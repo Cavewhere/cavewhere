@@ -145,6 +145,13 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - Removed stale console.log debug output
 - Verified 10/10 passes
 
+### tst_LiDARNotes.qml — 12 → 2 wait() (10 replaced, 1 waitForRendering removed)
+- Category A: wait(200) after carpet button retained — transition animation repositions toolbar
+- Category A: wait(100) after openEditor retained — text input activation async under offscreen
+- Replaced: wait(100) after mouseDrag removed (followed by tryVerify); 6x wait(100) → tryVerify(element exists/visible); wait(100) after scale clicks → tryVerify(measuredValue > 1.0); wait(100) after keyClick removed (followed by tryVerify for text)
+- Removed waitForRendering(azimuth) — key events are synchronous
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:
