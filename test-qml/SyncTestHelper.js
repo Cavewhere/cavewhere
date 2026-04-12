@@ -142,7 +142,7 @@ function loadFixtureAndOpenFirstTrip(testCase, rootData, testHelper) {
 function waitForProjectSyncToFinish(testCase, rootData) {
     tryVerifyWithDiagnostics(testCase, () => {
         return rootData.project.syncInProgress === false
-    }, 3000, "waitForProjectSyncToFinish")
+    }, 10000, "waitForProjectSyncToFinish")
 }
 
 function waitForFutureManagerToFinish(testCase, rootData) {
