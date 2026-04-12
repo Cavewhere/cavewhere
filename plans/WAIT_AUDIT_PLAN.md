@@ -118,11 +118,20 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - Investigated ObjectFinder window() check and ListView.onPooled/onReused — neither solves the stale-binding issue
 - Each retained wait() has a comment explaining why
 
+### tst_SurveyDataEntry.qml — 15 → 0 wait() (15 replaced)
+- Category A: wait after openContextMenu removed (triggerMenuItemFromLoader now uses tryVerify for loader); wait after blocked insert → tryCompare; focus hack wait → tryVerify visible
+- Category C: 3x wait(1) removed (redundant before existing tryVerify or no async dependency)
+- Category D: wait after positionViewAtBeginning → tryVerify(visible); wait after positionViewAtIndex removed (followed by tryVerify); scrollToBottom wait → tryVerify cell exists
+- Category E: init() wait → tryVerify page loaded
+- dataBoxAt() manual 50-iteration polling loop simplified to single tryVerify
+- 6x triggerMenuItemFromLoader + 1x menuItemEnabled updated to tryVerify for async Loader
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:
 1. Replace all `wait()` calls using the replacement rules above
-2. Verify the test still passes 20/20
+2. Verify the test still passes 10/10
 3. Commit per-file or per-batch (user preference)
 
 Skip `SyncTestHelper.js` line 76 (already a polling loop).
