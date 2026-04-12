@@ -87,4 +87,4 @@ rm ~/Library/LaunchAgents/com.cavewhere.nightly-test.plist
 | `CPP_PARALLEL` | 4 | Concurrent `cavewhere-test` instances |
 | `QML_PARALLEL` | 2 | Concurrent `cavewhere-qml-test` instances (uses ~8GB RAM each) |
 | `TEST_TIMEOUT` | 22m | Max time per individual test run before kill |
-| `KEEP_DAYS` | 7 | Delete run directories older than this |
+| `KEEP_DAYS` | 90 | Delete run directories older than this |

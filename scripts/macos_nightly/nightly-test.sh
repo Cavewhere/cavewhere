@@ -7,7 +7,7 @@ BRANCH="origin/dev"
 NUM_RUNS="${NUM_RUNS:-16}"
 QT_PATH="$HOME/Qt/6.11.0/macos"
 WORK_DIR="/var/tmp/cavewhere-nightly/$(date +%Y-%m-%d_%H%M%S)"
-KEEP_DAYS=7
+KEEP_DAYS=90
 TEST_TIMEOUT=22m
 
 # --- Cleanup old runs ---
@@ -42,8 +42,8 @@ echo "Commit: $COMMIT_SHA"
 echo ">>> Running conan install..."
 
 # Pin CMake below 4.0 (wxWidgets compatibility)
-CONAN_PROFILE="$(conan config home)/profiles/default"
-# Write conan profile with deployment target 14.0, C++20, and CMake < 4.0
+CONAN_PROFILE="$(conan config home)/profiles/nightly-test"
+# Write a dedicated conan profile (not default) with deployment target 14.0, C++20, and CMake < 4.0
 cat > "$CONAN_PROFILE" <<'PROFILE'
 [settings]
 arch=armv8
@@ -59,7 +59,7 @@ os.version=14.0
 !cmake/*: cmake/[>=3 <4]
 PROFILE
 
-conan install . -o "&:system_qt=True" --build=missing -of conan_deps 2>&1 | tee "$LOG_DIR/conan-install.log"
+conan install . -pr nightly-test -o "&:system_qt=True" --build=missing -of conan_deps 2>&1 | tee "$LOG_DIR/conan-install.log"
 
 # --- CMake configure ---
 echo ">>> Configuring CMake..."
@@ -77,8 +77,8 @@ echo "Build directory: $BUILD_DIR"
 echo ">>> Building test targets..."
 cmake --build "$BUILD_DIR" -j8 --target cavewhere-test cavewhere-qml-test 2>&1 | tee "$LOG_DIR/cmake-build.log"
 
-CPP_TEST="$BUILD_DIR/cavewhere-test"
-QML_TEST="$BUILD_DIR/cavewhere-qml-test"
+CPP_TEST="$(pwd)/$BUILD_DIR/cavewhere-test"
+QML_TEST="$(pwd)/$BUILD_DIR/cavewhere-qml-test"
 
 if [[ ! -x "$CPP_TEST" ]]; then
     echo "ERROR: cavewhere-test binary not found at $CPP_TEST"
@@ -128,7 +128,7 @@ for i in $(seq 1 "$NUM_RUNS"); do
     echo "$QML_TEST $LOG_DIR/qml-test-run-${ii}.log $LOG_DIR/exit_codes/qml-${ii} --platform offscreen" >> "$QML_JOBS"
 done
 
-# Run cpp tests (4 at a time) and qml tests (4 at a time) simultaneously
+# Run cpp and qml tests simultaneously with independent parallelism
 xargs -P "$CPP_PARALLEL" -L1 "$RUN_SCRIPT" < "$CPP_JOBS" &
 xargs -P "$QML_PARALLEL" -L1 "$RUN_SCRIPT" < "$QML_JOBS" &
 
@@ -233,6 +233,15 @@ terminal-notifier \
     -subtitle "Commit $COMMIT_SHA" \
     -message "$notify_msg" \
     -open "file://$LOG_DIR"
+
+# --- Cleanup clone and build artifacts, keep only logs ---
+echo ">>> Cleaning up clone and build artifacts..."
+CLONE_DIR="$WORK_DIR/cavewhere"
+if [[ "$CLONE_DIR" == /var/tmp/cavewhere-nightly/*/cavewhere && -d "$CLONE_DIR" ]]; then
+    rm -rf "$CLONE_DIR"
+else
+    echo "WARNING: Skipping cleanup — unexpected clone path: $CLONE_DIR"
+fi
 
 echo ""
 echo "=== Done ==="
