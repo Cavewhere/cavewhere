@@ -87,9 +87,10 @@ MainWindowTest {
             wait(50)
             mouseMove(imageId, 326, 716)
             mouseClick(imageId, 326, 716)
-            wait(100)
 
             //Scrap should have 4 points
+            tryVerify(() => scrapView.selectedScrapItem !== null, 1000,
+                      "scrapView.selectedScrapItem should be non-null after adding points")
             let scrap = scrapView.selectedScrapItem.scrap as Scrap
             console.log("Scrap:" + scrap)
             verify(scrap !== null)
