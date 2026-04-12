@@ -5,6 +5,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QCoreApplication>
+#include <QGuiApplication>
 
 // asyncfuture
 #include "asyncfuture.h"
@@ -100,6 +101,11 @@ TEST_CASE("setActiveAccountId while inactive does not trigger keychain read", "[
 // keychain read so credentials are available once the user picks GitHub.
 TEST_CASE("setActive(true) after setActiveAccountId triggers keychain read", "[cwHttpsAuth]")
 {
+    const QString platformName = QGuiApplication::platformName();
+    if (platformName == QLatin1String("offscreen") || platformName == QLatin1String("minimal")) {
+        SKIP("Keychain callback requires native event loop (GCD main queue); skipping under " + platformName.toStdString());
+    }
+
     cwRemoteCredentialStore credentialStore;
     cwGitHubIntegration integration(&credentialStore);
 

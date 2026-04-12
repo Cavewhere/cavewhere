@@ -62,15 +62,17 @@ public:
 
 TEST_CASE("Test that the cavewhere main window remember size and position", "[CavewhereMainWindow]") {
 
+    const QString platformName = QGuiApplication::platformName();
+    if (platformName == QLatin1String("offscreen") || platformName == QLatin1String("minimal")) {
+        SKIP("Window geometry persistence requires a real window manager; skipping under " + platformName.toStdString());
+    }
+
     {
         QSettings settings;
         settings.clear();
     }
 
-    const QString platformName = QGuiApplication::platformName();
-    const bool canSetWindowPosition = platformName != QStringLiteral("wayland")
-        && platformName != QStringLiteral("offscreen")
-        && platformName != QStringLiteral("minimal");
+    const bool canSetWindowPosition = platformName != QLatin1String("wayland");
 
     auto firstAppEngine = MainHelper::createApplicationEnigne();
 
