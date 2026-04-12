@@ -152,6 +152,12 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - Removed waitForRendering(azimuth) — key events are synchronous
 - Verified 10/10 passes
 
+### tst_MapMultiLayer.qml — 14 → 3 wait() (11 replaced)
+- Category A: wait(100) after mapButton retained — mapPage layout must complete before addLayerButton is interactive
+- Category A: 2x wait(50/100) after Done click retained — capture viewport geometry computed asynchronously
+- Replaced: wait(100) after mapButton → tryVerify(mapPage) + retained wait; wait(50) after addLayerButton → tryVerify(viewPage transition) + tryVerify(selectionButton visible); wait(100) after area selection → tryVerify(selectionButton enabled); wait(50) after selectionButton click removed; 5x wait(50) cycle selection → tryVerify(selection state change); wait(100) after last Done → tryVerify(captureItem exists); wait(100) at end of test removed
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:

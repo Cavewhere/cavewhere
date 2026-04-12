@@ -27,24 +27,31 @@ MainWindowTest {
             let mapButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->mapButton")
             mouseClick(mapButton)
 
+            // wait() needed — mapPage layout must complete before addLayerButton is interactive
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "mapPage" });
             wait(100)
 
             let addLayerButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->addLayerButton")
             mouseClick(addLayerButton)
 
-            wait(50);
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
 
-            let selectionButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton")
+            let selectionButton = null
+            tryVerify(() => {
+                          selectionButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton")
+                          return selectionButton !== null && selectionButton.visible
+                      })
             mouseClick(selectionButton)
 
             let interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectAreaInteraction")
             mouseDrag(interaction, 389.645, 137.965, 340, 349)
 
-            wait(100);
-
+            tryVerify(() => { return selectionButton.enabled === true })
             let done = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton->label")
             mouseClick(done)
 
+            // wait() needed — capture viewport geometry is computed asynchronously
+            // after Done click; without it the capture item has wrong dimensions
             wait(50)
 
             mouseClick(addLayerButton)
@@ -56,11 +63,12 @@ MainWindowTest {
             // let selectionButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton")
             mouseClick(selectionButton)
 
-            wait(50);
-
             //Make sure the selection rectangle is cleared
-            let selectionRectangle = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionRectangle")
-            verify(selectionRectangle.visible === true)
+            let selectionRectangle = null
+            tryVerify(() => {
+                          selectionRectangle = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionRectangle")
+                          return selectionRectangle !== null && selectionRectangle.visible === true
+                      })
             verify(selectionRectangle.width === 0)
             verify(selectionRectangle.height === 0)
 
@@ -72,6 +80,7 @@ MainWindowTest {
 
             mouseClick(done);
 
+            // wait() needed — capture viewport geometry is computed asynchronously
             wait(100);
 
             mouseClick(addLayerButton)
@@ -87,10 +96,12 @@ MainWindowTest {
             mouseDrag(interaction, 275, 305, 279, 267)
             mouseClick(done);
 
-            wait(100);
-
             //Make sure cycle selection works correctly
-            let captureItem0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0")
+            let captureItem0_obj1 = null
+            tryVerify(() => {
+                          captureItem0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0")
+                          return captureItem0_obj1 !== null
+                      })
             let captureItem1_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem1")
             let captureItem2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem2")
 
@@ -106,15 +117,15 @@ MainWindowTest {
             }
 
             mouseClick(captureItem2_obj1, 281.029, 181.485)
-            wait(50);
+            tryVerify(() => { return selectedCapture() !== null })
             let firstSelected = selectedCapture();
 
             mouseClick(captureItem2_obj1, 281.029, 181.485)
-            wait(50);
+            tryVerify(() => { return selectedCapture() !== null && selectedCapture() !== firstSelected })
             let secondSelected = selectedCapture();
 
             mouseClick(captureItem2_obj1, 281.029, 181.485)
-            wait(50);
+            tryVerify(() => { return selectedCapture() !== null && selectedCapture() !== secondSelected })
             let thirdSelected = selectedCapture();
 
             verify(firstSelected !== secondSelected);
@@ -122,15 +133,13 @@ MainWindowTest {
             verify(secondSelected !== thirdSelected);
 
             mouseClick(captureItem2_obj1, 281.029, 181.485)
-            wait(50);
-            verify(firstSelected === selectedCapture())
+            tryVerify(() => { return firstSelected === selectedCapture() })
 
             mouseClick(captureItem1_obj1, 177.889, 282.772)
-            wait(50);
+            tryVerify(() => { return captureItem1_obj1.selected === true })
 
             verify(captureItem0_obj1.selected === false);
             verify(captureItem2_obj1.selected === false);
-            verify(captureItem1_obj1.selected === true);
 
             //Spot check that the elements are visually correct
             verify(findChild(captureItem0_obj1, "topLeftHandle").visible == false);
@@ -171,9 +180,6 @@ MainWindowTest {
             exportImage("test.svg", CaptureManager.SVG);
             exportImage("test.pdf", CaptureManager.PDF);
             exportImage("test.png", CaptureManager.PNG);
-
-            wait(100);
-
         }
     }
 }
