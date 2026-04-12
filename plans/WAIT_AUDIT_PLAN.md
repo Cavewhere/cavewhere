@@ -136,6 +136,15 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - Note: tryFuzzyCompare captures `actual` by value — needs preceding tryVerify to poll for convergence. Framework fix tracked as follow-up.
 - Verified 10/10 passes
 
+### tst_ScrapInteraction.qml — 18 → 4 wait() (14 replaced)
+- Category E: init() wait(1000) retained — newProject() triggers broad async cleanup that has no single observable completion signal
+- Category A: 2x wait(500) after carpet button click retained — the "" → "SELECT" transition includes PropertyAnimations that reposition the toolbar; clicks miss during animation
+- Category A: wait(50) after openEditor() retained — text input activation is async and activeFocus unreliable under offscreen
+- Replaced: wait(100) after zoomScale removed (sync property set); 3x wait(50) between scrap points removed (events are sync); wait(100) after zoomIntoRenderingView removed; wait(50) after verify removed; 2x wait(100) in addLeadInteraction → tryVerify(leadEditor exists); wait(200) after leadPoint click → tryVerify(quoteBox exists); 2x wait(500) page navigation → tryVerify(page transition); wait(100) after scrap click → tryVerify(comboBox exists)
+- compare(scrapView.count, 1) → tryCompare for async scrap creation
+- Removed stale console.log debug output
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:
