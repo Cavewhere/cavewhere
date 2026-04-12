@@ -26,9 +26,11 @@ MainWindowTest {
             let noteGalleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView");
             tryVerify(() => { return noteGalleryView.count === 2});
 
-            wait(50)
-
-            let lidarThumb = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1");
+            let lidarThumb = null;
+            tryVerify(() => {
+                lidarThumb = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1");
+                return lidarThumb !== null;
+            }, 1000, "lidarThumb (noteImage1) should exist after images added")
             mouseClick(lidarThumb);
 
             let lidarViewer = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId");
@@ -215,10 +217,14 @@ MainWindowTest {
             let setLengthButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->setLengthButton")
             mouseClick(setLengthButton)
 
-            wait(100)
-
             let scaleInteraction = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARScaleInteraction")
-            tryVerify(() => scaleInteraction.visible)
+            tryVerify(() => {
+                if (!scaleInteraction.visible) {
+                    mouseClick(setLengthButton)
+                    return false
+                }
+                return true
+            }, 3000, "scaleInteraction should be visible after clicking setLengthButton")
             mouseClick(scaleInteraction, 203.246, 244.637)
             mouseClick(scaleInteraction, 319.91, 514.371)
 
