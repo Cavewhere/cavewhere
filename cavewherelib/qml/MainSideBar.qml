@@ -222,7 +222,9 @@ QQ.Rectangle {
             id: autoSwitchLayoutId
             anchors.left: parent.left
             anchors.right: parent.right
+            spacing: 2
 
+            // Wide: label + checkbox
             QC.Label {
                 text: "Automatic\nUpdate"
                 id: labelTextId
@@ -234,11 +236,27 @@ QQ.Rectangle {
 
             QC.CheckBox {
                 id: autoCheckboxId
+                objectName: "autoUpdateCheckbox"
+                visible: sidebarArea.layoutSize >= Theme.LayoutSize.Wide
                 checked: RootData.settings.jobSettings.automaticUpdate
-                onCheckedChanged: {
-                    RootData.settings.jobSettings.automaticUpdate = checked
-                }
+                onToggled: RootData.settings.jobSettings.automaticUpdate = checked
                 Layout.alignment: Qt.AlignHCenter
+            }
+
+            // Compact: toggle button with icon
+            RoundButton {
+                id: autoUpdateToggleId
+                objectName: "autoUpdateToggle"
+                visible: sidebarArea._compactMode
+                checkable: true
+                checked: RootData.settings.jobSettings.automaticUpdate
+                onToggled: RootData.settings.jobSettings.automaticUpdate = checked
+                icon.source: "qrc:/twbs-icons/icons/arrow-repeat.svg"
+                icon.color: checked ? Theme.accent : Theme.text
+                Layout.alignment: Qt.AlignHCenter
+
+                QC.ToolTip.visible: hovered
+                QC.ToolTip.text: checked ? "Automatic updates on" : "Automatic updates off"
             }
         }
     }

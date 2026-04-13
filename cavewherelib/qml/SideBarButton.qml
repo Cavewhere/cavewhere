@@ -66,13 +66,12 @@ QQ.Rectangle {
         QC.Label {
             id: textLabel
             objectName: "textLabel"
-            visible: !button.compactMode
             color: Theme.sidebar.text
             text: "text"
             smooth: true
             style: QC.Label.Sunken
             font.bold: true
-            font.pixelSize: Theme.fontSizeMedium
+            font.pixelSize: button.compactMode ? Theme.fontSizeSmall : Theme.fontSizeMedium
             Layout.alignment: Qt.AlignHCenter
         }
     }

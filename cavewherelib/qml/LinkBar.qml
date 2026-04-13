@@ -11,12 +11,16 @@ QQ.Item {
     implicitHeight: rowLayoutId.height
 
     required property int sidebarWidth
+    required property int layoutSize
+    required property string viewPageAddress
+    required property string dataPageAddress
+    required property string mapPageAddress
 
     RowLayout {
         id: rowLayoutId
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.rightMargin: RootData.desktopBuild ? 5 : 0
+        anchors.rightMargin: linkBarId.layoutSize >= Theme.LayoutSize.Wide ? 5 : 0
 
         spacing: 0
 
@@ -25,8 +29,61 @@ QQ.Item {
             address: RootData.pageSelectionModel.currentPageAddress
         }
 
+        // Hamburger menu button — visible only at narrow width
+        RoundButton {
+            id: hamburgerButtonId
+            objectName: "hamburgerButton"
+            visible: linkBarId.layoutSize === Theme.LayoutSize.Narrow
+            icon.source: "qrc:/twbs-icons/icons/list.svg"
+            icon.color: Theme.text
+            implicitWidth: sizeItemId.height
+            implicitHeight: implicitWidth
+            onClicked: hamburgerMenuId.open()
+
+            QC.Menu {
+                id: hamburgerMenuId
+                objectName: "hamburgerMenu"
+
+                readonly property string _addr: RootData.pageSelectionModel.currentPageAddress
+                function isOnPage(pageAddr) { return _addr === pageAddr || _addr.startsWith(pageAddr + "/") }
+                readonly property bool _onView: isOnPage(linkBarId.viewPageAddress)
+                readonly property bool _onData: isOnPage(linkBarId.dataPageAddress)
+                readonly property bool _onMap: isOnPage(linkBarId.mapPageAddress)
+
+                QC.MenuItem {
+                    text: "View"
+                    font.bold: hamburgerMenuId._onView
+                    icon.source: "qrc:/twbs-icons/icons/box.svg"
+                    onTriggered: RootData.pageSelectionModel.currentPageAddress = linkBarId.viewPageAddress
+                }
+                QC.MenuItem {
+                    text: "Data"
+                    font.bold: hamburgerMenuId._onData
+                    icon.source: "qrc:/twbs-icons/icons/book.svg"
+                    onTriggered: RootData.pageSelectionModel.currentPageAddress = linkBarId.dataPageAddress
+                }
+                QC.MenuItem {
+                    text: "Map"
+                    font.bold: hamburgerMenuId._onMap
+                    icon.source: "qrc:/twbs-icons/icons/map.svg"
+                    onTriggered: RootData.pageSelectionModel.currentPageAddress = linkBarId.mapPageAddress
+                }
+
+                QC.MenuSeparator {}
+
+                QC.MenuItem {
+                    text: "Automatic Update"
+                    icon.source: "qrc:/twbs-icons/icons/arrow-repeat.svg"
+                    checkable: true
+                    checked: RootData.settings.jobSettings.automaticUpdate
+                    onTriggered: RootData.settings.jobSettings.automaticUpdate = checked
+                }
+            }
+        }
+
+        // Back/forward navigation — always visible, centered over sidebar at wide
         QQ.Item {
-            implicitWidth: linkBarId.sidebarWidth
+            implicitWidth: linkBarId.layoutSize >= Theme.LayoutSize.Wide ? linkBarId.sidebarWidth : backForwardLayoutId.implicitWidth
             implicitHeight: backForwardLayoutId.implicitHeight
 
             RowLayout {
@@ -38,19 +95,17 @@ QQ.Item {
                     icon.source: "qrc:/twbs-icons/icons/chevron-left.svg"
                     icon.color: Theme.text
                     enabled: RootData.pageSelectionModel.hasBackward
-                    onClicked: {
-                        RootData.pageSelectionModel.back();
-                    }
+                    onClicked: RootData.pageSelectionModel.back()
                     implicitWidth: sizeItemId.height
                     implicitHeight: implicitWidth
                 }
 
                 RoundButton {
+                    objectName: "forward"
                     icon.source: "qrc:/twbs-icons/icons/chevron-right.svg"
+                    icon.color: Theme.text
                     enabled: RootData.pageSelectionModel.hasForward
-                    onClicked: {
-                        RootData.pageSelectionModel.forward();
-                    }
+                    onClicked: RootData.pageSelectionModel.forward()
                     implicitWidth: sizeItemId.height
                     implicitHeight: implicitWidth
                 }
@@ -130,94 +185,91 @@ QQ.Item {
             }
         }
 
-        DesktopLoader {
-            sourceComponent: RowLayout {
-                QQ.Item {
-                    implicitWidth: 5
-                    implicitHeight: 1
-                }
+        QQ.Item {
+            implicitWidth: 5
+            implicitHeight: 1
+        }
 
-                SyncButton {
-                    id: syncButtonId
-                    objectName: "syncButton"
-                    implicitWidth: sizeItemId.height
-                    implicitHeight: implicitWidth
-                    syncHealth: RootData.project.syncHealth
-                    syncInProgress: RootData.project.syncInProgress
-                    projectModified: RootData.project.modified
-                    saveWillCauseDataLoss: RootData.project.saveWillCauseDataLoss
-                    requiredVersion: RootData.project.requiredVersion
-                    loggedIn: RootData.remote.gitHubIntegration.loggedIn
-                    usesTokenAuth: RootData.project.syncHealth.status.usesTokenAuth
+        SyncButton {
+            id: syncButtonId
+            objectName: "syncButton"
+            implicitWidth: sizeItemId.height
+            implicitHeight: implicitWidth
+            syncHealth: RootData.project.syncHealth
+            syncInProgress: RootData.project.syncInProgress
+            projectModified: RootData.project.modified
+            saveWillCauseDataLoss: RootData.project.saveWillCauseDataLoss
+            requiredVersion: RootData.project.requiredVersion
+            loggedIn: RootData.remote.gitHubIntegration.loggedIn
+            usesTokenAuth: RootData.project.syncHealth.status.usesTokenAuth
 
-                    // Right-aligned popup positioning anchored below this button
-                    readonly property int _popupRightEdge: QC.Overlay.overlay.width - 5
-                    readonly property int _popupY: syncButtonId.mapToItem(null, 0, syncButtonId.height + 4).y
+            // Right-aligned popup positioning anchored below this button
+            readonly property int _popupRightEdge: QC.Overlay.overlay.width - 5
+            readonly property int _popupY: syncButtonId.mapToItem(null, 0, syncButtonId.height + 4).y
 
-                    onSyncRequested: {
-                        RootData.project.sync()
-                    }
-                    onRemoteSettingsRequested: {
-                        RootData.pageSelectionModel.gotoPageByName(null, "Remote Settings")
-                    }
-                    onHistoryRequested: {
-                        RootData.pageSelectionModel.gotoPageByName(null, "History")
-                    }
-                    onSetupRemoteRequested: {
-                        setupRemoteWizardId.open()
-                    }
-                    onLoginRequested: {
-                        RootData.remote.accountCoordinator.loginGitHubAccount()
-                    }
+            onSyncRequested: {
+                RootData.project.sync()
+            }
+            onRemoteSettingsRequested: {
+                RootData.pageSelectionModel.gotoPageByName(null, "Remote Settings")
+            }
+            onHistoryRequested: {
+                RootData.pageSelectionModel.gotoPageByName(null, "History")
+            }
+            onSetupRemoteRequested: {
+                setupRemoteWizardId.open()
+            }
+            onLoginRequested: {
+                RootData.remote.accountCoordinator.loginGitHubAccount()
+            }
 
-                    QQ.Connections {
-                        target: RootData.remote.accountCoordinator
-                        function onLoginGitHubAccountFinished(authorized) {
-                            if (!authorized) {
-                                reconnectPopupId.open()
-                            }
-                        }
-                    }
-                    onLogoutRequested: {
-                        RootData.remote.accountCoordinator.forgetGitHubAccount()
-                    }
-
-                    ReconnectPopup {
-                        id: reconnectPopupId
-                        parent: QC.Overlay.overlay
-                        gitHub: RootData.remote.gitHubIntegration
-                        x: syncButtonId._popupRightEdge - width
-                        y: syncButtonId._popupY
-                    }
-
-                    SetupRemoteWizard {
-                        id: setupRemoteWizardId
-                        parent: QC.Overlay.overlay
-                        x: syncButtonId._popupRightEdge - width
-                        y: syncButtonId._popupY
-                        gitHubIntegration: RootData.remote.gitHubIntegration
-                        accountCoordinator: RootData.remote.accountCoordinator
-                        repository: RootData.project.repository
-                        onRemoteSetupComplete: function(syncNow) {
-                            setupRemoteWizardId.close()
-                            if (syncNow) { RootData.project.sync() }
-                        }
-                        onRemoteSetupCancelled: setupRemoteWizardId.close()
-                    }
-                }
-
-                QQ.Connections {
-                    target: RootData.project
-                    function onSyncAuthFailed() {
+            QQ.Connections {
+                target: RootData.remote.accountCoordinator
+                function onLoginGitHubAccountFinished(authorized) {
+                    if (!authorized) {
                         reconnectPopupId.open()
                     }
                 }
-
-                DiscordChatButton {
-                    implicitWidth: sizeItemId.height
-                    implicitHeight: implicitWidth
-                }
             }
+            onLogoutRequested: {
+                RootData.remote.accountCoordinator.forgetGitHubAccount()
+            }
+
+            ReconnectPopup {
+                id: reconnectPopupId
+                parent: QC.Overlay.overlay
+                gitHub: RootData.remote.gitHubIntegration
+                x: syncButtonId._popupRightEdge - width
+                y: syncButtonId._popupY
+            }
+
+            SetupRemoteWizard {
+                id: setupRemoteWizardId
+                parent: QC.Overlay.overlay
+                x: syncButtonId._popupRightEdge - width
+                y: syncButtonId._popupY
+                gitHubIntegration: RootData.remote.gitHubIntegration
+                accountCoordinator: RootData.remote.accountCoordinator
+                repository: RootData.project.repository
+                onRemoteSetupComplete: function(syncNow) {
+                    setupRemoteWizardId.close()
+                    if (syncNow) { RootData.project.sync() }
+                }
+                onRemoteSetupCancelled: setupRemoteWizardId.close()
+            }
+        }
+
+        QQ.Connections {
+            target: RootData.project
+            function onSyncAuthFailed() {
+                reconnectPopupId.open()
+            }
+        }
+
+        DiscordChatButton {
+            visible: linkBarId.layoutSize >= Theme.LayoutSize.Wide
+            implicitWidth: sizeItemId.height
+            implicitHeight: implicitWidth
         }
     }
 

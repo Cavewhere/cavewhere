@@ -93,14 +93,30 @@ Item {
             let label = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateLabel")
             verify(label !== null, "autoUpdateLabel not found")
             verify(label.visible, "Auto-update label should be visible in wide layout")
+
+            let checkbox = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateCheckbox")
+            verify(checkbox !== null, "autoUpdateCheckbox not found")
+            verify(checkbox.visible, "Checkbox should be visible in wide layout")
+
+            let toggle = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateToggle")
+            verify(toggle !== null, "autoUpdateToggle not found")
+            verify(!toggle.visible, "Toggle button should be hidden in wide layout")
         }
 
-        function test_autoUpdateLabelHiddenInMedium() {
+        function test_autoUpdateToggleVisibleInMedium() {
             sidebarId.layoutSize = Theme.LayoutSize.Medium
             waitForRendering(sidebarId)
             let label = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateLabel")
             verify(label !== null, "autoUpdateLabel not found")
             verify(!label.visible, "Auto-update label should be hidden in medium layout")
+
+            let checkbox = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateCheckbox")
+            verify(checkbox !== null, "autoUpdateCheckbox not found")
+            verify(!checkbox.visible, "Checkbox should be hidden in medium layout")
+
+            let toggle = ObjectFinder.findObjectByChain(rootId, "rootId->testSidebar->autoUpdateToggle")
+            verify(toggle !== null, "autoUpdateToggle not found")
+            verify(toggle.visible, "Toggle button should be visible in medium layout")
         }
     }
 
@@ -117,12 +133,20 @@ Item {
             verify(!standaloneButton.compactMode)
         }
 
-        function test_compactHidesText() {
+        function test_compactShrinksText() {
             let label = ObjectFinder.findObjectByChain(rootId, "rootId->standaloneButton->textLabel")
             verify(label !== null, "textLabel not found")
-            verify(label.visible, "Text should be visible in normal mode")
+
+            standaloneButton.compactMode = false
+            waitForRendering(standaloneButton)
+            let normalSize = label.font.pixelSize
+
             standaloneButton.compactMode = true
-            verify(!label.visible, "Text should be hidden in compact mode")
+            waitForRendering(standaloneButton)
+            let compactSize = label.font.pixelSize
+
+            verify(compactSize < normalSize,
+                   "Compact text (" + compactSize + ") should be smaller than normal (" + normalSize + ")")
         }
 
         function test_compactReducesIconSize() {

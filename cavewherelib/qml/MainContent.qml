@@ -10,6 +10,17 @@ QQ.Item {
     property QC.Menu fileMenu
     property AskToSaveDialog askToSaveDialog: null
 
+    // Page addresses — set in onCompleted after page registration
+    property string viewPageAddress
+    property string dataPageAddress
+    property string mapPageAddress
+
+    readonly property int layoutSize: {
+        if (width >= Theme.breakpointWide) return Theme.LayoutSize.Wide
+        if (width >= Theme.breakpointMedium) return Theme.LayoutSize.Medium
+        return Theme.LayoutSize.Narrow
+    }
+
     anchors.fill: parent
 
     LinkBar {
@@ -19,12 +30,17 @@ QQ.Item {
         anchors.left: parent.left
         anchors.right: parent.right
 
-        sidebarWidth: mainSideBar.width - 1
+        layoutSize: mainContentId.layoutSize
+        sidebarWidth: mainContentId.layoutSize >= Theme.LayoutSize.Medium ? mainSideBar.width - 1 : 0
+        viewPageAddress: mainContentId.viewPageAddress
+        dataPageAddress: mainContentId.dataPageAddress
+        mapPageAddress: mainContentId.mapPageAddress
     }
 
     MainSideBar {
         id: mainSideBar;
-        visible: RootData.desktopBuild
+        visible: mainContentId.layoutSize >= Theme.LayoutSize.Medium
+        layoutSize: mainContentId.layoutSize
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.leftMargin: 0
@@ -45,7 +61,7 @@ QQ.Item {
         id: container;
         anchors.top: linkBar.bottom
         anchors.bottom: parent.bottom
-        anchors.left: RootData.desktopBuild ? mainSideBar.right : parent.left
+        anchors.left: mainContentId.layoutSize >= Theme.LayoutSize.Medium ? mainSideBar.right : parent.left
         anchors.right: parent.right
 
         // property int currentPosition: height * mainSideBar.pageShownReal
@@ -190,6 +206,10 @@ QQ.Item {
         mainSideBar.viewPage = viewPage;
         mainSideBar.dataPage = dataPage;
         mainSideBar.mapPage = mapPage;
+
+        mainContentId.viewPageAddress = viewPage.fullname();
+        mainContentId.dataPageAddress = dataPage.fullname();
+        mainContentId.mapPageAddress = mapPage.fullname();
 
         if(RootData.desktopBuild) {
             RootData.pageSelectionModel.gotoPage(viewPage);
