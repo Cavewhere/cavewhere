@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
+#include <QCoreApplication>
 #include <QImage>
 #include <QSize>
 #include <QString>
@@ -268,7 +269,8 @@ TEST_CASE("cwImageProvider scales SVG units correctly", "[cwImageProvider]") {
                                         .arg(unitCase.height, 0, 'f', 6)
                                         .arg(QLatin1String(unitCase.unit));
 
-        const QString tempDirPath = QDir::temp().filePath(QStringLiteral("cwImageProviderSvgUnits"));
+        const QString tempDirPath = QDir::temp().filePath(
+            QStringLiteral("cwImageProviderSvgUnits-%1").arg(QCoreApplication::applicationPid()));
         QDir().mkpath(tempDirPath);
         const QString tempPath = QDir(tempDirPath).filePath(
             QStringLiteral("units-%1.svg").arg(QLatin1String(unitCase.unit)));

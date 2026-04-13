@@ -6,6 +6,7 @@
 #include <QMetaObject>
 #include <QVector3D>
 #include <QFuture>
+#include <QCoreApplication>
 #include <QSvgGenerator>
 #include <QPainter>
 #include <QTemporaryFile>
@@ -157,7 +158,7 @@ TEST_CASE("SVG export test", "[Survey2DGeometryRule]") {
     double height = maxY - minY;
 
     // 4) Set up an SVG generator that writes to ~/Desktop/test.svg
-    auto svgPath = QDir::tempPath() + "/Survey2DGeometryRule-test.svg";
+    auto svgPath = QDir::tempPath() + QStringLiteral("/Survey2DGeometryRule-test-%1.svg").arg(QCoreApplication::applicationPid());
     QSvgGenerator generator;
     generator.setFileName(svgPath);
     generator.setSize(QSize(width, height));

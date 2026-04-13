@@ -29,9 +29,11 @@ Run the application:
 Build and run tests:
 ```bash
 cmake --build build/<preset> --target cavewhere-test cavewhere-qml-test
-./build/<preset>/cavewhere-test
-./build/<preset>/cavewhere-qml-test --platform offscreen
+./build/<preset>/cavewhere-test -d yes 2>&1 | tee /tmp/cavewhere-test.log
+./build/<preset>/cavewhere-qml-test --platform offscreen 2>&1 | tee /tmp/cavewhere-qml-test.log
 ```
+
+Always redirect test output to a log file (using `tee` or `>`) so failures can be inspected immediately without re-running.
 
 Run a single C++ test (Catch2 tag syntax):
 ```bash

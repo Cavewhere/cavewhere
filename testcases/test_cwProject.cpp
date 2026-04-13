@@ -8579,7 +8579,7 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
     auto image = [size](const QColor& color)->Image {
         QImage image(size, QImage::Format_ARGB32);
         image.fill(color);
-        QString imageFilename = QDir::tempPath() + "/" + QString("cavewhere-cwProject-image%1%2%3.png").arg(color.red()).arg(color.green()).arg(color.blue());
+        QString imageFilename = QDir::tempPath() + "/" + QString("cavewhere-cwProject-image%1%2%3-%4.png").arg(color.red()).arg(color.green()).arg(color.blue()).arg(QCoreApplication::applicationPid());
         REQUIRE(image.save(imageFilename, "png"));
         return {color, size, QUrl::fromLocalFile(imageFilename)};
     };
