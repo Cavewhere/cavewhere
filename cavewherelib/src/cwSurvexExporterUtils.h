@@ -3,10 +3,26 @@
 
 #include <QtGlobal>
 #include <QString>
+#include <QSet>
 
 #include "cwClinoReading.h"
 
 namespace cwSurvexExporterUtils {
+
+// Valid survex *team role keywords (must match role_tab in survex/src/commands.c)
+inline bool isValidSurvexRole(const QString& role)
+{
+    static const QSet<QString> validRoles = {
+        "instruments", "insts", "tape", "length", "compass", "bearing",
+        "clino", "gradient", "backtape", "backlength", "backcompass",
+        "backbearing", "backclino", "backgradient", "station", "position",
+        "notes", "notebook", "pictures", "pics", "assistant", "dog",
+        "explorer", "altitude", "dz", "dimensions", "left", "right",
+        "up", "ceiling", "down", "floor", "count", "counter", "depth"
+    };
+    return validRoles.contains(role.toLower());
+}
+
 inline QString verticalClinoText(const cwClinoReading& reading)
 {
     if(reading.state() != cwClinoReading::State::Valid) {

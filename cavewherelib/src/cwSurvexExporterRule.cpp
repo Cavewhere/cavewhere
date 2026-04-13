@@ -308,7 +308,9 @@ void cwSurvexExporterRule::writeTeamData(QTextStream &stream, const QVector<cwTe
 
         auto jobs = teamMember.jobs();
         for(const QString& job : std::as_const(jobs)) {
-            stream << " \"" << job << "\"";
+            if (cwSurvexExporterUtils::isValidSurvexRole(job)) {
+                stream << " " << job;
+            }
         }
 
         stream << Qt::endl;

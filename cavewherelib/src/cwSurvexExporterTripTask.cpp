@@ -225,7 +225,9 @@ void cwSurvexExporterTripTask::writeTeamData(QTextStream &stream, const cwTeam* 
         stream << dataLine;
 
         foreach(QString job, teamMember.jobs()) {
-            stream << QStringLiteral(" \"") << job << QStringLiteral("\"");
+            if (cwSurvexExporterUtils::isValidSurvexRole(job)) {
+                stream << QStringLiteral(" ") << job;
+            }
         }
 
         stream << Qt::endl;

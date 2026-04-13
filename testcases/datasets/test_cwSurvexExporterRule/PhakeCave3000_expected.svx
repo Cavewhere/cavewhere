@@ -5,7 +5,7 @@
 *begin ; Release 0.08
 *date 2020.02.26
 
-*team "Philip Schuchardt" "Developer"
+*team "Philip Schuchardt"
 
 *data normal from to tape compass clino
 ;From       To          Distance    Compass     Clino      
