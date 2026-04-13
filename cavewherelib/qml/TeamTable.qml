@@ -28,31 +28,25 @@ QQ.Item {
         //        console.debug("Update state: " + teamTable.state )
     }
 
-    SectionLabel {
-        id: title
+    SectionHeader {
+        id: titleRow
+        anchors.horizontalCenter: parent.horizontalCenter
         text: "Team"
+        showAddButton: true
+        onAddClicked: {
+            teamTable.model.addTeamMember();
+            teamList.currentIndex = teamList.count - 1
+        }
     }
 
     QQ.Item {
         id: personTable
 
-        anchors.top: title.bottom
+        anchors.top: titleRow.bottom
         anchors.topMargin: 5
 
         width: teamList.width
         height: childrenRect.height
-
-        AddButton {
-            id: addPerson
-            anchors.left:  parent.left
-            //            anchors.leftMargin: 10
-
-            onClicked: {
-                teamTable.model.addTeamMember();
-                teamList.currentIndex = teamList.count - 1
-            }
-            visible: true
-        }
 
         QC.Label {
             id: nameHeader
@@ -79,7 +73,7 @@ QQ.Item {
         QQ.Rectangle {
             id: verticalLine2
             anchors.left: parent.horizontalCenter
-            anchors.top: parent.top
+            anchors.top: nameHeader.top
             anchors.bottom: teamList.top
             width: 1
             border.color: Theme.borderSubtle
@@ -91,7 +85,7 @@ QQ.Item {
             id: teamList
             objectName: "teamList"
 
-            anchors.top: addPerson.bottom
+            anchors.top: nameHeader.bottom
 
             width: teamTable.width
             height: childrenRect.height
@@ -160,6 +154,7 @@ QQ.Item {
                     anchors.leftMargin: 4
                     anchors.right: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
+                    implicitHeight: Math.max(deletePersonButton.height, nameText.height)
 
                     RemoveButton {
                         id: deletePersonButton
@@ -178,6 +173,7 @@ QQ.Item {
                     DoubleClickTextInput {
                         id: nameText
                         text: rowDelegate.name
+                        autoResize: true
 
                         anchors.left: deletePersonButton.right
                         anchors.right: parent.right
@@ -326,19 +322,6 @@ QQ.Item {
     states: [
         QQ.State {
             name: "NoTeam"
-            //            when: teamList.count === 0
-            QQ.AnchorChanges {
-                target: addPerson
-                anchors.left: undefined
-                anchors.horizontalCenter: personTable.horizontalCenter
-            }
-
-            QQ.PropertyChanges {
-                addPerson {
-                    anchors.leftMargin: 0
-                    text: "Add a team member"
-                }
-            }
 
             QQ.PropertyChanges {
                 teamList {

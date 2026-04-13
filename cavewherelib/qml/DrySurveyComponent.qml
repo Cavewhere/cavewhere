@@ -5,7 +5,7 @@ import cavewherelib
 Item {
     id: itemId
 
-    width: 400
+    width: ListView.view ? ListView.view.width : 400
     height: {
         switch(itemId.rowType) {
         case SurveyEditorRowIndex.TitleRow:
@@ -58,6 +58,7 @@ Item {
         active: itemId.rowType === SurveyEditorRowIndex.TitleRow
         sourceComponent: SurveyEditorColumnTitles {
             id: titleColumnId
+            width: itemId.columnTemplate.width
             y: titleOffset
             shotOffset: Math.floor(50.0 / 2.0);
             chunk: itemId.model.chunkForRow(itemId.index)

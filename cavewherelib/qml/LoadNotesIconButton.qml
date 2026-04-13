@@ -6,7 +6,6 @@
 **************************************************************************/
 
 import cavewherelib
-import QtQuick.Dialogs
 
 NeutralIconButton {
     id: buttonId
@@ -16,21 +15,11 @@ NeutralIconButton {
     iconSource: "qrc:icons/svg/addNotes.svg"
     text: "Load"
 
-    onClicked: {
-        fileDialog.open();
-    }
+    onClicked: fileDialog.open()
 
-    FileDialog {
-        id: fileDialog;
-        nameFilters: [ "All (" + RootData.supportImageFormats + " *.glb)"];
-        title: "Load Images or LiDAR scans"
-        // selectMultiple: true
-        fileMode: FileDialog.OpenFiles
-        currentFolder: RootData.lastDirectory
-        onAccepted: {
-            RootData.lastDirectory = fileDialog.currentFolder
-            buttonId.filesSelected(fileDialog.selectedFiles)
-        }
+    NotesFileDialog {
+        id: fileDialog
+        onFilesSelected: (images) => buttonId.filesSelected(images)
     }
 
     ImageValidator {

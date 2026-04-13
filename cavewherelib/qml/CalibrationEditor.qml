@@ -5,7 +5,6 @@
 **
 **************************************************************************/
 
-// import QtQuick as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick as QQ
 import QtQuick.Layouts
 import cavewherelib
@@ -14,7 +13,8 @@ QQ.Item {
     id: calibrationEditor
     property TripCalibration calibration
 
-    // radius: 8
+    readonly property real _minColumnWidth: 200
+
     implicitHeight: childrenRect.height
 
     ColumnLayout {
@@ -28,46 +28,46 @@ QQ.Item {
             Layout.alignment: Qt.AlignHCenter
         }
 
-        QQ.Item {
-            Layout.fillWidth: true;
-            implicitHeight: childrenRect.height
+        QQ.Flow {
+            id: decTapeFlow
+            Layout.fillWidth: true
+            spacing: Theme.flowSpacing
+
+            readonly property real halfWidth: (width - spacing) / 2
+            readonly property bool twoColumn: halfWidth >= calibrationEditor._minColumnWidth
 
             DeclainationEditor {
                 calibration: calibrationEditor.calibration
-                anchors.left: parent.left
-                anchors.right: parent.horizontalCenter
+                width: decTapeFlow.twoColumn ? decTapeFlow.halfWidth : decTapeFlow.width
             }
 
             TapeCalibrationEditor {
                 id: tapeEditor
                 calibration: calibrationEditor.calibration
-                anchors.left: parent.horizontalCenter
-                anchors.right: parent.right
+                width: decTapeFlow.twoColumn ? decTapeFlow.halfWidth : decTapeFlow.width
             }
         }
 
-
-        QQ.Item {
+        QQ.Flow {
+            id: sightsFlow
             Layout.fillWidth: true
+            spacing: Theme.flowSpacing
 
-            implicitHeight: childrenRect.height
+            readonly property real halfWidth: (width - spacing) / 2
+            readonly property bool twoColumn: halfWidth >= calibrationEditor._minColumnWidth
 
             FrontSightCalibrationEditor {
                 id: frontSightCalibrationEditor
                 calibration: calibrationEditor.calibration
                 contentsVisible: checked
-
-                anchors.left: parent.left
-                anchors.right: parent.horizontalCenter
+                width: sightsFlow.twoColumn ? sightsFlow.halfWidth : sightsFlow.width
             }
 
             BackSightCalibrationEditor {
                 id: backSightCalibrationEditor
                 calibration: calibrationEditor.calibration
                 contentsVisible: checked
-
-                anchors.left: parent.horizontalCenter
-                anchors.right: parent.right
+                width: sightsFlow.twoColumn ? sightsFlow.halfWidth : sightsFlow.width
             }
         }
 

@@ -12,7 +12,7 @@ import cavewherelib
 QQ.Rectangle {
     property alias text: textArea.text
 
-    width: Math.floor(textArea.width) + 20
+    implicitWidth: Math.floor(textArea.width) + 10
     height: 40
 
     border.color: Theme.borderSubtle

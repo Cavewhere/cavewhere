@@ -37,74 +37,72 @@ Item {
     RowLayout {
         id: titleRowLayoutId
         spacing: -1
+        width: titleId.width > 0 ? titleId.width : implicitWidth
 
         TitleLabel {
             id: stationLabelId
             text: "Station"
+            Layout.fillWidth: true
         }
 
         Item {
-            width: distanceLabelId.width
+            Layout.fillWidth: true
+            implicitWidth: distanceLabelId.implicitWidth
             height: distanceLabelId.height
             TitleLabel {
                 id: distanceLabelId
-                // anchors.left: stationLabelId.right
-                // anchors.leftMargin: -1
                 y: shotOffset
                 text: "Distance"
+                width: parent.width
             }
         }
 
         Item {
-            width: compassLabelId.width
+            Layout.fillWidth: true
+            implicitWidth: compassLabelId.implicitWidth
             height: compassLabelId.height
             TitleLabel {
                 id: compassLabelId
-                // anchors.left: distanceLabelId.right
-                // anchors.leftMargin: -1
                 y: shotOffset
                 text: "Compass"
+                width: parent.width
             }
         }
 
         Item {
-            width: clinoLabelId.width
+            Layout.fillWidth: true
+            implicitWidth: clinoLabelId.implicitWidth
             height: clinoLabelId.height
             TitleLabel {
                 id: clinoLabelId
-                // anchors.left: compassLabelId.right
-                // anchors.leftMargin: -1
                 y: shotOffset
                 text: "Vertical\nAngle"
+                width: parent.width
             }
         }
 
         TitleLabel {
             id: lLabelId
-            // anchors.left: clinoLabelId.right
-            // anchors.leftMargin: -1
             text: "L"
+            Layout.fillWidth: true
         }
 
         TitleLabel {
             id: rLabelId
-            // anchors.left: lLabelId.right
-            // anchors.leftMargin: -1
             text: "R"
+            Layout.fillWidth: true
         }
 
         TitleLabel {
             id: uLabelId
-            // anchors.left: rLabelId.right
-            // anchors.leftMargin: -1
             text: "U"
+            Layout.fillWidth: true
         }
 
         TitleLabel {
             id: dLabelId
-            // anchors.left: uLabelId.right
-            // anchors.leftMargin: -1
             text: "D"
+            Layout.fillWidth: true
         }
     }
 

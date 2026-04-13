@@ -18,12 +18,15 @@ QQ.Item {
     property Trip currentTrip
     property TripCalibration currentCalibration: currentTrip.calibration
     readonly property alias contentWidth: scrollAreaId.width //For animation
+    property bool isNarrow: false
+    property SurveyNotesConcatModel notesModel: null
 
     signal collapseClicked();
+    signal noteClicked(int noteIndex)
 
     clip: false
 
-    width: scrollAreaId.width
+    width: isNarrow ? parent.width : scrollAreaId.width
     height: 100
 
     TripLengthTask {
@@ -54,8 +57,9 @@ QQ.Item {
         anchors.margins: 1;
 
         QC.ScrollBar.vertical.stepSize: 50;
+        QC.ScrollBar.vertical.policy: clipArea.isNarrow ? QC.ScrollBar.AlwaysOff : QC.ScrollBar.AsNeeded
 
-        width: 500; //flickableAreaId.contentWidth
+        width: clipArea.isNarrow ? clipArea.width : 500
         visible: true
         clip: true
 
@@ -126,7 +130,7 @@ QQ.Item {
             header: ColumnLayout {
                 id: column
                 spacing: 5
-                width: scrollAreaId.width - 30
+                width: scrollAreaId.width - viewId.contentMargin
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -135,6 +139,7 @@ QQ.Item {
                     QQ.Item {
                         Layout.fillWidth: true
                         implicitHeight: collapseButton.height
+                        visible: !clipArea.isNarrow
                         SectionLabel {
                             text: "Trip"
                         }
@@ -202,10 +207,81 @@ QQ.Item {
                     Layout.fillWidth: true
                 }
 
+                // Note thumbnails — visible only in narrow mode
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: clipArea.isNarrow && clipArea.notesModel !== null
+
+                    BreakLine { }
+
+                    SectionHeader {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "Notes"
+                        showAddButton: true
+                        onAddClicked: addNotesFileDialog.open()
+
+                        NotesFileDialog {
+                            id: addNotesFileDialog
+                            onFilesSelected: (images) => clipArea.notesModel.addFiles(images)
+                        }
+                    }
+
+                    QQ.Flow {
+                        Layout.fillWidth: true
+                        spacing: Theme.flowSpacing
+
+                        QQ.Repeater {
+                            model: clipArea.notesModel
+
+                            delegate: QQ.Item {
+                                id: thumbDelegate
+                                required property url iconPath
+                                required property QQ.QtObject noteObject
+                                required property int index
+
+                                width: thumbSize
+                                height: thumbSize
+
+                                readonly property real thumbSize: 80
+
+                                QQ.Image {
+                                    anchors.fill: parent
+                                    anchors.margins: 2
+                                    source: thumbDelegate.iconPath
+                                    fillMode: QQ.Image.PreserveAspectFit
+                                    asynchronous: true
+                                    sourceSize: Qt.size(width, height)
+                                    rotation: thumbDelegate.noteObject?.rotate ?? 0
+                                }
+
+                                QQ.Rectangle {
+                                    anchors.fill: parent
+                                    anchors.margins: 2
+                                    visible: thumbDelegate.iconPath.toString().length === 0
+                                    color: Theme.surfaceMuted
+                                    radius: 4
+                                    QC.Label {
+                                        anchors.centerIn: parent
+                                        text: "3D"
+                                        color: Theme.textSubtle
+                                    }
+                                }
+
+                                QQ.TapHandler {
+                                    gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
+                                    onSingleTapped: clipArea.noteClicked(thumbDelegate.index)
+                                }
+                            }
+                        }
+                    }
+
+                }
+
                 BreakLine { }
 
                 SectionLabel {
                     text: "Data"
+                    Layout.alignment: Qt.AlignHCenter
                 }
 
                 SurveyErrorOverview {
@@ -228,8 +304,11 @@ QQ.Item {
 
             model: editorModel
 
+            readonly property int contentMargin: clipArea.isNarrow ? 10 : 30
+
             SurveyEditorColumnTitles {
                 id: titleTemplate
+                width: viewId.width - viewId.contentMargin
                 visible: false
                 listViewIndex: -1
                 chunk: null
@@ -251,7 +330,7 @@ QQ.Item {
 
 
             footer: ColumnLayout {
-                width: scrollAreaId.width - 30
+                width: scrollAreaId.width - viewId.contentMargin
 
                 QC.Label {
                     objectName: "totalLengthText"

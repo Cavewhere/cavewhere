@@ -17,7 +17,9 @@ StandardPage {
 
     property alias currentTrip: surveyEditor.currentTrip
     property string viewMode: ""
-    property alias currentNoteIndex: notesGallery.currentNoteIndex
+    property int currentNoteIndex: notesGalleryLoader.item ? notesGalleryLoader.item.currentNoteIndex : 0
+
+    readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
 
     function registerSubPages() {
         var oldCarpetPage = PageView.page.childPage("Carpet")
@@ -49,19 +51,33 @@ StandardPage {
     PageView.onPageChanged: registerSubPages()
 
     onViewModeChanged: {
+        if(area.isNarrow) return;
+        let ng = notesGalleryLoader.item
+        if(!ng) return;
         if(viewMode == "CARPET") {
-            notesGallery.setMode("CARPET")
+            ng.setMode("CARPET")
             state = "COLLAPSE" //Hide the survey data on the left side
         } else {
-            notesGallery.setMode("DEFAULT")
+            ng.setMode("DEFAULT")
             state = "" //Show the survey data on the left side
             surveyEditor.visible = true
-            notesGallery.visible = true
+            ng.visible = true
+        }
+    }
+
+    onIsNarrowChanged: {
+        if(isNarrow && state === "COLLAPSE") {
+            state = ""
         }
     }
 
     onCurrentNoteIndexChanged: {
         PageView.page.selectionProperties = { "currentNoteIndex":currentNoteIndex }
+    }
+
+    SurveyNotesConcatModel {
+        id: surveyNoteConcatModelId
+        trip: area.currentTrip
     }
 
     SurveyEditor {
@@ -71,6 +87,8 @@ StandardPage {
         anchors.left: parent.left
         anchors.margins: 5
         visible: true
+        isNarrow: area.isNarrow
+        notesModel: surveyNoteConcatModelId
 
         onCollapseClicked: {
             area.state = "COLLAPSE"
@@ -121,36 +139,24 @@ StandardPage {
 
     }
 
-    NotesGallery {
-        id: notesGallery
-        notesModel: SurveyNotesConcatModel {
-            id: surveyNoteConcatModelId
-            trip: area.currentTrip
-            // area.currentTrip.notes
-        }
+    QQ.Loader {
+        id: notesGalleryLoader
+        active: !area.isNarrow
+        visible: !area.isNarrow
         anchors.left: surveyEditor.right
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         clip: true
 
-        onImagesAdded: (images) => {
-                           console.log("Adding images:" + images)
-            surveyNoteConcatModelId.addFiles(images)
+        sourceComponent: QQ.Component {
+            NotesGallery {
+                notesModel: surveyNoteConcatModelId
+                onImagesAdded: (images) => {
+                    surveyNoteConcatModelId.addFiles(images)
+                }
+            }
         }
-
-        // onBackClicked: {
-        //     RootData.pageSelectionModel.back()
-        // }
-
-        // onModeChanged: {
-        //     if(mode === "CARPET"
-        //             && area.viewMode === "") {
-        //         var page = area.PageView.page
-        //         RootData.pageSelectionModel.gotoPageByName(area.PageView.page, "Carpet")
-        //         RootData.pageSelectionModel.currentPage.selectionProperties = page.selectionProperties
-        //     }
-        // }
     }
 
 
@@ -169,7 +175,7 @@ StandardPage {
             }
 
             QQ.AnchorChanges {
-                target: notesGallery
+                target: notesGalleryLoader
                 anchors.left: collapseRectangleId.right
             }
 
@@ -196,7 +202,7 @@ StandardPage {
 
             QQ.ParallelAnimation {
                 QQ.AnchorAnimation {
-                    targets: [ notesGallery ]
+                    targets: [ notesGalleryLoader ]
                 }
 
                 QQ.NumberAnimation {
@@ -218,11 +224,11 @@ StandardPage {
             to: ""
 
 
-            QQ.PropertyAction { target: notesGallery; property: "anchors.left"; value: surveyEditor.right}
+            QQ.PropertyAction { target: notesGalleryLoader; property: "anchors.left"; value: surveyEditor.right}
 
             QQ.ParallelAnimation {
                 QQ.AnchorAnimation {
-                    targets: [ notesGallery ]
+                    targets: [ notesGalleryLoader ]
                 }
 
                 QQ.NumberAnimation {
