@@ -8,15 +8,16 @@
 //Our includes
 #include "cwCavernTask.h"
 #include "cwDebug.h"
-#include "cwFileUtils.h"
+
+//Survex library
+#include "cavern_lib.h"
 
 //Qt includes
 #include <QReadLocker>
-#include <QProcess>
 #include <QFileInfo>
 #include <QDir>
 #include <QDebug>
-#include <QApplication>
+#include <QMutexLocker>
 
 cwCavernTask::cwCavernTask(QObject *parent) :
     cwTask(parent)
@@ -39,7 +40,7 @@ void cwCavernTask::setSurvexFile(QString inputFile) {
   */
 QString cwCavernTask::output3dFileName() const {
     QFileInfo info(survexFileName().append(survex3dExtension()));
-    if(info.exists()) {
+    if (info.exists()) {
         return info.absoluteFilePath();
     } else {
         return QString();
@@ -47,89 +48,40 @@ QString cwCavernTask::output3dFileName() const {
 }
 
 /**
-  \brief Runs survex's cavern
+  \brief Runs survex's cavern as a library call
   */
- void cwCavernTask::runTask() {
- #if QT_CONFIG(process)
-     if(!isRunning()) {
-         done();
-         return;
-     }
+void cwCavernTask::runTask() {
+    if (!isRunning()) {
+        done();
+        return;
+    }
 
-     auto qprocessDeleter = [](QProcess* process) {
-         if(process) {
-             process->deleteLater();
-         }
-     };
+    // cavern_run() uses global state, serialize all calls
+    static QMutex cavernMutex;
+    QMutexLocker locker(&cavernMutex);
 
-     //If QProcess crashes, errorOccured could happen before the process finishes
-     std::unique_ptr<QProcess, decltype(qprocessDeleter)> cavernProcess(new QProcess, qprocessDeleter);
+    QString inputFile = survexFileName();
+    QString outputFile = inputFile + survex3dExtension();
 
-     //Set the process's working directory
-     QFileInfo survexFileInfo(SurvexFileName);
-     QString workingDirectory = survexFileInfo.absoluteDir().absolutePath();
-     cavernProcess->setWorkingDirectory(workingDirectory);
+    char arg0[] = "cavern";
+    QByteArray outputArg = QStringLiteral("--output=%1").arg(outputFile).toUtf8();
+    QByteArray inputArg = inputFile.toUtf8();
 
-     connect(cavernProcess.get(), SIGNAL(errorOccurred(QProcess::ProcessError)), this, SLOT(processError(QProcess::ProcessError)));
+    char* argv[] = {
+        arg0,
+        outputArg.data(),
+        inputArg.data(),
+        nullptr
+    };
 
-     QString inputFile = survexFileName();
-     QString outputFile = inputFile + survex3dExtension();
+    int rc = cavern_run(3, argv);
+    if (rc != 0) {
+        qDebug() << "cavern_run failed with exit code" << rc << "for" << inputFile;
+        stop();
+    }
 
-     QStringList cavernAppNames;
-     cavernAppNames.append("cavern");
-     cavernAppNames.append("cavern.exe");
-
-     //The absolute pathe for the cavern executable
-     QString cavernPathName = cwGlobals::findExecutable(cavernAppNames, {cwGlobals::survexPath()});
-     QFileInfo cavernFileInfo(cavernPathName);
-     if(cavernFileInfo.absoluteDir().exists("en.msg")) {
-         cavernProcess->setEnvironment({QStringLiteral("SURVEXLIB=") + cavernFileInfo.absolutePath()});
-     }
-
-     //Found cavern executable?
-     if(cavernPathName.isEmpty()) {
-         qDebug() << "Can't find cavern executable!  This means cavewhere can't do loop closure or line ploting!!! Oh the horror!";
-         done();
-         return;
-     }
-
-     QStringList arguments;
-     arguments.append(QString("--output=%1").arg(outputFile));
-     arguments.append(inputFile);
-
-     cavernProcess->start(cavernPathName, arguments);
-     cavernProcess->waitForFinished();
-
-     if(cavernProcess->exitStatus() == QProcess::CrashExit) {
-         qDebug() << "Cavern has crash!" << cavernProcess->readAllStandardOutput();
-         stop();
-     } else if(cavernProcess->exitCode() > 0) {
-         int count = 0;
-         while (cavernProcess->canReadLine()) {
-             QString line = cavernProcess->readLine().trimmed();
-             ++count;
-
-             //Skip the first two info lines
-             if (!line.contains("error: No survey data") && count > 2) {
-                 // Process or store the valid line
-                 qDebug() << "cavern:" <<line;
-             }
-         }
-
-         stop();
-     } else {
-         if (!cwGlobals::isInApplicationDir(outputFile)) {
-             //This is a work around to this issue:
-             //https://trac.survex.com/ticket/147#ticket
-             cwFileUtils::waitForFileReady(outputFile);
-         }
-     }
-
-#endif
-
-     done();
+    done();
 }
-
 
 /**
   \brief Gets the survex file's
@@ -146,19 +98,3 @@ void cwCavernTask::privateSetSurvexFile(QString survexFile) {
     QWriteLocker locker(&SurvexFileNameLocker);
     SurvexFileName = survexFile;
 }
-
-
-/**
-* @brief cwCavernTask::processError
-* @param error
-*
-* Called when cavern process has errored
-*/
-#if QT_CONFIG(process)
-void cwCavernTask::processError(QProcess::ProcessError error)
-{
-   qDebug() << "Cavern has errored out with ProcessError code" << error << LOCATION;
-   stop();
-   done();
-}
-#endif

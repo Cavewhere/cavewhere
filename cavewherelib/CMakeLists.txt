@@ -109,7 +109,8 @@ target_link_libraries(cavewherelib
     abseil::abseil
     xxHash::xxhash
     MINIZIP::minizip
-    # surveximg
+    surveximg
+    cavernlib
 )
 
 cw_link_absl_static(cavewherelib)

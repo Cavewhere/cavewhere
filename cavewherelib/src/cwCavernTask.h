@@ -14,7 +14,7 @@
 
 //Qt includes
 #include <QReadWriteLock>
-#include <QProcess>
+#include <QMutex>
 
 class CAVEWHERE_LIB_EXPORT cwCavernTask : public cwTask
 {
@@ -24,12 +24,6 @@ public:
 
     void setSurvexFile(QString inputFile);
     QString output3dFileName() const;
-
-signals:
-
-public slots:
-
-
 
 protected:
     void runTask();
@@ -45,12 +39,6 @@ private:
 
 private slots:
     void privateSetSurvexFile(QString suvexFile);
-
-//    void cavernFinished(int exitCode, QProcess::ExitStatus exitStatus);
-
-#if QT_CONFIG(process)
-    void processError(QProcess::ProcessError error);
-#endif
 };
 
 #endif // CWCAVERNTASK_H

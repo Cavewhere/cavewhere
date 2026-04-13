@@ -456,6 +456,15 @@ void cwRootData::shutdownBlocking()
 void cwRootData::initCavewherelib()
 {
     QQuickGit::GitRepository::initGitEngine();
+
+    // Set SURVEXLIB so cavern_run() can find message files (en.msg).
+    // This must be set before any cavern_run() call.
+    for (const QDir& dir : cwGlobals::survexPath()) {
+        if (QFileInfo(dir.filePath("en.msg")).exists()) {
+            qputenv("SURVEXLIB", dir.absolutePath().toUtf8());
+            break;
+        }
+    }
 }
 
 cwRemoteServices* cwRootData::remote() const

@@ -10,8 +10,7 @@
 #include "cwConcurrent.h"
 #include "cwSurvexExporterRegionTask.h"
 #include "cwCavernTask.h"
-#include "cwSurvexportTask.h"
-#include "cwSurvexportCSVTask.h"
+#include "cwSurvex3DFileReader.h"
 #include "cwLinePlotGeometryTask.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
@@ -32,7 +31,6 @@
 #include <QFileInfo>
 #include <QFile>
 #include <QDir>
-#include <QProcess>
 #include <QEventLoop>
 #include <QFileSystemWatcher>
 #include <QTimer>
@@ -161,12 +159,11 @@ struct cwLinePlotTask::LinePlotWorker {
             return result;
         }
 
-        QString csvFile = runSurvexport(threeDFile);
-        if (csvFile.isEmpty()) {
+        cwSurvex3DFileReader reader;
+        cwStationPositionLookup stationPositions = reader.readStationPositions(threeDFile);
+        if (stationPositions.isEmpty()) {
             return result;
         }
-
-        cwStationPositionLookup stationPositions = parseSurvexport(csvFile);
         updateStationPositionForCaves(stationPositions, result);
 
         GeometryResult geometry = generateGeometry();
@@ -230,24 +227,6 @@ private:
         cavernTask.setSurvexFile(survexFilename);
         runTaskInPlace(cavernTask);
         return QFileInfo::exists(cavernTask.output3dFileName()) ? cavernTask.output3dFileName() : QString();
-    }
-
-    QString runSurvexport(const QString& threeDFile)
-    {
-        cwSurvexportTask survexportTask;
-        survexportTask.setUsingThreadPool(false);
-        survexportTask.setSurvex3DFile(threeDFile);
-        runTaskInPlace(survexportTask);
-        return QFileInfo::exists(survexportTask.outputFilename()) ? survexportTask.outputFilename() : QString();
-    }
-
-    cwStationPositionLookup parseSurvexport(const QString& csvFile)
-    {
-        cwSurvexportCSVTask parser;
-        parser.setUsingThreadPool(false);
-        parser.setSurvexportCSVFile(csvFile);
-        runTaskInPlace(parser);
-        return parser.stationPositions();
     }
 
     GeometryResult generateGeometry()

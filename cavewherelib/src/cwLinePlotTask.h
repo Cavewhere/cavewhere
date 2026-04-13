@@ -17,8 +17,6 @@ class cwLinePlotGeometryTask;
 #include "cwCavingRegionData.h"
 class cwSurvexExporterRegionTask;
 class cwCavernTask;
-class cwSurvexportTask;
-class cwSurvexportCSVTask;
 class cwScrap;
 class cwTrip;
 class cwCave;
