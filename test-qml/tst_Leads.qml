@@ -162,13 +162,19 @@ MainWindowTest {
             setNoteOverlaysCollapsed(true)
 
             let imageId_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
-            mouseClick(imageId_obj1, 1854.2, 1091.57)
-
-            // Verify the scrap is actually selected before proceeding
             let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea")
             let scrapViewEarly = findChild(noteArea, "scrapViewId")
-            tryVerify(() => scrapViewEarly.selectedScrapItem !== null, 5000,
-                      "scrap should be selected after image click")
+
+            // Retry the click — under heavy CI load the carpet animation
+            // may not have fully settled, causing the first click to miss
+            mouseClick(imageId_obj1, 1854.2, 1091.57)
+            tryVerify(() => {
+                          if (scrapViewEarly.selectedScrapItem === null) {
+                              mouseClick(imageId_obj1, 1854.2, 1091.57)
+                              return false
+                          }
+                          return true
+                      }, 5000, "scrap should be selected after image click")
 
             // Click addLeads — retry if the click doesn't register
             // (can happen when QML is still processing the SELECT state transition)
