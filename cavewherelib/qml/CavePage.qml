@@ -131,7 +131,6 @@ StandardPage {
             QC.ComboBox {
                 id: sortComboId
                 model: ["Name", "Date", "Stations", "Length"]
-                font.pixelSize: Theme.fontSizeSmall
 
                 property list<int> sortRoles: [
                     CavePageModel.TripNameRole,
@@ -146,28 +145,19 @@ StandardPage {
                 }
             }
 
-            QC.AbstractButton {
+            QC.RoundButton {
                 id: sortOrderButtonId
                 property bool ascending: true
 
-                implicitWidth: sortArrowId.implicitWidth + 12
                 implicitHeight: sortComboId.height
+                implicitWidth: implicitHeight
 
-                contentItem: QQ.Image {
-                    id: sortArrowId
-                    source: "qrc:/icons/moreArrowDown.png"
-                    rotation: sortOrderButtonId.ascending ? 180 : 0
-                    sourceSize: Qt.size(12, 12)
-                    smooth: true
-                    anchors.centerIn: parent
-                }
-
-                background: QQ.Rectangle {
-                    radius: 4
-                    color: sortOrderButtonId.hovered ? Theme.surfaceRaised : "transparent"
-                    border.color: Theme.borderSubtle
-                    border.width: 1
-                }
+                icon.source: sortOrderButtonId.ascending
+                             ? "qrc:/twbs-icons/icons/sort-up.svg"
+                             : "qrc:/twbs-icons/icons/sort-down.svg"
+                icon.width: 16
+                icon.height: 16
+                icon.color: Theme.text
 
                 onClicked: {
                     ascending = !ascending
