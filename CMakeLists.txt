@@ -206,9 +206,7 @@ add_subdirectory(MarkScope)
 add_subdirectory(QuickQanava)
 # add_subdirectory(SignalSpyChecker)
 
-if(NOT MOBILE_BUILD)
-    add_subdirectory(survex)
-endif()
+add_subdirectory(survex)
 
 if(UNIX AND NOT APPLE AND NOT MOBILE_BUILD)
     include(ExternalProject)
@@ -749,27 +747,22 @@ if(APPLE)
             )
         endif()
 
-        # if(NOT MOBILE_BUILD)
-            #Disable survex
-
         add_custom_command(TARGET CaveWhere POST_BUILD
-            # COMMAND ${CMAKE_COMMOND} -E
-            # COMMAND ${CMAKE_COMMAND} -E copy_directory ${SURVEX_OUTPUT_DIR} $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/MacOS/survex/
             COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:cavern> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/MacOS/cavern
             COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:survexport> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/MacOS/survexport
-
             COMMENT "Copying survex module to application bundle."
         )
 
+        set(SVX_MSG_DEST "$<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources")
         foreach(MSG_FILE ${SVX_MESSAGE_FILES})
             get_filename_component(MSG_NAME ${MSG_FILE} NAME)
             add_custom_command(TARGET CaveWhere POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy ${MSG_FILE} $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/${MSG_NAME}
+                COMMAND ${CMAKE_COMMAND} -E copy ${MSG_FILE} ${SVX_MSG_DEST}/${MSG_NAME}
                 COMMENT "Copying ${MSG_NAME} to application bundle."
             )
         endforeach()
 
-        add_dependencies(CaveWhere messageFiles) #Makes sure the message files get copied to bundle correctly
+        add_dependencies(CaveWhere messageFiles)
 
         # Define the icon file
         set(APP_ICON "${CMAKE_SOURCE_DIR}/${CMAKE_MACOSX_BUNDLE_ICON_FILE}")
@@ -832,6 +825,18 @@ if(APPLE)
             endif()
 
         endif()
+    else()
+        # iOS: copy message files into the flat app bundle so cavern_run() can find them
+        set(SVX_MSG_DEST "$<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>")
+        foreach(MSG_FILE ${SVX_MESSAGE_FILES})
+            get_filename_component(MSG_NAME ${MSG_FILE} NAME)
+            add_custom_command(TARGET CaveWhere POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy ${MSG_FILE} ${SVX_MSG_DEST}/${MSG_NAME}
+                COMMENT "Copying ${MSG_NAME} to application bundle."
+            )
+        endforeach()
+
+        add_dependencies(CaveWhere messageFiles)
     endif()
 
 endif()

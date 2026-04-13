@@ -37,6 +37,9 @@ class CaveWhereConan(ConanFile):
     generators = "CMakeDeps", "CMakeToolchain", "VirtualBuildEnv", "VirtualRunEnv"
 
     def requirements(self):
+        # PROJ is needed by survex (cavernlib/survex_core) on all platforms
+        self.requires("proj/[>=9.3.1]")
+
         if not self.options.mobile:
             #We handle survex dependancies here for now, since we're using conan
             self.requires("wxwidgets/[>=3.2.6]")
@@ -45,7 +48,6 @@ class CaveWhereConan(ConanFile):
             self.requires("gdal/[>=3.5.3]")
             self.requires("expat/[>=2.6.2]", override=True)
             self.requires("libpng/[>=1.6.44]", override=True)
-            self.requires("proj/[>=9.3.1]")
             self.requires("nlohmann_json/[>=3.12.0]", override=True)
 
         if self.settings.os == "Linux":
@@ -110,7 +112,13 @@ class CaveWhereConan(ConanFile):
             self.options["qt"].with_libjpeg = "libjpeg"
             self.options["qt"].with_dbus = True
 
-        if not self.options.mobile:
+        self.options["proj"].with_curl = False
+
+        if self.options.mobile:
+            # Disable TIFF to avoid libjpeg version conflict: proj → libtiff → libjpeg 9e
+            # clashes with Qt's libjpeg-turbo (version 80) in the static iOS link.
+            self.options["proj"].with_tiff = False
+        else:
             #Arrow fails on github linux build, disable
             self.options["gdal"].with_arrow = False
 
@@ -118,7 +126,6 @@ class CaveWhereConan(ConanFile):
             #conan doesn't support strawberryperl or msys
             self.options["gdal"].with_curl = False
             self.options["gdal"].with_libiconv = False
-            self.options["proj"].with_curl = False
 
 
             #This prevents xcode build from failing
