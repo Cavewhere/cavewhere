@@ -1962,10 +1962,13 @@ MainWindowTest {
             }
 
             let verifySelectedLiDARNote = function(expectedFileName) {
-                let galleryItem = ObjectFinder.findObjectByChain(
-                    mainWindow,
-                    "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
-                verify(galleryItem !== null)
+                let galleryItem = null
+                tryVerify(() => {
+                    galleryItem = ObjectFinder.findObjectByChain(
+                        mainWindow,
+                        "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                    return galleryItem !== null
+                }, 5000, "gallery delegate should exist for last note")
                 mouseClick(galleryItem)
 
                 tryVerifyWithDiagnostics(() => {
@@ -2110,10 +2113,13 @@ MainWindowTest {
             }
 
             let verifySelectedLiDARNote = function(expectedFileName) {
-                let galleryItem = ObjectFinder.findObjectByChain(
-                    mainWindow,
-                    "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
-                verify(galleryItem !== null)
+                let galleryItem = null
+                tryVerify(() => {
+                    galleryItem = ObjectFinder.findObjectByChain(
+                        mainWindow,
+                        "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                    return galleryItem !== null
+                }, 5000, "gallery delegate should exist for last note")
                 mouseClick(galleryItem)
 
                 tryVerifyWithDiagnostics(() => {
