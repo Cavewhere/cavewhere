@@ -352,6 +352,8 @@ MainWindowTest {
 
             if (shouldForceRebind && galleryView.currentIndex === noteIndex) {
                 galleryView.currentIndex = -1
+                // wait() needed — ListView must process the deselection before
+                // reselecting the same index to force a delegate rebind
                 wait(50)
             }
             if (galleryView.currentIndex !== noteIndex) {
@@ -1542,6 +1544,8 @@ MainWindowTest {
 
             mouseClick(addScrapButton())
             noteGallery().state = "ADD-SCRAP"
+            // wait() needed — the ADD-SCRAP state transition uses ScriptAction
+            // which fires asynchronously; the interaction isn't ready for clicks yet
             wait(100)
 
             let image = imageItem()
@@ -1553,17 +1557,14 @@ MainWindowTest {
 
             mouseMove(image, points[0].x, points[0].y)
             mouseClick(image, points[0].x, points[0].y)
-            wait(50)
             tryVerifyWithDiagnostics(() => {
                 return currentScrapView.count === existingScrapCount + 1
             }, 5000, "wait for new scrap row")
             mouseClick(autoCalculateScrapCheckBox())
-            wait(50)
 
             for (let i = 1; i < points.length; ++i) {
                 mouseMove(image, points[i].x, points[i].y)
                 mouseClick(image, points[i].x, points[i].y)
-                wait(50)
             }
 
             tryVerifyWithDiagnostics(() => {

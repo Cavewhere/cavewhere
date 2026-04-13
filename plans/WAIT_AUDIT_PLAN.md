@@ -183,6 +183,14 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - wait(50) after waitForFinished() removed — no async dependency before save()
 - Verified 10/10 passes
 
+### tst_ScrapSync.qml — 6 → 3 wait() (3 removed)
+- 3x wait(50) in createNewScrap removed — after first scrap point (redundant before tryVerifyWithDiagnostics), after checkbox click (synchronous), between scrap point clicks in loop (synchronous)
+- wait(50) for ListView deselect/reselect rebind retained — must process deselection before same-index reselect
+- wait(100) for ADD-SCRAP ScriptAction transition retained — interaction not ready for clicks yet
+- wait(50) inside tryVerifyWithDiagnostics polling loop retained — already polling behavior
+- Added explanatory comments to retained waits
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:
