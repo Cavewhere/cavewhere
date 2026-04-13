@@ -61,7 +61,8 @@ MainWindowTest {
             let carpetButton = ObjectFinder.findObjectByChain(
                 mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(carpetButton)
-            wait(300)
+            let carpetArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonArea")
+            tryVerify(() => carpetArea.scale === 1.0)
 
             // -- 3. Select the first scrap and record original station position --
             let noteArea = ObjectFinder.findObjectByChain(
@@ -143,7 +144,8 @@ MainWindowTest {
             carpetButton = ObjectFinder.findObjectByChain(
                 mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(carpetButton)
-            wait(300)
+            carpetArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonArea")
+            tryVerify(() => carpetArea.scale === 1.0)
 
             // -- 7. Verify the station is back to its original position --
             // Re-query noteArea and scrapView inside tryVerify so we

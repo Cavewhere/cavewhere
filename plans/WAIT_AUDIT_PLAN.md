@@ -221,6 +221,37 @@ This works when the next action doesn't click through the noteTransformEditor ov
 - 8x waitForRendering retained — needed for text field focus under offscreen (activeFocus not reliable)
 - Verified 10/10 passes
 
+### tst_DiscardReload.qml — 2 → 0 wait() (2 replaced)
+- 2x wait(300) after carpet button → tryVerify(carpetButtonArea.scale === 1.0)
+- Verified 10/10 passes
+
+### tst_NoteScaleInteraction.qml — 2 → 0 wait() (2 replaced)
+- wait(1000) after carpet button → tryVerify(carpetButtonArea.scale === 1.0); removed stale toCarpetTransition check
+- wait(200) after scrap selection → tryVerify for setLengthButton existence
+- Verified 10/10 passes
+
+### tst_TurntableInteraction.qml — 1 → 0 wait() (1 removed)
+- wait(50) after mouseWheel loop removed — events are synchronous
+- Verified 10/10 passes
+
+### tst_GitWorkingTreePanel.qml — 1 → 0 wait() (1 removed)
+- wait(0) after destroy() removed — no-op
+- Verified 10/10 passes
+
+### tst_GitImageComparePage.qml — 1 → 0 wait() (1 removed)
+- wait(0) after destroy() removed — no-op
+- Verified 10/10 passes
+
+### tst_GitFileDiffPage.qml — 1 → 0 wait() (1 removed)
+- wait(0) after destroy() removed — no-op
+- Verified 10/10 passes
+
+### tst_ScrapSelectionReset.qml — 1 → 1 wait() (comment only)
+- wait(200) after carpet button retained — scrap view initialization needs settle time beyond animation
+- Verified 10/10 passes
+
+### tst_QuoteBox.qml — 0 active wait() (nothing to change)
+
 ## Execution approach
 
 Work through files in priority order. For each file:

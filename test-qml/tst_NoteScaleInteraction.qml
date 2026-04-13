@@ -22,19 +22,19 @@ MainWindowTest {
             let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(_obj1);
 
-            //Wait until the carpet is Selectd
-            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
-            let carpetTransition = findChild(noteGallery, "toCarpetTransition")
-            tryVerify(()=>{ return !carpetTransition.running });
-
-            wait(1000);
+            //Wait until the carpet animation is done
+            let carpetArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonArea")
+            tryVerify(() => carpetArea.scale === 1.0)
 
             //Select scrap
             let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId_obj2, 475.801, 600.855)
-            wait(200)
 
-            let setLengthButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->setLengthButton")
+            let setLengthButton_obj1 = null
+            tryVerify(() => {
+                          setLengthButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->setLengthButton")
+                          return setLengthButton_obj1 !== null
+                      })
             mouseClick(setLengthButton_obj1)
 
             // let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")

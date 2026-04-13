@@ -48,7 +48,6 @@ Item {
             if (rootId.currentPage) {
                 rootId.currentPage.destroy()
                 rootId.currentPage = null
-                wait(0)
             }
         }
 

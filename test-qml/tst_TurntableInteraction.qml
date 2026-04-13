@@ -22,8 +22,6 @@ MainWindowTest {
                 mouseWheel(turnTableInteraction, 521, 344, 0, 100, Qt.LeftButton, Qt.NoModifier, 30)
             }
 
-            wait(50)
-
             let originalPosition = Qt.vector3d(turnTableInteraction.camera.position.x,
                                                turnTableInteraction.camera.position.y,
                                                turnTableInteraction.camera.position.z)

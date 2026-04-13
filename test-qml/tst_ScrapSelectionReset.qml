@@ -18,6 +18,8 @@ MainWindowTest {
 
             let carpetButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(carpetButton);
+            // wait() needed — scrap view initialization after carpet mode requires
+            // additional settle time beyond the animation completion
             wait(200);
 
             let noteArea = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea");

@@ -43,7 +43,6 @@ Item {
             if (rootId.currentPanel) {
                 rootId.currentPanel.destroy()
                 rootId.currentPanel = null
-                wait(0)
             }
         }
 
