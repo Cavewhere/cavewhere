@@ -246,6 +246,7 @@ QQ.Item {
                                 readonly property real thumbSize: 80
 
                                 QQ.Image {
+                                    id: thumbImage
                                     anchors.fill: parent
                                     anchors.margins: 2
                                     source: thumbDelegate.iconPath
@@ -253,6 +254,11 @@ QQ.Item {
                                     asynchronous: true
                                     sourceSize: Qt.size(width, height)
                                     rotation: thumbDelegate.noteObject?.rotate ?? 0
+                                }
+
+                                QC.BusyIndicator {
+                                    anchors.centerIn: parent
+                                    running: thumbImage.visible && thumbImage.status === QQ.Image.Loading
                                 }
 
                                 QQ.Rectangle {
