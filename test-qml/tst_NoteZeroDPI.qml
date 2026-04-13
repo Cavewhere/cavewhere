@@ -38,7 +38,7 @@ MainWindowTest {
             let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(_obj1);
 
-            let carpetArea = findChild(ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery"), "carpetButtonArea")
+            let carpetArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonArea")
             tryVerify(() => carpetArea.scale === 1.0)
 
             //Text DPI should be correct
