@@ -15,6 +15,8 @@ import "Utils.js" as Utils
 QQ.Item {
     id: clipArea
 
+    objectName: "surveyEditor"
+
     property Trip currentTrip
     property TripCalibration currentCalibration: currentTrip.calibration
     readonly property alias contentWidth: scrollAreaId.width //For animation
