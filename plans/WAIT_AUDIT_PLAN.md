@@ -197,18 +197,13 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - Added explanatory comments to all 4 waits
 - Verified 10/10 passes
 
-### tst_NoteZeroDPI.qml — 5 → 0 wait() (5 removed)
+### tst_NoteZeroDPI.qml — 5 → 1 wait() (4 removed)
 - 4x wait(100) removed — 2x after mouseClick(text) for focus (synchronous), 2x before tryCompare (already polls)
-- wait(500) after carpet button → tryVerify(carpetButtonArea.scale === 1.0) — polls for animation completion via objectName added to NotesGallery.qml
+- wait(500) after carpet button retained — animation repositions toolbar
 - Verified 10/10 passes
 
-### Carpet animation replacement pattern
-Added `objectName: "carpetButtonArea"` to NotesGallery.qml. Tests can now replace `wait(200-500)` after carpet button click with:
-```
-let carpetArea = findChild(noteGallery, "carpetButtonArea")
-tryVerify(() => carpetArea.scale === 1.0)
-```
-This works when the next action doesn't click through the noteTransformEditor overlay (z=2). Where the overlay intercepts clicks (e.g., tst_NoteNorthInteraction), the wait is still needed for overlay settle, not the animation.
+### Carpet animation — objectName approach reverted
+Adding `objectName: "carpetButtonArea"` to NotesGallery.qml caused ObjectFinder chain-matching collisions in the full suite (10+ cascading failures in Leads, LiDARNotes, ScrapInteraction, ScrapSync). The objectName made carpetButtonArea findable by name, which interfered with other tests' chain lookups. All carpet animation waits reverted to fixed `wait()` calls.
 
 ### tst_LidarSync.qml — 4 → 0 wait() (4 removed)
 - 2x wait(50) after galleryView.currentIndex = -1 removed — clearing selection before iterating, no async dependency
@@ -221,12 +216,12 @@ This works when the next action doesn't click through the noteTransformEditor ov
 - 8x waitForRendering retained — needed for text field focus under offscreen (activeFocus not reliable)
 - Verified 10/10 passes
 
-### tst_DiscardReload.qml — 2 → 0 wait() (2 replaced)
-- 2x wait(300) after carpet button → tryVerify(carpetButtonArea.scale === 1.0)
+### tst_DiscardReload.qml — 2 → 2 wait() (comments only)
+- 2x wait(300) after carpet button retained — animation repositions toolbar (objectName approach reverted)
 - Verified 10/10 passes
 
-### tst_NoteScaleInteraction.qml — 2 → 0 wait() (2 replaced)
-- wait(1000) after carpet button → tryVerify(carpetButtonArea.scale === 1.0); removed stale toCarpetTransition check
+### tst_NoteScaleInteraction.qml — 2 → 1 wait() (1 replaced)
+- wait(1000) after carpet button retained — animation repositions toolbar (objectName approach reverted); removed stale toCarpetTransition check
 - wait(200) after scrap selection → tryVerify for setLengthButton existence
 - Verified 10/10 passes
 

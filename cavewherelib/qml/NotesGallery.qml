@@ -418,7 +418,6 @@ QQ.Rectangle {
 
     ShadowRectangle {
         id: carpetButtonArea
-        objectName: "carpetButtonArea"
         visible: false
         z: 1
 

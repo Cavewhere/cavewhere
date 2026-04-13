@@ -61,8 +61,9 @@ MainWindowTest {
             let carpetButton = ObjectFinder.findObjectByChain(
                 mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(carpetButton)
-            let carpetArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonArea")
-            tryVerify(() => carpetArea.scale === 1.0)
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
+            wait(300)
 
             // -- 3. Select the first scrap and record original station position --
             let noteArea = ObjectFinder.findObjectByChain(
@@ -144,8 +145,8 @@ MainWindowTest {
             carpetButton = ObjectFinder.findObjectByChain(
                 mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(carpetButton)
-            carpetArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonArea")
-            tryVerify(() => carpetArea.scale === 1.0)
+            // wait() needed — carpet animation settle
+            wait(300)
 
             // -- 7. Verify the station is back to its original position --
             // Re-query noteArea and scrapView inside tryVerify so we

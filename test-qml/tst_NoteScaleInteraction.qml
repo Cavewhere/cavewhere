@@ -22,9 +22,9 @@ MainWindowTest {
             let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(_obj1);
 
-            //Wait until the carpet animation is done
-            let carpetArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonArea")
-            tryVerify(() => carpetArea.scale === 1.0)
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
+            wait(1000)
 
             //Select scrap
             let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
