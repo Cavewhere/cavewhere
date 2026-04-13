@@ -191,6 +191,17 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - Added explanatory comments to retained waits
 - Verified 10/10 passes
 
+### tst_NoteNorthInteraction.qml — 4 → 4 wait() (0 replaced, comments only)
+- 2x wait(200) after carpet button retained — animation repositions toolbar
+- 2x wait(200) after scrap selection retained — noteTransformEditor overlay (z=2) must fully settle; without it, subsequent image clicks get intercepted
+- Added explanatory comments to all 4 waits
+- Verified 10/10 passes
+
+### tst_NoteZeroDPI.qml — 5 → 1 wait() (4 removed)
+- 4x wait(100) removed — 2x after mouseClick(text) for focus (synchronous), 2x before tryCompare (already polls)
+- wait(500) after carpet button retained — animation repositions toolbar
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:

@@ -32,12 +32,16 @@ MainWindowTest {
             let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(_obj1)
 
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
             wait(200)
 
             //Select scrap
             let noteItem = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(noteItem, 464.938, 829.673)
 
+            // wait() needed — noteTransformEditor overlay (z=2) must fully settle
+            // after scrap selection; without it, subsequent image clicks get intercepted
             wait(200)
 
             let typeComboBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->typeComboBox")
@@ -86,11 +90,15 @@ MainWindowTest {
             let carpetButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(carpetButton)
 
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
             wait(200)
 
             let noteItem = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(noteItem, 121.341, 192.815)
 
+            // wait() needed — noteTransformEditor overlay (z=2) must fully settle
+            // after scrap selection; without it, subsequent image clicks get intercepted
             wait(200)
 
             let typeComboBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->typeComboBox")

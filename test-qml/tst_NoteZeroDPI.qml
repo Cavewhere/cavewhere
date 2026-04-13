@@ -38,29 +38,27 @@ MainWindowTest {
             let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(_obj1);
 
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
             wait(500);
 
             //Text DPI should be correct
             let text = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteResolution->noteDPI->coreTextInput")
             tryCompare(text, "text", "300.96", 100);
             mouseClick(text)
-            wait(100);
 
             //User shouldn't be allowed to set the DPI to zero because this will prevent scraps from
             //warping correctly
             keyClick(48, 0) //0
             keyClick(16777220, 0) //Return
-            wait(100);
             tryCompare(text, "text", "300.96", 100);
 
             //Make sure we can change the DPI to something Validator
             mouseClick(text)
-            wait(100);
             keyClick(53, 0) //5
             keyClick(48, 0) //0
             keyClick(48, 0) //0
             keyClick(16777220, 0) //Return
-            wait(100);
             tryCompare(text, "text", "500", 100);
 
             //Use the DPI tool, and prevent the user from accepting invalid DPI
