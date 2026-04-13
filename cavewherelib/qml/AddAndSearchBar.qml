@@ -14,6 +14,8 @@ RowLayout {
         objectName: "addButton"
 
         icon.source: "qrc:/twbs-icons/icons/plus.svg"
+        icon.width: 16
+        icon.height: 16
 
         Layout.alignment: Qt.AlignLeft
 

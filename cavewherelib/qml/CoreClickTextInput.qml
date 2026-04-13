@@ -22,6 +22,7 @@ QQ.Item {
     property Validator validator;
     property bool readOnly: false
     property bool autoResize: false
+    property alias wrapMode: textAreaId.wrapMode
     property string errorText
 
     signal startedEditting()
