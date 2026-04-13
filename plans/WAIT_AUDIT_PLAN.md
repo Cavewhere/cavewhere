@@ -197,10 +197,18 @@ for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscree
 - Added explanatory comments to all 4 waits
 - Verified 10/10 passes
 
-### tst_NoteZeroDPI.qml — 5 → 1 wait() (4 removed)
+### tst_NoteZeroDPI.qml — 5 → 0 wait() (5 removed)
 - 4x wait(100) removed — 2x after mouseClick(text) for focus (synchronous), 2x before tryCompare (already polls)
-- wait(500) after carpet button retained — animation repositions toolbar
+- wait(500) after carpet button → tryVerify(carpetButtonArea.scale === 1.0) — polls for animation completion via objectName added to NotesGallery.qml
 - Verified 10/10 passes
+
+### Carpet animation replacement pattern
+Added `objectName: "carpetButtonArea"` to NotesGallery.qml. Tests can now replace `wait(200-500)` after carpet button click with:
+```
+let carpetArea = findChild(noteGallery, "carpetButtonArea")
+tryVerify(() => carpetArea.scale === 1.0)
+```
+This works when the next action doesn't click through the noteTransformEditor overlay (z=2). Where the overlay intercepts clicks (e.g., tst_NoteNorthInteraction), the wait is still needed for overlay settle, not the animation.
 
 ## Execution approach
 

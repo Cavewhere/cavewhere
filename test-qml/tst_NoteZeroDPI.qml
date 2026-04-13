@@ -38,9 +38,8 @@ MainWindowTest {
             let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(_obj1);
 
-            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
-            // that reposition the toolbar; clicks miss during the animation
-            wait(500);
+            let carpetArea = findChild(ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery"), "carpetButtonArea")
+            tryVerify(() => carpetArea.scale === 1.0)
 
             //Text DPI should be correct
             let text = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteResolution->noteDPI->coreTextInput")
