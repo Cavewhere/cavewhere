@@ -215,6 +215,12 @@ This works when the next action doesn't click through the noteTransformEditor ov
 - 2x wait(50) after mouseClick(galleryItem) in loop removed — tryVerifyWithDiagnostics below handles final state
 - Verified 10/10 passes
 
+### tst_WelcomePage.qml — 3 → 0 wait() (3 removed)
+- wait(100) at end of test_validInfo removed — no cleanup needed
+- 2x wait(300) after next button click → tryVerify for hasError state
+- 8x waitForRendering retained — needed for text field focus under offscreen (activeFocus not reliable)
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:
