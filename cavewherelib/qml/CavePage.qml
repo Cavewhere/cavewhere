@@ -24,6 +24,17 @@ StandardPage {
         return "Trip=" + trip.name;
     }
 
+    function addTripAndNavigate() {
+        cavePageArea.currentCave.addTrip()
+
+        var lastIndex = cavePageArea.currentCave.rowCount() - 1;
+        var lastModelIndex = cavePageArea.currentCave.index(lastIndex);
+        var lastTrip = cavePageArea.currentCave.data(lastModelIndex, Cave.TripObjectRole);
+
+        RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                                                   cavePageArea.tripPageName(lastTrip));
+    }
+
     function registerSubPages() {
         if(currentCave) {
             var oldCarpetPage = PageView.page.childPage("Leads")
@@ -63,7 +74,7 @@ StandardPage {
 
     DoubleClickTextInput {
         id: caveNameText
-        text: cavePageArea.currentCave.name
+        text: cavePageArea.currentCave ? cavePageArea.currentCave.name : ""
         font.bold: true
         font.pixelSize: Theme.fontSizeTitle
         wrapMode: QQ.Text.WordWrap
@@ -89,7 +100,7 @@ StandardPage {
 
     RowLayout {
         id: leadsRow
-        spacing: 4
+        spacing: Theme.delegatePadding
 
         QC.Label {
             text: "Leads:"
@@ -106,65 +117,13 @@ StandardPage {
 
     QQ.Flow {
         id: actionBar
-        spacing: 16
+        spacing: Theme.actionBarSpacing
         Layout.fillWidth: true
 
         AddAndSearchBar {
             objectName: "addTrip"
             addButtonText: "Add Trip"
-            onAdd: {
-                cavePageArea.currentCave.addTrip()
-
-                var lastIndex = cavePageArea.currentCave.rowCount() - 1;
-                var lastModelIndex = cavePageArea.currentCave.index(lastIndex);
-                var lastTrip = cavePageArea.currentCave.data(lastModelIndex, Cave.TripObjectRole);
-
-                RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                           cavePageArea.tripPageName(lastTrip));
-            }
-        }
-
-        RowLayout {
-            visible: cavePageArea.isNarrow
-            spacing: 4
-
-            QC.ComboBox {
-                id: sortComboId
-                model: ["Name", "Date", "Stations", "Length"]
-
-                property list<int> sortRoles: [
-                    CavePageModel.TripNameRole,
-                    CavePageModel.TripDateRole,
-                    CavePageModel.UsedStationsRole,
-                    CavePageModel.TripDistanceRole
-                ]
-
-                onActivated: {
-                    tripProxyModel.sortRole = sortRoles[currentIndex]
-                    tripProxyModel.sort(sortOrderButtonId.ascending ? Qt.AscendingOrder : Qt.DescendingOrder)
-                }
-            }
-
-            QC.RoundButton {
-                id: sortOrderButtonId
-                property bool ascending: true
-
-                implicitHeight: sortComboId.height
-                implicitWidth: implicitHeight
-
-                icon.source: sortOrderButtonId.ascending
-                             ? "qrc:/twbs-icons/icons/sort-up.svg"
-                             : "qrc:/twbs-icons/icons/sort-down.svg"
-                icon.width: 16
-                icon.height: 16
-                icon.color: Theme.text
-
-                onClicked: {
-                    ascending = !ascending
-                    tripProxyModel.sortRole = sortComboId.sortRoles[sortComboId.currentIndex]
-                    tripProxyModel.sort(ascending ? Qt.AscendingOrder : Qt.DescendingOrder)
-                }
-            }
+            onAdd: cavePageArea.addTripAndNavigate()
         }
 
         ExportImportButtons {
@@ -208,30 +167,30 @@ StandardPage {
         visible: !cavePageArea.isNarrow
         anchors.fill: parent
         anchors.margins: Theme.pageMargin
-        spacing: 12
+        spacing: Theme.columnGap
 
         ColumnLayout {
-            Layout.minimumWidth: statsColumnId.implicitWidth + 10
-            Layout.maximumWidth: 200
+            Layout.minimumWidth: statsColumnId.implicitWidth + Theme.statsPadding
+            Layout.maximumWidth: Theme.infoColumnMaxWidth
             Layout.alignment: Qt.AlignTop
-            spacing: 6
+            spacing: Theme.flowSpacing
 
             LayoutItemProxy { target: caveNameText }
 
             QQ.Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: statsColumnId.implicitHeight + 10
+                implicitHeight: statsColumnId.implicitHeight + Theme.statsPadding
                 color: Theme.borderSubtle
 
                 ColumnLayout {
                     id: statsColumnId
                     anchors.centerIn: parent
-                    spacing: 2
+                    spacing: Theme.tightSpacing
 
                     LayoutItemProxy { target: lengthStat }
                     LayoutItemProxy { target: depthStat }
 
-                    QQ.Item { implicitHeight: 4 }
+                    QQ.Item { implicitHeight: Theme.delegatePadding }
 
                     LayoutItemProxy { target: leadsRow }
                 }
@@ -241,7 +200,7 @@ StandardPage {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 8
+            spacing: Theme.sectionSpacing
 
             LayoutItemProxy { target: actionBar }
             LayoutItemProxy { target: wideLoaderId }
@@ -249,27 +208,12 @@ StandardPage {
     }
 
     // --- Narrow layout ---
-    ColumnLayout {
+    QQ.Item {
         visible: cavePageArea.isNarrow
         anchors.fill: parent
         anchors.margins: Theme.pageMargin
-        spacing: 8
 
-        LayoutItemProxy { target: caveNameText }
-
-        QQ.Flow {
-            Layout.fillWidth: true
-            spacing: 6
-
-            LayoutItemProxy { target: lengthStat }
-            QC.Label { text: "·"; color: Theme.textSubtle }
-            LayoutItemProxy { target: depthStat }
-            QC.Label { text: "·"; color: Theme.textSubtle }
-            LayoutItemProxy { target: leadsRow }
-        }
-
-        LayoutItemProxy { target: actionBar }
-        LayoutItemProxy { target: narrowLoaderId }
+        LayoutItemProxy { target: narrowLoaderId; anchors.fill: parent }
     }
 
     SortFilterProxyModel {
@@ -472,6 +416,108 @@ StandardPage {
             clip: true
             model: tripProxyModel
 
+            header: ColumnLayout {
+                width: parent ? parent.width : 0
+                spacing: Theme.sectionSpacing
+
+                DoubleClickTextInput {
+                    text: cavePageArea.currentCave ? cavePageArea.currentCave.name : ""
+                    font.bold: true
+                    font.pixelSize: Theme.fontSizeTitle
+
+                    onFinishedEditting: (newText) => {
+                                            cavePageArea.currentCave.name = newText
+                                        }
+                }
+
+                QQ.Flow {
+                    Layout.fillWidth: true
+                    spacing: Theme.flowSpacing
+
+                    SelectableCaveStat {
+                        label: "Length:"
+                        unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.length : null
+                        unitModel: UnitDefaults.lengthModel
+                    }
+
+                    QC.Label { text: "·"; color: Theme.textSubtle }
+
+                    SelectableCaveStat {
+                        label: "Depth:"
+                        unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.depth : null
+                        unitModel: UnitDefaults.depthModel
+                    }
+
+                    QC.Label { text: "·"; color: Theme.textSubtle }
+
+                    RowLayout {
+                        spacing: Theme.delegatePadding
+
+                        QC.Label { text: "Leads:" }
+
+                        LinkText {
+                            text: leadModelId.rowCount()
+                            onClicked: {
+                                RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
+                            }
+                        }
+                    }
+                }
+
+                QQ.Flow {
+                    Layout.fillWidth: true
+                    spacing: Theme.actionBarSpacing
+
+                    AddAndSearchBar {
+                        objectName: "addTrip"
+                        addButtonText: "Add Trip"
+                        onAdd: cavePageArea.addTripAndNavigate()
+                    }
+
+                    RowLayout {
+                        spacing: Theme.delegatePadding
+
+                        QC.ComboBox {
+                            id: narrowSortComboId
+                            model: ["Name", "Date", "Stations", "Length"]
+
+                            property list<int> sortRoles: [
+                                CavePageModel.TripNameRole,
+                                CavePageModel.TripDateRole,
+                                CavePageModel.UsedStationsRole,
+                                CavePageModel.TripDistanceRole
+                            ]
+
+                            onActivated: {
+                                tripProxyModel.sortRole = sortRoles[currentIndex]
+                                tripProxyModel.sort(narrowSortOrderButtonId.ascending ? Qt.AscendingOrder : Qt.DescendingOrder)
+                            }
+                        }
+
+                        QC.RoundButton {
+                            id: narrowSortOrderButtonId
+                            property bool ascending: true
+
+                            implicitHeight: narrowSortComboId.height
+                            implicitWidth: implicitHeight
+
+                            icon.source: narrowSortOrderButtonId.ascending
+                                         ? "qrc:/twbs-icons/icons/sort-up.svg"
+                                         : "qrc:/twbs-icons/icons/sort-down.svg"
+                            icon.width: Theme.iconSizeButton
+                            icon.height: Theme.iconSizeButton
+                            icon.color: Theme.text
+
+                            onClicked: {
+                                ascending = !ascending
+                                tripProxyModel.sortRole = narrowSortComboId.sortRoles[narrowSortComboId.currentIndex]
+                                tripProxyModel.sort(ascending ? Qt.AscendingOrder : Qt.DescendingOrder)
+                            }
+                        }
+                    }
+                }
+            }
+
             delegate: QQ.Item {
                 id: flowDelegateId
                 required property Trip tripObjectRole
@@ -499,7 +545,7 @@ StandardPage {
                 QQ.Flow {
                     id: flowId
                     width: parent.width
-                    spacing: 4
+                    spacing: Theme.delegatePadding
                     anchors.verticalCenter: parent.verticalCenter
 
                     ErrorIconBar {

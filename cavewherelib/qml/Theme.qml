@@ -86,12 +86,20 @@ QtObject {
     readonly property int sidebarWidthCompact: 50
 
     // Icon sizes
+    readonly property int iconSizeButton: 16
     readonly property int iconSizeSmall: 24
     readonly property int iconSizeMedium: 32
 
     // Spacing
     readonly property int pageMargin: 8
     readonly property int delegatePadding: 4
+    readonly property int tightSpacing: 2
+    readonly property int flowSpacing: 6
+    readonly property int sectionSpacing: 8
+    readonly property int columnGap: 12
+    readonly property int actionBarSpacing: 16
+    readonly property int statsPadding: 10
+    readonly property int infoColumnMaxWidth: 200
 
     // Utility
     readonly property color transparent: "#00000000"

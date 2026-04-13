@@ -11,7 +11,7 @@ RowLayout {
     property UnitValue unitValue: null
     property var unitModel
 
-    spacing: 4
+    spacing: Theme.delegatePadding
 
     QC.Label {
         text: rootId.label
