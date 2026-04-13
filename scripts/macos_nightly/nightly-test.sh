@@ -4,7 +4,8 @@ set -euo pipefail
 # --- Configuration ---
 REPO_URL="https://github.com/Cavewhere/cavewhere.git"
 BRANCH="origin/dev"
-NUM_RUNS="${NUM_RUNS:-16}"
+CPP_RUNS="${CPP_RUNS:-16}"
+QML_RUNS="${QML_RUNS:-8}"
 QT_PATH="$HOME/Qt/6.11.0/macos"
 WORK_DIR="/var/tmp/cavewhere-nightly/$(date +%Y-%m-%d_%H%M%S)"
 KEEP_DAYS=90
@@ -20,7 +21,7 @@ fi
 echo "=== CaveWhere Nightly Flaky Test Runner ==="
 echo "Date:       $(date)"
 echo "Branch:     $BRANCH"
-echo "Iterations: $NUM_RUNS"
+echo "Iterations: cpp=$CPP_RUNS qml=$QML_RUNS"
 echo "Work dir:   $WORK_DIR"
 echo ""
 
@@ -92,10 +93,10 @@ fi
 echo ""
 echo ">>> Build complete. Starting test runs..."
 
-# --- Run tests in parallel ---
+# --- Run tests: cpp first (parallel), then qml (sequential) ---
 CPP_PARALLEL="${CPP_PARALLEL:-4}"
-QML_PARALLEL="${QML_PARALLEL:-2}"
-echo "=== Running tests ($NUM_RUNS iterations, $CPP_PARALLEL cpp + $QML_PARALLEL qml parallel) ==="
+QML_PARALLEL="${QML_PARALLEL:-1}"
+echo "=== Running tests (cpp: $CPP_RUNS runs x$CPP_PARALLEL parallel, then qml: $QML_RUNS runs x$QML_PARALLEL parallel) ==="
 
 # Directory for exit code files
 mkdir -p "$LOG_DIR/exit_codes"
@@ -122,18 +123,21 @@ CPP_JOBS="$LOG_DIR/cpp-jobs.txt"
 QML_JOBS="$LOG_DIR/qml-jobs.txt"
 > "$CPP_JOBS"
 > "$QML_JOBS"
-for i in $(seq 1 "$NUM_RUNS"); do
+for i in $(seq 1 "$CPP_RUNS"); do
     ii=$(printf "%02d" "$i")
     echo "$CPP_TEST $LOG_DIR/cpp-test-run-${ii}.log $LOG_DIR/exit_codes/cpp-${ii} --platform offscreen" >> "$CPP_JOBS"
+done
+for i in $(seq 1 "$QML_RUNS"); do
+    ii=$(printf "%02d" "$i")
     echo "$QML_TEST $LOG_DIR/qml-test-run-${ii}.log $LOG_DIR/exit_codes/qml-${ii} --platform offscreen" >> "$QML_JOBS"
 done
 
-# Run cpp and qml tests simultaneously with independent parallelism
-xargs -P "$CPP_PARALLEL" -L1 "$RUN_SCRIPT" < "$CPP_JOBS" &
-xargs -P "$QML_PARALLEL" -L1 "$RUN_SCRIPT" < "$QML_JOBS" &
+# Run cpp tests first, then qml tests (no overlap to avoid load-induced flakiness)
+echo ">>> Running cavewhere-test ($CPP_RUNS runs, $CPP_PARALLEL parallel)..."
+xargs -P "$CPP_PARALLEL" -L1 "$RUN_SCRIPT" < "$CPP_JOBS"
 
-# Wait for both xargs groups to finish
-wait
+echo ">>> Running cavewhere-qml-test ($QML_RUNS runs, $QML_PARALLEL parallel)..."
+xargs -P "$QML_PARALLEL" -L1 "$RUN_SCRIPT" < "$QML_JOBS"
 
 # Collect results
 cpp_failures=0
@@ -141,9 +145,8 @@ qml_failures=0
 cpp_results=()
 qml_results=()
 
-for i in $(seq 1 "$NUM_RUNS"); do
+for i in $(seq 1 "$CPP_RUNS"); do
     ii=$(printf "%02d" "$i")
-
     cpp_exit=$(cat "$LOG_DIR/exit_codes/cpp-${ii}" 2>/dev/null || echo 1)
     if [[ "$cpp_exit" -eq 0 ]]; then
         cpp_results+=("PASS")
@@ -151,7 +154,10 @@ for i in $(seq 1 "$NUM_RUNS"); do
         cpp_results+=("FAIL")
         cpp_failures=$((cpp_failures + 1))
     fi
+done
 
+for i in $(seq 1 "$QML_RUNS"); do
+    ii=$(printf "%02d" "$i")
     qml_exit=$(cat "$LOG_DIR/exit_codes/qml-${ii}" 2>/dev/null || echo 1)
     if [[ "$qml_exit" -eq 0 ]]; then
         qml_results+=("PASS")
@@ -172,14 +178,14 @@ SUMMARY="$LOG_DIR/summary.txt"
     echo "Date:       $(date)"
     echo "Branch:     $BRANCH"
     echo "Commit:     $COMMIT_SHA"
-    echo "Iterations: $NUM_RUNS"
+    echo "Iterations: cpp=$CPP_RUNS qml=$QML_RUNS"
     echo ""
     echo "Results:"
-    echo "  cavewhere-test:     $cpp_failures/$NUM_RUNS failures"
-    echo "  cavewhere-qml-test: $qml_failures/$NUM_RUNS failures"
+    echo "  cavewhere-test:     $cpp_failures/$CPP_RUNS failures"
+    echo "  cavewhere-qml-test: $qml_failures/$QML_RUNS failures"
     echo ""
     echo "cavewhere-test runs:"
-    for i in $(seq 1 "$NUM_RUNS"); do
+    for i in $(seq 1 "$CPP_RUNS"); do
         idx=$((i - 1))
         printf "  Run %02d: %s\n" "$i" "${cpp_results[$idx]}"
     done
@@ -188,7 +194,7 @@ SUMMARY="$LOG_DIR/summary.txt"
     if [[ $cpp_failures -gt 0 ]]; then
         echo ""
         echo "  Failing tests (with frequency):"
-        for i in $(seq 1 "$NUM_RUNS"); do
+        for i in $(seq 1 "$CPP_RUNS"); do
             idx=$((i - 1))
             if [[ "${cpp_results[$idx]}" == "FAIL" ]]; then
                 cpp_log=$(printf "%s/cpp-test-run-%02d.log" "$LOG_DIR" "$i")
@@ -199,7 +205,7 @@ SUMMARY="$LOG_DIR/summary.txt"
 
     echo ""
     echo "cavewhere-qml-test runs:"
-    for i in $(seq 1 "$NUM_RUNS"); do
+    for i in $(seq 1 "$QML_RUNS"); do
         idx=$((i - 1))
         printf "  Run %02d: %s\n" "$i" "${qml_results[$idx]}"
     done
@@ -208,7 +214,7 @@ SUMMARY="$LOG_DIR/summary.txt"
     if [[ $qml_failures -gt 0 ]]; then
         echo ""
         echo "  Failing tests (with frequency):"
-        for i in $(seq 1 "$NUM_RUNS"); do
+        for i in $(seq 1 "$QML_RUNS"); do
             idx=$((i - 1))
             if [[ "${qml_results[$idx]}" == "FAIL" ]]; then
                 qml_log=$(printf "%s/qml-test-run-%02d.log" "$LOG_DIR" "$i")
@@ -223,9 +229,9 @@ cat "$SUMMARY"
 # --- macOS notification ---
 total_failures=$((cpp_failures + qml_failures))
 if [[ $total_failures -eq 0 ]]; then
-    notify_msg="All $NUM_RUNS runs passed for both test suites."
+    notify_msg="All runs passed (cpp: $CPP_RUNS, qml: $QML_RUNS)."
 else
-    notify_msg="cpp: $cpp_failures/$NUM_RUNS failures, qml: $qml_failures/$NUM_RUNS failures. See $LOG_DIR"
+    notify_msg="cpp: $cpp_failures/$CPP_RUNS failures, qml: $qml_failures/$QML_RUNS failures. See $LOG_DIR"
 fi
 
 terminal-notifier \
