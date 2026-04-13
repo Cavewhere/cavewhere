@@ -210,6 +210,11 @@ tryVerify(() => carpetArea.scale === 1.0)
 ```
 This works when the next action doesn't click through the noteTransformEditor overlay (z=2). Where the overlay intercepts clicks (e.g., tst_NoteNorthInteraction), the wait is still needed for overlay settle, not the animation.
 
+### tst_LidarSync.qml — 4 → 0 wait() (4 removed)
+- 2x wait(50) after galleryView.currentIndex = -1 removed — clearing selection before iterating, no async dependency
+- 2x wait(50) after mouseClick(galleryItem) in loop removed — tryVerifyWithDiagnostics below handles final state
+- Verified 10/10 passes
+
 ## Execution approach
 
 Work through files in priority order. For each file:
