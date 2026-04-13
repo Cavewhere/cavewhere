@@ -77,7 +77,8 @@ Item {
 
         Compass {
             id: compassItemId
-            width: 175
+            objectName: "compass"
+            width: Math.min(Math.max(rendererId.width * 0.25, 80), 175)
             height: width
             compassRotation: turnTableInteractionId.cameraRotation
             sampleCount: 4

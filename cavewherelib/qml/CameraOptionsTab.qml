@@ -7,7 +7,7 @@ QQ.Item {
     id: itemId
     objectName: "cameraOptions"
 
-    implicitWidth: columnLayoutId.width + 10
+    implicitWidth: parent ? parent.width : 320
 
     property GLTerrainRenderer viewer
 

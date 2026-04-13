@@ -44,7 +44,7 @@ Item {
                 required property int index
 
                 width: ListView.view ? ListView.view.width : parent.width
-                height: Math.max(400, groupListView.height / groupListView.count)
+                height: Math.max(250, Math.min(400, keywordTabId.height * 0.8), groupListView.count > 0 ? groupListView.height / groupListView.count : 250)
                 color: Theme.background
 
                 border {
@@ -95,7 +95,7 @@ Item {
                         required property KeywordGroupByKeyModel filterModelObjectRole
                         required property int index
 
-                        width: 220
+                        width: Math.max(100, Math.min(220, andListView.width - 24))
                         height: andListView.height
 
                         Rectangle {
