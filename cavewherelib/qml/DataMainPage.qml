@@ -23,47 +23,27 @@ StandardPage {
         return "Cave=" + cave.name;
     }
 
-    RowLayout {
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.bottom: parent.bottom
+    ColumnLayout {
+        anchors.fill: parent
         anchors.margins: Theme.pageMargin
+        spacing: 8
 
-        ColumnLayout {
-            Layout.alignment: Qt.AlignTop
+        DoubleClickTextInput {
+            objectName: "regionNameInput"
+            font.bold: true
+            font.pixelSize: Theme.fontSizeTitle
+            text: RootData.region.name
 
-            DoubleClickTextInput {
-                objectName: "regionNameInput"
-                font.bold: true
-                font.pixelSize: Theme.fontSizeTitle
-                text: RootData.region.name
-
-                onFinishedEditting: (newText) => {
-                    RootData.region.name = newText
-                }
+            onFinishedEditting: (newText) => {
+                RootData.region.name = newText
             }
-
-            ExportImportButtons {
-                id: exportButton
-                currentRegion: RootData.region
-                importVisible: true
-                page: pageId.PageView.page
-                currentCave: {
-                    let currentItem = tableViewId.currentItem as CaveDelegate
-                    if(currentItem) {
-                        return currentItem.caveObjectRole
-                    } else {
-                        return null;
-                    }
-                }
-            }
-
         }
 
-        ColumnLayout {
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
 
             AddAndSearchBar {
-                Layout.fillWidth: true
                 addButtonText: "Add Cave"
                 onAdd: {
                     RootData.region.addCave();
@@ -77,94 +57,111 @@ StandardPage {
                 }
             }
 
-            QQ.ListView {
-                id: tableViewId
-                model: RootData.region
-
-                Layout.fillHeight: true
-                implicitWidth: 450
-
-                component CaveDelegate: QQ.Item {
-                    id: delegateId
-                    objectName: "caveDelegate" + index
-
-                    required property Cave caveObjectRole;
-                    required property int index
-
-                    implicitHeight: layoutId.height
-                    implicitWidth: layoutId.width
-
-                    TableRowBackground {
-                        isSelected: tableViewId.currentIndex == delegateId.index
-                        rowIndex: delegateId.index
-                        anchors.fill: parent
+            ExportImportButtons {
+                id: exportButton
+                visible: RootData.desktopBuild
+                currentRegion: RootData.region
+                importVisible: true
+                page: pageId.PageView.page
+                currentCave: {
+                    let currentItem = tableViewId.currentItem as CaveDelegate
+                    if(currentItem) {
+                        return currentItem.caveObjectRole
+                    } else {
+                        return null;
                     }
+                }
+            }
+        }
 
-                    QQ.MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.LeftButton
+        QQ.ListView {
+            id: tableViewId
+            model: RootData.region
 
-                        onClicked: {
-                            tableViewId.currentIndex = delegateId.index
-                        }
-                    }
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
 
-                    RowLayout {
-                        id: layoutId
+            component CaveDelegate: QQ.Item {
+                id: delegateId
+                objectName: "caveDelegate" + index
 
-                        ErrorIconBar {
-                            errorModel: delegateId.caveObjectRole.errorModel
-                        }
+                required property Cave caveObjectRole;
+                required property int index
 
-                        LinkText {
-                            objectName: "caveLink"
-                            text: delegateId.caveObjectRole.name
-                            onClicked: {
-                                RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                                           pageId.cavePageName(delegateId.caveObjectRole));
-                            }
-                        }
-                        // }
+                implicitHeight: flowId.implicitHeight + 4
+                width: tableViewId.width
 
-                        QC.Label {
-                            text: "is"
-                        }
-
-                        UnitValueInput {
-                            objectName: "length"
-                            unitValue: delegateId.caveObjectRole.length
-                            unitModel: UnitDefaults.lengthModel
-                            valueReadOnly: true
-                        }
-
-                        QC.Label {
-                            text: "long and"
-                        }
-
-                        UnitValueInput {
-                            objectName: "depth"
-                            unitValue: delegateId.caveObjectRole.depth
-                            unitModel: UnitDefaults.depthModel
-                            valueReadOnly: true
-                        }
-
-                        QC.Label {
-                            text: "deep"
-                        }
-                    }
-
-                    DataRightClickMouseMenu {
-                        anchors.fill: parent
-                        removeChallenge: removeChallengeId
-                        name: delegateId.caveObjectRole.name
-                        row: delegateId.index
-                    }
-
-
+                TableRowBackground {
+                    isSelected: tableViewId.currentIndex == delegateId.index
+                    rowIndex: delegateId.index
+                    anchors.fill: parent
                 }
 
-                delegate: CaveDelegate {}
+                QQ.MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+
+                    onClicked: {
+                        tableViewId.currentIndex = delegateId.index
+                    }
+                }
+
+                QQ.Flow {
+                    id: flowId
+                    width: parent.width
+                    spacing: 4
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    ErrorIconBar {
+                        errorModel: delegateId.caveObjectRole.errorModel
+                    }
+
+                    LinkText {
+                        objectName: "caveLink"
+                        text: delegateId.caveObjectRole.name
+                        onClicked: {
+                            RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                                       pageId.cavePageName(delegateId.caveObjectRole));
+                        }
+                    }
+
+                    QC.Label {
+                        text: "is"
+                    }
+
+                    UnitValueInput {
+                        objectName: "length"
+                        unitValue: delegateId.caveObjectRole.length
+                        unitModel: UnitDefaults.lengthModel
+                        valueReadOnly: true
+                    }
+
+                    QC.Label {
+                        text: "long and"
+                    }
+
+                    UnitValueInput {
+                        objectName: "depth"
+                        unitValue: delegateId.caveObjectRole.depth
+                        unitModel: UnitDefaults.depthModel
+                        valueReadOnly: true
+                    }
+
+                    QC.Label {
+                        text: "deep"
+                    }
+                }
+
+                DataRightClickMouseMenu {
+                    anchors.fill: parent
+                    removeChallenge: removeChallengeId
+                    name: delegateId.caveObjectRole.name
+                    row: delegateId.index
+                }
             }
+
+            delegate: CaveDelegate {}
         }
     }
 

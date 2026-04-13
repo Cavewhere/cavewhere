@@ -122,7 +122,7 @@ QQ.Item {
         ]
     }
 
-    ColumnLayout {
+    RowLayout {
         id: rowId
 
         spacing: 3
