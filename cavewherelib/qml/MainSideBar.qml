@@ -13,7 +13,9 @@ import cavewherelib
 QQ.Rectangle {
     id: sidebarArea
     objectName: "mainSideBar"
-    width: 80
+    property int layoutSize: Theme.LayoutSize.Wide
+
+    width: layoutSize >= Theme.LayoutSize.Wide ? Theme.sidebarWidthFull : Theme.sidebarWidthCompact
     color: Theme.sidebar.background
 
     //Pageshown is an enumerated type that is either, view, data, draft
@@ -25,6 +27,7 @@ QQ.Rectangle {
     required property QC.Menu fileMenu
     readonly property bool isMacOS: Qt.platform.os === "osx"
 
+    readonly property bool _compactMode: layoutSize === Theme.LayoutSize.Medium
     readonly property string _viewPage: viewPage.fullname()
     readonly property string _dataPage: dataPage.fullname()
     readonly property string _mapPage: mapPage.fullname()
@@ -127,7 +130,8 @@ QQ.Rectangle {
 
         QQ.Loader {
             id: fileMenuButtonLoaderId
-            active: RootData.desktopBuild && !sidebarArea.isMacOS
+            objectName: "fileMenuButtonLoader"
+            active: sidebarArea.layoutSize >= Theme.LayoutSize.Wide && !sidebarArea.isMacOS
             width: parent.width
             sourceComponent: SideBarButton {
                 id: fileMenuButtonId
@@ -171,6 +175,7 @@ QQ.Rectangle {
             objectName: "viewButton"
             text: "View"
             image: "qrc:/twbs-icons/icons/box.svg"
+            compactMode: sidebarArea._compactMode
             troggled: 0 == buttonBar.currentIndex
             onButtonIsTroggled: buttonBar.currentIndex = 0
         }
@@ -180,6 +185,7 @@ QQ.Rectangle {
             objectName: "dataButton"
             text: "Data"
             image: "qrc:/twbs-icons/icons/book.svg"
+            compactMode: sidebarArea._compactMode
             troggled: 1 == buttonBar.currentIndex
             onButtonIsTroggled: buttonBar.currentIndex = 1
         }
@@ -189,6 +195,7 @@ QQ.Rectangle {
             objectName: "mapButton"
             text: "Map"
             image: "qrc:/twbs-icons/icons/map.svg"
+            compactMode: sidebarArea._compactMode
             troggled: 2 == buttonBar.currentIndex
             onButtonIsTroggled: buttonBar.currentIndex = 2
         }
@@ -219,6 +226,8 @@ QQ.Rectangle {
             QC.Label {
                 text: "Automatic\nUpdate"
                 id: labelTextId
+                objectName: "autoUpdateLabel"
+                visible: sidebarArea.layoutSize >= Theme.LayoutSize.Wide
                 horizontalAlignment: QC.Label.AlignHCenter
                 Layout.fillWidth: true
             }

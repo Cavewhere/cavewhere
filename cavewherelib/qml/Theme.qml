@@ -73,6 +73,21 @@ QtObject {
     readonly property int fontSizeLarge:   Math.round(24 * fontScale)
     readonly property int fontSizeXLarge:  Math.round(30 * fontScale)
 
+    // Responsive layout tiers
+    enum LayoutSize { Narrow, Medium, Wide }
+
+    // Responsive breakpoints (window width in pixels)
+    readonly property int breakpointWide: 800
+    readonly property int breakpointMedium: 500
+
+    // Sidebar dimensions per tier
+    readonly property int sidebarWidthFull: 80
+    readonly property int sidebarWidthCompact: 50
+
+    // Icon sizes
+    readonly property int iconSizeSmall: 24
+    readonly property int iconSizeMedium: 32
+
     // Spacing
     readonly property int pageMargin: 8
 

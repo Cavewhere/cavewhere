@@ -20,6 +20,7 @@ QQ.Rectangle {
     property bool troggled: false;
     property int buttonIndex;
     property int layout: Qt.Vertical
+    property bool compactMode: false
     property alias imageSize: icon.sourceSize
     property alias layoutDirection: columnLayoutId.layoutDirection
 
@@ -41,12 +42,17 @@ QQ.Rectangle {
 
         QQ.Image {
             id: icon
+            objectName: "icon"
             smooth: true
 
             // height: Qt.Vertical ? 32 : 10
             // width: Qt.V
 
-            sourceSize: layout == Qt.Vertical ? Qt.size(32, 32) : Qt.size(textLabel.height, textLabel.height)
+            sourceSize: button.compactMode
+                       ? Qt.size(Theme.iconSizeSmall, Theme.iconSizeSmall)
+                       : layout == Qt.Vertical
+                         ? Qt.size(Theme.iconSizeMedium, Theme.iconSizeMedium)
+                         : Qt.size(textLabel.height, textLabel.height)
 
             // visible: false
 
@@ -59,6 +65,8 @@ QQ.Rectangle {
 
         QC.Label {
             id: textLabel
+            objectName: "textLabel"
+            visible: !button.compactMode
             color: Theme.sidebar.text
             text: "text"
             smooth: true
