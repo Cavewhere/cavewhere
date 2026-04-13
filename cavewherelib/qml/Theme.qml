@@ -91,6 +91,7 @@ QtObject {
 
     // Spacing
     readonly property int pageMargin: 8
+    readonly property int delegatePadding: 4
 
     // Utility
     readonly property color transparent: "#00000000"

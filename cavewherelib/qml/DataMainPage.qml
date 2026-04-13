@@ -89,8 +89,8 @@ StandardPage {
                 required property Cave caveObjectRole;
                 required property int index
 
-                implicitHeight: flowId.implicitHeight + 4
-                width: tableViewId.width
+                implicitHeight: flowId.implicitHeight + Theme.delegatePadding
+                width: QQ.ListView.view ? QQ.ListView.view.width : 0
 
                 TableRowBackground {
                     isSelected: tableViewId.currentIndex == delegateId.index
