@@ -21,6 +21,7 @@ QQ.Rectangle {
     property Note currentNote
     property NoteLiDAR currentNoteLiDAR
     property alias currentNoteIndex: galleryView.currentIndex
+    property bool showGallery: true
 
     readonly property string mode: {
         switch(state) {
@@ -46,7 +47,6 @@ QQ.Rectangle {
                     noteGallery.state = "NO_NOTES"
                 } else {
                     noteGallery.state = ""
-                    galleryContainer.visible = true;
                     mainButtonArea.visible = true;
                 }
                 break;
@@ -250,9 +250,9 @@ QQ.Rectangle {
         anchors.right: parent.right
         anchors.topMargin: 3
         anchors.rightMargin: mainButtonArea.anchors.rightMargin
-        width: 210
+        width: noteGallery.showGallery ? 210 : 0
+        visible: noteGallery.showGallery
         radius: 7
-        visible: true
 
         color: Theme.floatingWidgetColor
 
@@ -504,6 +504,8 @@ QQ.Rectangle {
 
 
     Splitter {
+        id: splitterId
+        visible: noteGallery.showGallery
         anchors.bottom: parent.bottom
         anchors.top: parent.top
         anchors.left: galleryContainer.left
@@ -599,7 +601,6 @@ QQ.Rectangle {
                 galleryView.onCountChanged: () => {
                     if(count > 0) {
                         noteGallery.state = ""
-                        galleryContainer.visible = true
                         mainButtonArea.visible = true
                         noteArea.visible = true
                         currentIndex = 0;

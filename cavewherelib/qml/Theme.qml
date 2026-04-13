@@ -80,6 +80,7 @@ QtObject {
     readonly property int breakpointWide: 800
     readonly property int breakpointMedium: 500
     readonly property int breakpointPanelCollapse: 600
+    readonly property int breakpointFullGallery: 1200
 
     // Sidebar dimensions per tier
     readonly property int sidebarWidthFull: 80

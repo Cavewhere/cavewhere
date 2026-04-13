@@ -19,6 +19,7 @@ QQ.Item {
     property TripCalibration currentCalibration: currentTrip.calibration
     readonly property alias contentWidth: scrollAreaId.width //For animation
     property bool isNarrow: false
+    property bool showNotes: false
     property SurveyNotesConcatModel notesModel: null
 
     signal collapseClicked();
@@ -207,10 +208,10 @@ QQ.Item {
                     Layout.fillWidth: true
                 }
 
-                // Note thumbnails — visible only in narrow mode
+                // Note thumbnails — hidden when full gallery is shown (wide mode)
                 ColumnLayout {
                     Layout.fillWidth: true
-                    visible: clipArea.isNarrow && clipArea.notesModel !== null
+                    visible: clipArea.showNotes && clipArea.notesModel !== null
 
                     BreakLine { }
 

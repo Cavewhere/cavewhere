@@ -20,6 +20,7 @@ StandardPage {
     property int currentNoteIndex: notesGalleryLoader.item ? notesGalleryLoader.item.currentNoteIndex : 0
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
+    readonly property bool isWide: width >= Theme.breakpointFullGallery
 
     function registerSubPages() {
         var oldCarpetPage = PageView.page.childPage("Carpet")
@@ -65,8 +66,8 @@ StandardPage {
         }
     }
 
-    onIsNarrowChanged: {
-        if(isNarrow && state === "COLLAPSE") {
+    onIsWideChanged: {
+        if(!isWide && state === "COLLAPSE") {
             state = ""
         }
     }
@@ -88,10 +89,16 @@ StandardPage {
         anchors.margins: 5
         visible: true
         isNarrow: area.isNarrow
+        showNotes: !area.isWide
         notesModel: surveyNoteConcatModelId
 
         onCollapseClicked: {
-            area.state = "COLLAPSE"
+            if(area.isWide) area.state = "COLLAPSE"
+        }
+
+        onNoteClicked: (noteIndex) => {
+            let ng = notesGalleryLoader.item
+            if(ng) ng.currentNoteIndex = noteIndex
         }
     }
 
@@ -151,6 +158,7 @@ StandardPage {
 
         sourceComponent: QQ.Component {
             NotesGallery {
+                showGallery: area.isWide
                 notesModel: surveyNoteConcatModelId
                 onImagesAdded: (images) => {
                     surveyNoteConcatModelId.addFiles(images)
