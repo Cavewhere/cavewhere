@@ -274,3 +274,107 @@ TEST_CASE("cwPageSelectionModel unregisterPage removes page from address resolut
     REQUIRE(model.currentPage() == nullptr);
     REQUIRE(model.currentPageAddress() == dataAddress);
 }
+
+TEST_CASE("cwPageSelectionModel resolves note pages under trip address", "[cwPageSelectionModel]")
+{
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* component = makePageComponent(engine, &model);
+    auto* noteComponent = makePageComponent(engine, &model);
+    auto pages = createPageTree(model, component);
+
+    // Register note pages under the trip (using note names, not indices)
+    auto* note1 = model.registerPage(pages.trip, QStringLiteral("Note=photo.png"), noteComponent,
+                                      {{"currentNoteIndex", 0}});
+    auto* note2 = model.registerPage(pages.trip, QStringLiteral("Note=scan.glb"), noteComponent,
+                                      {{"currentNoteIndex", 1}});
+
+    REQUIRE(note1 != nullptr);
+    REQUIRE(note2 != nullptr);
+
+    // Verify parent-child relationships
+    REQUIRE(pages.trip->childPage(QStringLiteral("Note=photo.png")) == note1);
+    REQUIRE(pages.trip->childPage(QStringLiteral("Note=scan.glb")) == note2);
+
+    // Verify full address resolution
+    const QString note1Address = QStringLiteral("Source/Data/Cave=Alpha/Trip=Trip 1/Note=photo.png");
+    model.setCurrentPageAddress(note1Address);
+    REQUIRE(model.currentPage() == note1);
+    REQUIRE(model.currentPageAddress() == note1Address);
+
+    const QString note2Address = QStringLiteral("Source/Data/Cave=Alpha/Trip=Trip 1/Note=scan.glb");
+    model.setCurrentPageAddress(note2Address);
+    REQUIRE(model.currentPage() == note2);
+    REQUIRE(model.currentPageAddress() == note2Address);
+}
+
+TEST_CASE("cwPageSelectionModel shows unknown page for invalid note address", "[cwPageSelectionModel]")
+{
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* component = makePageComponent(engine, &model);
+    auto* noteComponent = makePageComponent(engine, &model);
+    auto pages = createPageTree(model, component);
+
+    // Register only one note
+    model.registerPage(pages.trip, QStringLiteral("Note=photo.png"), noteComponent,
+                       {{"currentNoteIndex", 0}});
+
+    // Try to navigate to a note that doesn't exist
+    const QString invalidAddress = QStringLiteral("Source/Data/Cave=Alpha/Trip=Trip 1/Note=missing.png");
+    model.setCurrentPageAddress(invalidAddress);
+    REQUIRE(model.currentPage() == nullptr);
+    REQUIRE(model.currentPageAddress() == invalidAddress);
+}
+
+TEST_CASE("cwPageSelectionModel unregister note page removes from tree", "[cwPageSelectionModel]")
+{
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* component = makePageComponent(engine, &model);
+    auto* noteComponent = makePageComponent(engine, &model);
+    auto pages = createPageTree(model, component);
+
+    auto* note1 = model.registerPage(pages.trip, QStringLiteral("Note=photo.png"), noteComponent,
+                                      {{"currentNoteIndex", 0}});
+    auto* note2 = model.registerPage(pages.trip, QStringLiteral("Note=scan.glb"), noteComponent,
+                                      {{"currentNoteIndex", 1}});
+
+    REQUIRE(pages.trip->childPage(QStringLiteral("Note=photo.png")) == note1);
+    REQUIRE(pages.trip->childPage(QStringLiteral("Note=scan.glb")) == note2);
+
+    // Unregister note1
+    model.unregisterPage(note1);
+    QCoreApplication::processEvents();
+
+    REQUIRE(pages.trip->childPage(QStringLiteral("Note=photo.png")) == nullptr);
+    REQUIRE(pages.trip->childPage(QStringLiteral("Note=scan.glb")) == note2);
+
+    // Address for removed note should fail
+    const QString note1Address = QStringLiteral("Source/Data/Cave=Alpha/Trip=Trip 1/Note=photo.png");
+    model.setCurrentPageAddress(note1Address);
+    REQUIRE(model.currentPage() == nullptr);
+}
+
+TEST_CASE("cwPageSelectionModel note page address updates when renamed", "[cwPageSelectionModel]")
+{
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* component = makePageComponent(engine, &model);
+    auto* noteComponent = makePageComponent(engine, &model);
+    auto pages = createPageTree(model, component);
+
+    auto* notePage = model.registerPage(pages.trip, QStringLiteral("Note=photo.png"), noteComponent,
+                                         {{"currentNoteIndex", 0}});
+
+    model.gotoPage(notePage);
+    REQUIRE(model.currentPageAddress() == QStringLiteral("Source/Data/Cave=Alpha/Trip=Trip 1/Note=photo.png"));
+
+    QSignalSpy addressChangedSpy(&model, &cwPageSelectionModel::currentPageAddressChanged);
+
+    // Rename the note page (simulates what setNamingFunction does)
+    notePage->setName(QStringLiteral("Note=renamed.png"));
+    REQUIRE(addressChangedSpy.count() >= 1);
+    REQUIRE(model.currentPageAddress() == QStringLiteral("Source/Data/Cave=Alpha/Trip=Trip 1/Note=renamed.png"));
+}
+

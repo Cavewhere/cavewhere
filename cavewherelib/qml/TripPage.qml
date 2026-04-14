@@ -9,6 +9,7 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 import QtQuick.Layouts
+import QtQml
 
 StandardPage {
     id: area
@@ -21,6 +22,10 @@ StandardPage {
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
     readonly property bool isWide: width >= Theme.breakpointFullGallery
+
+    function notePageName(note) {
+        return "Note=" + note.name
+    }
 
     function registerSubPages() {
         var oldCarpetPage = PageView.page.childPage("Carpet")
@@ -50,6 +55,10 @@ StandardPage {
     }
 
     PageView.onPageChanged: registerSubPages()
+
+    onCurrentTripChanged: {
+        noteInstantiatorId.model = surveyNoteConcatModelId
+    }
 
     onViewModeChanged: {
         if(area.isNarrow) return;
@@ -97,8 +106,15 @@ StandardPage {
         }
 
         onNoteClicked: (noteIndex) => {
-            let ng = notesGalleryLoader.item
-            if(ng) ng.currentNoteIndex = noteIndex
+            if (area.isNarrow) {
+                let delegate = noteInstantiatorId.objectAt(noteIndex)
+                if (delegate && delegate.page) {
+                    RootData.pageSelectionModel.gotoPage(delegate.page)
+                }
+            } else {
+                let ng = notesGalleryLoader.item
+                if (ng) ng.currentNoteIndex = noteIndex
+            }
         }
     }
 
@@ -168,9 +184,50 @@ StandardPage {
     }
 
 
-//    QQ.Component.onCompleted: {
-//        registerSubPages()
-//    }
+    QQ.Component {
+        id: notePageComponent
+        NotePage {
+            anchors.fill: parent
+        }
+    }
+
+    Instantiator {
+        id: noteInstantiatorId
+
+        component NoteDelegate: QQ.QtObject {
+            required property QQ.QtObject noteObject
+            required property int index
+            property Page page
+        }
+
+        delegate: NoteDelegate {}
+
+        onObjectAdded: (index, object) => {
+            let delegate = object as NoteDelegate
+            let noteObj = delegate.noteObject
+            var page = RootData.pageSelectionModel.registerPage(
+                area.PageView.page,
+                area.notePageName(noteObj),
+                notePageComponent,
+                {
+                    "notesModel": surveyNoteConcatModelId,
+                    "currentNoteIndex": index
+                }
+            )
+            delegate.page = page
+            page.setNamingFunction(noteObj,
+                                   "nameChanged()",
+                                   area,
+                                   "notePageName",
+                                   noteObj)
+        }
+
+        onObjectRemoved: (index, object) => {
+            RootData.pageSelectionModel.unregisterPage(
+                (object as NoteDelegate).page
+            )
+        }
+    }
 
     states: [
         QQ.State {

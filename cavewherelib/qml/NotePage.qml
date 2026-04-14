@@ -17,10 +17,7 @@ StandardPage {
     property SurveyNotesConcatModel notesModel: null
 
     PageView.defaultProperties: {
-        "notesModel": null
-    }
-
-    PageView.defaultSelectionProperties: {
+        "notesModel": null,
         "currentNoteIndex": 0
     }
 
