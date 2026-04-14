@@ -153,5 +153,45 @@ MainWindowTest {
             }, 5000, "Trip2's note should be reachable when no prior note in history")
             compare(RootData.pageSelectionModel.currentPageAddress, trip2NoteAddress)
         }
+
+        function test_switchTripWideModeConcatModelAssert() {
+            // Regression: switching trips in wide mode (NotesGallery visible)
+            // must not trigger index assertions on the concat model.
+            rootId.width = 1200
+
+            // Navigate to Trip1 in wide mode — NotesGallery is active
+            RootData.pageSelectionModel.currentPageAddress = trip1Address
+            tryVerify(() => {
+                return RootData.pageView.currentPageItem !== null
+                    && RootData.pageView.currentPageItem.objectName === "tripPage"
+            })
+            waitForRendering(rootId)
+
+            // Switch to Trip2 — concat model source models swap while
+            // the NotesGallery ListView is watching
+            RootData.pageSelectionModel.currentPageAddress = trip2Address
+            tryVerify(() => {
+                return RootData.pageView.currentPageItem !== null
+                    && RootData.pageView.currentPageItem.objectName === "tripPage"
+            })
+            waitForRendering(rootId)
+
+            // Switch back to Trip1 to exercise the swap a second time
+            RootData.pageSelectionModel.currentPageAddress = trip1Address
+            tryVerify(() => {
+                return RootData.pageView.currentPageItem !== null
+                    && RootData.pageView.currentPageItem.objectName === "tripPage"
+            })
+            waitForRendering(rootId)
+
+            // Verify note pages still resolve after wide-mode trip switches
+            let trip1NoteAddress = trip1Address + "/Note=PhakeCave.PNG"
+            RootData.pageSelectionModel.currentPageAddress = trip1NoteAddress
+            tryVerify(() => {
+                return RootData.pageView.currentPageItem !== null
+                    && RootData.pageView.currentPageItem.objectName === "notePage"
+            }, 5000, "Note page should resolve after wide-mode trip switches")
+            compare(RootData.pageSelectionModel.currentPageAddress, trip1NoteAddress)
+        }
     }
 }

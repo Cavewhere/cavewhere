@@ -58,12 +58,20 @@ StandardPage {
     PageView.onPageChanged: registerSubPages()
 
     onCurrentTripChanged: {
-        // Disconnect before changing trip to prevent re-entrant Instantiator
-        // delegate creation ("Cannot create new component instance") when the
-        // concat model emits row changes during the trip swap.
+        // Disconnect all consumers before swapping the trip. The concat
+        // model emits incremental row changes during the source-model
+        // swap; any view still watching can hit a hasIndex assert.
         noteInstantiatorId.model = null
+        surveyEditor.notesModel = null
+        if (notesGalleryLoader.item)
+            notesGalleryLoader.item.notesModel = null
+
         surveyNoteConcatModelId.trip = area.currentTrip
+
         noteInstantiatorId.model = surveyNoteConcatModelId
+        surveyEditor.notesModel = surveyNoteConcatModelId
+        if (notesGalleryLoader.item)
+            notesGalleryLoader.item.notesModel = surveyNoteConcatModelId
     }
 
     onViewModeChanged: {

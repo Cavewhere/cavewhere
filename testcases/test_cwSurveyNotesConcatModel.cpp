@@ -25,52 +25,7 @@
 //Our includes
 #include "LoadProjectHelper.h"
 
-// If needed: #include "cwFutureManagerModel.h" (or wherever waitForFinished() lives)
-// If PDF converter is not available in CI, we’ll only use JPG + GLB in this test.
 
-static QUrl urlFromPath(const QString& absolutePath) {
-    return QUrl::fromLocalFile(absolutePath);
-}
-
-// static QString makeTinyJpeg(const QDir& dir, const QString& basename) {
-//     QImage img(2, 2, QImage::Format_RGBA8888);
-//     img.fill(Qt::white);
-//     const QString path = dir.filePath(basename);
-//     REQUIRE(img.save(path, "JPG"));
-//     return path;
-// }
-
-// static QString makeDummyFile(const QDir& dir, const QString& basename) {
-//     const QString path = dir.filePath(basename);
-//     QFile f(path);
-//     REQUIRE(f.open(QIODevice::WriteOnly));
-//     f.write("x"); // just to ensure the file exists
-//     f.close();
-//     return path;
-// }
-
-// // Helper: wait until rowCount reaches target or timeout
-// static bool waitForRowCount(QAbstractItemModel* model, int expected, int timeoutMs = 5000) {
-//     QElapsedTimer timer;
-//     timer.start();
-
-//     // Use rowsInserted spy for faster wakeups
-//     QSignalSpy spy(model, &QAbstractItemModel::rowsInserted);
-
-//     while (timer.elapsed() < timeoutMs) {
-//         if (model->rowCount() >= expected) {
-//             return true;
-//         }
-//         // If we already saw rowsInserted, process them
-//         if (!spy.isEmpty() && model->rowCount() >= expected) {
-//             return true;
-//         }
-//         // Spin the event loop briefly
-//         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-//         spy.wait(50);
-//     }
-//     return model->rowCount() >= expected;
-// }
 
 TEST_CASE("cwSurveyNotesConcatModel integrates with real cwTrip models", "[cwSurveyNotesConcatModel]") {
     // --- Arrange a Project → Region → Cave → Trip tree so models resolve project() ---
@@ -115,8 +70,8 @@ TEST_CASE("cwSurveyNotesConcatModel integrates with real cwTrip models", "[cwSur
     const QString glbPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
 
     const QList<QUrl> files = {
-        urlFromPath(jpgPath),
-        urlFromPath(glbPath)
+        QUrl::fromLocalFile(jpgPath),
+        QUrl::fromLocalFile(glbPath)
     };
 
     // --- Act: route via concatenated model ---
@@ -196,6 +151,63 @@ TEST_CASE("cwSurveyNotesConcatModel addFiles uses absolute paths with cwImagePro
     const QImage image = provider.requestImage(providerPath, &size, QSize(64, 64));
     REQUIRE(!image.isNull());
     REQUIRE(size.isValid());
+}
+
+TEST_CASE("cwSurveyNotesConcatModel switching trips updates rows correctly", "[cwSurveyNotesConcatModel]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    cwCave* cave = new cwCave();
+    cave->setName("test");
+
+    cwTrip* trip1 = new cwTrip();
+    trip1->setName("trip 1");
+    cave->addTrip(trip1);
+
+    cwTrip* trip2 = new cwTrip();
+    trip2->setName("trip 2");
+    cave->addTrip(trip2);
+
+    project->cavingRegion()->addCave(cave);
+
+    // Add a note to trip1
+    const QString png1 = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    trip1->notes()->addFromFiles({ QUrl::fromLocalFile(png1) });
+    rootData->futureManagerModel()->waitForFinished();
+    REQUIRE(trip1->notes()->rowCount() == 1);
+
+    // Add two notes to trip2
+    const QString png2 = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    const QString glb = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    trip2->notes()->addFromFiles({ QUrl::fromLocalFile(png2) });
+    trip2->notesLiDAR()->addFromFiles({ QUrl::fromLocalFile(glb) });
+    rootData->futureManagerModel()->waitForFinished();
+    REQUIRE(trip2->notes()->rowCount() == 1);
+    REQUIRE(trip2->notesLiDAR()->rowCount() == 1);
+
+    cwSurveyNotesConcatModel concat;
+    concat.setTrip(trip1);
+    REQUIRE(concat.rowCount() == 1);
+
+    // Switch to trip2 — must not assert on stale indices
+    concat.setTrip(trip2);
+    REQUIRE(concat.rowCount() == 2);
+
+    // All indices must be valid after the switch
+    for (int i = 0; i < concat.rowCount(); ++i) {
+        const QModelIndex idx = concat.index(i, 0);
+        REQUIRE(idx.isValid());
+        REQUIRE(!concat.data(idx, cwSurveyNoteModelBase::PathRole).toString().isEmpty());
+    }
+
+    // Switch back to trip1
+    concat.setTrip(trip1);
+    REQUIRE(concat.rowCount() == 1);
+    REQUIRE(concat.index(0, 0).isValid());
+
+    // Clear to null
+    concat.setTrip(nullptr);
+    REQUIRE(concat.rowCount() == 0);
 }
 
 TEST_CASE("cwSurveyNotesConcatModel allows duplicate image files", "[cwSurveyNotesConcatModel]") {
