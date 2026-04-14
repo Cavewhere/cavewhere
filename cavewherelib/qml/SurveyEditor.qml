@@ -258,9 +258,8 @@ QQ.Item {
                                     rotation: thumbDelegate.noteObject?.rotate ?? 0
                                 }
 
-                                QC.BusyIndicator {
-                                    anchors.centerIn: parent
-                                    running: thumbImage.visible && thumbImage.status === QQ.Image.Loading
+                                ImageBusyIndicator {
+                                    image: thumbImage
                                 }
 
                                 QQ.Rectangle {

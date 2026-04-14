@@ -224,9 +224,8 @@ QQ.Rectangle {
             }
         }
 
-        QC.BusyIndicator {
-            anchors.centerIn: parent
-            running: imageItem.visible && imageItem.status == QQ.Image.Loading
+        ImageBusyIndicator {
+            image: imageItem
         }
 
         QQ.TapHandler {

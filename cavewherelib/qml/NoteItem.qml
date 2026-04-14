@@ -51,6 +51,10 @@ ImageItem {
         visible: noteArea.scrapsVisible
     }
 
+    ImageBusyIndicator {
+        image: noteArea
+    }
+
     ScrapInteraction {
         id: addScrapInteraction
         anchors.fill: parent
