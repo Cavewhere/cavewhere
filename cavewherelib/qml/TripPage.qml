@@ -24,6 +24,7 @@ StandardPage {
     readonly property bool isWide: width >= Theme.breakpointFullGallery
 
     function notePageName(note) {
+        if (!note) return ""
         return "Note=" + note.name
     }
 
@@ -57,6 +58,11 @@ StandardPage {
     PageView.onPageChanged: registerSubPages()
 
     onCurrentTripChanged: {
+        // Disconnect before changing trip to prevent re-entrant Instantiator
+        // delegate creation ("Cannot create new component instance") when the
+        // concat model emits row changes during the trip swap.
+        noteInstantiatorId.model = null
+        surveyNoteConcatModelId.trip = area.currentTrip
         noteInstantiatorId.model = surveyNoteConcatModelId
     }
 
@@ -87,7 +93,6 @@ StandardPage {
 
     SurveyNotesConcatModel {
         id: surveyNoteConcatModelId
-        trip: area.currentTrip
     }
 
     SurveyEditor {

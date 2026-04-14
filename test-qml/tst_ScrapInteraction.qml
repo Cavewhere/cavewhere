@@ -315,6 +315,10 @@ MainWindowTest {
             let notesButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->gotoNotes")
             mouseClick(notesButton)
 
+            tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "notePage" });
+
+            // Navigate back to the trip page to continue lead interactions
+            RootData.pageSelectionModel.back()
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select the carpet button

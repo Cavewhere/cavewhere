@@ -78,7 +78,10 @@ QString cwLinkGenerator::scrapLink(cwScrap *scrap)
 QString cwLinkGenerator::noteLink(cwNote *note)
 {
     if(note == nullptr) { return QString(); }
-    return tripLink(note->parentTrip());
+    return tripLink(note->parentTrip())
+           + cwPageSelectionModel::seperator()
+           + QStringLiteral("Note=")
+           + note->name();
 }
 
 /**
@@ -115,21 +118,14 @@ void cwLinkGenerator::gotoScrap(cwScrap *scrap)
  */
 void cwLinkGenerator::gotoNote(cwNote *note)
 {
+    if(note == nullptr) { return; }
+
     if(pageSelectionModel() == nullptr) {
         qDebug() << "Can't goto note" << note << "because pageSelectionModel() is null" << LOCATION;
+        return;
     }
 
     QString link = noteLink(note);
     pageSelectionModel()->setCurrentPageAddress(link);
-    cwPage* page = pageSelectionModel()->currentPage();
-
-    Q_ASSERT(page != nullptr);
-
-    int index = note->parentTrip()->notes()->notes().indexOf(note);
-
-    QVariantMap selection;
-    selection.insert("currentNoteIndex", index);
-
-    page->setSelectionProperties(selection);
 }
 
