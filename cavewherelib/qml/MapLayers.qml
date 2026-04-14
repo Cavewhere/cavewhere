@@ -278,7 +278,11 @@ ColumnLayout {
                 }
             }
 
-
+            QC.CheckBox {
+                id: scaleBarCheckBoxId
+                text: "Scale Bar"
+                checked: true
+            }
         }
 
         states: [
@@ -330,6 +334,13 @@ ColumnLayout {
                         text: Utils.fixed(layerProperties.layerObject.rotation, 2);
                         onFinishedEditting: (newText) => {
                             layerProperties.layerObject.rotation = newText
+                        }
+                    }
+
+                    scaleBarCheckBoxId {
+                        checked: layerProperties.layerObject.scaleBarVisible
+                        onCheckedChanged: {
+                            layerProperties.layerObject.scaleBarVisible = scaleBarCheckBoxId.checked
                         }
                     }
                 }
