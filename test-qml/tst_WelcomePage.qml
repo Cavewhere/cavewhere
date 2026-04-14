@@ -150,8 +150,6 @@ MainWindowTest {
             compare(RootData.account.email, "test@gmail.com")
             compare(settings.value("name", ""), "Philip");
             compare(settings.value("email", ""), "test@gmail.com");
-
-            wait(100);
         }
 
         /**
@@ -276,13 +274,11 @@ MainWindowTest {
             //When 5. User Clicks on next button
             let nextButton = ObjectFinder.findObjectByChain(rootId, "rootId->welcome->nextButton->label")
             mouseClick(nextButton)
-            wait(300);
 
             //Then 1. Name field shouldn't have an error
-            verify(!obj1.hasError)
-
             //Then 2. Email field should have an error
-            verify(obj2.hasError)
+            tryVerify(() => obj2.hasError)
+            verify(!obj1.hasError)
 
             //Then. RootData hasn't changed
             verify(RootData.account.name === "")
@@ -335,13 +331,10 @@ MainWindowTest {
             //When 5. User Clicks on next button
             let nextButton = ObjectFinder.findObjectByChain(rootId, "rootId->welcome->nextButton->label")
             mouseClick(nextButton)
-            wait(300);
 
             //Then 1. Name field should have an error
-            verify(obj1.hasError)
-
             //Then 2. Email field should have an error
-            verify(obj2.hasError)
+            tryVerify(() => obj1.hasError && obj2.hasError)
 
             compare(RootData.account.name, "");
             compare(RootData.account.email, "");

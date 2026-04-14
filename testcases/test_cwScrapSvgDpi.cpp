@@ -4,6 +4,8 @@
 
 //Qt includes
 #include <QBuffer>
+#include <QCoreApplication>
+#include <QFileInfo>
 #include <QImageReader>
 
 //Our includes
@@ -49,7 +51,12 @@ QByteArray buildViewBoxSvg(int viewBoxWidth, int viewBoxHeight)
 //! Write SVG data to the temp folder and return the path.
 QString writeSvgToTemp(const QByteArray& svgData, const QString& name)
 {
-    const QString path = prependTempFolder(name);
+    QFileInfo info(name);
+    const QString uniqueName = QStringLiteral("%1-%2.%3")
+        .arg(info.completeBaseName())
+        .arg(QCoreApplication::applicationPid())
+        .arg(info.suffix());
+    const QString path = prependTempFolder(uniqueName);
     QFile file(path);
     REQUIRE(file.open(QIODevice::WriteOnly));
     file.write(svgData);

@@ -100,14 +100,14 @@ MainWindowTest {
             verify(!quoteBox.visible)
             tryVerify(() => {return !helpBox.visible})
 
-            wait(200)
-
             //Click done
             tryVerify(() => { return selectButton.visible === true });
             tryVerify(() => { return selectButton.enabled === true });
             tryVerify(() => { return selectButton.text === " Done" })
             mouseClick(selectButton);
 
+            // wait() needed — the capture viewport geometry is computed asynchronously
+            // after the Done button is clicked; without it the capture item has wrong dimensions
             wait(100);
 
             let areaTool = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool");
@@ -125,24 +125,23 @@ MainWindowTest {
         }
 
         function moveMapLayer() {
-            wait(100);
-
-            let captureItem0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0")
+            let captureItem0_obj1 = null
+            tryVerify(() => {
+                          captureItem0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0")
+                          return captureItem0_obj1 !== null
+                      })
             mouseClick(captureItem0_obj1)
 
-            wait(10)
-
-            verify(captureItem0_obj1.selected === true)
+            tryVerify(() => { return captureItem0_obj1.selected === true })
             verify(captureItem0_obj1.captureItem.positionOnPaper === Qt.point(1.025, 1.025))
 
             //Drag
             mouseDrag(captureItem0_obj1, 82.8114, 136.675, 10, 15)
 
-            wait(100);
-
             //Values have been visually verified, that the drag works
             let delta = 0.02
-            var err = new Error();
+            //Wait for drag position to be computed before tryFuzzyCompare captures value
+            tryVerify(() => { return Math.abs(captureItem0_obj1.captureItem.positionOnPaper.x - 1.19041) <= delta })
             tryFuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.x, 1.19041, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.y, 1.27312, delta)
 
@@ -160,6 +159,8 @@ MainWindowTest {
 
             //Do rotation on top left corner
             let rotationHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->rotationHandle")
+            // wait() between mouse steps is needed — the rotation interaction
+            // processes events through timers to distinguish click from drag
             mousePress(rotationHandle_obj1, 24.8349, 8.20597)
             wait(50)
             mouseMove(rotationHandle_obj1, 24.8349, 8.20597+10)
@@ -169,26 +170,22 @@ MainWindowTest {
             mouseMove(rotationHandle_obj1, 24.8349+10, 8.20597+30)
             wait(50)
             mouseRelease(rotationHandle_obj1, 24.8349+10, 8.20597+30)
-            wait(50)
 
             let delta = 0.02
-            //Values have been visually verified, that the drag works
-            console.log("Bounding box:" + captureItem0_obj1.captureItem.boundingBox)
+            //Wait for rotation to be computed before tryFuzzyCompare captures value
+            tryVerify(() => { return Math.abs(captureItem0_obj1.captureItem.boundingBox.x - (-0.570247)) <= delta })
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.x, -0.570247, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.y, 0.726273, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 8.07971, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 10.0437, delta);
 
-            wait(50)
-
             //Move sure move the layer works in rotation
             mouseDrag(captureItem0_obj1, 82.8114, 136.675, 50, 40)
 
             //Values have been visually verified, that the drag works
+            tryVerify(() => { return Math.abs(captureItem0_obj1.captureItem.positionOnPaper.x - 2.86109) <= delta })
             tryFuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.x, 2.86109, delta)
             tryFuzzyCompare(captureItem0_obj1.captureItem.positionOnPaper.y, 2.57988, delta)
-
-            wait(50)
         }
 
         function test_moveResizeMapLayer() {
@@ -196,12 +193,13 @@ MainWindowTest {
 
             let captureItem0_obj1 = moveMapLayer()
 
-            //Check that the resize works
-            wait(50);
-
             // wait(10000);
 
-            let topLeftHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->topLeftHandle")
+            let topLeftHandle_obj1 = null
+            tryVerify(() => {
+                          topLeftHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->topLeftHandle")
+                          return topLeftHandle_obj1 !== null
+                      })
             mouseDrag(topLeftHandle_obj1, 5, 5, 5, 10, Qt.LeftButton, Qt.NoModifier, 50)
 
 
@@ -213,9 +211,11 @@ MainWindowTest {
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 8.78761, delta);
 
 
-            wait(50);
-
-            let topRightHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->topRightHandle")
+            let topRightHandle_obj1 = null
+            tryVerify(() => {
+                          topRightHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->topRightHandle")
+                          return topRightHandle_obj1 !== null
+                      })
             mouseDrag(topRightHandle_obj1, 5, 5, 10, 7, Qt.LeftButton, Qt.NoModifier, 50)
 
             //Values have been visually verified, that the drag works
@@ -224,9 +224,11 @@ MainWindowTest {
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.64109, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 9.11239, delta);
 
-            wait(50)
-
-            let bottomRightHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->bottomRightHandle")
+            let bottomRightHandle_obj1 = null
+            tryVerify(() => {
+                          bottomRightHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->bottomRightHandle")
+                          return bottomRightHandle_obj1 !== null
+                      })
             mouseDrag(bottomRightHandle_obj1, 5, 5, 8, 10, Qt.LeftButton, Qt.NoModifier, 50)
 
             //Values have been visually verified, that the drag works
@@ -235,9 +237,11 @@ MainWindowTest {
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.width, 4.77342, delta);
             tryFuzzyCompare(captureItem0_obj1.captureItem.boundingBox.height, 9.37221, delta);
 
-            wait(50)
-
-            let bottomLeftHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->bottomLeftHandle")
+            let bottomLeftHandle_obj1 = null
+            tryVerify(() => {
+                          bottomLeftHandle_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0->bottomLeftHandle")
+                          return bottomLeftHandle_obj1 !== null
+                      })
             mouseDrag(bottomLeftHandle_obj1, 5, 5, 4, 15, Qt.LeftButton, Qt.NoModifier, 50)
 
             //Values have been visually verified, that the drag works
@@ -299,6 +303,8 @@ MainWindowTest {
             verify(paperWidth.text === "14")
             verify(paperHeight.text === "8.5")
 
+            // wait() needed — paper layout must settle after Legal switch
+            // before the landscape toggle click registers correctly
             wait(100)
 
             //Click on landscapeButton again to put in portrate
@@ -359,6 +365,8 @@ MainWindowTest {
             //Make sure the capture is the correct size
             let captureItem0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->captureItem0")
 
+            //Wait for layout to settle before tryFuzzyCompare captures value
+            tryVerify(() => { return Math.abs(captureItem0_obj1.width - 306) <= 5.0 })
             tryFuzzyCompare(captureItem0_obj1.width, 306, 5.0);
             tryFuzzyCompare(captureItem0_obj1.height, 602, 5.0);
             tryFuzzyCompare(captureItem0_obj1.x, 19.5, 5.0);

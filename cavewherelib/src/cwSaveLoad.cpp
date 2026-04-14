@@ -3977,7 +3977,13 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
                 QString relativeFilename = dataRootDir.relativeFilePath(filename);
                 const QString noteRelativeFilename = noteDir.relativeFilePath(filename);
                 noteImage.setPath(noteRelativeFilename);
+
+                // Save the user's imageResolution before setImage, which
+                // triggers resetImageResolution() and would overwrite it
+                // with the image's embedded DPI.
+                auto savedResolution = noteCopy.imageResolution()->data();
                 noteCopy.setImage(noteImage);
+                noteCopy.imageResolution()->setData(savedResolution);
 
                 *updatedNoteData = noteCopy.data();
                 return ResultBase();

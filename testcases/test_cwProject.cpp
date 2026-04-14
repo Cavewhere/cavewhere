@@ -8579,7 +8579,7 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
     auto image = [size](const QColor& color)->Image {
         QImage image(size, QImage::Format_ARGB32);
         image.fill(color);
-        QString imageFilename = QDir::tempPath() + "/" + QString("cavewhere-cwProject-image%1%2%3.png").arg(color.red()).arg(color.green()).arg(color.blue());
+        QString imageFilename = QDir::tempPath() + "/" + QString("cavewhere-cwProject-image%1%2%3-%4.png").arg(color.red()).arg(color.green()).arg(color.blue()).arg(QCoreApplication::applicationPid());
         REQUIRE(image.save(imageFilename, "png"));
         return {color, size, QUrl::fromLocalFile(imageFilename)};
     };
@@ -13071,4 +13071,30 @@ TEST_CASE("cwProject bundled sync already up to date does not mark project as mo
 
     // No changes pulled — bundle is still in sync, should NOT be modified.
     CHECK(isProjectModified(f.project) == false);
+}
+
+TEST_CASE("V6 conversion preserves note image resolution", "[cwProject][v6DPI]") {
+    // dpiTest.cw is a v6 SQLite project with one cave, one trip, one note,
+    // and one scrap. The note's imageResolution was set to 800 DPI.
+    // After conversion the resolution must survive, not reset to 72 DPI.
+
+    auto project = fileToProject("://datasets/test_cwProject/dpiTest.cw");
+    REQUIRE(project != nullptr);
+
+    auto* region = project->cavingRegion();
+    REQUIRE(region->caveCount() == 1);
+
+    auto* cave = region->cave(0);
+    REQUIRE(cave->tripCount() == 1);
+
+    auto* trip = cave->trip(0);
+    auto* noteModel = trip->notes();
+    REQUIRE(noteModel->rowCount() == 1);
+
+    cwNote* note = noteModel->notes().first();
+    REQUIRE(note != nullptr);
+
+    // The v6 file had the resolution set to 800 DPI
+    CHECK(note->imageResolution()->unit() == cwUnits::DotsPerInch);
+    CHECK(note->imageResolution()->value() == Approx(800.0).epsilon(1e-2));
 }

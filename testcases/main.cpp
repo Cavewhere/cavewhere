@@ -31,7 +31,7 @@ int main( int argc, char* argv[] )
 
   QApplication::setOrganizationName("Vadose Solutions");
   QApplication::setOrganizationDomain("cavewhere.com");
-  QApplication::setApplicationName("cavewhere-test");
+  QApplication::setApplicationName(QStringLiteral("cavewhere-test-%1").arg(QApplication::applicationPid()));
   QApplication::setApplicationVersion("1.0");
 
   cwMetaTypeSystem::registerTypes();

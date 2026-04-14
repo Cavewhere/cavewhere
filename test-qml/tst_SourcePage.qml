@@ -246,9 +246,17 @@ MainWindowTest {
 
             verify(RootData.project.save())
             TestHelper.waitForProjectSaveToFinish(RootData.project)
+            TestHelper.waitForFutureManagerToFinish(RootData.futureManagerModel)
 
             compare(RootData.project.fileType, Project.GitFileType)
 
+            //Save as a .cw bundle and verify it becomes BundledGitFileType
+            let bundlePath = RootData.urlToLocal(TestHelper.tempDirectoryUrl()) + "/Phake Cave 3000.cw"
+            verify(RootData.project.saveAs(bundlePath))
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+            TestHelper.waitForFutureManagerToFinish(RootData.futureManagerModel)
+
+            compare(RootData.project.fileType, Project.BundledGitFileType)
         }
 
         function test_openLegacyProject_showsOnlyOriginalBundlePath() {

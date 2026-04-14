@@ -29,9 +29,11 @@ Run the application:
 Build and run tests:
 ```bash
 cmake --build build/<preset> --target cavewhere-test cavewhere-qml-test
-./build/<preset>/cavewhere-test
-./build/<preset>/cavewhere-qml-test --platform offscreen
+./build/<preset>/cavewhere-test -d yes 2>&1 | tee /tmp/cavewhere-test.log
+./build/<preset>/cavewhere-qml-test --platform offscreen 2>&1 | tee /tmp/cavewhere-qml-test.log
 ```
+
+Always redirect test output to a log file (using `tee` or `>`) so failures can be inspected immediately without re-running.
 
 Run a single C++ test (Catch2 tag syntax):
 ```bash
@@ -108,6 +110,20 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 - Register modules via `qt_add_qml_module` in CMakeLists.txt
 - Use `Loader` for deferred/conditional loading; avoid expensive operations in bindings
 - Use `QCanvasPainterItem` (C++) for custom painting; do not use QML `Canvas` or `Shapes`
+- **QML item body ordering** — arrange members in this order, with blank lines between groups:
+  1. `id` (not required, but always first when present)
+  2. `objectName` (only if needed for QML testing)
+  3. Property declarations (`property type name`, `required property`, etc.)
+  4. Property assignments / aliases to parent or attached properties
+  5. Signal declarations
+  6. Functions
+  7. Property bindings (e.g. `width:`, `height:`, `anchors.*:`, `visible:`)
+  8. Signal handlers (`on*:`)
+  9. Child objects
+  10. `states:` and `transitions:` (always last)
+
+#### C++ testing conventions
+- Tests must be safe to run as **multiple concurrent processes** (the nightly CI runs several `cavewhere-test` instances in parallel). Never use hardcoded temp file paths — include `QCoreApplication::applicationPid()` in the name or use `QTemporaryFile`/`QTemporaryDir` so parallel processes don't collide.
 
 #### QML testing conventions
 - Prefer `tryVerify()` / `tryCompare()` over `wait()`. Fixed waits are flaky — poll for the condition you actually need (e.g. a property becoming true, an object appearing). `QQ.Transition` with `QQ.ScriptAction` is async (fires next frame after the state changes), so always `tryVerify` the resulting side-effect (e.g. `interaction.enabled`) rather than assuming the state change is enough.

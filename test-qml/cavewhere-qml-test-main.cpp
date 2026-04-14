@@ -34,7 +34,7 @@ public slots:
         //This needs to be first for QSettings
         QApplication::setOrganizationName("Vadose Solutions");
         QApplication::setOrganizationDomain("cavewhere.com");
-        QApplication::setApplicationName("cavewhere-qml-test");
+        QApplication::setApplicationName(QStringLiteral("cavewhere-qml-test-%1").arg(QApplication::applicationPid()));
         // QApplication::setApplicationVersion(CAVEWHERE_VERSION);
 
         //Clear all the settings

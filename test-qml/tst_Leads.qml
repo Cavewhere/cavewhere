@@ -32,6 +32,12 @@ MainWindowTest {
             RootData.newProject();
         }
 
+        function clickToEdit(item) {
+            mouseClick(item)
+            tryVerify(() => GlobalShadowTextInput.textInput.activeFocus, 1000,
+                      "Shadow text input should have focus after clicking " + item.objectName)
+        }
+
         function setNoteOverlaysCollapsed(collapse) {
             let noteRes = ObjectFinder.findObjectByChain(
                 mainWindow,
@@ -119,14 +125,13 @@ MainWindowTest {
 
             let addCave = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->addButton")
             mouseClick(addCave)
-            wait(100)
-
-            if (RootData.pageView.currentPageItem.objectName !== "cavePage") {
-                // Retry the click if the first one didn't register
-                mouseClick(addCave)
-            }
-
-            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "cavePage" });
+            tryVerify(() => {
+                          if (RootData.pageView.currentPageItem.objectName !== "cavePage") {
+                              mouseClick(addCave)
+                              return false
+                          }
+                          return true
+                      }, 5000, "should navigate to cavePage after clicking addButton")
 
             let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsButton")
             mouseClick(leadsButton)
@@ -149,18 +154,27 @@ MainWindowTest {
 
             let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId");
             mouseClick(carpetButton);
+
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
             wait(300)
 
             setNoteOverlaysCollapsed(true)
 
             let imageId_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
-            mouseClick(imageId_obj1, 1854.2, 1091.57)
-
-            // Verify the scrap is actually selected before proceeding
             let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea")
             let scrapViewEarly = findChild(noteArea, "scrapViewId")
-            tryVerify(() => scrapViewEarly.selectedScrapItem !== null, 5000,
-                      "scrap should be selected after image click")
+
+            // Retry the click — under heavy CI load the carpet animation
+            // may not have fully settled, causing the first click to miss
+            mouseClick(imageId_obj1, 1854.2, 1091.57)
+            tryVerify(() => {
+                          if (scrapViewEarly.selectedScrapItem === null) {
+                              mouseClick(imageId_obj1, 1854.2, 1091.57)
+                              return false
+                          }
+                          return true
+                      }, 5000, "scrap should be selected after image click")
 
             // Click addLeads — retry if the click doesn't register
             // (can happen when QML is still processing the SELECT state transition)
@@ -186,7 +200,6 @@ MainWindowTest {
 
             let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId_obj2, 2429.22, 732.923)
-            wait(200)
 
             let scrapView = findChild(noteArea, "scrapViewId");
             verify(scrapView)
@@ -206,7 +219,7 @@ MainWindowTest {
             compare(widthText.text, "?")
 
             // Click "?" and commit without changing anything
-            mouseClick(widthText, 2, 2);
+            clickToEdit(widthText);
             keyClick(Qt.Key_Return);
 
             compare(widthText.text, "?")
@@ -223,7 +236,7 @@ MainWindowTest {
             // Try typing "-2": the '-' character is Invalid on its own so the TextInput
             // blocks it; '2' then replaces the selected "?". Either way, no negative
             // value should be committed.
-            mouseClick(widthText, 2, 2);
+            clickToEdit(widthText);
             keyClick(Qt.Key_Minus);
             keyClick(Qt.Key_2);
             keyClick(Qt.Key_Return);
@@ -239,13 +252,13 @@ MainWindowTest {
             let {scrap, leadIndex, widthText, heightText} = addNewLeadToScrap();
 
             // First set a valid width
-            mouseClick(widthText, 2, 2);
+            clickToEdit(widthText);
             keyClick(51, 0); // '3'
             keyClick(Qt.Key_Return);
             compare(widthText.text, "3")
 
             // Clear the width field — should revert to "?" not "" or "0"
-            mouseClick(widthText, 2, 2);
+            clickToEdit(widthText);
             keyClick(Qt.Key_A, Qt.ControlModifier); // select all
             keyClick(Qt.Key_Delete);
             keyClick(Qt.Key_Return);
@@ -258,14 +271,16 @@ MainWindowTest {
             let {widthText, heightText} = addNewLeadToScrap();
 
             // Fill in lead details
-            mouseClick(widthText, 2, 2);
+            clickToEdit(widthText);
             keyClick(51, 0); // '3'
 
-            mouseClick(heightText, 2, 2);
+            clickToEdit(heightText);
             keyClick(50, 0); // '2'
 
             let description = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->description");
-            mouseClick(description, 2, 2);
+            mouseClick(description);
+            tryVerify(() => description.activeFocus, 1000,
+                      "Description should have focus after click");
             keyClick("N");
             keyClick("e");
             keyClick("w");
@@ -280,15 +295,18 @@ MainWindowTest {
             mouseClick(viewButton);
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "viewPage");
 
-            wait(300)
-            let leadObj = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint1_2")
-            tryVerify(() => leadObj !== null)
+            let leadObj = null
+            tryVerify(() => {
+                          leadObj = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint1_2")
+                          return leadObj !== null
+                      })
             mouseClick(leadObj)
 
-            wait(100);
-
-            let quoteBox = findChild(leadObj, "leadQuoteBox");
-            verify(quoteBox)
+            let quoteBox = null
+            tryVerify(() => {
+                          quoteBox = findChild(leadObj, "leadQuoteBox")
+                          return quoteBox !== null
+                      })
             let widthDisplay = findChild(quoteBox, "widthText");
             let heightDisplay = findChild(quoteBox, "heightText");
             let descriptionDisplay = findChild(quoteBox, "description");
@@ -316,6 +334,9 @@ MainWindowTest {
             // Enter carpet mode
             let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId");
             mouseClick(carpetButton);
+
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
             wait(300);
 
             let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea");
@@ -350,7 +371,6 @@ MainWindowTest {
             let outlinePoint = outlinePointView.selectedItem();
             verify(outlinePoint !== null);
             outlinePointView.selectedItemIndex = -1;
-            wait(50);
 
             let editor = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor");
             verify(!editor.visible, "Lead editor should start hidden");

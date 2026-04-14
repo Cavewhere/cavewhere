@@ -15,6 +15,8 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
             RootData.project.newProject()
             RootData.pageSelectionModel.currentPageAddress = "View"
+            // wait() needed — newProject() triggers async cleanup (futures, scrap manager,
+            // page reloads); tryVerify for viewPage is too narrow to catch all side effects
             wait(1000)
         }
 
@@ -39,8 +41,6 @@ MainWindowTest {
             let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.05;
 
-            wait(100);
-
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -48,12 +48,12 @@ MainWindowTest {
             let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(_obj1);
 
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks on addScrapButton miss during the animation
             wait(500);
 
             let addScrapButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->addScrapButton")
             mouseClick(addScrapButton)
-
-            wait(200);
 
             //Zoom in with wheel mouse
             let imageId = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
@@ -65,12 +65,11 @@ MainWindowTest {
 
             let noteArea = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea");
             let scrapView = findChild(noteArea, "scrapViewId")
-            compare(scrapView.count, 1);
+            tryCompare(scrapView, "count", 1);
             verify(scrapView.selectedScrapItem === null)
 
             mouseMove(imageId, 322, 392);
             mouseClick(imageId, 322, 392)
-            wait(50);
 
             //Expand overlays so the checkbox is clickable, then collapse
             //to prevent the overlay from intercepting scrap outline clicks
@@ -81,17 +80,15 @@ MainWindowTest {
 
             mouseMove(imageId, 596, 402);
             mouseClick(imageId, 596, 402);
-            wait(50)
             mouseMove(imageId, 589, 731)
             mouseClick(imageId, 589, 731)
-            wait(50)
             mouseMove(imageId, 326, 716)
             mouseClick(imageId, 326, 716)
-            wait(100)
 
             //Scrap should have 4 points
+            tryVerify(() => scrapView.selectedScrapItem !== null, 1000,
+                      "scrapView.selectedScrapItem should be non-null after adding points")
             let scrap = scrapView.selectedScrapItem.scrap as Scrap
-            console.log("Scrap:" + scrap)
             verify(scrap !== null)
             verify(scrap.isClosed() === false);
             verify(scrap.numberOfPoints() === 4);
@@ -128,7 +125,6 @@ MainWindowTest {
             mouseClick(viewButton)
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
-            wait(100);
             // let renderingView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer")
             // let renderingViewCenterX = renderingView.width / 2.0;
             // let renderingViewCenterY = renderingView.height / 2.0;
@@ -177,7 +173,8 @@ MainWindowTest {
 
             // mouseDoubleClickSequence(a4Station)
             a4Station.openEditor() //Double clicking doesn't seem like it works through qml test
-
+            // wait() needed — openEditor() activates the text input asynchronously;
+            // activeFocus may not be reliable under --platform offscreen
             wait(50);
 
             //Change the station to a4
@@ -185,8 +182,6 @@ MainWindowTest {
             keyClick(52, 0) //4
             keyClick(16777220, 0) //Return
             verify(scrap.numberOfStations() === 3);
-
-            wait(50);
 
             //Switch to rendering view
             zoomIntoRenderingView()
@@ -240,14 +235,16 @@ MainWindowTest {
             //Click on the leads button
             let addLeads = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->addLeads")
             mouseClick(addLeads)
-            wait(100)
 
             //Add the lead to the note (position shifted to avoid NoteTransformEditor z=2 overlay)
             mouseClick(imageId_obj2, 500, 650)
-            wait(100)
 
             //Change the dimensions
-            let widthText = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->widthText")
+            let widthText = null
+            tryVerify(() => {
+                          widthText = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->widthText")
+                          return widthText !== null
+                      })
             mouseClick(widthText, 1.78125, 9.35938)
 
             //5 for the width
@@ -299,11 +296,14 @@ MainWindowTest {
 
             verify(leadPoint.selected === true)
 
-            wait(200);
-
             //Make sure the popup box is showing the write data
-            let leadPointSizeWidth = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->widthText")
-            let leadPointSizeHeight = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->heightText")
+            let leadPointSizeWidth = null
+            let leadPointSizeHeight = null
+            tryVerify(() => {
+                          leadPointSizeWidth = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->widthText")
+                          leadPointSizeHeight = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->heightText")
+                          return leadPointSizeWidth !== null && leadPointSizeHeight !== null
+                      })
 
             verify(leadPointSizeWidth.text === "5")
             verify(leadPointSizeHeight.text === "4")
@@ -358,8 +358,6 @@ MainWindowTest {
             let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.05;
 
-            wait(100);
-
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -367,12 +365,18 @@ MainWindowTest {
             let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(_obj1);
 
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
             wait(500);
 
             let imageId_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId_obj1, 470.703, 608.133)
 
-            let transformEditor = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor")
+            let transformEditor = null
+            tryVerify(() => {
+                          transformEditor = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor")
+                          return transformEditor !== null && transformEditor.scrap !== null
+                      })
             verify(transformEditor.scrap.type === Scrap.ProjectedProfile)
             verify(transformEditor.scrap.viewMatrix.direction === ProjectedProfileScrapViewMatrix.LookingAt);
 
@@ -388,22 +392,23 @@ MainWindowTest {
             let viewButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->viewButton")
             mouseClick(viewButton_obj1)
 
-            wait(500)
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
 
             //Click back
             let back_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->linkBar->back")
             mouseClick(back_obj1, 16.5781, 13.8867)
 
-            wait(500)
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select the same scrap again
             imageId_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId_obj1, 493.154, 663.103)
 
-            wait(100)
-
             //Make sure the direction is correct
-            directionComboBox_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->directionComboBox")
+            tryVerify(() => {
+                          directionComboBox_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->directionComboBox")
+                          return directionComboBox_obj1 !== null
+                      })
             compare(directionComboBox_obj1.currentText, "left → right")
 
             //Make sure nothing has changed on the scrap level

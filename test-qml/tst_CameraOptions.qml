@@ -27,11 +27,8 @@ MainWindowTest {
 
             //Do some view interaction
             mouseWheel(renderer, 100, 100, 0, -20)
-            wait(50)
             mouseDrag(renderer, renderer.width * 0.5,  renderer.height * 0.5, 5, -25, Qt.RightButton)
-            wait(50)
             mouseDrag(renderer, renderer.width * 0.5,  renderer.height * 0.5, 100, 100)
-            wait(50)
 
             //Make sure the view has changed
             tryVerify(() => { return originalAzimuth !== turnTableInteraction.azimuth })
@@ -75,11 +72,8 @@ MainWindowTest {
 
             //Do some view interaction
             mouseWheel(renderer, 100, 100, 0, -20)
-            wait(50)
             mouseDrag(renderer, renderer.width * 0.5,  renderer.height * 0.5, 50, 50)
-            wait(50)
             mouseDrag(renderer, renderer.width * 0.5,  renderer.height * 0.5, 5, -25, Qt.RightButton)
-            wait(50)
 
             //Make sure the view has changed
             tryVerify(() => { return originalAzimuth !== turnTableInteraction.azimuth })

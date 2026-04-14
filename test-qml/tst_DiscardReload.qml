@@ -61,6 +61,8 @@ MainWindowTest {
             let carpetButton = ObjectFinder.findObjectByChain(
                 mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(carpetButton)
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
             wait(300)
 
             // -- 3. Select the first scrap and record original station position --
@@ -143,6 +145,7 @@ MainWindowTest {
             carpetButton = ObjectFinder.findObjectByChain(
                 mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(carpetButton)
+            // wait() needed — carpet animation settle
             wait(300)
 
             // -- 7. Verify the station is back to its original position --

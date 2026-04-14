@@ -224,7 +224,6 @@ MainWindowTest {
 
             let galleryView = freshGalleryView()
             galleryView.currentIndex = -1
-            wait(50)
 
             for (let i = 0; i < galleryView.count; ++i) {
                 let galleryItem = ObjectFinder.findObjectByChain(
@@ -234,7 +233,6 @@ MainWindowTest {
                     continue
                 }
                 mouseClick(galleryItem)
-                wait(50)
                 let gallery = freshGallery()
                 if (gallery != null
                         && gallery.currentNoteLiDAR != null
@@ -312,7 +310,6 @@ MainWindowTest {
 
             let galleryView = freshGalleryView()
             galleryView.currentIndex = -1
-            wait(50)
 
             for (let i = 0; i < galleryView.count; ++i) {
                 let galleryItem = ObjectFinder.findObjectByChain(
@@ -322,7 +319,6 @@ MainWindowTest {
                     continue
                 }
                 mouseClick(galleryItem)
-                wait(50)
                 let gallery = freshGallery()
                 if (gallery != null && gallery.currentNoteLiDAR != null) {
                     break

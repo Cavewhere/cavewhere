@@ -26,9 +26,11 @@ MainWindowTest {
             let noteGalleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView");
             tryVerify(() => { return noteGalleryView.count === 2});
 
-            wait(50)
-
-            let lidarThumb = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1");
+            let lidarThumb = null;
+            tryVerify(() => {
+                lidarThumb = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1");
+                return lidarThumb !== null;
+            }, 1000, "lidarThumb (noteImage1) should exist after images added")
             mouseClick(lidarThumb);
 
             let lidarViewer = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId");
@@ -55,6 +57,8 @@ MainWindowTest {
             let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
             mouseClick(carpetButton)
 
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
             wait(200)
 
             let addStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
@@ -116,8 +120,6 @@ MainWindowTest {
                       40, 30,
                       Qt.LeftButton, Qt.NoModifier, 100)
 
-            wait(100);
-
             tryVerify(() => {
                           let current3D = stationIconHandler.position3D !== undefined ? stationIconHandler.position3D : stationItem.position3D
                           let mapping = stationIconHandler.mapToItem(stationIconHandler.parentView, stationIconHandler.parent.x, stationIconHandler.parent.y)
@@ -136,10 +138,12 @@ MainWindowTest {
         }
 
         function test_northInteraction() {
-            wait(100)
-
             //Turn off auto calculate
-            let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->checkBox")
+            let _obj1 = null
+            tryVerify(() => {
+                          _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->checkBox")
+                          return _obj1 !== null
+                      })
             _obj1.checked = false;
 
 
@@ -155,35 +159,36 @@ MainWindowTest {
             //Escape out of the tool
             keyClick(16777216, 0) //Esc
 
-            wait(100)
-
             //Make sure the tool works again
             //Go through the tool
-            northToolButton_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northToolButton")
+            tryVerify(() => {
+                          northToolButton_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northToolButton")
+                          return northToolButton_obj2 !== null && northToolButton_obj2.visible
+                      })
             mouseClick(northToolButton_obj2)
 
-            wait(100)
-
-            noteLiDARNorthInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction")
+            tryVerify(() => {
+                          noteLiDARNorthInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction")
+                          return noteLiDARNorthInteraction_obj3 !== null
+                      })
             mouseClick(noteLiDARNorthInteraction_obj3, 319.91, 514.371)
             mouseMove(noteLiDARNorthInteraction_obj3, 203.246, 244.637, 100)
             mouseClick(noteLiDARNorthInteraction_obj3, 203.246, 244.637)
 
-            wait(100)
-
-            let azimuth = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->valueInput")
+            let azimuth = null
+            tryVerify(() => {
+                          azimuth = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction->valueInput")
+                          return azimuth !== null
+                      })
 
             azimuth.openEditor()
-
+            // wait() needed — openEditor() activates the text input asynchronously;
+            // activeFocus may not be reliable under --platform offscreen
             wait(100)
-
-            waitForRendering(azimuth);
 
             keyClick(54, 0) //6
             keyClick(50, 0) //2
             keyClick(16777220, 0) //Return
-
-            wait(100)
 
             tryVerify(() => { return azimuth.text === "62.0"; })
 
@@ -210,22 +215,26 @@ MainWindowTest {
             let noteTransform = transformEditor.noteTransform
             verify(noteTransform !== null)
 
-            wait(100)
-
-            let setLengthButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->setLengthButton")
+            let setLengthButton = null
+            tryVerify(() => {
+                          setLengthButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->setLengthButton")
+                          return setLengthButton !== null
+                      })
             mouseClick(setLengthButton)
 
-            wait(100)
-
             let scaleInteraction = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARScaleInteraction")
-            tryVerify(() => scaleInteraction.visible)
+            tryVerify(() => {
+                if (!scaleInteraction.visible) {
+                    mouseClick(setLengthButton)
+                    return false
+                }
+                return true
+            }, 3000, "scaleInteraction should be visible after clicking setLengthButton")
             mouseClick(scaleInteraction, 203.246, 244.637)
             mouseClick(scaleInteraction, 319.91, 514.371)
 
-            wait(100)
-
+            tryVerify(() => { return scaleInteraction.measuredValue > 1.0 })
             let measured = scaleInteraction.measuredValue
-            verify(measured > 1.0) //if this is 1.0 the measuredValue isn't right
 
             let lengthInput = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARScaleInteraction->scaleLengthInput->coreTextInput")
             mouseClick(lengthInput)
@@ -263,14 +272,18 @@ MainWindowTest {
 
             verify(upModeCombo_obj1.displayText === "Custom");
 
-            wait(100)
-
-            let setUpToolButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->setUpToolButton")
+            let setUpToolButton_obj1 = null
+            tryVerify(() => {
+                          setUpToolButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->setUpToolButton")
+                          return setUpToolButton_obj1 !== null && setUpToolButton_obj1.visible
+                      })
             mouseClick(setUpToolButton_obj1)
 
-            wait(100)
-
-            let noteLiDARUpInteraction_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARUpInteraction")
+            let noteLiDARUpInteraction_obj1 = null
+            tryVerify(() => {
+                          noteLiDARUpInteraction_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARUpInteraction")
+                          return noteLiDARUpInteraction_obj1 !== null
+                      })
             mouseClick(noteLiDARUpInteraction_obj1, 60.8242, 396.969)
             mouseClick(noteLiDARUpInteraction_obj1, 56.8516, 300.746)
 

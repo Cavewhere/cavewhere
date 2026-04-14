@@ -1,0 +1,258 @@
+# Audit and replace bare `wait()` calls in cavewhere-qml-test
+
+## Context
+
+The nightly CI runs 4 `cavewhere-test` + 2 `cavewhere-qml-test` concurrently under `--platform offscreen` in Release mode. Bare `wait(ms)` calls are inherently flaky — they assume a fixed time budget that may be too short under heavy load or too long for fast runs. The CLAUDE.md convention is: "Prefer `tryVerify()` / `tryCompare()` over `wait()`. Fixed waits are flaky — poll for the condition you actually need."
+
+**Scope:** 182 bare `wait()` calls across 24 files (23 `.qml` + 1 `.js`).
+
+## Categories of wait() usage
+
+After auditing every occurrence, the waits fall into 5 patterns:
+
+### Category A: "Wait after navigation/click for UI to settle" (~90 calls)
+**Pattern:** `mouseClick(button); wait(100)` or `pageAddress = "..."; wait(100)`
+**Fix:** Replace with `tryVerify()` checking the expected effect of the action — e.g., object existence, visibility change, page item objectName, model count change. Every click should have a verifiable consequence.
+**Files:** tst_KeywordTab (22), tst_SurveyDataEntry (several), tst_Leads (7), tst_ImportCSVData (several), tst_WelcomePage (4), tst_DiscardReload (2), tst_ScrapInteraction (several)
+
+### Category B: "Wait between mouse interaction steps" (~40 calls)
+**Pattern:** `mousePress(); wait(50); mouseMove(); wait(50); mouseRelease()`
+**Fix:** Replace with `tryVerify()` checking the effect of the interaction — e.g., a property changed, an interaction became active, a position updated. If no observable state change exists between micro-steps, the wait can simply be removed (Qt processes mouse events synchronously in test mode).
+**Files:** tst_Map (19), tst_MapMultiLayer (14), tst_CameraOptions (7), tst_NoteNorthInteraction (5), tst_TurntableInteraction (1), tst_ScrapInteraction (several)
+
+### Category C: "Yield for event loop / 1ms waits" (~5 calls)
+**Pattern:** `wait(1)` — minimal yield to process pending events
+**Fix:** Replace with `tryVerify()` on the condition the code is actually waiting for (e.g., delegate loaded, cell available). If the wait is just yielding for an object finder, fold it into the existing `tryVerify` that follows.
+**Files:** tst_SurveyDataEntry (lines 1854, 1868, 2039)
+
+### Category D: "Wait after positionViewAtIndex for delegates to load" (~10 calls)
+**Pattern:** `view.positionViewAtIndex(row, ...); wait(50); let cell = ObjectFinder.find(...)`
+**Fix:** Replace with `tryVerify()` that the target delegate object exists (it's created asynchronously by ListView).
+**Files:** tst_SurveyDataEntry (lines 279, 2308, 2326, 2350, 2363, 2384, 2428)
+
+### Category E: "Cleanup/setup waits and wait(0)" (~5 calls)
+**Pattern:** `obj.destroy(); wait(0)` or `newProject(); wait(100)`
+**Fix:** `wait(0)` can be removed (it's a no-op). Setup waits like `newProject(); wait(100)` should use `tryVerify()` on the expected post-state (e.g., page loaded, model reset).
+**Files:** tst_GitImageComparePage (1), tst_GitWorkingTreePanel (1), tst_SurveyDataEntry (line 18)
+
+### IMPORTANT: Do NOT use `waitForRendering()`
+`waitForRendering()` can hang indefinitely under `--platform offscreen` when no frame is produced. **Always use `tryVerify()` with a concrete, observable condition instead.** Every action in a test should have a verifiable effect — if it doesn't, question whether the wait is needed at all.
+
+### Exception: ListView delegate recycling
+When a ListView model changes (e.g., removing an OR boundary in KeywordTab), the delegates are recycled asynchronously. `ObjectFinder` can return stale delegate references during this period, and clicks on stale refs are silently dropped. In these cases, a `wait()` is the only reliable approach — `tryVerify` finds the item immediately (it hasn't been destroyed yet) but the reference is stale. Mark these with a comment explaining why `wait()` is needed.
+
+### Commented-out waits (DO NOT touch)
+There are ~15 commented-out `// wait(1000000)` calls that serve as debugging breakpoints. Leave these as-is.
+
+## Implementation plan — ordered by file, highest impact first
+
+### Priority 1: Files with nightly failures or highest count
+
+| File | Count | Primary fix pattern |
+|------|-------|-------------------|
+| `tst_SurveyDataEntry.qml` | 30 | Categories A, C, D — `tryVerify` for cell/delegate existence |
+| `tst_KeywordTab.qml` | 22 | Category A — `tryVerify` for UI element existence after click |
+| `tst_Map.qml` | 19 | Category B — `tryVerify` or remove between mouse steps |
+| `tst_ScrapInteraction.qml` | 18 | Categories A, B — `tryVerify` for state changes |
+| `tst_MapMultiLayer.qml` | 14 | Category B — `tryVerify` for layer/visibility changes |
+| `tst_LiDARNotes.qml` | 15 | Categories A, B — `tryVerify` for note/image state |
+
+### Priority 2: Medium count files
+
+| File | Count | Primary fix pattern |
+|------|-------|-------------------|
+| `tst_ImportCSVData.qml` | 9 | Category A — `tryVerify` for model/column changes after drag |
+| `tst_Leads.qml` | 7 | Category A — `tryVerify` for page state |
+| `tst_CameraOptions.qml` | 7 | Category B — `tryVerify` or remove between interactions |
+| `tst_TripSync.qml` | 6 | Category A — `tryVerify` for sync state |
+| `tst_ScrapSync.qml` | 6 | Category A — `tryVerify` for sync state |
+| `tst_NoteNorthInteraction.qml` | 5 | Category B — `tryVerify` for rotation/position |
+| `tst_NoteZeroDPI.qml` | 5 | Category A — `tryCompare` for text values |
+
+### Priority 3: Low count files (1-4 each)
+
+| File | Count |
+|------|-------|
+| `tst_LidarSync.qml` | 4 |
+| `tst_WelcomePage.qml` | 4 |
+| `tst_DiscardReload.qml` | 2 |
+| `tst_NoteScaleInteraction.qml` | 2 |
+| `tst_TurntableInteraction.qml` | 1 |
+| `tst_GitWorkingTreePanel.qml` | 1 |
+| `tst_GitImageComparePage.qml` | 1 |
+| `tst_GitFileDiffPage.qml` | 1 |
+| `tst_ScrapSelectionReset.qml` | 1 |
+| `tst_QuoteBox.qml` | 1 |
+| `SyncTestHelper.js` | 1 |
+
+### SyncTestHelper.js special case
+The `wait(50)` on line 76 is inside `tryVerifyWithDiagnostics()` — a custom polling loop. This is already polling behavior (not a bare fixed wait), so it's **low priority** and can be left as-is. The 50ms sleep inside a retry loop is the expected pattern.
+
+## Replacement rules (quick reference)
+
+**Never use `waitForRendering()` — it can hang under offscreen. Always use `tryVerify()` with a concrete condition.**
+
+| Old pattern | New pattern |
+|-------------|-------------|
+| `mouseClick(x); wait(N); let y = find(...)` | `mouseClick(x); tryVerify(() => find(...) !== null)` — verify the click's effect |
+| `mouseClick(tab); wait(N)` | `mouseClick(tab); tryVerify(() => expectedPanel !== null)` — verify tab content loaded |
+| `mouseDrag(...); wait(N)` | `mouseDrag(...); tryVerify(() => property changed)` |
+| `mousePress/Move/Release; wait(50)` | Remove the wait if no observable state change; otherwise `tryVerify(condition)` |
+| `view.positionViewAtIndex(...); wait(N); let cell = find(...)` | `view.positionViewAtIndex(...); tryVerify(() => find(...) !== null)` |
+| `wait(1)` | Fold into the nearest `tryVerify` or remove if followed by one |
+| `wait(0)` | Remove entirely |
+| `pageAddress = "X"; wait(N)` | `pageAddress = "X"; tryVerify(() => currentPageItem.objectName === "expected")` |
+
+## Verification
+
+After each file is modified, run it 10 times with `--platform offscreen` in Release mode:
+```bash
+for i in $(seq 1 10); do ./build/<preset>/cavewhere-qml-test --platform offscreen -input test-qml/tst_FILE.qml && echo "Run $i: PASS" || echo "Run $i: FAIL"; done
+```
+
+## Completed files
+
+### tst_KeywordTab.qml — 22 → 7 wait() (15 replaced)
+- All Category A waits (after mouseClick for UI elements) replaced with tryVerify
+- 7 waits retained: all involve ListView delegate recycling where recycled delegates have valid refs but stale bound properties (sourceRow, index), causing button clicks to act on wrong model rows
+- Investigated ObjectFinder window() check and ListView.onPooled/onReused — neither solves the stale-binding issue
+- Each retained wait() has a comment explaining why
+
+### tst_SurveyDataEntry.qml — 15 → 0 wait() (15 replaced)
+- Category A: wait after openContextMenu removed (triggerMenuItemFromLoader now uses tryVerify for loader); wait after blocked insert → tryCompare; focus hack wait → tryVerify visible
+- Category C: 3x wait(1) removed (redundant before existing tryVerify or no async dependency)
+- Category D: wait after positionViewAtBeginning → tryVerify(visible); wait after positionViewAtIndex removed (followed by tryVerify); scrollToBottom wait → tryVerify cell exists
+- Category E: init() wait → tryVerify page loaded
+- dataBoxAt() manual 50-iteration polling loop simplified to single tryVerify
+- 6x triggerMenuItemFromLoader + 1x menuItemEnabled updated to tryVerify for async Loader
+- Verified 10/10 passes
+
+### tst_Map.qml — 19 → 7 wait() (12 replaced)
+- Category B: 5x wait(50) retained between mousePress/mouseMove/mouseRelease — rotation interaction uses timers to distinguish click from drag
+- Category A: wait(100) after Done click retained — capture viewport geometry computed asynchronously with no observable completion signal
+- Category A: wait(100) before landscape toggle retained — paper layout must settle after paper type switch
+- Replaced: wait → tryVerify(exists) for captureItem0 and 4 resize handles; wait → tryVerify(selected) after click; wait → tryVerify(position converged) after drag/rotation (workaround for tryFuzzyCompare capturing actual by value)
+- Removed stale console.log debug output and unused `var err = new Error()`
+- Note: tryFuzzyCompare captures `actual` by value — needs preceding tryVerify to poll for convergence. Framework fix tracked as follow-up.
+- Verified 10/10 passes
+
+### tst_ScrapInteraction.qml — 18 → 4 wait() (14 replaced)
+- Category E: init() wait(1000) retained — newProject() triggers broad async cleanup that has no single observable completion signal
+- Category A: 2x wait(500) after carpet button click retained — the "" → "SELECT" transition includes PropertyAnimations that reposition the toolbar; clicks miss during animation
+- Category A: wait(50) after openEditor() retained — text input activation is async and activeFocus unreliable under offscreen
+- Replaced: wait(100) after zoomScale removed (sync property set); 3x wait(50) between scrap points removed (events are sync); wait(100) after zoomIntoRenderingView removed; wait(50) after verify removed; 2x wait(100) in addLeadInteraction → tryVerify(leadEditor exists); wait(200) after leadPoint click → tryVerify(quoteBox exists); 2x wait(500) page navigation → tryVerify(page transition); wait(100) after scrap click → tryVerify(comboBox exists)
+- compare(scrapView.count, 1) → tryCompare for async scrap creation
+- Removed stale console.log debug output
+- Verified 10/10 passes
+
+### tst_LiDARNotes.qml — 12 → 2 wait() (10 replaced, 1 waitForRendering removed)
+- Category A: wait(200) after carpet button retained — transition animation repositions toolbar
+- Category A: wait(100) after openEditor retained — text input activation async under offscreen
+- Replaced: wait(100) after mouseDrag removed (followed by tryVerify); 6x wait(100) → tryVerify(element exists/visible); wait(100) after scale clicks → tryVerify(measuredValue > 1.0); wait(100) after keyClick removed (followed by tryVerify for text)
+- Removed waitForRendering(azimuth) — key events are synchronous
+- Verified 10/10 passes
+
+### tst_MapMultiLayer.qml — 14 → 3 wait() (11 replaced)
+- Category A: wait(100) after mapButton retained — mapPage layout must complete before addLayerButton is interactive
+- Category A: 2x wait(50/100) after Done click retained — capture viewport geometry computed asynchronously
+- Replaced: wait(100) after mapButton → tryVerify(mapPage) + retained wait; wait(50) after addLayerButton → tryVerify(viewPage transition) + tryVerify(selectionButton visible); wait(100) after area selection → tryVerify(selectionButton enabled); wait(50) after selectionButton click removed; 5x wait(50) cycle selection → tryVerify(selection state change); wait(100) after last Done → tryVerify(captureItem exists); wait(100) at end of test removed
+- Verified 10/10 passes
+
+### tst_ImportCSVData.qml — 9 → 8 wait() (1 replaced)
+- Category A: wait(200) after import click → tryVerify(caveDelegate0 exists) for async page transition + data load
+- 6x wait(100) between drag operations retained — ListView delegate layout must settle after model reorder before mapToItem returns correct coordinates for the next drag
+- 1x wait(50) after scrollbar position retained — ScrollBar.position is applied asynchronously; import button's visual position not updated yet for mouseClick
+- Added explanatory comments to all retained waits
+- Verified 10/10 passes
+
+### tst_Leads.qml — 7 → 2 wait() (5 replaced)
+- Category A: wait(100) + retry after addCave click → tryVerify with retry in polling loop
+- Category A: wait(200) after image click to add lead → removed (followed by existing tryVerify)
+- Category A: wait(300) after view page switch → tryVerify for leadObj existence
+- Category A: wait(100) after clicking lead → tryVerify for quoteBox existence
+- Category E: wait(50) after deselection removed — direct method calls are synchronous
+- 2x wait(300) after carpet button retained — animation repositions toolbar
+- Verified 10/10 passes
+
+### tst_CameraOptions.qml — 6 → 0 wait() (6 removed)
+- Category B: 6x wait(50) between mouseWheel/mouseDrag interactions removed — events are fully synchronous in test mode; existing tryVerify blocks handle async property updates
+- Verified 10/10 passes
+
+### tst_TripSync.qml — 2 → 0 wait() (2 replaced)
+- Manual polling loop (while+wait(50)+snapshotTeamState) → single tryVerify with 3s timeout
+- wait(50) after waitForFinished() removed — no async dependency before save()
+- Verified 10/10 passes
+
+### tst_ScrapSync.qml — 6 → 3 wait() (3 removed)
+- 3x wait(50) in createNewScrap removed — after first scrap point (redundant before tryVerifyWithDiagnostics), after checkbox click (synchronous), between scrap point clicks in loop (synchronous)
+- wait(50) for ListView deselect/reselect rebind retained — must process deselection before same-index reselect
+- wait(100) for ADD-SCRAP ScriptAction transition retained — interaction not ready for clicks yet
+- wait(50) inside tryVerifyWithDiagnostics polling loop retained — already polling behavior
+- Added explanatory comments to retained waits
+- Verified 10/10 passes
+
+### tst_NoteNorthInteraction.qml — 4 → 4 wait() (0 replaced, comments only)
+- 2x wait(200) after carpet button retained — animation repositions toolbar
+- 2x wait(200) after scrap selection retained — noteTransformEditor overlay (z=2) must fully settle; without it, subsequent image clicks get intercepted
+- Added explanatory comments to all 4 waits
+- Verified 10/10 passes
+
+### tst_NoteZeroDPI.qml — 5 → 1 wait() (4 removed)
+- 4x wait(100) removed — 2x after mouseClick(text) for focus (synchronous), 2x before tryCompare (already polls)
+- wait(500) after carpet button retained — animation repositions toolbar
+- Verified 10/10 passes
+
+### Carpet animation — objectName approach reverted
+Adding `objectName: "carpetButtonArea"` to NotesGallery.qml caused ObjectFinder chain-matching collisions in the full suite (10+ cascading failures in Leads, LiDARNotes, ScrapInteraction, ScrapSync). The objectName made carpetButtonArea findable by name, which interfered with other tests' chain lookups. All carpet animation waits reverted to fixed `wait()` calls.
+
+### tst_LidarSync.qml — 4 → 0 wait() (4 removed)
+- 2x wait(50) after galleryView.currentIndex = -1 removed — clearing selection before iterating, no async dependency
+- 2x wait(50) after mouseClick(galleryItem) in loop removed — tryVerifyWithDiagnostics below handles final state
+- Verified 10/10 passes
+
+### tst_WelcomePage.qml — 3 → 0 wait() (3 removed)
+- wait(100) at end of test_validInfo removed — no cleanup needed
+- 2x wait(300) after next button click → tryVerify for hasError state
+- 8x waitForRendering retained — needed for text field focus under offscreen (activeFocus not reliable)
+- Verified 10/10 passes
+
+### tst_DiscardReload.qml — 2 → 2 wait() (comments only)
+- 2x wait(300) after carpet button retained — animation repositions toolbar (objectName approach reverted)
+- Verified 10/10 passes
+
+### tst_NoteScaleInteraction.qml — 2 → 1 wait() (1 replaced)
+- wait(1000) after carpet button retained — animation repositions toolbar (objectName approach reverted); removed stale toCarpetTransition check
+- wait(200) after scrap selection → tryVerify for setLengthButton existence
+- Verified 10/10 passes
+
+### tst_TurntableInteraction.qml — 1 → 0 wait() (1 removed)
+- wait(50) after mouseWheel loop removed — events are synchronous
+- Verified 10/10 passes
+
+### tst_GitWorkingTreePanel.qml — 1 → 0 wait() (1 removed)
+- wait(0) after destroy() removed — no-op
+- Verified 10/10 passes
+
+### tst_GitImageComparePage.qml — 1 → 0 wait() (1 removed)
+- wait(0) after destroy() removed — no-op
+- Verified 10/10 passes
+
+### tst_GitFileDiffPage.qml — 1 → 0 wait() (1 removed)
+- wait(0) after destroy() removed — no-op
+- Verified 10/10 passes
+
+### tst_ScrapSelectionReset.qml — 1 → 1 wait() (comment only)
+- wait(200) after carpet button retained — scrap view initialization needs settle time beyond animation
+- Verified 10/10 passes
+
+### tst_QuoteBox.qml — 0 active wait() (nothing to change)
+
+## Execution approach
+
+Work through files in priority order. For each file:
+1. Replace all `wait()` calls using the replacement rules above
+2. Verify the test still passes 10/10
+3. Commit per-file or per-batch (user preference)
+
+Skip `SyncTestHelper.js` line 76 (already a polling loop).
+Skip all commented-out `// wait(...)` lines.

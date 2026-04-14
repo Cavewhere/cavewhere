@@ -15,7 +15,8 @@ MainWindowTest {
         function init() {
             RootData.project.newProject()
             RootData.pageSelectionModel.currentPageAddress = "View"
-            wait(100)
+            tryVerify(() => { return RootData.pageView.currentPageItem !== null
+                                  && RootData.pageView.currentPageItem.objectName === "viewPage" })
         }
 
         function addSurvey() {
@@ -274,9 +275,6 @@ MainWindowTest {
             //Make sure the first chunk gets trimmed
             compare(firstChunk.stationCount, 3)
             compare(firstChunk.shotCount, 2)
-
-            //Make sure the new scrap exists
-            wait(50)
 
             //Add data
             let secondChunkStation0Row = editorModel.toModelRow(
@@ -627,38 +625,11 @@ MainWindowTest {
 
             function dataBoxAt(row, column) {
                 view.positionViewAtIndex(row, ListView.Contain)
-                waitForRendering(rootId)
                 let cell = null
-                for(let attempt = 0; attempt < 50; ++attempt) {
-                    cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
-                    if(cell !== null) {
-                        break
-                    }
-                    wait(100)
-                }
-                if(cell === null) {
-                    console.log("[SurveyDataEntryDebug]", "Missing dataBox", "row=", row, "column=", column)
-                    let activeTrip = RootData.pageView.currentPageItem.currentTrip as Trip
-                    if(activeTrip !== null && activeTrip.chunkCount > 0) {
-                        let activeChunk = activeTrip.chunk(0)
-                        if(activeChunk !== null) {
-                            logEditorSnapshot("missing-cell-state", activeChunk)
-                        }
-                    }
-                    logRowCells(row, [
-                                    SurveyChunk.StationNameRole,
-                                    SurveyChunk.ShotDistanceRole,
-                                    SurveyChunk.ShotCompassRole,
-                                    SurveyChunk.ShotBackCompassRole,
-                                    SurveyChunk.ShotClinoRole,
-                                    SurveyChunk.ShotBackClinoRole,
-                                    SurveyChunk.StationLeftRole,
-                                    SurveyChunk.StationRightRole,
-                                    SurveyChunk.StationUpRole,
-                                    SurveyChunk.StationDownRole
-                                ])
-                }
-                verify(cell !== null, "Missing dataBox at row=" + row + " column=" + column)
+                tryVerify(() => {
+                              cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                              return cell !== null
+                          })
                 mouseClick(cell)
                 return cell
             }
@@ -1161,14 +1132,15 @@ MainWindowTest {
 
             function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
                 let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
-                let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
-                verify(loader !== null)
-                verify(loader.item !== null)
+                let loader = null
+                tryVerify(() => {
+                              loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
+                              return loader !== null && loader.item !== null
+                          })
 
                 let item = findChild(loader.item, itemObjectName)
                 verify(item !== null)
                 item.triggered()
-                waitForRendering(rootId)
             }
 
             let trip = RootData.pageView.currentPageItem.currentTrip as Trip
@@ -1199,7 +1171,6 @@ MainWindowTest {
 
             // Insert station above A1
             openContextMenu(3, SurveyChunk.StationNameRole)
-            wait(100);
             triggerMenuItemFromLoader(3, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuInsertAbove")
 
             verifyFocusedCounts(4, 3)
@@ -1319,14 +1290,15 @@ MainWindowTest {
 
             function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
                 let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
-                let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
-                verify(loader !== null)
-                verify(loader.item !== null)
+                let loader = null
+                tryVerify(() => {
+                              loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
+                              return loader !== null && loader.item !== null
+                          })
 
                 let item = findChild(loader.item, itemObjectName)
                 verify(item !== null)
                 item.triggered()
-                waitForRendering(rootId)
             }
 
             let trip = RootData.pageView.currentPageItem.currentTrip as Trip
@@ -1395,14 +1367,15 @@ MainWindowTest {
 
             function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
                 let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
-                let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
-                verify(loader !== null)
-                verify(loader.item !== null)
+                let loader = null
+                tryVerify(() => {
+                              loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
+                              return loader !== null && loader.item !== null
+                          })
 
                 let item = findChild(loader.item, itemObjectName)
                 verify(item !== null)
                 item.triggered()
-                waitForRendering(rootId)
             }
 
             let trip = RootData.pageView.currentPageItem.currentTrip as Trip
@@ -1472,14 +1445,15 @@ MainWindowTest {
 
             function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
                 let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
-                let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
-                verify(loader !== null)
-                verify(loader.item !== null)
+                let loader = null
+                tryVerify(() => {
+                              loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
+                              return loader !== null && loader.item !== null
+                          })
 
                 let item = findChild(loader.item, itemObjectName)
                 verify(item !== null)
                 item.triggered()
-                waitForRendering(rootId)
             }
 
             let trip = RootData.pageView.currentPageItem.currentTrip as Trip
@@ -1509,10 +1483,8 @@ MainWindowTest {
             openContextMenu(3, SurveyChunk.StationNameRole)
             triggerMenuItemFromLoader(3, SurveyChunk.StationNameRole, "stationMenuLoader", "stationMenuInsertBelow")
 
-            wait(100)
-
             // Inserting below the last non-empty station is blocked while a virtual tail exists.
-            compare(chunk.stationCount, 2)
+            tryCompare(chunk, "stationCount", 2)
             compare(chunk.shotCount, 1)
             compare(chunk.data(SurveyChunk.StationNameRole, 0), "A0")
             compare(chunk.data(SurveyChunk.StationNameRole, 1), "A1")
@@ -1569,9 +1541,11 @@ MainWindowTest {
 
             function menuItemEnabled(row, column, loaderObjectName, itemObjectName) {
                 let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
-                let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
-                verify(loader !== null)
-                verify(loader.item !== null)
+                let loader = null
+                tryVerify(() => {
+                              loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
+                              return loader !== null && loader.item !== null
+                          })
                 let item = findChild(loader.item, itemObjectName)
                 verify(item !== null)
                 return item.enabled
@@ -1664,13 +1638,14 @@ MainWindowTest {
 
             function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
                 let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
-                let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
-                verify(loader !== null)
-                verify(loader.item !== null)
+                let loader = null
+                tryVerify(() => {
+                              loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
+                              return loader !== null && loader.item !== null
+                          })
                 let item = findChild(loader.item, itemObjectName)
                 verify(item !== null)
                 item.triggered()
-                waitForRendering(rootId)
             }
 
             function findStationRowForChunk(chunk, stationIndex) {
@@ -1851,8 +1826,6 @@ MainWindowTest {
             verify(trip !== null)
             verify(trip.chunkCount >= 2)
 
-            wait(1);
-
             let chunks = []
             let initialRealEmptyTail = []
             for(let i = 0; i < trip.chunkCount; ++i) {
@@ -1864,8 +1837,6 @@ MainWindowTest {
 
             function clickStationName(row) {
                 view.positionViewAtIndex(row, ListView.Contain)
-                // waitForRendering(rootId)
-                        wait(1);
                 let cell = null
                 tryVerify(() => {
                               cell = ObjectFinder.findObjectByChain(
@@ -2036,8 +2007,6 @@ MainWindowTest {
             function stepUntilStationChunk(targetChunk, key, maxSteps) {
                 for(let i = 0; i < maxSteps; ++i) {
                     keyClick(key, 0)
-                            wait(1);
-                    // waitForRendering(rootId)
                     let rowIndex = focusedChunkAndType()
                     verifyVisibleDataBoxesMatchModel("step " + i + " key=" + keyName(key))
                     verifyUnfocusedChunksAreClean(rowIndex.chunk,
@@ -2305,7 +2274,7 @@ MainWindowTest {
                 if(testBacksights) {
                     // ----- Enable the backsights and frontsights ----
                     view.positionViewAtBeginning()
-                    wait(100);
+                    tryVerify(() => { return backsight.visible })
                     mouseClick(backsight);
 
                     verify(frontsight.checked === true)
@@ -2323,7 +2292,6 @@ MainWindowTest {
                     view.positionViewAtIndex(row - 1, ListView.Contain)
                     view.positionViewAtIndex(row, ListView.Contain)
                     view.positionViewAtIndex(row + 1, ListView.Contain)
-                    wait(50);
 
                     //We need to click twice because, this could change the number of the cells
                     tryVerify(() => {
@@ -2347,7 +2315,7 @@ MainWindowTest {
 
                     // ----- Enable the backsights only
                     view.positionViewAtBeginning()
-                    wait(50);
+                    tryVerify(() => { return frontsight.visible })
                     mouseClick(frontsight);
 
                     verify(frontsight.checked === false)
@@ -2360,7 +2328,6 @@ MainWindowTest {
                     }
 
                     view.positionViewAtIndex(row + 1, ListView.Contain)
-                    wait(50);
 
                     tryVerify(() => {
                                   cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
@@ -2381,7 +2348,7 @@ MainWindowTest {
                     direction(cell, cell.listViewIndex, cell.dataValue.chunkDataRole);
 
                     view.positionViewAtBeginning()
-                    wait(50);
+                    tryVerify(() => { return frontsight.visible })
                     mouseClick(frontsight);
                     mouseClick(backsight);
                 }
@@ -2425,10 +2392,11 @@ MainWindowTest {
                 //Scroll to the bottom
                 let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
                 surveyView.positionViewAtEnd()
-                wait(100)
-                // waitForRendering(rootId)
-
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + SurveyChunk.StationNameRole)
+                let cell = null
+                tryVerify(() => {
+                              cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + SurveyChunk.StationNameRole)
+                              return cell !== null
+                          })
                 mouseClick(cell)
             }
 
@@ -2602,8 +2570,10 @@ MainWindowTest {
                 //This is a hack to get this testcase to work. Focus is lost some how
                 //when reverse tabing, I'm not sure why. The testcase fail intermidantly without this
                 //It seems to work just fine on the real interface
-                currentItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.11.4")
-                wait(100)
+                tryVerify(() => {
+                              currentItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.11.4")
+                              return currentItem !== null && currentItem.visible
+                          })
                 mouseClick(currentItem)
 
                 currentItem = previousTab(null, 11, SurveyChunk.StationUpRole);

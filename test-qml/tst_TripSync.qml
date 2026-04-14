@@ -59,6 +59,14 @@ MainWindowTest {
             SyncTestHelper.waitForProjectSyncToFinish(testCaseId, RootData)
         }
 
+        function waitForCurrentTrip() {
+            tryVerify(function() {
+                return RootData.pageView.currentPageItem !== null
+                       && RootData.pageView.currentPageItem.currentTrip !== null
+            }, 5000, "wait for trip page item to be ready")
+            return RootData.pageView.currentPageItem.currentTrip
+        }
+
         function runTripSyncRoundTrip(tripPageAddress, getter, setter, nextValue, uiGetter) {
             SyncTestHelper.runProjectSyncRoundTrip(testCaseId, RootData, TestHelper, {
                 tripPageAddress: tripPageAddress,
@@ -203,10 +211,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentPageTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let tripId = String(currentPageTrip().id)
@@ -330,10 +335,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentPageTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let trip = currentPageTrip()
@@ -580,10 +582,7 @@ MainWindowTest {
         function test_tripTeamSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
             let currentTeamModel = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                let model = currentPageItem.currentTrip.team
+                let model = waitForCurrentTrip().team
                 verify(model !== null)
                 return model
             }
@@ -663,10 +662,7 @@ MainWindowTest {
         function test_tripTeamRemoveViaUiSync() {
             let context = loadFixtureAndOpenFirstTrip()
             let currentTeamModel = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                let model = currentPageItem.currentTrip.team
+                let model = waitForCurrentTrip().team
                 verify(model !== null)
                 return model
             }
@@ -757,23 +753,16 @@ MainWindowTest {
             verify(commitC === commitB)
 
             verifyStillOnTripPage(context.tripPageAddress)
-            let finalTeamState = snapshotTeamState(currentTeamModel())
-            let deadline = Date.now() + 3000
-            while (Date.now() < deadline && finalTeamState !== expectedAfterRemovalState) {
-                wait(50)
-                finalTeamState = snapshotTeamState(currentTeamModel())
-            }
-            compare(finalTeamState, expectedAfterRemovalState)
+            tryVerify(() => {
+                          return snapshotTeamState(currentTeamModel()) === expectedAfterRemovalState
+                      }, 3000)
         }
 
         function test_tripChunkDataSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let currentChunk = function() {
@@ -918,10 +907,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let currentChunk = function() {
@@ -1093,10 +1079,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let currentChunk = function() {
@@ -1285,10 +1268,7 @@ MainWindowTest {
             verify(editorModel !== null)
 
             let currentTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let currentChunk = function() {
@@ -1560,10 +1540,7 @@ MainWindowTest {
             verify(editorModel !== null)
 
             let currentTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let rowForStationIndex = function(chunk, stationIndex) {
@@ -1690,10 +1667,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let snapshotTripState = function() {
@@ -1745,10 +1719,7 @@ MainWindowTest {
             verify(editorModel !== null)
 
             let currentTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let readingText = function(value) {
@@ -1857,10 +1828,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let notesModel = function() {
@@ -1946,10 +1914,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let imageNotesModel = function() {
@@ -1997,10 +1962,13 @@ MainWindowTest {
             }
 
             let verifySelectedLiDARNote = function(expectedFileName) {
-                let galleryItem = ObjectFinder.findObjectByChain(
-                    mainWindow,
-                    "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
-                verify(galleryItem !== null)
+                let galleryItem = null
+                tryVerify(() => {
+                    galleryItem = ObjectFinder.findObjectByChain(
+                        mainWindow,
+                        "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                    return galleryItem !== null
+                }, 5000, "gallery delegate should exist for last note")
                 mouseClick(galleryItem)
 
                 tryVerifyWithDiagnostics(() => {
@@ -2097,10 +2065,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let imageNotesModel = function() {
@@ -2148,10 +2113,13 @@ MainWindowTest {
             }
 
             let verifySelectedLiDARNote = function(expectedFileName) {
-                let galleryItem = ObjectFinder.findObjectByChain(
-                    mainWindow,
-                    "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
-                verify(galleryItem !== null)
+                let galleryItem = null
+                tryVerify(() => {
+                    galleryItem = ObjectFinder.findObjectByChain(
+                        mainWindow,
+                        "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                    return galleryItem !== null
+                }, 5000, "gallery delegate should exist for last note")
                 mouseClick(galleryItem)
 
                 tryVerifyWithDiagnostics(() => {
@@ -2256,7 +2224,6 @@ MainWindowTest {
             }, 5000, "verify removed LiDAR note no longer selected")
 
             RootData.futureManagerModel.waitForFinished()
-            wait(50)
 
             let saveResult = RootData.project.save()
             verify(saveResult)
@@ -2294,10 +2261,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentTrip = function() {
-                let currentPageItem = RootData.pageView.currentPageItem
-                verify(currentPageItem !== null)
-                verify(currentPageItem.currentTrip !== null)
-                return currentPageItem.currentTrip
+                return waitForCurrentTrip()
             }
 
             let notesModel = function() {
