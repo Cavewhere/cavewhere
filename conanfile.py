@@ -38,7 +38,7 @@ class CaveWhereConan(ConanFile):
 
     def requirements(self):
         # PROJ is needed by survex (cavernlib/survex_core) on all platforms
-        self.requires("proj/[>=9.3.1]")
+        self.requires("proj/[=9.3.1]")
 
         if not self.options.mobile:
             #We handle survex dependancies here for now, since we're using conan
@@ -66,7 +66,7 @@ class CaveWhereConan(ConanFile):
             self.requires("xkbcommon/[>=1.6.0]", override=True)
             self.requires("sqlite3/[>=3.45.0]") #, override=True) #override seems to use system's sqlite3 and causes issues
         else:
-            self.requires("sqlite3/[>=3.44.2]")
+            self.requires("sqlite3/[>=3.48.0]", override=True)
 
     def build_requirements(self):
         self.tool_requires("protobuf/<host_version>")
