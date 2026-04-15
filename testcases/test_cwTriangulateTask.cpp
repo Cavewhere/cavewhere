@@ -33,6 +33,7 @@
 #include <QFile>
 #include <QImageReader>
 #include <QPainter>
+#include <QCoreApplication>
 
 //Std includes
 #include <algorithm>
@@ -170,11 +171,13 @@ static cwTriangulatedData triangulateImageAtPath(const QString& imagePath,
     inData.setViewMatrix(new cwPlanScrapViewMatrix::Data());
     inData.setNoteImageResolution(qRound(300.0 / 0.0254));
 
-    const QDir imageDir = QFileInfo(imagePath).absoluteDir();
+    const QDir tempDir(QDir::temp().filePath(
+        QStringLiteral("cwTriangulateTask-%1").arg(QCoreApplication::applicationPid())));
+    tempDir.mkpath(".");
 
     cwTriangulateTask task;
     task.setScrapData({inData});
-    task.setDataRootDir(imageDir);
+    task.setDataRootDir(tempDir);
     task.setFormatType(cwTextureUploadTask::OpenGL_RGBA);
     auto futures = task.triangulate();
     REQUIRE(futures.size() == 1);
