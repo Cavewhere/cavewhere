@@ -25,7 +25,7 @@
 
 class cwTriangulatePrivateData;
 
-class cwTriangulateInData
+class CAVEWHERE_LIB_EXPORT cwTriangulateInData
 {
 public:
     cwTriangulateInData();

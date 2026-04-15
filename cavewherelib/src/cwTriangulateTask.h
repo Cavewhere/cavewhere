@@ -46,7 +46,7 @@ struct WarpingSettingsAccessor<T, std::void_t<decltype(std::declval<const T&>().
 };
 }
 
-class cwTriangulateTask
+class CAVEWHERE_LIB_EXPORT cwTriangulateTask
 {
    // Q_OBJECT
 public:
