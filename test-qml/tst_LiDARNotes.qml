@@ -12,13 +12,13 @@ MainWindowTest {
         when: windowShown
 
         function init() {
-            TestHelper.loadProjectFromZip(RootData.project, "://datasets/lidarProjects/jaws of the beast.zip");
+            TestHelper.loadProjectFromZip(RootData.project, TestHelper.testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
-            let imagePath = TestHelper.copyToTempDirUrl("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
-            let lidarPath = TestHelper.copyToTempDirUrl("://datasets/lidarProjects/9_15_2025 3.glb");
+            let imagePath = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
+            let lidarPath = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
 
             let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery");
             noteGallery.imagesAdded([imagePath, lidarPath]);

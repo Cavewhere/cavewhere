@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Qt includes
 #include <QSignalSpy>
@@ -19,7 +20,7 @@ TEST_CASE("cwRegionTreeModel all function should work correctly", "[cwRegionTree
 
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
-    fileToProject(project.get(), "://datasets/test_cwRegionTreeModel/testAllFunction.cw");
+    fileToProject(project.get(), testcasesDatasetPath("test_cwRegionTreeModel/testAllFunction.cw"));
 
     auto regionModel = std::make_unique<cwRegionTreeModel>();
     regionModel->setCavingRegion(project->cavingRegion());
@@ -58,7 +59,7 @@ TEST_CASE("cwRegionTreeModel object function should work correctly", "[cwRegionT
 
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
-    fileToProject(project.get(), "://datasets/test_cwRegionTreeModel/testAllFunction.cw");
+    fileToProject(project.get(), testcasesDatasetPath("test_cwRegionTreeModel/testAllFunction.cw"));
 
     auto regionModel = std::make_unique<cwRegionTreeModel>();
     regionModel->setCavingRegion(project->cavingRegion());
@@ -102,7 +103,7 @@ static T* objAt(const QAbstractItemModel* m, const QModelIndex& idx, int role)
 TEST_CASE("LiDAR rows are exposed under Trip and react to insert/remove", "[cwRegionTreeModel][LiDAR]") {
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
-    fileToProject(project.get(), "://datasets/test_cwRegionTreeModel/testAllFunction.cw");
+    fileToProject(project.get(), testcasesDatasetPath("test_cwRegionTreeModel/testAllFunction.cw"));
 
     auto regionModel = std::make_unique<cwRegionTreeModel>();
     regionModel->setCavingRegion(project->cavingRegion());
@@ -261,7 +262,7 @@ static QModelIndex idxTripNotesLidarContainer(const cwRegionTreeModel& m, const 
 TEST_CASE("cwRegionTreeModel::parent correctness across all levels", "[cwRegionTreeModel]") {
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
-    fileToProject(project.get(), "://datasets/test_cwRegionTreeModel/testAllFunction.cw");
+    fileToProject(project.get(), testcasesDatasetPath("test_cwRegionTreeModel/testAllFunction.cw"));
 
     auto model = std::make_unique<cwRegionTreeModel>();
     model->setCavingRegion(project->cavingRegion());

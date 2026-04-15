@@ -20,7 +20,7 @@ MainWindowTest {
         }
 
         function addSurvey() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "cavePage" });
@@ -1580,7 +1580,7 @@ MainWindowTest {
         }
 
         function test_trimAfterInsertShotAboveLastStationAndFocusChange() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
 
             let cave = RootData.region.cave(0)
@@ -1807,7 +1807,7 @@ MainWindowTest {
         }
 
         function test_stationNameArrowSwitchesFocusedChunkVirtualRows() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
 
             let cave = RootData.region.cave(0)
@@ -2120,7 +2120,7 @@ MainWindowTest {
           Test arrow keys for navigation
           */
         function test_arrowNavigation() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
 
@@ -2427,7 +2427,7 @@ MainWindowTest {
           frontsights and backsights on.
           */
         function test_tabNavigationTabWorks() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
 
@@ -2860,7 +2860,7 @@ MainWindowTest {
           Tabing forward from the last element should stay focus
           */
         function test_tabEndingShouldStayFocus() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
 
@@ -2902,7 +2902,7 @@ MainWindowTest {
         }
 
         function test_tabGuessSurveyName() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
 
@@ -2927,7 +2927,7 @@ MainWindowTest {
         }
 
         // function test_editorTest() {
-        //     TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_SurveyDataEntry/navTest.cw");
+        //     TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
         //     RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
 

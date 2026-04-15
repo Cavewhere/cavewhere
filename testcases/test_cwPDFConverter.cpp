@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Our includes
 #include "cwPDFConverter.h"
@@ -63,7 +64,7 @@ TEST_CASE("cwPDFConverter should initilize correctly", "[cwPDFConverter]") {
 
 TEST_CASE("cwPDFConverter should convert PDFs correctly", "[cwPDFConverter]") {
     cwPDFConverter converter;
-    converter.setSource("://datasets/test_cwPDFConverter/2page-test.pdf");
+    converter.setSource(testcasesDatasetPath("test_cwPDFConverter/2page-test.pdf"));
     auto future = converter.convert();
 
     if(converter.isSupported()) {
@@ -76,8 +77,8 @@ TEST_CASE("cwPDFConverter should convert PDFs correctly", "[cwPDFConverter]") {
         CHECK(future.resultAt(0).size() == QSize(417, 417));
         CHECK(future.resultAt(1).size() == QSize(625, 417));
 
-        QImage page1("://datasets/test_cwPDFConverter/page1-300.png");
-        QImage page2("://datasets/test_cwPDFConverter/page2-300.png");
+        QImage page1(testcasesDatasetPath("test_cwPDFConverter/page1-300.png"));
+        QImage page2(testcasesDatasetPath("test_cwPDFConverter/page2-300.png"));
 
         const double page1Delta = meanChannelDelta(future.resultAt(0), page1);
         const double page2Delta = meanChannelDelta(future.resultAt(1), page2);

@@ -22,7 +22,7 @@ MainWindowTest {
 
         function test_arrowInteraction() {
 
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
@@ -82,7 +82,7 @@ MainWindowTest {
         }
 
         function test_planDeclinationManualNorthUp() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });

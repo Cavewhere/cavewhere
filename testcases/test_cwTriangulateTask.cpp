@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 #include <catch2/catch_approx.hpp>
 
 //Our includes
@@ -70,7 +71,7 @@ TEST_CASE("cwTriangulateTask uses note units for crop scaling", "[cwTriangulateT
 
         auto root = std::make_unique<cwRootData>();
         TestHelper helper;
-        helper.loadProjectFromZip(root->project(), "://datasets/test_cwNote/bb-pdf-dpi-test.zip");
+        helper.loadProjectFromZip(root->project(), testcasesDatasetPath("test_cwNote/bb-pdf-dpi-test.zip"));
 
         auto project = root->project();
         REQUIRE(project->cavingRegion()->caveCount() == 1);

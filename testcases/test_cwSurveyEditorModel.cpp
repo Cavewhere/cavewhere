@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Our includes
 #include "cwTrip.h"
@@ -474,7 +475,7 @@ TEST_CASE("cwSurveyEditorModel trims trailing empty rows when focus changes afte
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
 
-    const QString filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    const QString filename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     project->loadOrConvert(filename);
     project->waitLoadToFinish();
 

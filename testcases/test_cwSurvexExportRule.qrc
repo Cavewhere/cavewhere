@@ -1,5 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file>datasets/test_cwSurvexExporterRule/PhakeCave3000_expected.svx</file>
-    </qresource>
-</RCC>

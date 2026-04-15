@@ -1,6 +1,7 @@
 #include "LoadProjectHelper.h"
 
 //Qt includes
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
@@ -35,11 +36,19 @@
 #include <QSignalSpy>
 
 //Std includes
+#include <atomic>
+#include <cstdlib>
 #include <exception>
 #include <memory>
+#include <string>
 
 namespace {
 std::unique_ptr<LfsServer> g_syncLfsServer;
+std::atomic<int> g_tempSubdirCounter{0};
+
+// Stored as std::string so the atexit handler can read it without
+// re-entering sharedTempRoot()'s function-local static.
+std::string g_sharedTempRootPath;
 
 bool setRepositoryConfigString(const QString& repositoryPath,
                                const QString& key,
@@ -82,6 +91,32 @@ bool setRepositoryConfigString(const QString& repositoryPath,
 }
 } // namespace
 
+QString sharedTempRoot()
+{
+    static bool initialized = []() {
+        QString path = QDir::tempPath()
+                       + QStringLiteral("/cavewhere-test-")
+                       + QString::number(QCoreApplication::applicationPid());
+        QDir().mkpath(path);
+        g_sharedTempRootPath = path.toStdString();
+        std::atexit([]() {
+            QDir(QString::fromStdString(g_sharedTempRootPath)).removeRecursively();
+        });
+        return true;
+    }();
+    Q_UNUSED(initialized);
+    return QString::fromStdString(g_sharedTempRootPath);
+}
+
+QString createTempSubdir()
+{
+    QString subdir = sharedTempRoot()
+                     + QStringLiteral("/")
+                     + QString::number(g_tempSubdirCounter.fetch_add(1));
+    QDir().mkpath(subdir);
+    return subdir;
+}
+
 std::shared_ptr<cwProject> fileToProject(QString filename) {
     auto project = std::make_shared<cwProject>();
     addTokenManager(project.get());
@@ -100,11 +135,8 @@ QString fileToProject(cwProject *project, const QString &filename) {
 
 QString copyToTempFolder(QString filename) {
 
-    QTemporaryDir tempDir;
-    tempDir.setAutoRemove(false);
-
     QFileInfo info(filename);
-    QString newFileLocation = tempDir.path() + "/" + info.fileName();
+    QString newFileLocation = createTempSubdir() + "/" + info.fileName();
 
     if(!info.exists(filename)) {
         qFatal() << "file doesnt' exist:" << filename;
@@ -551,7 +583,7 @@ cwSyncFixtureInfo TestHelper::createLocalSyncFixtureWithLfsServer()
     cwProject project;
     addTokenManager(&project);
     project.setGitAccount(&account);
-    const QString datasetFile = copyToTempFolder(QStringLiteral("://datasets/test_cwProject/Phake Cave 3000.cw"));
+    const QString datasetFile = testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw");
     project.loadOrConvert(datasetFile);
     project.waitLoadToFinish();
 
@@ -691,7 +723,7 @@ cwSyncFixtureInfo TestHelper::createLocalLiDARSyncFixtureWithLfsServer()
     addTokenManager(&project);
     project.setGitAccount(&account);
 
-    const QString datasetFileZip = copyToTempFolder(QStringLiteral("://datasets/lidarProjects/jaws of the beast.zip"));
+    const QString datasetFileZip = testcasesDatasetPath("lidarProjects/jaws of the beast.zip");
     QFileInfo zipInfo(datasetFileZip);
     cwZip::extractAll(datasetFileZip, zipInfo.canonicalPath());
 
@@ -752,7 +784,7 @@ cwSyncFixtureInfo TestHelper::createLocalLiDARSyncFixtureWithLfsServer()
         }
     }
 
-    const QString sourceGlbPath = copyToTempFolder(QStringLiteral("://datasets/lidarProjects/9_15_2025 3.glb"));
+    const QString sourceGlbPath = testcasesDatasetPath("lidarProjects/9_15_2025 3.glb");
     const QFileInfo sourceGlbInfo(sourceGlbPath);
     const QString lidarFileName = sourceGlbInfo.fileName();
     const QString destinationGlbPath = project.notesDir(trip->notesLiDAR()).filePath(lidarFileName);

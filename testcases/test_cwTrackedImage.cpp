@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Our includes
 #include "cwFutureManagerModel.h"
@@ -23,7 +24,7 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
     cwTrackedImage trackedImage;
 
     int count = 0;
-    project->addImages({QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"))},
+    project->addImages({QUrl::fromLocalFile(copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG")))},
                        ProjectFilenameTestHelper::projectDir(project),
                        [project, &trackedImage, &count](QList<cwImage> newImages)
     {
@@ -59,7 +60,7 @@ TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function
 
     cwTrackedImagePtr trackImagePtr;
 
-    project->addImages({QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"))},
+    project->addImages({QUrl::fromLocalFile(copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG")))},
                        ProjectFilenameTestHelper::projectDir(project),
                        [project, &trackImagePtr](QList<cwImage> newImages)
     {

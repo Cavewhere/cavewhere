@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 //Our includes
@@ -104,7 +105,7 @@ TEST_CASE("cwCSVImporterManager should initilize correctly", "[cwCSVImporterMana
 
 TEST_CASE("cwCSVImportManager should parse using default values", "[cwCSVImporterManager]") {
     cwCSVImporterManager manager;
-    manager.setFilename("://datasets/test_cwCSVImporterManager/defaultColumns.txt");
+    manager.setFilename(testcasesDatasetPath("test_cwCSVImporterManager/defaultColumns.txt"));
     manager.waitToFinish();
 
     cwSurveyChunk* chunk1 = new cwSurveyChunk();
@@ -144,7 +145,7 @@ TEST_CASE("cwCSVImportManager should parse using default values", "[cwCSVImporte
 TEST_CASE("cwCSVImportManager previewText should works correctly", "[cwCSVImporterManager]") {
     cwCSVImporterManager manager;
     manager.setSkipHeaderLines(0);
-    manager.setFilename("://datasets/test_cwCSVImporterManager/long.csv");
+    manager.setFilename(testcasesDatasetPath("test_cwCSVImporterManager/long.csv"));
     manager.waitToFinish();
 
     CHECK(manager.errorModel()->fatalCount() == 0);
@@ -222,7 +223,7 @@ TEST_CASE("cwCSVImportManager should parse with custom columns", "[cwCSVImporter
                     {"Right", cwCSVImporterTask::Right}
                 }
                 );
-    manager.setFilename("://datasets/test_cwCSVImporterManager/allCustomColumns.txt");
+    manager.setFilename(testcasesDatasetPath("test_cwCSVImporterManager/allCustomColumns.txt"));
     manager.waitToFinish();
 
     cwSurveyChunk* chunk1 = new cwSurveyChunk();
@@ -279,7 +280,7 @@ TEST_CASE("cwCSVImportManager should parse with custom columns", "[cwCSVImporter
 
 TEST_CASE("cwCSVImageManager should skipHeaderLines correctly", "[cwCSVImporterManager]") {
     cwCSVImporterManager manager;
-    manager.setFilename("://datasets/test_cwCSVImporterManager/skipHeaderLines.txt");
+    manager.setFilename(testcasesDatasetPath("test_cwCSVImporterManager/skipHeaderLines.txt"));
     manager.setSkipHeaderLines(3);
     manager.waitToFinish();
 
@@ -307,7 +308,7 @@ TEST_CASE("cwCSVImageManager should skipHeaderLines correctly", "[cwCSVImporterM
 
 TEST_CASE("cwCSVImageManager should change seperator correctly", "[cwCSVImporterManager]") {
     cwCSVImporterManager manager;
-    manager.setFilename("://datasets/test_cwCSVImporterManager/seperator.txt");
+    manager.setFilename(testcasesDatasetPath("test_cwCSVImporterManager/seperator.txt"));
     manager.setSeperator("|#");
     manager.waitToFinish();
 
@@ -335,7 +336,7 @@ TEST_CASE("cwCSVImageManager should change seperator correctly", "[cwCSVImporter
 
 TEST_CASE("cwCSVImageManager should set distance units correctly", "[cwCSVImporterManager]") {
     cwCSVImporterManager manager;
-    manager.setFilename("://datasets/test_cwCSVImporterManager/defaultColumns.txt");
+    manager.setFilename(testcasesDatasetPath("test_cwCSVImporterManager/defaultColumns.txt"));
     manager.setDistanceUnit(cwUnits::Feet);
     manager.waitToFinish();
 
@@ -380,7 +381,7 @@ TEST_CASE("cwCSVImageManager should process last shot LRUD data correctly", "[cw
                     {"Right", cwCSVImporterTask::Right}
                 }
                 );
-    manager.setFilename("://datasets/test_cwCSVImporterManager/lastLRUD.txt");
+    manager.setFilename(testcasesDatasetPath("test_cwCSVImporterManager/lastLRUD.txt"));
     manager.waitToFinish();
 
     cwSurveyChunk* chunk1 = new cwSurveyChunk();
@@ -460,7 +461,7 @@ TEST_CASE("cwCSVImageManager should set UseFromStationForLRUD correctly", "[cwCS
                     {"Right", cwCSVImporterTask::Right}
                 }
                 );
-    manager.setFilename("://datasets/test_cwCSVImporterManager/lastToLRUD.txt");
+    manager.setFilename(testcasesDatasetPath("test_cwCSVImporterManager/lastToLRUD.txt"));
     manager.setUseFromStationForLRUD(false);
     manager.waitToFinish();
 
@@ -523,7 +524,7 @@ TEST_CASE("cwCSVImageManager should set UseFromStationForLRUD correctly", "[cwCS
 
 TEST_CASE("cwCSVImporterManager should handle new trip on empty lines correctly", "[cwCSVImporterManager]") {
     cwCSVImporterManager manager;
-    manager.setFilename("://datasets/test_cwCSVImporterManager/newTrips.txt");
+    manager.setFilename(testcasesDatasetPath("test_cwCSVImporterManager/newTrips.txt"));
     manager.waitToFinish();
 
     SECTION("Default action") {
@@ -601,7 +602,7 @@ TEST_CASE("cwCSVImageManager should handle errors properly", "[cwCSVImporterMana
     }
 
     SECTION("Warning with zero filesize") {
-        manager.setFilename("://datasets/test_cwCSVImporterManager/emptyFile.txt");
+        manager.setFilename(testcasesDatasetPath("test_cwCSVImporterManager/emptyFile.txt"));
         manager.waitToFinish();
         CHECK(manager.errorModel()->fatalCount() == 0);
         REQUIRE(manager.errorModel()->warningCount() == 1);
@@ -611,7 +612,7 @@ TEST_CASE("cwCSVImageManager should handle errors properly", "[cwCSVImporterMana
     }
 
     SECTION("Warning with columns miss aligned") {
-        manager.setFilename("://datasets/test_cwCSVImporterManager/defaultColumnsColumnMissAlignment.txt");
+        manager.setFilename(testcasesDatasetPath("test_cwCSVImporterManager/defaultColumnsColumnMissAlignment.txt"));
         manager.waitToFinish();
         CHECK(manager.errorModel()->fatalCount() == 0);
         REQUIRE(manager.errorModel()->warningCount() == 2);
@@ -640,7 +641,7 @@ TEST_CASE("cwCSVImageManager should handle errors properly", "[cwCSVImporterMana
                         {"Right", cwCSVImporterTask::Right}
                     }
                     );
-        manager.setFilename("://datasets/test_cwCSVImporterManager/lastToLRUDError.txt");
+        manager.setFilename(testcasesDatasetPath("test_cwCSVImporterManager/lastToLRUDError.txt"));
         manager.waitToFinish();
 
         CHECK(manager.errorModel()->fatalCount() == 0);

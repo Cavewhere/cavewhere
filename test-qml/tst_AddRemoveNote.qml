@@ -16,15 +16,15 @@ MainWindowTest {
         }
 
         function test_addNotes() {
-                    // TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
-                    TestHelper.loadProjectFromZip(RootData.project, "://datasets/lidarProjects/jaws of the beast.zip");
+                    // TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
+                    TestHelper.loadProjectFromZip(RootData.project, TestHelper.testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
                     RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
                     tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
                     // //Copy test data to another
-                    let phakeCavePath = TestHelper.copyToTempDirUrl("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
-                    let bonesPath = TestHelper.copyToTempDirUrl("://datasets/lidarProjects/9_15_2025 3.glb");
+                    let phakeCavePath = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
+                    let bonesPath = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
 
                     let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery");
                     noteGallery.imagesAdded([phakeCavePath, bonesPath]);
@@ -48,7 +48,7 @@ MainWindowTest {
         }
 
         function test_removeNote() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
@@ -94,14 +94,14 @@ MainWindowTest {
         }
 
         function test_removeLidarNote() {
-            TestHelper.loadProjectFromZip(RootData.project, "://datasets/lidarProjects/jaws of the beast.zip");
+            TestHelper.loadProjectFromZip(RootData.project, TestHelper.testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
             tryVerify(() => { return RootData.pageView.currentPageItem !== null })
                     tryVerify(() => {return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
-            let phakeCavePath = TestHelper.copyToTempDirUrl("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
-            let bonesPath = TestHelper.copyToTempDirUrl("://datasets/lidarProjects/9_15_2025 3.glb");
+            let phakeCavePath = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
+            let bonesPath = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
 
             let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery");
             noteGallery.imagesAdded([phakeCavePath, bonesPath]);

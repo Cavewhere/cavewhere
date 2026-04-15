@@ -312,9 +312,10 @@ if(BUILD_TESTING)
         cavewherelib
     )
 
-    file(GLOB cavewhere_testlib_qrc_FILES "testcases/*.qrc")
-    qt_add_resources(cavewhere_testlib_QT_RESOURCES ${cavewhere_testlib_qrc_FILES})
-    target_sources(cavewhere-testlib PRIVATE ${cavewhere_testlib_QT_RESOURCES})
+    target_compile_definitions(cavewhere-testlib PUBLIC
+        CW_TESTCASES_DATASET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/testcases/datasets"
+        CW_QML_TEST_DATASET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test-qml/datasets"
+    )
 
     target_include_directories(cavewhere-testlib PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/testlib
@@ -373,10 +374,6 @@ if(BUILD_TESTING)
     file(GLOB cavewhere_qml_test_CPP_FILES "test-qml/*.cpp")
     file(GLOB cavewhere_qml_test_H_FILES "test-qml/*.h")
     target_sources(cavewhere-qml-test PRIVATE ${cavewhere_qml_test_CPP_FILES} ${cavewhere_qml_test_CPP_FILES})
-
-    file(GLOB cavewhere_qml_test_qrc_FILES "test-qml/*.qrc")
-    qt_add_resources(cavewhere_qml_test_QT_RESOURCES ${cavewhere_qml_test_qrc_FILES})
-    target_sources(cavewhere-qml-test PRIVATE ${cavewhere_qml_test_QT_RESOURCES})
 
     # Make the remaining QML files relative to the project directory
     file(GLOB cavewhere_qmltest_QML_FILES CONFIGURE_DEPENDS "test-qml/*.qml")

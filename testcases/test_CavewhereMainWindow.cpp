@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Our includes
 #include "cwGlobalDirectory.h"
@@ -143,7 +144,7 @@ TEST_CASE("Main window should load file and close the window", "[CavewhereMainWi
     auto rootData = firstAppEngine->singletonInstance<cwRootData*>("cavewherelib", "RootData");
     REQUIRE(rootData);
 
-    auto filename = copyToTempFolder("://datasets/scrapGuessNeighbor/scrapGuessNeigborPlanContinuous.cw");
+    auto filename = copyToTempFolder(testcasesDatasetPath("scrapGuessNeighbor/scrapGuessNeigborPlanContinuous.cw"));
 
 
     QEventLoop loop;
@@ -166,7 +167,7 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
     auto rootData = firstAppEngine->singletonInstance<cwRootData*>("cavewherelib", "RootData");
     REQUIRE(rootData);
 
-    auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto filename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
     SECTION("Make the file read-only") {
         QFile file(filename);

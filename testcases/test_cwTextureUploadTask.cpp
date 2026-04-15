@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 #include <catch2/catch_approx.hpp>
 
 //Our includes
@@ -20,7 +21,7 @@
 
 TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
 
-    auto project = fileToProject("://datasets/test_cwTextureUploadTask/cwTextureUploadTask.cw");
+    auto project = fileToProject(testcasesDatasetPath("test_cwTextureUploadTask/cwTextureUploadTask.cw"));
 
     REQUIRE(project->cavingRegion()->caveCount() == 1);
 
@@ -95,7 +96,7 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
         CHECK(results.scaleTexCoords.x() == Catch::Approx(1.0));
         CHECK(results.scaleTexCoords.y() == Catch::Approx(1.0));
 
-        QImage image("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+        QImage image(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
         image = image.convertToFormat(QImage::Format_RGBA8888).flipped(Qt::Vertical);
         CHECK(results.image == image);
     }

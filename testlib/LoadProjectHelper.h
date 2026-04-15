@@ -25,13 +25,42 @@
 #include "CaveWhereTestLibExport.h"
 #include "cwFutureManagerModel.h"
 
-//Std includes
-#include <iostream>
+/**
+ * Returns the shared temp root directory for this test process.
+ * Created once per process, removed recursively at exit.
+ */
+QString CAVEWHERE_TESTLIB_EXPORT sharedTempRoot();
+
+/**
+ * Creates a unique subdirectory under sharedTempRoot() and returns its path.
+ */
+QString CAVEWHERE_TESTLIB_EXPORT createTempSubdir();
+
+inline QString testcasesDatasetSourcePath(const QString& relativePath) {
+    return QStringLiteral(CW_TESTCASES_DATASET_DIR "/") + relativePath;
+}
+inline QString qmlTestDatasetSourcePath(const QString& relativePath) {
+    return QStringLiteral(CW_QML_TEST_DATASET_DIR "/") + relativePath;
+}
 
 /**
  * Copyies filename to the temp folder
  */
 QString CAVEWHERE_TESTLIB_EXPORT copyToTempFolder(QString filename);
+
+/**
+ * Copies a testcases dataset file to a temp folder and returns the temp path.
+ */
+inline QString testcasesDatasetPath(const QString& relativePath) {
+    return copyToTempFolder(testcasesDatasetSourcePath(relativePath));
+}
+
+/**
+ * Copies a QML test dataset file to a temp folder and returns the temp path.
+ */
+inline QString qmlTestDatasetPath(const QString& relativePath) {
+    return copyToTempFolder(qmlTestDatasetSourcePath(relativePath));
+}
 
 QString CAVEWHERE_TESTLIB_EXPORT prependTempFolder(QString filename);
 
@@ -158,10 +187,15 @@ public:
                                                     const QString& token) const;
     Q_INVOKABLE bool clearGitHubAccessTokenForAccount(const QString& accountId) const;
 
+    Q_INVOKABLE QString testcasesDatasetPath(const QString& relativePath) const {
+        return ::testcasesDatasetPath(relativePath);
+    }
+    Q_INVOKABLE QString qmlTestDatasetPath(const QString& relativePath) const {
+        return ::qmlTestDatasetPath(relativePath);
+    }
+
     Q_INVOKABLE QUrl tempDirectoryUrl() {
-        QTemporaryDir dir;
-        dir.setAutoRemove(false);
-        return QUrl::fromLocalFile(dir.path());
+        return QUrl::fromLocalFile(createTempSubdir());
     }
 
     Q_INVOKABLE QUrl toLocalUrl(const QString& path) {

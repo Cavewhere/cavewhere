@@ -48,7 +48,7 @@ void requireLayoutMatches(const cwGeometry& geometry,
 
 TEST_CASE("GLTF loader repacks geometry for textured items", "[cwGltfLoader]")
 {
-    const QString gltfPath = copyToTempFolder("://datasets/test_cwGltfLoader/test.glb");
+    const QString gltfPath = copyToTempFolder(testcasesDatasetPath("test_cwGltfLoader/test.glb"));
     REQUIRE_FALSE(gltfPath.isEmpty());
     REQUIRE(QFileInfo::exists(gltfPath));
 
@@ -80,7 +80,7 @@ TEST_CASE("GLTF loader repacks geometry for textured items", "[cwGltfLoader]")
 
 TEST_CASE("GLTF loader preserves full geometry when no options are provided", "[cwGltfLoader]")
 {
-    const QString gltfPath = copyToTempFolder("://datasets/test_cwGltfLoader/test.glb");
+    const QString gltfPath = copyToTempFolder(testcasesDatasetPath("test_cwGltfLoader/test.glb"));
     REQUIRE_FALSE(gltfPath.isEmpty());
     REQUIRE(QFileInfo::exists(gltfPath));
 

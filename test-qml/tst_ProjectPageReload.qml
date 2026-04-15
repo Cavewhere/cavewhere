@@ -24,7 +24,7 @@ MainWindowTest {
             // 1. Load Project 1 (Phake Cave 3000) and save it so it
             //    appears in the recent projects list.
             RootData.recentProjectModel.clear()
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
             tryVerify(() => { return RootData.region.caveCount > 0 }, 5000)
 

@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Our includes
 #include "cwSurveyImportManager.h"
@@ -20,7 +21,7 @@ TEST_CASE("cwSurveyImportManager should add compass errors to errorModel", "[cwS
 
     CHECK(errorModel->size() == 0);
 
-    QString datasetFile = copyToTempFolder("://datasets/compass/badFile.dat");
+    QString datasetFile = copyToTempFolder(testcasesDatasetPath("compass/badFile.dat"));
     manager->importCompassDataFile({QUrl::fromLocalFile(datasetFile)});
     manager->waitForCompassToFinish();
 

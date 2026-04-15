@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 #include <catch2/catch_approx.hpp>
 
 //Our includes
@@ -16,7 +17,7 @@
 #include "cwUnits.h"
 
 TEST_CASE("Note with zero DPI", "[cwNote]") {
-    auto project = fileToProject("://datasets/test_cwNote/basic.cw");
+    auto project = fileToProject(testcasesDatasetPath("test_cwNote/basic.cw"));
     auto futureManagerModel = new cwFutureManagerModel(project.get());
     project->setFutureManagerToken(futureManagerModel);
 
@@ -29,7 +30,7 @@ TEST_CASE("Note with zero DPI", "[cwNote]") {
     auto notes = trip->notes();
     REQUIRE(notes->hasNotes() == 0);
 
-    notes->addFromFiles({QUrl::fromLocalFile(copyToTempFolder(":/datasets/test_cwNote/testpage.png"))});
+    notes->addFromFiles({QUrl::fromLocalFile(copyToTempFolder(testcasesDatasetPath("test_cwNote/testpage.png")))});
     futureManagerModel->waitForFinished();
 
     REQUIRE(notes->hasNotes() == 1);
@@ -46,7 +47,7 @@ TEST_CASE("Note pdf sizes use note resolution and render settings", "[cwNote]") 
 
     auto root = std::make_unique<cwRootData>();
     TestHelper helper;
-    helper.loadProjectFromZip(root->project(), "://datasets/test_cwNote/bb-pdf-dpi-test.zip");
+    helper.loadProjectFromZip(root->project(), testcasesDatasetPath("test_cwNote/bb-pdf-dpi-test.zip"));
     root->futureManagerModel()->waitForFinished();
 
     auto project = root->project();
@@ -93,7 +94,7 @@ TEST_CASE("Note svg render size uses CSS dpi", "[cwNote]") {
     cave->addTrip();
     auto trip = cave->trip(0);
 
-    const QString svgPath = copyToTempFolder("://datasets/test_cwImageProvider/supportedImage.svg");
+    const QString svgPath = copyToTempFolder(testcasesDatasetPath("test_cwImageProvider/supportedImage.svg"));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(svgPath)});
     root->futureManagerModel()->waitForFinished();
 

@@ -229,7 +229,7 @@ MainWindowTest {
             waitForRendering(mainWindow);
 
             //Copy the test project to the test folder
-            let filename = TestHelper.copyToTempDir("://datasets/test_cwProject/Phake Cave 3000.cw");
+            let filename = TestHelper.copyToTempDir(TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
             // let openCavingAreaButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->openCavingAreaButton")
             // mouseClick(openCavingAreaButton_obj1, 61.707, 18.5938)
@@ -263,7 +263,7 @@ MainWindowTest {
             RootData.pageSelectionModel.currentPageAddress = "Source"
             waitForRendering(mainWindow);
 
-            let filename = TestHelper.copyToTempDir("://datasets/test_cwProject/Phake Cave 3000.cw");
+            let filename = TestHelper.copyToTempDir(TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             let dialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog")
             dialog.runLoadForTest(TestHelper.toLocalUrl(filename))
 
@@ -325,7 +325,7 @@ MainWindowTest {
             RootData.pageSelectionModel.currentPageAddress = "Source"
             waitForRendering(mainWindow);
 
-            let filename = TestHelper.copyToTempDir("://datasets/test_cwProject/Phake Cave 3000.cw");
+            let filename = TestHelper.copyToTempDir(TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             let dialog = ObjectFinder.findObjectByChain(mainWindow, "rootId->loadProjectDialog")
             dialog.runLoadForTest(TestHelper.toLocalUrl(filename))
 

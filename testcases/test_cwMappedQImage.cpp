@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Qt includes
 #include <QFile>
@@ -10,7 +11,7 @@
 
 TEST_CASE("cwMappedQImage should create mapped QImage", "[cwMappedQImage]") {
 
-    QImage refImage("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    QImage refImage(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
 
     QString tempFile = QDir::tempPath() + QStringLiteral("/cwMappedQImage-%1.bitmap").arg(QCoreApplication::applicationPid());
     if(QFile::exists(tempFile)) {
@@ -84,7 +85,7 @@ TEST_CASE("CreateDiskImageWithTempFile should work correctly with QImage", "[cwM
     QString tempFilePath;
 
     {
-        QImage refImage("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+        QImage refImage(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
         QImage diskImage = cwMappedQImage::createDiskImageWithTempFile(templateName, refImage);
 
         auto dirListAll = tempDir.entryList(filter, QDir::Files);

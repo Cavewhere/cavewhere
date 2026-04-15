@@ -45,7 +45,7 @@ Item {
         width: 300
         height: 300
         anchors.left: container.right
-        source: "qrc:/datasets/tst_QuoteBox/testQuoteBox.png"
+        source: "file://" + TestHelper.qmlTestDatasetPath("tst_QuoteBox/testQuoteBox.png")
     }
 
     TestCase {

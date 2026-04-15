@@ -131,7 +131,7 @@ TEST_CASE("cwSaveLoad saves pdf notes with unique filenames", "[cwSaveLoad]") {
     cave->addTrip();
     auto trip = cave->trip(0);
 
-    const QString pdfPath = copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf");
+    const QString pdfPath = copyToTempFolder(testcasesDatasetPath("test_cwPDFConverter/2page-test.pdf"));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(pdfPath)});
     rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
@@ -154,10 +154,10 @@ TEST_CASE("cwSaveLoad writes file version metadata for saved files", "[cwSaveLoa
 
     auto trip = cave->trip(0);
     REQUIRE(trip != nullptr);
-    const QString noteImagePath = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    const QString noteImagePath = copyToTempFolder(testcasesDatasetPath("test_cwNote/testpage.png"));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(noteImagePath)});
 
-    const QString glbPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString glbPath = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbPath)});
 
     root->futureManagerModel()->waitForFinished();
@@ -265,9 +265,9 @@ TEST_CASE("cwSaveLoad reloads missing image metadata", "[cwSaveLoad]") {
     cave->addTrip();
     auto trip = cave->trip(0);
 
-    const QString pngPath = copyToTempFolder("://datasets/test_cwNote/testpage.png");
-    const QString svgPath = copyToTempFolder("://datasets/test_cwImageProvider/supportedImage.svg");
-    const QString pdfPath = copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf");
+    const QString pngPath = copyToTempFolder(testcasesDatasetPath("test_cwNote/testpage.png"));
+    const QString svgPath = copyToTempFolder(testcasesDatasetPath("test_cwImageProvider/supportedImage.svg"));
+    const QString pdfPath = copyToTempFolder(testcasesDatasetPath("test_cwPDFConverter/2page-test.pdf"));
 
     QList<QUrl> noteFiles{
         QUrl::fromLocalFile(pngPath),
@@ -385,9 +385,9 @@ TEST_CASE("cwSaveLoad preserves cwImage units for png, svg, and pdf notes", "[cw
     cave->addTrip();
     auto trip = cave->trip(0);
 
-    const QString pngPath = copyToTempFolder("://datasets/test_cwNote/testpage.png");
-    const QString svgPath = copyToTempFolder("://datasets/test_cwImageProvider/supportedImage.svg");
-    const QString pdfPath = copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf");
+    const QString pngPath = copyToTempFolder(testcasesDatasetPath("test_cwNote/testpage.png"));
+    const QString svgPath = copyToTempFolder(testcasesDatasetPath("test_cwImageProvider/supportedImage.svg"));
+    const QString pdfPath = copyToTempFolder(testcasesDatasetPath("test_cwPDFConverter/2page-test.pdf"));
 
     QList<QUrl> noteFiles{
         QUrl::fromLocalFile(pngPath),
@@ -900,7 +900,7 @@ TEST_CASE("Test the sanitized for directory name", "[cwSaveLoad]") {
 
 TEST_CASE("cwSaveLoad should save and load old projects correctly", "[cwSaveLoad]") {
     auto root = std::make_unique<cwRootData>();
-    auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto filename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     // auto filename = "/Users/cave/Desktop/BlankenshipBlowhole.cw";
 
     //Prevents loop closure from happening
@@ -1031,7 +1031,7 @@ TEST_CASE("cwSaveLoad should save and load old projects correctly", "[cwSaveLoad
 
 TEST_CASE("cwSaveLoad should 3-way merge cwTrip correctly", "[cwSaveLoad]") {
     auto root = std::make_unique<cwRootData>();
-    auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto filename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
     //Prevents loop closure from happening
     root->settings()->jobSettings()->setAutomaticUpdate(false);
@@ -2125,10 +2125,10 @@ TEST_CASE("Entity saves blocked with errors when project has newer version entit
     trip->setName(QStringLiteral("SaveBlockTrip"));
 
     // Add a note image and a LiDAR note
-    const QString noteImagePath = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    const QString noteImagePath = copyToTempFolder(testcasesDatasetPath("test_cwNote/testpage.png"));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(noteImagePath)});
 
-    const QString glbPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString glbPath = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbPath)});
 
     rootData->futureManagerModel()->waitForFinished();

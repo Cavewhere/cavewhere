@@ -28,7 +28,7 @@ MainWindowTest {
         }
 
         function test_selectionClearsOnReload() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_ScrapInteraction/projectedProfile.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_ScrapInteraction/projectedProfile.cw"));
 
             let noteArea = openTripNotes();
             let scrapView = findChild(noteArea, "scrapViewId");
@@ -44,7 +44,7 @@ MainWindowTest {
             RootData.project.newProject();
             RootData.futureManagerModel.waitForFinished();
 
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_ScrapInteraction/projectedProfile.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_ScrapInteraction/projectedProfile.cw"));
 
             noteArea = openTripNotes();
             scrapView = findChild(noteArea, "scrapViewId");

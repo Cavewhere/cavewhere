@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Our includes
 #include "SignalSpyChecker.h"
@@ -326,7 +327,7 @@ TEST_CASE("cwKeywordItemModel must initilize correctly", "[cwKeywordItemModel]")
 
 // TEST_CASE("cwKeywordItemModel should populate correctly from loaded file", "[cwKeywordItemModel]") {
 //     cwRootData root;
-//     fileToProject(root.project(), "://datasets/test_cwKeywordItemModel/keywordScrap.cw");
+//     fileToProject(root.project(), testcasesDatasetPath("test_cwKeywordItemModel/keywordScrap.cw"));
 
 //     class Row {
 //     public:
