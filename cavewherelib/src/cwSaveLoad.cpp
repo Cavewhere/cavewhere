@@ -3963,12 +3963,12 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
                 noteCopy.setData(noteData);
 
                 if(noteCopy.name().isEmpty()) {
-                    noteCopy.setName(QString::number(imageIndex));
+                    noteCopy.setName(QStringLiteral("%1").arg(imageIndex, 3, 10, QLatin1Char('0')));
                 }
                 auto imageData = provider.data(noteCopy.image().original());
 
                 auto filename = noteDir.absoluteFilePath(QStringLiteral("%1.%2")
-                                                         .arg(imageIndex)
+                                                         .arg(imageIndex, 3, 10, QLatin1Char('0'))
                                                          .arg(imageData.format().toLower()));
 
                 QSaveFile file(filename);

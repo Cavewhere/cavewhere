@@ -3499,3 +3499,59 @@ TEST_CASE("save registers SaveFuture with futureManagerModel", "[cwSaveLoad]") {
         CHECK(allFinishedSpy.count() >= 1);
     }
 }
+
+TEST_CASE("v6 conversion zero-pads note filenames to preserve ordering", "[cwSaveLoad]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    rootData->settings()->jobSettings()->setAutomaticUpdate(false);
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("SortTestCave"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    trip->setName(QStringLiteral("SortTestTrip"));
+
+    const int noteCount = 12;
+    QList<cwNote*> notes;
+    notes.reserve(noteCount);
+    for (int i = 1; i <= noteCount; ++i) {
+        auto* note = new cwNote();
+        note->setName(QStringLiteral("%1").arg(i, 3, 10, QLatin1Char('0')));
+        cwImage image;
+        image.setPath(QStringLiteral("%1.png").arg(i, 3, 10, QLatin1Char('0')));
+        note->setImage(image);
+        notes.append(note);
+    }
+    trip->notes()->addNotes(notes);
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("SortTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString savedProjectFile = project->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+
+    auto loadFuture = cwSaveLoad::loadAll(savedProjectFile);
+    REQUIRE(AsyncFuture::waitForFinished(loadFuture, 10000));
+    auto loadResult = loadFuture.result();
+    REQUIRE_FALSE(loadResult.hasError());
+
+    auto loadData = loadResult.value();
+    REQUIRE(loadData.region.caves.size() == 1);
+    REQUIRE(loadData.region.caves.first().trips.size() == 1);
+
+    const auto& loadedNotes = loadData.region.caves.first().trips.first().noteModel.notes;
+    REQUIRE(loadedNotes.size() == noteCount);
+
+    for (int i = 0; i < noteCount; ++i) {
+        const QString expected = QStringLiteral("%1").arg(i + 1, 3, 10, QLatin1Char('0'));
+        INFO("Note index " << i << " should have name \"" << expected.toStdString() << "\""
+             << " but got \"" << loadedNotes[i].name.toStdString() << "\"");
+        CHECK(loadedNotes[i].name == expected);
+    }
+}
