@@ -258,6 +258,10 @@ private:
     QSqlDatabase ProjectDatabase;
     int FileVersion;
 
+public:
+    int fileVersion() const { return FileVersion; }
+private:
+
 
     //For keeping database connection unique
     static QAtomicInt ConnectionCounter;

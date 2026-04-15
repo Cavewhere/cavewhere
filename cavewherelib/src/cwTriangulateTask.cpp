@@ -8,6 +8,7 @@
 //Our includes
 #include "cwTriangulateTask.h"
 #include "cwCropImageTask.h"
+#include "cwImageProvider.h"
 #include "cwDebug.h"
 #include "utils/cwTriangulate.h"
 #include "cwRunningProfileScrapViewMatrix.h"
@@ -21,6 +22,7 @@
 
 //Qt includes
 #include <QDebug>
+#include <QDir>
 #include <cmath>
 
 void cwTriangulateTask::setScrapData(QList<cwTriangulateInData> scraps) {

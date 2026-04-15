@@ -307,6 +307,29 @@ message ProjectedProfileScrapViewMatrix {
 }
 ```
 
+### Scrap Coordinate System
+
+All scrap geometry — `outlinePoints`, `NoteStation.positionOnNote`, and `Lead.positionOnNote` —
+is stored in **normalized coordinates** relative to `Image.size`:
+
+- **Range**: [0, 1] in both axes
+- **X-axis**: 0 = left edge, 1 = right edge
+- **Y-axis**: 0 = bottom of image, 1 = top (OpenGL convention, opposite of pixel row order)
+- **`Image.size`** always stores **post-EXIF-rotation** dimensions (e.g., a portrait phone photo
+  with EXIF Rotate 90 is stored as 3024×4032, not the raw sensor 4032×3024)
+
+The conversion between normalized and pixel coordinates uses CaveWhere's `toImage()` transform:
+
+```
+scale(Image.size.width, Image.size.height) × scale(1, −1) × translate(0, −1)
+```
+
+This maps normalized (nx, ny) → pixel (nx × width, (1 − ny) × height).
+
+Legacy v6 (SQLite) files may store coordinates in pre-rotation space. The v6→v9 conversion
+detects the EXIF orientation and applies the appropriate coordinate transform so that the
+resulting v9 coordinates are always in post-rotation normalized space.
+
 ### LiDAR Note (`.cwnote3d`)
 
 ```protobuf

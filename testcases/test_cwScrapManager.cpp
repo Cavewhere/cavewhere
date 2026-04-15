@@ -22,9 +22,13 @@
 #include "cwKeywordItem.h"
 #include "cwRenderTexturedItemVisibility.h"
 #include "cwRunningProfileScrapViewMatrix.h"
+#include "cwImageUtils.h"
+#include "cwCavingRegion.h"
+#include "cwScrap.h"
 
 //Qt includes
 #include <QFile>
+#include <QImageReader>
 #include <QElapsedTimer>
 #include <QThread>
 #include <QThreadPool>
@@ -337,4 +341,105 @@ TEST_CASE("cwScrapManager scrap render items should remain visible after loading
     // Sanity-check: the dataset has scraps, so we must have found at least one
     // visibility item.
     CHECK(visibilityItemCount > 0);
+}
+
+// Helper: load a v6 .cw file and return the first note
+static cwNote* loadV6FirstNote(cwRootData* rootData, const QString& resourcePath) {
+    requireAutomaticUpdatesEnabled();
+    auto project = rootData->project();
+    fileToProject(project, resourcePath);
+    rootData->futureManagerModel()->waitForFinished();
+
+    REQUIRE(project->cavingRegion()->caveCount() == 1);
+    auto cave = project->cavingRegion()->cave(0);
+    REQUIRE(cave->tripCount() == 1);
+    auto trip = cave->trip(0);
+    auto notes = trip->notes()->notes();
+    REQUIRE(notes.size() == 1);
+    return notes.at(0);
+}
+
+TEST_CASE("V6 conversion with landscape EXIF coords applies rotation", "[cwScrapManager]") {
+    // backgroundRotation-0.08.cw is proto v1 with EXIF Rotate 90 CW.
+    // Raw image is 4032x3024 (landscape). Scrap coords are in landscape space.
+    // After conversion: originalSize should be post-rotation (3024x4032)
+    // and coords should be rotated: (x,y) -> (y, 1-x).
+    auto rootData = std::make_unique<cwRootData>();
+    auto note = loadV6FirstNote(rootData.get(),
+        "://datasets/test_cwScrapManager/backgroundRotation-0.08.cw");
+    REQUIRE(note->scraps().size() >= 1);
+
+    // originalSize should be post-rotation
+    const QSize storedSize = note->image().originalSize();
+    CHECK(storedSize.width() == 3024);
+    CHECK(storedSize.height() == 4032);
+
+    // DPI should be set from image
+    CHECK(note->image().originalDotsPerMeter() > 0);
+
+    // imageWithAutoTransform should match stored originalSize
+    const QString absPath = rootData->project()->absolutePath(note, note->image().path());
+    REQUIRE(QFileInfo::exists(absPath));
+    QFile file(absPath);
+    REQUIRE(file.open(QIODevice::ReadOnly));
+    QByteArray data = file.readAll();
+    QImage autoImage = cwImageUtils::imageWithAutoTransform(
+        data, QFileInfo(absPath).suffix().toLatin1());
+    CHECK(autoImage.size() == storedSize);
+
+    // Station coords should be rotated from landscape (~0.660, 0.620)
+    // to portrait (~0.620, 0.340)
+    auto scrap = note->scrap(0);
+    REQUIRE(scrap->stations().size() >= 1);
+    const QPointF station0 = scrap->stations().at(0).positionOnNote();
+    CHECK(station0.x() == Catch::Approx(0.620).margin(0.01));
+    CHECK(station0.y() == Catch::Approx(0.340).margin(0.02));
+
+    // Triangulate and verify it completes
+    auto results = rootData->scrapManager()->triangulateScraps({scrap});
+    rootData->futureManagerModel()->waitForFinished();
+    REQUIRE(!results.isEmpty());
+    REQUIRE(AsyncFuture::waitForFinished(results.first().data));
+    REQUIRE(results.first().data.resultCount() == 1);
+    CHECK(!results.first().data.result().isNull());
+}
+
+TEST_CASE("V6 conversion with v5 coords in v6 file applies rotation", "[cwScrapManager]") {
+    // backgroundRotation-2025.2 to 2025.2-101.cw is proto v6 with v5 landscape coords.
+    // Same image/coords as 2025.2 (v5), but saved in v6 format.
+    auto rootData = std::make_unique<cwRootData>();
+    auto note = loadV6FirstNote(rootData.get(),
+        "://datasets/test_cwScrapManager/backgroundRotation-2025.2 to 2025.2-101.cw");
+    REQUIRE(note->scraps().size() >= 1);
+
+    // originalSize should be post-rotation
+    CHECK(note->image().originalSize().width() == 3024);
+    CHECK(note->image().originalSize().height() == 4032);
+
+    // Station coords should be rotated (same as v1-v5 behavior)
+    auto scrap = note->scrap(0);
+    REQUIRE(scrap->stations().size() >= 1);
+    const QPointF station0 = scrap->stations().at(0).positionOnNote();
+    CHECK(station0.x() == Catch::Approx(0.587).margin(0.01));
+    CHECK(station0.y() == Catch::Approx(0.352).margin(0.02));
+}
+
+TEST_CASE("V6 conversion with correct EXIF coords does not modify", "[cwScrapManager]") {
+    // backgroundRotation-2025.2-101.cw is proto v6 with post-rotation originalSize (3024x4032).
+    // Coords are already correct — no transformation should be applied.
+    auto rootData = std::make_unique<cwRootData>();
+    auto note = loadV6FirstNote(rootData.get(),
+        "://datasets/test_cwScrapManager/backgroundRotation-2025.2-101.cw");
+    REQUIRE(note->scraps().size() >= 1);
+
+    // originalSize should remain post-rotation (already correct)
+    CHECK(note->image().originalSize().width() == 3024);
+    CHECK(note->image().originalSize().height() == 4032);
+
+    // Station coords should be unchanged (~0.621, 0.339)
+    auto scrap = note->scrap(0);
+    REQUIRE(scrap->stations().size() >= 1);
+    const QPointF station0 = scrap->stations().at(0).positionOnNote();
+    CHECK(station0.x() == Catch::Approx(0.621).margin(0.005));
+    CHECK(station0.y() == Catch::Approx(0.339).margin(0.005));
 }
