@@ -35,13 +35,38 @@ void cwDiskCacher::setDir(const QDir& directory)
     m_dir = directory;
 }
 
+// Returns true when relativeFilePath() produced a path that would escape the cache root:
+// either ../ traversal (same filesystem root, different branch) or an unchanged absolute
+// path (Windows cross-drive, where Qt can't produce a relative path at all).
+static bool escapesBaseDir(const QString& rel)
+{
+    return rel == QStringLiteral("..")
+        || rel.startsWith(QStringLiteral("../"))
+        || rel.startsWith(QStringLiteral("..\\"))
+        || QDir::isAbsolutePath(rel);
+}
+
 // Private helpers
 QDir cwDiskCacher::relativeDir(const Key& key) const
 {
     QString relativePath = key.path.path();
     if (key.path.isAbsolute()) {
-        // Keep cache directories relative to m_dir when keys use absolute paths
-        relativePath = m_dir.relativeFilePath(relativePath);
+        QString rel = m_dir.relativeFilePath(relativePath);
+        if (escapesBaseDir(rel)) {
+            // Strip the drive letter and all leading separators so the cache path
+            // stays contained within .cw_cache/.
+            int start = 0;
+            if (relativePath.size() >= 2 && relativePath[1] == QLatin1Char(':')) {
+                start = 2;  // skip Windows drive letter, e.g. "C:"
+            }
+            while (start < relativePath.size()
+                   && (relativePath[start] == QLatin1Char('/') || relativePath[start] == QLatin1Char('\\'))) {
+                ++start;
+            }
+            relativePath = relativePath.mid(start);
+        } else {
+            relativePath = rel;
+        }
     }
 
     const QDir cacheRoot(m_dir.filePath(QStringLiteral(".cw_cache")));

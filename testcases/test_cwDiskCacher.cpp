@@ -57,6 +57,28 @@ TEST_CASE("cwDiskCacher single-threaded insert and entry", "[cwDiskCacher]") {
         CHECK(QFileInfo(cachePath).exists());
         CHECK(cacher.entry(absKey) == absData);
     }
+
+    SECTION("Absolute key paths outside cache dir do not escape via ../") {
+        // Triangulate-task scenario: cacher lives in a temp dir but the key path points
+        // to a directory with no common prefix (e.g. source tree). On Windows this also
+        // covers cross-drive paths where relativeFilePath() returns the absolute path
+        // unchanged; that branch is guarded by QDir::isAbsolutePath().
+        QTemporaryDir outerDir;
+        REQUIRE(outerDir.isValid());
+
+        cwDiskCacher outerCacher(outerDir.path());
+        cwDiskCacher::Key outsideKey{
+            QStringLiteral("image.cw_img_cache"),
+            QDir{QStringLiteral("/some/completely/different/directory")},
+            QStringLiteral("chk")};
+
+        outerCacher.insert(outsideKey, QByteArray("outside data"));
+
+        const QString cachedFilePath = QFileInfo(outerCacher.filePath(outsideKey)).absoluteFilePath();
+        CHECK(cachedFilePath.startsWith(outerDir.path()));  // no ../.. escaping
+        CHECK(cacher.entry(outsideKey) == QByteArray());    // different cacher dir, miss
+        CHECK(outerCacher.entry(outsideKey) == QByteArray("outside data"));
+    }
 }
 
 // Test concurrent insert and entry
