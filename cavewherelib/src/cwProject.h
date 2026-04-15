@@ -105,6 +105,8 @@ public:
 
     cwErrorListModel* errorModel() const;
 
+    int fileVersion() const { return FileVersion; }
+
     static QString supportedImageFormats();
 
     Q_INVOKABLE void safeCommitAll(const QString& subject, const QString& description);
@@ -257,10 +259,6 @@ private:
     // QString ProjectFile;
     QSqlDatabase ProjectDatabase;
     int FileVersion;
-
-public:
-    int fileVersion() const { return FileVersion; }
-private:
 
 
     //For keeping database connection unique

@@ -8,7 +8,6 @@
 //Our includes
 #include "cwTriangulateTask.h"
 #include "cwCropImageTask.h"
-#include "cwImageProvider.h"
 #include "cwDebug.h"
 #include "utils/cwTriangulate.h"
 #include "cwRunningProfileScrapViewMatrix.h"

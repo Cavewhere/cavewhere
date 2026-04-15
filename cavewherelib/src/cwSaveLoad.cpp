@@ -3937,10 +3937,9 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
     const QDir dataRootDir = makeDir(QDir(dir.absoluteFilePath(d->projectMetadata.dataRoot)));
 
-    auto version = d->lastLoadMaxFileVersion;
     const int protoVersion = project->fileVersion();
 
-    auto saveNotes = [version, protoVersion, makeDir, this, projectFileName, dataRootDir](const QDir& tripDir, const cwSurveyNoteModel* notes) {
+    auto saveNotes = [protoVersion, makeDir, this, projectFileName, dataRootDir](const QDir& tripDir, const cwSurveyNoteModel* notes) {
         const QDir noteDir = makeDir(noteDirHelper(tripDir));
 
         int imageIndex = 1;
@@ -3956,7 +3955,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
             saveImageJob.objectId = note;
             saveImageJob.kind = Data::Job::Kind::File;
             saveImageJob.action = Data::Job::Action::Custom;
-            saveImageJob.payload = Data::Job::CustomPayload{[version, protoVersion, projectFileName, dataRootDir, noteData, imageIndex, noteDir, updatedNoteData]() {
+            saveImageJob.payload = Data::Job::CustomPayload{[protoVersion, projectFileName, dataRootDir, noteData, imageIndex, noteDir, updatedNoteData]() {
                 cwImageProvider provider;
                 provider.setProjectPath(projectFileName);
 
@@ -3992,49 +3991,20 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
                     QImageReader reader(&buf);
                     const auto transform = reader.transformation();
 
-                    qDebug() << "=== V6 EXIF conversion ==="
-                             << filename
-                             << "note:" << noteCopy.name()
-                             << "image:" << imageIndex
-                             << "exif:" << static_cast<int>(transform)
-                             << "storedSize:" << noteCopy.image().originalSize()
-                             << "protoVersion:" << protoVersion
-                             << "scraps:" << noteCopy.scraps().size();
-
                     if (transform != QImageIOHandler::TransformationNone) {
                         const auto info = imageInfo(filename);
                         const QSize storedSize = noteCopy.image().originalSize();
                         const bool needsCoordFix = (storedSize != info.originalSize);
 
-                        qDebug() << "  postRotSize:" << info.originalSize
-                                 << "needsCoordFix:" << needsCoordFix;
-
                         if (needsCoordFix) {
                             QTransform coordFix;
-                            QString fixType;
                             if (protoVersion < 6) {
                                 // V1-V5: coords in landscape space, apply EXIF rotation
                                 coordFix = cwImageUtils::transformForOrientation(transform);
-                                fixType = QStringLiteral("rotation");
                             } else {
                                 // V6: display was auto-rotated but toNormalized used
-                                // pre-rotation dims → re-normalize to post-rotation dims
+                                // pre-rotation dims, re-normalize to post-rotation dims
                                 coordFix = cwImageUtils::reNormalizationTransform(storedSize, info.originalSize);
-                                fixType = QStringLiteral("reNormalization");
-                            }
-
-                            qDebug() << "  fix:" << fixType;
-
-                            // Log first scrap's first few points before/after
-                            if (!noteCopy.scraps().isEmpty()) {
-                                const auto& pts = noteCopy.scraps().first()->points();
-                                for (int pi = 0; pi < qMin(pts.size(), 3); ++pi) {
-                                    qDebug() << "    pt[" << pi << "]" << pts[pi] << "->" << coordFix.map(pts[pi]);
-                                }
-                                if (!noteCopy.scraps().first()->stations().isEmpty()) {
-                                    const auto& st0 = noteCopy.scraps().first()->stations().first();
-                                    qDebug() << "    station0:" << st0.positionOnNote() << "->" << coordFix.map(st0.positionOnNote());
-                                }
                             }
 
                             for (cwScrap* scrap : noteCopy.scraps()) {
@@ -4062,8 +4032,6 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
                         cwImage img = noteCopy.image();
                         img.setOriginalImageInfo(info);
                         noteCopy.setImage(img);
-                    } else {
-                        qDebug() << "  no EXIF transform, skipping";
                     }
                 }
 
