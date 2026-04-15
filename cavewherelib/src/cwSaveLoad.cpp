@@ -3992,42 +3992,48 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
                     QImageReader reader(&buf);
                     const auto transform = reader.transformation();
 
+                    qDebug() << "=== V6 EXIF conversion ==="
+                             << filename
+                             << "note:" << noteCopy.name()
+                             << "image:" << imageIndex
+                             << "exif:" << static_cast<int>(transform)
+                             << "storedSize:" << noteCopy.image().originalSize()
+                             << "protoVersion:" << protoVersion
+                             << "scraps:" << noteCopy.scraps().size();
+
                     if (transform != QImageIOHandler::TransformationNone) {
                         const auto info = imageInfo(filename);
                         const QSize storedSize = noteCopy.image().originalSize();
                         const bool needsCoordFix = (storedSize != info.originalSize);
 
+                        qDebug() << "  postRotSize:" << info.originalSize
+                                 << "needsCoordFix:" << needsCoordFix;
+
                         if (needsCoordFix) {
                             QTransform coordFix;
+                            QString fixType;
                             if (protoVersion < 6) {
                                 // V1-V5: coords in landscape space, apply EXIF rotation
                                 coordFix = cwImageUtils::transformForOrientation(transform);
+                                fixType = QStringLiteral("rotation");
                             } else {
-                                // V6: check this note's scrap coords for distorted portrait signal
-                                bool hasDistortedCoords = false;
-                                for (const cwScrap* scrap : noteCopy.scraps()) {
-                                    for (const QPointF& pt : scrap->points()) {
-                                        if (pt.y() < 0.0) { hasDistortedCoords = true; break; }
-                                    }
-                                    if (!hasDistortedCoords) {
-                                        for (const cwNoteStation& st : scrap->stations()) {
-                                            if (st.positionOnNote().y() < 0.0) { hasDistortedCoords = true; break; }
-                                        }
-                                    }
-                                    if (!hasDistortedCoords) {
-                                        for (const cwLead& lead : scrap->leads()) {
-                                            if (lead.positionOnNote().y() < 0.0) { hasDistortedCoords = true; break; }
-                                        }
-                                    }
-                                    if (hasDistortedCoords) break;
-                                }
+                                // V6: display was auto-rotated but toNormalized used
+                                // pre-rotation dims → re-normalize to post-rotation dims
+                                coordFix = cwImageUtils::reNormalizationTransform(storedSize, info.originalSize);
+                                fixType = QStringLiteral("reNormalization");
+                            }
 
-                                if (hasDistortedCoords) {
-                                    // Auto-rotated display but toNormalized used wrong dims
-                                    coordFix = cwImageUtils::reNormalizationTransform(storedSize, info.originalSize);
-                                } else {
-                                    // v5 landscape coords carried into v6 file
-                                    coordFix = cwImageUtils::transformForOrientation(transform);
+                            qDebug() << "  fix:" << fixType;
+
+                            // Log first scrap's first few points before/after
+                            if (!noteCopy.scraps().isEmpty()) {
+                                const auto& pts = noteCopy.scraps().first()->points();
+                                for (int pi = 0; pi < qMin(pts.size(), 3); ++pi) {
+                                    qDebug() << "    pt[" << pi << "]" << pts[pi] << "->" << coordFix.map(pts[pi]);
+                                }
+                                if (!noteCopy.scraps().first()->stations().isEmpty()) {
+                                    const auto& st0 = noteCopy.scraps().first()->stations().first();
+                                    qDebug() << "    station0:" << st0.positionOnNote() << "->" << coordFix.map(st0.positionOnNote());
                                 }
                             }
 
@@ -4056,6 +4062,8 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
                         cwImage img = noteCopy.image();
                         img.setOriginalImageInfo(info);
                         noteCopy.setImage(img);
+                    } else {
+                        qDebug() << "  no EXIF transform, skipping";
                     }
                 }
 

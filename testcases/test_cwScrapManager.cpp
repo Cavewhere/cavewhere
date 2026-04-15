@@ -404,9 +404,10 @@ TEST_CASE("V6 conversion with landscape EXIF coords applies rotation", "[cwScrap
     CHECK(!results.first().data.result().isNull());
 }
 
-TEST_CASE("V6 conversion with v5 coords in v6 file applies rotation", "[cwScrapManager]") {
+TEST_CASE("V6 conversion with v5 coords in v6 file applies reNormalization", "[cwScrapManager]") {
     // backgroundRotation-2025.2 to 2025.2-101.cw is proto v6 with v5 landscape coords.
-    // Same image/coords as 2025.2 (v5), but saved in v6 format.
+    // V6 always applies reNormalization (not rotation) because real v6 users
+    // would have redrawn scraps on the auto-rotated display.
     auto rootData = std::make_unique<cwRootData>();
     auto note = loadV6FirstNote(rootData.get(),
         "://datasets/test_cwScrapManager/backgroundRotation-2025.2 to 2025.2-101.cw");
@@ -416,12 +417,15 @@ TEST_CASE("V6 conversion with v5 coords in v6 file applies rotation", "[cwScrapM
     CHECK(note->image().originalSize().width() == 3024);
     CHECK(note->image().originalSize().height() == 4032);
 
-    // Station coords should be rotated (same as v1-v5 behavior)
+    // Station coords are re-normalized from landscape to portrait dims.
+    // Original v5 station0: (0.6485, 0.5875)
+    // reNorm: x' = x * W/H = 0.6485 * 1.333 ≈ 0.865
+    //         y' = y * H/W + (1 - H/W) = 0.5875 * 0.75 + 0.25 ≈ 0.691
     auto scrap = note->scrap(0);
     REQUIRE(scrap->stations().size() >= 1);
     const QPointF station0 = scrap->stations().at(0).positionOnNote();
-    CHECK(station0.x() == Catch::Approx(0.587).margin(0.01));
-    CHECK(station0.y() == Catch::Approx(0.352).margin(0.02));
+    CHECK(station0.x() == Catch::Approx(0.865).margin(0.01));
+    CHECK(station0.y() == Catch::Approx(0.691).margin(0.02));
 }
 
 TEST_CASE("V6 conversion with correct EXIF coords does not modify", "[cwScrapManager]") {
