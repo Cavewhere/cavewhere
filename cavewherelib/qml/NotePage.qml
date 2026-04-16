@@ -24,6 +24,7 @@ StandardPage {
     NotesGallery {
         anchors.fill: parent
         showGallery: false
+        isNarrow: true
         notesModel: notePage.notesModel
         currentNoteIndex: notePage.currentNoteIndex
         onImagesAdded: (images) => notePage.notesModel.addFiles(images)

@@ -1,0 +1,149 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick as QQ
+import QtQuick.Controls as QC
+import QtQuick.Layouts
+import cavewherelib
+
+QQ.Rectangle {
+    id: narrowToolbar
+
+    property bool shown: true
+    property int currentNoteIndex: 0
+    property int noteCount: 0
+    property string galleryState: ""
+    property string galleryMode: ""
+    property bool hasCurrentNote: false
+
+    signal navigatePrev()
+    signal navigateNext()
+    signal stateChangeRequested(string newState)
+    signal doneClicked()
+    signal rotateRequested()
+    signal notePickerRequested()
+
+    visible: shown
+    height: shown ? narrowToolbarColumn.implicitHeight + 2 * Theme.flowSpacing : 0
+    color: Theme.floatingWidgetColor
+
+    QQ.Behavior on height {
+        QQ.NumberAnimation { duration: 120 }
+    }
+
+    ColumnLayout {
+        id: narrowToolbarColumn
+
+        anchors.top: parent.top
+        anchors.topMargin: Theme.flowSpacing
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: Theme.flowSpacing
+        anchors.rightMargin: Theme.flowSpacing
+        spacing: 0
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.flowSpacing
+
+            RoundButton {
+                objectName: "prevButton"
+                icon.source: "qrc:/twbs-icons/icons/chevron-left.svg"
+                enabled: narrowToolbar.currentNoteIndex > 0
+                onClicked: narrowToolbar.navigatePrev()
+            }
+
+            QC.Label {
+                objectName: "counterLabel"
+
+                text: (narrowToolbar.currentNoteIndex + 1) + " / " + narrowToolbar.noteCount
+                font.pixelSize: Theme.fontSizeSmall
+
+                QQ.TapHandler {
+                    onTapped: narrowToolbar.notePickerRequested()
+                }
+            }
+
+            RoundButton {
+                objectName: "nextButton"
+                icon.source: "qrc:/twbs-icons/icons/chevron-right.svg"
+                enabled: narrowToolbar.currentNoteIndex < narrowToolbar.noteCount - 1
+                onClicked: narrowToolbar.navigateNext()
+            }
+
+            QQ.Item { Layout.fillWidth: true }
+
+            RoundButton {
+                objectName: "editButton"
+                icon.source: "qrc:icons/svg/carpet.svg"
+                checked: narrowToolbar.galleryMode === "CARPET"
+                onClicked: narrowToolbar.stateChangeRequested("SELECT")
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            visible: narrowToolbar.galleryMode === "CARPET"
+            spacing: Theme.flowSpacing
+
+            RoundButton {
+                objectName: "selectButton"
+                icon.source: "qrc:icons/svg/select.svg"
+                checked: narrowToolbar.galleryState === "SELECT"
+                onClicked: narrowToolbar.stateChangeRequested("SELECT")
+            }
+
+            RoundButton {
+                objectName: "addScrapButton"
+                icon.source: "qrc:icons/svg/addScrap.svg"
+                visible: narrowToolbar.hasCurrentNote
+                checked: narrowToolbar.galleryState === "ADD-SCRAP"
+                onClicked: narrowToolbar.stateChangeRequested("ADD-SCRAP")
+            }
+
+            RoundButton {
+                objectName: "addStationButton"
+                icon.source: "qrc:icons/svg/addStation.svg"
+                checked: narrowToolbar.galleryState === "ADD-STATION"
+                onClicked: narrowToolbar.stateChangeRequested("ADD-STATION")
+            }
+
+            RoundButton {
+                objectName: "addLeadButton"
+                icon.source: "qrc:icons/svg/addLead.svg"
+                visible: narrowToolbar.hasCurrentNote
+                checked: narrowToolbar.galleryState === "ADD-LEAD"
+                onClicked: narrowToolbar.stateChangeRequested("ADD-LEAD")
+            }
+
+            QQ.Rectangle {
+                width: 1
+                Layout.preferredHeight: 20
+                Layout.alignment: Qt.AlignVCenter
+                color: Theme.border
+                visible: narrowToolbar.hasCurrentNote
+            }
+
+            RoundButton {
+                objectName: "rotateButton"
+                icon.source: "qrc:icons/svg/rotate.svg"
+                visible: narrowToolbar.hasCurrentNote
+                onClicked: narrowToolbar.rotateRequested()
+            }
+
+            QQ.Item { Layout.fillWidth: true }
+
+            QQ.Rectangle {
+                width: 1
+                Layout.preferredHeight: 20
+                Layout.alignment: Qt.AlignVCenter
+                color: Theme.border
+            }
+
+            RoundButton {
+                objectName: "doneButton"
+                icon.source: "qrc:/twbs-icons/icons/check-lg.svg"
+                onClicked: narrowToolbar.doneClicked()
+            }
+        }
+    }
+}

@@ -22,6 +22,10 @@ QQ.Rectangle {
     property NoteLiDAR currentNoteLiDAR
     property alias currentNoteIndex: galleryView.currentIndex
     property bool showGallery: true
+    property bool isNarrow: false
+    readonly property int noteCount: galleryView.count
+    readonly property bool _showNarrowToolbar: noteGallery.isNarrow && noteGallery.noteCount > 0
+    property alias _notePickerDrawer: notePickerDrawer
 
     readonly property string mode: {
         switch(state) {
@@ -47,13 +51,20 @@ QQ.Rectangle {
                     noteGallery.state = "NO_NOTES"
                 } else {
                     noteGallery.state = ""
-                    mainButtonArea.visible = true;
+                    mainButtonArea.visible = !noteGallery.isNarrow;
                 }
                 break;
             case "CARPET":
                 noteGallery.state = "SELECT"
             }
         }
+    }
+
+    function exitCarpetMode() {
+        noteGallery.state = "CARPET"
+        noteGallery.state = ""
+        noteLidarArea.state = "SELECT"
+        noteGallery.backClicked()
     }
 
     signal imagesAdded(list<url> images)
@@ -66,6 +77,58 @@ QQ.Rectangle {
         id: loadNoteWidgetId
         onFilesSelected: (images) => noteGallery.imagesAdded(images)
         visible: false
+    }
+
+    NotesGalleryNarrowToolbar {
+        id: narrowToolbar
+        objectName: "narrowToolbar"
+
+        shown: noteGallery._showNarrowToolbar
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+
+        currentNoteIndex: noteGallery.currentNoteIndex
+        noteCount: noteGallery.noteCount
+        galleryState: noteGallery.state
+        galleryMode: noteGallery.mode
+        hasCurrentNote: noteGallery.currentNote !== null
+
+        onNavigatePrev: noteGallery.currentNoteIndex--
+        onNavigateNext: noteGallery.currentNoteIndex++
+        onStateChangeRequested: (s) => noteGallery.state = s
+        onDoneClicked: noteGallery.exitCarpetMode()
+        onRotateRequested: {
+            noteRotationAnimation.from = noteGallery.currentNote.rotate
+            noteRotationAnimation.to = noteGallery.currentNote.rotate + 90
+            noteRotationAnimation.start()
+        }
+        onNotePickerRequested: notePickerDrawer.open()
+    }
+
+    QC.Drawer {
+        id: notePickerDrawer
+        objectName: "notePickerDrawer"
+        edge: Qt.LeftEdge
+        width: Math.min(280, noteGallery.width * 0.75)
+        height: noteGallery.QQ.Window.window ? noteGallery.QQ.Window.window.height : noteGallery.height
+        interactive: true
+
+        QQ.ListView {
+            id: notePickerList
+            objectName: "notePickerList"
+            anchors.fill: parent
+            anchors.margins: 4
+            model: galleryView.model
+            delegate: listDelegate
+            clip: true
+            currentIndex: noteGallery.currentNoteIndex
+            highlight: QQ.Rectangle {
+                color: Theme.accent
+                radius: 3
+                width: notePickerList.width
+            }
+        }
     }
 
     /**
@@ -241,6 +304,20 @@ QQ.Rectangle {
         ListDelegate {}
     }
 
+    // Lightweight delegate for narrow mode: satisfies the model's required
+    // properties without loading images. In narrow mode showGallery is false,
+    // so the gallery panel never renders — this avoids creating heavyweight
+    // ListDelegate instances (each of which loads an image texture) for items
+    // that are never shown.
+    QQ.Component {
+        id: narrowListDelegate
+        QQ.Item {
+            required property QQ.QtObject noteObject
+            required property url iconPath
+            required property int index
+        }
+    }
+
 
     QQ.Rectangle {
         id: galleryContainer
@@ -310,7 +387,7 @@ QQ.Rectangle {
 
             anchors.margins: 4
 
-            delegate: listDelegate
+            delegate: noteGallery.isNarrow ? narrowListDelegate : listDelegate
 
             clip: true
 
@@ -329,16 +406,12 @@ QQ.Rectangle {
 
             function updateCurrentNote() {
                 if(currentItem != null) {
-                    noteGallery.currentNote = (currentItem as ListDelegate).noteObject as Note;
-                    noteGallery.currentNoteLiDAR = (currentItem as ListDelegate).noteObject as NoteLiDAR;
-
-                    // console.log("currentNote:" + (currentItem as ListDelegate).noteObject)
-
-                    // noteArea.image = Qt.binding(function() { return currentItem.noteObject.image });
+                    let obj = currentItem["noteObject"]
+                    noteGallery.currentNote = obj as Note;
+                    noteGallery.currentNoteLiDAR = obj as NoteLiDAR;
                 } else {
                     noteGallery.currentNote = null;
                     noteGallery.currentNoteLiDAR = null;
-                    // noteArea.clearImage();
                 }
             }
 
@@ -357,7 +430,7 @@ QQ.Rectangle {
 
     ShadowRectangle {
         id: mainButtonArea
-        visible: true
+        visible: !noteGallery.isNarrow
         z: 1
 
         anchors.right: parent.right
@@ -440,12 +513,7 @@ QQ.Rectangle {
                 sourceSize: mainToolBar.iconSize
                 text: "Back"
 
-                onClicked: {
-                    noteGallery.state = "CARPET"
-                    noteGallery.state = ""
-                    noteLidarArea.state = "SELECT"
-                    noteGallery.backClicked()
-                }
+                onClicked: noteGallery.exitCarpetMode()
             }
 
             NeutralIconButton {
@@ -515,13 +583,14 @@ QQ.Rectangle {
     NoteItem {
         id: noteArea
 
-        anchors.top: parent.top
+        anchors.top: narrowToolbar.bottom
         anchors.left: parent.left
         anchors.right: galleryContainer.left
         anchors.bottom: parent.bottom
 
         visible: noteGallery.currentNote !== null
         scrapsVisible: false
+        isNarrow: noteGallery.isNarrow
         note: noteGallery.currentNote
     }
 
@@ -529,6 +598,7 @@ QQ.Rectangle {
         id: noteLidarArea
         anchors.fill: noteArea
         visible: noteGallery.currentNoteLiDAR !== null
+        isNarrow: noteGallery.isNarrow
         note: noteGallery.currentNoteLiDAR
     }
 
@@ -600,7 +670,7 @@ QQ.Rectangle {
                 galleryView.onCountChanged: () => {
                     if(count > 0) {
                         noteGallery.state = ""
-                        mainButtonArea.visible = true
+                        mainButtonArea.visible = !noteGallery.isNarrow
                         noteArea.visible = true
                         currentIndex = 0;
                     }
@@ -627,7 +697,7 @@ QQ.Rectangle {
 
             QQ.PropertyChanges {
                 carpetButtonArea {
-                    visible: true
+                    visible: !noteGallery.isNarrow
                 }
             }
 
@@ -744,7 +814,7 @@ QQ.Rectangle {
                 to: mainButtonArea.anchors.topMargin
             }
 
-            QQ.PropertyAction { target: mainButtonArea; property: "visible"; value: true }
+            QQ.PropertyAction { target: mainButtonArea; property: "visible"; value: !noteGallery.isNarrow }
             QQ.PropertyAnimation {
                 target: carpetButtonArea
                 properties: "scale"
@@ -773,7 +843,7 @@ QQ.Rectangle {
                 from: mainButtonArea.anchors.topMargin
             }
 
-            QQ.PropertyAction { target: carpetButtonArea; property: "visible"; value: true }
+            QQ.PropertyAction { target: carpetButtonArea; property: "visible"; value: !noteGallery.isNarrow }
             QQ.PropertyAction { target: noteArea; property: "scrapsVisible"; value: false }
             QQ.PropertyAnimation {
                 target: carpetButtonArea

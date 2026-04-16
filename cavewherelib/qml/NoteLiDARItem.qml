@@ -6,6 +6,7 @@ RegionViewer {
     objectName: "rhiViewerId"
 
     property NoteLiDAR note
+    property bool isNarrow: false
 
     function captureIconIfNeeded() {
         if (!note || !RootData.noteLiDARManager) {
@@ -146,6 +147,7 @@ RegionViewer {
 
     NoteLiDARTransformEditor {
         id: transformEditorId
+        collapsed: rhiViewerId.isNarrow
         note: rhiViewerId.note
         interactionManager: interactionManagerId
         northInteraction: lidarNorthInteraction

@@ -26,6 +26,8 @@ QQ.Item {
     property NoteLiDARUpInteraction upInteraction
     property InteractionManager interactionManager
 
+    property alias collapsed: floatingBox.collapsed
+
     visible: note !== null
     implicitHeight: floatingBox.implicitHeight
     implicitWidth: floatingBox.implicitWidth

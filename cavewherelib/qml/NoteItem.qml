@@ -18,6 +18,7 @@ ImageItem {
 
     property Note note;
     property bool scrapsVisible: false
+    property bool isNarrow: false
 
     imageRotation: note ? note.rotate : 0
     image.source: note ? RootData.cavewhereImageUrl(note.image, RootData.project.absolutePath(note)) : ""
@@ -167,12 +168,14 @@ ImageItem {
         NoteResolution {
             id: noteResolutionId
             note: noteArea.note
+            collapsed: noteArea.isNarrow
             onActivateDPIInteraction: interactionManagerId.active(noteDPIInteraction)
             visible: noteArea.scrapsVisible
         }
 
         NoteTransformEditor {
             id: noteTransformEditorId
+            collapsed: noteArea.isNarrow
             interactionManager: interactionManagerId
             northInteraction: noteNorthUpInteraction
             scaleInteraction: noteScaleInteraction
