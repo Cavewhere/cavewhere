@@ -158,6 +158,15 @@ TEST_CASE("cwDeepLinkHandler handleShareLink valid links", "[DeepLink]")
         CHECK(f.openSpy.first().first().toUrl() == QUrl("https://github.com/user/repo"));
     }
 
+    SECTION("https://cavewhere.com/open/ with trailing slash works")
+    {
+        DeepLinkFixture f;
+        f.handler.handleShareLink(QUrl("https://cavewhere.com/open/?repo=https%3A//github.com/user/repo"));
+        REQUIRE(f.openSpy.count() == 1);
+        CHECK(f.invalidSpy.count() == 0);
+        CHECK(f.openSpy.first().first().toUrl() == QUrl("https://github.com/user/repo"));
+    }
+
     SECTION("Percent-encoded repo param decoded correctly")
     {
         DeepLinkFixture f;

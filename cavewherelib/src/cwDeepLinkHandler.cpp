@@ -47,9 +47,14 @@ void cwDeepLinkHandler::handleShareLink(const QUrl& url)
         return;
     }
 
+    auto path = url.path();
+    if (path.endsWith(QLatin1Char('/'))) {
+        path.chop(1);
+    }
+
     if (url.scheme() == QLatin1String("https")
         && url.host().toLower() == QLatin1String("cavewhere.com")
-        && url.path() == QLatin1String("/open")) {
+        && path == QLatin1String("/open")) {
         const QUrlQuery query(url);
         QString error;
         QUrl repoUrl = validateAndExtractRepo(query, &error);
