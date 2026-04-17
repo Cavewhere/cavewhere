@@ -64,9 +64,8 @@ QQ.Loader {
     }
 
     function handleTemporaryDeleteRequest() {
-        if (RootData.project.deleteTemporaryProject()) {
-            loaderId._privateAfterSave();
-        }
+        // Temporary project directories are cleaned up automatically by cwSaveLoad
+        loaderId._privateAfterSave();
     }
 
     anchors.centerIn: parent

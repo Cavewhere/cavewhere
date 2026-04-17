@@ -1573,6 +1573,7 @@ struct cwSaveLoad::Data {
 
     bool isTemporary = true;
     bool saveEnabled = true;
+    QStringList m_ownedTempDirs; // QTemporaryDir paths owned by this project, cleaned up on retire/destroy
     bool newProjectCalled = false;
 
     cwFutureManagerToken futureToken;
@@ -2591,6 +2592,10 @@ struct cwSaveLoad::Data {
 
 // cwSaveLoad::~cwSaveLoad() = default;
 cwSaveLoad::~cwSaveLoad() {
+    for (const QString& dir : std::as_const(d->m_ownedTempDirs)) {
+        removeTemporaryProjectDir(dir);
+    }
+
     // Discard any queued-but-not-yet-dispatched filesystem jobs. This handles
     // abnormal destruction (e.g. the owning async chain was cancelled) where
     // retire() was never called. Complete the deferred so observers don't hang.
@@ -2732,6 +2737,12 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
             if (!QDir().rename(currentRootPath, targetRootPath)) {
                 return ResultBase(QStringLiteral("Couldn't move project to '%1'.").arg(targetRootPath));
             }
+            // Project root was moved out — remove the now-empty QTemporaryDir parent(s).
+            // waitForFinished() was called above, so no in-flight jobs.
+            for (const QString& dir : std::as_const(d->m_ownedTempDirs)) {
+                removeTemporaryProjectDir(dir);
+            }
+            d->m_ownedTempDirs.clear();
         } else if (mode == ProjectTransferMode::Copy) {
             auto copyResult = copyDirectoryRecursively(QDir(currentRootPath), QDir(targetRootPath));
             if (copyResult.hasError()) {
@@ -3775,23 +3786,27 @@ QFuture<ResultBase> cwSaveLoad::enqueueFlushAndCommit()
             .future();
 }
 
-ResultBase cwSaveLoad::deleteTemporaryProject()
+void cwSaveLoad::setOwnedTempDir(const QString& path)
 {
-    if (!isTemporaryProject()) {
-        return ResultBase(QStringLiteral("Project is not temporary."));
+    if (!path.isEmpty() && !d->m_ownedTempDirs.contains(path)) {
+        d->m_ownedTempDirs.append(path);
+    }
+}
+
+void cwSaveLoad::removeTemporaryProjectDir(const QString& ownedTempDirPath)
+{
+    if (ownedTempDirPath.isEmpty()) {
+        return;
     }
 
-    waitForFinished();
-
-    QDir dir = dataRootDir();
-    if (dir.exists()) {
-        qDebug() << "Wanting to delete:" << dir;
-        // if (!dir.removeRecursively()) {
-        //     return ResultBase(QStringLiteral("Couldn't delete temporary project at '%1'.").arg(dir.absolutePath()));
-        // }
+    const QString tempRoot = QDir::tempPath() + QStringLiteral("/");
+    if (!ownedTempDirPath.startsWith(tempRoot)) {
+        qWarning() << "cwSaveLoad::removeTemporaryProjectDir: refusing to delete path outside"
+                    << "system temp directory:" << ownedTempDirPath;
+        return;
     }
 
-    return ResultBase();
+    LongPathFs::removeDirRecursive(ownedTempDirPath);
 }
 
 // ------------------------
@@ -5773,6 +5788,8 @@ QDir cwSaveLoad::createTemporaryDirectory(const QString &subDirName)
     QTemporaryDir tempDir;
     tempDir.setAutoRemove(false);
 
+    setOwnedTempDir(tempDir.path());
+
     QDir dir(tempDir.path());
     dir.mkdir(subDirName);
     dir.cd(subDirName);
@@ -6751,7 +6768,23 @@ QFuture<void> cwSaveLoad::retire()
     disconnectTreeModel();
     d->m_regionTreeModel->setCavingRegion(nullptr);
 
-    auto retireFuture = completeSaveJobs();
+    auto saveJobsFuture = completeSaveJobs();
+
+    QFuture<void> retireFuture;
+    if (!d->m_ownedTempDirs.isEmpty()) {
+        const QStringList capturedTempDirs = d->m_ownedTempDirs;
+        d->m_ownedTempDirs.clear();  // Prevent destructor double-cleanup
+        retireFuture = AsyncFuture::observe(saveJobsFuture)
+            .context(this, [this, capturedTempDirs]() {
+                return QtConcurrent::run(&d->m_saveThreadPool, [capturedTempDirs]() {
+                    for (const QString& dir : capturedTempDirs) {
+                        removeTemporaryProjectDir(dir);
+                    }
+                });
+            }).future();
+    } else {
+        retireFuture = saveJobsFuture;
+    }
 
     d->retireFuture = retireFuture;
     d->futureToken.addJob(cwFuture(QFuture<void>(d->retireFuture),

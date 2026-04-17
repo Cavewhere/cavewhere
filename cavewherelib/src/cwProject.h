@@ -135,7 +135,6 @@ public:
     Q_INVOKABLE QUrl remoteBrowseUrl() const;
     Q_INVOKABLE QUrl shareLink() const;
     Q_INVOKABLE bool saveAs(QString newFilename);
-    Q_INVOKABLE bool deleteTemporaryProject();
     Q_INVOKABLE bool isNewEmptyProject() const;
     Q_INVOKABLE void discardChanges();
 

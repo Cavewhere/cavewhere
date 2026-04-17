@@ -126,6 +126,11 @@ QString findProjectFileInDirectory(const QString& rootPath)
     return QString();
 }
 
+struct BundleExtractionResult {
+    QString projectFilePath;
+    QString extractionRootPath;  // QTemporaryDir path, for cleanup tracking
+};
+
 } // namespace
 
 /**
@@ -759,24 +764,6 @@ bool cwProject::saveAs(QString newFilename)
     return true;
 }
 
-bool cwProject::deleteTemporaryProject()
-{
-    if(!isTemporaryProject()) {
-        ErrorModel->append(cwError(QStringLiteral("Current project is not temporary."), cwError::Warning));
-        return false;
-    }
-
-    if (emitVersionGuardError(QStringLiteral("delete this project"))) { return false; }
-
-    auto result = m_saveLoad->deleteTemporaryProject();
-    if(result.hasError()) {
-        ErrorModel->append(cwError(result.errorMessage(), cwError::Fatal));
-        return false;
-    }
-
-    return true;
-}
-
 void cwProject::setSqliteTemporaryProject(bool isTemp)
 {
     if (SQLiteTempProject == isTemp) {
@@ -969,35 +956,44 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
             }).future();
     } else if (type == BundledGitFileType) {
         const QString bundleSourcePath = filename;
-        auto loadBundleFuture = cwConcurrent::run([filename]() -> ResultString {
+        auto loadBundleFuture = cwConcurrent::run([filename]() -> Result<BundleExtractionResult> {
             auto archiveProjectFileResult = cwZip::findProjectFileInArchive(filename);
             if (archiveProjectFileResult.hasError()) {
-                return ResultString(archiveProjectFileResult.errorMessage(), archiveProjectFileResult.errorCode());
+                return Result<BundleExtractionResult>(archiveProjectFileResult.errorMessage(),
+                                                      archiveProjectFileResult.errorCode());
             }
 
             QTemporaryDir extractionRoot;
             extractionRoot.setAutoRemove(false);
             if (!extractionRoot.isValid()) {
-                return ResultString(QStringLiteral("Couldn't create temporary directory for bundled project extraction."), ResultBase::Unknown);
+                return Result<BundleExtractionResult>(
+                    QStringLiteral("Couldn't create temporary directory for bundled project extraction."),
+                    ResultBase::Unknown);
             }
 
-            auto extractResult = cwZip::extractAll(filename, extractionRoot.path());
+            const QString rootPath = extractionRoot.path();
+
+            auto extractResult = cwZip::extractAll(filename, rootPath);
             if (extractResult.hasError()) {
-                return ResultString(extractResult.errorMessage(), extractResult.errorCode());
+                QDir(rootPath).removeRecursively();
+                return Result<BundleExtractionResult>(extractResult.errorMessage(),
+                                                      extractResult.errorCode());
             }
 
-            const QString extractedProjectPath = QDir(extractionRoot.path()).absoluteFilePath(archiveProjectFileResult.value());
+            const QString extractedProjectPath = QDir(rootPath).absoluteFilePath(archiveProjectFileResult.value());
             if (QFileInfo::exists(extractedProjectPath)) {
-                return ResultString(extractedProjectPath);
+                return Result<BundleExtractionResult>(BundleExtractionResult{extractedProjectPath, rootPath});
             }
 
-            const QString fallbackProjectPath = findProjectFileInDirectory(extractionRoot.path());
+            const QString fallbackProjectPath = findProjectFileInDirectory(rootPath);
             if (!fallbackProjectPath.isEmpty()) {
-                return ResultString(fallbackProjectPath);
+                return Result<BundleExtractionResult>(BundleExtractionResult{fallbackProjectPath, rootPath});
             }
 
-            return ResultString(QStringLiteral("Couldn't locate a .cwproj in extracted bundle '%1'.").arg(filename),
-                                ResultBase::Unknown);
+            QDir(rootPath).removeRecursively();
+            return Result<BundleExtractionResult>(
+                QStringLiteral("Couldn't locate a .cwproj in extracted bundle '%1'.").arg(filename),
+                ResultBase::Unknown);
         });
 
         FutureToken.addJob({QFuture<void>(loadBundleFuture), QStringLiteral("Extracting bundled project")});
@@ -1008,7 +1004,10 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
                     return QtFuture::makeReadyValueFuture(ResultBase(loadBundleFuture.result().errorMessage()));
                 }
 
-                auto extractedProjectLoadFuture = m_saveLoad->load(loadBundleFuture.result().value());
+                const auto extractionResult = loadBundleFuture.result().value();
+                m_saveLoad->setOwnedTempDir(extractionResult.extractionRootPath);
+
+                auto extractedProjectLoadFuture = m_saveLoad->load(extractionResult.projectFilePath);
                 return AsyncFuture::observe(extractedProjectLoadFuture)
                     .context(this, [this, extractedProjectLoadFuture, bundleSourcePath]() {
                         auto result = extractedProjectLoadFuture.result();
@@ -1441,6 +1440,7 @@ void cwProject::loadOrConvert(const QString &filename)
                          if(type == SqliteFileType) {
                              QTemporaryDir dir;
                              dir.setAutoRemove(false);
+                             m_saveLoad->setOwnedTempDir(dir.path());  // Track for cleanup
                              auto tempDir = QDir(dir.filePath(QFileInfo(normalizedFilename).baseName()));
                              const QFileInfo info(normalizedFilename);
                              const bool temporaryProject = !info.isWritable();

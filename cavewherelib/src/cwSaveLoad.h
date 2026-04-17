@@ -255,7 +255,7 @@ public:
     // Enqueues recursive deletion of an orphaned cave or trip directory left on disk after
     // a rename/rename merge conflict. The path is relative to the project root directory.
     void enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath);
-    Monad::ResultBase deleteTemporaryProject();
+    void setOwnedTempDir(const QString& path);
 
     void addFiles(QList<QUrl> files,
                   const QDir& dir,
@@ -409,6 +409,7 @@ private:
     QDir dirPrivate(const cwNoteLiDAR* note) const;
 
     void setSaveEnabled(bool enabled);
+    static void removeTemporaryProjectDir(const QString& ownedTempDirPath);
 
     enum class ProjectTransferMode { Move, Copy };
     Monad::ResultBase transferProjectTo(const QString& destinationFileUrl, ProjectTransferMode mode);

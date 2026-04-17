@@ -2315,43 +2315,6 @@ TEST_CASE("Version-incompatible project is not marked as temporary", "[cwSaveLoa
     CHECK_FALSE(reloaded->canSaveDirectly());
 }
 
-TEST_CASE("deleteTemporaryProject rejected for version-incompatible project", "[cwSaveLoad]") {
-    // A version-incompatible project loaded from a real path is not temporary,
-    // so deleteTemporaryProject should reject it as "not temporary".
-    auto rootData = std::make_unique<cwRootData>();
-    auto project = rootData->project();
-
-    auto region = project->cavingRegion();
-    region->addCave();
-    region->cave(0)->setName(QStringLiteral("DeleteRejectCave"));
-
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-    const QString projectPath = QDir(tempDir.path()).filePath(QStringLiteral("DeleteRejectTest.cwproj"));
-    REQUIRE(project->saveAs(projectPath));
-    rootData->futureManagerModel()->waitForFinished();
-    project->waitSaveToFinish();
-
-    const QString savedProjectFile = project->filename();
-
-    auto caveFiles = findEntityFiles(QFileInfo(savedProjectFile).absolutePath(), {QStringLiteral("*.cwcave")});
-    REQUIRE(caveFiles.size() == 1);
-    REQUIRE(bumpFileVersion(caveFiles.first(), cwRegionIOTask::protoVersion() + 1));
-
-    auto reloaded = std::make_unique<cwProject>();
-    addTokenManager(reloaded.get());
-    reloaded->loadOrConvert(savedProjectFile);
-    reloaded->waitLoadToFinish();
-
-    reloaded->errorModel()->clear();
-
-    CHECK(reloaded->saveWillCauseDataLoss());
-    CHECK_FALSE(reloaded->isTemporaryProject());
-    CHECK_FALSE(reloaded->deleteTemporaryProject());
-    REQUIRE(reloaded->errorModel()->count() >= 1);
-    CHECK(reloaded->errorModel()->at(0).message().contains(QStringLiteral("not temporary")));
-}
-
 TEST_CASE("saveBlockedByVersion signal only emitted once per load", "[cwSaveLoad]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();

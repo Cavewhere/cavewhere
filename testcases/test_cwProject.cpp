@@ -1199,6 +1199,13 @@ TEST_CASE("newProject waits for pending edits before reset", "[cwProject][newPro
 
     cave->setName(QStringLiteral("InitialCave"));
     trip->setName(QStringLiteral("InitialTrip"));
+
+    // Save to a permanent location so the project dir survives newProject's temp cleanup
+    QTemporaryDir permanentDir;
+    REQUIRE(permanentDir.isValid());
+    const QString projectPath = QDir(permanentDir.path()).filePath(QStringLiteral("PendingEditsTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
 
     const QString oldProjectFile = project->filename();
@@ -11433,7 +11440,13 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
         return result;
     };
 
-    QString convertedFilename = [](){
+    // Use a QTemporaryDir to hold the permanent copy of the converted project.
+    // The conversion creates a temp directory that is cleaned up when the project
+    // is destroyed, so we save to a permanent location first.
+    QTemporaryDir permanentConvertedDir;
+    REQUIRE(permanentConvertedDir.isValid());
+
+    QString convertedFilename = [&permanentConvertedDir](){
         auto root = std::make_unique<cwRootData>();
         const QString filename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
@@ -11445,11 +11458,14 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
         // so filename() points to the git dir, not the original .cw path.
         REQUIRE(root->project()->filename() != filename);
         REQUIRE(root->project()->fileType() == cwProject::GitFileType);
-        const QDir workingProjectRoot = QFileInfo(root->project()->dataRootDir().absolutePath()).absoluteDir();
-        const QString workingProjectFile = firstCwprojInDirectory(workingProjectRoot.absolutePath());
-        REQUIRE_FALSE(workingProjectFile.isEmpty());
 
-        return workingProjectFile;
+        // Save to a permanent location so it survives destruction of the temp project
+        const QString permanentPath = QDir(permanentConvertedDir.path()).filePath(QStringLiteral("Converted.cwproj"));
+        REQUIRE(root->project()->saveAs(permanentPath));
+        root->futureManagerModel()->waitForFinished();
+        root->project()->waitSaveToFinish();
+
+        return root->project()->filename();
     }();
 
     auto initialLoad = scan(QFileInfo(convertedFilename).absolutePath());
@@ -13098,4 +13114,245 @@ TEST_CASE("V6 conversion preserves note image resolution", "[cwProject][v6DPI]")
     // The v6 file had the resolution set to 800 DPI
     CHECK(note->imageResolution()->unit() == cwUnits::DotsPerInch);
     CHECK(note->imageResolution()->value() == Approx(800.0).epsilon(1e-2));
+}
+
+// ---------------------------------------------------------------------------
+// Temp directory cleanup tests
+// ---------------------------------------------------------------------------
+
+namespace {
+// Returns the QTemporaryDir-level path for a temp project.
+// project->filename() returns e.g. /tmp/abc123/tempName/tempName.cwproj
+// projectRootDir is /tmp/abc123/tempName/
+// The QTemporaryDir path is /tmp/abc123/ (one level up from project root).
+QString tempProjectOwnerDir(cwProject* project) {
+    const QFileInfo cwprojInfo(project->filename());
+    const QDir projectRoot = cwprojInfo.absoluteDir();        // /tmp/abc123/tempName/
+    return QFileInfo(projectRoot.absolutePath()).absolutePath(); // /tmp/abc123/
+}
+} // namespace
+
+TEST_CASE("newProject cleans up previous temp directory", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    const QString oldTempDir = tempProjectOwnerDir(project);
+    REQUIRE(QFileInfo::exists(oldTempDir));
+
+    project->newProject();
+    project->waitSaveToFinish();
+
+    CHECK_FALSE(QFileInfo::exists(oldTempDir));
+
+    // The new project should have its own temp dir
+    const QString newTempDir = tempProjectOwnerDir(project);
+    CHECK(QFileInfo::exists(newTempDir));
+    CHECK(oldTempDir != newTempDir);
+}
+
+TEST_CASE("destructor cleans up temp directory", "[cwProject][tempCleanup]") {
+    QString capturedTempDir;
+    {
+        auto rootData = std::make_unique<cwRootData>();
+        auto project = rootData->project();
+        project->waitSaveToFinish();
+
+        capturedTempDir = tempProjectOwnerDir(project);
+        REQUIRE(QFileInfo::exists(capturedTempDir));
+    }
+    // rootData destroyed → cwProject → cwSaveLoad destructor fires
+    CHECK_FALSE(QFileInfo::exists(capturedTempDir));
+}
+
+TEST_CASE("saveAs(.cwproj) moves temp dir to permanent location", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    const QString tempDir = tempProjectOwnerDir(project);
+    REQUIRE(QFileInfo::exists(tempDir));
+
+    QTemporaryDir permanentLocation;
+    REQUIRE(permanentLocation.isValid());
+    const QString projectPath = QDir(permanentLocation.path()).filePath(QStringLiteral("MovedProject.cwproj"));
+
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    CHECK_FALSE(project->isTemporaryProject());
+    CHECK_FALSE(QFileInfo::exists(tempDir));
+    CHECK(QFileInfo::exists(project->filename()));
+}
+
+TEST_CASE("permanent project dir survives newProject", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    QTemporaryDir permanentLocation;
+    REQUIRE(permanentLocation.isValid());
+    const QString projectPath = QDir(permanentLocation.path()).filePath(QStringLiteral("PermanentProject.cwproj"));
+
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString permanentProjectDir = QFileInfo(project->filename()).absolutePath();
+    REQUIRE(QFileInfo::exists(permanentProjectDir));
+
+    project->newProject();
+    project->waitSaveToFinish();
+
+    CHECK(QFileInfo::exists(permanentProjectDir));
+}
+
+TEST_CASE("bundled archive extraction temp dir cleaned up on newProject", "[cwProject][tempCleanup]") {
+    // Create a project with some data and save as .cw bundle
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("BundleTestCave"));
+
+    QTemporaryDir bundleDir;
+    REQUIRE(bundleDir.isValid());
+    const QString bundlePath = QDir(bundleDir.path()).filePath(QStringLiteral("test.cw"));
+    REQUIRE(project->saveAs(bundlePath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Now load the .cw bundle — this extracts to a temp dir
+    project->newProject();
+    project->waitSaveToFinish();
+    project->loadFile(bundlePath);
+    project->waitLoadToFinish();
+    project->waitSaveToFinish();
+
+    // For bundled projects, filename() returns the .cw bundle path; derive
+    // the extraction root from dataRootDir() (one level up from the data root).
+    const QDir dataRoot = project->dataRootDir();
+    const QString extractionOwnerDir = QFileInfo(dataRoot.absolutePath()).absolutePath();
+    REQUIRE(extractionOwnerDir.startsWith(QDir::tempPath()));
+    REQUIRE(extractionOwnerDir != QDir::tempPath()); // must not be the temp root itself
+    REQUIRE(QFileInfo::exists(extractionOwnerDir));
+
+    // newProject should clean it up
+    project->newProject();
+    project->waitSaveToFinish();
+
+    CHECK_FALSE(QFileInfo::exists(extractionOwnerDir));
+}
+
+TEST_CASE("bundled .cw save-as does not delete temp dir prematurely", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("BundleSaveAsTestCave"));
+
+    const QString tempDir = tempProjectOwnerDir(project);
+    REQUIRE(QFileInfo::exists(tempDir));
+
+    QTemporaryDir bundleDir;
+    REQUIRE(bundleDir.isValid());
+    const QString bundlePath = QDir(bundleDir.path()).filePath(QStringLiteral("bundle-saveas.cw"));
+    REQUIRE(project->saveAs(bundlePath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Temp dir should still exist — project continues working from it
+    CHECK(QFileInfo::exists(tempDir));
+    CHECK(QFileInfo::exists(bundlePath));
+
+    // newProject should trigger cleanup
+    project->newProject();
+    project->waitSaveToFinish();
+
+    CHECK_FALSE(QFileInfo::exists(tempDir));
+}
+
+TEST_CASE("loadFile over temp project cleans up old temp dir on next newProject", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    // Save to a permanent location first so we have something to load
+    QTemporaryDir permanentDir;
+    REQUIRE(permanentDir.isValid());
+    const QString projectPath = QDir(permanentDir.path()).filePath(QStringLiteral("LoadOverTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString permanentProjectFile = project->filename();
+
+    // Start a new temp project
+    project->newProject();
+    project->waitSaveToFinish();
+
+    const QString newTempDir = tempProjectOwnerDir(project);
+    REQUIRE(QFileInfo::exists(newTempDir));
+
+    // Load the permanent project — temp dir still tracked but not yet cleaned up
+    project->loadFile(permanentProjectFile);
+    project->waitLoadToFinish();
+    project->waitSaveToFinish();
+
+    CHECK(QFileInfo::exists(permanentProjectFile));
+
+    // newProject triggers retire which cleans up the old temp dir
+    project->newProject();
+    project->waitSaveToFinish();
+
+    CHECK_FALSE(QFileInfo::exists(newTempDir));
+}
+
+TEST_CASE("saveAs(.cwproj) copy from non-temp preserves source dir", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("CopyModeTestCave"));
+
+    // Save to a permanent location (makes it non-temporary)
+    QTemporaryDir firstSave;
+    REQUIRE(firstSave.isValid());
+    const QString firstPath = QDir(firstSave.path()).filePath(QStringLiteral("First.cwproj"));
+    REQUIRE(project->saveAs(firstPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK_FALSE(project->isTemporaryProject());
+
+    const QString firstProjectDir = QFileInfo(project->filename()).absolutePath();
+
+    // saveAs again to a different location — non-temp to non-temp uses copy mode
+    QTemporaryDir secondSave;
+    REQUIRE(secondSave.isValid());
+    const QString secondPath = QDir(secondSave.path()).filePath(QStringLiteral("Second.cwproj"));
+    REQUIRE(project->saveAs(secondPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Both project dirs should still exist (copy doesn't delete source)
+    CHECK(QFileInfo::exists(firstProjectDir));
+    CHECK(QFileInfo::exists(QFileInfo(project->filename()).absolutePath()));
+
+    // newProject should NOT delete either permanent dir
+    project->newProject();
+    project->waitSaveToFinish();
+    CHECK(QFileInfo::exists(firstProjectDir));
+}
+
+TEST_CASE("double retire does not crash or double-delete", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    const QString tempDir = tempProjectOwnerDir(project);
+    REQUIRE(QFileInfo::exists(tempDir));
+
+    // Two rapid newProject calls — each retires the previous saveLoad
+    project->newProject();
+    project->newProject();
+    project->waitSaveToFinish();
+
+    // No crash, and the original temp dir is cleaned up
+    CHECK_FALSE(QFileInfo::exists(tempDir));
 }
