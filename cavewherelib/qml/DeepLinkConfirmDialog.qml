@@ -47,11 +47,11 @@ QQ.Item {
                 if (entryType === RemoteAccountSelectionModel.AccountEntry) {
                     accountCombo.currentIndex = i
                     _selectedUsername = accountSelectionModel.data(idx, RemoteAccountSelectionModel.UsernameRole) ?? ""
-                    // Do NOT activate credentials here: the C++ cloner may have stale
-                    // cloneFailedDueToAuthError + pendingCloneUrl from a prior session.
-                    // Loading the token now would trigger an unintended auto-retry that
-                    // closes the dialog before the user clicks Clone. Credentials are
-                    // loaded lazily when the user explicitly clicks Clone.
+                    // Load the keychain token now so the subsequent Clone click has
+                    // credentials available. rootId.open() calls cloneAreaId.reset()
+                    // before _autoSelectAccount(), which clears cloneFailedDueToAuthError,
+                    // so the cloner's token-arrival auto-retry cannot fire here.
+                    _activateSelectedAccount()
                     return
                 }
             }
