@@ -102,8 +102,6 @@ QC.Menu {
     QC.MenuItem {
         objectName: "shareMenuItem"
         text: qsTr("Share...")
-        enabled: RootData.project.fileType === Project.GitFileType
-              && !RootData.project.syncHealth.status.noRemote
         onTriggered: fileMenuId.shareRequested()
     }
 
