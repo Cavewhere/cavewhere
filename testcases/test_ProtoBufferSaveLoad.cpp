@@ -228,7 +228,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
 //This also test v3->v6
 TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[ProtoSaveLoad]") {
 
-    auto fileCheck = [](QString filename, auto scrapCheckFunc) {
+    auto fileCheck = [](QString filename, auto scrapCheckFunc, QString saveAsPath = {}) {
         auto root = std::make_unique<cwRootData>();
 
         root->project()->loadOrConvert(filename);
@@ -417,6 +417,11 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
 
         CHECK(root->project()->canSaveDirectly() == true);
 
+        if (!saveAsPath.isEmpty()) {
+            REQUIRE(root->project()->saveAs(saveAsPath));
+            root->project()->waitSaveToFinish();
+        }
+
         return root->project()->filename();
     };
 
@@ -453,7 +458,9 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
 
     };
 
-    auto newFilename = fileCheck(testcasesDatasetPath("test_ProtoBufferSaveLoad/ProjectProfile-test-v3.cw"), originalScrapCheck);
+    const QString savePath = createTempSubdir() + QStringLiteral("/profile-roundtrip.cwproj");
+
+    auto newFilename = fileCheck(testcasesDatasetPath("test_ProtoBufferSaveLoad/ProjectProfile-test-v3.cw"), originalScrapCheck, savePath);
 
     fileCheck(newFilename, profileCheck);
 }
