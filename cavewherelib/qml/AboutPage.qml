@@ -23,7 +23,7 @@ StandardPage {
         QC.Label {
             Layout.alignment: Qt.AlignHCenter
             text: {
-                return "Copyright 2025 Philip Schuchardt"
+                return "Copyright 2026 Philip Schuchardt"
             }
         }
     }
