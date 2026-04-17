@@ -32,6 +32,7 @@ class cwCavingRegion;
 class cwProject;
 class cwNoteLiDAR;
 class cwNoteLiDARData;
+struct cwSaveLoadPrivate;
 #include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
 #include "cwError.h"
@@ -361,9 +362,8 @@ private:
         CheckoutLocal
     };
 
-    struct Data;
-    friend struct Data;
-    std::unique_ptr<Data> d;
+    friend struct cwSaveLoadPrivate;
+    std::unique_ptr<cwSaveLoadPrivate> d;
     QPointer<QUndoStack> m_undoStack;
     QPointer<cwRemoteAuthProvider> m_authProvider;
 
