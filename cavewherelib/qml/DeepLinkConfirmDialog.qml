@@ -11,10 +11,13 @@ QQ.Item {
     // Emitted when a clone completes and the caller should ask-to-save then load the file.
     signal openRequested(string filePath)
 
+    // Accepts a string or QUrl; SSH URLs must be passed as strings because
+    // QUrl parses `git@host:user/repo.git` to empty.
     function open(url) {
-        dialogId.repoUrl = url
+        dialogId.repoUrl = typeof url === "string" ? url : url.toString()
         dialogId._selectedUsername = ""
         dialogId._addingAccount = false
+        cloneAreaId.reset()
         dialogId._autoSelectAccount()
         dialogId.open()
     }
@@ -27,9 +30,13 @@ QQ.Item {
         id: dialogId
         objectName: "deepLinkConfirmDialog"
 
-        property url repoUrl
+        property string repoUrl
         property string _selectedUsername: ""
         property bool _addingAccount: false
+
+        // SSH URLs authenticate with a local key, not a GitHub token — hide
+        // the account picker and auth flow when the URL is SSH.
+        readonly property bool _isSshUrl: repoUrl.length > 0 && cloneAreaId.isSshUrl(repoUrl)
 
         readonly property GitHubIntegration _gitHub: RootData.remote.gitHubIntegration
 
@@ -60,12 +67,13 @@ QQ.Item {
         // Show the inline auth flow when adding an account or after an auth error,
         // but not when already authorized (token loaded successfully)
         readonly property bool _showAuthFlow: {
+            if (_isSshUrl) return false
             if (_gitHub.authState === GitHubIntegration.Authorized) return false
             return _addingAccount || cloneAreaId.cloneFailedDueToAuthError
         }
 
         readonly property string _repoDisplay: {
-            const str = repoUrl.toString()
+            const str = repoUrl
             if (str === "") return ""
             try {
                 const u = new URL(str)
@@ -110,7 +118,9 @@ QQ.Item {
             }
 
             RowLayout {
+                objectName: "deepLinkAccountRow"
                 Layout.fillWidth: true
+                visible: !dialogId._isSshUrl
 
                 QC.Label {
                     text: qsTr("Account:")
@@ -202,7 +212,7 @@ QQ.Item {
             CloneArea {
                 id: cloneAreaId
                 Layout.fillWidth: true
-                urlText: dialogId.repoUrl.toString()
+                urlText: dialogId.repoUrl
                 authErrorMessage: qsTr("Sign in to GitHub above to retry.")
                 onReadyToOpen: function(filePath) { rootId.openRequested(filePath) }
             }
@@ -237,7 +247,9 @@ QQ.Item {
                     enabled: !cloneAreaId.isCloning
                     font.bold: true
                     onClicked: {
-                        dialogId._activateSelectedAccount()
+                        if (!dialogId._isSshUrl) {
+                            dialogId._activateSelectedAccount()
+                        }
                         cloneAreaId.clone()
                     }
                 }

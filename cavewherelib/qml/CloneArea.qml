@@ -29,6 +29,14 @@ ColumnLayout {
         clonerId.clone(urlText, _destinationParentFolder)
     }
 
+    function reset() {
+        clonerId.resetCloneState()
+    }
+
+    function isSshUrl(url) {
+        return clonerId.isSshUrl(url)
+    }
+
     readonly property url _destinationParentFolder: {
         if (root.selectedDestinationFolder.toString() !== "")
             return root.selectedDestinationFolder

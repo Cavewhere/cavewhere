@@ -37,17 +37,19 @@ void cwDeepLinkHandler::handleUrl(const QUrl& url)
         return;
     }
 
-    acceptRepoUrl(repoUrl);
+    acceptRepoUrl(repoUrl.toString());
 }
 
-void cwDeepLinkHandler::handleShareLink(const QUrl& url)
+void cwDeepLinkHandler::handleShareLink(const QString& text)
 {
+    const QString trimmed = text.trimmed();
+    const QUrl url(trimmed);
     if (url.scheme() == QLatin1String("cavewhere")) {
         handleUrl(url);
         return;
     }
 
-    auto path = url.path();
+    QString path = url.path();
     if (path.endsWith(QLatin1Char('/'))) {
         path.chop(1);
     }
@@ -62,16 +64,43 @@ void cwDeepLinkHandler::handleShareLink(const QUrl& url)
             emit invalidLink(error);
             return;
         }
-        acceptRepoUrl(repoUrl);
+        acceptRepoUrl(repoUrl.toString());
+        return;
+    }
+
+    // Forward the raw text so SSH shapes like `git@host:user/repo.git`
+    // survive — QUrl parses those to an empty string.
+    if (looksLikeCloneUrl(trimmed)) {
+        acceptRepoUrl(trimmed);
         return;
     }
 
     emit invalidLink(QStringLiteral(
-        "Please paste a CaveWhere share link "
-        "(https://cavewhere.com/open?repo=... or cavewhere://open?repo=...)"));
+        "Please paste a CaveWhere share link or repository URL "
+        "(e.g. https://cavewhere.com/open?repo=..., cavewhere://open?repo=..., "
+        "or https://github.com/user/repo.git)"));
 }
 
-void cwDeepLinkHandler::acceptRepoUrl(const QUrl& repoUrl)
+bool cwDeepLinkHandler::looksLikeCloneUrl(const QString& text)
+{
+    if (text.isEmpty()) {
+        return false;
+    }
+
+    if (text.contains(QLatin1String("://"))) {
+        return true;
+    }
+
+    const int atIndex = text.indexOf(QLatin1Char('@'));
+    const int colonIndex = text.lastIndexOf(QLatin1Char(':'));
+    if (atIndex != -1 && colonIndex > atIndex) {
+        return true;
+    }
+
+    return text.contains(QLatin1Char('/'));
+}
+
+void cwDeepLinkHandler::acceptRepoUrl(const QString& repoUrl)
 {
     m_pendingUrl = repoUrl;
     emit openRepoRequested(repoUrl);
@@ -120,9 +149,9 @@ QUrl cwDeepLinkHandler::validateAndExtractRepo(const QUrlQuery& query, QString* 
  * Windows startup case where argv delivers the URL before the signal
  * connection to the confirmation dialog exists.
  */
-QUrl cwDeepLinkHandler::takePendingUrl()
+QString cwDeepLinkHandler::takePendingUrl()
 {
-    QUrl url = m_pendingUrl;
+    QString url = m_pendingUrl;
     m_pendingUrl.clear();
     return url;
 }

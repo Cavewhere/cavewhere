@@ -48,8 +48,10 @@ public:
 
     Q_INVOKABLE QString repositoryNameFromUrl(const QString& urlText) const;
     Q_INVOKABLE QString normalizeCloneUrl(const QString& urlText) const;
+    Q_INVOKABLE bool isSshUrl(const QString& urlText) const;
     Q_INVOKABLE void clone(const QString& urlText);
     Q_INVOKABLE void clone(const QString& urlText, const QUrl& destinationParentDir);
+    Q_INVOKABLE void resetCloneState();
 
 signals:
     void cloneErrorMessageChanged();

@@ -116,7 +116,7 @@ QC.Menu {
 
     QC.MenuItem {
         objectName: "openSharedLinkMenuItem"
-        text: qsTr("Open Shared Link...")
+        text: qsTr("Open from Link...")
         onTriggered: fileMenuId.openSharedLinkRequested()
     }
 

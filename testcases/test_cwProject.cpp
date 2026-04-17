@@ -12856,12 +12856,12 @@ TEST_CASE("shareLink round-trip: output parses back to original repo URL via cwD
     handlerUrl.setQuery(shareLink.query());
 
     cwDeepLinkHandler handler;
-    QUrl receivedUrl;
+    QString receivedUrl;
     QObject::connect(&handler, &cwDeepLinkHandler::openRepoRequested,
-                     [&](const QUrl& url) { receivedUrl = url; });
+                     [&](const QString& url) { receivedUrl = url; });
 
     handler.handleUrl(handlerUrl);
-    CHECK(receivedUrl == repoUrl);
+    CHECK(receivedUrl == repoUrl.toString());
 }
 
 TEST_CASE("shareLink prefers origin remote when multiple remotes present", "[ShareLink]")
