@@ -72,6 +72,15 @@ QC.Menu {
         }
     }
 
+    QC.Action {
+        id: openOnlineActionId
+        text: "Open from O&nline…"
+        shortcut: "Ctrl+Shift+O"
+        onTriggered: {
+            RootData.pageSelectionModel.gotoPageByName(null, "Remote");
+        }
+    }
+
     QC.MenuSeparator {}
 
     QC.Action {
