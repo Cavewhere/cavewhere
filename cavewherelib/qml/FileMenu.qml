@@ -59,7 +59,7 @@ QC.Menu {
 
     QC.Action {
         id: openActionId
-        text: "&Open"
+        text: "&Open..."
         shortcut: "Ctrl+O"
         onTriggered: {
             const openDialog = function() {
@@ -90,7 +90,7 @@ QC.Menu {
 
     QC.MenuItem {
         id: saveAsMenuItem
-        text: "Save As"
+        text: "Save As..."
         enabled: !RootData.project.saveWillCauseDataLoss
         onTriggered:{
             fileMenuId.saveAsFileDialog.open()
@@ -114,14 +114,14 @@ QC.Menu {
     QC.MenuSeparator {}
 
     QC.MenuItem {
-        text: "Settings"
+        text: "Settings..."
         onTriggered: {
             RootData.pageSelectionModel.gotoPageByName(null, "Settings");
         }
     }
 
     QC.MenuItem {
-        text: "About"
+        text: "About..."
         onTriggered: {
             RootData.pageSelectionModel.gotoPageByName(null, "About");
         }
@@ -187,7 +187,7 @@ QC.Menu {
         }
 
         QC.MenuItem {
-            text: "Testcases"
+            text: "Testcases..."
             onTriggered: {
                 RootData.pageSelectionModel.gotoPageByName(null, "Testcases");
             }
