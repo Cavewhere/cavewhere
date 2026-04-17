@@ -239,6 +239,14 @@ public:
 
     Monad::ResultBase moveProjectTo(const QString& destinationFileUrl);
     Monad::ResultBase copyProjectTo(const QString& destinationFileUrl);
+
+    // Renames the on-disk data-root directory to match `bundleBaseName` and updates
+    // in-memory metadata. Drains in-flight jobs and temporarily disables the save
+    // pipeline, but does not change the project's filename or temporary state.
+    // Used by cwProject::saveAs before packaging a bundle so the zipped tree has
+    // a data-root directory whose name matches the bundle.
+    Monad::ResultBase prepareBundleStage(const QString& bundleBaseName);
+
     QFuture<Monad::ResultBase> saveBundledArchive(const QString& targetArchivePath);
     QFuture<Monad::ResultBase> enqueueFlushAndCommit();
 
@@ -413,6 +421,13 @@ private:
 
     enum class ProjectTransferMode { Move, Copy };
     Monad::ResultBase transferProjectTo(const QString& destinationFileUrl, ProjectTransferMode mode);
+
+    // Renames the data-root directory under `targetRootDir` from the current metadata
+    // name to `newDataRootName` and updates in-memory metadata / object states. No-op
+    // when the name is unchanged. Shared between transferProjectTo and
+    // prepareBundleStage so .cwproj and .cw save-as paths stay in sync.
+    Monad::ResultBase renameDataRootOnDisk(const QDir& targetRootDir,
+                                           const QString& newDataRootName);
 
     void disconnectTreeModel();
     void connectTreeModel();

@@ -2777,48 +2777,105 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     }
 
     const auto region = d->m_regionTreeModel->cavingRegion();
-    QString oldDataRootName = d->projectMetadata.dataRoot;
-    if (oldDataRootName.isEmpty()) {
-        oldDataRootName = defaultDataRoot(region ? region->name() : QString());
-    }
 
     // For Copy mode on already-saved projects, preserve the existing dataRoot rather than
     // deriving a new one from the destination basename. This keeps the copy internally
     // consistent without mutating the loaded project's identity.
     const bool isAlreadySavedCopy = (mode == ProjectTransferMode::Copy && !d->isTemporary);
-    const QString newDataRootName = isAlreadySavedCopy ? oldDataRootName : destination.sanitizedBaseName;
+    const QString newDataRootName = isAlreadySavedCopy ? d->projectMetadata.dataRoot
+                                                       : destination.sanitizedBaseName;
 
-    if (!oldDataRootName.isEmpty() && oldDataRootName != newDataRootName) {
-        const QString oldDataRootPath = targetRootDir.absoluteFilePath(oldDataRootName);
-        const QString newDataRootPath = targetRootDir.absoluteFilePath(newDataRootName);
-        if (QFileInfo::exists(oldDataRootPath)) {
-            if (QFileInfo::exists(newDataRootPath)) {
-                return ResultBase(QStringLiteral("Destination data root '%1' already exists.").arg(newDataRootPath));
-            }
-            if (!QDir().rename(oldDataRootPath, newDataRootPath)) {
-                return ResultBase(QStringLiteral("Couldn't rename data root to '%1'.").arg(newDataRootPath));
-            }
-        } else {
-            QDir(targetRootDir).mkpath(newDataRootName);
+    if (!isAlreadySavedCopy) {
+        auto renameResult = renameDataRootOnDisk(targetRootDir, newDataRootName);
+        if (renameResult.hasError()) {
+            return renameResult;
         }
     }
 
     setFileName(desiredFilePath);
     initializeRepositoryForCurrentFile();
     setTemporary(false);
-    if (!isAlreadySavedCopy) {
-        d->projectMetadata.dataRoot = newDataRootName;
-        emit dataRootChanged();
-        // Do NOT call region->setName() here: the sanitizedBaseName is a filesystem-safe
-        // name and is not appropriate as the user-visible display name. The caller
-        // (cwProject::saveAs) is responsible for setting the region name to the raw
-        // user-chosen basename once the transfer completes.
-    }
+    // Do NOT call region->setName() here: the sanitizedBaseName is a filesystem-safe
+    // name and is not appropriate as the user-visible display name. The caller
+    // (cwProject::saveAs) is responsible for setting the region name to the raw
+    // user-chosen basename once the transfer completes.
     d->resetObjectStates(this);
     saveProject(targetRootDir, region);
 
     setSaveEnabled(true);
     enableGuard.dismiss();
+
+    return ResultBase();
+}
+
+Monad::ResultBase cwSaveLoad::renameDataRootOnDisk(const QDir& targetRootDir,
+                                                   const QString& newDataRootName)
+{
+    const auto region = d->m_regionTreeModel->cavingRegion();
+    QString oldDataRootName = d->projectMetadata.dataRoot;
+    if (oldDataRootName.isEmpty()) {
+        oldDataRootName = defaultDataRoot(region ? region->name() : QString());
+    }
+
+    if (newDataRootName.isEmpty() || oldDataRootName == newDataRootName) {
+        return ResultBase();
+    }
+
+    const QString oldDataRootPath = targetRootDir.absoluteFilePath(oldDataRootName);
+    const QString newDataRootPath = targetRootDir.absoluteFilePath(newDataRootName);
+    if (QFileInfo::exists(oldDataRootPath)) {
+        if (QFileInfo::exists(newDataRootPath)) {
+            return ResultBase(QStringLiteral("Destination data root '%1' already exists.").arg(newDataRootPath));
+        }
+        if (!QDir().rename(oldDataRootPath, newDataRootPath)) {
+            return ResultBase(QStringLiteral("Couldn't rename data root to '%1'.").arg(newDataRootPath));
+        }
+    } else {
+        QDir(targetRootDir).mkpath(newDataRootName);
+    }
+
+    d->projectMetadata.dataRoot = newDataRootName;
+    emit dataRootChanged();
+
+    return ResultBase();
+}
+
+Monad::ResultBase cwSaveLoad::prepareBundleStage(const QString& bundleBaseName)
+{
+    const QString sanitized = sanitizeFileName(bundleBaseName);
+    Q_ASSERT(bundleBaseName.isEmpty() || !sanitized.isEmpty());
+    if (sanitized.isEmpty()) {
+        return ResultBase();
+    }
+    if (d->projectMetadata.dataRoot == sanitized) {
+        return ResultBase();
+    }
+    if (d->projectFileName.isEmpty()) {
+        return ResultBase(QStringLiteral("Project does not have an associated file."));
+    }
+
+    setSaveEnabled(false);
+    auto enableGuard = qScopeGuard([this]() { setSaveEnabled(true); });
+
+    waitForFinished();
+
+    const auto region = d->m_regionTreeModel->cavingRegion();
+
+    // The region-rename handler (connected to cavingRegion::nameChanged) early-outs
+    // for temporary projects, so setting the display name here does not trigger a
+    // second on-disk rename. renameDataRootOnDisk below does the real work.
+    if (region) {
+        region->setName(bundleBaseName);
+    }
+
+    const QDir rootDir = projectRootDir();
+    auto renameResult = renameDataRootOnDisk(rootDir, sanitized);
+    if (renameResult.hasError()) {
+        return renameResult;
+    }
+
+    d->resetObjectStates(this);
+    saveProject(rootDir, region);
 
     return ResultBase();
 }
