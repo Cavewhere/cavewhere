@@ -1159,7 +1159,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     const auto region = d->m_regionTreeModel->cavingRegion();
     QString oldDataRootName = d->projectMetadata.dataRoot;
     if (oldDataRootName.isEmpty()) {
-        oldDataRootName = defaultDataRoot(region ? region->name() : QString());
+        oldDataRootName = cwSaveLoadPrivate::defaultDataRoot(region ? region->name() : QString());
     }
 
     // For Copy mode on already-saved projects, preserve the existing dataRoot rather than
@@ -1242,7 +1242,7 @@ void cwSaveLoad::newProject()
         d->projectMetadata.projectId = QUuid::createUuid().toString(QUuid::WithoutBraces);
 
         //Save the project file
-        d->projectMetadata.dataRoot = defaultDataRoot(region->name());
+        d->projectMetadata.dataRoot = cwSaveLoadPrivate::defaultDataRoot(region->name());
         d->projectMetadata.syncEnabled = true;
         tempDir.mkpath(d->projectMetadata.dataRoot);
 
@@ -1727,7 +1727,7 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
 
     auto metadata = d->projectMetadata;
     if (metadata.dataRoot.isEmpty()) {
-        metadata.dataRoot = defaultDataRoot(region ? region->name() : QString());
+        metadata.dataRoot = cwSaveLoadPrivate::defaultDataRoot(region ? region->name() : QString());
     }
     d->projectMetadata = metadata;
 
@@ -2186,7 +2186,7 @@ void cwSaveLoad::removeTemporaryProjectDir(const QString& ownedTempDirPath)
         return;
     }
 
-    LongPathFs::removeDirRecursive(ownedTempDirPath);
+    cwSaveLoadPrivate::fsRemoveDirRecursive(ownedTempDirPath);
 }
 
 // ------------------------
@@ -2326,7 +2326,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
     };
 
     const QString projectName = QFileInfo(project->filename()).baseName();
-    d->projectMetadata.dataRoot = defaultDataRoot(projectName);
+    d->projectMetadata.dataRoot = cwSaveLoadPrivate::defaultDataRoot(projectName);
     d->projectMetadata.syncEnabled = true;
     emit dataRootChanged();
 
@@ -2742,7 +2742,7 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
         }
 
         if (loadData.metadata.dataRoot.isEmpty()) {
-            loadData.metadata.dataRoot = defaultDataRoot(loadData.region.name);
+            loadData.metadata.dataRoot = cwSaveLoadPrivate::defaultDataRoot(loadData.region.name);
         }
 
         return Result(loadData);
@@ -3320,7 +3320,7 @@ void cwSaveLoad::enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath)
                               if (!QFileInfo::exists(orphanDirAbsPath)) {
                                   return Monad::ResultBase();
                               }
-                              if (!LongPathFs::removeDirRecursive(orphanDirAbsPath)) {
+                              if (!cwSaveLoadPrivate::fsRemoveDirRecursive(orphanDirAbsPath)) {
                               #ifdef Q_OS_WIN
                                   // On Windows, files checked out by the rebase may still
                                   // be held open by the LFS filter or git index.  Log a
@@ -3856,7 +3856,7 @@ QDir cwSaveLoad::dataRootDir() const
     auto region = d->m_regionTreeModel->cavingRegion();
     QString dataRootName = d->projectMetadata.dataRoot;
     if (dataRootName.isEmpty()) {
-        dataRootName = defaultDataRoot(region ? region->name() : QString());
+        dataRootName = cwSaveLoadPrivate::defaultDataRoot(region ? region->name() : QString());
     }
     return QDir(projectRootDir().absoluteFilePath(dataRootName));
 }
@@ -4057,7 +4057,7 @@ void cwSaveLoad::setDataRoot(const QString &dataRoot)
     QString normalized = dataRoot.trimmed();
     if (normalized.isEmpty()) {
         auto region = d->m_regionTreeModel->cavingRegion();
-        normalized = defaultDataRoot(region ? region->name() : QString());
+        normalized = cwSaveLoadPrivate::defaultDataRoot(region ? region->name() : QString());
     }
 
     if (d->projectMetadata.dataRoot == normalized) {
