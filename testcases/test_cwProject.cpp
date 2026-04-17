@@ -903,6 +903,56 @@ TEST_CASE("discardChangesAndReload reloads in-memory model from committed state"
     CHECK(project->cavingRegion()->cave(0)->name().toStdString() == "Committed Cave");
 }
 
+TEST_CASE("discardChanges after v6 sqlite conversion does not produce HEAD error (issue #418)",
+          "[cwProject][discardChanges][conversion]") {
+    // Reproduces GitHub issue #418: after converting a v6 SQLite .cw bundle to
+    // GitFileType via loadOrConvert(), the git repository has no commits (HEAD
+    // does not exist). A subsequent discardChanges() calls git reset --hard HEAD
+    // which fails with "revspec 'HEAD' not found", posting a warning to the
+    // error model.
+
+    QQuickGit::Account account;
+    account.setName(QStringLiteral("V6 Discard Tester"));
+    account.setEmail(QStringLiteral("v6.discard.tester@example.com"));
+
+    const QString sqliteSource = copyToTempFolder(
+        testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+    REQUIRE(QFileInfo::exists(sqliteSource));
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->setGitAccount(&account);
+
+    // Step 1: Load (convert) the v6 SQLite bundle.
+    project->loadOrConvert(sqliteSource);
+    project->waitLoadToFinish();
+    project->waitSaveToFinish();
+
+    // The conversion should succeed without errors.
+    INFO("Error count after load: " << project->errorModel()->count());
+    for (int i = 0; i < project->errorModel()->count(); ++i) {
+        UNSCOPED_INFO("Error[" << i << "]: "
+                      << project->errorModel()->at(i).message().toStdString());
+    }
+    REQUIRE(project->errorModel()->count() == 0);
+    REQUIRE(project->fileType() == cwProject::GitFileType);
+    REQUIRE(project->cavingRegion()->caveCount() > 0);
+
+    // Step 2: Discard changes on the freshly converted project.
+    // With the bug, this triggers "Failed to discard changes: revspec 'HEAD'
+    // not found" because the conversion path never created an initial commit.
+    project->errorModel()->clear();
+    project->discardChanges();
+    project->waitForDiscardToFinish();
+
+    // Step 3: Verify no error was posted.
+    INFO("Error count after discard: " << project->errorModel()->count());
+    for (int i = 0; i < project->errorModel()->count(); ++i) {
+        UNSCOPED_INFO("Discard error[" << i << "]: "
+                      << project->errorModel()->at(i).message().toStdString());
+    }
+    CHECK(project->errorModel()->count() == 0);
+}
 
 TEST_CASE("NewProject should not clear objects added after call", "[cwProject][newProject]") {
     auto rootData = std::make_unique<cwRootData>();

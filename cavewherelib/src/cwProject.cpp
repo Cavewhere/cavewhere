@@ -1100,6 +1100,13 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
                     emit fileTypeChanged();
                     FileVersion = tempProject->FileVersion;
                     emit loaded();
+
+                    // Create the initial commit so HEAD exists. Without this,
+                    // discardChanges() fails with "revspec 'HEAD' not found"
+                    // because git reset --hard HEAD requires at least one commit.
+                    // (See issue #418.)
+                    auto commitFuture = m_saveLoad->enqueueFlushAndCommit();
+                    FutureToken.addJob(cwFuture(QFuture<void>(commitFuture), QStringLiteral("Initial commit")));
                 } else if (tempProject->errorModel()->isEmpty()) {
                     // Only add the result error when tempProject didn't already report it,
                     // to avoid adding the same error twice.
