@@ -2355,7 +2355,7 @@ TEST_CASE("Remote clone open edit save and sync workflow preserves LFS assets",
         const auto syncError = project->errorModel()->last();
         CHECK(syncError.message() == QStringLiteral("Unsupported LFS remote URL"));
     }
-    CHECK(syncJobsSeen.contains(QStringLiteral("Syncing project")));
+    CHECK(syncJobsSeen.contains(QStringLiteral("Syncing")));
 
     const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
     git_repository* localRepo = nullptr;

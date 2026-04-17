@@ -6377,11 +6377,6 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
 
     (*scheduleAttempt)(0);
 
-    if (d->futureToken.isValid()) {
-        d->futureToken.addJob(cwFuture(QFuture<void>(syncDeferred->future()),
-                                       QStringLiteral("Syncing project")));
-    }
-
     return syncDeferred->future();
 }
 
