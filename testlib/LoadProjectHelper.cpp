@@ -1,5 +1,8 @@
 #include "LoadProjectHelper.h"
 
+//Catch2 (for REQUIRE/CHECK inside test fixture helpers)
+#include <catch2/catch_test_macros.hpp>
+
 //Qt includes
 #include <QCoreApplication>
 #include <QFile>
@@ -24,6 +27,7 @@
 #include "cwLead.h"
 #include "cwLinePlotManager.h"
 #include "cwErrorListModel.h"
+#include "cwRootData.h"
 #include "GitRepository.h"
 #include "Account.h"
 #include "cwRemoteCredentialStore.h"
@@ -1109,4 +1113,98 @@ int initBareRepo(const QString& path)
         git_repository_free(repo);
     }
     return err;
+}
+
+cwSyncChurnFixture makeSyncChurnFixture(const cwSyncChurnFixtureConfig& config)
+{
+    cwSyncChurnFixture fx;
+
+    fx.rootData = std::make_unique<cwRootData>();
+    fx.project = fx.rootData->project();
+    REQUIRE(fx.project != nullptr);
+
+    fx.rootData->account()->setName(config.localAccountName);
+    fx.rootData->account()->setEmail(config.localAccountEmail);
+
+    auto* region = fx.project->cavingRegion();
+    REQUIRE(region != nullptr);
+    region->addCave();
+    auto* cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(config.caveName);
+
+    cwTrip* trip = nullptr;
+    if (config.tripName.has_value()) {
+        cave->addTrip();
+        trip = cave->trip(0);
+        REQUIRE(trip != nullptr);
+        trip->setName(*config.tripName);
+    }
+
+    fx.projectDir = std::make_unique<QTemporaryDir>();
+    REQUIRE(fx.projectDir->isValid());
+    fx.projectPath = QDir(fx.projectDir->path()).filePath(config.projectFileBaseName);
+    REQUIRE(fx.project->saveAs(fx.projectPath));
+    fx.project->waitSaveToFinish();
+
+    if (config.addPngNoteFromDataset) {
+        REQUIRE(trip != nullptr);
+        const QString pngSource = copyToTempFolder(
+            testcasesDatasetPath(QStringLiteral("test_cwTextureUploadTask/PhakeCave.PNG")));
+        REQUIRE(QFileInfo::exists(pngSource));
+        trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
+        fx.rootData->futureManagerModel()->waitForFinished();
+        fx.project->waitSaveToFinish();
+        REQUIRE(trip->notes()->rowCount() == 1);
+    }
+
+    fx.repository = fx.project->repository();
+    REQUIRE(fx.repository != nullptr);
+
+    fx.remoteRoot = std::make_unique<QTemporaryDir>();
+    REQUIRE(fx.remoteRoot->isValid());
+    fx.remoteRepoPath = QDir(fx.remoteRoot->path()).filePath(QStringLiteral("remote.git"));
+    REQUIRE(initBareRepo(fx.remoteRepoPath) == GIT_OK);
+
+    const QString addRemoteError = fx.repository->addRemote(
+        QStringLiteral("origin"), QUrl::fromLocalFile(fx.remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    fx.project->errorModel()->clear();
+    REQUIRE(fx.project->sync());
+    fx.rootData->futureManagerModel()->waitForFinished();
+    fx.project->waitSaveToFinish();
+    CHECK(fx.project->errorModel()->count() == 0);
+
+    fx.cloneDir = std::make_unique<QTemporaryDir>();
+    REQUIRE(fx.cloneDir->isValid());
+    fx.clonePath = QDir(fx.cloneDir->path()).filePath(config.cloneSubdirName);
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(fx.clonePath));
+    cloneRepository.setAccount(fx.rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(fx.remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    fx.remoteRootData = std::make_unique<cwRootData>();
+    fx.remoteRootData->account()->setName(config.remoteAccountName);
+    fx.remoteRootData->account()->setEmail(config.remoteAccountEmail);
+
+    fx.remoteProject = fx.remoteRootData->project();
+    REQUIRE(fx.remoteProject != nullptr);
+    const QString clonedProjectPath = QDir(fx.clonePath).filePath(
+        QFileInfo(fx.projectPath).fileName());
+    REQUIRE(QFileInfo::exists(clonedProjectPath));
+    fx.remoteProject->loadFile(clonedProjectPath);
+    fx.remoteProject->waitLoadToFinish();
+    fx.remoteProject->waitSaveToFinish();
+
+    fx.remoteRepository = fx.remoteProject->repository();
+    REQUIRE(fx.remoteRepository != nullptr);
+    fx.remoteRepository->setAccount(fx.remoteRootData->account());
+
+    return fx;
 }
