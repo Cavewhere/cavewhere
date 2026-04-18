@@ -12,7 +12,7 @@ NeutralIconButton {
 
     signal filesSelected(list<url> images)
 
-    iconSource: "qrc:icons/svg/addNotes.svg"
+    iconSource: "qrc:/twbs-icons/icons/file-earmark-plus.svg"
     text: "Load"
 
     onClicked: fileDialog.open()

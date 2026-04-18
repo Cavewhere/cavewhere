@@ -448,13 +448,13 @@ QQ.Rectangle {
 
         QQ.Row {
             id: mainToolBar
-            property size iconSize: Qt.size(42, 42)
+            property size iconSize: Qt.size(21, 21)
 
             spacing: 3
 
             NeutralIconButton {
                 id: rotateIconButtonId
-                iconSource: "qrc:icons/svg/rotate.svg"
+                iconSource: "qrc:/twbs-icons/icons/arrow-repeat.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Rotate"
                 adjustColor: false
@@ -470,7 +470,7 @@ QQ.Rectangle {
             NeutralIconButton {
                 id: carpetButtonId
                 objectName: "carpetButtonId"
-                iconSource: "qrc:icons/svg/carpet.svg"
+                iconSource: "qrc:/twbs-icons/icons/pencil.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Carpet"
 
@@ -511,7 +511,7 @@ QQ.Rectangle {
 
             NeutralIconButton {
                 objectName: "backButton"
-                iconSource: "qrc:icons/svg/back.svg"
+                iconSource: "qrc:/twbs-icons/icons/chevron-left.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Back"
 
@@ -521,7 +521,7 @@ QQ.Rectangle {
             NeutralIconButton {
                 id: selectObjectId
                 objectName: "selectButton"
-                iconSource: "qrc:icons/svg/select.svg"
+                iconSource: "qrc:/twbs-icons/icons/hand-index.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Select"
 
@@ -538,7 +538,7 @@ QQ.Rectangle {
                     id: addScrapId
                     objectName: "addScrapButton"
 
-                    iconSource: "qrc:icons/svg/addScrap.svg"
+                    iconSource: "qrc:/twbs-icons/icons/bounding-box.svg"
                     sourceSize: mainToolBar.iconSize
                     text: "Scrap"
                     visible: noteGallery.currentNote !== null
@@ -550,7 +550,7 @@ QQ.Rectangle {
                     id: addStationId
                     objectName: "addScrapStation"
 
-                    iconSource: "qrc:icons/svg/addStation.svg"
+                    iconSource: "qrc:/twbs-icons/icons/geo-alt.svg"
                     sourceSize: mainToolBar.iconSize
                     text: "Station"
 
@@ -559,7 +559,7 @@ QQ.Rectangle {
 
                 NeutralIconButton {
                     id: addLeadId
-                    iconSource: "qrc:icons/svg/addLead.svg"
+                    iconSource: "qrc:/twbs-icons/icons/question-circle.svg"
                     objectName: "addLeads"
                     sourceSize: mainToolBar.iconSize
                     text: "Lead"
