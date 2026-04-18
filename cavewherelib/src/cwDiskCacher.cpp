@@ -146,9 +146,7 @@ void cwDiskCacher::insert(const Key& key, const QByteArray& data)
 
     // Ensure directory exists
     QDir dir = QFileInfo(cacheFile).absoluteDir();
-    if (!dir.exists()) {
-        dir.mkpath(dir.path());
-    }
+    dir.mkpath(dir.path());
 
     CavewhereProto::DiskCacheEntry entryProto;
     entryProto.set_checksum(key.checksum.toStdString());
