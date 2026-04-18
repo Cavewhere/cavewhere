@@ -24,7 +24,7 @@ jobs:
             qt_arch: linux_gcc_64
             qt_dir: gcc_64
           - arch: arm64
-            runs_on: ubuntu-24.04-arm64
+            runs_on: ubuntu-24.04-arm
             qt_host: linux_arm64
             qt_arch: linux_gcc_arm64
             qt_dir: gcc_arm64
