@@ -685,9 +685,19 @@ bool cwProject::saveAs(QString newFilename)
 
     if (saveAsBundled) {
         const bool wasTemporary = isTemporaryProject();
+        const QString baseName = QFileInfo(newFilename).completeBaseName();
+
+        if (!baseName.isEmpty() && wasTemporary) {
+            auto renameResult = m_saveLoad->prepareBundleStage(baseName);
+            if (renameResult.hasError()) {
+                ErrorModel->append(cwError(renameResult.errorMessage(), cwError::Fatal));
+                return false;
+            }
+        }
+
         auto saveAsBundledFuture = m_saveLoad->saveBundledArchive(newFilename);
         SaveFuture = AsyncFuture::observe(saveAsBundledFuture)
-                         .context(this, [this, saveAsBundledFuture, newFilename, wasTemporary]() {
+                         .context(this, [this, saveAsBundledFuture, newFilename]() {
                              const auto saveResult = saveAsBundledFuture.result();
                              if (saveResult.hasError()) {
                                  ErrorModel->append(cwError(saveResult.errorMessage(), cwError::Fatal));
@@ -695,12 +705,6 @@ bool cwProject::saveAs(QString newFilename)
                              }
 
                              ScopedProjectStateNotifier stateGuard(this);
-                             const QString baseName = QFileInfo(newFilename).completeBaseName();
-                             if (!baseName.isEmpty() && wasTemporary) {
-                                 cavingRegion()->setName(baseName);
-                                 m_saveLoad->setDataRoot(baseName);
-                             }
-
                              LoadedFromBundledArchive = true;
                              ConvertedFromSqlite = false;
                              BundledArchivePath = newFilename;

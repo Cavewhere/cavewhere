@@ -68,7 +68,7 @@ jobs:
           host: 'linux'
           target: 'desktop'
           arch: ${{ matrix.qt_arch }}
-          modules: 'qtshadertools qtcanvaspainter'
+          modules: 'qtshadertools qtcanvaspainter qtpdf'
 
       - name: Install Conan
         run: pipx install conan
@@ -102,7 +102,7 @@ jobs:
 
       - name: Configure the Project with CMake
         run: |
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF \
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
           -DBUILD_TESTING=OFF \
           -DCMAKE_PREFIX_PATH=${{ github.workspace }}/Qt/6.11.0/${{ matrix.qt_dir }}/lib \
           -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build

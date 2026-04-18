@@ -17,6 +17,7 @@
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
+#include "cwImageProvider.h"
 #include "cwImageUtils.h"
 #include "cwUnits.h"
 #include "cwTeam.h"
@@ -3460,6 +3461,94 @@ TEST_CASE("save registers SaveFuture with futureManagerModel", "[cwSaveLoad]") {
 
         CHECK(futureModel->isEmpty());
         CHECK(allFinishedSpy.count() >= 1);
+    }
+}
+
+// Regression test for https://github.com/Cavewhere/cavewhere/issues/428
+// "Trip image data lost with bundle saves":
+//   * Create a project, add Trip 1 with a note image
+//   * Save As to a bundled .cw
+//   * Trip 1's note image must still be readable through cwImageProvider
+//     using the project's current dataRootDir().
+//   * Adding Trip 2 after saveAs must not invalidate Trip 1's image lookup.
+// Under the current implementation of cwProject::saveAs for bundles,
+// cwSaveLoad's internal projectFileName / temp dir are not re-bound to the
+// new bundle, leaving dataRootDir() pointing at a stale (eventually deleted)
+// temp dir and cwImageProvider failing with "device not open".
+TEST_CASE("Bundle saveAs preserves note image for existing trip", "[cwProject][cwSaveLoad]") {
+    qRegisterMetaType<QList<cwImage>>("QList<cwImage>");
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    rootData->settings()->jobSettings()->setAutomaticUpdate(false);
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    cave->setName(QStringLiteral("Issue428Cave"));
+    cave->addTrip();
+    auto trip1 = cave->trip(0);
+    trip1->setName(QStringLiteral("Trip 1"));
+
+    const QString sourceImage = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
+    REQUIRE(QFileInfo::exists(sourceImage));
+    const QImage originalImage(sourceImage);
+    REQUIRE(!originalImage.isNull());
+
+    trip1->notes()->addFromFiles({QUrl::fromLocalFile(sourceImage)});
+    rootData->futureManagerModel()->waitForFinished();
+
+    REQUIRE(trip1->notes()->notes().size() == 1);
+    cwNote* note = trip1->notes()->notes().first();
+    REQUIRE(note != nullptr);
+    REQUIRE(!note->image().path().isEmpty());
+
+    // Sanity: image is readable through the provider before any saveAs.
+    auto readNoteImage = [&]() {
+        cwImageProvider provider;
+        provider.setDataRootDir(project->dataRootDir());
+        const QString noteImagePath = ProjectFilenameTestHelper::absolutePath(note, note->image().path());
+        return provider.image(noteImagePath);
+    };
+
+    {
+        const QImage preSaveImage = readNoteImage();
+        REQUIRE(!preSaveImage.isNull());
+        REQUIRE(originalImage == preSaveImage);
+    }
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString bundlePath = QDir(tempDir.path()).filePath(QStringLiteral("issue428.cw"));
+
+    REQUIRE(project->saveAs(bundlePath));
+    rootData->futureManagerModel()->waitForFinished();
+
+    REQUIRE(QFileInfo::exists(bundlePath));
+
+    SECTION("image readable immediately after saveAs to bundle") {
+        const QImage afterSaveImage = readNoteImage();
+        CHECK(!afterSaveImage.isNull());
+        CHECK(originalImage == afterSaveImage);
+    }
+
+    SECTION("image readable after adding a second trip") {
+        cave->addTrip();
+        auto trip2 = cave->trip(1);
+        trip2->setName(QStringLiteral("Trip 2"));
+        rootData->futureManagerModel()->waitForFinished();
+
+        const QImage afterSecondTripImage = readNoteImage();
+        CHECK(!afterSecondTripImage.isNull());
+        CHECK(originalImage == afterSecondTripImage);
+    }
+
+    SECTION("dataRootDir stays valid after saveAs to bundle") {
+        const QDir postDataRoot = project->dataRootDir();
+        CHECK(postDataRoot.exists());
+        const QString postDataRootPath = postDataRoot.absolutePath();
+        INFO("dataRootDir after bundle saveAs: " << postDataRootPath.toStdString());
+        CHECK(!postDataRootPath.isEmpty());
     }
 }
 
