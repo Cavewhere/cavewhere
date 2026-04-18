@@ -4239,8 +4239,13 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
 
     auto syncDeferred = std::make_shared<AsyncFuture::Deferred<ResultBase>>();
     auto scheduleAttempt = std::make_shared<std::function<void(int)>>();
+    // Preserved across retries so each sync report's diff spans from the
+    // very first attempt's pre-pull HEAD to the current attempt's post-pull
+    // HEAD. Without this, retries after a pull that merged remote changes
+    // see an empty diff and skip reconciling those already-merged changes.
+    auto firstAttemptBeforeHead = std::make_shared<std::optional<QString>>();
 
-    *scheduleAttempt = [this, repo, repoPath, syncGeneration, syncDeferred, scheduleAttempt](int retryCount) {
+    *scheduleAttempt = [this, repo, repoPath, syncGeneration, syncDeferred, scheduleAttempt, firstAttemptBeforeHead](int retryCount) {
         if (syncDeferred->future().isFinished()) {
             return;
         }
@@ -4259,7 +4264,7 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
         auto syncPrepareFuture = d->enqueueOperation(
                     this,
                     cwSaveLoadPrivate::Operation::Type::SyncProject,
-                    [this, repo, repoPath, syncGeneration, saveFlushFuture, attemptState]() -> QFuture<ResultBase> {
+                    [this, repo, repoPath, syncGeneration, saveFlushFuture, attemptState, firstAttemptBeforeHead]() -> QFuture<ResultBase> {
             Q_ASSERT(saveFlushFuture.isFinished());
             const auto saveFlushResult = saveFlushFuture.result();
             if (saveFlushResult.hasError()) {
@@ -4286,7 +4291,10 @@ QFuture<Monad::ResultBase> cwSaveLoad::sync()
             if (beforeHeadResult.hasError()) {
                 return AsyncFuture::completed(ResultBase(beforeHeadResult.errorMessage()));
             }
-            const QString beforeHead = beforeHeadResult.value();
+            if (!firstAttemptBeforeHead->has_value()) {
+                *firstAttemptBeforeHead = beforeHeadResult.value();
+            }
+            const QString beforeHead = **firstAttemptBeforeHead;
 
             auto beforeSnapshotFuture = QtConcurrent::run([repoPath]() {
                 return captureLfsSnapshot(repoPath);

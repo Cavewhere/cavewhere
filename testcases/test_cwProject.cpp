@@ -7417,6 +7417,134 @@ TEST_CASE("cwProject sync handles local edit churn during reconcile apply window
     }
 }
 
+// Stress-test the "pull merged, reconcile skipped due to churn" race. The
+// race is probabilistic — a single iteration triggers the bug roughly 1-in-6
+// runs without the fix — so this test runs many back-to-back rename/churn
+// cycles to amplify the cumulative detection rate (>95% with 20 iterations).
+TEST_CASE("cwProject sync converges remote cave rename across churn-induced retries", "[cwProject][sync][churn-race]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    rootData->account()->setName(QStringLiteral("Sync Tester"));
+    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    auto cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Churn Race Cave 0"));
+    cave->addTrip();
+    auto trip = cave->trip(0);
+    REQUIRE(trip != nullptr);
+    trip->setName(QStringLiteral("Churn Race Trip"));
+
+    QTemporaryDir projectDir;
+    REQUIRE(projectDir.isValid());
+    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("churn-race.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+
+    auto* repository = project->repository();
+    REQUIRE(repository != nullptr);
+
+    QTemporaryDir remoteRoot;
+    REQUIRE(remoteRoot.isValid());
+    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
+
+    REQUIRE(repository->addRemote(QStringLiteral("origin"), QUrl::fromLocalFile(remoteRepoPath)).isEmpty());
+
+    project->errorModel()->clear();
+    REQUIRE(project->sync());
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK(project->errorModel()->count() == 0);
+
+    // Peer clone drives renames on the remote side.
+    QTemporaryDir cloneDir;
+    REQUIRE(cloneDir.isValid());
+    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("peer-clone"));
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(clonePath));
+    cloneRepository.setAccount(rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    REQUIRE(!cloneFuture.result().hasError());
+
+    auto remoteRootData = std::make_unique<cwRootData>();
+    remoteRootData->account()->setName(QStringLiteral("Peer"));
+    remoteRootData->account()->setEmail(QStringLiteral("peer@example.com"));
+
+    auto remoteProject = remoteRootData->project();
+    const QString clonedProjectPath = QDir(clonePath).filePath(QFileInfo(projectPath).fileName());
+    REQUIRE(QFileInfo::exists(clonedProjectPath));
+    remoteProject->loadFile(clonedProjectPath);
+    remoteProject->waitLoadToFinish();
+    remoteProject->waitSaveToFinish();
+
+    auto* remoteRepository = remoteProject->repository();
+    REQUIRE(remoteRepository != nullptr);
+    remoteRepository->setAccount(remoteRootData->account());
+
+    constexpr int kIterations = 20;
+    int mutationCount = 0;
+
+    for (int iter = 0; iter < kIterations; ++iter) {
+        INFO("iteration=" << iter);
+
+        const QString targetName = QStringLiteral("Churn Race Cave %1").arg(iter + 1);
+
+        auto* remoteCave = remoteProject->cavingRegion()->cave(0);
+        REQUIRE(remoteCave != nullptr);
+        remoteCave->setName(targetName);
+        remoteProject->waitSaveToFinish();
+        REQUIRE(remoteProject->sync());
+        remoteRootData->futureManagerModel()->waitForFinished();
+        remoteProject->waitSaveToFinish();
+        CHECK(remoteProject->errorModel()->count() == 0);
+
+        // Local syncs while churning its own trip date. Tight loop with zero
+        // processEvents wait maximises mutation density.
+        project->errorModel()->clear();
+        REQUIRE(project->sync());
+
+        QElapsedTimer elapsed;
+        elapsed.start();
+        while (rootData->futureManagerModel()->rowCount() > 0 && elapsed.elapsed() < 5000) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 0);
+            auto* c = project->cavingRegion()->cave(0);
+            auto* t = c ? c->trip(0) : nullptr;
+            if (t != nullptr) {
+                t->setDate(QDateTime(QDate(2024, 1, 1).addDays(mutationCount), QTime()));
+                ++mutationCount;
+            }
+        }
+
+        rootData->futureManagerModel()->waitForFinished();
+        project->waitSaveToFinish();
+
+        // Sync may finish clean or with a retry-cap warning. A quiescent
+        // follow-up sync (no churn) must always converge the in-memory cave
+        // name to the remote rename.
+        auto* localCave = project->cavingRegion()->cave(0);
+        REQUIRE(localCave != nullptr);
+        if (localCave->name() != targetName) {
+            project->errorModel()->clear();
+            REQUIRE(project->sync());
+            rootData->futureManagerModel()->waitForFinished();
+            project->waitSaveToFinish();
+            CHECK(project->errorModel()->count() == 0);
+            localCave = project->cavingRegion()->cave(0);
+            REQUIRE(localCave != nullptr);
+        }
+        CHECK(localCave->name() == targetName);
+    }
+
+    INFO("total mutations=" << mutationCount);
+}
+
 TEST_CASE("cwProject sync reconciles pulled model changes before pushing local changes", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
