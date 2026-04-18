@@ -82,5 +82,47 @@ MainWindowTest {
             compare(RootData.pageSelectionModel.currentPageAddress, note2Address)
             compare(notePage.currentNoteIndex, 1, "Second note should have currentNoteIndex 1")
         }
+
+        // Guards that toolbar prev/next navigation doesn't leave the gallery
+        // out of sync with notePage.currentNoteIndex on later re-entry from
+        // the trip page.
+        function test_navigateAfterToolbarPrevNextPreservesSelection() {
+            let note1Address = tripAddress + "/Note=PhakeCave.PNG"
+            let note2Address = tripAddress + "/Note=9_15_2025 3.glb 2"
+
+            RootData.pageSelectionModel.currentPageAddress = note1Address
+            tryVerify(() => {
+                return RootData.pageView.currentPageItem !== null
+                    && RootData.pageView.currentPageItem.objectName === "notePage"
+            })
+            let notePage = RootData.pageView.currentPageItem
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery")
+            tryVerify(() => { return noteGallery !== null && noteGallery.noteCount > 0 })
+            compare(noteGallery.currentNoteIndex, 0)
+
+            let nextButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar->nextButton")
+            mouseClick(nextButton)
+            tryVerify(() => { return noteGallery.currentNoteIndex === 1 })
+
+            let prevButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar->prevButton")
+            mouseClick(prevButton)
+            tryVerify(() => { return noteGallery.currentNoteIndex === 0 })
+
+            RootData.pageSelectionModel.currentPageAddress = tripAddress
+            tryVerify(() => {
+                return RootData.pageView.currentPageItem !== null
+                    && RootData.pageView.currentPageItem.objectName === "tripPage"
+            })
+
+            RootData.pageSelectionModel.currentPageAddress = note2Address
+            tryVerify(() => {
+                return RootData.pageView.currentPageItem !== null
+                    && RootData.pageView.currentPageItem.objectName === "notePage"
+            })
+
+            compare(notePage.currentNoteIndex, 1)
+            compare(noteGallery.currentNoteIndex, 1,
+                    "Gallery should display the second note after re-entry")
+        }
     }
 }

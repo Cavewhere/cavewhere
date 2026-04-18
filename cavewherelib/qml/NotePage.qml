@@ -22,11 +22,19 @@ StandardPage {
     }
 
     NotesGallery {
+        id: notesGallery
         anchors.fill: parent
         showGallery: false
         isNarrow: true
         notesModel: notePage.notesModel
-        currentNoteIndex: notePage.currentNoteIndex
         onImagesAdded: (images) => notePage.notesModel.addFiles(images)
+        onNoteIndexChangeRequested: (index) => notePage.currentNoteIndex = index
     }
+
+    // Imperative sync instead of a binding because ListView internals
+    // imperatively reset galleryView.currentIndex (e.g. when the model is
+    // assigned), which would permanently break a binding on the aliased
+    // property. A change handler always runs regardless of binding state.
+    onCurrentNoteIndexChanged: notesGallery.currentNoteIndex = currentNoteIndex
+    QQ.Component.onCompleted: notesGallery.currentNoteIndex = currentNoteIndex
 }

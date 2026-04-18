@@ -69,6 +69,7 @@ QQ.Rectangle {
 
     signal imagesAdded(list<url> images)
     signal backClicked();
+    signal noteIndexChangeRequested(int index)
 
     anchors.margins: 3
     color: Theme.background
@@ -94,8 +95,8 @@ QQ.Rectangle {
         galleryMode: noteGallery.mode
         hasCurrentNote: noteGallery.currentNote !== null
 
-        onNavigatePrev: noteGallery.currentNoteIndex--
-        onNavigateNext: noteGallery.currentNoteIndex++
+        onNavigatePrev: noteGallery.noteIndexChangeRequested(noteGallery.currentNoteIndex - 1)
+        onNavigateNext: noteGallery.noteIndexChangeRequested(noteGallery.currentNoteIndex + 1)
         onStateChangeRequested: (s) => noteGallery.state = s
         onDoneClicked: noteGallery.exitCarpetMode()
         onRotateRequested: {
