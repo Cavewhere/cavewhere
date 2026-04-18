@@ -587,12 +587,16 @@ void cwSaveLoadPrivate::runNextOperation(cwSaveLoad* context)
     auto op = activeOperation;
 
     if (op->generation != operationGeneration) {
-        op->deferred.complete(Monad::ResultBase(QStringLiteral("Operation canceled.")));
+        const QString cancelReason = pendingCancellationReason.isEmpty()
+                ? QStringLiteral("Operation canceled.")
+                : pendingCancellationReason;
+        op->deferred.complete(Monad::ResultBase(cancelReason));
         activeOperation.reset();
         runNextOperation(context);
         return;
     }
 
+    pendingCancellationReason.clear();
     maybeStartPendingFileJobs(context);
 
     QFuture<Monad::ResultBase> opFuture;
@@ -631,6 +635,7 @@ void cwSaveLoadPrivate::runNextOperation(cwSaveLoad* context)
 void cwSaveLoadPrivate::cancelPendingOperations(const QString& reason)
 {
     ++operationGeneration;
+    pendingCancellationReason = reason;
 
     if (activeOperation && !activeOperation->deferred.future().isFinished()) {
         activeOperation->deferred.complete(Monad::ResultBase(reason));

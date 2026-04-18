@@ -243,6 +243,7 @@ struct cwSaveLoadPrivate {
     QQueue<std::shared_ptr<Operation>> operationQueue;
     std::shared_ptr<Operation> activeOperation;
     quint64 operationGeneration = 0;
+    QString pendingCancellationReason;
     quint64 modelMutationEpoch = 0;
     quint64 localMutationEpoch = 0;
     bool suppressLocalMutationTracking = false;
