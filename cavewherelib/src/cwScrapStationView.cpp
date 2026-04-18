@@ -49,6 +49,13 @@ cwScrapStationView::~cwScrapStationView() {
 
 }
 
+void cwScrapStationView::removeSelectedItem()
+{
+    if(Scrap != nullptr && selectedItemIndex() >= 0) {
+        Scrap->removeStation(selectedItemIndex());
+    }
+}
+
 
 /**
 Sets scrap that this class renders all the stations of

@@ -14,12 +14,18 @@
 class cwScrapItem;
 // #include "cwScrapItem.h"
 
+//Qt includes
+#include <QQmlEngine>
+
 class cwScrapPointView : public cwAbstractPointManager
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ScrapPointView)
+    QML_UNCREATABLE("Abstract base — use ScrapOutlinePointView / ScrapStationView / ScrapLeadView")
 
     Q_PROPERTY(cwScrap* scrap READ scrap WRITE setScrap NOTIFY scrapChanged)
     Q_PROPERTY(cwScrapItem* scrapItem READ scrapItem WRITE setScrapItem NOTIFY scrapItemChanged)
+    Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY selectedItemIndexChanged)
 
 public:
     explicit cwScrapPointView(QQuickItem *parent = 0);
@@ -29,6 +35,10 @@ public:
 
     cwScrap* scrap() const;
     virtual void setScrap(cwScrap* scrap);
+
+    bool hasSelection() const { return selectedItemIndex() >= 0; }
+
+    Q_INVOKABLE virtual void removeSelectedItem() = 0;
 
 signals:
     void scrapChanged();

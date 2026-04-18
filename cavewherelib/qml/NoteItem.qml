@@ -20,6 +20,25 @@ ImageItem {
     property bool scrapsVisible: false
     property bool isNarrow: false
 
+    readonly property list<ScrapPointView> _pointViews: {
+        const s = scrapViewId.selectedScrapItem
+        if(s === null) return []
+        return [s.outlinePointView, s.stationView, s.leadView]
+    }
+
+    readonly property bool hasSelection: {
+        for(let i = 0; i < _pointViews.length; i++) {
+            if(_pointViews[i] !== null && _pointViews[i].hasSelection) return true
+        }
+        return false
+    }
+
+    function deleteSelected() {
+        for(let i = 0; i < _pointViews.length; i++) {
+            if(_pointViews[i] !== null) _pointViews[i].removeSelectedItem()
+        }
+    }
+
     imageRotation: note ? note.rotate : 0
     image.source: note ? RootData.cavewhereImageUrl(note.image, RootData.project.absolutePath(note)) : ""
 

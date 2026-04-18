@@ -40,6 +40,8 @@ public:
 
     cwNoteStation selectedNoteStation() const;
 
+    void removeSelectedItem() override;
+
 signals:
     void scrapChanged();
     void scrapItemChanged();

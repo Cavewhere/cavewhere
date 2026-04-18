@@ -176,6 +176,28 @@ MainWindowTest {
             tryVerify(() => { return noteGallery.mode !== "CARPET" })
         }
 
+        function test_deleteButtonHiddenWhenNothingSelected() {
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery")
+            let editButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar->editButton")
+            mouseClick(editButton)
+            wait(200)
+            tryVerify(() => { return noteGallery.mode === "CARPET" })
+
+            let selectButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar->selectButton")
+            mouseClick(selectButton)
+            tryVerify(() => { return noteGallery.state === "SELECT" })
+
+            let deleteButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar->deleteSelectedButton")
+            verify(deleteButton !== null, "deleteSelectedButton should exist")
+            verify(!deleteButton.visible, "delete button should be hidden with nothing selected")
+
+            // Delete is a SELECT-mode action — should stay hidden in ADD-* sub-modes.
+            let addStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar->addStationButton")
+            mouseClick(addStationButton)
+            tryVerify(() => { return noteGallery.state === "ADD-STATION" })
+            verify(!deleteButton.visible, "delete button should be hidden in ADD-STATION")
+        }
+
         function test_overlaysStartCollapsed() {
             let noteRes = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->noteArea->noteResolution")
             verify(noteRes.collapsed, "NoteResolution should start collapsed on NotePage")

@@ -29,6 +29,8 @@ public:
 
     void setScrap(cwScrap* scrap);
 
+    void removeSelectedItem() override;
+
 private:
     virtual void updateItemPosition(QQuickItem* item, int index);
 

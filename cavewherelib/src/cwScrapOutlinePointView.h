@@ -23,8 +23,10 @@ class cwScrapOutlinePointView : public cwScrapPointView
 
 public:
     explicit cwScrapOutlinePointView(QQuickItem *parent = 0);
-    
+
     void setScrap(cwScrap* scrap);
+
+    void removeSelectedItem() override;
 
 protected:
     virtual void updateItemPosition(QQuickItem* item, int pointIndex);

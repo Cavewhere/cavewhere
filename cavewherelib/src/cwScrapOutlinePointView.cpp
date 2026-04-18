@@ -17,6 +17,14 @@ cwScrapOutlinePointView::cwScrapOutlinePointView(QQuickItem *parent) :
 }
 
 
+void cwScrapOutlinePointView::removeSelectedItem()
+{
+    if(Scrap != nullptr && selectedItemIndex() >= 0) {
+        Scrap->removePoint(selectedItemIndex());
+    }
+}
+
+
 void cwScrapOutlinePointView::setScrap(cwScrap *scrap)
 {
     if(Scrap != scrap) {

@@ -21,6 +21,13 @@ cwScrapLeadView::~cwScrapLeadView()
 
 }
 
+void cwScrapLeadView::removeSelectedItem()
+{
+    if(Scrap != nullptr && selectedItemIndex() >= 0) {
+        Scrap->removeLead(selectedItemIndex());
+    }
+}
+
 void cwScrapLeadView::setScrap(cwScrap *scrap)
 {
     if(Scrap != scrap) {

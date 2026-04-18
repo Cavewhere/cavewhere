@@ -95,6 +95,7 @@ QQ.Rectangle {
         galleryState: noteGallery.state
         galleryMode: noteGallery.mode
         hasCurrentNote: noteGallery.currentNote !== null
+        hasSelection: noteArea.hasSelection
 
         onNavigatePrev: noteGallery.noteIndexChangeRequested(noteGallery.currentNoteIndex - 1)
         onNavigateNext: noteGallery.noteIndexChangeRequested(noteGallery.currentNoteIndex + 1)
@@ -106,6 +107,7 @@ QQ.Rectangle {
             noteRotationAnimation.start()
         }
         onNotePickerRequested: notePickerDrawer.open()
+        onDeleteSelectedRequested: noteArea.deleteSelected()
     }
 
     QC.Drawer {

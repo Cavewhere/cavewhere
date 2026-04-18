@@ -14,6 +14,7 @@ QQ.Rectangle {
     property string galleryState: ""
     property string galleryMode: ""
     property bool hasCurrentNote: false
+    property bool hasSelection: false
 
     signal navigatePrev()
     signal navigateNext()
@@ -21,6 +22,7 @@ QQ.Rectangle {
     signal doneClicked()
     signal rotateRequested()
     signal notePickerRequested()
+    signal deleteSelectedRequested()
 
     visible: shown
     height: shown ? narrowToolbarColumn.implicitHeight + 2 * Theme.flowSpacing : 0
@@ -145,6 +147,13 @@ QQ.Rectangle {
                 }
 
                 QQ.Item { Layout.fillWidth: true }
+
+                RoundButton {
+                    objectName: "deleteSelectedButton"
+                    icon.source: "qrc:/twbs-icons/icons/trash.svg"
+                    visible: narrowToolbar.galleryState === "SELECT" && narrowToolbar.hasSelection
+                    onClicked: narrowToolbar.deleteSelectedRequested()
+                }
             }
         }
     }
