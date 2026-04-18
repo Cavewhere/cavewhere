@@ -201,5 +201,29 @@ MainWindowTest {
             drawer.close()
             tryVerify(() => { return drawer.position === 0 }, 2000)
         }
+
+        // In narrow mode the main gallery panel is collapsed to width 0, but
+        // the note picker drawer reuses the same delegate and must still
+        // display note thumbnails at a visible size.
+        function test_notePickerDrawerShowsImages() {
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery")
+            let counterLabel = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar->counterLabel")
+            mouseClick(counterLabel)
+
+            let drawer = noteGallery._notePickerDrawer
+            tryVerify(() => { return drawer.position === 1.0 }, 2000, "Drawer should fully open")
+
+            let list = noteGallery._notePickerList
+            verify(list !== null, "notePickerList should exist")
+            compare(list.count, 2, "Drawer list should contain both notes")
+
+            tryVerify(() => { return list.itemAtIndex(0) !== null }, 2000, "First delegate should materialize")
+            let delegate0 = list.itemAtIndex(0)
+            verify(delegate0.width > 0, "Drawer delegate should have non-zero width")
+            verify(delegate0.height > 0, "Drawer delegate should have non-zero height")
+
+            drawer.close()
+            tryVerify(() => { return drawer.position === 0 }, 2000)
+        }
     }
 }

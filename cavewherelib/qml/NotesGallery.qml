@@ -26,6 +26,7 @@ QQ.Rectangle {
     readonly property int noteCount: galleryView.count
     readonly property bool _showNarrowToolbar: noteGallery.isNarrow && noteGallery.noteCount > 0
     property alias _notePickerDrawer: notePickerDrawer
+    property alias _notePickerList: notePickerList
 
     readonly property string mode: {
         switch(state) {
@@ -143,7 +144,7 @@ QQ.Rectangle {
         required property QQ.QtObject noteObject //This will be typecase other
         required property url iconPath
         required property int index
-        property real maxImageWidth: galleryView.width
+        property real maxImageWidth: QQ.ListView.view ? QQ.ListView.view.width : 0
         readonly property bool hasIconSource: iconPath !== undefined && iconPath.toString().length > 0
         readonly property string fallbackFileName: {
             if (!noteObject) {
