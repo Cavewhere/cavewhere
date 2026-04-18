@@ -1995,7 +1995,7 @@ QFuture<ResultBase> cwSaveLoad::copyFilesAndEmitResults(const QList<QString>& so
 
     for (const CopyCommand& command : commands) {
         cwSaveLoadPrivate::Job job;
-        job.action = cwSaveLoadPrivate::Job::Action::CopyFile;
+        job.action = cwSaveLoadPrivate::Job::Action::Copy;
         job.kind = cwSaveLoadPrivate::Job::Kind::File;
         job.payload = cwSaveLoadPrivate::Job::CopyFilePayload{command.sourceFilePath};
         job.path = command.destinationFilePath;

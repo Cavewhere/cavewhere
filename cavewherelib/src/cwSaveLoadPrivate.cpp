@@ -384,7 +384,7 @@ Monad::ResultBase cwSaveLoadPrivate::Job::execute() const {
             return Monad::ResultBase();
         });
     }
-    case Action::CopyFile: {
+    case Action::Copy: {
         auto* copyPayload = std::get_if<CopyFilePayload>(&payload);
         if (!copyPayload || copyPayload->sourcePath.isEmpty()) {
             return Monad::ResultBase(QStringLiteral("Missing source path for CopyFile job: %1").arg(path));

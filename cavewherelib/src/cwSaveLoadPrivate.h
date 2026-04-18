@@ -53,7 +53,7 @@ struct cwSaveLoadPrivate {
 
     struct Job {
         enum class Kind { File, Directory, };
-        enum class Action { Move, Remove, EnsureDir, WriteFile, CopyFile, Custom };
+        enum class Action { Move, Remove, EnsureDir, WriteFile, Copy, Custom };
 
         struct EmptyPayload { };
         struct WriteFilePayload { std::shared_ptr<const google::protobuf::Message> message; };
@@ -130,8 +130,8 @@ struct cwSaveLoadPrivate {
                 return "EnsureDir";
             case Action::WriteFile:
                 return "WriteFile";
-            case Action::CopyFile:
-                return "CopyFile";
+            case Action::Copy:
+                return "Copy";
             case Action::Custom:
                 return "Custom";
             }
