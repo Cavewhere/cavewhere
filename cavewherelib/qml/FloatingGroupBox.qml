@@ -40,16 +40,21 @@ QQ.Item {
                     : "qrc:/twbs-icons/icons/chevron-down.svg"
                 sourceSize: Qt.size(12, 12)
             }
-
-            QQ.MouseArea {
-                anchors.fill: parent
-                onClicked: floatingGroupBoxId.collapsed = !floatingGroupBoxId.collapsed
-            }
         }
 
         QC.Label {
             id: titleId
             font.bold: true
+        }
+    }
+
+    QQ.Item {
+        z: 2
+        anchors.fill: titleRow
+
+        QQ.TapHandler {
+            gesturePolicy: QQ.TapHandler.WithinBounds
+            onTapped: floatingGroupBoxId.collapsed = !floatingGroupBoxId.collapsed
         }
     }
 

@@ -37,7 +37,7 @@ ScrapPointItem {
 
         // objectName: "scrapPointItem" + scrapPointItem.pointIndex
 
-        width: 10
+        width: Math.round(10 * Theme.pointSizeFactor)
         height: width
 
         anchors.centerIn: parent
@@ -49,8 +49,8 @@ ScrapPointItem {
 
         ScrapPointMouseArea {
             anchors.fill: parent
-            anchors.bottomMargin: -3
-            anchors.rightMargin: -3
+            anchors.bottomMargin: Math.round(-3 * Theme.pointSizeFactor)
+            anchors.rightMargin: Math.round(-3 * Theme.pointSizeFactor)
 
             scrapItem: scrapPointItem.scrapItem
             parentView: scrapPointItem.parentView

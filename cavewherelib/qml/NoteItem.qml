@@ -53,7 +53,7 @@ ImageItem {
     }
 
     ImageBusyIndicator {
-        image: noteArea
+        image: noteArea.image
     }
 
     ScrapInteraction {

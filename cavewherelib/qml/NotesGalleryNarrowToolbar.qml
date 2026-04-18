@@ -39,7 +39,7 @@ QQ.Rectangle {
         anchors.right: parent.right
         anchors.leftMargin: Theme.flowSpacing
         anchors.rightMargin: Theme.flowSpacing
-        spacing: 0
+        spacing: Theme.flowSpacing
 
         RowLayout {
             Layout.fillWidth: true
@@ -74,75 +74,77 @@ QQ.Rectangle {
 
             RoundButton {
                 objectName: "editButton"
-                icon.source: "qrc:icons/svg/carpet.svg"
+                icon.source: "qrc:/twbs-icons/icons/pencil.svg"
                 checked: narrowToolbar.galleryMode === "CARPET"
-                onClicked: narrowToolbar.stateChangeRequested("SELECT")
+                onClicked: {
+                    if (narrowToolbar.galleryMode === "CARPET") {
+                        narrowToolbar.doneClicked()
+                    } else {
+                        narrowToolbar.stateChangeRequested("SELECT")
+                    }
+                }
             }
         }
 
-        RowLayout {
+        QQ.Rectangle {
             Layout.fillWidth: true
+            Layout.preferredHeight: row2Layout.implicitHeight + 2 * Theme.flowSpacing
             visible: narrowToolbar.galleryMode === "CARPET"
-            spacing: Theme.flowSpacing
+            color: Theme.floatingWidgetRaisedColor
+            radius: Theme.floatingWidgetRadius
 
-            RoundButton {
-                objectName: "selectButton"
-                icon.source: "qrc:icons/svg/select.svg"
-                checked: narrowToolbar.galleryState === "SELECT"
-                onClicked: narrowToolbar.stateChangeRequested("SELECT")
-            }
+            RowLayout {
+                id: row2Layout
+                anchors.fill: parent
+                anchors.margins: Theme.flowSpacing
+                spacing: Theme.flowSpacing
 
-            RoundButton {
-                objectName: "addScrapButton"
-                icon.source: "qrc:icons/svg/addScrap.svg"
-                visible: narrowToolbar.hasCurrentNote
-                checked: narrowToolbar.galleryState === "ADD-SCRAP"
-                onClicked: narrowToolbar.stateChangeRequested("ADD-SCRAP")
-            }
+                RoundButton {
+                    objectName: "selectButton"
+                    icon.source: "qrc:/twbs-icons/icons/hand-index.svg"
+                    checked: narrowToolbar.galleryState === "SELECT"
+                    onClicked: narrowToolbar.stateChangeRequested("SELECT")
+                }
 
-            RoundButton {
-                objectName: "addStationButton"
-                icon.source: "qrc:icons/svg/addStation.svg"
-                checked: narrowToolbar.galleryState === "ADD-STATION"
-                onClicked: narrowToolbar.stateChangeRequested("ADD-STATION")
-            }
+                RoundButton {
+                    objectName: "addScrapButton"
+                    icon.source: "qrc:/twbs-icons/icons/bounding-box.svg"
+                    visible: narrowToolbar.hasCurrentNote
+                    checked: narrowToolbar.galleryState === "ADD-SCRAP"
+                    onClicked: narrowToolbar.stateChangeRequested("ADD-SCRAP")
+                }
 
-            RoundButton {
-                objectName: "addLeadButton"
-                icon.source: "qrc:icons/svg/addLead.svg"
-                visible: narrowToolbar.hasCurrentNote
-                checked: narrowToolbar.galleryState === "ADD-LEAD"
-                onClicked: narrowToolbar.stateChangeRequested("ADD-LEAD")
-            }
+                RoundButton {
+                    objectName: "addStationButton"
+                    icon.source: "qrc:/twbs-icons/icons/geo-alt.svg"
+                    checked: narrowToolbar.galleryState === "ADD-STATION"
+                    onClicked: narrowToolbar.stateChangeRequested("ADD-STATION")
+                }
 
-            QQ.Rectangle {
-                width: 1
-                Layout.preferredHeight: 20
-                Layout.alignment: Qt.AlignVCenter
-                color: Theme.border
-                visible: narrowToolbar.hasCurrentNote
-            }
+                RoundButton {
+                    objectName: "addLeadButton"
+                    icon.source: "qrc:/twbs-icons/icons/question-circle.svg"
+                    visible: narrowToolbar.hasCurrentNote
+                    checked: narrowToolbar.galleryState === "ADD-LEAD"
+                    onClicked: narrowToolbar.stateChangeRequested("ADD-LEAD")
+                }
 
-            RoundButton {
-                objectName: "rotateButton"
-                icon.source: "qrc:icons/svg/rotate.svg"
-                visible: narrowToolbar.hasCurrentNote
-                onClicked: narrowToolbar.rotateRequested()
-            }
+                QQ.Rectangle {
+                    width: 1
+                    Layout.preferredHeight: 20
+                    Layout.alignment: Qt.AlignVCenter
+                    color: Theme.border
+                    visible: narrowToolbar.hasCurrentNote
+                }
 
-            QQ.Item { Layout.fillWidth: true }
+                RoundButton {
+                    objectName: "rotateButton"
+                    icon.source: "qrc:/twbs-icons/icons/arrow-repeat.svg"
+                    visible: narrowToolbar.hasCurrentNote
+                    onClicked: narrowToolbar.rotateRequested()
+                }
 
-            QQ.Rectangle {
-                width: 1
-                Layout.preferredHeight: 20
-                Layout.alignment: Qt.AlignVCenter
-                color: Theme.border
-            }
-
-            RoundButton {
-                objectName: "doneButton"
-                icon.source: "qrc:/twbs-icons/icons/check-lg.svg"
-                onClicked: narrowToolbar.doneClicked()
+                QQ.Item { Layout.fillWidth: true }
             }
         }
     }

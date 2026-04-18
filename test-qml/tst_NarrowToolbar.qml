@@ -105,10 +105,6 @@ MainWindowTest {
 
             tryVerify(() => { return noteGallery.mode === "CARPET" })
             verify(editButton.checked, "Edit button should show checked in carpet mode")
-
-            let doneButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar->doneButton")
-            verify(doneButton !== null, "Done button should exist in Row 2")
-            verify(doneButton.visible, "Done button should be visible in carpet mode")
         }
 
         function test_subToolsChangeState() {
@@ -139,20 +135,16 @@ MainWindowTest {
             tryVerify(() => { return noteGallery.state === "ADD-LEAD" })
         }
 
-        function test_doneExitsCarpetMode() {
+        function test_editTogglesCarpetMode() {
             let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery")
             let editButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar->editButton")
             mouseClick(editButton)
             wait(200)
             tryVerify(() => { return noteGallery.mode === "CARPET" })
 
-            let doneButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar->doneButton")
-            mouseClick(doneButton)
-
+            mouseClick(editButton)
             tryVerify(() => { return noteGallery.mode !== "CARPET" })
-            verify(!editButton.checked, "Edit button should not be checked after Done")
-
-            tryVerify(() => { return !doneButton.visible })
+            verify(!editButton.checked, "Edit button should not be checked after exiting carpet mode")
         }
 
         function test_lidarNoteHidesPhotoOnlyButtons() {
@@ -180,8 +172,7 @@ MainWindowTest {
             let addStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar->addStationButton")
             verify(addStationButton.visible, "Station button should be visible for LiDAR note")
 
-            let doneButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar->doneButton")
-            mouseClick(doneButton)
+            mouseClick(editButton)
             tryVerify(() => { return noteGallery.mode !== "CARPET" })
         }
 

@@ -91,6 +91,9 @@ QtObject {
     readonly property int iconSizeSmall: 24
     readonly property int iconSizeMedium: 32
 
+    // Touch target sizing — scale up hit points on mobile builds
+    readonly property real pointSizeFactor: RootData.mobileBuild ? 2.0 : 1.0
+
     // Spacing
     readonly property int pageMargin: 8
     readonly property int delegatePadding: 4
@@ -109,6 +112,9 @@ QtObject {
 
     // Legacy values mapped from the previous Theme.js
     readonly property color floatingWidgetColor: dark ? "#2b3038" : "#DDDDDD"
+    readonly property color floatingWidgetRaisedColor: dark
+        ? Qt.lighter(floatingWidgetColor, 1.3)
+        : Qt.darker(floatingWidgetColor, 1.12)
     readonly property real floatingWidgetRadius: 3
     readonly property color errorBackground: danger
 
