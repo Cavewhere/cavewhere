@@ -37,6 +37,7 @@ QQ.Item {
         id: gridModel
         lineColor: Theme.sketchGridLine
         labelColor: Theme.sketchGridLabel
+        labelFont: Qt.font({ family: Theme.fontFamily, pixelSize: Theme.fontSizeSmall })
         majorGridInterval: 100
         minorGridInterval: 20
         // The zoom-level heuristic's +2 offset assumes a cave-meter mapMatrix
