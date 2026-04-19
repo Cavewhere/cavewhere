@@ -13,12 +13,14 @@ find_package(Qt6
     GuiPrivate
     Widgets
     Quick
+    QuickPrivate
     Sql
     Xml
     Concurrent
     Svg
     Test
     ShaderTools
+    CanvasPainter
     REQUIRED)
 find_package(xxHash REQUIRED)
 find_package(TinyGLTF REQUIRED)
@@ -95,6 +97,8 @@ target_link_libraries(cavewherelib
     Qt6::Concurrent
     Qt6::Svg
     Qt6::GuiPrivate
+    Qt6::QuickPrivate
+    Qt6::CanvasPainter
     asyncfuture
     dewalls
     QMath3d
