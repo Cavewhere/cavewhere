@@ -11,7 +11,7 @@ This is a multi-iteration feature. This document covers iteration 1 in depth, an
 1. Sketches attach to a `cwTrip`, shown alongside image notes in the existing Notes area on `TripPage.qml`.
 2. Each sketch has a view type: **Plan**, **Running Profile**, or **Projected Profile** — matching the existing `cwScrap::ScrapType` enum. **Iteration 1 supports Plan only; Running Profile and Projected Profile are future iterations.** The enum and proto schema carry all three values from day one for forward compatibility, but iteration 1 only constructs Plan sketches and only tests Plan round-trips.
 3. Iteration 1 supports two stroke kinds: **Wall** and **Not-wall** (features). Future iterations add custom points, lines, and areas.
-4. Rendering uses a QPainter-compatible path so the same code runs on-screen, for PDF/SVG export, and for printing.
+4. Rendering uses a QPainter-compatible path so the same code runs on-screen and for PDF/SVG export.
 5. All pen data is captured raw so real-time filters (smoothing, pressure mapping) can be re-applied without losing the original input.
 6. The "Wall" stroke kind is forward-looking: eventually a closed wall loop should become a `cwScrap` outline so the sketch contributes to 3D rendering. Iteration 1 just tags the stroke so the data is there when we build the conversion in a later iteration.
 7. Therion `.th2` import is explicitly out of scope but noted as a downstream objective — data structures should not paint us into a corner.
@@ -91,7 +91,7 @@ The minimum Qt version is 6.11.x. Qt comes from the developer's local system ins
 **What Qt 6.11's Canvas Painter actually is** (verified against the `QtCanvasPainter` module docs, which landed as Technology Preview in 6.11):
 
 - `QCanvasPainter` is **Canvas2D-style** — `beginPath`, `moveTo`, `lineTo`, `fill`, `stroke`, `fillText`, `setFillStyle`, `setStrokeStyle`, `setLineWidth`. It is not a `QPainter` subclass and does not accept `QPen` / `QBrush` / `drawPath(QPainterPath)` with a pen overload.
-- There is **no software backend**. Canvas Painter is GPU-only (QRhi-backed). It cannot target `QPdfWriter`, `QPrinter`, or `QImage`. Qt's blog is explicit: *"There are no plans to implement a software backend."* This kills the "one paint method for both screen and export" idea.
+- There is **no software backend**. Canvas Painter is GPU-only (QRhi-backed). It cannot target `QPdfWriter` or `QImage`. Qt's blog is explicit: *"There are no plans to implement a software backend."* This kills the "one paint method for both screen and export" idea.
 - `QCanvasPainter::addPath(const QPainterPath&)` **is** supported — so a `QPainterPath` built once on CPU can be fed to either a `QPainter` (for export) or a `QCanvasPainter` (for screen). **`QPainterPath` is the real cross-cutting type, not `QPainter`.**
 - `QCanvasPainterItem` inherits `QQuickRhiItem` and follows an Item/Renderer split: the Item lives on the GUI thread, the Renderer (`QCanvasPainterItemRenderer`, which overrides `paint(QCanvasPainter*)`, `prePaint`, `initializeResources`, `synchronize`) lives on the render thread. `synchronize(QCanvasPainterItem*)` is the only place GUI-thread Item state and render-thread Renderer state can safely touch. This is the same pattern CaveWhere already uses for `cwRhiItemRenderer` — the integration is natural.
 - Persistent `QCanvasPath` objects can be cached and drawn via `stroke(path, pathGroup)` / `fill(path, pathGroup)`, where `pathGroup` is a stable `int` key. This is the GPU-cached tessellation fast path for finished strokes.
@@ -106,7 +106,7 @@ The minimum Qt version is 6.11.x. Qt comes from the developer's local system ins
 cwSketchPainterPathModel (QPainterPath batches, pen/brush intent)
             │
             ├──► cwSketchDrawCanvas   (QCanvasPainter*)  — on-screen
-            └──► cwSketchDrawQPainter (QPainter*)        — PDF / SVG / print export
+            └──► cwSketchDrawQPainter (QPainter*)        — PDF / SVG export
 ```
 
 Each backend is a small class implementing a narrow shared interface:
@@ -129,7 +129,7 @@ public:
 };
 ```
 
-- `cwSketchDrawQPainter`: direct forwarding. `strokePath(p)` → `m_painter->setPen(...); m_painter->drawPath(p);`. Used by `cwSketchExporter` (wrapping `QPdfWriter` / `QSvgGenerator` / `QPrinter`).
+- `cwSketchDrawQPainter`: direct forwarding. `strokePath(p)` → `m_painter->setPen(...); m_painter->drawPath(p);`. Used by `cwSketchExporter` (wrapping `QPdfWriter` / `QSvgGenerator`).
 - `cwSketchDrawCanvas`: forwards to a `QCanvasPainter*`. `strokePath(p)` → `m_cp->setStrokeStyle(color); m_cp->setLineWidth(w); m_cp->beginPath(); m_cp->addPath(p); m_cp->stroke();`. `drawText` → `m_cp->setFillStyle(color); m_cp->setFont(font); m_cp->fillText(text, pt.x(), pt.y());`. `setClipRect` → `m_cp->setClipRect(rect);`.
 
 **Drawing logic** lives in one place:
@@ -199,7 +199,7 @@ void cwSketchExporter::exportPdf(const QString &path, const cwSketch *sketch) {
 }
 ```
 
-Same for `QSvgGenerator` and `QPrinter`. Text uses `QPainter::drawText` (supporting stroke/outline if we ever want it) — no parity loss vs. Canvas Painter's `fillText`-only limitation on the screen side, because export is where outlined text actually matters (print quality).
+Same for `QSvgGenerator`. Text uses `QPainter::drawText` (supporting stroke/outline if we ever want it) — no parity loss vs. Canvas Painter's `fillText`-only limitation on the screen side, because export is where outlined text actually matters (print quality).
 
 **Why this structure**:
 
@@ -249,7 +249,7 @@ cwSketch-owned (one instance per sketch):
 
 **Where the shared `cwSurveyNetworkArtifact` lives**:
 
-Introduce `cwRegionSurveyNetwork` as a lazy, per-`cwCavingRegion` helper that owns the `cwSurveyDataArtifact` and `cwSurveyNetworkBuilderRule` and exposes the resulting `cwSurveyNetworkArtifact*`. It's created on first demand (first sketch that needs it) and destroyed with the region. Other consumers (future: print layouts, 2D map views) can plug into the same artifact later.
+Introduce `cwRegionSurveyNetwork` as a lazy, per-`cwCavingRegion` helper that owns the `cwSurveyDataArtifact` and `cwSurveyNetworkBuilderRule` and exposes the resulting `cwSurveyNetworkArtifact*`. It's created on first demand (first sketch that needs it) and destroyed with the region. Other consumers (future: 2D map views) can plug into the same artifact later.
 
 `cwRootData` gains a `cwRegionSurveyNetwork *regionSurveyNetwork() const` accessor, analogous to how it already exposes `cwLinePlotManager`. We do **not** try to unify this with `cwLinePlotManager`'s internal network — that one is owned inside `cwLinePlotTask` and its lifetime is coupled to the 3D rendering path. Coupling them is a future refactor, not iteration 1 work.
 
@@ -459,7 +459,7 @@ cwSketch (POD store)
                     │
                     └─ export:    cwSketchDrawQPainter wraps QPainter*
                                   driven by cwSketchExporter
-                                  (QPdfWriter / QSvgGenerator / QPrinter)
+                                  (QPdfWriter / QSvgGenerator)
 ```
 
 `cwSketchPainter::paint()` is a pure function that issues draw calls against an abstract `cwSketchDraw*`. `PaintContext` carries:
@@ -664,11 +664,11 @@ Instantiator {
 
 `NotePage.qml` becomes the single entry point that can display either an image note or a sketch. Internally it hosts a `NotesGallery`, and iteration 1 extends `NotesGallery`'s content-area dispatch to pick `SketchItem` when the row is a sketch (currently it picks `NoteItem` or `NoteLiDARItem`). No `SketchPage.qml` needed unless testing reveals we want one for routing clarity — leave as a decision to make during implementation.
 
-## Export and print
+## Export
 
 Iteration 1 ships on-screen rendering only, but we build the export seam immediately so it doesn't get retrofitted awkwardly later:
 
-- `cwSketchExporter` — C++ class with `exportPdf(QString path)`, `exportSvg(QString path)`, `print(QPrinter*)`.
+- `cwSketchExporter` — C++ class with `exportPdf(QString path)` and `exportSvg(QString path)`.
 - Each method opens the appropriate `QPaintDevice`, gets a `QPainter`, builds a `PaintContext` for the full-extent viewport, and calls `cwSketchPainter::paint()`.
 - A QML `Q_INVOKABLE` on `cwSketch` exposes `exportPdf(url)`, `exportSvg(url)`.
 - Iteration 1 does **not** wire these into the UI — there's no export button yet. The C++ plumbing is there, tested, and ready.
@@ -686,7 +686,7 @@ Iteration 1 ships on-screen rendering only, but we build the export seam immedia
 - `AddNoteMenuButton.qml` (unified +-menu), `SectionHeader.qml` generalized to accept an `addControl` Item, `SurveyEditor.qml` narrow-mode Notes section uses it, `NotesGallery.qml` main toolbar uses it, `NotesGalleryNarrowToolbar.qml` overflow menu gets a Sketch item.
 - `NotesGallery.qml` delegate dispatch adds `SketchItem` alongside `NoteItem` / `NoteLiDARItem`; state machine adds `"ADD-SKETCH-WALL"` / `"ADD-SKETCH-FEATURE"` extending `"CARPET"`.
 - Stroke kinds: Wall, Feature. View types: **Plan only** (enum and proto carry all three for forward compat; Running Profile / Projected Profile are not constructed or tested).
-- Export seam in C++ (`cwSketchExporter` with `exportPdf` / `exportSvg` / `print`), no UI wiring. Includes a smoke test.
+- Export seam in C++ (`cwSketchExporter` with `exportPdf` / `exportSvg`), no UI wiring. Includes a smoke test.
 - Tests (see below).
 
 #### Iteration 1 commit breakdown
@@ -698,7 +698,7 @@ Iteration 1 is large (~15 C++ classes, 4 QML files, proto + save/load, 8 tests, 
 | 1 | **Qt 6.11 bump** ✅ | `CLAUDE.md` + build README only | Toolchain validated before any code depends on it |
 | 2 | **Pen data model** ✅ | `cwPenPoint`, `cwPenStroke`, bare `cwSketch` (no pipeline yet), `cwSketchData`, `cwPenStrokeModel`, `cwMovingAveragePenStrokeProxy` | `test_cwSketch`, `test_cwPenStrokeModel` (coalescing proof) |
 | 3 | **Grid + coord infra port** ✅ | `cwInfiniteGridModel` family, `cwWorldToScreenMatrix`, `cwAbstractSketchPainterPathModel` (pulled forward from commit 4 — base of `cwFixedGridModel`) | `test_cwInfiniteGridModel`, `test_cwFixedGridModel`, `test_cwWorldToScreenMatrix` — pure port, no sketch deps |
-| 4 | **Painter-path + QPainter backend + exporter** | `cwSketchPainterPathModel`, `cwSketchPainter`, `cwSketchDraw`, `cwSketchDrawQPainter`, `cwSketchExporter` | `test_cwSketchPainterPathModel`, `test_cwSketchExporter` — all testable without Canvas |
+| 4 | **Painter-path + QPainter backend + exporter** ✅ | `cwSketchPainterPathModel`, `cwSketchPainter`, `cwSketchDraw`, `cwSketchDrawQPainter`, `cwSketchExporter` | `test_cwSketchPainterPathModel`, `test_cwSketchExporter` — all testable without Canvas |
 | 5 | **Per-sketch 2D pipeline** | `cwRegionSurveyNetwork` + `cwRootData` hookup, `cwSurvey2DGeometryRule` wired in `cwSketch`, `cwCenterlineSketchPainterModel` | `test_cwSketchPipeline` |
 | 6 | **Proto + save/load** | `cavewhere.proto` additions, `cwSaveLoadProtoBuffer` round-trip | `test_cwSketchSaveLoad` (incl. forward-compat fallback) |
 | 7 | **Trip integration** | `cwSurveyNoteSketchModel`, `cwTrip::notesSketch()`, `cwSurveyNotesConcatModel::addSketch()` | Covered via existing concat-model tests + commit 11 |
@@ -738,8 +738,7 @@ Iteration 1 is large (~15 C++ classes, 4 QML files, proto + save/load, 8 tests, 
 
 ### Iteration 5 — export UI
 
-- Wire the `cwSketchExporter` C++ plumbing to a print/export dialog.
-- Integrate with the future print layout system (currently nascent in CaveWhere — capture/layout code exists but isn't exposed yet).
+- Wire the `cwSketchExporter` C++ plumbing to an export dialog.
 
 ## File changes
 
