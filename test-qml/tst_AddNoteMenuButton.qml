@@ -16,9 +16,9 @@ Item {
     }
 
     SignalSpy {
-        id: imageSpy
+        id: filesSpy
         target: buttonId
-        signalName: "imageRequested"
+        signalName: "filesRequested"
     }
 
     SignalSpy {
@@ -27,51 +27,34 @@ Item {
         signalName: "sketchRequested"
     }
 
-    SignalSpy {
-        id: lidarSpy
-        target: buttonId
-        signalName: "lidarRequested"
-    }
-
     TestCase {
         name: "AddNoteMenuButton"
         when: windowShown
 
         function cleanup() {
-            imageSpy.clear()
+            filesSpy.clear()
             sketchSpy.clear()
-            lidarSpy.clear()
         }
 
         function test_menuItemsExist() {
-            const imageItem = findChild(buttonId, "imageMenuItem")
+            const filesItem = findChild(buttonId, "filesMenuItem")
             const sketchItem = findChild(buttonId, "sketchMenuItem")
-            const lidarItem = findChild(buttonId, "lidarMenuItem")
-            verify(imageItem !== null, "imageMenuItem should exist")
+            verify(filesItem !== null, "filesMenuItem should exist")
             verify(sketchItem !== null, "sketchMenuItem should exist")
-            verify(lidarItem !== null, "lidarMenuItem should exist")
-            compare(imageItem.text, "Image")
+            compare(filesItem.text, "Notes or 3D Model")
             compare(sketchItem.text, "Sketch")
-            compare(lidarItem.text, "LiDAR")
         }
 
         function test_sketchMenuItemEmitsSignal() {
             const sketchItem = findChild(buttonId, "sketchMenuItem")
             sketchItem.triggered()
             compare(sketchSpy.count, 1, "sketchRequested should fire once")
-            compare(imageSpy.count, 0, "imageRequested should not fire")
-            compare(lidarSpy.count, 0, "lidarRequested should not fire")
+            compare(filesSpy.count, 0, "filesRequested should not fire")
         }
 
-        function test_imageMenuItemOpensDialog() {
-            const imageItem = findChild(buttonId, "imageMenuItem")
-            imageItem.triggered()
-            compare(sketchSpy.count, 0, "sketchRequested should not fire")
-        }
-
-        function test_lidarMenuItemOpensDialog() {
-            const lidarItem = findChild(buttonId, "lidarMenuItem")
-            lidarItem.triggered()
+        function test_filesMenuItemOpensDialog() {
+            const filesItem = findChild(buttonId, "filesMenuItem")
+            filesItem.triggered()
             compare(sketchSpy.count, 0, "sketchRequested should not fire")
         }
     }

@@ -67,7 +67,7 @@ MainWindowTest {
                       "sketchArea should be visible when a sketch is current")
         }
 
-        function test_mainButtonAreaHiddenWhenViewingSketch() {
+        function test_carpetButtonHiddenWhenViewingSketch() {
             let noteGallery = ObjectFinder.findObjectByChain(mainWindow,
                 "rootId->tripPage->noteGallery")
             verify(noteGallery !== null, "noteGallery should exist")
@@ -75,6 +75,10 @@ MainWindowTest {
             let mainButtonArea = ObjectFinder.findObjectByChain(mainWindow,
                 "rootId->tripPage->noteGallery->mainButtonArea")
             verify(mainButtonArea !== null, "mainButtonArea should exist")
+
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow,
+                "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
+            verify(carpetButton !== null, "carpetButtonId should exist")
 
             const sketchIndex = tempNotesModel.rowCount()
             tempNotesModel.addSketch(Sketch.Plan)
@@ -84,20 +88,22 @@ MainWindowTest {
             noteGallery.currentNoteIndex = sketchIndex
             tryVerify(() => { return noteGallery.currentSketch !== null },
                       2000, "currentSketch resolves")
-            tryVerify(() => { return !mainButtonArea.visible },
-                      2000, "mainButtonArea hidden when viewing a sketch")
+            tryVerify(() => { return mainButtonArea.visible },
+                      2000, "mainButtonArea stays visible when viewing a sketch")
+            tryVerify(() => { return !carpetButton.visible },
+                      2000, "carpet button hidden when viewing a sketch")
 
             // Prior tests leave sketches on row 0, so scan for any non-sketch
-            // row to verify the binding restores visibility when leaving the
-            // sketch. Skip the check if the model is sketch-only.
+            // row to verify the binding restores the carpet button when
+            // leaving the sketch. Skip the check if the model is sketch-only.
             for (let i = 0; i < tempNotesModel.rowCount(); i++) {
                 if (i === sketchIndex) {
                     continue
                 }
                 noteGallery.currentNoteIndex = i
                 if (noteGallery.currentSketch === null) {
-                    tryVerify(() => { return mainButtonArea.visible },
-                              2000, "mainButtonArea re-shown after leaving sketch")
+                    tryVerify(() => { return carpetButton.visible },
+                              2000, "carpet button re-shown after leaving sketch")
                     return
                 }
             }

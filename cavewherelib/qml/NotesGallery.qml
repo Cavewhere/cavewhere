@@ -26,7 +26,6 @@ QQ.Rectangle {
     property bool isNarrow: false
     readonly property int noteCount: galleryView.count
     readonly property bool _showNarrowToolbar: noteGallery.isNarrow && noteGallery.noteCount > 0
-    readonly property bool _mainButtonAreaVisible: !noteGallery.isNarrow && noteGallery.currentSketch === null
     property alias _notePickerDrawer: notePickerDrawer
     property alias _notePickerList: notePickerList
 
@@ -56,12 +55,18 @@ QQ.Rectangle {
                     noteGallery.state = "NO_NOTES"
                 } else {
                     noteGallery.state = ""
-                    mainButtonArea.visible = noteGallery._mainButtonAreaVisible;
+                    mainButtonArea.visible = !noteGallery.isNarrow;
                 }
                 break;
             case "CARPET":
                 noteGallery.state = "SELECT"
             }
+        }
+    }
+
+    function addSketch() {
+        if(noteGallery.notesModel !== null) {
+            noteGallery.notesModel.addSketch(Sketch.Plan)
         }
     }
 
@@ -82,6 +87,7 @@ QQ.Rectangle {
     LoadNotesWidget {
         id: loadNoteWidgetId
         onFilesSelected: (images) => noteGallery.imagesAdded(images)
+        onSketchRequested: noteGallery.addSketch()
         visible: false
     }
 
@@ -442,7 +448,7 @@ QQ.Rectangle {
     ShadowRectangle {
         id: mainButtonArea
         objectName: "mainButtonArea"
-        visible: noteGallery._mainButtonAreaVisible
+        visible: !noteGallery.isNarrow
         z: 1
 
         anchors.right: parent.right
@@ -468,6 +474,7 @@ QQ.Rectangle {
                 sourceSize: mainToolBar.iconSize
                 text: "Rotate"
                 adjustColor: false
+                visible: noteGallery.currentNote !== null
 
                 onClicked: {
                     //Update the note's rotation
@@ -483,17 +490,26 @@ QQ.Rectangle {
                 iconSource: "qrc:/twbs-icons/icons/pencil.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Carpet"
+                visible: noteGallery.currentSketch === null
 
                 onClicked:  {
                     noteGallery.state = "SELECT"
                 }
             }
 
-            LoadNotesIconButton {
-                objectName: "toolbarLoadNotesButton"
+            NeutralIconButton {
+                id: addMenuButtonId
+                objectName: "toolbarAddNoteButton"
+                iconSource: "qrc:/twbs-icons/icons/plus.svg"
                 sourceSize: mainToolBar.iconSize
-                onFilesSelected: (images) =>  {
-                    noteGallery.imagesAdded(images)
+                text: "Add"
+
+                onClicked: addNoteMenuId.popup()
+
+                AddNoteMenu {
+                    id: addNoteMenuId
+                    onFilesRequested: (files) => noteGallery.imagesAdded(files)
+                    onSketchRequested: noteGallery.addSketch()
                 }
             }
         }
@@ -691,7 +707,7 @@ QQ.Rectangle {
                 galleryView.onCountChanged: () => {
                     if(count > 0) {
                         noteGallery.state = ""
-                        mainButtonArea.visible = noteGallery._mainButtonAreaVisible
+                        mainButtonArea.visible = !noteGallery.isNarrow
                         noteArea.visible = true
                         currentIndex = 0;
                     }
@@ -845,7 +861,7 @@ QQ.Rectangle {
                 to: mainButtonArea.anchors.topMargin
             }
 
-            QQ.PropertyAction { target: mainButtonArea; property: "visible"; value: noteGallery._mainButtonAreaVisible }
+            QQ.PropertyAction { target: mainButtonArea; property: "visible"; value: !noteGallery.isNarrow }
             QQ.PropertyAnimation {
                 target: carpetButtonArea
                 properties: "scale"

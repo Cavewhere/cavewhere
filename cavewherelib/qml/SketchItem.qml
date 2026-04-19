@@ -212,7 +212,7 @@ QQ.Item {
         id: toolbarId
         objectName: "sketchToolbar"
         anchors.top: parent.top
-        anchors.right: parent.right
+        anchors.left: parent.left
         anchors.margins: Theme.pageMargin
         sketch: sketchItemId.sketch
     }

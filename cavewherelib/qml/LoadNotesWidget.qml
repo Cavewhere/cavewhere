@@ -15,6 +15,7 @@ QQ.Item {
     id: widgetId
 
     signal filesSelected(var images)
+    signal sketchRequested()
 
     width: shadowContainerId.width
     height: shadowContainerId.height
@@ -48,7 +49,7 @@ QQ.Item {
 
             ColumnLayout {
                 id: columnId
-                spacing: 10
+                spacing: 14
 
                 anchors.centerIn: parent
 
@@ -62,29 +63,65 @@ QQ.Item {
 
                 RowLayout {
                     id: rowId
-                    spacing: 5
+                    spacing: 16
                     Layout.alignment: Qt.AlignHCenter
 
-                    QC.Label {
-                        text: "Scanned notes\n3d Model"
+                    ColumnLayout {
+                        spacing: 6
                         Layout.alignment: Qt.AlignVCenter
+
+                        QC.Label {
+                            text: "Import"
+                            font.bold: true
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+
+                        QC.Label {
+                            text: "Scanned notes\n3D model"
+                            horizontalAlignment: QQ.Text.AlignHCenter
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+
+                        LoadNotesIconButton {
+                            Layout.alignment: Qt.AlignHCenter
+                            id: loadNoteButtonId
+                            objectName: "emptyStateLoadNotesButton"
+                            onFilesSelected: (images) => widgetId.filesSelected(images)
+                            sourceSize: Qt.size(48, 48)
+                        }
                     }
 
-                    QQ.Image {
-                        Layout.alignment: Qt.AlignVCenter
-                        rotation: 180
-                        source: "qrc:/icons/back.png"
-                        sourceSize: Qt.size(30, 30)
+                    QQ.Rectangle {
+                        Layout.fillHeight: true
+                        Layout.preferredWidth: 1
+                        color: Theme.border
                     }
 
-                    LoadNotesIconButton {
+                    ColumnLayout {
+                        spacing: 6
                         Layout.alignment: Qt.AlignVCenter
-                        id: loadNoteButtonId
-                        objectName: "emptyStateLoadNotesButton"
-                        onFilesSelected: (images) => widgetId.filesSelected(images)
-                        sourceSize: Qt.size(48, 48)
-                    }
 
+                        QC.Label {
+                            text: "Create"
+                            font.bold: true
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+
+                        QC.Label {
+                            text: "Draw a blank\nsketch"
+                            horizontalAlignment: QQ.Text.AlignHCenter
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+
+                        NeutralIconButton {
+                            Layout.alignment: Qt.AlignHCenter
+                            objectName: "emptyStateNewSketchButton"
+                            iconSource: "qrc:/twbs-icons/icons/pencil-square.svg"
+                            sourceSize: Qt.size(48, 48)
+                            text: "Sketch"
+                            onClicked: widgetId.sketchRequested()
+                        }
+                    }
                 }
             }
         }
