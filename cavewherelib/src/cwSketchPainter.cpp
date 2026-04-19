@@ -12,7 +12,6 @@
 
 //Qt includes
 #include <QAbstractItemModel>
-#include <QFontMetricsF>
 #include <QPainterPath>
 
 namespace {
@@ -59,17 +58,10 @@ void drawText(cwSketchDraw *draw,
         if (row.text.isEmpty()) {
             continue;
         }
-        // Counter-scale around the text anchor so the font renders at its
-        // intrinsic screen size regardless of the painter's zoom transform.
-        // Label bounds in cwFixedGridModel are already pre-shrunk by the same
-        // labelScale so positions land correctly after this.
-        // row.position is the bounding rect's top-left; drawText uses the
-        // baseline, so offset down by the font ascent.
-        const QFontMetricsF metrics(row.font);
         draw->save();
         draw->translate(row.position.x(), row.position.y());
         draw->scale(labelScale, labelScale);
-        draw->drawText(QPointF(0.0, metrics.ascent()), row.text, row.font, row.fillColor);
+        draw->drawText(QPointF(0.0, 0.0), row.text, row.font, row.fillColor);
         draw->restore();
     }
 }

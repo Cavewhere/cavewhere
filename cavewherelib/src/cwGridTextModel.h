@@ -29,7 +29,7 @@ public:
     struct TextRow
     {
         QString text;
-        QPointF position;
+        QPointF position; // Baseline draw anchor in scene coordinates (Qt drawText convention).
         QFont   font;
         QColor  fillColor;
         QColor  strokeColor;

@@ -287,16 +287,8 @@ cwFixedGridModel::cwFixedGridModel(QObject *parent) :
     m_textRows.setBinding([this]() {
         const auto font = m_labelFont.value();
         const auto fillColor = m_labelColor.value();
-
-        auto makeRow = [font, fillColor](const GridLabel &gridLabel) {
-            cwGridTextModel::TextRow row;
-            row.text        = gridLabel.text;
-            row.position    = gridLabel.bounds.topLeft();
-            row.font        = font;
-            row.fillColor   = fillColor;
-            row.strokeColor = Qt::transparent;
-            return row;
-        };
+        const double labelScale = m_labelScale.value();
+        const QFontMetricsF fontMetrics(font);
 
         const auto labels = m_gridLabels.value();
 
@@ -304,7 +296,14 @@ cwFixedGridModel::cwFixedGridModel(QObject *parent) :
         rows.reserve(labels.size());
 
         for (const auto &label : labels) {
-            rows.append(makeRow(label));
+            cwGridTextModel::TextRow row;
+            row.text        = label.text;
+            row.position    = label.bounds.topLeft()
+                              - fontMetrics.boundingRect(label.text).topLeft() * labelScale;
+            row.font        = font;
+            row.fillColor   = fillColor;
+            row.strokeColor = Qt::transparent;
+            rows.append(row);
         }
 
         return rows;

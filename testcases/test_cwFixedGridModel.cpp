@@ -5,11 +5,13 @@
 //Qt includes
 #include <QColor>
 #include <QFont>
+#include <QFontMetricsF>
 #include <QRectF>
 #include <QSignalSpy>
 
 //Our includes
 #include "cwFixedGridModel.h"
+#include "cwGridTextModel.h"
 #include "cwLength.h"
 
 using Catch::Approx;
@@ -289,4 +291,27 @@ TEST_CASE("cwFixedGridModel dataChanged signals on property updates", "[cwFixedG
         const auto mroles1 = margs1.at(2).value<QVector<int>>();
         REQUIRE(mroles1.contains(cwAbstractSketchPainterPathModel::PainterPathRole));
     }
+}
+
+TEST_CASE("cwFixedGridModel text rows expose baseline anchor, not bounds top-left",
+          "[cwFixedGridModel]") {
+    cwFixedGridModel model;
+    model.setViewport(QRectF(0, 0, 50, 50));
+    QFont font("Arial", 12);
+    model.setLabelFont(font);
+
+    auto *textModel = model.textModel();
+    REQUIRE(textModel != nullptr);
+    const auto rows = textModel->rows();
+    REQUIRE(!rows.isEmpty());
+
+    const QFontMetricsF metrics(font);
+    int bottomAlignedLabels = 0;
+    for (const auto &row : rows) {
+        const double glyphBottom = row.position.y() + metrics.boundingRect(row.text).bottom();
+        if (std::abs(glyphBottom - 50.0) <= 0.5) {
+            ++bottomAlignedLabels;
+        }
+    }
+    CHECK(bottomAlignedLabels >= 3);
 }
