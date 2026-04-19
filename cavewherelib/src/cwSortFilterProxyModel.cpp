@@ -49,6 +49,8 @@ cwSortFilterProxyModel::cwSortFilterProxyModel(QObject *parent) : QSortFilterPro
 {
     connect(this, SIGNAL(rowsInserted(QModelIndex,int,int)), this, SIGNAL(countChanged()));
     connect(this, SIGNAL(rowsRemoved(QModelIndex,int,int)), this, SIGNAL(countChanged()));
+    connect(this, &QAbstractItemModel::modelReset, this, &cwSortFilterProxyModel::countChanged);
+    connect(this, &QAbstractItemModel::layoutChanged, this, &cwSortFilterProxyModel::countChanged);
 }
 
 int cwSortFilterProxyModel::count() const

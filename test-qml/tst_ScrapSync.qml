@@ -501,7 +501,7 @@ MainWindowTest {
                        && RootData.pageView.currentPageItem.objectName === "cavePage"
             }, 10000, "open cave page")
 
-            let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsButton")
+            let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsLink")
             verify(leadsButton !== null)
             mouseClick(leadsButton)
 

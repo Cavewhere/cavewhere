@@ -94,7 +94,7 @@ MainWindowTest {
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "cavePage" });
 
-            let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsButton->label")
+            let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsLink")
             mouseClick(leadsButton)
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "leadPage" });
@@ -108,6 +108,55 @@ MainWindowTest {
             compare(tableView.count, 5);
         }
 
+        function test_navigateCavePageThenLeads() {
+            // Regression: LayoutItemProxy reparenting on wide/narrow flip
+            // crashed in QQuickWindowPrivate::polishItems on native macOS.
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            RootData.futureManagerModel.waitForFinished();
+
+            let cave = RootData.region.cave(0)
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "cavePage",
+                      5000, "should land on cavePage");
+
+            let leadsLink = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsLink")
+            tryVerify(() => leadsLink !== null && leadsLink.visible,
+                      5000, "leadsLink should be present on cavePage");
+            waitForRendering(mainWindow)
+            tryVerify(() => {
+                if (RootData.pageView.currentPageItem.objectName !== "leadPage") {
+                    mouseClick(leadsLink)
+                    return false
+                }
+                return true
+            }, 5000, "should land on leadPage after clicking leadsLink");
+
+            let tableView = ObjectFinder.findObjectByChain(mainWindow, "rootId->leadPage->leadTableView")
+            tryCompare(tableView, "count", 5);
+        }
+
+        function test_leadTable() {
+            // Focused CaveLeadPage check that doesn't depend on the 3D
+            // renderer (which is not functional under offscreen platform).
+            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            RootData.futureManagerModel.waitForFinished();
+
+            let cave = RootData.region.cave(0)
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Leads"
+
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "leadPage",
+                      5000, "should land on leadPage");
+
+            let noLeadsHelpbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->leadPage->noLeadsHelpBox")
+            tryVerify(() => noLeadsHelpbox !== null && !noLeadsHelpbox.visible,
+                      5000, "no-leads helpbox should be hidden when leads exist");
+
+            let tableView = ObjectFinder.findObjectByChain(mainWindow, "rootId->leadPage->leadTableView")
+            tryCompare(tableView, "count", 5);
+        }
+
         function test_leadPositionCrash() {
             TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
 
@@ -118,29 +167,21 @@ MainWindowTest {
         }
 
         function test_noLeadsMessage() {
-            let dataButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->dataButton")
-            mouseClick(dataButton_obj1)
+            // Start from a freshly added cave (no leads) and navigate directly
+            // to its Leads page via the page selection model — avoids flaky
+            // mouse-click navigation under offscreen rendering.
+            RootData.region.addCave()
+            let cave = RootData.region.cave(RootData.region.caveCount - 1)
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Leads"
 
-            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "dataMainPage" });
-
-            let addCave = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->addButton")
-            mouseClick(addCave)
-            tryVerify(() => {
-                          if (RootData.pageView.currentPageItem.objectName !== "cavePage") {
-                              mouseClick(addCave)
-                              return false
-                          }
-                          return true
-                      }, 5000, "should navigate to cavePage after clicking addButton")
-
-            let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsButton")
-            mouseClick(leadsButton)
-
-            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "leadPage" });
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "leadPage",
+                      5000, "should land on leadPage");
 
             //Make sure the helpbox is visible
             let noLeadsHelpbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->leadPage->noLeadsHelpBox")
-            tryVerify(()=>{ return noLeadsHelpbox.visible });
+            tryVerify(() => noLeadsHelpbox !== null && noLeadsHelpbox.visible,
+                      5000, "no-leads helpbox should be visible for an empty cave");
         }
 
         function addNewLeadToScrap() {
