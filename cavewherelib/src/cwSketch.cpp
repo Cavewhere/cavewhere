@@ -6,7 +6,10 @@
 **************************************************************************/
 
 //Qt includes
+#include <QDir>
+#include <QFile>
 #include <QMetaObject>
+#include <QStandardPaths>
 #include <QUndoCommand>
 
 //Our includes
@@ -90,6 +93,7 @@ void cwSketch::setName(const QString &name)
 void cwSketch::setId(const QUuid &id)
 {
     m_id = id.isNull() ? QUuid::createUuid() : id;
+    m_cachedIconPath.clear();
 }
 
 void cwSketch::setViewType(ViewType type)
@@ -144,13 +148,41 @@ void cwSketch::syncMatrixArtifact()
     }
 }
 
-void cwSketch::setIconImagePath(const QString &path)
+void cwSketch::setIconImage(const QByteArray &image)
 {
-    if (m_iconImagePath == path) {
+    if (m_iconImage == image) {
         return;
     }
-    m_iconImagePath = path;
-    emit iconImagePathChanged();
+    m_iconImage = image;
+    m_cachedIconPath.clear();
+    emit iconImageChanged();
+}
+
+QString cwSketch::iconImagePath() const
+{
+    if (m_iconImage.isEmpty()) {
+        return QString();
+    }
+    if (!m_cachedIconPath.isEmpty() && QFile::exists(m_cachedIconPath)) {
+        return m_cachedIconPath;
+    }
+
+    const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+                             + QStringLiteral("/sketch-icons");
+    QDir().mkpath(cacheDir);
+    const QString path = cacheDir + QStringLiteral("/") + m_id.toString(QUuid::WithoutBraces) + QStringLiteral(".png");
+
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qWarning("cwSketch: failed to write icon cache %s: %s",
+                 qPrintable(path), qPrintable(file.errorString()));
+        return QString();
+    }
+    file.write(m_iconImage);
+    file.close();
+
+    m_cachedIconPath = path;
+    return m_cachedIconPath;
 }
 
 void cwSketch::setStrokes(const QVector<cwPenStroke> &strokes)
@@ -226,7 +258,7 @@ cwSketchData cwSketch::data() const
     d.id            = m_id;
     d.viewType      = static_cast<cwSketchData::ViewType>(m_viewType);
     d.mapScale      = m_mapScale->data();
-    d.iconImagePath = m_iconImagePath;
+    d.iconImage     = m_iconImage;
     d.strokes       = m_strokes;
     return d;
 }
@@ -237,7 +269,7 @@ void cwSketch::setData(const cwSketchData &d)
     setId(d.id);
     setViewType(static_cast<ViewType>(d.viewType));
     m_mapScale->setData(d.mapScale);
-    setIconImagePath(d.iconImagePath);
+    setIconImage(d.iconImage);
     applyStrokes(d.strokes);
     m_undoStack->clear();
 }

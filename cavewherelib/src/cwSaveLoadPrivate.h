@@ -7,6 +7,7 @@
 #include "cwTrip.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
+#include "cwSketch.h"
 #include "cwCavingRegion.h"
 #include "cwRegionTreeModel.h"
 #include "cwRegionIOTask.h"
@@ -435,6 +436,8 @@ struct cwSaveLoadPrivate {
                 saveProtoMessage(context, cwSaveLoad::toProtoNote(object), object);
             } else if constexpr (std::is_same_v<T, cwNoteLiDAR>) {
                 saveProtoMessage(context, cwSaveLoad::toProtoNoteLiDAR(object), object);
+            } else if constexpr (std::is_same_v<T, cwSketch>) {
+                saveProtoMessage(context, cwSaveLoad::toProtoSketch(object), object);
             } else {
                 static_assert(std::is_same_v<T, void>, "Unsupported saveObject type");
             }
@@ -456,6 +459,8 @@ struct cwSaveLoadPrivate {
         } else if constexpr (std::is_same_v<T, cwNote>) {
             newDirPath = context->dirPrivate(object).absolutePath();
         } else if constexpr (std::is_same_v<T, cwNoteLiDAR>) {
+            newDirPath = context->dirPrivate(object).absolutePath();
+        } else if constexpr (std::is_same_v<T, cwSketch>) {
             newDirPath = context->dirPrivate(object).absolutePath();
         } else {
             static_assert(std::is_same_v<T, void>, "Unsupported renameDirectoryAndFile type");

@@ -32,6 +32,8 @@ class cwCavingRegion;
 class cwProject;
 class cwNoteLiDAR;
 class cwNoteLiDARData;
+class cwSketch;
+class cwSketchData;
 struct cwSaveLoadPrivate;
 #include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
@@ -73,6 +75,7 @@ class NoteLiDAR;
 class NoteLiDARTransformation;
 class Project;
 class ProjectMetadata;
+class Sketch;
 };
 
 namespace QtProto {
@@ -230,6 +233,7 @@ public:
 
     static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
     static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
+    static std::unique_ptr<CavewhereProto::Sketch> toProtoSketch(const cwSketch* sketch);
 
     void addImages(QList<QUrl> noteImagePaths,
                    const QDir& dir,
@@ -321,9 +325,12 @@ public:
     static Monad::Result<cwCaveData> loadCave(const QString& filename);
     static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QString& filename, const QDir &projectDir);
     static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QByteArray& content, const QString& filename, const QDir &projectDir);
+    static Monad::Result<cwSketchData> loadSketch(const QString& filename, const QDir& projectDir);
+    static Monad::Result<cwSketchData> loadSketch(const QByteArray& content, const QString& filename, const QDir& projectDir);
     static cwTripData tripDataFromProtoTrip(const CavewhereProto::Trip& proto);
     static cwNoteData noteDataFromProtoNote(const CavewhereProto::Note& protoNote, const QString& filename);
     static cwNoteLiDARData noteLiDARDataFromProtoNoteLiDAR(const CavewhereProto::NoteLiDAR& protoNote, const QString& filename);
+    static cwSketchData sketchDataFromProtoSketch(const CavewhereProto::Sketch& protoSketch, const QString& filename);
 
 signals:
     void fileNameChanged();
@@ -399,6 +406,11 @@ private:
     QString absolutePathPrivate(const cwNoteLiDAR* note) const;
     QString absolutePathPrivate(const cwNoteLiDAR* note, const QString& lidarFilename) const;
     QDir dirPrivate(const cwNoteLiDAR* note) const;
+
+    QString fileNamePrivate(const cwSketch* sketch) const;
+    QString absolutePathPrivate(const cwSketch* sketch) const;
+    QString absolutePathPrivate(const cwSketch* sketch, const QString& sketchFilename) const;
+    QDir dirPrivate(const cwSketch* sketch) const;
 
     void setSaveEnabled(bool enabled);
     static void removeTemporaryProjectDir(const QString& ownedTempDirPath);
@@ -477,6 +489,8 @@ private:
 
     void save(const cwNoteLiDAR* note);
     static std::unique_ptr<CavewhereProto::NoteLiDAR> toProtoNoteLiDAR(const cwNoteLiDAR* note);
+
+    void save(const cwSketch* sketch);
 
     template<typename ResultType, typename MakeResultFunc>
     QFuture<Monad::ResultBase> copyFilesAndEmitResults(

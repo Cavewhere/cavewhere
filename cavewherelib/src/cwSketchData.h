@@ -9,6 +9,7 @@
 #define CWSKETCHDATA_H
 
 //Qt includes
+#include <QByteArray>
 #include <QString>
 #include <QUuid>
 #include <QVector>
@@ -33,7 +34,7 @@ public:
     QUuid    id;
     ViewType viewType = Plan;
     cwScale::Data mapScale;
-    QString  iconImagePath;
+    QByteArray iconImage;                 // inline PNG bytes; regenerated on demand
     QVector<cwPenStroke> strokes;
 };
 

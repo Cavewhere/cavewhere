@@ -19,6 +19,10 @@
 #include "cwNoteStation.h"
 #include "cwLead.h"
 #include "cwImage.h"
+#include "cwPenPoint.h"
+#include "cwPenStroke.h"
+#include "cwScale.h"
+#include "cwSketchData.h"
 
 //Forward declarations
 class cwTripCalibration;
@@ -44,6 +48,10 @@ class ProjectedProfileScrapViewMatrix;
 class ImageResolution;
 class Length;
 class Image;
+class PenPoint;
+class PenStroke;
+class Scale;
+class Sketch;
 }
 
 namespace QtProto {
@@ -108,6 +116,7 @@ CAVEWHERE_LIB_EXPORT void saveStringList(google::protobuf::RepeatedPtrField<std:
 
 // Complex save helpers
 CAVEWHERE_LIB_EXPORT void saveLength(CavewhereProto::Length* protoLength, cwLength* length);
+CAVEWHERE_LIB_EXPORT void saveLength(CavewhereProto::Length* protoLength, const cwLength::Data& data);
 CAVEWHERE_LIB_EXPORT void saveImageResolution(CavewhereProto::ImageResolution* protoImageRes, cwImageResolution* imageResolution);
 CAVEWHERE_LIB_EXPORT void saveImage(CavewhereProto::Image* protoImage, const cwImage& image);
 CAVEWHERE_LIB_EXPORT void saveNoteStation(CavewhereProto::NoteStation* protoNoteStation, const cwNoteStation& noteStation);
@@ -145,5 +154,16 @@ CAVEWHERE_LIB_EXPORT std::unique_ptr<cwProjectedProfileScrapViewMatrix::Data> fr
 CAVEWHERE_LIB_EXPORT cwImageResolution::Data fromProtoImageResolution(const CavewhereProto::ImageResolution& protoImageResolution);
 CAVEWHERE_LIB_EXPORT QQuaternion fromProtoQuaternion(const QtProto::QQuaternion& protoQuaternion);
 CAVEWHERE_LIB_EXPORT cwLength::Data fromProtoLength(const CavewhereProto::Length& protoLength);
+
+// Sketch
+CAVEWHERE_LIB_EXPORT void savePenPoint (CavewhereProto::PenPoint*  protoPoint,  const cwPenPoint&    point);
+CAVEWHERE_LIB_EXPORT void savePenStroke(CavewhereProto::PenStroke* protoStroke, const cwPenStroke&   stroke);
+CAVEWHERE_LIB_EXPORT void saveScale    (CavewhereProto::Scale*     protoScale,  const cwScale::Data& scale);
+CAVEWHERE_LIB_EXPORT void saveSketch   (CavewhereProto::Sketch*    protoSketch, const cwSketchData&  data);
+
+CAVEWHERE_LIB_EXPORT cwPenPoint    fromProtoPenPoint (const CavewhereProto::PenPoint&  protoPoint);
+CAVEWHERE_LIB_EXPORT cwPenStroke   fromProtoPenStroke(const CavewhereProto::PenStroke& protoStroke);
+CAVEWHERE_LIB_EXPORT cwScale::Data fromProtoScale    (const CavewhereProto::Scale&     protoScale);
+CAVEWHERE_LIB_EXPORT cwSketchData  fromProtoSketch   (const CavewhereProto::Sketch&    protoSketch);
 
 } // namespace cwProtoUtils

@@ -417,6 +417,44 @@ message NoteLiDAR {
     optional string id = 7;
 }
 
+message PenPoint {
+    optional QtProto.QPointF position = 1;
+    optional double pressure = 2;       // -1 == unknown
+    optional int64 timestampMs = 3;
+}
+
+message PenStroke {
+    enum Kind {
+        Wall = 0;
+        Feature = 1;
+    }
+    optional Kind kind = 1;
+    optional double width = 2;
+    optional string colorHex = 3;       // QColor::name(QColor::HexArgb)
+    repeated PenPoint points = 4;
+    optional string id = 5;             // UUID
+}
+
+message Scale {
+    optional Length scaleNumerator = 1;
+    optional Length scaleDenominator = 2;
+}
+
+message Sketch {
+    optional FileVersion fileVersion = 1;
+    enum ViewType {
+        Plan = 0;
+        RunningProfile = 1;
+        ProjectedProfile = 2;
+    }
+    optional string id = 2;
+    optional string name = 3;
+    optional ViewType viewType = 4;
+    optional Scale mapScale = 5;
+    optional string referenceStationName = 6; // reserved for RP/PP (future)
+    repeated PenStroke strokes = 7;
+}
+
 ///////////////////////////////////////////////////
 // Messages below this are for cacheing data, this data is stored locally
 // reduces recomputing when loading a project

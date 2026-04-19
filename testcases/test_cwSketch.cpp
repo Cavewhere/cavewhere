@@ -65,7 +65,7 @@ TEST_CASE("cwSketch setData round-trips", "[cwSketch]") {
     in.name          = "Test Sketch";
     in.id            = QUuid::createUuid();
     in.viewType      = cwSketchData::Plan;
-    in.iconImagePath = "file:///tmp/test.png";
+    in.iconImage = QByteArray("fake-png-bytes");
 
     cwPenStroke s;
     s.kind  = cwPenStroke::Wall;
@@ -80,7 +80,7 @@ TEST_CASE("cwSketch setData round-trips", "[cwSketch]") {
     CHECK(sketch.name() == in.name);
     CHECK(sketch.id() == in.id);
     CHECK(sketch.viewType() == cwSketch::Plan);
-    CHECK(sketch.iconImagePath() == in.iconImagePath);
+    CHECK(sketch.iconImage() == in.iconImage);
     REQUIRE(sketch.strokes().size() == 1);
     CHECK(sketch.strokes().first().points.size() == 2);
     CHECK(sketch.undoStack()->canUndo() == false);

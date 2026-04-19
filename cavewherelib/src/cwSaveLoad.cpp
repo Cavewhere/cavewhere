@@ -36,6 +36,8 @@
 #include "cwSvgReader.h"
 #include "cwZip.h"
 #include "cwNoteLiDAR.h"
+#include "cwSketch.h"
+#include "cwSketchData.h"
 #include "cwImageResolution.h"
 #include "cwUniqueConnectionChecker.h"
 #include "cwGlobals.h"
@@ -2366,6 +2368,22 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
     return protoNote;
 }
 
+void cwSaveLoad::save(const cwSketch *sketch)
+{
+    d->saveObject(this, sketch);
+}
+
+std::unique_ptr<CavewhereProto::Sketch> cwSaveLoad::toProtoSketch(const cwSketch *sketch)
+{
+    auto protoSketch = std::make_unique<CavewhereProto::Sketch>();
+    auto fileVersion = protoSketch->mutable_fileversion();
+    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+
+    cwProtoUtils::saveSketch(protoSketch.get(), sketch->data());
+    return protoSketch;
+}
+
 
 /**
  * This saves all the data in region into directory
@@ -2964,6 +2982,33 @@ cwNoteLiDARData cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(const CavewhereProto
     }
 
     return noteData;
+}
+
+Monad::Result<cwSketchData> cwSaveLoad::loadSketch(const QString& filename, const QDir& projectDir)
+{
+    auto sketchResult = loadMessage<CavewhereProto::Sketch>(filename);
+    return Monad::mbind(sketchResult, [filename, projectDir](const Result<CavewhereProto::Sketch>& result) -> Monad::Result<cwSketchData> {
+        Q_UNUSED(projectDir)
+        return cwSaveLoad::sketchDataFromProtoSketch(result.value(), filename);
+    });
+}
+
+Monad::Result<cwSketchData> cwSaveLoad::loadSketch(const QByteArray& content,
+                                                   const QString& filename,
+                                                   const QDir& projectDir)
+{
+    auto sketchResult = loadMessage<CavewhereProto::Sketch>(content, filename);
+    return Monad::mbind(sketchResult, [filename, projectDir](const Result<CavewhereProto::Sketch>& result) -> Monad::Result<cwSketchData> {
+        Q_UNUSED(projectDir)
+        return cwSaveLoad::sketchDataFromProtoSketch(result.value(), filename);
+    });
+}
+
+cwSketchData cwSaveLoad::sketchDataFromProtoSketch(const CavewhereProto::Sketch& protoSketch,
+                                                   const QString& filename)
+{
+    Q_UNUSED(filename)
+    return cwProtoUtils::fromProtoSketch(protoSketch);
 }
 
 
@@ -4065,6 +4110,32 @@ QDir cwSaveLoad::dirPrivate(const cwNoteLiDAR* note) const
     if (note->parentTrip()) {
         return noteDirHelper(dirPrivate(note->parentTrip()));
     }
+    return QDir();
+}
+
+QString cwSaveLoad::fileNamePrivate(const cwSketch* sketch) const
+{
+    return sanitizeFileName(sketch->name() + QStringLiteral(".cwsketch"));
+}
+
+QString cwSaveLoad::absolutePathPrivate(const cwSketch* sketch) const
+{
+    return dirPrivate(sketch).absoluteFilePath(fileNamePrivate(sketch));
+}
+
+QString cwSaveLoad::absolutePathPrivate(const cwSketch* sketch, const QString& sketchFilename) const
+{
+    if (sketch == nullptr || sketchFilename.isEmpty()) {
+        return QString();
+    }
+    return dirPrivate(sketch).absoluteFilePath(sketchFilename);
+}
+
+QDir cwSaveLoad::dirPrivate(const cwSketch* sketch) const
+{
+    // TODO: return noteDirHelper(dirPrivate(sketch->parentTrip())) once
+    // cwSketch exposes its parent trip.
+    Q_UNUSED(sketch)
     return QDir();
 }
 

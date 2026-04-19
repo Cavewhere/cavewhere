@@ -9,6 +9,7 @@
 #define CWSKETCH_H
 
 //Qt includes
+#include <QByteArray>
 #include <QObject>
 #include <QQmlEngine>
 #include <QUndoStack>
@@ -37,7 +38,7 @@ class CAVEWHERE_LIB_EXPORT cwSketch : public QObject
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(ViewType viewType READ viewType WRITE setViewType NOTIFY viewTypeChanged)
     Q_PROPERTY(cwScale* mapScale READ mapScale CONSTANT)
-    Q_PROPERTY(QString iconImagePath READ iconImagePath WRITE setIconImagePath NOTIFY iconImagePathChanged)
+    Q_PROPERTY(QByteArray iconImage READ iconImage WRITE setIconImage NOTIFY iconImageChanged)
     Q_PROPERTY(cwPenStrokeModel* strokeModel READ strokeModel CONSTANT)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
@@ -66,8 +67,12 @@ public:
 
     cwScale *mapScale() const { return m_mapScale; }
 
-    QString iconImagePath() const { return m_iconImagePath; }
-    void setIconImagePath(const QString &path);
+    QByteArray iconImage() const { return m_iconImage; }
+    void setIconImage(const QByteArray &image);
+
+    // Materialises m_iconImage to a cache file on first call and returns the
+    // path. Empty if no icon is set.
+    QString iconImagePath() const;
 
     const QVector<cwPenStroke> &strokes() const { return m_strokes; }
     void setStrokes(const QVector<cwPenStroke> &strokes);
@@ -103,7 +108,7 @@ public:
 signals:
     void nameChanged();
     void viewTypeChanged();
-    void iconImagePathChanged();
+    void iconImageChanged();
     void strokesReset();
     void surveyNetworkArtifactChanged();
 
@@ -115,7 +120,8 @@ private:
     QUuid    m_id;
     ViewType m_viewType = Plan;
     cwScale *m_mapScale = nullptr;
-    QString  m_iconImagePath;
+    QByteArray m_iconImage;
+    mutable QString m_cachedIconPath;
 
     cwPenStrokeModel *m_strokeModel = nullptr;
     QUndoStack       *m_undoStack   = nullptr;

@@ -163,6 +163,12 @@ void saveLength(CavewhereProto::Length* protoLength, cwLength* length)
     protoLength->set_unit((CavewhereProto::Units_LengthUnit)length->unit());
 }
 
+void saveLength(CavewhereProto::Length* protoLength, const cwLength::Data& data)
+{
+    protoLength->set_value(data.value);
+    protoLength->set_unit(static_cast<CavewhereProto::Units_LengthUnit>(data.unit));
+}
+
 void saveImageResolution(CavewhereProto::ImageResolution* protoImageRes, cwImageResolution* imageResolution)
 {
     protoImageRes->set_value(imageResolution->value());
@@ -684,6 +690,110 @@ cwLength::Data fromProtoLength(const CavewhereProto::Length& protoLength)
         protoLength.unit(),
                 protoLength.value()
     };
+}
+
+void savePenPoint(CavewhereProto::PenPoint* protoPoint, const cwPenPoint& point)
+{
+    savePointF(protoPoint->mutable_position(), point.position);
+    protoPoint->set_pressure(point.pressure);
+    protoPoint->set_timestampms(point.timestampMs);
+}
+
+void savePenStroke(CavewhereProto::PenStroke* protoStroke, const cwPenStroke& stroke)
+{
+    protoStroke->set_kind(static_cast<CavewhereProto::PenStroke_Kind>(stroke.kind));
+    protoStroke->set_width(stroke.width);
+    if (stroke.color.isValid()) {
+        saveString(protoStroke->mutable_colorhex(), stroke.color.name(QColor::HexArgb));
+    }
+    for (const auto& point : stroke.points) {
+        savePenPoint(protoStroke->add_points(), point);
+    }
+    if (!stroke.id.isNull()) {
+        saveQUuid(protoStroke->mutable_id(), stroke.id);
+    }
+}
+
+void saveScale(CavewhereProto::Scale* protoScale, const cwScale::Data& scale)
+{
+    saveLength(protoScale->mutable_scalenumerator(), scale.scaleNumerator);
+    saveLength(protoScale->mutable_scaledenominator(), scale.scaleDenominator);
+}
+
+void saveSketch(CavewhereProto::Sketch* protoSketch, const cwSketchData& data)
+{
+    if (!data.id.isNull()) {
+        saveQUuid(protoSketch->mutable_id(), data.id);
+    }
+    saveString(protoSketch->mutable_name(), data.name);
+    protoSketch->set_viewtype(static_cast<CavewhereProto::Sketch_ViewType>(data.viewType));
+    saveScale(protoSketch->mutable_mapscale(), data.mapScale);
+    for (const auto& stroke : data.strokes) {
+        savePenStroke(protoSketch->add_strokes(), stroke);
+    }
+}
+
+cwPenPoint fromProtoPenPoint(const CavewhereProto::PenPoint& protoPoint)
+{
+    cwPenPoint point;
+    point.position    = loadPointF(protoPoint.position());
+    point.pressure    = protoPoint.has_pressure() ? protoPoint.pressure() : -1.0;
+    point.timestampMs = protoPoint.timestampms();
+    return point;
+}
+
+cwPenStroke fromProtoPenStroke(const CavewhereProto::PenStroke& protoStroke)
+{
+    cwPenStroke stroke;
+    stroke.kind  = static_cast<cwPenStroke::Kind>(protoStroke.kind());
+    stroke.width = protoStroke.width();
+    if (protoStroke.has_colorhex()) {
+        stroke.color = QColor(QString::fromStdString(protoStroke.colorhex()));
+    }
+    stroke.points.reserve(protoStroke.points_size());
+    for (const auto& protoPoint : protoStroke.points()) {
+        stroke.points.append(fromProtoPenPoint(protoPoint));
+    }
+    if (protoStroke.has_id()) {
+        stroke.id = toUuid(protoStroke.id());
+    }
+    return stroke;
+}
+
+cwScale::Data fromProtoScale(const CavewhereProto::Scale& protoScale)
+{
+    cwScale::Data data;
+    data.scaleNumerator   = fromProtoLength(protoScale.scalenumerator());
+    data.scaleDenominator = fromProtoLength(protoScale.scaledenominator());
+    return data;
+}
+
+cwSketchData fromProtoSketch(const CavewhereProto::Sketch& protoSketch)
+{
+    cwSketchData data;
+    if (protoSketch.has_id()) {
+        data.id = toUuid(protoSketch.id());
+    }
+    data.name = QString::fromStdString(protoSketch.name());
+
+    const auto vt = protoSketch.viewtype();
+    if (vt == CavewhereProto::Sketch_ViewType_Plan) {
+        data.viewType = cwSketchData::Plan;
+    } else {
+        qWarning("cwSketch: view type %d not supported yet; falling back to Plan", int(vt));
+        data.viewType = cwSketchData::Plan;
+    }
+
+    if (protoSketch.has_mapscale()) {
+        data.mapScale = fromProtoScale(protoSketch.mapscale());
+    }
+
+    data.strokes.reserve(protoSketch.strokes_size());
+    for (const auto& protoStroke : protoSketch.strokes()) {
+        data.strokes.append(fromProtoPenStroke(protoStroke));
+    }
+
+    return data;
 }
 
 } // namespace cwProtoUtils

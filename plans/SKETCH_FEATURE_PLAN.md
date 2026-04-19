@@ -436,37 +436,36 @@ message PenStroke {
     optional string id = 5;
 }
 
+message Scale {
+    optional Length scaleNumerator = 1;
+    optional Length scaleDenominator = 2;
+}
+
 message Sketch {
+    optional FileVersion fileVersion = 1;
     enum ViewType { Plan = 0; RunningProfile = 1; ProjectedProfile = 2; }
-    optional string id = 1;
-    optional string name = 2;
-    optional ViewType viewType = 3;                // iteration 1: Plan only; RP/PP reserved
-    // Paper scale follows the same idiom as NoteTransformation in cavewhere.proto:
-    // two Length fields (numerator / denominator) rather than a wrapped Scale
-    // message. `cavewhere.proto` has no Scale message and NoteTransformation is
-    // the established precedent, so Sketch mirrors it.
-    optional Length mapScaleNumerator = 4;
-    optional Length mapScaleDenominator = 5;
+    optional string id = 2;
+    optional string name = 3;
+    optional ViewType viewType = 4;                // iteration 1: Plan only; RP/PP reserved
+    optional Scale mapScale = 5;                    // wraps cwScale::Data
     optional string referenceStationName = 6;      // reserved for Running/Projected Profile (iteration ≥ 2)
     repeated PenStroke strokes = 7;
-    optional string iconImagePath = 8;
 }
 
-message Trip {
-    // ... existing fields ...
-    repeated Sketch sketches = N;         // next free tag
-}
+// `repeated Sketch sketches = 10;` is added to `Trip` in commit 7 alongside
+// the model/live-save wiring that populates it.
 ```
 
-The `PenStroke.kind` enum is an open-ended int so adding `CustomPoint`, `CustomLine`, etc. in later iterations is a non-breaking change.
+The `PenStroke.kind` enum is an open-ended int so adding `CustomPoint`, `CustomLine`, etc. in later iterations is a non-breaking change. `cwScale` is a standalone class with `cwScale::Data`, so it gets a dedicated `Scale` proto message (unlike `NoteTransformation`, which inlines two Length fields because it has no composable scale type). Sketch icons are **not** persisted: they are derived from strokes at runtime and materialised lazily into a process-local cache via `cwSketch::iconImagePath()`.
 
 ### cwSaveLoad wiring
 
-Follow the existing pattern used for notes and LiDAR notes:
+Follow the existing pattern used for `cwNote` (`.cwnote`) and `cwNoteLiDAR` (`.cwnote3d`) — this is the current `cwSaveLoad` engine, **not** the legacy `cwSaveLoadProtoBuffer` path.
 
-1. `cwSaveLoadProtoBuffer::saveTrip()` — emit `Sketch` messages under `repeated sketches`.
-2. `cwSaveLoadProtoBuffer::loadTrip()` — reconstruct `cwSketch` instances, parented to the trip, append to `cwSurveyNoteSketchModel`.
-3. For bundled-`.cw` (zip) and `.cwproj` (git-backed directory) formats: sketches have no external asset files in iteration 1 (everything is inline), so no additional zip entries are needed. Icon images, when we start generating them, go in the same asset directory used for note icons (`assets/icons/` or equivalent — confirm the exact path when implementing).
+1. Per-sketch file type `.cwsketch` — one proto message `CavewhereProto::Sketch` per file, living in the same `trips/<trip>/notes/` directory as `.cwnote`/`.cwnote3d`. Extension disambiguates.
+2. `cwSaveLoad::toProtoSketch(const cwSketch*)` + `sketchDataFromProtoSketch(proto, filename)` + `loadSketch(filename/bytes, projectDir)` statics provide the round trip. `cwProtoUtils::saveSketch` / `fromProtoSketch` handle the per-field conversions alongside `savePenPoint`/`savePenStroke`/`saveScale`.
+3. Commit 7 adds the glue that actually writes sketches during project save / reads them during project load: `repeated Sketch sketches = 10` on `Trip`, a `cwTrip::notesSketch()` model, live-save connections via `connectSketch`, region-tree enumeration, and `loadObjectsFromNotesDir("cwsketch", ...)`. Sync reconciliation / merge applier is deferred further.
+4. Bundled `.cw` and `.cwproj` formats: sketches have no external asset files (icon bytes are inline), so no extra zip entries or sibling files are required.
 
 ## Rendering pipeline
 
@@ -724,8 +723,8 @@ Iteration 1 is large (~15 C++ classes, 4 QML files, proto + save/load, 8 tests, 
 | 3 | **Grid + coord infra port** ✅ | `cwInfiniteGridModel` family, `cwWorldToScreenMatrix`, `cwAbstractSketchPainterPathModel` (pulled forward from commit 4 — base of `cwFixedGridModel`) | `test_cwInfiniteGridModel`, `test_cwFixedGridModel`, `test_cwWorldToScreenMatrix` — pure port, no sketch deps |
 | 4 | **Painter-path + QPainter backend + exporter** ✅ | `cwSketchPainterPathModel`, `cwSketchPainter`, `cwSketchDraw`, `cwSketchDrawQPainter`, `cwSketchExporter` | `test_cwSketchPainterPathModel`, `test_cwSketchExporter` — all testable without Canvas |
 | 5 | **Per-sketch 2D pipeline** ✅ | Region-wide `cwSurveyNetworkArtifact` exposed by `cwLinePlotManager` (fed by extended `cwSurvex3DFileReader::readNetworkAndLookup()` via `cwLinePlotTask`), `cwSurvey2DGeometryRule` wired in `cwSketch`, `cwCenterlineSketchPainterModel`. Dropped `cwSurveyNetworkBuilderRule` (was test-only) | `test_cwSketchPipeline`, `test_cwCenterlineSketchPainterModel`, extended `test_cwSurvex3DFileReader` |
-| 6 | **Proto + save/load** | `cavewhere.proto` additions, `cwSaveLoadProtoBuffer` round-trip | `test_cwSketchSaveLoad` (incl. forward-compat fallback) |
-| 7 | **Trip integration** | `cwSurveyNoteSketchModel`, `cwTrip::notesSketch()`, `cwSurveyNotesConcatModel::addSketch()` | Covered via existing concat-model tests + commit 11 |
+| 6 | **Proto + save/load** ✅ | `cavewhere.proto` additions (`PenPoint`, `PenStroke`, `Scale`, `Sketch`; no `Trip.sketches` yet); `cwProtoUtils` save/fromProto helpers; `cwSaveLoad` `.cwsketch` round-trip statics (`toProtoSketch`, `sketchDataFromProtoSketch`, `loadSketch`, path helpers, `save(cwSketch*)` entry point); `cwSketchData::iconImagePath` → `iconImage` (QByteArray). Sync reconciliation deferred | `test_cwSketchSaveLoad` (in-memory, file round trip, ViewType forward-compat fallback) |
+| 7 | **Trip integration** | `cwSurveyNoteSketchModel`, `cwTrip::notesSketch()`, `cwSurveyNotesConcatModel::addSketch()`, plus everything commit 6 deferred: `repeated Sketch sketches = 10` on `Trip`, `cwSaveLoad::connectSketch(cwSketch*)` live-save hookup, region-tree enumeration of sketches, `loadObjectsFromNotesDir("cwsketch", ...)`, `cwSaveLoadPrivate` path seeding for loaded sketches, `TripLoadData` sketch container field, `cwSketch::parentTrip()` accessor so `cwSaveLoad::dirPrivate(const cwSketch*)` can resolve the real notes directory (stubs `QDir()` today) | Covered via existing concat-model tests + commit 11 |
 | 8 | **Canvas backend + renderer** | `cwSketchDrawCanvas`, `cwSketchCanvas`, `cwSketchCanvasRenderer`, `cwExclusivePointHandler` port | Manual smoke + `tst_SketchItem` in commit 9 |
 | 9 | **SketchItem + toolbar QML** | `SketchItem.qml`, `SketchToolbar.qml` | `tst_SketchItem` (synthetic stylus input) |
 | 10 | **Add-note menu unification** | `AddNoteMenuButton.qml`, `SectionHeader` generalization, `SurveyEditor.qml` narrow-mode update | `tst_AddNoteMenuButton` |
