@@ -220,12 +220,11 @@ QQ.Item {
                     SectionHeader {
                         Layout.alignment: Qt.AlignHCenter
                         text: "Notes"
-                        showAddButton: true
-                        onAddClicked: addNotesFileDialog.open()
-
-                        NotesFileDialog {
-                            id: addNotesFileDialog
-                            onFilesSelected: (images) => clipArea.notesModel.addFiles(images)
+                        addControl: QQ.Component {
+                            AddNoteMenuButton {
+                                objectName: "addNoteMenuButton"
+                                notesModel: clipArea.notesModel
+                            }
                         }
                     }
 
