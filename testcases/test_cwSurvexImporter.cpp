@@ -7,6 +7,7 @@
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Cavewhere includes
 #include "cwSurvexImporter.h"
@@ -64,7 +65,7 @@ TEST_CASE("Import LRUD data correctly", "[SurvexImport]") {
     testRows << Row(2, 2, "26e", "0", "2", "1", "1");
 
     cwSurvexImporter* importer = new cwSurvexImporter();
-    importer->setInputFiles(QStringList() << "://datasets/survex/issue118.svx");
+    importer->setInputFiles(QStringList() << testcasesDatasetPath("survex/issue118.svx"));
     importer->start();
     importer->waitToFinish();
 
@@ -101,7 +102,7 @@ TEST_CASE("Import LRUD data correctly", "[SurvexImport]") {
 
 TEST_CASE("Import chunk calibration applies to trip calibration", "[SurvexImport]") {
     cwSurvexImporter* importer = new cwSurvexImporter();
-    importer->setInputFiles(QStringList() << "://datasets/survex/dakeng.svx");
+    importer->setInputFiles(QStringList() << testcasesDatasetPath("survex/dakeng.svx"));
     importer->start();
     importer->waitToFinish();
 

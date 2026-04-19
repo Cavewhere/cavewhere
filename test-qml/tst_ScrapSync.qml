@@ -1560,6 +1560,12 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 return currentScrapView.count === existingScrapCount + 1
             }, 5000, "wait for new scrap row")
+            // wait() is needed: NoteTransformEditor becomes visible on first
+            // scrap creation, and Qt's event delivery mis-routes the next
+            // mouseClick to the carpet-toolbar Select button without a frame
+            // tick to settle. Polling for editor/checkbox geometry doesn't fix
+            // it; only an event-loop pause does.
+            wait(100)
             mouseClick(autoCalculateScrapCheckBox())
 
             for (let i = 1; i < points.length; ++i) {
@@ -2369,6 +2375,92 @@ MainWindowTest {
             }, 10000, "verify resynced cave lead page row")
 
             restoreTripPage(context.tripPageAddress)
+        }
+
+        function test_addImageNoteWithScrapSyncAndCheckout() {
+            let context = loadFixtureAndOpenFirstTrip()
+
+            let notesModel = function() {
+                let model = currentTrip().notes
+                verify(model !== null)
+                return model
+            }
+
+            let caveName = String(currentTrip().parentCave.name)
+            let tripName = String(currentTrip().name)
+            verify(caveName.length > 0)
+            verify(tripName.length > 0)
+
+            let baselineNoteCount = notesModel().rowCount()
+
+            let commitA = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitA !== "")
+
+            // --- Add a new image note ---
+            let copiedImageUrl = TestHelper.copyToTempDirUrl(
+                TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"))
+            noteGallery().imagesAdded([copiedImageUrl])
+
+            tryVerifyWithDiagnostics(() => {
+                return notesModel().rowCount() === baselineNoteCount + 1
+            }, 5000, "verify image note added to model")
+
+            let newNoteIndex = notesModel().rowCount() - 1
+
+            // --- Select the new note and add a scrap ---
+            selectNoteIndex(newNoteIndex, "select newly added note")
+            compare(TestHelper.noteScrapCount(noteGallery().currentNote), 0)
+
+            createNewOpenScrapWithThreePoints(0)
+
+            tryVerifyWithDiagnostics(() => {
+                return TestHelper.noteScrapCount(noteGallery().currentNote) === 1
+            }, 5000, "verify scrap added to new note")
+
+            let expectedScrapState = TestHelper.scrapOutlineState(noteGallery().currentNote, 0)
+            verify(expectedScrapState !== null)
+            verify(expectedScrapState.pointCount === 3)
+
+            // --- First sync ---
+            verify(RootData.project.sync())
+            SyncTestHelper.waitForProjectSyncToFinish(testCaseId, RootData)
+
+            let commitB = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitB !== "")
+            verify(commitB !== commitA)
+
+            // --- Checkout to before the note was added ---
+            let checkoutError = TestHelper.checkoutProjectRef(RootData.project, commitA, true)
+            compare(checkoutError, "")
+
+            SyncTestHelper.openTripPage(testCaseId, RootData, caveName, tripName)
+            compare(notesModel().rowCount(), baselineNoteCount)
+
+            // --- Second sync (fast-forward to synced state) ---
+            verify(RootData.project.sync())
+            SyncTestHelper.waitForProjectSyncToFinish(testCaseId, RootData)
+
+            let commitC = TestHelper.projectHeadCommitOid(RootData.project)
+            verify(commitC !== "")
+            verify(commitC === commitB)
+
+            // --- Verify note AND scrap reappear (bug #413) ---
+            SyncTestHelper.openTripPage(testCaseId, RootData, caveName, tripName)
+
+            tryVerifyWithDiagnostics(() => {
+                return notesModel().rowCount() === baselineNoteCount + 1
+            }, 5000, "verify note count restored after second sync")
+
+            selectNoteIndex(notesModel().rowCount() - 1, "select restored note after second sync")
+
+            tryVerifyWithDiagnostics(() => {
+                return noteGallery().currentNote !== null
+                       && TestHelper.noteScrapCount(noteGallery().currentNote) === 1
+            }, 5000, "verify scrap count on restored note after second sync")
+
+            let restoredScrapState = TestHelper.scrapOutlineState(noteGallery().currentNote, 0)
+            verify(restoredScrapState !== null)
+            compare(restoredScrapState.pointCount, 3)
         }
     }
 }

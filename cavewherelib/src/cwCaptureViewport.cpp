@@ -725,6 +725,19 @@ void cwCaptureViewport::updateItemsPosition()
 
 }
 
+void cwCaptureViewport::setScaleBarVisible(bool visible)
+{
+    if(m_scaleBarVisible == visible) {
+        return;
+    }
+
+    m_scaleBarVisible = visible;
+
+    m_scaleBar->setVisible(visible);
+
+    emit scaleBarVisibleChanged();
+}
+
 void cwCaptureViewport::updateScaleBarScale()
 {
     double ratio = 0.0;
@@ -734,6 +747,9 @@ void cwCaptureViewport::updateScaleBarScale()
 
     if(!qFuzzyCompare(ratio + 1.0, m_scaleBar->scaleRatio() + 1.0)) {
         m_scaleBar->setScaleRatio(ratio);
+        if(!m_scaleBarVisible) {
+            m_scaleBar->setVisible(false);
+        }
     }
 }
 
@@ -745,6 +761,9 @@ void cwCaptureViewport::updateScaleBarGeometry()
     }
 
     m_scaleBar->setBorderRect(borderRect);
+    if(!m_scaleBarVisible) {
+        m_scaleBar->setVisible(false);
+    }
 }
 
 /**

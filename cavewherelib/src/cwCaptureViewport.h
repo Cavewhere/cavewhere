@@ -43,6 +43,7 @@ class cwCaptureViewport : public cwCaptureItem
     Q_PROPERTY(QGraphicsItem* fullResolutionItem READ fullResolutionItem NOTIFY fullResolutionItemChanged)
     Q_PROPERTY(double cameraAzimuth READ cameraAzimuth WRITE setCameraAzimuth NOTIFY cameraAzimuthChanged)
     Q_PROPERTY(double cameraPitch READ cameraPitch WRITE setCameraPitch NOTIFY cameraPitchChanged)
+    Q_PROPERTY(bool scaleBarVisible READ scaleBarVisible WRITE setScaleBarVisible NOTIFY scaleBarVisibleChanged)
 
 public:
 
@@ -87,6 +88,9 @@ public:
 
     QPointF mapToCapture(const cwCaptureViewport *viewport) const;
 
+    bool scaleBarVisible() const;
+    void setScaleBarVisible(bool visible);
+
 signals:
     void resolutionChanged();
     void viewportChanged();
@@ -98,6 +102,7 @@ signals:
     void cameraPitchChanged();
     void cameraAzimuthChanged();
     void positionAfterScaleChanged();
+    void scaleBarVisibleChanged();
 
     void sceneManagerChanged();
 
@@ -127,6 +132,7 @@ private:
     QGraphicsItemGroup* PreviewItem; //This is the preview item
     QGraphicsItemGroup* Item; //This is the full resultion item
     cwScaleBarItem* m_scaleBar;
+    bool m_scaleBarVisible = true;
 
     cwProjection tileProjection(QRectF tileViewport,
                                 QSizeF imageSize,
@@ -212,6 +218,10 @@ inline QGraphicsItem* cwCaptureViewport::fullResolutionItem() const {
 
 inline cwScaleBarItem* cwCaptureViewport::scaleBarItem() const {
     return m_scaleBar;
+}
+
+inline bool cwCaptureViewport::scaleBarVisible() const {
+    return m_scaleBarVisible;
 }
 
 /**

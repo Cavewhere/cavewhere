@@ -89,6 +89,14 @@ function openTripPage(testCase, rootData, caveName, tripName) {
     }, 10000, "openTripPage")
 }
 
+function openCavePage(testCase, rootData, caveName) {
+    rootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + caveName
+    tryVerifyWithDiagnostics(testCase, () => {
+        return rootData.pageView.currentPageItem !== null
+               && rootData.pageView.currentPageItem.objectName === "cavePage"
+    }, 10000, "openCavePage")
+}
+
 function verifyStillOnTripPage(testCase, rootData, tripPageAddress) {
     tryVerifyWithDiagnostics(testCase, () => {
         if (rootData.pageSelectionModel.currentPageAddress !== tripPageAddress) {
@@ -135,6 +143,8 @@ function loadFixtureAndOpenFirstTrip(testCase, rootData, testHelper) {
     openTripPage(testCase, rootData, caveName, tripName)
 
     return {
+        caveName: caveName,
+        tripName: tripName,
         tripPageAddress: "Source/Data/Cave=" + caveName + "/Trip=" + tripName
     }
 }

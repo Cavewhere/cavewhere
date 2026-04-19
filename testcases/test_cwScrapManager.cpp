@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 #include <catch2/catch_approx.hpp>
 
 //Our includes
@@ -22,9 +23,13 @@
 #include "cwKeywordItem.h"
 #include "cwRenderTexturedItemVisibility.h"
 #include "cwRunningProfileScrapViewMatrix.h"
+#include "cwImageUtils.h"
+#include "cwCavingRegion.h"
+#include "cwScrap.h"
 
 //Qt includes
 #include <QFile>
+#include <QImageReader>
 #include <QElapsedTimer>
 #include <QThread>
 #include <QThreadPool>
@@ -51,7 +56,7 @@ TEST_CASE("cwScrapManager should make the file size grow when re-calculaing scra
     {
         auto rootData = std::make_unique<cwRootData>();
         auto project = rootData->project();
-        fileToProject(project, "://datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw");
+        fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
 
         file.setFileName(project->filename());
         REQUIRE(file.open(QFile::ReadOnly));
@@ -107,7 +112,7 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
     requireAutomaticUpdatesEnabled();
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
-    fileToProject(project, "://datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw");
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
 
     rootData->futureManagerModel()->waitForFinished();
 
@@ -162,7 +167,7 @@ TEST_CASE("cwScrapManager shouldn't update scraps that are invalid", "[cwScrapMa
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
-    fileToProject(project, "://datasets/test_cwScrapManager/ignoreInvalidScrap.cw");
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/ignoreInvalidScrap.cw"));
     REQUIRE(project->cavingRegion()->caveCount() == 1);
     auto cave = project->cavingRegion()->cave(0);
     REQUIRE(project->cavingRegion()->cave(0)->tripCount() == 1);
@@ -205,7 +210,7 @@ TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
-    fileToProject(project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
     if(rootData->futureManagerModel()->rowCount() >= 0) {
         rootData->futureManagerModel()->waitForFinished();
     }
@@ -261,7 +266,7 @@ TEST_CASE("cwScrapManager should defer updates while editing", "[cwScrapManager]
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
-    fileToProject(project, "://datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw");
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
     rootData->futureManagerModel()->waitForFinished();
 
     auto scrapManager = rootData->scrapManager();
@@ -313,7 +318,7 @@ TEST_CASE("cwScrapManager scrap render items should remain visible after loading
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
-    fileToProject(project, "://datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw");
+    fileToProject(project, testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
     rootData->futureManagerModel()->waitForFinished();
 
     auto* keywordModel = rootData->keywordItemModel();
@@ -337,4 +342,109 @@ TEST_CASE("cwScrapManager scrap render items should remain visible after loading
     // Sanity-check: the dataset has scraps, so we must have found at least one
     // visibility item.
     CHECK(visibilityItemCount > 0);
+}
+
+// Helper: load a v6 .cw file and return the first note
+static cwNote* loadV6FirstNote(cwRootData* rootData, const QString& resourcePath) {
+    requireAutomaticUpdatesEnabled();
+    auto project = rootData->project();
+    fileToProject(project, resourcePath);
+    rootData->futureManagerModel()->waitForFinished();
+
+    REQUIRE(project->cavingRegion()->caveCount() == 1);
+    auto cave = project->cavingRegion()->cave(0);
+    REQUIRE(cave->tripCount() == 1);
+    auto trip = cave->trip(0);
+    auto notes = trip->notes()->notes();
+    REQUIRE(notes.size() == 1);
+    return notes.at(0);
+}
+
+TEST_CASE("V6 conversion with landscape EXIF coords applies rotation", "[cwScrapManager]") {
+    // backgroundRotation-0.08.cw is proto v1 with EXIF Rotate 90 CW.
+    // Raw image is 4032x3024 (landscape). Scrap coords are in landscape space.
+    // After conversion: originalSize should be post-rotation (3024x4032)
+    // and coords should be rotated: (x,y) -> (y, 1-x).
+    auto rootData = std::make_unique<cwRootData>();
+    auto note = loadV6FirstNote(rootData.get(),
+        testcasesDatasetPath("test_cwScrapManager/backgroundRotation-0.08.cw"));
+    REQUIRE(note->scraps().size() >= 1);
+
+    // originalSize should be post-rotation
+    const QSize storedSize = note->image().originalSize();
+    CHECK(storedSize.width() == 3024);
+    CHECK(storedSize.height() == 4032);
+
+    // DPI should be set from image
+    CHECK(note->image().originalDotsPerMeter() > 0);
+
+    // imageWithAutoTransform should match stored originalSize
+    const QString absPath = rootData->project()->absolutePath(note, note->image().path());
+    REQUIRE(QFileInfo::exists(absPath));
+    QFile file(absPath);
+    REQUIRE(file.open(QIODevice::ReadOnly));
+    QByteArray data = file.readAll();
+    QImage autoImage = cwImageUtils::imageWithAutoTransform(
+        data, QFileInfo(absPath).suffix().toLatin1());
+    CHECK(autoImage.size() == storedSize);
+
+    // Station coords should be rotated from landscape (~0.660, 0.620)
+    // to portrait (~0.620, 0.340)
+    auto scrap = note->scrap(0);
+    REQUIRE(scrap->stations().size() >= 1);
+    const QPointF station0 = scrap->stations().at(0).positionOnNote();
+    CHECK(station0.x() == Catch::Approx(0.620).margin(0.01));
+    CHECK(station0.y() == Catch::Approx(0.340).margin(0.02));
+
+    // Triangulate and verify it completes
+    auto results = rootData->scrapManager()->triangulateScraps({scrap});
+    rootData->futureManagerModel()->waitForFinished();
+    REQUIRE(!results.isEmpty());
+    REQUIRE(AsyncFuture::waitForFinished(results.first().data));
+    REQUIRE(results.first().data.resultCount() == 1);
+    CHECK(!results.first().data.result().isNull());
+}
+
+TEST_CASE("V6 conversion with v5 coords in v6 file applies reNormalization", "[cwScrapManager]") {
+    // backgroundRotation-2025.2 to 2025.2-101.cw is proto v6 with v5 landscape coords.
+    // V6 always applies reNormalization (not rotation) because real v6 users
+    // would have redrawn scraps on the auto-rotated display.
+    auto rootData = std::make_unique<cwRootData>();
+    auto note = loadV6FirstNote(rootData.get(),
+        testcasesDatasetPath("test_cwScrapManager/backgroundRotation-2025.2 to 2025.2-101.cw"));
+    REQUIRE(note->scraps().size() >= 1);
+
+    // originalSize should be post-rotation
+    CHECK(note->image().originalSize().width() == 3024);
+    CHECK(note->image().originalSize().height() == 4032);
+
+    // Station coords are re-normalized from landscape to portrait dims.
+    // Original v5 station0: (0.6485, 0.5875)
+    // reNorm: x' = x * W/H = 0.6485 * 1.333 ≈ 0.865
+    //         y' = y * H/W + (1 - H/W) = 0.5875 * 0.75 + 0.25 ≈ 0.691
+    auto scrap = note->scrap(0);
+    REQUIRE(scrap->stations().size() >= 1);
+    const QPointF station0 = scrap->stations().at(0).positionOnNote();
+    CHECK(station0.x() == Catch::Approx(0.865).margin(0.01));
+    CHECK(station0.y() == Catch::Approx(0.691).margin(0.02));
+}
+
+TEST_CASE("V6 conversion with correct EXIF coords does not modify", "[cwScrapManager]") {
+    // backgroundRotation-2025.2-101.cw is proto v6 with post-rotation originalSize (3024x4032).
+    // Coords are already correct — no transformation should be applied.
+    auto rootData = std::make_unique<cwRootData>();
+    auto note = loadV6FirstNote(rootData.get(),
+        testcasesDatasetPath("test_cwScrapManager/backgroundRotation-2025.2-101.cw"));
+    REQUIRE(note->scraps().size() >= 1);
+
+    // originalSize should remain post-rotation (already correct)
+    CHECK(note->image().originalSize().width() == 3024);
+    CHECK(note->image().originalSize().height() == 4032);
+
+    // Station coords should be unchanged (~0.621, 0.339)
+    auto scrap = note->scrap(0);
+    REQUIRE(scrap->stations().size() >= 1);
+    const QPointF station0 = scrap->stations().at(0).positionOnNote();
+    CHECK(station0.x() == Catch::Approx(0.621).margin(0.005));
+    CHECK(station0.y() == Catch::Approx(0.339).margin(0.005));
 }

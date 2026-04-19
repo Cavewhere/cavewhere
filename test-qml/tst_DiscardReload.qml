@@ -31,7 +31,7 @@ MainWindowTest {
             RootData.account.email = "discard.test@example.com"
 
             TestHelper.loadProjectFromFile(RootData.project,
-                "://datasets/test_cwProject/Phake Cave 3000.cw")
+                TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"))
             RootData.futureManagerModel.waitForFinished()
             tryVerify(() => { return RootData.region.caveCount > 0 }, 10000)
 

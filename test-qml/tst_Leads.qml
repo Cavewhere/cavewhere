@@ -51,7 +51,7 @@ MainWindowTest {
         }
 
         function test_leads() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
 
             //Click on the lead
@@ -158,7 +158,7 @@ MainWindowTest {
         }
 
         function test_leadPositionCrash() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
             RootData.project.newProject();
 
@@ -186,7 +186,7 @@ MainWindowTest {
 
         function addNewLeadToScrap() {
             // Returns {scrap, leadIndex, widthText, heightText} after adding a new lead
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
             let cave = RootData.region.cave(0);
             let trip = cave.trip(0);
@@ -363,7 +363,7 @@ MainWindowTest {
         // (through cwSelectionManager) incorrectly clears the lead's selection,
         // so the lead info editor never appears.
         function test_clickingLeadInCarpetShowsInfo() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
 
             // Navigate to the trip page

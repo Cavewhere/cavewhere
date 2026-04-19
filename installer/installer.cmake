@@ -131,8 +131,8 @@ if(WIN32)
     endif()
 
 
-    if(WITH_PDF)
-        list(APPEND ROOT_FILES_TO_COPY "${Qt_bin_dir}/Qt5Pdf${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    if(TARGET Qt6::Pdf)
+        list(APPEND ROOT_FILES_TO_COPY "${Qt_bin_dir}/Qt6Pdf${CMAKE_SHARED_LIBRARY_SUFFIX}")
     endif()
 
     set(QML_FILES_TO_COPY ${cavewhere_QML_FILES})

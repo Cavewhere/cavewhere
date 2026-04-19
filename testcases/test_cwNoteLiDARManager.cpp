@@ -39,7 +39,7 @@ TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation",
     REQUIRE(root != nullptr);
 
     TestHelper helper;
-    helper.loadProjectFromZip(root->project(), QStringLiteral(":/datasets/lidarProjects/jaws of the beast.zip"));
+    helper.loadProjectFromZip(root->project(), testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
     root->project()->waitLoadToFinish();
     root->futureManagerModel()->waitForFinished();
     root->linePlotManager()->waitToFinish();
@@ -57,7 +57,7 @@ TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation",
     REQUIRE(lidarModel != nullptr);
     REQUIRE(cave->stationPositionLookup().positions().size() == 10);
 
-    const QString lidarFile = helper.copyToTempDir(QStringLiteral(":/datasets/lidarProjects/9_15_2025 3.glb"));
+    const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
     REQUIRE_FALSE(lidarFile.isEmpty());
 
     QSignalSpy rowsInsertedSpy(lidarModel, &QAbstractItemModel::rowsInserted);
@@ -155,7 +155,7 @@ TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry access
     REQUIRE(root != nullptr);
 
     TestHelper helper;
-    helper.loadProjectFromZip(root->project(), QStringLiteral(":/datasets/lidarProjects/jaws of the beast.zip"));
+    helper.loadProjectFromZip(root->project(), testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
     root->project()->waitLoadToFinish();
     root->futureManagerModel()->waitForFinished();
     root->linePlotManager()->waitToFinish();
@@ -176,7 +176,7 @@ TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry access
 
     REQUIRE(cave->stationPositionLookup().positions().size() == 10);
 
-    const QString lidarFile = helper.copyToTempDir(QStringLiteral(":/datasets/lidarProjects/9_15_2025 3.glb"));
+    const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
     REQUIRE_FALSE(lidarFile.isEmpty());
 
     QSignalSpy rowsInsertedSpy(lidarModel, &QAbstractItemModel::rowsInserted);

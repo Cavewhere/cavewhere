@@ -67,7 +67,7 @@ static void CHECK_VEC3(const QVector3D &v, double x, double y, double z) {
 
 TEST_CASE("cwSurvexExportRule should build the network correctly and position stations", "[SurveyNetworkBuilderRule]") {
     // Load project and get the caving region
-    auto project = fileToProject("://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto project = fileToProject(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto cavingRegion = project->cavingRegion();
 
     // Create a survey data artifact and set the region

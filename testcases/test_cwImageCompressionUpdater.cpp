@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Our includes
 #include "cwRootData.h"
@@ -26,7 +27,7 @@ TEST_CASE("cwRootData should automatically update compression for notes", "[cwIm
     };
 
     SECTION("Update on load") {
-        fileToProject(project, "://datasets/test_cwImageCompressionUpdater/NotesNeedUpdating.cw");
+        fileToProject(project, testcasesDatasetPath("test_cwImageCompressionUpdater/NotesNeedUpdating.cw"));
         rootData->futureManagerModel()->waitForFinished();
         checkNotesAreGood();
     }

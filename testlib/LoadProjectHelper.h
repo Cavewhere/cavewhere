@@ -16,6 +16,15 @@
 #include <QObject>
 #include <QTemporaryDir>
 #include <QQmlEngine>
+#include <QCoreApplication>
+#include <QEventLoop>
+#include <QElapsedTimer>
+#include <QThread>
+
+//Std includes
+#include <memory>
+#include <optional>
+#include <utility>
 
 //Our includes
 #include "cwProject.h"
@@ -25,13 +34,48 @@
 #include "CaveWhereTestLibExport.h"
 #include "cwFutureManagerModel.h"
 
-//Std includes
-#include <iostream>
+class cwRootData;
+
+namespace QQuickGit {
+class GitRepository;
+}
+
+/**
+ * Returns the shared temp root directory for this test process.
+ * Created once per process, removed recursively at exit.
+ */
+QString CAVEWHERE_TESTLIB_EXPORT sharedTempRoot();
+
+/**
+ * Creates a unique subdirectory under sharedTempRoot() and returns its path.
+ */
+QString CAVEWHERE_TESTLIB_EXPORT createTempSubdir();
+
+inline QString testcasesDatasetSourcePath(const QString& relativePath) {
+    return QStringLiteral(CW_TESTCASES_DATASET_DIR "/") + relativePath;
+}
+inline QString qmlTestDatasetSourcePath(const QString& relativePath) {
+    return QStringLiteral(CW_QML_TEST_DATASET_DIR "/") + relativePath;
+}
 
 /**
  * Copyies filename to the temp folder
  */
 QString CAVEWHERE_TESTLIB_EXPORT copyToTempFolder(QString filename);
+
+/**
+ * Copies a testcases dataset file to a temp folder and returns the temp path.
+ */
+inline QString testcasesDatasetPath(const QString& relativePath) {
+    return copyToTempFolder(testcasesDatasetSourcePath(relativePath));
+}
+
+/**
+ * Copies a QML test dataset file to a temp folder and returns the temp path.
+ */
+inline QString qmlTestDatasetPath(const QString& relativePath) {
+    return copyToTempFolder(qmlTestDatasetSourcePath(relativePath));
+}
 
 QString CAVEWHERE_TESTLIB_EXPORT prependTempFolder(QString filename);
 
@@ -100,6 +144,88 @@ public:
 };
 Q_DECLARE_METATYPE(cwSyncFixtureInfo)
 
+/**
+ * Owning fixture for C++ sync tests that need a local project, a bare origin,
+ * and a peer clone loaded as a second cwProject. All temp dirs and rootData
+ * are owned by unique_ptr and destroyed when the fixture goes out of scope,
+ * so a test can declare it as an automatic variable and get RAII cleanup.
+ */
+struct CAVEWHERE_TESTLIB_EXPORT cwSyncChurnFixture {
+    std::unique_ptr<QTemporaryDir> projectDir;
+    std::unique_ptr<QTemporaryDir> remoteRoot;
+    std::unique_ptr<QTemporaryDir> cloneDir;
+
+    std::unique_ptr<cwRootData> rootData;
+    std::unique_ptr<cwRootData> remoteRootData;
+
+    // Non-owning convenience pointers; valid for the fixture's lifetime.
+    cwProject* project = nullptr;
+    cwProject* remoteProject = nullptr;
+    QQuickGit::GitRepository* repository = nullptr;
+    QQuickGit::GitRepository* remoteRepository = nullptr;
+
+    QString projectPath;
+    QString remoteRepoPath;
+    QString clonePath;
+
+    cwSyncChurnFixture() = default;
+    cwSyncChurnFixture(cwSyncChurnFixture&&) noexcept = default;
+    cwSyncChurnFixture& operator=(cwSyncChurnFixture&&) noexcept = default;
+    cwSyncChurnFixture(const cwSyncChurnFixture&) = delete;
+    cwSyncChurnFixture& operator=(const cwSyncChurnFixture&) = delete;
+    ~cwSyncChurnFixture() = default;
+};
+
+struct cwSyncChurnFixtureConfig {
+    QString caveName;
+    std::optional<QString> tripName;
+    QString projectFileBaseName = QStringLiteral("sync-fixture.cwproj");
+    bool addPngNoteFromDataset = false;
+    QString cloneSubdirName = QStringLiteral("clone-2");
+    QString localAccountName = QStringLiteral("Sync Tester");
+    QString localAccountEmail = QStringLiteral("sync.tester@example.com");
+    QString remoteAccountName = QStringLiteral("Remote Sync Tester");
+    QString remoteAccountEmail = QStringLiteral("remote.sync.tester@example.com");
+};
+
+/**
+ * Build the multi-peer sync fixture described by \a config. Fails the current
+ * Catch2 test case via REQUIRE on any setup step error.
+ */
+cwSyncChurnFixture CAVEWHERE_TESTLIB_EXPORT
+makeSyncChurnFixture(const cwSyncChurnFixtureConfig& config);
+
+struct cwChurnLoopConfig {
+    int budgetMs = 2000;
+    int processEventsMaxMs = 20;
+    int postMutateSleepMs = 0;
+};
+
+/**
+ * Spin the event loop while \a futureManager still has work, calling
+ * \a mutateOnce each iteration to perturb the in-memory model. Returns the
+ * number of mutations applied. Template keeps the callable inline; the stress
+ * path runs this loop many thousands of times.
+ */
+template <typename Mutator>
+int runChurnLoop(cwFutureManagerModel* futureManager,
+                 const cwChurnLoopConfig& config,
+                 Mutator&& mutateOnce)
+{
+    int iterations = 0;
+    QElapsedTimer timer;
+    timer.start();
+    while (futureManager->rowCount() > 0 && timer.elapsed() < config.budgetMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, config.processEventsMaxMs);
+        mutateOnce(iterations);
+        ++iterations;
+        if (config.postMutateSleepMs > 0) {
+            QThread::msleep(static_cast<unsigned long>(config.postMutateSleepMs));
+        }
+    }
+    return iterations;
+}
+
 class CAVEWHERE_TESTLIB_EXPORT TestHelper : public QObject {
     Q_OBJECT
     QML_ELEMENT
@@ -158,10 +284,15 @@ public:
                                                     const QString& token) const;
     Q_INVOKABLE bool clearGitHubAccessTokenForAccount(const QString& accountId) const;
 
+    Q_INVOKABLE QString testcasesDatasetPath(const QString& relativePath) const {
+        return ::testcasesDatasetPath(relativePath);
+    }
+    Q_INVOKABLE QString qmlTestDatasetPath(const QString& relativePath) const {
+        return ::qmlTestDatasetPath(relativePath);
+    }
+
     Q_INVOKABLE QUrl tempDirectoryUrl() {
-        QTemporaryDir dir;
-        dir.setAutoRemove(false);
-        return QUrl::fromLocalFile(dir.path());
+        return QUrl::fromLocalFile(createTempSubdir());
     }
 
     Q_INVOKABLE QUrl toLocalUrl(const QString& path) {

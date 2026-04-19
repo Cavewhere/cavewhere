@@ -32,6 +32,7 @@ class cwCavingRegion;
 class cwProject;
 class cwNoteLiDAR;
 class cwNoteLiDARData;
+struct cwSaveLoadPrivate;
 #include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
 #include "cwError.h"
@@ -239,6 +240,14 @@ public:
 
     Monad::ResultBase moveProjectTo(const QString& destinationFileUrl);
     Monad::ResultBase copyProjectTo(const QString& destinationFileUrl);
+
+    // Renames the on-disk data-root directory to match `bundleBaseName` and updates
+    // in-memory metadata. Drains in-flight jobs and temporarily disables the save
+    // pipeline, but does not change the project's filename or temporary state.
+    // Used by cwProject::saveAs before packaging a bundle so the zipped tree has
+    // a data-root directory whose name matches the bundle.
+    Monad::ResultBase prepareBundleStage(const QString& bundleBaseName);
+
     QFuture<Monad::ResultBase> saveBundledArchive(const QString& targetArchivePath);
     QFuture<Monad::ResultBase> enqueueFlushAndCommit();
 
@@ -255,7 +264,7 @@ public:
     // Enqueues recursive deletion of an orphaned cave or trip directory left on disk after
     // a rename/rename merge conflict. The path is relative to the project root directory.
     void enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath);
-    Monad::ResultBase deleteTemporaryProject();
+    void setOwnedTempDir(const QString& path);
 
     void addFiles(QList<QUrl> files,
                   const QDir& dir,
@@ -316,22 +325,6 @@ public:
     static cwNoteData noteDataFromProtoNote(const CavewhereProto::Note& protoNote, const QString& filename);
     static cwNoteLiDARData noteLiDARDataFromProtoNoteLiDAR(const CavewhereProto::NoteLiDAR& protoNote, const QString& filename);
 
-    // Proto primitive type helpers (shared by cwSaveLoad and cwRegionLoadTask)
-    static QDate loadDate(const QtProto::QDate& protoDate);
-    static QSize loadSize(const QtProto::QSize& protoSize);
-    static QSizeF loadSizeF(const QtProto::QSizeF& protoSize);
-    static QPointF loadPointF(const QtProto::QPointF& protoPointF);
-    static QVector3D loadVector3D(const QtProto::QVector3D& protoVector3D);
-    static QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D);
-    static void saveString(std::string *protoString, const QString &string);
-    static void saveDate(QtProto::QDate* protoDate, QDate date);
-    static void saveSize(QtProto::QSize* protoSize, QSize size);
-    static void saveSizeF(QtProto::QSizeF* protoSize, QSizeF size);
-    static void savePointF(QtProto::QPointF* protoPointF, QPointF point);
-    static void saveVector3D(QtProto::QVector3D* protoVector3D, QVector3D vector3D);
-    static void saveQUuid(std::string *protoString, const QUuid& id);
-    static void saveStringList(google::protobuf::RepeatedPtrField<std::string>* protoStringList, const QStringList& stringList);
-
 signals:
     void fileNameChanged();
     void dataRootChanged();
@@ -377,9 +370,8 @@ private:
         CheckoutLocal
     };
 
-    struct Data;
-    friend struct Data;
-    std::unique_ptr<Data> d;
+    friend struct cwSaveLoadPrivate;
+    std::unique_ptr<cwSaveLoadPrivate> d;
     QPointer<QUndoStack> m_undoStack;
     QPointer<cwRemoteAuthProvider> m_authProvider;
 
@@ -409,9 +401,17 @@ private:
     QDir dirPrivate(const cwNoteLiDAR* note) const;
 
     void setSaveEnabled(bool enabled);
+    static void removeTemporaryProjectDir(const QString& ownedTempDirPath);
 
     enum class ProjectTransferMode { Move, Copy };
     Monad::ResultBase transferProjectTo(const QString& destinationFileUrl, ProjectTransferMode mode);
+
+    // Renames the data-root directory under `targetRootDir` from the current metadata
+    // name to `newDataRootName` and updates in-memory metadata / object states. No-op
+    // when the name is unchanged. Shared between transferProjectTo and
+    // prepareBundleStage so .cwproj and .cw save-as paths stay in sync.
+    Monad::ResultBase renameDataRootOnDisk(const QDir& targetRootDir,
+                                           const QString& newDataRootName);
 
     void disconnectTreeModel();
     void connectTreeModel();
@@ -438,8 +438,6 @@ private:
     static QDir caveDirHelper(const QDir& projectDir, const cwCave *cave);
     static QDir tripDirHelper(const QDir& caveDir, const cwTrip* trip);
     static QDir noteDirHelper(const QDir& tripDir);
-
-    static QUuid toUuid(const std::string& uuidStr);
 
     Monad::ResultBase commitProjectChanges(const QString& subject = QString(),
                                            const QString& description = QString());
@@ -479,47 +477,6 @@ private:
 
     void save(const cwNoteLiDAR* note);
     static std::unique_ptr<CavewhereProto::NoteLiDAR> toProtoNoteLiDAR(const cwNoteLiDAR* note);
-
-    static cwTripCalibrationData fromProtoTripCalibration(const CavewhereProto::TripCalibration& proto);
-    static cwTeamData fromProtoTeam(const CavewhereProto::Team& proto);
-    static cwTeamMember fromProtoTeamMember(const CavewhereProto::TeamMember& proto);
-    static cwSurveyChunkData fromProtoSurveyChunk(const CavewhereProto::SurveyChunk& protoChunk);
-    static cwStation fromProtoStation(const CavewhereProto::StationShot& protoStation);
-    static cwShot fromProtoShot(const CavewhereProto::StationShot& protoShot);
-    static cwScrapData fromProtoScrap(const CavewhereProto::Scrap& protoScrap);
-    static cwNoteStation fromProtoNoteStation(const CavewhereProto::NoteStation& protoNoteStation);
-    static cwLead fromProtoLead(const CavewhereProto::Lead& protoLead);
-    static cwNoteTransformationData fromProtoNoteTransformation(const CavewhereProto::NoteTransformation& protoNoteTransform);
-    static cwNoteLiDARTransformationData fromProtoLiDARNoteTransformation(const CavewhereProto::NoteLiDARTransformation& protoNoteTransform);
-    static cwLength::Data fromProtoLength(const CavewhereProto::Length& protoLength);
-    static std::unique_ptr<cwProjectedProfileScrapViewMatrix::Data> fromProtoProjectedScraptViewMatrix(const CavewhereProto::ProjectedProfileScrapViewMatrix protoViewMatrix);
-    static cwImageResolution::Data fromProtoImageResolution(const CavewhereProto::ImageResolution& protoImageResolution);
-    static QQuaternion fromProtoQuaternion(const QtProto::QQuaternion& protoQuaternion);
-
-    static void saveNoteLiDARTranformation(CavewhereProto::NoteLiDARTransformation *protoNoteTransformation,
-                                           cwNoteLiDARTransformation *noteTransformation);
-    static void saveQQuaternion(QtProto::QQuaternion* protoQuaternion,
-                                const QQuaternion& quaternion);
-
-    // Proto serialization helpers (moved from cwRegionSaveTask)
-    static void saveLength(CavewhereProto::Length* protoLength, cwLength* length);
-    static void saveImageResolution(CavewhereProto::ImageResolution* protoImageRes, cwImageResolution* imageResolution);
-    static void saveImage(CavewhereProto::Image* protoImage, const cwImage& image);
-    static void saveNoteStation(CavewhereProto::NoteStation* protoNoteStation, const cwNoteStation& noteStation);
-    static void saveTeamMember(CavewhereProto::TeamMember* protoTeamMember, const cwTeamMember& teamMember);
-    static void saveLead(CavewhereProto::Lead* protoLead, const cwLead& lead);
-    static void saveProjectedScrapViewMatrix(CavewhereProto::ProjectedProfileScrapViewMatrix* protoViewMatrix,
-                                             cwProjectedProfileScrapViewMatrix* viewMatrix);
-    static void saveNoteTranformation(CavewhereProto::NoteTransformation* protoNoteTransformation,
-                                      cwAbstractNoteTransformation *noteTransformation);
-    static void saveStationShot(CavewhereProto::StationShot* protoStation, const cwStation& station);
-    static void saveStationShot(CavewhereProto::StationShot* protoShot, const cwShot& shot);
-    static void saveTripCalibration(CavewhereProto::TripCalibration* protoTripCalibration, cwTripCalibration* tripCalibration);
-    static void saveSurveyChunk(CavewhereProto::SurveyChunk* protoChunk, cwSurveyChunk* chunk);
-    static void saveTeam(CavewhereProto::Team* protoTeam, cwTeam* team);
-    static void saveScrap(CavewhereProto::Scrap* protoScrap, cwScrap* scrap);
-
-
 
     template<typename ResultType, typename MakeResultFunc>
     QFuture<Monad::ResultBase> copyFilesAndEmitResults(

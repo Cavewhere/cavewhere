@@ -42,22 +42,23 @@ public:
     explicit cwDeepLinkHandler(QObject* parent = nullptr);
 
     Q_INVOKABLE void handleUrl(const QUrl& url);
-    Q_INVOKABLE void handleShareLink(const QUrl& url);
-    Q_INVOKABLE QUrl takePendingUrl();
+    Q_INVOKABLE void handleShareLink(const QString& text);
+    Q_INVOKABLE QString takePendingUrl();
 
     static bool isHostAllowed(const QString& host);
     Q_INVOKABLE static QString hostDisplayName(const QUrl& url);
     Q_INVOKABLE static QUrl collaboratorSettingsUrl(const QUrl& repoUrl);
 
 signals:
-    void openRepoRequested(QUrl repoUrl);
+    void openRepoRequested(QString repoUrl);
     void invalidLink(QString reason);
 
 private:
     QUrl validateAndExtractRepo(const QUrlQuery& query, QString* errorOut);
-    void acceptRepoUrl(const QUrl& repoUrl);
+    void acceptRepoUrl(const QString& repoUrl);
+    static bool looksLikeCloneUrl(const QString& text);
 
-    QUrl m_pendingUrl;
+    QString m_pendingUrl;
 
     static const QStringList& allowedHosts();
 };

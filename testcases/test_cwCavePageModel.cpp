@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 #include <catch2/catch_approx.hpp>
 
 
@@ -23,7 +24,7 @@ TEST_CASE("cwCavePageModel Test with Static Data", "[cwCavePageModel]")
 {
     // Set up the root data and project
     auto root = std::make_unique<cwRootData>();
-    fileToProject(root->project(), ":/datasets/test_cwCavePageModel/cwCavePageModel.cw");
+    fileToProject(root->project(), testcasesDatasetPath("test_cwCavePageModel/cwCavePageModel.cw"));
     auto project = root->project();
 
     // Wait for plot manager and tasks to finish

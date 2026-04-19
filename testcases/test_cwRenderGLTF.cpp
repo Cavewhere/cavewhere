@@ -56,7 +56,7 @@ TEST_CASE("GLTF file should be loaded correctly", "[cwRenderGLTF]") {
     cwScene scene;
     render->setScene(&scene);
 
-    const QString gltfPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString gltfPath = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     REQUIRE_FALSE(gltfPath.isEmpty());
     REQUIRE(QFileInfo::exists(gltfPath));
 

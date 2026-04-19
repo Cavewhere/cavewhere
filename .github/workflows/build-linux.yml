@@ -20,12 +20,14 @@ jobs:
         include:
           - arch: x86_64
             runs_on: ubuntu-24.04
+            qt_host: linux
             qt_arch: linux_gcc_64
             qt_dir: gcc_64
-          # - arch: arm64
-          #   runs_on: ubuntu-24.04-arm64
-          #   qt_arch: linux_gcc_arm64
-          #   qt_dir: gcc_arm64
+          - arch: arm64
+            runs_on: ubuntu-24.04-arm
+            qt_host: linux_arm64
+            qt_arch: linux_gcc_arm64
+            qt_dir: gcc_arm64
     runs-on: ${{ matrix.runs_on }}
 
     steps:
@@ -65,10 +67,10 @@ jobs:
         with:
           aqtversion: '==3.3.*'
           version: '6.11.0'
-          host: 'linux'
+          host: ${{ matrix.qt_host }}
           target: 'desktop'
           arch: ${{ matrix.qt_arch }}
-          modules: 'qtshadertools qtcanvaspainter'
+          modules: 'qtshadertools qtcanvaspainter qtpdf'
 
       - name: Install Conan
         run: pipx install conan
@@ -90,9 +92,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.conan2
-          key: ${{ runner.os }}-conan-${{ hashFiles('conanfile.*') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-conan-${{ hashFiles('conanfile.*') }}
           restore-keys: |
-            ${{ runner.os }}-conan-
+            ${{ runner.os }}-${{ matrix.arch }}-conan-
 
       - name: Install Dependencies with Conan
         run: |
@@ -102,7 +104,7 @@ jobs:
 
       - name: Configure the Project with CMake
         run: |
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF \
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
           -DBUILD_TESTING=OFF \
           -DCMAKE_PREFIX_PATH=${{ github.workspace }}/Qt/6.11.0/${{ matrix.qt_dir }}/lib \
           -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build

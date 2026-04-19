@@ -7,6 +7,7 @@
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 #include <catch2/catch_approx.hpp>
 
 //Cavewhere includes
@@ -34,7 +35,7 @@
 
 TEST_CASE("Export/Import Compass", "[Compass]") {
 
-    QString datasetFile = copyToTempFolder(":/datasets/compass/compassImportExport.cw");
+    QString datasetFile = copyToTempFolder(testcasesDatasetPath("compass/compassImportExport.cw"));
 
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
@@ -102,7 +103,7 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
 
 TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
 
-    QString datasetFile = copyToTempFolder(":/datasets/compass/compassExportMissingLRUD.cw");
+    QString datasetFile = copyToTempFolder(testcasesDatasetPath("compass/compassExportMissingLRUD.cw"));
 
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
@@ -128,7 +129,7 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
     QFile exportedFile(exportFile);
     REQUIRE(exportedFile.open(QFile::ReadOnly));
 
-    QFile validatedFile("://datasets/compass/missingDataValidated.dat");
+    QFile validatedFile(testcasesDatasetPath("compass/missingDataValidated.dat"));
     REQUIRE(validatedFile.open(QFile::ReadOnly));
 
     while(!validatedFile.atEnd() && !exportedFile.atEnd()) {
@@ -280,7 +281,7 @@ TEST_CASE("Export compass handles UP/DOWN clino values - ISSUE #121", "[Compass]
 }
 
 TEST_CASE("Test 15 char format is okay", "[Compass]") {
-    QString datasetFile = copyToTempFolder("://datasets/compass/calibrationToLong.dat");
+    QString datasetFile = copyToTempFolder(testcasesDatasetPath("compass/calibrationToLong.dat"));
 
     auto importFromCompass = std::make_unique<cwCompassImporter>();
 
@@ -303,7 +304,7 @@ TEST_CASE("Test 15 char format is okay", "[Compass]") {
 }
 
 TEST_CASE("Compass importer enables backsights and reads data - ISSUE #249", "[Compass]") {
-    QString datasetFile = copyToTempFolder(":/datasets/compass/A.dat");
+    QString datasetFile = copyToTempFolder(testcasesDatasetPath("compass/A.dat"));
 
     auto importFromCompass = std::make_unique<cwCompassImporter>();
     cwSignalSpy messageSpy(importFromCompass.get(), &cwCompassImporter::statusMessage);
@@ -363,7 +364,7 @@ TEST_CASE("Compass importer enables backsights and reads data - ISSUE #249", "[C
 }
 
 TEST_CASE("Compass importer ignores -9.90 LRUD values - ISSUE #248", "[Compass]") {
-    QString datasetFile = copyToTempFolder(":/datasets/compass/A.dat");
+    QString datasetFile = copyToTempFolder(testcasesDatasetPath("compass/A.dat"));
 
     auto importFromCompass = std::make_unique<cwCompassImporter>();
     cwSignalSpy messageSpy(importFromCompass.get(), &cwCompassImporter::statusMessage);

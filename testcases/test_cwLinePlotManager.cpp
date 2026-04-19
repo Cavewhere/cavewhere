@@ -7,6 +7,7 @@
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 #include <catch2/catch_approx.hpp>
 
 //Cavewhere includes
@@ -31,7 +32,7 @@
 #include "cwSignalSpy.h"
 
 TEST_CASE("Survey network are returned", "[LinePlotManager]") {
-    auto project = fileToProject(":/datasets/network.cw");
+    auto project = fileToProject(testcasesDatasetPath("network.cw"));
 
     REQUIRE(project->cavingRegion()->caveCount() == 1);
 

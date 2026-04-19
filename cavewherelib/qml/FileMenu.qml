@@ -59,7 +59,7 @@ QC.Menu {
 
     QC.Action {
         id: openActionId
-        text: "&Open"
+        text: "&Open..."
         shortcut: "Ctrl+O"
         onTriggered: {
             const openDialog = function() {
@@ -69,6 +69,15 @@ QC.Menu {
             fileMenuId.askToSaveDialog.taskName = "opening a project";
             fileMenuId.askToSaveDialog.afterSaveFunc = openDialog;
             fileMenuId.askToSaveDialog.askToSave();
+        }
+    }
+
+    QC.Action {
+        id: openOnlineActionId
+        text: "Open from O&nline…"
+        shortcut: "Ctrl+Shift+O"
+        onTriggered: {
+            RootData.pageSelectionModel.gotoPageByName(null, "Remote");
         }
     }
 
@@ -90,7 +99,7 @@ QC.Menu {
 
     QC.MenuItem {
         id: saveAsMenuItem
-        text: "Save As"
+        text: "Save As..."
         enabled: !RootData.project.saveWillCauseDataLoss
         onTriggered:{
             fileMenuId.saveAsFileDialog.open()
@@ -102,28 +111,26 @@ QC.Menu {
     QC.MenuItem {
         objectName: "shareMenuItem"
         text: qsTr("Share...")
-        enabled: RootData.project.fileType === Project.GitFileType
-              && !RootData.project.syncHealth.status.noRemote
         onTriggered: fileMenuId.shareRequested()
     }
 
     QC.MenuItem {
         objectName: "openSharedLinkMenuItem"
-        text: qsTr("Open Shared Link...")
+        text: qsTr("Open from Link...")
         onTriggered: fileMenuId.openSharedLinkRequested()
     }
 
     QC.MenuSeparator {}
 
     QC.MenuItem {
-        text: "Settings"
+        text: "Settings..."
         onTriggered: {
             RootData.pageSelectionModel.gotoPageByName(null, "Settings");
         }
     }
 
     QC.MenuItem {
-        text: "About"
+        text: "About..."
         onTriggered: {
             RootData.pageSelectionModel.gotoPageByName(null, "About");
         }
@@ -189,7 +196,7 @@ QC.Menu {
         }
 
         QC.MenuItem {
-            text: "Testcases"
+            text: "Testcases..."
             onTriggered: {
                 RootData.pageSelectionModel.gotoPageByName(null, "Testcases");
             }

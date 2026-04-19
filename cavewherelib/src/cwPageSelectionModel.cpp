@@ -78,8 +78,13 @@ cwPage* cwPageSelectionModel::registerPage(cwPage *parentPage,
         emit historyChanged();
 
         if(CurrentPage == childPage) {
-            //Replace the current page with the new page
+            //Re-emit so observers rebind: after the old cwPage is
+            //deleteLater'd, any QPointer to it silently goes null
+            //without notification.
             CurrentPage = newPage;
+            updateCurrentPageNameConnections();
+            emit currentPageChanged();
+            emit currentPageAddressChanged();
         }
     }
 

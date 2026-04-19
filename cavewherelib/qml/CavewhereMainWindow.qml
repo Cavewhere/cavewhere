@@ -224,7 +224,7 @@ QC.ApplicationWindow {
 
         // Drain any deep-link URL that arrived before QML was loaded (Windows cold start)
         var pending = RootData.deepLinkHandler.takePendingUrl()
-        if (pending.toString() !== "")
+        if (pending.length > 0)
             deepLinkConfirmDialogId.open(pending)
     }
 }

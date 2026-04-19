@@ -29,7 +29,7 @@ MainWindowTest {
          * - The doneButton prevents invalid values and updates DPI appropriately for valid inputs.
          */
         function test_noteScaleInteraction() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/tst_NoteZeroDPI/test.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_NoteZeroDPI/test.cw"));
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });

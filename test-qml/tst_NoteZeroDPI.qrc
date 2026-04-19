@@ -1,5 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file>datasets/tst_NoteZeroDPI/test.cw</file>
-    </qresource>
-</RCC>

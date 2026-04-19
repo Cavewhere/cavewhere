@@ -48,7 +48,7 @@ jobs:
       #     host: 'windows'
       #     target: 'desktop'
       #     arch: 'win64_msvc2022_64'
-      #     modules: 'qtshadertools qtcanvaspainter'
+      #     modules: 'qtshadertools qtcanvaspainter qtpdf'
       - name: Install Qt
         shell: pwsh
         run: |
@@ -78,6 +78,18 @@ jobs:
             7z x $outFile -o"$qtRoot" -y | Out-Null
             Remove-Item $outFile
           }
+
+          # Qt PDF is released separately under the extensions/ path
+          $pdfVer = "6.11.0-0-202603180532"
+          $pdfRepoBase = "https://qt.mirror.constant.com/online/qtsdkrepository/windows_x86/extensions/qtpdf/6110/msvc2022_64"
+          $pdfSubdir = "extensions.qtpdf.6110.win64_msvc2022_64"
+          $pdfArchive = "qtpdf-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
+          $pdfUrl = "$pdfRepoBase/$pdfSubdir/$pdfVer$pdfArchive"
+          $pdfOutFile = "$env:TEMP\$pdfArchive"
+          Write-Host "Downloading $pdfArchive (extension)..."
+          Invoke-WebRequest -Uri $pdfUrl -OutFile $pdfOutFile -UseBasicParsing
+          7z x $pdfOutFile -o"$qtRoot" -y | Out-Null
+          Remove-Item $pdfOutFile
 
           Write-Host "Qt installed to $qtRoot"
 
@@ -135,7 +147,7 @@ jobs:
 
       - name: Configure the Project with CMake
         run: |
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DBUILD_TESTING=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt" -DCMAKE_TOOLCHAIN_FILE="build/conan_toolchain.cmake" -S . -B build
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Qt" -DCMAKE_TOOLCHAIN_FILE="build/conan_toolchain.cmake" -S . -B build
 
       - name: Build Windows Installer
         run: cmake --build build --target windowsInstaller --parallel

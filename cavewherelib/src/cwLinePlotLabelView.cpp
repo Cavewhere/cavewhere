@@ -80,6 +80,7 @@ void cwLinePlotLabelView::removeCaves(int begin, int end)
 
         cwLabel3dGroup* group = CaveLabelGroups.at(i);
         group->deleteLater();
+        CaveLabelGroups.removeAt(i);
     }
 }
 

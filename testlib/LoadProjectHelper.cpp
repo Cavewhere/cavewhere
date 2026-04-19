@@ -1,6 +1,10 @@
 #include "LoadProjectHelper.h"
 
+//Catch2 (for REQUIRE/CHECK inside test fixture helpers)
+#include <catch2/catch_test_macros.hpp>
+
 //Qt includes
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
@@ -23,6 +27,7 @@
 #include "cwLead.h"
 #include "cwLinePlotManager.h"
 #include "cwErrorListModel.h"
+#include "cwRootData.h"
 #include "GitRepository.h"
 #include "Account.h"
 #include "cwRemoteCredentialStore.h"
@@ -35,11 +40,19 @@
 #include <QSignalSpy>
 
 //Std includes
+#include <atomic>
+#include <cstdlib>
 #include <exception>
 #include <memory>
+#include <string>
 
 namespace {
 std::unique_ptr<LfsServer> g_syncLfsServer;
+std::atomic<int> g_tempSubdirCounter{0};
+
+// Stored as std::string so the atexit handler can read it without
+// re-entering sharedTempRoot()'s function-local static.
+std::string g_sharedTempRootPath;
 
 bool setRepositoryConfigString(const QString& repositoryPath,
                                const QString& key,
@@ -82,6 +95,32 @@ bool setRepositoryConfigString(const QString& repositoryPath,
 }
 } // namespace
 
+QString sharedTempRoot()
+{
+    static bool initialized = []() {
+        QString path = QDir::tempPath()
+                       + QStringLiteral("/cavewhere-test-")
+                       + QString::number(QCoreApplication::applicationPid());
+        QDir().mkpath(path);
+        g_sharedTempRootPath = path.toStdString();
+        std::atexit([]() {
+            QDir(QString::fromStdString(g_sharedTempRootPath)).removeRecursively();
+        });
+        return true;
+    }();
+    Q_UNUSED(initialized);
+    return QString::fromStdString(g_sharedTempRootPath);
+}
+
+QString createTempSubdir()
+{
+    QString subdir = sharedTempRoot()
+                     + QStringLiteral("/")
+                     + QString::number(g_tempSubdirCounter.fetch_add(1));
+    QDir().mkpath(subdir);
+    return subdir;
+}
+
 std::shared_ptr<cwProject> fileToProject(QString filename) {
     auto project = std::make_shared<cwProject>();
     addTokenManager(project.get());
@@ -100,11 +139,8 @@ QString fileToProject(cwProject *project, const QString &filename) {
 
 QString copyToTempFolder(QString filename) {
 
-    QTemporaryDir tempDir;
-    tempDir.setAutoRemove(false);
-
     QFileInfo info(filename);
-    QString newFileLocation = tempDir.path() + "/" + info.fileName();
+    QString newFileLocation = createTempSubdir() + "/" + info.fileName();
 
     if(!info.exists(filename)) {
         qFatal() << "file doesnt' exist:" << filename;
@@ -551,7 +587,7 @@ cwSyncFixtureInfo TestHelper::createLocalSyncFixtureWithLfsServer()
     cwProject project;
     addTokenManager(&project);
     project.setGitAccount(&account);
-    const QString datasetFile = copyToTempFolder(QStringLiteral("://datasets/test_cwProject/Phake Cave 3000.cw"));
+    const QString datasetFile = testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw");
     project.loadOrConvert(datasetFile);
     project.waitLoadToFinish();
 
@@ -691,7 +727,7 @@ cwSyncFixtureInfo TestHelper::createLocalLiDARSyncFixtureWithLfsServer()
     addTokenManager(&project);
     project.setGitAccount(&account);
 
-    const QString datasetFileZip = copyToTempFolder(QStringLiteral("://datasets/lidarProjects/jaws of the beast.zip"));
+    const QString datasetFileZip = testcasesDatasetPath("lidarProjects/jaws of the beast.zip");
     QFileInfo zipInfo(datasetFileZip);
     cwZip::extractAll(datasetFileZip, zipInfo.canonicalPath());
 
@@ -752,7 +788,7 @@ cwSyncFixtureInfo TestHelper::createLocalLiDARSyncFixtureWithLfsServer()
         }
     }
 
-    const QString sourceGlbPath = copyToTempFolder(QStringLiteral("://datasets/lidarProjects/9_15_2025 3.glb"));
+    const QString sourceGlbPath = testcasesDatasetPath("lidarProjects/9_15_2025 3.glb");
     const QFileInfo sourceGlbInfo(sourceGlbPath);
     const QString lidarFileName = sourceGlbInfo.fileName();
     const QString destinationGlbPath = project.notesDir(trip->notesLiDAR()).filePath(lidarFileName);
@@ -1077,4 +1113,98 @@ int initBareRepo(const QString& path)
         git_repository_free(repo);
     }
     return err;
+}
+
+cwSyncChurnFixture makeSyncChurnFixture(const cwSyncChurnFixtureConfig& config)
+{
+    cwSyncChurnFixture fx;
+
+    fx.rootData = std::make_unique<cwRootData>();
+    fx.project = fx.rootData->project();
+    REQUIRE(fx.project != nullptr);
+
+    fx.rootData->account()->setName(config.localAccountName);
+    fx.rootData->account()->setEmail(config.localAccountEmail);
+
+    auto* region = fx.project->cavingRegion();
+    REQUIRE(region != nullptr);
+    region->addCave();
+    auto* cave = region->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(config.caveName);
+
+    cwTrip* trip = nullptr;
+    if (config.tripName.has_value()) {
+        cave->addTrip();
+        trip = cave->trip(0);
+        REQUIRE(trip != nullptr);
+        trip->setName(*config.tripName);
+    }
+
+    fx.projectDir = std::make_unique<QTemporaryDir>();
+    REQUIRE(fx.projectDir->isValid());
+    fx.projectPath = QDir(fx.projectDir->path()).filePath(config.projectFileBaseName);
+    REQUIRE(fx.project->saveAs(fx.projectPath));
+    fx.project->waitSaveToFinish();
+
+    if (config.addPngNoteFromDataset) {
+        REQUIRE(trip != nullptr);
+        const QString pngSource = copyToTempFolder(
+            testcasesDatasetPath(QStringLiteral("test_cwTextureUploadTask/PhakeCave.PNG")));
+        REQUIRE(QFileInfo::exists(pngSource));
+        trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
+        fx.rootData->futureManagerModel()->waitForFinished();
+        fx.project->waitSaveToFinish();
+        REQUIRE(trip->notes()->rowCount() == 1);
+    }
+
+    fx.repository = fx.project->repository();
+    REQUIRE(fx.repository != nullptr);
+
+    fx.remoteRoot = std::make_unique<QTemporaryDir>();
+    REQUIRE(fx.remoteRoot->isValid());
+    fx.remoteRepoPath = QDir(fx.remoteRoot->path()).filePath(QStringLiteral("remote.git"));
+    REQUIRE(initBareRepo(fx.remoteRepoPath) == GIT_OK);
+
+    const QString addRemoteError = fx.repository->addRemote(
+        QStringLiteral("origin"), QUrl::fromLocalFile(fx.remoteRepoPath));
+    REQUIRE(addRemoteError.isEmpty());
+
+    fx.project->errorModel()->clear();
+    REQUIRE(fx.project->sync());
+    fx.rootData->futureManagerModel()->waitForFinished();
+    fx.project->waitSaveToFinish();
+    CHECK(fx.project->errorModel()->count() == 0);
+
+    fx.cloneDir = std::make_unique<QTemporaryDir>();
+    REQUIRE(fx.cloneDir->isValid());
+    fx.clonePath = QDir(fx.cloneDir->path()).filePath(config.cloneSubdirName);
+
+    QQuickGit::GitRepository cloneRepository;
+    cloneRepository.setDirectory(QDir(fx.clonePath));
+    cloneRepository.setAccount(fx.rootData->account());
+
+    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(fx.remoteRepoPath));
+    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
+    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
+    REQUIRE(!cloneFuture.result().hasError());
+
+    fx.remoteRootData = std::make_unique<cwRootData>();
+    fx.remoteRootData->account()->setName(config.remoteAccountName);
+    fx.remoteRootData->account()->setEmail(config.remoteAccountEmail);
+
+    fx.remoteProject = fx.remoteRootData->project();
+    REQUIRE(fx.remoteProject != nullptr);
+    const QString clonedProjectPath = QDir(fx.clonePath).filePath(
+        QFileInfo(fx.projectPath).fileName());
+    REQUIRE(QFileInfo::exists(clonedProjectPath));
+    fx.remoteProject->loadFile(clonedProjectPath);
+    fx.remoteProject->waitLoadToFinish();
+    fx.remoteProject->waitSaveToFinish();
+
+    fx.remoteRepository = fx.remoteProject->repository();
+    REQUIRE(fx.remoteRepository != nullptr);
+    fx.remoteRepository->setAccount(fx.remoteRootData->account());
+
+    return fx;
 }

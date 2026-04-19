@@ -12,7 +12,7 @@ QC.Dialog {
     anchors.centerIn: QC.Overlay.overlay
     modal: true
     implicitWidth: 460
-    title: qsTr("Open Shared Link")
+    title: qsTr("Open from Link")
 
     onOpened: {
         linkFieldId.text = ""
@@ -37,14 +37,14 @@ QC.Dialog {
         spacing: 8
 
         QC.Label {
-            text: qsTr("Paste a CaveWhere share link below:")
+            text: qsTr("Paste a CaveWhere share link or repository URL:")
         }
 
         QC.TextField {
             id: linkFieldId
             objectName: "openSharedLinkField"
             Layout.fillWidth: true
-            placeholderText: "https://cavewhere.com/open?repo=..."
+            placeholderText: "https://github.com/user/repo.git"
             onAccepted: {
                 if (text.trim().length > 0) {
                     openButtonId.clicked()

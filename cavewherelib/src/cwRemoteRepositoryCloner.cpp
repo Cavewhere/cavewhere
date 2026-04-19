@@ -109,16 +109,30 @@ QString cwRemoteRepositoryCloner::normalizeCloneUrl(const QString& urlText) cons
         return QString();
     }
 
-    if (!trimmed.contains(QStringLiteral("://"))) {
-        int atIndex = trimmed.indexOf('@');
+    if (isSshUrl(trimmed)) {
         int colonIndex = trimmed.lastIndexOf(':');
-        if (atIndex != -1 && colonIndex > atIndex) {
-            return QStringLiteral("ssh://") + trimmed.left(colonIndex) + '/' + trimmed.mid(colonIndex + 1);
-        }
+        return QStringLiteral("ssh://") + trimmed.left(colonIndex) + '/' + trimmed.mid(colonIndex + 1);
+    }
+
+    if (!trimmed.contains(QStringLiteral("://"))) {
         return QStringLiteral("https://") + trimmed;
     }
 
     return trimmed;
+}
+
+bool cwRemoteRepositoryCloner::isSshUrl(const QString& urlText) const
+{
+    const QString trimmed = urlText.trimmed();
+    if (trimmed.startsWith(QStringLiteral("ssh://"))) {
+        return true;
+    }
+    if (trimmed.contains(QStringLiteral("://"))) {
+        return false;
+    }
+    const int atIndex = trimmed.indexOf('@');
+    const int colonIndex = trimmed.lastIndexOf(':');
+    return atIndex != -1 && colonIndex > atIndex;
 }
 
 void cwRemoteRepositoryCloner::resetCloneRepository()
@@ -141,9 +155,7 @@ void cwRemoteRepositoryCloner::clone(const QString& urlText)
 
 void cwRemoteRepositoryCloner::clone(const QString& urlText, const QUrl& destinationParentDir)
 {
-    setCloneErrorMessage(QString());
-    setCloneStatusMessage(QString());
-    setCloneFailedDueToAuthError(false);
+    resetCloneState();
 
     if (!m_recentProjectModel) {
         qWarning() << "RemoteRepositoryCloner requires recentProjectModel to be set before cloning.";
@@ -186,6 +198,13 @@ void cwRemoteRepositoryCloner::clone(const QString& urlText, const QUrl& destina
     m_cloneRepository->setDirectory(dir);
     setCloneStatusMessage(QStringLiteral("Starting clone..."));
     m_cloneWatcher->setFuture(m_cloneRepository->clone(QUrl(normalizedUrl)));
+}
+
+void cwRemoteRepositoryCloner::resetCloneState()
+{
+    setCloneErrorMessage(QString());
+    setCloneStatusMessage(QString());
+    setCloneFailedDueToAuthError(false);
 }
 
 void cwRemoteRepositoryCloner::setCloneErrorMessage(const QString& message)

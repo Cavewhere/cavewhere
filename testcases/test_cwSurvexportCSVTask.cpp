@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 #include <catch2/catch_approx.hpp>
 
 //Our includes
@@ -15,7 +16,7 @@ TEST_CASE("cwSurvexportCSVTask should initilize correctly", "[cwSurvexportCSVTas
 
 TEST_CASE("cwSurvexportCSVTask should parse survexport CSV output correctly", "[cwSurvexportCSVTask]") {
     cwSurvexportCSVTask task;
-    task.setSurvexportCSVFile(QStringLiteral("://datasets/test_cwSurvexportCSVTask/cwSurvexport_data.3d.csv"));
+    task.setSurvexportCSVFile(testcasesDatasetPath("test_cwSurvexportCSVTask/cwSurvexport_data.3d.csv"));
     task.start();
     task.waitToFinish();
 

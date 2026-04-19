@@ -1,7 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file>datasets/test_cwImageProvider/2019c154_-_party_fault-2p.svg</file>
-        <file>datasets/test_cwImageProvider/testpage.png</file>
-        <file>datasets/test_cwImageProvider/supportedImage.svg</file>
-    </qresource>
-</RCC>

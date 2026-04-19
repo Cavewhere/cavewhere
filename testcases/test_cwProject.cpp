@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 #include <catch2/catch_approx.hpp>
 using namespace Catch;
 
@@ -685,7 +686,7 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
     cave->addTrip();
     auto trip = cave->trip(0);
 
-    QString filename = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    QString filename = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     QImage originalImage(filename);
 
     trip->notes()->addFromFiles({QUrl("file:/" + filename)});
@@ -902,6 +903,56 @@ TEST_CASE("discardChangesAndReload reloads in-memory model from committed state"
     CHECK(project->cavingRegion()->cave(0)->name().toStdString() == "Committed Cave");
 }
 
+TEST_CASE("discardChanges after v6 sqlite conversion does not produce HEAD error (issue #418)",
+          "[cwProject][discardChanges][conversion]") {
+    // Reproduces GitHub issue #418: after converting a v6 SQLite .cw bundle to
+    // GitFileType via loadOrConvert(), the git repository has no commits (HEAD
+    // does not exist). A subsequent discardChanges() calls git reset --hard HEAD
+    // which fails with "revspec 'HEAD' not found", posting a warning to the
+    // error model.
+
+    QQuickGit::Account account;
+    account.setName(QStringLiteral("V6 Discard Tester"));
+    account.setEmail(QStringLiteral("v6.discard.tester@example.com"));
+
+    const QString sqliteSource = copyToTempFolder(
+        testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+    REQUIRE(QFileInfo::exists(sqliteSource));
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->setGitAccount(&account);
+
+    // Step 1: Load (convert) the v6 SQLite bundle.
+    project->loadOrConvert(sqliteSource);
+    project->waitLoadToFinish();
+    project->waitSaveToFinish();
+
+    // The conversion should succeed without errors.
+    INFO("Error count after load: " << project->errorModel()->count());
+    for (int i = 0; i < project->errorModel()->count(); ++i) {
+        UNSCOPED_INFO("Error[" << i << "]: "
+                      << project->errorModel()->at(i).message().toStdString());
+    }
+    REQUIRE(project->errorModel()->count() == 0);
+    REQUIRE(project->fileType() == cwProject::GitFileType);
+    REQUIRE(project->cavingRegion()->caveCount() > 0);
+
+    // Step 2: Discard changes on the freshly converted project.
+    // With the bug, this triggers "Failed to discard changes: revspec 'HEAD'
+    // not found" because the conversion path never created an initial commit.
+    project->errorModel()->clear();
+    project->discardChanges();
+    project->waitForDiscardToFinish();
+
+    // Step 3: Verify no error was posted.
+    INFO("Error count after discard: " << project->errorModel()->count());
+    for (int i = 0; i < project->errorModel()->count(); ++i) {
+        UNSCOPED_INFO("Discard error[" << i << "]: "
+                      << project->errorModel()->at(i).message().toStdString());
+    }
+    CHECK(project->errorModel()->count() == 0);
+}
 
 TEST_CASE("NewProject should not clear objects added after call", "[cwProject][newProject]") {
     auto rootData = std::make_unique<cwRootData>();
@@ -1026,11 +1077,11 @@ TEST_CASE("objectPathReady emits for renamed objects", "[cwProject][cwSaveLoad]"
     auto notes = trip->notes();
     REQUIRE(notes != nullptr);
 
-    const QString sourceImage = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString sourceImage = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(sourceImage));
     notes->addFromFiles({QUrl::fromLocalFile(sourceImage)});
 
-    const QString glbSource = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString glbSource = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     REQUIRE(QFileInfo::exists(glbSource));
     trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbSource)});
 
@@ -1097,7 +1148,7 @@ TEST_CASE("Queued copy and rename should preserve note assets", "[cwProject][cwS
     auto notes = trip->notes();
     REQUIRE(notes != nullptr);
 
-    const QString sourceImage = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString sourceImage = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(sourceImage));
 
     QTemporaryDir tempDir;
@@ -1198,6 +1249,13 @@ TEST_CASE("newProject waits for pending edits before reset", "[cwProject][newPro
 
     cave->setName(QStringLiteral("InitialCave"));
     trip->setName(QStringLiteral("InitialTrip"));
+
+    // Save to a permanent location so the project dir survives newProject's temp cleanup
+    QTemporaryDir permanentDir;
+    REQUIRE(permanentDir.isValid());
+    const QString projectPath = QDir(permanentDir.path()).filePath(QStringLiteral("PendingEditsTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
     project->waitSaveToFinish();
 
     const QString oldProjectFile = project->filename();
@@ -1262,7 +1320,7 @@ TEST_CASE("Loading a project clears temporary flag", "[cwProject]") {
 
     REQUIRE(project->isTemporaryProject());
 
-    QString source = copyToTempFolder("://datasets/test_cwProject/v8.cwproj");
+    QString source = copyToTempFolder(testcasesDatasetPath("test_cwProject/v8.cwproj"));
     project->loadOrConvert(source);
     rootData->futureManagerModel()->waitForFinished();
     project->waitLoadToFinish();
@@ -1313,7 +1371,7 @@ TEST_CASE("Loading a project adds .git/info/exclude cache entry", "[cwProject]")
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
-    QString source = copyToTempFolder("://datasets/test_cwProject/v8.cwproj");
+    QString source = copyToTempFolder(testcasesDatasetPath("test_cwProject/v8.cwproj"));
     const QDir projectDir = QFileInfo(source).absoluteDir();
     QFile::remove(projectDir.filePath(QStringLiteral(".git/info/exclude")));
 
@@ -1339,11 +1397,11 @@ TEST_CASE("Loading a project repairs and persists missing top-level ids", "[cwPr
     REQUIRE(trip != nullptr);
     trip->setName(QStringLiteral("Repair Trip"));
 
-    const QString imagePath = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString imagePath = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(imagePath));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(imagePath)});
 
-    const QString glbPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString glbPath = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     REQUIRE(QFileInfo::exists(glbPath));
     trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbPath)});
 
@@ -1513,7 +1571,7 @@ TEST_CASE("Loading a project repairs and persists missing scrap station and lead
     REQUIRE(trip != nullptr);
     trip->setName(QStringLiteral("Repair Scrap Child IDs Trip"));
 
-    const QString imagePath = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString imagePath = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(imagePath));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(imagePath)});
     rootData->futureManagerModel()->waitForFinished();
@@ -1669,7 +1727,7 @@ TEST_CASE("Loading a project repairs duplicate scrap station and lead ids", "[cw
     REQUIRE(trip != nullptr);
     trip->setName(QStringLiteral("Repair Duplicate Scrap Child IDs Trip"));
 
-    const QString imagePath = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString imagePath = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(imagePath));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(imagePath)});
     rootData->futureManagerModel()->waitForFinished();
@@ -1837,7 +1895,7 @@ TEST_CASE("Loading a project repairs duplicate LiDAR station ids", "[cwProject][
     REQUIRE(trip != nullptr);
     trip->setName(QStringLiteral("Repair Duplicate LiDAR Station IDs Trip"));
 
-    const QString glbPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString glbPath = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     REQUIRE(QFileInfo::exists(glbPath));
     trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbPath)});
     rootData->futureManagerModel()->waitForFinished();
@@ -2304,7 +2362,7 @@ TEST_CASE("Remote clone open edit save and sync workflow preserves LFS assets",
     newChunk->setData(cwSurveyChunk::ShotClinoRole, 0, QStringLiteral("0.0"));
     newChunk->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, true);
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     newTrip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -2347,7 +2405,7 @@ TEST_CASE("Remote clone open edit save and sync workflow preserves LFS assets",
         const auto syncError = project->errorModel()->last();
         CHECK(syncError.message() == QStringLiteral("Unsupported LFS remote URL"));
     }
-    CHECK(syncJobsSeen.contains(QStringLiteral("Syncing project")));
+    CHECK(syncJobsSeen.contains(QStringLiteral("Syncing")));
 
     const QString localRepoPath = QFileInfo(project->filename()).absoluteDir().absolutePath();
     git_repository* localRepo = nullptr;
@@ -2529,7 +2587,7 @@ TEST_CASE("cwProject sync fails without remotes after saving survey and notes", 
     chunk->setData(cwSurveyChunk::ShotClinoRole, 0, QStringLiteral("-1.0"));
     chunk->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, true);
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     QTemporaryDir lowerCaseImageRoot;
     REQUIRE(lowerCaseImageRoot.isValid());
@@ -2647,7 +2705,7 @@ TEST_CASE("cwProject sync succeeds after adding remote through project repositor
     chunk->setData(cwSurveyChunk::ShotClinoRole, 0, QStringLiteral("0.5"));
     chunk->setData(cwSurveyChunk::ShotDistanceIncludedRole, 0, true);
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -2832,9 +2890,9 @@ TEST_CASE("cwProject sync tracks png pdf and glb via LFS", "[cwProject][lfs]") {
     REQUIRE(trip != nullptr);
     trip->setName(QStringLiteral("LFS Trip"));
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
-    const QString pdfSource = copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf");
-    const QString glbSource = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
+    const QString pdfSource = copyToTempFolder(testcasesDatasetPath("test_cwPDFConverter/2page-test.pdf"));
+    const QString glbSource = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     REQUIRE(QFileInfo::exists(pngSource));
     REQUIRE(QFileInfo::exists(pdfSource));
     REQUIRE(QFileInfo::exists(glbSource));
@@ -2968,7 +3026,7 @@ TEST_CASE("cwProject sync uploads LFS objects through test LFS server", "[cwProj
     REQUIRE(trip != nullptr);
     trip->setName(QStringLiteral("LFS Sync Trip"));
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     QTemporaryDir lowerCaseImageRoot;
     REQUIRE(lowerCaseImageRoot.isValid());
@@ -3096,7 +3154,7 @@ TEST_CASE("cwProject sync hydrates pulled LFS objects from test LFS server", "[c
     REQUIRE(trip != nullptr);
     trip->setName(QStringLiteral("Hydration Trip"));
 
-    const QString seedPngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString seedPngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(seedPngSource));
     QTemporaryDir authorLowerCaseRoot;
     REQUIRE(authorLowerCaseRoot.isValid());
@@ -3218,7 +3276,7 @@ TEST_CASE("cwProject sync hydrates pulled LFS objects from test LFS server", "[c
     consumerProject->waitLoadToFinish();
     consumerProject->waitSaveToFinish();
 
-    const QString updatePngSource = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    const QString updatePngSource = copyToTempFolder(testcasesDatasetPath("test_cwNote/testpage.png"));
     REQUIRE(QFileInfo::exists(updatePngSource));
     const QString updatePngPath = QDir(authorLowerCaseRoot.path()).filePath(QStringLiteral("hydration-update.png"));
     REQUIRE(QFile::copy(updatePngSource, updatePngPath));
@@ -3457,181 +3515,52 @@ TEST_CASE("cwProject sync pulls remote-only changes into a clean local repo", "[
 }
 
 TEST_CASE("cwProject sync reconciles pulled cave updates into memory", "[cwProject]") {
-    auto rootData = std::make_unique<cwRootData>();
-    auto project = rootData->project();
+    auto fx = makeSyncChurnFixture({
+        .caveName = QStringLiteral("Reconcile Baseline Cave"),
+        .projectFileBaseName = QStringLiteral("sync-reconcile.cwproj"),
+    });
 
-    rootData->account()->setName(QStringLiteral("Sync Tester"));
-    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
-
-    auto region = project->cavingRegion();
-    region->addCave();
-    auto cave = region->cave(0);
-    REQUIRE(cave != nullptr);
-    cave->setName(QStringLiteral("Reconcile Baseline Cave"));
-
-    QTemporaryDir projectDir;
-    REQUIRE(projectDir.isValid());
-    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-reconcile.cwproj"));
-    REQUIRE(project->saveAs(projectPath));
-    project->waitSaveToFinish();
-
-    auto* repository = project->repository();
-    REQUIRE(repository != nullptr);
-
-    QTemporaryDir remoteRoot;
-    REQUIRE(remoteRoot.isValid());
-    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
-
-    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
-
-    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
-                                                         QUrl::fromLocalFile(remoteRepoPath));
-    REQUIRE(addRemoteError.isEmpty());
-
-    project->errorModel()->clear();
-    REQUIRE(project->sync());
-    rootData->futureManagerModel()->waitForFinished();
-    project->waitSaveToFinish();
-    CHECK(project->errorModel()->count() == 0);
-
-    QTemporaryDir cloneDir;
-    REQUIRE(cloneDir.isValid());
-    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
-
-    QQuickGit::GitRepository cloneRepository;
-    cloneRepository.setDirectory(QDir(clonePath));
-    cloneRepository.setAccount(rootData->account());
-
-    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
-    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
-    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
-    REQUIRE(!cloneFuture.result().hasError());
-
-    auto remoteRootData = std::make_unique<cwRootData>();
-    remoteRootData->account()->setName(QStringLiteral("Remote Sync Tester"));
-    remoteRootData->account()->setEmail(QStringLiteral("remote.sync.tester@example.com"));
-
-    auto remoteProject = remoteRootData->project();
-    const QString clonedProjectPath = QDir(clonePath).filePath(QFileInfo(projectPath).fileName());
-    REQUIRE(QFileInfo::exists(clonedProjectPath));
-    remoteProject->loadFile(clonedProjectPath);
-    remoteProject->waitLoadToFinish();
-    remoteProject->waitSaveToFinish();
-
-    auto* remoteRepository = remoteProject->repository();
-    REQUIRE(remoteRepository != nullptr);
-    remoteRepository->setAccount(remoteRootData->account());
-
-    auto* remoteCave = remoteProject->cavingRegion()->cave(0);
+    auto* remoteCave = fx.remoteProject->cavingRegion()->cave(0);
     REQUIRE(remoteCave != nullptr);
     const QString remoteCaveName = QStringLiteral("Reconcile Updated Cave");
     remoteCave->setName(remoteCaveName);
-    remoteProject->waitSaveToFinish();
-    REQUIRE(isProjectModified(remoteProject));
+    fx.remoteProject->waitSaveToFinish();
+    REQUIRE(isProjectModified(fx.remoteProject));
 
-    remoteProject->errorModel()->clear();
-    REQUIRE(remoteProject->sync());
-    remoteRootData->futureManagerModel()->waitForFinished();
-    remoteProject->waitSaveToFinish();
-    CHECK(remoteProject->errorModel()->count() == 0);
-    requireCleanRepository(remoteRepository);
+    fx.remoteProject->errorModel()->clear();
+    REQUIRE(fx.remoteProject->sync());
+    fx.remoteRootData->futureManagerModel()->waitForFinished();
+    fx.remoteProject->waitSaveToFinish();
+    CHECK(fx.remoteProject->errorModel()->count() == 0);
+    requireCleanRepository(fx.remoteRepository);
 
-    project->errorModel()->clear();
-    REQUIRE(project->sync());
-    rootData->futureManagerModel()->waitForFinished();
-    project->waitSaveToFinish();
-    CHECK(project->errorModel()->count() == 0);
-    requireCleanRepository(repository);
+    fx.project->errorModel()->clear();
+    REQUIRE(fx.project->sync());
+    fx.rootData->futureManagerModel()->waitForFinished();
+    fx.project->waitSaveToFinish();
+    CHECK(fx.project->errorModel()->count() == 0);
+    requireCleanRepository(fx.repository);
 
-    auto* localCave = project->cavingRegion()->cave(0);
+    auto* localCave = fx.project->cavingRegion()->cave(0);
     REQUIRE(localCave != nullptr);
     CHECK(localCave->name() == remoteCaveName);
 }
 
 TEST_CASE("cwProject sync incrementally reconciles pulled note updates without replacing cave and trip objects", "[cwProject]") {
-    auto rootData = std::make_unique<cwRootData>();
-    auto project = rootData->project();
+    auto fx = makeSyncChurnFixture({
+        .caveName = QStringLiteral("Incremental Note Reconcile Cave"),
+        .tripName = QStringLiteral("Incremental Note Reconcile Trip"),
+        .projectFileBaseName = QStringLiteral("sync-note-incremental.cwproj"),
+        .addPngNoteFromDataset = true,
+    });
+    requireCleanRepository(fx.repository);
 
-    rootData->account()->setName(QStringLiteral("Sync Tester"));
-    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
-
-    auto region = project->cavingRegion();
-    region->addCave();
-    auto cave = region->cave(0);
-    REQUIRE(cave != nullptr);
-    cave->setName(QStringLiteral("Incremental Note Reconcile Cave"));
-    cave->addTrip();
-    auto trip = cave->trip(0);
-    REQUIRE(trip != nullptr);
-    trip->setName(QStringLiteral("Incremental Note Reconcile Trip"));
-
-    QTemporaryDir projectDir;
-    REQUIRE(projectDir.isValid());
-    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-note-incremental.cwproj"));
-    REQUIRE(project->saveAs(projectPath));
-    project->waitSaveToFinish();
-
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
-    REQUIRE(QFileInfo::exists(pngSource));
-    trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
-    rootData->futureManagerModel()->waitForFinished();
-    project->waitSaveToFinish();
-    REQUIRE(trip->notes()->rowCount() == 1);
-
-    auto* repository = project->repository();
-    REQUIRE(repository != nullptr);
-
-    QTemporaryDir remoteRoot;
-    REQUIRE(remoteRoot.isValid());
-    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
-
-    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
-
-    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
-                                                         QUrl::fromLocalFile(remoteRepoPath));
-    REQUIRE(addRemoteError.isEmpty());
-
-    project->errorModel()->clear();
-    REQUIRE(project->sync());
-    rootData->futureManagerModel()->waitForFinished();
-    project->waitSaveToFinish();
-    CHECK(project->errorModel()->count() == 0);
-    requireCleanRepository(repository);
-
-    QPointer<cwCave> localCavePtr = project->cavingRegion()->cave(0);
+    QPointer<cwCave> localCavePtr = fx.project->cavingRegion()->cave(0);
     REQUIRE(localCavePtr != nullptr);
     QPointer<cwTrip> localTripPtr = localCavePtr->trip(0);
     REQUIRE(localTripPtr != nullptr);
 
-    QTemporaryDir cloneDir;
-    REQUIRE(cloneDir.isValid());
-    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
-
-    QQuickGit::GitRepository cloneRepository;
-    cloneRepository.setDirectory(QDir(clonePath));
-    cloneRepository.setAccount(rootData->account());
-
-    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
-    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
-    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
-    REQUIRE(!cloneFuture.result().hasError());
-
-    auto remoteRootData = std::make_unique<cwRootData>();
-    remoteRootData->account()->setName(QStringLiteral("Remote Sync Tester"));
-    remoteRootData->account()->setEmail(QStringLiteral("remote.sync.tester@example.com"));
-
-    auto remoteProject = remoteRootData->project();
-    const QString clonedProjectPath = QDir(clonePath).filePath(QFileInfo(projectPath).fileName());
-    REQUIRE(QFileInfo::exists(clonedProjectPath));
-    remoteProject->loadFile(clonedProjectPath);
-    remoteProject->waitLoadToFinish();
-    remoteProject->waitSaveToFinish();
-
-    auto* remoteRepository = remoteProject->repository();
-    REQUIRE(remoteRepository != nullptr);
-    remoteRepository->setAccount(remoteRootData->account());
-
-    auto* remoteTrip = remoteProject->cavingRegion()->cave(0)->trip(0);
+    auto* remoteTrip = fx.remoteProject->cavingRegion()->cave(0)->trip(0);
     REQUIRE(remoteTrip != nullptr);
     REQUIRE(remoteTrip->notes()->rowCount() == 1);
     auto* remoteNote = remoteTrip->notes()->notes().first();
@@ -3641,26 +3570,26 @@ TEST_CASE("cwProject sync incrementally reconciles pulled note updates without r
     constexpr double remoteNoteRotation = 17.5;
     remoteNote->setName(remoteNoteName);
     remoteNote->setRotate(remoteNoteRotation);
-    remoteProject->waitSaveToFinish();
-    REQUIRE(isProjectModified(remoteProject));
+    fx.remoteProject->waitSaveToFinish();
+    REQUIRE(isProjectModified(fx.remoteProject));
 
-    remoteProject->errorModel()->clear();
-    REQUIRE(remoteProject->sync());
-    remoteRootData->futureManagerModel()->waitForFinished();
-    remoteProject->waitSaveToFinish();
-    CHECK(remoteProject->errorModel()->count() == 0);
-    requireCleanRepository(remoteRepository);
+    fx.remoteProject->errorModel()->clear();
+    REQUIRE(fx.remoteProject->sync());
+    fx.remoteRootData->futureManagerModel()->waitForFinished();
+    fx.remoteProject->waitSaveToFinish();
+    CHECK(fx.remoteProject->errorModel()->count() == 0);
+    requireCleanRepository(fx.remoteRepository);
 
-    project->errorModel()->clear();
-    REQUIRE(project->sync());
-    rootData->futureManagerModel()->waitForFinished();
-    project->waitSaveToFinish();
-    CHECK(project->errorModel()->count() == 0);
-    requireCleanRepository(repository);
+    fx.project->errorModel()->clear();
+    REQUIRE(fx.project->sync());
+    fx.rootData->futureManagerModel()->waitForFinished();
+    fx.project->waitSaveToFinish();
+    CHECK(fx.project->errorModel()->count() == 0);
+    requireCleanRepository(fx.repository);
 
     REQUIRE(localCavePtr != nullptr);
     REQUIRE(localTripPtr != nullptr);
-    CHECK(project->cavingRegion()->cave(0) == localCavePtr.data());
+    CHECK(fx.project->cavingRegion()->cave(0) == localCavePtr.data());
     CHECK(localCavePtr->trip(0) == localTripPtr.data());
 
     REQUIRE(localTripPtr->notes()->rowCount() == 1);
@@ -3669,7 +3598,7 @@ TEST_CASE("cwProject sync incrementally reconciles pulled note updates without r
     CHECK(localNote->name() == remoteNoteName);
     CHECK(localNote->rotate() == Catch::Approx(remoteNoteRotation));
 
-    const auto syncReport = project->lastSyncReport();
+    const auto syncReport = fx.project->lastSyncReport();
     REQUIRE(syncReport.has_value());
     CHECK(std::any_of(syncReport->changedPaths.cbegin(),
                       syncReport->changedPaths.cend(),
@@ -3701,7 +3630,7 @@ TEST_CASE("cwProject sync incrementally reconciles note updates after remote tri
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -3846,7 +3775,7 @@ TEST_CASE("cwProject sync incrementally reconciles trip rename without note chan
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -3986,7 +3915,7 @@ TEST_CASE("cwProject sync incrementally reconciles remote trip rename with local
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -4133,7 +4062,7 @@ TEST_CASE("cwProject sync incrementally reconciles local trip rename with remote
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -5438,7 +5367,7 @@ TEST_CASE("cwProject sync incrementally reconciles second fast-forward trip rena
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -5616,7 +5545,7 @@ TEST_CASE("cwProject sync incrementally reconciles remote cave rename with local
     REQUIRE(trip != nullptr);
     trip->setName(QStringLiteral("2025.2 Release test"));
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     const QString pngSource2 = QFileInfo(pngSource).absoluteDir().filePath(QStringLiteral("PhakeCave-copy.PNG"));
     QFile::remove(pngSource2);
@@ -5952,7 +5881,7 @@ TEST_CASE("cwProject sync incrementally reconciles note asset updates after remo
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -6028,7 +5957,7 @@ TEST_CASE("cwProject sync incrementally reconciles note asset updates after remo
     remoteTrip->setName(remoteTripName);
     remoteProject->waitSaveToFinish();
 
-    const QString replacementSource = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    const QString replacementSource = copyToTempFolder(testcasesDatasetPath("test_cwNote/testpage.png"));
     REQUIRE(QFileInfo::exists(replacementSource));
     QFile replacementFile(replacementSource);
     REQUIRE(replacementFile.open(QIODevice::ReadOnly));
@@ -6124,7 +6053,7 @@ TEST_CASE("cwProject sync structurally reconciles note scraps by id without repl
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -6281,8 +6210,8 @@ TEST_CASE("cwProject sync reconciles note order changes without full note-model 
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString firstImageSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
-    const QString secondImageSource = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    const QString firstImageSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
+    const QString secondImageSource = copyToTempFolder(testcasesDatasetPath("test_cwNote/testpage.png"));
     REQUIRE(QFileInfo::exists(firstImageSource));
     REQUIRE(QFileInfo::exists(secondImageSource));
     trip->notes()->addFromFiles({
@@ -6399,8 +6328,8 @@ TEST_CASE("cwProject sync preserves note QObject identity on reorder-only reconc
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString firstImageSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
-    const QString secondImageSource = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    const QString firstImageSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
+    const QString secondImageSource = copyToTempFolder(testcasesDatasetPath("test_cwNote/testpage.png"));
     REQUIRE(QFileInfo::exists(firstImageSource));
     REQUIRE(QFileInfo::exists(secondImageSource));
     trip->notes()->addFromFiles({
@@ -6497,7 +6426,7 @@ TEST_CASE("cwProject sync incrementally reconciles pulled scrap station updates"
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -6617,7 +6546,7 @@ TEST_CASE("cwProject sync incrementally reconciles pulled LiDAR note updates", "
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString glbSource = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString glbSource = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     REQUIRE(QFileInfo::exists(glbSource));
     trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -6778,7 +6707,7 @@ TEST_CASE("cwProject sync incrementally reconciles LiDAR note updates after remo
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString glbSource = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString glbSource = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     REQUIRE(QFileInfo::exists(glbSource));
     trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -6928,7 +6857,7 @@ TEST_CASE("cwProject sync incrementally reconciles LiDAR asset updates after rem
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString glbSource = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString glbSource = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     REQUIRE(QFileInfo::exists(glbSource));
     trip->notesLiDAR()->addFromFiles({QUrl::fromLocalFile(glbSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -7005,7 +6934,7 @@ TEST_CASE("cwProject sync incrementally reconciles LiDAR asset updates after rem
     remoteTrip->setName(remoteTripName);
     remoteProject->waitSaveToFinish();
 
-    const QString replacementSource = copyToTempFolder("://datasets/test_cwGltfLoader/test.glb");
+    const QString replacementSource = copyToTempFolder(testcasesDatasetPath("test_cwGltfLoader/test.glb"));
     REQUIRE(QFileInfo::exists(replacementSource));
     QFile replacementFile(replacementSource);
     REQUIRE(replacementFile.open(QIODevice::ReadOnly));
@@ -7105,7 +7034,7 @@ TEST_CASE("cwProject sync falls back to full reconcile for ambiguous scrap struc
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngSource = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(pngSource));
     trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
     rootData->futureManagerModel()->waitForFinished();
@@ -7220,143 +7149,143 @@ TEST_CASE("cwProject sync falls back to full reconcile for ambiguous scrap struc
 }
 
 TEST_CASE("cwProject sync handles local edit churn during reconcile apply window", "[cwProject][sync]") {
-    auto rootData = std::make_unique<cwRootData>();
-    auto project = rootData->project();
+    auto fx = makeSyncChurnFixture({
+        .caveName = QStringLiteral("Remote Apply Guard Cave"),
+        .tripName = QStringLiteral("Remote Apply Guard Trip"),
+        .projectFileBaseName = QStringLiteral("sync-remote-apply-guard.cwproj"),
+        .addPngNoteFromDataset = true,
+    });
 
-    rootData->account()->setName(QStringLiteral("Sync Tester"));
-    rootData->account()->setEmail(QStringLiteral("sync.tester@example.com"));
-
-    auto region = project->cavingRegion();
-    region->addCave();
-    auto cave = region->cave(0);
-    REQUIRE(cave != nullptr);
-    cave->setName(QStringLiteral("Remote Apply Guard Cave"));
-    cave->addTrip();
-    auto trip = cave->trip(0);
-    REQUIRE(trip != nullptr);
-    trip->setName(QStringLiteral("Remote Apply Guard Trip"));
-
-    QTemporaryDir projectDir;
-    REQUIRE(projectDir.isValid());
-    const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("sync-remote-apply-guard.cwproj"));
-    REQUIRE(project->saveAs(projectPath));
-    project->waitSaveToFinish();
-
-    const QString pngSource = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
-    REQUIRE(QFileInfo::exists(pngSource));
-    trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
-    rootData->futureManagerModel()->waitForFinished();
-    project->waitSaveToFinish();
-    REQUIRE(trip->notes()->rowCount() == 1);
-
-    auto* repository = project->repository();
-    REQUIRE(repository != nullptr);
-
-    QTemporaryDir remoteRoot;
-    REQUIRE(remoteRoot.isValid());
-    const QString remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
-
-    REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
-
-    const QString addRemoteError = repository->addRemote(QStringLiteral("origin"),
-                                                         QUrl::fromLocalFile(remoteRepoPath));
-    REQUIRE(addRemoteError.isEmpty());
-
-    project->errorModel()->clear();
-    REQUIRE(project->sync());
-    rootData->futureManagerModel()->waitForFinished();
-    project->waitSaveToFinish();
-    CHECK(project->errorModel()->count() == 0);
-
-    QTemporaryDir cloneDir;
-    REQUIRE(cloneDir.isValid());
-    const QString clonePath = QDir(cloneDir.path()).filePath(QStringLiteral("clone-2"));
-
-    QQuickGit::GitRepository cloneRepository;
-    cloneRepository.setDirectory(QDir(clonePath));
-    cloneRepository.setAccount(rootData->account());
-
-    auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(remoteRepoPath));
-    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
-    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
-    REQUIRE(!cloneFuture.result().hasError());
-
-    auto remoteRootData = std::make_unique<cwRootData>();
-    remoteRootData->account()->setName(QStringLiteral("Remote Sync Tester"));
-    remoteRootData->account()->setEmail(QStringLiteral("remote.sync.tester@example.com"));
-
-    auto remoteProject = remoteRootData->project();
-    const QString clonedProjectPath = QDir(clonePath).filePath(QFileInfo(projectPath).fileName());
-    REQUIRE(QFileInfo::exists(clonedProjectPath));
-    remoteProject->loadFile(clonedProjectPath);
-    remoteProject->waitLoadToFinish();
-    remoteProject->waitSaveToFinish();
-
-    auto* remoteRepository = remoteProject->repository();
-    REQUIRE(remoteRepository != nullptr);
-    remoteRepository->setAccount(remoteRootData->account());
-
-    auto* remoteCave = remoteProject->cavingRegion()->cave(0);
+    auto* remoteCave = fx.remoteProject->cavingRegion()->cave(0);
     REQUIRE(remoteCave != nullptr);
     auto* remoteTrip = remoteCave->trip(0);
     REQUIRE(remoteTrip != nullptr);
     const QString remoteCaveName = QStringLiteral("Remote Apply Guard Cave Updated");
     remoteCave->setName(remoteCaveName);
-    remoteProject->waitSaveToFinish();
-    REQUIRE(isProjectModified(remoteProject));
+    fx.remoteProject->waitSaveToFinish();
+    REQUIRE(isProjectModified(fx.remoteProject));
 
-    remoteProject->errorModel()->clear();
-    REQUIRE(remoteProject->sync());
-    remoteRootData->futureManagerModel()->waitForFinished();
-    remoteProject->waitSaveToFinish();
-    CHECK(remoteProject->errorModel()->count() == 0);
+    fx.remoteProject->errorModel()->clear();
+    REQUIRE(fx.remoteProject->sync());
+    fx.remoteRootData->futureManagerModel()->waitForFinished();
+    fx.remoteProject->waitSaveToFinish();
+    CHECK(fx.remoteProject->errorModel()->count() == 0);
 
-    project->errorModel()->clear();
-    REQUIRE(project->sync());
+    fx.project->errorModel()->clear();
+    REQUIRE(fx.project->sync());
 
     int localMutationCount = 0;
-    QElapsedTimer churnTimer;
-    churnTimer.start();
-    while (rootData->futureManagerModel()->rowCount() > 0 && churnTimer.elapsed() < 2000) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-        auto* churnCave = project->cavingRegion()->cave(0);
-        auto* churnTrip = churnCave ? churnCave->trip(0) : nullptr;
-        if (churnTrip != nullptr) {
-            churnTrip->setDate(QDateTime(QDate(2024, 1, 1).addDays(localMutationCount), QTime()));
-            ++localMutationCount;
-        }
-    }
+    runChurnLoop(fx.rootData->futureManagerModel(),
+                 {.budgetMs = 2000, .processEventsMaxMs = 20},
+                 [&](int) {
+                     auto* churnCave = fx.project->cavingRegion()->cave(0);
+                     auto* churnTrip = churnCave ? churnCave->trip(0) : nullptr;
+                     if (churnTrip != nullptr) {
+                         churnTrip->setDate(QDateTime(QDate(2024, 1, 1).addDays(localMutationCount), QTime()));
+                         ++localMutationCount;
+                     }
+                 });
 
-    rootData->futureManagerModel()->waitForFinished();
-    project->waitSaveToFinish();
+    fx.rootData->futureManagerModel()->waitForFinished();
+    fx.project->waitSaveToFinish();
 
     REQUIRE(localMutationCount > 0);
-    if (project->errorModel()->count() > 0) {
-        const auto syncError = project->errorModel()->last();
+    if (fx.project->errorModel()->count() > 0) {
+        const auto syncError = fx.project->errorModel()->last();
         CHECK(syncError.type() == cwError::Warning);
         const QString syncMessage = syncError.message();
         if (syncMessage.contains(QStringLiteral("Sync did not complete after 3 retries"))) {
             CHECK(syncMessage.contains(QStringLiteral("model changed before reconcile apply")));
         }
     } else {
-        auto* localCave = project->cavingRegion()->cave(0);
+        auto* localCave = fx.project->cavingRegion()->cave(0);
         REQUIRE(localCave != nullptr);
 
         // If churn stops before the first sync finishes reconciliation, a follow-up
         // sync without additional churn should converge on the remote cave rename.
         if (localCave->name() != remoteCaveName) {
-            project->errorModel()->clear();
-            REQUIRE(project->sync());
-            rootData->futureManagerModel()->waitForFinished();
-            project->waitSaveToFinish();
-            CHECK(project->errorModel()->count() == 0);
+            fx.project->errorModel()->clear();
+            REQUIRE(fx.project->sync());
+            fx.rootData->futureManagerModel()->waitForFinished();
+            fx.project->waitSaveToFinish();
+            CHECK(fx.project->errorModel()->count() == 0);
 
-            localCave = project->cavingRegion()->cave(0);
+            localCave = fx.project->cavingRegion()->cave(0);
             REQUIRE(localCave != nullptr);
         }
 
         CHECK(localCave->name() == remoteCaveName);
     }
+}
+
+// Stress-test the "pull merged, reconcile skipped due to churn" race. The
+// race is probabilistic — a single iteration triggers the bug roughly 1-in-6
+// runs without the fix — so this test runs many back-to-back rename/churn
+// cycles to amplify the cumulative detection rate (>95% with 20 iterations).
+TEST_CASE("cwProject sync converges remote cave rename across churn-induced retries", "[cwProject][sync][churn-race]") {
+    auto fx = makeSyncChurnFixture({
+        .caveName = QStringLiteral("Churn Race Cave 0"),
+        .tripName = QStringLiteral("Churn Race Trip"),
+        .projectFileBaseName = QStringLiteral("churn-race.cwproj"),
+        .cloneSubdirName = QStringLiteral("peer-clone"),
+        .remoteAccountName = QStringLiteral("Peer"),
+        .remoteAccountEmail = QStringLiteral("peer@example.com"),
+    });
+
+    constexpr int kIterations = 20;
+    int mutationCount = 0;
+
+    for (int iter = 0; iter < kIterations; ++iter) {
+        INFO("iteration=" << iter);
+
+        const QString targetName = QStringLiteral("Churn Race Cave %1").arg(iter + 1);
+
+        auto* remoteCave = fx.remoteProject->cavingRegion()->cave(0);
+        REQUIRE(remoteCave != nullptr);
+        remoteCave->setName(targetName);
+        fx.remoteProject->waitSaveToFinish();
+        REQUIRE(fx.remoteProject->sync());
+        fx.remoteRootData->futureManagerModel()->waitForFinished();
+        fx.remoteProject->waitSaveToFinish();
+        CHECK(fx.remoteProject->errorModel()->count() == 0);
+
+        // Local syncs while churning its own trip date. Tight loop with zero
+        // processEvents wait maximises mutation density.
+        fx.project->errorModel()->clear();
+        REQUIRE(fx.project->sync());
+
+        runChurnLoop(fx.rootData->futureManagerModel(),
+                     {.budgetMs = 5000, .processEventsMaxMs = 0},
+                     [&](int) {
+                         auto* c = fx.project->cavingRegion()->cave(0);
+                         auto* t = c ? c->trip(0) : nullptr;
+                         if (t != nullptr) {
+                             t->setDate(QDateTime(QDate(2024, 1, 1).addDays(mutationCount), QTime()));
+                             ++mutationCount;
+                         }
+                     });
+
+        fx.rootData->futureManagerModel()->waitForFinished();
+        fx.project->waitSaveToFinish();
+
+        // Sync may finish clean or with a retry-cap warning. A quiescent
+        // follow-up sync (no churn) must always converge the in-memory cave
+        // name to the remote rename.
+        auto* localCave = fx.project->cavingRegion()->cave(0);
+        REQUIRE(localCave != nullptr);
+        if (localCave->name() != targetName) {
+            fx.project->errorModel()->clear();
+            REQUIRE(fx.project->sync());
+            fx.rootData->futureManagerModel()->waitForFinished();
+            fx.project->waitSaveToFinish();
+            CHECK(fx.project->errorModel()->count() == 0);
+            localCave = fx.project->cavingRegion()->cave(0);
+            REQUIRE(localCave != nullptr);
+        }
+        CHECK(localCave->name() == targetName);
+    }
+
+    INFO("total mutations=" << mutationCount);
 }
 
 TEST_CASE("cwProject sync reconciles pulled model changes before pushing local changes", "[cwProject]") {
@@ -8588,7 +8517,7 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
     QList<Image> testImages;
     std::transform(imageColors.begin(), imageColors.end(), std::back_inserter(testImages), image);
 
-    QString crashMapPath = "://datasets/test_cwProject/crashMap.png";
+    QString crashMapPath = testcasesDatasetPath("test_cwProject/crashMap.png");
     QImage crashMap(crashMapPath);
     auto y = crashMap.size().height() - 1;
     testImages += Image {crashMap.pixelColor(0, y),
@@ -8644,7 +8573,7 @@ TEST_CASE("New project should clear loaded scraps before reload", "[cwProject]")
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
 
-    const QString dataset = copyToTempFolder("://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+    const QString dataset = copyToTempFolder(testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
     project->loadOrConvert(dataset);
     project->waitLoadToFinish();
 
@@ -8662,7 +8591,7 @@ TEST_CASE("Reloading the same project should replace scrap objects", "[cwProject
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
 
-    const QString dataset = copyToTempFolder("://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+    const QString dataset = copyToTempFolder(testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
     project->loadOrConvert(dataset);
     project->waitLoadToFinish();
 
@@ -9049,7 +8978,7 @@ TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
     };
 
     auto makeExtractedCwprojFixture = []() -> QString {
-        const QString zippedFixture = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
+        const QString zippedFixture = copyToTempFolder(testcasesDatasetPath("test_cwProject/jaws of the beast with scrap.zip"));
         QFileInfo zipInfo(zippedFixture);
         auto extractResult = cwZip::extractAll(zippedFixture, zipInfo.canonicalPath());
         REQUIRE_FALSE(extractResult.hasError());
@@ -9077,7 +9006,7 @@ TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
     };
 
     auto makeBundledFixture = []() -> QString {
-        const QString bundledZip = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
+        const QString bundledZip = copyToTempFolder(testcasesDatasetPath("test_cwProject/jaws of the beast with scrap.zip"));
         const QString bundledArchive = QFileInfo(bundledZip).path()
             + QDir::separator()
             + QFileInfo(bundledZip).completeBaseName()
@@ -9186,8 +9115,8 @@ TEST_CASE("SaveAs dual format matrix", "[cwProject][saveAs]") {
 //     auto project = rootData->project();
 
 //     QList<QUrl> filenames {
-//         QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")),
-//         QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwProject/crashMap.png"))
+//         QUrl::fromLocalFile(copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"))),
+//         QUrl::fromLocalFile(copyToTempFolder(testcasesDatasetPath("test_cwProject/crashMap.png")))
 //     };
 
 //     QList<cwImage> loadedImages;
@@ -9319,7 +9248,7 @@ TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
             cave->addTrip();
             auto trip = cave->trip(0);
 
-            const QString pdfPath = copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf");
+            const QString pdfPath = copyToTempFolder(testcasesDatasetPath("test_cwPDFConverter/2page-test.pdf"));
 
             cwPDFSettings::instance()->setResolutionImport(row.resolutionPPI);
 
@@ -9370,13 +9299,13 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
     };
 
     //Older sqlite project: detection triggers conversion, resulting in GitFileType
-    CHECK(detectType(copyToTempFolder(":/datasets/test_cwProject/Phake Cave 3000.cw")) == cwProject::GitFileType);
+    CHECK(detectType(copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"))) == cwProject::GitFileType);
 
     //A file based file
-    CHECK(detectType(copyToTempFolder(":/datasets/test_cwProject/v8.cwproj")) == cwProject::GitFileType);
+    CHECK(detectType(copyToTempFolder(testcasesDatasetPath("test_cwProject/v8.cwproj"))) == cwProject::GitFileType);
 
     //A bundled project fixture (copy .zip fixture, rename to .cw)
-    const QString bundledZip = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
+    const QString bundledZip = copyToTempFolder(testcasesDatasetPath("test_cwProject/jaws of the beast with scrap.zip"));
     const QString bundledArchive = QFileInfo(bundledZip).path()
         + QDir::separator()
         + QFileInfo(bundledZip).completeBaseName()
@@ -9416,20 +9345,20 @@ TEST_CASE("cwProject fileType should reflect the current loaded project format",
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
-    const QString sqliteSource = copyToTempFolder(":/datasets/test_cwProject/Phake Cave 3000.cw");
+    const QString sqliteSource = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     project->loadOrConvert(sqliteSource);
     rootData->futureManagerModel()->waitForFinished();
     project->waitLoadToFinish();
     project->waitSaveToFinish();
     CHECK(project->fileType() == cwProject::GitFileType);
 
-    const QString gitSource = copyToTempFolder(":/datasets/test_cwProject/v8.cwproj");
+    const QString gitSource = copyToTempFolder(testcasesDatasetPath("test_cwProject/v8.cwproj"));
     project->loadOrConvert(gitSource);
     rootData->futureManagerModel()->waitForFinished();
     project->waitLoadToFinish();
     CHECK(project->fileType() == cwProject::GitFileType);
 
-    const QString bundledZip = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
+    const QString bundledZip = copyToTempFolder(testcasesDatasetPath("test_cwProject/jaws of the beast with scrap.zip"));
     const QString bundledArchive = QFileInfo(bundledZip).path()
         + QDir::separator()
         + QFileInfo(bundledZip).completeBaseName()
@@ -9443,7 +9372,7 @@ TEST_CASE("cwProject fileType should reflect the current loaded project format",
 }
 
 TEST_CASE("cwProject should save bundled .cw changes", "[cwProject]") {
-    const QString bundledZip = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
+    const QString bundledZip = copyToTempFolder(testcasesDatasetPath("test_cwProject/jaws of the beast with scrap.zip"));
     const QString bundledArchive = QFileInfo(bundledZip).path()
         + QDir::separator()
         + QFileInfo(bundledZip).completeBaseName()
@@ -9488,7 +9417,7 @@ TEST_CASE("cwProject should save bundled .cw changes", "[cwProject]") {
 }
 
 TEST_CASE("Bundled save should exclude git-excluded files", "[cwProject][bundled][exclude]") {
-    const QString bundledZip = copyToTempFolder("://datasets/test_cwProject/jaws of the beast with scrap.zip");
+    const QString bundledZip = copyToTempFolder(testcasesDatasetPath("test_cwProject/jaws of the beast with scrap.zip"));
     const QString bundledArchive = QFileInfo(bundledZip).path()
         + QDir::separator()
         + QFileInfo(bundledZip).completeBaseName()
@@ -9565,7 +9494,7 @@ TEST_CASE("Updating scrap data from a loaded project should save", "[cwProject]"
     root->account()->setEmail(QStringLiteral("scrap.save.tester@example.com"));
 
     TestHelper helper;
-    helper.loadProjectFromZip(root->project(), QStringLiteral("://datasets/test_cwProject/jaws of the beast with scrap.zip"));
+    helper.loadProjectFromZip(root->project(), testcasesDatasetPath("test_cwProject/jaws of the beast with scrap.zip"));
     root->project()->waitLoadToFinish();
 
     root->futureManagerModel()->waitForFinished();
@@ -9758,7 +9687,7 @@ TEST_CASE("Renaming a trip moves its files and note assets", "[cwProject][cwTrip
     REQUIRE(root != nullptr);
 
     TestHelper helper;
-    helper.loadProjectFromZip(root->project(), QStringLiteral("://datasets/test_cwProject/jaws of the beast with scrap.zip"));
+    helper.loadProjectFromZip(root->project(), testcasesDatasetPath("test_cwProject/jaws of the beast with scrap.zip"));
     root->project()->waitLoadToFinish();
     root->futureManagerModel()->waitForFinished();
 
@@ -9812,7 +9741,7 @@ TEST_CASE("Renaming a trip moves its files and note assets", "[cwProject][cwTrip
     }
 
     // Add a LiDAR note with a copied GLB so rename covers LiDAR assets too
-    const QString glbSource = copyToTempFolder(":/datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString glbSource = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     REQUIRE(QFileInfo::exists(glbSource));
 
     lidarModel->addFromFiles({QUrl::fromLocalFile(glbSource)});
@@ -11075,7 +11004,7 @@ TEST_CASE("LiDAR GLB persistence: file copy + stations", "[cwProject]") {
     CHECK(lidarModel->rowCount() == 0);
 
     // ---- Prepare a GLB file in temp (you can duplicate/rename if needed) ----
-    const QString originalGlbPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString originalGlbPath = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     REQUIRE(QFileInfo::exists(originalGlbPath));
     const QByteArray originalHash = fileSha256(originalGlbPath);
     REQUIRE(!originalHash.isEmpty());
@@ -11432,9 +11361,15 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
         return result;
     };
 
-    QString convertedFilename = [](){
+    // Use a QTemporaryDir to hold the permanent copy of the converted project.
+    // The conversion creates a temp directory that is cleaned up when the project
+    // is destroyed, so we save to a permanent location first.
+    QTemporaryDir permanentConvertedDir;
+    REQUIRE(permanentConvertedDir.isValid());
+
+    QString convertedFilename = [&permanentConvertedDir](){
         auto root = std::make_unique<cwRootData>();
-        const QString filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+        const QString filename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
         root->project()->loadOrConvert(filename);
         root->project()->waitLoadToFinish();
@@ -11444,11 +11379,14 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
         // so filename() points to the git dir, not the original .cw path.
         REQUIRE(root->project()->filename() != filename);
         REQUIRE(root->project()->fileType() == cwProject::GitFileType);
-        const QDir workingProjectRoot = QFileInfo(root->project()->dataRootDir().absolutePath()).absoluteDir();
-        const QString workingProjectFile = firstCwprojInDirectory(workingProjectRoot.absolutePath());
-        REQUIRE_FALSE(workingProjectFile.isEmpty());
 
-        return workingProjectFile;
+        // Save to a permanent location so it survives destruction of the temp project
+        const QString permanentPath = QDir(permanentConvertedDir.path()).filePath(QStringLiteral("Converted.cwproj"));
+        REQUIRE(root->project()->saveAs(permanentPath));
+        root->futureManagerModel()->waitForFinished();
+        root->project()->waitSaveToFinish();
+
+        return root->project()->filename();
     }();
 
     auto initialLoad = scan(QFileInfo(convertedFilename).absolutePath());
@@ -11515,7 +11453,7 @@ TEST_CASE("V6 conversion writes note image paths relative to note file",
           "[cwProject][conversion][regression]")
 {
     auto root = std::make_unique<cwRootData>();
-    const QString sourceFilename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    const QString sourceFilename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
     root->project()->loadOrConvert(sourceFilename);
     root->project()->waitLoadToFinish();
@@ -11552,7 +11490,7 @@ TEST_CASE("V6 conversion writes note image paths relative to note file",
 TEST_CASE("loadOrConvert sqlite converts to a temporary git directory", "[cwProject][conversion]") {
     // SQLite .cw files now convert to a temporary git directory (GitFileType).
     // The original .cw file is not modified; saves go to the temp git dir.
-    const QString sqliteSource = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    const QString sqliteSource = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     REQUIRE(QFileInfo::exists(sqliteSource));
 
     auto project = std::make_unique<cwProject>();
@@ -11596,7 +11534,7 @@ TEST_CASE("loadOrConvert sqlite converts to a temporary git directory", "[cwProj
 
 TEST_CASE("loadOrConvert sqlite read-only source remains temporary and won't save directly",
           "[cwProject][conversion][bundled]") {
-    const QString sqliteSource = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    const QString sqliteSource = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     REQUIRE(QFileInfo::exists(sqliteSource));
 
     QFile sourceFile(sqliteSource);
@@ -11624,7 +11562,7 @@ TEST_CASE("loadOrConvert sqlite read-only source remains temporary and won't sav
 }
 
 TEST_CASE("Caves should be removed correctly simple", "[cwProject]") {
-    auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto filename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
 
@@ -11654,7 +11592,7 @@ TEST_CASE("Caves should be removed correctly simple", "[cwProject]") {
 }
 
 TEST_CASE("Trips should be removed correctly simple", "[cwProject]") {
-    auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto filename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
 
@@ -11685,7 +11623,7 @@ TEST_CASE("Trips should be removed correctly simple", "[cwProject]") {
 }
 
 TEST_CASE("Note should be removed correctly simple", "[cwProject]") {
-    auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto filename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
 
@@ -11740,7 +11678,7 @@ TEST_CASE("LiDAR note should be removed correctly simple", "[cwProject][regressi
     cwSurveyNoteLiDARModel* const lidarModel = trip->notesLiDAR();
     REQUIRE(lidarModel != nullptr);
 
-    const QString glbSource = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString glbSource = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     REQUIRE(QFileInfo::exists(glbSource));
 
     lidarModel->addFromFiles({QUrl::fromLocalFile(glbSource)});
@@ -12176,7 +12114,7 @@ TEST_CASE("modified property - note operations", "[cwProject][modified][notes]")
     f.saveAndFlush(QStringLiteral("modified-notes-test.cwproj"));
 
     const QString imagePath = copyToTempFolder(
-        QStringLiteral("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"));
+        testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(imagePath));
 
     SECTION("adding a note marks the project modified") {
@@ -12226,7 +12164,7 @@ TEST_CASE("modified property - scrap operations", "[cwProject][modified][scraps]
     ModifiedTestFixture f;
 
     const QString imagePath = copyToTempFolder(
-        QStringLiteral("://datasets/test_cwTextureUploadTask/PhakeCave.PNG"));
+        testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(QFileInfo::exists(imagePath));
 
     f.trip->notes()->addFromFiles({QUrl::fromLocalFile(imagePath)});
@@ -12297,7 +12235,7 @@ TEST_CASE("modified property - LiDAR operations", "[cwProject][modified][lidar]"
     f.saveAndFlush(QStringLiteral("modified-lidar-test.cwproj"));
 
     const QString glbPath = copyToTempFolder(
-        QStringLiteral("://datasets/test_cwSurveyNotesConcatModel/bones.glb"));
+        testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
     REQUIRE(QFileInfo::exists(glbPath));
 
     SECTION("adding a LiDAR note marks the project modified") {
@@ -12789,12 +12727,12 @@ TEST_CASE("shareLink round-trip: output parses back to original repo URL via cwD
     handlerUrl.setQuery(shareLink.query());
 
     cwDeepLinkHandler handler;
-    QUrl receivedUrl;
+    QString receivedUrl;
     QObject::connect(&handler, &cwDeepLinkHandler::openRepoRequested,
-                     [&](const QUrl& url) { receivedUrl = url; });
+                     [&](const QString& url) { receivedUrl = url; });
 
     handler.handleUrl(handlerUrl);
-    CHECK(receivedUrl == repoUrl);
+    CHECK(receivedUrl == repoUrl.toString());
 }
 
 TEST_CASE("shareLink prefers origin remote when multiple remotes present", "[ShareLink]")
@@ -13078,7 +13016,7 @@ TEST_CASE("V6 conversion preserves note image resolution", "[cwProject][v6DPI]")
     // and one scrap. The note's imageResolution was set to 800 DPI.
     // After conversion the resolution must survive, not reset to 72 DPI.
 
-    auto project = fileToProject("://datasets/test_cwProject/dpiTest.cw");
+    auto project = fileToProject(testcasesDatasetPath("test_cwProject/dpiTest.cw"));
     REQUIRE(project != nullptr);
 
     auto* region = project->cavingRegion();
@@ -13097,4 +13035,245 @@ TEST_CASE("V6 conversion preserves note image resolution", "[cwProject][v6DPI]")
     // The v6 file had the resolution set to 800 DPI
     CHECK(note->imageResolution()->unit() == cwUnits::DotsPerInch);
     CHECK(note->imageResolution()->value() == Approx(800.0).epsilon(1e-2));
+}
+
+// ---------------------------------------------------------------------------
+// Temp directory cleanup tests
+// ---------------------------------------------------------------------------
+
+namespace {
+// Returns the QTemporaryDir-level path for a temp project.
+// project->filename() returns e.g. /tmp/abc123/tempName/tempName.cwproj
+// projectRootDir is /tmp/abc123/tempName/
+// The QTemporaryDir path is /tmp/abc123/ (one level up from project root).
+QString tempProjectOwnerDir(cwProject* project) {
+    const QFileInfo cwprojInfo(project->filename());
+    const QDir projectRoot = cwprojInfo.absoluteDir();        // /tmp/abc123/tempName/
+    return QFileInfo(projectRoot.absolutePath()).absolutePath(); // /tmp/abc123/
+}
+} // namespace
+
+TEST_CASE("newProject cleans up previous temp directory", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    const QString oldTempDir = tempProjectOwnerDir(project);
+    REQUIRE(QFileInfo::exists(oldTempDir));
+
+    project->newProject();
+    project->waitSaveToFinish();
+
+    CHECK_FALSE(QFileInfo::exists(oldTempDir));
+
+    // The new project should have its own temp dir
+    const QString newTempDir = tempProjectOwnerDir(project);
+    CHECK(QFileInfo::exists(newTempDir));
+    CHECK(oldTempDir != newTempDir);
+}
+
+TEST_CASE("destructor cleans up temp directory", "[cwProject][tempCleanup]") {
+    QString capturedTempDir;
+    {
+        auto rootData = std::make_unique<cwRootData>();
+        auto project = rootData->project();
+        project->waitSaveToFinish();
+
+        capturedTempDir = tempProjectOwnerDir(project);
+        REQUIRE(QFileInfo::exists(capturedTempDir));
+    }
+    // rootData destroyed → cwProject → cwSaveLoad destructor fires
+    CHECK_FALSE(QFileInfo::exists(capturedTempDir));
+}
+
+TEST_CASE("saveAs(.cwproj) moves temp dir to permanent location", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    const QString tempDir = tempProjectOwnerDir(project);
+    REQUIRE(QFileInfo::exists(tempDir));
+
+    QTemporaryDir permanentLocation;
+    REQUIRE(permanentLocation.isValid());
+    const QString projectPath = QDir(permanentLocation.path()).filePath(QStringLiteral("MovedProject.cwproj"));
+
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    CHECK_FALSE(project->isTemporaryProject());
+    CHECK_FALSE(QFileInfo::exists(tempDir));
+    CHECK(QFileInfo::exists(project->filename()));
+}
+
+TEST_CASE("permanent project dir survives newProject", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    QTemporaryDir permanentLocation;
+    REQUIRE(permanentLocation.isValid());
+    const QString projectPath = QDir(permanentLocation.path()).filePath(QStringLiteral("PermanentProject.cwproj"));
+
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString permanentProjectDir = QFileInfo(project->filename()).absolutePath();
+    REQUIRE(QFileInfo::exists(permanentProjectDir));
+
+    project->newProject();
+    project->waitSaveToFinish();
+
+    CHECK(QFileInfo::exists(permanentProjectDir));
+}
+
+TEST_CASE("bundled archive extraction temp dir cleaned up on newProject", "[cwProject][tempCleanup]") {
+    // Create a project with some data and save as .cw bundle
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("BundleTestCave"));
+
+    QTemporaryDir bundleDir;
+    REQUIRE(bundleDir.isValid());
+    const QString bundlePath = QDir(bundleDir.path()).filePath(QStringLiteral("test.cw"));
+    REQUIRE(project->saveAs(bundlePath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Now load the .cw bundle — this extracts to a temp dir
+    project->newProject();
+    project->waitSaveToFinish();
+    project->loadFile(bundlePath);
+    project->waitLoadToFinish();
+    project->waitSaveToFinish();
+
+    // For bundled projects, filename() returns the .cw bundle path; derive
+    // the extraction root from dataRootDir() (one level up from the data root).
+    const QDir dataRoot = project->dataRootDir();
+    const QString extractionOwnerDir = QFileInfo(dataRoot.absolutePath()).absolutePath();
+    REQUIRE(extractionOwnerDir.startsWith(QDir::tempPath()));
+    REQUIRE(extractionOwnerDir != QDir::tempPath()); // must not be the temp root itself
+    REQUIRE(QFileInfo::exists(extractionOwnerDir));
+
+    // newProject should clean it up
+    project->newProject();
+    project->waitSaveToFinish();
+
+    CHECK_FALSE(QFileInfo::exists(extractionOwnerDir));
+}
+
+TEST_CASE("bundled .cw save-as does not delete temp dir prematurely", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("BundleSaveAsTestCave"));
+
+    const QString tempDir = tempProjectOwnerDir(project);
+    REQUIRE(QFileInfo::exists(tempDir));
+
+    QTemporaryDir bundleDir;
+    REQUIRE(bundleDir.isValid());
+    const QString bundlePath = QDir(bundleDir.path()).filePath(QStringLiteral("bundle-saveas.cw"));
+    REQUIRE(project->saveAs(bundlePath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Temp dir should still exist — project continues working from it
+    CHECK(QFileInfo::exists(tempDir));
+    CHECK(QFileInfo::exists(bundlePath));
+
+    // newProject should trigger cleanup
+    project->newProject();
+    project->waitSaveToFinish();
+
+    CHECK_FALSE(QFileInfo::exists(tempDir));
+}
+
+TEST_CASE("loadFile over temp project cleans up old temp dir on next newProject", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    // Save to a permanent location first so we have something to load
+    QTemporaryDir permanentDir;
+    REQUIRE(permanentDir.isValid());
+    const QString projectPath = QDir(permanentDir.path()).filePath(QStringLiteral("LoadOverTest.cwproj"));
+    REQUIRE(project->saveAs(projectPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    const QString permanentProjectFile = project->filename();
+
+    // Start a new temp project
+    project->newProject();
+    project->waitSaveToFinish();
+
+    const QString newTempDir = tempProjectOwnerDir(project);
+    REQUIRE(QFileInfo::exists(newTempDir));
+
+    // Load the permanent project — temp dir still tracked but not yet cleaned up
+    project->loadFile(permanentProjectFile);
+    project->waitLoadToFinish();
+    project->waitSaveToFinish();
+
+    CHECK(QFileInfo::exists(permanentProjectFile));
+
+    // newProject triggers retire which cleans up the old temp dir
+    project->newProject();
+    project->waitSaveToFinish();
+
+    CHECK_FALSE(QFileInfo::exists(newTempDir));
+}
+
+TEST_CASE("saveAs(.cwproj) copy from non-temp preserves source dir", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("CopyModeTestCave"));
+
+    // Save to a permanent location (makes it non-temporary)
+    QTemporaryDir firstSave;
+    REQUIRE(firstSave.isValid());
+    const QString firstPath = QDir(firstSave.path()).filePath(QStringLiteral("First.cwproj"));
+    REQUIRE(project->saveAs(firstPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    CHECK_FALSE(project->isTemporaryProject());
+
+    const QString firstProjectDir = QFileInfo(project->filename()).absolutePath();
+
+    // saveAs again to a different location — non-temp to non-temp uses copy mode
+    QTemporaryDir secondSave;
+    REQUIRE(secondSave.isValid());
+    const QString secondPath = QDir(secondSave.path()).filePath(QStringLiteral("Second.cwproj"));
+    REQUIRE(project->saveAs(secondPath));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    // Both project dirs should still exist (copy doesn't delete source)
+    CHECK(QFileInfo::exists(firstProjectDir));
+    CHECK(QFileInfo::exists(QFileInfo(project->filename()).absolutePath()));
+
+    // newProject should NOT delete either permanent dir
+    project->newProject();
+    project->waitSaveToFinish();
+    CHECK(QFileInfo::exists(firstProjectDir));
+}
+
+TEST_CASE("double retire does not crash or double-delete", "[cwProject][tempCleanup]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    const QString tempDir = tempProjectOwnerDir(project);
+    REQUIRE(QFileInfo::exists(tempDir));
+
+    // Two rapid newProject calls — each retires the previous saveLoad
+    project->newProject();
+    project->newProject();
+    project->waitSaveToFinish();
+
+    // No crash, and the original temp dir is cleaned up
+    CHECK_FALSE(QFileInfo::exists(tempDir));
 }

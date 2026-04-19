@@ -1,5 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file>datasets/tst_QuoteBox/testQuoteBox.png</file>
-    </qresource>
-</RCC>

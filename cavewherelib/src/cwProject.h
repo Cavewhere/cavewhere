@@ -105,6 +105,8 @@ public:
 
     cwErrorListModel* errorModel() const;
 
+    int fileVersion() const { return FileVersion; }
+
     static QString supportedImageFormats();
 
     Q_INVOKABLE void safeCommitAll(const QString& subject, const QString& description);
@@ -133,7 +135,6 @@ public:
     Q_INVOKABLE QUrl remoteBrowseUrl() const;
     Q_INVOKABLE QUrl shareLink() const;
     Q_INVOKABLE bool saveAs(QString newFilename);
-    Q_INVOKABLE bool deleteTemporaryProject();
     Q_INVOKABLE bool isNewEmptyProject() const;
     Q_INVOKABLE void discardChanges();
 

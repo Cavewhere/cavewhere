@@ -27,6 +27,7 @@
 #include "cwProject.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwSaveLoad.h"
+#include "cwProtoUtils.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -836,13 +837,13 @@ QString cwRegionLoadTask::fileNotReadableErrorMessage(const QString &filename)
     return QString("Couldn't open '%1' because you don't have permission to read it").arg(filename);
 }
 
-// Delegating to cwSaveLoad — canonical implementations live there now.
-QDate cwRegionLoadTask::loadDate(const QtProto::QDate& protoDate) { return cwSaveLoad::loadDate(protoDate); }
-QSize cwRegionLoadTask::loadSize(const QtProto::QSize &protoSize) { return cwSaveLoad::loadSize(protoSize); }
-QSizeF cwRegionLoadTask::loadSizeF(const QtProto::QSizeF &protoSize) { return cwSaveLoad::loadSizeF(protoSize); }
-QPointF cwRegionLoadTask::loadPointF(const QtProto::QPointF& protoPointF) { return cwSaveLoad::loadPointF(protoPointF); }
-QVector3D cwRegionLoadTask::loadVector3D(const QtProto::QVector3D &protoVector3D) { return cwSaveLoad::loadVector3D(protoVector3D); }
-QVector2D cwRegionLoadTask::loadVector2D(const QtProto::QVector2D &protoVector2D) { return cwSaveLoad::loadVector2D(protoVector2D); }
+// Delegating to cwProtoUtils — canonical implementations live there now.
+QDate cwRegionLoadTask::loadDate(const QtProto::QDate& protoDate) { return cwProtoUtils::loadDate(protoDate); }
+QSize cwRegionLoadTask::loadSize(const QtProto::QSize &protoSize) { return cwProtoUtils::loadSize(protoSize); }
+QSizeF cwRegionLoadTask::loadSizeF(const QtProto::QSizeF &protoSize) { return cwProtoUtils::loadSizeF(protoSize); }
+QPointF cwRegionLoadTask::loadPointF(const QtProto::QPointF& protoPointF) { return cwProtoUtils::loadPointF(protoPointF); }
+QVector3D cwRegionLoadTask::loadVector3D(const QtProto::QVector3D &protoVector3D) { return cwProtoUtils::loadVector3D(protoVector3D); }
+QVector2D cwRegionLoadTask::loadVector2D(const QtProto::QVector2D &protoVector2D) { return cwProtoUtils::loadVector2D(protoVector2D); }
 
 /**
  * @brief cwRegionLoadTask::loadStringList

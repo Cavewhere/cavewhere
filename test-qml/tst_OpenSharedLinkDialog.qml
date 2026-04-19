@@ -106,7 +106,7 @@ Item {
 
             var linkField = findChild(rootId, "openSharedLinkField")
             verify(linkField !== null)
-            linkField.text = "https://example.com/not-a-share-link"
+            linkField.text = "notaurl"
 
             var openButton = findChild(rootId, "openSharedLinkOpenButton")
             verify(openButton !== null)

@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Our includes
 #include "cwLeadCSVExporter.h"
@@ -23,7 +24,7 @@ TEST_CASE("cwLeadCSVExporter should export leads to CSV", "[cwLeadCSVExporter]")
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
 
-    auto datasetFile = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto datasetFile = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     project->loadOrConvert(datasetFile);
     project->waitLoadToFinish();
     rootData->futureManagerModel()->waitForFinished();

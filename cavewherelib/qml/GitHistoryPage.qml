@@ -61,12 +61,13 @@ StandardPage {
     }
 
     QC.SplitView {
+        id: splitView
         anchors.fill: parent
         anchors.margins: Theme.pageMargin
         orientation: Qt.Horizontal
 
         QQ.Item {
-            QC.SplitView.preferredWidth: 400
+            QC.SplitView.preferredWidth: splitView.width / 2
             QC.SplitView.minimumWidth: 200
 
             QG.GitHistoryView {

@@ -1871,7 +1871,7 @@ MainWindowTest {
             editedState.noteCount += 1
             let expectedEditedState = JSON.stringify(editedState)
 
-            let copiedImageUrl = TestHelper.copyToTempDirUrl("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")
+            let copiedImageUrl = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"))
 
             let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
             verify(noteGallery !== null)
@@ -2013,7 +2013,7 @@ MainWindowTest {
             let commitA = TestHelper.projectHeadCommitOid(RootData.project)
             verify(commitA !== "")
 
-            let copiedLiDARUrl = TestHelper.copyToTempDirUrl("://datasets/lidarProjects/9_15_2025 3.glb")
+            let copiedLiDARUrl = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"))
             let expectedFileName = "9_15_2025 3.glb"
 
             let editedState = JSON.parse(baselineModelState)
@@ -2155,7 +2155,7 @@ MainWindowTest {
                     return
                 }
 
-                let copiedLiDARUrl = TestHelper.copyToTempDirUrl("://datasets/lidarProjects/9_15_2025 3.glb")
+                let copiedLiDARUrl = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"))
                 verify(copiedLiDARUrl.toString() !== "")
                 let expectedFileName = "9_15_2025 3.glb"
 
@@ -2293,7 +2293,7 @@ MainWindowTest {
                     return
                 }
 
-                let copiedImageUrl = TestHelper.copyToTempDirUrl("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")
+                let copiedImageUrl = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"))
                 verify(copiedImageUrl.toString() !== "")
 
                 let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")

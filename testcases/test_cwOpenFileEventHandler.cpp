@@ -6,6 +6,7 @@
 **************************************************************************/
 
 #include "TestHelper.h"
+#include "LoadProjectHelper.h"
 
 #include "cwErrorListModel.h"
 #include "cwJobSettings.h"
@@ -42,7 +43,7 @@ TEST_CASE("cwOpenFileEventHandler should load and convert legacy cw files", "[cw
 
     root->settings()->jobSettings()->setAutomaticUpdate(false);
 
-    const QString legacyProjectPath = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    const QString legacyProjectPath = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
     cwOpenFileEventHandler openFileHandler(QApplication::instance());
     openFileHandler.setProject(root->project());
@@ -94,7 +95,7 @@ TEST_CASE("cwOpenFileEventHandler cavewhere:// URL handling", "[FileOpen]")
         auto root = std::make_unique<cwRootData>();
         root->settings()->jobSettings()->setAutomaticUpdate(false);
 
-        const QString legacyProjectPath = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+        const QString legacyProjectPath = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
         cwOpenFileEventHandler openFileHandler(QApplication::instance());
         openFileHandler.setProject(root->project());

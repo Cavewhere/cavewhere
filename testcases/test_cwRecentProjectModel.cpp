@@ -1,5 +1,6 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Qt includes
 #include <memory>
@@ -368,7 +369,7 @@ TEST_CASE("cwRecentProjectModel addRepositoryFromProjectFile stores bundled proj
 
     cwRecentProjectModel model;
 
-    const QString bundledSource = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    const QString bundledSource = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     REQUIRE(QFileInfo::exists(bundledSource));
 
     const QUrl bundledUrl = QUrl::fromLocalFile(bundledSource);
@@ -431,7 +432,7 @@ TEST_CASE("cwRecentProjectModel saveAs bundled project uses bundled path instead
     auto* model = root->recentProjectModel();
     auto* project = root->project();
 
-    const QString sqliteSource = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    const QString sqliteSource = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     REQUIRE(QFileInfo::exists(sqliteSource));
 
     project->loadOrConvert(sqliteSource);
@@ -507,7 +508,7 @@ TEST_CASE("cwRecentProjectModel opening sqlite project keeps only original entry
     auto* model = root->recentProjectModel();
     auto* project = root->project();
 
-    const QString bundledSource = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+    const QString bundledSource = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     REQUIRE(QFileInfo::exists(bundledSource));
 
     const auto addResult = model->addRepositoryFromProjectFile(QUrl::fromLocalFile(bundledSource));

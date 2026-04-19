@@ -20,7 +20,7 @@
 
 TEST_CASE("cwSurvexExportRule should export a caving region correctly", "[cwSurvexExportRule]") {
     // Load project and get the caving region
-    auto project = fileToProject("://datasets/test_cwProject/Phake Cave 3000.cw");
+    auto project = fileToProject(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto cavingRegion = project->cavingRegion();
 
     // Create a survey data artifact and set the region
@@ -54,7 +54,7 @@ TEST_CASE("cwSurvexExportRule should export a caving region correctly", "[cwSurv
         exportedFile.close();
 
         // Load expected content from the known expected file
-        QFile expectedFile("://datasets/test_cwSurvexExporterRule/PhakeCave3000_expected.svx");
+        QFile expectedFile(testcasesDatasetPath("test_cwSurvexExporterRule/PhakeCave3000_expected.svx"));
         bool expectedExists = expectedFile.exists();
         REQUIRE(expectedExists == true);
         bool expectedOpenOk = expectedFile.open(QIODevice::ReadOnly);

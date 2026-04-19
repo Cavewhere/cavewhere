@@ -21,6 +21,7 @@
 
 //Qt includes
 #include <QDebug>
+#include <QDir>
 #include <cmath>
 
 void cwTriangulateTask::setScrapData(QList<cwTriangulateInData> scraps) {

@@ -29,7 +29,7 @@ MainWindowTest {
 
             let csvManager = findChild(RootData.pageView.currentPageItem, "csvManager")
             verify(csvManager !== null)
-            csvManager.filename = "://datasets/test_cwCSVImporterManager/allCustomColumns.txt"
+            csvManager.filename = TestHelper.testcasesDatasetPath("test_cwCSVImporterManager/allCustomColumns.txt")
 
             //Move the columns to the right order
             let availableColumns = ObjectFinder.findObjectByChain(mainWindow, "rootId->csvImporterPage->GroupBox->GroupBox->availableColumns");

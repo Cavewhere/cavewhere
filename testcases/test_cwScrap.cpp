@@ -7,6 +7,7 @@
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 #include <catch2/catch_approx.hpp>
 
 //Cavewhere includes
@@ -167,18 +168,18 @@ void checkScrapTransform(cwScrap* scrap, const TestRow& row) {
 TEST_CASE("Auto Calculate Note Transform", "[cwScrap]") {
 
     QList<TestRow> rows;
-    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileRotate.cw", 87.8004635984, 176.349));
-    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileRotateMirror.cw", 87.5044033263, 176.696));
-    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfile.cw", 358.11335805615993877, 175.592));
-    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileMirror.cw", 357.70680855674373788, 176.721));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/runningProfileUpsideDown.cw",  87.8188708214, 1729.652));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw",
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/runningProfileRotate.cw"), 87.8004635984, 176.349));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/runningProfileRotateMirror.cw"), 87.5044033263, 176.696));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/runningProfile.cw"), 358.11335805615993877, 175.592));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/runningProfileMirror.cw"), 357.70680855674373788, 176.721));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/runningProfileUpsideDown.cw"),  87.8188708214, 1729.652));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/ProjectProfile-test-v3.cw"),
                 0.199, 255.962, 0.05, 0.05, 135.7));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/projectedProfile-90left.cw",
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/projectedProfile-90left.cw"),
                 270.08, 255.66, 0.05, 0.05, 134.2));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/projectedProfile-90right.cw",
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/projectedProfile-90right.cw"),
                 89.955, 255.667, 0.05, 0.05, 136.3));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/projectedProfile-180.cw",
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/projectedProfile-180.cw"),
                         180, 255.193, 0.05, 0.05, 135.6));
 
     foreach(TestRow row, rows) {
@@ -200,14 +201,14 @@ TEST_CASE("Auto Calculate Note Transform", "[cwScrap]") {
 TEST_CASE("Exact Auto Calculate Note Transform", "[cwScrap]") {
 
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw", 359.857, 5795.0, 0.05, 0.005));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-1mirror.cw", 359.728, 5795.0, 0.06, 0.005));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-90rot-0mirror.cw", 90, 5795.0, 0.05, 0.005));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-90rot-1mirror.cw", 90, 5795.0, 0.05, 0.005));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-180rot-0mirror.cw", 180, 5795.0, 0.05, 0.005));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-180rot-1mirror.cw", 180, 5795.0, 0.05, 0.005));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-270rot-0mirror.cw", 270, 5795.0, 0.05, 0.005));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-270rot-1mirror.cw", 270, 5795.0, 0.05, 0.005));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/exact/profile-0rot-0mirror.cw"), 359.857, 5795.0, 0.05, 0.005));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/exact/profile-0rot-1mirror.cw"), 359.728, 5795.0, 0.06, 0.005));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/exact/profile-90rot-0mirror.cw"), 90, 5795.0, 0.05, 0.005));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/exact/profile-90rot-1mirror.cw"), 90, 5795.0, 0.05, 0.005));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/exact/profile-180rot-0mirror.cw"), 180, 5795.0, 0.05, 0.005));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/exact/profile-180rot-1mirror.cw"), 180, 5795.0, 0.05, 0.005));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/exact/profile-270rot-0mirror.cw"), 270, 5795.0, 0.05, 0.005));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/exact/profile-270rot-1mirror.cw"), 270, 5795.0, 0.05, 0.005));
 
     foreach(TestRow row, rows) {
         auto project = fileToProject(row.Filename);
@@ -232,8 +233,8 @@ TEST_CASE("Exact Auto Calculate Note Transform", "[cwScrap]") {
 
 TEST_CASE("Check that auto calculate work outside of trip", "[cwScrap]") {
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip.cw", 30.13, 1606.3, 0.05, 0.005));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip-badSave.cw", 30.13, 1606.3, 0.05, 0.005));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/exact/plan-seperate-trip.cw"), 30.13, 1606.3, 0.05, 0.005));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/exact/plan-seperate-trip-badSave.cw"), 30.13, 1606.3, 0.05, 0.005));
 
     foreach(TestRow row, rows) {
         row.TripName = QStringLiteral("Trip 2");
@@ -273,7 +274,7 @@ TEST_CASE("Check that auto calculate work outside of trip", "[cwScrap]") {
 
 TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip.cw", 354.13, 16063.06, 0.05, 0.005));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/exact/plan-seperate-trip.cw"), 354.13, 16063.06, 0.05, 0.005));
 
     foreach(TestRow row, rows) {
         row.TripName = QStringLiteral("Trip 2");
@@ -321,7 +322,7 @@ TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
 
 TEST_CASE("Auto calculate should work on projected profile azimuth", "[cwScrap]") {
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw", 0.1997, 255.967, 0.05, 0.005, 135.7));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/ProjectProfile-test-v3.cw"), 0.1997, 255.967, 0.05, 0.005, 135.7));
 
     foreach(TestRow row, rows) {
         auto root = std::make_unique<cwRootData>();
@@ -347,7 +348,7 @@ TEST_CASE("Auto calculate should work on projected profile azimuth", "[cwScrap]"
 
 TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-startRunning.cw", 0.8519, 257.162, 0.05, 0.005, 134.4));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/ProjectProfile-test-startRunning.cw"), 0.8519, 257.162, 0.05, 0.005, 134.4));
     rows[0].CaveName = "My Cave";
     rows[0].TripName = "Best Trip";
 
@@ -393,7 +394,7 @@ TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
 }
 
 TEST_CASE("Manual scrap rotation uses declination during triangulation", "[cwScrap]") {
-    auto project = fileToProject("://datasets/scrapAutoCalculate/runningProfile.cw");
+    auto project = fileToProject(testcasesDatasetPath("scrapAutoCalculate/runningProfile.cw"));
     cwScrap* scrap = firstScrap(project.get());
     REQUIRE(scrap);
     REQUIRE(scrap->parentNote());
@@ -447,12 +448,12 @@ TEST_CASE("Guess neighbor station name", "[cwScrap]") {
     };
 
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborPlan.cw"));
-    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborPlanContinuous.cw"));
-    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfile.cw"));
-    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfileRotate90.cw"));
-    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfileContinuous.cw"));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw"));
+    rows.append(TestRow(testcasesDatasetPath("scrapGuessNeighbor/scrapGuessNeigborPlan.cw")));
+    rows.append(TestRow(testcasesDatasetPath("scrapGuessNeighbor/scrapGuessNeigborPlanContinuous.cw")));
+    rows.append(TestRow(testcasesDatasetPath("scrapGuessNeighbor/scrapGuessNeigborProfile.cw")));
+    rows.append(TestRow(testcasesDatasetPath("scrapGuessNeighbor/scrapGuessNeigborProfileRotate90.cw")));
+    rows.append(TestRow(testcasesDatasetPath("scrapGuessNeighbor/scrapGuessNeigborProfileContinuous.cw")));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/ProjectProfile-test-v3.cw")));
 
     foreach(TestRow row, rows) {
         INFO("Testing:" << row.Filename.toStdString());
@@ -503,7 +504,7 @@ TEST_CASE("Guess neighbor station name", "[cwScrap]") {
 TEST_CASE("Distance lead unit should return the index supported units", "[cwScrap]") {
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
-    fileToProject(project.get(), "://datasets/test_cwScrap/leadLengthCheck.cw");
+    fileToProject(project.get(), testcasesDatasetPath("test_cwScrap/leadLengthCheck.cw"));
 
     auto trip = project->cavingRegion()->cave(0)->trip(0);
     auto scrap = trip->notes()->notes().at(0)->scrap(0);

@@ -38,7 +38,7 @@ MainWindowTest {
         }
 
         function test_addremovefirst() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
             // Ensure we are on the View page
             RootData.pageSelectionModel.gotoPageByName(null, "View");
@@ -84,7 +84,7 @@ MainWindowTest {
         }
 
         function test_addRemoveSimple() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
             // Ensure we are on the View page
             RootData.pageSelectionModel.gotoPageByName(null, "View");
@@ -119,7 +119,7 @@ MainWindowTest {
         }
 
         function test_addremovelast() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
             // Ensure we are on the View page
             RootData.pageSelectionModel.gotoPageByName(null, "View");
@@ -164,7 +164,7 @@ MainWindowTest {
         }
 
         function test_add3removelast() {
-                    TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+                    TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
                     // Ensure we are on the View page
                     RootData.pageSelectionModel.gotoPageByName(null, "View");
@@ -204,7 +204,7 @@ MainWindowTest {
         }
 
         function test_orBoundariesRemoveThenAdd() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
             // Ensure we are on the View page
             RootData.pageSelectionModel.gotoPageByName(null, "View");
@@ -266,7 +266,7 @@ MainWindowTest {
         }
 
         function test_removeMiddleOrBoundary() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
             RootData.pageSelectionModel.gotoPageByName(null, "View");
             let layersTab = findChild(rootId.mainWindow, "layersTabButton");
@@ -310,7 +310,7 @@ MainWindowTest {
         }
 
         function test_objectCount() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000 2024.2.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000 2024.2.cw"));
 
             RootData.pageSelectionModel.gotoPageByName(null, "View");
             let layersTab = findChild(rootId.mainWindow, "layersTabButton");
@@ -389,7 +389,7 @@ MainWindowTest {
         }
 
         function test_hideRemoveSecondOr() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000 2024.2.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000 2024.2.cw"));
 
             RootData.pageSelectionModel.gotoPageByName(null, "View");
             let layersTab = findChild(rootId.mainWindow, "layersTabButton");
@@ -446,7 +446,7 @@ MainWindowTest {
         }
 
         function test_togglePlanScrapVisibility() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000 2024.2.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000 2024.2.cw"));
 
             RootData.pageSelectionModel.gotoPageByName(null, "View");
             let layersTab = findChild(rootId.mainWindow, "layersTabButton");
@@ -510,7 +510,7 @@ MainWindowTest {
         }
 
         function test_keywordSelectionMultiSelect() {
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000 2024.2.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000 2024.2.cw"));
 
             RootData.pageSelectionModel.gotoPageByName(null, "View");
             let layersTab = findChild(rootId.mainWindow, "layersTabButton");

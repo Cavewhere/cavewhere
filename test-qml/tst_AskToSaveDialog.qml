@@ -80,7 +80,7 @@ Item {
         // Modified project: dialog is shown and afterSaveFunc is NOT yet called
         function test_modifiedProject_showsDialog() {
             TestHelper.loadProjectFromFile(RootData.project,
-                                           "://datasets/test_cwProject/Phake Cave 3000.cw");
+                                           TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             tryVerify(function() { return RootData.region.caveCount > 0; });
             saveAsDirectory("askToSave-modified");
 
@@ -354,7 +354,7 @@ Item {
         // Discard on a .cwproj directory project: discardChanges() reverts the git working dir
         function test_discard_revertsDirectoryProject() {
             TestHelper.loadProjectFromFile(RootData.project,
-                                           "://datasets/test_cwProject/Phake Cave 3000.cw");
+                                           TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             tryVerify(function() { return RootData.region.caveCount > 0; });
             saveAsDirectory("askToSave-discard");
 
@@ -436,7 +436,7 @@ Item {
         // "Save & Sync" button is NOT shown; dialog is in idle-nosync state.
         function test_offerSync_falseWithNoRemote() {
             TestHelper.loadProjectFromFile(RootData.project,
-                                           "://datasets/test_cwProject/Phake Cave 3000.cw")
+                                           TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"))
             tryVerify(function() { return RootData.region.caveCount > 0 })
             saveAsDirectory("offerSync-no-remote")
 

@@ -1,5 +1,6 @@
 //Catch2 includes
 #include <catch2/catch_test_macros.hpp>
+#include "LoadProjectHelper.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -22,7 +23,7 @@
 
 TEST_CASE("test cwImageProvider requestImage cache behavior", "[cwImageProvider]") {
     // 1) Copy the resource into a temp directory and derive paths
-    const QString filename = copyToTempFolder(":/datasets/test_cwImageProvider/testpage.png");
+    const QString filename = copyToTempFolder(testcasesDatasetPath("test_cwImageProvider/testpage.png"));
     REQUIRE(!filename.isEmpty());
 
     const QFileInfo fileInfo(filename);
@@ -110,7 +111,7 @@ TEST_CASE("test cwImageProvider requestImage cache behavior", "[cwImageProvider]
 }
 
 TEST_CASE("cwImageProvider renders SVG using resolutionImport", "[cwImageProvider]") {
-    const QString filename = copyToTempFolder(":/datasets/test_cwImageProvider/supportedImage.svg");
+    const QString filename = copyToTempFolder(testcasesDatasetPath("test_cwImageProvider/supportedImage.svg"));
     REQUIRE(!filename.isEmpty());
 
     const QFileInfo fileInfo(filename);
@@ -155,7 +156,7 @@ TEST_CASE("cwImageProvider renders SVG using resolutionImport", "[cwImageProvide
 }
 
 TEST_CASE("cwImageProvider respects SVG unit sizes with CSS dpi", "[cwImageProvider]") {
-    const QString filename = copyToTempFolder(":/datasets/test_cwImageProvider/2019c154_-_party_fault-2p.svg");
+    const QString filename = copyToTempFolder(testcasesDatasetPath("test_cwImageProvider/2019c154_-_party_fault-2p.svg"));
     REQUIRE(!filename.isEmpty());
 
     const QFileInfo fileInfo(filename);
@@ -190,7 +191,7 @@ TEST_CASE("cwImageProvider respects SVG unit sizes with CSS dpi", "[cwImageProvi
 }
 
 TEST_CASE("cwImageProvider clamps SVG render size to 256MB threshold", "[cwImageProvider]") {
-    const QString filename = copyToTempFolder(":/datasets/test_cwImageProvider/2019c154_-_party_fault-2p.svg");
+    const QString filename = copyToTempFolder(testcasesDatasetPath("test_cwImageProvider/2019c154_-_party_fault-2p.svg"));
     REQUIRE(!filename.isEmpty());
 
     const QFileInfo fileInfo(filename);

@@ -36,7 +36,7 @@ TEST_CASE("cwSurvexportTask should produce a CSV file from a .3d file", "[cwSurv
     //If this fails, cavern couldn't be found
     REQUIRE(cavernPath.isEmpty() == false);
 
-    QString cavernDataFile = copyToTempFolder("://datasets/test_cwSurvexport/data.svx");
+    QString cavernDataFile = copyToTempFolder(testcasesDatasetPath("test_cwSurvexport/data.svx"));
     QDir tempDir = QFileInfo(cavernDataFile).absoluteDir();
 
     REQUIRE(QFile::exists(cavernDataFile));
@@ -58,7 +58,7 @@ TEST_CASE("cwSurvexportTask should produce a CSV file from a .3d file", "[cwSurv
 
     //Compare the test file with the generated file
     QFile generatedFile(task.outputFilename());
-    QFile testFile("://datasets/test_cwSurvexport/cwSurvexport_data.3d.csv");
+    QFile testFile(testcasesDatasetPath("test_cwSurvexport/cwSurvexport_data.3d.csv"));
     REQUIRE(generatedFile.open(QFile::ReadOnly));
     REQUIRE(testFile.open(QFile::ReadOnly));
 

@@ -66,8 +66,8 @@ TEST_CASE("cwSurveyNotesConcatModel integrates with real cwTrip models", "[cwSur
     REQUIRE(concat.rowCount() == 0);
 
     // --- Create one small real JPEG and one dummy GLB file ---
-    const QString jpgPath = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
-    const QString glbPath = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString jpgPath = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
+    const QString glbPath = copyToTempFolder(testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb"));
 
     const QList<QUrl> files = {
         QUrl::fromLocalFile(jpgPath),
@@ -114,7 +114,7 @@ TEST_CASE("cwSurveyNotesConcatModel addFiles uses absolute paths with cwImagePro
     cwSurveyNotesConcatModel concat;
     concat.setTrip(trip);
 
-    const QString pngPath = copyToTempFolder("://datasets/test_cwNote/testpage.png");
+    const QString pngPath = copyToTempFolder(testcasesDatasetPath("test_cwNote/testpage.png"));
     REQUIRE(!pngPath.isEmpty());
     const QList<QUrl> files = { QUrl::fromLocalFile(pngPath) };
 
@@ -225,7 +225,7 @@ TEST_CASE("cwSurveyNotesConcatModel allows duplicate image files", "[cwSurveyNot
     cwSurveyNotesConcatModel concat;
     concat.setTrip(trip);
 
-    const QString pngPath = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString pngPath = copyToTempFolder(testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
     REQUIRE(!pngPath.isEmpty());
 
     const QList<QUrl> files = {
