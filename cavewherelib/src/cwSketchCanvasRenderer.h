@@ -12,9 +12,11 @@
 #include <QCanvasPainterItemRenderer>
 #include <QRectF>
 #include <QTransform>
+#include <QVector>
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwGridTextModel.h"
 
 class cwSketchCanvasRendererSnapshotModel;
 
@@ -29,6 +31,10 @@ public:
 
 private:
     cwSketchCanvasRendererSnapshotModel *m_snapshot;
+    cwSketchCanvasRendererSnapshotModel *m_minorGridSnapshot;
+    cwSketchCanvasRendererSnapshotModel *m_majorGridSnapshot;
+    QVector<cwGridTextModel::TextRow> m_minorTextSnapshot;
+    QVector<cwGridTextModel::TextRow> m_majorTextSnapshot;
     QTransform m_worldToItem;
     QRectF m_worldViewport;
 };

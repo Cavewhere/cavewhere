@@ -18,6 +18,8 @@
 #include "cwSketchPainterPathModel.h"
 
 class cwSketch;
+class cwInfiniteGridModel;
+class QAbstractItemModel;
 
 class CAVEWHERE_LIB_EXPORT cwSketchCanvas : public QCanvasPainterItem
 {
@@ -29,6 +31,7 @@ class CAVEWHERE_LIB_EXPORT cwSketchCanvas : public QCanvasPainterItem
     Q_PROPERTY(QPointF pan READ pan WRITE setPan NOTIFY panChanged)
     Q_PROPERTY(int activeStrokeIndex READ activeStrokeIndex WRITE setActiveStrokeIndex NOTIFY activeStrokeIndexChanged)
     Q_PROPERTY(cwSketchPainterPathModel* pathModel READ pathModel CONSTANT)
+    Q_PROPERTY(cwInfiniteGridModel* grid READ grid WRITE setGrid NOTIFY gridChanged)
 
 public:
     explicit cwSketchCanvas(QQuickItem *parent = nullptr);
@@ -48,22 +51,32 @@ public:
 
     cwSketchPainterPathModel *pathModel() const { return m_pathModel; }
 
+    cwInfiniteGridModel *grid() const { return m_grid; }
+    void setGrid(cwInfiniteGridModel *grid);
+
 protected:
     QCanvasPainterItemRenderer *createItemRenderer() const override;
+    void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
 signals:
     void sketchChanged();
     void zoomChanged();
     void panChanged();
     void activeStrokeIndexChanged();
+    void gridChanged();
 
 private:
     cwSketch *m_sketch = nullptr;
     cwSketchPainterPathModel *m_pathModel = nullptr;
+    cwInfiniteGridModel *m_grid = nullptr;
     double m_zoom = 1.0;
     QPointF m_pan;
 
     void connectPathModelSignals();
+    void connectModelForUpdate(QAbstractItemModel *model);
+    void disconnectGridModels(cwInfiniteGridModel *grid);
+    void connectGridModels(cwInfiniteGridModel *grid);
+    void updateGridView();
 };
 
 #endif // CWSKETCHCANVAS_H

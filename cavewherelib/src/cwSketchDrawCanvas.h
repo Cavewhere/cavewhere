@@ -22,6 +22,8 @@ public:
     void save() override;
     void restore() override;
     void setTransform(const QTransform &transform) override;
+    void translate(double dx, double dy) override;
+    void scale(double sx, double sy) override;
     void setClipRect(const QRectF &rect) override;
     void setStrokePen(const QColor &color, double widthPx,
                       Qt::PenCapStyle cap,

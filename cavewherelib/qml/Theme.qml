@@ -41,6 +41,10 @@ QtObject {
     readonly property color borderSubtle: dark ? "#353a42" : "#e4e4e4"
     readonly property color divider: "#141414" // dark ? #2c3138" : "#d8d8d8"
 
+    // Sketch grid
+    readonly property color sketchGridLine: dark ? "#1eb6dd" : "#1eb6dd"
+    readonly property color sketchGridLabel: dark ? "#5bc8e3" : "#178ba8"
+
     // Diff colors
     readonly property color diffAddedBackground: dark ? "#1a3626" : "#dafbe1"
     readonly property color diffDeletedBackground: dark ? "#3d1f1f" : "#ffebe9"

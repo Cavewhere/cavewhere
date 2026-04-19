@@ -11,6 +11,9 @@
 #include "cwSketchDrawCanvas.h"
 #include "cwSketchPainter.h"
 #include "cwAbstractSketchPainterPathModel.h"
+#include "cwInfiniteGridModel.h"
+#include "cwFixedGridModel.h"
+#include "cwGridTextModel.h"
 
 //Qt includes
 #include <QCanvasPainter>
@@ -36,14 +39,47 @@ protected:
     }
 };
 
+namespace {
+
+void snapshotPaths(const cwAbstractSketchPainterPathModel *source,
+                   cwSketchCanvasRendererSnapshotModel *target)
+{
+    target->entries.clear();
+    if (source == nullptr) {
+        return;
+    }
+    const int rows = source->rowCount();
+    target->entries.reserve(rows);
+    for (int row = 0; row < rows; ++row) {
+        const QModelIndex idx = source->index(row, 0);
+        const QPainterPath painterPath =
+            idx.data(cwAbstractSketchPainterPathModel::PainterPathRole).value<QPainterPath>();
+        if (painterPath.isEmpty()) {
+            continue;
+        }
+        target->entries.append({
+            painterPath,
+            idx.data(cwAbstractSketchPainterPathModel::StrokeColorRole).value<QColor>(),
+            idx.data(cwAbstractSketchPainterPathModel::StrokeWidthRole).toDouble(),
+            0.0
+        });
+    }
+}
+
+} // namespace
+
 cwSketchCanvasRenderer::cwSketchCanvasRenderer()
-    : m_snapshot(new cwSketchCanvasRendererSnapshotModel())
+    : m_snapshot(new cwSketchCanvasRendererSnapshotModel()),
+      m_minorGridSnapshot(new cwSketchCanvasRendererSnapshotModel()),
+      m_majorGridSnapshot(new cwSketchCanvasRendererSnapshotModel())
 {
 }
 
 cwSketchCanvasRenderer::~cwSketchCanvasRenderer()
 {
     delete m_snapshot;
+    delete m_minorGridSnapshot;
+    delete m_majorGridSnapshot;
 }
 
 void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
@@ -51,6 +87,10 @@ void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
     auto *canvas = qobject_cast<cwSketchCanvas *>(item);
     if (canvas == nullptr) {
         m_snapshot->entries.clear();
+        m_minorGridSnapshot->entries.clear();
+        m_majorGridSnapshot->entries.clear();
+        m_minorTextSnapshot.clear();
+        m_majorTextSnapshot.clear();
         return;
     }
 
@@ -66,28 +106,17 @@ void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
         m_worldViewport = QRectF();
     }
 
-    m_snapshot->entries.clear();
-    const auto *pathModel = canvas->pathModel();
-    if (pathModel == nullptr) {
-        return;
-    }
+    snapshotPaths(canvas->pathModel(), m_snapshot);
 
-    const int rows = pathModel->rowCount();
-    m_snapshot->entries.reserve(rows);
-    for (int row = 0; row < rows; ++row) {
-        const QModelIndex idx = pathModel->index(row, 0);
-        const QPainterPath painterPath =
-            idx.data(cwAbstractSketchPainterPathModel::PainterPathRole).value<QPainterPath>();
-        if (painterPath.isEmpty()) {
-            continue;
-        }
-        m_snapshot->entries.append({
-            painterPath,
-            idx.data(cwAbstractSketchPainterPathModel::StrokeColorRole).value<QColor>(),
-            idx.data(cwAbstractSketchPainterPathModel::StrokeWidthRole).toDouble(),
-            0.0
-        });
-    }
+    auto *grid = canvas->grid();
+    snapshotPaths(grid ? grid->minorGridModel() : nullptr, m_minorGridSnapshot);
+    snapshotPaths(grid ? grid->majorGridModel() : nullptr, m_majorGridSnapshot);
+    m_minorTextSnapshot = (grid && grid->minorTextModel())
+                              ? grid->minorTextModel()->rows()
+                              : QVector<cwGridTextModel::TextRow>();
+    m_majorTextSnapshot = (grid && grid->majorTextModel())
+                              ? grid->majorTextModel()->rows()
+                              : QVector<cwGridTextModel::TextRow>();
 }
 
 void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
@@ -101,7 +130,13 @@ void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
     painter->clearRect(0.0f, 0.0f, w, h);
     painter->setRenderHint(QCanvasPainter::RenderHint::Antialiasing);
 
-    if (m_snapshot->entries.isEmpty()) {
+    const bool hasStrokes = !m_snapshot->entries.isEmpty();
+    const bool hasGrid    = !m_minorGridSnapshot->entries.isEmpty()
+                         || !m_majorGridSnapshot->entries.isEmpty()
+                         || !m_minorTextSnapshot.isEmpty()
+                         || !m_majorTextSnapshot.isEmpty();
+
+    if (!hasStrokes && !hasGrid) {
         return;
     }
 
@@ -110,9 +145,13 @@ void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
     draw.setTransform(m_worldToItem);
 
     cwSketchPainter::PaintContext ctx;
-    ctx.viewport = m_worldViewport;
-    ctx.zoom     = m_worldToItem.m11();
-    ctx.strokes  = m_snapshot;
+    ctx.viewport       = m_worldViewport;
+    ctx.zoom           = m_worldToItem.m11();
+    ctx.strokes        = m_snapshot;
+    ctx.gridMinor.paths = m_minorGridSnapshot;
+    ctx.gridMinor.text  = &m_minorTextSnapshot;
+    ctx.gridMajor.paths = m_majorGridSnapshot;
+    ctx.gridMajor.text  = &m_majorTextSnapshot;
     cwSketchPainter::paint(&draw, ctx);
 
     painter->restore();

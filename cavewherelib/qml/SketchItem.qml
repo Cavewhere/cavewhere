@@ -33,6 +33,19 @@ QQ.Item {
 
     clip: true
 
+    InfiniteGridModel {
+        id: gridModel
+        lineColor: Theme.sketchGridLine
+        labelColor: Theme.sketchGridLabel
+        majorGridInterval: 100
+        minorGridInterval: 20
+        // The zoom-level heuristic's +2 offset assumes a cave-meter mapMatrix
+        // (~15 px/m from the WorldToScreenMatrix prototype). With identity
+        // mapMatrix we shift it so clampedZoomLevel == 0 at zoom == 1 and the
+        // base intervals render 1:1 (100 / 20 px) instead of ×100.
+        minorGridMinPixelInterval: 0.1
+    }
+
     SketchCanvas {
         id: sketchCanvasId
         objectName: "sketchCanvas"
@@ -41,6 +54,7 @@ QQ.Item {
         zoom: sketchItemId.zoom
         pan: sketchItemId.pan
         activeStrokeIndex: sketchItemId._activeStrokeIndex
+        grid: gridModel
     }
 
     QQ.WheelHandler {
@@ -50,7 +64,7 @@ QQ.Item {
                 return
             }
             const factor = event.angleDelta.y > 0 ? 1.1 : 1.0 / 1.1
-            const focus = event.position
+            const focus = Qt.point(event.x, event.y)
             const world = sketchItemId._worldPoint(focus)
             sketchItemId.zoom = sketchItemId.zoom * factor
             sketchItemId.pan = Qt.point(focus.x - world.x * sketchItemId.zoom,

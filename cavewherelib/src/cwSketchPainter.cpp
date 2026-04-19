@@ -14,6 +14,64 @@
 #include <QAbstractItemModel>
 #include <QPainterPath>
 
+namespace {
+
+void drawPaths(cwSketchDraw *draw, const cwAbstractSketchPainterPathModel *model)
+{
+    if (model == nullptr) {
+        return;
+    }
+    const int rows = model->rowCount();
+    for (int row = 0; row < rows; ++row) {
+        const QModelIndex idx = model->index(row);
+        const QPainterPath path =
+            idx.data(cwAbstractSketchPainterPathModel::PainterPathRole)
+                .value<QPainterPath>();
+        if (path.isEmpty()) {
+            continue;
+        }
+        const QColor color =
+            idx.data(cwAbstractSketchPainterPathModel::StrokeColorRole)
+                .value<QColor>();
+        const double width =
+            idx.data(cwAbstractSketchPainterPathModel::StrokeWidthRole)
+                .toDouble();
+
+        if (width > 0.0) {
+            draw->setStrokePen(color, width, Qt::RoundCap, Qt::RoundJoin);
+            draw->strokePath(path);
+        } else {
+            draw->setFillBrush(color);
+            draw->fillPath(path);
+        }
+    }
+}
+
+void drawText(cwSketchDraw *draw,
+              const QVector<cwGridTextModel::TextRow> *rows,
+              double labelScale)
+{
+    if (rows == nullptr || labelScale <= 0.0) {
+        return;
+    }
+    for (const auto &row : *rows) {
+        if (row.text.isEmpty()) {
+            continue;
+        }
+        // Counter-scale around the text anchor so the font renders at its
+        // intrinsic screen size regardless of the painter's zoom transform.
+        // Label bounds in cwFixedGridModel are already pre-shrunk by the same
+        // labelScale so positions land correctly after this.
+        draw->save();
+        draw->translate(row.position.x(), row.position.y());
+        draw->scale(labelScale, labelScale);
+        draw->drawText(QPointF(0.0, 0.0), row.text, row.font, row.fillColor);
+        draw->restore();
+    }
+}
+
+} // namespace
+
 void cwSketchPainter::paint(cwSketchDraw *draw, const PaintContext &context)
 {
     Q_ASSERT(draw != nullptr);
@@ -24,33 +82,13 @@ void cwSketchPainter::paint(cwSketchDraw *draw, const PaintContext &context)
         draw->setClipRect(context.viewport);
     }
 
-    const auto *strokes = context.strokes;
-    if (strokes) {
-        const int rows = strokes->rowCount();
-        for (int row = 0; row < rows; ++row) {
-            const QModelIndex idx = strokes->index(row);
-            const QPainterPath path =
-                idx.data(cwAbstractSketchPainterPathModel::PainterPathRole)
-                    .value<QPainterPath>();
-            if (path.isEmpty()) {
-                continue;
-            }
-            const QColor color =
-                idx.data(cwAbstractSketchPainterPathModel::StrokeColorRole)
-                    .value<QColor>();
-            const double width =
-                idx.data(cwAbstractSketchPainterPathModel::StrokeWidthRole)
-                    .toDouble();
+    const double labelScale = context.zoom > 0.0 ? 1.0 / context.zoom : 1.0;
 
-            if (width > 0.0) {
-                draw->setStrokePen(color, width, Qt::RoundCap, Qt::RoundJoin);
-                draw->strokePath(path);
-            } else {
-                draw->setFillBrush(color);
-                draw->fillPath(path);
-            }
-        }
-    }
+    drawPaths(draw, context.gridMinor.paths);
+    drawPaths(draw, context.gridMajor.paths);
+    drawText (draw, context.gridMinor.text, labelScale);
+    drawText (draw, context.gridMajor.text, labelScale);
+    drawPaths(draw, context.strokes);
 
     draw->restore();
 }

@@ -32,6 +32,16 @@ void cwSketchDrawQPainter::setTransform(const QTransform &transform)
     m_painter->setTransform(transform);
 }
 
+void cwSketchDrawQPainter::translate(double dx, double dy)
+{
+    m_painter->translate(dx, dy);
+}
+
+void cwSketchDrawQPainter::scale(double sx, double sy)
+{
+    m_painter->scale(sx, sy);
+}
+
 void cwSketchDrawQPainter::setClipRect(const QRectF &rect)
 {
     m_painter->setClipRect(rect);

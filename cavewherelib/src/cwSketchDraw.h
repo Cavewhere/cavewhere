@@ -28,6 +28,8 @@ public:
     virtual void save()    = 0;
     virtual void restore() = 0;
     virtual void setTransform(const QTransform &transform)    = 0;
+    virtual void translate(double dx, double dy)              = 0;
+    virtual void scale(double sx, double sy)                  = 0;
     virtual void setClipRect(const QRectF &rect)              = 0;
     virtual void setStrokePen(const QColor &color, double widthPx,
                               Qt::PenCapStyle cap,

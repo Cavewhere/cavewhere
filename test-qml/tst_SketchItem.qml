@@ -34,6 +34,24 @@ Item {
             mouseRelease(sketchItemId, last.x, last.y, Qt.LeftButton)
         }
 
+        function test_gridTracksPanZoom() {
+            let sketchCanvas = findChild(sketchItemId, "sketchCanvas")
+            verify(sketchCanvas !== null, "sketchCanvas should exist")
+            verify(sketchCanvas.grid !== null,
+                   "sketchCanvas.grid should be wired")
+
+            sketchItemId.zoom = 2.0
+            sketchItemId.pan = Qt.point(50, 50)
+
+            tryVerify(() => sketchCanvas.grid.viewScale === 0.5,
+                      2000, "grid viewScale should be inverse of sketch zoom")
+            tryVerify(() => sketchCanvas.grid.gridOrigin.x === 50
+                          && sketchCanvas.grid.gridOrigin.y === 50,
+                      2000, "grid origin should track sketch pan")
+            tryVerify(() => sketchCanvas.grid.majorGridModel.rowCount() > 0,
+                      2000, "major grid model should populate for the viewport")
+        }
+
         function test_stylusInputAndUndo() {
             const initial = sketchId.strokeModel.rowCount()
 

@@ -57,6 +57,16 @@ void cwSketchDrawCanvas::setTransform(const QTransform &transform)
     m_painter->setTransform(transform);
 }
 
+void cwSketchDrawCanvas::translate(double dx, double dy)
+{
+    m_painter->translate(static_cast<float>(dx), static_cast<float>(dy));
+}
+
+void cwSketchDrawCanvas::scale(double sx, double sy)
+{
+    m_painter->scale(static_cast<float>(sx), static_cast<float>(sy));
+}
+
 void cwSketchDrawCanvas::setClipRect(const QRectF &rect)
 {
     m_painter->setClipRect(rect);
