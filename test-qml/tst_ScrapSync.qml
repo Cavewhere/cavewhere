@@ -1560,6 +1560,12 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 return currentScrapView.count === existingScrapCount + 1
             }, 5000, "wait for new scrap row")
+            // wait() is needed: NoteTransformEditor becomes visible on first
+            // scrap creation, and Qt's event delivery mis-routes the next
+            // mouseClick to the carpet-toolbar Select button without a frame
+            // tick to settle. Polling for editor/checkbox geometry doesn't fix
+            // it; only an event-loop pause does.
+            wait(100)
             mouseClick(autoCalculateScrapCheckBox())
 
             for (let i = 1; i < points.length; ++i) {
