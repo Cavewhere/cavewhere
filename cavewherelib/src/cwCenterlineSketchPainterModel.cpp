@@ -109,20 +109,26 @@ void cwCenterlineSketchPainterModel::updateModel()
     // e.g. at 1:250, 1 mm paper ≈ 0.25 m world.
     constexpr double stationSymbolDiameterPaperMm = 1.0; // 0.5 mm radius
     constexpr double stationLabelHeightPaperMm    = 3.0;
-    constexpr double shotLineWidthWorldMeters     = 0.02;
+    constexpr double shotLineWidthPaperMm         = 0.25;
+
+    const double paperMmToWorldM = 1.0 / (1000.0 * scaleRatio);
 
     const double stationRadiusWorld =
-        0.5 * stationSymbolDiameterPaperMm / (1000.0 * scaleRatio);
+        0.5 * stationSymbolDiameterPaperMm * paperMmToWorldM;
     const double labelTargetHeightWorld =
-        stationLabelHeightPaperMm / (1000.0 * scaleRatio);
+        stationLabelHeightPaperMm * paperMmToWorldM;
+    const double shotLineWidthWorld =
+        shotLineWidthPaperMm * paperMmToWorldM;
 
     auto convertToPainterPaths = [stationRadiusWorld,
-                                  labelTargetHeightWorld]
+                                  labelTargetHeightWorld,
+                                  shotLineWidthWorld]
         (const Result<cwSurvey2DGeometry> result) -> QFuture<Result<QVector<Path>>> {
         const cwSurvey2DGeometry geometry = result.value();
         return cwConcurrent::run([geometry,
                                   stationRadiusWorld,
-                                  labelTargetHeightWorld]() {
+                                  labelTargetHeightWorld,
+                                  shotLineWidthWorld]() {
             // strokeWidth == 0 flags a fill pass (see cwAbstractSketchPainterPathModel).
             auto makePath = [](QPainterPath path, double strokeWidth) {
                 Path p;
@@ -139,7 +145,7 @@ void cwCenterlineSketchPainterModel::updateModel()
                 lines.moveTo(line.p1());
                 lines.lineTo(line.p2());
             }
-            paths.append(makePath(std::move(lines), shotLineWidthWorldMeters));
+            paths.append(makePath(std::move(lines), shotLineWidthWorld));
 
             QPainterPath symbols;
             for (const auto &station : geometry.stations) {

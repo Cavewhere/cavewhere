@@ -71,6 +71,9 @@ cwSketch::cwSketch(QObject *parent)
 {
     m_undoStack->setUndoLimit(32);
 
+    // Default paper scale 1:250 — matches SketchItem.qml's view-matrix default.
+    m_mapScale->scaleDenominator()->setValue(250.0);
+
     rebuildViewMatrixForType();
     syncMatrixArtifact();
     m_geometryRule->setViewMatrix(m_matrixArtifact);

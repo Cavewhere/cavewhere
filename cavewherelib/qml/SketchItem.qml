@@ -64,8 +64,12 @@ QQ.Item {
     WorldToScreenMatrix {
         id: worldToScreenId
         pixelDensity: Screen.pixelDensity
-        scale.scaleNumerator.value: 1
-        scale.scaleDenominator.value: 250
+        // Mirror sketch.mapScale — the sketch owns the paper scale (1:250
+        // default) and this matrix is a view-only consumer.
+        scale.scaleNumerator.value:   sketchItemId.sketch ? sketchItemId.sketch.mapScale.scaleNumerator.value   : 1
+        scale.scaleDenominator.value: sketchItemId.sketch ? sketchItemId.sketch.mapScale.scaleDenominator.value : 250
+        scale.scaleNumerator.unit:    sketchItemId.sketch ? sketchItemId.sketch.mapScale.scaleNumerator.unit    : Units.Meters
+        scale.scaleDenominator.unit:  sketchItemId.sketch ? sketchItemId.sketch.mapScale.scaleDenominator.unit  : Units.Meters
     }
 
     InfiniteGridModel {
