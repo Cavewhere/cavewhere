@@ -134,7 +134,7 @@ QQ.Rectangle {
 
                 RoundButton {
                     objectName: "addSketchWallButton"
-                    icon.source: "qrc:/twbs-icons/icons/bounding-box.svg"
+                    icon.source: "qrc:/twbs-icons/icons/border.svg"
                     visible: narrowToolbar.hasCurrentSketch
                     checked: narrowToolbar.galleryState === "ADD-SKETCH-WALL"
                     onClicked: narrowToolbar.stateChangeRequested("ADD-SKETCH-WALL")
@@ -142,7 +142,7 @@ QQ.Rectangle {
 
                 RoundButton {
                     objectName: "addSketchFeatureButton"
-                    icon.source: "qrc:/twbs-icons/icons/pencil.svg"
+                    icon.source: "qrc:/twbs-icons/icons/brush.svg"
                     visible: narrowToolbar.hasCurrentSketch
                     checked: narrowToolbar.galleryState === "ADD-SKETCH-FEATURE"
                     onClicked: narrowToolbar.stateChangeRequested("ADD-SKETCH-FEATURE")

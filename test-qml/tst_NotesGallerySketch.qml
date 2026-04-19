@@ -17,11 +17,14 @@ MainWindowTest {
 
         readonly property string tripAddress: "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
+        function initTestCase() {
+            TestHelper.loadProjectFromZip(RootData.project,
+                TestHelper.testcasesDatasetPath("lidarProjects/jaws of the beast.zip"))
+        }
+
         function init() {
             rootId.width = 1200
 
-            TestHelper.loadProjectFromZip(RootData.project,
-                TestHelper.testcasesDatasetPath("lidarProjects/jaws of the beast.zip"))
             RootData.pageSelectionModel.currentPageAddress = tripAddress
             tryVerify(() => {
                 return RootData.pageView.currentPageItem !== null
@@ -57,7 +60,8 @@ MainWindowTest {
                       2000, "currentSketch should resolve to the new sketch")
             compare(noteGallery.currentSketch.name, sketch.name)
 
-            const sketchArea = findChild(noteGallery, "sketchArea")
+            const sketchArea = ObjectFinder.findObjectByChain(mainWindow,
+                "rootId->tripPage->noteGallery->sketchArea")
             verify(sketchArea !== null, "sketchArea should exist")
             tryVerify(() => { return sketchArea.visible }, 2000,
                       "sketchArea should be visible when a sketch is current")
