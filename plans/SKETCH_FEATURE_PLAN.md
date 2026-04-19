@@ -697,7 +697,7 @@ Iteration 1 is large (~15 C++ classes, 4 QML files, proto + save/load, 8 tests, 
 |---|--------|------------|----------|
 | 1 | **Qt 6.11 bump** ✅ | `CLAUDE.md` + build README only | Toolchain validated before any code depends on it |
 | 2 | **Pen data model** ✅ | `cwPenPoint`, `cwPenStroke`, bare `cwSketch` (no pipeline yet), `cwSketchData`, `cwPenStrokeModel`, `cwMovingAveragePenStrokeProxy` | `test_cwSketch`, `test_cwPenStrokeModel` (coalescing proof) |
-| 3 | **Grid + coord infra port** | `cwInfiniteGridModel` family, `cwWorldToScreenMatrix` | `test_cwInfiniteGridModel` — pure port, no sketch deps |
+| 3 | **Grid + coord infra port** ✅ | `cwInfiniteGridModel` family, `cwWorldToScreenMatrix`, `cwAbstractSketchPainterPathModel` (pulled forward from commit 4 — base of `cwFixedGridModel`) | `test_cwInfiniteGridModel`, `test_cwFixedGridModel`, `test_cwWorldToScreenMatrix` — pure port, no sketch deps |
 | 4 | **Painter-path + QPainter backend + exporter** | `cwSketchPainterPathModel`, `cwSketchPainter`, `cwSketchDraw`, `cwSketchDrawQPainter`, `cwSketchExporter` | `test_cwSketchPainterPathModel`, `test_cwSketchExporter` — all testable without Canvas |
 | 5 | **Per-sketch 2D pipeline** | `cwRegionSurveyNetwork` + `cwRootData` hookup, `cwSurvey2DGeometryRule` wired in `cwSketch`, `cwCenterlineSketchPainterModel` | `test_cwSketchPipeline` |
 | 6 | **Proto + save/load** | `cavewhere.proto` additions, `cwSaveLoadProtoBuffer` round-trip | `test_cwSketchSaveLoad` (incl. forward-compat fallback) |
