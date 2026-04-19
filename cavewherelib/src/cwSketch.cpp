@@ -1,0 +1,188 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+//Qt includes
+#include <QMetaObject>
+#include <QUndoCommand>
+
+//Our includes
+#include "cwSketch.h"
+#include "cwSketchData.h"
+#include "cwPenStrokeModel.h"
+#include "cwScale.h"
+#include "cwKeywordModel.h"
+
+namespace {
+
+// QUndoStack::push() runs redo() once on push. Since endStroke()/clearStrokes()
+// apply the mutation *before* pushing, the first redo() would otherwise tear
+// the model down via a full resetModel. Skip the first redo to preserve
+// downstream delegate state on stroke completion.
+class cwSketchSetStrokesCommand : public QUndoCommand
+{
+public:
+    cwSketchSetStrokesCommand(cwSketch *sketch,
+                              const QVector<cwPenStroke> &before,
+                              const QVector<cwPenStroke> &after,
+                              const QString &text)
+        : QUndoCommand(text, nullptr),
+          m_sketch(sketch),
+          m_before(before),
+          m_after(after)
+    {}
+
+    void undo() override { m_sketch->setStrokes(m_before); }
+    void redo() override {
+        if (m_firstRun) {
+            m_firstRun = false;
+            return;
+        }
+        m_sketch->setStrokes(m_after);
+    }
+
+private:
+    cwSketch *m_sketch;
+    QVector<cwPenStroke> m_before;
+    QVector<cwPenStroke> m_after;
+    bool m_firstRun = true;
+};
+
+} // namespace
+
+cwSketch::cwSketch(QObject *parent)
+    : QObject(parent),
+      m_id(QUuid::createUuid()),
+      m_mapScale(new cwScale(this)),
+      m_strokeModel(new cwPenStrokeModel(this)),
+      m_undoStack(new QUndoStack(this)),
+      m_keywordModel(new cwKeywordModel(this))
+{
+    m_undoStack->setUndoLimit(32);
+}
+
+cwSketch::~cwSketch() = default;
+
+void cwSketch::setName(const QString &name)
+{
+    if (m_name == name) {
+        return;
+    }
+    m_name = name;
+    emit nameChanged();
+}
+
+void cwSketch::setId(const QUuid &id)
+{
+    m_id = id.isNull() ? QUuid::createUuid() : id;
+}
+
+void cwSketch::setViewType(ViewType type)
+{
+    if (m_viewType == type) {
+        return;
+    }
+    m_viewType = type;
+    emit viewTypeChanged();
+}
+
+void cwSketch::setIconImagePath(const QString &path)
+{
+    if (m_iconImagePath == path) {
+        return;
+    }
+    m_iconImagePath = path;
+    emit iconImagePathChanged();
+}
+
+void cwSketch::setStrokes(const QVector<cwPenStroke> &strokes)
+{
+    applyStrokes(strokes);
+}
+
+int cwSketch::beginStroke(cwPenStroke::Kind kind, double width, const QColor &color)
+{
+    m_startStrokes = m_strokes;
+
+    cwPenStroke stroke;
+    stroke.kind  = kind;
+    stroke.width = width;
+    stroke.color = color;
+    stroke.id    = QUuid::createUuid();
+
+    const int row = m_strokes.size();
+    m_strokeModel->beginInsertRows(QModelIndex(), row, row);
+    m_strokes.append(stroke);
+    m_strokeModel->endInsertRows();
+    return row;
+}
+
+void cwSketch::appendPoint(int strokeIndex, const cwPenPoint &p)
+{
+    if (strokeIndex < 0 || strokeIndex >= m_strokes.size()) {
+        return;
+    }
+    m_strokes[strokeIndex].points.append(p);
+    if (m_pendingDirtyRow != -1) {
+        return;
+    }
+    m_pendingDirtyRow = strokeIndex;
+    QMetaObject::invokeMethod(this, [this]{
+        const int row = m_pendingDirtyRow;
+        m_pendingDirtyRow = -1;
+        const QModelIndex idx = m_strokeModel->index(row);
+        emit m_strokeModel->dataChanged(idx, idx,
+            { cwPenStrokeModel::PointsRole, cwPenStrokeModel::StrokeRole });
+    }, Qt::QueuedConnection);
+}
+
+void cwSketch::endStroke()
+{
+    auto *cmd = new cwSketchSetStrokesCommand(this, m_startStrokes, m_strokes, "Draw Stroke");
+    m_startStrokes.clear();
+    m_undoStack->push(cmd);
+}
+
+void cwSketch::clearStrokes()
+{
+    if (m_strokes.isEmpty()) {
+        return;
+    }
+    const auto before = m_strokes;
+    applyStrokes({});
+    m_undoStack->push(new cwSketchSetStrokesCommand(this, before, {}, "Clear Strokes"));
+}
+
+void cwSketch::applyStrokes(const QVector<cwPenStroke> &strokes)
+{
+    m_strokeModel->beginResetModel();
+    m_strokes = strokes;
+    m_strokeModel->endResetModel();
+    emit strokesReset();
+}
+
+cwSketchData cwSketch::data() const
+{
+    cwSketchData d;
+    d.name          = m_name;
+    d.id            = m_id;
+    d.viewType      = static_cast<cwSketchData::ViewType>(m_viewType);
+    d.mapScale      = m_mapScale->data();
+    d.iconImagePath = m_iconImagePath;
+    d.strokes       = m_strokes;
+    return d;
+}
+
+void cwSketch::setData(const cwSketchData &d)
+{
+    setName(d.name);
+    setId(d.id);
+    setViewType(static_cast<ViewType>(d.viewType));
+    m_mapScale->setData(d.mapScale);
+    setIconImagePath(d.iconImagePath);
+    applyStrokes(d.strokes);
+    m_undoStack->clear();
+}
