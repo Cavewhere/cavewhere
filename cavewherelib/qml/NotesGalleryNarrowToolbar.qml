@@ -148,11 +148,10 @@ QQ.Rectangle {
                     onClicked: narrowToolbar.stateChangeRequested("ADD-SKETCH-FEATURE")
                 }
 
-                QQ.Rectangle {
-                    width: 1
+                VLine {
+                    Layout.fillHeight: false
                     Layout.preferredHeight: 20
                     Layout.alignment: Qt.AlignVCenter
-                    color: Theme.border
                     visible: narrowToolbar.hasCurrentNote
                 }
 

@@ -91,11 +91,7 @@ QQ.Item {
                         }
                     }
 
-                    QQ.Rectangle {
-                        Layout.fillHeight: true
-                        Layout.preferredWidth: 1
-                        color: Theme.border
-                    }
+                    VLine {}
 
                     ColumnLayout {
                         spacing: 6

@@ -196,9 +196,7 @@ StandardPage {
                         color: Theme.textSubtle
                     }
 
-                    QQ.Rectangle {
-                        Layout.preferredWidth: 1
-                        Layout.fillHeight: true
+                    VLine {
                         color: Theme.borderSubtle
                     }
 
