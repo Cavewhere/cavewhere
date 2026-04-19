@@ -19,10 +19,15 @@
 #include "CaveWhereLibExport.h"
 #include "cwPenStroke.h"
 #include "cwSketchData.h"
+#include "cwSurvey2DGeometryArtifact.h"
+#include "cwSurveyNetworkArtifact.h"
 
 class cwScale;
 class cwKeywordModel;
 class cwPenStrokeModel;
+class cwAbstractScrapViewMatrix;
+class cwMatrix4x4Artifact;
+class cwSurvey2DGeometryRule;
 
 class CAVEWHERE_LIB_EXPORT cwSketch : public QObject
 {
@@ -36,6 +41,8 @@ class CAVEWHERE_LIB_EXPORT cwSketch : public QObject
     Q_PROPERTY(cwPenStrokeModel* strokeModel READ strokeModel CONSTANT)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
+    Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact WRITE setSurveyNetworkArtifact NOTIFY surveyNetworkArtifactChanged)
+    Q_PROPERTY(cwSurvey2DGeometryArtifact* survey2DGeometry READ survey2DGeometry CONSTANT)
 
 public:
     enum ViewType {
@@ -69,6 +76,14 @@ public:
     QUndoStack       *undoStack() const { return m_undoStack; }
     cwKeywordModel   *keywordModel() const { return m_keywordModel; }
 
+    // Region-wide network input; typically pointed at
+    // cwLinePlotManager::surveyNetworkArtifact(). When it or the view matrix
+    // changes, survey2DGeometry() regenerates.
+    cwSurveyNetworkArtifact   *surveyNetworkArtifact() const;
+    void setSurveyNetworkArtifact(cwSurveyNetworkArtifact *artifact);
+
+    cwSurvey2DGeometryArtifact *survey2DGeometry() const;
+
     Q_INVOKABLE int  beginStroke(cwPenStroke::Kind kind, double width, const QColor &color = QColor());
 
     // Contract: appendPoint is for the live pen input stream only — one
@@ -90,6 +105,7 @@ signals:
     void viewTypeChanged();
     void iconImagePathChanged();
     void strokesReset();
+    void surveyNetworkArtifactChanged();
 
 private:
     QVector<cwPenStroke> m_strokes;
@@ -105,11 +121,17 @@ private:
     QUndoStack       *m_undoStack   = nullptr;
     cwKeywordModel   *m_keywordModel = nullptr;
 
+    cwAbstractScrapViewMatrix *m_viewMatrix      = nullptr;
+    cwMatrix4x4Artifact       *m_matrixArtifact  = nullptr;
+    cwSurvey2DGeometryRule    *m_geometryRule    = nullptr;
+
     // -1 sentinel doubles as the "no flush scheduled" flag; see Decision 2
     // in the sketch feature plan for why coalescing matters.
     int m_pendingDirtyRow = -1;
 
     void applyStrokes(const QVector<cwPenStroke> &strokes);
+    void rebuildViewMatrixForType();
+    void syncMatrixArtifact();
 };
 
 #endif // CWSKETCH_H

@@ -23,7 +23,10 @@
 #include "cwSurveyChunkSignaler.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
+#include "cwSurveyNetworkArtifact.h"
 #include "asyncfuture.h"
+
+#include <QFuture>
 
 
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
@@ -32,6 +35,9 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
 {
     Region = nullptr;
     m_linePlot = nullptr;
+
+    m_surveyNetworkArtifact = new cwSurveyNetworkArtifact(this);
+    m_surveyNetworkArtifact->setName(QStringLiteral("LinePlotManager Survey Network"));
 
     SurveySignaler = new cwSurveyChunkSignaler(this);
 
@@ -324,6 +330,16 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     //Update the 3D plot
     if(m_linePlot != nullptr) {
         m_linePlot->setGeometry(results.stationPositions(), results.linePlotIndexData());
+    }
+
+    // Skip emission when the network hasn't changed so 2D-geometry rules
+    // don't rebuild on every line-plot completion triggered by unrelated
+    // cave data (labels, calibration, etc.).
+    const cwSurveyNetwork newNetwork = results.regionNetwork();
+    if (newNetwork != m_lastPublishedNetwork) {
+        m_lastPublishedNetwork = newNetwork;
+        m_surveyNetworkArtifact->setSurveyNetwork(
+            QtFuture::makeReadyValueFuture(Monad::Result<cwSurveyNetwork>(newNetwork)));
     }
 
     //Mark all caves as up todate

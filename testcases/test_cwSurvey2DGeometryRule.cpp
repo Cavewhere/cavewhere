@@ -23,8 +23,8 @@
 
 //SVG export test
 #include "LoadProjectHelper.h"
-#include "cwSurveyNetworkBuilderRule.h"
-#include "cwSurveyDataArtifact.h"
+#include "cwLinePlotManager.h"
+#include "cwFutureManagerModel.h"
 #include "asyncfuture.h"
 
 
@@ -102,12 +102,15 @@ TEST_CASE("SVG export test", "[Survey2DGeometryRule]") {
     auto project = fileToProject(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto cavingRegion = project->cavingRegion();
 
-    // Create a survey data artifact and set the region
-    cwSurveyDataArtifact surveyData;
-    surveyData.setRegion(cavingRegion);
-
-    cwSurveyNetworkBuilderRule networkBuilderRule;
-    networkBuilderRule.setSurveyData(&surveyData);
+    // Source the survey network from the line-plot pipeline (which reads the
+    // .3d file produced by cavern and hands us a complete region-wide
+    // cwSurveyNetwork). This replaces the old cwSurveyNetworkBuilderRule
+    // path — see commit 5 of the sketch feature plan.
+    cwFutureManagerModel futureManager;
+    cwLinePlotManager linePlotManager;
+    linePlotManager.setFutureManagerToken(futureManager.token());
+    linePlotManager.setRegion(cavingRegion);
+    linePlotManager.waitToFinish();
 
     cwSurvey2DGeometryRule rule;
     auto matrixArtifact = new cwMatrix4x4Artifact(&rule);
@@ -129,7 +132,7 @@ TEST_CASE("SVG export test", "[Survey2DGeometryRule]") {
     matrix.rotate(rotationDifferance);
     matrixArtifact->setMatrix4x4(matrix);
 
-    rule.setSurveyNetwork(networkBuilderRule.surveyNetworkArtifact());
+    rule.setSurveyNetwork(linePlotManager.surveyNetworkArtifact());
     rule.setViewMatrix(matrixArtifact);
 
     auto geometryFuture = rule.survey2DGeometry()->geometryResult();

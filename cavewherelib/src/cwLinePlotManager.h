@@ -20,6 +20,8 @@ class cwRenderLinePlot;
 class cwSurveyChunkSignaler;
 class cwErrorListModel;
 #include "cwLinePlotTask.h"
+#include "cwSurveyNetwork.h"
+#include "cwSurveyNetworkArtifact.h"
 #include "cwGlobals.h"
 #include "cwFutureManagerToken.h"
 
@@ -37,6 +39,7 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
     QML_NAMED_ELEMENT(LinePlotManager)
 
     Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
+    Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact CONSTANT)
 
 public:
     explicit cwLinePlotManager(QObject *parent = 0);
@@ -48,6 +51,12 @@ public:
 
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);
+
+    // Region-wide survey network artifact, updated whenever the line-plot
+    // pipeline completes. Shared across every consumer (sketches today; future
+    // 2D views). Always non-null after construction; its future may be
+    // unstarted until the first line plot finishes.
+    cwSurveyNetworkArtifact* surveyNetworkArtifact() const { return m_surveyNetworkArtifact; }
 
     void waitToFinish();
 
@@ -68,6 +77,9 @@ private:
     cwRenderLinePlot* m_linePlot;
 
     cwSurveyChunkSignaler* SurveySignaler;
+
+    cwSurveyNetworkArtifact* m_surveyNetworkArtifact;
+    cwSurveyNetwork m_lastPublishedNetwork;
 
     bool AutomaticUpdate = true;
 

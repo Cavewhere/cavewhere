@@ -160,11 +160,12 @@ struct cwLinePlotTask::LinePlotWorker {
         }
 
         cwSurvex3DFileReader reader;
-        cwStationPositionLookup stationPositions = reader.readStationPositions(threeDFile);
-        if (stationPositions.isEmpty()) {
+        cwSurvex3DFileReader::NetworkAndLookup parsed = reader.readNetworkAndLookup(threeDFile);
+        if (parsed.lookup.isEmpty()) {
             return result;
         }
-        updateStationPositionForCaves(stationPositions, result);
+        updateStationPositionForCaves(parsed.lookup, result);
+        result.setRegionNetwork(std::move(parsed.network));
 
         GeometryResult geometry = generateGeometry();
         result.setPositions(geometry.points);

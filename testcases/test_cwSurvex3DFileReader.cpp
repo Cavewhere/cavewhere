@@ -18,7 +18,7 @@ TEST_CASE("cwSurvex3DFileReader should return empty lookup for missing file", "[
 
 TEST_CASE("cwSurvex3DFileReader should read station positions from .3d file", "[cwSurvex3DFileReader]") {
     // Run cavern to produce a .3d file from the test dataset
-    QString survexDataFile = copyToTempFolder("://datasets/test_cwSurvexport/data.svx");
+    QString survexDataFile = testcasesDatasetPath("test_cwSurvexport/data.svx");
     REQUIRE(QFile::exists(survexDataFile));
 
     cwCavernTask cavern;
@@ -53,4 +53,42 @@ TEST_CASE("cwSurvex3DFileReader should read station positions from .3d file", "[
     CHECK(pos26a.x() == Catch::Approx(0.93).margin(0.01));
     CHECK(pos26a.y() == Catch::Approx(-5.40).margin(0.01));
     CHECK(pos26a.z() == Catch::Approx(2.32).margin(0.01));
+}
+
+TEST_CASE("cwSurvex3DFileReader should build a survey network from .3d file", "[cwSurvex3DFileReader]") {
+    QString survexDataFile = testcasesDatasetPath("test_cwSurvexport/data.svx");
+    REQUIRE(QFile::exists(survexDataFile));
+
+    cwCavernTask cavern;
+    cavern.setSurvexFile(survexDataFile);
+    cavern.start();
+    cavern.waitToFinish();
+
+    REQUIRE(!cavern.output3dFileName().isEmpty());
+    REQUIRE(QFileInfo(cavern.output3dFileName()).exists());
+
+    cwSurvex3DFileReader reader;
+    auto parsed = reader.readNetworkAndLookup(cavern.output3dFileName());
+
+    // Lookup and network positions must agree for every station in the file.
+    CHECK(parsed.lookup.positions().size() == 6);
+    CHECK(parsed.network.stations().size() == 6);
+    for (const auto &name : parsed.network.stations()) {
+        CHECK(parsed.lookup.hasPosition(name));
+        CHECK(parsed.network.hasPosition(name));
+    }
+
+    // Survex data.svx connects five shots: 26–26a, 26a–26b, 26c–26b,
+    // 26d–26c, 26c–26e. Station 26c therefore has three neighbours.
+    REQUIRE(parsed.network.hasPosition("26c"));
+    auto neighbors26c = parsed.network.neighbors("26c");
+    CHECK(neighbors26c.size() == 3);
+    CHECK(neighbors26c.contains("26b"));
+    CHECK(neighbors26c.contains("26d"));
+    CHECK(neighbors26c.contains("26e"));
+
+    // Station 26e is a leaf.
+    auto neighbors26e = parsed.network.neighbors("26e");
+    CHECK(neighbors26e.size() == 1);
+    CHECK(neighbors26e.contains("26c"));
 }

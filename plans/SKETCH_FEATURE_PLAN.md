@@ -247,27 +247,50 @@ cwSketch-owned (one instance per sketch):
 - The view matrix is the one piece that's genuinely sketch-specific. Keeping it alongside the rule and artifact in `cwSketch` keeps the "my projection" responsibility local.
 - Lifetime matches: when a sketch is destroyed, its rule and artifact go with it automatically (parent-ownership) and no stale computation or signal graph remains.
 
-**Where the shared `cwSurveyNetworkArtifact` lives**:
+**Where the shared `cwSurveyNetworkArtifact` lives** (revised in commit 5):
 
-Introduce `cwRegionSurveyNetwork` as a lazy, per-`cwCavingRegion` helper that owns the `cwSurveyDataArtifact` and `cwSurveyNetworkBuilderRule` and exposes the resulting `cwSurveyNetworkArtifact*`. It's created on first demand (first sketch that needs it) and destroyed with the region. Other consumers (future: 2D map views) can plug into the same artifact later.
+`cwLinePlotManager` owns the region-wide `cwSurveyNetworkArtifact*` and exposes
+it as a Q_PROPERTY. The network is built as a side-effect of the normal line-plot
+pipeline: `cwSurvex3DFileReader::readNetworkAndLookup()` parses the `.3d` file
+produced by cavern in two passes (pass 1 indexes `img_LABEL` items, pass 2
+walks `img_MOVE`/`img_LINE` records and resolves endpoints by coordinate match)
+and yields both the `cwStationPositionLookup` (positions for per-cave geometry)
+and a full `cwSurveyNetwork` (shots + positions) used for sketches.
 
-`cwRootData` gains a `cwRegionSurveyNetwork *regionSurveyNetwork() const` accessor, analogous to how it already exposes `cwLinePlotManager`. We do **not** try to unify this with `cwLinePlotManager`'s internal network — that one is owned inside `cwLinePlotTask` and its lifetime is coupled to the 3D rendering path. Coupling them is a future refactor, not iteration 1 work.
+The earlier plan drafted a lazy `cwRegionSurveyNetwork` helper backed by
+`cwSurveyDataArtifact` + `cwSurveyNetworkBuilderRule`. That pipeline was
+dropped in commit 5 because it duplicated work cavern was already doing —
+the builder rule re-computed the network from raw chunks + calibrations in
+parallel with the line-plot pipeline, then ran its own BFS to propagate
+positions. Feeding the sketch's 2D rule from `cwLinePlotManager`'s output
+instead means there's one source of truth, the 3D and 2D consumers see the
+same topology, and any future surveyor-facing change (different cavern flags,
+`.pos` files, etc.) propagates to both layers uniformly.
 
-**What `cwSketch` adds for the pipeline**:
+`cwSurveyNetworkBuilderRule.{h,cpp}` and `test_cwSurveyNetworkBuilderRule.cpp`
+are removed. `cwSurveyDataArtifact` stays — it is load-bearing for
+`cwSurvexExporterRule` (a separate exporter rule wired into
+`cavewherelib/qml/PipelinePage.qml`).
+
+**What `cwSketch` adds for the pipeline** (landed in commit 5):
 
 ```cpp
 class cwSketch : public QObject {
     // ... fields from earlier decisions ...
 
     // Per-sketch 2D-projection pipeline:
-    cwAbstractScrapViewMatrix *m_viewMatrix;    // Plan/Running/Projected (by viewType)
+    cwAbstractScrapViewMatrix *m_viewMatrix;      // Plan/Running/Projected (by viewType)
     cwMatrix4x4Artifact       *m_matrixArtifact;
     cwSurvey2DGeometryRule    *m_geometryRule;
+    cwSurveyNetworkArtifact   *m_surveyNetworkArtifact; // set via setSurveyNetworkArtifact()
 
-    // Wired on construction: region network → m_geometryRule.surveyNetwork;
-    //                        m_matrixArtifact  → m_geometryRule.viewMatrix.
-    // All three are QObject children of `this`.
+    // Matrix artifact wired on construction: it tracks m_viewMatrix->matrix()
+    // via matrixChanged. m_geometryRule.viewMatrix = m_matrixArtifact.
+    // Callers (trip layer / save-load) invoke setSurveyNetworkArtifact() to
+    // point the sketch at cwLinePlotManager::surveyNetworkArtifact(); this
+    // routes m_geometryRule.surveyNetwork to the shared source.
 
+    void setSurveyNetworkArtifact(cwSurveyNetworkArtifact *artifact);
     cwSurvey2DGeometryArtifact *survey2DGeometry() const {
         return m_geometryRule->survey2DGeometry();
     }
@@ -367,8 +390,9 @@ class cwSketch : public QObject {
     cwKeywordModel *keywordModel() const;
 
     // Per-sketch 2D-projection pipeline (see Decision 4).
-    // Constructed on attach to a cwTrip (which gives us access to the region's
-    // shared cwSurveyNetworkArtifact via cwRegionSurveyNetwork).
+    // Commit 5: the trip layer (future commit 7) points this sketch at the
+    // shared cwSurveyNetworkArtifact exposed by cwLinePlotManager via
+    // setSurveyNetworkArtifact().
     cwSurvey2DGeometryArtifact *survey2DGeometry() const;
 
     cwSketchData data() const;
@@ -512,9 +536,9 @@ Port `InfiniteGridModel`, `FixedGridModel`, `TextModel`, `WorldToScreenMatrix` v
 
 Port `CenterlinePainterModel` as `cwCenterlineSketchPainterModel`. It keeps its existing dependency on `cwSurvey2DGeometryArtifact`, but the wiring is different from the prototype:
 
-- Each `cwSketch` constructs its own `cwSurvey2DGeometryRule` + `cwMatrix4x4Artifact` pair (see Decision 4). The rule's input `surveyNetwork` is the shared `cwSurveyNetworkArtifact*` from `cwRegionSurveyNetwork`; its `viewMatrix` is driven by the sketch's `viewType` (iteration 1: always Plan, so `cwPlanScrapViewMatrix`). Running / Projected Profile wiring comes in a future iteration.
+- Each `cwSketch` constructs its own `cwSurvey2DGeometryRule` + `cwMatrix4x4Artifact` pair (see Decision 4). The rule's input `surveyNetwork` is the shared `cwSurveyNetworkArtifact*` from `cwLinePlotManager`; its `viewMatrix` is driven by the sketch's `viewType` (iteration 1: always Plan, so `cwPlanScrapViewMatrix`). Running / Projected Profile wiring comes in a future iteration.
 - `cwCenterlineSketchPainterModel` binds to `sketch->survey2DGeometry()` for its input. When the sketch's view type or reference station changes, the rule re-runs and the painter model refreshes automatically via its existing `geometryResultChanged()` slot.
-- The shared `cwRegionSurveyNetwork` is created lazily by the first sketch that needs it, and destroyed with its `cwCavingRegion`.
+- The shared `cwSurveyNetworkArtifact` lives on `cwLinePlotManager` (already owned by `cwRootData`); the artifact's `surveyNetwork` future is refreshed whenever the line-plot pipeline completes.
 
 No port of the prototype's `RootData::createGeometry2DPipeline()` — that was a global shortcut that doesn't fit the per-sketch ownership model.
 
@@ -680,7 +704,7 @@ Iteration 1 ships on-screen rendering only, but we build the export seam immedia
 - Bump minimum required system Qt to 6.11 (Conan does not package it yet); update `CLAUDE.md` and build README.
 - Port prototype core: `cwPenPoint`, `cwPenStroke`, `cwSketch`, `cwPenStrokeModel`, `cwMovingAveragePenStrokeProxy`, `cwSketchPainterPathModel`, `cwSketchPainter`, `cwSketchCanvas` (`QCanvasPainterItem`) + `cwSketchCanvasRenderer` (`QCanvasPainterItemRenderer`), `InfiniteGridModel` family.
 - New trip-level note source: `cwSurveyNoteSketchModel`, wired into `cwSurveyNotesConcatModel` with `Q_INVOKABLE addSketch(ViewType)`.
-- Per-region shared artifact: `cwRegionSurveyNetwork`, exposed via `cwRootData`. Per-sketch pipeline: `cwMatrix4x4Artifact` + `cwSurvey2DGeometryRule` inside each `cwSketch`.
+- Per-region shared artifact: `cwSurveyNetworkArtifact` exposed by `cwLinePlotManager` (built from the .3d file via extended `cwSurvex3DFileReader::readNetworkAndLookup()`). Per-sketch pipeline: `cwMatrix4x4Artifact` + `cwSurvey2DGeometryRule` inside each `cwSketch`.
 - Proto schema additions + `cwSaveLoad` round-trip. Paper scale mirrors `NoteTransformation`'s `scaleNumerator` / `scaleDenominator` `Length`-field pattern (no new `Scale` message).
 - `SketchItem.qml`, `ExclusivePointHandler` ported.
 - `AddNoteMenuButton.qml` (unified +-menu), `SectionHeader.qml` generalized to accept an `addControl` Item, `SurveyEditor.qml` narrow-mode Notes section uses it, `NotesGallery.qml` main toolbar uses it, `NotesGalleryNarrowToolbar.qml` overflow menu gets a Sketch item.
@@ -699,7 +723,7 @@ Iteration 1 is large (~15 C++ classes, 4 QML files, proto + save/load, 8 tests, 
 | 2 | **Pen data model** ✅ | `cwPenPoint`, `cwPenStroke`, bare `cwSketch` (no pipeline yet), `cwSketchData`, `cwPenStrokeModel`, `cwMovingAveragePenStrokeProxy` | `test_cwSketch`, `test_cwPenStrokeModel` (coalescing proof) |
 | 3 | **Grid + coord infra port** ✅ | `cwInfiniteGridModel` family, `cwWorldToScreenMatrix`, `cwAbstractSketchPainterPathModel` (pulled forward from commit 4 — base of `cwFixedGridModel`) | `test_cwInfiniteGridModel`, `test_cwFixedGridModel`, `test_cwWorldToScreenMatrix` — pure port, no sketch deps |
 | 4 | **Painter-path + QPainter backend + exporter** ✅ | `cwSketchPainterPathModel`, `cwSketchPainter`, `cwSketchDraw`, `cwSketchDrawQPainter`, `cwSketchExporter` | `test_cwSketchPainterPathModel`, `test_cwSketchExporter` — all testable without Canvas |
-| 5 | **Per-sketch 2D pipeline** | `cwRegionSurveyNetwork` + `cwRootData` hookup, `cwSurvey2DGeometryRule` wired in `cwSketch`, `cwCenterlineSketchPainterModel` | `test_cwSketchPipeline` |
+| 5 | **Per-sketch 2D pipeline** ✅ | Region-wide `cwSurveyNetworkArtifact` exposed by `cwLinePlotManager` (fed by extended `cwSurvex3DFileReader::readNetworkAndLookup()` via `cwLinePlotTask`), `cwSurvey2DGeometryRule` wired in `cwSketch`, `cwCenterlineSketchPainterModel`. Dropped `cwSurveyNetworkBuilderRule` (was test-only) | `test_cwSketchPipeline`, `test_cwCenterlineSketchPainterModel`, extended `test_cwSurvex3DFileReader` |
 | 6 | **Proto + save/load** | `cavewhere.proto` additions, `cwSaveLoadProtoBuffer` round-trip | `test_cwSketchSaveLoad` (incl. forward-compat fallback) |
 | 7 | **Trip integration** | `cwSurveyNoteSketchModel`, `cwTrip::notesSketch()`, `cwSurveyNotesConcatModel::addSketch()` | Covered via existing concat-model tests + commit 11 |
 | 8 | **Canvas backend + renderer** | `cwSketchDrawCanvas`, `cwSketchCanvas`, `cwSketchCanvasRenderer`, `cwExclusivePointHandler` port | Manual smoke + `tst_SketchItem` in commit 9 |
@@ -768,8 +792,10 @@ cavewherelib/src/
   cwWorldToScreenMatrix.{h,cpp}     // ported
   cwExclusivePointHandler.{h,cpp}   // ported
   cwCenterlineSketchPainterModel.{h,cpp} // port of CenterlinePainterModel
-  cwRegionSurveyNetwork.{h,cpp}     // shared per-region network; owns the
-                                    //   cwSurveyDataArtifact + cwSurveyNetworkBuilderRule
+  // Commit 5 extends cwSurvex3DFileReader with readNetworkAndLookup() and
+  // cwLinePlotManager with a region-wide cwSurveyNetworkArtifact; no new
+  // helper class is needed — the 3D pipeline is the single source of truth.
+  // cwSurveyNetworkBuilderRule was removed in the same commit (was test-only).
 
 cavewherelib/qml/
   SketchItem.qml
@@ -800,7 +826,10 @@ cavewhere.proto                           // add PenPoint, PenStroke, Sketch; ex
 cavewherelib/src/cwTrip.{h,cpp}           // add notesSketch()
 cavewherelib/src/cwSurveyNotesConcatModel.{h,cpp}  // subscribe to sketch model; addSketch() invokable
 cavewherelib/src/cwSaveLoadProtoBuffer.cpp         // Trip sketch round-trip
-cavewherelib/src/cwRootData.{h,cpp}       // expose cwRegionSurveyNetwork*; optionally a sketch icon manager like noteLiDARManager
+cavewherelib/src/cwLinePlotManager.{h,cpp}  // commit 5: expose surveyNetworkArtifact()
+cavewherelib/src/cwLinePlotTask.{h,cpp}     // commit 5: carry region-wide cwSurveyNetwork in LinePlotResultData
+cavewherelib/src/cwSurvex3DFileReader.{h,cpp} // commit 5: readNetworkAndLookup() (shots + positions from .3d)
+cavewherelib/src/cwRootData.{h,cpp}       // optionally a sketch icon manager like noteLiDARManager
 cavewherelib/qml/NotesGallery.qml         // swap LoadNotesIconButton → AddNoteMenuButton; SketchItem delegate dispatch; ADD-SKETCH-* states
 cavewherelib/qml/NotesGalleryNarrowToolbar.qml     // Sketch submenu in overflow menu
 cavewherelib/qml/SurveyEditor.qml         // narrow-mode Notes SectionHeader uses AddNoteMenuButton
@@ -822,7 +851,7 @@ All C++ tests use `QTemporaryDir` + `QCoreApplication::applicationPid()` for any
 - **`test_cwSketchPainterPathModel.cpp`** — wall vs. feature stroke geometry, variable-width polygon assembly (port the prototype test), `(kind, width, color)` batching behavior, stable `pathGroup` ids across insert/delete operations.
 - **`test_cwInfiniteGridModel.cpp`** — port of the prototype grid tests; verifies zoom-level computation and interval switching.
 - **`test_cwSketchSaveLoad.cpp`** — round-trip a trip with Plan sketches through `.cw` (bundled zip), `.cwproj` (git), and legacy JSON. Includes PenPoint with `pressure=-1` (unknown) and with a valid pressure; includes Wall and Feature strokes. Also verifies forward-compat: a proto with `viewType = RunningProfile` loads without crashing (falls back to Plan with a warning).
-- **`test_cwSketchPipeline.cpp`** — construct a trip, add a sketch, verify it lazily creates `cwRegionSurveyNetwork` on first survey-data access and that the sketch's `cwSurvey2DGeometryArtifact` emits on survey-data changes. (Future iterations will extend this to verify two sketches with different view types produce independent artifacts — iteration 1 tests Plan only.)
+- **`test_cwSketchPipeline.cpp`** — loads `Phake Cave 3000.cw`, drives `cwLinePlotManager` to completion, checks the region-wide `cwSurveyNetworkArtifact` has the expected station count and neighbour topology (a10 has three neighbours — a9, a11, a13). Attaches a `cwSketch` to the trip, sets its `surveyNetworkArtifact`, and verifies `survey2DGeometry()->geometryResult()` settles with non-empty stations/shotLines. Finally hooks a `cwCenterlineSketchPainterModel` to the sketch and confirms its three-row output (shotLines / station dots / station labels) with the labels row carrying strokeWidth = 0. (Future iterations will extend this to verify two sketches with different view types produce independent artifacts — iteration 1 tests Plan only.)
 - **`test_cwSketchExporter.cpp`** — smoke-test export: render a fixed sketch to a `QBuffer`-backed `QPdfWriter` and `QSvgGenerator`, confirm output is non-empty and starts with the expected magic bytes (`%PDF-` for PDF, `<?xml` / `<svg` for SVG). Locks in "export seam works" before we add export UI in iteration 5.
 - **`tst_SketchItem.qml`** — stylus input produces strokes (drive with synthetic points), undo button removes the last stroke. Use `tryVerify`/`tryCompare` per CLAUDE.md.
 - **`tst_AddNoteMenuButton.qml`** — clicking each menu item (Image, Sketch, LiDAR) triggers the expected `notesModel` action. Verifies the menu structure as iteration 1 ships it (single "Sketch" item) so future regressions are caught when it expands to a submenu.

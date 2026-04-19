@@ -141,11 +141,17 @@ public:
         QVector<unsigned int> linePlotIndexData() const;
 
     public:
+        void setRegionNetwork(cwSurveyNetwork network);
+        cwSurveyNetwork regionNetwork() const;
+        bool hasRegionNetworkChanged() const;
+
         QMap<cwCave*, LinePlotCaveData> Caves;
         QSet<cwTrip*> Trips;
         QSet<cwScrap*> Scraps;
         QVector<QVector3D> StationPositions;
         QVector<unsigned int> LinePlotIndexData;
+        cwSurveyNetwork RegionNetwork;
+        bool RegionNetworkChanged = false;
 
         friend class cwLinePlotTask;
         friend struct LinePlotWorker;
@@ -230,6 +236,22 @@ inline QVector<QVector3D> cwLinePlotTask::LinePlotResultData::stationPositions()
 inline QVector<unsigned int> cwLinePlotTask::LinePlotResultData::linePlotIndexData() const
 {
     return LinePlotIndexData;
+}
+
+inline void cwLinePlotTask::LinePlotResultData::setRegionNetwork(cwSurveyNetwork network)
+{
+    RegionNetwork = std::move(network);
+    RegionNetworkChanged = true;
+}
+
+inline cwSurveyNetwork cwLinePlotTask::LinePlotResultData::regionNetwork() const
+{
+    return RegionNetwork;
+}
+
+inline bool cwLinePlotTask::LinePlotResultData::hasRegionNetworkChanged() const
+{
+    return RegionNetworkChanged;
 }
 
 /**
