@@ -23,6 +23,7 @@ QQ.Item {
     property bool isNarrow: false
     property bool showNotes: false
     property SurveyNotesConcatModel notesModel: null
+    property int currentNoteIndex: -1
 
     signal collapseClicked();
     signal noteClicked(int noteIndex)
@@ -228,49 +229,69 @@ QQ.Item {
                         }
                     }
 
-                    QQ.Flow {
+                    QQ.Rectangle {
                         Layout.fillWidth: true
-                        spacing: Theme.flowSpacing
+                        implicitHeight: notesFlow.implicitHeight + 2 * Theme.flowSpacing
+                        visible: notesRepeater.count > 0
+                        color: Theme.floatingWidgetColor
+                        radius: 7
 
-                        QQ.Repeater {
-                            model: clipArea.notesModel
+                        QQ.Flow {
+                            id: notesFlow
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: Theme.flowSpacing
+                            spacing: Theme.flowSpacing
 
-                            delegate: QQ.Item {
-                                id: thumbDelegate
-                                required property url iconPath
-                                required property QQ.QtObject noteObject
-                                required property int index
+                            QQ.Repeater {
+                                id: notesRepeater
+                                model: clipArea.notesModel
 
-                                width: thumbSize
-                                height: thumbSize
+                                delegate: QQ.Item {
+                                    id: thumbDelegate
+                                    required property url iconPath
+                                    required property QQ.QtObject noteObject
+                                    required property int index
 
-                                readonly property real thumbSize: 80
+                                    readonly property real thumbSize: 80
 
-                                QQ.Image {
-                                    id: thumbImage
-                                    anchors.fill: parent
-                                    anchors.margins: 2
-                                    source: thumbDelegate.iconPath
-                                    fillMode: QQ.Image.PreserveAspectFit
-                                    asynchronous: true
-                                    sourceSize: Qt.size(width, height)
-                                    rotation: thumbDelegate.noteObject?.rotate ?? 0
-                                }
+                                    width: thumbSize
+                                    height: thumbSize
 
-                                ImageBusyIndicator {
-                                    image: thumbImage
-                                }
+                                    QQ.Rectangle {
+                                        anchors.fill: parent
+                                        visible: thumbDelegate.index === clipArea.currentNoteIndex
+                                        color: Theme.accent
+                                        radius: Theme.floatingWidgetRadius
+                                    }
 
-                                NotePlaceholderIcon {
-                                    anchors.fill: parent
-                                    anchors.margins: 2
-                                    visible: thumbDelegate.iconPath.toString().length === 0
-                                    noteObject: thumbDelegate.noteObject
-                                }
+                                    QQ.Image {
+                                        id: thumbImage
+                                        anchors.fill: parent
+                                        anchors.margins: 2
+                                        source: thumbDelegate.iconPath
+                                        fillMode: QQ.Image.PreserveAspectFit
+                                        asynchronous: true
+                                        sourceSize: Qt.size(width, height)
+                                        rotation: thumbDelegate.noteObject?.rotate ?? 0
+                                    }
 
-                                QQ.TapHandler {
-                                    gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
-                                    onSingleTapped: clipArea.noteClicked(thumbDelegate.index)
+                                    ImageBusyIndicator {
+                                        image: thumbImage
+                                    }
+
+                                    NotePlaceholderIcon {
+                                        anchors.fill: parent
+                                        anchors.margins: 2
+                                        visible: thumbDelegate.iconPath.toString().length === 0
+                                        noteObject: thumbDelegate.noteObject
+                                    }
+
+                                    QQ.TapHandler {
+                                        gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
+                                        onSingleTapped: clipArea.noteClicked(thumbDelegate.index)
+                                    }
                                 }
                             }
                         }

@@ -113,6 +113,7 @@ StandardPage {
         isNarrow: area.isNarrow
         showNotes: !area.isWide
         notesModel: surveyNoteConcatModelId
+        currentNoteIndex: area.currentNoteIndex
 
         onCollapseClicked: {
             if(!area.isNarrow) area.state = "COLLAPSE"
