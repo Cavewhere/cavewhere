@@ -153,5 +153,7 @@
         <file>twbs-icons/icons/hand-index.svg</file>
         <file>twbs-icons/icons/bounding-box.svg</file>
         <file>twbs-icons/icons/geo-alt.svg</file>
+        <file>twbs-icons/icons/brush.svg</file>
+        <file>twbs-icons/icons/border.svg</file>
     </qresource>
 </RCC>
