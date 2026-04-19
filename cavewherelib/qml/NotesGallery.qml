@@ -20,6 +20,7 @@ QQ.Rectangle {
     property alias notesModel: galleryView.model;
     property Note currentNote
     property NoteLiDAR currentNoteLiDAR
+    property Sketch currentSketch
     property alias currentNoteIndex: galleryView.currentIndex
     property bool showGallery: true
     property bool isNarrow: false
@@ -37,6 +38,8 @@ QQ.Rectangle {
             case "ADD-STATION": return "CARPET"
             case "ADD-SCRAP": return "CARPET"
             case "ADD-LEAD": return "CARPET"
+            case "ADD-SKETCH-WALL": return "CARPET"
+            case "ADD-SKETCH-FEATURE": return "CARPET"
             default: return "ERROR"
         }
     }
@@ -95,6 +98,7 @@ QQ.Rectangle {
         galleryState: noteGallery.state
         galleryMode: noteGallery.mode
         hasCurrentNote: noteGallery.currentNote !== null
+        hasCurrentSketch: noteGallery.currentSketch !== null
         hasSelection: noteArea.hasSelection
 
         onNavigatePrev: noteGallery.noteIndexChangeRequested(noteGallery.currentNoteIndex - 1)
@@ -413,9 +417,11 @@ QQ.Rectangle {
                     let obj = currentItem["noteObject"]
                     noteGallery.currentNote = obj as Note;
                     noteGallery.currentNoteLiDAR = obj as NoteLiDAR;
+                    noteGallery.currentSketch = obj as Sketch;
                 } else {
                     noteGallery.currentNote = null;
                     noteGallery.currentNoteLiDAR = null;
+                    noteGallery.currentSketch = null;
                 }
             }
 
@@ -604,6 +610,15 @@ QQ.Rectangle {
         visible: noteGallery.currentNoteLiDAR !== null
         isNarrow: noteGallery.isNarrow
         note: noteGallery.currentNoteLiDAR
+    }
+
+    SketchItem {
+        id: sketchArea
+        objectName: "sketchArea"
+        anchors.fill: noteArea
+        visible: noteGallery.currentSketch !== null
+        isNarrow: noteGallery.isNarrow
+        sketch: noteGallery.currentSketch
     }
 
     QQ.SequentialAnimation {
@@ -796,6 +811,16 @@ QQ.Rectangle {
                     state: "ADD-SCRAP"
                 }
             }
+        },
+
+        QQ.State {
+            name: "ADD-SKETCH-WALL"
+            extend: "CARPET"
+        },
+
+        QQ.State {
+            name: "ADD-SKETCH-FEATURE"
+            extend: "CARPET"
         }
     ]
 

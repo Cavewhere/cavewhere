@@ -14,6 +14,7 @@ QQ.Rectangle {
     property string galleryState: ""
     property string galleryMode: ""
     property bool hasCurrentNote: false
+    property bool hasCurrentSketch: false
     property bool hasSelection: false
 
     signal navigatePrev()
@@ -129,6 +130,22 @@ QQ.Rectangle {
                     visible: narrowToolbar.hasCurrentNote
                     checked: narrowToolbar.galleryState === "ADD-LEAD"
                     onClicked: narrowToolbar.stateChangeRequested("ADD-LEAD")
+                }
+
+                RoundButton {
+                    objectName: "addSketchWallButton"
+                    icon.source: "qrc:/twbs-icons/icons/bounding-box.svg"
+                    visible: narrowToolbar.hasCurrentSketch
+                    checked: narrowToolbar.galleryState === "ADD-SKETCH-WALL"
+                    onClicked: narrowToolbar.stateChangeRequested("ADD-SKETCH-WALL")
+                }
+
+                RoundButton {
+                    objectName: "addSketchFeatureButton"
+                    icon.source: "qrc:/twbs-icons/icons/pencil.svg"
+                    visible: narrowToolbar.hasCurrentSketch
+                    checked: narrowToolbar.galleryState === "ADD-SKETCH-FEATURE"
+                    onClicked: narrowToolbar.stateChangeRequested("ADD-SKETCH-FEATURE")
                 }
 
                 QQ.Rectangle {
