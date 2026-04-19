@@ -30,11 +30,14 @@ cwInfiniteGridModel::cwInfiniteGridModel(QObject *parent)
     m_majorGrid->setGridZ(0);
     m_minorGrid->setGridZ(0);
 
-    // Hide origin labels under the major grid's font metrics.
+    // Hide origin labels under the major grid's font metrics. maxLabelSizePixels
+    // is in screen pixels; convert to world-meters via labelScale so the mask
+    // lives in the same space as the meter-space viewport and label bounds.
     m_originMask.setBinding([this]() {
         QSizeF size = m_majorGrid->maxLabelSizePixels();
-        size.setHeight(size.height() * 0.5);
-        size.setWidth(size.width() * 0.25);
+        const double labelScale = m_majorGrid->labelScale();
+        size.setHeight(size.height() * 0.5 * labelScale);
+        size.setWidth(size.width() * 0.25 * labelScale);
         const QRectF viewport = m_viewport.value();
         const QPointF bottomLeft = viewport.bottomLeft();
         return QRectF(QPointF(bottomLeft.x(), bottomLeft.y() - size.height()),
@@ -98,12 +101,16 @@ cwInfiniteGridModel::cwInfiniteGridModel(QObject *parent)
         return m_labelBackgroundColor.value();
     });
 
-    m_majorGrid->bindableLabelScale().setBinding([this]() {
-        return m_viewScale.value();
-    });
-    m_minorGrid->bindableLabelScale().setBinding([this]() {
-        return m_viewScale.value();
-    });
+    // labelScale = world-units (meters) per screen pixel = viewScale / mapScale.
+    // Grid positions are in meters and label bounds come from fontMetrics in
+    // screen pixels; scaleBounds() in cwFixedGridModel multiplies by labelScale
+    // to convert the screen-pixel bounds into the same meter-space as positions.
+    auto labelScaleBinding = [this]() {
+        const double mapScale = m_mapMatrix.value()(0, 0);
+        return mapScale > 0.0 ? m_viewScale.value() / mapScale : m_viewScale.value();
+    };
+    m_majorGrid->bindableLabelScale().setBinding(labelScaleBinding);
+    m_minorGrid->bindableLabelScale().setBinding(labelScaleBinding);
 
     m_majorGrid->bindableMapMatrix().setBinding([this]() {
         return m_mapMatrix.value();

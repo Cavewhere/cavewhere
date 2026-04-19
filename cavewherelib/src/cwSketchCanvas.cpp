@@ -17,6 +17,10 @@
 
 //Qt includes
 #include <QAbstractItemModel>
+#include <QLoggingCategory>
+#include <QTransform>
+
+Q_LOGGING_CATEGORY(lcSketchCanvas, "cw.sketch.canvas")
 
 cwSketchCanvas::cwSketchCanvas(QQuickItem *parent)
     : QCanvasPainterItem(parent),
@@ -97,6 +101,17 @@ void cwSketchCanvas::setActiveStrokeIndex(int index)
     update();
 }
 
+void cwSketchCanvas::setMapMatrix(const QMatrix4x4 &matrix)
+{
+    if (m_mapMatrix == matrix) {
+        return;
+    }
+    m_mapMatrix = matrix;
+    updateGridView();
+    emit mapMatrixChanged();
+    update();
+}
+
 void cwSketchCanvas::setGrid(cwInfiniteGridModel *grid)
 {
     if (m_grid == grid) {
@@ -172,14 +187,34 @@ void cwSketchCanvas::updateGridView()
     if (m_grid == nullptr) {
         return;
     }
-    m_grid->setGridOrigin(m_pan);
-    // Inverse zoom: the model's viewScale is a pen-width/interval compensation
-    // factor for the painter's scale(zoom) transform, so lines render at a
-    // constant screen thickness and the zoom-level log10 picks coarser grids
-    // when zoomed out. Matches the standalone prototype's 1.0 / outer.scale.
+
+    // viewScale = 1/zoom is the pen-width / label-scale compensation factor
+    // and drives the zoom-level log10 heuristic paired with mapMatrix scale.
     m_grid->setViewScale(m_zoom > 0.0 ? 1.0 / m_zoom : 1.0);
-    if (m_zoom > 0.0) {
-        m_grid->setViewport(QRectF(-m_pan.x() / m_zoom, -m_pan.y() / m_zoom,
-                                   width()  / m_zoom,  height() / m_zoom));
+
+    if (m_zoom <= 0.0) {
+        return;
     }
+
+    const QTransform worldToItem =
+        m_mapMatrix.toTransform()
+        * QTransform().scale(m_zoom, m_zoom)
+        * QTransform().translate(m_pan.x(), m_pan.y());
+
+    bool invertible = false;
+    const QTransform itemToWorld = worldToItem.inverted(&invertible);
+    if (!invertible) {
+        return;
+    }
+
+    const QRectF itemRect(0.0, 0.0, width(), height());
+    const QRectF worldViewport = itemToWorld.mapRect(itemRect);
+    const QPointF worldOrigin = itemToWorld.map(QPointF(0.0, 0.0));
+    m_grid->setViewport(worldViewport);
+    m_grid->setGridOrigin(worldOrigin);
+
+    qCDebug(lcSketchCanvas)
+        << "updateGridView pan" << m_pan << "zoom" << m_zoom
+        << "mapScale" << m_mapMatrix(0, 0)
+        << "worldViewport" << worldViewport << "worldOrigin" << worldOrigin;
 }

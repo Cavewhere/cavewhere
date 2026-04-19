@@ -8,6 +8,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
+import QtQuick.Window
 import cavewherelib
 
 QQ.Item {
@@ -26,25 +27,35 @@ QQ.Item {
 
     property int _activeStrokeIndex: -1
 
+    // mapMatrix is diag(mapScale, -mapScale, mapScale) — the Y-flip makes world
+    // Y-up while the item stays Y-down — so the forward/inverse transforms are
+    // simple scalar math rather than full matrix inversions.
     function _worldPoint(itemPoint) {
-        return Qt.point((itemPoint.x - pan.x) / zoom,
-                        (itemPoint.y - pan.y) / zoom)
+        const mapScale = worldToScreenId.matrix.m11
+        if (mapScale === 0.0) {
+            return Qt.point(0, 0)
+        }
+        return Qt.point((itemPoint.x - pan.x) / zoom / mapScale,
+                        -(itemPoint.y - pan.y) / zoom / mapScale)
     }
 
     clip: true
+
+    WorldToScreenMatrix {
+        id: worldToScreenId
+        pixelDensity: Screen.pixelDensity
+        scale.scaleNumerator.value: 1
+        scale.scaleDenominator.value: 250
+    }
 
     InfiniteGridModel {
         id: gridModel
         lineColor: Theme.sketchGridLine
         labelColor: Theme.sketchGridLabel
         labelFont: Qt.font({ family: Theme.fontFamily, pixelSize: Theme.fontSizeSmall })
-        majorGridInterval: 100
-        minorGridInterval: 20
-        // The zoom-level heuristic's +2 offset assumes a cave-meter mapMatrix
-        // (~15 px/m from the WorldToScreenMatrix prototype). With identity
-        // mapMatrix we shift it so clampedZoomLevel == 0 at zoom == 1 and the
-        // base intervals render 1:1 (100 / 20 px) instead of ×100.
-        minorGridMinPixelInterval: 0.1
+        majorGridInterval: 5
+        minorGridInterval: 1
+        mapMatrix: worldToScreenId.matrix
     }
 
     SketchCanvas {
@@ -54,6 +65,7 @@ QQ.Item {
         sketch: sketchItemId.sketch
         zoom: sketchItemId.zoom
         pan: sketchItemId.pan
+        mapMatrix: worldToScreenId.matrix
         activeStrokeIndex: sketchItemId._activeStrokeIndex
         grid: gridModel
     }
@@ -68,8 +80,10 @@ QQ.Item {
             const focus = Qt.point(event.x, event.y)
             const world = sketchItemId._worldPoint(focus)
             sketchItemId.zoom = sketchItemId.zoom * factor
-            sketchItemId.pan = Qt.point(focus.x - world.x * sketchItemId.zoom,
-                                        focus.y - world.y * sketchItemId.zoom)
+            // Re-solve pan so `world` stays under `focus` at the new zoom.
+            const k = worldToScreenId.matrix.m11 * sketchItemId.zoom
+            sketchItemId.pan = Qt.point(focus.x - world.x * k,
+                                        focus.y + world.y * k)
         }
     }
 

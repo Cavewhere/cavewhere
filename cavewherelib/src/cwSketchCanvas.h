@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QCanvasPainterItem>
+#include <QMatrix4x4>
 #include <QPointF>
 #include <QQmlEngine>
 
@@ -32,6 +33,7 @@ class CAVEWHERE_LIB_EXPORT cwSketchCanvas : public QCanvasPainterItem
     Q_PROPERTY(int activeStrokeIndex READ activeStrokeIndex WRITE setActiveStrokeIndex NOTIFY activeStrokeIndexChanged)
     Q_PROPERTY(cwSketchPainterPathModel* pathModel READ pathModel CONSTANT)
     Q_PROPERTY(cwInfiniteGridModel* grid READ grid WRITE setGrid NOTIFY gridChanged)
+    Q_PROPERTY(QMatrix4x4 mapMatrix READ mapMatrix WRITE setMapMatrix NOTIFY mapMatrixChanged)
 
 public:
     explicit cwSketchCanvas(QQuickItem *parent = nullptr);
@@ -54,6 +56,9 @@ public:
     cwInfiniteGridModel *grid() const { return m_grid; }
     void setGrid(cwInfiniteGridModel *grid);
 
+    QMatrix4x4 mapMatrix() const { return m_mapMatrix; }
+    void setMapMatrix(const QMatrix4x4 &matrix);
+
 protected:
     QCanvasPainterItemRenderer *createItemRenderer() const override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
@@ -64,6 +69,7 @@ signals:
     void panChanged();
     void activeStrokeIndexChanged();
     void gridChanged();
+    void mapMatrixChanged();
 
 private:
     cwSketch *m_sketch = nullptr;
@@ -71,6 +77,7 @@ private:
     cwInfiniteGridModel *m_grid = nullptr;
     double m_zoom = 1.0;
     QPointF m_pan;
+    QMatrix4x4 m_mapMatrix;
 
     void connectPathModelSignals();
     void connectModelForUpdate(QAbstractItemModel *model);

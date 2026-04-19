@@ -37,6 +37,7 @@ private:
     QVector<cwGridTextModel::TextRow> m_majorTextSnapshot;
     QTransform m_worldToItem;
     QRectF m_worldViewport;
+    double m_mapScale = 1.0;
 };
 
 #endif // CWSKETCHCANVASRENDERER_H

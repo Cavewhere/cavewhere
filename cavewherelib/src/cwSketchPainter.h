@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QRectF>
+#include <QTransform>
 #include <QVector>
 
 //Our includes
@@ -29,7 +30,12 @@ public:
 
     struct PaintContext {
         QRectF viewport;
-        double zoom = 1.0;
+        // World→item transform: mapMatrix · scale(userZoom) · translate(pan).
+        QTransform worldToItem;
+        // mapMatrix(0,0). Kept separate from worldToItem because strokes are
+        // specified in screen pixels and want compensation for mapScale but
+        // not for userZoom (so zooming still thickens strokes).
+        double mapScale = 1.0;
         const cwAbstractSketchPainterPathModel *strokes = nullptr;
 
         // Optional grid layer. Drawn before strokes; major on top of minor.

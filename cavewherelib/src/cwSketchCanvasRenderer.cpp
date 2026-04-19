@@ -18,6 +18,9 @@
 //Qt includes
 #include <QCanvasPainter>
 #include <QCanvasPainterItem>
+#include <QLoggingCategory>
+
+Q_LOGGING_CATEGORY(lcSketchRenderer, "cw.sketch.renderer")
 
 // Render-thread-owned model backing cwSketchPainter::paint. Populated in
 // synchronize() while the GUI thread is blocked; read in paint() without
@@ -95,16 +98,24 @@ void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
     }
 
     const QPointF pan = canvas->pan();
-    m_worldToItem = QTransform()
-                        .translate(pan.x(), pan.y())
-                        .scale(canvas->zoom(), canvas->zoom());
+    const QMatrix4x4 mapMatrix = canvas->mapMatrix();
+    const double userZoom = canvas->zoom();
+    m_mapScale = mapMatrix(0, 0);
+    m_worldToItem = mapMatrix.toTransform()
+                    * QTransform().scale(userZoom, userZoom)
+                    * QTransform().translate(pan.x(), pan.y());
 
-    if (canvas->zoom() > 0.0) {
+    if (userZoom > 0.0) {
         const QRectF itemRect(0.0, 0.0, canvas->width(), canvas->height());
         m_worldViewport = m_worldToItem.inverted().mapRect(itemRect);
     } else {
         m_worldViewport = QRectF();
     }
+
+    qCDebug(lcSketchRenderer)
+        << "synchronize pan" << pan << "userZoom" << userZoom
+        << "mapScale" << m_mapScale
+        << "worldViewport(meters)" << m_worldViewport;
 
     snapshotPaths(canvas->pathModel(), m_snapshot);
 
@@ -146,7 +157,8 @@ void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
 
     cwSketchPainter::PaintContext ctx;
     ctx.viewport       = m_worldViewport;
-    ctx.zoom           = m_worldToItem.m11();
+    ctx.worldToItem    = m_worldToItem;
+    ctx.mapScale       = m_mapScale;
     ctx.strokes        = m_snapshot;
     ctx.gridMinor.paths = m_minorGridSnapshot;
     ctx.gridMinor.text  = &m_minorTextSnapshot;

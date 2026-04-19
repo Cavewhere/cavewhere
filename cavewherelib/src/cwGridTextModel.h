@@ -15,6 +15,7 @@
 #include <QFont>
 #include <QPointF>
 #include <QQmlEngine>
+#include <QRectF>
 #include <QVector>
 
 //Our includes
@@ -29,13 +30,23 @@ public:
     struct TextRow
     {
         QString text;
-        QPointF position; // Baseline draw anchor in scene coordinates (Qt drawText convention).
+        // Top-left corner of the label's rectangle in *scene* coordinates (world
+        // meters in the sketch pipeline). The painter maps `bounds` through the
+        // world-to-screen transform and derives the baseline anchor in screen
+        // space, which is the only way to handle Y-flipped mapMatrixes (the
+        // model can't know the caller's Y orientation).
+        QRectF  bounds;
+        // Legacy mirror of `bounds.topLeft()` — kept so existing
+        // PositionRole QML consumers keep working. Painters should use
+        // `bounds` directly.
+        QPointF position;
         QFont   font;
         QColor  fillColor;
         QColor  strokeColor;
 
         bool operator==(const TextRow &other) const {
             return text == other.text &&
+                   bounds == other.bounds &&
                    position == other.position &&
                    font == other.font &&
                    fillColor == other.fillColor &&

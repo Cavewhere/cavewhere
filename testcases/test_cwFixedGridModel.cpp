@@ -252,26 +252,6 @@ TEST_CASE("cwFixedGridModel dataChanged signals on property updates", "[cwFixedG
         REQUIRE(roles1.contains(cwAbstractSketchPainterPathModel::PainterPathRole));
     }
 
-    SECTION("mapMatrix change emits PainterPathRole for each row separately") {
-        spy.clear();
-        QMatrix4x4 mat;
-        mat.scale(2.0f, 2.0f, 1.0f);
-        model.setMapMatrix(mat);
-        REQUIRE(spy.count() == 2);
-
-        auto margs0 = spy.takeFirst();
-        REQUIRE(margs0.at(0).value<QModelIndex>() == model.index(0, 0));
-        REQUIRE(margs0.at(1).value<QModelIndex>() == model.index(0, 0));
-        const auto mroles0 = margs0.at(2).value<QVector<int>>();
-        REQUIRE(mroles0.contains(cwAbstractSketchPainterPathModel::PainterPathRole));
-
-        auto margs1 = spy.takeFirst();
-        REQUIRE(margs1.at(0).value<QModelIndex>() == model.index(1, 0));
-        REQUIRE(margs1.at(1).value<QModelIndex>() == model.index(1, 0));
-        const auto mroles1 = margs1.at(2).value<QVector<int>>();
-        REQUIRE(mroles1.contains(cwAbstractSketchPainterPathModel::PainterPathRole));
-    }
-
     SECTION("gridInterval value change emits PainterPathRole for both rows") {
         spy.clear();
 
@@ -293,7 +273,7 @@ TEST_CASE("cwFixedGridModel dataChanged signals on property updates", "[cwFixedG
     }
 }
 
-TEST_CASE("cwFixedGridModel text rows expose baseline anchor, not bounds top-left",
+TEST_CASE("cwFixedGridModel text rows carry bounds for screen-space baseline",
           "[cwFixedGridModel]") {
     cwFixedGridModel model;
     model.setViewport(QRectF(0, 0, 50, 50));
@@ -305,13 +285,21 @@ TEST_CASE("cwFixedGridModel text rows expose baseline anchor, not bounds top-lef
     const auto rows = textModel->rows();
     REQUIRE(!rows.isEmpty());
 
-    const QFontMetricsF metrics(font);
-    int bottomAlignedLabels = 0;
+    // `bounds` is the label rect in world space; `position` is its top-left.
+    // The painter is responsible for mapping bounds through worldToItem and
+    // deriving the baseline in screen pixels.
     for (const auto &row : rows) {
-        const double glyphBottom = row.position.y() + metrics.boundingRect(row.text).bottom();
-        if (std::abs(glyphBottom - 50.0) <= 0.5) {
-            ++bottomAlignedLabels;
+        CHECK(row.bounds.isValid());
+        CHECK(row.position == row.bounds.topLeft());
+    }
+
+    // X-axis labels are pinned to the viewport's smaller-Y edge — which the
+    // sketch maps to screen bottom via its Y-flip mapMatrix.
+    int topAlignedLabels = 0;
+    for (const auto &row : rows) {
+        if (std::abs(row.bounds.top() - 0.0) <= 0.5) {
+            ++topAlignedLabels;
         }
     }
-    CHECK(bottomAlignedLabels >= 3);
+    CHECK(topAlignedLabels >= 3);
 }

@@ -52,7 +52,7 @@ cwFixedGridModel::cwFixedGridModel(QObject *parent) :
         m_gridIntervalUnit.notify();
     });
 
-    auto gridLines = [this](double left, double right, double scale) {
+    auto gridLines = [this](double left, double right) {
         QVector<GridLine> positions;
 
         if (!m_gridVisible.value()) {
@@ -70,8 +70,8 @@ cwFixedGridModel::cwFixedGridModel(QObject *parent) :
             return positions;
         }
 
-        double leftMeter  = left / scale;
-        double rightMeter = right / scale;
+        double leftMeter  = left;
+        double rightMeter = right;
 
         const double flipped = leftMeter > rightMeter ? -1.0 : 1.0;
 
@@ -96,8 +96,8 @@ cwFixedGridModel::cwFixedGridModel(QObject *parent) :
 
             if (keep) {
                 positions.append(GridLine{
-                    positionInMeters * scale, // in map pixels
-                    positionInMeters           // in cave units
+                    positionInMeters, // in cave units (meters)
+                    positionInMeters  // cave-unit label value
                 });
             }
         }
@@ -107,25 +107,22 @@ cwFixedGridModel::cwFixedGridModel(QObject *parent) :
 
     m_xGridLines.setBinding([this, gridLines]() {
         const QRectF viewport = m_viewport.value();
-        const QMatrix4x4 mapMatrix = m_mapMatrix.value();
-        const double xScale = mapMatrix(0, 0);
-        return gridLines(viewport.left(), viewport.right(), xScale);
+        return gridLines(viewport.left(), viewport.right());
     });
 
+    // Screen-pixel width of one grid interval: meters × (screen-px/meter) × zoom.
+    // labelScale = world-units-per-screen-pixel, so 1/labelScale = screen-px/world-unit.
     m_gridIntervalPixels.setBinding([this]() {
         const double interval = cwUnits::convert(m_gridIntervalLength.value(),
                                                  (cwUnits::LengthUnit)m_gridIntervalUnit.value(),
                                                  cwUnits::Meters);
-        const QMatrix4x4 mapMatrix = m_mapMatrix.value();
-        const double xScale = mapMatrix(0, 0);
-        return interval * xScale / m_labelScale;
+        const double labelScale = m_labelScale.value();
+        return labelScale > 0.0 ? interval / labelScale : 0.0;
     });
 
     m_yGridLines.setBinding([this, gridLines]() {
         const QRectF viewport = m_viewport.value();
-        const QMatrix4x4 mapMatrix = m_mapMatrix.value();
-        const double yScale = mapMatrix(1, 1);
-        return gridLines(viewport.top(), viewport.bottom(), yScale);
+        return gridLines(viewport.top(), viewport.bottom());
     });
 
     m_gridPath.setBinding([this]() {
@@ -200,11 +197,15 @@ cwFixedGridModel::cwFixedGridModel(QObject *parent) :
                 }
             };
 
+            // Callers are expected to pass a Y-up world viewport (sketch's
+            // mapMatrix has a Y-flip), so viewport.top() — the smaller-Y edge
+            // in QRectF terms — maps to the bottom of the screen, matching
+            // the prototype's "labels along the bottom" convention.
             for (const GridLine &xValue : xGridLines) {
                 const QString text = toString(xValue.value);
                 QRectF bounds = textBounds(text, fontMetrics);
                 bounds.moveTo(xValue.position - bounds.width() * 0.5,
-                              viewport.bottom() - bounds.height());
+                              viewport.top());
                 appendLabel({bounds, text});
             }
 
@@ -287,8 +288,6 @@ cwFixedGridModel::cwFixedGridModel(QObject *parent) :
     m_textRows.setBinding([this]() {
         const auto font = m_labelFont.value();
         const auto fillColor = m_labelColor.value();
-        const double labelScale = m_labelScale.value();
-        const QFontMetricsF fontMetrics(font);
 
         const auto labels = m_gridLabels.value();
 
@@ -298,8 +297,12 @@ cwFixedGridModel::cwFixedGridModel(QObject *parent) :
         for (const auto &label : labels) {
             cwGridTextModel::TextRow row;
             row.text        = label.text;
-            row.position    = label.bounds.topLeft()
-                              - fontMetrics.boundingRect(label.text).topLeft() * labelScale;
+            // Hand the full bounds to the painter; it maps through the
+            // world-to-screen transform and derives the baseline anchor,
+            // which is the only way to stay correct whether the caller's
+            // world is Y-up (sketch with mapMatrix Y-flip) or Y-down.
+            row.bounds      = label.bounds;
+            row.position    = label.bounds.topLeft();
             row.font        = font;
             row.fillColor   = fillColor;
             row.strokeColor = Qt::transparent;

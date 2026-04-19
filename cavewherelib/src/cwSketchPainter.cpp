@@ -12,11 +12,17 @@
 
 //Qt includes
 #include <QAbstractItemModel>
+#include <QFontMetricsF>
+#include <QLoggingCategory>
 #include <QPainterPath>
+
+Q_LOGGING_CATEGORY(lcSketchPainter, "cw.sketch.painter")
 
 namespace {
 
-void drawPaths(cwSketchDraw *draw, const cwAbstractSketchPainterPathModel *model)
+void drawPaths(cwSketchDraw *draw,
+               const cwAbstractSketchPainterPathModel *model,
+               double penScale)
 {
     if (model == nullptr) {
         return;
@@ -38,7 +44,7 @@ void drawPaths(cwSketchDraw *draw, const cwAbstractSketchPainterPathModel *model
                 .toDouble();
 
         if (width > 0.0) {
-            draw->setStrokePen(color, width, Qt::RoundCap, Qt::RoundJoin);
+            draw->setStrokePen(color, width * penScale, Qt::RoundCap, Qt::RoundJoin);
             draw->strokePath(path);
         } else {
             draw->setFillBrush(color);
@@ -47,21 +53,40 @@ void drawPaths(cwSketchDraw *draw, const cwAbstractSketchPainterPathModel *model
     }
 }
 
+// Labels live at world-meter positions but must render at the font's native
+// screen-pixel size regardless of mapScale or user zoom. Map each label's
+// world bounds rect to screen pixels, derive the baseline from the screen
+// rect's top + ascent (independent of the world's Y direction), reset the
+// painter transform to identity, and draw at native font size.
 void drawText(cwSketchDraw *draw,
               const QVector<cwGridTextModel::TextRow> *rows,
-              double labelScale)
+              const QTransform &worldToItem)
 {
-    if (rows == nullptr || labelScale <= 0.0) {
+    if (rows == nullptr || rows->isEmpty()) {
         return;
     }
+    QFont cachedFont;
+    QFontMetricsF metrics(cachedFont);
+    bool metricsValid = false;
     for (const auto &row : *rows) {
         if (row.text.isEmpty()) {
             continue;
         }
+        if (!metricsValid || row.font != cachedFont) {
+            cachedFont = row.font;
+            metrics = QFontMetricsF(cachedFont);
+            metricsValid = true;
+        }
+        const QRectF screenBounds = worldToItem.mapRect(row.bounds);
+        const QRectF glyphBR = metrics.boundingRect(row.text);
+        // Qt drawText anchors at the baseline: glyphBR.top() is negative
+        // (≈ -ascent), so subtracting shifts the baseline down from the
+        // rect's screen-top.
+        const QPointF screenBaseline(screenBounds.left() - glyphBR.left(),
+                                     screenBounds.top()  - glyphBR.top());
         draw->save();
-        draw->translate(row.position.x(), row.position.y());
-        draw->scale(labelScale, labelScale);
-        draw->drawText(QPointF(0.0, 0.0), row.text, row.font, row.fillColor);
+        draw->setTransform(QTransform());
+        draw->drawText(screenBaseline, row.text, row.font, row.fillColor);
         draw->restore();
     }
 }
@@ -78,13 +103,21 @@ void cwSketchPainter::paint(cwSketchDraw *draw, const PaintContext &context)
         draw->setClipRect(context.viewport);
     }
 
-    const double labelScale = context.zoom > 0.0 ? 1.0 / context.zoom : 1.0;
+    // Pen widths are in screen pixels. The render transform scales them by
+    // mapScale · userZoom; cancel the mapScale component so drawings come out
+    // at their intended screen thickness, while still letting user zoom
+    // thicken strokes when zoomed in.
+    const double penScale = context.mapScale > 0.0 ? 1.0 / context.mapScale : 1.0;
 
-    drawPaths(draw, context.gridMinor.paths);
-    drawPaths(draw, context.gridMajor.paths);
-    drawText (draw, context.gridMinor.text, labelScale);
-    drawText (draw, context.gridMajor.text, labelScale);
-    drawPaths(draw, context.strokes);
+    qCDebug(lcSketchPainter) << "paint viewport" << context.viewport
+                              << "mapScale" << context.mapScale
+                              << "penScale" << penScale;
+
+    drawPaths(draw, context.gridMinor.paths, penScale);
+    drawPaths(draw, context.gridMajor.paths, penScale);
+    drawText (draw, context.gridMinor.text, context.worldToItem);
+    drawText (draw, context.gridMajor.text, context.worldToItem);
+    drawPaths(draw, context.strokes, penScale);
 
     draw->restore();
 }

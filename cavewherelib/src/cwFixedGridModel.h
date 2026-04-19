@@ -201,7 +201,7 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwFixedGridModel, QSizeF, m_maxLabelSizePixels, QSizeF(), &cwFixedGridModel::maxLabelSizePixelsChanged);
 
     struct GridLine {
-        double position; // Position in map pixels
+        double position; // Position in world (cave meters)
         double value;    // Cave-unit label
 
         bool operator==(const GridLine &other) const {

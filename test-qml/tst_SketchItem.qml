@@ -40,14 +40,25 @@ Item {
             verify(sketchCanvas.grid !== null,
                    "sketchCanvas.grid should be wired")
 
+            // Baseline gridOrigin with pan=(0,0) so we can assert movement.
+            sketchItemId.zoom = 1.0
+            sketchItemId.pan = Qt.point(0, 0)
+            tryVerify(() => sketchCanvas.grid.gridOrigin.x === 0
+                          && sketchCanvas.grid.gridOrigin.y === 0,
+                      2000, "gridOrigin is world (0,0) when pan is zero")
+
             sketchItemId.zoom = 2.0
             sketchItemId.pan = Qt.point(50, 50)
 
             tryVerify(() => sketchCanvas.grid.viewScale === 0.5,
                       2000, "grid viewScale should be inverse of sketch zoom")
-            tryVerify(() => sketchCanvas.grid.gridOrigin.x === 50
-                          && sketchCanvas.grid.gridOrigin.y === 50,
-                      2000, "grid origin should track sketch pan")
+            // gridOrigin is now the world-meter point that lands at item (0,0).
+            // With pan=(50,50) the world origin sits at screen (50,50), so
+            // item (0,0) maps to a negative world point; exact value depends
+            // on Screen.pixelDensity so just assert it moved.
+            tryVerify(() => sketchCanvas.grid.gridOrigin.x !== 0
+                          && sketchCanvas.grid.gridOrigin.y !== 0,
+                      2000, "gridOrigin should shift when pan changes")
             tryVerify(() => sketchCanvas.grid.majorGridModel.rowCount() > 0,
                       2000, "major grid model should populate for the viewport")
         }
