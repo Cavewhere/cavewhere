@@ -269,7 +269,7 @@ QQ.Item {
                                     radius: 4
                                     QC.Label {
                                         anchors.centerIn: parent
-                                        text: "3D"
+                                        text: thumbDelegate.noteObject instanceof Sketch ? "Sketch" : "3D"
                                         color: Theme.textSubtle
                                     }
                                 }

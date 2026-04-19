@@ -24,6 +24,7 @@
 #include "cwLinePlotManager.h"
 #include "cwScrapManager.h"
 #include "cwNoteLiDARManager.h"
+#include "cwSketchManager.h"
 #include "cwProject.h"
 #include "cwTripCalibration.h"
 #include "cwTrip.h"
@@ -61,6 +62,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwLinePlotManager* linePlotManager READ linePlotManager NOTIFY linePlotManagerChanged)
     Q_PROPERTY(cwScrapManager* scrapManager READ scrapManager NOTIFY scrapManagerChanged)
     Q_PROPERTY(cwNoteLiDARManager* noteLiDARManager READ noteLiDARManager NOTIFY noteLiDARManagerChanged FINAL)
+    Q_PROPERTY(cwSketchManager* sketchManager READ sketchManager CONSTANT)
     Q_PROPERTY(cwProject* project READ project NOTIFY projectChanged)
     Q_PROPERTY(cwTripCalibration* defaultTripCalibration READ defaultTripCalibration NOTIFY defaultTripCalibrationChanged)
     Q_PROPERTY(cwTrip* defaultTrip READ defaultTrip NOTIFY defaultTripChanged)
@@ -172,6 +174,7 @@ public:
     static bool isMobileBuild();
 
     cwNoteLiDARManager *noteLiDARManager() const;
+    cwSketchManager *sketchManager() const { return SketchManager; }
 
     Q_INVOKABLE void shutdown();
     void shutdownBlocking();
@@ -207,6 +210,7 @@ private:
     cwLinePlotManager* LinePlotManager; //!< For keeping the lineplot updated
     cwScrapManager* ScrapManager; //!< For keeping all the scraps updated (carpeting)
     cwNoteLiDARManager* NoteLiDARManager; //!< For carpeting lidar scans
+    cwSketchManager* SketchManager = nullptr; //!< Rasterises sketch thumbnails into the disk cache
     cwKeywordItemModel* m_keywordItemModel;
     cwKeywordFilterPipelineModel* m_keywordFilterPipelineModel = nullptr;
     cwProject* Project; //!< For saving and loading, image saving and loading

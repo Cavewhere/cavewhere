@@ -56,6 +56,18 @@ cwSketch* cwSurveyNoteSketchModel::addSketch(cwSketch::ViewType viewType)
 
 void cwSurveyNoteSketchModel::addSketches(const QList<cwSketch*>& sketches)
 {
+    for (cwSketch* sketch : sketches) {
+        if (sketch == nullptr) {
+            continue;
+        }
+        connect(sketch, &cwSketch::iconImagePathChanged, this, [this, sketch]() {
+            const int row = notes().indexOf(static_cast<QObject*>(sketch));
+            const QModelIndex modelIndex = index(row);
+            if (modelIndex.isValid()) {
+                emit dataChanged(modelIndex, modelIndex, { IconPathRole });
+            }
+        });
+    }
     addNotesHelper(sketches);
 }
 

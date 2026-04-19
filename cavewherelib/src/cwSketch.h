@@ -9,9 +9,9 @@
 #define CWSKETCH_H
 
 //Qt includes
-#include <QByteArray>
 #include <QObject>
 #include <QQmlEngine>
+#include <QString>
 #include <QUndoStack>
 #include <QUuid>
 #include <QVector>
@@ -39,7 +39,7 @@ class CAVEWHERE_LIB_EXPORT cwSketch : public QObject
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(ViewType viewType READ viewType WRITE setViewType NOTIFY viewTypeChanged)
     Q_PROPERTY(cwScale* mapScale READ mapScale CONSTANT)
-    Q_PROPERTY(QByteArray iconImage READ iconImage WRITE setIconImage NOTIFY iconImageChanged)
+    Q_PROPERTY(QString iconImagePath READ iconImagePath WRITE setIconImagePath NOTIFY iconImagePathChanged)
     Q_PROPERTY(cwPenStrokeModel* strokeModel READ strokeModel CONSTANT)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
@@ -68,12 +68,11 @@ public:
 
     cwScale *mapScale() const { return m_mapScale; }
 
-    QByteArray iconImage() const { return m_iconImage; }
-    void setIconImage(const QByteArray &image);
-
-    // Materialises m_iconImage to a cache file on first call and returns the
-    // path. Empty if no icon is set.
-    QString iconImagePath() const;
+    // Icon thumbnails are written by cwSketchManager into the shared project
+    // disk cache and exposed here as an `image://cwcache/...` URL. The sketch
+    // itself does not know how to produce or resolve them.
+    QString iconImagePath() const { return m_iconImagePath; }
+    void setIconImagePath(const QString &path);
 
     const QVector<cwPenStroke> &strokes() const { return m_strokes; }
     void setStrokes(const QVector<cwPenStroke> &strokes);
@@ -113,7 +112,7 @@ public:
 signals:
     void nameChanged();
     void viewTypeChanged();
-    void iconImageChanged();
+    void iconImagePathChanged();
     void strokesReset();
     void surveyNetworkArtifactChanged();
 
@@ -125,8 +124,7 @@ private:
     QUuid    m_id;
     ViewType m_viewType = Plan;
     cwScale *m_mapScale = nullptr;
-    QByteArray m_iconImage;
-    mutable QString m_cachedIconPath;
+    QString  m_iconImagePath;
 
     cwPenStrokeModel *m_strokeModel = nullptr;
     QUndoStack       *m_undoStack   = nullptr;

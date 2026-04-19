@@ -10,6 +10,7 @@
 #include "cwDiskCacher.h"
 #include "cwImageProvider.h"
 #include <algorithm>
+#include <QUrlQuery>
 
 namespace {
 
@@ -82,20 +83,39 @@ bool cwCacheImageProvider::decodeKey(const QString& encodedKey, cwDiskCacher::Ke
 
 QImage cwCacheImageProvider::requestImage(const QString& id, QSize* size, const QSize& requestedSize)
 {
-    cwDiskCacher::Key key;
+    // The `?v=<token>` query is a cache-busting suffix: it makes QML see a
+    // fresh URL when the underlying entry changes, but is not part of the
+    // on-disk key. The token is folded into the scaled-image sub-cache key
+    // below so the scaled layer invalidates in lockstep with the original.
+    QString idWithoutQuery = id;
+    QString versionToken;
+    const int queryStart = id.indexOf(QLatin1Char('?'));
+    if (queryStart >= 0) {
+        idWithoutQuery = id.left(queryStart);
+        versionToken = QUrlQuery(id.mid(queryStart + 1))
+            .queryItemValue(QStringLiteral("v"));
+    }
 
-    if (!decodeKey(id, &key)) {
+    cwDiskCacher::Key key;
+    if (!decodeKey(idWithoutQuery, &key)) {
+        qWarning() << "cwCacheImageProvider: decodeKey failed for id:" << id;
         return {};
     }
 
     QDir baseDir = cacheBaseDir();
     if (!baseDir.exists()) {
+        qWarning() << "cwCacheImageProvider: baseDir does not exist:"
+                   << baseDir.absolutePath()
+                   << "(request id:" << id << ")";
         return {};
     }
 
     cwDiskCacher cacher(baseDir);
     const QByteArray data = cacher.entry(key);
     if (data.isEmpty()) {
+        qWarning() << "cwCacheImageProvider: empty cache entry for key"
+                   << key.path.path() << "/" << key.id
+                   << "under baseDir:" << baseDir.absolutePath();
         return {};
     }
 
@@ -113,15 +133,17 @@ QImage cwCacheImageProvider::requestImage(const QString& id, QSize* size, const 
                                .arg(requestedSize.width())
                                .arg(requestedSize.height());
     cwDiskCacher::Key scaledKey = key;
-    scaledKey.id = prefix + QStringLiteral("-") + key.id + QStringLiteral(".") + cwImageProvider::imageCacheExtension();
+    const QString versionSuffix = versionToken.isEmpty()
+        ? QString()
+        : (QStringLiteral("-v") + versionToken);
+    scaledKey.id = prefix + QStringLiteral("-") + key.id + versionSuffix
+        + QStringLiteral(".") + cwImageProvider::imageCacheExtension();
 
     auto loadOriginal = [data]() {
         QImage image;
         image.loadFromData(data);
         return image;
     };
-
-    qDebug() << "Requesting scaled image:" << requestedSize;
 
     return cwImageProvider::requestScaledImageFromCache(
         requestedSize,

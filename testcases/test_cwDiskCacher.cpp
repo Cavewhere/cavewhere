@@ -1,10 +1,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <QDateTime>
+#include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QVector>
 #include <QtConcurrent>
-#include <QFileInfo>
 #include <numeric>
 
 #include "cwDiskCacher.h"
@@ -79,6 +81,49 @@ TEST_CASE("cwDiskCacher single-threaded insert and entry", "[cwDiskCacher]") {
         CHECK(cacher.entry(outsideKey) == QByteArray());    // different cacher dir, miss
         CHECK(outerCacher.entry(outsideKey) == QByteArray("outside data"));
     }
+}
+
+// The sketch-icon versioning scheme reads QFileInfo(cacher.filePath(key))
+// .lastModified() and embeds the epoch-ms into `?v=` on the image URL so
+// QML's pixmap cache invalidates on each rewrite. That only works if
+// filePath() returns a path pointing at the actual file insert() wrote,
+// not some indirected location. Pin the contract.
+TEST_CASE("cwDiskCacher filePath() points at the file written by insert()", "[cwDiskCacher]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    cwDiskCacher cacher(tempDir.path());
+
+    cwDiskCacher::Key key{QStringLiteral("sketch-abc"),
+                          QDir{QStringLiteral("sketch-icons")},
+                          QString()};
+    cacher.insert(key, QByteArray("v1-bytes"));
+
+    const QString path = cacher.filePath(key);
+    QFileInfo info(path);
+    REQUIRE(info.exists());
+    REQUIRE(info.isFile());
+
+    // Backdate mtime on the first-insert file so the second insert is
+    // guaranteed to produce a strictly-greater mtime without sleeping past
+    // the filesystem's 1s mtime granularity.
+    {
+        QFile f(path);
+        REQUIRE(f.open(QIODevice::ReadOnly));
+        const QDateTime backdated = QDateTime::currentDateTime().addSecs(-5);
+        REQUIRE(f.setFileTime(backdated, QFileDevice::FileModificationTime));
+    }
+    info.refresh();
+    const QDateTime mtimeAfterFirstInsert = info.lastModified();
+
+    // Re-inserting under the same key must rewrite the same file so the
+    // QML cache-busting token (derived from mtime) changes deterministically.
+    cacher.insert(key, QByteArray("v2-bytes"));
+
+    info.refresh();
+    REQUIRE(info.exists());
+    CHECK(cacher.filePath(key) == path);
+    CHECK(info.lastModified() > mtimeAfterFirstInsert);
+    CHECK(cacher.entry(key) == QByteArray("v2-bytes"));
 }
 
 // Test concurrent insert and entry

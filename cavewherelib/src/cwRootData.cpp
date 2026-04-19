@@ -123,6 +123,11 @@ cwRootData::cwRootData(QObject *parent) :
     NoteLiDARManager->setFutureManagerToken(FutureManagerModel->token());
     NoteLiDARManager->setKeywordItemModel(m_keywordItemModel);
 
+    //Setup the sketch manager (writes sketch thumbnails into the shared cache)
+    SketchManager = new cwSketchManager(Project);
+    SketchManager->setProject(Project);
+    SketchManager->setRegionTreeModel(RegionTreeModel);
+
     //Setup the survey import manager
     SurveyImportManager = new cwSurveyImportManager(Project);
     SurveyImportManager->setCavingRegion(Region);
