@@ -32,9 +32,12 @@ Q_LOGGING_CATEGORY(lcSketchManager, "cw.sketch.manager")
 #include "cwSketchDrawQPainter.h"
 #include "cwSketchPainter.h"
 #include "cwSketchPainterPathModel.h"
+#include "cwSurveyChunk.h"
 #include "cwSurveyNoteModelBase.h"
 #include "cwSurveyNoteSketchModel.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
+#include "cwTripLinePlotTask.h"
 
 namespace {
 
@@ -464,4 +467,193 @@ void cwSketchManager::sketchDestroyed(QObject* sketchObj)
 {
     auto* sketch = static_cast<cwSketch*>(sketchObj);
     m_dirtySketches.remove(sketch);
+}
+
+// ---------------------- Per-trip line plot pipeline ----------------------
+
+void cwSketchManager::acquireLinePlot(cwSketchCanvas* canvas, cwTrip* trip)
+{
+    Q_UNUSED(canvas);
+    if (trip == nullptr) {
+        return;
+    }
+
+    auto it = m_tripPipelines.find(trip);
+    if (it == m_tripPipelines.end()) {
+        auto pipeline = std::make_unique<TripPipeline>();
+        pipeline->restarter = std::make_unique<Restarter>(this);
+
+        // Route the restarter's settled future through a .context(this, ...)
+        // callback so we only touch GUI-thread state from the GUI thread.
+        // onFutureChanged fires every time the restarter swaps in a new
+        // deferred — we observe each new future as it arrives. We re-look
+        // up the pipeline by trip pointer at callback time, because the
+        // pipeline may have been released between restart() and resolve.
+        cwTrip* capturedTrip = trip;
+        Restarter* capturedRestarter = pipeline->restarter.get();
+        pipeline->restarter->onFutureChanged([this, capturedRestarter, capturedTrip]() {
+            auto future = capturedRestarter->future();
+            AsyncFuture::observe(future).context(this,
+                [this, capturedTrip, future]() {
+                    if (future.isCanceled() || future.resultCount() == 0) {
+                        return;
+                    }
+                    auto entry = m_tripPipelines.find(capturedTrip);
+                    if (entry == m_tripPipelines.end()) {
+                        // Canvas released before the future settled; drop.
+                        return;
+                    }
+                    entry->second->latest = future.result();
+                    emit linePlotUpdated(capturedTrip);
+                });
+        });
+
+        auto [inserted, ok] = m_tripPipelines.emplace(trip, std::move(pipeline));
+        Q_UNUSED(ok);
+        it = inserted;
+
+        connectLinePlotTripSignals(trip, *it->second);
+        connectLinePlotChunkSignals(trip, *it->second);
+
+        // destroyed(): remove the entry. Use lambda because slot needs
+        // to forward the trip pointer we already captured.
+        it->second->destroyedConnection = connect(trip, &QObject::destroyed,
+            this, [this, trip]() { onTripDestroyed(trip); });
+
+        // Kick first run.
+        it->second->refCount = 1;
+        requestLinePlotRerun(trip);
+        return;
+    }
+
+    it->second->refCount += 1;
+}
+
+void cwSketchManager::releaseLinePlot(cwSketchCanvas* canvas, cwTrip* trip)
+{
+    Q_UNUSED(canvas);
+    if (trip == nullptr) {
+        return;
+    }
+    auto it = m_tripPipelines.find(trip);
+    if (it == m_tripPipelines.end()) {
+        return;
+    }
+    it->second->refCount -= 1;
+    if (it->second->refCount > 0) {
+        return;
+    }
+
+    disconnectLinePlotSignals(*it->second);
+    QObject::disconnect(it->second->destroyedConnection);
+    m_tripPipelines.erase(it);
+}
+
+QList<cwTripLinePlotTask::TripComponent>
+cwSketchManager::latestLinePlot(cwTrip* trip) const
+{
+    const auto it = m_tripPipelines.find(trip);
+    if (it == m_tripPipelines.end()) {
+        return {};
+    }
+    return it->second->latest;
+}
+
+void cwSketchManager::connectLinePlotTripSignals(cwTrip* trip, TripPipeline& pipeline)
+{
+    // Any structural change to the trip's chunks rewires per-chunk signals
+    // and triggers a rerun. Calibrations cover declination (stripped) but
+    // also tape/compass corrections that DO affect geometry.
+    pipeline.tripConnections.append(
+        connect(trip, &cwTrip::chunksInserted, this, [this, trip]() {
+            rebuildChunkSignals(trip);
+            requestLinePlotRerun(trip);
+        }));
+    pipeline.tripConnections.append(
+        connect(trip, &cwTrip::chunksRemoved, this, [this, trip]() {
+            rebuildChunkSignals(trip);
+            requestLinePlotRerun(trip);
+        }));
+    if (auto* calib = trip->calibrations()) {
+        pipeline.tripConnections.append(
+            connect(calib, &cwTripCalibration::calibrationsChanged,
+                    this, [this, trip]() { requestLinePlotRerun(trip); }));
+    }
+}
+
+void cwSketchManager::connectLinePlotChunkSignals(cwTrip* trip, TripPipeline& pipeline)
+{
+    for (auto* chunk : trip->chunks()) {
+        if (chunk == nullptr) {
+            continue;
+        }
+        pipeline.chunkConnections.append(
+            connect(chunk, &cwSurveyChunk::dataChanged,
+                    this, [this, trip]() { requestLinePlotRerun(trip); }));
+        pipeline.chunkConnections.append(
+            connect(chunk, &cwSurveyChunk::stationsAdded,
+                    this, [this, trip]() { requestLinePlotRerun(trip); }));
+        pipeline.chunkConnections.append(
+            connect(chunk, &cwSurveyChunk::stationsRemoved,
+                    this, [this, trip]() { requestLinePlotRerun(trip); }));
+        pipeline.chunkConnections.append(
+            connect(chunk, &cwSurveyChunk::shotsAdded,
+                    this, [this, trip]() { requestLinePlotRerun(trip); }));
+        pipeline.chunkConnections.append(
+            connect(chunk, &cwSurveyChunk::shotsRemoved,
+                    this, [this, trip]() { requestLinePlotRerun(trip); }));
+    }
+}
+
+void cwSketchManager::disconnectLinePlotSignals(TripPipeline& pipeline)
+{
+    for (const auto& c : pipeline.tripConnections) {
+        QObject::disconnect(c);
+    }
+    pipeline.tripConnections.clear();
+    for (const auto& c : pipeline.chunkConnections) {
+        QObject::disconnect(c);
+    }
+    pipeline.chunkConnections.clear();
+}
+
+void cwSketchManager::rebuildChunkSignals(cwTrip* trip)
+{
+    auto it = m_tripPipelines.find(trip);
+    if (it == m_tripPipelines.end()) {
+        return;
+    }
+    // Disconnect all existing per-chunk connections; reconnect based on
+    // current chunk list. Cheaper than bookkeeping inserts/removes.
+    for (const auto& c : it->second->chunkConnections) {
+        QObject::disconnect(c);
+    }
+    it->second->chunkConnections.clear();
+    connectLinePlotChunkSignals(trip, *it->second);
+}
+
+void cwSketchManager::requestLinePlotRerun(cwTrip* trip)
+{
+    auto it = m_tripPipelines.find(trip);
+    if (it == m_tripPipelines.end()) {
+        return;
+    }
+    auto input = cwTripLinePlotTask::buildInput(trip);
+    it->second->restarter->restart([input = std::move(input)]() mutable {
+        return cwTripLinePlotTask::run(std::move(input));
+    });
+}
+
+void cwSketchManager::onTripDestroyed(cwTrip* trip)
+{
+    // The trip is gone; connections to it are already dead. Just drop the
+    // hash entry. Do NOT touch pipeline.tripConnections here (QObject::destroyed
+    // handlers are invoked with the target partially destroyed).
+    auto it = m_tripPipelines.find(trip);
+    if (it == m_tripPipelines.end()) {
+        return;
+    }
+    it->second->tripConnections.clear();
+    it->second->chunkConnections.clear();
+    m_tripPipelines.erase(it);
 }

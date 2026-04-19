@@ -731,6 +731,9 @@ void saveSketch(CavewhereProto::Sketch* protoSketch, const cwSketchData& data)
     for (const auto& stroke : data.strokes) {
         savePenStroke(protoSketch->add_strokes(), stroke);
     }
+    if (!data.anchorStation.isEmpty()) {
+        protoSketch->set_anchorstation(data.anchorStation.toStdString());
+    }
 }
 
 cwPenPoint fromProtoPenPoint(const CavewhereProto::PenPoint& protoPoint)
@@ -791,6 +794,10 @@ cwSketchData fromProtoSketch(const CavewhereProto::Sketch& protoSketch)
     data.strokes.reserve(protoSketch.strokes_size());
     for (const auto& protoStroke : protoSketch.strokes()) {
         data.strokes.append(fromProtoPenStroke(protoStroke));
+    }
+
+    if (protoSketch.has_anchorstation()) {
+        data.anchorStation = QString::fromStdString(protoSketch.anchorstation());
     }
 
     return data;

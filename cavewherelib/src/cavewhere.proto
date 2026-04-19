@@ -453,6 +453,7 @@ message Sketch {
     optional Scale mapScale = 5;
     optional string referenceStationName = 6; // reserved for RP/PP (future)
     repeated PenStroke strokes = 7;
+    optional string anchorStation = 8; // per-trip centerline anchor station
 }
 
 ///////////////////////////////////////////////////

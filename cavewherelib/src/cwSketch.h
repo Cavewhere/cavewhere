@@ -45,6 +45,7 @@ class CAVEWHERE_LIB_EXPORT cwSketch : public QObject
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
     Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact WRITE setSurveyNetworkArtifact NOTIFY surveyNetworkArtifactChanged)
     Q_PROPERTY(cwSurvey2DGeometryArtifact* survey2DGeometry READ survey2DGeometry CONSTANT)
+    Q_PROPERTY(QString anchorStation READ anchorStation WRITE setAnchorStation NOTIFY anchorStationChanged)
 
 public:
     enum ViewType {
@@ -73,6 +74,13 @@ public:
     // itself does not know how to produce or resolve them.
     QString iconImagePath() const { return m_iconImagePath; }
     void setIconImagePath(const QString &path);
+
+    // Station within parentTrip() that selects *which* connected component of
+    // the trip's line plot this sketch renders, AND whose world position is
+    // translated to the sketch's (0,0). Empty until the user picks it (or the
+    // single-component auto-pick fires). Persisted across loads.
+    QString anchorStation() const { return m_anchorStation; }
+    void setAnchorStation(const QString &name);
 
     const QVector<cwPenStroke> &strokes() const { return m_strokes; }
     void setStrokes(const QVector<cwPenStroke> &strokes);
@@ -116,6 +124,7 @@ signals:
     void strokesReset();
     void strokeEnded();
     void surveyNetworkArtifactChanged();
+    void anchorStationChanged();
 
 private:
     QVector<cwPenStroke> m_strokes;
@@ -126,6 +135,7 @@ private:
     ViewType m_viewType = Plan;
     cwScale *m_mapScale = nullptr;
     QString  m_iconImagePath;
+    QString  m_anchorStation;
 
     cwPenStrokeModel *m_strokeModel = nullptr;
     QUndoStack       *m_undoStack   = nullptr;

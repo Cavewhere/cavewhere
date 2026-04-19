@@ -27,6 +27,26 @@ QQ.Item {
 
     property int _activeStrokeIndex: -1
 
+    // Gates the anchor-picker dialog. We only open it after this item has
+    // fully loaded, so transient sketch swaps during page construction do
+    // not flash a modal. See plan §7.
+    property bool _pageReady: false
+    property var  _pendingAnchorComponents: null
+
+    QQ.Component.onCompleted: {
+        _pageReady = true
+        if (_pendingAnchorComponents !== null) {
+            anchorPickerLoaderId.active = true
+        }
+    }
+
+    function _handleAnchorSelectionRequest(componentList) {
+        _pendingAnchorComponents = componentList
+        if (_pageReady) {
+            anchorPickerLoaderId.active = true
+        }
+    }
+
     // mapMatrix is diag(mapScale, -mapScale, mapScale) — the Y-flip makes world
     // Y-up while the item stays Y-down — so the forward/inverse transforms are
     // simple scalar math rather than full matrix inversions.
@@ -63,11 +83,35 @@ QQ.Item {
         objectName: "sketchCanvas"
         anchors.fill: parent
         sketch: sketchItemId.sketch
+        sketchManager: RootData.sketchManager
         zoom: sketchItemId.zoom
         pan: sketchItemId.pan
         mapMatrix: worldToScreenId.matrix
         activeStrokeIndex: sketchItemId._activeStrokeIndex
         grid: gridModel
+
+        onRequestAnchorSelection: (components) => {
+            sketchItemId._handleAnchorSelectionRequest(components)
+        }
+    }
+
+    QQ.Loader {
+        id: anchorPickerLoaderId
+        objectName: "anchorPickerLoader"
+        active: false
+
+        sourceComponent: ChooseTripComponentDialog {
+            sketch: sketchItemId.sketch
+            QQ.Component.onCompleted: {
+                if (sketchItemId._pendingAnchorComponents !== null) {
+                    open(sketchItemId._pendingAnchorComponents)
+                    sketchItemId._pendingAnchorComponents = null
+                }
+            }
+            onAnchorChosen: {
+                anchorPickerLoaderId.active = false
+            }
+        }
     }
 
     QQ.WheelHandler {

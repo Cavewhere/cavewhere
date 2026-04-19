@@ -34,6 +34,7 @@ public:
     ViewType viewType = Plan;
     cwScale::Data mapScale;
     QVector<cwPenStroke> strokes;
+    QString  anchorStation;
 };
 
 #endif // CWSKETCHDATA_H

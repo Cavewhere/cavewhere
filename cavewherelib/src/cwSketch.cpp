@@ -158,6 +158,15 @@ void cwSketch::setIconImagePath(const QString &path)
     emit iconImagePathChanged();
 }
 
+void cwSketch::setAnchorStation(const QString &name)
+{
+    if (m_anchorStation == name) {
+        return;
+    }
+    m_anchorStation = name;
+    emit anchorStationChanged();
+}
+
 void cwSketch::setStrokes(const QVector<cwPenStroke> &strokes)
 {
     applyStrokes(strokes);
@@ -238,6 +247,7 @@ cwSketchData cwSketch::data() const
     d.viewType      = static_cast<cwSketchData::ViewType>(m_viewType);
     d.mapScale      = m_mapScale->data();
     d.strokes       = m_strokes;
+    d.anchorStation = m_anchorStation;
     return d;
 }
 
@@ -248,5 +258,6 @@ void cwSketch::setData(const cwSketchData &d)
     setViewType(static_cast<ViewType>(d.viewType));
     m_mapScale->setData(d.mapScale);
     applyStrokes(d.strokes);
+    setAnchorStation(d.anchorStation);
     m_undoStack->clear();
 }

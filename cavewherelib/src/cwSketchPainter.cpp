@@ -110,6 +110,7 @@ void cwSketchPainter::paint(cwSketchDraw *draw, const PaintContext &context)
     drawPaths(draw, context.gridMajor.paths, penScale);
     drawText (draw, context.gridMinor.text, context.worldToItem);
     drawText (draw, context.gridMajor.text, context.worldToItem);
+    drawPaths(draw, context.linePlot, penScale);
     drawPaths(draw, context.strokes, penScale);
 
     draw->restore();

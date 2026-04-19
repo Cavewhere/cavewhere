@@ -11,23 +11,31 @@
 //Qt includes
 #include <QHash>
 #include <QImage>
+#include <QList>
+#include <QMetaObject>
 #include <QModelIndex>
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
 #include <QSet>
 #include <QTimer>
+#include <memory>
+#include <unordered_map>
 
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwDiskCacher.h"
+#include "cwTripLinePlotTask.h"
 #include "cwUniqueConnectionChecker.h"
+#include "asyncfuture.h"
 
 class cwProject;
 class cwRegionTreeModel;
 class cwTrip;
 class cwSketch;
+class cwSketchCanvas;
 class cwSurveyNoteSketchModel;
+class cwSurveyChunk;
 
 /**
  * @brief Rasterises sketch thumbnails into the shared project disk cache and
@@ -63,6 +71,36 @@ public:
     // Renders the sketch's strokes into a square QImage of the given edge size.
     static QImage renderIcon(const cwSketch* sketch, int edgePixels = 256);
 
+    // -------------------- Per-trip line plot pipeline --------------------
+    //
+    // Sketches share one cwTripLinePlotTask pipeline per cwTrip. A canvas
+    // acquires the pipeline when it attaches to a sketch, and releases it
+    // when the sketch changes or the canvas is destroyed. The pipeline is
+    // created lazily on first acquire and destroyed when the refcount drops
+    // to zero — no background warming.
+    //
+    // Updates are coalesced through AsyncFuture::Restarter: a burst of
+    // survey-editor keystrokes yields one cavern run per settle.
+
+    // Registers `canvas` as a consumer of `trip`'s line plot. Safe with
+    // null arguments (no-op). Triggers a first run if this is the initial
+    // consumer; returns immediately either way.
+    void acquireLinePlot(cwSketchCanvas* canvas, cwTrip* trip);
+
+    // Removes `canvas` from `trip`'s consumer list. On reaching zero
+    // consumers, disconnects signals and drops the cached components.
+    void releaseLinePlot(cwSketchCanvas* canvas, cwTrip* trip);
+
+    // Most recent settled components for `trip`. Empty while the first run
+    // is in flight, when the trip has no chunks, or when no consumer is
+    // currently attached.
+    QList<cwTripLinePlotTask::TripComponent> latestLinePlot(cwTrip* trip) const;
+
+signals:
+    // Emitted on the GUI thread after a pipeline run completes for `trip`.
+    // Consumers should re-query latestLinePlot(trip) on this signal.
+    void linePlotUpdated(cwTrip* trip);
+
 private slots:
     void handleRegionReset();
     void regionRowsInserted(const QModelIndex& parent, int begin, int end);
@@ -89,6 +127,26 @@ private:
 
     QDir cacheDir() const;
 
+    // ---- Per-trip line plot pipeline (see header comment above) ----
+
+    using Restarter = AsyncFuture::Restarter<QList<cwTripLinePlotTask::TripComponent>>;
+
+    struct TripPipeline {
+        std::unique_ptr<Restarter> restarter;
+        QList<cwTripLinePlotTask::TripComponent> latest;
+        int refCount = 0;
+        QList<QMetaObject::Connection> tripConnections;
+        QList<QMetaObject::Connection> chunkConnections;
+        QMetaObject::Connection destroyedConnection;
+    };
+
+    void connectLinePlotTripSignals(cwTrip* trip, TripPipeline& pipeline);
+    void connectLinePlotChunkSignals(cwTrip* trip, TripPipeline& pipeline);
+    void disconnectLinePlotSignals(TripPipeline& pipeline);
+    void rebuildChunkSignals(cwTrip* trip);
+    void requestLinePlotRerun(cwTrip* trip);
+    void onTripDestroyed(cwTrip* trip);
+
     QPointer<cwRegionTreeModel> m_regionModel;
     QPointer<cwProject> m_project;
 
@@ -96,6 +154,8 @@ private:
     QTimer m_flushTimer;
 
     cwUniqueConnectionChecker m_connectionChecker;
+
+    std::unordered_map<cwTrip*, std::unique_ptr<TripPipeline>> m_tripPipelines;
 };
 
 #endif // CWSKETCHMANAGER_H

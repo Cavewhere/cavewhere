@@ -41,6 +41,10 @@ public:
         // Optional grid layer. Drawn before strokes; major on top of minor.
         GridLayer gridMinor;
         GridLayer gridMajor;
+
+        // Optional centerline / survey line plot. Drawn between grid text
+        // and user strokes so pen input overlays the reference plot.
+        const cwAbstractSketchPainterPathModel *linePlot = nullptr;
     };
 
     static void paint(cwSketchDraw *draw, const PaintContext &context);

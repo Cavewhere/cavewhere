@@ -14,14 +14,21 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwSurveyChunk.h"
+#include "cwStation.h"
+#include "cwShot.h"
+#include "cwTripCalibration.h"
 #include "cwLinePlotManager.h"
 #include "cwFutureManagerModel.h"
 #include "cwSurveyNetworkArtifact.h"
 #include "cwSurvey2DGeometryArtifact.h"
 #include "cwSurvey2DGeometry.h"
 #include "cwSurveyNetwork.h"
+#include "cwStationPositionLookup.h"
 #include "cwCenterlineSketchPainterModel.h"
 #include "cwAbstractSketchPainterPathModel.h"
+#include "cwSketchManager.h"
+#include "cwTripLinePlotTask.h"
 #include "asyncfuture.h"
 
 
@@ -188,4 +195,164 @@ TEST_CASE("cwCenterlineSketchPainterModel populates three rows from survey2DGeom
                         cwAbstractSketchPainterPathModel::StrokeWidthRole)
             .toDouble();
     CHECK(labelsWidth == Catch::Approx(0.0));
+}
+
+// ---------------- cwSketchManager per-trip line plot pipeline ----------------
+
+namespace {
+
+cwShot simpleShot(double distance = 10.0, double compass = 0.0)
+{
+    cwShot shot;
+    shot.setDistance(cwDistanceReading(QString::number(distance)));
+    shot.setCompass(cwCompassReading(QString::number(compass)));
+    shot.setBackCompass(cwCompassReading(QString::number(std::fmod(compass + 180.0, 360.0))));
+    shot.setClino(cwClinoReading("0"));
+    shot.setBackClino(cwClinoReading("0"));
+    return shot;
+}
+
+cwStation named(const QString &name)
+{
+    cwStation s;
+    s.setName(name);
+    s.setLeft(cwDistanceReading("0"));
+    s.setRight(cwDistanceReading("0"));
+    s.setUp(cwDistanceReading("0"));
+    s.setDown(cwDistanceReading("0"));
+    return s;
+}
+
+struct MiniRegion {
+    std::unique_ptr<cwCavingRegion> region;
+    cwCave *cave = nullptr;
+    cwTrip *trip = nullptr;
+};
+
+MiniRegion buildRegionWithTrip()
+{
+    MiniRegion mr;
+    mr.region = std::make_unique<cwCavingRegion>();
+    mr.cave = new cwCave();
+    mr.cave->setName("Cave 1");
+    mr.region->addCave(mr.cave);
+    mr.trip = new cwTrip();
+    mr.trip->setName("Trip 1");
+    mr.cave->addTrip(mr.trip);
+
+    auto *chunk = new cwSurveyChunk();
+    mr.trip->addChunk(chunk);
+    chunk->appendShot(named("a1"), named("a2"), simpleShot(10.0));
+    chunk->appendShot(named("a2"), named("a3"), simpleShot(10.0));
+    return mr;
+}
+
+// Spin the event loop until `predicate` returns true or timeout elapses.
+bool waitFor(std::function<bool()> predicate, int timeoutMs = 10000)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (!predicate() && timer.elapsed() < timeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
+    }
+    return predicate();
+}
+
+} // namespace
+
+
+TEST_CASE("cwSketchManager acquireLinePlot creates a pipeline entry and populates components", "[cwSketchManager][TripLinePlot]") {
+    auto mr = buildRegionWithTrip();
+    cwSketchManager manager;
+
+    CHECK(manager.latestLinePlot(mr.trip).isEmpty()); // no pipeline yet
+
+    manager.acquireLinePlot(nullptr, mr.trip);
+    REQUIRE(waitFor([&](){
+        return !manager.latestLinePlot(mr.trip).isEmpty();
+    }));
+
+    const auto components = manager.latestLinePlot(mr.trip);
+    REQUIRE(components.size() == 1);
+    CHECK(components.first().network.stations().size() == 3);
+
+    manager.releaseLinePlot(nullptr, mr.trip);
+    // Refcount reached 0 → pipeline entry dropped.
+    CHECK(manager.latestLinePlot(mr.trip).isEmpty());
+}
+
+TEST_CASE("cwSketchManager re-emits linePlotUpdated after a chunk edit", "[cwSketchManager][TripLinePlot]") {
+    auto mr = buildRegionWithTrip();
+    cwSketchManager manager;
+
+    manager.acquireLinePlot(nullptr, mr.trip);
+    REQUIRE(waitFor([&](){
+        return !manager.latestLinePlot(mr.trip).isEmpty();
+    }));
+
+    QSignalSpy spy(&manager, &cwSketchManager::linePlotUpdated);
+
+    // Trigger a chunk edit — extend the existing chunk.
+    auto *chunk = mr.trip->chunks().first();
+    chunk->appendShot(named("a3"), named("a4"), simpleShot(10.0));
+
+    REQUIRE(waitFor([&](){ return spy.count() >= 1; }));
+
+    const auto components = manager.latestLinePlot(mr.trip);
+    REQUIRE(components.size() == 1);
+    CHECK(components.first().network.stations().size() == 4);
+
+    manager.releaseLinePlot(nullptr, mr.trip);
+}
+
+TEST_CASE("cwSketchManager refcounts shared acquisitions", "[cwSketchManager][TripLinePlot]") {
+    auto mr = buildRegionWithTrip();
+    cwSketchManager manager;
+
+    manager.acquireLinePlot(nullptr, mr.trip);
+    manager.acquireLinePlot(nullptr, mr.trip); // second consumer
+
+    REQUIRE(waitFor([&](){
+        return !manager.latestLinePlot(mr.trip).isEmpty();
+    }));
+
+    manager.releaseLinePlot(nullptr, mr.trip);
+    // Still held by the second consumer.
+    CHECK_FALSE(manager.latestLinePlot(mr.trip).isEmpty());
+
+    manager.releaseLinePlot(nullptr, mr.trip);
+    CHECK(manager.latestLinePlot(mr.trip).isEmpty());
+}
+
+TEST_CASE("cwTripLinePlotTask projects positions stably under other-trip edits", "[cwSketchPipeline][TripLinePlot]") {
+    // Build a region with two trips.
+    cwCavingRegion region;
+    auto *cave = new cwCave();
+    cave->setName("Cave 1");
+    region.addCave(cave);
+
+    auto *t1 = new cwTrip(); t1->setName("T1"); cave->addTrip(t1);
+    auto *chunk1 = new cwSurveyChunk(); t1->addChunk(chunk1);
+    chunk1->appendShot(named("t1a"), named("t1b"), simpleShot(10.0));
+    chunk1->appendShot(named("t1b"), named("t1c"), simpleShot(10.0));
+
+    auto *t2 = new cwTrip(); t2->setName("T2"); cave->addTrip(t2);
+    auto *chunk2 = new cwSurveyChunk(); t2->addChunk(chunk2);
+    chunk2->appendShot(named("t2a"), named("t2b"), simpleShot(5.0));
+
+    // Snapshot T1's geometry.
+    auto f1 = cwTripLinePlotTask::run(cwTripLinePlotTask::buildInput(t1));
+    REQUIRE(AsyncFuture::waitForFinished(f1, 10000));
+    const auto r1 = f1.result();
+    REQUIRE(r1.size() == 1);
+    const auto originalT1C = r1.first().positions.position("t1c");
+
+    // Mutate T2 — must not affect T1.
+    chunk2->appendShot(named("t2b"), named("t2c"), simpleShot(15.0));
+
+    auto f2 = cwTripLinePlotTask::run(cwTripLinePlotTask::buildInput(t1));
+    REQUIRE(AsyncFuture::waitForFinished(f2, 10000));
+    const auto r2 = f2.result();
+    REQUIRE(r2.size() == 1);
+    CHECK(r2.first().positions.position("t1c") == originalT1C);
 }
