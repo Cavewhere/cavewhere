@@ -89,8 +89,8 @@ StandardPage {
         }
     }
 
-    onIsWideChanged: {
-        if(!isWide && state === "COLLAPSE") {
+    onIsNarrowChanged: {
+        if(isNarrow && state === "COLLAPSE") {
             state = ""
         }
     }
@@ -115,7 +115,7 @@ StandardPage {
         notesModel: surveyNoteConcatModelId
 
         onCollapseClicked: {
-            if(area.isWide) area.state = "COLLAPSE"
+            if(!area.isNarrow) area.state = "COLLAPSE"
         }
 
         onNoteClicked: (noteIndex) => {
