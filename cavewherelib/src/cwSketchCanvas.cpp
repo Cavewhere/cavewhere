@@ -17,10 +17,7 @@
 
 //Qt includes
 #include <QAbstractItemModel>
-#include <QLoggingCategory>
 #include <QTransform>
-
-Q_LOGGING_CATEGORY(lcSketchCanvas, "cw.sketch.canvas")
 
 cwSketchCanvas::cwSketchCanvas(QQuickItem *parent)
     : QCanvasPainterItem(parent),
@@ -212,9 +209,4 @@ void cwSketchCanvas::updateGridView()
     const QPointF worldOrigin = itemToWorld.map(QPointF(0.0, 0.0));
     m_grid->setViewport(worldViewport);
     m_grid->setGridOrigin(worldOrigin);
-
-    qCDebug(lcSketchCanvas)
-        << "updateGridView pan" << m_pan << "zoom" << m_zoom
-        << "mapScale" << m_mapMatrix(0, 0)
-        << "worldViewport" << worldViewport << "worldOrigin" << worldOrigin;
 }

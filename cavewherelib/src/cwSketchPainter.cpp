@@ -13,10 +13,7 @@
 //Qt includes
 #include <QAbstractItemModel>
 #include <QFontMetricsF>
-#include <QLoggingCategory>
 #include <QPainterPath>
-
-Q_LOGGING_CATEGORY(lcSketchPainter, "cw.sketch.painter")
 
 namespace {
 
@@ -108,10 +105,6 @@ void cwSketchPainter::paint(cwSketchDraw *draw, const PaintContext &context)
     // at their intended screen thickness, while still letting user zoom
     // thicken strokes when zoomed in.
     const double penScale = context.mapScale > 0.0 ? 1.0 / context.mapScale : 1.0;
-
-    qCDebug(lcSketchPainter) << "paint viewport" << context.viewport
-                              << "mapScale" << context.mapScale
-                              << "penScale" << penScale;
 
     drawPaths(draw, context.gridMinor.paths, penScale);
     drawPaths(draw, context.gridMajor.paths, penScale);

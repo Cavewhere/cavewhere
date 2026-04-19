@@ -18,9 +18,6 @@
 //Qt includes
 #include <QCanvasPainter>
 #include <QCanvasPainterItem>
-#include <QLoggingCategory>
-
-Q_LOGGING_CATEGORY(lcSketchRenderer, "cw.sketch.renderer")
 
 // Render-thread-owned model backing cwSketchPainter::paint. Populated in
 // synchronize() while the GUI thread is blocked; read in paint() without
@@ -111,11 +108,6 @@ void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
     } else {
         m_worldViewport = QRectF();
     }
-
-    qCDebug(lcSketchRenderer)
-        << "synchronize pan" << pan << "userZoom" << userZoom
-        << "mapScale" << m_mapScale
-        << "worldViewport(meters)" << m_worldViewport;
 
     snapshotPaths(canvas->pathModel(), m_snapshot);
 
