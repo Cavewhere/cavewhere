@@ -261,17 +261,11 @@ QQ.Item {
                                     image: thumbImage
                                 }
 
-                                QQ.Rectangle {
+                                NotePlaceholderIcon {
                                     anchors.fill: parent
                                     anchors.margins: 2
                                     visible: thumbDelegate.iconPath.toString().length === 0
-                                    color: Theme.surfaceMuted
-                                    radius: 4
-                                    QC.Label {
-                                        anchors.centerIn: parent
-                                        text: thumbDelegate.noteObject instanceof Sketch ? "Sketch" : "3D"
-                                        color: Theme.textSubtle
-                                    }
+                                    noteObject: thumbDelegate.noteObject
                                 }
 
                                 QQ.TapHandler {

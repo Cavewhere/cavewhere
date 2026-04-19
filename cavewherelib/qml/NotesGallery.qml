@@ -159,28 +159,11 @@ QQ.Rectangle {
         required property int index
         property real maxImageWidth: QQ.ListView.view ? QQ.ListView.view.width : 0
         readonly property bool hasIconSource: iconPath !== undefined && iconPath.toString().length > 0
-        readonly property string fallbackFileName: {
-            if (!noteObject) {
-                return ""
-            }
-            if (noteObject.filename !== undefined && noteObject.filename !== "") {
-                return RootData.fileName(noteObject.filename)
-            }
-            if (noteObject.name !== undefined && noteObject.name !== "") {
-                return noteObject.name
-            }
-            return ""
-        }
-        readonly property string fallbackFileExtension: {
-            const dotIndex = fallbackFileName.lastIndexOf(".")
-            if (dotIndex > 0 && dotIndex < fallbackFileName.length - 1) {
-                return fallbackFileName.slice(dotIndex + 1).toUpperCase()
-            }
-            return qsTr("GLB")
-        }
 
         width: maxImageWidth
         height: maxImageWidth
+
+        onMaxImageWidthChanged: imageItem.updateHeight()
 
         QQ.Rectangle {
             //Background for the image for transparent image and svgs
@@ -237,40 +220,12 @@ QQ.Rectangle {
             }
         }
 
-        QQ.Rectangle {
+        NotePlaceholderIcon {
             id: placeholderIcon
             anchors.fill: imageItem
             anchors.margins: 6
-            radius: 6
             visible: !container.hasIconSource || imageItem.status === QQ.Image.Error
-            color: "#2c3037"
-            border.color: "#5a6170"
-            border.width: 2
-
-            QQ.Column {
-                anchors.centerIn: parent
-                spacing: 6
-                width: parent.width - 16
-
-                QC.Label {
-                    text: container.fallbackFileExtension
-                    font.bold: true
-                    font.pixelSize: 32
-                    color: "#f2f4f8"
-                    horizontalAlignment: QQ.Text.AlignHCenter
-                    width: parent.width
-                }
-
-                QC.Label {
-                    text: container.fallbackFileName
-                    font.bold: true
-                    font.pixelSize: Theme.fontSizeUI
-                    color: "#cbd0da"
-                    wrapMode: QQ.Text.WordWrap
-                    horizontalAlignment: QQ.Text.AlignHCenter
-                    width: parent.width
-                }
-            }
+            noteObject: container.noteObject
         }
 
         QQ.Image {
