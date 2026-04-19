@@ -209,6 +209,7 @@ void cwSketch::endStroke()
     auto *cmd = new cwSketchSetStrokesCommand(this, m_startStrokes, m_strokes, "Draw Stroke");
     m_startStrokes.clear();
     m_undoStack->push(cmd);
+    emit strokeEnded();
 }
 
 void cwSketch::clearStrokes()

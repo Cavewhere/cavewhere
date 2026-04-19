@@ -73,8 +73,11 @@ QRectF strokeBoundingRect(const cwSketch* sketch)
 cwSketchManager::cwSketchManager(QObject* parent)
     : QObject(parent)
 {
+    // Trailing-edge debounce: each markDirty() restarts the timer, so the
+    // icon only rasterises after the user pauses for this long. Pen-up via
+    // cwSketch::strokeEnded bypasses the debounce for immediate feedback.
     m_flushTimer.setSingleShot(true);
-    m_flushTimer.setInterval(0);
+    m_flushTimer.setInterval(1000);
     connect(&m_flushTimer, &QTimer::timeout, this, &cwSketchManager::flushDirty);
 }
 
@@ -255,9 +258,7 @@ void cwSketchManager::markDirty(cwSketch* sketch)
         return;
     }
     m_dirtySketches.insert(sketch);
-    if (!m_flushTimer.isActive()) {
-        m_flushTimer.start();
-    }
+    m_flushTimer.start();
 }
 
 void cwSketchManager::flushDirty()
@@ -421,6 +422,15 @@ void cwSketchManager::connectSketch(cwSketch* sketch)
     connect(sketch, &QObject::destroyed, this, &cwSketchManager::sketchDestroyed);
     connect(sketch, &cwSketch::strokesReset, this, [this, sketch]() {
         markDirty(sketch);
+    });
+    connect(sketch, &cwSketch::strokeEnded, this, [this, sketch]() {
+        // Pen-up: flush immediately so the thumbnail updates at the natural
+        // stroke boundary rather than waiting out the debounce.
+        m_dirtySketches.remove(sketch);
+        if (m_dirtySketches.isEmpty()) {
+            m_flushTimer.stop();
+        }
+        writeIcon(sketch);
     });
 
     if (auto* model = sketch->strokeModel()) {

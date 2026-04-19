@@ -114,6 +114,7 @@ signals:
     void viewTypeChanged();
     void iconImagePathChanged();
     void strokesReset();
+    void strokeEnded();
     void surveyNetworkArtifactChanged();
 
 private:
