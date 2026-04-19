@@ -10,6 +10,7 @@
 
 //Our includes
 #include "cwLabel3dView.h"
+#include "cwGlobals.h"
 class cwCavingRegion;
 class cwCave;
 class cwLabel3dGroup;
@@ -18,7 +19,7 @@ class cwLabel3dGroup;
 #include <QQmlEngine>
 
 
-class cwLinePlotLabelView : public cwLabel3dView
+class CAVEWHERE_LIB_EXPORT cwLinePlotLabelView : public cwLabel3dView
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(LinePlotLabelView)
