@@ -9,6 +9,7 @@
 #include "cwScrapStationView.h"
 #include "cwScrap.h"
 #include "cwNote.h"
+#include "cwStation.h"
 #include "cwTrip.h"
 #include "cwCave.h"
 #include "cwSGLinesNode.h"
@@ -215,7 +216,7 @@ void cwScrapStationView::updateShotLines() {
             if(scrap()->type() == cwScrap::RunningProfile) {
                 bool foundStation = false;
                 foreach(cwNoteStation currentNoteStation, scrap()->stations()) {
-                    if(currentNoteStation.name().toLower() == station.name().toLower()) {
+                    if(cwStation::canonicalKey(currentNoteStation.name()) == cwStation::canonicalKey(station.name())) {
                         foundStation = true;
                     }
                 }

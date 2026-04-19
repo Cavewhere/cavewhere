@@ -60,6 +60,11 @@ public:
 
     static bool nameIsValid(QString stationName);
 
+    // Canonical form for station-name equality and hash keys. Case-insensitive
+    // everywhere the pipeline compares stations (cavern, cwSurveyNetwork,
+    // cwStationPositionLookup). Use this instead of ad-hoc toLower/toUpper.
+    static QString canonicalKey(const QString &stationName) { return stationName.toLower(); }
+
 private:
     class PrivateData : public QSharedData {
     public:
@@ -82,7 +87,7 @@ private:
 };
 
 inline size_t qHash(const cwStation& station) {
-    return qHash(station.name().toLower());
+    return qHash(cwStation::canonicalKey(station.name()));
 }
 
 inline QString cwStation::name() const { return Data->Name; }

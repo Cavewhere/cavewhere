@@ -8,6 +8,7 @@
 //Our includes
 #include "cwSurvexImporter.h"
 #include "cwShot.h"
+#include "cwStation.h"
 #include "cwSurveyChunk.h"
 #include "cwTreeImportDataNode.h"
 #include "cwSurvexGlobalData.h"
@@ -1085,10 +1086,10 @@ void cwSurvexImporter::updateStationLRUD(cwStation before, cwStation station, cw
             int stationIndex)
             ->bool
     {
-        QString afterStationName = chunk->station(stationIndex + 1).name().toLower();
-        QString currentStationName = chunk->station(stationIndex).name().toLower();
-        if(station.name().toLower() == currentStationName
-                && after.name().toLower() == afterStationName)
+        QString afterStationName = cwStation::canonicalKey(chunk->station(stationIndex + 1).name());
+        QString currentStationName = cwStation::canonicalKey(chunk->station(stationIndex).name());
+        if(cwStation::canonicalKey(station.name()) == currentStationName
+                && cwStation::canonicalKey(after.name()) == afterStationName)
         {
             chunk->setStation(station, stationIndex);
             chunk->setStation(after, stationIndex + 1);

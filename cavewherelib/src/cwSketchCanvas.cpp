@@ -16,6 +16,7 @@
 #include "cwFixedGridModel.h"
 #include "cwGridTextModel.h"
 #include "cwCenterlineSketchPainterModel.h"
+#include "cwStation.h"
 #include "cwSurvey2DGeometryArtifact.h"
 #include "cwSurvey2DGeometry.h"
 #include "cwTrip.h"
@@ -27,7 +28,6 @@
 #include <QDebug>
 #include <QLoggingCategory>
 #include <QTransform>
-#include <QVariantMap>
 
 Q_LOGGING_CATEGORY(lcSketchCanvas, "cw.sketch.canvas")
 
@@ -80,8 +80,6 @@ void cwSketchCanvas::setSketch(cwSketch *sketch)
 
         acquireLinePlotForSketch(m_sketch);
 
-        // Re-render when the caver picks a different anchor (component
-        // switch or translation-origin change).
         m_anchorStationChangedConnection =
             connect(m_sketch, &cwSketch::anchorStationChanged,
                     this, [this]() { refreshLinePlotFromManager(); });
@@ -267,7 +265,7 @@ void cwSketchCanvas::acquireLinePlotForSketch(cwSketch *sketch)
         return;
     }
 
-    m_sketchManager->acquireLinePlot(this, trip);
+    m_sketchManager->acquireLinePlot(trip);
     m_acquiredTrip = trip;
 
     m_linePlotUpdatedConnection = connect(
@@ -278,8 +276,6 @@ void cwSketchCanvas::acquireLinePlotForSketch(cwSketch *sketch)
             }
         });
 
-    // Seed with any already-cached components (no-op if the pipeline is
-    // still on its first run).
     refreshLinePlotFromManager();
 }
 
@@ -294,37 +290,34 @@ void cwSketchCanvas::releaseLinePlotAcquisition()
         m_anchorStationChangedConnection = {};
     }
     if (!m_sketchManager.isNull() && !m_acquiredTrip.isNull()) {
-        m_sketchManager->releaseLinePlot(this, m_acquiredTrip.data());
+        m_sketchManager->releaseLinePlot(m_acquiredTrip.data());
     }
     m_acquiredTrip.clear();
+    clearLinePlotGeometry();
+}
 
-    // Clear the artifact so the painter model drops any stale geometry.
+void cwSketchCanvas::clearLinePlotGeometry()
+{
     m_linePlotGeometry->setGeometryResult(
         AsyncFuture::completed(Monad::Result<cwSurvey2DGeometry>(cwSurvey2DGeometry())));
 }
 
 namespace {
 
-// Build a minimum-scope ComponentSummary list for the UI picker. We pass
-// it as QVariantList of QVariantMaps — QML-friendly without needing a
-// registered metatype.
-QVariantList componentSummaries(const QList<cwTripLinePlotTask::TripComponent> &components)
+QList<cwTripComponentSummary> componentSummaries(const QList<cwTripLinePlotTask::TripComponent> &components)
 {
-    QVariantList list;
+    QList<cwTripComponentSummary> list;
     list.reserve(components.size());
     for (const auto &component : components) {
-        QVariantMap entry;
-        entry["anchor"]       = component.canonicalAnchor;
-        entry["stationCount"] = component.stations().size();
-        entry["stations"]     = QVariant::fromValue(component.stations());
-        list.append(entry);
+        cwTripComponentSummary summary;
+        summary.anchor       = component.canonicalAnchor;
+        summary.stations     = component.stations();
+        summary.stationCount = summary.stations.size();
+        list.append(std::move(summary));
     }
     return list;
 }
 
-// Find the component whose positions lookup has a station matching `anchor`
-// (case-insensitive, matching cwStationPositionLookup semantics). Returns
-// -1 if not found.
 int indexOfComponentContainingAnchor(
     const QList<cwTripLinePlotTask::TripComponent> &components,
     const QString &anchor)
@@ -363,8 +356,8 @@ cwSurvey2DGeometry projectPlan(const cwTripLinePlotTask::TripComponent &componen
     for (const auto &from : component.network.stations()) {
         const auto neighbors = component.network.neighbors(from);
         for (const auto &to : neighbors) {
-            QString a = from.toLower();
-            QString b = to.toLower();
+            QString a = cwStation::canonicalKey(from);
+            QString b = cwStation::canonicalKey(to);
             if (a > b) {
                 std::swap(a, b);
             }
@@ -390,21 +383,18 @@ cwSurvey2DGeometry projectPlan(const cwTripLinePlotTask::TripComponent &componen
 void cwSketchCanvas::refreshLinePlotFromManager()
 {
     if (m_sketch == nullptr || m_sketchManager.isNull() || m_acquiredTrip.isNull()) {
-        m_linePlotGeometry->setGeometryResult(
-            AsyncFuture::completed(Monad::Result<cwSurvey2DGeometry>(cwSurvey2DGeometry())));
+        clearLinePlotGeometry();
         return;
     }
 
     const auto components = m_sketchManager->latestLinePlot(m_acquiredTrip.data());
     if (components.isEmpty()) {
-        m_linePlotGeometry->setGeometryResult(
-            AsyncFuture::completed(Monad::Result<cwSurvey2DGeometry>(cwSurvey2DGeometry())));
+        clearLinePlotGeometry();
         return;
     }
 
     QString anchor = m_sketch->anchorStation();
 
-    // Single component + empty anchor: silent auto-pick. No prompt.
     if (components.size() == 1 && anchor.isEmpty()) {
         m_sketch->setAnchorStation(components.first().canonicalAnchor);
         anchor = m_sketch->anchorStation();
@@ -412,9 +402,9 @@ void cwSketchCanvas::refreshLinePlotFromManager()
 
     int componentIndex = indexOfComponentContainingAnchor(components, anchor);
 
-    // Stale anchor: caver deleted/renamed the station we remembered. Auto-
-    // pick the largest component, overwrite, warn. Do not prompt — less
-    // disruptive mid-edit than a modal.
+    // Stale anchor: caver deleted/renamed the station we remembered. Fall
+    // back to the largest component rather than prompt — less disruptive
+    // mid-edit than a modal.
     if (componentIndex < 0 && !anchor.isEmpty()) {
         qCWarning(lcSketchCanvas) << "anchorStation" << anchor
                                   << "not present in any component of trip"
@@ -425,20 +415,11 @@ void cwSketchCanvas::refreshLinePlotFromManager()
         componentIndex = 0;
     }
 
-    // Multi-component + no anchor → request picker. Render nothing until
-    // the caver chooses.
-    if (componentIndex < 0 && components.size() > 1) {
-        emit requestAnchorSelection(componentSummaries(components));
-        m_linePlotGeometry->setGeometryResult(
-            AsyncFuture::completed(Monad::Result<cwSurvey2DGeometry>(cwSurvey2DGeometry())));
-        return;
-    }
-
     if (componentIndex < 0) {
-        // Single-component but somehow no match (shouldn't happen after the
-        // auto-pick above). Be defensive.
-        m_linePlotGeometry->setGeometryResult(
-            AsyncFuture::completed(Monad::Result<cwSurvey2DGeometry>(cwSurvey2DGeometry())));
+        if (components.size() > 1) {
+            emit requestAnchorSelection(componentSummaries(components));
+        }
+        clearLinePlotGeometry();
         return;
     }
 

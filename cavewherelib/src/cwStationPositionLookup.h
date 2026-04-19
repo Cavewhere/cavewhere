@@ -15,6 +15,7 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwStation.h"
 
 /**
   The station position model holds the position of all the stations
@@ -48,7 +49,7 @@ inline void cwStationPositionLookup::clearStations() {
   overwrite the position of the existing station
   */
 inline void cwStationPositionLookup::setPosition(const QString& stationName, const QVector3D& stationPosition) {
-    StationPositions[stationName.toLower()] = stationPosition;
+    StationPositions[cwStation::canonicalKey(stationName)] = stationPosition;
 }
 
 /**
@@ -56,14 +57,14 @@ inline void cwStationPositionLookup::setPosition(const QString& stationName, con
   will return QVector3D()
   */
 inline QVector3D cwStationPositionLookup::position(const QString& stationName) const {
-    return StationPositions.value(stationName.toLower(), QVector3D());
+    return StationPositions.value(cwStation::canonicalKey(stationName), QVector3D());
 }
 
 /**
   Checks if the station position model has the position
   */
 inline bool cwStationPositionLookup::hasPosition(QString stationName) const {
-    return StationPositions.contains(stationName.toLower());
+    return StationPositions.contains(cwStation::canonicalKey(stationName));
 }
 
 /**

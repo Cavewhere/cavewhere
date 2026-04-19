@@ -123,74 +123,54 @@ void cwCenterlineSketchPainterModel::updateModel()
         return cwConcurrent::run([geometry,
                                   stationRadiusWorld,
                                   labelTargetHeightWorld]() {
+            // strokeWidth == 0 flags a fill pass (see cwAbstractSketchPainterPathModel).
+            auto makePath = [](QPainterPath path, double strokeWidth) {
+                Path p;
+                p.painterPath = std::move(path);
+                p.strokeWidth = strokeWidth;
+                return p;
+            };
+
             QVector<Path> paths;
             paths.reserve(3);
 
-            // Shot lines — stroke width specified in world meters.
-            {
-                QPainterPath lines;
-                for (const auto &line : geometry.shotLines) {
-                    lines.moveTo(line.p1());
-                    lines.lineTo(line.p2());
-                }
-                Path p;
-                p.painterPath = std::move(lines);
-                p.strokeWidth = shotLineWidthWorldMeters;
-                paths.append(std::move(p));
+            QPainterPath lines;
+            for (const auto &line : geometry.shotLines) {
+                lines.moveTo(line.p1());
+                lines.lineTo(line.p2());
             }
+            paths.append(makePath(std::move(lines), shotLineWidthWorldMeters));
 
-            // Station symbols (filled dots) — radius in world meters derived
-            // from the paper-mm constant above.
-            {
-                QPainterPath symbols;
-                for (const auto &station : geometry.stations) {
-                    symbols.addEllipse(station.position,
-                                       stationRadiusWorld,
-                                       stationRadiusWorld);
-                }
-                Path p;
-                p.painterPath = std::move(symbols);
-                // Filled pass.
-                p.strokeWidth = 0.0;
-                paths.append(std::move(p));
+            QPainterPath symbols;
+            for (const auto &station : geometry.stations) {
+                symbols.addEllipse(station.position,
+                                   stationRadiusWorld,
+                                   stationRadiusWorld);
             }
+            paths.append(makePath(std::move(symbols), 0.0));
 
-            // Station labels — addText bakes glyphs in Qt-internal font
-            // units; we measure their natural height and apply a
-            // per-label QTransform so the rendered height in world meters
-            // matches labelTargetHeightWorld (paper-mm derived). Y is
-            // flipped so the baseline sits above the station point (world
-            // Y is up).
-            {
-                QPainterPath labels;
-                QFont font;
-                font.setPointSizeF(10.0);
-                const QFontMetricsF metrics(font);
-                const double naturalHeight = std::max(1.0, metrics.height());
-                const double glyphScale    = labelTargetHeightWorld / naturalHeight;
+            // addText bakes glyphs in Qt-internal font units; measure natural
+            // height and apply a per-label QTransform so the rendered height
+            // in world meters hits labelTargetHeightWorld. Y is flipped so the
+            // baseline sits above the station point (world Y is up).
+            QPainterPath labels;
+            QFont font;
+            font.setPointSizeF(10.0);
+            const QFontMetricsF metrics(font);
+            const double naturalHeight = std::max(1.0, metrics.height());
+            const double glyphScale    = labelTargetHeightWorld / naturalHeight;
+            const double labelOffsetWorld = stationRadiusWorld * 2.0;
 
-                // Offset label slightly right + above the station position
-                // (world Y is up, so positive offset moves up visually).
-                const double labelOffsetWorld = stationRadiusWorld * 2.0;
-
-                for (const auto &station : geometry.stations) {
-                    QPainterPath glyph;
-                    glyph.addText(QPointF(0, 0), font, station.name);
-                    QTransform t;
-                    t.translate(station.position.x() + labelOffsetWorld,
-                                station.position.y() + labelOffsetWorld);
-                    // Flip Y so the glyph sits above the anchor in a
-                    // world-Y-up coordinate system.
-                    t.scale(glyphScale, -glyphScale);
-                    labels.addPath(t.map(glyph));
-                }
-                Path p;
-                p.painterPath = std::move(labels);
-                // Stroke width 0 flags this row as a fill pass; station
-                // labels are rendered by filling the text path, not stroking.
-                p.strokeWidth = 0.0;
-                paths.append(std::move(p));
+            for (const auto &station : geometry.stations) {
+                QPainterPath glyph;
+                glyph.addText(QPointF(0, 0), font, station.name);
+                QTransform t;
+                t.translate(station.position.x() + labelOffsetWorld,
+                            station.position.y() + labelOffsetWorld);
+                t.scale(glyphScale, -glyphScale);
+                labels.addPath(t.map(glyph));
             }
+            paths.append(makePath(std::move(labels), 0.0));
 
             return Result(paths);
         });

@@ -14,12 +14,12 @@
 #include <QPointer>
 #include <QPointF>
 #include <QQmlEngine>
-#include <QVariantList>
 
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwSketchManager.h"
 #include "cwSketchPainterPathModel.h"
+#include "cwTripLinePlotTask.h"
 
 class cwSketch;
 class cwInfiniteGridModel;
@@ -86,11 +86,10 @@ signals:
     void sketchManagerChanged();
 
     // Emitted when the sketch's current trip resolves to >1 connected
-    // component AND the sketch has no valid anchor. Payload is a list of
-    // QVariantMap entries: {anchor: QString, stationCount: int,
-    // stations: QStringList}. The canvas does NOT render the line plot
-    // until the caller sets sketch->anchorStation() in response.
-    void requestAnchorSelection(QVariantList components);
+    // component AND the sketch has no valid anchor. The canvas does NOT
+    // render the line plot until the caller sets sketch->anchorStation()
+    // in response.
+    void requestAnchorSelection(QList<cwTripComponentSummary> components);
 
 private:
     cwSketch *m_sketch = nullptr;
@@ -116,6 +115,7 @@ private:
     void acquireLinePlotForSketch(cwSketch *sketch);
     void releaseLinePlotAcquisition();
     void refreshLinePlotFromManager();
+    void clearLinePlotGeometry();
 };
 
 #endif // CWSKETCHCANVAS_H

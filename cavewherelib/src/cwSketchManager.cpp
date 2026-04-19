@@ -471,9 +471,8 @@ void cwSketchManager::sketchDestroyed(QObject* sketchObj)
 
 // ---------------------- Per-trip line plot pipeline ----------------------
 
-void cwSketchManager::acquireLinePlot(cwSketchCanvas* canvas, cwTrip* trip)
+void cwSketchManager::acquireLinePlot(cwTrip* trip)
 {
-    Q_UNUSED(canvas);
     if (trip == nullptr) {
         return;
     }
@@ -483,28 +482,22 @@ void cwSketchManager::acquireLinePlot(cwSketchCanvas* canvas, cwTrip* trip)
         auto pipeline = std::make_unique<TripPipeline>();
         pipeline->restarter = std::make_unique<Restarter>(this);
 
-        // Route the restarter's settled future through a .context(this, ...)
-        // callback so we only touch GUI-thread state from the GUI thread.
-        // onFutureChanged fires every time the restarter swaps in a new
-        // deferred — we observe each new future as it arrives. We re-look
-        // up the pipeline by trip pointer at callback time, because the
-        // pipeline may have been released between restart() and resolve.
-        cwTrip* capturedTrip = trip;
+        // Re-look up the pipeline by trip pointer at callback time: the
+        // entry may have been released between restart() and resolve.
         Restarter* capturedRestarter = pipeline->restarter.get();
-        pipeline->restarter->onFutureChanged([this, capturedRestarter, capturedTrip]() {
+        pipeline->restarter->onFutureChanged([this, capturedRestarter, trip]() {
             auto future = capturedRestarter->future();
             AsyncFuture::observe(future).context(this,
-                [this, capturedTrip, future]() {
+                [this, trip, future]() {
                     if (future.isCanceled() || future.resultCount() == 0) {
                         return;
                     }
-                    auto entry = m_tripPipelines.find(capturedTrip);
+                    auto entry = m_tripPipelines.find(trip);
                     if (entry == m_tripPipelines.end()) {
-                        // Canvas released before the future settled; drop.
                         return;
                     }
                     entry->second->latest = future.result();
-                    emit linePlotUpdated(capturedTrip);
+                    emit linePlotUpdated(trip);
                 });
         });
 
@@ -515,12 +508,9 @@ void cwSketchManager::acquireLinePlot(cwSketchCanvas* canvas, cwTrip* trip)
         connectLinePlotTripSignals(trip, *it->second);
         connectLinePlotChunkSignals(trip, *it->second);
 
-        // destroyed(): remove the entry. Use lambda because slot needs
-        // to forward the trip pointer we already captured.
         it->second->destroyedConnection = connect(trip, &QObject::destroyed,
             this, [this, trip]() { onTripDestroyed(trip); });
 
-        // Kick first run.
         it->second->refCount = 1;
         requestLinePlotRerun(trip);
         return;
@@ -529,9 +519,8 @@ void cwSketchManager::acquireLinePlot(cwSketchCanvas* canvas, cwTrip* trip)
     it->second->refCount += 1;
 }
 
-void cwSketchManager::releaseLinePlot(cwSketchCanvas* canvas, cwTrip* trip)
+void cwSketchManager::releaseLinePlot(cwTrip* trip)
 {
-    Q_UNUSED(canvas);
     if (trip == nullptr) {
         return;
     }

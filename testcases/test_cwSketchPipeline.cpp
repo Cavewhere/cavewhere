@@ -267,7 +267,7 @@ TEST_CASE("cwSketchManager acquireLinePlot creates a pipeline entry and populate
 
     CHECK(manager.latestLinePlot(mr.trip).isEmpty()); // no pipeline yet
 
-    manager.acquireLinePlot(nullptr, mr.trip);
+    manager.acquireLinePlot(mr.trip);
     REQUIRE(waitFor([&](){
         return !manager.latestLinePlot(mr.trip).isEmpty();
     }));
@@ -276,7 +276,7 @@ TEST_CASE("cwSketchManager acquireLinePlot creates a pipeline entry and populate
     REQUIRE(components.size() == 1);
     CHECK(components.first().network.stations().size() == 3);
 
-    manager.releaseLinePlot(nullptr, mr.trip);
+    manager.releaseLinePlot(mr.trip);
     // Refcount reached 0 → pipeline entry dropped.
     CHECK(manager.latestLinePlot(mr.trip).isEmpty());
 }
@@ -285,7 +285,7 @@ TEST_CASE("cwSketchManager re-emits linePlotUpdated after a chunk edit", "[cwSke
     auto mr = buildRegionWithTrip();
     cwSketchManager manager;
 
-    manager.acquireLinePlot(nullptr, mr.trip);
+    manager.acquireLinePlot(mr.trip);
     REQUIRE(waitFor([&](){
         return !manager.latestLinePlot(mr.trip).isEmpty();
     }));
@@ -302,25 +302,25 @@ TEST_CASE("cwSketchManager re-emits linePlotUpdated after a chunk edit", "[cwSke
     REQUIRE(components.size() == 1);
     CHECK(components.first().network.stations().size() == 4);
 
-    manager.releaseLinePlot(nullptr, mr.trip);
+    manager.releaseLinePlot(mr.trip);
 }
 
 TEST_CASE("cwSketchManager refcounts shared acquisitions", "[cwSketchManager][TripLinePlot]") {
     auto mr = buildRegionWithTrip();
     cwSketchManager manager;
 
-    manager.acquireLinePlot(nullptr, mr.trip);
-    manager.acquireLinePlot(nullptr, mr.trip); // second consumer
+    manager.acquireLinePlot(mr.trip);
+    manager.acquireLinePlot(mr.trip); // second consumer
 
     REQUIRE(waitFor([&](){
         return !manager.latestLinePlot(mr.trip).isEmpty();
     }));
 
-    manager.releaseLinePlot(nullptr, mr.trip);
+    manager.releaseLinePlot(mr.trip);
     // Still held by the second consumer.
     CHECK_FALSE(manager.latestLinePlot(mr.trip).isEmpty());
 
-    manager.releaseLinePlot(nullptr, mr.trip);
+    manager.releaseLinePlot(mr.trip);
     CHECK(manager.latestLinePlot(mr.trip).isEmpty());
 }
 

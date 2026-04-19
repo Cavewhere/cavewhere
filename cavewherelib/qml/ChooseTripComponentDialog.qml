@@ -84,8 +84,9 @@ QQ.Item {
                     model: rootId.components
 
                     delegate: QC.ItemDelegate {
+                        id: delegateId
                         required property int index
-                        required property var modelData
+                        required property tripComponentSummary modelData
                         width: componentListId.width
                         highlighted: componentListId.currentIndex === index
                         onClicked: componentListId.currentIndex = index
@@ -94,13 +95,13 @@ QQ.Item {
                             spacing: 2
                             QC.Label {
                                 Layout.fillWidth: true
-                                text: qsTr("Anchor: %1").arg(parent.parent.modelData.anchor)
+                                text: qsTr("Anchor: %1").arg(delegateId.modelData.anchor)
                                 font.bold: true
                                 elide: QC.Label.ElideRight
                             }
                             QC.Label {
                                 Layout.fillWidth: true
-                                text: qsTr("%1 stations").arg(parent.parent.modelData.stationCount)
+                                text: qsTr("%1 stations").arg(delegateId.modelData.stationCount)
                                 color: Theme.textSubtle
                                 font.pixelSize: Theme.fontSizeSmall
                             }

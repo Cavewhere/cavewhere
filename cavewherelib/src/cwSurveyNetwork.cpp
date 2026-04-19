@@ -1,13 +1,14 @@
 // cwSurveyNetwork.cpp
 
 #include "cwSurveyNetwork.h"
+#include "cwStation.h"
 
 
 void cwSurveyNetwork::clear() { stationDataMap.clear(); }
 
 void cwSurveyNetwork::addShot(const QString& fromStation, const QString& toStation) {
-    QString from = fromStation.toLower();
-    QString to = toStation.toLower();
+    QString from = cwStation::canonicalKey(fromStation);
+    QString to = cwStation::canonicalKey(toStation);
 
     if (from.isEmpty() || to.isEmpty()) {
         return;
@@ -31,8 +32,8 @@ void cwSurveyNetwork::addShot(const QString& fromStation, const QString& toStati
 }
 
 QStringList cwSurveyNetwork::neighbors(const QString& stationName) const {
-    QString uppercaseName = stationName.toLower();
-    auto dataIterator = stationDataMap.constFind(uppercaseName);
+    const QString key = cwStation::canonicalKey(stationName);
+    auto dataIterator = stationDataMap.constFind(key);
     if (dataIterator != stationDataMap.constEnd()) {
         return dataIterator->neighborList;
     }
@@ -44,15 +45,15 @@ QStringList cwSurveyNetwork::stations() const { return stationDataMap.keys(); }
 bool cwSurveyNetwork::isEmpty() const { return stationDataMap.isEmpty(); }
 
 void cwSurveyNetwork::setPosition(const QString& stationName, const QVector3D& stationPosition) {
-    QString uppercaseName = stationName.toLower();
-    StationData& stationData = stationDataMap[uppercaseName];
+    const QString key = cwStation::canonicalKey(stationName);
+    StationData& stationData = stationDataMap[key];
     stationData.stationPosition = stationPosition;
     stationData.positionIsSet = true;
 }
 
 QVector3D cwSurveyNetwork::position(const QString& stationName) const {
-    QString uppercaseName = stationName.toLower();
-    auto dataIterator = stationDataMap.constFind(uppercaseName);
+    const QString key = cwStation::canonicalKey(stationName);
+    auto dataIterator = stationDataMap.constFind(key);
     if (dataIterator != stationDataMap.constEnd() && dataIterator->positionIsSet) {
         return dataIterator->stationPosition;
     }
@@ -60,8 +61,8 @@ QVector3D cwSurveyNetwork::position(const QString& stationName) const {
 }
 
 bool cwSurveyNetwork::hasPosition(const QString& stationName) const {
-    QString uppercaseName = stationName.toLower();
-    auto dataIterator = stationDataMap.constFind(uppercaseName);
+    const QString key = cwStation::canonicalKey(stationName);
+    auto dataIterator = stationDataMap.constFind(key);
     return (dataIterator != stationDataMap.constEnd() && dataIterator->positionIsSet);
 }
 

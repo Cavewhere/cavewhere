@@ -13,6 +13,7 @@
 #include "cwCavingRegionData.h"
 #include "cwCave.h"
 #include "cwCaveData.h"
+#include "cwStation.h"
 #include "cwTrip.h"
 #include "cwTripData.h"
 #include "cwSurveyChunk.h"
@@ -26,19 +27,6 @@
 
 namespace {
 
-// Station name comparisons are case-insensitive everywhere in the line plot
-// pipeline (cwStationPositionLookup stores lowercased keys). Keep loop-break
-// bookkeeping in lower case so e.g. "A3" and "a3" are treated as the same
-// station — matching cavern's behaviour.
-QString canonicalName(const QString &name)
-{
-    return name.toLower();
-}
-
-// ---- Component split ----------------------------------------------------
-
-// BFS over chunk-shares-station adjacency. Returns components as lists of
-// chunk indices into the input list, in the order the BFS discovered them.
 QList<QList<int>> splitIntoComponents(const QList<cwSurveyChunkData> &chunks)
 {
     QList<QList<int>> components;
@@ -51,7 +39,7 @@ QList<QList<int>> splitIntoComponents(const QList<cwSurveyChunkData> &chunks)
     for (int i = 0; i < chunks.size(); ++i) {
         QSet<QString> seen;
         for (const auto &station : chunks.at(i).stations) {
-            const QString key = canonicalName(station.name());
+            const QString key = cwStation::canonicalKey(station.name());
             if (key.isEmpty() || seen.contains(key)) {
                 continue;
             }
@@ -73,7 +61,7 @@ QList<QList<int>> splitIntoComponents(const QList<cwSurveyChunkData> &chunks)
             const int idx = queue.dequeue();
             component.append(idx);
             for (const auto &station : chunks.at(idx).stations) {
-                const QString key = canonicalName(station.name());
+                const QString key = cwStation::canonicalKey(station.name());
                 if (key.isEmpty()) {
                     continue;
                 }
@@ -94,8 +82,6 @@ QList<QList<int>> splitIntoComponents(const QList<cwSurveyChunkData> &chunks)
     }
     return components;
 }
-
-// ---- Loop-break rename --------------------------------------------------
 
 struct LoopBreakResult {
     QList<cwSurveyChunkData> chunks;          // renamed copies
@@ -144,7 +130,7 @@ LoopBreakResult renameDuplicates(const QList<cwSurveyChunkData> &allChunks,
         // name is already in seenCount).
         QList<int> duplicateIndices;
         for (int i = 0; i < chunk.stations.size(); ++i) {
-            const QString key = canonicalName(chunk.stations.at(i).name());
+            const QString key = cwStation::canonicalKey(chunk.stations.at(i).name());
             if (key.isEmpty()) {
                 continue;
             }
@@ -159,15 +145,15 @@ LoopBreakResult renameDuplicates(const QList<cwSurveyChunkData> &allChunks,
                 const int idx = duplicateIndices.at(j);
                 cwStation station = chunk.stations.at(idx);
                 const QString originalName = station.name();
-                const QString key = canonicalName(originalName);
+                const QString key = cwStation::canonicalKey(originalName);
                 const int n = ++renameCounter[key];
                 const QString internalName = internalDupName(originalName, n);
                 const QString publicName   = publicDupName(originalName, n);
                 station.setName(internalName);
                 chunk.stations[idx] = station;
-                out.internalToPublic.insert(canonicalName(internalName), publicName);
+                out.internalToPublic.insert(cwStation::canonicalKey(internalName), publicName);
                 out.publicToOriginal.insert(publicName, originalName);
-                seenCount[canonicalName(internalName)] = 1;
+                seenCount[cwStation::canonicalKey(internalName)] = 1;
             }
         }
 
@@ -176,13 +162,10 @@ LoopBreakResult renameDuplicates(const QList<cwSurveyChunkData> &allChunks,
             out.canonicalAnchor = chunk.stations.first().name();
         }
 
-        // Mark all this chunk's stations as seen under their (possibly
-        // renamed) names. Note: the unrenamed duplicates (case 0/1 duplicate
-        // or the first duplicate in the ≥2 case) are incremented here —
-        // multiple chunks meeting at the same station are fine and do not
-        // trigger renames on their own.
+        // Multiple chunks meeting at a shared station do NOT trigger renames
+        // on their own — only ≥2 duplicates in a single chunk do.
         for (const auto &station : chunk.stations) {
-            const QString key = canonicalName(station.name());
+            const QString key = cwStation::canonicalKey(station.name());
             if (!key.isEmpty()) {
                 seenCount[key]++;
             }
@@ -193,8 +176,6 @@ LoopBreakResult renameDuplicates(const QList<cwSurveyChunkData> &allChunks,
 
     return out;
 }
-
-// ---- Build minimal cwLinePlotTask::Input --------------------------------
 
 cwLinePlotTask::Input buildLinePlotInput(const QString &tripName,
                                          const cwTripCalibrationData &calibration,
@@ -318,9 +299,9 @@ QFuture<QList<TripComponent>> run(Input pipelineInput)
                 cwSurveyNetwork renamedNetwork;
                 const QStringList stations = tc.network.stations();
                 for (const QString &from : stations) {
-                    QString fromPublic = broken.internalToPublic.value(canonicalName(from), from);
+                    QString fromPublic = broken.internalToPublic.value(cwStation::canonicalKey(from), from);
                     for (const QString &to : tc.network.neighbors(from)) {
-                        QString toPublic = broken.internalToPublic.value(canonicalName(to), to);
+                        QString toPublic = broken.internalToPublic.value(cwStation::canonicalKey(to), to);
                         renamedNetwork.addShot(fromPublic, toPublic);
                     }
                 }

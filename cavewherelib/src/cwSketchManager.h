@@ -33,7 +33,6 @@ class cwProject;
 class cwRegionTreeModel;
 class cwTrip;
 class cwSketch;
-class cwSketchCanvas;
 class cwSurveyNoteSketchModel;
 class cwSurveyChunk;
 
@@ -82,14 +81,13 @@ public:
     // Updates are coalesced through AsyncFuture::Restarter: a burst of
     // survey-editor keystrokes yields one cavern run per settle.
 
-    // Registers `canvas` as a consumer of `trip`'s line plot. Safe with
-    // null arguments (no-op). Triggers a first run if this is the initial
-    // consumer; returns immediately either way.
-    void acquireLinePlot(cwSketchCanvas* canvas, cwTrip* trip);
+    // Adds a consumer to `trip`'s line plot pipeline. Null-safe.
+    // Triggers a first run if this is the initial consumer.
+    void acquireLinePlot(cwTrip* trip);
 
-    // Removes `canvas` from `trip`'s consumer list. On reaching zero
-    // consumers, disconnects signals and drops the cached components.
-    void releaseLinePlot(cwSketchCanvas* canvas, cwTrip* trip);
+    // Drops a consumer. On reaching zero, disconnects signals and clears
+    // cached components.
+    void releaseLinePlot(cwTrip* trip);
 
     // Most recent settled components for `trip`. Empty while the first run
     // is in flight, when the trip has no chunks, or when no consumer is

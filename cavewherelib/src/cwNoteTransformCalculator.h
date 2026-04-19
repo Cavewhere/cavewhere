@@ -10,6 +10,7 @@
 //Our includes
 #include "cwNoteTranformation.h"
 #include "cwScrapType.h"
+#include "cwStation.h"
 #include "cwStationPositionLookup.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwSurveyNetwork.h"
@@ -79,7 +80,7 @@ public:
         std::sort(validStationList.begin(), validStationList.end(),
                   [](const NoteStation& s1, const NoteStation& s2)
                   {
-                      return s1.name().toLower() < s2.name().toLower();
+                      return cwStation::canonicalKey(s1.name()) < cwStation::canonicalKey(s2.name());
                   });
 
         //Generate all the neighbor list for each station
@@ -99,7 +100,7 @@ public:
                 auto neighborsStation2 = stationNeighbors[j];
 
                 //See if they make up a shot
-                if(neighborsStation1.contains(station2.name().toLower()) && neighborsStation2.contains(station1.name().toLower())) {
+                if(neighborsStation1.contains(cwStation::canonicalKey(station2.name())) && neighborsStation2.contains(cwStation::canonicalKey(station1.name()))) {
                     shotList.append(QPair<NoteStation, NoteStation>(station1, station2));
                 }
             }

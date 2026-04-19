@@ -9,6 +9,7 @@
 #define CWTRIANGULATETASK_H
 
 //Our includes
+#include "cwStation.h"
 #include "cwTask.h"
 #include "cwTriangulateInData.h"
 #include "cwTriangulatedData.h"
@@ -82,7 +83,7 @@ public:
 
             for (const auto& station : data.noteStations()) {
                 const QString stationName = station.name();
-                const QString normalizedName = stationName.toLower();
+                const QString normalizedName = cwStation::canonicalKey(stationName);
                 if(stationLookup.hasPosition(normalizedName)) [[likely]] {
                     notePositions.insert(normalizedName, QVector3D(station.positionOnNote()));
                     stations.append(cwTriangulateStation(
@@ -126,7 +127,7 @@ public:
                     continue;
                 }
 
-                const QString to = toStation.toLower();
+                const QString to = cwStation::canonicalKey(toStation);
                 QString shotKey = from < to ? from + "|" + to : to + "|" + from;
                 if (processedShots.contains(shotKey)) {
                     continue;

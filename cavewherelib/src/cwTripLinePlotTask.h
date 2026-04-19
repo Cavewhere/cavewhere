@@ -12,7 +12,10 @@
 #include <QFuture>
 #include <QHash>
 #include <QList>
+#include <QMetaType>
+#include <QQmlEngine>
 #include <QString>
+#include <QStringList>
 
 //Our includes
 #include "cwStationPositionLookup.h"
@@ -22,6 +25,24 @@
 #include "CaveWhereLibExport.h"
 
 class cwTrip;
+
+// Picker-facing summary of one connected survey component. Q_GADGET so QML
+// can read fields directly (`modelData.anchor` etc.) without a QVariantMap.
+class CAVEWHERE_LIB_EXPORT cwTripComponentSummary {
+    Q_GADGET
+    QML_VALUE_TYPE(tripComponentSummary)
+
+    Q_PROPERTY(QString anchor MEMBER anchor)
+    Q_PROPERTY(int stationCount MEMBER stationCount)
+    Q_PROPERTY(QStringList stations MEMBER stations)
+
+public:
+    QString     anchor;
+    int         stationCount = 0;
+    QStringList stations;
+};
+
+Q_DECLARE_METATYPE(cwTripComponentSummary)
 
 // Per-trip line-plot pipeline. Splits a trip's chunks into connected
 // components, breaks intra-component loops by renaming duplicate station

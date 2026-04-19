@@ -8,6 +8,7 @@
 
 //Our includes
 #include "cwFindUnconnectedSurveyChunksTask.h"
+#include "cwStation.h"
 #include "cwSurveyChunk.h"
 #include "cwCave.h"
 #include "cwTrip.h"
@@ -111,7 +112,7 @@ QSet<QString> cwFindUnconnectedSurveyChunksTask::chunkToStationNameSet(const cwS
 {
     QSet<QString> stationNameSet;
     for(int i = 0; i < chunk->stationCount(); i++) {
-        QString name = chunk->data(cwSurveyChunk::StationNameRole, i).toString().toUpper();
+        QString name = cwStation::canonicalKey(chunk->data(cwSurveyChunk::StationNameRole, i).toString());
         if(!name.isEmpty()) {
             stationNameSet.insert(name);
         }
@@ -177,7 +178,7 @@ void cwFindUnconnectedSurveyChunksTask::addFirstChunkAsConnected(const cwCave *c
         foreach(cwSurveyChunk* chunk, trip->chunks()) {
             if(chunk->isValid()) {
                 for(int i = 0; i < chunk->stationCount(); i++) {
-                   QString stationName = chunk->data(cwSurveyChunk::StationNameRole, i).toString().toUpper();
+                   QString stationName = cwStation::canonicalKey(chunk->data(cwSurveyChunk::StationNameRole, i).toString());
                    if(!stationName.isEmpty()) {
                        //Found the first survey chunk that has a valid station name
                        insertChunkToConnected(chunk);
