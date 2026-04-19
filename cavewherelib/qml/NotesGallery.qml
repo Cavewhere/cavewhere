@@ -26,6 +26,7 @@ QQ.Rectangle {
     property bool isNarrow: false
     readonly property int noteCount: galleryView.count
     readonly property bool _showNarrowToolbar: noteGallery.isNarrow && noteGallery.noteCount > 0
+    readonly property bool _mainButtonAreaVisible: !noteGallery.isNarrow && noteGallery.currentSketch === null
     property alias _notePickerDrawer: notePickerDrawer
     property alias _notePickerList: notePickerList
 
@@ -55,7 +56,7 @@ QQ.Rectangle {
                     noteGallery.state = "NO_NOTES"
                 } else {
                     noteGallery.state = ""
-                    mainButtonArea.visible = !noteGallery.isNarrow;
+                    mainButtonArea.visible = noteGallery._mainButtonAreaVisible;
                 }
                 break;
             case "CARPET":
@@ -440,7 +441,8 @@ QQ.Rectangle {
 
     ShadowRectangle {
         id: mainButtonArea
-        visible: !noteGallery.isNarrow
+        objectName: "mainButtonArea"
+        visible: noteGallery._mainButtonAreaVisible
         z: 1
 
         anchors.right: parent.right
@@ -689,7 +691,7 @@ QQ.Rectangle {
                 galleryView.onCountChanged: () => {
                     if(count > 0) {
                         noteGallery.state = ""
-                        mainButtonArea.visible = !noteGallery.isNarrow
+                        mainButtonArea.visible = noteGallery._mainButtonAreaVisible
                         noteArea.visible = true
                         currentIndex = 0;
                     }
@@ -843,7 +845,7 @@ QQ.Rectangle {
                 to: mainButtonArea.anchors.topMargin
             }
 
-            QQ.PropertyAction { target: mainButtonArea; property: "visible"; value: !noteGallery.isNarrow }
+            QQ.PropertyAction { target: mainButtonArea; property: "visible"; value: noteGallery._mainButtonAreaVisible }
             QQ.PropertyAnimation {
                 target: carpetButtonArea
                 properties: "scale"
