@@ -231,6 +231,11 @@ void cwSketch::appendPoint(int strokeIndex, const cwPenPoint &p)
     }, Qt::QueuedConnection);
 }
 
+void cwSketch::appendPoint(int strokeIndex, QPointF position, double pressure, qint64 timestampMs)
+{
+    appendPoint(strokeIndex, cwPenPoint(position, pressure, timestampMs));
+}
+
 void cwSketch::endStroke()
 {
     auto *cmd = new cwSketchSetStrokesCommand(this, m_startStrokes, m_strokes, "Draw Stroke");

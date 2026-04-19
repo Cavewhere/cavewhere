@@ -103,6 +103,7 @@ public:
     // (point symbols, fill areas, etc.) should go through a future bulk API
     // that batches its own begin/endInsertRows, not through appendPoint.
     Q_INVOKABLE void appendPoint(int strokeIndex, const cwPenPoint &p);
+    Q_INVOKABLE void appendPoint(int strokeIndex, QPointF position, double pressure, qint64 timestampMs = 0);
     Q_INVOKABLE void endStroke();
     Q_INVOKABLE void clearStrokes();
 

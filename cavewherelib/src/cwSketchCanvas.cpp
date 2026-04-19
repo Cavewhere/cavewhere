@@ -67,23 +67,13 @@ void cwSketchCanvas::setZoom(double zoom)
     update();
 }
 
-void cwSketchCanvas::setPanX(double x)
+void cwSketchCanvas::setPan(QPointF pan)
 {
-    if (qFuzzyCompare(m_panX, x)) {
+    if (m_pan == pan) {
         return;
     }
-    m_panX = x;
-    emit panXChanged();
-    update();
-}
-
-void cwSketchCanvas::setPanY(double y)
-{
-    if (qFuzzyCompare(m_panY, y)) {
-        return;
-    }
-    m_panY = y;
-    emit panYChanged();
+    m_pan = pan;
+    emit panChanged();
     update();
 }
 

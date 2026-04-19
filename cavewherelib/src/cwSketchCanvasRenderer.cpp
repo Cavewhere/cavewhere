@@ -54,8 +54,9 @@ void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
         return;
     }
 
+    const QPointF pan = canvas->pan();
     m_worldToItem = QTransform()
-                        .translate(canvas->panX(), canvas->panY())
+                        .translate(pan.x(), pan.y())
                         .scale(canvas->zoom(), canvas->zoom());
 
     if (canvas->zoom() > 0.0) {

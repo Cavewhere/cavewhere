@@ -11,6 +11,7 @@
 //Qt includes
 #include <QColor>
 #include <QMetaType>
+#include <QQmlEngine>
 #include <QUuid>
 #include <QVector>
 
@@ -38,5 +39,16 @@ public:
 };
 
 Q_DECLARE_METATYPE(cwPenStroke)
+
+// Re-export cwPenStroke as a QML namespace so its Kind enum is reachable as
+// `PenStroke.Wall` / `PenStroke.Feature`. QML_FOREIGN_NAMESPACE avoids the
+// "value type names should begin with a lowercase letter" warning emitted
+// when a Q_GADGET is registered directly with QML_NAMED_ELEMENT.
+struct cwPenStrokeForeign
+{
+    Q_GADGET
+    QML_FOREIGN_NAMESPACE(cwPenStroke)
+    QML_NAMED_ELEMENT(PenStroke)
+};
 
 #endif // CWPENSTROKE_H
