@@ -87,6 +87,63 @@ QQ.Item {
         }
     }
 
+    QQ.PinchHandler {
+        id: pinchHandler
+        target: null
+        acceptedDevices: QQ.PointerDevice.TouchScreen | QQ.PointerDevice.TouchPad
+        rotationAxis.enabled: false
+        minimumPointCount: 2
+        maximumPointCount: 2
+
+        property double startZoom: 1.0
+        property point startWorld: Qt.point(0, 0)
+
+        function _applyGesture() {
+            const newZoom = startZoom * activeScale
+            const k = worldToScreenId.matrix.m11 * newZoom
+            const c = centroid.position
+            sketchItemId.zoom = newZoom
+            sketchItemId.pan = Qt.point(c.x - startWorld.x * k,
+                                        c.y + startWorld.y * k)
+        }
+
+        onActiveChanged: {
+            if (active) {
+                startZoom = sketchItemId.zoom
+                startWorld = sketchItemId._worldPoint(centroid.position)
+            }
+        }
+
+        onActiveScaleChanged: if (active) _applyGesture()
+        onCentroidChanged: if (active) _applyGesture()
+    }
+
+    QQ.DragHandler {
+        id: touchPanHandler
+        target: null
+        acceptedDevices: QQ.PointerDevice.TouchScreen
+        maximumPointCount: 1
+        dragThreshold: 0
+
+        property point lastPosition
+
+        onActiveChanged: {
+            if (active) {
+                lastPosition = centroid.position
+            }
+        }
+
+        onCentroidChanged: {
+            if (!active) {
+                return
+            }
+            sketchItemId.pan = Qt.point(
+                sketchItemId.pan.x + centroid.position.x - lastPosition.x,
+                sketchItemId.pan.y + centroid.position.y - lastPosition.y)
+            lastPosition = centroid.position
+        }
+    }
+
     QQ.DragHandler {
         id: panHandler
         target: null

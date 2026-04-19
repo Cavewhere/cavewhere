@@ -182,7 +182,7 @@ QImage cwSketchManager::renderIcon(const cwSketch* sketch, int edgePixels)
     cwSketchDrawQPainter draw(&painter);
     cwSketchPainter::PaintContext ctx;
     ctx.viewport = world;
-    ctx.zoom     = zoom;
+    ctx.mapScale = zoom;
     ctx.strokes  = &pathModel;
     cwSketchPainter::paint(&draw, ctx);
 
