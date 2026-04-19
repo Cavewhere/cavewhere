@@ -17,7 +17,7 @@ QQ.Rectangle {
 
     objectName: "noteGallery"
 
-    property alias notesModel: galleryView.model;
+    property SurveyNotesConcatModel notesModel: null
     property Note currentNote
     property NoteLiDAR currentNoteLiDAR
     property Sketch currentSketch
@@ -134,7 +134,7 @@ QQ.Rectangle {
             objectName: "notePickerList"
             anchors.fill: parent
             anchors.margins: 4
-            model: galleryView.model
+            model: noteGallery.notesModel
             delegate: listDelegate
             clip: true
             currentIndex: noteGallery.currentNoteIndex
@@ -402,6 +402,7 @@ QQ.Rectangle {
 
             anchors.margins: 4
 
+            model: noteGallery.notesModel
             delegate: noteGallery.isNarrow ? narrowListDelegate : listDelegate
 
             clip: true
