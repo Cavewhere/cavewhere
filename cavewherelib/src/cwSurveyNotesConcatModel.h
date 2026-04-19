@@ -17,9 +17,12 @@
 class cwTrip;
 class cwSurveyNoteModel;
 class cwSurveyNoteLiDARModel;
+class cwSurveyNoteSketchModel;
+class cwSketch;
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwSketch.h"
 
 /**
  * @brief Concatenates cwTrip's image/PDF notes and LiDAR notes into one model.
@@ -49,6 +52,7 @@ public:
 
     Q_INVOKABLE void addFiles(QList<QUrl> files);
     Q_INVOKABLE void removeNote(int index);
+    Q_INVOKABLE cwSketch* addSketch(cwSketch::ViewType viewType = cwSketch::Plan);
 
 signals:
     void tripChanged(cwTrip* trip);
@@ -65,5 +69,6 @@ private: // members last
     QPointer<cwTrip> m_trip;
     QPointer<cwSurveyNoteModel> m_notesModel;
     QPointer<cwSurveyNoteLiDARModel> m_notesLiDARModel;
+    QPointer<cwSurveyNoteSketchModel> m_notesSketchModel;
 
 };

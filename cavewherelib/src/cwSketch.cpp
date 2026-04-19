@@ -81,6 +81,11 @@ cwSketch::cwSketch(QObject *parent)
 
 cwSketch::~cwSketch() = default;
 
+void cwSketch::setParentTrip(cwTrip *trip)
+{
+    m_parentTrip = trip;
+}
+
 void cwSketch::setName(const QString &name)
 {
     if (m_name == name) {

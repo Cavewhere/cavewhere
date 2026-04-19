@@ -29,6 +29,7 @@ class cwPenStrokeModel;
 class cwAbstractScrapViewMatrix;
 class cwMatrix4x4Artifact;
 class cwSurvey2DGeometryRule;
+class cwTrip;
 
 class CAVEWHERE_LIB_EXPORT cwSketch : public QObject
 {
@@ -89,6 +90,9 @@ public:
 
     cwSurvey2DGeometryArtifact *survey2DGeometry() const;
 
+    void setParentTrip(cwTrip *trip);
+    Q_INVOKABLE cwTrip *parentTrip() const { return m_parentTrip; }
+
     Q_INVOKABLE int  beginStroke(cwPenStroke::Kind kind, double width, const QColor &color = QColor());
 
     // Contract: appendPoint is for the live pen input stream only — one
@@ -130,6 +134,7 @@ private:
     cwAbstractScrapViewMatrix *m_viewMatrix      = nullptr;
     cwMatrix4x4Artifact       *m_matrixArtifact  = nullptr;
     cwSurvey2DGeometryRule    *m_geometryRule    = nullptr;
+    cwTrip                    *m_parentTrip      = nullptr;
 
     // -1 sentinel doubles as the "no flush scheduled" flag; see Decision 2
     // in the sketch feature plan for why coalescing matters.

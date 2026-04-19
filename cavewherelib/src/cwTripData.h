@@ -11,6 +11,7 @@
 #include "cwSurveyChunkData.h"
 #include "cwSurveyNoteModelData.h"
 #include "cwSurveyNoteLiDARModelData.h"
+#include "cwSurveyNoteSketchModelData.h"
 
 struct cwTripData {
     QString name;
@@ -20,6 +21,7 @@ struct cwTripData {
     QList<cwSurveyChunkData> chunks;
     cwSurveyNoteModelData noteModel;
     cwSurveyNoteLiDARModelData noteLiDARModel;
+    cwSurveyNoteSketchModelData sketchModel;
     QUuid id;
 };
 

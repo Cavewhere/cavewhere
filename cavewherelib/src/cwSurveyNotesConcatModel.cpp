@@ -5,6 +5,8 @@
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyNoteModelBase.h"
 #include "cwSurveyNoteLiDARModel.h"
+#include "cwSurveyNoteSketchModel.h"
+#include "cwSketch.h"
 #include "cwPDFConverter.h"
 
 // Qt
@@ -66,12 +68,16 @@ void cwSurveyNotesConcatModel::refreshSources()
 
     m_notesModel = m_trip->notes();
     m_notesLiDARModel = m_trip->notesLiDAR();
+    m_notesSketchModel = m_trip->notesSketch();
 
     if (m_notesModel) {
         addSourceModel(m_notesModel);
     }
     if (m_notesLiDARModel) {
         addSourceModel(m_notesLiDARModel);
+    }
+    if (m_notesSketchModel) {
+        addSourceModel(m_notesSketchModel);
     }
 }
 
@@ -85,6 +91,18 @@ void cwSurveyNotesConcatModel::clearSources()
         removeSourceModel(m_notesLiDARModel);
         m_notesLiDARModel = nullptr;
     }
+    if (m_notesSketchModel) {
+        removeSourceModel(m_notesSketchModel);
+        m_notesSketchModel = nullptr;
+    }
+}
+
+cwSketch* cwSurveyNotesConcatModel::addSketch(cwSketch::ViewType viewType)
+{
+    if (m_trip == nullptr || m_trip->notesSketch() == nullptr) {
+        return nullptr;
+    }
+    return m_trip->notesSketch()->addSketch(viewType);
 }
 
 // ---------- File routing ----------

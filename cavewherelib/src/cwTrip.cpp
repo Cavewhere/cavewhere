@@ -13,6 +13,7 @@
 #include "cwTripCalibration.h"
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyNoteLiDARModel.h"
+#include "cwSurveyNoteSketchModel.h"
 #include "cwErrorModel.h"
 #include "cwData.h"
 #include "cwKeywordModel.h"
@@ -33,12 +34,14 @@ cwTrip::cwTrip(QObject *parent) :
     DateTime = QDateTime(QDate::currentDate(), QTime());
     Notes = new cwSurveyNoteModel(this);
     NotesLidar = new cwSurveyNoteLiDARModel(this);
+    NotesSketch = new cwSurveyNoteSketchModel(this);
     ErrorModel = new cwErrorModel(this);
     KeywordModel = new cwKeywordModel(this);
     Id = QUuid::createUuid();
 
     Notes->setParentTrip(this);
     NotesLidar->setParentTrip(this);
+    NotesSketch->setParentTrip(this);
 
     KeywordModel->addExtension(Team->keywordModel());
     updateKeywordMetadata();
@@ -400,6 +403,7 @@ cwTripData cwTrip::data() const
         cwData::toDataList<cwSurveyChunkData>(Chunks),
         Notes->data(),
         NotesLidar->data(),
+        NotesSketch->data(),
         Id
     };
 }
@@ -413,6 +417,7 @@ void cwTrip::setData(const cwTripData &data)
     Calibration->setData(data.calibrations);
     Notes->setData(data.noteModel);
     NotesLidar->setData(data.noteLiDARModel);
+    NotesSketch->setData(data.sketchModel);
 
     removeChunks(0, Chunks.size() - 1);
     for(const auto& chunk : data.chunks) {

@@ -15,8 +15,10 @@ class cwCave;
 class cwNote;
 class cwScrap;
 class cwNoteLiDAR;
+class cwSketch;
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyNoteLiDARModel.h"
+#include "cwSurveyNoteSketchModel.h"
 #include "cwGlobals.h"
 #include "cwUniqueConnectionChecker.h"
 
@@ -55,13 +57,16 @@ public:
         ScrapType,
         NotesType,
         NotesLiDARType,
-        NoteLiDARType
+        NoteLiDARType,
+        NotesSketchType,
+        SketchType
     };
     Q_ENUM(ItemType)
 
     enum class TripRows : int {
         NotesModel,
         NotesLiDARModel,
+        NotesSketchModel,
 
         //Add more rows above this
         NumberOfRows
@@ -78,8 +83,10 @@ public:
     QModelIndex index (cwNote* note) const;
     QModelIndex index (cwScrap* scrap) const;
     QModelIndex index (cwNoteLiDAR* noteLiDAR) const;
+    QModelIndex index (cwSketch* sketch) const;
     QModelIndex index (cwSurveyNoteModel* model) const;
     QModelIndex index (cwSurveyNoteLiDARModel* model) const;
+    QModelIndex index (cwSurveyNoteSketchModel* model) const;
 
     QModelIndex parent ( const QModelIndex & index ) const;
     int rowCount ( const QModelIndex & parent = QModelIndex() ) const;
@@ -92,7 +99,9 @@ public:
     Q_INVOKABLE cwScrap* scrap(const QModelIndex& index) const;
     Q_INVOKABLE cwSurveyNoteModel* notesModel(const QModelIndex& index) const;
     Q_INVOKABLE cwSurveyNoteLiDARModel* notesLiDARModel(const QModelIndex& index) const;
+    Q_INVOKABLE cwSurveyNoteSketchModel* notesSketchModel(const QModelIndex& index) const;
     Q_INVOKABLE cwNoteLiDAR* noteLiDAR(const QModelIndex& index) const;
+    Q_INVOKABLE cwSketch* sketch(const QModelIndex& index) const;
     Q_INVOKABLE QObject* object(const QModelIndex& index) const;
 
 
@@ -104,6 +113,8 @@ public:
     Q_INVOKABLE bool isNotes(const QModelIndex& index) const { return index.data(TypeRole).toInt() == NotesType; }
     Q_INVOKABLE bool isNotesLiDAR(const QModelIndex& index) const { return index.data(TypeRole).toInt() == NotesLiDARType; }
     Q_INVOKABLE bool isNoteLiDAR(const QModelIndex& index) const { return index.data(TypeRole).toInt() == NoteLiDARType; }
+    Q_INVOKABLE bool isNotesSketch(const QModelIndex& index) const { return index.data(TypeRole).toInt() == NotesSketchType; }
+    Q_INVOKABLE bool isSketch(const QModelIndex& index) const { return index.data(TypeRole).toInt() == SketchType; }
 
     template <typename ReturnType, typename GetFunc>
     QList<ReturnType> objects(const QModelIndex& parent,

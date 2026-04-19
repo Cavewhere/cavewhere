@@ -24,6 +24,7 @@ class cwSurveyChunk;
 // class cwCave;
 class cwSurveyNoteModel;
 class cwSurveyNoteLiDARModel;
+class cwSurveyNoteSketchModel;
 class cwShot;
 class cwErrorModel;
 class cwTeam;
@@ -49,6 +50,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(QDateTime date READ date WRITE setDate NOTIFY dateChanged)
     Q_PROPERTY(cwSurveyNoteModel* notes READ notes CONSTANT)
     Q_PROPERTY(cwSurveyNoteLiDARModel* notesLiDAR READ notesLiDAR CONSTANT);
+    Q_PROPERTY(cwSurveyNoteSketchModel* notesSketch READ notesSketch CONSTANT);
     Q_PROPERTY(cwTeam* team READ team CONSTANT)
     Q_PROPERTY(int chunkCount READ chunkCount NOTIFY numberOfChunksChanged)
     Q_PROPERTY(cwTripCalibration* calibration READ calibrations CONSTANT)
@@ -83,6 +85,7 @@ public:
 
     cwSurveyNoteModel* notes() const;
     cwSurveyNoteLiDARModel* notesLiDAR() const;
+    cwSurveyNoteSketchModel* notesSketch() const;
     cwKeywordModel* keywordModel() const;
 
     void addShotToLastChunk(const cwStation& fromStation, const cwStation& toStation, const cwShot& shot);
@@ -139,6 +142,7 @@ protected:
     QPointer<cwCave> ParentCave;
     cwSurveyNoteModel* Notes;
     cwSurveyNoteLiDARModel* NotesLidar;
+    cwSurveyNoteSketchModel* NotesSketch;
     cwErrorModel* ErrorModel; //!<
     cwKeywordModel* KeywordModel;
     QUuid Id;
@@ -236,6 +240,11 @@ inline cwSurveyNoteModel* cwTrip::notes() const {
 inline cwSurveyNoteLiDARModel *cwTrip::notesLiDAR() const
 {
     return NotesLidar;
+}
+
+inline cwSurveyNoteSketchModel *cwTrip::notesSketch() const
+{
+    return NotesSketch;
 }
 
 /**

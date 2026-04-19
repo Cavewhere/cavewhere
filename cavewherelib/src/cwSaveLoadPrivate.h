@@ -180,11 +180,18 @@ struct cwSaveLoadPrivate {
         QString noteName;
     };
 
+    struct LoadedSketchPathParts {
+        QString caveName;
+        QString tripName;
+        QString sketchName;
+    };
+
     struct LoadedPathIndex {
         QHash<QUuid, QString> caveNameById;
         QHash<QUuid, LoadedTripPathParts> tripPartsById;
         QHash<QUuid, LoadedNotePathParts> notePartsById;
         QHash<QUuid, LoadedLiDARPathParts> lidarPartsById;
+        QHash<QUuid, LoadedSketchPathParts> sketchPartsById;
     };
 
     //Where the objects are currently being saved

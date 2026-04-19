@@ -6,6 +6,7 @@ class cwCave;
 class cwTrip;
 class cwSurveyNoteModel;
 class cwSurveyNoteLiDARModel;
+class cwSurveyNoteSketchModel;
 class cwTripCalibration;
 class cwSurveyChunk;
 class cwTeam;
@@ -437,6 +438,7 @@ private:
     void connectNote(cwNote* note);
     void connectScrap(cwScrap* scrap);
     void connectNoteLiDAR(cwNoteLiDAR * lidarNote);
+    void connectSketch(cwSketch* sketch);
 
     void setTemporary(bool isTemp);
 

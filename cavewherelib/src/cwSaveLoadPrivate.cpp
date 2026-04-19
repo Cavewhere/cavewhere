@@ -820,6 +820,9 @@ QString cwSaveLoadPrivate::absolutePathFor(const cwSaveLoad* context, const QObj
     if (auto lidar = qobject_cast<const cwNoteLiDAR*>(object)) {
         return context->absolutePathPrivate(lidar);
     }
+    if (auto sketch = qobject_cast<const cwSketch*>(object)) {
+        return context->absolutePathPrivate(sketch);
+    }
     if (auto trip = qobject_cast<const cwTrip*>(object)) {
         return context->absolutePathPrivate(trip);
     }
@@ -867,6 +870,14 @@ cwSaveLoadPrivate::LoadedPathIndex cwSaveLoadPrivate::buildLoadedPathIndex(const
                 }
                 index.lidarPartsById.insert(noteData.id,
                                             LoadedLiDARPathParts {caveData.name, tripData.name, noteData.name});
+            }
+
+            for (const cwSketchData& sketchData : tripData.sketchModel.notes) {
+                if (sketchData.id.isNull()) {
+                    continue;
+                }
+                index.sketchPartsById.insert(sketchData.id,
+                                             LoadedSketchPathParts {caveData.name, tripData.name, sketchData.name});
             }
         }
     }
@@ -918,6 +929,7 @@ void cwSaveLoadPrivate::resetObjectStates(cwSaveLoad* context) {
     addObjects(m_regionTreeModel->all<cwTrip*>(QModelIndex(), &cwRegionTreeModel::trip));
     addObjects(m_regionTreeModel->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note));
     addObjects(m_regionTreeModel->all<cwNoteLiDAR*>(QModelIndex(), &cwRegionTreeModel::noteLiDAR));
+    addObjects(m_regionTreeModel->all<cwSketch*>(QModelIndex(), &cwRegionTreeModel::sketch));
 }
 
 void cwSaveLoadPrivate::seedObjectStatesFromLoadedData(cwSaveLoad* context,
@@ -1003,6 +1015,24 @@ void cwSaveLoadPrivate::seedObjectStatesFromLoadedData(cwSaveLoad* context,
                                                                    QDir(QStringLiteral("trips")).filePath(
                                                                        QDir(tripDirName).filePath(
                                                                            QDir(QStringLiteral("notes")).filePath(noteFileName))))));
+    }
+
+    for (cwSketch* sketch : m_regionTreeModel->all<cwSketch*>(QModelIndex(), &cwRegionTreeModel::sketch)) {
+        if (sketch == nullptr || sketch->id().isNull()) {
+            continue;
+        }
+        const auto partsIt = loadedPathIndex.sketchPartsById.constFind(sketch->id());
+        if (partsIt == loadedPathIndex.sketchPartsById.constEnd()) {
+            continue;
+        }
+
+        const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
+        const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
+        const QString sketchFileName = cwSaveLoad::sanitizeFileName(partsIt->sketchName + QStringLiteral(".cwsketch"));
+        seedStatePathFromLoaded(sketch, baseDataRootDir.filePath(QDir(caveDirName).filePath(
+                                                                     QDir(QStringLiteral("trips")).filePath(
+                                                                         QDir(tripDirName).filePath(
+                                                                             QDir(QStringLiteral("notes")).filePath(sketchFileName))))));
     }
 }
 

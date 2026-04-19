@@ -647,6 +647,14 @@ void regenerateNoteLiDARSubtreeIds(cwNoteLiDARData& noteLiDAR)
     }
 }
 
+void regenerateSketchSubtreeIds(cwSketchData& sketch)
+{
+    sketch.id = QUuid::createUuid();
+    for (cwPenStroke& stroke : sketch.strokes) {
+        stroke.id = QUuid::createUuid();
+    }
+}
+
 void regenerateTripSubtreeIds(cwTripData& trip)
 {
     trip.id = QUuid::createUuid();
@@ -655,6 +663,9 @@ void regenerateTripSubtreeIds(cwTripData& trip)
     }
     for (cwNoteLiDARData& noteLiDAR : trip.noteLiDARModel.notes) {
         regenerateNoteLiDARSubtreeIds(noteLiDAR);
+    }
+    for (cwSketchData& sketch : trip.sketchModel.notes) {
+        regenerateSketchSubtreeIds(sketch);
     }
 }
 
@@ -672,6 +683,7 @@ void cwSaveLoad::repairTopLevelIds(ProjectLoadData& loadData)
     QSet<QUuid> seenTripIds;
     QSet<QUuid> seenNoteIds;
     QSet<QUuid> seenNoteLiDARIds;
+    QSet<QUuid> seenSketchIds;
 
     // Returns true (and regenerates the subtree) if id is a duplicate.
     auto detectDuplicate = [&](QUuid& id, QSet<QUuid>& seenIds, auto regenerateFn) {
@@ -708,6 +720,12 @@ void cwSaveLoad::repairTopLevelIds(ProjectLoadData& loadData)
                     continue;
                 }
                 note.id = repairedTopLevelId(note.id, seenNoteLiDARIds, loadData.identityRepair);
+            }
+            for (cwSketchData& sketch : trip.sketchModel.notes) {
+                if (detectDuplicate(sketch.id, seenSketchIds, [&]{ regenerateSketchSubtreeIds(sketch); })) {
+                    continue;
+                }
+                sketch.id = repairedTopLevelId(sketch.id, seenSketchIds, loadData.identityRepair);
             }
         }
     }
@@ -784,6 +802,13 @@ void cwSaveLoad::repairNameCollisions(ProjectLoadData& loadData)
             for (cwNoteLiDARData& note : trip.noteLiDARModel.notes) {
                 dedup(lidarNames, note.name, [&](const QString& old, const QString& fixed) {
                     return QStringLiteral("LiDAR note \"%1\" in trip \"%2\" renamed to \"%3\" to avoid a name collision on disk.").arg(old, trip.name, fixed);
+                });
+            }
+
+            cwSanitizedNameSet sketchNames;
+            for (cwSketchData& sketch : trip.sketchModel.notes) {
+                dedup(sketchNames, sketch.name, [&](const QString& old, const QString& fixed) {
+                    return QStringLiteral("Sketch \"%1\" in trip \"%2\" renamed to \"%3\" to avoid a name collision on disk.").arg(old, trip.name, fixed);
                 });
             }
         }
@@ -1514,6 +1539,15 @@ QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave(bool persistNoteDescri
                     d->enqueueRenameIfNeeded(this, lidarNote);
                     if (persistLiDARNotes) {
                         save(lidarNote);
+                    }
+                }
+            }
+
+            for (QObject* sketchObject : trip->notesSketch()->notes()) {
+                if (auto* sketch = qobject_cast<cwSketch*>(sketchObject)) {
+                    d->enqueueRenameIfNeeded(this, sketch);
+                    if (persistAllDescriptors) {
+                        save(sketch);
                     }
                 }
             }
@@ -2753,6 +2787,16 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                         },
                         trip.noteLiDARModel.notes);
 
+                        //Load sketches
+                        loadObjectsFromNotesDir(QStringLiteral("cwsketch"),
+                                                [](const QString& path) {
+                            return loadMessage<CavewhereProto::Sketch>(path);
+                        },
+                        [](const CavewhereProto::Sketch& proto, const QString& path) {
+                            return cwSaveLoad::sketchDataFromProtoSketch(proto, path);
+                        },
+                        trip.sketchModel.notes);
+
                         cave.trips.append(trip);
                     }
                 }
@@ -3129,6 +3173,12 @@ void cwSaveLoad::connectTreeModel()
                 save(noteLiDAR);
                 break;
             }
+            case cwRegionTreeModel::SketchType: {
+                auto sketch = d->m_regionTreeModel->sketch(index);
+                connectSketch(sketch);
+                save(sketch);
+                break;
+            }
             default:
                 break;
             }
@@ -3197,6 +3247,11 @@ void cwSaveLoad::connectTreeModel()
                 auto* noteLiDAR = d->m_regionTreeModel->noteLiDAR(index);
                 removeFile(noteLiDAR);
                 removeResolvedFile(absolutePathPrivate(noteLiDAR, noteLiDAR->filename()));
+                break;
+            }
+            case cwRegionTreeModel::SketchType: {
+                auto* sketch = d->m_regionTreeModel->sketch(index);
+                removeFile(sketch);
                 break;
             }
             default:
@@ -3519,6 +3574,13 @@ void cwSaveLoad::connectObjects()
         auto notes = d->m_regionTreeModel->all<cwNoteLiDAR*>(QModelIndex(), &cwRegionTreeModel::noteLiDAR);
         for(auto note : notes) {
             connectNoteLiDAR(note);
+        }
+    }
+
+    {
+        auto sketches = d->m_regionTreeModel->all<cwSketch*>(QModelIndex(), &cwRegionTreeModel::sketch);
+        for(auto sketch : sketches) {
+            connectSketch(sketch);
         }
     }
 
@@ -3858,6 +3920,33 @@ void cwSaveLoad::connectNoteLiDAR(cwNoteLiDAR *lidarNote)
     connect(lidarNote->noteTransformation(), &cwNoteLiDARTransformation::scaleChanged, this, saveNote);
 }
 
+void cwSaveLoad::connectSketch(cwSketch *sketch)
+{
+    if (sketch == nullptr) {
+        return;
+    }
+
+    const auto saveSketch = [this, sketch]() {
+        save(sketch);
+    };
+
+    if (!d->trackConnected(sketch)) {
+        return;
+    }
+    d->connectionChecker.add(sketch);
+
+    connect(sketch, &cwSketch::nameChanged, this, saveSketch);
+    connect(sketch, &cwSketch::viewTypeChanged, this, saveSketch);
+    connect(sketch, &cwSketch::strokesReset, this, saveSketch);
+
+    if (auto* scale = sketch->mapScale()) {
+        if (d->trackConnected(scale)) {
+            d->connectionChecker.add(scale);
+            connect(scale, &cwScale::scaleChanged, this, saveSketch);
+        }
+    }
+}
+
 
 void cwSaveLoad::setTemporary(bool isTemp)
 {
@@ -4133,9 +4222,9 @@ QString cwSaveLoad::absolutePathPrivate(const cwSketch* sketch, const QString& s
 
 QDir cwSaveLoad::dirPrivate(const cwSketch* sketch) const
 {
-    // TODO: return noteDirHelper(dirPrivate(sketch->parentTrip())) once
-    // cwSketch exposes its parent trip.
-    Q_UNUSED(sketch)
+    if (sketch != nullptr && sketch->parentTrip() != nullptr) {
+        return noteDirHelper(dirPrivate(sketch->parentTrip()));
+    }
     return QDir();
 }
 
