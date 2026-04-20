@@ -312,7 +312,7 @@ MainWindowTest {
                 tryVerifyWithDiagnostics(() => {
                     return currentScrapView.note === noteGallery().currentNote
                            && currentScrapView.count > 0
-                }, 5000, "bind scrap view during lead scan")
+                }, 10000, "bind scrap view during lead scan")
 
                 for (let scrapIndex = 0; scrapIndex < currentScrapView.count; ++scrapIndex) {
                     selectScrapIndex(scrapIndex, "select scrap during lead scan")

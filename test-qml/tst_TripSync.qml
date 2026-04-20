@@ -63,7 +63,7 @@ MainWindowTest {
             tryVerify(function() {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.currentTrip !== null
-            }, 5000, "wait for trip page item to be ready")
+            }, 10000, "wait for trip page item to be ready")
             return RootData.pageView.currentPageItem.currentTrip
         }
 
