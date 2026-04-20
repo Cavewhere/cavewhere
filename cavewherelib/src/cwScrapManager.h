@@ -96,6 +96,9 @@ public:
     bool isTrackingSketch(cwSketch* sketch) const { return m_sketchDerivedScraps.contains(sketch); }
     int  trackedSketchCount() const { return m_sketchDerivedScraps.size(); }
 
+    Q_INVOKABLE int derivedScrapCount(cwSketch* sketch) const { return m_sketchDerivedScraps.value(sketch).size(); }
+    Q_INVOKABLE int renderScrapCount() const { return m_scrapToRenderId.size(); }
+
 signals:
     void automaticUpdateChanged();
 
@@ -138,6 +141,12 @@ private:
     // Per-sketch tracking: scraps derived from each sketch's outline
     // strokes, keyed by source stroke UUID.
     QHash<cwSketch*, QHash<QUuid, cwScrap*>> m_sketchDerivedScraps;
+
+    // Trip-local bounding box per sketch-derived scrap. The scrap stores
+    // its outline in normalized [0,1] coords, so the raw world-meter box is
+    // kept here — the rasterizer and noteImageResolution both need it at
+    // triangulation time.
+    QHash<cwScrap*, QRectF> m_sketchScrapBoundingBox;
 
     QPointer<cwSketchManager> m_sketchManager;
 

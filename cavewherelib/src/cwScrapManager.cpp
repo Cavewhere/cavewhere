@@ -18,6 +18,8 @@
 #include "cwTriangulateInData.h"
 #include "cwDebug.h"
 #include "cwImageResolution.h"
+#include "cwImageProvider.h"
+#include "cwDiskCacher.h"
 #include "cwLinePlotManager.h"
 #include "cwTaskManagerModel.h"
 #include "cwRegionTreeModel.h"
@@ -36,6 +38,7 @@
 #include "cwSurveyNoteSketchModel.h"
 #include "cwSketchScrapOutlineDetector.h"
 #include "cwSketchScrapOutline.h"
+#include "cwSketchScrapRasterizer.h"
 #include "cwSketchManager.h"
 #include "cwTripLinePlotTask.h"
 #include "cwStation.h"
@@ -360,6 +363,7 @@ void cwScrapManager::scrapDeleted(QObject *scrapObj)
     cwScrap* scrap = static_cast<cwScrap*>(scrapObj);
     addToDeletedScraps(scrap);
     DirtyScraps.remove(scrap); //scrapObj);
+    m_sketchScrapBoundingBox.remove(scrap);
 }
 
 /**
@@ -664,6 +668,7 @@ void cwScrapManager::sketchRemovedHelper(cwSketch* sketch)
     }
 
     for(cwScrap* scrap : std::as_const(it.value())) {
+        m_sketchScrapBoundingBox.remove(scrap);
         detachScrap(scrap);
         scrap->deleteLater();
     }
@@ -686,11 +691,12 @@ void cwScrapManager::releaseSketchLinePlot(cwSketch* sketch)
 
 namespace {
 
-// Detection thresholds for outline-forming strokes. 5 cm snaps near-closed
-// strokes into closed polygons; 5 mm Douglas-Peucker keeps pen detail without
-// bloating the CDT input. Both are placeholders until the plan's
-// stroke-width-relative heuristic lands.
-constexpr double kSketchCloseThresholdMeters    = 0.05;
+// Detection thresholds for outline-forming strokes. 1 m snaps near-closed
+// strokes into closed polygons — generous enough that hand-drawn wall loops
+// at typical paper scales (1:250) close without perfect endpoint alignment;
+// 5 mm Douglas-Peucker keeps pen detail without bloating the CDT input.
+// Both are placeholders until the plan's stroke-width-relative heuristic lands.
+constexpr double kSketchCloseThresholdMeters    = 1.0;
 constexpr double kSketchSimplifyToleranceMeters = 0.005;
 
 QPointF normalizePointToBox(QPointF p, const QRectF& box)
@@ -833,6 +839,7 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
             scrap->setPoints(normalized);
             scrap->setStations(noteStations);
             tracked.insert(outline.sourceStrokeId, scrap);
+            m_sketchScrapBoundingBox.insert(scrap, outlineBox);
             connectScrap(scrap);
             attachScrap(scrap);
             dirtyScraps.append(scrap);
@@ -840,13 +847,21 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
             cwScrap* scrap = it.value();
             const bool pointsChanged = scrap->points() != normalized;
             const bool stationsChanged = scrap->stations() != noteStations;
+            const QRectF previousBox = m_sketchScrapBoundingBox.value(scrap);
+            const bool bboxChanged = previousBox != outlineBox;
             if(pointsChanged) {
                 scrap->setPoints(normalized);
             }
             if(stationsChanged) {
                 scrap->setStations(noteStations);
             }
-            if(pointsChanged || stationsChanged) {
+            if(bboxChanged) {
+                m_sketchScrapBoundingBox.insert(scrap, outlineBox);
+            }
+            // bbox changes re-trigger triangulation so the rasterized texture
+            // tracks the outline even when the normalized outline points are
+            // byte-identical (same shape, shifted or scaled in trip-local).
+            if(pointsChanged || stationsChanged || bboxChanged) {
                 dirtyScraps.append(scrap);
             }
         }
@@ -854,11 +869,25 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
 
     for(auto it = tracked.begin(); it != tracked.end(); ) {
         if(!seen.contains(it.key())) {
+            m_sketchScrapBoundingBox.remove(it.value());
             detachScrap(it.value());
             it.value()->deleteLater();
             it = tracked.erase(it);
         } else {
             ++it;
+        }
+    }
+
+    // Any change to the sketch (new stroke, removed stroke, moved point)
+    // calls into this function, so re-rasterize every surviving tracked
+    // scrap unconditionally. Coarser than an overlap check but much simpler,
+    // and correct: the rasterizer always paints the full stroke set.
+    QSet<cwScrap*> dirtyScrapSet(dirtyScraps.cbegin(), dirtyScraps.cend());
+    for(auto it = tracked.begin(); it != tracked.end(); ++it) {
+        cwScrap* scrap = it.value();
+        if(!dirtyScrapSet.contains(scrap)) {
+            dirtyScraps.append(scrap);
+            dirtyScrapSet.insert(scrap);
         }
     }
 
@@ -1058,15 +1087,56 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setMorphingSettings(m_warpingSettings->data());
 
     if(scrap->parentKind() == cwScrap::SketchParent) {
-        // Identity note-transform + unit DPI collapses cwTriangulateTask's
-        // paper→meters chain, so outline points and station positionOnNote
-        // (both normalized to the same outline bounding box) land in
-        // trip-local meters for the morph inverse-distance step.
+        // cwTriangulateTask::createPointGrid computes grid size as
+        //   sizeOnPaper / noteScale  where sizeOnPaper = imagePx / noteImageResolution
+        // A default-constructed cwNoteTransformationData has scale = 0/0 = NaN,
+        // which collapses the grid and yields zero triangles. So we supply an
+        // explicit 1:1 scale: the rasterizer already produces a texture whose
+        // "paper" is cave-meters (pixelsPerMeter is trip-local), and the
+        // outline / station positionOnNote are normalized to the same outline
+        // bounding box, so paper-meters == cave-meters for this scrap.
+        cwSketch* sketch = scrap->parentSketch();
+        const QRectF bbox = m_sketchScrapBoundingBox.value(scrap);
+
+        QImage rasterized;
+        double pixelsPerMeter = 1.0;
+        if(sketch != nullptr && !bbox.isEmpty()) {
+            rasterized = cwSketchScrapRasterizer::rasterize(sketch, bbox);
+            if(!rasterized.isNull() && bbox.width() > 0.0) {
+                pixelsPerMeter = double(rasterized.width()) / bbox.width();
+            }
+        }
+
         cwImage noteImage;
-        noteImage.setOriginalSize(QSize(1, 1));
+        if(!rasterized.isNull() && Project != nullptr) {
+            // cwTriangulateTask reads its input texture off disk via
+            // cwImageProvider, so publish the rasterized QImage into the
+            // project's shared image cache and hand out the resulting path.
+            // The content hash is folded into the cache key, so identical
+            // rasters land on the same on-disk file and collide harmlessly.
+            const QString pathHint = QStringLiteral("sketch_scrap_%1.png")
+                .arg(sketch->id().toString(QUuid::WithoutBraces));
+            const quint64 hash = cwImageProvider::imageHash(rasterized);
+            const cwDiskCacher::Key key = cwImageProvider::imageCacheKey(
+                pathHint, QStringLiteral("sketch-texture"), hash);
+            const cwDiskCacher::Key written = cwImageProvider::addToImageCache(
+                Project->dataRootDir(), rasterized, key);
+            cwDiskCacher cacher(Project->dataRootDir());
+            noteImage.setOriginalSize(rasterized.size());
+            noteImage.setPath(cacher.filePath(written));
+        } else {
+            noteImage.setOriginalSize(rasterized.isNull() ? QSize(1, 1)
+                                                          : rasterized.size());
+        }
+
+        cwNoteTransformationData identityTransform;
+        identityTransform.north = 0.0;
+        identityTransform.scale.scaleNumerator = {cwUnits::Meters, 1.0, false};
+        identityTransform.scale.scaleDenominator = {cwUnits::Meters, 1.0, false};
+
         data.setNoteImage(noteImage);
-        data.setNoteImageResolution(1.0);
-        data.setNoteTransform({});
+        data.setNoteImageResolution(pixelsPerMeter);
+        data.setNoteTransform(identityTransform);
         data.setNoteStation(scrap->stations());
         if(auto* cave = scrap->parentCave()) {
             data.setStationLookup(cave->stationPositionLookup());
