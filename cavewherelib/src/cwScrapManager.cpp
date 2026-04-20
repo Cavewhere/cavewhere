@@ -36,6 +36,10 @@
 #include "cwSurveyNoteSketchModel.h"
 #include "cwSketchScrapOutlineDetector.h"
 #include "cwSketchScrapOutline.h"
+#include "cwSketchManager.h"
+#include "cwTripLinePlotTask.h"
+#include "cwStation.h"
+#include "cwNoteStation.h"
 #include "cwImage.h"
 
 //Async future
@@ -213,6 +217,56 @@ void cwScrapManager::setFutureManagerToken(cwFutureManagerToken token)
     // if(m_renderScraps) {
     //     m_renderScraps->setFutureManagerToken(token);
     // }
+}
+
+void cwScrapManager::setSketchManager(cwSketchManager *sketchManager)
+{
+    if(m_sketchManager == sketchManager) {
+        return;
+    }
+
+    if(!m_sketchManager.isNull()) {
+        disconnect(m_sketchManager.data(), &cwSketchManager::linePlotUpdated,
+                   this, nullptr);
+        for(auto it = m_sketchLinePlotTrip.begin(); it != m_sketchLinePlotTrip.end(); ++it) {
+            if(!it.value().isNull()) {
+                m_sketchManager->releaseLinePlot(it.value().data());
+            }
+        }
+    }
+    m_sketchLinePlotTrip.clear();
+
+    m_sketchManager = sketchManager;
+
+    if(m_sketchManager.isNull()) {
+        return;
+    }
+
+    connect(m_sketchManager.data(), &cwSketchManager::linePlotUpdated,
+            this, [this](cwTrip* trip) {
+        if(trip == nullptr) {
+            return;
+        }
+        for(auto it = m_sketchDerivedScraps.begin(); it != m_sketchDerivedScraps.end(); ++it) {
+            cwSketch* sketch = it.key();
+            if(sketch != nullptr && sketch->parentTrip() == trip) {
+                updateDerivedScrapsForSketch(sketch);
+            }
+        }
+    });
+
+    for(auto it = m_sketchDerivedScraps.begin(); it != m_sketchDerivedScraps.end(); ++it) {
+        cwSketch* sketch = it.key();
+        if(sketch == nullptr) {
+            continue;
+        }
+        cwTrip* trip = sketch->parentTrip();
+        if(trip == nullptr) {
+            continue;
+        }
+        m_sketchManager->acquireLinePlot(trip);
+        m_sketchLinePlotTrip.insert(sketch, trip);
+    }
 }
 
 void cwScrapManager::setKeywordItemModel(cwKeywordItemModel *keywordItemModel)
@@ -557,12 +611,21 @@ void cwScrapManager::connectSketch(cwSketch* sketch)
     // rowsRemoved — without a destroyed handler the tracking map would retain
     // dangling pointers once the owning model deleteLater's the sketch.
     connect(sketch, &QObject::destroyed, this, [this](QObject* obj) {
-        m_sketchDerivedScraps.remove(static_cast<cwSketch*>(obj));
+        auto* sk = static_cast<cwSketch*>(obj);
+        m_sketchDerivedScraps.remove(sk);
+        releaseSketchLinePlot(sk);
     });
 
     if(auto* model = sketch->strokeModel()) {
         connect(model, &QAbstractItemModel::rowsRemoved,
                 this, [this, sketch]() { updateDerivedScrapsForSketch(sketch); });
+    }
+
+    if(!m_sketchManager.isNull()) {
+        if(cwTrip* trip = sketch->parentTrip()) {
+            m_sketchManager->acquireLinePlot(trip);
+            m_sketchLinePlotTrip.insert(sketch, trip);
+        }
     }
 }
 
@@ -605,6 +668,20 @@ void cwScrapManager::sketchRemovedHelper(cwSketch* sketch)
         scrap->deleteLater();
     }
     m_sketchDerivedScraps.erase(it);
+
+    releaseSketchLinePlot(sketch);
+}
+
+void cwScrapManager::releaseSketchLinePlot(cwSketch* sketch)
+{
+    auto it = m_sketchLinePlotTrip.find(sketch);
+    if(it == m_sketchLinePlotTrip.end()) {
+        return;
+    }
+    if(!m_sketchManager.isNull() && !it.value().isNull()) {
+        m_sketchManager->releaseLinePlot(it.value().data());
+    }
+    m_sketchLinePlotTrip.erase(it);
 }
 
 namespace {
@@ -616,21 +693,89 @@ namespace {
 constexpr double kSketchCloseThresholdMeters    = 0.05;
 constexpr double kSketchSimplifyToleranceMeters = 0.005;
 
-// Normalize a trip-local polygon into its bounding box's [0,1] frame. That's
-// the coordinate system cwScrap expects and the same shape 4c's station
-// anchoring will feed the triangulator.
-QVector<QPointF> normalizePolygonToBoundingBox(const QPolygonF& polygon)
+QPointF normalizePointToBox(QPointF p, const QRectF& box)
 {
-    const QRectF box = polygon.boundingRect();
     const double w = box.width();
     const double h = box.height();
+    return {
+        w > 0.0 ? (p.x() - box.x()) / w : 0.0,
+        h > 0.0 ? (p.y() - box.y()) / h : 0.0
+    };
+}
+
+QVector<QPointF> normalizePolygonToBoundingBox(const QPolygonF& polygon, const QRectF& box)
+{
     QVector<QPointF> out;
     out.reserve(polygon.size());
     for(const QPointF& p : polygon) {
-        const double nx = w > 0.0 ? (p.x() - box.x()) / w : 0.0;
-        const double ny = h > 0.0 ? (p.y() - box.y()) / h : 0.0;
-        out.append({nx, ny});
+        out.append(normalizePointToBox(p, box));
     }
+    return out;
+}
+
+// Build note stations for a sketch-derived outline from the trip's line
+// plot components. A station qualifies if its trip-local position lands
+// inside the outline's bounding box expanded by a margin of the larger
+// dimension — the margin keeps the morph well-conditioned for outlines
+// that hug just inside a wall with stations outside. Loop-broken
+// duplicates collapse to their original name so the global
+// cwStationPositionLookup resolves them.
+//
+// Result is sorted by canonical name so repeated calls with the same
+// station set produce equal QLists — QHash iteration order is not stable
+// across inserts, so unsorted output would spuriously flag "changed"
+// against a prior snapshot.
+QList<cwNoteStation> stationsForOutline(
+    const QList<cwTripLinePlotTask::TripComponent>& components,
+    const QRectF& outlineBoundingBox)
+{
+    QList<cwNoteStation> out;
+    if(!outlineBoundingBox.isValid()) {
+        return out;
+    }
+
+    const double margin = std::max(outlineBoundingBox.width(),
+                                   outlineBoundingBox.height());
+    const QRectF filterBox = outlineBoundingBox.adjusted(-margin, -margin,
+                                                          margin, margin);
+
+    QSet<QString> seenKeys;
+
+    for(const auto& component : components) {
+        const auto positions = component.positions.positions();
+        for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
+            const QVector3D pos = it.value();
+            const QPointF tripLocal(pos.x(), pos.y());
+            if(!filterBox.contains(tripLocal)) {
+                continue;
+            }
+
+            QString name = it.key();
+            const auto remapIt = component.renameRemap.constFind(name);
+            if(remapIt != component.renameRemap.constEnd()) {
+                name = remapIt.value();
+            }
+
+            const QString key = cwStation::canonicalKey(name);
+            // A loop-break pair collapses to the same original name; keep
+            // the first occurrence (morph treats them as one anchor).
+            if(seenKeys.contains(key)) {
+                continue;
+            }
+            seenKeys.insert(key);
+
+            cwNoteStation noteStation;
+            noteStation.setName(name);
+            noteStation.setPositionOnNote(normalizePointToBox(tripLocal, outlineBoundingBox));
+            out.append(noteStation);
+        }
+    }
+
+    std::sort(out.begin(), out.end(),
+              [](const cwNoteStation& a, const cwNoteStation& b) {
+                  return cwStation::canonicalKey(a.name())
+                       < cwStation::canonicalKey(b.name());
+              });
     return out;
 }
 
@@ -651,27 +796,59 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
         kSketchCloseThresholdMeters,
         kSketchSimplifyToleranceMeters);
 
+    QList<cwTripLinePlotTask::TripComponent> components;
+    if(!m_sketchManager.isNull()) {
+        if(cwTrip* trip = sketch->parentTrip()) {
+            components = m_sketchManager->latestLinePlot(trip);
+        }
+    }
+    const bool haveStationSource = !m_sketchManager.isNull();
+
     QHash<QUuid, cwScrap*>& tracked = trackedIt.value();
     QSet<QUuid> seen;
     QList<cwScrap*> dirtyScraps;
 
     for(const auto& outline : outlines) {
+        const QRectF outlineBox = outline.tripLocalPolygon.boundingRect();
+        const QList<cwNoteStation> noteStations = haveStationSource
+            ? stationsForOutline(components, outlineBox)
+            : QList<cwNoteStation>();
+
+        // Empty-station guard: morph needs at least one (local,global) pair,
+        // so outlines with no nearby stations are dropped before they reach
+        // the triangulator. When no station source is wired (unit tests),
+        // scraps are still created so the 4b no-anchor path keeps working.
+        if(haveStationSource && noteStations.isEmpty()) {
+            continue;
+        }
+
         seen.insert(outline.sourceStrokeId);
         const QVector<QPointF> normalized =
-            normalizePolygonToBoundingBox(outline.tripLocalPolygon);
+            normalizePolygonToBoundingBox(outline.tripLocalPolygon, outlineBox);
 
         auto it = tracked.find(outline.sourceStrokeId);
         if(it == tracked.end()) {
             auto* scrap = new cwScrap(sketch);
             scrap->setParentSketch(sketch);
             scrap->setPoints(normalized);
+            scrap->setStations(noteStations);
             tracked.insert(outline.sourceStrokeId, scrap);
             connectScrap(scrap);
             attachScrap(scrap);
             dirtyScraps.append(scrap);
-        } else if(it.value()->points() != normalized) {
-            it.value()->setPoints(normalized);
-            dirtyScraps.append(it.value());
+        } else {
+            cwScrap* scrap = it.value();
+            const bool pointsChanged = scrap->points() != normalized;
+            const bool stationsChanged = scrap->stations() != noteStations;
+            if(pointsChanged) {
+                scrap->setPoints(normalized);
+            }
+            if(stationsChanged) {
+                scrap->setStations(noteStations);
+            }
+            if(pointsChanged || stationsChanged) {
+                dirtyScraps.append(scrap);
+            }
         }
     }
 
@@ -882,14 +1059,15 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
 
     if(scrap->parentKind() == cwScrap::SketchParent) {
         // Identity note-transform + unit DPI collapses cwTriangulateTask's
-        // paper→meters chain, so outline points land at their bounding-box-
-        // normalized coordinates with no paper-side scaling.
+        // paper→meters chain, so outline points and station positionOnNote
+        // (both normalized to the same outline bounding box) land in
+        // trip-local meters for the morph inverse-distance step.
         cwImage noteImage;
         noteImage.setOriginalSize(QSize(1, 1));
         data.setNoteImage(noteImage);
         data.setNoteImageResolution(1.0);
         data.setNoteTransform({});
-        data.setNoteStation({});
+        data.setNoteStation(scrap->stations());
         if(auto* cave = scrap->parentCave()) {
             data.setStationLookup(cave->stationPositionLookup());
             data.setSurveyNetwork(cave->network());

@@ -128,6 +128,10 @@ cwRootData::cwRootData(QObject *parent) :
     SketchManager->setProject(Project);
     SketchManager->setRegionTreeModel(RegionTreeModel);
 
+    // Sketch-parented scraps pull trip-local station positions from the
+    // sketch manager's per-trip line plot pipeline.
+    ScrapManager->setSketchManager(SketchManager);
+
     //Setup the survey import manager
     SurveyImportManager = new cwSurveyImportManager(Project);
     SurveyImportManager->setCavingRegion(Region);

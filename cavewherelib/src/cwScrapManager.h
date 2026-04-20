@@ -41,6 +41,7 @@ class cwRenderScraps;
 class cwKeywordItemModel;
 class cwKeywordItem;
 class cwRenderTexturedItemVisibility;
+class cwSketchManager;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
 #include "cwTriangulatedData.h"
@@ -77,6 +78,7 @@ public:
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
     void setFutureManagerToken(cwFutureManagerToken token);
     void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
+    void setSketchManager(cwSketchManager* sketchManager);
 
     Q_INVOKABLE void setRenderScraps(cwRenderTexturedItems* glScraps);
 
@@ -137,6 +139,13 @@ private:
     // strokes, keyed by source stroke UUID.
     QHash<cwSketch*, QHash<QUuid, cwScrap*>> m_sketchDerivedScraps;
 
+    QPointer<cwSketchManager> m_sketchManager;
+
+    // Trip captured at acquireLinePlot() time so release pairs against the
+    // same trip pointer even if sketch->parentTrip() later changes or the
+    // sketch is reparented before its acquire is balanced.
+    QHash<cwSketch*, QPointer<cwTrip>> m_sketchLinePlotTrip;
+
     void connectNote(cwNote* note);
     void connectScrap(cwScrap* scrap);
     void connectSketch(cwSketch* sketch);
@@ -148,6 +157,7 @@ private:
     void sketchInsertedHelper(cwSketch* sketch);
     void sketchRemovedHelper(cwSketch* sketch);
     void updateDerivedScrapsForSketch(cwSketch* sketch);
+    void releaseSketchLinePlot(cwSketch* sketch);
 
     // Shared render/keyword hookup + teardown for both note- and sketch-
     // parented scraps. The caller handles connectScrap/disconnectScrap and
