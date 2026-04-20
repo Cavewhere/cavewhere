@@ -19,8 +19,11 @@ QQ.Item {
     property Sketch sketch
     property bool isNarrow: false
 
-    property double zoom: 1.0
-    property point pan: Qt.point(0, 0)
+    // Fresh sketches (viewInitialized === false) start centered at 1×; otherwise each sketch remembers its own view.
+    readonly property double zoom: sketch ? sketch.viewState.zoom : 1.0
+    readonly property point pan: (sketch && sketch.viewState.viewInitialized)
+        ? sketch.viewState.pan
+        : Qt.point(width / 2, height / 2)
 
     readonly property int strokeKind: toolbarId.strokeKind
     readonly property double strokeWidth: strokeKind === PenStroke.Wall ? 4.0 : 2.5
@@ -121,17 +124,18 @@ QQ.Item {
     QQ.WheelHandler {
         acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
         onWheel: (event) => {
-            if (event.angleDelta.y === 0) {
+            if (!sketchItemId.sketch || event.angleDelta.y === 0) {
                 return
             }
             const factor = event.angleDelta.y > 0 ? 1.1 : 1.0 / 1.1
             const focus = Qt.point(event.x, event.y)
             const world = sketchItemId._worldPoint(focus)
-            sketchItemId.zoom = sketchItemId.zoom * factor
+            const newZoom = sketchItemId.zoom * factor
             // Re-solve pan so `world` stays under `focus` at the new zoom.
-            const k = worldToScreenId.matrix.m11 * sketchItemId.zoom
-            sketchItemId.pan = Qt.point(focus.x - world.x * k,
-                                        focus.y + world.y * k)
+            const k = worldToScreenId.matrix.m11 * newZoom
+            sketchItemId.sketch.viewState.zoom = newZoom
+            sketchItemId.sketch.viewState.pan = Qt.point(focus.x - world.x * k,
+                                                         focus.y + world.y * k)
         }
     }
 
@@ -147,12 +151,15 @@ QQ.Item {
         property point startWorld: Qt.point(0, 0)
 
         function _applyGesture() {
+            if (!sketchItemId.sketch) {
+                return
+            }
             const newZoom = startZoom * activeScale
             const k = worldToScreenId.matrix.m11 * newZoom
             const c = centroid.position
-            sketchItemId.zoom = newZoom
-            sketchItemId.pan = Qt.point(c.x - startWorld.x * k,
-                                        c.y + startWorld.y * k)
+            sketchItemId.sketch.viewState.zoom = newZoom
+            sketchItemId.sketch.viewState.pan = Qt.point(c.x - startWorld.x * k,
+                                                         c.y + startWorld.y * k)
         }
 
         onActiveChanged: {
@@ -182,10 +189,10 @@ QQ.Item {
         }
 
         onCentroidChanged: {
-            if (!active) {
+            if (!active || !sketchItemId.sketch) {
                 return
             }
-            sketchItemId.pan = Qt.point(
+            sketchItemId.sketch.viewState.pan = Qt.point(
                 sketchItemId.pan.x + centroid.position.x - lastPosition.x,
                 sketchItemId.pan.y + centroid.position.y - lastPosition.y)
             lastPosition = centroid.position
@@ -208,10 +215,10 @@ QQ.Item {
         }
 
         onCentroidChanged: {
-            if (!active) {
+            if (!active || !sketchItemId.sketch) {
                 return
             }
-            sketchItemId.pan = Qt.point(
+            sketchItemId.sketch.viewState.pan = Qt.point(
                 sketchItemId.pan.x + centroid.position.x - lastPosition.x,
                 sketchItemId.pan.y + centroid.position.y - lastPosition.y)
             lastPosition = centroid.position

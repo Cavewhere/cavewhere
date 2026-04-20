@@ -20,6 +20,7 @@
 #include "CaveWhereLibExport.h"
 #include "cwPenStroke.h"
 #include "cwSketchData.h"
+#include "cwSketchViewState.h"
 #include "cwSurvey2DGeometryArtifact.h"
 #include "cwSurveyNetworkArtifact.h"
 
@@ -46,6 +47,7 @@ class CAVEWHERE_LIB_EXPORT cwSketch : public QObject
     Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact WRITE setSurveyNetworkArtifact NOTIFY surveyNetworkArtifactChanged)
     Q_PROPERTY(cwSurvey2DGeometryArtifact* survey2DGeometry READ survey2DGeometry CONSTANT)
     Q_PROPERTY(QString anchorStation READ anchorStation WRITE setAnchorStation NOTIFY anchorStationChanged)
+    Q_PROPERTY(cwSketchViewState* viewState READ viewState CONSTANT)
 
 public:
     enum ViewType {
@@ -81,6 +83,8 @@ public:
     // single-component auto-pick fires). Persisted across loads.
     QString anchorStation() const { return m_anchorStation; }
     void setAnchorStation(const QString &name);
+
+    cwSketchViewState *viewState() const { return m_viewState; }
 
     const QVector<cwPenStroke> &strokes() const { return m_strokes; }
     void setStrokes(const QVector<cwPenStroke> &strokes);
@@ -137,9 +141,10 @@ private:
     QString  m_iconImagePath;
     QString  m_anchorStation;
 
-    cwPenStrokeModel *m_strokeModel = nullptr;
-    QUndoStack       *m_undoStack   = nullptr;
-    cwKeywordModel   *m_keywordModel = nullptr;
+    cwPenStrokeModel  *m_strokeModel = nullptr;
+    QUndoStack        *m_undoStack   = nullptr;
+    cwKeywordModel    *m_keywordModel = nullptr;
+    cwSketchViewState *m_viewState   = nullptr;
 
     cwAbstractScrapViewMatrix *m_viewMatrix      = nullptr;
     cwMatrix4x4Artifact       *m_matrixArtifact  = nullptr;

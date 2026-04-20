@@ -12,6 +12,7 @@
 //Our includes
 #include "cwSketch.h"
 #include "cwSketchData.h"
+#include "cwSketchViewState.h"
 #include "cwPenStrokeModel.h"
 #include "cwScale.h"
 #include "cwKeywordModel.h"
@@ -66,6 +67,7 @@ cwSketch::cwSketch(QObject *parent)
       m_strokeModel(new cwPenStrokeModel(this)),
       m_undoStack(new QUndoStack(this)),
       m_keywordModel(new cwKeywordModel(this)),
+      m_viewState(new cwSketchViewState(this)),
       m_matrixArtifact(new cwMatrix4x4Artifact(this)),
       m_geometryRule(new cwSurvey2DGeometryRule(this))
 {

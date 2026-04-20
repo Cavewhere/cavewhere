@@ -41,14 +41,14 @@ Item {
                    "sketchCanvas.grid should be wired")
 
             // Baseline gridOrigin with pan=(0,0) so we can assert movement.
-            sketchItemId.zoom = 1.0
-            sketchItemId.pan = Qt.point(0, 0)
+            sketchId.viewState.zoom = 1.0
+            sketchId.viewState.pan = Qt.point(0, 0)
             tryVerify(() => sketchCanvas.grid.gridOrigin.x === 0
                           && sketchCanvas.grid.gridOrigin.y === 0,
                       2000, "gridOrigin is world (0,0) when pan is zero")
 
-            sketchItemId.zoom = 2.0
-            sketchItemId.pan = Qt.point(50, 50)
+            sketchId.viewState.zoom = 2.0
+            sketchId.viewState.pan = Qt.point(50, 50)
 
             tryVerify(() => sketchCanvas.grid.viewScale === 0.5,
                       2000, "grid viewScale should be inverse of sketch zoom")
