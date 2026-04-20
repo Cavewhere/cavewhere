@@ -28,6 +28,7 @@ QQ.Rectangle {
     readonly property bool _showNarrowToolbar: noteGallery.isNarrow && noteGallery.noteCount > 0
     property alias _notePickerDrawer: notePickerDrawer
     property alias _notePickerList: notePickerList
+    property bool _pendingAutoSelect: false
 
     readonly property string mode: {
         switch(state) {
@@ -66,8 +67,14 @@ QQ.Rectangle {
 
     function addSketch() {
         if(noteGallery.notesModel !== null) {
+            noteGallery._pendingAutoSelect = true
             noteGallery.notesModel.addSketch(Sketch.Plan)
         }
+    }
+
+    function addFiles(urls) {
+        noteGallery._pendingAutoSelect = true
+        noteGallery.imagesAdded(urls)
     }
 
     function exitCarpetMode() {
@@ -86,9 +93,21 @@ QQ.Rectangle {
 
     LoadNotesWidget {
         id: loadNoteWidgetId
-        onFilesSelected: (images) => noteGallery.imagesAdded(images)
+        onFilesSelected: (images) => noteGallery.addFiles(images)
         onSketchRequested: noteGallery.addSketch()
         visible: false
+    }
+
+    QQ.Connections {
+        target: noteGallery.notesModel
+        function onRowsInserted(parent, first, last) {
+            if (noteGallery._pendingAutoSelect) {
+                noteGallery._pendingAutoSelect = false
+                // Defer: ListView shifts its own currentIndex while processing
+                // rowsInserted; setting it synchronously gets clobbered.
+                Qt.callLater(() => { galleryView.currentIndex = first })
+            }
+        }
     }
 
     NotesGalleryNarrowToolbar {
@@ -464,7 +483,7 @@ QQ.Rectangle {
 
                 AddNoteMenu {
                     id: addNoteMenuId
-                    onFilesRequested: (files) => noteGallery.imagesAdded(files)
+                    onFilesRequested: (files) => noteGallery.addFiles(files)
                     onSketchRequested: noteGallery.addSketch()
                 }
             }

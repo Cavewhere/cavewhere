@@ -24,6 +24,7 @@ QQ.Item {
     property bool showNotes: false
     property SurveyNotesConcatModel notesModel: null
     property int currentNoteIndex: -1
+    property bool _pendingAutoSelect: false
 
     signal collapseClicked();
     signal noteClicked(int noteIndex)
@@ -49,6 +50,19 @@ QQ.Item {
 
         onLastChunkAdded: {
             editorModel.focusOnLastChunk()
+        }
+    }
+
+    QQ.Connections {
+        target: clipArea.notesModel
+        function onRowsInserted(parent, first, last) {
+            if (clipArea._pendingAutoSelect) {
+                clipArea._pendingAutoSelect = false
+                // Defer: parent listeners (notably NotesGallery.galleryView)
+                // shift their currentIndex while processing rowsInserted;
+                // emitting synchronously gets clobbered.
+                Qt.callLater(() => clipArea.noteClicked(first))
+            }
         }
     }
 
@@ -225,6 +239,12 @@ QQ.Item {
                             AddNoteMenuButton {
                                 objectName: "addNoteMenuButton"
                                 notesModel: clipArea.notesModel
+                                onSketchRequested: {
+                                    if (clipArea.notesModel !== null) {
+                                        clipArea.noteClicked(clipArea.notesModel.rowCount() - 1)
+                                    }
+                                }
+                                onFilesRequested: clipArea._pendingAutoSelect = true
                             }
                         }
                     }
