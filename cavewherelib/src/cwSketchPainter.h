@@ -30,7 +30,8 @@ public:
 
     struct PaintContext {
         QRectF viewport;
-        // World→item transform: mapMatrix · scale(userZoom) · translate(pan).
+        // Strokes and line-plot geometry are world-Y-up; Qt paint devices are
+        // Y-down. Must include the Y-flip (determinant() < 0) or paint asserts.
         QTransform worldToItem;
         // mapMatrix(0,0). Kept separate from worldToItem because strokes are
         // specified in screen pixels and want compensation for mapScale but
@@ -46,6 +47,11 @@ public:
         // and user strokes so pen input overlays the reference plot.
         const cwAbstractSketchPainterPathModel *linePlot = nullptr;
     };
+
+    // World-metre → destination-pixel transform for paper-bound render
+    // targets (PDF/SVG, rasterised thumbnail). Mirrors cwWorldToScreenMatrix
+    // as a pure function for callers that don't own a cwWorldToScreenMatrix.
+    static QTransform paperTransform(double mapScale, double pixelDensity);
 
     static void paint(cwSketchDraw *draw, const PaintContext &context);
 };

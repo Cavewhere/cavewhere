@@ -90,11 +90,21 @@ void drawText(cwSketchDraw *draw,
 
 } // namespace
 
+QTransform cwSketchPainter::paperTransform(double mapScale, double pixelDensity)
+{
+    constexpr double meterToMilliMeter = 1000.0;
+    const double k = mapScale * meterToMilliMeter * pixelDensity;
+    return QTransform::fromScale(k, -k);
+}
+
 void cwSketchPainter::paint(cwSketchDraw *draw, const PaintContext &context)
 {
     Q_ASSERT(draw != nullptr);
+    // Paths are stored world-Y-up; worldToItem must include the Y-flip.
+    Q_ASSERT(context.worldToItem.determinant() < 0.0);
 
     draw->save();
+    draw->setTransform(context.worldToItem);
 
     if (!context.viewport.isNull()) {
         draw->setClipRect(context.viewport);

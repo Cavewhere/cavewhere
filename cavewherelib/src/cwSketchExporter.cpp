@@ -10,9 +10,12 @@
 #include "cwSketchPainter.h"
 #include "cwSketchDrawQPainter.h"
 #include "cwAbstractSketchPainterPathModel.h"
+#include "cwScale.h"
+#include "cwSketch.h"
 
 //Qt includes
 #include <QFile>
+#include <QPaintDevice>
 #include <QPainter>
 #include <QPdfWriter>
 #include <QSvgGenerator>
@@ -66,7 +69,14 @@ void cwSketchExporter::paintTo(QPaintDevice *device)
     QPainter painter(device);
     cwSketchDrawQPainter draw(&painter);
 
+    const double paperScale = m_sketch ? m_sketch->mapScale()->scale()
+                                       : 1.0 / 250.0;
+    const int rawDpi = device->logicalDpiX();
+    const double pixelDensity = (rawDpi > 0 ? double(rawDpi) : 96.0) / 25.4;
+
     cwSketchPainter::PaintContext ctx;
-    ctx.strokes = m_strokeModel;
+    ctx.worldToItem = cwSketchPainter::paperTransform(paperScale, pixelDensity);
+    ctx.mapScale    = paperScale;
+    ctx.strokes     = m_strokeModel;
     cwSketchPainter::paint(&draw, ctx);
 }

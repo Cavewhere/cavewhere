@@ -17,6 +17,7 @@
 #include <QLoggingCategory>
 #include <QPainter>
 #include <QRectF>
+#include <QTransform>
 #include <QUrl>
 
 Q_LOGGING_CATEGORY(lcSketchManager, "cw.sketch.manager")
@@ -172,21 +173,23 @@ QImage cwSketchManager::renderIcon(const cwSketch* sketch, int edgePixels)
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    // Centre the stroke bbox inside the square image.
+    // Centre the bbox and Y-flip so world north (largest Y) lands at image top.
     const double offsetX = (edgePixels - world.width()  * zoom) * 0.5;
     const double offsetY = (edgePixels - world.height() * zoom) * 0.5;
-    painter.translate(offsetX - world.left() * zoom,
-                      offsetY - world.top()  * zoom);
-    painter.scale(zoom, zoom);
+    QTransform worldToItem;
+    worldToItem.translate(offsetX - world.left()   * zoom,
+                          offsetY + world.bottom() * zoom);
+    worldToItem.scale(zoom, -zoom);
 
     cwSketchPainterPathModel pathModel;
     pathModel.setStrokeModel(sketch->strokeModel());
 
     cwSketchDrawQPainter draw(&painter);
     cwSketchPainter::PaintContext ctx;
-    ctx.viewport = world;
-    ctx.mapScale = zoom;
-    ctx.strokes  = &pathModel;
+    ctx.viewport    = world;
+    ctx.worldToItem = worldToItem;
+    ctx.mapScale    = zoom;
+    ctx.strokes     = &pathModel;
     cwSketchPainter::paint(&draw, ctx);
 
     painter.end();

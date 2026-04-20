@@ -151,7 +151,6 @@ void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
 
     painter->save();
     cwSketchDrawCanvas draw(painter);
-    draw.setTransform(m_worldToItem);
 
     cwSketchPainter::PaintContext ctx;
     ctx.viewport       = m_worldViewport;
