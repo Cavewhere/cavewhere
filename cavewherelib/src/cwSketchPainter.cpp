@@ -103,10 +103,15 @@ void drawText(cwSketchDraw *draw,
 
 } // namespace
 
-QTransform cwSketchPainter::paperTransform(double mapScale, double pixelDensity)
+double cwSketchPainter::pixelsPerMeterFromPaperScale(double paperScale, double dpi)
 {
-    constexpr double meterToMilliMeter = 1000.0;
-    const double k = mapScale * meterToMilliMeter * pixelDensity;
+    constexpr double kInchesPerMeter = 1000.0 / 25.4;
+    return paperScale * dpi * kInchesPerMeter;
+}
+
+QTransform cwSketchPainter::paperTransform(double mapScale, double dpi)
+{
+    const double k = pixelsPerMeterFromPaperScale(mapScale, dpi);
     return QTransform::fromScale(k, -k);
 }
 

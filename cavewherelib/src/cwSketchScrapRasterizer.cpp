@@ -21,18 +21,6 @@
 #include <algorithm>
 #include <cmath>
 
-namespace {
-
-// Paper-inch → cave-meter scaling at 1:mapScale is:
-//   pixels-per-cave-meter = DPI × (inches / meter) × paperScale
-// where `paperScale` is the unitless ratio returned by cwScale::scale()
-// (e.g. 1/250 for a 1:250 sketch). Matches cwSketchPainter::paperTransform's
-// k = mapScale · 1000 · (DPI / 25.4), just inlined to dodge the QTransform
-// round-trip.
-constexpr double kInchesPerMeter = 1000.0 / 25.4;
-
-} // namespace
-
 QImage cwSketchScrapRasterizer::rasterize(const cwSketch *sketch,
                                           const QRectF   &tripLocalBoundingBox,
                                           int             maxPixelDimension)
@@ -47,7 +35,8 @@ QImage cwSketchScrapRasterizer::rasterize(const cwSketch *sketch,
         return QImage();
     }
 
-    const double basePpm = paperScale * kTargetDPI * kInchesPerMeter;
+    const double basePpm =
+        cwSketchPainter::pixelsPerMeterFromPaperScale(paperScale, kTargetDPI);
     if(basePpm <= 0.0) {
         return QImage();
     }

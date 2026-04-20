@@ -63,10 +63,16 @@ public:
         double linePlotTextScale = 1.0;
     };
 
+    // Cave-metre → destination-pixel scalar at a given paper scale and DPI.
+    //   pixels-per-cave-metre = paperScale × dpi × (1000 / 25.4)
+    // paperTransform() wraps this into a Y-flipped QTransform for paint
+    // devices; rasterisers that want the bare scalar call this directly.
+    static double pixelsPerMeterFromPaperScale(double paperScale, double dpi);
+
     // World-metre → destination-pixel transform for paper-bound render
     // targets (PDF/SVG, rasterised thumbnail). Mirrors cwWorldToScreenMatrix
     // as a pure function for callers that don't own a cwWorldToScreenMatrix.
-    static QTransform paperTransform(double mapScale, double pixelDensity);
+    static QTransform paperTransform(double mapScale, double dpi);
 
     static void paint(cwSketchDraw *draw, const PaintContext &context);
 };

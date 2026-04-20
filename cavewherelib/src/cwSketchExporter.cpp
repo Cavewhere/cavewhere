@@ -72,10 +72,10 @@ void cwSketchExporter::paintTo(QPaintDevice *device)
     const double paperScale = m_sketch ? m_sketch->mapScale()->scale()
                                        : 1.0 / 250.0;
     const int rawDpi = device->logicalDpiX();
-    const double pixelDensity = (rawDpi > 0 ? double(rawDpi) : 96.0) / 25.4;
+    const double dpi = rawDpi > 0 ? double(rawDpi) : 96.0;
 
     cwSketchPainter::PaintContext ctx;
-    ctx.worldToItem = cwSketchPainter::paperTransform(paperScale, pixelDensity);
+    ctx.worldToItem = cwSketchPainter::paperTransform(paperScale, dpi);
     ctx.mapScale    = paperScale;
     ctx.strokes     = m_strokeModel;
     ctx.linePlotTextScale = paperScale / cwSketchPainter::LinePlotReferenceMapScaleRatio;

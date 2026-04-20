@@ -14,15 +14,15 @@
 #include "cwPenStroke.h"
 #include "cwScale.h"
 #include "cwSketch.h"
+#include "cwSketchPainter.h"
 #include "cwSketchScrapRasterizer.h"
 
 namespace {
 
-constexpr double kInchesPerMeter = 1000.0 / 25.4;
-
 double expectedPpm(double paperScale)
 {
-    return paperScale * cwSketchScrapRasterizer::kTargetDPI * kInchesPerMeter;
+    return cwSketchPainter::pixelsPerMeterFromPaperScale(
+        paperScale, cwSketchScrapRasterizer::kTargetDPI);
 }
 
 // Same default cwSketch ships with: 1:250 paper scale from

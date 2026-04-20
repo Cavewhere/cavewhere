@@ -52,6 +52,14 @@
 #include <algorithm>
 #include <ranges>
 
+namespace {
+// cwImageProvider cache-key prefix used for the rasterised texture that
+// backs every sketch-derived scrap. The prefix + content hash form a
+// namespace within cwDiskCacher; identical rasters collide harmlessly.
+inline const QString kSketchTextureCacheKeyPrefix =
+    QStringLiteral("sketch-texture");
+} // namespace
+
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
     LinePlotManager(nullptr),
@@ -1115,7 +1123,7 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
                 .arg(sketch->id().toString(QUuid::WithoutBraces));
             const quint64 hash = cwImageProvider::imageHash(rasterized);
             const cwDiskCacher::Key key = cwImageProvider::imageCacheKey(
-                pathHint, QStringLiteral("sketch-texture"), hash);
+                pathHint, kSketchTextureCacheKeyPrefix, hash);
             const cwDiskCacher::Key written = cwImageProvider::addToImageCache(
                 Project->dataRootDir(), rasterized, key);
             cwDiskCacher cacher(Project->dataRootDir());
