@@ -7,6 +7,8 @@
 
 //Our includes
 #include "cwScrap.h"
+#include "cwSketch.h"
+#include "cwTrip.h"
 #include "cwMath.h"
 #include "cwTrip.h"
 #include "cwCave.h"
@@ -929,10 +931,45 @@ void cwScrap::setParentNote(cwNote* note) {
 
         ParentNote = note;
 
-        // if(ParentNote != nullptr) {
-        //     ParentCave = parentNote()->parentCave();
-        // }
+        // A scrap has exactly one parent kind; attaching to a note detaches
+        // any sketch parent.
+        if(note != nullptr && m_parentSketch != nullptr) {
+            disconnect(m_parentSketch, nullptr, this, nullptr);
+            m_parentSketch = nullptr;
+        }
     }
+}
+
+void cwScrap::setParentSketch(cwSketch* sketch) {
+    if(m_parentSketch != sketch) {
+        if(m_parentSketch != nullptr) {
+            disconnect(m_parentSketch, nullptr, this, nullptr);
+        }
+        m_parentSketch = sketch;
+
+        if(sketch != nullptr && ParentNote != nullptr) {
+            disconnect(ParentNote, nullptr, this, nullptr);
+            ParentNote = nullptr;
+        }
+    }
+}
+
+cwTrip* cwScrap::parentTrip() const {
+    if(m_parentSketch != nullptr) {
+        return m_parentSketch->parentTrip();
+    }
+    if(ParentNote != nullptr) {
+        return ParentNote->parentTrip();
+    }
+    return nullptr;
+}
+
+// Routes through whichever parent is set; returns nullptr when the scrap
+// has no parent, when the parent isn't yet attached to a trip, or when
+// the trip has no cave.
+cwCave* cwScrap::parentCave() const {
+    cwTrip* trip = parentTrip();
+    return trip == nullptr ? nullptr : trip->parentCave();
 }
 
 

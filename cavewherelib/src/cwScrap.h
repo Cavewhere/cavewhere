@@ -36,6 +36,8 @@ class cwRunningProfileScrapViewMatrix;
 class cwProjectedProfileScrapViewMatrix;
 class cwNote;
 class cwCave;
+class cwTrip;
+class cwSketch;
 class cwKeywordModel;
 class cwScrapEditingScope;
 
@@ -67,6 +69,12 @@ public:
         ProjectedProfile = cwScrapType::ProjectedProfile
     };
     Q_ENUM(ScrapType);
+
+    enum ParentKind {
+        NoteParent,
+        SketchParent
+    };
+    Q_ENUM(ParentKind);
 
     enum StationDataRole {
         StationName,
@@ -117,7 +125,12 @@ public:
     void setParentNote(cwNote* trip);
     cwNote* parentNote() const;
 
-    // void setParentCave(cwCave* cave);
+    void setParentSketch(cwSketch* sketch);
+    cwSketch* parentSketch() const;
+
+    ParentKind parentKind() const;
+
+    cwTrip* parentTrip() const;
     cwCave* parentCave() const;
 
     cwAbstractScrapViewMatrix* viewMatrix() const;
@@ -284,6 +297,7 @@ private:
 
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;
+    cwSketch* m_parentSketch = nullptr;
     // cwCave* ParentCave;
 
     //For rendering, points in note coordinates
@@ -417,12 +431,12 @@ inline bool cwScrap::calculateNoteTransform() const {
     return CalculateNoteTransform;
 }
 
-/**
-    \brief Gets the parent cave
-  */
-inline cwCave *cwScrap::parentCave() const {
-    return ParentNote->parentCave();
-    // return ParentCave;
+inline cwSketch *cwScrap::parentSketch() const {
+    return m_parentSketch;
+}
+
+inline cwScrap::ParentKind cwScrap::parentKind() const {
+    return m_parentSketch != nullptr ? SketchParent : NoteParent;
 }
 
 inline cwAbstractScrapViewMatrix *cwScrap::viewMatrix() const
