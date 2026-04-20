@@ -212,6 +212,13 @@ void cwSketchManager::writeIcon(cwSketch* sketch)
         return;
     }
 
+    // Without a project we have no persistent cache directory; writing with
+    // an empty QDir lands under cwd/.cw_cache, polluting the source tree for
+    // tests that instantiate a bare sketch manager.
+    if (m_project == nullptr) {
+        return;
+    }
+
     const QImage icon = renderIcon(sketch);
     if (icon.isNull()) {
         sketch->setIconImagePath(QString());
@@ -243,7 +250,7 @@ void cwSketchManager::writeIcon(cwSketch* sketch)
 
 void cwSketchManager::updateIconFromCache(cwSketch* sketch)
 {
-    if (sketch == nullptr) {
+    if (sketch == nullptr || m_project == nullptr) {
         return;
     }
 
