@@ -26,7 +26,13 @@ QQ.Item {
         : Qt.point(width / 2, height / 2)
 
     readonly property int strokeKind: toolbarId.strokeKind
-    readonly property double strokeWidth: strokeKind === PenStroke.Wall ? 4.0 : 2.5
+    readonly property double strokeWidth: {
+        switch (strokeKind) {
+        case PenStroke.Wall: return 4.0
+        case PenStroke.ScrapOutline: return 3.0
+        default: return 2.5
+        }
+    }
 
     property int _activeStrokeIndex: -1
 

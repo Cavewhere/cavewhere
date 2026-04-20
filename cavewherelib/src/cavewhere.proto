@@ -427,6 +427,7 @@ message PenStroke {
     enum Kind {
         Wall = 0;
         Feature = 1;
+        ScrapOutline = 2;
     }
     optional Kind kind = 1;
     optional double width = 2;

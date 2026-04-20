@@ -25,7 +25,8 @@ class CAVEWHERE_LIB_EXPORT cwPenStroke {
 public:
     enum Kind {
         Wall = 0,
-        Feature = 1
+        Feature = 1,
+        ScrapOutline = 2
     };
     Q_ENUM(Kind)
 

@@ -53,6 +53,19 @@ QC.Frame {
             }
         }
 
+        QC.RadioButton {
+            id: scrapOutlineButtonId
+            objectName: "scrapOutlineButton"
+            text: "Scrap Outline"
+            checked: toolbarId.strokeKind === PenStroke.ScrapOutline
+            QC.ButtonGroup.group: kindGroupId
+            onToggled: {
+                if (checked) {
+                    toolbarId.strokeKind = PenStroke.ScrapOutline
+                }
+            }
+        }
+
         QC.Button {
             id: undoButtonId
             objectName: "undoButton"
