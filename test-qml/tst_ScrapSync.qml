@@ -404,13 +404,19 @@ MainWindowTest {
         }
 
         function enterCarpetMode() {
-            let gallery = noteGallery()
-            if (gallery.mode !== "CARPET") {
-                mouseClick(carpetButton())
-            }
-
+            // Click is re-issued every ~500ms if mode hasn't settled, since
+            // a click can be dropped when the gallery's child items are still
+            // mid-instantiation after a forced rebind or page rebuild.
+            let attempts = 0
             tryVerifyWithDiagnostics(() => {
-                return gallery.mode === "CARPET"
+                if (noteGallery().mode === "CARPET") {
+                    return true
+                }
+                if (attempts % 10 === 0) {
+                    mouseClick(carpetButton())
+                }
+                attempts += 1
+                return false
             }, 10000, "enter carpet mode")
         }
 
@@ -472,13 +478,7 @@ MainWindowTest {
                 return
             }
 
-            if (gallery.mode !== "CARPET") {
-                mouseClick(carpetButton())
-            }
-
-            tryVerifyWithDiagnostics(() => {
-                return gallery.mode === "CARPET"
-            }, 10000, "enter carpet mode")
+            enterCarpetMode()
 
             let currentScrapView = scrapView()
             tryVerifyWithDiagnostics(() => {
