@@ -53,7 +53,9 @@ TEST_CASE("cwTaskManagerModel isIdle and becameIdle signal", "[cwTaskManagerMode
         task.start();
         task.waitToFinish();
 
-        QCoreApplication::processEvents();
+        if (becameIdleSpy.isEmpty()) {
+            becameIdleSpy.wait(2000);
+        }
 
         CHECK(model.isIdle() == true);
         CHECK(becameIdleSpy.size() == 1);
