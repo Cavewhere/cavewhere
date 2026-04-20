@@ -346,6 +346,8 @@ if(BUILD_TESTING)
         SOURCES
             testlib/LoadProjectHelper.cpp
             testlib/LoadProjectHelper.h
+            testlib/cwSketchTestHelpers.cpp
+            testlib/cwSketchTestHelpers.h
             QQuickGit/tests/lfs/LfsServer.cpp
             QQuickGit/tests/lfs/LfsServer.h
         QML_FILES
