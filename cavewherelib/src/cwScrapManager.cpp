@@ -1087,14 +1087,11 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setMorphingSettings(m_warpingSettings->data());
 
     if(scrap->parentKind() == cwScrap::SketchParent) {
-        // cwTriangulateTask::createPointGrid computes grid size as
-        //   sizeOnPaper / noteScale  where sizeOnPaper = imagePx / noteImageResolution
-        // A default-constructed cwNoteTransformationData has scale = 0/0 = NaN,
-        // which collapses the grid and yields zero triangles. So we supply an
-        // explicit 1:1 scale: the rasterizer already produces a texture whose
-        // "paper" is cave-meters (pixelsPerMeter is trip-local), and the
-        // outline / station positionOnNote are normalized to the same outline
-        // bounding box, so paper-meters == cave-meters for this scrap.
+        // The rasterizer produces a texture whose "paper" is cave-meters
+        // (pixelsPerMeter is trip-local), and the outline / station
+        // positionOnNote are normalized to the same outline bounding box —
+        // so paper-meters == cave-meters for this scrap, which is exactly
+        // what cwNoteTransformationData's default (1:1, north=0) gives us.
         cwSketch* sketch = scrap->parentSketch();
         const QRectF bbox = m_sketchScrapBoundingBox.value(scrap);
 
@@ -1129,14 +1126,9 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
                                                           : rasterized.size());
         }
 
-        cwNoteTransformationData identityTransform;
-        identityTransform.north = 0.0;
-        identityTransform.scale.scaleNumerator = {cwUnits::Meters, 1.0, false};
-        identityTransform.scale.scaleDenominator = {cwUnits::Meters, 1.0, false};
-
         data.setNoteImage(noteImage);
         data.setNoteImageResolution(pixelsPerMeter);
-        data.setNoteTransform(identityTransform);
+        data.setNoteTransform({});
         data.setNoteStation(scrap->stations());
         if(auto* cave = scrap->parentCave()) {
             data.setStationLookup(cave->stationPositionLookup());
