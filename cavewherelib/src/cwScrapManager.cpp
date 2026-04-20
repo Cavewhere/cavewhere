@@ -31,6 +31,9 @@
 #include "cwTriangulateWarping.h"
 #include "cwTriangulateWarpingSettings.h"
 #include "cwSaveLoad.h"
+#include "cwSketch.h"
+#include "cwPenStrokeModel.h"
+#include "cwSurveyNoteSketchModel.h"
 
 //Async future
 #include "asyncfuture.h"
@@ -366,6 +369,14 @@ void cwScrapManager::handleRegionReset()
                 foreach(cwNote* note, trip->notes()->notes()) {
                     scrapInsertedHelper(note, 0, note->scraps().size() - 1);
                 }
+                if(auto* sketchModel = trip->notesSketch()) {
+                    for(QObject* obj : sketchModel->notes()) {
+                        if(auto* sketch = qobject_cast<cwSketch*>(obj)) {
+                            connectSketch(sketch);
+                            sketchInsertedHelper(sketch);
+                        }
+                    }
+                }
             }
         }
     }
@@ -397,6 +408,14 @@ void cwScrapManager::inserted(QModelIndex parent, int begin, int end)
         if(RegionModel->isNote(parent)) {
             scrapInsertedHelper(RegionModel->note(parent), begin, end);
         }
+    } else if(RegionModel->isNotesSketch(parent)) {
+        for(int i = begin; i <= end; i++) {
+            QModelIndex idx = RegionModel->index(i, 0, parent);
+            if(auto* sketch = idx.data(cwRegionTreeModel::ObjectRole).value<cwSketch*>()) {
+                connectSketch(sketch);
+                sketchInsertedHelper(sketch);
+            }
+        }
     }
 }
 
@@ -422,6 +441,14 @@ void cwScrapManager::removed(QModelIndex parent, int begin, int end)
 
         if(RegionModel->isNote(parent)) {
             scrapRemovedHelper(RegionModel->note(parent), begin, end);
+        }
+    } else if(RegionModel->isNotesSketch(parent)) {
+        for(int i = begin; i <= end; i++) {
+            QModelIndex idx = RegionModel->index(i, 0, parent);
+            if(auto* sketch = idx.data(cwRegionTreeModel::ObjectRole).value<cwSketch*>()) {
+                sketchRemovedHelper(sketch);
+                disconnectSketch(sketch);
+            }
         }
     }
 }
@@ -508,6 +535,64 @@ void cwScrapManager::disconnectScrap(cwScrap* scrap)
     disconnect(scrap, &cwScrap::editingChanged, this, nullptr);
     disconnect(scrap, &cwScrap::viewMatrixChanged, this, nullptr);
     disconnect(scrap->viewMatrix(), &cwAbstractScrapViewMatrix::matrixChanged, this, nullptr);
+}
+
+void cwScrapManager::connectSketch(cwSketch* sketch)
+{
+    // Guard against double-connect: handleRegionReset can run after rows have
+    // already been wired via inserted(), and modelReset can re-walk the tree.
+    if(sketch == nullptr || m_sketchDerivedScraps.contains(sketch)) {
+        return;
+    }
+
+    connect(sketch, &cwSketch::strokesReset,
+            this, [this, sketch]() { updateDerivedScrapsForSketch(sketch); });
+    connect(sketch, &cwSketch::strokeEnded,
+            this, [this, sketch]() { updateDerivedScrapsForSketch(sketch); });
+
+    // cwSurveyNoteModelBase::clearNotes uses beginResetModel and never fires
+    // rowsRemoved — without a destroyed handler the tracking map would retain
+    // dangling pointers once the owning model deleteLater's the sketch.
+    connect(sketch, &QObject::destroyed, this, [this](QObject* obj) {
+        m_sketchDerivedScraps.remove(static_cast<cwSketch*>(obj));
+    });
+
+    if(auto* model = sketch->strokeModel()) {
+        connect(model, &QAbstractItemModel::rowsRemoved,
+                this, [this, sketch]() { updateDerivedScrapsForSketch(sketch); });
+    }
+}
+
+void cwScrapManager::disconnectSketch(cwSketch* sketch)
+{
+    if(sketch == nullptr) {
+        return;
+    }
+    disconnect(sketch, nullptr, this, nullptr);
+    if(auto* model = sketch->strokeModel()) {
+        disconnect(model, nullptr, this, nullptr);
+    }
+}
+
+void cwScrapManager::sketchInsertedHelper(cwSketch* sketch)
+{
+    if(sketch == nullptr) {
+        return;
+    }
+    m_sketchDerivedScraps.insert(sketch, {});
+}
+
+void cwScrapManager::sketchRemovedHelper(cwSketch* sketch)
+{
+    if(sketch == nullptr) {
+        return;
+    }
+    m_sketchDerivedScraps.remove(sketch);
+}
+
+void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
+{
+    emit sketchDerivedScrapsUpdated(sketch);
 }
 
 /**

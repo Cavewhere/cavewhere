@@ -13,6 +13,8 @@
 #include <QObject>
 #include <QModelIndex>
 #include <QSet>
+#include <QHash>
+#include <QUuid>
 #include <QWeakPointer>
 #include <QPointer>
 #include <QMetaObject>
@@ -26,6 +28,7 @@ class cwTrip;
 class cwSurveyNoteModel;
 class cwScrap;
 class cwNote;
+class cwSketch;
 class cwTriangulateTask;
 class cwProject;
 class cwGLScraps;
@@ -88,8 +91,15 @@ public:
 
     cwTriangulateWarping* warpingSettings() const { return m_warpingSettings; }
 
+    bool isTrackingSketch(cwSketch* sketch) const { return m_sketchDerivedScraps.contains(sketch); }
+    int  trackedSketchCount() const { return m_sketchDerivedScraps.size(); }
+
 signals:
     void automaticUpdateChanged();
+
+    // Fires whenever stroke-level state changes for a tracked sketch; downstream
+    // consumers (and tests) use this to observe the diff pipeline.
+    void sketchDerivedScrapsUpdated(cwSketch* sketch);
 
 public slots:
     void updateAllScraps();
@@ -123,11 +133,21 @@ private:
     std::unique_ptr<class cwTriangulateWarpingSettings> m_warpingSettingsStore;
     QMetaObject::Connection m_pathReadyConnection;
 
+    // Per-sketch tracking: scraps derived from each sketch's outline
+    // strokes, keyed by source stroke UUID.
+    QHash<cwSketch*, QHash<QUuid, cwScrap*>> m_sketchDerivedScraps;
+
     void connectNote(cwNote* note);
     void connectScrap(cwScrap* scrap);
+    void connectSketch(cwSketch* sketch);
 
     void disconnectNote(cwNote* note);
     void disconnectScrap(cwScrap* scrap);
+    void disconnectSketch(cwSketch* sketch);
+
+    void sketchInsertedHelper(cwSketch* sketch);
+    void sketchRemovedHelper(cwSketch* sketch);
+    void updateDerivedScrapsForSketch(cwSketch* sketch);
 
     void updateScrapGeometry(QList<cwScrap *> scraps = QList<cwScrap*>());
     void updateScrapGeometryHelper(QList<cwScrap *> scraps);
