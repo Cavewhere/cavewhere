@@ -1,8 +1,5 @@
 #include "LoadProjectHelper.h"
 
-//Catch2 (for REQUIRE/CHECK inside test fixture helpers)
-#include <catch2/catch_test_macros.hpp>
-
 //Qt includes
 #include <QCoreApplication>
 #include <QFile>
@@ -44,7 +41,20 @@
 #include <cstdlib>
 #include <exception>
 #include <memory>
+#include <stdexcept>
 #include <string>
+
+// Catch2 REQUIRE/CHECK cannot be used from inside a shared library (DLL) on
+// Windows: each DLL gets its own copy of Catch2's thread-local ResultCapture,
+// so assertions in the DLL fire against a null context and throw
+// "No result capture instance".  Use FIXTURE_REQUIRE instead — it throws
+// std::runtime_error, which the TEST_CASE catches and reports as a failure
+// with a descriptive message.
+#define FIXTURE_REQUIRE(cond) \
+    do { \
+        if (!(cond)) \
+            throw std::runtime_error("Fixture setup failed: " #cond); \
+    } while (false)
 
 namespace {
 std::unique_ptr<LfsServer> g_syncLfsServer;
@@ -1121,63 +1131,63 @@ cwSyncChurnFixture makeSyncChurnFixture(const cwSyncChurnFixtureConfig& config)
 
     fx.rootData = std::make_unique<cwRootData>();
     fx.project = fx.rootData->project();
-    REQUIRE(fx.project != nullptr);
+    FIXTURE_REQUIRE(fx.project != nullptr);
 
     fx.rootData->account()->setName(config.localAccountName);
     fx.rootData->account()->setEmail(config.localAccountEmail);
 
     auto* region = fx.project->cavingRegion();
-    REQUIRE(region != nullptr);
+    FIXTURE_REQUIRE(region != nullptr);
     region->addCave();
     auto* cave = region->cave(0);
-    REQUIRE(cave != nullptr);
+    FIXTURE_REQUIRE(cave != nullptr);
     cave->setName(config.caveName);
 
     cwTrip* trip = nullptr;
     if (config.tripName.has_value()) {
         cave->addTrip();
         trip = cave->trip(0);
-        REQUIRE(trip != nullptr);
+        FIXTURE_REQUIRE(trip != nullptr);
         trip->setName(*config.tripName);
     }
 
     fx.projectDir = std::make_unique<QTemporaryDir>();
-    REQUIRE(fx.projectDir->isValid());
+    FIXTURE_REQUIRE(fx.projectDir->isValid());
     fx.projectPath = QDir(fx.projectDir->path()).filePath(config.projectFileBaseName);
-    REQUIRE(fx.project->saveAs(fx.projectPath));
+    FIXTURE_REQUIRE(fx.project->saveAs(fx.projectPath));
     fx.project->waitSaveToFinish();
 
     if (config.addPngNoteFromDataset) {
-        REQUIRE(trip != nullptr);
+        FIXTURE_REQUIRE(trip != nullptr);
         const QString pngSource = copyToTempFolder(
             testcasesDatasetPath(QStringLiteral("test_cwTextureUploadTask/PhakeCave.PNG")));
-        REQUIRE(QFileInfo::exists(pngSource));
+        FIXTURE_REQUIRE(QFileInfo::exists(pngSource));
         trip->notes()->addFromFiles({QUrl::fromLocalFile(pngSource)});
         fx.rootData->futureManagerModel()->waitForFinished();
         fx.project->waitSaveToFinish();
-        REQUIRE(trip->notes()->rowCount() == 1);
+        FIXTURE_REQUIRE(trip->notes()->rowCount() == 1);
     }
 
     fx.repository = fx.project->repository();
-    REQUIRE(fx.repository != nullptr);
+    FIXTURE_REQUIRE(fx.repository != nullptr);
 
     fx.remoteRoot = std::make_unique<QTemporaryDir>();
-    REQUIRE(fx.remoteRoot->isValid());
+    FIXTURE_REQUIRE(fx.remoteRoot->isValid());
     fx.remoteRepoPath = QDir(fx.remoteRoot->path()).filePath(QStringLiteral("remote.git"));
-    REQUIRE(initBareRepo(fx.remoteRepoPath) == GIT_OK);
+    FIXTURE_REQUIRE(initBareRepo(fx.remoteRepoPath) == GIT_OK);
 
     const QString addRemoteError = fx.repository->addRemote(
         QStringLiteral("origin"), QUrl::fromLocalFile(fx.remoteRepoPath));
-    REQUIRE(addRemoteError.isEmpty());
+    FIXTURE_REQUIRE(addRemoteError.isEmpty());
 
     fx.project->errorModel()->clear();
-    REQUIRE(fx.project->sync());
+    FIXTURE_REQUIRE(fx.project->sync());
     fx.rootData->futureManagerModel()->waitForFinished();
     fx.project->waitSaveToFinish();
-    CHECK(fx.project->errorModel()->count() == 0);
+    FIXTURE_REQUIRE(fx.project->errorModel()->count() == 0);
 
     fx.cloneDir = std::make_unique<QTemporaryDir>();
-    REQUIRE(fx.cloneDir->isValid());
+    FIXTURE_REQUIRE(fx.cloneDir->isValid());
     fx.clonePath = QDir(fx.cloneDir->path()).filePath(config.cloneSubdirName);
 
     QQuickGit::GitRepository cloneRepository;
@@ -1185,25 +1195,30 @@ cwSyncChurnFixture makeSyncChurnFixture(const cwSyncChurnFixtureConfig& config)
     cloneRepository.setAccount(fx.rootData->account());
 
     auto cloneFuture = cloneRepository.clone(QUrl::fromLocalFile(fx.remoteRepoPath));
-    REQUIRE(AsyncFuture::waitForFinished(cloneFuture, 10000));
-    INFO("Clone error:" << cloneFuture.result().errorMessage().toStdString());
-    REQUIRE(!cloneFuture.result().hasError());
+    if (!AsyncFuture::waitForFinished(cloneFuture, 10000)) {
+        throw std::runtime_error("Fixture setup failed: clone timed out");
+    }
+    if (cloneFuture.result().hasError()) {
+        throw std::runtime_error(
+            std::string("Fixture setup failed: clone error: ")
+            + cloneFuture.result().errorMessage().toStdString());
+    }
 
     fx.remoteRootData = std::make_unique<cwRootData>();
     fx.remoteRootData->account()->setName(config.remoteAccountName);
     fx.remoteRootData->account()->setEmail(config.remoteAccountEmail);
 
     fx.remoteProject = fx.remoteRootData->project();
-    REQUIRE(fx.remoteProject != nullptr);
+    FIXTURE_REQUIRE(fx.remoteProject != nullptr);
     const QString clonedProjectPath = QDir(fx.clonePath).filePath(
         QFileInfo(fx.projectPath).fileName());
-    REQUIRE(QFileInfo::exists(clonedProjectPath));
+    FIXTURE_REQUIRE(QFileInfo::exists(clonedProjectPath));
     fx.remoteProject->loadFile(clonedProjectPath);
     fx.remoteProject->waitLoadToFinish();
     fx.remoteProject->waitSaveToFinish();
 
     fx.remoteRepository = fx.remoteProject->repository();
-    REQUIRE(fx.remoteRepository != nullptr);
+    FIXTURE_REQUIRE(fx.remoteRepository != nullptr);
     fx.remoteRepository->setAccount(fx.remoteRootData->account());
 
     return fx;

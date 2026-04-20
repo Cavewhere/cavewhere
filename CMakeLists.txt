@@ -307,7 +307,6 @@ if(BUILD_TESTING)
         Qt6::Widgets
         Qt6::Quick
         Qt6::Qml
-        Catch2::Catch2
         qt6keychain
         cavewherelib
     )
