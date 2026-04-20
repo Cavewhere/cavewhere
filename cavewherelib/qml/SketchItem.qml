@@ -8,6 +8,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import QtQuick.Window
 import cavewherelib
 
@@ -33,6 +34,7 @@ QQ.Item {
         default: return 2.5
         }
     }
+    readonly property bool zoomAllowed: sketch !== null && !sketch.viewState.zoomLocked
 
     property int _activeStrokeIndex: -1
 
@@ -128,6 +130,7 @@ QQ.Item {
     }
 
     QQ.WheelHandler {
+        enabled: sketchItemId.zoomAllowed
         acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
         onWheel: (event) => {
             if (!sketchItemId.sketch || event.angleDelta.y === 0) {
@@ -147,6 +150,7 @@ QQ.Item {
 
     QQ.PinchHandler {
         id: pinchHandler
+        enabled: sketchItemId.zoomAllowed
         target: null
         acceptedDevices: QQ.PointerDevice.TouchScreen | QQ.PointerDevice.TouchPad
         rotationAxis.enabled: false
@@ -276,5 +280,50 @@ QQ.Item {
         anchors.left: parent.left
         anchors.margins: Theme.pageMargin
         sketch: sketchItemId.sketch
+    }
+
+    RowLayoutPanel {
+        id: scalePanelId
+        objectName: "sketchScalePanel"
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.margins: Theme.pageMargin
+        visible: sketchItemId.sketch !== null
+
+        ScaleInput {
+            id: mapScaleInputId
+            objectName: "mapScaleInput"
+            onPaperLabel: "On Paper"
+            inCaveLabel: "In Cave"
+            valueVisible: true
+            onPaperValue: sketchItemId.sketch ? sketchItemId.sketch.mapScale.scaleNumerator   : null
+            inCaveValue:  sketchItemId.sketch ? sketchItemId.sketch.mapScale.scaleDenominator : null
+            scaleValue:   sketchItemId.sketch ? sketchItemId.sketch.mapScale.scale            : 1.0
+        }
+
+        LockButton {
+            id: zoomLockButtonId
+            objectName: "zoomLockButton"
+            checkable: true
+            checked: sketchItemId.sketch !== null && sketchItemId.sketch.viewState.zoomLocked
+            QC.ToolTip.text: checked ? "Unlock zoom" : "Lock zoom to map scale"
+            QC.ToolTip.visible: hovered
+            enabled: sketchItemId.sketch !== null
+            onToggled: {
+                sketchItemId.sketch.viewState.zoomLocked = checked
+                if (checked) {
+                    zoomResetAnimationId.restart()
+                }
+            }
+        }
+    }
+
+    QQ.NumberAnimation {
+        id: zoomResetAnimationId
+        target: sketchItemId.sketch ? sketchItemId.sketch.viewState : null
+        property: "zoom"
+        to: 1.0
+        duration: 250
+        easing.type: Easing.InOutQuad
     }
 }

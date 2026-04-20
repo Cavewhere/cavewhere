@@ -3,6 +3,6 @@ import QtQuick.Controls as QC
 
 QC.ToolButton {
     icon.name: "lock"
-    icon.source: down ? "qrc:/icons/lock.png" : "qrc:/icons/unlock.png"
+    icon.source: (down || checked) ? "qrc:/icons/lock.png" : "qrc:/icons/unlock.png"
     icon.color: Theme.icon
 }

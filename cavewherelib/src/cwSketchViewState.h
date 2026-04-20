@@ -27,6 +27,7 @@ class CAVEWHERE_LIB_EXPORT cwSketchViewState : public QObject
     Q_PROPERTY(QPointF pan READ pan WRITE setPan NOTIFY panChanged)
     // False until the first setZoom/setPan, so callers can distinguish a fresh sketch from one panned back to (0,0).
     Q_PROPERTY(bool viewInitialized READ viewInitialized NOTIFY viewInitializedChanged)
+    Q_PROPERTY(bool zoomLocked READ zoomLocked WRITE setZoomLocked NOTIFY zoomLockedChanged)
 
 public:
     explicit cwSketchViewState(QObject *parent = nullptr);
@@ -34,19 +35,23 @@ public:
     double  zoom() const { return m_zoom; }
     QPointF pan() const { return m_pan; }
     bool    viewInitialized() const { return m_viewInitialized; }
+    bool    zoomLocked() const { return m_zoomLocked; }
 
     void setZoom(double zoom);
     void setPan(QPointF pan);
+    void setZoomLocked(bool zoomLocked);
 
 signals:
     void zoomChanged();
     void panChanged();
     void viewInitializedChanged();
+    void zoomLockedChanged();
 
 private:
     double  m_zoom = 1.0;
     QPointF m_pan;
     bool    m_viewInitialized = false;
+    bool    m_zoomLocked = true;
 
     void markInitialized();
 };

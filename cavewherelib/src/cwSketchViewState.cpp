@@ -32,6 +32,15 @@ void cwSketchViewState::setPan(QPointF pan)
     emit panChanged();
 }
 
+void cwSketchViewState::setZoomLocked(bool zoomLocked)
+{
+    if (m_zoomLocked == zoomLocked) {
+        return;
+    }
+    m_zoomLocked = zoomLocked;
+    emit zoomLockedChanged();
+}
+
 void cwSketchViewState::markInitialized()
 {
     if (m_viewInitialized) {
