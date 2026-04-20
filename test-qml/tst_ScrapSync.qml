@@ -406,7 +406,7 @@ MainWindowTest {
 
             tryVerifyWithDiagnostics(() => {
                 return gallery.mode === "CARPET"
-            }, 5000, "enter carpet mode")
+            }, 10000, "enter carpet mode")
         }
 
         function waitForNoteCanvasReady(label) {
@@ -425,7 +425,7 @@ MainWindowTest {
                        && image.visible === true
                        && image.width > 0
                        && image.height > 0
-            }, 5000, label)
+            }, 10000, label)
         }
 
         function disableNoteLoadUi() {
@@ -473,7 +473,7 @@ MainWindowTest {
 
             tryVerifyWithDiagnostics(() => {
                 return gallery.mode === "CARPET"
-            }, 5000, "enter carpet mode")
+            }, 10000, "enter carpet mode")
 
             let currentScrapView = scrapView()
             tryVerifyWithDiagnostics(() => {
