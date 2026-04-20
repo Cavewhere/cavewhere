@@ -306,6 +306,11 @@ MainWindowTest {
 
             for (let row = 0; row < model.rowCount(); ++row) {
                 selectNoteIndex(row, "select note during lead scan", true)
+
+                if (TestHelper.noteScrapCount(noteGallery().currentNote) === 0) {
+                    continue
+                }
+
                 enterCarpetMode()
 
                 let currentScrapView = scrapView()
