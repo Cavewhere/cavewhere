@@ -15,6 +15,8 @@
 #include <QFontMetricsF>
 #include <QPainterPath>
 
+#include <cmath>
+
 namespace {
 
 void drawPaths(cwSketchDraw *draw,
@@ -57,21 +59,32 @@ void drawPaths(cwSketchDraw *draw,
 // painter transform to identity, and draw at native font size.
 void drawText(cwSketchDraw *draw,
               const QVector<cwGridTextModel::TextRow> *rows,
-              const QTransform &worldToItem)
+              const QTransform &worldToItem,
+              double fontScale = 1.0)
 {
     if (rows == nullptr || rows->isEmpty()) {
         return;
     }
-    QFont cachedFont;
-    QFontMetricsF metrics(cachedFont);
+    // Guard against mis-wired callers: non-finite / non-positive scale
+    // would produce zero-size glyphs or NaN metrics.
+    if (!std::isfinite(fontScale) || fontScale <= 0.0) {
+        fontScale = 1.0;
+    }
+    QFont cachedRowFont;
+    QFont cachedDrawFont;
+    QFontMetricsF metrics(cachedDrawFont);
     bool metricsValid = false;
     for (const auto &row : *rows) {
         if (row.text.isEmpty()) {
             continue;
         }
-        if (!metricsValid || row.font != cachedFont) {
-            cachedFont = row.font;
-            metrics = QFontMetricsF(cachedFont);
+        if (!metricsValid || row.font != cachedRowFont) {
+            cachedRowFont = row.font;
+            cachedDrawFont = row.font;
+            if (fontScale != 1.0) {
+                cachedDrawFont.setPointSizeF(row.font.pointSizeF() * fontScale);
+            }
+            metrics = QFontMetricsF(cachedDrawFont);
             metricsValid = true;
         }
         const QRectF screenBounds = worldToItem.mapRect(row.bounds);
@@ -83,7 +96,7 @@ void drawText(cwSketchDraw *draw,
                                      screenBounds.top()  - glyphBR.top());
         draw->save();
         draw->setTransform(QTransform());
-        draw->drawText(screenBaseline, row.text, row.font, row.fillColor);
+        draw->drawText(screenBaseline, row.text, cachedDrawFont, row.fillColor);
         draw->restore();
     }
 }
@@ -120,7 +133,8 @@ void cwSketchPainter::paint(cwSketchDraw *draw, const PaintContext &context)
     drawPaths(draw, context.gridMajor.paths, penScale);
     drawText (draw, context.gridMinor.text, context.worldToItem);
     drawText (draw, context.gridMajor.text, context.worldToItem);
-    drawPaths(draw, context.linePlot, penScale);
+    drawPaths(draw, context.linePlot.paths, penScale);
+    drawText (draw, context.linePlot.text, context.worldToItem, context.linePlotTextScale);
     drawPaths(draw, context.strokes, penScale);
 
     draw->restore();

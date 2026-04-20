@@ -27,6 +27,9 @@
 #include "cwStationPositionLookup.h"
 #include "cwCenterlineSketchPainterModel.h"
 #include "cwAbstractSketchPainterPathModel.h"
+#include "cwGridTextModel.h"
+#include "cwSketchDraw.h"
+#include "cwSketchPainter.h"
 #include "cwSketchManager.h"
 #include "cwTripLinePlotTask.h"
 #include "asyncfuture.h"
@@ -180,21 +183,95 @@ TEST_CASE("cwCenterlineSketchPainterModel populates three rows from survey2DGeom
         QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
     }
 
-    REQUIRE(centerline.rowCount() == 3); // shotLines, stationDots, labels
+    REQUIRE(centerline.rowCount() == 2); // shotLines, stationDots
 
-    // Shot-lines row (row 0) should carry a non-empty QPainterPath; labels
-    // row (row 2) must be flagged as a fill (stroke width 0.0).
     const auto shotLinesPath =
         centerline.data(centerline.index(0),
                         cwAbstractSketchPainterPathModel::PainterPathRole)
             .value<QPainterPath>();
     CHECK_FALSE(shotLinesPath.isEmpty());
 
-    const double labelsWidth =
-        centerline.data(centerline.index(2),
+    const double symbolsWidth =
+        centerline.data(centerline.index(1),
                         cwAbstractSketchPainterPathModel::StrokeWidthRole)
             .toDouble();
-    CHECK(labelsWidth == Catch::Approx(0.0));
+    CHECK(symbolsWidth == Catch::Approx(0.0));
+
+    const auto textRows = centerline.textRows();
+    REQUIRE_FALSE(textRows.isEmpty());
+    CHECK(textRows.size() == 14); // one row per station (matches stations count above)
+    for (const auto &row : textRows) {
+        CHECK_FALSE(row.text.isEmpty());
+        CHECK(row.font.pointSizeF() > 0.0);
+    }
+}
+
+namespace {
+
+// cwSketchDraw mock that records drawText font sizes. No-op for everything else.
+class RecordingDraw : public cwSketchDraw {
+public:
+    struct TextCall {
+        QString text;
+        double pointSizeF = 0.0;
+    };
+    QList<TextCall> textCalls;
+
+    void save() override {}
+    void restore() override {}
+    void setTransform(const QTransform &) override {}
+    void translate(double, double) override {}
+    void scale(double, double) override {}
+    void setClipRect(const QRectF &) override {}
+    void setStrokePen(const QColor &, double, Qt::PenCapStyle, Qt::PenJoinStyle) override {}
+    void setFillBrush(const QColor &) override {}
+    void strokePath(const QPainterPath &) override {}
+    void fillPath(const QPainterPath &) override {}
+    void drawText(const QPointF &, const QString &text,
+                  const QFont &font, const QColor &) override {
+        textCalls.append({text, font.pointSizeF()});
+    }
+};
+
+} // namespace
+
+TEST_CASE("cwSketchPainter scales linePlot text with PaintContext::linePlotTextScale", "[cwSketchPainter]") {
+    QFont labelFont;
+    labelFont.setPointSizeF(12.0);
+
+    cwGridTextModel::TextRow row;
+    row.text        = "B8";
+    row.bounds      = QRectF(0.0, 0.0, 0.0, 0.0);
+    row.position    = QPointF(0.0, 0.0);
+    row.font        = labelFont;
+    row.fillColor   = Qt::black;
+    row.strokeColor = Qt::transparent;
+    QVector<cwGridTextModel::TextRow> rows{row};
+
+    auto paintWithScale = [&](double scale) {
+        RecordingDraw draw;
+        cwSketchPainter::PaintContext ctx;
+        // worldToItem must have negative determinant (Y-flip).
+        ctx.worldToItem = QTransform::fromScale(1.0, -1.0);
+        ctx.mapScale    = 1.0;
+        ctx.linePlot.text = &rows;
+        ctx.linePlotTextScale = scale;
+        cwSketchPainter::paint(&draw, ctx);
+        return draw.textCalls;
+    };
+
+    const auto at1 = paintWithScale(1.0);
+    REQUIRE(at1.size() == 1);
+    CHECK(at1.first().text == "B8");
+    CHECK(at1.first().pointSizeF == Catch::Approx(12.0));
+
+    const auto at2 = paintWithScale(2.0);
+    REQUIRE(at2.size() == 1);
+    CHECK(at2.first().pointSizeF == Catch::Approx(24.0));
+
+    const auto atHalf = paintWithScale(0.5);
+    REQUIRE(atHalf.size() == 1);
+    CHECK(atHalf.first().pointSizeF == Catch::Approx(6.0));
 }
 
 // ---------------- cwSketchManager per-trip line plot pipeline ----------------

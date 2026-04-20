@@ -120,10 +120,15 @@ void cwCenterlineSketchPainterModel::updateModel()
     const double shotLineWidthWorld =
         shotLineWidthPaperMm * paperMmToWorldM;
 
+    struct Snapshot {
+        QVector<Path> paths;
+        QVector<cwGridTextModel::TextRow> textRows;
+    };
+
     auto convertToPainterPaths = [stationRadiusWorld,
                                   labelTargetHeightWorld,
                                   shotLineWidthWorld]
-        (const Result<cwSurvey2DGeometry> result) -> QFuture<Result<QVector<Path>>> {
+        (const Result<cwSurvey2DGeometry> result) -> QFuture<Result<Snapshot>> {
         const cwSurvey2DGeometry geometry = result.value();
         return cwConcurrent::run([geometry,
                                   stationRadiusWorld,
@@ -137,15 +142,15 @@ void cwCenterlineSketchPainterModel::updateModel()
                 return p;
             };
 
-            QVector<Path> paths;
-            paths.reserve(3);
+            Snapshot snapshot;
+            snapshot.paths.reserve(2);
 
             QPainterPath lines;
             for (const auto &line : geometry.shotLines) {
                 lines.moveTo(line.p1());
                 lines.lineTo(line.p2());
             }
-            paths.append(makePath(std::move(lines), shotLineWidthWorld));
+            snapshot.paths.append(makePath(std::move(lines), shotLineWidthWorld));
 
             QPainterPath symbols;
             for (const auto &station : geometry.stations) {
@@ -153,32 +158,33 @@ void cwCenterlineSketchPainterModel::updateModel()
                                    stationRadiusWorld,
                                    stationRadiusWorld);
             }
-            paths.append(makePath(std::move(symbols), 0.0));
+            snapshot.paths.append(makePath(std::move(symbols), 0.0));
 
-            // addText bakes glyphs in Qt-internal font units; measure natural
-            // height and apply a per-label QTransform so the rendered height
-            // in world meters hits labelTargetHeightWorld. Y is flipped so the
-            // baseline sits above the station point (world Y is up).
-            QPainterPath labels;
+            // The shared painter text helper anchors glyphs at
+            // bounds.topLeft; a non-zero height would shift the Y-flipped
+            // screen anchor by that height, so pass a degenerate rect.
+            Q_UNUSED(labelTargetHeightWorld);
             QFont font;
-            font.setPointSizeF(10.0);
-            const QFontMetricsF metrics(font);
-            const double naturalHeight = std::max(1.0, metrics.height());
-            const double glyphScale    = labelTargetHeightWorld / naturalHeight;
+            font.setPointSizeF(12.0);
             const double labelOffsetWorld = stationRadiusWorld * 2.0;
 
+            snapshot.textRows.reserve(geometry.stations.size());
             for (const auto &station : geometry.stations) {
-                QPainterPath glyph;
-                glyph.addText(QPointF(0, 0), font, station.name);
-                QTransform t;
-                t.translate(station.position.x() + labelOffsetWorld,
-                            station.position.y() + labelOffsetWorld);
-                t.scale(glyphScale, -glyphScale);
-                labels.addPath(t.map(glyph));
-            }
-            paths.append(makePath(std::move(labels), 0.0));
+                const QPointF worldAnchor(
+                    station.position.x() + labelOffsetWorld,
+                    station.position.y() + labelOffsetWorld);
 
-            return Result(paths);
+                cwGridTextModel::TextRow row;
+                row.text        = station.name;
+                row.bounds      = QRectF(worldAnchor, QSizeF(0.0, 0.0));
+                row.position    = worldAnchor;
+                row.font        = font;
+                row.fillColor   = Qt::black;
+                row.strokeColor = Qt::transparent;
+                snapshot.textRows.append(row);
+            }
+
+            return Result(snapshot);
         });
     };
 
@@ -194,8 +200,13 @@ void cwCenterlineSketchPainterModel::updateModel()
         if (pathFuture.result().hasError()) {
             return;
         }
+        auto snapshot = pathFuture.result().value();
         beginResetModel();
-        m_paths = pathFuture.result().value();
+        m_paths = std::move(snapshot.paths);
         endResetModel();
+        if (m_textRows != snapshot.textRows) {
+            m_textRows = std::move(snapshot.textRows);
+            emit textRowsChanged();
+        }
     });
 }

@@ -15,6 +15,7 @@
 
 //Our includes
 #include "cwAbstractSketchPainterPathModel.h"
+#include "cwGridTextModel.h"
 #include "cwScale.h"
 #include "cwSurvey2DGeometryArtifact.h"
 #include "CaveWhereLibExport.h"
@@ -42,9 +43,16 @@ public:
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
 
+    // Station labels are emitted as text rows (not baked glyph paths) so the
+    // backend draws real text — this keeps character counters ('8', '0', 'e')
+    // hollow on the Canvas backend (which lacks a path fill-rule API) and lets
+    // SVG/PDF export produce selectable <text> elements.
+    QVector<cwGridTextModel::TextRow> textRows() const { return m_textRows; }
+
 signals:
     void survey2DGeometryChanged();
     void mapScaleChanged();
+    void textRowsChanged();
 
 protected:
     Path path(const QModelIndex &index) const override;
@@ -56,6 +64,7 @@ private:
     QPointer<cwSurvey2DGeometryArtifact> m_geometryArtifact;
     QPointer<cwScale> m_mapScale;
     QVector<Path> m_paths;
+    QVector<cwGridTextModel::TextRow> m_textRows;
 };
 
 #endif // CWCENTERLINESKETCHPAINTERMODEL_H

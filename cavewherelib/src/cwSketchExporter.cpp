@@ -78,5 +78,6 @@ void cwSketchExporter::paintTo(QPaintDevice *device)
     ctx.worldToItem = cwSketchPainter::paperTransform(paperScale, pixelDensity);
     ctx.mapScale    = paperScale;
     ctx.strokes     = m_strokeModel;
+    ctx.linePlotTextScale = paperScale / cwSketchPainter::LinePlotReferenceMapScaleRatio;
     cwSketchPainter::paint(&draw, ctx);
 }

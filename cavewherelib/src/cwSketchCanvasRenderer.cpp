@@ -8,6 +8,8 @@
 //Our includes
 #include "cwSketchCanvasRenderer.h"
 #include "cwSketchCanvas.h"
+#include "cwSketch.h"
+#include "cwScale.h"
 #include "cwSketchDrawCanvas.h"
 #include "cwSketchPainter.h"
 #include "cwAbstractSketchPainterPathModel.h"
@@ -95,6 +97,7 @@ void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
         m_linePlotSnapshot->entries.clear();
         m_minorTextSnapshot.clear();
         m_majorTextSnapshot.clear();
+        m_linePlotTextSnapshot.clear();
         return;
     }
 
@@ -102,6 +105,14 @@ void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
     const QMatrix4x4 mapMatrix = canvas->mapMatrix();
     const double userZoom = canvas->zoom();
     m_mapScale = mapMatrix(0, 0);
+    m_userZoom = userZoom;
+    // Dimensionless paper:world ratio (e.g. 1/250). Falls back to 1:250 if
+    // the sketch isn't attached yet — matches the linePlot model's default.
+    auto *sketch = canvas->sketch();
+    auto *sketchScale = sketch ? sketch->mapScale() : nullptr;
+    m_mapScaleRatio = (sketchScale && sketchScale->scale() > 0.0)
+                          ? sketchScale->scale()
+                          : cwSketchPainter::LinePlotReferenceMapScaleRatio;
     m_worldToItem = mapMatrix.toTransform()
                     * QTransform().scale(userZoom, userZoom)
                     * QTransform().translate(pan.x(), pan.y());
@@ -114,7 +125,11 @@ void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
     }
 
     snapshotPaths(canvas->pathModel(), m_snapshot);
-    snapshotPaths(canvas->linePlotModel(), m_linePlotSnapshot);
+    auto *linePlot = canvas->linePlotModel();
+    snapshotPaths(linePlot, m_linePlotSnapshot);
+    m_linePlotTextSnapshot = linePlot
+                                 ? linePlot->textRows()
+                                 : QVector<cwGridTextModel::TextRow>();
 
     auto *grid = canvas->grid();
     snapshotPaths(grid ? grid->minorGridModel() : nullptr, m_minorGridSnapshot);
@@ -139,7 +154,8 @@ void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
     painter->setRenderHint(QCanvasPainter::RenderHint::Antialiasing);
 
     const bool hasStrokes  = !m_snapshot->entries.isEmpty();
-    const bool hasLinePlot = !m_linePlotSnapshot->entries.isEmpty();
+    const bool hasLinePlot = !m_linePlotSnapshot->entries.isEmpty()
+                          || !m_linePlotTextSnapshot.isEmpty();
     const bool hasGrid     = !m_minorGridSnapshot->entries.isEmpty()
                           || !m_majorGridSnapshot->entries.isEmpty()
                           || !m_minorTextSnapshot.isEmpty()
@@ -161,7 +177,11 @@ void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
     ctx.gridMinor.text  = &m_minorTextSnapshot;
     ctx.gridMajor.paths = m_majorGridSnapshot;
     ctx.gridMajor.text  = &m_majorTextSnapshot;
-    ctx.linePlot        = m_linePlotSnapshot;
+    ctx.linePlot.paths  = m_linePlotSnapshot;
+    ctx.linePlot.text   = &m_linePlotTextSnapshot;
+
+    ctx.linePlotTextScale =
+        (m_mapScaleRatio / cwSketchPainter::LinePlotReferenceMapScaleRatio) * m_userZoom;
     cwSketchPainter::paint(&draw, ctx);
 
     painter->restore();

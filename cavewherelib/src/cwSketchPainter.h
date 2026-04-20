@@ -23,6 +23,11 @@ class cwAbstractSketchPainterPathModel;
 class CAVEWHERE_LIB_EXPORT cwSketchPainter
 {
 public:
+    // Map-scale ratio (paper : world) at which linePlot labels render at
+    // their authored point size. Callers scale font size linearly around
+    // this reference so labels at the default 1:250 look paper-sized.
+    static constexpr double LinePlotReferenceMapScaleRatio = 1.0 / 250.0;
+
     struct GridLayer {
         const cwAbstractSketchPainterPathModel *paths = nullptr;
         const QVector<cwGridTextModel::TextRow> *text = nullptr;
@@ -44,8 +49,18 @@ public:
         GridLayer gridMajor;
 
         // Optional centerline / survey line plot. Drawn between grid text
-        // and user strokes so pen input overlays the reference plot.
-        const cwAbstractSketchPainterPathModel *linePlot = nullptr;
+        // and user strokes so pen input overlays the reference plot. The
+        // `text` layer (station labels) renders via the backend's native
+        // text API — required so Canvas-backed renders keep character
+        // counters hollow and SVG/PDF export produces selectable text.
+        GridLayer linePlot;
+
+        // Multiplier applied to linePlot text font pointSizeF at paint
+        // time. 1.0 = render at the row's declared font size (same as
+        // grid text). Callers compute this so centerline labels at the
+        // 1:250 default render at the authored point size and scale
+        // linearly with total view scale (mapScale × userZoom).
+        double linePlotTextScale = 1.0;
     };
 
     // World-metre → destination-pixel transform for paper-bound render
