@@ -149,6 +149,13 @@ private:
     void sketchRemovedHelper(cwSketch* sketch);
     void updateDerivedScrapsForSketch(cwSketch* sketch);
 
+    // Shared render/keyword hookup + teardown for both note- and sketch-
+    // parented scraps. The caller handles connectScrap/disconnectScrap and
+    // whatever per-parent ownership semantics apply (note scraps are child
+    // QObjects of the note; sketch scraps need an explicit deleteLater).
+    void attachScrap(cwScrap* scrap);
+    void detachScrap(cwScrap* scrap);
+
     void updateScrapGeometry(QList<cwScrap *> scraps = QList<cwScrap*>());
     void updateScrapGeometryHelper(QList<cwScrap *> scraps);
     cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;

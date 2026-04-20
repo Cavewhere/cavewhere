@@ -34,6 +34,9 @@
 #include "cwSketch.h"
 #include "cwPenStrokeModel.h"
 #include "cwSurveyNoteSketchModel.h"
+#include "cwSketchScrapOutlineDetector.h"
+#include "cwSketchScrapOutline.h"
+#include "cwImage.h"
 
 //Async future
 #include "asyncfuture.h"
@@ -580,6 +583,11 @@ void cwScrapManager::sketchInsertedHelper(cwSketch* sketch)
         return;
     }
     m_sketchDerivedScraps.insert(sketch, {});
+    // On load, strokes are deserialized before the region tree raises
+    // rowsInserted, so the sketch's own strokesReset/strokeEnded already
+    // fired with no listener attached. Run the detector now so loaded
+    // projects materialize their derived scraps without waiting for an edit.
+    updateDerivedScrapsForSketch(sketch);
 }
 
 void cwScrapManager::sketchRemovedHelper(cwSketch* sketch)
@@ -587,12 +595,129 @@ void cwScrapManager::sketchRemovedHelper(cwSketch* sketch)
     if(sketch == nullptr) {
         return;
     }
-    m_sketchDerivedScraps.remove(sketch);
+    auto it = m_sketchDerivedScraps.find(sketch);
+    if(it == m_sketchDerivedScraps.end()) {
+        return;
+    }
+
+    for(cwScrap* scrap : std::as_const(it.value())) {
+        detachScrap(scrap);
+        scrap->deleteLater();
+    }
+    m_sketchDerivedScraps.erase(it);
 }
+
+namespace {
+
+// Detection thresholds for outline-forming strokes. 5 cm snaps near-closed
+// strokes into closed polygons; 5 mm Douglas-Peucker keeps pen detail without
+// bloating the CDT input. Both are placeholders until the plan's
+// stroke-width-relative heuristic lands.
+constexpr double kSketchCloseThresholdMeters    = 0.05;
+constexpr double kSketchSimplifyToleranceMeters = 0.005;
+
+// Normalize a trip-local polygon into its bounding box's [0,1] frame. That's
+// the coordinate system cwScrap expects and the same shape 4c's station
+// anchoring will feed the triangulator.
+QVector<QPointF> normalizePolygonToBoundingBox(const QPolygonF& polygon)
+{
+    const QRectF box = polygon.boundingRect();
+    const double w = box.width();
+    const double h = box.height();
+    QVector<QPointF> out;
+    out.reserve(polygon.size());
+    for(const QPointF& p : polygon) {
+        const double nx = w > 0.0 ? (p.x() - box.x()) / w : 0.0;
+        const double ny = h > 0.0 ? (p.y() - box.y()) / h : 0.0;
+        out.append({nx, ny});
+    }
+    return out;
+}
+
+} // namespace
 
 void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
 {
+    if(sketch == nullptr) {
+        return;
+    }
+    auto trackedIt = m_sketchDerivedScraps.find(sketch);
+    if(trackedIt == m_sketchDerivedScraps.end()) {
+        return;
+    }
+
+    const auto outlines = cwSketchScrapOutlineDetector::detect(
+        sketch->strokes(),
+        kSketchCloseThresholdMeters,
+        kSketchSimplifyToleranceMeters);
+
+    QHash<QUuid, cwScrap*>& tracked = trackedIt.value();
+    QSet<QUuid> seen;
+    QList<cwScrap*> dirtyScraps;
+
+    for(const auto& outline : outlines) {
+        seen.insert(outline.sourceStrokeId);
+        const QVector<QPointF> normalized =
+            normalizePolygonToBoundingBox(outline.tripLocalPolygon);
+
+        auto it = tracked.find(outline.sourceStrokeId);
+        if(it == tracked.end()) {
+            auto* scrap = new cwScrap(sketch);
+            scrap->setParentSketch(sketch);
+            scrap->setPoints(normalized);
+            tracked.insert(outline.sourceStrokeId, scrap);
+            connectScrap(scrap);
+            attachScrap(scrap);
+            dirtyScraps.append(scrap);
+        } else if(it.value()->points() != normalized) {
+            it.value()->setPoints(normalized);
+            dirtyScraps.append(it.value());
+        }
+    }
+
+    for(auto it = tracked.begin(); it != tracked.end(); ) {
+        if(!seen.contains(it.key())) {
+            detachScrap(it.value());
+            it.value()->deleteLater();
+            it = tracked.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    if(!dirtyScraps.isEmpty()) {
+        updateScrapGeometry(dirtyScraps);
+    }
+
     emit sketchDerivedScrapsUpdated(sketch);
+}
+
+void cwScrapManager::attachScrap(cwScrap* scrap)
+{
+    if(scrap == nullptr || m_renderScraps.isNull()) {
+        return;
+    }
+    cwRenderMaterialState state;
+    state.cullMode = cwRenderMaterialState::CullMode::None;
+    m_scrapToRenderId.insert(scrap,
+                             m_renderScraps->addItem({cwGeometry(), QImage(), state}));
+    addKeywordItemForScrap(scrap);
+}
+
+void cwScrapManager::detachScrap(cwScrap* scrap)
+{
+    if(scrap == nullptr) {
+        return;
+    }
+    addToDeletedScraps(scrap);
+    disconnectScrap(scrap);
+    removeKeywordItemForScrap(scrap);
+    if(m_scrapToRenderId.contains(scrap)) {
+        auto id = m_scrapToRenderId.take(scrap);
+        if(!m_renderScraps.isNull()) {
+            m_renderScraps->removeItem(id);
+        }
+    }
 }
 
 /**
@@ -750,24 +875,41 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
   */
 cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) const {
     cwTriangulateInData data;
+    data.setOutline(scrap->points());
+    data.setViewMatrix(scrap->viewMatrix()->data()->clone());
+    data.setLeads(scrap->leads());
+    data.setMorphingSettings(m_warpingSettings->data());
+
+    if(scrap->parentKind() == cwScrap::SketchParent) {
+        // Identity note-transform + unit DPI collapses cwTriangulateTask's
+        // paper→meters chain, so outline points land at their bounding-box-
+        // normalized coordinates with no paper-side scaling.
+        cwImage noteImage;
+        noteImage.setOriginalSize(QSize(1, 1));
+        data.setNoteImage(noteImage);
+        data.setNoteImageResolution(1.0);
+        data.setNoteTransform({});
+        data.setNoteStation({});
+        if(auto* cave = scrap->parentCave()) {
+            data.setStationLookup(cave->stationPositionLookup());
+            data.setSurveyNetwork(cave->network());
+        }
+        return data;
+    }
+
     cwCave* cave = scrap->parentNote()->parentTrip()->parentCave();
 
     cwImage noteImage = scrap->parentNote()->image();
     if (Project) {
         data.setNoteImage(Project->absolutePathNoteImage(scrap->parentNote()));
     }
-    data.setOutline(scrap->points());
     data.setNoteStation(scrap->stations());
     data.setStationLookup(cave->stationPositionLookup());
     data.setSurveyNetwork(cave->network());
     data.setNoteTransform(scrap->noteTransformAdjustedDeclination());
-    data.setViewMatrix(scrap->viewMatrix()->data()->clone());
 
     double dotsPerMeter = scrap->parentNote()->imageResolution()->convertTo(cwUnits::DotsPerMeter).value;
     data.setNoteImageResolution(dotsPerMeter);
-
-    data.setLeads(scrap->leads());
-    data.setMorphingSettings(m_warpingSettings->data());
 
     return data;
 }
@@ -803,18 +945,8 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
     for(int i = begin; i <= end; i++) {
         cwScrap* scrap = parentNote->scrap(i);
 
-        //Connect the scrap
         connectScrap(scrap);
-
-        cwRenderMaterialState state;
-        state.cullMode = cwRenderMaterialState::CullMode::None;
-
-        //Add the scrap data that's already in it
-        m_scrapToRenderId.insert(scrap,
-                                 m_renderScraps->addItem({cwGeometry(),
-                                                          QImage(),
-                                                          state}));
-        addKeywordItemForScrap(scrap);
+        attachScrap(scrap);
 
         if(isScrapGeometryValid(scrap)) {
             scrapsToUpdate.append(scrap);
@@ -918,17 +1050,7 @@ void cwScrapManager::removeKeywordItemForScrap(cwScrap *scrap)
 void cwScrapManager::scrapRemovedHelper(cwNote *parentNote, int begin, int end)
 {
     for(int i = begin; i <= end; i++) {
-        cwScrap* scrap = parentNote->scrap(i);
-        addToDeletedScraps(scrap);
-
-        //Connect the scrap
-        disconnectScrap(scrap);
-        removeKeywordItemForScrap(scrap);
-
-        if(m_scrapToRenderId.contains(scrap)) {
-            auto id = m_scrapToRenderId.take(scrap);
-            m_renderScraps->removeItem(id);
-        }
+        detachScrap(parentNote->scrap(i));
     }
 }
 
