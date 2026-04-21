@@ -63,6 +63,50 @@ Item {
                       2000, "major grid model should populate for the viewport")
         }
 
+        function selectEraser() {
+            const toolbar = findChild(rootId, "sketchToolbar")
+            verify(toolbar !== null)
+            toolbar.strokeKind = PenStroke.Eraser
+            // Widen the eraser so a handful of mouse samples reliably cover
+            // a stroke's sample points regardless of pixelDensity.
+            toolbar.eraserRadius = 5.0
+            return toolbar
+        }
+
+        function resetToolbarToPen() {
+            const toolbar = findChild(rootId, "sketchToolbar")
+            toolbar.strokeKind = PenStroke.Wall
+        }
+
+        function test_eraserDragMergesIntoOneUndoStep() {
+            resetToolbarToPen()
+            const strokesBefore = sketchId.strokeModel.rowCount()
+            drawStroke([Qt.point(250, 200), Qt.point(350, 200),
+                        Qt.point(450, 200), Qt.point(550, 200)])
+            tryVerify(() => sketchId.strokeModel.rowCount() === strokesBefore + 1,
+                      2000, "Setup stroke should exist")
+            const strokesAfterDraw = sketchId.strokeModel.rowCount()
+
+            selectEraser()
+
+            mousePress(sketchItemId, 400, 200, Qt.LeftButton)
+            mouseMove(sketchItemId, 410, 200, 0, Qt.LeftButton)
+            mouseMove(sketchItemId, 420, 200, 0, Qt.LeftButton)
+            mouseMove(sketchItemId, 430, 200, 0, Qt.LeftButton)
+            mouseRelease(sketchItemId, 440, 200, Qt.LeftButton)
+
+            tryVerify(() => sketchId.strokeModel.rowCount() !== strokesAfterDraw,
+                      2000, "Eraser drag should have mutated the strokes")
+            // One undo restores everything — proves per-move erase commands
+            // merged into a single step via cwSketchEraseCommand::mergeWith.
+            verify(sketchId.undoStack.canUndo,
+                   "Undo should be available after an eraser drag")
+            sketchId.undoStack.undo()
+            tryVerify(() => sketchId.strokeModel.rowCount() === strokesAfterDraw,
+                      2000, "A single undo should restore every erased point")
+            resetToolbarToPen()
+        }
+
         function test_stylusInputAndUndo() {
             const initial = sketchId.strokeModel.rowCount()
 

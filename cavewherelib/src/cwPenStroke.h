@@ -26,7 +26,8 @@ public:
     enum Kind {
         Wall = 0,
         Feature = 1,
-        ScrapOutline = 2
+        ScrapOutline = 2,
+        Eraser = 3
     };
     Q_ENUM(Kind)
 

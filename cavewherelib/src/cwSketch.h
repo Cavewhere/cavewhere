@@ -118,6 +118,17 @@ public:
     Q_INVOKABLE void endStroke();
     Q_INVOKABLE void clearStrokes();
 
+    // Splits any stored stroke whose points fall within radiusWorld of the
+    // eraser polyline. Surviving point runs become new strokes (fresh id,
+    // same kind/width/color). Per-pointer-move calls within one drag merge
+    // into a single undo step; endEraseSession() closes that window.
+    Q_INVOKABLE void eraseAlongPath(const QVector<QPointF> &pathPointsWorld,
+                                    double radiusWorld);
+
+    // Closes the current erase merge window so the next eraseAlongPath call
+    // begins a fresh undo entry. Called on pen-up.
+    Q_INVOKABLE void endEraseSession();
+
     cwSketchData data() const;
     void setData(const cwSketchData &d);
 
@@ -154,6 +165,12 @@ private:
     // -1 sentinel doubles as the "no flush scheduled" flag; see Decision 2
     // in the sketch feature plan for why coalescing matters.
     int m_pendingDirtyRow = -1;
+
+    // Monotonic id that identifies one pen drag's worth of erases. Each
+    // cwSketchEraseCommand captures this value at construction; merges are
+    // allowed only between commands that share an id, so endEraseStroke()
+    // bumps it to start a fresh undo entry for the next drag.
+    int m_eraseSession = 0;
 
     void applyStrokes(const QVector<cwPenStroke> &strokes);
     void rebuildViewMatrixForType();

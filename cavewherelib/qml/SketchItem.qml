@@ -36,7 +36,18 @@ QQ.Item {
     }
     readonly property bool zoomAllowed: sketch !== null && !sketch.viewState.zoomLocked
 
+    // World-meters to screen-pixels for the current zoom. Wheel/pinch handlers
+    // and the eraser-cursor size all derive from this.
+    readonly property double _pxPerMeter: worldToScreenId.matrix.m11 * zoom
+
     property int _activeStrokeIndex: -1
+
+    // Eraser mode state. _eraserCursor tracks the pen even while hovering so
+    // the cursor disk follows before pen-down. _eraserLastWorld seeds the
+    // per-move segment passed to eraseAlongPath.
+    property point _eraserCursor: Qt.point(0, 0)
+    property point _eraserLastWorld: Qt.point(0, 0)
+    property bool _eraserHasLastPoint: false
 
     // Gates the anchor-picker dialog. We only open it after this item has
     // fully loaded, so transient sketch swaps during page construction do
@@ -247,6 +258,17 @@ QQ.Item {
             if (!sketchItemId.sketch) {
                 return
             }
+            if (sketchItemId.strokeKind === PenStroke.Eraser) {
+                if (active) {
+                    sketchItemId._eraserHasLastPoint = false
+                } else {
+                    // Close the merge window on pen-up so the next drag
+                    // starts a fresh undo step.
+                    sketchItemId.sketch.endEraseSession()
+                    sketchItemId._eraserHasLastPoint = false
+                }
+                return
+            }
             if (active) {
                 sketchItemId._activeStrokeIndex = sketchItemId.sketch.beginStroke(
                     sketchItemId.strokeKind,
@@ -260,7 +282,27 @@ QQ.Item {
         }
 
         onPointChanged: {
-            if (!active || !sketchItemId.sketch) {
+            if (!sketchItemId.sketch) {
+                return
+            }
+            if (sketchItemId.strokeKind === PenStroke.Eraser) {
+                sketchItemId._eraserCursor = point.position
+                if (!active) {
+                    return
+                }
+                const world = sketchItemId._worldPoint(point.position)
+                if (sketchItemId._eraserHasLastPoint) {
+                    // Feed just the new segment; the merging undo command
+                    // stitches the whole drag into a single step.
+                    sketchItemId.sketch.eraseAlongPath(
+                        [sketchItemId._eraserLastWorld, world],
+                        toolbarId.eraserRadius)
+                }
+                sketchItemId._eraserLastWorld = world
+                sketchItemId._eraserHasLastPoint = true
+                return
+            }
+            if (!active) {
                 return
             }
             if (sketchItemId._activeStrokeIndex < 0) {
@@ -271,6 +313,26 @@ QQ.Item {
             sketchItemId.sketch.appendPoint(sketchItemId._activeStrokeIndex,
                                             world, pressure, 0)
         }
+    }
+
+    // Eraser cursor: a hollow disk that tracks the pen while in eraser mode,
+    // sized so the on-screen radius matches the actual erase region at any
+    // zoom. Visible while the pen hovers or drags — ExclusivePointHandler
+    // updates point.position in both cases.
+    QQ.Rectangle {
+        readonly property double radiusPx:
+            toolbarId.eraserRadius * sketchItemId._pxPerMeter
+
+        visible: sketchItemId.strokeKind === PenStroke.Eraser
+                 && sketchItemId._eraserCursor.x !== 0
+        width: radiusPx * 2
+        height: radiusPx * 2
+        radius: radiusPx
+        color: "transparent"
+        border.color: Theme.sketchGridLine
+        border.width: 1
+        x: sketchItemId._eraserCursor.x - radiusPx
+        y: sketchItemId._eraserCursor.y - radiusPx
     }
 
     SketchToolbar {

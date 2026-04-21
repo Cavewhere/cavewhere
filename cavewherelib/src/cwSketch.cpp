@@ -9,6 +9,9 @@
 #include <QMetaObject>
 #include <QUndoCommand>
 
+//Std includes
+#include <algorithm>
+
 //Our includes
 #include "cwSketch.h"
 #include "cwSketchData.h"
@@ -57,6 +60,142 @@ private:
     QVector<cwPenStroke> m_after;
     bool m_firstRun = true;
 };
+
+// Per-pointer-move erase commands from one drag collapse into a single undo
+// step via QUndoStack::tryMerge — same session id means merge.
+class cwSketchEraseCommand : public QUndoCommand
+{
+public:
+    static constexpr int Id = 0x5A5E;
+
+    cwSketchEraseCommand(cwSketch *sketch,
+                         const QVector<cwPenStroke> &before,
+                         const QVector<cwPenStroke> &after,
+                         int session)
+        : QUndoCommand(QStringLiteral("Erase"), nullptr),
+          m_sketch(sketch),
+          m_before(before),
+          m_after(after),
+          m_session(session)
+    {}
+
+    int id() const override { return Id; }
+
+    bool mergeWith(const QUndoCommand *other) override {
+        const auto *o = static_cast<const cwSketchEraseCommand *>(other);
+        if (o->m_sketch != m_sketch || o->m_session != m_session) {
+            return false;
+        }
+        m_after = o->m_after;
+        return true;
+    }
+
+    void undo() override { m_sketch->setStrokes(m_before); }
+    void redo() override {
+        if (m_firstRun) {
+            m_firstRun = false;
+            return;
+        }
+        m_sketch->setStrokes(m_after);
+    }
+
+private:
+    cwSketch *m_sketch;
+    QVector<cwPenStroke> m_before;
+    QVector<cwPenStroke> m_after;
+    int m_session;
+    bool m_firstRun = true;
+};
+
+double distancePointToSegmentSquared(const QPointF &p, const QPointF &a, const QPointF &b)
+{
+    const QPointF ab = b - a;
+    const double lenSq = ab.x() * ab.x() + ab.y() * ab.y();
+    if (lenSq <= 0.0) {
+        const QPointF d = p - a;
+        return d.x() * d.x() + d.y() * d.y();
+    }
+    const QPointF ap = p - a;
+    double t = (ap.x() * ab.x() + ap.y() * ab.y()) / lenSq;
+    t = std::clamp(t, 0.0, 1.0);
+    const QPointF proj = a + t * ab;
+    const QPointF d = p - proj;
+    return d.x() * d.x() + d.y() * d.y();
+}
+
+bool pointWithinPath(const QPointF &p,
+                     const QVector<QPointF> &path,
+                     double radiusSquared)
+{
+    if (path.isEmpty()) {
+        return false;
+    }
+    if (path.size() == 1) {
+        const QPointF d = p - path.first();
+        return (d.x() * d.x() + d.y() * d.y()) <= radiusSquared;
+    }
+    for (int i = 1; i < path.size(); ++i) {
+        if (distancePointToSegmentSquared(p, path[i - 1], path[i]) <= radiusSquared) {
+            return true;
+        }
+    }
+    return false;
+}
+
+struct ErasedStrokes {
+    QVector<cwPenStroke> strokes;
+    bool changed = false;
+};
+
+ErasedStrokes computeErasedStrokes(const QVector<cwPenStroke> &strokes,
+                                   const QVector<QPointF> &path,
+                                   double radius)
+{
+    const double r2 = radius * radius;
+    ErasedStrokes out;
+    out.strokes.reserve(strokes.size());
+
+    for (const cwPenStroke &src : strokes) {
+        QVector<cwPenPoint> run;
+        run.reserve(src.points.size());
+        bool anyErased = false;
+        QVector<cwPenStroke> subStrokes;
+
+        auto flushRun = [&](bool preserveId) {
+            if (run.size() >= 2) {
+                cwPenStroke fragment;
+                fragment.kind   = src.kind;
+                fragment.width  = src.width;
+                fragment.color  = src.color;
+                fragment.id     = preserveId ? src.id : QUuid::createUuid();
+                fragment.points = run;
+                subStrokes.append(fragment);
+            } else if (!run.isEmpty()) {
+                // A single surviving point cannot render a line; dropping
+                // it counts as a stroke-level change so the caller records
+                // one undo step for the shrinkage.
+                anyErased = true;
+            }
+            run.clear();
+        };
+
+        for (const cwPenPoint &pt : src.points) {
+            if (pointWithinPath(pt.position, path, r2)) {
+                anyErased = true;
+                flushRun(false);
+            } else {
+                run.append(pt);
+            }
+        }
+        flushRun(!anyErased);
+
+        out.strokes.append(subStrokes);
+        if (anyErased) {
+            out.changed = true;
+        }
+    }
+    return out;
+}
 
 } // namespace
 
@@ -224,6 +363,30 @@ void cwSketch::endStroke()
     m_startStrokes.clear();
     m_undoStack->push(cmd);
     emit strokeEnded();
+}
+
+void cwSketch::eraseAlongPath(const QVector<QPointF> &pathPointsWorld, double radiusWorld)
+{
+    if (pathPointsWorld.isEmpty() || radiusWorld <= 0.0 || m_strokes.isEmpty()) {
+        return;
+    }
+
+    auto result = computeErasedStrokes(m_strokes, pathPointsWorld, radiusWorld);
+    if (!result.changed) {
+        return;
+    }
+
+    // Snapshot only once we know the erase actually mutates — on the hot path
+    // of a hovering eraser this avoids a per-frame deep copy of all strokes.
+    const auto before = m_strokes;
+    applyStrokes(result.strokes);
+    m_undoStack->push(new cwSketchEraseCommand(this, before, result.strokes,
+                                               m_eraseSession));
+}
+
+void cwSketch::endEraseSession()
+{
+    ++m_eraseSession;
 }
 
 void cwSketch::clearStrokes()

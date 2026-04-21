@@ -108,3 +108,143 @@ TEST_CASE("cwSketch clearStrokes is undoable", "[cwSketch]") {
     sketch.undoStack()->undo();
     CHECK(sketch.strokes().size() == 1);
 }
+
+namespace {
+int drawHorizontalStroke(cwSketch &sketch, cwPenStroke::Kind kind, double y,
+                         int pointCount, double spacing = 1.0)
+{
+    const int row = sketch.beginStroke(kind, 3.0, QColor("#abcdef"));
+    for (int i = 0; i < pointCount; ++i) {
+        sketch.appendPoint(row, cwPenPoint(QPointF(i * spacing, y), 0.5));
+    }
+    sketch.endStroke();
+    return row;
+}
+}
+
+TEST_CASE("cwSketch eraseAlongPath splits a stroke at contact", "[cwSketch]") {
+    cwSketch sketch;
+    drawHorizontalStroke(sketch, cwPenStroke::Wall, 0.0, 10);
+    REQUIRE(sketch.strokes().size() == 1);
+    const QUuid originalId = sketch.strokes().first().id;
+    const int undoBefore = sketch.undoStack()->count();
+
+    // Erase one point (x=5) with a tight radius; splits into [0..4] and [6..9].
+    sketch.eraseAlongPath({ QPointF(5.0, 0.0) }, 0.4);
+
+    REQUIRE(sketch.strokes().size() == 2);
+    const auto &a = sketch.strokes()[0];
+    const auto &b = sketch.strokes()[1];
+    CHECK(a.kind  == cwPenStroke::Wall);
+    CHECK(a.width == 3.0);
+    CHECK(a.color == QColor("#abcdef"));
+    CHECK(a.points.size() == 5);
+    CHECK(b.points.size() == 4);
+    CHECK(a.id != originalId);
+    CHECK(b.id != originalId);
+    CHECK(a.id != b.id);
+    CHECK(sketch.undoStack()->count() == undoBefore + 1);
+}
+
+TEST_CASE("cwSketch eraseAlongPath removes a fully covered stroke", "[cwSketch]") {
+    cwSketch sketch;
+    drawHorizontalStroke(sketch, cwPenStroke::Feature, 0.0, 5);
+
+    // Path sweeps across the entire stroke; large radius wipes it out.
+    sketch.eraseAlongPath({ QPointF(0.0, 0.0), QPointF(4.0, 0.0) }, 1.0);
+
+    CHECK(sketch.strokes().isEmpty());
+    REQUIRE(sketch.undoStack()->canUndo());
+}
+
+TEST_CASE("cwSketch eraseAlongPath leaves non-intersecting strokes alone", "[cwSketch]") {
+    cwSketch sketch;
+    drawHorizontalStroke(sketch, cwPenStroke::Wall, 0.0, 5);
+    drawHorizontalStroke(sketch, cwPenStroke::Feature, 100.0, 5);
+    REQUIRE(sketch.strokes().size() == 2);
+    const QUuid survivorId = sketch.strokes()[1].id;
+
+    sketch.eraseAlongPath({ QPointF(0.0, 0.0), QPointF(4.0, 0.0) }, 1.0);
+
+    REQUIRE(sketch.strokes().size() == 1);
+    CHECK(sketch.strokes().first().id == survivorId);
+    CHECK(sketch.strokes().first().kind == cwPenStroke::Feature);
+}
+
+TEST_CASE("cwSketch eraseAlongPath is a no-op when the path misses everything",
+          "[cwSketch]") {
+    cwSketch sketch;
+    drawHorizontalStroke(sketch, cwPenStroke::Wall, 0.0, 5);
+    const int undoBefore = sketch.undoStack()->count();
+    const auto snapshot = sketch.strokes();
+
+    sketch.eraseAlongPath({ QPointF(500.0, 500.0) }, 0.5);
+
+    CHECK(sketch.undoStack()->count() == undoBefore);
+    REQUIRE(sketch.strokes().size() == snapshot.size());
+    CHECK(sketch.strokes().first().id == snapshot.first().id);
+}
+
+TEST_CASE("cwSketch eraseAlongPath undo restores pre-erase state", "[cwSketch]") {
+    cwSketch sketch;
+    drawHorizontalStroke(sketch, cwPenStroke::Wall, 0.0, 10);
+    const QUuid originalId = sketch.strokes().first().id;
+
+    sketch.eraseAlongPath({ QPointF(5.0, 0.0) }, 0.4);
+    REQUIRE(sketch.strokes().size() == 2);
+
+    sketch.undoStack()->undo();
+    REQUIRE(sketch.strokes().size() == 1);
+    CHECK(sketch.strokes().first().id == originalId);
+    CHECK(sketch.strokes().first().points.size() == 10);
+}
+
+TEST_CASE("cwSketch eraseAlongPath merges successive live calls into one undo step",
+          "[cwSketch]") {
+    cwSketch sketch;
+    drawHorizontalStroke(sketch, cwPenStroke::Wall, 0.0, 10);
+    const int undoBefore = sketch.undoStack()->count();
+
+    // Simulate a single drag: per-segment calls, each chipping away one
+    // point. No endEraseSession() between them — all merge into one step.
+    sketch.eraseAlongPath({ QPointF(2.0, 0.0) }, 0.4);
+    sketch.eraseAlongPath({ QPointF(3.0, 0.0) }, 0.4);
+    sketch.eraseAlongPath({ QPointF(4.0, 0.0) }, 0.4);
+    sketch.endEraseSession();
+
+    CHECK(sketch.undoStack()->count() == undoBefore + 1);
+
+    sketch.undoStack()->undo();
+    REQUIRE(sketch.strokes().size() == 1);
+    CHECK(sketch.strokes().first().points.size() == 10);
+}
+
+TEST_CASE("cwSketch eraseAlongPath does not merge across pen lifts",
+          "[cwSketch]") {
+    cwSketch sketch;
+    drawHorizontalStroke(sketch, cwPenStroke::Wall, 0.0, 20);
+    const int undoBefore = sketch.undoStack()->count();
+
+    // First pen drag: erase point at x=5.
+    sketch.eraseAlongPath({ QPointF(5.0, 0.0) }, 0.4);
+    sketch.endEraseSession();
+
+    // Second pen drag: erase point at x=15.
+    sketch.eraseAlongPath({ QPointF(15.0, 0.0) }, 0.4);
+    sketch.endEraseSession();
+
+    // Two distinct pen drags → two undo entries.
+    CHECK(sketch.undoStack()->count() == undoBefore + 2);
+
+    // First undo reverts only the second erase (restoring point at x=15).
+    sketch.undoStack()->undo();
+    REQUIRE(sketch.strokes().size() == 2);
+    const int total = sketch.strokes()[0].points.size()
+                      + sketch.strokes()[1].points.size();
+    CHECK(total == 19);
+
+    // Second undo reverts the first erase, restoring the full 20-point stroke.
+    sketch.undoStack()->undo();
+    REQUIRE(sketch.strokes().size() == 1);
+    CHECK(sketch.strokes().first().points.size() == 20);
+}

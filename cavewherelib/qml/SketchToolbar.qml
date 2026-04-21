@@ -18,6 +18,11 @@ QC.Frame {
     property Sketch sketch
     property int strokeKind: PenStroke.Wall
 
+    // World-space eraser radius in meters. The canvas uses worldToScreenId to
+    // convert this to the on-screen cursor size, so the visible disk matches
+    // the actual erase region at any zoom.
+    property real eraserRadius: 0.5
+
     padding: Theme.tightSpacing
 
     ColumnLayout {
@@ -63,6 +68,37 @@ QC.Frame {
                 if (checked) {
                     toolbarId.strokeKind = PenStroke.ScrapOutline
                 }
+            }
+        }
+
+        QC.RadioButton {
+            id: eraserButtonId
+            objectName: "eraserButton"
+            text: "Eraser"
+            checked: toolbarId.strokeKind === PenStroke.Eraser
+            QC.ButtonGroup.group: kindGroupId
+            onToggled: {
+                if (checked) {
+                    toolbarId.strokeKind = PenStroke.Eraser
+                }
+            }
+        }
+
+        RowLayout {
+            visible: toolbarId.strokeKind === PenStroke.Eraser
+            spacing: Theme.tightSpacing
+
+            QC.Label { text: "Size" }
+
+            QC.Slider {
+                id: eraserSizeSliderId
+                objectName: "eraserSizeSlider"
+                from: 0.1
+                to: 2.0
+                stepSize: 0.1
+                value: toolbarId.eraserRadius
+                Layout.preferredWidth: 100
+                onMoved: toolbarId.eraserRadius = value
             }
         }
 
