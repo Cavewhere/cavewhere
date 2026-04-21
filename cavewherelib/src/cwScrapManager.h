@@ -53,6 +53,7 @@ class cwSketchManager;
 #include "cwGlobals.h"
 #include "asyncfuture.h"
 #include "cwTriangulateWarping.h"
+#include "cwSketchScrapOutline.h"
 #include <memory>
 
 /**
@@ -85,7 +86,7 @@ public:
     };
 
     struct SketchScrapDebugEntry {
-        QUuid sourceStrokeId;
+        QVector<QUuid> memberStrokeIds;
         QPolygonF tripLocalPolygon;
         QVector<SketchScrapDebugStation> stations;
         bool operator==(const SketchScrapDebugEntry&) const = default;
@@ -165,8 +166,10 @@ private:
     QMetaObject::Connection m_pathReadyConnection;
 
     // Per-sketch tracking: scraps derived from each sketch's outline
-    // strokes, keyed by source stroke UUID.
-    QHash<cwSketch*, QHash<QUuid, cwScrap*>> m_sketchDerivedScraps;
+    // strokes, keyed by the outline's sorted member-stroke ids. Keying on
+    // the whole set lets a chain survive unrelated stroke edits — only a
+    // change to its own membership churns the tracked scrap.
+    QHash<cwSketch*, QHash<QVector<QUuid>, cwScrap*>> m_sketchDerivedScraps;
 
     // Trip-local bounding box per sketch-derived scrap. The scrap stores
     // its outline in normalized [0,1] coords, so the raw world-meter box is

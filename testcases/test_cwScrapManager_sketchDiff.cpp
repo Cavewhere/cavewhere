@@ -124,12 +124,15 @@ TEST_CASE("Closed ScrapOutline stroke produces a sketch-parented scrap",
     CHECK(sketchDerivedScrapCount(f.sketch) == 1);
 }
 
-TEST_CASE("Open Wall stroke produces no scrap",
+TEST_CASE("Open Wall stroke self-caps into a scrap",
           "[cwScrapManager][sketchDiff]")
 {
+    // Nearest-endpoint matching has no distance cutoff: an open wall
+    // self-pairs at its two endpoints, the close-back seam becomes an
+    // auto-cap edge, and the resulting triangle is a valid outline.
     Fixture f;
     f.drawOpenLine(cwPenStroke::Wall);
-    CHECK(sketchDerivedScrapCount(f.sketch) == 0);
+    CHECK(sketchDerivedScrapCount(f.sketch) == 1);
 }
 
 TEST_CASE("Closed Feature stroke is ignored",

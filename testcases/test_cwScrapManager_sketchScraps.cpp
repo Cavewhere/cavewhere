@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QCoreApplication>
+#include <QEvent>
 #include <QSignalSpy>
 #include <QVector3D>
 
@@ -141,6 +142,16 @@ struct Fixture {
         sketch->appendPoint(row, QPointF(cx - halfSize, cy - halfSize), 1.0, 0);
         sketch->endStroke();
     }
+
+    // Draws an open polyline from a list of points.
+    void drawPolyline(cwPenStroke::Kind kind, const QVector<QPointF>& points)
+    {
+        const int row = sketch->beginStroke(kind, 0.01);
+        for (const auto& p : points) {
+            sketch->appendPoint(row, p, 1.0, 0);
+        }
+        sketch->endStroke();
+    }
 };
 
 } // namespace
@@ -247,4 +258,68 @@ TEST_CASE("Sketch-derived scrap keeps only stations inside the polygon",
     CHECK(names.contains(QString("a3")));
     CHECK_FALSE(names.contains(QString("a1")));
     CHECK_FALSE(names.contains(QString("a4")));
+}
+
+TEST_CASE("Two-stroke chain around stations produces one anchored scrap",
+          "[cwScrapManager][sketchScraps]")
+{
+    Fixture f;
+    REQUIRE(f.waitForLinePlot());
+
+    // Two open L-shaped walls whose endpoints meet at opposite corners
+    // of a rectangle covering y = -3..13, containing a1 (y=0) and a2
+    // (y=10). The nearest-endpoint matcher chains them into one outline.
+    f.drawPolyline(cwPenStroke::Wall,
+                   {{-3.0, -3.0}, {3.0, -3.0}, {3.0, 13.0}});
+    f.drawPolyline(cwPenStroke::Wall,
+                   {{3.0, 13.0}, {-3.0, 13.0}, {-3.0, -3.0}});
+
+    // Drain deleteLater for the single-stroke scrap retired when stroke 2
+    // changed the membership key.
+    QCoreApplication::processEvents();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    CHECK(f.sketchDerivedScrapCount() == 1);
+    auto* scrap = f.firstSketchScrap();
+    REQUIRE(scrap != nullptr);
+
+    QStringList names;
+    for(const auto& s : scrap->stations()) {
+        names.append(s.name());
+    }
+    CHECK(names.contains(QString("a1")));
+    CHECK(names.contains(QString("a2")));
+    CHECK_FALSE(names.contains(QString("a3")));
+    CHECK_FALSE(names.contains(QString("a4")));
+}
+
+TEST_CASE("Chain scrap identity is preserved across unrelated stroke edits",
+          "[cwScrapManager][sketchScraps]")
+{
+    Fixture f;
+    REQUIRE(f.waitForLinePlot());
+
+    f.drawPolyline(cwPenStroke::Wall,
+                   {{-3.0, -3.0}, {3.0, -3.0}, {3.0, 13.0}});
+    f.drawPolyline(cwPenStroke::Wall,
+                   {{3.0, 13.0}, {-3.0, 13.0}, {-3.0, -3.0}});
+
+    QCoreApplication::processEvents();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    REQUIRE(f.sketchDerivedScrapCount() == 1);
+    cwScrap* original = f.firstSketchScrap();
+    REQUIRE(original != nullptr);
+
+    // A Feature stroke triggers a rebuild but never contributes to the
+    // outline — the chain's memberStrokeIds is unchanged, so the tracked
+    // scrap pointer must survive.
+    f.drawPolyline(cwPenStroke::Feature,
+                   {{100.0, 100.0}, {101.0, 100.0}, {101.0, 101.0}});
+
+    QCoreApplication::processEvents();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    REQUIRE(f.sketchDerivedScrapCount() == 1);
+    CHECK(f.firstSketchScrap() == original);
 }

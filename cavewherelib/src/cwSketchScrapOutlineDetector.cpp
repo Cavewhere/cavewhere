@@ -14,6 +14,7 @@
 //Std includes
 #include <algorithm>
 #include <cmath>
+#include <tuple>
 
 namespace {
 
@@ -30,28 +31,6 @@ QPolygonF strokeToPolygon(const cwPenStroke &stroke)
         out.append(p.position);
     }
     return out;
-}
-
-// If the last point is within closeThreshold of the first, collapse them
-// to their midpoint (detector-only transform; the stroke itself is
-// untouched). Returns an empty polygon if the stroke cannot close.
-QPolygonF closePolygon(QPolygonF polygon, double closeThreshold)
-{
-    if (polygon.size() < 3) {
-        return {};
-    }
-    const QPointF first = polygon.first();
-    const QPointF last  = polygon.last();
-    const QPointF delta = last - first;
-    const double  dist  = std::hypot(delta.x(), delta.y());
-    if (dist > closeThreshold) {
-        return {};
-    }
-    const QPointF mid((first.x() + last.x()) * 0.5,
-                      (first.y() + last.y()) * 0.5);
-    polygon.first() = mid;
-    polygon.removeLast();
-    return polygon;
 }
 
 double perpendicularDistance(const QPointF &p,
@@ -240,20 +219,141 @@ QPolygonF offsetRingOutward(const QPolygonF &ring, double distance)
 
 } // namespace
 
+namespace {
+
+// Paired endpoints within this distance collapse to a single midpoint
+// (hand-drawn imprecision); farther pairs stay as two distinct vertices,
+// and the straight line between them becomes an auto-cap edge. 5 cm is well
+// below typical map resolution at cave scales (1:100–1:500) but tolerant of
+// hand-drawn closures.
+constexpr double kSeamMergeEps = 0.05;
+
+} // namespace
+
 QVector<cwSketchScrapOutline>
 cwSketchScrapOutlineDetector::detect(const QVector<cwPenStroke> &strokes,
-                                     double closeThresholdMeters,
                                      double simplifyToleranceMeters,
                                      double outsetMeters)
 {
     QVector<cwSketchScrapOutline> out;
-    out.reserve(strokes.size());
 
-    for (const auto &stroke : strokes) {
-        if (!kindProducesOutline(stroke.kind)) {
+    QVector<QUuid> ids;
+    QVector<QPolygonF> polylines;
+    ids.reserve(strokes.size());
+    polylines.reserve(strokes.size());
+    for (const auto &s : strokes) {
+        if (!kindProducesOutline(s.kind)) {
             continue;
         }
-        QPolygonF ring = closePolygon(strokeToPolygon(stroke), closeThresholdMeters);
+        QPolygonF poly = strokeToPolygon(s);
+        if (poly.size() < 2) {
+            continue;
+        }
+        ids.append(s.id);
+        polylines.append(std::move(poly));
+    }
+
+    const int n = polylines.size();
+    if (n == 0) {
+        return out;
+    }
+
+    // Endpoint indexing: 2*i = polyline start, 2*i+1 = polyline end.
+    const int epCount = 2 * n;
+    auto endpointPos = [&](int ep) -> QPointF {
+        return (ep & 1) ? polylines.at(ep >> 1).last()
+                        : polylines.at(ep >> 1).first();
+    };
+
+    // Same-stroke start↔end pairs are included so a closed stroke self-pairs
+    // into a single-member ring. distSq is sort key only — we never need the
+    // sqrt for matching decisions.
+    struct Candidate { double distSq; int a; int b; };
+    QVector<Candidate> candidates;
+    candidates.reserve(epCount * (epCount - 1) / 2);
+    for (int a = 0; a < epCount; ++a) {
+        const QPointF pa = endpointPos(a);
+        for (int b = a + 1; b < epCount; ++b) {
+            const QPointF pb = endpointPos(b);
+            const double dx = pa.x() - pb.x();
+            const double dy = pa.y() - pb.y();
+            candidates.append({dx * dx + dy * dy, a, b});
+        }
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [](const Candidate &x, const Candidate &y) {
+                  return std::tie(x.distSq, x.a, x.b)
+                       < std::tie(y.distSq, y.a, y.b);
+              });
+
+    // Greedy perfect matching: with 2N endpoints and no distance cutoff,
+    // the sweep always produces exactly N pairs.
+    QVector<int> match(epCount, -1);
+    for (const auto &c : candidates) {
+        if (match.at(c.a) != -1 || match.at(c.b) != -1) {
+            continue;
+        }
+        match[c.a] = c.b;
+        match[c.b] = c.a;
+    }
+
+    // Collapse the seam at `[anchor, free]` into their midpoint and report
+    // whether a collapse occurred. Callers use the return to decide whether
+    // to skip `free` (collapsed) or keep it as a distinct cap vertex.
+    auto tryMergeSeam = [](QPointF &anchor, const QPointF &free) {
+        if (QLineF(anchor, free).length() > kSeamMergeEps) {
+            return false;
+        }
+        anchor = (anchor + free) * 0.5;
+        return true;
+    };
+
+    QVector<bool> visited(n, false);
+
+    for (int startIdx = 0; startIdx < n; ++startIdx) {
+        if (visited.at(startIdx)) {
+            continue;
+        }
+
+        QPolygonF ring = std::move(polylines[startIdx]);
+        QVector<QUuid> members{ids.at(startIdx)};
+        visited[startIdx] = true;
+
+        // Tail = endpoint we're walking from. Start at startIdx's end; the
+        // chain closes when the walk meets startIdx's start.
+        int tail = 2 * startIdx + 1;
+
+        while (true) {
+            const int partner = match.at(tail);
+            Q_ASSERT(partner >= 0);
+
+            const int partnerStroke = partner >> 1;
+            const int partnerWhich  = partner & 1;
+
+            if (partnerStroke == startIdx) {
+                if (tryMergeSeam(ring.first(), ring.last())) {
+                    ring.removeLast();
+                }
+                break;
+            }
+
+            Q_ASSERT(!visited.at(partnerStroke));
+            visited[partnerStroke] = true;
+
+            QPolygonF next = std::move(polylines[partnerStroke]);
+            if (partnerWhich == 1) {
+                std::reverse(next.begin(), next.end());
+            }
+
+            const int startAppend = tryMergeSeam(ring.last(), next.first()) ? 1 : 0;
+            for (int k = startAppend; k < next.size(); ++k) {
+                ring.append(next.at(k));
+            }
+            members.append(ids.at(partnerStroke));
+
+            tail = 2 * partnerStroke + (partnerWhich == 0 ? 1 : 0);
+        }
+
         if (ring.size() < 3) {
             continue;
         }
@@ -277,8 +377,10 @@ cwSketchScrapOutlineDetector::detect(const QVector<cwPenStroke> &strokes,
             }
         }
 
+        std::sort(members.begin(), members.end());
+
         cwSketchScrapOutline outline;
-        outline.sourceStrokeId   = stroke.id;
+        outline.memberStrokeIds  = std::move(members);
         outline.tripLocalPolygon = std::move(ring);
         out.append(std::move(outline));
     }

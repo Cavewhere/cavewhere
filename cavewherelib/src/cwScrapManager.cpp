@@ -705,12 +705,10 @@ void cwScrapManager::releaseSketchLinePlot(cwSketch* sketch)
 
 namespace {
 
-// Detection thresholds for outline-forming strokes. 1 m snaps near-closed
-// strokes into closed polygons — generous enough that hand-drawn wall loops
-// at typical paper scales (1:250) close without perfect endpoint alignment;
-// 5 mm Douglas-Peucker keeps pen detail without bloating the CDT input.
-// Both are placeholders until the plan's stroke-width-relative heuristic lands.
-constexpr double kSketchCloseThresholdMeters    = 1.0;
+// Douglas-Peucker tolerance applied to chained outline rings before the
+// self-intersection / offset pipeline. 5 mm keeps pen detail without bloating
+// the CDT input; it's a placeholder until the plan's stroke-width-relative
+// heuristic lands.
 constexpr double kSketchSimplifyToleranceMeters = 0.005;
 
 QPointF normalizePointToBox(QPointF p, const QRectF& box)
@@ -830,7 +828,6 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
 
     const auto outlines = cwSketchScrapOutlineDetector::detect(
         sketch->strokes(),
-        kSketchCloseThresholdMeters,
         kSketchSimplifyToleranceMeters,
         outsetMeters);
 
@@ -842,8 +839,8 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
     }
     const bool haveStationSource = !m_sketchManager.isNull();
 
-    QHash<QUuid, cwScrap*>& tracked = trackedIt.value();
-    QSet<QUuid> seen;
+    QHash<QVector<QUuid>, cwScrap*>& tracked = trackedIt.value();
+    QSet<QVector<QUuid>> seen;
     QList<cwScrap*> dirtyScraps;
     QVector<SketchScrapDebugEntry> debugEntries;
     debugEntries.reserve(outlines.size());
@@ -864,22 +861,22 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
         }
 
         SketchScrapDebugEntry debugEntry;
-        debugEntry.sourceStrokeId = outline.sourceStrokeId;
+        debugEntry.memberStrokeIds = outline.memberStrokeIds;
         debugEntry.tripLocalPolygon = outline.tripLocalPolygon;
         debugEntry.stations = filteredStations;
         debugEntries.append(std::move(debugEntry));
 
-        seen.insert(outline.sourceStrokeId);
+        seen.insert(outline.memberStrokeIds);
         const QVector<QPointF> normalized =
             normalizePolygonToBoundingBox(outline.tripLocalPolygon, outlineBox);
 
-        auto it = tracked.find(outline.sourceStrokeId);
+        auto it = tracked.find(outline.memberStrokeIds);
         if(it == tracked.end()) {
             auto* scrap = new cwScrap(sketch);
             scrap->setParentSketch(sketch);
             scrap->setPoints(normalized);
             scrap->setStations(noteStations);
-            tracked.insert(outline.sourceStrokeId, scrap);
+            tracked.insert(outline.memberStrokeIds, scrap);
             m_sketchScrapBoundingBox.insert(scrap, outlineBox);
             connectScrap(scrap);
             attachScrap(scrap);
