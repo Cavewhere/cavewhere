@@ -283,6 +283,17 @@ MainWindowTest {
             let render = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer")
 
             let leadPoint = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0")
+
+            // Wait for the renderer to be laid out and the lead point to be
+            // projected by cwTransformUpdater. Under --platform offscreen the
+            // renderer can momentarily report width/height 0, during which
+            // leadPoint.x/y are still at their default 0 — without this gate
+            // the 'not in the center' checks below compare 0 !== 0 and spin
+            // until the tryVerify default timeout.
+            tryVerify(() => {
+                return render.width > 0 && render.height > 0 && leadPoint.visible
+            }, 10000, "renderer laid out and lead point projected")
+
             verify(leadPoint.x >= 0);
             verify(leadPoint.y >= 0);
             verify(leadPoint.x <= render.width)
