@@ -145,15 +145,15 @@ struct Fixture {
 
 } // namespace
 
-TEST_CASE("Sketch-derived scrap anchors to trip-local stations inside its bounding box",
+TEST_CASE("Sketch-derived scrap anchors to trip-local stations inside its polygon",
           "[cwScrapManager][sketchScraps]")
 {
     Fixture f;
     REQUIRE(f.waitForLinePlot());
 
-    // Square around (0, 5) — half-size 7 m, so it covers stations a1
-    // (y=0) and a2 (y=10). The filter margin is max(width,height)=14 m,
-    // so even a3 at y=20 should sneak in, but a4 at y=30 should not.
+    // Square around (0, 5) — half-size 7 m, so y-range is -2..12 which
+    // contains a1 (y=0) and a2 (y=10). a3 at y=20 and a4 at y=30 are
+    // outside the polygon and must not be anchored.
     f.drawClosedSquareAt(cwPenStroke::ScrapOutline, 0.0, 5.0, 7.0);
 
     REQUIRE(f.sketchDerivedScrapCount() == 1);
@@ -173,8 +173,7 @@ TEST_CASE("Sketch-derived scrap anchors to trip-local stations inside its boundi
         CHECK(p.x() <= 1.0 + 1.0e-9);
     }
 
-    // a1 and a2 are inside the 7 m half-size box; a4 is well outside the
-    // margin-expanded filter and should not be anchored.
+    // a1 and a2 fall inside the polygon; a4 is outside.
     QStringList names;
     for(const auto& noteStation : stations) {
         names.append(noteStation.name());
@@ -203,10 +202,49 @@ TEST_CASE("Closed Wall stroke around stations produces an anchored scrap",
     Fixture f;
     REQUIRE(f.waitForLinePlot());
 
-    f.drawClosedSquareAt(cwPenStroke::Wall, 0.0, 15.0, 4.0);
+    f.drawClosedSquareAt(cwPenStroke::Wall, 0.0, 15.0, 6.0);
 
     REQUIRE(f.sketchDerivedScrapCount() == 1);
     auto* scrap = f.firstSketchScrap();
     REQUIRE(scrap != nullptr);
     CHECK(!scrap->stations().isEmpty());
+}
+
+TEST_CASE("Sketch-derived scrap rejects stations that lie outside its polygon "
+          "but inside its bounding box neighborhood",
+          "[cwScrapManager][sketchScraps]")
+{
+    Fixture f;
+    REQUIRE(f.waitForLinePlot());
+
+    // Square around (0, 5) half-size 3 m → polygon covers y = 2..8.
+    // No station lives in that range (a1=0, a2=10, a3=20, a4=30), so the
+    // outline drops to the empty-station guard.
+    f.drawClosedSquareAt(cwPenStroke::ScrapOutline, 0.0, 5.0, 3.0);
+
+    CHECK(f.sketchDerivedScrapCount() == 0);
+}
+
+TEST_CASE("Sketch-derived scrap keeps only stations inside the polygon",
+          "[cwScrapManager][sketchScraps]")
+{
+    Fixture f;
+    REQUIRE(f.waitForLinePlot());
+
+    // Square around (0, 15) with half-size 6 m → polygon covers y = 9..21.
+    // a2 (y=10) and a3 (y=20) are inside; a1 (y=0) and a4 (y=30) are out.
+    f.drawClosedSquareAt(cwPenStroke::ScrapOutline, 0.0, 15.0, 6.0);
+
+    REQUIRE(f.sketchDerivedScrapCount() == 1);
+    auto* scrap = f.firstSketchScrap();
+    REQUIRE(scrap != nullptr);
+
+    QStringList names;
+    for(const auto& s : scrap->stations()) {
+        names.append(s.name());
+    }
+    CHECK(names.contains(QString("a2")));
+    CHECK(names.contains(QString("a3")));
+    CHECK_FALSE(names.contains(QString("a1")));
+    CHECK_FALSE(names.contains(QString("a4")));
 }

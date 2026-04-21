@@ -733,35 +733,19 @@ QVector<QPointF> normalizePolygonToBoundingBox(const QPolygonF& polygon, const Q
     return out;
 }
 
-// Build note stations for a sketch-derived outline from the trip's line
-// plot components. A station qualifies if its trip-local position lands
-// inside the outline's bounding box expanded by a margin of the larger
-// dimension — the margin keeps the morph well-conditioned for outlines
-// that hug just inside a wall with stations outside. Loop-broken
-// duplicates collapse to their original name so the global
-// cwStationPositionLookup resolves them.
-//
-// Result is sorted by canonical name so repeated calls with the same
-// station set produce equal QLists — QHash iteration order is not stable
-// across inserts, so unsorted output would spuriously flag "changed"
-// against a prior snapshot.
 // Shared filter for sketch-scrap station selection: keeps stations whose
-// trip-local position falls within a bbox inflated by max(width,height),
-// deduplicated by canonical name and sorted so repeated calls produce
-// equal QVectors.
+// trip-local position falls strictly inside the (already outset) outline
+// polygon, deduplicated by canonical name and sorted so repeated calls
+// produce equal QVectors. Loop-broken duplicates collapse to their original
+// name so the global cwStationPositionLookup resolves them.
 QVector<cwScrapManager::SketchScrapDebugStation> filteredStationsForOutline(
     const QList<cwTripLinePlotTask::TripComponent>& components,
-    const QRectF& outlineBoundingBox)
+    const QPolygonF& outlinePolygon)
 {
     QVector<cwScrapManager::SketchScrapDebugStation> out;
-    if(!outlineBoundingBox.isValid()) {
+    if(outlinePolygon.size() < 3) {
         return out;
     }
-
-    const double margin = std::max(outlineBoundingBox.width(),
-                                   outlineBoundingBox.height());
-    const QRectF filterBox = outlineBoundingBox.adjusted(-margin, -margin,
-                                                          margin, margin);
 
     QSet<QString> seenKeys;
 
@@ -770,7 +754,7 @@ QVector<cwScrapManager::SketchScrapDebugStation> filteredStationsForOutline(
         for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
             const QVector3D pos = it.value();
             const QPointF tripLocal(pos.x(), pos.y());
-            if(!filterBox.contains(tripLocal)) {
+            if(!outlinePolygon.containsPoint(tripLocal, Qt::OddEvenFill)) {
                 continue;
             }
 
@@ -867,7 +851,7 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
     for(const auto& outline : outlines) {
         const QRectF outlineBox = outline.tripLocalPolygon.boundingRect();
         const QVector<SketchScrapDebugStation> filteredStations = haveStationSource
-            ? filteredStationsForOutline(components, outlineBox)
+            ? filteredStationsForOutline(components, outline.tripLocalPolygon)
             : QVector<SketchScrapDebugStation>();
         const QList<cwNoteStation> noteStations = toNoteStations(filteredStations, outlineBox);
 
