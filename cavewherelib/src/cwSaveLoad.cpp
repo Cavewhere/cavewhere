@@ -3938,6 +3938,11 @@ void cwSaveLoad::connectSketch(cwSketch *sketch)
     connect(sketch, &cwSketch::nameChanged, this, saveSketch);
     connect(sketch, &cwSketch::viewTypeChanged, this, saveSketch);
     connect(sketch, &cwSketch::strokesReset, this, saveSketch);
+    // beginStroke/appendPoint/endStroke mutate the stroke list directly
+    // and push a QUndoCommand whose first redo() is a no-op — strokesReset
+    // never fires during a fresh stroke. Persist on strokeEnded so drawn
+    // strokes survive save/load.
+    connect(sketch, &cwSketch::strokeEnded, this, saveSketch);
 
     if (auto* scale = sketch->mapScale()) {
         if (d->trackConnected(scale)) {

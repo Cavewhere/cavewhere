@@ -105,17 +105,12 @@ struct ScrapFingerprint {
     QList<QPair<QString, QPointF>> stations;
 
     bool operator<(const ScrapFingerprint& other) const {
-        if(points.size() != other.points.size()) {
-            return points.size() < other.points.size();
-        }
-        for(int i = 0; i < points.size(); ++i) {
-            if(points.at(i) != other.points.at(i)) {
-                return points.at(i).x() != other.points.at(i).x()
-                    ? points.at(i).x() < other.points.at(i).x()
-                    : points.at(i).y() < other.points.at(i).y();
-            }
-        }
-        return false;
+        return std::lexicographical_compare(
+            points.cbegin(), points.cend(),
+            other.points.cbegin(), other.points.cend(),
+            [](const QPointF& a, const QPointF& b) {
+                return a.x() != b.x() ? a.x() < b.x() : a.y() < b.y();
+            });
     }
 
     bool operator==(const ScrapFingerprint& other) const {
@@ -167,21 +162,6 @@ cwSketch* findSketchInRoot(cwRootData* root)
             cwTrip* trip = cave->trip(t);
             for(QObject* n : trip->notesSketch()->notes()) {
                 if(auto* sk = qobject_cast<cwSketch*>(n)) {
-                    if(!sk->strokes().isEmpty()) {
-                        return sk;
-                    }
-                }
-            }
-        }
-    }
-    // Fall back to the first sketch regardless of stroke count so the
-    // caller can assert meaningfully.
-    for(int c = 0; c < region->caveCount(); ++c) {
-        cwCave* cave = region->cave(c);
-        for(int t = 0; t < cave->tripCount(); ++t) {
-            cwTrip* trip = cave->trip(t);
-            for(QObject* n : trip->notesSketch()->notes()) {
-                if(auto* sk = qobject_cast<cwSketch*>(n)) {
                     return sk;
                 }
             }
@@ -226,12 +206,11 @@ TEST_CASE("Sketch-derived scraps round trip through a full project save/load",
         root->linePlotManager()->waitToFinish();
         REQUIRE(!cave->stationPositionLookup().isEmpty());
 
-        // Construct the sketch with its final name before inserting, so
-        // cwSaveLoad's rowsInserted handler writes straight to
-        // "ScrapOutlineSketch.cwsketch". addSketch() uses a no-name sketch
-        // whose later rename doesn't move the empty-named file on disk —
-        // the empty file would then reload as a second, stroke-less
-        // sketch.
+        // Name the sketch before inserting — a nameless sketch writes to
+        // "cwsketch" (no stem), and cwSaveLoad's signal-driven save path
+        // does not rename the old file on nameChanged, so a later rename
+        // would leave the empty-named file as a stray sibling that
+        // reloads as a second stroke-less sketch.
         auto* sketch = new cwSketch();
         sketch->setViewType(cwSketch::Plan);
         sketch->setName(QStringLiteral("ScrapOutlineSketch"));
@@ -249,13 +228,6 @@ TEST_CASE("Sketch-derived scraps round trip through a full project save/load",
         drawClosedSquare(sketch, cwPenStroke::ScrapOutline, 0.0, 5.0, 4.0);
         drawClosedSquare(sketch, cwPenStroke::Wall,         0.0, 20.0, 4.0);
 
-        // Force a strokesReset so cwSaveLoad picks up the drawn strokes.
-        // beginStroke/appendPoint/endStroke mutate the model directly and
-        // push a no-op first-redo undo command; cwSaveLoad's connectSketch
-        // only saves on strokesReset (and friends), so without this round-
-        // trip through setStrokes the on-disk proto would stay empty.
-        sketch->setStrokes(sketch->strokes());
-
         REQUIRE(waitForDerivedScraps(root->scrapManager(), sketch, 2));
 
         preSave = fingerprintSketch(sketch);
@@ -268,9 +240,8 @@ TEST_CASE("Sketch-derived scraps round trip through a full project save/load",
         REQUIRE(project->saveAs(projectPath));
         root->futureManagerModel()->waitForFinished();
         project->waitSaveToFinish();
-        // saveAs on a temporary project moves it into a containing
-        // directory next to the given path, so the authoritative
-        // filename comes back from project->filename().
+        // saveAs from a temporary project moves the tree into a containing
+        // directory, so query the authoritative path after flush.
         savedProjectPath = project->filename();
         REQUIRE(!savedProjectPath.isEmpty());
     }
