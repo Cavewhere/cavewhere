@@ -26,6 +26,7 @@ class cwInfiniteGridModel;
 class cwCenterlineSketchPainterModel;
 class cwSurvey2DGeometryArtifact;
 class cwTrip;
+class cwScrapManager;
 class QAbstractItemModel;
 
 class CAVEWHERE_LIB_EXPORT cwSketchCanvas : public QCanvasPainterItem
@@ -42,6 +43,8 @@ class CAVEWHERE_LIB_EXPORT cwSketchCanvas : public QCanvasPainterItem
     Q_PROPERTY(QMatrix4x4 mapMatrix READ mapMatrix WRITE setMapMatrix NOTIFY mapMatrixChanged)
     Q_PROPERTY(cwSketchManager* sketchManager READ sketchManager WRITE setSketchManager NOTIFY sketchManagerChanged)
     Q_PROPERTY(cwCenterlineSketchPainterModel* linePlotModel READ linePlotModel CONSTANT)
+    Q_PROPERTY(cwScrapManager* scrapManager READ scrapManager WRITE setScrapManager NOTIFY scrapManagerChanged)
+    Q_PROPERTY(bool debugOverlayVisible READ debugOverlayVisible WRITE setDebugOverlayVisible NOTIFY debugOverlayVisibleChanged)
 
 public:
     explicit cwSketchCanvas(QQuickItem *parent = nullptr);
@@ -72,6 +75,12 @@ public:
 
     cwCenterlineSketchPainterModel *linePlotModel() const { return m_linePlotModel; }
 
+    cwScrapManager *scrapManager() const { return m_scrapManager; }
+    void setScrapManager(cwScrapManager *manager);
+
+    bool debugOverlayVisible() const { return m_debugOverlayVisible; }
+    void setDebugOverlayVisible(bool visible);
+
 protected:
     QCanvasPainterItemRenderer *createItemRenderer() const override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
@@ -84,6 +93,8 @@ signals:
     void gridChanged();
     void mapMatrixChanged();
     void sketchManagerChanged();
+    void scrapManagerChanged();
+    void debugOverlayVisibleChanged();
 
     // Emitted when the sketch's current trip resolves to >1 connected
     // component AND the sketch has no valid anchor. The canvas does NOT
@@ -100,6 +111,9 @@ private:
     QMatrix4x4 m_mapMatrix;
 
     QPointer<cwSketchManager> m_sketchManager;
+    QPointer<cwScrapManager> m_scrapManager;
+    bool m_debugOverlayVisible = false;
+    QMetaObject::Connection m_scrapDebugChangedConnection;
     cwCenterlineSketchPainterModel *m_linePlotModel = nullptr;
     cwSurvey2DGeometryArtifact *m_linePlotGeometry = nullptr;
     QPointer<cwTrip> m_acquiredTrip;

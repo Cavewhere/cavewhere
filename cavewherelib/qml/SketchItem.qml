@@ -110,6 +110,8 @@ QQ.Item {
         anchors.fill: parent
         sketch: sketchItemId.sketch
         sketchManager: RootData.sketchManager
+        scrapManager: RootData.scrapManager
+        debugOverlayVisible: debugToggleId.checked
         zoom: sketchItemId.zoom
         pan: sketchItemId.pan
         mapMatrix: worldToScreenId.matrix
@@ -119,6 +121,18 @@ QQ.Item {
         onRequestAnchorSelection: (components) => {
             sketchItemId._handleAnchorSelectionRequest(components)
         }
+    }
+
+    QC.CheckBox {
+        id: debugToggleId
+        objectName: "debugScrapSelectionToggle"
+
+        text: "Debug scrap selection"
+        checked: false
+
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 4
     }
 
     QQ.Loader {

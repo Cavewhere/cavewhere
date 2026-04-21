@@ -627,6 +627,7 @@ void cwScrapManager::connectSketch(cwSketch* sketch)
     connect(sketch, &QObject::destroyed, this, [this](QObject* obj) {
         auto* sk = static_cast<cwSketch*>(obj);
         m_sketchDerivedScraps.remove(sk);
+        m_sketchDebugEntries.remove(sk);
         releaseSketchLinePlot(sk);
     });
 
@@ -683,6 +684,9 @@ void cwScrapManager::sketchRemovedHelper(cwSketch* sketch)
         scrap->deleteLater();
     }
     m_sketchDerivedScraps.erase(it);
+    if(m_sketchDebugEntries.remove(sketch) > 0) {
+        emit sketchDebugEntriesChanged(sketch);
+    }
 
     releaseSketchLinePlot(sketch);
 }
@@ -741,11 +745,15 @@ QVector<QPointF> normalizePolygonToBoundingBox(const QPolygonF& polygon, const Q
 // station set produce equal QLists — QHash iteration order is not stable
 // across inserts, so unsorted output would spuriously flag "changed"
 // against a prior snapshot.
-QList<cwNoteStation> stationsForOutline(
+// Shared filter for sketch-scrap station selection: keeps stations whose
+// trip-local position falls within a bbox inflated by max(width,height),
+// deduplicated by canonical name and sorted so repeated calls produce
+// equal QVectors.
+QVector<cwScrapManager::SketchScrapDebugStation> filteredStationsForOutline(
     const QList<cwTripLinePlotTask::TripComponent>& components,
     const QRectF& outlineBoundingBox)
 {
-    QList<cwNoteStation> out;
+    QVector<cwScrapManager::SketchScrapDebugStation> out;
     if(!outlineBoundingBox.isValid()) {
         return out;
     }
@@ -780,18 +788,31 @@ QList<cwNoteStation> stationsForOutline(
             }
             seenKeys.insert(key);
 
-            cwNoteStation noteStation;
-            noteStation.setName(name);
-            noteStation.setPositionOnNote(normalizePointToBox(tripLocal, outlineBoundingBox));
-            out.append(noteStation);
+            out.append({name, tripLocal});
         }
     }
 
     std::sort(out.begin(), out.end(),
-              [](const cwNoteStation& a, const cwNoteStation& b) {
-                  return cwStation::canonicalKey(a.name())
-                       < cwStation::canonicalKey(b.name());
+              [](const cwScrapManager::SketchScrapDebugStation& a,
+                 const cwScrapManager::SketchScrapDebugStation& b) {
+                  return cwStation::canonicalKey(a.name)
+                       < cwStation::canonicalKey(b.name);
               });
+    return out;
+}
+
+QList<cwNoteStation> toNoteStations(
+    const QVector<cwScrapManager::SketchScrapDebugStation>& filtered,
+    const QRectF& outlineBoundingBox)
+{
+    QList<cwNoteStation> out;
+    out.reserve(filtered.size());
+    for(const auto& s : filtered) {
+        cwNoteStation noteStation;
+        noteStation.setName(s.name);
+        noteStation.setPositionOnNote(normalizePointToBox(s.tripLocalPos, outlineBoundingBox));
+        out.append(noteStation);
+    }
     return out;
 }
 
@@ -840,12 +861,15 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
     QHash<QUuid, cwScrap*>& tracked = trackedIt.value();
     QSet<QUuid> seen;
     QList<cwScrap*> dirtyScraps;
+    QVector<SketchScrapDebugEntry> debugEntries;
+    debugEntries.reserve(outlines.size());
 
     for(const auto& outline : outlines) {
         const QRectF outlineBox = outline.tripLocalPolygon.boundingRect();
-        const QList<cwNoteStation> noteStations = haveStationSource
-            ? stationsForOutline(components, outlineBox)
-            : QList<cwNoteStation>();
+        const QVector<SketchScrapDebugStation> filteredStations = haveStationSource
+            ? filteredStationsForOutline(components, outlineBox)
+            : QVector<SketchScrapDebugStation>();
+        const QList<cwNoteStation> noteStations = toNoteStations(filteredStations, outlineBox);
 
         // Empty-station guard: morph needs at least one (local,global) pair,
         // so outlines with no nearby stations are dropped before they reach
@@ -854,6 +878,12 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
         if(haveStationSource && noteStations.isEmpty()) {
             continue;
         }
+
+        SketchScrapDebugEntry debugEntry;
+        debugEntry.sourceStrokeId = outline.sourceStrokeId;
+        debugEntry.tripLocalPolygon = outline.tripLocalPolygon;
+        debugEntry.stations = filteredStations;
+        debugEntries.append(std::move(debugEntry));
 
         seen.insert(outline.sourceStrokeId);
         const QVector<QPointF> normalized =
@@ -920,6 +950,16 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
 
     if(!dirtyScraps.isEmpty()) {
         updateScrapGeometry(dirtyScraps);
+    }
+
+    const auto previousDebug = m_sketchDebugEntries.value(sketch);
+    if(debugEntries.isEmpty()) {
+        m_sketchDebugEntries.remove(sketch);
+    } else {
+        m_sketchDebugEntries.insert(sketch, debugEntries);
+    }
+    if(previousDebug != debugEntries) {
+        emit sketchDebugEntriesChanged(sketch);
     }
 
     emit sketchDerivedScrapsUpdated(sketch);

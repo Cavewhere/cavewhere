@@ -18,6 +18,7 @@
 #include "CaveWhereLibExport.h"
 #include "cwGridTextModel.h"
 #include "cwSketchPainter.h"
+#include "cwScrapManager.h"
 
 class cwSketchCanvasRendererSnapshotModel;
 
@@ -43,6 +44,8 @@ private:
     double m_mapScale = 1.0;
     double m_userZoom = 1.0;
     double m_mapScaleRatio = cwSketchPainter::LinePlotReferenceMapScaleRatio;
+
+    QVector<cwScrapManager::SketchScrapDebugEntry> m_debugSnapshot;
 };
 
 #endif // CWSKETCHCANVASRENDERER_H

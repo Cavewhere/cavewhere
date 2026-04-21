@@ -21,6 +21,9 @@
 //Qt includes
 #include <QCanvasPainter>
 #include <QCanvasPainterItem>
+#include <QColor>
+#include <QFont>
+#include <QPainterPath>
 
 // Render-thread-owned model backing cwSketchPainter::paint. Populated in
 // synchronize() while the GUI thread is blocked; read in paint() without
@@ -98,6 +101,7 @@ void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
         m_minorTextSnapshot.clear();
         m_majorTextSnapshot.clear();
         m_linePlotTextSnapshot.clear();
+        m_debugSnapshot.clear();
         return;
     }
 
@@ -140,6 +144,11 @@ void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
     m_majorTextSnapshot = (grid && grid->majorTextModel())
                               ? grid->majorTextModel()->rows()
                               : QVector<cwGridTextModel::TextRow>();
+
+    auto *scrapManager = canvas->scrapManager();
+    m_debugSnapshot = (canvas->debugOverlayVisible() && scrapManager && sketch)
+                          ? scrapManager->sketchDebugEntries(sketch)
+                          : QVector<cwScrapManager::SketchScrapDebugEntry>();
 }
 
 void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
@@ -161,28 +170,65 @@ void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
                           || !m_minorTextSnapshot.isEmpty()
                           || !m_majorTextSnapshot.isEmpty();
 
-    if (!hasStrokes && !hasGrid && !hasLinePlot) {
+    if (!hasStrokes && !hasGrid && !hasLinePlot && m_debugSnapshot.isEmpty()) {
         return;
     }
 
     painter->save();
     cwSketchDrawCanvas draw(painter);
 
-    cwSketchPainter::PaintContext ctx;
-    ctx.viewport       = m_worldViewport;
-    ctx.worldToItem    = m_worldToItem;
-    ctx.mapScale       = m_mapScale;
-    ctx.strokes        = m_snapshot;
-    ctx.gridMinor.paths = m_minorGridSnapshot;
-    ctx.gridMinor.text  = &m_minorTextSnapshot;
-    ctx.gridMajor.paths = m_majorGridSnapshot;
-    ctx.gridMajor.text  = &m_majorTextSnapshot;
-    ctx.linePlot.paths  = m_linePlotSnapshot;
-    ctx.linePlot.text   = &m_linePlotTextSnapshot;
+    if (hasStrokes || hasGrid || hasLinePlot) {
+        cwSketchPainter::PaintContext ctx;
+        ctx.viewport       = m_worldViewport;
+        ctx.worldToItem    = m_worldToItem;
+        ctx.mapScale       = m_mapScale;
+        ctx.strokes        = m_snapshot;
+        ctx.gridMinor.paths = m_minorGridSnapshot;
+        ctx.gridMinor.text  = &m_minorTextSnapshot;
+        ctx.gridMajor.paths = m_majorGridSnapshot;
+        ctx.gridMajor.text  = &m_majorTextSnapshot;
+        ctx.linePlot.paths  = m_linePlotSnapshot;
+        ctx.linePlot.text   = &m_linePlotTextSnapshot;
 
-    ctx.linePlotTextScale =
-        (m_mapScaleRatio / cwSketchPainter::LinePlotReferenceMapScaleRatio) * m_userZoom;
-    cwSketchPainter::paint(&draw, ctx);
+        ctx.linePlotTextScale =
+            (m_mapScaleRatio / cwSketchPainter::LinePlotReferenceMapScaleRatio) * m_userZoom;
+        cwSketchPainter::paint(&draw, ctx);
+    }
+
+    if (!m_debugSnapshot.isEmpty()) {
+        const QColor outlineColor(0, 200, 230, 230);
+        const QColor stationFill(255, 80, 80, 230);
+        const QColor stationLabel(20, 20, 20, 255);
+        const double markerRadius = 5.0;
+        const QFont labelFont(QStringLiteral("Helvetica"), 10);
+
+        draw.save();
+        draw.setTransform(QTransform());
+        draw.setStrokePen(outlineColor, 2.0, Qt::FlatCap, Qt::MiterJoin);
+        draw.setFillBrush(stationFill);
+
+        for (const auto &entry : m_debugSnapshot) {
+            if (entry.tripLocalPolygon.size() >= 2) {
+                QPainterPath path;
+                path.moveTo(m_worldToItem.map(entry.tripLocalPolygon.first()));
+                for (int i = 1; i < entry.tripLocalPolygon.size(); ++i) {
+                    path.lineTo(m_worldToItem.map(entry.tripLocalPolygon.at(i)));
+                }
+                path.closeSubpath();
+                draw.strokePath(path);
+            }
+
+            for (const auto &station : entry.stations) {
+                const QPointF itemPos = m_worldToItem.map(station.tripLocalPos);
+                QPainterPath dot;
+                dot.addEllipse(itemPos, markerRadius, markerRadius);
+                draw.fillPath(dot);
+                draw.drawText(itemPos + QPointF(markerRadius + 2.0, -markerRadius),
+                              station.name, labelFont, stationLabel);
+            }
+        }
+        draw.restore();
+    }
 
     painter->restore();
 }

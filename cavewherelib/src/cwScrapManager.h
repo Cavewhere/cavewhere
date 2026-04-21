@@ -20,6 +20,9 @@
 #include <QMetaObject>
 #include <QQmlEngine>
 #include <QFuture>
+#include <QPolygonF>
+#include <QVector>
+#include <QPair>
 
 //Our includes
 class cwCavingRegion;
@@ -73,6 +76,27 @@ public:
         QFuture<cwTriangulatedData> data;
     };
 
+    // Snapshot of data the sketch-scrap derivation pipeline produced for one
+    // outline — exposed so the sketch view can overlay it for debugging.
+    struct SketchScrapDebugStation {
+        QString name;
+        QPointF tripLocalPos;
+        bool operator==(const SketchScrapDebugStation&) const = default;
+    };
+
+    struct SketchScrapDebugEntry {
+        QUuid sourceStrokeId;
+        QPolygonF tripLocalPolygon;
+        QVector<SketchScrapDebugStation> stations;
+        bool operator==(const SketchScrapDebugEntry&) const = default;
+    };
+
+    const QVector<SketchScrapDebugEntry>& sketchDebugEntries(cwSketch* sketch) const {
+        static const QVector<SketchScrapDebugEntry> empty;
+        auto it = m_sketchDebugEntries.constFind(sketch);
+        return it != m_sketchDebugEntries.constEnd() ? it.value() : empty;
+    }
+
     void setProject(cwProject* project);
     void setRegionTreeModel(cwRegionTreeModel* regionTreeModel);
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
@@ -105,6 +129,8 @@ signals:
     // Fires whenever stroke-level state changes for a tracked sketch; downstream
     // consumers (and tests) use this to observe the diff pipeline.
     void sketchDerivedScrapsUpdated(cwSketch* sketch);
+
+    void sketchDebugEntriesChanged(cwSketch* sketch);
 
 public slots:
     void updateAllScraps();
@@ -147,6 +173,8 @@ private:
     // kept here — the rasterizer and noteImageResolution both need it at
     // triangulation time.
     QHash<cwScrap*, QRectF> m_sketchScrapBoundingBox;
+
+    QHash<cwSketch*, QVector<SketchScrapDebugEntry>> m_sketchDebugEntries;
 
     QPointer<cwSketchManager> m_sketchManager;
 

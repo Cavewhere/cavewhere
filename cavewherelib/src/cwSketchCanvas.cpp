@@ -10,6 +10,7 @@
 #include "cwSketch.h"
 #include "cwSketchCanvasRenderer.h"
 #include "cwSketchManager.h"
+#include "cwScrapManager.h"
 #include "cwSketchPainterPathModel.h"
 #include "cwPenStrokeModel.h"
 #include "cwInfiniteGridModel.h"
@@ -240,6 +241,39 @@ void cwSketchCanvas::updateGridView()
     const QPointF worldOrigin = itemToWorld.map(QPointF(0.0, 0.0));
     m_grid->setViewport(worldViewport);
     m_grid->setGridOrigin(worldOrigin);
+}
+
+void cwSketchCanvas::setScrapManager(cwScrapManager *manager)
+{
+    if (m_scrapManager == manager) {
+        return;
+    }
+    if (m_scrapDebugChangedConnection) {
+        QObject::disconnect(m_scrapDebugChangedConnection);
+        m_scrapDebugChangedConnection = {};
+    }
+    m_scrapManager = manager;
+    if (m_scrapManager) {
+        m_scrapDebugChangedConnection =
+            connect(m_scrapManager.data(), &cwScrapManager::sketchDebugEntriesChanged,
+                    this, [this](cwSketch *changed) {
+                        if (changed == m_sketch) {
+                            update();
+                        }
+                    });
+    }
+    emit scrapManagerChanged();
+    update();
+}
+
+void cwSketchCanvas::setDebugOverlayVisible(bool visible)
+{
+    if (m_debugOverlayVisible == visible) {
+        return;
+    }
+    m_debugOverlayVisible = visible;
+    emit debugOverlayVisibleChanged();
+    update();
 }
 
 void cwSketchCanvas::setSketchManager(cwSketchManager *manager)
