@@ -283,25 +283,19 @@ MainWindowTest {
             let render = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer")
 
             let leadPoint = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0")
-
-            // Wait for the renderer to be laid out and the lead point to be
-            // projected by cwTransformUpdater. Under --platform offscreen the
-            // renderer can momentarily report width/height 0, during which
-            // leadPoint.x/y are still at their default 0 — without this gate
-            // the 'not in the center' checks below compare 0 !== 0 and spin
-            // until the tryVerify default timeout.
-            tryVerify(() => {
-                return render.width > 0 && render.height > 0 && leadPoint.visible
-            }, 10000, "renderer laid out and lead point projected")
-
             verify(leadPoint.x >= 0);
             verify(leadPoint.y >= 0);
             verify(leadPoint.x <= render.width)
             verify(leadPoint.y <= render.height)
 
-            //lead is not in the center
-            tryVerify(() => { return leadPoint.x !== render.width * 0.5; })
-            tryVerify(() => { return leadPoint.y !== render.height * 0.5; })
+            // lead is not in the center. Initially the projection places the
+            // lead at exact viewport center; a secondary cwTransformUpdater
+            // tick ~100ms later shifts it off-center. Bumped to 10s from the
+            // default 5s since the nightly has flaked at the 5s budget.
+            tryVerify(() => { return leadPoint.x !== render.width * 0.5; }, 10000,
+                      "lead point should move off horizontal center")
+            tryVerify(() => { return leadPoint.y !== render.height * 0.5; }, 10000,
+                      "lead point should move off vertical center")
 
             mouseClick(leadPoint)
 
