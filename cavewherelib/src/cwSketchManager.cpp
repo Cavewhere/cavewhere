@@ -149,9 +149,9 @@ QImage cwSketchManager::renderIcon(const cwSketch* sketch, int edgePixels)
     }
 
     QRectF world = strokeBoundingRect(sketch);
-    if (!world.isValid() || world.isEmpty()) {
-        // Single-point or zero-extent sketches still get a placeholder canvas
-        // centred on the stroke so the thumbnail is non-empty.
+    if (world.width() == 0.0 && world.height() == 0.0) {
+        // Single-point only. Axis-aligned strokes (zero in one dimension)
+        // must fall through — the margin padding below inflates both axes.
         const QPointF centre = world.topLeft();
         world = QRectF(centre - QPointF(1.0, 1.0), QSizeF(2.0, 2.0));
     }
