@@ -41,6 +41,15 @@ void cwSketchViewState::setZoomLocked(bool zoomLocked)
     emit zoomLockedChanged();
 }
 
+void cwSketchViewState::setDebugOverlayVisible(bool visible)
+{
+    if (m_debugOverlayVisible == visible) {
+        return;
+    }
+    m_debugOverlayVisible = visible;
+    emit debugOverlayVisibleChanged();
+}
+
 void cwSketchViewState::markInitialized()
 {
     if (m_viewInitialized) {

@@ -78,7 +78,7 @@ public:
     cwScrapManager *scrapManager() const { return m_scrapManager; }
     void setScrapManager(cwScrapManager *manager);
 
-    bool debugOverlayVisible() const { return m_debugOverlayVisible; }
+    bool debugOverlayVisible() const;
     void setDebugOverlayVisible(bool visible);
 
 protected:
@@ -112,8 +112,8 @@ private:
 
     QPointer<cwSketchManager> m_sketchManager;
     QPointer<cwScrapManager> m_scrapManager;
-    bool m_debugOverlayVisible = false;
     QMetaObject::Connection m_scrapDebugChangedConnection;
+    QMetaObject::Connection m_viewStateDebugChangedConnection;
     cwCenterlineSketchPainterModel *m_linePlotModel = nullptr;
     cwSurvey2DGeometryArtifact *m_linePlotGeometry = nullptr;
     QPointer<cwTrip> m_acquiredTrip;

@@ -28,6 +28,10 @@ class CAVEWHERE_LIB_EXPORT cwSketchViewState : public QObject
     // False until the first setZoom/setPan, so callers can distinguish a fresh sketch from one panned back to (0,0).
     Q_PROPERTY(bool viewInitialized READ viewInitialized NOTIFY viewInitializedChanged)
     Q_PROPERTY(bool zoomLocked READ zoomLocked WRITE setZoomLocked NOTIFY zoomLockedChanged)
+    // Toggled by the sketch canvas's debug overlay. cwScrapManager also
+    // observes this: when false the diagnostic build (per-stroke polyline
+    // copy + rejection list) is skipped entirely.
+    Q_PROPERTY(bool debugOverlayVisible READ debugOverlayVisible WRITE setDebugOverlayVisible NOTIFY debugOverlayVisibleChanged)
 
 public:
     explicit cwSketchViewState(QObject *parent = nullptr);
@@ -36,22 +40,26 @@ public:
     QPointF pan() const { return m_pan; }
     bool    viewInitialized() const { return m_viewInitialized; }
     bool    zoomLocked() const { return m_zoomLocked; }
+    bool    debugOverlayVisible() const { return m_debugOverlayVisible; }
 
     void setZoom(double zoom);
     void setPan(QPointF pan);
     void setZoomLocked(bool zoomLocked);
+    void setDebugOverlayVisible(bool visible);
 
 signals:
     void zoomChanged();
     void panChanged();
     void viewInitializedChanged();
     void zoomLockedChanged();
+    void debugOverlayVisibleChanged();
 
 private:
     double  m_zoom = 1.0;
     QPointF m_pan;
     bool    m_viewInitialized = false;
     bool    m_zoomLocked = true;
+    bool    m_debugOverlayVisible = false;
 
     void markInitialized();
 };

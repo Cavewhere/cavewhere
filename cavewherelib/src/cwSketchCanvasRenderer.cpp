@@ -103,6 +103,7 @@ void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
         m_majorTextSnapshot.clear();
         m_linePlotTextSnapshot.clear();
         m_debugSnapshot.clear();
+        m_rejectedSnapshot.clear();
         return;
     }
 
@@ -150,6 +151,9 @@ void cwSketchCanvasRenderer::synchronize(QCanvasPainterItem *item)
     m_debugSnapshot = (canvas->debugOverlayVisible() && scrapManager && sketch)
                           ? scrapManager->sketchDebugEntries(sketch)
                           : QVector<cwScrapManager::SketchScrapDebugEntry>();
+    m_rejectedSnapshot = (canvas->debugOverlayVisible() && scrapManager && sketch)
+                             ? scrapManager->sketchRejectedStrokes(sketch)
+                             : QVector<cwSketchScrapRejectedStroke>();
 }
 
 void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
@@ -171,7 +175,8 @@ void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
                           || !m_minorTextSnapshot.isEmpty()
                           || !m_majorTextSnapshot.isEmpty();
 
-    if (!hasStrokes && !hasGrid && !hasLinePlot && m_debugSnapshot.isEmpty()) {
+    if (!hasStrokes && !hasGrid && !hasLinePlot
+        && m_debugSnapshot.isEmpty() && m_rejectedSnapshot.isEmpty()) {
         return;
     }
 
@@ -233,6 +238,38 @@ void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
                 draw.drawText(itemPos + QPointF(markerRadius + 2.0, -markerRadius),
                               station.name, labelFont, stationLabel);
             }
+        }
+        draw.restore();
+    }
+
+    if (!m_rejectedSnapshot.isEmpty()) {
+        const QColor rejectColor(220, 60, 60, 230);
+        const QColor labelColor(180, 20, 20, 255);
+        const QFont  labelFont(QStringLiteral("Helvetica"), 10);
+
+        draw.save();
+        draw.setTransform(QTransform());
+        draw.setStrokePen(rejectColor, 2.0, Qt::FlatCap, Qt::MiterJoin);
+
+        for (const auto &rejected : m_rejectedSnapshot) {
+            const QPolygonF &poly = rejected.tripLocalPolyline;
+            if (poly.size() < 2) {
+                continue;
+            }
+            QPainterPath path;
+            QPointF centroid(0.0, 0.0);
+            path.moveTo(m_worldToItem.map(poly.first()));
+            centroid += poly.first();
+            for (int i = 1; i < poly.size(); ++i) {
+                const QPointF mapped = m_worldToItem.map(poly.at(i));
+                path.lineTo(mapped);
+                centroid += poly.at(i);
+            }
+            draw.strokePath(path);
+
+            centroid /= poly.size();
+            draw.drawText(m_worldToItem.map(centroid), rejected.reason,
+                          labelFont, labelColor);
         }
         draw.restore();
     }

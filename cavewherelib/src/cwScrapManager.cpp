@@ -621,6 +621,13 @@ void cwScrapManager::connectSketch(cwSketch* sketch)
     connect(sketch, &cwSketch::strokeEnded,
             this, [this, sketch]() { updateDerivedScrapsForSketch(sketch); });
 
+    // Flipping the overlay re-runs detection so the cached data matches
+    // what the renderer is about to ask for.
+    if(auto* viewState = sketch->viewState()) {
+        connect(viewState, &cwSketchViewState::debugOverlayVisibleChanged,
+                this, [this, sketch]() { updateDerivedScrapsForSketch(sketch); });
+    }
+
     // cwSurveyNoteModelBase::clearNotes uses beginResetModel and never fires
     // rowsRemoved — without a destroyed handler the tracking map would retain
     // dangling pointers once the owning model deleteLater's the sketch.
@@ -628,6 +635,7 @@ void cwScrapManager::connectSketch(cwSketch* sketch)
         auto* sk = static_cast<cwSketch*>(obj);
         m_sketchDerivedScraps.remove(sk);
         m_sketchDebugEntries.remove(sk);
+        m_sketchRejectedStrokes.remove(sk);
         releaseSketchLinePlot(sk);
     });
 
@@ -684,8 +692,10 @@ void cwScrapManager::sketchRemovedHelper(cwSketch* sketch)
         scrap->deleteLater();
     }
     m_sketchDerivedScraps.erase(it);
-    if(m_sketchDebugEntries.remove(sketch) > 0) {
-        emit sketchDebugEntriesChanged(sketch);
+    const bool hadDebug    = m_sketchDebugEntries.remove(sketch) > 0;
+    const bool hadRejected = m_sketchRejectedStrokes.remove(sketch) > 0;
+    if(hadDebug || hadRejected) {
+        emit sketchDiagnosticsChanged(sketch);
     }
 
     releaseSketchLinePlot(sketch);
@@ -826,10 +836,27 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
         ? (0.5 * maxWidthPixels) / ppm
         : 0.0;
 
-    const auto outlines = cwSketchScrapOutlineDetector::detect(
-        sketch->strokes(),
-        kSketchSimplifyToleranceMeters,
-        outsetMeters);
+    const bool diagnosticsEnabled = sketch->viewState()
+        && sketch->viewState()->debugOverlayVisible();
+
+    QVector<cwSketchScrapOutline> detectorOutlines;
+    QVector<cwSketchScrapRejectedStroke> rejectedStrokes;
+    QHash<QUuid, QPolygonF> rawStrokeById;
+    if (diagnosticsEnabled) {
+        auto detectResult = cwSketchScrapOutlineDetector::detectWithDiagnostics(
+            sketch->strokes(),
+            kSketchSimplifyToleranceMeters,
+            outsetMeters);
+        detectorOutlines = std::move(detectResult.outlines);
+        rejectedStrokes  = std::move(detectResult.rejected);
+        rawStrokeById    = std::move(detectResult.rawStrokesById);
+    } else {
+        detectorOutlines = cwSketchScrapOutlineDetector::detect(
+            sketch->strokes(),
+            kSketchSimplifyToleranceMeters,
+            outsetMeters);
+    }
+    const auto& outlines = detectorOutlines;
 
     QList<cwTripLinePlotTask::TripComponent> components;
     if(!m_sketchManager.isNull()) {
@@ -857,14 +884,25 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
         // the triangulator. When no station source is wired (unit tests),
         // scraps are still created so the 4b no-anchor path keeps working.
         if(haveStationSource && noteStations.isEmpty()) {
+            if(diagnosticsEnabled) {
+                // Surface each member stroke so the debug overlay explains
+                // why the wall didn't become a scrap.
+                for(const QUuid& id : outline.memberStrokeIds) {
+                    rejectedStrokes.append({id,
+                                            QString::fromLatin1(cwSketchScrapRejectReasons::NoAnchorStations),
+                                            rawStrokeById.value(id)});
+                }
+            }
             continue;
         }
 
-        SketchScrapDebugEntry debugEntry;
-        debugEntry.memberStrokeIds = outline.memberStrokeIds;
-        debugEntry.tripLocalPolygon = outline.tripLocalPolygon;
-        debugEntry.stations = filteredStations;
-        debugEntries.append(std::move(debugEntry));
+        if(diagnosticsEnabled) {
+            SketchScrapDebugEntry debugEntry;
+            debugEntry.memberStrokeIds = outline.memberStrokeIds;
+            debugEntry.tripLocalPolygon = outline.tripLocalPolygon;
+            debugEntry.stations = filteredStations;
+            debugEntries.append(std::move(debugEntry));
+        }
 
         seen.insert(outline.memberStrokeIds);
         const QVector<QPointF> normalized =
@@ -933,14 +971,20 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
         updateScrapGeometry(dirtyScraps);
     }
 
-    const auto previousDebug = m_sketchDebugEntries.value(sketch);
+    const auto previousDebug    = m_sketchDebugEntries.value(sketch);
+    const auto previousRejected = m_sketchRejectedStrokes.value(sketch);
     if(debugEntries.isEmpty()) {
         m_sketchDebugEntries.remove(sketch);
     } else {
         m_sketchDebugEntries.insert(sketch, debugEntries);
     }
-    if(previousDebug != debugEntries) {
-        emit sketchDebugEntriesChanged(sketch);
+    if(rejectedStrokes.isEmpty()) {
+        m_sketchRejectedStrokes.remove(sketch);
+    } else {
+        m_sketchRejectedStrokes.insert(sketch, rejectedStrokes);
+    }
+    if(previousDebug != debugEntries || previousRejected != rejectedStrokes) {
+        emit sketchDiagnosticsChanged(sketch);
     }
 
     emit sketchDerivedScrapsUpdated(sketch);

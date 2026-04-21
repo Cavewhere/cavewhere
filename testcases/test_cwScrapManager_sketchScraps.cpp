@@ -15,6 +15,8 @@
 #include "cwCompassReading.h"
 #include "cwDistanceReading.h"
 #include "cwPenStroke.h"
+#include "cwSketchScrapOutline.h"
+#include "cwSketchViewState.h"
 #include "cwRegionTreeModel.h"
 #include "cwScrap.h"
 #include "cwScrapManager.h"
@@ -198,6 +200,7 @@ TEST_CASE("Outline with no nearby stations produces no derived scrap",
           "[cwScrapManager][sketchScraps]")
 {
     Fixture f;
+    f.sketch->viewState()->setDebugOverlayVisible(true);
     REQUIRE(f.waitForLinePlot());
 
     // Far from every station (stations live on the y-axis between 0
@@ -205,6 +208,15 @@ TEST_CASE("Outline with no nearby stations produces no derived scrap",
     f.drawClosedSquareAt(cwPenStroke::ScrapOutline, 500.0, 500.0, 1.0);
 
     CHECK(f.sketchDerivedScrapCount() == 0);
+
+    // The wall's member strokes must surface in the per-sketch rejection
+    // list so the debug overlay can show WHY the scrap wasn't created.
+    const auto rejected = f.scrapManager.sketchRejectedStrokes(f.sketch);
+    REQUIRE(!rejected.isEmpty());
+    for(const auto& r : rejected) {
+        CHECK(r.reason == QString::fromLatin1(
+            cwSketchScrapRejectReasons::NoAnchorStations));
+    }
 }
 
 TEST_CASE("Closed Wall stroke around stations produces an anchored scrap",

@@ -31,10 +31,28 @@
 // shorter distances first, that short stroke wins naturally.
 class CAVEWHERE_LIB_EXPORT cwSketchScrapOutlineDetector {
 public:
+    // Full-diagnostics entry point. Returns both the emitted outlines and
+    // per-stroke rejection diagnostics. Pays the cost of preserving a per-
+    // stroke raw polyline copy and populating the rejection vector — use
+    // only when a debug overlay or test actually reads the diagnostics.
+    static cwSketchScrapDetectResult
+    detectWithDiagnostics(const QVector<cwPenStroke> &strokes,
+                          double simplifyToleranceMeters,
+                          double outsetMeters = 0.0);
+
+    // Fast path: skips the diagnostic copy/rejection bookkeeping entirely.
+    // Production callers that don't need rejection tags should use this.
     static QVector<cwSketchScrapOutline>
     detect(const QVector<cwPenStroke> &strokes,
            double simplifyToleranceMeters,
            double outsetMeters = 0.0);
+
+private:
+    static cwSketchScrapDetectResult
+    detectImpl(const QVector<cwPenStroke> &strokes,
+               double simplifyToleranceMeters,
+               double outsetMeters,
+               bool   collectDiagnostics);
 };
 
 #endif // CWSKETCHSCRAPOUTLINEDETECTOR_H

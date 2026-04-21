@@ -166,6 +166,60 @@ TEST_CASE("Degenerate strokes (< 2 points) are rejected", "[cwSketchScrapOutline
     CHECK(out.isEmpty());
 }
 
+TEST_CASE("detectWithDiagnostics reports too-few-points rejections",
+          "[cwSketchScrapOutlineDetector][diagnostics]") {
+    const cwPenStroke empty = makeStroke(cwPenStroke::Wall, {});
+    const cwPenStroke one   = makeStroke(cwPenStroke::Wall, {{0.0, 0.0}});
+    const cwPenStroke valid = makeStroke(cwPenStroke::Wall, {
+        {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
+    });
+
+    const auto result = cwSketchScrapOutlineDetector::detectWithDiagnostics(
+        {empty, one, valid}, kSimplifyTolerance);
+
+    REQUIRE(result.outlines.size() == 1);
+    REQUIRE(result.rejected.size() == 2);
+
+    QVector<QUuid> rejectedIds;
+    for (const auto &r : result.rejected) {
+        rejectedIds.append(r.id);
+        CHECK(r.reason == QString::fromLatin1(
+            cwSketchScrapRejectReasons::TooFewPoints));
+    }
+    std::sort(rejectedIds.begin(), rejectedIds.end());
+    QVector<QUuid> expected{empty.id, one.id};
+    std::sort(expected.begin(), expected.end());
+    CHECK(rejectedIds == expected);
+}
+
+TEST_CASE("detectWithDiagnostics flags kept-but-rejected feature strokes as silent",
+          "[cwSketchScrapOutlineDetector][diagnostics]") {
+    // Feature strokes are intentionally ignored — no rejection record
+    // (they're not failing outlines, they're a different stroke kind).
+    const cwPenStroke feature = makeStroke(cwPenStroke::Feature, {
+        {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
+    });
+
+    const auto result = cwSketchScrapOutlineDetector::detectWithDiagnostics(
+        {feature}, kSimplifyTolerance);
+
+    CHECK(result.outlines.isEmpty());
+    CHECK(result.rejected.isEmpty());
+}
+
+TEST_CASE("detect wrapper returns the same outlines as detectWithDiagnostics",
+          "[cwSketchScrapOutlineDetector][diagnostics]") {
+    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+        {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
+    });
+
+    const auto wrapped = cwSketchScrapOutlineDetector::detect({wall}, kSimplifyTolerance);
+    const auto full    = cwSketchScrapOutlineDetector::detectWithDiagnostics({wall}, kSimplifyTolerance);
+
+    REQUIRE(wrapped.size() == full.outlines.size());
+    CHECK(wrapped == full.outlines);
+}
+
 TEST_CASE("Lone straight two-point stroke collapses below ring threshold",
           "[cwSketchScrapOutlineDetector]") {
     // Self-pair merges the two endpoints into a single midpoint vertex.

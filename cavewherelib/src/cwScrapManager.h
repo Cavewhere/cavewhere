@@ -98,6 +98,13 @@ public:
         return it != m_sketchDebugEntries.constEnd() ? it.value() : empty;
     }
 
+    const QVector<cwSketchScrapRejectedStroke>&
+    sketchRejectedStrokes(cwSketch* sketch) const {
+        static const QVector<cwSketchScrapRejectedStroke> empty;
+        auto it = m_sketchRejectedStrokes.constFind(sketch);
+        return it != m_sketchRejectedStrokes.constEnd() ? it.value() : empty;
+    }
+
     void setProject(cwProject* project);
     void setRegionTreeModel(cwRegionTreeModel* regionTreeModel);
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
@@ -131,7 +138,7 @@ signals:
     // consumers (and tests) use this to observe the diff pipeline.
     void sketchDerivedScrapsUpdated(cwSketch* sketch);
 
-    void sketchDebugEntriesChanged(cwSketch* sketch);
+    void sketchDiagnosticsChanged(cwSketch* sketch);
 
 public slots:
     void updateAllScraps();
@@ -178,6 +185,7 @@ private:
     QHash<cwScrap*, QRectF> m_sketchScrapBoundingBox;
 
     QHash<cwSketch*, QVector<SketchScrapDebugEntry>> m_sketchDebugEntries;
+    QHash<cwSketch*, QVector<cwSketchScrapRejectedStroke>> m_sketchRejectedStrokes;
 
     QPointer<cwSketchManager> m_sketchManager;
 

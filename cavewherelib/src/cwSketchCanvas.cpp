@@ -79,6 +79,19 @@ void cwSketchCanvas::setSketch(cwSketch *sketch)
         connect(m_sketch, &QObject::destroyed,
                 this, [this]() { setSketch(nullptr); });
 
+        if (m_viewStateDebugChangedConnection) {
+            QObject::disconnect(m_viewStateDebugChangedConnection);
+            m_viewStateDebugChangedConnection = {};
+        }
+        if (auto* viewState = m_sketch->viewState()) {
+            m_viewStateDebugChangedConnection =
+                connect(viewState, &cwSketchViewState::debugOverlayVisibleChanged,
+                        this, [this]() {
+                            emit debugOverlayVisibleChanged();
+                            update();
+                        });
+        }
+
         acquireLinePlotForSketch(m_sketch);
 
         m_anchorStationChangedConnection =
@@ -255,7 +268,7 @@ void cwSketchCanvas::setScrapManager(cwScrapManager *manager)
     m_scrapManager = manager;
     if (m_scrapManager) {
         m_scrapDebugChangedConnection =
-            connect(m_scrapManager.data(), &cwScrapManager::sketchDebugEntriesChanged,
+            connect(m_scrapManager.data(), &cwScrapManager::sketchDiagnosticsChanged,
                     this, [this](cwSketch *changed) {
                         if (changed == m_sketch) {
                             update();
@@ -266,14 +279,20 @@ void cwSketchCanvas::setScrapManager(cwScrapManager *manager)
     update();
 }
 
+bool cwSketchCanvas::debugOverlayVisible() const
+{
+    return m_sketch && m_sketch->viewState()
+        && m_sketch->viewState()->debugOverlayVisible();
+}
+
 void cwSketchCanvas::setDebugOverlayVisible(bool visible)
 {
-    if (m_debugOverlayVisible == visible) {
+    if (!m_sketch || !m_sketch->viewState()) {
         return;
     }
-    m_debugOverlayVisible = visible;
-    emit debugOverlayVisibleChanged();
-    update();
+    m_sketch->viewState()->setDebugOverlayVisible(visible);
+    // No need to emit or update() here — the viewState signal already
+    // drives both via m_viewStateDebugChangedConnection.
 }
 
 void cwSketchCanvas::setSketchManager(cwSketchManager *manager)

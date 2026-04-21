@@ -46,6 +46,7 @@ private:
     double m_mapScaleRatio = cwSketchPainter::LinePlotReferenceMapScaleRatio;
 
     QVector<cwScrapManager::SketchScrapDebugEntry> m_debugSnapshot;
+    QVector<cwSketchScrapRejectedStroke> m_rejectedSnapshot;
 };
 
 #endif // CWSKETCHCANVASRENDERER_H

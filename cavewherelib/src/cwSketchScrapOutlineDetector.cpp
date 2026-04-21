@@ -8,6 +8,7 @@
 #include "cwSketchScrapOutlineDetector.h"
 
 //Qt includes
+#include <QHash>
 #include <QLineF>
 #include <QPainterPath>
 #include <QPointF>
@@ -263,24 +264,53 @@ constexpr double kSeamMergeEps = 0.05;
 
 } // namespace
 
+cwSketchScrapDetectResult
+cwSketchScrapOutlineDetector::detectWithDiagnostics(const QVector<cwPenStroke> &strokes,
+                                                    double simplifyToleranceMeters,
+                                                    double outsetMeters)
+{
+    return detectImpl(strokes, simplifyToleranceMeters, outsetMeters, /*collectDiagnostics=*/true);
+}
+
 QVector<cwSketchScrapOutline>
 cwSketchScrapOutlineDetector::detect(const QVector<cwPenStroke> &strokes,
                                      double simplifyToleranceMeters,
                                      double outsetMeters)
 {
-    QVector<cwSketchScrapOutline> out;
+    return detectImpl(strokes, simplifyToleranceMeters, outsetMeters,
+                      /*collectDiagnostics=*/false).outlines;
+}
 
-    QVector<QUuid> ids;
+cwSketchScrapDetectResult
+cwSketchScrapOutlineDetector::detectImpl(const QVector<cwPenStroke> &strokes,
+                                         double simplifyToleranceMeters,
+                                         double outsetMeters,
+                                         bool   collectDiagnostics)
+{
+    cwSketchScrapDetectResult result;
+
+    QVector<QUuid>     ids;
     QVector<QPolygonF> polylines;
     ids.reserve(strokes.size());
     polylines.reserve(strokes.size());
+    if (collectDiagnostics) {
+        result.rawStrokesById.reserve(strokes.size());
+    }
     for (const auto &s : strokes) {
         if (!kindProducesOutline(s.kind)) {
             continue;
         }
         QPolygonF poly = strokeToPolygon(s);
         if (poly.size() < 2) {
+            if (collectDiagnostics) {
+                result.rejected.append({s.id,
+                                        QString::fromLatin1(cwSketchScrapRejectReasons::TooFewPoints),
+                                        poly});
+            }
             continue;
+        }
+        if (collectDiagnostics) {
+            result.rawStrokesById.insert(s.id, poly);
         }
         ids.append(s.id);
         polylines.append(std::move(poly));
@@ -288,8 +318,15 @@ cwSketchScrapOutlineDetector::detect(const QVector<cwPenStroke> &strokes,
 
     const int n = polylines.size();
     if (n == 0) {
-        return out;
+        return result;
     }
+
+    auto recordChainRejection = [&](const QVector<QUuid> &members, const char *reason) {
+        for (const auto &id : members) {
+            result.rejected.append({id, QString::fromLatin1(reason),
+                                    result.rawStrokesById.value(id)});
+        }
+    };
 
     // Endpoint indexing: 2*i = polyline start, 2*i+1 = polyline end.
     const int epCount = 2 * n;
@@ -388,10 +425,16 @@ cwSketchScrapOutlineDetector::detect(const QVector<cwPenStroke> &strokes,
         }
 
         if (ring.size() < 3) {
+            if (collectDiagnostics) {
+                recordChainRejection(members, cwSketchScrapRejectReasons::RingTooSmall);
+            }
             continue;
         }
         ring = simplifyClosedRing(ring, simplifyToleranceMeters);
         if (ring.size() < 3) {
+            if (collectDiagnostics) {
+                recordChainRejection(members, cwSketchScrapRejectReasons::SimplifiedCollapse);
+            }
             continue;
         }
         if (ringSelfIntersects(ring)) {
@@ -407,6 +450,9 @@ cwSketchScrapOutlineDetector::detect(const QVector<cwPenStroke> &strokes,
             path.setFillRule(Qt::OddEvenFill);
             ring = largestOuterSubpath(path.simplified().toSubpathPolygons());
             if (ring.size() < 3) {
+                if (collectDiagnostics) {
+                    recordChainRejection(members, cwSketchScrapRejectReasons::SalvageEmpty);
+                }
                 continue;
             }
         }
@@ -428,8 +474,8 @@ cwSketchScrapOutlineDetector::detect(const QVector<cwPenStroke> &strokes,
         cwSketchScrapOutline outline;
         outline.memberStrokeIds  = std::move(members);
         outline.tripLocalPolygon = std::move(ring);
-        out.append(std::move(outline));
+        result.outlines.append(std::move(outline));
     }
 
-    return out;
+    return result;
 }

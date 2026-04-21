@@ -14,6 +14,8 @@
 #include "cwScrap.h"
 #include "cwScrapManager.h"
 #include "cwSketch.h"
+#include "cwSketchScrapOutline.h"
+#include "cwSketchViewState.h"
 #include "cwSurveyNoteSketchModel.h"
 #include "cwTrip.h"
 
@@ -210,4 +212,25 @@ TEST_CASE("Destroying the sketch drops derived scraps and tracking entry",
     CHECK(sketchPtr.isNull());
     CHECK(scrapPtr.isNull());
     CHECK(f.manager.trackedSketchCount() == 0);
+}
+
+TEST_CASE("Degenerate stroke shows up in sketchRejectedStrokes with reason tag",
+          "[cwScrapManager][sketchDiff]")
+{
+    // Too-few-points strokes don't produce a scrap but must surface in the
+    // per-sketch rejection list so the debug overlay can paint them with
+    // the reason tag.
+    Fixture f;
+    f.sketch->viewState()->setDebugOverlayVisible(true);
+    const int row = f.sketch->beginStroke(cwPenStroke::Wall, 0.01);
+    f.sketch->appendPoint(row, QPointF(0.0, 0.0), 1.0, 0);
+    f.sketch->endStroke();
+    const QUuid strokeId = f.sketch->strokes().at(row).id;
+
+    CHECK(sketchDerivedScrapCount(f.sketch) == 0);
+    const auto rejected = f.manager.sketchRejectedStrokes(f.sketch);
+    REQUIRE(rejected.size() == 1);
+    CHECK(rejected.first().id == strokeId);
+    CHECK(rejected.first().reason == QString::fromLatin1(
+        cwSketchScrapRejectReasons::TooFewPoints));
 }
