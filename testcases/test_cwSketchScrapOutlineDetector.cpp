@@ -178,6 +178,211 @@ TEST_CASE("Douglas–Peucker drops collinear interior points", "[cwSketchScrapOu
     CHECK(out.first().tripLocalPolygon.size() == 4);
 }
 
+TEST_CASE("Zero outset leaves polygon unchanged", "[cwSketchScrapOutlineDetector]") {
+    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+        {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
+    });
+
+    const auto baseline = cwSketchScrapOutlineDetector::detect(
+        {wall}, kCloseThreshold, kSimplifyTolerance);
+    const auto zero = cwSketchScrapOutlineDetector::detect(
+        {wall}, kCloseThreshold, kSimplifyTolerance, 0.0);
+
+    REQUIRE(baseline.size() == 1);
+    REQUIRE(zero.size() == 1);
+    REQUIRE(baseline.first().tripLocalPolygon.size() == zero.first().tripLocalPolygon.size());
+    for (int i = 0; i < baseline.first().tripLocalPolygon.size(); ++i) {
+        CHECK(baseline.first().tripLocalPolygon.at(i) == zero.first().tripLocalPolygon.at(i));
+    }
+}
+
+TEST_CASE("Positive outset enlarges a square polygon by the offset distance", "[cwSketchScrapOutlineDetector]") {
+    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+        {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
+    });
+
+    constexpr double offset = 0.1;
+    const auto out = cwSketchScrapOutlineDetector::detect(
+        {wall}, kCloseThreshold, kSimplifyTolerance, offset);
+
+    REQUIRE(out.size() == 1);
+    const QPolygonF &ring = out.first().tripLocalPolygon;
+    CHECK(ring.size() == 4); // right-angle corners: miter stays in one vertex per corner
+
+    const QRectF bbox = ring.boundingRect();
+    const double eps = 1e-9;
+    CHECK(std::abs(bbox.left()   - (-offset))          < eps);
+    CHECK(std::abs(bbox.top()    - (-offset))          < eps);
+    CHECK(std::abs(bbox.right()  - (1.0 + offset))     < eps);
+    CHECK(std::abs(bbox.bottom() - (1.0 + offset))     < eps);
+    CHECK(signedArea(ring) > 1.0); // area grew beyond the unit square
+}
+
+TEST_CASE("Positive outset enlarges a triangle and keeps it a triangle", "[cwSketchScrapOutlineDetector]") {
+    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+        {0.0, 0.0}, {1.0, 0.0}, {0.0, 1.0}, {0.0, 0.0}
+    });
+
+    constexpr double offset = 0.05;
+    const auto out = cwSketchScrapOutlineDetector::detect(
+        {wall}, kCloseThreshold, kSimplifyTolerance, offset);
+
+    REQUIRE(out.size() == 1);
+    const QPolygonF &ring = out.first().tripLocalPolygon;
+    CHECK(ring.size() == 3);
+    CHECK(signedArea(ring) > 0.0);
+
+    const QRectF bbox = ring.boundingRect();
+    // Every edge moves outward by at least `offset`, so the bbox grows by
+    // at least `offset` on all four sides.
+    CHECK(bbox.left()   <= -offset + 1e-9);
+    CHECK(bbox.top()    <= -offset + 1e-9);
+    CHECK(bbox.right()  >= 1.0 + offset - 1e-9);
+    CHECK(bbox.bottom() >= 1.0 + offset - 1e-9);
+}
+
+TEST_CASE("Outset preserves CCW orientation regardless of input winding", "[cwSketchScrapOutlineDetector]") {
+    const cwPenStroke cw = makeStroke(cwPenStroke::Wall, {
+        {0.0, 0.0}, {0.0, 1.0}, {1.0, 1.0}, {1.0, 0.0}, {0.0, 0.0}
+    });
+
+    const auto out = cwSketchScrapOutlineDetector::detect(
+        {cw}, kCloseThreshold, kSimplifyTolerance, 0.05);
+
+    REQUIRE(out.size() == 1);
+    CHECK(signedArea(out.first().tripLocalPolygon) > 0.0);
+}
+
+TEST_CASE("Outset on a non-convex polygon moves every vertex outside the input", "[cwSketchScrapOutlineDetector]") {
+    // L-shape with one reflex (concave) corner at (1,1). CCW winding.
+    const cwPenStroke lshape = makeStroke(cwPenStroke::Wall, {
+        {0.0, 0.0}, {2.0, 0.0}, {2.0, 1.0}, {1.0, 1.0},
+        {1.0, 2.0}, {0.0, 2.0}, {0.0, 0.0}
+    });
+
+    constexpr double offset = 0.05;
+    const auto baseline = cwSketchScrapOutlineDetector::detect(
+        {lshape}, kCloseThreshold, kSimplifyTolerance);
+    const auto out = cwSketchScrapOutlineDetector::detect(
+        {lshape}, kCloseThreshold, kSimplifyTolerance, offset);
+
+    REQUIRE(baseline.size() == 1);
+    REQUIRE(out.size() == 1);
+    const QPolygonF &inputRing = baseline.first().tripLocalPolygon;
+    const QPolygonF &outRing   = out.first().tripLocalPolygon;
+
+    CHECK(signedArea(outRing) > 0.0); // still CCW
+    CHECK(signedArea(outRing) > signedArea(inputRing)); // enlarged
+
+    // Every output vertex sits outside (or on) the original polygon — the
+    // reflex corner at (1,1) must move into the notch interior, away from
+    // the original boundary, while convex corners bulge outward.
+    for (const QPointF &p : outRing) {
+        CHECK_FALSE(inputRing.containsPoint(p, Qt::OddEvenFill));
+    }
+}
+
+TEST_CASE("Miter cap prevents spikes on sharp acute corners", "[cwSketchScrapOutlineDetector]") {
+    // A narrow dart: one vertex at (1,0) forms a very acute angle. Without
+    // capping, the bisector miter would shoot out roughly 1/sin(halfAngle)
+    // times the offset distance. kMiterCap = 4.0 in the implementation.
+    const cwPenStroke dart = makeStroke(cwPenStroke::Wall, {
+        {0.0, 0.0}, {1.0, 0.0}, {0.0, 0.05}, {0.0, 0.0}
+    });
+
+    constexpr double offset        = 0.02;
+    constexpr double kMiterCapFact = 4.0;
+    const auto baseline = cwSketchScrapOutlineDetector::detect(
+        {dart}, kCloseThreshold, kSimplifyTolerance);
+    const auto out = cwSketchScrapOutlineDetector::detect(
+        {dart}, kCloseThreshold, kSimplifyTolerance, offset);
+
+    REQUIRE(baseline.size() == 1);
+    REQUIRE(out.size() == 1);
+    const QPolygonF &inputRing = baseline.first().tripLocalPolygon;
+    const QPolygonF &outRing   = out.first().tripLocalPolygon;
+    REQUIRE(outRing.size() == inputRing.size());
+
+    bool checked = false;
+    for (int i = 0; i < inputRing.size(); ++i) {
+        if (std::abs(inputRing.at(i).x() - 1.0) < 1e-9
+            && std::abs(inputRing.at(i).y() - 0.0) < 1e-9) {
+            const QPointF d = outRing.at(i) - inputRing.at(i);
+            const double moved = std::hypot(d.x(), d.y());
+            CHECK(moved <= kMiterCapFact * offset + 1e-9);
+            checked = true;
+        }
+    }
+    CHECK(checked);
+}
+
+TEST_CASE("Outset larger than notch half-width falls back to un-offset ring", "[cwSketchScrapOutlineDetector]") {
+    // CCW C-shape with a 1 m wide notch on the right. Outward-offsetting by
+    // 1.0 m forces the two reflex corners (1,1) and (1,3) to converge onto
+    // the same point, making the offset ring self-intersect across the
+    // former notch — detect() must fall back to the un-offset polygon.
+    const cwPenStroke cshape = makeStroke(cwPenStroke::Wall, {
+        {0.0, 0.0}, {2.0, 0.0}, {2.0, 1.0}, {1.0, 1.0},
+        {1.0, 3.0}, {2.0, 3.0}, {2.0, 4.0}, {0.0, 4.0}, {0.0, 0.0}
+    });
+
+    const auto baseline = cwSketchScrapOutlineDetector::detect(
+        {cshape}, kCloseThreshold, kSimplifyTolerance);
+    const auto out = cwSketchScrapOutlineDetector::detect(
+        {cshape}, kCloseThreshold, kSimplifyTolerance, 1.0);
+
+    REQUIRE(baseline.size() == 1);
+    REQUIRE(out.size() == 1);
+    const QPolygonF &baseRing = baseline.first().tripLocalPolygon;
+    const QPolygonF &outRing  = out.first().tripLocalPolygon;
+    REQUIRE(baseRing.size() == outRing.size());
+    for (int i = 0; i < baseRing.size(); ++i) {
+        CHECK(baseRing.at(i) == outRing.at(i));
+    }
+}
+
+TEST_CASE("Outset applies to ScrapOutline strokes as well as Wall strokes", "[cwSketchScrapOutlineDetector]") {
+    const cwPenStroke outline = makeStroke(cwPenStroke::ScrapOutline, {
+        {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
+    });
+
+    constexpr double offset = 0.1;
+    const auto out = cwSketchScrapOutlineDetector::detect(
+        {outline}, kCloseThreshold, kSimplifyTolerance, offset);
+
+    REQUIRE(out.size() == 1);
+    const QRectF bbox = out.first().tripLocalPolygon.boundingRect();
+    const double eps = 1e-9;
+    CHECK(std::abs(bbox.left()   - (-offset))      < eps);
+    CHECK(std::abs(bbox.top()    - (-offset))      < eps);
+    CHECK(std::abs(bbox.right()  - (1.0 + offset)) < eps);
+    CHECK(std::abs(bbox.bottom() - (1.0 + offset)) < eps);
+}
+
+TEST_CASE("Mixed list: outset applied independently per outline", "[cwSketchScrapOutlineDetector]") {
+    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+        {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
+    });
+    const cwPenStroke outline = makeStroke(cwPenStroke::ScrapOutline, {
+        {20.0, 0.0}, {21.0, 0.0}, {21.0, 1.0}, {20.0, 1.0}, {20.0, 0.0}
+    });
+
+    constexpr double offset = 0.05;
+    const auto out = cwSketchScrapOutlineDetector::detect(
+        {wall, outline}, kCloseThreshold, kSimplifyTolerance, offset);
+
+    REQUIRE(out.size() == 2);
+
+    const double eps = 1e-9;
+    const QRectF b0 = out.at(0).tripLocalPolygon.boundingRect();
+    CHECK(std::abs(b0.left()   - (-offset))      < eps);
+    CHECK(std::abs(b0.right()  - (1.0 + offset)) < eps);
+
+    const QRectF b1 = out.at(1).tripLocalPolygon.boundingRect();
+    CHECK(std::abs(b1.left()   - (20.0 - offset)) < eps);
+    CHECK(std::abs(b1.right()  - (21.0 + offset)) < eps);
+}
+
 TEST_CASE("Mixed stroke list produces one outline per qualifying stroke", "[cwSketchScrapOutlineDetector]") {
     const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}

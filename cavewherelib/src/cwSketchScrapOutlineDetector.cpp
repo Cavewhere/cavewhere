@@ -170,12 +170,81 @@ void ensureCounterClockwise(QPolygonF &ring)
     }
 }
 
+// Outward-offset a CCW ring by `distance` using per-vertex miter joins.
+// Each vertex is pushed along the bisector of its two adjacent edges' outward
+// normals. The miter length is clamped to `kMiterCap * distance` so a sharp
+// acute corner cannot produce a huge spike.
+QPolygonF offsetRingOutward(const QPolygonF &ring, double distance)
+{
+    if (distance <= 0.0 || ring.size() < 3) {
+        return ring;
+    }
+
+    constexpr double kMiterCap = 4.0;
+    const double maxMiter = kMiterCap * distance;
+
+    const int n = ring.size();
+
+    // For a CCW polygon, the outward unit normal of edge (dx, dy) is (dy,
+    // -dx) / |edge|. Precomputed once per edge rather than twice per vertex.
+    QVector<QPointF> edgeNormal(n);
+    for (int i = 0; i < n; ++i) {
+        const QPointF edge = ring.at((i + 1) % n) - ring.at(i);
+        const double  len  = std::hypot(edge.x(), edge.y());
+        edgeNormal[i] = (len > 0.0)
+            ? QPointF(edge.y() / len, -edge.x() / len)
+            : QPointF(0.0, 0.0);
+    }
+
+    QPolygonF out;
+    out.reserve(n);
+
+    for (int i = 0; i < n; ++i) {
+        const QPointF &curr  = ring.at(i);
+        const QPointF &nPrev = edgeNormal[(i + n - 1) % n];
+        const QPointF &nNext = edgeNormal[i];
+
+        // Zero-length adjacent edge: no defined normal, leave the vertex in
+        // place rather than fabricate a direction.
+        const bool nPrevValid = nPrev.x() != 0.0 || nPrev.y() != 0.0;
+        const bool nNextValid = nNext.x() != 0.0 || nNext.y() != 0.0;
+        if (!nPrevValid || !nNextValid) {
+            out.append(curr);
+            continue;
+        }
+
+        const QPointF bisector = nPrev + nNext;
+        const double  bisLen2  = bisector.x() * bisector.x() + bisector.y() * bisector.y();
+        const double  dotBN    = bisector.x() * nPrev.x() + bisector.y() * nPrev.y();
+
+        // bisLen2 == 0 means a 180° reversal; dotBN <= 0 means the bisector
+        // points inward (shouldn't happen for CCW + valid normals but guard
+        // anyway). Either way, fall back to offsetting along one normal.
+        if (bisLen2 <= 0.0 || dotBN <= 0.0) {
+            out.append(QPointF(curr.x() + nPrev.x() * distance,
+                               curr.y() + nPrev.y() * distance));
+            continue;
+        }
+
+        // Travel along the unit bisector by t such that the perpendicular
+        // distance to each adjacent edge equals `distance`:
+        // t = distance / (unitBis · nPrev) = distance · |bisector| / dotBN.
+        const double bisNorm  = std::sqrt(bisLen2);
+        const double miterLen = std::min(distance * bisNorm / dotBN, maxMiter);
+        out.append(QPointF(curr.x() + bisector.x() / bisNorm * miterLen,
+                           curr.y() + bisector.y() / bisNorm * miterLen));
+    }
+
+    return out;
+}
+
 } // namespace
 
 QVector<cwSketchScrapOutline>
 cwSketchScrapOutlineDetector::detect(const QVector<cwPenStroke> &strokes,
                                      double closeThresholdMeters,
-                                     double simplifyToleranceMeters)
+                                     double simplifyToleranceMeters,
+                                     double outsetMeters)
 {
     QVector<cwSketchScrapOutline> out;
     out.reserve(strokes.size());
@@ -196,6 +265,17 @@ cwSketchScrapOutlineDetector::detect(const QVector<cwPenStroke> &strokes,
             continue;
         }
         ensureCounterClockwise(ring);
+
+        if (outsetMeters > 0.0) {
+            QPolygonF offset = offsetRingOutward(ring, outsetMeters);
+            // Fall back to the un-offset ring when the offset is too large
+            // for the polygon's inradius — dropping the outline entirely would
+            // regress behavior relative to `outsetMeters == 0.0`.
+            if (offset.size() == ring.size() && !ringSelfIntersects(offset)) {
+                ensureCounterClockwise(offset);
+                ring = std::move(offset);
+            }
+        }
 
         cwSketchScrapOutline outline;
         outline.sourceStrokeId   = stroke.id;

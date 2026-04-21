@@ -39,7 +39,9 @@
 #include "cwSketchScrapOutlineDetector.h"
 #include "cwSketchScrapOutline.h"
 #include "cwSketchScrapRasterizer.h"
+#include "cwSketchPainter.h"
 #include "cwSketchManager.h"
+#include "cwScale.h"
 #include "cwTripLinePlotTask.h"
 #include "cwStation.h"
 #include "cwNoteStation.h"
@@ -805,10 +807,27 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
         return;
     }
 
+    // Outset the detected outline by half the widest wall / scrap-outline
+    // stroke so the rasterized texture and triangulated mesh include the
+    // full pen thickness instead of clipping at the stroke centerline.
+    const double paperScale = sketch->mapScale() ? sketch->mapScale()->scale() : 0.0;
+    double maxWidthPixels = 0.0;
+    for (const auto &s : sketch->strokes()) {
+        if (s.kind == cwPenStroke::Wall || s.kind == cwPenStroke::ScrapOutline) {
+            maxWidthPixels = std::max(maxWidthPixels, s.width);
+        }
+    }
+    const double ppm = cwSketchPainter::pixelsPerMeterFromPaperScale(
+        paperScale, cwSketchScrapRasterizer::kTargetDPI);
+    const double outsetMeters = (ppm > 0.0 && maxWidthPixels > 0.0)
+        ? (0.5 * maxWidthPixels) / ppm
+        : 0.0;
+
     const auto outlines = cwSketchScrapOutlineDetector::detect(
         sketch->strokes(),
         kSketchCloseThresholdMeters,
-        kSketchSimplifyToleranceMeters);
+        kSketchSimplifyToleranceMeters,
+        outsetMeters);
 
     QList<cwTripLinePlotTask::TripComponent> components;
     if(!m_sketchManager.isNull()) {

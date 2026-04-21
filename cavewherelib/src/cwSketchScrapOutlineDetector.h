@@ -26,7 +26,8 @@ public:
     static QVector<cwSketchScrapOutline>
     detect(const QVector<cwPenStroke> &strokes,
            double closeThresholdMeters,
-           double simplifyToleranceMeters);
+           double simplifyToleranceMeters,
+           double outsetMeters = 0.0);
 };
 
 #endif // CWSKETCHSCRAPOUTLINEDETECTOR_H
