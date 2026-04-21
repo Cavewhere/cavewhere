@@ -171,14 +171,14 @@ TEST_CASE("cwSurveyNotesConcatModel switching trips updates rows correctly", "[c
     project->cavingRegion()->addCave(cave);
 
     // Add a note to trip1
-    const QString png1 = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
+    const QString png1 = testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG");
     trip1->notes()->addFromFiles({ QUrl::fromLocalFile(png1) });
     rootData->futureManagerModel()->waitForFinished();
     REQUIRE(trip1->notes()->rowCount() == 1);
 
     // Add two notes to trip2
-    const QString png2 = copyToTempFolder("://datasets/test_cwNote/testpage.png");
-    const QString glb = copyToTempFolder("://datasets/test_cwSurveyNotesConcatModel/bones.glb");
+    const QString png2 = testcasesDatasetPath("test_cwNote/testpage.png");
+    const QString glb = testcasesDatasetPath("test_cwSurveyNotesConcatModel/bones.glb");
     trip2->notes()->addFromFiles({ QUrl::fromLocalFile(png2) });
     trip2->notesLiDAR()->addFromFiles({ QUrl::fromLocalFile(glb) });
     rootData->futureManagerModel()->waitForFinished();
