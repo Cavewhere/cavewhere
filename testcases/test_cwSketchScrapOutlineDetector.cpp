@@ -108,15 +108,53 @@ TEST_CASE("Single open stroke self-caps into a closed ring", "[cwSketchScrapOutl
     CHECK(out.first().tripLocalPolygon.first().y() == 0.0);
 }
 
-TEST_CASE("Self-intersecting closed stroke is rejected", "[cwSketchScrapOutlineDetector]") {
-    // Bowtie: two triangles crossing at the middle edge.
+TEST_CASE("Self-intersecting bowtie salvages into one outer lobe",
+          "[cwSketchScrapOutlineDetector]") {
+    // Bowtie: two triangles crossing at the middle edge. Under OddEvenFill,
+    // QPainterPath::simplified resolves the figure-8 into two disjoint
+    // triangle subpaths; the salvage picks the larger one (or either, since
+    // the two lobes are congruent). The user's drawing intent for a bowtie
+    // is ambiguous — this tests that Patch 1 emits one outline rather than
+    // silently dropping the input.
     const cwPenStroke bowtie = makeStroke(cwPenStroke::Wall, {
         {0.0, 0.0}, {1.0, 1.0}, {1.0, 0.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
     const auto out = cwSketchScrapOutlineDetector::detect({bowtie}, kSimplifyTolerance);
 
-    CHECK(out.isEmpty());
+    REQUIRE(out.size() == 1);
+    const QPolygonF &ring = out.first().tripLocalPolygon;
+    CHECK(ring.size() == 3); // a triangle lobe
+    CHECK(signedArea(ring) > 0.0); // normalized to CCW
+}
+
+TEST_CASE("Tiny hook at seam is salvaged instead of dropping the outline",
+          "[cwSketchScrapOutlineDetector]") {
+    // User drew an almost-closed unit square, then restarted drawing on
+    // the start edge and overshot by 3 cm past the origin before releasing.
+    // The last segment crosses the first edge, producing a self-intersecting
+    // ring with a tiny hook lobe. Patch 1 must salvage the main square.
+    const cwPenStroke hooked = makeStroke(cwPenStroke::Wall, {
+        {0.0, 0.0},
+        {1.0, 0.0},
+        {1.0, 1.0},
+        {0.0, 1.0},
+        {0.0, -0.03}, // overshoot past origin along the start edge
+        {0.03, 0.0}   // tiny hook re-entering the square
+    });
+
+    const auto out = cwSketchScrapOutlineDetector::detect({hooked}, kSimplifyTolerance);
+
+    REQUIRE(out.size() == 1);
+    const QPolygonF &ring = out.first().tripLocalPolygon;
+    CHECK(signedArea(ring) > 0.0);
+
+    // Main square area dominates the tiny hook sliver: the salvaged ring
+    // should be close to 1 m² and clearly not the hook lobe.
+    CHECK(signedArea(ring) > 0.9);
+
+    // All corners of the input square lie on or inside the salvaged ring.
+    CHECK(ring.containsPoint(QPointF(0.5, 0.5), Qt::OddEvenFill));
 }
 
 TEST_CASE("Degenerate strokes (< 2 points) are rejected", "[cwSketchScrapOutlineDetector]") {

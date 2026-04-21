@@ -143,12 +143,16 @@ TEST_CASE("Closed Feature stroke is ignored",
     CHECK(sketchDerivedScrapCount(f.sketch) == 0);
 }
 
-TEST_CASE("Self-intersecting closed stroke is skipped without crash",
+TEST_CASE("Self-intersecting closed stroke salvages into one scrap",
           "[cwScrapManager][sketchDiff]")
 {
+    // Patch 1: ringSelfIntersects no longer drops the outline; the
+    // detector's QPainterPath::simplified salvage emits the larger outer
+    // lobe. A bowtie drawn as a Wall stroke now produces exactly one
+    // sketch-derived scrap.
     Fixture f;
     f.drawBowtie(cwPenStroke::Wall);
-    CHECK(sketchDerivedScrapCount(f.sketch) == 0);
+    CHECK(sketchDerivedScrapCount(f.sketch) == 1);
 }
 
 TEST_CASE("Unrelated stroke changes preserve existing scrap identity",

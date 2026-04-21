@@ -9,6 +9,7 @@
 
 //Qt includes
 #include <QLineF>
+#include <QPainterPath>
 #include <QPointF>
 
 //Std includes
@@ -147,6 +148,38 @@ void ensureCounterClockwise(QPolygonF &ring)
     if (signedArea(ring) < 0.0) {
         std::reverse(ring.begin(), ring.end());
     }
+}
+
+// QPainterPath::simplified()'s subpath orientation depends on Qt internals
+// we don't control, so selection uses |signedArea| and the caller
+// normalizes winding via ensureCounterClockwise.
+QPolygonF largestOuterSubpath(const QList<QPolygonF> &subpaths)
+{
+    const QPolygonF *bestPtr = nullptr;
+    double bestAbsArea = 0.0;
+    for (const QPolygonF &sp : subpaths) {
+        // A closing-duplicate last vertex contributes a zero-area edge to
+        // the shoelace sum, so signedArea is correct either way; only the
+        // distinct-vertex count matters for the size guard.
+        const bool hasClosingDup = sp.size() >= 2 && sp.first() == sp.last();
+        const int  distinct      = hasClosingDup ? sp.size() - 1 : sp.size();
+        if (distinct < 3) {
+            continue;
+        }
+        const double absA = std::abs(signedArea(sp));
+        if (absA > bestAbsArea) {
+            bestAbsArea = absA;
+            bestPtr     = &sp;
+        }
+    }
+    if (!bestPtr) {
+        return QPolygonF();
+    }
+    QPolygonF best = *bestPtr;
+    if (best.size() >= 2 && best.first() == best.last()) {
+        best.removeLast();
+    }
+    return best;
 }
 
 // Outward-offset a CCW ring by `distance` using per-vertex miter joins.
@@ -362,7 +395,20 @@ cwSketchScrapOutlineDetector::detect(const QVector<cwPenStroke> &strokes,
             continue;
         }
         if (ringSelfIntersects(ring)) {
-            continue;
+            // Salvage the tiny-hook-at-seam case: when the user restarts
+            // drawing on an existing wall and overshoots by a few mm, the
+            // chained ring self-intersects at that micro-hook. Re-interpret
+            // the ring as an OddEvenFill region — a single self-crossing
+            // excludes the hook's inner lobe — and pick the largest outer
+            // subpath. WindingFill would *keep* the hook lobe (winding = 2,
+            // still non-zero), so OddEvenFill is the correct rule here.
+            QPainterPath path;
+            path.addPolygon(ring);
+            path.setFillRule(Qt::OddEvenFill);
+            ring = largestOuterSubpath(path.simplified().toSubpathPolygons());
+            if (ring.size() < 3) {
+                continue;
+            }
         }
         ensureCounterClockwise(ring);
 
