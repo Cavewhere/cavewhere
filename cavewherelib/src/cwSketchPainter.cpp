@@ -115,6 +115,12 @@ QTransform cwSketchPainter::paperTransform(double mapScale, double dpi)
     return QTransform::fromScale(k, -k);
 }
 
+double cwSketchPainter::paperStrokePenScale(double paperScale, double dpi)
+{
+    const double ppm = pixelsPerMeterFromPaperScale(paperScale, dpi);
+    return ppm > 0.0 ? 1.0 / ppm : 0.0;
+}
+
 void cwSketchPainter::paint(cwSketchDraw *draw, const PaintContext &context)
 {
     Q_ASSERT(draw != nullptr);
@@ -140,7 +146,10 @@ void cwSketchPainter::paint(cwSketchDraw *draw, const PaintContext &context)
     drawText (draw, context.gridMajor.text, context.worldToItem);
     drawPaths(draw, context.linePlot.paths, penScale);
     drawText (draw, context.linePlot.text, context.worldToItem, context.linePlotTextScale);
-    drawPaths(draw, context.strokes, penScale);
+    const double strokePenScale = context.strokePenScale > 0.0
+                                      ? context.strokePenScale
+                                      : penScale;
+    drawPaths(draw, context.strokes, strokePenScale);
 
     draw->restore();
 }

@@ -216,6 +216,7 @@ public:
         double pointSizeF = 0.0;
     };
     QList<TextCall> textCalls;
+    QList<double> penWidths;
 
     void save() override {}
     void restore() override {}
@@ -223,7 +224,9 @@ public:
     void translate(double, double) override {}
     void scale(double, double) override {}
     void setClipRect(const QRectF &) override {}
-    void setStrokePen(const QColor &, double, Qt::PenCapStyle, Qt::PenJoinStyle) override {}
+    void setStrokePen(const QColor &, double width, Qt::PenCapStyle, Qt::PenJoinStyle) override {
+        penWidths.append(width);
+    }
     void setFillBrush(const QColor &) override {}
     void strokePath(const QPainterPath &) override {}
     void fillPath(const QPainterPath &) override {}
@@ -272,6 +275,74 @@ TEST_CASE("cwSketchPainter scales linePlot text with PaintContext::linePlotTextS
     const auto atHalf = paintWithScale(0.5);
     REQUIRE(atHalf.size() == 1);
     CHECK(atHalf.first().pointSizeF == Catch::Approx(6.0));
+}
+
+namespace {
+
+// Minimal path model that publishes a single straight-line path with a
+// caller-specified stored stroke width.
+class SinglePathModel final : public cwAbstractSketchPainterPathModel
+{
+public:
+    using cwAbstractSketchPainterPathModel::Path;
+
+    SinglePathModel(double width, QColor color)
+    {
+        QPainterPath p;
+        p.moveTo(0.0, 0.0);
+        p.lineTo(1.0, 0.0);
+        m_path = Path(p, color, width, 0.0);
+    }
+
+    int rowCount(const QModelIndex & = QModelIndex()) const override { return 1; }
+
+protected:
+    Path path(const QModelIndex &) const override { return m_path; }
+
+private:
+    Path m_path;
+};
+
+} // namespace
+
+TEST_CASE("cwSketchPainter::strokePenScale affects only user strokes", "[cwSketchPainter]") {
+    const double gridWidth   = 1.0;
+    const double strokeWidth = 4.0;
+    SinglePathModel gridModel(gridWidth, Qt::black);
+    SinglePathModel strokeModel(strokeWidth, Qt::red);
+
+    cwSketchPainter::PaintContext ctx;
+    ctx.worldToItem = QTransform::fromScale(1.0, -1.0);
+    ctx.mapScale    = 10.0;                   // default penScale = 0.1
+    ctx.strokePenScale = 1.0 / 2.0;           // override for strokes only
+    ctx.gridMinor.paths = &gridModel;
+    ctx.strokes         = &strokeModel;
+
+    RecordingDraw draw;
+    cwSketchPainter::paint(&draw, ctx);
+
+    REQUIRE(draw.penWidths.size() == 2);
+    // Grid emitted first, using the default penScale (= 1/mapScale = 0.1).
+    CHECK(draw.penWidths.at(0) == Catch::Approx(gridWidth * (1.0 / ctx.mapScale)));
+    // Strokes emitted second, using strokePenScale = 0.5 (not 0.1).
+    CHECK(draw.penWidths.at(1) == Catch::Approx(strokeWidth * ctx.strokePenScale));
+}
+
+TEST_CASE("cwSketchPainter::strokePenScale<=0 falls back to default penScale", "[cwSketchPainter]") {
+    const double strokeWidth = 3.0;
+    SinglePathModel strokeModel(strokeWidth, Qt::red);
+
+    cwSketchPainter::PaintContext ctx;
+    ctx.worldToItem = QTransform::fromScale(1.0, -1.0);
+    ctx.mapScale    = 5.0;                    // default penScale = 0.2
+    ctx.strokePenScale = 0.0;                 // unset
+    ctx.strokes = &strokeModel;
+
+    RecordingDraw draw;
+    cwSketchPainter::paint(&draw, ctx);
+
+    REQUIRE(draw.penWidths.size() == 1);
+    CHECK(draw.penWidths.first() == Catch::Approx(strokeWidth * (1.0 / ctx.mapScale)));
 }
 
 // ---------------- cwSketchManager per-trip line plot pipeline ----------------

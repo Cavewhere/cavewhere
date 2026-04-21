@@ -61,6 +61,11 @@ public:
         // 1:250 default render at the authored point size and scale
         // linearly with total view scale (mapScale × userZoom).
         double linePlotTextScale = 1.0;
+
+        // Optional override for user strokes only (grid / line-plot keep
+        // the default penScale derived from mapScale). <= 0 means "unset".
+        // See cwSketchPainter::paperStrokePenScale to compute it.
+        double strokePenScale = 0.0;
     };
 
     // Cave-metre → destination-pixel scalar at a given paper scale and DPI.
@@ -68,6 +73,12 @@ public:
     // paperTransform() wraps this into a Y-flipped QTransform for paint
     // devices; rasterisers that want the bare scalar call this directly.
     static double pixelsPerMeterFromPaperScale(double paperScale, double dpi);
+
+    // PaintContext::strokePenScale value that makes pen widths map to a
+    // fixed world/paper thickness (independent of screen DPI) by treating
+    // cwPenStroke::width as pixels at `dpi`. Returns 0 on bad input so the
+    // painter falls back to the default penScale.
+    static double paperStrokePenScale(double paperScale, double dpi);
 
     // World-metre → destination-pixel transform for paper-bound render
     // targets (PDF/SVG, rasterised thumbnail). Mirrors cwWorldToScreenMatrix

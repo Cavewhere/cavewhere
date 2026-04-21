@@ -17,6 +17,7 @@
 #include "cwInfiniteGridModel.h"
 #include "cwFixedGridModel.h"
 #include "cwGridTextModel.h"
+#include "cwSketchScrapRasterizer.h"
 
 //Qt includes
 #include <QCanvasPainter>
@@ -192,6 +193,12 @@ void cwSketchCanvasRenderer::paint(QCanvasPainter *painter)
 
         ctx.linePlotTextScale =
             (m_mapScaleRatio / cwSketchPainter::LinePlotReferenceMapScaleRatio) * m_userZoom;
+
+        // Strokes render at a fixed world thickness (independent of screen
+        // DPI) to match the scrap rasterizer and outline outset.
+        ctx.strokePenScale = cwSketchPainter::paperStrokePenScale(
+            m_mapScaleRatio, cwSketchScrapRasterizer::kTargetDPI);
+
         cwSketchPainter::paint(&draw, ctx);
     }
 
