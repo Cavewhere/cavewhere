@@ -73,9 +73,7 @@ TEST_CASE("cwRegionTreeModel object function should work correctly", "[cwRegionT
     QModelIndex firstTripIndex = regionModel->index(firstTrip);
     CHECK(firstTripIndex.isValid());
 
-    //Trips always are static with 2
     int count = regionModel->rowCount(firstTripIndex);
-    CHECK(static_cast<int>(cwRegionTreeModel::TripRows::NumberOfRows) == 2);
     CHECK(count == static_cast<int>(cwRegionTreeModel::TripRows::NumberOfRows));
 
     auto notesIndex = regionModel->index(static_cast<int>(cwRegionTreeModel::TripRows::NotesModel), 0, firstTripIndex);
