@@ -1260,6 +1260,20 @@ void cwRegionTreeModel::insertedTrips(cwCave *parentCave, int begin, int end)
             beginInsertRows(parenIndex, 0, lastIndex);
             insertedNotes(trip, 0, lastIndex);
         }
+
+        // Sketches loaded into a pre-existing trip (on project reload) must
+        // emit rowsInserted so listeners like cwScrapManager and
+        // cwSketchManager discover them — they subscribe to the sketches
+        // model's rowsInserted above, but that signal never fires for
+        // entries that were already in the model when the connection was
+        // made.
+        auto* sketches = trip->notesSketch();
+        const int sketchLast = sketches ? sketches->rowCount() - 1 : -1;
+        if(sketchLast >= 0) {
+            QModelIndex sketchParent = index(sketches);
+            beginInsertRows(sketchParent, 0, sketchLast);
+            endInsertRows();
+        }
     }
 
 }
