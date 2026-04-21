@@ -64,17 +64,20 @@ void cwCavernTask::runTask() {
     QString outputFile = inputFile + survex3dExtension();
 
     char arg0[] = "cavern";
+    char quietArg[] = "--quiet";
     QByteArray outputArg = QStringLiteral("--output=%1").arg(outputFile).toUtf8();
     QByteArray inputArg = inputFile.toUtf8();
 
     char* argv[] = {
         arg0,
+        quietArg,
+        quietArg,
         outputArg.data(),
         inputArg.data(),
         nullptr
     };
 
-    int rc = cavern_run(3, argv);
+    int rc = cavern_run(5, argv);
     if (rc != 0) {
         qDebug() << "cavern_run failed with exit code" << rc << "for" << inputFile;
         stop();
