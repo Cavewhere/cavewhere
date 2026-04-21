@@ -152,10 +152,26 @@ ErasedStrokes computeErasedStrokes(const QVector<cwPenStroke> &strokes,
                                    double radius)
 {
     const double r2 = radius * radius;
+    const QRectF pathBox =
+        cwBoundingBoxOf(path, [](const QPointF &p) { return p; })
+            .adjusted(-radius, -radius, radius, radius);
     ErasedStrokes out;
     out.strokes.reserve(strokes.size());
 
     for (const cwPenStroke &src : strokes) {
+        // Manual overlap test — QRectF::intersects treats degenerate (zero
+        // width/height) rects as empty, which would drop purely horizontal
+        // or vertical strokes.
+        const QRectF strokeBox = src.boundingBox();
+        const bool disjoint =
+            strokeBox.right()  < pathBox.left()  ||
+            pathBox.right()    < strokeBox.left() ||
+            strokeBox.bottom() < pathBox.top()   ||
+            pathBox.bottom()   < strokeBox.top();
+        if (disjoint) {
+            out.strokes.append(src);
+            continue;
+        }
         QVector<cwPenPoint> run;
         run.reserve(src.points.size());
         bool anyErased = false;
