@@ -10,6 +10,11 @@ class cwJobSettings;
 class cwPDFSettings;
 class cwFontSettings;
 #include "cwGlobals.h"
+// cwSketchSettings.h must be a full include (not a forward decl) because
+// `cwSketchSettings` sorts after `cwSettings` in the auto-generated QML
+// type registration file — forward-declaring here would leave the type
+// incomplete at metatype-registration time and trip a static_assert.
+#include "cwSketchSettings.h"
 
 class CAVEWHERE_LIB_EXPORT cwSettings : public QObject
 {
@@ -20,11 +25,13 @@ class CAVEWHERE_LIB_EXPORT cwSettings : public QObject
     Q_PROPERTY(cwJobSettings* jobSettings READ jobSettings CONSTANT)
     Q_PROPERTY(cwPDFSettings* pdfSettings READ pdfSettings CONSTANT)
     Q_PROPERTY(cwFontSettings* fontSettings READ fontSettings CONSTANT)
+    Q_PROPERTY(cwSketchSettings* sketchSettings READ sketchSettings CONSTANT)
 
 public:
     cwJobSettings* jobSettings() const;
     cwPDFSettings* pdfSettings() const;
     cwFontSettings* fontSettings() const;
+    cwSketchSettings* sketchSettings() const;
 
     static void initialize();
     static cwSettings* instance();

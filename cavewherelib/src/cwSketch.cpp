@@ -17,6 +17,7 @@
 #include "cwSketchData.h"
 #include "cwSketchViewState.h"
 #include "cwPenStrokeModel.h"
+#include "cwPenStrokeFilter.h"
 #include "cwScale.h"
 #include "cwKeywordModel.h"
 #include "cwAbstractScrapViewMatrix.h"
@@ -25,6 +26,7 @@
 #include "cwSurvey2DGeometryRule.h"
 #include "cwSurvey2DGeometryArtifact.h"
 #include "cwSurveyNetworkArtifact.h"
+#include "cwSketchSettings.h"
 
 namespace {
 
@@ -375,6 +377,56 @@ void cwSketch::appendPoint(int strokeIndex, QPointF position, double pressure, q
 
 void cwSketch::endStroke()
 {
+    // Opt-in trim of Apple Pencil start/end hooks. We run this before the
+    // undo command captures the final stroke so undo/redo treats the
+    // cleaned polyline as one atomic unit; previously-committed strokes
+    // are unaffected if the setting is toggled later.
+    auto *settings = cwSketchSettings::instance();
+    const bool filterOn = settings && settings->filterPenHooks();
+
+    if (!m_strokes.isEmpty()) {
+        const int row = m_strokes.size() - 1;
+        cwPenStroke &stroke = m_strokes[row];
+
+        // Dump the raw captured polyline in a makeStroke({...})-compatible
+        // form so real pen data can be pasted straight into a test case.
+        // Always dumped (category-gated) regardless of the filter setting
+        // so you can see what the tablet produced before any trimming.
+        if (lcPenFilter().isDebugEnabled()) {
+            QString raw;
+            raw.reserve(stroke.points.size() * 32);
+            for (const cwPenPoint &p : stroke.points) {
+                raw += QString::asprintf("    {%.6f, %.6f},\n",
+                                         p.position.x(), p.position.y());
+            }
+            qCDebug(lcPenFilter).noquote()
+                << QString("stroke end: kind=%1 width=%2 points=%3 filter=%4\nraw points:\n%5")
+                       .arg(int(stroke.kind))
+                       .arg(stroke.width)
+                       .arg(stroke.points.size())
+                       .arg(filterOn ? "on" : "off")
+                       .arg(raw);
+        }
+
+        if (filterOn) {
+            const QVector<cwPenPoint> trimmed = cwPenStrokeFilter::trimHooks(stroke.points);
+            const int removed = stroke.points.size() - trimmed.size();
+            if (lcPenFilter().isDebugEnabled()) {
+                qCDebug(lcPenFilter) << "trimHooks removed" << removed
+                                     << "point(s); kept" << trimmed.size();
+            }
+            if (removed > 0) {
+                stroke.points = trimmed;
+                // The append-time coalescer only flushes during the
+                // drag; after the last appendPoint we must emit our own
+                // dataChanged so the model/view sees the trim.
+                const QModelIndex idx = m_strokeModel->index(row);
+                emit m_strokeModel->dataChanged(idx, idx,
+                    { cwPenStrokeModel::PointsRole, cwPenStrokeModel::StrokeRole });
+            }
+        }
+    }
+
     auto *cmd = new cwSketchSetStrokesCommand(this, m_startStrokes, m_strokes, "Draw Stroke");
     m_startStrokes.clear();
     m_undoStack->push(cmd);

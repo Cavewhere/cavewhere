@@ -3,6 +3,7 @@
 #include "cwJobSettings.h"
 #include "cwPDFSettings.h"
 #include "cwFontSettings.h"
+#include "cwSketchSettings.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -27,6 +28,7 @@ void cwSettings::initialize()
     cwJobSettings::initialize();
     cwPDFSettings::initialize();
     cwFontSettings::initialize();
+    cwSketchSettings::initialize();
 }
 
 cwSettings *cwSettings::instance()
@@ -44,4 +46,8 @@ cwPDFSettings* cwSettings::pdfSettings() const {
 
 cwFontSettings* cwSettings::fontSettings() const {
     return cwFontSettings::instance();
+}
+
+cwSketchSettings* cwSettings::sketchSettings() const {
+    return cwSketchSettings::instance();
 }
