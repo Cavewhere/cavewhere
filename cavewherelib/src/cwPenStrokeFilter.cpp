@@ -16,19 +16,6 @@ Q_LOGGING_CATEGORY(lcPenFilter, "cw.sketch.penfilter", QtDebugMsg)
 
 namespace {
 
-// Once a hook apex is found, the pivot is walked forward (head-scan only)
-// to the first raw sample whose distance from the endpoint exceeds this
-// many hook-arm lengths. Chosen so the retrace past the apex is skipped
-// but the clean body isn't nibbled.
-constexpr double HookExtensionArmMultiplier = 2.0;
-
-double distance(const QPointF &a, const QPointF &b)
-{
-    const double dx = a.x() - b.x();
-    const double dy = a.y() - b.y();
-    return std::sqrt(dx * dx + dy * dy);
-}
-
 double totalPathLength(const QVector<cwPenPoint> &points)
 {
     double sum = 0.0;
@@ -118,26 +105,10 @@ int findHookPivot(const QVector<cwPenPoint> &points,
                 }
 
                 const double hookArm = cumPath;
-                int finalPivot = unique[k];
-                if (step > 0) {
-                    // Cap extension at the last scanned raw sample so a
-                    // short-fixture test can't chase the threshold off
-                    // the end of the stroke.
-                    const int extEnd = unique.last();
-                    for (int m = finalPivot + step; m >= 0 && m < n && m <= extEnd; m += step) {
-                        const QPointF d = points[m].position - origin;
-                        if (std::hypot(d.x(), d.y()) > HookExtensionArmMultiplier * hookArm) {
-                            finalPivot = m;
-                            break;
-                        }
-                    }
-                }
-
                 qCDebug(lcPenFilter) << side << ": V-HOOK apex at raw i=" << unique[k]
                                      << "arm=" << hookArm << "m dot=" << dot
-                                     << "(angle~" << qRadiansToDegrees(std::acos(std::clamp(dot, -1.0, 1.0))) << "deg)"
-                                     << "final pivot: raw i=" << finalPivot;
-                return finalPivot;
+                                     << "(angle~" << qRadiansToDegrees(std::acos(std::clamp(dot, -1.0, 1.0))) << "deg)";
+                return unique[k];
             }
         }
         qCDebug(lcPenFilter) << side << ": no V-reversal (worstDot=" << worstDot
@@ -205,34 +176,11 @@ int findHookPivot(const QVector<cwPenPoint> &points,
         return -1;
     }
 
-    // L-hooks: walk raw samples forward from the apex pivot and stop at
-    // the first one whose displacement from the endpoint ALIGNS with
-    // the stable direction. This skips past the hook's duplicate
-    // cluster and retrace region, even when they extend beyond the
-    // dedup window.
-    int finalPivot = unique[lastMisalignedK];
-    if (step > 0) {
-        for (int m = finalPivot + step; m >= 0 && m < n; m += step) {
-            const QPointF disp = points[m].position - origin;
-            const double dispLen = std::hypot(disp.x(), disp.y());
-            if (dispLen <= 0.0) {
-                continue;
-            }
-            const double dot = (disp.x() * stableVec.x() + disp.y() * stableVec.y())
-                               / (dispLen * stableLen);
-            if (dot >= alignThreshold) {
-                finalPivot = m;
-                break;
-            }
-        }
-    }
-
     qCDebug(lcPenFilter) << side << ": L-HOOK at unique k=" << lastMisalignedK
                          << "raw i=" << unique[lastMisalignedK]
                          << "maxDisp=" << maxHookDisp << "m"
-                         << "worstDot=" << worstDot
-                         << "final pivot (past retrace): raw i=" << finalPivot;
-    return finalPivot;
+                         << "worstDot=" << worstDot;
+    return unique[lastMisalignedK];
 }
 
 }

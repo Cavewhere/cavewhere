@@ -325,7 +325,7 @@ QQ.Item {
             const pressure = point.pressure > 0.0 ? point.pressure : 1.0
             const world = sketchItemId._worldPoint(point.position)
             sketchItemId.sketch.appendPoint(sketchItemId._activeStrokeIndex,
-                                            world, pressure, 0)
+                                            world, pressure, Date.now())
         }
     }
 

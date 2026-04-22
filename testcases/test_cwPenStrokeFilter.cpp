@@ -168,13 +168,10 @@ TEST_CASE("cwPenStrokeFilter trims a real Apple-Pencil iPad trace", "[cwPenStrok
     auto trimmed = cwPenStrokeFilter::trimHooks(stroke);
 
     REQUIRE(trimmed.size() < stroke.size());
-    // The hook arm (~5.5 mm out to the apex, then retracing past the
-    // touchdown) should be gone. The retained first point must be
-    // more than one hook-arm (so >5.5 mm) past the original start.
-    const double startX = -6.484399;
-    const double armLength = 0.0055;
-    CHECK(std::abs(trimmed.first().position.x() - startX) > armLength);
-    // Stroke body is preserved all the way to the tail.
+    // Clip lands at the V-reversal apex — the deepest point of the
+    // -X spur, at (-6.489889, 1.260644). The retrace that returns to
+    // the body is retained (it overlaps the body direction visually).
+    CHECK(trimmed.first().position == QPointF(-6.489889, 1.260644));
     CHECK(trimmed.last().position == QPointF(-6.122388, 1.303365));
 }
 
@@ -211,10 +208,10 @@ TEST_CASE("cwPenStrokeFilter trims a large iPad hook on a moderate stroke",
     auto trimmed = cwPenStrokeFilter::trimHooks(stroke);
 
     REQUIRE(trimmed.size() < stroke.size());
-    // The head should advance past the reversal retrace — first kept
-    // point must be well clear of the touchdown-vicinity.
-    CHECK(trimmed.first().position.x() > -3.830);
-    // Tail is preserved.
+    // Clip lands at the V-reversal apex (-3.837874, 3.070461). The
+    // retrace back through the touchdown area into the body direction
+    // is retained.
+    CHECK(trimmed.first().position == QPointF(-3.837874, 3.070461));
     CHECK(trimmed.last().position == QPointF(-3.700743, 3.064339));
 }
 
@@ -284,9 +281,11 @@ TEST_CASE("cwPenStrokeFilter trims an L-shaped iPad touchdown hook",
     auto trimmed = cwPenStrokeFilter::trimHooks(stroke);
 
     REQUIRE(trimmed.size() < stroke.size());
-    // The leading -X drift sits between x=-6.138726 and x=-6.140869.
-    // Real stroke emerges at x>-6.138 and moves toward x=-6.021.
-    CHECK(trimmed.first().position.x() > -6.138);
+    // Clip lands at the L-hook pivot — the last sample whose
+    // displacement from the endpoint pointed off the stable direction,
+    // at (-6.138726, -3.527667). The few trailing dup samples at the
+    // same position are retained.
+    CHECK(trimmed.first().position == QPointF(-6.138726, -3.527667));
     CHECK(trimmed.last().position == QPointF(-6.021413, -3.571459));
 }
 
@@ -384,9 +383,10 @@ TEST_CASE("cwPenStrokeFilter trims a stationary-apex L-hook (iPad)",
     auto trimmed = cwPenStrokeFilter::trimHooks(stroke, paramsForSlice());
 
     REQUIRE(trimmed.size() < stroke.size());
-    // The leading down-left drift (x in [-1.65, -1.63]) must be gone.
-    // The retained head should be well into the real stroke's +X path.
-    CHECK(trimmed.first().position.x() > -1.64);
+    // Clip lands at the L-hook pivot — the last sample misaligned
+    // with the stable direction, which sits inside the stationary
+    // cluster at (-1.650827, -0.927493).
+    CHECK(trimmed.first().position == QPointF(-1.650827, -0.927493));
     CHECK(trimmed.last().position == QPointF(-1.583868, -0.952804));
 }
 

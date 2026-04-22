@@ -388,16 +388,18 @@ void cwSketch::endStroke()
         const int row = m_strokes.size() - 1;
         cwPenStroke &stroke = m_strokes[row];
 
-        // Dump the raw captured polyline in a makeStroke({...})-compatible
-        // form so real pen data can be pasted straight into a test case.
-        // Always dumped (category-gated) regardless of the filter setting
-        // so you can see what the tablet produced before any trimming.
+        // Dump the raw captured polyline as {x, y, pressure, tMs} so we
+        // can analyze the pressure ramp alongside position. Always dumped
+        // (category-gated) regardless of the filter setting so you can
+        // see what the tablet produced before any trimming.
         if (lcPenFilter().isDebugEnabled()) {
             QString raw;
-            raw.reserve(stroke.points.size() * 32);
+            raw.reserve(stroke.points.size() * 48);
             for (const cwPenPoint &p : stroke.points) {
-                raw += QString::asprintf("    {%.6f, %.6f},\n",
-                                         p.position.x(), p.position.y());
+                raw += QString::asprintf("    {%.6f, %.6f, %.4f, %lld},\n",
+                                         p.position.x(), p.position.y(),
+                                         p.pressure,
+                                         static_cast<long long>(p.timestampMs));
             }
             qCDebug(lcPenFilter).noquote()
                 << QString("stroke end: kind=%1 width=%2 points=%3 filter=%4\nraw points:\n%5")
