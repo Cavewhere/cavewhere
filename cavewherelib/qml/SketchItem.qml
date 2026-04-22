@@ -20,6 +20,8 @@ QQ.Item {
     property Sketch sketch
     property bool isNarrow: false
 
+    property Sketch _previousSketch: null
+
     // Fresh sketches (viewInitialized === false) start centered at 1×; otherwise each sketch remembers its own view.
     readonly property double zoom: sketch ? sketch.viewState.zoom : 1.0
     readonly property point pan: (sketch && sketch.viewState.viewInitialized)
@@ -60,6 +62,20 @@ QQ.Item {
         if (_pendingAnchorComponents !== null) {
             anchorPickerLoaderId.active = true
         }
+    }
+
+    // Navigation-triggered flush. When the bound sketch changes, we flush both
+    // the sketch being left (so its thumbnail catches up for the gallery) and
+    // the sketch being entered (covers the case where a prior session closed
+    // without flushing — no-op otherwise, and gated when active drawing starts).
+    onSketchChanged: {
+        if (_previousSketch !== null && _previousSketch !== sketch) {
+            RootData.sketchManager.flushIconIfDirty(_previousSketch)
+        }
+        if (sketch !== null && sketch !== _previousSketch) {
+            RootData.sketchManager.flushIconIfDirty(sketch)
+        }
+        _previousSketch = sketch
     }
 
     function _handleAnchorSelectionRequest(componentList) {

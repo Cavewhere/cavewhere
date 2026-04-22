@@ -138,6 +138,9 @@ signals:
     void iconImagePathChanged();
     void strokesReset();
     void strokeEnded();
+    // Toggles around the live drawing window (begin/endStroke). cwSketchManager
+    // uses this to suppress async icon rendering while a stroke is in flight.
+    void activeDrawingChanged(bool active);
     void surveyNetworkArtifactChanged();
     void anchorStationChanged();
 

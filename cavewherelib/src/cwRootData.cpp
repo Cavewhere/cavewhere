@@ -29,6 +29,7 @@
 #include "cwDeepLinkHandler.h"
 // #include "cwImageCompressionUpdater.h"
 #include "cwJobSettings.h"
+#include "cwSketchSettings.h"
 #include "cwSurveyNoteModel.h"
 
 //Qt includes
@@ -127,6 +128,21 @@ cwRootData::cwRootData(QObject *parent) :
     SketchManager = new cwSketchManager(Project);
     SketchManager->setProject(Project);
     SketchManager->setRegionTreeModel(RegionTreeModel);
+    // Bind icon-pipeline tunables to cwSketchSettings. Defaults derive from
+    // mobileBuild(); the settings object is the single source of truth and can
+    // be retuned at runtime without touching this wiring again.
+    if (auto* sketchSettings = cwSettings::instance()->sketchSettings()) {
+        SketchManager->setAutoIconUpdates(sketchSettings->autoIconUpdates());
+        SketchManager->setIdleIntervalMs(sketchSettings->idleIntervalMs());
+        connect(sketchSettings, &cwSketchSettings::autoIconUpdatesChanged,
+                SketchManager, [this, sketchSettings]() {
+                    SketchManager->setAutoIconUpdates(sketchSettings->autoIconUpdates());
+                });
+        connect(sketchSettings, &cwSketchSettings::idleIntervalMsChanged,
+                SketchManager, [this, sketchSettings]() {
+                    SketchManager->setIdleIntervalMs(sketchSettings->idleIntervalMs());
+                });
+    }
 
     // Sketch-parented scraps pull trip-local station positions from the
     // sketch manager's per-trip line plot pipeline.

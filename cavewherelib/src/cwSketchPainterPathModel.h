@@ -92,13 +92,6 @@ private:
     void clearFinished();
 
     void buildStrokeGeometry(QPainterPath &out, int sourceRow) const;
-
-    double pressureToLineHalfWidth(const cwPenPoint &p) const;
-    QLineF perpendicularLineAt(const QVector<cwPenPoint> &points, int index) const;
-    QVector<QPointF> capFromNormal(const QPointF &normal, const QLineF &perpendicularLine,
-                                   double radius) const;
-    QVector<QPointF> endCap(const QVector<cwPenPoint> &points, const QLineF &perpendicularLine) const;
-
 };
 
 #endif // CWSKETCHPAINTERPATHMODEL_H

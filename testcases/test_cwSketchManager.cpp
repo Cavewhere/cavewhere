@@ -3,8 +3,13 @@
 
 //Qt includes
 #include <QCoreApplication>
+#include <QDir>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QImage>
 #include <QSignalSpy>
+#include <QTemporaryDir>
+#include <QTest>
 #include <QUrl>
 
 //Our includes
@@ -226,4 +231,179 @@ TEST_CASE("cwSketchManager cache entry survives a manager restart",
 
     cwDiskCacher cacher(project.dataRootDir());
     CHECK(cacher.hasEntry(key));
+}
+
+// --------------------------------------------------------------------------
+// Async-pipeline tests
+//
+// These exercise the auto-update + manual-flush paths. Each test creates its
+// own cwProject (which allocates an isolated dataRootDir) so the sketch-icons
+// directory doesn't collide across parallel test processes.
+// --------------------------------------------------------------------------
+
+namespace {
+
+// Wait up to `timeoutMs` for `predicate` to return true; pumps the event loop
+// so queued slots and async observers fire. Returns the final truth value.
+template <typename P>
+bool spinUntil(P predicate, int timeoutMs = 3000)
+{
+    QElapsedTimer timer; timer.start();
+    while (!predicate() && timer.elapsed() < timeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
+        QTest::qWait(10);
+    }
+    return predicate();
+}
+
+} // namespace
+
+TEST_CASE("cwSketchManager: async render fires after idle window",
+          "[cwSketchManager][async]")
+{
+    cwProject project;
+    cwSketchManager manager;
+    manager.setProject(&project);
+    manager.setIdleIntervalMs(100);
+
+    cwSketch sketch;
+    QSignalSpy iconSpy(&sketch, &cwSketch::iconImagePathChanged);
+
+    manager.attachSketch(&sketch);
+
+    addStroke(sketch, cwPenStroke::Wall, { {0, 0}, {10, 10}, {20, 0} });
+
+    const bool updated = spinUntil([&]() { return iconSpy.count() > 0; }, 3000);
+    REQUIRE(updated);
+    CHECK(!sketch.iconImagePath().isEmpty());
+
+    const auto key = cwSketchManager::cacheKey(&sketch);
+    cwDiskCacher cacher(project.dataRootDir());
+    CHECK(cacher.hasEntry(key));
+}
+
+TEST_CASE("cwSketchManager: autoIconUpdates=false suppresses auto render",
+          "[cwSketchManager][async]")
+{
+    cwProject project;
+    cwSketchManager manager;
+    manager.setProject(&project);
+    manager.setIdleIntervalMs(100);
+    manager.setAutoIconUpdates(false);
+
+    cwSketch sketch;
+    QSignalSpy iconSpy(&sketch, &cwSketch::iconImagePathChanged);
+
+    manager.attachSketch(&sketch);
+    addStroke(sketch, cwPenStroke::Wall, { {0, 0}, {10, 10} });
+
+    QTest::qWait(500);
+    CHECK(iconSpy.count() == 0);
+
+    const auto autoKey = cwSketchManager::cacheKey(&sketch);
+    cwDiskCacher autoCacher(project.dataRootDir());
+    CHECK_FALSE(autoCacher.hasEntry(autoKey));
+
+    manager.flushIconIfDirty(&sketch);
+    const bool updated = spinUntil([&]() { return iconSpy.count() > 0; }, 3000);
+    REQUIRE(updated);
+    CHECK(autoCacher.hasEntry(autoKey));
+}
+
+TEST_CASE("cwSketchManager: flushIconIfDirty is a no-op when not dirty",
+          "[cwSketchManager][async]")
+{
+    cwProject project;
+    cwSketchManager manager;
+    manager.setProject(&project);
+    manager.setIdleIntervalMs(100);
+    manager.setAutoIconUpdates(false);
+
+    cwSketch sketch;
+    manager.attachSketch(&sketch);
+    addStroke(sketch, cwPenStroke::Wall, { {0, 0}, {5, 5} });
+
+    // Keep flushing until the sketch quiesces. cwSketch::appendPoint posts a
+    // queued dataChanged that can bump dirtyEpoch after the initial flush
+    // submits, so we may need to chase one trailing render.
+    manager.flushIconIfDirty(&sketch);
+    REQUIRE(spinUntil([&]() { return !sketch.iconImagePath().isEmpty(); }, 3000));
+    QTest::qWait(100);
+    manager.flushIconIfDirty(&sketch);
+    QTest::qWait(500); // let any trailing submit land
+
+    QSignalSpy iconSpy(&sketch, &cwSketch::iconImagePathChanged);
+
+    manager.flushIconIfDirty(&sketch);
+    QTest::qWait(500);
+    CHECK(iconSpy.count() == 0);
+}
+
+TEST_CASE("cwSketchManager: rapid edits coalesce into one write",
+          "[cwSketchManager][async]")
+{
+    cwProject project;
+    cwSketchManager manager;
+    manager.setProject(&project);
+    manager.setIdleIntervalMs(100);
+
+    cwSketch sketch;
+    QSignalSpy iconSpy(&sketch, &cwSketch::iconImagePathChanged);
+    manager.attachSketch(&sketch);
+
+    for (int i = 0; i < 5; ++i) {
+        addStroke(sketch, cwPenStroke::Wall,
+                  { QPointF(i, 0), QPointF(i + 1, 1) });
+    }
+
+    REQUIRE(spinUntil([&]() { return iconSpy.count() > 0; }, 3000));
+    CHECK(iconSpy.count() <= 2);
+}
+
+TEST_CASE("cwSketchManager: flushIconIfDirty is gated while actively drawing",
+          "[cwSketchManager][async]")
+{
+    cwProject project;
+    cwSketchManager manager;
+    manager.setProject(&project);
+    manager.setIdleIntervalMs(100);
+    manager.setAutoIconUpdates(false);
+
+    cwSketch sketch;
+    QSignalSpy iconSpy(&sketch, &cwSketch::iconImagePathChanged);
+    manager.attachSketch(&sketch);
+
+    const int row = sketch.beginStroke(cwPenStroke::Wall, 3.0);
+    sketch.appendPoint(row, QPointF(0, 0), 1.0, 0);
+    sketch.appendPoint(row, QPointF(5, 5), 1.0, 0);
+
+    manager.flushIconIfDirty(&sketch);
+    QTest::qWait(300);
+    CHECK(iconSpy.count() == 0);
+
+    sketch.endStroke();
+
+    manager.flushIconIfDirty(&sketch);
+    REQUIRE(spinUntil([&]() { return iconSpy.count() > 0; }, 3000));
+}
+
+TEST_CASE("cwSketchManager: teardown during in-flight render does not crash",
+          "[cwSketchManager][async]")
+{
+    cwProject project;
+    cwSketchManager manager;
+    manager.setProject(&project);
+    manager.setIdleIntervalMs(50);
+
+    // Spin up a few renders and destroy the sketch before they settle. ASan
+    // catches any dangling-pointer deref in the observer / pipeline map.
+    for (int i = 0; i < 20; ++i) {
+        auto sketch = std::make_unique<cwSketch>();
+        manager.attachSketch(sketch.get());
+        addStroke(*sketch, cwPenStroke::Wall,
+                  { {0, 0}, {double(i), double(i) + 1} });
+        QTest::qWait(5); // may or may not have submitted yet
+    }
+    QTest::qWait(500);
+    SUCCEED();
 }

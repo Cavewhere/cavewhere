@@ -310,7 +310,10 @@ QQ.Item {
 
                                     QQ.TapHandler {
                                         gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
-                                        onSingleTapped: clipArea.noteClicked(thumbDelegate.index)
+                                        onSingleTapped: {
+                                            RootData.sketchManager.flushIconIfDirty(thumbDelegate.noteObject)
+                                            clipArea.noteClicked(thumbDelegate.index)
+                                        }
                                     }
                                 }
                             }

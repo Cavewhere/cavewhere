@@ -346,6 +346,7 @@ int cwSketch::beginStroke(cwPenStroke::Kind kind, double width, const QColor &co
     m_strokeModel->beginInsertRows(QModelIndex(), row, row);
     m_strokes.append(stroke);
     m_strokeModel->endInsertRows();
+    emit activeDrawingChanged(true);
     return row;
 }
 
@@ -379,6 +380,7 @@ void cwSketch::endStroke()
     m_startStrokes.clear();
     m_undoStack->push(cmd);
     emit strokeEnded();
+    emit activeDrawingChanged(false);
 }
 
 void cwSketch::eraseAlongPath(const QVector<QPointF> &pathPointsWorld, double radiusWorld)

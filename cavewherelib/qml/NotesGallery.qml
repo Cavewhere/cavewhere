@@ -283,6 +283,7 @@ QQ.Rectangle {
         QQ.TapHandler {
             gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
             onSingleTapped: {
+                RootData.sketchManager.flushIconIfDirty(container.noteObject)
                 galleryView.currentIndex = container.index
             }
         }

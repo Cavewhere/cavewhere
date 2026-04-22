@@ -16,6 +16,9 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QPainter>
+#include <QPainterPath>
+#include <QPen>
+#include <QPromise>
 #include <QRectF>
 #include <QTransform>
 #include <QUrl>
@@ -26,13 +29,12 @@ Q_LOGGING_CATEGORY(lcSketchManager, "cw.sketch.manager")
 #include "cwCacheImageProvider.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwConcurrent.h"
 #include "cwPenStrokeModel.h"
 #include "cwProject.h"
 #include "cwRegionTreeModel.h"
 #include "cwSketch.h"
-#include "cwSketchDrawQPainter.h"
-#include "cwSketchPainter.h"
-#include "cwSketchPainterPathModel.h"
+#include "cwSketchStrokeGeometry.h"
 #include "cwSurveyChunk.h"
 #include "cwSurveyNoteModelBase.h"
 #include "cwSurveyNoteSketchModel.h"
@@ -48,15 +50,11 @@ namespace {
 // any zero-size rect (including one seeded by the first point) — which
 // previously caused the accumulator to overwrite bounds on every iteration
 // and collapse to just the last point.
-QRectF strokeBoundingRect(const cwSketch* sketch)
+QRectF strokeBoundingRect(const QVector<cwPenStroke>& strokes)
 {
     QRectF bounds;
     bool hasBounds = false;
-    if (sketch == nullptr) {
-        return bounds;
-    }
-
-    for (const auto& stroke : sketch->strokes()) {
+    for (const auto& stroke : strokes) {
         for (const auto& p : stroke.points) {
             if (!hasBounds) {
                 bounds = QRectF(p.position, QSizeF(0.0, 0.0));
@@ -72,17 +70,115 @@ QRectF strokeBoundingRect(const cwSketch* sketch)
     return bounds;
 }
 
+// PNG-encode a rendered QImage. Returns an empty QByteArray on failure.
+QByteArray encodePng(const QImage& image)
+{
+    if (image.isNull()) {
+        return QByteArray();
+    }
+    QByteArray png;
+    QBuffer buffer(&png);
+    buffer.open(QIODevice::WriteOnly);
+    if (!image.save(&buffer, "PNG")) {
+        return QByteArray();
+    }
+    return png;
+}
+
 } // namespace
+
+// --------------------------------------------------------------------------
+// renderIcon / renderIconFromSnapshot
+// --------------------------------------------------------------------------
+
+QImage cwSketchManager::renderIconFromSnapshot(const QVector<cwPenStroke>& strokes,
+                                               int edgePixels)
+{
+    if (strokes.isEmpty() || edgePixels <= 0) {
+        return QImage();
+    }
+
+    QRectF world = strokeBoundingRect(strokes);
+    if (!world.isValid() && world.width() == 0.0 && world.height() == 0.0
+        && !std::isfinite(world.x())) {
+        return QImage();
+    }
+
+    if (world.width() == 0.0 && world.height() == 0.0) {
+        // Single-point only.
+        const QPointF centre = world.topLeft();
+        world = QRectF(centre - QPointF(1.0, 1.0), QSizeF(2.0, 2.0));
+    }
+
+    // Pad so thick strokes at the edge aren't clipped.
+    constexpr double marginFrac = 0.1;
+    const double pad = std::max(world.width(), world.height()) * marginFrac;
+    world.adjust(-pad, -pad, pad, pad);
+
+    const double fitSide = std::max(world.width(), world.height());
+    if (fitSide <= 0.0) {
+        return QImage();
+    }
+    const double zoom = double(edgePixels) / fitSide;
+
+    QImage image(edgePixels, edgePixels, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::white);
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    // Centre the bbox and Y-flip so world north (largest Y) lands at image top.
+    const double offsetX = (edgePixels - world.width()  * zoom) * 0.5;
+    const double offsetY = (edgePixels - world.height() * zoom) * 0.5;
+    QTransform worldToItem;
+    worldToItem.translate(offsetX - world.left()   * zoom,
+                          offsetY + world.bottom() * zoom);
+    worldToItem.scale(zoom, -zoom);
+    painter.setTransform(worldToItem);
+
+    // Pen widths are in screen pixels; cancel the world-to-pixel scale so they
+    // render at their intended thickness.
+    const double penScale = zoom > 0.0 ? 1.0 / zoom : 1.0;
+
+    for (const auto& stroke : strokes) {
+        QPainterPath path;
+        cwSketchStrokeGeometry::buildPath(path, stroke.points, stroke.width);
+        if (path.isEmpty()) {
+            continue;
+        }
+        const QColor color = stroke.color.isValid() ? stroke.color : QColor(Qt::black);
+        if (stroke.width > 0.0) {
+            QPen pen(color, stroke.width * penScale, Qt::SolidLine,
+                     Qt::RoundCap, Qt::RoundJoin);
+            painter.setPen(pen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawPath(path);
+        } else {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(color);
+            painter.drawPath(path);
+        }
+    }
+
+    painter.end();
+    return image;
+}
+
+QImage cwSketchManager::renderIcon(const cwSketch* sketch, int edgePixels)
+{
+    if (sketch == nullptr) {
+        return QImage();
+    }
+    return renderIconFromSnapshot(sketch->strokes(), edgePixels);
+}
+
+// --------------------------------------------------------------------------
+// cwSketchManager
+// --------------------------------------------------------------------------
 
 cwSketchManager::cwSketchManager(QObject* parent)
     : QObject(parent)
 {
-    // Trailing-edge debounce: each markDirty() restarts the timer, so the
-    // icon only rasterises after the user pauses for this long. Pen-up via
-    // cwSketch::strokeEnded bypasses the debounce for immediate feedback.
-    m_flushTimer.setSingleShot(true);
-    m_flushTimer.setInterval(1000);
-    connect(&m_flushTimer, &QTimer::timeout, this, &cwSketchManager::flushDirty);
 }
 
 cwSketchManager::~cwSketchManager() = default;
@@ -119,6 +215,36 @@ void cwSketchManager::setRegionTreeModel(cwRegionTreeModel* regionTreeModel)
     }
 }
 
+void cwSketchManager::setAutoIconUpdates(bool enabled)
+{
+    if (m_autoIconUpdates == enabled) {
+        return;
+    }
+    m_autoIconUpdates = enabled;
+    emit autoIconUpdatesChanged();
+
+    if (!enabled) {
+        // Stop pending idle timers; in-flight renders complete naturally.
+        for (auto& entry : m_sketchPipelines) {
+            if (entry.second->idleTimer) {
+                entry.second->idleTimer->stop();
+            }
+        }
+    }
+}
+
+void cwSketchManager::setIdleIntervalMs(int ms)
+{
+    if (ms < 0) {
+        ms = 0;
+    }
+    if (m_idleIntervalMs == ms) {
+        return;
+    }
+    m_idleIntervalMs = ms;
+    emit idleIntervalMsChanged();
+}
+
 cwDiskCacher::Key cwSketchManager::cacheKey(const cwSketch* sketch)
 {
     cwDiskCacher::Key key;
@@ -142,63 +268,31 @@ QString cwSketchManager::cacheUrl(const cwDiskCacher::Key& key, const QString& v
     return url;
 }
 
-QImage cwSketchManager::renderIcon(const cwSketch* sketch, int edgePixels)
-{
-    if (sketch == nullptr || sketch->strokes().isEmpty() || edgePixels <= 0) {
-        return QImage();
-    }
-
-    QRectF world = strokeBoundingRect(sketch);
-    if (world.width() == 0.0 && world.height() == 0.0) {
-        // Single-point only. Axis-aligned strokes (zero in one dimension)
-        // must fall through — the margin padding below inflates both axes.
-        const QPointF centre = world.topLeft();
-        world = QRectF(centre - QPointF(1.0, 1.0), QSizeF(2.0, 2.0));
-    }
-
-    // Pad so thick strokes at the edge aren't clipped.
-    constexpr double marginFrac = 0.1;
-    const double pad = std::max(world.width(), world.height()) * marginFrac;
-    world.adjust(-pad, -pad, pad, pad);
-
-    const double fitSide = std::max(world.width(), world.height());
-    if (fitSide <= 0.0) {
-        return QImage();
-    }
-    const double zoom = double(edgePixels) / fitSide;
-
-    QImage image(edgePixels, edgePixels, QImage::Format_ARGB32_Premultiplied);
-    image.fill(Qt::white);
-
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    // Centre the bbox and Y-flip so world north (largest Y) lands at image top.
-    const double offsetX = (edgePixels - world.width()  * zoom) * 0.5;
-    const double offsetY = (edgePixels - world.height() * zoom) * 0.5;
-    QTransform worldToItem;
-    worldToItem.translate(offsetX - world.left()   * zoom,
-                          offsetY + world.bottom() * zoom);
-    worldToItem.scale(zoom, -zoom);
-
-    cwSketchPainterPathModel pathModel;
-    pathModel.setStrokeModel(sketch->strokeModel());
-
-    cwSketchDrawQPainter draw(&painter);
-    cwSketchPainter::PaintContext ctx;
-    ctx.viewport    = world;
-    ctx.worldToItem = worldToItem;
-    ctx.mapScale    = zoom;
-    ctx.strokes     = &pathModel;
-    cwSketchPainter::paint(&draw, ctx);
-
-    painter.end();
-    return image;
-}
-
 void cwSketchManager::rasteriseNow(cwSketch* sketch)
 {
-    writeIcon(sketch);
+    writeIconSync(sketch);
+}
+
+void cwSketchManager::flushIconIfDirty(QObject* sketchObject)
+{
+    auto* sketch = qobject_cast<cwSketch*>(sketchObject);
+    if (sketch == nullptr) {
+        return;
+    }
+    auto* pipeline = pipelineFor(sketch);
+    if (pipeline == nullptr) {
+        return;
+    }
+    if (pipeline->activeDrawing) {
+        return;
+    }
+    if (pipeline->dirtyEpoch == pipeline->completedEpoch) {
+        return;
+    }
+    if (pipeline->idleTimer) {
+        pipeline->idleTimer->stop();
+    }
+    submitRender(sketch);
 }
 
 QDir cwSketchManager::cacheDir() const
@@ -206,16 +300,9 @@ QDir cwSketchManager::cacheDir() const
     return m_project ? m_project->dataRootDir() : QDir();
 }
 
-void cwSketchManager::writeIcon(cwSketch* sketch)
+void cwSketchManager::writeIconSync(cwSketch* sketch)
 {
-    if (sketch == nullptr) {
-        return;
-    }
-
-    // Without a project we have no persistent cache directory; writing with
-    // an empty QDir lands under cwd/.cw_cache, polluting the source tree for
-    // tests that instantiate a bare sketch manager.
-    if (m_project == nullptr) {
+    if (sketch == nullptr || m_project == nullptr) {
         return;
     }
 
@@ -225,11 +312,9 @@ void cwSketchManager::writeIcon(cwSketch* sketch)
         return;
     }
 
-    QByteArray pngData;
-    QBuffer buffer(&pngData);
-    buffer.open(QIODevice::WriteOnly);
-    if (!icon.save(&buffer, "PNG")) {
-        qCWarning(lcSketchManager) << "writeIcon: QImage::save(PNG) failed";
+    const QByteArray pngData = encodePng(icon);
+    if (pngData.isEmpty()) {
+        qCWarning(lcSketchManager) << "writeIconSync: PNG encode failed";
         return;
     }
 
@@ -239,13 +324,14 @@ void cwSketchManager::writeIcon(cwSketch* sketch)
     cwDiskCacher cacher(dir);
     cacher.insert(key, pngData);
 
-    // Version the URL by cache-file mtime so QML's Image cache invalidates
-    // whenever the icon is rewritten. Without this, setIconImagePath() would
-    // early-return on the unchanged URL and QML would keep showing stale
-    // (or initial blank) pixels even though the on-disk bytes changed.
     const QFileInfo info(cacher.filePath(key));
     const QString version = QString::number(info.lastModified().toMSecsSinceEpoch());
     sketch->setIconImagePath(cacheUrl(key, version));
+
+    if (auto* p = pipelineFor(sketch)) {
+        p->completedEpoch = p->dirtyEpoch;
+        p->submittedEpoch = p->dirtyEpoch;
+    }
 }
 
 void cwSketchManager::updateIconFromCache(cwSketch* sketch)
@@ -265,27 +351,126 @@ void cwSketchManager::updateIconFromCache(cwSketch* sketch)
     }
 }
 
+// --------------------------------------------------------------------------
+// Pipeline helpers
+// --------------------------------------------------------------------------
+
+cwSketchManager::SketchPipeline* cwSketchManager::pipelineFor(cwSketch* sketch)
+{
+    auto it = m_sketchPipelines.find(sketch);
+    if (it == m_sketchPipelines.end()) {
+        return nullptr;
+    }
+    return it->second.get();
+}
+
 void cwSketchManager::markDirty(cwSketch* sketch)
 {
     if (sketch == nullptr) {
         return;
     }
-    m_dirtySketches.insert(sketch);
-    m_flushTimer.start();
+    auto* pipeline = pipelineFor(sketch);
+    if (pipeline == nullptr) {
+        return;
+    }
+    ++pipeline->dirtyEpoch;
+
+    if (!m_autoIconUpdates) {
+        return; // manual mode: wait for flushIconIfDirty.
+    }
+    if (pipeline->activeDrawing) {
+        return; // never arm the timer while drawing.
+    }
+    if (pipeline->idleTimer) {
+        pipeline->idleTimer->start(m_idleIntervalMs);
+    }
 }
 
-void cwSketchManager::flushDirty()
+void cwSketchManager::onActiveDrawingChanged(cwSketch* sketch, bool active)
 {
-    const auto sketches = m_dirtySketches;
-    m_dirtySketches.clear();
-    for (cwSketch* sketch : sketches) {
-        if (sketch != nullptr) {
-            writeIcon(sketch);
+    auto* pipeline = pipelineFor(sketch);
+    if (pipeline == nullptr) {
+        return;
+    }
+    pipeline->activeDrawing = active;
+
+    if (active) {
+        if (pipeline->idleTimer) {
+            pipeline->idleTimer->stop();
+        }
+        // Drop any in-flight render before its disk write lands.
+        if (pipeline->cancelToken) {
+            pipeline->cancelToken->store(true);
+        }
+    } else {
+        if (m_autoIconUpdates
+            && pipeline->dirtyEpoch > pipeline->completedEpoch
+            && pipeline->idleTimer) {
+            pipeline->idleTimer->start(m_idleIntervalMs);
         }
     }
 }
 
-// ---------------------- Region tree wiring ----------------------
+void cwSketchManager::onIdleTimeout(cwSketch* sketch)
+{
+    auto* pipeline = pipelineFor(sketch);
+    if (pipeline == nullptr) {
+        return;
+    }
+    if (pipeline->activeDrawing) {
+        return;
+    }
+    if (pipeline->dirtyEpoch == pipeline->completedEpoch) {
+        return; // battery guard
+    }
+    submitRender(sketch);
+}
+
+void cwSketchManager::submitRender(cwSketch* sketch)
+{
+    if (sketch == nullptr || m_project == nullptr) {
+        return;
+    }
+    auto* pipeline = pipelineFor(sketch);
+    if (pipeline == nullptr || !pipeline->restarter) {
+        return;
+    }
+
+    // Snapshot GUI-thread state into the worker closure.
+    const QVector<cwPenStroke> snapshot = sketch->strokes();
+    const cwDiskCacher::Key key = cacheKey(sketch);
+    const QDir dir = cacheDir();
+    const int edgePixels = 256;
+    pipeline->submittedEpoch = pipeline->dirtyEpoch;
+    pipeline->cancelToken = std::make_shared<std::atomic<bool>>(false);
+    auto cancelToken = pipeline->cancelToken;
+
+    pipeline->restarter->restart(
+        [snapshot, key, dir, edgePixels, cancelToken]() -> QFuture<QByteArray> {
+            return cwConcurrent::run(
+                [snapshot, key, dir, edgePixels, cancelToken]
+                (QPromise<QByteArray>& promise) {
+                    if (promise.isCanceled() || cancelToken->load()) return;
+                    const QImage img = renderIconFromSnapshot(snapshot, edgePixels);
+                    if (img.isNull()) {
+                        promise.addResult(QByteArray());
+                        return;
+                    }
+
+                    if (promise.isCanceled() || cancelToken->load()) return;
+                    const QByteArray png = encodePng(img);
+                    if (png.isEmpty()) return;
+
+                    if (promise.isCanceled() || cancelToken->load()) return;
+                    cwDiskCacher(dir).insert(key, png);
+                    promise.addResult(png);
+                });
+        });
+}
+
+// --------------------------------------------------------------------------
+// Region / trip / sketch wiring
+// --------------------------------------------------------------------------
 
 void cwSketchManager::handleRegionReset()
 {
@@ -328,8 +513,6 @@ void cwSketchManager::regionRowsAboutToBeRemoved(const QModelIndex& parent, int 
         }
     }
 }
-
-// ---------------------- Trip wiring ----------------------
 
 void cwSketchManager::connectTrip(cwTrip* trip)
 {
@@ -388,7 +571,15 @@ void cwSketchManager::disconnectTrip(cwTrip* trip)
     }
 }
 
-// ---------------------- Sketch model wiring ----------------------
+void cwSketchManager::attachSketch(cwSketch* sketch)
+{
+    connectSketch(sketch);
+}
+
+void cwSketchManager::detachSketch(cwSketch* sketch)
+{
+    disconnectSketch(sketch);
+}
 
 void cwSketchManager::sketchRowsInserted(const QModelIndex& parent, int begin, int end)
 {
@@ -432,19 +623,65 @@ void cwSketchManager::connectSketch(cwSketch* sketch)
         return;
     }
 
+    // Create the per-sketch pipeline BEFORE wiring signals so slot callbacks
+    // can assume it exists.
+    auto pipeline = std::make_unique<SketchPipeline>();
+    pipeline->restarter = std::make_unique<IconRestarter>(this);
+    pipeline->idleTimer = std::make_unique<QTimer>();
+    pipeline->idleTimer->setSingleShot(true);
+
+    IconRestarter* restarterPtr = pipeline->restarter.get();
+
+    // Observer that runs on the GUI thread after a submitted render settles.
+    restarterPtr->onFutureChanged([this, sketch, restarterPtr]() {
+        auto future = restarterPtr->future();
+        AsyncFuture::observe(future).context(this,
+            [this, sketch, future]() {
+                auto* p = pipelineFor(sketch);
+                if (p == nullptr) {
+                    return; // sketch went away
+                }
+                if (future.isCanceled() || future.resultCount() == 0) {
+                    return;
+                }
+                if (future.result().isEmpty()) {
+                    return; // worker cancelled mid-flight; no disk write happened
+                }
+                if (p->cancelToken && p->cancelToken->load()) {
+                    return; // superseded by activeDrawing; drop stale result
+                }
+                if (m_project == nullptr) {
+                    return;
+                }
+                const auto key = cacheKey(sketch);
+                const QDir dir = cacheDir();
+                const QFileInfo info(cwDiskCacher(dir).filePath(key));
+                const QString version = QString::number(
+                    info.lastModified().toMSecsSinceEpoch());
+                sketch->setIconImagePath(cacheUrl(key, version));
+                p->completedEpoch = p->submittedEpoch;
+
+                if (m_autoIconUpdates
+                    && p->dirtyEpoch > p->completedEpoch
+                    && !p->activeDrawing
+                    && p->idleTimer) {
+                    p->idleTimer->start(m_idleIntervalMs);
+                }
+            });
+    });
+
+    QTimer* timerPtr = pipeline->idleTimer.get();
+    connect(timerPtr, &QTimer::timeout, this,
+            [this, sketch]() { onIdleTimeout(sketch); });
+
+    m_sketchPipelines.emplace(sketch, std::move(pipeline));
+
     connect(sketch, &QObject::destroyed, this, &cwSketchManager::sketchDestroyed);
     connect(sketch, &cwSketch::strokesReset, this, [this, sketch]() {
         markDirty(sketch);
     });
-    connect(sketch, &cwSketch::strokeEnded, this, [this, sketch]() {
-        // Pen-up: flush immediately so the thumbnail updates at the natural
-        // stroke boundary rather than waiting out the debounce.
-        m_dirtySketches.remove(sketch);
-        if (m_dirtySketches.isEmpty()) {
-            m_flushTimer.stop();
-        }
-        writeIcon(sketch);
-    });
+    connect(sketch, &cwSketch::activeDrawingChanged, this,
+            [this, sketch](bool active) { onActiveDrawingChanged(sketch, active); });
 
     if (auto* model = sketch->strokeModel()) {
         connect(model, &QAbstractItemModel::dataChanged, this,
@@ -470,16 +707,18 @@ void cwSketchManager::disconnectSketch(cwSketch* sketch)
     if (auto* model = sketch->strokeModel()) {
         disconnect(model, nullptr, this, nullptr);
     }
-    m_dirtySketches.remove(sketch);
+    m_sketchPipelines.erase(sketch); // restarter cancels in-flight in its dtor
 }
 
 void cwSketchManager::sketchDestroyed(QObject* sketchObj)
 {
     auto* sketch = static_cast<cwSketch*>(sketchObj);
-    m_dirtySketches.remove(sketch);
+    m_sketchPipelines.erase(sketch);
 }
 
-// ---------------------- Per-trip line plot pipeline ----------------------
+// --------------------------------------------------------------------------
+// Per-trip line plot pipeline (unchanged)
+// --------------------------------------------------------------------------
 
 void cwSketchManager::acquireLinePlot(cwTrip* trip)
 {
@@ -492,8 +731,6 @@ void cwSketchManager::acquireLinePlot(cwTrip* trip)
         auto pipeline = std::make_unique<TripPipeline>();
         pipeline->restarter = std::make_unique<Restarter>(this);
 
-        // Re-look up the pipeline by trip pointer at callback time: the
-        // entry may have been released between restart() and resolve.
         Restarter* capturedRestarter = pipeline->restarter.get();
         pipeline->restarter->onFutureChanged([this, capturedRestarter, trip]() {
             auto future = capturedRestarter->future();
@@ -560,9 +797,6 @@ cwSketchManager::latestLinePlot(cwTrip* trip) const
 
 void cwSketchManager::connectLinePlotTripSignals(cwTrip* trip, TripPipeline& pipeline)
 {
-    // Any structural change to the trip's chunks rewires per-chunk signals
-    // and triggers a rerun. Calibrations cover declination (stripped) but
-    // also tape/compass corrections that DO affect geometry.
     pipeline.tripConnections.append(
         connect(trip, &cwTrip::chunksInserted, this, [this, trip]() {
             rebuildChunkSignals(trip);
@@ -622,8 +856,6 @@ void cwSketchManager::rebuildChunkSignals(cwTrip* trip)
     if (it == m_tripPipelines.end()) {
         return;
     }
-    // Disconnect all existing per-chunk connections; reconnect based on
-    // current chunk list. Cheaper than bookkeeping inserts/removes.
     for (const auto& c : it->second->chunkConnections) {
         QObject::disconnect(c);
     }
@@ -645,9 +877,6 @@ void cwSketchManager::requestLinePlotRerun(cwTrip* trip)
 
 void cwSketchManager::onTripDestroyed(cwTrip* trip)
 {
-    // The trip is gone; connections to it are already dead. Just drop the
-    // hash entry. Do NOT touch pipeline.tripConnections here (QObject::destroyed
-    // handlers are invoked with the target partially destroyed).
     auto it = m_tripPipelines.find(trip);
     if (it == m_tripPipelines.end()) {
         return;
