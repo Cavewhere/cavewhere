@@ -306,6 +306,12 @@ target_compile_definitions(cavewherelib
     PRIVATE "CAVEWHERE_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\""
 )
 
+target_compile_definitions(cavewherelib
+    PUBLIC
+        $<$<CONFIG:Release,RelWithDebInfo,MinSizeRel>:QT_NO_DEBUG_OUTPUT>
+        $<$<CONFIG:Release,RelWithDebInfo,MinSizeRel>:QT_NO_INFO_OUTPUT>
+)
+
 if(MOBILE_BUILD)
     message(STATUS "Building as a mobile build")
     target_compile_definitions(cavewherelib
