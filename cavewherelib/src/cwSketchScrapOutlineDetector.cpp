@@ -8,8 +8,10 @@
 #include "cwSketchScrapOutlineDetector.h"
 
 //Qt includes
+#include <QDebug>
 #include <QHash>
 #include <QLineF>
+#include <QLoggingCategory>
 #include <QPainterPath>
 #include <QPointF>
 
@@ -17,6 +19,12 @@
 #include <algorithm>
 #include <cmath>
 #include <tuple>
+
+// Off by default. Enable with QT_LOGGING_RULES="cw.sketch.detector.debug=true"
+// to dump per-stroke geometry and every chain decision — especially useful
+// when diagnosing crossing-wall cases (one wall drawn through another), where
+// the chain-walked ring self-intersects in its interior rather than at a seam.
+Q_LOGGING_CATEGORY(lcSketchDetector, "cw.sketch.detector", QtInfoMsg)
 
 namespace {
 
@@ -312,6 +320,11 @@ cwSketchScrapOutlineDetector::detectImpl(const QVector<cwPenStroke> &strokes,
         if (collectDiagnostics) {
             result.rawStrokesById.insert(s.id, poly);
         }
+        qCDebug(lcSketchDetector) << "intake stroke" << s.id
+                                  << "kind" << s.kind
+                                  << "points" << poly.size()
+                                  << "first" << poly.first()
+                                  << "last" << poly.last();
         ids.append(s.id);
         polylines.append(std::move(poly));
     }
@@ -424,6 +437,8 @@ cwSketchScrapOutlineDetector::detectImpl(const QVector<cwPenStroke> &strokes,
             tail = 2 * partnerStroke + (partnerWhich == 0 ? 1 : 0);
         }
 
+        qCDebug(lcSketchDetector) << "chain closed: members" << members
+                                  << "ring vertices" << ring.size();
         if (ring.size() < 3) {
             if (collectDiagnostics) {
                 recordChainRejection(members, cwSketchScrapRejectReasons::RingTooSmall);
@@ -438,6 +453,9 @@ cwSketchScrapOutlineDetector::detectImpl(const QVector<cwPenStroke> &strokes,
             continue;
         }
         if (ringSelfIntersects(ring)) {
+            qCDebug(lcSketchDetector) << "ring self-intersects, entering salvage"
+                                      << "members" << members
+                                      << "ring" << ring;
             // Salvage the tiny-hook-at-seam case: when the user restarts
             // drawing on an existing wall and overshoots by a few mm, the
             // chained ring self-intersects at that micro-hook. Re-interpret
@@ -448,7 +466,10 @@ cwSketchScrapOutlineDetector::detectImpl(const QVector<cwPenStroke> &strokes,
             QPainterPath path;
             path.addPolygon(ring);
             path.setFillRule(Qt::OddEvenFill);
-            ring = largestOuterSubpath(path.simplified().toSubpathPolygons());
+            const QList<QPolygonF> subpaths = path.simplified().toSubpathPolygons();
+            qCDebug(lcSketchDetector) << "salvage subpaths" << subpaths.size();
+            ring = largestOuterSubpath(subpaths);
+            qCDebug(lcSketchDetector) << "salvage selected ring vertices" << ring.size();
             if (ring.size() < 3) {
                 if (collectDiagnostics) {
                     recordChainRejection(members, cwSketchScrapRejectReasons::SalvageEmpty);
@@ -471,6 +492,8 @@ cwSketchScrapOutlineDetector::detectImpl(const QVector<cwPenStroke> &strokes,
 
         std::sort(members.begin(), members.end());
 
+        qCDebug(lcSketchDetector) << "emit outline: members" << members
+                                  << "polygon" << ring;
         cwSketchScrapOutline outline;
         outline.memberStrokeIds  = std::move(members);
         outline.tripLocalPolygon = std::move(ring);
