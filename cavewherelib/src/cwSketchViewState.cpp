@@ -6,10 +6,48 @@
 **************************************************************************/
 
 #include "cwSketchViewState.h"
+#include "cwWorldToScreenMatrix.h"
 
 cwSketchViewState::cwSketchViewState(QObject *parent)
     : QObject(parent)
 {
+}
+
+void cwSketchViewState::setWorldToScreenMatrix(cwWorldToScreenMatrix *matrix)
+{
+    if (m_worldToScreenMatrix == matrix) {
+        return;
+    }
+    m_worldToScreenMatrix = matrix;
+    emit worldToScreenMatrixChanged();
+}
+
+double cwSketchViewState::pixelsPerMeter() const
+{
+    if (!m_worldToScreenMatrix) {
+        return 0.0;
+    }
+    // m11 is the positive world-meter→screen-pixel scale baked into the
+    // matrix; the Y-axis flip lives in m22. Multiplying by zoom mirrors
+    // the _pxPerMeter derivation in SketchItem.qml.
+    return static_cast<double>(m_worldToScreenMatrix->matrix()(0, 0)) * m_zoom;
+}
+
+double cwSketchViewState::screenPixelsToWorldMeters(double px) const
+{
+    const double k = pixelsPerMeter();
+    if (k <= 0.0) {
+        return 0.0;
+    }
+    return px / k;
+}
+
+double cwSketchViewState::pixelsPerMeterPaper() const
+{
+    if (!m_worldToScreenMatrix) {
+        return 0.0;
+    }
+    return static_cast<double>(m_worldToScreenMatrix->matrix()(0, 0));
 }
 
 void cwSketchViewState::setZoom(double zoom)

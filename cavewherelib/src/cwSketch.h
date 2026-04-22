@@ -32,6 +32,22 @@ class cwMatrix4x4Artifact;
 class cwSurvey2DGeometryRule;
 class cwTrip;
 
+// Result of cwSketch::findContinuationTarget. strokeIndex == -1 means no
+// qualifying stroke was within proximity. armProbation() reads strokeWidth to
+// derive the per-sample hit-test radius (0.5 × strokeWidth screen pixels).
+class CAVEWHERE_LIB_EXPORT cwSketchContinuationTarget {
+    Q_GADGET
+    QML_VALUE_TYPE(sketchContinuationTarget)
+    Q_PROPERTY(int strokeIndex MEMBER strokeIndex)
+    Q_PROPERTY(double strokeWidth MEMBER strokeWidth)
+
+public:
+    int    strokeIndex = -1;
+    double strokeWidth = 0.0;
+};
+
+Q_DECLARE_METATYPE(cwSketchContinuationTarget)
+
 class CAVEWHERE_LIB_EXPORT cwSketch : public QObject
 {
     Q_OBJECT
@@ -106,6 +122,31 @@ public:
 
     Q_INVOKABLE int  beginStroke(cwPenStroke::Kind kind, double width, const QColor &color = QColor());
 
+    // Scans same-`kind` strokes (Eraser is always skipped) for one whose
+    // centerline is within 0.5×stroke.width *screen pixels* (converted to
+    // world meters via viewState->pixelsPerMeter()) of `worldPoint`. Returns
+    // the nearest qualifying stroke. When the matrix is unset the scan is
+    // skipped and strokeIndex=-1 is returned.
+    Q_INVOKABLE cwSketchContinuationTarget findContinuationTarget(
+        cwPenStroke::Kind kind, QPointF worldPoint) const;
+
+    // Arms a probation window on the active stroke (created by QML via
+    // beginStroke; its row index is `probationStrokeIndex`). Subsequent
+    // appendPoint calls on that row hit-test against `candidate`'s
+    // centerline. After `probationWindowScreenPx` of accumulated raw pen
+    // travel, if hitCount/sampleCount >= commitHitRateThreshold the
+    // probation row is removed, the candidate is truncated at the
+    // furthest-along hit (graft vertex appended), `continuationCommitted`
+    // fires with the candidate's new row index, and the next
+    // `postCommitBlendWindowScreenPx` of travel is blended toward the
+    // candidate's tangent. Otherwise `continuationRejected` fires and the
+    // probation row is left as a normal fresh stroke.
+    Q_INVOKABLE void armProbation(int probationStrokeIndex,
+                                  cwSketchContinuationTarget candidate,
+                                  double probationWindowScreenPx,
+                                  double postCommitBlendWindowScreenPx,
+                                  double commitHitRateThreshold = 0.6);
+
     // Contract: appendPoint is for the live pen input stream only — one
     // active row at a time, between beginStroke() and endStroke(). The
     // per-frame coalescer uses a single-row sentinel, so calling this across
@@ -144,6 +185,16 @@ signals:
     void surveyNetworkArtifactChanged();
     void anchorStationChanged();
 
+    // Fired from inside appendPoint() when probation passes the hit-rate
+    // threshold. The probation row has been removed from m_strokes and the
+    // candidate (now `newActiveStrokeIndex`) has been truncated + grafted.
+    // QML must update its `_activeStrokeIndex` to keep subsequent
+    // appendPoint calls targeting the right row.
+    void continuationCommitted(int newActiveStrokeIndex);
+    // Fired from inside appendPoint() when probation fails. The probation
+    // row stays as a normal fresh stroke; QML keeps its existing index.
+    void continuationRejected();
+
 private:
     QVector<cwPenStroke> m_strokes;
     QVector<cwPenStroke> m_startStrokes;
@@ -175,9 +226,70 @@ private:
     // bumps it to start a fresh undo entry for the next drag.
     int m_eraseSession = 0;
 
+    // Three-phase state machine driven by appendPoint().
+    //
+    //   Off       : normal stroke; appendPoint stores raw.
+    //   Probation : armed by armProbation(). Each sample hit-tests against
+    //               candidate centerline; we accumulate raw-pen travel until
+    //               it exceeds probationWindowMeters, then commit or reject.
+    //   Blend     : entered on commit. The next blendWindowMeters of raw
+    //               travel are lerped between candidate-tangent extrapolation
+    //               and raw pen, then the state returns to Off.
+    //
+    // `used` stays true once probation commits, so endStroke() picks the
+    // "Continue Stroke" undo label.
+    struct ContinuationState {
+        enum class Phase { Off, Probation, Blend };
+        Phase   phase = Phase::Off;
+        bool    used = false;
+        int     strokeIndex = -1;     // The row appendPoint is targeting.
+
+        // Probation bookkeeping.
+        int     candidateIndex = -1;
+        double  hitThresholdMeters = 0.0;     // 0.5 × strokeWidthScreenPx / pxPerMeter.
+        double  probationWindowMeters = 0.0;
+        double  blendWindowMeters = 0.0;       // Carried into Blend on commit.
+        double  commitHitRateThreshold = 0.6;
+        int     hitCount = 0;
+        int     sampleCount = 0;
+
+        // Direction resolution.
+        //
+        // Probation tracks both the highest-index (forward) and lowest-index
+        // (backward) in-proximity hit so commit can truncate from either end.
+        // The direction itself is decided at commit time by projecting the
+        // pen's net motion (lastRaw − probationStart) onto the candidate
+        // tangent sampled at the *first* hit — a positive dot product means
+        // the user is extending forward (keep current behavior), negative
+        // means they're extending backward (reverse the candidate so its
+        // head becomes its tail, then truncate normally).
+        QPointF probationStartWorld;           // First raw pen position.
+        bool    haveProbationStart = false;
+        int     firstHitSegmentIndex = -1;     // Segment of the first hit.
+        QPointF firstHitTangent;               // Forward tangent at the first hit.
+        int     furthestForwardSeg = -1;       // Max-index hit.
+        QPointF furthestForwardWorld;
+        QPointF furthestForwardTangent;
+        int     furthestBackwardSeg = -1;      // Min-index hit.
+        QPointF furthestBackwardWorld;
+        QPointF furthestBackwardTangent;
+
+        // Shared / Blend bookkeeping.
+        QPointF graftPoint;
+        QPointF graftTangent;
+        double  travelMeters = 0.0;            // Cumulative raw arclength since arming / since commit.
+        QPointF lastRawWorld;
+        bool    haveLastRawWorld = false;
+    };
+    ContinuationState m_continuationState;
+
     void applyStrokes(const QVector<cwPenStroke> &strokes);
     void rebuildViewMatrixForType();
     void syncMatrixArtifact();
+    // Coalesces per-sample dataChanged emits into one queued call per row so
+    // a fast pen drag doesn't flood Qt's event loop. Used by appendPoint
+    // (both the probation and the post-probation paths).
+    void scheduleDirtyEmit(int row);
 };
 
 #endif // CWSKETCH_H

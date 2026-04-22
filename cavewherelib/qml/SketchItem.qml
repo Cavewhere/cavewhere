@@ -42,6 +42,15 @@ QQ.Item {
     // and the eraser-cursor size all derive from this.
     readonly property double _pxPerMeter: worldToScreenId.matrix.m11 * zoom
 
+    // Continuation tuning. The probation window is the *minimum* pen travel
+    // required before we decide commit vs reject — it both gives the user
+    // room to retrace the candidate and bounds how long an accidental
+    // pen-down on a stroke can hijack a fresh draw. The post-commit blend
+    // window is the screen-space distance over which the seam crossfades
+    // from the candidate's tangent extrapolation to the raw pen.
+    readonly property real _probationWindowScreenPx: 10 * Screen.pixelDensity
+    readonly property real _postCommitBlendScreenPx: 5 * Screen.pixelDensity
+
     property int _activeStrokeIndex: -1
 
     // Eraser mode state. _eraserCursor tracks the pen even while hovering so
@@ -108,6 +117,26 @@ QQ.Item {
         scale.scaleDenominator.value: sketchItemId.sketch ? sketchItemId.sketch.mapScale.scaleDenominator.value : 250
         scale.scaleNumerator.unit:    sketchItemId.sketch ? sketchItemId.sketch.mapScale.scaleNumerator.unit    : Units.Meters
         scale.scaleDenominator.unit:  sketchItemId.sketch ? sketchItemId.sketch.mapScale.scaleDenominator.unit  : Units.Meters
+    }
+
+    // Publish the matrix to the C++ view state so cwSketch can derive
+    // screen-pixel → world-meter thresholds without reimplementing the
+    // paper-scale formula.
+    onSketchChanged: {
+        if (sketch) {
+            sketch.viewState.worldToScreenMatrix = worldToScreenId
+        }
+    }
+
+    // Probation commits inside cwSketch::appendPoint: the probation row is
+    // removed and the candidate becomes the active row. We have to retarget
+    // _activeStrokeIndex so the next appendPoint from onPointChanged lands
+    // on the continued stroke.
+    QQ.Connections {
+        target: sketchItemId.sketch
+        function onContinuationCommitted(newActiveStrokeIndex) {
+            sketchItemId._activeStrokeIndex = newActiveStrokeIndex
+        }
     }
 
     InfiniteGridModel {
@@ -300,9 +329,23 @@ QQ.Item {
                 return
             }
             if (active) {
+                // Always start a fresh stroke; if the pen landed on a
+                // same-kind stroke, arm probation so the next ~1 cm of pen
+                // travel decides whether to graft. On commit the cwSketch
+                // signal handler swaps `_activeStrokeIndex` to the
+                // continued (candidate) row.
+                const worldStart = sketchItemId._worldPoint(point.position)
+                const target = sketchItemId.sketch.findContinuationTarget(
+                    sketchItemId.strokeKind, worldStart)
                 sketchItemId._activeStrokeIndex = sketchItemId.sketch.beginStroke(
-                    sketchItemId.strokeKind,
-                    sketchItemId.strokeWidth)
+                    sketchItemId.strokeKind, sketchItemId.strokeWidth)
+                if (target.strokeIndex >= 0) {
+                    sketchItemId.sketch.armProbation(
+                        sketchItemId._activeStrokeIndex,
+                        target,
+                        sketchItemId._probationWindowScreenPx,
+                        sketchItemId._postCommitBlendScreenPx)
+                }
             } else {
                 if (sketchItemId._activeStrokeIndex >= 0) {
                     sketchItemId.sketch.endStroke()
