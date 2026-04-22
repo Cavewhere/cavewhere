@@ -10,7 +10,9 @@
 
 //Qt includes
 #include <QObject>
+#include <QPointF>
 #include <QQmlEngine>
+#include <QRectF>
 #include <QString>
 #include <QUndoStack>
 #include <QUuid>
@@ -254,6 +256,11 @@ private:
         double  commitHitRateThreshold = 0.6;
         int     hitCount = 0;
         int     sampleCount = 0;
+        // Candidate bounding box expanded by hitThresholdMeters, cached at
+        // arm time to reject per-sample scans when the pen is far from the
+        // candidate. The candidate does not mutate during probation so one
+        // snapshot suffices.
+        QRectF  candidateBbox;
 
         // Direction resolution.
         //
@@ -292,6 +299,14 @@ private:
     // a fast pen drag doesn't flood Qt's event loop. Used by appendPoint
     // (both the probation and the post-probation paths).
     void scheduleDirtyEmit(int row);
+
+    // Probation-phase helpers split out of appendPoint() so the hot sample
+    // path stays readable. handleProbationSample appends the sample to the
+    // probation row, hit-tests against the candidate centerline, updates
+    // direction-tracking fields, and returns true if the probation window
+    // has closed (caller then invokes commitContinuation or rejects).
+    bool handleProbationSample(int strokeIndex, const cwPenPoint &p);
+    void commitContinuation();
 };
 
 #endif // CWSKETCH_H

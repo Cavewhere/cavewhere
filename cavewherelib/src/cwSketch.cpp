@@ -370,270 +370,263 @@ void cwSketch::appendPoint(int strokeIndex, const cwPenPoint &p)
     using Phase = ContinuationState::Phase;
     auto &cs = m_continuationState;
 
-    // Probation phase: hit-test, accumulate travel, decide commit/reject
-    // when the window closes. The probation row owns the raw sample either
-    // way (committed → row gets removed; rejected → row keeps it).
     if (cs.phase == Phase::Probation && cs.strokeIndex == strokeIndex) {
-        const QPointF rawWorld = p.position;
-        if (!cs.haveProbationStart) {
-            cs.probationStartWorld = rawWorld;
-            cs.haveProbationStart = true;
-        }
-        if (cs.haveLastRawWorld) {
-            const QPointF delta = rawWorld - cs.lastRawWorld;
-            cs.travelMeters += std::hypot(delta.x(), delta.y());
-        }
-        cs.lastRawWorld = rawWorld;
-        cs.haveLastRawWorld = true;
-
-        // Hit-test against the candidate centerline.
-        if (cs.candidateIndex >= 0 && cs.candidateIndex < m_strokes.size()) {
-            const cwPenStroke &cand = m_strokes[cs.candidateIndex];
-            const double rSq = cs.hitThresholdMeters * cs.hitThresholdMeters;
-            int   bestSeg = -1;
-            double bestSegDistSq = std::numeric_limits<double>::infinity();
-            double sceneBestDistSq = std::numeric_limits<double>::infinity();
-            for (int i = 1; i < cand.points.size(); ++i) {
-                const QPointF a = cand.points[i - 1].position;
-                const QPointF b = cand.points[i].position;
-                const double dSq = distancePointToSegmentSquared(rawWorld, a, b);
-                if (dSq < sceneBestDistSq) {
-                    sceneBestDistSq = dSq;
-                }
-                if (dSq <= rSq && dSq < bestSegDistSq) {
-                    bestSegDistSq = dSq;
-                    bestSeg = i;
-                }
-            }
-            cs.sampleCount += 1;
-            const double mapScaleRatioLog = m_mapScale ? m_mapScale->scale() : 0.0;
-            const double paperPpmLog = cwSketchPainter::pixelsPerMeterFromPaperScale(
-                mapScaleRatioLog, cwSketchScrapRasterizer::kTargetDPI);
-            const double pxPerMeter = m_viewState
-                ? m_viewState->pixelsPerMeter() : 0.0;
-            const double minDist = std::sqrt(sceneBestDistSq);
-            qCInfo(lcContinuation,
-                   "probation sample %d pen=(%.4f, %.4f) "
-                   "minDistWorld=%.5f (=%.4f paperPx, %.4f screenPx) "
-                   "thresholdWorld=%.5f → %s (hits=%d/%d)",
-                   cs.sampleCount, rawWorld.x(), rawWorld.y(),
-                   minDist, minDist * paperPpmLog, minDist * pxPerMeter,
-                   cs.hitThresholdMeters,
-                   (bestSeg >= 0 ? "HIT" : "miss"),
-                   cs.hitCount + (bestSeg >= 0 ? 1 : 0), cs.sampleCount);
-            if (bestSeg >= 0) {
-                cs.hitCount += 1;
-                const QPointF a = cand.points[bestSeg - 1].position;
-                const QPointF b = cand.points[bestSeg].position;
-                const QPointF ab = b - a;
-                const double lenSq = ab.x() * ab.x() + ab.y() * ab.y();
-                QPointF proj = a;
-                QPointF tangent(1.0, 0.0);
-                if (lenSq > 0.0) {
-                    const QPointF ap = rawWorld - a;
-                    const double t = std::clamp(
-                        (ap.x() * ab.x() + ap.y() * ab.y()) / lenSq, 0.0, 1.0);
-                    proj = a + t * ab;
-                    const double len = std::sqrt(lenSq);
-                    tangent = QPointF(ab.x() / len, ab.y() / len);
-                }
-
-                // First hit anchors the direction reference used at commit
-                // *and* the start of the overlap region for the in-probation
-                // blend.
-                if (cs.firstHitSegmentIndex < 0) {
-                    cs.firstHitSegmentIndex = bestSeg;
-                    cs.firstHitTangent = tangent;
-                    cs.firstHitWorld = proj;
-                }
-                // Track the extreme in-proximity hit on both ends. Using >=
-                // (not >) so a lone hit populates both forward and backward.
-                if (cs.furthestForwardSeg < 0 || bestSeg >= cs.furthestForwardSeg) {
-                    cs.furthestForwardSeg = bestSeg;
-                    cs.furthestForwardWorld = proj;
-                    cs.furthestForwardTangent = tangent;
-                }
-                if (cs.furthestBackwardSeg < 0 || bestSeg <= cs.furthestBackwardSeg) {
-                    cs.furthestBackwardSeg = bestSeg;
-                    cs.furthestBackwardWorld = proj;
-                    cs.furthestBackwardTangent = tangent;
-                }
-            }
-        }
-
-        // Append raw point to the probation row first; the commit path
-        // below removes the row wholesale, so the in-progress sample is
-        // discarded on commit and preserved on reject.
-        m_strokes[strokeIndex].points.append(p);
-        scheduleDirtyEmit(strokeIndex);
-
-        // Window closed? Decide.
-        const bool windowClosed = cs.probationWindowMeters > 0.0
-            && cs.travelMeters >= cs.probationWindowMeters;
-        if (!windowClosed) {
+        if (!handleProbationSample(strokeIndex, p)) {
             return;
         }
 
         const double rate = cs.sampleCount > 0
             ? static_cast<double>(cs.hitCount) / cs.sampleCount
             : 0.0;
-        qCInfo(lcContinuation,
-               "probation window closed: travel=%.5f/%.5f m "
-               "rate=%.2f (%d/%d) threshold=%.2f "
-               "firstSeg=%d fwdSeg=%d bwdSeg=%d",
-               cs.travelMeters, cs.probationWindowMeters,
-               rate, cs.hitCount, cs.sampleCount,
-               cs.commitHitRateThreshold,
-               cs.firstHitSegmentIndex,
-               cs.furthestForwardSeg, cs.furthestBackwardSeg);
-        const bool commit = (rate >= cs.commitHitRateThreshold)
+        if (lcContinuation().isInfoEnabled()) {
+            qCInfo(lcContinuation,
+                   "probation window closed: travel=%.5f/%.5f m "
+                   "rate=%.2f (%d/%d) threshold=%.2f "
+                   "firstSeg=%d fwdSeg=%d bwdSeg=%d",
+                   cs.travelMeters, cs.probationWindowMeters,
+                   rate, cs.hitCount, cs.sampleCount,
+                   cs.commitHitRateThreshold,
+                   cs.firstHitSegmentIndex,
+                   cs.furthestForwardSeg, cs.furthestBackwardSeg);
+        }
+
+        const bool canCommit = (rate >= cs.commitHitRateThreshold)
             && cs.candidateIndex >= 0
             && cs.candidateIndex < m_strokes.size()
             && cs.firstHitSegmentIndex >= 0;
-
-        if (!commit) {
+        if (!canCommit) {
             qCInfo(lcContinuation, "  → REJECT");
-            const int probationIdx = cs.strokeIndex;
-            m_continuationState = ContinuationState();
-            emit continuationRejected();
-            (void)probationIdx;
-            return;
-        }
-
-        // Resolve direction: project the pen's net motion during probation
-        // onto the first-hit tangent. Positive → user extends along the
-        // stroke's stored direction (forward commit). Negative → user
-        // extends against it (reverse the candidate so its original head
-        // becomes the new tail, then blend over the overlap normally).
-        const QPointF motion = cs.lastRawWorld - cs.probationStartWorld;
-        const double motionDotTangent =
-            motion.x() * cs.firstHitTangent.x()
-            + motion.y() * cs.firstHitTangent.y();
-        const bool backward = motionDotTangent < 0.0;
-
-        const int probationIdx = cs.strokeIndex;
-        const int candidateIdxBefore = cs.candidateIndex;
-
-        // The overlap region on the candidate runs from firstHitWorld (where
-        // the pen first touched the stroke) to overlapEnd (the *furthest*
-        // in-proximity hit in the chosen direction). That region's old
-        // polyline gets discarded; replacement points come from the buffered
-        // probation samples, each lerped against the straight-line chord
-        // (firstHit → overlapEnd) with weight t = clamp(sampleTravel /
-        // probationWindow, 0, 1). A small t favours the old centerline
-        // (smoothing out early jitter); t near 1 favours the raw pen.
-        const QPointF overlapStart = cs.firstHitWorld;
-        QPointF       overlapEnd;
-        if (backward) {
-            overlapEnd = cs.furthestBackwardWorld;
-        } else {
-            overlapEnd = cs.furthestForwardWorld;
-        }
-
-        // Snapshot probation samples + per-sample cumulative travel *before*
-        // removing the probation row.
-        QVector<cwPenPoint> probSamples = m_strokes[probationIdx].points;
-        QVector<double>     sampleTravel(probSamples.size(), 0.0);
-        {
-            double acc = 0.0;
-            QPointF prev;
-            bool havePrev = false;
-            for (int i = 0; i < probSamples.size(); ++i) {
-                if (havePrev) {
-                    const QPointF d = probSamples[i].position - prev;
-                    acc += std::hypot(d.x(), d.y());
-                }
-                sampleTravel[i] = acc;
-                prev = probSamples[i].position;
-                havePrev = true;
-            }
-        }
-
-        qCInfo(lcContinuation,
-               "  → COMMIT: %s (motion·firstTangent=%.4f) "
-               "overlapStart=(%.4f, %.4f) overlapEnd=(%.4f, %.4f) "
-               "probSamples=%d",
-               backward ? "BACKWARD (reversing candidate)" : "FORWARD",
-               motionDotTangent, overlapStart.x(), overlapStart.y(),
-               overlapEnd.x(), overlapEnd.y(),
-               static_cast<int>(probSamples.size()));
-
-        m_strokeModel->beginRemoveRows(QModelIndex(), probationIdx, probationIdx);
-        m_strokes.removeAt(probationIdx);
-        m_strokeModel->endRemoveRows();
-        // m_pendingDirtyRow may have referenced the now-gone row; clear it.
-        m_pendingDirtyRow = -1;
-
-        // Removing a row before the candidate would shift its index down.
-        int candidateIdx = candidateIdxBefore;
-        if (probationIdx < candidateIdxBefore) {
-            candidateIdx -= 1;
-        }
-        if (candidateIdx < 0 || candidateIdx >= m_strokes.size()) {
-            // Safety net: candidate vanished. Nothing to commit to.
             m_continuationState = ContinuationState();
             emit continuationRejected();
             return;
         }
-
-        cwPenStroke &cand = m_strokes[candidateIdx];
-
-        // prefixCount points of the (possibly reversed) candidate survive as
-        // the untouched leading section. In forward mode this is everything
-        // before segment firstHitSegmentIndex. In backward mode, once we
-        // reverse the array, the first-hit segment's upper reversed-frame
-        // index is N − firstHitSegmentIndex, so the pre-overlap prefix has
-        // that many points.
-        int prefixCount;
-        if (backward) {
-            std::reverse(cand.points.begin(), cand.points.end());
-            prefixCount = cand.points.size() - cs.firstHitSegmentIndex;
-        } else {
-            prefixCount = cs.firstHitSegmentIndex;
-        }
-        prefixCount = std::clamp<int>(prefixCount, 0, cand.points.size());
-
-        QVector<cwPenPoint> newPoints;
-        newPoints.reserve(prefixCount + probSamples.size());
-        for (int i = 0; i < prefixCount; ++i) {
-            newPoints.append(cand.points[i]);
-        }
-
-        const double window = cs.probationWindowMeters;
-        for (int i = 0; i < probSamples.size(); ++i) {
-            const double t = (window > 0.0)
-                ? std::clamp(sampleTravel[i] / window, 0.0, 1.0)
-                : 1.0;
-            const QPointF oldLine(
-                (1.0 - t) * overlapStart.x() + t * overlapEnd.x(),
-                (1.0 - t) * overlapStart.y() + t * overlapEnd.y());
-            const QPointF raw = probSamples[i].position;
-            cwPenPoint bp = probSamples[i];
-            bp.position = QPointF(
-                (1.0 - t) * oldLine.x() + t * raw.x(),
-                (1.0 - t) * oldLine.y() + t * raw.y());
-            newPoints.append(bp);
-        }
-        cand.points = newPoints;
-
-        // Reset the model around the candidate replacement; structural
-        // changes to the polyline are not reliably consumed via dataChanged
-        // alone.
-        applyStrokes(m_strokes);
-
-        // Back to Off — subsequent appendPoint() calls store raw. `used`
-        // persists through to endStroke() so the undo label is "Continue
-        // Stroke".
-        m_continuationState = ContinuationState();
-        m_continuationState.used = true;
-        m_continuationState.strokeIndex = candidateIdx;
-
-        emit continuationCommitted(candidateIdx);
+        commitContinuation();
         return;
     }
 
     m_strokes[strokeIndex].points.append(p);
     scheduleDirtyEmit(strokeIndex);
+}
+
+bool cwSketch::handleProbationSample(int strokeIndex, const cwPenPoint &p)
+{
+    auto &cs = m_continuationState;
+    const QPointF rawWorld = p.position;
+
+    if (!cs.haveProbationStart) {
+        cs.probationStartWorld = rawWorld;
+        cs.haveProbationStart = true;
+    }
+    if (cs.haveLastRawWorld) {
+        const QPointF delta = rawWorld - cs.lastRawWorld;
+        cs.travelMeters += std::hypot(delta.x(), delta.y());
+    }
+    cs.lastRawWorld = rawWorld;
+    cs.haveLastRawWorld = true;
+
+    // AABB early-reject: the candidate doesn't move during probation, so a
+    // one-shot bbox-vs-point check skips the per-segment scan whenever the
+    // pen is outside the threshold-expanded envelope.
+    int   bestSeg = -1;
+    double sceneBestDistSq = std::numeric_limits<double>::infinity();
+    if (cs.candidateIndex >= 0 && cs.candidateIndex < m_strokes.size()
+        && (cs.candidateBbox.isNull() || cs.candidateBbox.contains(rawWorld))) {
+        const cwPenStroke &cand = m_strokes[cs.candidateIndex];
+        const double rSq = cs.hitThresholdMeters * cs.hitThresholdMeters;
+        double bestSegDistSq = std::numeric_limits<double>::infinity();
+        for (int i = 1; i < cand.points.size(); ++i) {
+            const QPointF a = cand.points[i - 1].position;
+            const QPointF b = cand.points[i].position;
+            const double dSq = distancePointToSegmentSquared(rawWorld, a, b);
+            if (dSq < sceneBestDistSq) {
+                sceneBestDistSq = dSq;
+            }
+            if (dSq <= rSq && dSq < bestSegDistSq) {
+                bestSegDistSq = dSq;
+                bestSeg = i;
+            }
+        }
+    }
+    cs.sampleCount += 1;
+
+    if (lcContinuation().isInfoEnabled()) {
+        const double mapScaleRatioLog = m_mapScale ? m_mapScale->scale() : 0.0;
+        const double paperPpmLog = cwSketchPainter::pixelsPerMeterFromPaperScale(
+            mapScaleRatioLog, cwSketchScrapRasterizer::kTargetDPI);
+        const double pxPerMeter = m_viewState
+            ? m_viewState->pixelsPerMeter() : 0.0;
+        const double minDist = std::sqrt(sceneBestDistSq);
+        qCInfo(lcContinuation,
+               "probation sample %d pen=(%.4f, %.4f) "
+               "minDistWorld=%.5f (=%.4f paperPx, %.4f screenPx) "
+               "thresholdWorld=%.5f → %s (hits=%d/%d)",
+               cs.sampleCount, rawWorld.x(), rawWorld.y(),
+               minDist, minDist * paperPpmLog, minDist * pxPerMeter,
+               cs.hitThresholdMeters,
+               (bestSeg >= 0 ? "HIT" : "miss"),
+               cs.hitCount + (bestSeg >= 0 ? 1 : 0), cs.sampleCount);
+    }
+
+    if (bestSeg >= 0) {
+        cs.hitCount += 1;
+        const cwPenStroke &cand = m_strokes[cs.candidateIndex];
+        const QPointF a = cand.points[bestSeg - 1].position;
+        const QPointF b = cand.points[bestSeg].position;
+        const QPointF ab = b - a;
+        const double lenSq = ab.x() * ab.x() + ab.y() * ab.y();
+        QPointF proj = a;
+        QPointF tangent(1.0, 0.0);
+        if (lenSq > 0.0) {
+            const QPointF ap = rawWorld - a;
+            const double t = std::clamp(
+                (ap.x() * ab.x() + ap.y() * ab.y()) / lenSq, 0.0, 1.0);
+            proj = a + t * ab;
+            const double len = std::sqrt(lenSq);
+            tangent = QPointF(ab.x() / len, ab.y() / len);
+        }
+
+        if (cs.firstHitSegmentIndex < 0) {
+            cs.firstHitSegmentIndex = bestSeg;
+            cs.firstHitTangent = tangent;
+            cs.firstHitWorld = proj;
+        }
+        // Using >= (not >) so a lone hit populates both extremes.
+        if (cs.furthestForwardSeg < 0 || bestSeg >= cs.furthestForwardSeg) {
+            cs.furthestForwardSeg = bestSeg;
+            cs.furthestForwardWorld = proj;
+            cs.furthestForwardTangent = tangent;
+        }
+        if (cs.furthestBackwardSeg < 0 || bestSeg <= cs.furthestBackwardSeg) {
+            cs.furthestBackwardSeg = bestSeg;
+            cs.furthestBackwardWorld = proj;
+            cs.furthestBackwardTangent = tangent;
+        }
+    }
+
+    // The probation row owns every raw sample until commit/reject:
+    // committed rows are removed wholesale, rejected rows survive as the
+    // user's new stroke.
+    m_strokes[strokeIndex].points.append(p);
+    scheduleDirtyEmit(strokeIndex);
+
+    return cs.probationWindowMeters > 0.0
+        && cs.travelMeters >= cs.probationWindowMeters;
+}
+
+void cwSketch::commitContinuation()
+{
+    auto &cs = m_continuationState;
+
+    // Project pen motion onto firstHitTangent. Negative means the user is
+    // extending against the candidate's stored direction, so we reverse the
+    // candidate — the line is visually identical but its stored array now
+    // ends at the user's landing side, which lets the overlap/prefix math
+    // below stay single-ended.
+    const QPointF motion = cs.lastRawWorld - cs.probationStartWorld;
+    const double motionDotTangent =
+        motion.x() * cs.firstHitTangent.x()
+        + motion.y() * cs.firstHitTangent.y();
+    const bool backward = motionDotTangent < 0.0;
+
+    const int probationIdx = cs.strokeIndex;
+    const int candidateIdxBefore = cs.candidateIndex;
+    const QPointF overlapStart = cs.firstHitWorld;
+    const QPointF overlapEnd = backward
+        ? cs.furthestBackwardWorld
+        : cs.furthestForwardWorld;
+    const double window = cs.probationWindowMeters;
+    const int firstHitSeg = cs.firstHitSegmentIndex;
+
+    // Snapshot probation samples + per-sample cumulative travel before the
+    // probation row is removed.
+    QVector<cwPenPoint> probSamples = m_strokes[probationIdx].points;
+    QVector<double>     sampleTravel(probSamples.size(), 0.0);
+    {
+        double acc = 0.0;
+        for (int i = 1; i < probSamples.size(); ++i) {
+            const QPointF d = probSamples[i].position - probSamples[i - 1].position;
+            acc += std::hypot(d.x(), d.y());
+            sampleTravel[i] = acc;
+        }
+    }
+
+    qCInfo(lcContinuation,
+           "  → COMMIT: %s (motion·firstTangent=%.4f) "
+           "overlapStart=(%.4f, %.4f) overlapEnd=(%.4f, %.4f) "
+           "probSamples=%d",
+           backward ? "BACKWARD (reversing candidate)" : "FORWARD",
+           motionDotTangent, overlapStart.x(), overlapStart.y(),
+           overlapEnd.x(), overlapEnd.y(),
+           static_cast<int>(probSamples.size()));
+
+    m_strokeModel->beginRemoveRows(QModelIndex(), probationIdx, probationIdx);
+    m_strokes.removeAt(probationIdx);
+    m_strokeModel->endRemoveRows();
+    // m_pendingDirtyRow may have referenced the now-gone row.
+    m_pendingDirtyRow = -1;
+
+    int candidateIdx = candidateIdxBefore;
+    if (probationIdx < candidateIdxBefore) {
+        candidateIdx -= 1;
+    }
+    if (candidateIdx < 0 || candidateIdx >= m_strokes.size()) {
+        // Safety net: candidate vanished between arm and commit.
+        m_continuationState = ContinuationState();
+        emit continuationRejected();
+        return;
+    }
+
+    cwPenStroke &cand = m_strokes[candidateIdx];
+
+    // Keep the pre-overlap prefix of the (possibly reversed) candidate. In
+    // backward mode the first-hit segment's upper reversed-frame index is
+    // N − firstHitSeg, so that many leading points survive.
+    int prefixCount;
+    if (backward) {
+        std::reverse(cand.points.begin(), cand.points.end());
+        prefixCount = cand.points.size() - firstHitSeg;
+    } else {
+        prefixCount = firstHitSeg;
+    }
+    prefixCount = std::clamp<int>(prefixCount, 0, cand.points.size());
+
+    QVector<cwPenPoint> newPoints;
+    newPoints.reserve(prefixCount + probSamples.size());
+    for (int i = 0; i < prefixCount; ++i) {
+        newPoints.append(cand.points[i]);
+    }
+
+    // Replay each probation sample as lerp(oldCenterline, rawPen, t),
+    // t = sampleTravel/window ∈ [0, 1]. At t=0 the stored point sits on
+    // the old line (smoothing early jitter); at t=1 it equals the raw pen,
+    // so post-commit raw appends continue seamlessly.
+    for (int i = 0; i < probSamples.size(); ++i) {
+        const double t = (window > 0.0)
+            ? std::clamp(sampleTravel[i] / window, 0.0, 1.0)
+            : 1.0;
+        const QPointF oldLine(
+            (1.0 - t) * overlapStart.x() + t * overlapEnd.x(),
+            (1.0 - t) * overlapStart.y() + t * overlapEnd.y());
+        const QPointF raw = probSamples[i].position;
+        cwPenPoint bp = probSamples[i];
+        bp.position = QPointF(
+            (1.0 - t) * oldLine.x() + t * raw.x(),
+            (1.0 - t) * oldLine.y() + t * raw.y());
+        newPoints.append(bp);
+    }
+    cand.points = newPoints;
+
+    // Structural change to the polyline isn't reliably consumed via
+    // dataChanged alone, so reset the model around the replacement.
+    applyStrokes(m_strokes);
+
+    // `used` survives reset-and-set so endStroke labels the undo entry
+    // "Continue Stroke". Subsequent appendPoint calls store raw.
+    m_continuationState = ContinuationState();
+    m_continuationState.used = true;
+    m_continuationState.strokeIndex = candidateIdx;
+
+    emit continuationCommitted(candidateIdx);
 }
 
 void cwSketch::scheduleDirtyEmit(int row)
@@ -808,6 +801,13 @@ void cwSketch::armProbation(int probationStrokeIndex,
     m_continuationState.probationWindowMeters =
         probationWindowScreenPx / pxPerMeter;
     m_continuationState.commitHitRateThreshold = commitHitRateThreshold;
+
+    // Cache the candidate's threshold-expanded bbox for the per-sample
+    // AABB early-reject in handleProbationSample.
+    const double thr = m_continuationState.hitThresholdMeters;
+    m_continuationState.candidateBbox = m_strokes[candidate.strokeIndex]
+        .boundingBox()
+        .adjusted(-thr, -thr, thr, thr);
 
     qCInfo(lcContinuation,
            "armProbation: probationRow=%d candidateRow=%d candidateWidth=%.4f "
