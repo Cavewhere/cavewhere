@@ -2,16 +2,16 @@
 
 ## Context
 
-When a user lifts the pen mid-drawing (or just wants to extend a line they drew earlier), there's currently no way to resume a stroke — a new pen-down always begins a fresh `cwPenStroke`, leaving an awkward seam or a duplicate segment. This plan adds "continuation" behavior: if the pen lands **on** an existing stroke of the same kind, the stroke is grafted onto and the new pen travel extends it. The first ~1 cm of travel is blended so the seam is C1-smooth rather than a visible kink. Beyond the blend window the portion of the old stroke past the graft point is discarded and the raw pen path is appended.
+When a user lifts the pen mid-drawing (or just wants to extend a line they drew earlier), there's currently no way to resume a stroke — a new pen-down always begins a fresh `cwPenStroke`, leaving an awkward seam or a duplicate segment. This plan adds "continuation" behavior: if the pen lands **on** an existing stroke of the same kind, the overlap region (where the user retraces the existing line) is replayed as a blend of old centerline + raw pen, so the user's overdraw smooths into the existing line instead of being discarded or leaving a visible kink. Beyond the overlap the portion of the old stroke is discarded and the raw pen path is appended.
 
 User decisions (from clarifying Q&A):
 
 1. **Hit test (pen must land on the visible line).** Proximity = `0.5 × stroke.width / paperPpm` world meters, where `paperPpm = pixelsPerMeterFromPaperScale(mapScaleRatio, kTargetDPI=200)` — the same px/meter formula the renderer uses via `paperStrokePenScale`. That gives the pen tip free to land anywhere on the visible pixels of the rendered stroke (edge counts); tighten to `0.25` for "inner half only" if edge-grazes prove too loose. **Frame note:** the rendered stroke's world thickness is `stroke.width / paperPpm` — independent of zoom and independent of screen `pixelDensity`, because the renderer uses the fixed `kTargetDPI` constant (matches the scrap rasterizer) to pick its pen scale. The earlier design divided by `viewState->pixelsPerMeterPaper()` (= `mapScaleRatio × 1000 × pixelDensity`), which only coincidentally matched on ~100 DPI screens — always prefer `paperPpm`.
-2. **Probation, then commit.** Pen-down on a qualifying stroke does *not* immediately graft. Instead we start a fresh stroke (same kind/width/color as the tool) and enter a **probation window** of ~1 cm screen pen travel during which we track (a) hit count — how many raw pen samples still land within `0.5 × strokeWidth / paperPpm` of the candidate; (b) the *furthest-along* hit position on the candidate. When travel ≥ probation window we decide:
-   - **Commit** if `hitCount / totalSamples ≥ 0.6`: delete the probation stroke, truncate the candidate at the furthest-hit graft point, arm a short post-commit blend window, and hand off future pen samples to the candidate.
+2. **Probation, then commit.** Pen-down on a qualifying stroke does *not* immediately graft. Instead we start a fresh stroke (same kind/width/color as the tool) and enter a **probation window** of ~1 cm screen pen travel during which we (a) buffer the raw pen samples on the probation row, (b) hit-test each sample against the candidate centerline with threshold `0.5 × strokeWidth / paperPpm`, (c) remember both the *first* hit (its projection, segment, tangent) and the *furthest*-along hit on each side (forward = max index, backward = min index). When cumulative raw-pen travel ≥ probation window we decide:
+   - **Commit** if `hitCount / totalSamples ≥ 0.6`: resolve direction, replay the buffered probation samples into the candidate as blended points (see 3), remove the probation row, and emit `continuationCommitted` so QML retargets its `_activeStrokeIndex`.
    - **Reject** otherwise: leave the probation stroke alone — it's just a normal fresh stroke from then on.
-3. **Post-commit blend.** After commit, the next ~5 mm of pen travel is stored as `lerp(graftPoint + tangent × travel, rawPen, t)` with `t` swept 0→1, producing a C1-smooth seam. Past the blend window, points store raw.
-4. **Math location.** New screen↔world helpers live on `cwSketchViewState`, which gets a pointer to the existing `cwWorldToScreenMatrix` so it doesn't re-derive paper-scale math. The probation/graft/blend itself lives on `cwSketch` and calls into `cwSketchViewState` only for screen↔world conversions.
+3. **Probation-region blend (replaces post-commit blend).** The overlap on the candidate runs from `firstHitProj` to the chosen-direction `furthestHitProj`. That region's old polyline vertices are discarded. Each probation raw sample `P_i` carries its cumulative pen-travel arclength `s_i`; the replacement stored point is `lerp(oldLineAt(t_i), P_i.position, t_i)` with `t_i = clamp(s_i / probationWindow, 0, 1)` and `oldLineAt(t)` = straight-line interpolation between `firstHitProj` and the chosen `furthestHitProj`. At `t=0` (pen-down) the stored point sits exactly on the old centerline; at `t=1` (window close) it is pure raw pen, so subsequent post-probation samples append raw with no jump. The ~1 cm probation window **is** the blend zone; there is no separate post-commit blend window.
+4. **Math location.** New screen↔world helpers live on `cwSketchViewState`, which gets a pointer to the existing `cwWorldToScreenMatrix` so it doesn't re-derive paper-scale math. The probation/blend itself lives on `cwSketch` and calls into `cwSketchViewState` only for screen↔world conversions.
 5. **Kind matching.** A continuation can only extend a stroke of the **same `cwPenStroke::Kind`** as the one about to be drawn. Eraser is never a continuation target.
 
 ## Files To Modify
@@ -37,7 +37,8 @@ User decisions (from clarifying Q&A):
      beginStroke()                  beginStroke() (probation)
             │                          + armProbation()
             │                               │
-     appendPoint*                   appendPoint* (tracks hits,
+     appendPoint*                   appendPoint* (buffers raw samples
+            │                          on probation row, hit-tests,
             │                          accumulates travel)
             │                               │
             │                     travel ≥ probationWindow
@@ -45,14 +46,16 @@ User decisions (from clarifying Q&A):
             │              ┌────────────────┴─────────────┐
             │              hitRate ≥ 0.6          hitRate < 0.6
             │              │                              │
-            │         COMMIT: delete probation     REJECT: leave
-            │         stroke, truncate candidate   probation stroke
-            │         at furthest-hit, arm blend   as a normal stroke
-            │              │                              │
-            │        appendPoint* (lerps for ≤             │
-            │         postCommitBlendWindow, then raw)     │
-            │              │                              │
-            └──────────────┴──────────────────────────────┘
+            │         COMMIT: replay probation     REJECT: leave
+            │         samples as blended points    probation stroke
+            │         into candidate (overlap      as a normal stroke
+            │         region), remove probation    │
+            │         row                          │
+            │              │                      │
+            │        appendPoint* (raw, appended   │
+            │         to candidate)                │
+            │              │                      │
+            └──────────────┴──────────────────────┘
                             │
                        endStroke()
              (single cwSketchSetStrokesCommand,
@@ -109,17 +112,22 @@ Q_INVOKABLE cwSketchContinuationTarget findContinuationTarget(
 // Arms probation on the currently active stroke (created by QML via
 // beginStroke — its row is `probationStrokeIndex`). From here on appendPoint()
 // routes through the probation state machine:
+//   - buffers raw pen samples on the probation row
 //   - accumulates raw pen travel from pen-down
 //   - for each sample, hit-tests against candidate's centerline with
-//     threshold = 0.5 × candidate.strokeWidth / pxPerMeterPaper
+//     threshold = 0.5 × candidate.strokeWidth / paperPpm
 //     (zoom-independent — tracks the rendered stroke thickness)
-//   - tracks the furthest-along-candidate hit position + tangent
+//   - tracks the first hit (projection, tangent, segment) plus the
+//     extreme-forward and extreme-backward hits on the candidate
 //   - on `cumulativeTravel ≥ probationWindow`: commits if
 //     hitCount / sampleCount ≥ commitHitRateThreshold, else rejects
+//
+// On commit the buffered probation samples are replayed as blended
+// points into the candidate (see Commit mechanics); there is no separate
+// post-commit blend window.
 Q_INVOKABLE void armProbation(int probationStrokeIndex,
                               cwSketchContinuationTarget candidate,
                               double probationWindowScreenPx,
-                              double postCommitBlendWindowScreenPx,
                               double commitHitRateThreshold = 0.6);
 
 signals:
@@ -130,16 +138,23 @@ signals:
     void continuationRejected();
 ```
 
-**Internal state.** `cwSketch::m_continuation` carries a `Phase { Off, Probation, Blend }` plus per-phase fields: probation bookkeeping (candidate index, proximity threshold in meters, probation window in meters, running hit/sample counts, furthest-hit point index on candidate, furthest-hit world position + tangent, cumulative raw travel, last raw world position) and blend bookkeeping (graft point, graft tangent, blend window meters, blend travel). `appendPoint` dispatches on `Phase` and mutates internal state.
+**Internal state.** `cwSketch::m_continuation` carries a `Phase { Off, Probation }` plus probation bookkeeping: candidate index, proximity threshold in meters, probation window in meters, running hit/sample counts, first-hit projection + tangent + segment, extreme-forward and extreme-backward hits (each: segment, projected world, tangent), cumulative raw travel, first/last raw world position. `appendPoint` dispatches on `Phase` and mutates internal state.
 
-**Frame split inside armProbation.** The hit threshold uses `pixelsPerMeterPaper()` (no zoom) so it scales with the rendered stroke thickness. The probation/blend windows use `pixelsPerMeter()` (with zoom) because they are screen-space pen-travel distances ("user dragged 1 cm of pen") that should remain a fixed *screen* distance regardless of zoom.
+**Frame split inside armProbation.** The hit threshold uses `paperPpm` (`pixelsPerMeterFromPaperScale(mapScaleRatio, kTargetDPI=200)`, zoom-independent) so it scales with the rendered stroke thickness. The probation window uses `pixelsPerMeter()` (with zoom) because it is a screen-space pen-travel distance ("user dragged 1 cm of pen") that should remain a fixed *screen* distance regardless of zoom.
+
+**Direction resolution.** At commit, project pen motion `(lastRaw − probationStart)` onto `firstHitTangent`. Positive → forward (keep candidate orientation). Negative → backward (`std::reverse(cand.points.begin(), cand.points.end())` so the original head becomes the new tail).
 
 **Commit mechanics.** On commit, inside `appendPoint`:
-1. `beginRemoveRows` / remove probation row from `m_strokes` / `endRemoveRows`.
-2. Truncate `m_strokes[candidateIndex].points` to the prefix ending at the furthest-hit index, then append the furthest-hit world position as the new last vertex.
-3. Transition `m_continuation.phase = Blend` with the graft tangent and the post-commit blend window.
-4. Apply the blend lerp to the incoming sample `p` and append into the candidate.
-5. Emit `continuationCommitted(candidateIndex)`.
+1. Snapshot the probation row's buffered raw samples and compute per-sample cumulative pen-travel arclength.
+2. `beginRemoveRows` / remove probation row from `m_strokes` / `endRemoveRows`.
+3. If backward, `std::reverse` the candidate.
+4. Keep the candidate's pre-overlap prefix (points before the first-hit segment; in backward mode, that's the first `N − firstHitSegmentIndex` points of the reversed array).
+5. For each buffered sample `P_i` with cumulative travel `s_i`, compute `t_i = clamp(s_i / probationWindow, 0, 1)`, evaluate `oldLineAt(t_i)` as the straight-line interpolation from `firstHitWorld` to the chosen `furthestHitWorld`, and append `lerp(oldLineAt(t_i), P_i.position, t_i)` into the candidate.
+6. `applyStrokes` to reset the model around the structural change.
+7. Reset `m_continuation` to `Off`, keep `used = true` so `endStroke` labels the undo entry "Continue Stroke".
+8. Emit `continuationCommitted(candidateIndex)`.
+
+After commit, subsequent `appendPoint` calls store the raw pen position on the candidate (no further blend).
 
 **Reject mechanics.** Clear probation state and keep appending normally; the probation stroke is already a valid fresh stroke. Emit `continuationRejected()` (QML uses this only for debug/UX signal; `_activeStrokeIndex` is unchanged on reject).
 
@@ -162,8 +177,7 @@ if (active) {
         sketchItemId.sketch.armProbation(
             sketchItemId._activeStrokeIndex,
             target,
-            sketchItemId._probationWindowScreenPx,
-            sketchItemId._postCommitBlendScreenPx)
+            sketchItemId._probationWindowScreenPx)
     }
 }
 ```
@@ -172,7 +186,6 @@ Top-of-file property constants:
 
 ```qml
 readonly property real _probationWindowScreenPx: 10 * Screen.pixelDensity  // ~1 cm
-readonly property real _postCommitBlendScreenPx: 5 * Screen.pixelDensity   // ~5 mm
 // Commit hit-rate threshold (0..1) lives as cwSketch default (0.6); surface
 // here only if we want per-view override.
 ```
@@ -207,8 +220,7 @@ No changes to `onPointChanged` — `appendPoint` itself is the continuation-awar
 
 ## Open Tuning Parameters (start here, refine later)
 
-- **Probation window:** ~1 cm screen. Single `readonly property` in `SketchItem.qml`.
-- **Post-commit blend window:** ~5 mm screen. Single `readonly property`.
+- **Probation window:** ~1 cm screen. Single `readonly property` in `SketchItem.qml`. Also serves as the blend zone on commit, so tuning it changes both how long we wait to decide *and* how long the seam smooths.
 - **Commit hit-rate threshold:** 0.6 (default arg on `armProbation`).
 - **Hit rate denominator:** sample-count (simplest). If the sample-rate-dependent behavior proves flaky (e.g. a slow-drawing user gets counted as "mostly hit" just because samples pile up while the pen is momentarily still), switch to a travel-weighted metric: sum arclength segments that land in-proximity, divide by total travel. Keep in reserve as a drop-in for `armProbation`'s internals.
 - **Hit-test geometry:** `0.5 × stroke.width` against the candidate's centerline. No fixed floor — finger painting is disabled, so pen/mouse sub-pixel accuracy is attainable. If UX feedback shows trouble with thin strokes, add a small floor (e.g. `max(0.5 × strokeWidth / paperPpm, 3 mm)`).
@@ -230,9 +242,10 @@ No changes to `onPointChanged` — `appendPoint` itself is the continuation-awar
    - Proximity threshold is exactly `0.5 × stroke.width / pxPerMeter` — a pen just outside that threshold misses, just inside hits.
    - Eraser strokes are never returned.
    - Kind mismatch returns `-1`.
-   - `armProbation` + a sequence of `appendPoint` calls all inside proximity → commit fires: probation row is removed, candidate is truncated at the furthest-hit index + graft vertex appended, and `continuationCommitted(candidateIndex)` is emitted once.
+   - `armProbation` + a sequence of `appendPoint` calls all inside proximity → commit fires: probation row is removed, candidate's overlap region is replaced with the replayed blended samples, and `continuationCommitted(candidateIndex)` is emitted once.
    - `armProbation` + a sequence where the pen drifts off after a short on-line segment (hit rate < 0.6) → `continuationRejected` fires; probation stroke survives untouched as a normal fresh stroke; candidate is unchanged.
-   - After commit, the next ~`blendWindow` of raw samples are stored lerped between `graft + tangent × travel` and raw pen; beyond the window samples store raw.
+   - Blend math: replayed samples are `lerp(oldLineAt(t), rawSample, t)` with `t = clamp(sampleTravel / probationWindow, 0, 1)` and `oldLineAt` = straight line between `firstHitWorld` and the chosen `furthestHitWorld`. Assert at `t=0` stored == `firstHitWorld`; at `t≈1` stored == raw sample.
+   - After commit, further `appendPoint` calls on the candidate store the raw pen position (no additional blend).
    - A full commit pen drag (beginStroke → armProbation → N × appendPoint → endStroke) yields exactly one `QUndoStack` entry with label `"Continue Stroke"`; `undo()` restores both candidate (untruncated) and probation-never-existed.
    - A rejected pen drag yields one undo entry labeled `"Draw Stroke"` that removes the probation stroke.
    - Pen-up before the probation window completes: `endStroke` gracefully closes out leaving the probation stroke as a normal short stroke (no commit, no reject signal required — probation simply expires).

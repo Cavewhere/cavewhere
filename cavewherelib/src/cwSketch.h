@@ -133,18 +133,19 @@ public:
     // Arms a probation window on the active stroke (created by QML via
     // beginStroke; its row index is `probationStrokeIndex`). Subsequent
     // appendPoint calls on that row hit-test against `candidate`'s
-    // centerline. After `probationWindowScreenPx` of accumulated raw pen
-    // travel, if hitCount/sampleCount >= commitHitRateThreshold the
-    // probation row is removed, the candidate is truncated at the
-    // furthest-along hit (graft vertex appended), `continuationCommitted`
-    // fires with the candidate's new row index, and the next
-    // `postCommitBlendWindowScreenPx` of travel is blended toward the
-    // candidate's tangent. Otherwise `continuationRejected` fires and the
-    // probation row is left as a normal fresh stroke.
+    // centerline and are buffered on the probation row. After
+    // `probationWindowScreenPx` of accumulated raw pen travel, if
+    // hitCount/sampleCount >= commitHitRateThreshold the probation row is
+    // removed, the candidate's points in the overlap region are replaced
+    // with a sequence of blended samples (lerp between the old centerline
+    // and the raw pen, with weight swept 0→1 across the probation window
+    // so the seam smooths the user's overdraw into the existing line), and
+    // `continuationCommitted` fires with the candidate's new row index.
+    // Otherwise `continuationRejected` fires and the probation row is left
+    // as a normal fresh stroke. After commit, further samples append raw.
     Q_INVOKABLE void armProbation(int probationStrokeIndex,
                                   cwSketchContinuationTarget candidate,
                                   double probationWindowScreenPx,
-                                  double postCommitBlendWindowScreenPx,
                                   double commitHitRateThreshold = 0.6);
 
     // Contract: appendPoint is for the live pen input stream only — one
@@ -226,20 +227,22 @@ private:
     // bumps it to start a fresh undo entry for the next drag.
     int m_eraseSession = 0;
 
-    // Three-phase state machine driven by appendPoint().
+    // Two-phase state machine driven by appendPoint().
     //
     //   Off       : normal stroke; appendPoint stores raw.
     //   Probation : armed by armProbation(). Each sample hit-tests against
-    //               candidate centerline; we accumulate raw-pen travel until
-    //               it exceeds probationWindowMeters, then commit or reject.
-    //   Blend     : entered on commit. The next blendWindowMeters of raw
-    //               travel are lerped between candidate-tangent extrapolation
-    //               and raw pen, then the state returns to Off.
+    //               candidate centerline; we buffer raw samples on the
+    //               probation row and accumulate pen travel until it
+    //               exceeds probationWindowMeters, then commit or reject.
+    //               On commit the buffered probation samples are replayed
+    //               as blended points into the candidate (lerping with the
+    //               old centerline in the overlap region), and the state
+    //               returns to Off — no separate post-commit blend phase.
     //
     // `used` stays true once probation commits, so endStroke() picks the
     // "Continue Stroke" undo label.
     struct ContinuationState {
-        enum class Phase { Off, Probation, Blend };
+        enum class Phase { Off, Probation };
         Phase   phase = Phase::Off;
         bool    used = false;
         int     strokeIndex = -1;     // The row appendPoint is targeting.
@@ -248,7 +251,6 @@ private:
         int     candidateIndex = -1;
         double  hitThresholdMeters = 0.0;     // 0.5 × strokeWidthScreenPx / pxPerMeter.
         double  probationWindowMeters = 0.0;
-        double  blendWindowMeters = 0.0;       // Carried into Blend on commit.
         double  commitHitRateThreshold = 0.6;
         int     hitCount = 0;
         int     sampleCount = 0;
@@ -266,6 +268,7 @@ private:
         QPointF probationStartWorld;           // First raw pen position.
         bool    haveProbationStart = false;
         int     firstHitSegmentIndex = -1;     // Segment of the first hit.
+        QPointF firstHitWorld;                 // Projected first-hit world position. Anchors the overlap's start.
         QPointF firstHitTangent;               // Forward tangent at the first hit.
         int     furthestForwardSeg = -1;       // Max-index hit.
         QPointF furthestForwardWorld;
@@ -274,10 +277,9 @@ private:
         QPointF furthestBackwardWorld;
         QPointF furthestBackwardTangent;
 
-        // Shared / Blend bookkeeping.
-        QPointF graftPoint;
-        QPointF graftTangent;
-        double  travelMeters = 0.0;            // Cumulative raw arclength since arming / since commit.
+        // Raw-travel tracker (used to decide when the window closes and to
+        // compute per-sample blend weights at commit time).
+        double  travelMeters = 0.0;            // Cumulative raw arclength since arming.
         QPointF lastRawWorld;
         bool    haveLastRawWorld = false;
     };

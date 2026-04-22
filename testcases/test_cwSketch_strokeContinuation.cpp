@@ -194,8 +194,8 @@ TEST_CASE("armProbation commits when hit rate exceeds threshold",
     const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
     REQUIRE(probationRow == 1);
 
-    // Probation window 5m, blend window 1m.
-    sketch.armProbation(probationRow, target, 5.0, 1.0);
+    // Probation window 5m.
+    sketch.armProbation(probationRow, target, 5.0);
 
     // Walk along the candidate near (2,0)→(3,0)→(4,0)→(5,0)→(6,0). Each
     // sample lies within 1.0m of the candidate centerline. Travel between
@@ -212,17 +212,18 @@ TEST_CASE("armProbation commits when hit rate exceeds threshold",
     REQUIRE(committedSpy.count() == 1);
     CHECK(rejectedSpy.count() == 0);
 
-    // Probation row is gone; candidate has been truncated + grafted.
+    // Probation row is gone; candidate's overlap region has been replaced
+    // by replayed blended samples.
     REQUIRE(sketch.strokes().size() == 1);
     const int newActiveIndex = committedSpy.takeFirst().at(0).toInt();
     CHECK(newActiveIndex == 0);
 
     const auto &cand = sketch.strokes()[0];
-    // Furthest hit was on the last segment (index 5), so we keep
-    // points[0..4] then append the graft vertex → 6 points (same count as
-    // original by coincidence; what matters is the last vertex changed).
-    CHECK(cand.points.size() <= candidateOriginalSize);
-    CHECK(cand.points.size() >= 2);
+    (void)candidateOriginalSize;
+    // prefixCount = firstHitSeg = 2 (first hit at (2, 0.1) projects onto
+    // segment 2), and the 6 probation samples are replayed as blended
+    // points → 2 + 6 = 8.
+    CHECK(cand.points.size() == 8);
 
     sketch.endStroke();
 }
@@ -245,7 +246,7 @@ TEST_CASE("armProbation rejects when hit rate is below threshold",
     target.strokeWidth = 2.0;
 
     const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
-    sketch.armProbation(probationRow, target, 5.0, 1.0);
+    sketch.armProbation(probationRow, target, 5.0);
 
     // First sample lands on the candidate; subsequent samples fly off into
     // the y-direction (well outside the 1.0m hit threshold). Hit rate ≈ 1/N
@@ -272,7 +273,7 @@ TEST_CASE("armProbation rejects when hit rate is below threshold",
     sketch.endStroke();
 }
 
-TEST_CASE("post-commit blend lerps between candidate tangent and raw pen",
+TEST_CASE("probation-region blend lerps old centerline with raw pen samples",
           "[cwSketch][continuation]") {
     cwSketch sketch;
     UnitScale unit;
@@ -287,50 +288,53 @@ TEST_CASE("post-commit blend lerps between candidate tangent and raw pen",
 
     const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 4.0);
 
-    // Probation window 2m, post-commit blend window 2m.
-    sketch.armProbation(probationRow, target, 2.0, 2.0);
+    // Probation window 2m (= blend zone).
+    sketch.armProbation(probationRow, target, 2.0);
 
-    // Three on-stroke samples to clear the probation window. Travel:
-    //   1→2: 1m, 2→3: 1m → cumulative 2m → window closes on sample 3 → commit.
-    // Furthest hit = segment ending at index 3 → graft point ≈ (3, 0),
-    // tangent (1, 0).
-    sketch.appendPoint(probationRow, cwPenPoint(QPointF(1.0, 0.0), 0.5));
-    sketch.appendPoint(probationRow, cwPenPoint(QPointF(2.0, 0.0), 0.5));
-    sketch.appendPoint(probationRow, cwPenPoint(QPointF(3.0, 0.0), 0.5));
+    // Three on-stroke samples to clear the probation window:
+    //   s_0 = 0   (sample 1 travel=0)
+    //   s_1 = 1m  (sample 2 travel=1)
+    //   s_2 = 2m  (sample 3 travel=2, window closes and commit fires)
+    //
+    // First hit is sample 1 at (1, 0.1). The segment scan picks the first
+    // segment of equal distance (strict `<` in the tiebreak), so for
+    // sample (1, 0.1) firstHitSeg = 1 [(0,0)→(1,0)], clamped projection
+    // lands at (1, 0). Furthest forward is sample 3 at (3, 0.1);
+    // furthestForwardSeg = 3, projection = (3, 0). overlapStart=(1, 0),
+    // overlapEnd=(3, 0).
+    //
+    // Replayed blend math:
+    //   t=0 : oldLine=(1,0); blended = lerp((1,0), (1,0.1), 0) = (1, 0)
+    //   t=0.5: oldLine = 0.5·(1,0)+0.5·(3,0) = (2, 0);
+    //          blended = 0.5·(2,0) + 0.5·(2, 0.1) = (2, 0.05)
+    //   t=1  : oldLine=(3,0); blended = lerp((3,0), (3,0.1), 1) = (3, 0.1)
+    sketch.appendPoint(probationRow, cwPenPoint(QPointF(1.0, 0.1), 0.5));
+    sketch.appendPoint(probationRow, cwPenPoint(QPointF(2.0, 0.1), 0.5));
+    sketch.appendPoint(probationRow, cwPenPoint(QPointF(3.0, 0.1), 0.5));
 
-    // After commit the probation row is gone; candidate is row 0.
+    // prefixCount = firstHitSeg = 1 → candidate keeps [(0, 0)], then
+    // appends 3 blended points → 4 total.
     REQUIRE(sketch.strokes().size() == 1);
+    const auto &ptsAfterCommit = sketch.strokes()[0].points;
+    REQUIRE(ptsAfterCommit.size() == 4);
+    CHECK(ptsAfterCommit[0].position == QPointF(0.0, 0.0));
+    CHECK(ptsAfterCommit[1].position.x() == Catch::Approx(1.0));
+    CHECK(ptsAfterCommit[1].position.y() == Catch::Approx(0.0));
+    CHECK(ptsAfterCommit[2].position.x() == Catch::Approx(2.0));
+    CHECK(ptsAfterCommit[2].position.y() == Catch::Approx(0.05));
+    CHECK(ptsAfterCommit[3].position.x() == Catch::Approx(3.0));
+    CHECK(ptsAfterCommit[3].position.y() == Catch::Approx(0.1));
 
+    // After commit, subsequent samples append raw (no further blend).
     const int activeIdx = 0;
-
-    // Now the next pen samples flow into the candidate via the Blend phase.
-    // Sample A: pen jumps to (3, 0.5). Travel = 0.5m, t = 0.25.
-    //   extrap = (3 + 1·0.5, 0) = (3.5, 0)
-    //   stored = lerp(extrap, raw, 0.25)
-    //          = (0.75·3.5 + 0.25·3.0, 0.75·0 + 0.25·0.5)
-    //          = (3.375, 0.125)
-    sketch.appendPoint(activeIdx, cwPenPoint(QPointF(3.0, 0.5), 0.5));
-    // Sample B: pen at (3, 1.0). Travel cumulative 1.0m, t = 0.5.
-    //   extrap = (4.0, 0)
-    //   stored = (0.5·4 + 0.5·3, 0.5·0 + 0.5·1) = (3.5, 0.5)
-    sketch.appendPoint(activeIdx, cwPenPoint(QPointF(3.0, 1.0), 0.5));
-    // Sample C: pen at (3, 2.5). Travel cumulative 2.5m → past window → raw.
-    sketch.appendPoint(activeIdx, cwPenPoint(QPointF(3.0, 2.5), 0.5));
-
+    sketch.appendPoint(activeIdx, cwPenPoint(QPointF(3.5, 0.5), 0.5));
+    sketch.appendPoint(activeIdx, cwPenPoint(QPointF(4.0, 1.0), 0.5));
     sketch.endStroke();
 
     const auto &pts = sketch.strokes()[0].points;
-    REQUIRE(pts.size() >= 3);
-
-    // The last three appended samples are the blended/raw pen points.
-    const QPointF blendA = pts[pts.size() - 3].position;
-    const QPointF blendB = pts[pts.size() - 2].position;
-    const QPointF rawC   = pts[pts.size() - 1].position;
-    CHECK(blendA.x() == Catch::Approx(3.375));
-    CHECK(blendA.y() == Catch::Approx(0.125));
-    CHECK(blendB.x() == Catch::Approx(3.5));
-    CHECK(blendB.y() == Catch::Approx(0.5));
-    CHECK(rawC == QPointF(3.0, 2.5));
+    REQUIRE(pts.size() == 6);
+    CHECK(pts[4].position == QPointF(3.5, 0.5));
+    CHECK(pts[5].position == QPointF(4.0, 1.0));
 }
 
 TEST_CASE("committed continuation produces a single 'Continue Stroke' undo entry",
@@ -348,7 +352,7 @@ TEST_CASE("committed continuation produces a single 'Continue Stroke' undo entry
     target.strokeWidth = 2.0;
 
     const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
-    sketch.armProbation(probationRow, target, 3.0, 1.0);
+    sketch.armProbation(probationRow, target, 3.0);
 
     // Stay on the line.
     sketch.appendPoint(probationRow, cwPenPoint(QPointF(1.0, 0.0), 0.5));
@@ -386,7 +390,7 @@ TEST_CASE("rejected continuation produces a single 'Draw Stroke' undo entry",
     target.strokeWidth = 2.0;
 
     const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
-    sketch.armProbation(probationRow, target, 3.0, 1.0);
+    sketch.armProbation(probationRow, target, 3.0);
 
     // Diverge immediately → reject.
     sketch.appendPoint(probationRow, cwPenPoint(QPointF(2.0, 5.0), 0.5));
@@ -420,44 +424,48 @@ TEST_CASE("armProbation extends from the head when pen motion is backward",
     target.strokeWidth = 2.0;
 
     const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
-    // Probation 2.5m, blend 1.0m.
-    sketch.armProbation(probationRow, target, 2.5, 1.0);
+    // Probation window 2.5m (also the blend zone on commit).
+    sketch.armProbation(probationRow, target, 2.5);
 
     // Pen lands near (4.5, 0) — first hit lies on segment 5 ([p4,p5]).
-    // Then drags back along the stroke to (3.0, 0) (segment 3 or 4) and
-    // (1.5, 0) (segment 2). Cumulative travel = 3m → window closes on the
-    // third sample. Motion vector = (−3, 0); firstHitTangent = (1, 0) →
-    // dot product −3 < 0 → BACKWARD commit.
+    // Then drags back along the stroke to (3.0, 0) (segment 3) and (1.5, 0)
+    // (segment 2). Travel 0 → 1.5 → 3.0; window closes on the third sample.
+    // Motion vector = (−3, 0); firstHitTangent = (1, 0) → dot −3 < 0 →
+    // BACKWARD commit.
     sketch.appendPoint(probationRow, cwPenPoint(QPointF(4.5, 0.1), 0.5));
     sketch.appendPoint(probationRow, cwPenPoint(QPointF(3.0, 0.1), 0.5));
     sketch.appendPoint(probationRow, cwPenPoint(QPointF(1.5, 0.1), 0.5));
 
-    // After commit the probation row is gone and the candidate is reversed
-    // + truncated. furthestBackwardSeg = 2 (projection of last sample onto
-    // segment 2 = (1.5, 0)). N = 6 → reversed-frame furthestSeg = 6 − 2 =
-    // 4 → keep reversed[0..3] = [(5,0),(4,0),(3,0),(2,0)], then append
-    // graft (1.5, 0) → 5 points total.
+    // After commit: candidate is reversed so its original head (p0) is at
+    // the tail of the array, then its overlap region is replaced by
+    // replayed blended samples.
+    //   prefixCount = N − firstHitSeg = 6 − 5 = 1 → prefix = [(5, 0)]
+    //   overlapStart = firstHitWorld = (4.5, 0)
+    //   overlapEnd   = furthestBackwardWorld = (1.5, 0)
+    // Replayed samples:
+    //   t=0   : oldLine=(4.5,0); blended = (4.5, 0)
+    //   t=0.6 : oldLine = 0.4·(4.5,0) + 0.6·(1.5,0) = (2.7, 0);
+    //           blended = 0.4·(2.7,0) + 0.6·(3, 0.1) = (2.88, 0.06)
+    //   t=1   : oldLine=(1.5,0); blended = (1.5, 0.1)
     REQUIRE(sketch.strokes().size() == 1);
     const auto &cand = sketch.strokes()[0];
-    REQUIRE(cand.points.size() == 5);
+    REQUIRE(cand.points.size() == 4);
     CHECK(cand.points[0].position == QPointF(5.0, 0.0));
-    CHECK(cand.points[1].position == QPointF(4.0, 0.0));
-    CHECK(cand.points[2].position == QPointF(3.0, 0.0));
-    CHECK(cand.points[3].position == QPointF(2.0, 0.0));
-    CHECK(cand.points[4].position.x() == Catch::Approx(1.5));
-    CHECK(cand.points[4].position.y() == Catch::Approx(0.0));
+    CHECK(cand.points[1].position.x() == Catch::Approx(4.5));
+    CHECK(cand.points[1].position.y() == Catch::Approx(0.0));
+    CHECK(cand.points[2].position.x() == Catch::Approx(2.88));
+    CHECK(cand.points[2].position.y() == Catch::Approx(0.06));
+    CHECK(cand.points[3].position.x() == Catch::Approx(1.5));
+    CHECK(cand.points[3].position.y() == Catch::Approx(0.1));
 
-    // Draw one more point in the Blend phase to confirm the stored array is
-    // extending outward from the original head. Blend tangent = −(1,0) =
-    // (−1, 0). After 1m of travel past the graft we are clearly past x=1.5.
+    // Draw one more raw point to confirm subsequent appends extend outward
+    // past the original head.
     sketch.appendPoint(0, cwPenPoint(QPointF(0.0, 0.0), 0.5));
     sketch.endStroke();
 
-    // End of the committed stroke is to the left of the graft, i.e., the
-    // new drawing extended past the original head (x=0).
     const auto &afterEnd = sketch.strokes()[0];
-    REQUIRE(afterEnd.points.size() >= 6);
-    CHECK(afterEnd.points.last().position.x() <= 1.5);
+    REQUIRE(afterEnd.points.size() == 5);
+    CHECK(afterEnd.points.last().position == QPointF(0.0, 0.0));
 }
 
 TEST_CASE("pen-up before probation closes leaves a normal short stroke",
@@ -476,7 +484,7 @@ TEST_CASE("pen-up before probation closes leaves a normal short stroke",
     target.strokeWidth = 2.0;
 
     const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
-    sketch.armProbation(probationRow, target, 100.0, 1.0);  // huge window
+    sketch.armProbation(probationRow, target, 100.0);  // huge window
 
     sketch.appendPoint(probationRow, cwPenPoint(QPointF(1.0, 0.0), 0.5));
     sketch.appendPoint(probationRow, cwPenPoint(QPointF(2.0, 0.0), 0.5));

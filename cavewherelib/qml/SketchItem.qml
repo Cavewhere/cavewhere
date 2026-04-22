@@ -42,14 +42,14 @@ QQ.Item {
     // and the eraser-cursor size all derive from this.
     readonly property double _pxPerMeter: worldToScreenId.matrix.m11 * zoom
 
-    // Continuation tuning. The probation window is the *minimum* pen travel
+    // Continuation tuning. The probation window is the minimum pen travel
     // required before we decide commit vs reject — it both gives the user
     // room to retrace the candidate and bounds how long an accidental
-    // pen-down on a stroke can hijack a fresh draw. The post-commit blend
-    // window is the screen-space distance over which the seam crossfades
-    // from the candidate's tangent extrapolation to the raw pen.
+    // pen-down on a stroke can hijack a fresh draw. The same window also
+    // serves as the blend zone on commit: probation samples are replayed
+    // as lerp(oldCenterline, rawPen, t) with t swept 0→1 across it, so the
+    // user's overdraw smooths into the existing line.
     readonly property real _probationWindowScreenPx: 10 * Screen.pixelDensity
-    readonly property real _postCommitBlendScreenPx: 5 * Screen.pixelDensity
 
     property int _activeStrokeIndex: -1
 
@@ -343,8 +343,7 @@ QQ.Item {
                     sketchItemId.sketch.armProbation(
                         sketchItemId._activeStrokeIndex,
                         target,
-                        sketchItemId._probationWindowScreenPx,
-                        sketchItemId._postCommitBlendScreenPx)
+                        sketchItemId._probationWindowScreenPx)
                 }
             } else {
                 if (sketchItemId._activeStrokeIndex >= 0) {

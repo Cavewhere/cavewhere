@@ -438,10 +438,13 @@ void cwSketch::appendPoint(int strokeIndex, const cwPenPoint &p)
                     tangent = QPointF(ab.x() / len, ab.y() / len);
                 }
 
-                // First hit anchors the direction reference used at commit.
+                // First hit anchors the direction reference used at commit
+                // *and* the start of the overlap region for the in-probation
+                // blend.
                 if (cs.firstHitSegmentIndex < 0) {
                     cs.firstHitSegmentIndex = bestSeg;
                     cs.firstHitTangent = tangent;
+                    cs.firstHitWorld = proj;
                 }
                 // Track the extreme in-proximity hit on both ends. Using >=
                 // (not >) so a lone hit populates both forward and backward.
@@ -499,41 +502,61 @@ void cwSketch::appendPoint(int strokeIndex, const cwPenPoint &p)
 
         // Resolve direction: project the pen's net motion during probation
         // onto the first-hit tangent. Positive → user extends along the
-        // stroke's stored direction (forward commit, current behavior).
-        // Negative → user extends against it (reverse the candidate so its
-        // original head becomes the new tail, then truncate normally).
+        // stroke's stored direction (forward commit). Negative → user
+        // extends against it (reverse the candidate so its original head
+        // becomes the new tail, then blend over the overlap normally).
         const QPointF motion = cs.lastRawWorld - cs.probationStartWorld;
         const double motionDotTangent =
             motion.x() * cs.firstHitTangent.x()
             + motion.y() * cs.firstHitTangent.y();
         const bool backward = motionDotTangent < 0.0;
 
-        // Commit: remove the probation row, truncate the candidate at the
-        // furthest hit, append the graft vertex, transition to Blend.
         const int probationIdx = cs.strokeIndex;
         const int candidateIdxBefore = cs.candidateIndex;
-        int           furthestSeg;
-        QPointF       graft;
-        QPointF       tangent;
-        const bool    reverseCandidate = backward;
+
+        // The overlap region on the candidate runs from firstHitWorld (where
+        // the pen first touched the stroke) to overlapEnd (the *furthest*
+        // in-proximity hit in the chosen direction). That region's old
+        // polyline gets discarded; replacement points come from the buffered
+        // probation samples, each lerped against the straight-line chord
+        // (firstHit → overlapEnd) with weight t = clamp(sampleTravel /
+        // probationWindow, 0, 1). A small t favours the old centerline
+        // (smoothing out early jitter); t near 1 favours the raw pen.
+        const QPointF overlapStart = cs.firstHitWorld;
+        QPointF       overlapEnd;
         if (backward) {
-            furthestSeg = cs.furthestBackwardSeg;
-            graft = cs.furthestBackwardWorld;
-            tangent = QPointF(-cs.furthestBackwardTangent.x(),
-                              -cs.furthestBackwardTangent.y());
+            overlapEnd = cs.furthestBackwardWorld;
         } else {
-            furthestSeg = cs.furthestForwardSeg;
-            graft = cs.furthestForwardWorld;
-            tangent = cs.furthestForwardTangent;
+            overlapEnd = cs.furthestForwardWorld;
         }
-        const double blendMeters = cs.blendWindowMeters;
+
+        // Snapshot probation samples + per-sample cumulative travel *before*
+        // removing the probation row.
+        QVector<cwPenPoint> probSamples = m_strokes[probationIdx].points;
+        QVector<double>     sampleTravel(probSamples.size(), 0.0);
+        {
+            double acc = 0.0;
+            QPointF prev;
+            bool havePrev = false;
+            for (int i = 0; i < probSamples.size(); ++i) {
+                if (havePrev) {
+                    const QPointF d = probSamples[i].position - prev;
+                    acc += std::hypot(d.x(), d.y());
+                }
+                sampleTravel[i] = acc;
+                prev = probSamples[i].position;
+                havePrev = true;
+            }
+        }
 
         qCInfo(lcContinuation,
                "  → COMMIT: %s (motion·firstTangent=%.4f) "
-               "graft=(%.4f, %.4f) tangent=(%.4f, %.4f) furthestSeg=%d",
+               "overlapStart=(%.4f, %.4f) overlapEnd=(%.4f, %.4f) "
+               "probSamples=%d",
                backward ? "BACKWARD (reversing candidate)" : "FORWARD",
-               motionDotTangent, graft.x(), graft.y(),
-               tangent.x(), tangent.y(), furthestSeg);
+               motionDotTangent, overlapStart.x(), overlapStart.y(),
+               overlapEnd.x(), overlapEnd.y(),
+               static_cast<int>(probSamples.size()));
 
         m_strokeModel->beginRemoveRows(QModelIndex(), probationIdx, probationIdx);
         m_strokes.removeAt(probationIdx);
@@ -554,83 +577,62 @@ void cwSketch::appendPoint(int strokeIndex, const cwPenPoint &p)
         }
 
         cwPenStroke &cand = m_strokes[candidateIdx];
-        if (reverseCandidate) {
-            // Flip the point array so the user's landing side is now at the
-            // tail. The original segment [furthestSeg-1, furthestSeg] maps
-            // to a reversed-frame segment whose upper index is N -
-            // furthestSeg; keep that many leading points, then append graft.
-            std::reverse(cand.points.begin(), cand.points.end());
-            furthestSeg = cand.points.size() - furthestSeg;
-        }
-        const int keep = std::min<int>(furthestSeg, cand.points.size());
-        double graftPressure = 1.0;
-        if (keep > 0) {
-            graftPressure = cand.points[keep - 1].pressure;
-            if (graftPressure < 0.0) {
-                graftPressure = 1.0;
-            }
-        }
-        QVector<cwPenPoint> kept;
-        kept.reserve(keep + 1);
-        for (int i = 0; i < keep; ++i) {
-            kept.append(cand.points[i]);
-        }
-        kept.append(cwPenPoint(graft, graftPressure, 0));
-        cand.points = kept;
 
-        // Reset the model around the candidate truncation; structural changes
-        // to the polyline are not reliably consumed via dataChanged alone.
+        // prefixCount points of the (possibly reversed) candidate survive as
+        // the untouched leading section. In forward mode this is everything
+        // before segment firstHitSegmentIndex. In backward mode, once we
+        // reverse the array, the first-hit segment's upper reversed-frame
+        // index is N − firstHitSegmentIndex, so the pre-overlap prefix has
+        // that many points.
+        int prefixCount;
+        if (backward) {
+            std::reverse(cand.points.begin(), cand.points.end());
+            prefixCount = cand.points.size() - cs.firstHitSegmentIndex;
+        } else {
+            prefixCount = cs.firstHitSegmentIndex;
+        }
+        prefixCount = std::clamp<int>(prefixCount, 0, cand.points.size());
+
+        QVector<cwPenPoint> newPoints;
+        newPoints.reserve(prefixCount + probSamples.size());
+        for (int i = 0; i < prefixCount; ++i) {
+            newPoints.append(cand.points[i]);
+        }
+
+        const double window = cs.probationWindowMeters;
+        for (int i = 0; i < probSamples.size(); ++i) {
+            const double t = (window > 0.0)
+                ? std::clamp(sampleTravel[i] / window, 0.0, 1.0)
+                : 1.0;
+            const QPointF oldLine(
+                (1.0 - t) * overlapStart.x() + t * overlapEnd.x(),
+                (1.0 - t) * overlapStart.y() + t * overlapEnd.y());
+            const QPointF raw = probSamples[i].position;
+            cwPenPoint bp = probSamples[i];
+            bp.position = QPointF(
+                (1.0 - t) * oldLine.x() + t * raw.x(),
+                (1.0 - t) * oldLine.y() + t * raw.y());
+            newPoints.append(bp);
+        }
+        cand.points = newPoints;
+
+        // Reset the model around the candidate replacement; structural
+        // changes to the polyline are not reliably consumed via dataChanged
+        // alone.
         applyStrokes(m_strokes);
 
-        // Arm Blend phase on the candidate. travelMeters resets to 0 so
-        // the blend lerp starts at t=0 from the next sample.
+        // Back to Off — subsequent appendPoint() calls store raw. `used`
+        // persists through to endStroke() so the undo label is "Continue
+        // Stroke".
         m_continuationState = ContinuationState();
-        m_continuationState.phase = Phase::Blend;
         m_continuationState.used = true;
         m_continuationState.strokeIndex = candidateIdx;
-        m_continuationState.graftPoint = graft;
-        m_continuationState.graftTangent = tangent;
-        m_continuationState.blendWindowMeters = blendMeters;
-        m_continuationState.travelMeters = 0.0;
-        // Seed the raw-position tracker at the graft point so the first
-        // post-commit sample's delta is "raw pen − graft", giving the blend
-        // a non-zero t on the very first stored vertex (otherwise t=0 and
-        // the first stored point sits exactly on the graft, wasting one
-        // sample's worth of the blend window).
-        m_continuationState.lastRawWorld = graft;
-        m_continuationState.haveLastRawWorld = true;
 
         emit continuationCommitted(candidateIdx);
         return;
     }
 
-    // Blend phase: position-lerp toward the candidate's tangent extrapolation
-    // for the first blendWindowMeters of pen travel; raw afterward.
-    cwPenPoint stored = p;
-    if (cs.phase == Phase::Blend && cs.strokeIndex == strokeIndex) {
-        if (cs.haveLastRawWorld) {
-            const QPointF delta = p.position - cs.lastRawWorld;
-            cs.travelMeters += std::hypot(delta.x(), delta.y());
-        }
-        cs.lastRawWorld = p.position;
-        cs.haveLastRawWorld = true;
-
-        const double window = cs.blendWindowMeters;
-        if (window > 0.0 && cs.travelMeters < window) {
-            const double travel = cs.travelMeters;
-            const double t = travel / window;
-            const QPointF extrap(
-                cs.graftPoint.x() + cs.graftTangent.x() * travel,
-                cs.graftPoint.y() + cs.graftTangent.y() * travel);
-            stored.position = QPointF(
-                (1.0 - t) * extrap.x() + t * p.position.x(),
-                (1.0 - t) * extrap.y() + t * p.position.y());
-        } else {
-            cs.phase = Phase::Off;
-        }
-    }
-
-    m_strokes[strokeIndex].points.append(stored);
+    m_strokes[strokeIndex].points.append(p);
     scheduleDirtyEmit(strokeIndex);
 }
 
@@ -764,7 +766,6 @@ cwSketchContinuationTarget cwSketch::findContinuationTarget(
 void cwSketch::armProbation(int probationStrokeIndex,
                             cwSketchContinuationTarget candidate,
                             double probationWindowScreenPx,
-                            double postCommitBlendWindowScreenPx,
                             double commitHitRateThreshold)
 {
     if (probationStrokeIndex < 0 || probationStrokeIndex >= m_strokes.size()) {
@@ -787,9 +788,9 @@ void cwSketch::armProbation(int probationStrokeIndex,
     //     same logic as findContinuationTarget above. Screen pixelDensity
     //     must not feed in here because the rendered stroke width is
     //     computed with paperStrokePenScale, not the screen matrix.
-    //   pxPerMeter (zoom-aware, screen-space) drives the probation/blend
-    //     windows — those are pen-travel distances the user drags on
-    //     screen ("1 cm of drag") and should stay a fixed screen distance.
+    //   pxPerMeter (zoom-aware, screen-space) drives the probation window —
+    //     a pen-travel distance the user drags on screen ("1 cm of drag")
+    //     that should stay a fixed screen distance regardless of zoom.
     const double mapScaleRatio = m_mapScale ? m_mapScale->scale() : 0.0;
     const double paperPpm = cwSketchPainter::pixelsPerMeterFromPaperScale(
         mapScaleRatio, cwSketchScrapRasterizer::kTargetDPI);
@@ -806,20 +807,17 @@ void cwSketch::armProbation(int probationStrokeIndex,
         (0.5 * candidate.strokeWidth) / paperPpm;
     m_continuationState.probationWindowMeters =
         probationWindowScreenPx / pxPerMeter;
-    m_continuationState.blendWindowMeters =
-        postCommitBlendWindowScreenPx / pxPerMeter;
     m_continuationState.commitHitRateThreshold = commitHitRateThreshold;
 
     qCInfo(lcContinuation,
            "armProbation: probationRow=%d candidateRow=%d candidateWidth=%.4f "
            "hitThresholdWorld=%.5f (=%.4f paperPx, %.4f screenPx) "
-           "probationWindowWorld=%.5f blendWindowWorld=%.5f hitRateThreshold=%.2f",
+           "probationWindowWorld=%.5f hitRateThreshold=%.2f",
            probationStrokeIndex, candidate.strokeIndex, candidate.strokeWidth,
            m_continuationState.hitThresholdMeters,
            m_continuationState.hitThresholdMeters * paperPpm,
            m_continuationState.hitThresholdMeters * pxPerMeter,
            m_continuationState.probationWindowMeters,
-           m_continuationState.blendWindowMeters,
            commitHitRateThreshold);
 }
 
