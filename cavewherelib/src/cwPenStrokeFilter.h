@@ -27,9 +27,12 @@ CAVEWHERE_LIB_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcPenFilter)
 namespace cwPenStrokeFilter {
 
 struct CAVEWHERE_LIB_EXPORT Params {
-    // Absolute upper bound on reversal-arm length (world units, typically
-    // meters). Real iPad Apple Pencil hooks observed up to ~33 mm, so a
-    // generous ceiling here avoids missing them.
+    // Absolute upper bound on reversal-arm length, in **world meters** —
+    // the same units as cwPenPoint::position. The user-facing setting
+    // is in physical millimetres on the input surface; callers
+    // (cwSketchSettings::penStrokeFilterParams) convert via the current
+    // map scale and view zoom, so the cap is zoom/scale invariant from
+    // the user's perspective.
     double maxHookLength = 0.050;
 
     // Relative bound: hook arm must also be below this fraction of the

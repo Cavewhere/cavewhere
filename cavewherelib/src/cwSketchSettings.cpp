@@ -17,7 +17,9 @@ cwSketchSettings::cwSketchSettings(QObject *parent) :
     QObject(parent)
 {
     QSettings settings;
-    FilterPenHooks = settings.value(filterPenHooksKey(), FilterPenHooks).toBool();
+    FilterPenHooks  = settings.value(filterPenHooksKey(), FilterPenHooks).toBool();
+    MaxHookLengthMm = settings.value(maxHookLengthMmKey(), MaxHookLengthMm).toDouble();
+    MaxHookFraction = settings.value(maxHookFractionKey(), MaxHookFraction).toDouble();
 }
 
 void cwSketchSettings::setFilterPenHooks(bool enabled)
@@ -29,6 +31,39 @@ void cwSketchSettings::setFilterPenHooks(bool enabled)
     settings.setValue(filterPenHooksKey(), enabled);
     FilterPenHooks = enabled;
     emit filterPenHooksChanged();
+}
+
+void cwSketchSettings::setMaxHookLengthMm(double millimetres)
+{
+    if (MaxHookLengthMm == millimetres) {
+        return;
+    }
+    QSettings settings;
+    settings.setValue(maxHookLengthMmKey(), millimetres);
+    MaxHookLengthMm = millimetres;
+    emit maxHookLengthMmChanged();
+}
+
+void cwSketchSettings::setMaxHookFraction(double fraction)
+{
+    if (MaxHookFraction == fraction) {
+        return;
+    }
+    QSettings settings;
+    settings.setValue(maxHookFractionKey(), fraction);
+    MaxHookFraction = fraction;
+    emit maxHookFractionChanged();
+}
+
+cwPenStrokeFilter::Params cwSketchSettings::penStrokeFilterParams(double scaleRatio,
+                                                                  double zoom) const
+{
+    cwPenStrokeFilter::Params p;
+    const double safeScale = scaleRatio > 0.0 ? scaleRatio : 0.004;  // 1:250 fallback
+    const double safeZoom  = zoom       > 0.0 ? zoom       : 1.0;
+    p.maxHookLength   = (MaxHookLengthMm / 1000.0) / (safeZoom * safeScale);
+    p.maxHookFraction = MaxHookFraction;
+    return p;
 }
 
 cwSketchSettings *cwSketchSettings::instance()

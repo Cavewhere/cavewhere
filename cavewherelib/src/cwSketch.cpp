@@ -409,7 +409,12 @@ void cwSketch::endStroke()
         }
 
         if (filterOn) {
-            const QVector<cwPenPoint> trimmed = cwPenStrokeFilter::trimHooks(stroke.points);
+            const double scaleRatio = (m_mapScale && m_mapScale->scale() > 0.0)
+                                          ? m_mapScale->scale() : 0.004;
+            const double zoom       = m_viewState ? m_viewState->zoom() : 1.0;
+            const QVector<cwPenPoint> trimmed =
+                cwPenStrokeFilter::trimHooks(stroke.points,
+                                             settings->penStrokeFilterParams(scaleRatio, zoom));
             const int removed = stroke.points.size() - trimmed.size();
             if (lcPenFilter().isDebugEnabled()) {
                 qCDebug(lcPenFilter) << "trimHooks removed" << removed

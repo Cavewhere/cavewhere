@@ -102,16 +102,6 @@ QC.Frame {
             }
         }
 
-        QC.CheckBox {
-            id: filterHooksCheckBoxId
-            objectName: "filterHooksCheckBox"
-            text: "Smooth pen"
-            checked: RootData.settings.sketchSettings.filterPenHooks
-            QC.ToolTip.text: "Trim tiny start/end spurs from Apple Pencil strokes"
-            QC.ToolTip.visible: hovered
-            onToggled: RootData.settings.sketchSettings.filterPenHooks = checked
-        }
-
         QC.Button {
             id: undoButtonId
             objectName: "undoButton"
