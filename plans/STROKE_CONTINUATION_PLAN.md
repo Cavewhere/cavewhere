@@ -13,6 +13,19 @@ User decisions (from clarifying Q&A):
 3. **Probation-region blend (replaces post-commit blend).** The overlap on the candidate runs from `firstHitProj` to the chosen-direction `furthestHitProj`. That region's old polyline vertices are discarded. Each probation raw sample `P_i` carries its cumulative pen-travel arclength `s_i`; the replacement stored point is `lerp(oldLineAt(t_i), P_i.position, t_i)` with `t_i = clamp(s_i / probationWindow, 0, 1)` and `oldLineAt(t)` = straight-line interpolation between `firstHitProj` and the chosen `furthestHitProj`. At `t=0` (pen-down) the stored point sits exactly on the old centerline; at `t=1` (window close) it is pure raw pen, so subsequent post-probation samples append raw with no jump. The ~1 cm probation window **is** the blend zone; there is no separate post-commit blend window.
 4. **Math location.** New screen↔world helpers live on `cwSketchViewState`, which gets a pointer to the existing `cwWorldToScreenMatrix` so it doesn't re-derive paper-scale math. The probation/blend itself lives on `cwSketch` and calls into `cwSketchViewState` only for screen↔world conversions.
 5. **Kind matching.** A continuation can only extend a stroke of the **same `cwPenStroke::Kind`** as the one about to be drawn. Eraser is never a continuation target.
+6. **Endpoint fast path + endpoint-blend phase.** If the pen lands within `probationWindowMeters` of an endpoint — measured as **centerline arclength** from the projected hit point to `p0` or `p_{N-1}`, with an early-out so long strokes don't pay O(N) — probation is skipped and the continuation commits immediately. Rationale: within that radius there isn't enough line to retrace for probation's hit-rate rejection to fire correctly, so a legitimate tip-extension would be falsely rejected. Endpoint proximity is itself the intent signal; direction is fixed by which endpoint is closer (head → backward commit, tail → forward).
+
+   **Don't chop the old tail at commit.** Discarding the segment the user is about to overdraw creates a visible mid-drag chop (`applyStrokes` fires the model reset *before* the first sample arrives, so for one render frame the stroke ends at `hitWorld` instead of the original tip). Instead, `commitAtEndpoint` *inserts* `hitWorld` at array position `prefixCount` without truncating — the stroke stays full-length, just with one extra vertex sitting on the old centerline. Then enter `Phase::EndpointBlend` carrying:
+     - `blendStart = hitWorld`, `blendEnd = originalEndpointWorld`, `blendWindow = arclength(blendStart → blendEnd)`.
+     - `oldTailArcs[]` = cumulative arclength of each old-tail point from `hitWorld`, computed once at commit.
+     - `oldTailHeadIdx` = array index where the first remaining old-tail point currently lives (starts at `prefixCount + 1`).
+
+   Each subsequent `appendPoint` sample:
+     1. Accumulates pen travel and computes `t = clamp(travel / blendWindow, 0, 1)`, `arc = t × blendWindow`, and `stored = lerp(oldLine(t), raw, t)` where `oldLine(t)` interpolates straight from `blendStart` to `blendEnd`.
+     2. **Removes any old-tail points whose cumulative arclength is ≤ `arc`** (at array position `oldTailHeadIdx`, since they sit consecutively). Their arclengths pop off `oldTailArcs`.
+     3. **Inserts `stored` at `oldTailHeadIdx`**, then increments `oldTailHeadIdx`.
+
+   The net effect: the stroke visually keeps the old tail until the pen drags past each old-tail vertex, and new blended samples fill in behind the still-present tail as the user drags. At `t = 1` all old-tail points have been passed and removed; `Phase::EndpointBlend` returns to `Off` and subsequent samples `append` raw as usual. If the user pen-ups mid-blend, remaining old-tail points are left intact (the stroke still has a partial old tail past where they stopped), which is strictly less destructive than the previous "chop-at-commit" behavior.
 
 ## Files To Modify
 
@@ -27,6 +40,8 @@ User decisions (from clarifying Q&A):
 ## Design
 
 ### State machine
+
+Endpoint fast path splits the "yes" branch: if arclength to the nearest endpoint is `< probationWindowMeters`, QML skips `armProbation` and calls a new `commitAtEndpoint` which commits in one step (no buffering, no hit-rate gate). Otherwise the normal probation flow below runs.
 
 ```
                   pen-down near same-kind stroke?
@@ -97,6 +112,14 @@ Implementation: `pixelsPerMeter()` returns `m_worldToScreenMatrix->matrix()(0,0)
 struct cwSketchContinuationTarget {
     int    strokeIndex = -1;  // -1 when no qualifying stroke was found.
     double strokeWidth = 0.0; // Drives probation proximity = 0.5 × strokeWidth / paperPpm.
+
+    // Endpoint fast-path fields. Populated when the landing hit is within
+    // probationWindowMeters arclength of an endpoint.
+    enum class Endpoint { None, Head, Tail };
+    Endpoint endpoint     = Endpoint::None;   // Head → backward commit, Tail → forward, None → probation.
+    int      hitSegment   = -1;               // Segment containing the landing projection.
+    QPointF  hitWorld;                        // Landing projection on candidate centerline.
+    QPointF  hitTangent;                      // Forward unit tangent of hitSegment.
 };
 
 // Scan same-`kind` strokes (Eraser always skipped) for one whose centerline is
@@ -104,10 +127,21 @@ struct cwSketchContinuationTarget {
 // reject + segment-distance scan. Returns the nearest qualifying stroke, or
 // -1. (Paper px/m, not zoom-aware px/m — see Hit-test frame note above.)
 //
-// The *graft point* is NOT decided here — it's discovered during probation as
-// the furthest-along hit the user retraces before the commit threshold.
+// For the winning stroke, measure centerline arclength from the landing
+// projection to each endpoint, walking outward from the hit segment and
+// early-outing once the accumulator exceeds
+// `probationWindowMeters = probationWindowScreenPx / viewState->pixelsPerMeter()`.
+// If either side is under threshold, populate the endpoint fast-path fields
+// (endpoint = Head or Tail, hitSegment, hitWorld, hitTangent). Otherwise
+// `endpoint` stays None and QML falls through to the probation path.
+//
+// For the probation path, the *graft point* is NOT decided here — it's
+// discovered during probation as the furthest-along hit the user retraces
+// before the commit threshold.
 Q_INVOKABLE cwSketchContinuationTarget findContinuationTarget(
-    cwPenStroke::Kind kind, QPointF worldPoint) const;
+    cwPenStroke::Kind kind,
+    QPointF worldPoint,
+    double probationWindowScreenPx) const;
 
 // Arms probation on the currently active stroke (created by QML via
 // beginStroke — its row is `probationStrokeIndex`). From here on appendPoint()
@@ -130,6 +164,36 @@ Q_INVOKABLE void armProbation(int probationStrokeIndex,
                               double probationWindowScreenPx,
                               double commitHitRateThreshold = 0.6);
 
+// Endpoint fast path. Called instead of armProbation when the target's
+// `endpoint` field is Head or Tail. Performs the commit in one step
+// WITHOUT truncating the old tail — the old-tail vertices are removed
+// progressively during the blend phase as the pen drags past each one.
+//
+//   1. Remove the probation row (just created by QML's beginStroke).
+//   2. If endpoint == Head, reverse the candidate so the former head
+//      becomes the new tail.
+//   3. INSERT `hitWorld` at position `prefixCount` (= hitSegment for
+//      Tail, or N − hitSegment for Head). The old tail remains at
+//      [prefixCount+1 .. N].
+//   4. Precompute `oldTailArcs[]`: cumulative arclength of each
+//      still-present old-tail vertex from `hitWorld`.
+//   5. Enter Phase::EndpointBlend with blendStart = hitWorld,
+//      blendEnd = originalEndpointWorld, blendWindow =
+//      arclength(hitWorld → originalEndpoint), oldTailArcs populated,
+//      oldTailHeadIdx = prefixCount + 1. During each blend sample:
+//        - Pop old-tail vertices with arc ≤ current pen-travel arc and
+//          remove them from the array at oldTailHeadIdx.
+//        - Insert `stored = lerp(oldLine(t), raw, t)` at oldTailHeadIdx,
+//          then increment oldTailHeadIdx.
+//      Once t ≥ 1, phase returns to Off; any remaining old-tail
+//      vertices (should be empty) are cleaned up.
+//   6. applyStrokes + push a single "Continue Stroke" undo entry on
+//      endStroke. (m_startStrokes was seeded by beginStroke so undo
+//      restores the original un-reversed, un-modified candidate.)
+//   7. Emit continuationCommitted(candidateIndex).
+Q_INVOKABLE void commitAtEndpoint(int probationStrokeIndex,
+                                  cwSketchContinuationTarget candidate);
+
 signals:
     // Emitted inside appendPoint() when probation commits. QML's handler
     // updates `_activeStrokeIndex` so the next appendPoint from QML targets
@@ -138,7 +202,11 @@ signals:
     void continuationRejected();
 ```
 
-**Internal state.** `cwSketch::m_continuation` carries a `Phase { Off, Probation }` plus probation bookkeeping: candidate index, proximity threshold in meters, probation window in meters, running hit/sample counts, first-hit projection + tangent + segment, extreme-forward and extreme-backward hits (each: segment, projected world, tangent), cumulative raw travel, first/last raw world position. `appendPoint` dispatches on `Phase` and mutates internal state.
+**Internal state.** `cwSketch::m_continuation` carries a `Phase { Off, Probation, EndpointBlend }` plus phase-specific bookkeeping:
+- *Probation:* candidate index, proximity threshold in meters, probation window in meters, running hit/sample counts, first-hit projection + tangent + segment, extreme-forward and extreme-backward hits, cumulative raw travel, first/last raw world position.
+- *EndpointBlend:* `endpointBlendStartWorld` (= hitWorld), `endpointBlendEndWorld` (= original endpoint position), `endpointBlendWindowMeters` (= arclength from hit to original endpoint), plus cumulative raw travel and last-raw tracker shared with the other phases.
+
+`appendPoint` dispatches on `Phase` and mutates internal state.
 
 **Frame split inside armProbation.** The hit threshold uses `paperPpm` (`pixelsPerMeterFromPaperScale(mapScaleRatio, kTargetDPI=200)`, zoom-independent) so it scales with the rendered stroke thickness. The probation window uses `pixelsPerMeter()` (with zoom) because it is a screen-space pen-travel distance ("user dragged 1 cm of pen") that should remain a fixed *screen* distance regardless of zoom.
 
@@ -170,14 +238,20 @@ In the existing `penHandler.onActiveChanged` **pen-down, non-eraser** branch:
 if (active) {
     const worldStart = sketchItemId._worldPoint(point.position)
     const target = sketchItemId.sketch.findContinuationTarget(
-        sketchItemId.strokeKind, worldStart)
+        sketchItemId.strokeKind, worldStart,
+        sketchItemId._probationWindowScreenPx)
     sketchItemId._activeStrokeIndex = sketchItemId.sketch.beginStroke(
         sketchItemId.strokeKind, sketchItemId.strokeWidth)
     if (target.strokeIndex >= 0) {
-        sketchItemId.sketch.armProbation(
-            sketchItemId._activeStrokeIndex,
-            target,
-            sketchItemId._probationWindowScreenPx)
+        if (target.endpoint !== 0 /* None */) {
+            sketchItemId.sketch.commitAtEndpoint(
+                sketchItemId._activeStrokeIndex, target)
+        } else {
+            sketchItemId.sketch.armProbation(
+                sketchItemId._activeStrokeIndex,
+                target,
+                sketchItemId._probationWindowScreenPx)
+        }
     }
 }
 ```
@@ -220,7 +294,7 @@ No changes to `onPointChanged` — `appendPoint` itself is the continuation-awar
 
 ## Open Tuning Parameters (start here, refine later)
 
-- **Probation window:** ~1 cm screen. Single `readonly property` in `SketchItem.qml`. Also serves as the blend zone on commit, so tuning it changes both how long we wait to decide *and* how long the seam smooths.
+- **Probation window:** ~1 cm screen. Single `readonly property` in `SketchItem.qml`. Also serves as the blend zone on commit, so tuning it changes both how long we wait to decide *and* how long the seam smooths. **Also reused as the endpoint arclength radius** — if the landing projection is within one probation window's worth of arclength from an endpoint, the endpoint fast path fires (no probation). Tying the two together is deliberate: within that radius there isn't enough line to retrace for the hit-rate check to work.
 - **Commit hit-rate threshold:** 0.6 (default arg on `armProbation`).
 - **Hit rate denominator:** sample-count (simplest). If the sample-rate-dependent behavior proves flaky (e.g. a slow-drawing user gets counted as "mostly hit" just because samples pile up while the pen is momentarily still), switch to a travel-weighted metric: sum arclength segments that land in-proximity, divide by total travel. Keep in reserve as a drop-in for `armProbation`'s internals.
 - **Hit-test geometry:** `0.5 × stroke.width` against the candidate's centerline. No fixed floor — finger painting is disabled, so pen/mouse sub-pixel accuracy is attainable. If UX feedback shows trouble with thin strokes, add a small floor (e.g. `max(0.5 × strokeWidth / paperPpm, 3 mm)`).
@@ -249,6 +323,12 @@ No changes to `onPointChanged` — `appendPoint` itself is the continuation-awar
    - A full commit pen drag (beginStroke → armProbation → N × appendPoint → endStroke) yields exactly one `QUndoStack` entry with label `"Continue Stroke"`; `undo()` restores both candidate (untruncated) and probation-never-existed.
    - A rejected pen drag yields one undo entry labeled `"Draw Stroke"` that removes the probation stroke.
    - Pen-up before the probation window completes: `endStroke` gracefully closes out leaving the probation stroke as a normal short stroke (no commit, no reject signal required — probation simply expires).
+   - **Endpoint fast path — tail, post-commit visibility:** After `commitAtEndpoint` with `endpoint=Tail`, the candidate's array is **not truncated** — it is `[0..hitSegment-1, hitWorld, hitSegment..N-1]` with size `N+1`. The original last point `p_{N-1}` is still present at array index `N`. Assert `points.size() == N+1` and `points.last().position == original p_{N-1}` before any blend sample is appended.
+   - **Endpoint blend — progressive tail replacement:** drive samples that cover fractional portions of the blend window. As each sample's arc (= t × blendWindow) passes an old-tail vertex's cached arclength, that vertex is removed at `oldTailHeadIdx` and the new `stored` is inserted in its place. Assert: (a) array size at sample N > 0 equals prefix-count + 1 (for hitWorld) + inserted-samples + remaining-old-tail; (b) at t = 1 all old-tail vertices are gone and phase is Off; (c) post-blend raw samples append past the last stored blend point.
+   - **Endpoint fast path — head:** landing projection within probation-window arclength of `p_0` → `endpoint=Head`. `commitAtEndpoint` reverses the candidate and inserts `hitWorld` after the reversed prefix; old-tail arclengths are then computed against the **reversed** array (the "old tail" in reversed coordinates is the single original `p_0`, or more points if hit was multiple segments in from the head).
+   - **Endpoint arclength early-out:** stroke with many segments where the hit is near the middle (both directional walks exceed probation window) → `endpoint=None`, normal probation path runs. Assert only O(segments-within-window) segment distances are computed (e.g. by counting via an instrumented stroke or asserting a bounded work count).
+   - **Endpoint edge cases:** hit exactly *at* `p_0` / `p_{N-1}` (arclength=0) → fast path fires. Hit on a two-point stroke (single segment) always hits both endpoints' arclength window → prefer the nearer endpoint; tie → Tail.
+   - `commitAtEndpoint` produces one undo entry labeled `"Continue Stroke"`; `undo()` restores both the candidate (untruncated, un-reversed) and the probation-row-never-existed.
 
 2. **QML smoke test** — `test-qml/tst_SketchItemContinuation.qml`: programmatically drive `penHandler` with synthetic points that (a) retrace an existing stroke for ≥ 1 cm then diverge → assert `strokeModel.rowCount` is unchanged (probation row was swallowed) and the candidate's point count grew; (b) start on a stroke but immediately diverge → assert `rowCount` incremented by 1 and the original stroke is untouched.
 

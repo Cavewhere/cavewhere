@@ -329,21 +329,25 @@ QQ.Item {
                 return
             }
             if (active) {
-                // Always start a fresh stroke; if the pen landed on a
-                // same-kind stroke, arm probation so the next ~1 cm of pen
-                // travel decides whether to graft. On commit the cwSketch
-                // signal handler swaps `_activeStrokeIndex` to the
-                // continued (candidate) row.
+                // Endpoint-proximity landings skip probation entirely —
+                // within one probation window of the tip there isn't
+                // enough line to retrace for the hit-rate check to work.
                 const worldStart = sketchItemId._worldPoint(point.position)
                 const target = sketchItemId.sketch.findContinuationTarget(
-                    sketchItemId.strokeKind, worldStart)
+                    sketchItemId.strokeKind, worldStart,
+                    sketchItemId._probationWindowScreenPx)
                 sketchItemId._activeStrokeIndex = sketchItemId.sketch.beginStroke(
                     sketchItemId.strokeKind, sketchItemId.strokeWidth)
                 if (target.strokeIndex >= 0) {
-                    sketchItemId.sketch.armProbation(
-                        sketchItemId._activeStrokeIndex,
-                        target,
-                        sketchItemId._probationWindowScreenPx)
+                    if (target.endpoint !== 0) { // Endpoint.None
+                        sketchItemId.sketch.commitAtEndpoint(
+                            sketchItemId._activeStrokeIndex, target)
+                    } else {
+                        sketchItemId.sketch.armProbation(
+                            sketchItemId._activeStrokeIndex,
+                            target,
+                            sketchItemId._probationWindowScreenPx)
+                    }
                 }
             } else {
                 if (sketchItemId._activeStrokeIndex >= 0) {

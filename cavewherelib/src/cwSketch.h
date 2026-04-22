@@ -37,15 +37,36 @@ class cwTrip;
 // Result of cwSketch::findContinuationTarget. strokeIndex == -1 means no
 // qualifying stroke was within proximity. armProbation() reads strokeWidth to
 // derive the per-sample hit-test radius (0.5 × strokeWidth screen pixels).
+//
+// If the landing hit is within one probation window's worth of centerline
+// arclength of an endpoint, `endpoint` is set to Head or Tail and
+// `hitSegment`/`hitWorld`/`hitTangent` describe where the graft should go —
+// QML hands the whole struct to cwSketch::commitAtEndpoint which performs the
+// continuation in one step (no probation). Otherwise `endpoint` stays None
+// and QML falls through to armProbation.
 class CAVEWHERE_LIB_EXPORT cwSketchContinuationTarget {
     Q_GADGET
     QML_VALUE_TYPE(sketchContinuationTarget)
-    Q_PROPERTY(int strokeIndex MEMBER strokeIndex)
-    Q_PROPERTY(double strokeWidth MEMBER strokeWidth)
 
 public:
-    int    strokeIndex = -1;
-    double strokeWidth = 0.0;
+    enum class Endpoint { None = 0, Head = 1, Tail = 2 };
+    Q_ENUM(Endpoint)
+
+private:
+    Q_PROPERTY(int strokeIndex MEMBER strokeIndex)
+    Q_PROPERTY(double strokeWidth MEMBER strokeWidth)
+    Q_PROPERTY(Endpoint endpoint MEMBER endpoint)
+    Q_PROPERTY(int hitSegment MEMBER hitSegment)
+    Q_PROPERTY(QPointF hitWorld MEMBER hitWorld)
+    Q_PROPERTY(QPointF hitTangent MEMBER hitTangent)
+
+public:
+    int      strokeIndex = -1;
+    double   strokeWidth = 0.0;
+    Endpoint endpoint    = Endpoint::None;
+    int      hitSegment  = -1;   // 1-indexed segment (a = points[hitSegment-1], b = points[hitSegment]).
+    QPointF  hitWorld;           // Projected landing point on the candidate centerline.
+    QPointF  hitTangent;         // Forward unit tangent of hitSegment.
 };
 
 Q_DECLARE_METATYPE(cwSketchContinuationTarget)
@@ -129,8 +150,17 @@ public:
     // world meters via viewState->pixelsPerMeter()) of `worldPoint`. Returns
     // the nearest qualifying stroke. When the matrix is unset the scan is
     // skipped and strokeIndex=-1 is returned.
+    //
+    // When `probationWindowScreenPx > 0`, additionally measures centerline
+    // arclength from the landing projection to each endpoint (with
+    // early-out). If either side is shorter than
+    // probationWindowScreenPx / pxPerMeter, sets `endpoint` to Head or Tail
+    // and populates `hitSegment`/`hitWorld`/`hitTangent` so QML can dispatch
+    // to commitAtEndpoint instead of armProbation.
     Q_INVOKABLE cwSketchContinuationTarget findContinuationTarget(
-        cwPenStroke::Kind kind, QPointF worldPoint) const;
+        cwPenStroke::Kind kind,
+        QPointF worldPoint,
+        double probationWindowScreenPx) const;
 
     // Arms a probation window on the active stroke (created by QML via
     // beginStroke; its row index is `probationStrokeIndex`). Subsequent
@@ -149,6 +179,17 @@ public:
                                   cwSketchContinuationTarget candidate,
                                   double probationWindowScreenPx,
                                   double commitHitRateThreshold = 0.6);
+
+    // Endpoint fast path. Called when findContinuationTarget populates
+    // `endpoint = Head | Tail` — within one probation window's arclength of
+    // an endpoint there isn't enough line to retrace for probation's
+    // hit-rate check to work, so probation is skipped entirely. Removes the
+    // probation row, reverses the candidate if endpoint=Head, truncates to
+    // the prefix before the hit segment, appends `hitWorld` as the graft,
+    // and emits `continuationCommitted(candidateIndex)`. Subsequent
+    // appendPoint calls from QML store raw samples on the candidate.
+    Q_INVOKABLE void commitAtEndpoint(int probationStrokeIndex,
+                                      cwSketchContinuationTarget candidate);
 
     // Contract: appendPoint is for the live pen input stream only — one
     // active row at a time, between beginStroke() and endStroke(). The
@@ -244,7 +285,7 @@ private:
     // `used` stays true once probation commits, so endStroke() picks the
     // "Continue Stroke" undo label.
     struct ContinuationState {
-        enum class Phase { Off, Probation };
+        enum class Phase { Off, Probation, EndpointBlend };
         Phase   phase = Phase::Off;
         bool    used = false;
         int     strokeIndex = -1;     // The row appendPoint is targeting.
@@ -289,6 +330,23 @@ private:
         double  travelMeters = 0.0;            // Cumulative raw arclength since arming.
         QPointF lastRawWorld;
         bool    haveLastRawWorld = false;
+
+        // Phase::EndpointBlend: the old tail is NOT truncated at commit.
+        // hitWorld is inserted at the prefix boundary and the remaining
+        // old-tail vertices sit at [oldTailHeadIdx .. oldTailHeadIdx +
+        // oldTailArcs.size() − 1] in the stroke array. Each blend sample
+        // pops any oldTailArcs.first() ≤ current arc (removing at
+        // oldTailHeadIdx) then inserts the blended stored point there.
+        QPointF         endpointBlendStartWorld;
+        QPointF         endpointBlendEndWorld;
+        double          endpointBlendWindowMeters = 0.0;
+        QVector<double> endpointOldTailArcs;
+        int             endpointOldTailHeadIdx = -1;
+
+        // Shared between Probation and EndpointBlend: integrate Euclidean
+        // pen motion into travelMeters on each sample. First call seeds
+        // lastRawWorld; subsequent calls add |raw − lastRawWorld|.
+        void accumulateTravel(const QPointF &raw);
     };
     ContinuationState m_continuationState;
 

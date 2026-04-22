@@ -134,6 +134,25 @@ double distancePointToSegmentSquared(const QPointF &p, const QPointF &a, const Q
     return d.x() * d.x() + d.y() * d.y();
 }
 
+double distance(const QPointF &a, const QPointF &b)
+{
+    const QPointF d = b - a;
+    return std::hypot(d.x(), d.y());
+}
+
+// stored = lerp(oldLine(t), raw, t) where oldLine(t) = lerp(start, end, t).
+// Used by both the probation-region replay and the endpoint-blend phase.
+QPointF blendSample(const QPointF &start, const QPointF &end,
+                    const QPointF &raw, double t)
+{
+    const QPointF oldLine(
+        (1.0 - t) * start.x() + t * end.x(),
+        (1.0 - t) * start.y() + t * end.y());
+    return QPointF(
+        (1.0 - t) * oldLine.x() + t * raw.x(),
+        (1.0 - t) * oldLine.y() + t * raw.y());
+}
+
 bool pointWithinPath(const QPointF &p,
                      const QVector<QPointF> &path,
                      double radiusSquared)
@@ -225,6 +244,15 @@ ErasedStrokes computeErasedStrokes(const QVector<cwPenStroke> &strokes,
 }
 
 } // namespace
+
+void cwSketch::ContinuationState::accumulateTravel(const QPointF &raw)
+{
+    if (haveLastRawWorld) {
+        travelMeters += distance(lastRawWorld, raw);
+    }
+    lastRawWorld = raw;
+    haveLastRawWorld = true;
+}
 
 cwSketch::cwSketch(QObject *parent)
     : QObject(parent),
@@ -370,6 +398,56 @@ void cwSketch::appendPoint(int strokeIndex, const cwPenPoint &p)
     using Phase = ContinuationState::Phase;
     auto &cs = m_continuationState;
 
+    if (cs.phase == Phase::EndpointBlend && cs.strokeIndex == strokeIndex) {
+        const QPointF raw = p.position;
+        cs.accumulateTravel(raw);
+
+        const double window = cs.endpointBlendWindowMeters;
+        const double t = (window > 0.0)
+            ? std::clamp(cs.travelMeters / window, 0.0, 1.0)
+            : 1.0;
+        const double arc = t * window;
+
+        const QPointF stored = blendSample(
+            cs.endpointBlendStartWorld, cs.endpointBlendEndWorld, raw, t);
+
+        auto &points = m_strokes[strokeIndex].points;
+        int removedCount = 0;
+        while (!cs.endpointOldTailArcs.isEmpty()
+               && cs.endpointOldTailArcs.first() <= arc) {
+            points.removeAt(cs.endpointOldTailHeadIdx);
+            cs.endpointOldTailArcs.removeFirst();
+            ++removedCount;
+        }
+
+        cwPenPoint bp = p;
+        bp.position = stored;
+        points.insert(cs.endpointOldTailHeadIdx, bp);
+        cs.endpointOldTailHeadIdx += 1;
+
+        scheduleDirtyEmit(strokeIndex);
+
+        qCInfo(lcContinuation,
+               "endpointBlend sample: travel=%.5f/%.5f t=%.3f arc=%.5f "
+               "stored=(%.4f, %.4f) removed=%d tailRemaining=%d pts=%d%s",
+               cs.travelMeters, window, t, arc,
+               stored.x(), stored.y(),
+               removedCount,
+               static_cast<int>(cs.endpointOldTailArcs.size()),
+               static_cast<int>(points.size()),
+               (t >= 1.0 ? " → BLEND DONE" : ""));
+
+        if (t >= 1.0) {
+            // Sweep stragglers in case floating-point slop left arcs > window.
+            while (!cs.endpointOldTailArcs.isEmpty()) {
+                points.removeAt(cs.endpointOldTailHeadIdx);
+                cs.endpointOldTailArcs.removeFirst();
+            }
+            cs.phase = Phase::Off;
+        }
+        return;
+    }
+
     if (cs.phase == Phase::Probation && cs.strokeIndex == strokeIndex) {
         if (!handleProbationSample(strokeIndex, p)) {
             return;
@@ -417,12 +495,7 @@ bool cwSketch::handleProbationSample(int strokeIndex, const cwPenPoint &p)
         cs.probationStartWorld = rawWorld;
         cs.haveProbationStart = true;
     }
-    if (cs.haveLastRawWorld) {
-        const QPointF delta = rawWorld - cs.lastRawWorld;
-        cs.travelMeters += std::hypot(delta.x(), delta.y());
-    }
-    cs.lastRawWorld = rawWorld;
-    cs.haveLastRawWorld = true;
+    cs.accumulateTravel(rawWorld);
 
     // AABB early-reject: the candidate doesn't move during probation, so a
     // one-shot bbox-vs-point check skips the per-segment scan whenever the
@@ -544,8 +617,8 @@ void cwSketch::commitContinuation()
     {
         double acc = 0.0;
         for (int i = 1; i < probSamples.size(); ++i) {
-            const QPointF d = probSamples[i].position - probSamples[i - 1].position;
-            acc += std::hypot(d.x(), d.y());
+            acc += distance(probSamples[i - 1].position,
+                            probSamples[i].position);
             sampleTravel[i] = acc;
         }
     }
@@ -596,22 +669,15 @@ void cwSketch::commitContinuation()
         newPoints.append(cand.points[i]);
     }
 
-    // Replay each probation sample as lerp(oldCenterline, rawPen, t),
-    // t = sampleTravel/window ∈ [0, 1]. At t=0 the stored point sits on
-    // the old line (smoothing early jitter); at t=1 it equals the raw pen,
-    // so post-commit raw appends continue seamlessly.
+    // t=0 stored sits on the old line (smoothing early jitter); t=1 equals
+    // raw pen so post-commit raw appends continue seamlessly.
     for (int i = 0; i < probSamples.size(); ++i) {
         const double t = (window > 0.0)
             ? std::clamp(sampleTravel[i] / window, 0.0, 1.0)
             : 1.0;
-        const QPointF oldLine(
-            (1.0 - t) * overlapStart.x() + t * overlapEnd.x(),
-            (1.0 - t) * overlapStart.y() + t * overlapEnd.y());
-        const QPointF raw = probSamples[i].position;
         cwPenPoint bp = probSamples[i];
-        bp.position = QPointF(
-            (1.0 - t) * oldLine.x() + t * raw.x(),
-            (1.0 - t) * oldLine.y() + t * raw.y());
+        bp.position = blendSample(overlapStart, overlapEnd,
+                                  probSamples[i].position, t);
         newPoints.append(bp);
     }
     cand.points = newPoints;
@@ -666,7 +732,9 @@ void cwSketch::endStroke()
 }
 
 cwSketchContinuationTarget cwSketch::findContinuationTarget(
-    cwPenStroke::Kind kind, QPointF worldPoint) const
+    cwPenStroke::Kind kind,
+    QPointF worldPoint,
+    double probationWindowScreenPx) const
 {
     cwSketchContinuationTarget result;
     if (kind == cwPenStroke::Eraser) {
@@ -701,6 +769,9 @@ cwSketchContinuationTarget cwSketch::findContinuationTarget(
            static_cast<int>(m_strokes.size()));
 
     double bestDistSq = std::numeric_limits<double>::infinity();
+    int     bestSegIdx = -1;
+    QPointF bestProj;
+    QPointF bestTangent;
 
     for (int sIdx = 0; sIdx < m_strokes.size(); ++sIdx) {
         const cwPenStroke &stroke = m_strokes[sIdx];
@@ -739,6 +810,21 @@ cwSketchContinuationTarget cwSketch::findContinuationTarget(
             bestDistSq = dSq;
             result.strokeIndex = sIdx;
             result.strokeWidth = stroke.width;
+            bestSegIdx = i;
+            // Re-project to compute proj + tangent for this winning segment.
+            const QPointF ab = b - a;
+            const double lenSq = ab.x() * ab.x() + ab.y() * ab.y();
+            if (lenSq > 0.0) {
+                const QPointF ap = worldPoint - a;
+                const double t = std::clamp(
+                    (ap.x() * ab.x() + ap.y() * ab.y()) / lenSq, 0.0, 1.0);
+                bestProj = a + t * ab;
+                const double len = std::sqrt(lenSq);
+                bestTangent = QPointF(ab.x() / len, ab.y() / len);
+            } else {
+                bestProj = a;
+                bestTangent = QPointF(1.0, 0.0);
+            }
         }
         const double minDist = std::sqrt(strokeBestDistSq);
         qCInfo(lcContinuation,
@@ -751,8 +837,63 @@ cwSketchContinuationTarget cwSketch::findContinuationTarget(
                (strokeBestDistSq <= thresholdSq ? "HIT" : "miss"));
     }
 
-    qCInfo(lcContinuation, "findContinuationTarget → strokeIndex=%d strokeWidth=%.4f",
-           result.strokeIndex, result.strokeWidth);
+    // Endpoint arclength check: if the landing projection is within one
+    // probation window of an endpoint, promote the target to the fast path.
+    // Walk outward from the hit segment in each direction, early-outing when
+    // the accumulator passes the threshold — cost is O(segments-within-one-
+    // probation-window), not O(N).
+    if (result.strokeIndex >= 0 && probationWindowScreenPx > 0.0) {
+        const double probationWindowMeters =
+            probationWindowScreenPx / pxPerMeter;
+        const cwPenStroke &stroke = m_strokes[result.strokeIndex];
+        const int N = stroke.points.size();
+
+        double forwardArc = distance(bestProj, stroke.points[bestSegIdx].position);
+        for (int j = bestSegIdx;
+             j < N - 1 && forwardArc < probationWindowMeters; ++j) {
+            forwardArc += distance(stroke.points[j].position,
+                                   stroke.points[j + 1].position);
+        }
+
+        double backwardArc =
+            distance(bestProj, stroke.points[bestSegIdx - 1].position);
+        for (int j = bestSegIdx - 1;
+             j > 0 && backwardArc < probationWindowMeters; --j) {
+            backwardArc += distance(stroke.points[j].position,
+                                    stroke.points[j - 1].position);
+        }
+
+        const bool reachedTail = forwardArc < probationWindowMeters;
+        const bool reachedHead = backwardArc < probationWindowMeters;
+
+        using Endpoint = cwSketchContinuationTarget::Endpoint;
+        if (reachedHead && reachedTail) {
+            // Two-point stroke or very short one within both arclengths:
+            // pick the nearer; tie favors Tail (plan edge case).
+            result.endpoint = (backwardArc < forwardArc) ? Endpoint::Head
+                                                         : Endpoint::Tail;
+        } else if (reachedTail) {
+            result.endpoint = Endpoint::Tail;
+        } else if (reachedHead) {
+            result.endpoint = Endpoint::Head;
+        }
+
+        if (result.endpoint != Endpoint::None) {
+            result.hitSegment = bestSegIdx;
+            result.hitWorld = bestProj;
+            result.hitTangent = bestTangent;
+        }
+
+        qCInfo(lcContinuation,
+               "  endpoint-scan: forwardArc=%.5f backwardArc=%.5f "
+               "window=%.5f → endpoint=%d hitSegment=%d",
+               forwardArc, backwardArc, probationWindowMeters,
+               static_cast<int>(result.endpoint), result.hitSegment);
+    }
+
+    qCInfo(lcContinuation, "findContinuationTarget → strokeIndex=%d strokeWidth=%.4f endpoint=%d",
+           result.strokeIndex, result.strokeWidth,
+           static_cast<int>(result.endpoint));
     return result;
 }
 
@@ -819,6 +960,143 @@ void cwSketch::armProbation(int probationStrokeIndex,
            m_continuationState.hitThresholdMeters * pxPerMeter,
            m_continuationState.probationWindowMeters,
            commitHitRateThreshold);
+}
+
+void cwSketch::commitAtEndpoint(int probationStrokeIndex,
+                                cwSketchContinuationTarget candidate)
+{
+    using Endpoint = cwSketchContinuationTarget::Endpoint;
+    if (probationStrokeIndex < 0 || probationStrokeIndex >= m_strokes.size()) {
+        return;
+    }
+    if (candidate.strokeIndex < 0 || candidate.strokeIndex >= m_strokes.size()) {
+        return;
+    }
+    if (candidate.strokeIndex == probationStrokeIndex) {
+        return;
+    }
+    if (candidate.endpoint == Endpoint::None) {
+        return;
+    }
+    if (candidate.hitSegment <= 0) {
+        return;
+    }
+
+    const bool backward = (candidate.endpoint == Endpoint::Head);
+    const int probationIdx = probationStrokeIndex;
+    int candidateIdx = candidate.strokeIndex;
+    const int hitSeg = candidate.hitSegment;
+
+    // Blend window = centerline arclength from the landing projection to
+    // the original endpoint; cached before the reverse + insert so the
+    // EndpointBlend phase can smooth the user's overdraw across the
+    // remaining tip instead of discarding it.
+    const cwPenStroke &origCand = m_strokes[candidateIdx];
+    const int Norig = origCand.points.size();
+    QPointF endpointBlendEndWorld;
+    double  endpointBlendWindowMeters = 0.0;
+    if (hitSeg > 0 && hitSeg <= Norig - 1) {
+        if (backward) {
+            endpointBlendEndWorld = origCand.points.first().position;
+            endpointBlendWindowMeters =
+                distance(candidate.hitWorld, origCand.points[hitSeg - 1].position);
+            for (int j = hitSeg - 1; j > 0; --j) {
+                endpointBlendWindowMeters += distance(
+                    origCand.points[j].position,
+                    origCand.points[j - 1].position);
+            }
+        } else {
+            endpointBlendEndWorld = origCand.points.last().position;
+            endpointBlendWindowMeters =
+                distance(candidate.hitWorld, origCand.points[hitSeg].position);
+            for (int j = hitSeg; j < Norig - 1; ++j) {
+                endpointBlendWindowMeters += distance(
+                    origCand.points[j].position,
+                    origCand.points[j + 1].position);
+            }
+        }
+    }
+
+    qCInfo(lcContinuation,
+           "commitAtEndpoint: probationRow=%d candidateRow=%d endpoint=%s "
+           "hitSeg=%d hitWorld=(%.4f, %.4f) blendEnd=(%.4f, %.4f) "
+           "blendWindow=%.5f m origCandPoints=%d",
+           probationIdx, candidateIdx,
+           backward ? "Head" : "Tail",
+           hitSeg,
+           candidate.hitWorld.x(), candidate.hitWorld.y(),
+           endpointBlendEndWorld.x(), endpointBlendEndWorld.y(),
+           endpointBlendWindowMeters,
+           Norig);
+
+    m_strokeModel->beginRemoveRows(QModelIndex(), probationIdx, probationIdx);
+    m_strokes.removeAt(probationIdx);
+    m_strokeModel->endRemoveRows();
+    m_pendingDirtyRow = -1;
+
+    if (probationIdx < candidateIdx) {
+        candidateIdx -= 1;
+    }
+    if (candidateIdx < 0 || candidateIdx >= m_strokes.size()) {
+        return;
+    }
+
+    cwPenStroke &cand = m_strokes[candidateIdx];
+    const int N = cand.points.size();
+    if (hitSeg <= 0 || hitSeg > N - 1) {
+        return;
+    }
+
+    int prefixCount;
+    if (backward) {
+        std::reverse(cand.points.begin(), cand.points.end());
+        // Original segment (hitSeg-1, hitSeg) maps to reversed indices
+        // (N-1-hitSeg, N-hitSeg), so that many leading points survive.
+        prefixCount = N - hitSeg;
+    } else {
+        prefixCount = hitSeg;
+    }
+    prefixCount = std::clamp(prefixCount, 0, N);
+
+    // Insert hitWorld without truncating so the old tail stays visible;
+    // the blend phase removes old-tail vertices one at a time as the pen
+    // arc passes each.
+    cand.points.insert(prefixCount, cwPenPoint(candidate.hitWorld, 1.0, 0));
+    const int oldTailHeadIdx = prefixCount + 1;
+
+    // Walk forward through the array so this works identically for Tail
+    // commits and post-reverse Head commits.
+    QVector<double> oldTailArcs;
+    oldTailArcs.reserve(cand.points.size() - oldTailHeadIdx);
+    {
+        double acc = 0.0;
+        QPointF prev = candidate.hitWorld;
+        for (int j = oldTailHeadIdx; j < cand.points.size(); ++j) {
+            const QPointF q = cand.points[j].position;
+            acc += distance(prev, q);
+            oldTailArcs.append(acc);
+            prev = q;
+        }
+    }
+
+    // Structural change (reverse + insert); reset the model so the batching
+    // painter path picks up the new geometry cleanly.
+    applyStrokes(m_strokes);
+
+    m_continuationState = ContinuationState();
+    m_continuationState.used = true;
+    m_continuationState.strokeIndex = candidateIdx;
+    if (endpointBlendWindowMeters > 0.0) {
+        m_continuationState.phase = ContinuationState::Phase::EndpointBlend;
+        m_continuationState.endpointBlendStartWorld = candidate.hitWorld;
+        m_continuationState.endpointBlendEndWorld = endpointBlendEndWorld;
+        m_continuationState.endpointBlendWindowMeters =
+            endpointBlendWindowMeters;
+        m_continuationState.endpointOldTailArcs = oldTailArcs;
+        m_continuationState.endpointOldTailHeadIdx = oldTailHeadIdx;
+    }
+
+    emit continuationCommitted(candidateIdx);
 }
 
 void cwSketch::eraseAlongPath(const QVector<QPointF> &pathPointsWorld, double radiusWorld)
