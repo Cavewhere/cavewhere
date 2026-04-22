@@ -73,10 +73,13 @@ QQ.Item {
         }
     }
 
-    // Navigation-triggered flush. When the bound sketch changes, we flush both
-    // the sketch being left (so its thumbnail catches up for the gallery) and
-    // the sketch being entered (covers the case where a prior session closed
-    // without flushing — no-op otherwise, and gated when active drawing starts).
+    // Navigation-triggered flush. When the bound sketch changes, we flush
+    // both the sketch being left (so its thumbnail catches up for the
+    // gallery) and the sketch being entered (covers the case where a prior
+    // session closed without flushing — no-op otherwise, and gated when
+    // active drawing starts). Also publishes the worldToScreenMatrix to the
+    // C++ view state so cwSketch can derive screen-px→world-m thresholds
+    // without reimplementing the paper-scale formula.
     onSketchChanged: {
         if (_previousSketch !== null && _previousSketch !== sketch) {
             RootData.sketchManager.flushIconIfDirty(_previousSketch)
@@ -85,6 +88,10 @@ QQ.Item {
             RootData.sketchManager.flushIconIfDirty(sketch)
         }
         _previousSketch = sketch
+
+        if (sketch) {
+            sketch.viewState.worldToScreenMatrix = worldToScreenId
+        }
     }
 
     function _handleAnchorSelectionRequest(componentList) {
@@ -117,15 +124,6 @@ QQ.Item {
         scale.scaleDenominator.value: sketchItemId.sketch ? sketchItemId.sketch.mapScale.scaleDenominator.value : 250
         scale.scaleNumerator.unit:    sketchItemId.sketch ? sketchItemId.sketch.mapScale.scaleNumerator.unit    : Units.Meters
         scale.scaleDenominator.unit:  sketchItemId.sketch ? sketchItemId.sketch.mapScale.scaleDenominator.unit  : Units.Meters
-    }
-
-    // Publish the matrix to the C++ view state so cwSketch can derive
-    // screen-pixel → world-meter thresholds without reimplementing the
-    // paper-scale formula.
-    onSketchChanged: {
-        if (sketch) {
-            sketch.viewState.worldToScreenMatrix = worldToScreenId
-        }
     }
 
     // Probation commits inside cwSketch::appendPoint: the probation row is
