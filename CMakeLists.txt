@@ -285,6 +285,8 @@ if(BUILD_TESTING)
         SOURCES
             testlib/LoadProjectHelper.cpp
             testlib/LoadProjectHelper.h
+            testlib/MockAuthProvider.cpp
+            testlib/MockAuthProvider.h
             QQuickGit/tests/lfs/LfsServer.cpp
             QQuickGit/tests/lfs/LfsServer.h
         QML_FILES

@@ -13281,46 +13281,9 @@ TEST_CASE("double retire does not crash or double-delete", "[cwProject][tempClea
 // ---------------------------------------------------------------------------
 // Install-check sync gate tests
 // ---------------------------------------------------------------------------
-#include "cwRemoteAuthProvider.h"
+#include "MockAuthProvider.h"
 
 namespace {
-class StubAuthProvider : public cwRemoteAuthProvider
-{
-public:
-    using cwRemoteAuthProvider::cwRemoteAuthProvider;
-
-    bool hasLoadedCredentials() const override { return m_credsLoaded; }
-    void ensureCredentialsLoaded() override {
-        if (!m_credsLoaded) {
-            m_credsLoaded = true;
-            emit credentialsLoaded();
-        }
-    }
-    QString accessToken() const override { return QString(); }
-    bool supportsInstallationCheck() const override { return m_supports; }
-    void verifyInstallation() override {
-        ++m_verifyCalls;
-        // Emit asynchronously so the Qt::SingleShotConnection in
-        // cwProject::sync() observes the signal through the event loop,
-        // mirroring what a real network-backed provider does.
-        const bool installed = m_installed;
-        QMetaObject::invokeMethod(this, [this, installed]() {
-            emit installationVerified(installed);
-        }, Qt::QueuedConnection);
-    }
-
-    void setSupportsInstallationCheck(bool v) { m_supports = v; }
-    void setInstalled(bool v) { m_installed = v; }
-    void setCredentialsLoaded(bool v) { m_credsLoaded = v; }
-    int verifyCalls() const { return m_verifyCalls; }
-
-private:
-    bool m_supports = true;
-    bool m_installed = false;
-    bool m_credsLoaded = true;
-    int m_verifyCalls = 0;
-};
-
 // Builds a minimal project with a file:// bare remote configured, so sync()
 // reaches the install-check gate without needing HTTPS credentials.
 struct InstallGateFixture {
@@ -13354,7 +13317,7 @@ TEST_CASE("cwProject::sync() emits syncNeedsInstallation when install check retu
           "[cwProject][sync][installCheck]")
 {
     InstallGateFixture fx;
-    auto stub = std::make_unique<StubAuthProvider>();
+    auto stub = std::make_unique<MockAuthProvider>();
     stub->setInstalled(false);
     fx.project->setAuthProvider(stub.get());
 
@@ -13372,7 +13335,7 @@ TEST_CASE("cwProject::sync() proceeds when install check returns true",
           "[cwProject][sync][installCheck]")
 {
     InstallGateFixture fx;
-    auto stub = std::make_unique<StubAuthProvider>();
+    auto stub = std::make_unique<MockAuthProvider>();
     stub->setInstalled(true);
     fx.project->setAuthProvider(stub.get());
 
@@ -13392,7 +13355,7 @@ TEST_CASE("cwProject::sync() skips install check when provider reports unsupport
           "[cwProject][sync][installCheck]")
 {
     InstallGateFixture fx;
-    auto stub = std::make_unique<StubAuthProvider>();
+    auto stub = std::make_unique<MockAuthProvider>();
     stub->setSupportsInstallationCheck(false);
     fx.project->setAuthProvider(stub.get());
 
