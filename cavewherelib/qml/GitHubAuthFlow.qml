@@ -11,26 +11,42 @@ ColumnLayout {
 
     spacing: 8
 
-    QC.Label {
+    RowLayout {
         Layout.fillWidth: true
-        wrapMode: QC.Label.WrapAtWordBoundaryOrAnywhere
-        color: Theme.textSecondary
-        text: {
-            if (gitHubIntegration.needsInstallation) {
-                return qsTr("You're signed in, but CaveWhere isn't installed on any of your GitHub accounts yet. Install it to see your repositories.")
+        spacing: 8
+
+        QC.Label {
+            Layout.fillWidth: true
+            wrapMode: QC.Label.WrapAtWordBoundaryOrAnywhere
+            color: Theme.textSecondary
+            text: {
+                if (gitHubIntegration.needsInstallation) {
+                    if (gitHubIntegration.installPollActive) {
+                        return qsTr("<b>Waiting</b> for the install to finish on GitHub… this page will update automatically.")
+                    }
+                    return qsTr("You're signed in, but CaveWhere isn't installed on any of your GitHub accounts yet. Install it to see your repositories.")
+                }
+                switch (gitHubIntegration.authState) {
+                case GitHubIntegration.RequestingCode:
+                    return qsTr("Requesting a sign-in code from GitHub…")
+                case GitHubIntegration.AwaitingVerification:
+                    return qsTr("Enter the code below at GitHub to finish signing in.")
+                case GitHubIntegration.Error:
+                    return gitHubIntegration.errorMessage.length > 0
+                        ? gitHubIntegration.errorMessage
+                        : qsTr("Something went wrong.")
+                default:
+                    return contextMessage
+                }
             }
-            switch (gitHubIntegration.authState) {
-            case GitHubIntegration.RequestingCode:
-                return qsTr("Requesting a sign-in code from GitHub…")
-            case GitHubIntegration.AwaitingVerification:
-                return qsTr("Enter the code below at GitHub to finish signing in.")
-            case GitHubIntegration.Error:
-                return gitHubIntegration.errorMessage.length > 0
-                    ? gitHubIntegration.errorMessage
-                    : qsTr("Something went wrong.")
-            default:
-                return contextMessage
-            }
+        }
+
+        QC.BusyIndicator {
+            objectName: "installPollBusyIndicator"
+            visible: gitHubIntegration.installPollActive
+            implicitWidth: 16
+            implicitHeight: 16
+            running: visible
         }
     }
 
@@ -40,16 +56,34 @@ ColumnLayout {
 
         QC.Button {
             objectName: "installAppButton"
-            text: qsTr("Install CaveWhere on GitHub")
-            onClicked: QQ.Qt.openUrlExternally(gitHubIntegration.installationUrl)
+            text: gitHubIntegration.installPollTimedOut
+                ? qsTr("Try again — Install CaveWhere on GitHub")
+                : qsTr("Install CaveWhere on GitHub")
+            onClicked: {
+                QQ.Qt.openUrlExternally(gitHubIntegration.installationUrl)
+                gitHubIntegration.startInstallPolling()
+            }
         }
+    }
 
-        QQ.Item { Layout.fillWidth: true }
+    QQ.Rectangle {
+        Layout.fillWidth: true
+        visible: gitHubIntegration.installPollTimedOut
+        implicitHeight: timeoutBannerText.implicitHeight + 16
+        color: Theme.warning
+        radius: 5
 
-        QC.Button {
-            objectName: "installCompletedButton"
-            text: qsTr("I've installed it — continue")
-            onClicked: gitHubIntegration.refreshRepositories()
+        QC.Label {
+            id: timeoutBannerText
+            objectName: "installPollTimedOutBanner"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            wrapMode: QC.Label.WrapAtWordBoundaryOrAnywhere
+            font.pixelSize: Theme.fontSizeBody
+            text: qsTr("We didn't detect an install. Make sure you finished installing CaveWhere on the right GitHub account, then try again.")
         }
     }
 

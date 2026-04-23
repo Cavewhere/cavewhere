@@ -11,6 +11,8 @@
 #include <QNetworkRequest>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QDeadlineTimer>
+#include <QTimer>
 #include <QUrlQuery>
 #include <QScopedPointer>
 #include <QScopedPointerDeleteLater>
@@ -58,6 +60,20 @@ cwGitHubIntegration::cwGitHubIntegration(cwRemoteCredentialStore* credentialStor
                              emit secondsUntilNextPollChanged();
                          }
                      });
+
+    m_installPollTimer = new QTimer(this);
+    m_installPollTimer->setInterval(3000);
+    QObject::connect(m_installPollTimer, &QTimer::timeout, this, [this]() {
+        if (m_installPollDeadline.hasExpired()) {
+            if (!m_installPollTimedOut) {
+                m_installPollTimedOut = true;
+                emit installPollTimedOutChanged();
+            }
+            stopInstallPolling();
+            return;
+        }
+        refreshRepositoriesInternal(true);
+    });
 }
 
 cwGitHubIntegration::~cwGitHubIntegration() = default;
@@ -70,6 +86,10 @@ void cwGitHubIntegration::setActive(bool active)
 
     m_active = active;
     emit activeChanged();
+
+    if (!m_active) {
+        stopInstallPolling();
+    }
 
     if (m_active && !m_hasLoadedStoredToken && !m_loadingStoredToken) {
         m_loadingStoredToken = true;
@@ -170,6 +190,38 @@ void cwGitHubIntegration::refreshRepositories()
     refreshRepositoriesInternal(true);
 }
 
+void cwGitHubIntegration::startInstallPolling()
+{
+    constexpr qint64 kPollWindowMs = 3 * 60 * 1000;
+    m_installPollDeadline.setRemainingTime(kPollWindowMs);
+
+    if (m_installPollTimedOut) {
+        m_installPollTimedOut = false;
+        emit installPollTimedOutChanged();
+    }
+
+    if (!m_installPollActive) {
+        m_installPollActive = true;
+        emit installPollActiveChanged();
+    }
+
+    // Kick off the first check immediately rather than waiting the full
+    // interval — user just clicked Install, they want feedback fast.
+    m_installPollTimer->start();
+    refreshRepositoriesInternal(true);
+}
+
+void cwGitHubIntegration::stopInstallPolling()
+{
+    if (m_installPollTimer) {
+        m_installPollTimer->stop();
+    }
+    if (m_installPollActive) {
+        m_installPollActive = false;
+        emit installPollActiveChanged();
+    }
+}
+
 void cwGitHubIntegration::refreshRepositoriesInternal(bool allowRefreshRetry)
 {
     if (!m_active) {
@@ -234,6 +286,7 @@ void cwGitHubIntegration::logout()
 {
     const QString accountId = resolveActiveGitHubAccountId();
 
+    stopInstallPolling();
     cancelLogin();
     m_hasOpenedVerificationUrl = false;
     emit verificationOpenedChanged();
@@ -765,6 +818,13 @@ void cwGitHubIntegration::setApiBaseUrl(const QString& url)
     m_apiBaseUrl = url;
 }
 
+void cwGitHubIntegration::setAccessTokenForTesting(const QString& token)
+{
+    m_accessToken = token;
+    emit accessTokenChanged();
+    setAuthState(AuthState::Authorized);
+}
+
 void cwGitHubIntegration::createRepository(const QString& name, bool isPrivate, const QString& org)
 {
     createRepositoryInternal(name, isPrivate, org, true);
@@ -1003,9 +1063,18 @@ QUrl cwGitHubIntegration::installationUrl() const
 
 void cwGitHubIntegration::setNeedsInstallation(bool needsInstallation)
 {
-    if (m_needsInstallation == needsInstallation) {
-        return;
+    if (!needsInstallation) {
+        if (m_installPollActive) {
+            stopInstallPolling();
+        }
+        if (m_installPollTimedOut) {
+            m_installPollTimedOut = false;
+            emit installPollTimedOutChanged();
+        }
     }
-    m_needsInstallation = needsInstallation;
-    emit needsInstallationChanged();
+
+    if (m_needsInstallation != needsInstallation) {
+        m_needsInstallation = needsInstallation;
+        emit needsInstallationChanged();
+    }
 }

@@ -7,6 +7,7 @@
 #include <QVariantMap>
 #include <QRangeModel>
 #include <QUrl>
+#include <QDeadlineTimer>
 #include <QNetworkAccessManager>
 #include <QQmlEngine>
 #include <QMetaType>
@@ -22,6 +23,7 @@
 #include "cwGitHubDeviceAuth.h"
 #include "cwRemoteAuthProvider.h"
 
+class QTimer;
 class cwRemoteCredentialStore;
 
 struct CAVEWHERE_LIB_EXPORT cwGitHubRepositoryItem
@@ -71,6 +73,8 @@ class CAVEWHERE_LIB_EXPORT cwGitHubIntegration : public cwRemoteAuthProvider
     Q_PROPERTY(QString activeAccountId READ activeAccountId NOTIFY activeAccountIdChanged)
     Q_PROPERTY(bool loggedIn READ loggedIn NOTIFY authStateChanged)
     Q_PROPERTY(bool needsInstallation READ needsInstallation NOTIFY needsInstallationChanged)
+    Q_PROPERTY(bool installPollActive READ installPollActive NOTIFY installPollActiveChanged)
+    Q_PROPERTY(bool installPollTimedOut READ installPollTimedOut NOTIFY installPollTimedOutChanged)
     Q_PROPERTY(QUrl installationUrl READ installationUrl CONSTANT)
 
 public:
@@ -100,6 +104,8 @@ public:
     QString username() const { return m_username; }
     QString activeAccountId() const { return m_activeAccountId; }
     bool needsInstallation() const { return m_needsInstallation; }
+    bool installPollActive() const { return m_installPollActive; }
+    bool installPollTimedOut() const { return m_installPollTimedOut; }
     QUrl installationUrl() const;
     QString accessToken() const override { return m_accessToken; }
     bool hasLoadedCredentials() const override { return m_hasLoadedStoredToken; }
@@ -112,6 +118,12 @@ public:
     Q_INVOKABLE void cancelLogin();
     Q_INVOKABLE void cancelDeviceLoginFlow();
     Q_INVOKABLE void refreshRepositories();
+    // Starts polling /user/installations every 3 seconds for up to 3 minutes.
+    // Intended to be invoked right after the user opens the GitHub install
+    // page in the browser; auto-stops when the app becomes installed (the
+    // next poll returns a non-empty installation list) or the deadline passes.
+    Q_INVOKABLE void startInstallPolling();
+    Q_INVOKABLE void stopInstallPolling();
     Q_INVOKABLE void createRepository(const QString& name,
                                       bool isPrivate,
                                       const QString& org = QString());
@@ -124,6 +136,10 @@ public:
     void invalidateAccountToken(const QString& accountId, const QString& message = QString());
     QByteArray lfsAuthorizationHeader() const;
     void setApiBaseUrl(const QString& url);
+    // Test-only: seeds the in-memory access token + Authorized state so unit
+    // tests can exercise authenticated request paths without the device flow
+    // or a populated credential store. Not for production callers.
+    void setAccessTokenForTesting(const QString& token);
 
 signals:
     void authStateChanged();
@@ -144,6 +160,8 @@ signals:
     void repositoryCreated(const cwGitHubRepositoryItem& repo);
     void repositoryCreationFailed(const QString& errorMessage);
     void needsInstallationChanged();
+    void installPollActiveChanged();
+    void installPollTimedOutChanged();
 
 private:
     struct RepoAggregationState {
@@ -218,4 +236,9 @@ private:
 
     bool m_refreshInFlight = false;
     std::vector<std::function<void(bool)>> m_pendingRefreshCallbacks;
+
+    QTimer* m_installPollTimer = nullptr;
+    QDeadlineTimer m_installPollDeadline = QDeadlineTimer::Forever;
+    bool m_installPollActive = false;
+    bool m_installPollTimedOut = false;
 };
