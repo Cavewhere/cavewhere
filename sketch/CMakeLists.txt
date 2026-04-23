@@ -3,7 +3,8 @@ cmake_minimum_required(VERSION 3.23)
 project(CaveWhereSketch VERSION 0.1 LANGUAGES CXX)
 
 #Add address sanitizer for clang build only
-if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+option(ASAN_ENABLED "Enable AddressSanitizer on macOS Debug builds" ON)
+if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND ASAN_ENABLED)
     add_compile_options($<$<CONFIG:Debug>:-fsanitize=address>)
     add_link_options($<$<CONFIG:Debug>:-fsanitize=address>)
 endif()
