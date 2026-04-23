@@ -10,7 +10,7 @@
   <string>@CMAKE_PROJECT_NAME@</string>
 
   <key>CFBundleIdentifier</key>
-  <string>com.cavewhere.CaveWhere</string>
+  <string>com.cavewhere.cavewhere</string>
 
   <key>CFBundleName</key>
   <string>@CMAKE_PROJECT_NAME@</string>
@@ -19,10 +19,10 @@
   <string>CaveWhere</string>
 
   <key>CFBundleVersion</key>
-  <string>1.0</string>
+  <string>@CAVEWHERE_BUILD_NUMBER@</string>
 
   <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
+  <string>@PROJECT_VERSION@</string>
 
   <key>CFBundlePackageType</key>
   <string>APPL</string>

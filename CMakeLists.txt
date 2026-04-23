@@ -1,6 +1,69 @@
 cmake_minimum_required(VERSION 3.23)
 
-project(CaveWhere VERSION 1.0.0 LANGUAGES CXX)
+# Derive the marketing version (CFBundleShortVersionString) from the most recent
+# git tag reachable from HEAD. Real releases tag as e.g. 2026.4.2, which is the
+# value Apple expects in CFBundleShortVersionString. Fallback "0.0.0" for source
+# tarballs / checkouts with no tags — the iOS configure-time check rejects this
+# fallback so archive builds fail loudly instead of shipping with a bogus version.
+set(_cw_marketing_version "0.0.0")
+set(_cw_default_build_number "1")
+set(_cw_latest_tag "")
+# CFBundleShortVersionString: 1–3 dot-separated non-negative integers.
+# CMake regex doesn't support {n,m}, so spell the form out.
+set(_cw_marketing_version_regex "^[0-9]+(\\.[0-9]+)?(\\.[0-9]+)?$")
+
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --abbrev=0
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE _cw_latest_tag
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE _cw_tag_rc
+        ERROR_QUIET)
+    if(_cw_tag_rc EQUAL 0 AND _cw_latest_tag)
+        string(REGEX REPLACE "^v" "" _cw_stripped_tag "${_cw_latest_tag}")
+        if(_cw_stripped_tag MATCHES "${_cw_marketing_version_regex}")
+            set(_cw_marketing_version "${_cw_stripped_tag}")
+            execute_process(
+                COMMAND ${GIT_EXECUTABLE} rev-list ${_cw_latest_tag}..HEAD --count
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                OUTPUT_VARIABLE _cw_commits_since_tag
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                RESULT_VARIABLE _cw_count_rc
+                ERROR_QUIET)
+            if(_cw_count_rc EQUAL 0 AND _cw_commits_since_tag)
+                math(EXPR _cw_default_build_number "${_cw_commits_since_tag} + 1")
+            endif()
+        else()
+            message(STATUS
+                "CaveWhere: latest git tag '${_cw_latest_tag}' is not a valid "
+                "Apple marketing version; falling back to ${_cw_marketing_version}.")
+        endif()
+    endif()
+endif()
+
+project(CaveWhere VERSION ${_cw_marketing_version} LANGUAGES CXX)
+
+# iOS / App Store build number (CFBundleVersion). Cache default is the sentinel
+# string "auto", which is resolved below to commits-since-tag + 1 every
+# reconfigure — so normal dev builds track git state. For TestFlight iteration
+# (App Store Connect requires a unique, strictly-increasing build number per
+# marketing version) pass -DCAVEWHERE_BUILD_NUMBER=N; that value replaces the
+# sentinel in the cache and sticks across reconfigures.
+set(CAVEWHERE_BUILD_NUMBER "auto"
+    CACHE STRING "iOS build number (CFBundleVersion); 'auto' = commits-since-tag + 1")
+
+if(CAVEWHERE_BUILD_NUMBER STREQUAL "auto")
+    # Shadow the cache with a local variable so @CAVEWHERE_BUILD_NUMBER@ in
+    # ios/Info.plist.in and XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION see the
+    # effective numeric value, while the cache entry stays "auto" and keeps
+    # tracking git state on each reconfigure.
+    set(CAVEWHERE_BUILD_NUMBER "${_cw_default_build_number}")
+endif()
+
+message(STATUS
+    "CaveWhere marketing version: ${PROJECT_VERSION} (build ${CAVEWHERE_BUILD_NUMBER})")
 
 # Detect iOS builds. The Xcode generator doesn't set CMAKE_CROSSCOMPILING or CMAKE_SYSTEM_NAME=iOS,
 # so we detect iOS via CMAKE_OSX_SYSROOT instead.
@@ -8,6 +71,29 @@ if(ANDROID OR IOS OR CMAKE_OSX_SYSROOT MATCHES "iphoneos|iphonesimulator")
     set(CW_MOBILE ON)
 else()
     set(CW_MOBILE OFF)
+endif()
+
+# App Store format validation (iOS only). Catches typos like
+# -DCAVEWHERE_BUILD_NUMBER=not-a-number before Xcode starts.
+if(CW_MOBILE)
+    if(PROJECT_VERSION STREQUAL "0.0.0")
+        message(FATAL_ERROR
+            "CaveWhere: no git tag found; refusing to build iOS with fallback "
+            "version 0.0.0. Create a release tag (e.g. 2026.4.2) first.")
+    endif()
+    if(NOT PROJECT_VERSION MATCHES "${_cw_marketing_version_regex}")
+        message(FATAL_ERROR
+            "CaveWhere: CFBundleShortVersionString '${PROJECT_VERSION}' is not "
+            "a valid Apple marketing version (1–3 dot-separated integers).")
+    endif()
+    string(LENGTH "${CAVEWHERE_BUILD_NUMBER}" _cw_bn_len)
+    # CFBundleVersion: dot-separated non-negative integers, ≤18 chars.
+    if(NOT CAVEWHERE_BUILD_NUMBER MATCHES "^[0-9]+(\\.[0-9]+)*$"
+            OR _cw_bn_len GREATER 18)
+        message(FATAL_ERROR
+            "CaveWhere: CAVEWHERE_BUILD_NUMBER '${CAVEWHERE_BUILD_NUMBER}' is "
+            "not a valid CFBundleVersion (dot-separated integers, ≤18 chars).")
+    endif()
 endif()
 
 # Prefer Conan *build* tools (e.g., native protoc) over system versions.
@@ -643,13 +729,13 @@ if(APPLE)
         # MACOSX_BUNDLE_INFO_PLIST ${MACOSX_BUNDLE_INFO_PLIST}
         MACOSX_BUNDLE_BUNDLE_VERSION 1 #The build version
         # MACOSX_BUNDLE_BUNDLE_NAME "CaveWhere"
-        MACOSX_BUNDLE_GUI_IDENTIFIER "com.cavewhere.CaveWhere"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.cavewhere.cavewhere"
         #Enables instruments to run correctly in macos
         XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS "${CMAKE_SOURCE_DIR}/entitlements.plist"
         #XCODE_ATTRIBUTE_DEVELOPMENT_TEAM
         XCODE_ATTRIBUTE_OTHER_CODE_SIGN_FLAGS "--deep"
         #XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
-        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.cavewhere.CaveWhere"
+        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.cavewhere.cavewhere"
 
         RESOURCE "${CMAKE_SOURCE_DIR}/cavewhereIcon.icns"
     )
@@ -657,10 +743,25 @@ if(APPLE)
     if(MOBILE_BUILD)
         set_target_properties(CaveWhere PROPERTIES
             MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/ios/Info.plist.in"
-            XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME "AppIcon")
+            XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME "AppIcon"
+            XCODE_ATTRIBUTE_MARKETING_VERSION "${PROJECT_VERSION}"
+            XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION "${CAVEWHERE_BUILD_NUMBER}")
         target_sources(CaveWhere PRIVATE "${CMAKE_SOURCE_DIR}/ios/Assets.xcassets")
         set_source_files_properties("${CMAKE_SOURCE_DIR}/ios/Assets.xcassets"
             PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+
+        # Cross-check the built Info.plist's CFBundleShortVersionString against the
+        # CavewhereVersion string compiled into cavewhereVersion.h. The plist comes
+        # from the latest reachable tag (configure time); the header comes from
+        # `git describe HEAD` (cavewherelib post-build). Drift between them surfaces
+        # here instead of at App Store Connect upload time. The script resolves the
+        # plist path from Xcode's script-phase env — see CheckPlistVersion.cmake.
+        add_custom_command(TARGET CaveWhere POST_BUILD
+            COMMAND ${CMAKE_COMMAND}
+                -DVERSION_HEADER=${CMAKE_BINARY_DIR}/cavewherelib/versionInfo/cavewhereVersion.h
+                -P ${CMAKE_SOURCE_DIR}/cavewherelib/CheckPlistVersion.cmake
+            VERBATIM
+            COMMENT "Verify Info.plist marketing version matches cavewhereVersion.h")
     else()
         set_target_properties(CaveWhere PROPERTIES
             MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist.in")

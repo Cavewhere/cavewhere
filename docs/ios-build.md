@@ -161,3 +161,60 @@ property on the target and `UILaunchStoryboardName` in Info.plist handle this.
 
 Delete `CMakeCache.txt` and reconfigure. Stale cache entries from previous
 configure runs can point to wrong package locations.
+
+## Release / archive workflow
+
+The iOS bundle's `CFBundleShortVersionString` comes from the most recent git
+tag reachable from HEAD (e.g. `2026.4.2`), resolved at CMake configure time.
+`CFBundleVersion` comes from the `CAVEWHERE_BUILD_NUMBER` cache variable,
+defaulting to the sentinel `auto` — resolved to commits-since-tag + 1 on every
+reconfigure, so dev builds track the current git state. Passing
+`-DCAVEWHERE_BUILD_NUMBER=N` replaces the sentinel with a fixed value that
+sticks in the cache until you override it again (or reset to `auto`).
+
+### Cutting a release build
+
+1. Tag the commit you intend to ship — Apple requires 1–3 dot-separated
+   non-negative integers:
+   ```bash
+   git tag 2026.4.2
+   git push --tags
+   ```
+2. From a clean checkout at that tag, reconfigure CMake. The configure log
+   should include:
+   ```
+   -- CaveWhere marketing version: 2026.4.2 (build 1)
+   ```
+3. Archive in Xcode (Product → Archive) and upload via Organizer.
+
+### Re-uploading to TestFlight on the same tag
+
+Each upload to App Store Connect must have a unique `CFBundleVersion` that is
+strictly greater than all previous uploads for the same `CFBundleShortVersionString`.
+`auto` (commits-since-tag + 1) does not cover re-uploading the same commit
+(code-sign retry, asset tweak, etc.) — it returns the same number both times.
+Override explicitly for every archive:
+
+```bash
+cmake -DCAVEWHERE_BUILD_NUMBER=<N+1> ...
+```
+
+The value must be dot-separated non-negative integers, ≤ 18 characters.
+To go back to auto: `cmake -DCAVEWHERE_BUILD_NUMBER=auto ...`.
+
+### Fallback behaviour
+
+Source tarballs or checkouts with no reachable tag produce marketing version
+`0.0.0`. The iOS configure step rejects this explicitly so archive builds fail
+loudly instead of shipping a bogus version. Desktop builds are unaffected.
+
+### Post-build version cross-check
+
+A POST_BUILD step on the iOS `CaveWhere` target runs
+`cavewherelib/CheckPlistVersion.cmake`, which uses `plutil` to read
+`CFBundleShortVersionString` from the built `Info.plist` and compares it
+against `CavewhereVersion` in the generated `cavewhereVersion.h`. The header
+string is `git describe HEAD` (e.g. `2026.4.2-3-g<sha>` when HEAD is past the
+tag), so the invariant is that it must start with the plist version. A
+mismatch fails the build with both values printed — reconfigure CMake so both
+paths pick up the current git state.
