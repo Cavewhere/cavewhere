@@ -23,6 +23,9 @@ public:
         QString accessToken;
         QString tokenType;
         QString scope;
+        QString refreshToken;
+        qint64 expiresInSec = -1;
+        qint64 refreshExpiresInSec = -1;
         QString errorName;
         QString errorDescription;
     };
@@ -35,6 +38,10 @@ public:
     void cancel();
 
     int secondsUntilNextPoll() const { return m_secondsUntilNextPoll; }
+
+    // Exposed for testing. Parses a GitHub device-flow token-endpoint response body
+    // into an AccessTokenResult. Does not drive any state machine.
+    static AccessTokenResult parseAccessTokenResponse(const QByteArray& body);
 
 signals:
     void deviceCodeReceived(const cwGitHubDeviceAuth::DeviceCodeInfo& info);

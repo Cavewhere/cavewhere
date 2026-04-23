@@ -14,6 +14,64 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 
+TEST_CASE("parseAccessTokenResponse: OAuth App (no refresh/expiry)", "[cwGitHubDeviceAuth]")
+{
+    const QByteArray body = R"({
+        "access_token": "gho_oauthapptoken",
+        "token_type": "bearer",
+        "scope": "repo,read:user"
+    })";
+    const auto result = cwGitHubDeviceAuth::parseAccessTokenResponse(body);
+    CHECK(result.success);
+    CHECK(result.accessToken == QStringLiteral("gho_oauthapptoken"));
+    CHECK(result.tokenType == QStringLiteral("bearer"));
+    CHECK(result.scope == QStringLiteral("repo,read:user"));
+    CHECK(result.refreshToken.isEmpty());
+    CHECK(result.expiresInSec == -1);
+    CHECK(result.refreshExpiresInSec == -1);
+    CHECK(result.errorName.isEmpty());
+}
+
+TEST_CASE("parseAccessTokenResponse: GitHub App (refresh + expiry present)", "[cwGitHubDeviceAuth]")
+{
+    const QByteArray body = R"({
+        "access_token": "ghu_ghapptoken",
+        "expires_in": 28800,
+        "refresh_token": "ghr_refreshtoken",
+        "refresh_token_expires_in": 15552000,
+        "token_type": "bearer",
+        "scope": ""
+    })";
+    const auto result = cwGitHubDeviceAuth::parseAccessTokenResponse(body);
+    REQUIRE(result.success);
+    CHECK(result.accessToken == QStringLiteral("ghu_ghapptoken"));
+    CHECK(result.tokenType == QStringLiteral("bearer"));
+    CHECK(result.refreshToken == QStringLiteral("ghr_refreshtoken"));
+    CHECK(result.expiresInSec == 28800);
+    CHECK(result.refreshExpiresInSec == 15552000);
+}
+
+TEST_CASE("parseAccessTokenResponse: error payload preserved", "[cwGitHubDeviceAuth]")
+{
+    const QByteArray body = R"({
+        "error": "authorization_pending",
+        "error_description": "The authorization request is still pending."
+    })";
+    const auto result = cwGitHubDeviceAuth::parseAccessTokenResponse(body);
+    CHECK_FALSE(result.success);
+    CHECK(result.errorName == QStringLiteral("authorization_pending"));
+    CHECK_FALSE(result.errorDescription.isEmpty());
+    CHECK(result.accessToken.isEmpty());
+    CHECK(result.expiresInSec == -1);
+}
+
+TEST_CASE("parseAccessTokenResponse: malformed body returns parse_error", "[cwGitHubDeviceAuth]")
+{
+    const auto result = cwGitHubDeviceAuth::parseAccessTokenResponse(QByteArrayLiteral("not json"));
+    CHECK_FALSE(result.success);
+    CHECK(result.errorName == QStringLiteral("parse_error"));
+}
+
 //This seems to work!
 // TEST_CASE("Test github oAuth device", "[cwGitHubDeviceAuth]") {
 

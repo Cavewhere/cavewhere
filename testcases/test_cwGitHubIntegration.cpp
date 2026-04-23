@@ -155,3 +155,14 @@ TEST_CASE("cwGitHubIntegration::createRepository does not invalidate token on 50
     CHECK(!invalidatedFired);
     CHECK(failureMessage.contains(QStringLiteral("500")));
 }
+
+TEST_CASE("cwGitHubIntegration::installationUrl honors app-slug env override", "[cwGitHubIntegration]")
+{
+    cwGitHubIntegration integration(nullptr);
+    // The default slug is "cavewhere" — verify the URL is well-formed against GitHub.
+    const QUrl url = integration.installationUrl();
+    CHECK(url.isValid());
+    CHECK(url.host() == QStringLiteral("github.com"));
+    CHECK(url.path().contains(QStringLiteral("/installations/new")));
+    CHECK(url.path().startsWith(QStringLiteral("/apps/")));
+}

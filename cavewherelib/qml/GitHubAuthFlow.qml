@@ -16,6 +16,9 @@ ColumnLayout {
         wrapMode: QC.Label.WrapAtWordBoundaryOrAnywhere
         color: Theme.textSecondary
         text: {
+            if (gitHubIntegration.needsInstallation) {
+                return qsTr("You're signed in, but CaveWhere isn't installed on any of your GitHub accounts yet. Install it to see your repositories.")
+            }
             switch (gitHubIntegration.authState) {
             case GitHubIntegration.RequestingCode:
                 return qsTr("Requesting a sign-in code from GitHub…")
@@ -28,6 +31,25 @@ ColumnLayout {
             default:
                 return contextMessage
             }
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        visible: gitHubIntegration.needsInstallation
+
+        QC.Button {
+            objectName: "installAppButton"
+            text: qsTr("Install CaveWhere on GitHub")
+            onClicked: QQ.Qt.openUrlExternally(gitHubIntegration.installationUrl)
+        }
+
+        QQ.Item { Layout.fillWidth: true }
+
+        QC.Button {
+            objectName: "installCompletedButton"
+            text: qsTr("I've installed it — continue")
+            onClicked: gitHubIntegration.refreshRepositories()
         }
     }
 
@@ -69,6 +91,7 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         visible: gitHubIntegration.authState !== GitHubIntegration.AwaitingVerification
+                 && !gitHubIntegration.needsInstallation
 
         QC.Button {
             text: gitHubIntegration.authState === GitHubIntegration.Error

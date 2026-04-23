@@ -2,6 +2,7 @@
 
 //Qt
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -23,7 +24,15 @@ using namespace Qt::StringLiterals;
 
 namespace {
 static constexpr auto GitHubDeviceClientIdEnv = "CAVEWHERE_GITHUB_CLIENT_ID";
-static constexpr auto DefaultGitHubClientId = "Ov23ctOCCgOdD9y2mSs9";
+static constexpr auto DefaultGitHubClientId = "Iv23liChYuxNRf8RNlCX";
+static constexpr auto GitHubAppSlugEnv = "CAVEWHERE_GITHUB_APP_SLUG";
+static constexpr auto DefaultGitHubAppSlug = "cavewhere";
+
+static bool isSafeIdentifier(const QString& value)
+{
+    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z0-9_-]+$"));
+    return pattern.match(value).hasMatch();
+}
 }
 
 cwGitHubIntegration::cwGitHubIntegration(cwRemoteCredentialStore* credentialStore,
@@ -32,6 +41,8 @@ cwGitHubIntegration::cwGitHubIntegration(cwRemoteCredentialStore* credentialStor
     , m_deviceAuth(resolveClientId(), this)
     , m_credentialStore(credentialStore)
 {
+    m_network.setRedirectPolicy(QNetworkRequest::SameOriginRedirectPolicy);
+
     setRepositories({});
 
     QObject::connect(&m_deviceAuth, &cwGitHubDeviceAuth::deviceCodeReceived,
@@ -64,8 +75,15 @@ void cwGitHubIntegration::setActive(bool active)
         m_loadingStoredToken = true;
         loadStoredAccessToken();
     } else if (m_active && !m_accessToken.isEmpty() && m_authState == AuthState::Authorized) {
-        fetchUserProfile();
-        refreshRepositories();
+        if (isAccessTokenNearExpiry() && !m_refreshToken.isEmpty()) {
+            attemptTokenRefresh([this](bool) {
+                fetchUserProfile();
+                refreshRepositoriesInternal(true);
+            });
+        } else {
+            fetchUserProfile();
+            refreshRepositories();
+        }
     }
 }
 
@@ -80,6 +98,7 @@ void cwGitHubIntegration::startDeviceLogin()
     }
 
     setErrorMessage({});
+    setNeedsInstallation(false);
     if (m_hasOpenedVerificationUrl) {
         m_hasOpenedVerificationUrl = false;
         emit verificationOpenedChanged();
@@ -93,7 +112,8 @@ void cwGitHubIntegration::startDeviceLogin()
         emit secondsUntilNextPollChanged();
     }
     setAuthState(AuthState::RequestingCode);
-    m_deviceAuth.requestDeviceCode({QStringLiteral("repo"), QStringLiteral("read:user")});
+    // GitHub Apps use per-installation permissions, not OAuth scopes.
+    m_deviceAuth.requestDeviceCode({});
 }
 
 void cwGitHubIntegration::cancelLogin()
@@ -104,6 +124,9 @@ void cwGitHubIntegration::cancelLogin()
         emit deviceCodeChanged();
     }
     m_accessToken.clear();
+    m_refreshToken.clear();
+    m_accessTokenExpiresAt = -1;
+    setNeedsInstallation(false);
     setRepositories({});
     emit accessTokenChanged();
     setAuthState(AuthState::Idle);
@@ -144,6 +167,11 @@ void cwGitHubIntegration::cancelDeviceLoginFlow()
 
 void cwGitHubIntegration::refreshRepositories()
 {
+    refreshRepositoriesInternal(true);
+}
+
+void cwGitHubIntegration::refreshRepositoriesInternal(bool allowRefreshRetry)
+{
     if (!m_active) {
         return;
     }
@@ -154,7 +182,7 @@ void cwGitHubIntegration::refreshRepositories()
     }
 
     setBusy(true);
-    QUrl url(m_apiBaseUrl + QStringLiteral("/user/repos"));
+    QUrl url(m_apiBaseUrl + QStringLiteral("/user/installations"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("per_page"), QStringLiteral("100"));
     url.setQuery(query);
@@ -166,8 +194,8 @@ void cwGitHubIntegration::refreshRepositories()
     request.setRawHeader("Authorization", authorizationHeader());
 
     QNetworkReply* reply = m_network.get(request);
-    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-        handleRepositoryReply(reply);
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, allowRefreshRetry]() {
+        handleInstallationsReply(reply, allowRefreshRetry);
     });
 }
 
@@ -177,8 +205,11 @@ void cwGitHubIntegration::reloadAccessTokenFromCredentialStore()
         setActive(true);
     }
 
-    if (!m_accessToken.isEmpty()) {
-        m_accessToken.clear();
+    const bool hadToken = !m_accessToken.isEmpty();
+    m_accessToken.clear();
+    m_refreshToken.clear();
+    m_accessTokenExpiresAt = -1;
+    if (hadToken) {
         emit accessTokenChanged();
     }
     if (!m_username.isEmpty()) {
@@ -186,6 +217,7 @@ void cwGitHubIntegration::reloadAccessTokenFromCredentialStore()
         emit usernameChanged();
     }
 
+    setNeedsInstallation(false);
     setRepositories({});
     setErrorMessage({});
     setAuthState(AuthState::Idle);
@@ -206,8 +238,10 @@ void cwGitHubIntegration::logout()
     m_hasOpenedVerificationUrl = false;
     emit verificationOpenedChanged();
     setAuthState(AuthState::Idle);
-    clearStoredAccessToken(accountId);
+    clearStoredCredentials(accountId);
     m_accessToken.clear();
+    m_refreshToken.clear();
+    m_accessTokenExpiresAt = -1;
     emit accessTokenChanged();
     setRepositories({});
     setErrorMessage({});
@@ -251,7 +285,7 @@ void cwGitHubIntegration::persistCurrentAccessTokenForAccount(const QString& acc
     }
 
     setActiveAccountId(normalized);
-    storeAccessToken(m_accessToken, normalized);
+    storeCredentialsForAccount(normalized);
 }
 
 void cwGitHubIntegration::invalidateAccountToken(const QString& accountId, const QString& message)
@@ -317,6 +351,10 @@ void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessToke
     }
 
     m_accessToken = result.accessToken;
+    m_refreshToken = result.refreshToken;
+    m_accessTokenExpiresAt = (result.expiresInSec > 0)
+        ? (QDateTime::currentSecsSinceEpoch() + result.expiresInSec)
+        : -1;
     m_tokenLoadedFromKeychain = false;
     emit accessTokenChanged();
     setAuthState(AuthState::Authorized);
@@ -344,27 +382,28 @@ void cwGitHubIntegration::markVerificationOpened()
     }
 }
 
-void cwGitHubIntegration::storeAccessToken(const QString& token, const QString& accountId)
+void cwGitHubIntegration::storeCredentialsForAccount(const QString& accountId)
 {
     if (!m_credentialStore || accountId.trimmed().isEmpty()) {
         return;
     }
 
-    m_credentialStore->writeAccessToken(cwRemoteAccountModel::Provider::GitHub,
-                                        accountId,
-                                        token,
-                                        this);
+    const auto provider = cwRemoteAccountModel::Provider::GitHub;
+    m_credentialStore->writeAccessToken(provider, accountId, m_accessToken, this);
+    m_credentialStore->writeRefreshToken(provider, accountId, m_refreshToken, this);
+    m_credentialStore->writeAccessTokenExpiresAt(provider, accountId, m_accessTokenExpiresAt, this);
 }
 
-void cwGitHubIntegration::clearStoredAccessToken(const QString& accountId)
+void cwGitHubIntegration::clearStoredCredentials(const QString& accountId)
 {
     if (!m_credentialStore || accountId.isEmpty()) {
         return;
     }
 
-    m_credentialStore->deleteAccessToken(cwRemoteAccountModel::Provider::GitHub,
-                                         accountId,
-                                         this);
+    const auto provider = cwRemoteAccountModel::Provider::GitHub;
+    m_credentialStore->deleteAccessToken(provider, accountId, this);
+    m_credentialStore->deleteRefreshToken(provider, accountId, this);
+    m_credentialStore->deleteAccessTokenExpiresAt(provider, accountId, this);
 }
 
 void cwGitHubIntegration::ensureCredentialsLoaded()
@@ -388,16 +427,39 @@ void cwGitHubIntegration::loadStoredAccessToken()
         return;
     }
 
-    m_credentialStore->readAccessToken(cwRemoteAccountModel::Provider::GitHub,
-                                       accountId,
-                                       this,
-                                       [this, accountId](const cwRemoteCredentialStore::ReadResult& result) {
+    struct LoadState {
+        int remaining = 3;
+        bool accessTokenFound = false;
+        QString accessToken;
+        QString refreshToken;
+        qint64 expiresAt = -1;
+    };
+    auto state = std::make_shared<LoadState>();
+
+    auto finalize = [this, accountId, state]() {
+        if (--state->remaining > 0) {
+            return;
+        }
+
         m_loadingStoredToken = false;
         m_hasLoadedStoredToken = true;
 
         if (accountId == resolveActiveGitHubAccountId()
-            && result.success && result.found && !result.value.isEmpty()) {
-            m_accessToken = result.value;
+            && state->accessTokenFound && !state->accessToken.isEmpty()
+            && state->refreshToken.isEmpty()) {
+            // An access token with no companion refresh token is a stale OAuth-App
+            // credential from before the GitHub App migration. GitHub App device
+            // flow always issues a refresh token. Clear it and force re-auth.
+            clearStoredCredentials(accountId);
+            emit credentialsLoaded();
+            return;
+        }
+
+        if (accountId == resolveActiveGitHubAccountId()
+            && state->accessTokenFound && !state->accessToken.isEmpty()) {
+            m_accessToken = state->accessToken;
+            m_refreshToken = state->refreshToken;
+            m_accessTokenExpiresAt = state->expiresAt;
             m_tokenLoadedFromKeychain = true;
             emit accessTokenChanged();
             setAuthState(AuthState::Authorized);
@@ -406,16 +468,52 @@ void cwGitHubIntegration::loadStoredAccessToken()
             m_secondsUntilNextPoll = 0;
             emit secondsUntilNextPollChanged();
             if (m_active) {
-                fetchUserProfile();
-                refreshRepositories();
+                if (isAccessTokenNearExpiry() && !m_refreshToken.isEmpty()) {
+                    attemptTokenRefresh([this](bool) {
+                        // Regardless of refresh outcome, kick off profile/repos.
+                        // If refresh failed, the 401 handlers will invalidate.
+                        fetchUserProfile();
+                        refreshRepositoriesInternal(true);
+                    });
+                } else {
+                    fetchUserProfile();
+                    refreshRepositoriesInternal(true);
+                }
             }
         }
 
         emit credentialsLoaded();
-    });
+    };
+
+    const auto provider = cwRemoteAccountModel::Provider::GitHub;
+
+    m_credentialStore->readAccessToken(provider, accountId, this,
+        [state, finalize](const cwRemoteCredentialStore::ReadResult& result) {
+            if (result.success && result.found && !result.value.isEmpty()) {
+                state->accessTokenFound = true;
+                state->accessToken = result.value;
+            }
+            finalize();
+        });
+
+    m_credentialStore->readRefreshToken(provider, accountId, this,
+        [state, finalize](const cwRemoteCredentialStore::ReadResult& result) {
+            if (result.success && result.found) {
+                state->refreshToken = result.value;
+            }
+            finalize();
+        });
+
+    m_credentialStore->readAccessTokenExpiresAt(provider, accountId, this,
+        [state, finalize](bool success, bool found, qint64 epochSeconds) {
+            if (success && found) {
+                state->expiresAt = epochSeconds;
+            }
+            finalize();
+        });
 }
 
-void cwGitHubIntegration::fetchUserProfile()
+void cwGitHubIntegration::fetchUserProfile(bool allowRefreshRetry)
 {
     if (m_accessToken.isEmpty()) {
         return;
@@ -428,8 +526,8 @@ void cwGitHubIntegration::fetchUserProfile()
     request.setRawHeader("Authorization", authorizationHeader());
 
     QNetworkReply* reply = m_network.get(request);
-    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-        handleUserProfileReply(reply);
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, allowRefreshRetry]() {
+        handleUserProfileReply(reply, allowRefreshRetry);
     });
 }
 
@@ -443,11 +541,13 @@ void cwGitHubIntegration::setRepositories(std::vector<cwGitHubRepositoryItem> re
     emit repositoriesChanged();
 }
 
-void cwGitHubIntegration::handleUserProfileReply(QNetworkReply* reply)
+void cwGitHubIntegration::handleUserProfileReply(QNetworkReply* reply, bool allowRefreshRetry)
 {
     QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
     if (isUnauthorizedReply(reply)) {
-        invalidateActiveAccountToken(tr("GitHub session expired. Please sign in again."));
+        handleUnauthorized(allowRefreshRetry,
+            [this]() { fetchUserProfile(false); },
+            [this]() { invalidateActiveAccountToken(tr("GitHub session expired. Please sign in again.")); });
         return;
     }
 
@@ -476,17 +576,22 @@ void cwGitHubIntegration::handleUserProfileReply(QNetworkReply* reply)
     emit profileResolved(login);
 }
 
-void cwGitHubIntegration::handleRepositoryReply(QNetworkReply* reply)
+void cwGitHubIntegration::handleInstallationsReply(QNetworkReply* reply, bool allowRefreshRetry)
 {
     QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
-    setBusy(false);
 
     if (isUnauthorizedReply(reply)) {
-        invalidateActiveAccountToken(tr("GitHub session expired. Please sign in again."));
+        handleUnauthorized(allowRefreshRetry,
+            [this]() { refreshRepositoriesInternal(false); },
+            [this]() {
+                setBusy(false);
+                invalidateActiveAccountToken(tr("GitHub session expired. Please sign in again."));
+            });
         return;
     }
 
     if (reply->error() != QNetworkReply::NoError) {
+        setBusy(false);
         setErrorMessage(reply->errorString());
         return;
     }
@@ -494,27 +599,109 @@ void cwGitHubIntegration::handleRepositoryReply(QNetworkReply* reply)
     const QByteArray data = reply->readAll();
     QJsonParseError parseError{};
     const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        setErrorMessage(tr("Failed to parse repository list."));
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        setBusy(false);
+        setErrorMessage(tr("Failed to parse installations list."));
         return;
     }
 
-    std::vector<cwGitHubRepositoryItem> items;
-    const auto array = doc.array();
-    items.reserve(array.size());
-    for (const QJsonValue& entry : array) {
-        const QJsonObject obj = entry.toObject();
-        cwGitHubRepositoryItem repo;
-        repo.name = obj.value(QStringLiteral("name")).toString();
-        repo.description = obj.value(QStringLiteral("description")).toString();
-        repo.cloneUrl = obj.value(QStringLiteral("clone_url")).toString();
-        repo.sshUrl = obj.value(QStringLiteral("ssh_url")).toString();
-        repo.htmlUrl = obj.value(QStringLiteral("html_url")).toString();
-        repo.isPrivate = obj.value(QStringLiteral("private")).toBool();
-        items.push_back(std::move(repo));
+    const QJsonArray installations = doc.object().value(QStringLiteral("installations")).toArray();
+
+    if (installations.isEmpty()) {
+        setBusy(false);
+        setRepositories({});
+        setNeedsInstallation(true);
+        setErrorMessage({});
+        return;
     }
 
-    setRepositories(std::move(items));
+    // At least one installation exists; app is installed.
+    setNeedsInstallation(false);
+
+    QList<qint64> installationIds;
+    installationIds.reserve(installations.size());
+    for (const QJsonValue& entry : installations) {
+        const qint64 id = static_cast<qint64>(entry.toObject().value(QStringLiteral("id")).toInteger(-1));
+        if (id > 0) {
+            installationIds.append(id);
+        }
+    }
+
+    if (installationIds.isEmpty()) {
+        // Unexpected shape but non-empty array; treat as "installed, no repos".
+        setBusy(false);
+        setRepositories({});
+        setErrorMessage({});
+        return;
+    }
+
+    fetchInstallationRepositories(installationIds);
+}
+
+void cwGitHubIntegration::fetchInstallationRepositories(const QList<qint64>& installationIds)
+{
+    auto state = std::make_shared<RepoAggregationState>();
+    state->remaining = installationIds.size();
+
+    for (const qint64 installationId : installationIds) {
+        QUrl url(m_apiBaseUrl
+                 + QStringLiteral("/user/installations/%1/repositories").arg(installationId));
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("per_page"), QStringLiteral("100"));
+        url.setQuery(query);
+
+        QNetworkRequest request(url);
+        request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+        request.setRawHeader("Accept", "application/vnd.github+json");
+        request.setRawHeader("User-Agent", QByteArrayLiteral("CaveWhere"));
+        request.setRawHeader("Authorization", authorizationHeader());
+
+        QNetworkReply* reply = m_network.get(request);
+        QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, state]() {
+            handleInstallationRepositoriesReply(reply, state);
+        });
+    }
+}
+
+void cwGitHubIntegration::handleInstallationRepositoriesReply(
+    QNetworkReply* reply,
+    const std::shared_ptr<RepoAggregationState>& state)
+{
+    QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
+
+    if (!state || state->finalized) {
+        return;
+    }
+
+    // Parse this installation's repos into the aggregated list. Errors on a single
+    // installation don't abort the whole listing — they just contribute zero repos.
+    if (reply->error() == QNetworkReply::NoError) {
+        const QByteArray data = reply->readAll();
+        QJsonParseError parseError{};
+        const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+        if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+            const QJsonArray repos = doc.object().value(QStringLiteral("repositories")).toArray();
+            for (const QJsonValue& entry : repos) {
+                const QJsonObject obj = entry.toObject();
+                cwGitHubRepositoryItem repo;
+                repo.name = obj.value(QStringLiteral("name")).toString();
+                repo.description = obj.value(QStringLiteral("description")).toString();
+                repo.cloneUrl = obj.value(QStringLiteral("clone_url")).toString();
+                repo.sshUrl = obj.value(QStringLiteral("ssh_url")).toString();
+                repo.htmlUrl = obj.value(QStringLiteral("html_url")).toString();
+                repo.isPrivate = obj.value(QStringLiteral("private")).toBool();
+                state->aggregated.push_back(std::move(repo));
+            }
+        }
+    }
+
+    if (--state->remaining > 0) {
+        return;
+    }
+
+    state->finalized = true;
+    setBusy(false);
+    setRepositories(std::move(state->aggregated));
     setErrorMessage({});
 }
 
@@ -538,11 +725,15 @@ void cwGitHubIntegration::invalidateActiveAccountToken(const QString& message)
     const QString accountId = resolveActiveGitHubAccountId();
 
     if (!accountId.isEmpty()) {
-        clearStoredAccessToken(accountId);
+        clearStoredCredentials(accountId);
     }
 
-    if (!m_accessToken.isEmpty()) {
-        m_accessToken.clear();
+    const bool hadToken = !m_accessToken.isEmpty();
+    m_accessToken.clear();
+    m_refreshToken.clear();
+    m_accessTokenExpiresAt = -1;
+    setNeedsInstallation(false);
+    if (hadToken) {
         emit accessTokenChanged();
     }
 
@@ -576,6 +767,14 @@ void cwGitHubIntegration::setApiBaseUrl(const QString& url)
 
 void cwGitHubIntegration::createRepository(const QString& name, bool isPrivate, const QString& org)
 {
+    createRepositoryInternal(name, isPrivate, org, true);
+}
+
+void cwGitHubIntegration::createRepositoryInternal(const QString& name,
+                                                    bool isPrivate,
+                                                    const QString& org,
+                                                    bool allowRefreshRetry)
+{
     const QUrl url(m_apiBaseUrl
                    + (org.isEmpty()
                       ? QStringLiteral("/user/repos")
@@ -593,12 +792,17 @@ void cwGitHubIntegration::createRepository(const QString& name, bool isPrivate, 
         {QStringLiteral("auto_init"), false}
     };
     QNetworkReply* reply = m_network.post(request, QJsonDocument(body).toJson());
-    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, name]() {
-        handleCreateRepositoryReply(reply, name);
+    QObject::connect(reply, &QNetworkReply::finished, this,
+                     [this, reply, name, isPrivate, org, allowRefreshRetry]() {
+        handleCreateRepositoryReply(reply, name, isPrivate, org, allowRefreshRetry);
     });
 }
 
-void cwGitHubIntegration::handleCreateRepositoryReply(QNetworkReply* reply, const QString& repoName)
+void cwGitHubIntegration::handleCreateRepositoryReply(QNetworkReply* reply,
+                                                       const QString& repoName,
+                                                       bool isPrivate,
+                                                       const QString& org,
+                                                       bool allowRefreshRetry)
 {
     QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
 
@@ -613,10 +817,18 @@ void cwGitHubIntegration::handleCreateRepositoryReply(QNetworkReply* reply, cons
     const QString githubMessage = obj.value(QStringLiteral("message")).toString();
 
     if (statusCode == 401 || statusCode == 403) {
-        invalidateActiveAccountToken(githubMessage.isEmpty()
-                                         ? tr("GitHub session expired. Please sign in again.")
-                                         : githubMessage);
-        emit repositoryCreationFailed(m_errorMessage);
+        // 403 is not recoverable via refresh; only 401 triggers a retry attempt.
+        const bool canRetry = (statusCode == 401) && allowRefreshRetry;
+        handleUnauthorized(canRetry,
+            [this, repoName, isPrivate, org]() {
+                createRepositoryInternal(repoName, isPrivate, org, false);
+            },
+            [this, githubMessage]() {
+                invalidateActiveAccountToken(githubMessage.isEmpty()
+                                                 ? tr("GitHub session expired. Please sign in again.")
+                                                 : githubMessage);
+                emit repositoryCreationFailed(m_errorMessage);
+            });
         return;
     }
 
@@ -651,11 +863,149 @@ QString cwGitHubIntegration::resolveActiveGitHubAccountId() const
     return m_activeAccountId;
 }
 
+bool cwGitHubIntegration::isAccessTokenNearExpiry() const
+{
+    // Token is "near expiry" if we have an expiry timestamp and it's within
+    // 60s of the current time (or already past).
+    if (m_accessTokenExpiresAt < 0) {
+        return false;
+    }
+    return (m_accessTokenExpiresAt - QDateTime::currentSecsSinceEpoch()) < 60;
+}
+
+void cwGitHubIntegration::handleUnauthorized(bool allowRefreshRetry,
+                                               std::function<void()> onRetry,
+                                               std::function<void()> onFail)
+{
+    if (allowRefreshRetry && !m_refreshToken.isEmpty()) {
+        attemptTokenRefresh([onRetry = std::move(onRetry),
+                             onFail = std::move(onFail)](bool ok) {
+            if (ok) {
+                onRetry();
+            } else {
+                onFail();
+            }
+        });
+        return;
+    }
+    onFail();
+}
+
+void cwGitHubIntegration::attemptTokenRefresh(std::function<void(bool)> completion)
+{
+    if (m_refreshToken.isEmpty()) {
+        if (completion) {
+            completion(false);
+        }
+        return;
+    }
+
+    if (m_refreshInFlight) {
+        if (completion) {
+            m_pendingRefreshCallbacks.push_back(std::move(completion));
+        }
+        return;
+    }
+
+    m_refreshInFlight = true;
+
+    QNetworkRequest request(QUrl(QStringLiteral("https://github.com/login/oauth/access_token")));
+    request.setHeader(QNetworkRequest::ContentTypeHeader,
+                      QStringLiteral("application/x-www-form-urlencoded"));
+    request.setRawHeader("Accept", "application/json");
+    request.setRawHeader("User-Agent", QByteArrayLiteral("CaveWhere"));
+
+    QUrlQuery form;
+    form.addQueryItem(QStringLiteral("client_id"), resolveClientId());
+    form.addQueryItem(QStringLiteral("grant_type"), QStringLiteral("refresh_token"));
+    form.addQueryItem(QStringLiteral("refresh_token"), m_refreshToken);
+    const QByteArray body = form.query(QUrl::FullyEncoded).toUtf8();
+
+    QNetworkReply* reply = m_network.post(request, body);
+    QObject::connect(reply, &QNetworkReply::finished, this,
+                     [this, reply, completion = std::move(completion)]() mutable {
+        QScopedPointer<QNetworkReply, QScopedPointerDeleteLater> guard(reply);
+        const QByteArray data = reply->readAll();
+        const auto result = cwGitHubDeviceAuth::parseAccessTokenResponse(data);
+        const bool success = result.success && !result.accessToken.isEmpty();
+
+        if (success) {
+            m_accessToken = result.accessToken;
+            if (!result.refreshToken.isEmpty()) {
+                m_refreshToken = result.refreshToken;
+            }
+            m_accessTokenExpiresAt = (result.expiresInSec > 0)
+                ? (QDateTime::currentSecsSinceEpoch() + result.expiresInSec)
+                : -1;
+            emit accessTokenChanged();
+
+            const QString accountId = resolveActiveGitHubAccountId();
+            if (!accountId.isEmpty()) {
+                storeCredentialsForAccount(accountId);
+            }
+        } else if (result.errorName == QStringLiteral("bad_refresh_token")
+                   || result.errorName == QStringLiteral("invalid_grant")) {
+            // Refresh token is no longer valid on GitHub's side; forget it locally
+            // so the next 401 goes straight to the user-prompt path.
+            m_refreshToken.clear();
+            const QString accountId = resolveActiveGitHubAccountId();
+            if (!accountId.isEmpty() && m_credentialStore) {
+                m_credentialStore->deleteRefreshToken(cwRemoteAccountModel::Provider::GitHub,
+                                                     accountId, this);
+            }
+        }
+
+        m_refreshInFlight = false;
+
+        auto pending = std::move(m_pendingRefreshCallbacks);
+        m_pendingRefreshCallbacks.clear();
+        if (completion) {
+            completion(success);
+        }
+        for (auto& cb : pending) {
+            if (cb) {
+                cb(success);
+            }
+        }
+    });
+}
+
 QString cwGitHubIntegration::resolveClientId()
 {
     const QByteArray envValue = qgetenv(GitHubDeviceClientIdEnv);
     if (!envValue.isEmpty()) {
-        return QString::fromUtf8(envValue);
+        const QString candidate = QString::fromUtf8(envValue);
+        if (isSafeIdentifier(candidate)) {
+            return candidate;
+        }
+        qWarning() << "Ignoring" << GitHubDeviceClientIdEnv << "override: value contains characters outside [A-Za-z0-9_-]";
     }
     return QString::fromUtf8(DefaultGitHubClientId);
+}
+
+QString cwGitHubIntegration::resolveAppSlug()
+{
+    const QByteArray envValue = qgetenv(GitHubAppSlugEnv);
+    if (!envValue.isEmpty()) {
+        const QString candidate = QString::fromUtf8(envValue);
+        if (isSafeIdentifier(candidate)) {
+            return candidate;
+        }
+        qWarning() << "Ignoring" << GitHubAppSlugEnv << "override: value contains characters outside [A-Za-z0-9_-]";
+    }
+    return QString::fromUtf8(DefaultGitHubAppSlug);
+}
+
+QUrl cwGitHubIntegration::installationUrl() const
+{
+    return QUrl(QStringLiteral("https://github.com/apps/%1/installations/new").arg(resolveAppSlug()));
+}
+
+void cwGitHubIntegration::setNeedsInstallation(bool needsInstallation)
+{
+    if (m_needsInstallation == needsInstallation) {
+        return;
+    }
+    m_needsInstallation = needsInstallation;
+    emit needsInstallationChanged();
 }
