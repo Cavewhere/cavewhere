@@ -121,37 +121,21 @@ void cwGitHubDeviceAuth::poll() {
         const QByteArray data = reply->readAll();
         reply->deleteLater();
 
-        QJsonParseError parseError{};
-        const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-        AccessTokenResult result;
+        const AccessTokenResult result = parseAccessTokenResponse(data);
 
-        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-            result.success = false;
-            result.errorName = QStringLiteral("parse_error");
-            result.errorDescription = QStringLiteral("Failed to parse token response.");
-            scheduleNextPoll(m_currentPollIntervalSeconds);
-            emit accessTokenReceived(result);
-            return;
-        }
-
-        const QJsonObject obj = doc.object();
-
-        if (obj.contains(QStringLiteral("error"))) {
-            result.success = false;
-
-            result.errorName = obj.value(QStringLiteral("error")).toString();
-            result.errorDescription = obj.value(QStringLiteral("error_description")).toString();
-
+        if (!result.success) {
             if (result.errorName == QStringLiteral("slow_down")) {
-                const int serverInterval = obj.value(QStringLiteral("interval")).toInt(0);
+                // GitHub hints a new interval in the response; re-parse directly for it.
+                QJsonDocument slowDoc = QJsonDocument::fromJson(data);
+                const int serverInterval = slowDoc.isObject()
+                    ? slowDoc.object().value(QStringLiteral("interval")).toInt(0)
+                    : 0;
                 const int intervalSec = serverInterval > 0 ? serverInterval : (m_currentPollIntervalSeconds + 5);
                 m_currentPollIntervalSeconds = qMax(1, intervalSec);
                 scheduleNextPoll(m_currentPollIntervalSeconds);
             } else if (result.errorName == QStringLiteral("expired_token") ||
                        result.errorName == QStringLiteral("access_denied")) {
                 cancel();
-            } else if (result.errorName == QStringLiteral("authorization_pending")) {
-                scheduleNextPoll(m_currentPollIntervalSeconds);
             } else {
                 scheduleNextPoll(m_currentPollIntervalSeconds);
             }
@@ -159,14 +143,46 @@ void cwGitHubDeviceAuth::poll() {
             return;
         }
 
-        result.success = true;
-        result.accessToken = obj.value(QStringLiteral("access_token")).toString();
-        result.tokenType = obj.value(QStringLiteral("token_type")).toString();
-        result.scope = obj.value(QStringLiteral("scope")).toString();
-
         cancel();
         emit accessTokenReceived(result);
     });
+}
+
+cwGitHubDeviceAuth::AccessTokenResult
+cwGitHubDeviceAuth::parseAccessTokenResponse(const QByteArray& body)
+{
+    AccessTokenResult result;
+
+    QJsonParseError parseError{};
+    const QJsonDocument doc = QJsonDocument::fromJson(body, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        result.success = false;
+        result.errorName = QStringLiteral("parse_error");
+        result.errorDescription = QStringLiteral("Failed to parse token response.");
+        return result;
+    }
+
+    const QJsonObject obj = doc.object();
+
+    if (obj.contains(QStringLiteral("error"))) {
+        result.success = false;
+        result.errorName = obj.value(QStringLiteral("error")).toString();
+        result.errorDescription = obj.value(QStringLiteral("error_description")).toString();
+        return result;
+    }
+
+    result.success = true;
+    result.accessToken = obj.value(QStringLiteral("access_token")).toString();
+    result.tokenType = obj.value(QStringLiteral("token_type")).toString();
+    result.scope = obj.value(QStringLiteral("scope")).toString();
+    result.refreshToken = obj.value(QStringLiteral("refresh_token")).toString();
+    result.expiresInSec = obj.contains(QStringLiteral("expires_in"))
+        ? static_cast<qint64>(obj.value(QStringLiteral("expires_in")).toInteger(-1))
+        : -1;
+    result.refreshExpiresInSec = obj.contains(QStringLiteral("refresh_token_expires_in"))
+        ? static_cast<qint64>(obj.value(QStringLiteral("refresh_token_expires_in")).toInteger(-1))
+        : -1;
+    return result;
 }
 
 void cwGitHubDeviceAuth::updateCountdown()

@@ -33,8 +33,7 @@
 #include "cwNoteLiDAR.h"
 #include "CaveWhereTestLibExport.h"
 #include "cwFutureManagerModel.h"
-
-class cwRootData;
+#include "cwRootData.h"
 
 namespace QQuickGit {
 class GitRepository;

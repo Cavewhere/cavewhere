@@ -1,0 +1,165 @@
+Privacy Policy for CaveWhere
+
+Effective Date: 2026-04-23
+
+1. Introduction
+
+CaveWhere is a desktop application for cave mapping and 3D visualization. All
+core operations (survey editing, rendering, note digitization, project save
+and load) are performed locally on your device. CaveWhere does not collect,
+store, or transmit personal user data for analytics, advertising, or
+profiling. The application does make a small number of network requests for
+specific features, described below.
+
+2. Information Collection and Use
+
+CaveWhere does not operate a backend server and does not collect user data on
+our own infrastructure. Any data that leaves your device is sent directly to
+a third-party service that you have chosen to use (for example, GitHub when
+you sign in to sync a project, or Discord's public widget endpoint for
+support server status).
+
+3. Cookies and Tracking Technologies
+
+CaveWhere does not use cookies, advertising identifiers, or other tracking
+technologies.
+
+4. Discord Server Status
+
+CaveWhere periodically fetches the public Discord widget endpoint:
+
+  https://discord.com/api/guilds/1217210007443996764/widget.json
+
+This endpoint returns publicly available information about the CaveWhere
+support server's online status. No personal or account information is sent
+with this request.
+
+5. Git and GitHub Integration
+
+CaveWhere supports saving and collaborating on projects using Git, including
+projects hosted on GitHub. These features are opt-in: they are only used when
+you sign in to GitHub from within the application or configure a Git remote
+for a project. If you do not use these features, no data is sent to GitHub
+or to any Git host.
+
+5.1 GitHub Sign-In (OAuth Device Flow)
+
+When you sign in to GitHub from CaveWhere, the application uses GitHub's
+standard OAuth 2.0 Device Authorization Flow. This involves requests to:
+
+  https://github.com/login/device/code
+  https://github.com/login/oauth/access_token
+
+CaveWhere requests the OAuth scopes "repo" and "read:user" so that it can
+list, create, clone, push to, and pull from your GitHub repositories on your
+behalf, and read your GitHub username. The resulting access token is stored
+in your operating system's secure credential store (Keychain on macOS,
+Credential Manager on Windows, or Secret Service / libsecret on Linux) via
+the qtkeychain library. Tokens are removed from that store when you sign out
+of the associated account in CaveWhere.
+
+5.2 GitHub API Requests
+
+While signed in, CaveWhere may make authenticated requests to the GitHub
+REST API at https://api.github.com, including:
+
+  - /user                      (to retrieve your GitHub username)
+  - /user/repos                (to list or create your repositories)
+  - /orgs/{organization}/repos (to list or create repositories in an
+                                organization you belong to)
+
+Requests include your GitHub access token in the HTTP Authorization header.
+Responses are used only in memory to populate the in-app repository picker
+and are not transmitted anywhere else.
+
+5.3 Git Operations (Clone, Pull, Push)
+
+When you clone, pull, or push a project, CaveWhere uses the standard Git
+protocol (HTTPS or SSH) via the libgit2 library to communicate directly
+with the Git host you have configured — typically GitHub, but any Git host
+reachable by URL is supported. CaveWhere itself does not inspect or retain
+the contents of your repositories beyond what is required to perform the
+requested operation.
+
+  - Over HTTPS, CaveWhere authenticates using your stored GitHub access
+    token.
+  - Over SSH, CaveWhere first attempts to authenticate via your running
+    SSH agent. If no agent is available or the agent does not offer a
+    usable identity, CaveWhere falls back to reading an SSH private key
+    directly from disk. The locations checked, in order, are:
+
+        ~/.ssh/id_ed25519
+        ~/.ssh/id_rsa
+        ~/.ssh/id_ecdsa
+        <CaveWhere application config directory>/.ssh/id_ed25519
+        <CaveWhere application config directory>/.ssh/id_rsa
+
+    The contents of the private key are read into memory by libgit2 /
+    libssh2 only for the duration of the SSH handshake with the remote
+    host. CaveWhere does not copy your private key elsewhere, transmit it
+    to any third party, or upload it over the network; it is presented
+    only to the Git server you are connecting to, using the normal SSH
+    public-key authentication protocol.
+
+  - If no SSH key is available and you ask CaveWhere to generate one, the
+    application can create an RSA keypair and store it in the CaveWhere
+    application config directory under ".ssh/". Generated private keys
+    remain on your device; only the corresponding public key is shown to
+    you so that you can add it to your Git host account.
+
+Every Git commit includes a Git author signature composed of the name and
+email address associated with the CaveWhere remote account you have
+configured. This signature is written into the commit object and is
+published to the Git host as part of the normal push operation. If you do
+not want your name or email to appear in commits pushed to a remote host,
+do not configure a remote account or do not push the repository.
+
+5.4 Git LFS (Large File Storage)
+
+Cave projects can contain large note scans. When a repository uses Git LFS,
+CaveWhere contacts the repository's LFS endpoint (for GitHub, the
+repository-specific ".git/info/lfs" URL) to upload or download large file
+objects. LFS batch requests contain the object identifiers (SHA-256 hashes)
+and sizes of the files being transferred and are authenticated using HTTP
+Basic authentication with your GitHub access token.
+
+5.5 What CaveWhere Stores Locally for These Features
+
+  - GitHub OAuth access tokens are stored in the operating system credential
+    store described in Section 5.1.
+  - The display name, email address, and account identifier you associate
+    with a remote account are stored in the CaveWhere project or account
+    configuration on disk so they can be reused on subsequent sessions.
+  - If you ask CaveWhere to generate an SSH key for you, the generated
+    private and public key files are stored under the CaveWhere application
+    config directory (in a ".ssh" subfolder). Keys you created outside of
+    CaveWhere remain where you put them (typically "~/.ssh/") and are only
+    read at the moment of an SSH Git operation, as described in Section
+    5.3.
+  - No GitHub passwords are ever requested, transmitted, or stored by
+    CaveWhere.
+
+6. Security
+
+CaveWhere does not operate a server that stores user data, so there is no
+central data store that could be breached. Credentials used for optional
+Git and GitHub features are stored only in your operating system's native
+secure credential store. You should continue to follow standard security
+practices for your computer, your GitHub account (including two-factor
+authentication), and any SSH keys you use with Git.
+
+7. Children's Privacy
+
+CaveWhere is not directed to children under the age of 13, and we do not
+knowingly collect information from children.
+
+8. Changes to This Privacy Policy
+
+We may update this policy from time to time. Updates will be published at
+https://cavewhere.com/cavewhere-privacy-policy/ with a revised effective
+date. Material changes affecting the Git and GitHub integration will be
+called out in the application's release notes.
+
+9. Contact Us
+
+Questions about this policy can be sent to support@cavewhere.com.

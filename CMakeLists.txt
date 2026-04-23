@@ -192,7 +192,8 @@ find_package(libgit2)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 #Add address sanitizer for clang build only
-if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+option(ASAN_ENABLED "Enable AddressSanitizer on macOS Debug builds" ON)
+if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND ASAN_ENABLED)
     add_compile_options($<$<CONFIG:Debug>:-fsanitize=address>)
     add_link_options($<$<CONFIG:Debug>:-fsanitize=address>)
 endif()
@@ -457,7 +458,6 @@ if(BUILD_TESTING)
         Qt6::Widgets
         Qt6::Quick
         Qt6::Qml
-        Catch2::Catch2
         qt6keychain
         cavewherelib
     )

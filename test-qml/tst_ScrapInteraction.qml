@@ -288,9 +288,14 @@ MainWindowTest {
             verify(leadPoint.x <= render.width)
             verify(leadPoint.y <= render.height)
 
-            //lead is not in the center
-            tryVerify(() => { return leadPoint.x !== render.width * 0.5; })
-            tryVerify(() => { return leadPoint.y !== render.height * 0.5; })
+            // lead is not in the center. Initially the projection places the
+            // lead at exact viewport center; a secondary cwTransformUpdater
+            // tick ~100ms later shifts it off-center. Bumped to 10s from the
+            // default 5s since the nightly has flaked at the 5s budget.
+            tryVerify(() => { return leadPoint.x !== render.width * 0.5; }, 10000,
+                      "lead point should move off horizontal center")
+            tryVerify(() => { return leadPoint.y !== render.height * 0.5; }, 10000,
+                      "lead point should move off vertical center")
 
             mouseClick(leadPoint)
 

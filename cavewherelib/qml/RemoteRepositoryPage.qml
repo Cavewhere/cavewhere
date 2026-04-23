@@ -45,11 +45,11 @@ StandardPage {
                 },
                 PropertyChanges {
                     target: gitHubGroup
-                    visible: gitHub.authState !== GitHubIntegration.Authorized
+                    visible: gitHub.authState !== GitHubIntegration.Authorized || gitHub.needsInstallation
                 },
                 PropertyChanges {
                     target: repositoryLoader
-                    active: gitHub.authState === GitHubIntegration.Authorized
+                    active: gitHub.authState === GitHubIntegration.Authorized && !gitHub.needsInstallation
                 }
             ]
         },
@@ -62,11 +62,11 @@ StandardPage {
                 },
                 PropertyChanges {
                     target: gitHubGroup
-                    visible: gitHub.authState !== GitHubIntegration.Authorized
+                    visible: gitHub.authState !== GitHubIntegration.Authorized || gitHub.needsInstallation
                 },
                 PropertyChanges {
                     target: repositoryLoader
-                    active: gitHub.authState === GitHubIntegration.Authorized
+                    active: gitHub.authState === GitHubIntegration.Authorized && !gitHub.needsInstallation
                 },
                 StateChangeScript {
                     script: {

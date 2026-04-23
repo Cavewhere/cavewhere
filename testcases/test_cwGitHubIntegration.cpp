@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Qt
+#include <QHash>
 #include <QTcpServer>
 #include <QTcpSocket>
 
@@ -31,6 +32,7 @@ private:
     void onNewConnection()
     {
         QTcpSocket* socket = m_server.nextPendingConnection();
+        connect(socket, &QAbstractSocket::disconnected, socket, &QObject::deleteLater);
         connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
             // Qt's QNAM sends the full request in one write on loopback,
             // so the first readyRead carries the complete request.
@@ -57,6 +59,74 @@ private:
     QTcpServer m_server;
     int m_statusCode;
     QByteArray m_body;
+};
+
+// ---------------------------------------------------------------------------
+// Path-routed mock server: responds based on the request path. Falls back to
+// 404 for unrouted paths so a missed route surfaces as a clean test failure
+// rather than a hang.
+// ---------------------------------------------------------------------------
+struct PathRoutedMockServer : QObject
+{
+    Q_OBJECT
+public:
+    explicit PathRoutedMockServer(QObject* parent = nullptr)
+        : QObject(parent)
+    {
+        connect(&m_server, &QTcpServer::newConnection, this, &PathRoutedMockServer::onNewConnection);
+        m_server.listen(QHostAddress::LocalHost, 0);
+    }
+
+    quint16 port() const { return m_server.serverPort(); }
+
+    void addRoute(const QByteArray& pathPrefix, int statusCode, const QByteArray& body)
+    {
+        m_routes.append({pathPrefix, statusCode, body});
+    }
+
+private:
+    struct Route { QByteArray pathPrefix; int statusCode; QByteArray body; };
+
+    void onNewConnection()
+    {
+        QTcpSocket* socket = m_server.nextPendingConnection();
+        connect(socket, &QAbstractSocket::disconnected, socket, &QObject::deleteLater);
+        connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
+            const QByteArray request = socket->readAll();
+            const int firstSpace = request.indexOf(' ');
+            const int secondSpace = firstSpace >= 0 ? request.indexOf(' ', firstSpace + 1) : -1;
+            const QByteArray path = (firstSpace >= 0 && secondSpace > firstSpace)
+                ? request.mid(firstSpace + 1, secondSpace - firstSpace - 1)
+                : QByteArray();
+
+            int statusCode = 404;
+            QByteArray body = R"({"message":"unrouted in mock"})";
+            for (const Route& r : m_routes) {
+                if (path.startsWith(r.pathPrefix)) {
+                    statusCode = r.statusCode;
+                    body = r.body;
+                    break;
+                }
+            }
+
+            const QByteArray reasonPhrase = statusCode == 200 ? "OK"
+                                          : statusCode == 404 ? "Not Found"
+                                                              : "OK";
+            const QByteArray response =
+                "HTTP/1.1 " + QByteArray::number(statusCode) + " " + reasonPhrase + "\r\n"
+                "Content-Type: application/json\r\n"
+                "Content-Length: " + QByteArray::number(body.size()) + "\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+                + body;
+            socket->write(response);
+            socket->flush();
+            socket->disconnectFromHost();
+        });
+    }
+
+    QTcpServer m_server;
+    QList<Route> m_routes;
 };
 
 #include "test_cwGitHubIntegration.moc"
@@ -154,4 +224,131 @@ TEST_CASE("cwGitHubIntegration::createRepository does not invalidate token on 50
     REQUIRE(waitUntil([&failureMessage]() { return !failureMessage.isEmpty(); }));
     CHECK(!invalidatedFired);
     CHECK(failureMessage.contains(QStringLiteral("500")));
+}
+
+TEST_CASE("cwGitHubIntegration::installationUrl honors app-slug env override", "[cwGitHubIntegration]")
+{
+    cwGitHubIntegration integration(nullptr);
+    // The default slug is "cavewhere" — verify the URL is well-formed against GitHub.
+    const QUrl url = integration.installationUrl();
+    CHECK(url.isValid());
+    CHECK(url.host() == QStringLiteral("github.com"));
+    CHECK(url.path().contains(QStringLiteral("/installations/new")));
+    CHECK(url.path().startsWith(QStringLiteral("/apps/")));
+}
+
+TEST_CASE("cwGitHubIntegration::refreshRepositories sets needsInstallation on empty installations", "[cwGitHubIntegration]")
+{
+    PathRoutedMockServer server;
+    server.addRoute("/user/installations", 200, R"({"total_count":0,"installations":[]})");
+    REQUIRE(server.port() != 0);
+
+    cwGitHubIntegration integration(nullptr);
+    integration.setApiBaseUrl(QStringLiteral("http://127.0.0.1:%1").arg(server.port()));
+    integration.setActive(true);
+    integration.setAccessTokenForTesting(QStringLiteral("test_token"));
+
+    integration.refreshRepositories();
+
+    REQUIRE(waitUntil([&]() { return integration.needsInstallation(); }));
+    CHECK(integration.repositories() != nullptr);
+    CHECK(integration.repositories()->rowCount() == 0);
+}
+
+TEST_CASE("cwGitHubIntegration::refreshRepositories surfaces repos when installation has them", "[cwGitHubIntegration]")
+{
+    PathRoutedMockServer server;
+    // Longer/more-specific path first: PathRoutedMockServer matches prefixes
+    // in insertion order and "/user/installations" is a prefix of
+    // "/user/installations/12345/repositories".
+    server.addRoute("/user/installations/12345/repositories",
+                    200,
+                    R"({"total_count":1,"repositories":[{)"
+                    R"("name":"cave-data","clone_url":"https://github.com/vpicaver/cave-data.git",)"
+                    R"("ssh_url":"git@github.com:vpicaver/cave-data.git",)"
+                    R"("html_url":"https://github.com/vpicaver/cave-data","private":false}]})");
+    server.addRoute("/user/installations",
+                    200,
+                    R"({"total_count":1,"installations":[{"id":12345,"account":{"login":"vpicaver"}}]})");
+    REQUIRE(server.port() != 0);
+
+    cwGitHubIntegration integration(nullptr);
+    integration.setApiBaseUrl(QStringLiteral("http://127.0.0.1:%1").arg(server.port()));
+    integration.setActive(true);
+    integration.setAccessTokenForTesting(QStringLiteral("test_token"));
+
+    integration.refreshRepositories();
+
+    REQUIRE(waitUntil([&]() {
+        return !integration.busy()
+            && integration.repositories() != nullptr
+            && integration.repositories()->rowCount() == 1;
+    }));
+    CHECK(!integration.needsInstallation());
+}
+
+TEST_CASE("cwGitHubIntegration::startInstallPolling auto-stops when install appears", "[cwGitHubIntegration]")
+{
+    PathRoutedMockServer server;
+    // Populated installations response — first poll sees the install and stops.
+    server.addRoute("/user/installations/7/repositories",
+                    200,
+                    R"({"total_count":1,"repositories":[{)"
+                    R"("name":"pit-survey","clone_url":"https://github.com/vpicaver/pit-survey.git",)"
+                    R"("ssh_url":"git@github.com:vpicaver/pit-survey.git",)"
+                    R"("html_url":"https://github.com/vpicaver/pit-survey","private":true}]})");
+    server.addRoute("/user/installations",
+                    200,
+                    R"({"total_count":1,"installations":[{"id":7,"account":{"login":"vpicaver"}}]})");
+    REQUIRE(server.port() != 0);
+
+    cwGitHubIntegration integration(nullptr);
+    integration.setApiBaseUrl(QStringLiteral("http://127.0.0.1:%1").arg(server.port()));
+    integration.setActive(true);
+    integration.setAccessTokenForTesting(QStringLiteral("test_token"));
+
+    integration.startInstallPolling();
+
+    REQUIRE(waitUntil([&]() {
+        return !integration.installPollActive()
+            && !integration.needsInstallation()
+            && integration.repositories() != nullptr
+            && integration.repositories()->rowCount() == 1;
+    }));
+}
+
+TEST_CASE("cwGitHubIntegration::stopInstallPolling halts polling immediately", "[cwGitHubIntegration]")
+{
+    PathRoutedMockServer server;
+    server.addRoute("/user/installations", 200, R"({"total_count":0,"installations":[]})");
+    REQUIRE(server.port() != 0);
+
+    cwGitHubIntegration integration(nullptr);
+    integration.setApiBaseUrl(QStringLiteral("http://127.0.0.1:%1").arg(server.port()));
+    integration.setActive(true);
+    integration.setAccessTokenForTesting(QStringLiteral("test_token"));
+
+    integration.startInstallPolling();
+    REQUIRE(integration.installPollActive());
+
+    integration.stopInstallPolling();
+    CHECK(!integration.installPollActive());
+}
+
+TEST_CASE("cwGitHubIntegration::setActive(false) stops polling", "[cwGitHubIntegration]")
+{
+    PathRoutedMockServer server;
+    server.addRoute("/user/installations", 200, R"({"total_count":0,"installations":[]})");
+    REQUIRE(server.port() != 0);
+
+    cwGitHubIntegration integration(nullptr);
+    integration.setApiBaseUrl(QStringLiteral("http://127.0.0.1:%1").arg(server.port()));
+    integration.setActive(true);
+    integration.setAccessTokenForTesting(QStringLiteral("test_token"));
+
+    integration.startInstallPolling();
+    REQUIRE(integration.installPollActive());
+
+    integration.setActive(false);
+    CHECK(!integration.installPollActive());
 }

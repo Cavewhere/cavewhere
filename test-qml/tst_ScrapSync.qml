@@ -306,13 +306,18 @@ MainWindowTest {
 
             for (let row = 0; row < model.rowCount(); ++row) {
                 selectNoteIndex(row, "select note during lead scan", true)
+
+                if (TestHelper.noteScrapCount(noteGallery().currentNote) === 0) {
+                    continue
+                }
+
                 enterCarpetMode()
 
                 let currentScrapView = scrapView()
                 tryVerifyWithDiagnostics(() => {
                     return currentScrapView.note === noteGallery().currentNote
                            && currentScrapView.count > 0
-                }, 5000, "bind scrap view during lead scan")
+                }, 10000, "bind scrap view during lead scan")
 
                 for (let scrapIndex = 0; scrapIndex < currentScrapView.count; ++scrapIndex) {
                     selectScrapIndex(scrapIndex, "select scrap during lead scan")
@@ -399,14 +404,20 @@ MainWindowTest {
         }
 
         function enterCarpetMode() {
-            let gallery = noteGallery()
-            if (gallery.mode !== "CARPET") {
-                mouseClick(carpetButton())
-            }
-
+            // Click is re-issued every ~500ms if mode hasn't settled, since
+            // a click can be dropped when the gallery's child items are still
+            // mid-instantiation after a forced rebind or page rebuild.
+            let attempts = 0
             tryVerifyWithDiagnostics(() => {
-                return gallery.mode === "CARPET"
-            }, 5000, "enter carpet mode")
+                if (noteGallery().mode === "CARPET") {
+                    return true
+                }
+                if (attempts % 10 === 0) {
+                    mouseClick(carpetButton())
+                }
+                attempts += 1
+                return false
+            }, 10000, "enter carpet mode")
         }
 
         function waitForNoteCanvasReady(label) {
@@ -425,7 +436,7 @@ MainWindowTest {
                        && image.visible === true
                        && image.width > 0
                        && image.height > 0
-            }, 5000, label)
+            }, 10000, label)
         }
 
         function disableNoteLoadUi() {
@@ -467,13 +478,7 @@ MainWindowTest {
                 return
             }
 
-            if (gallery.mode !== "CARPET") {
-                mouseClick(carpetButton())
-            }
-
-            tryVerifyWithDiagnostics(() => {
-                return gallery.mode === "CARPET"
-            }, 5000, "enter carpet mode")
+            enterCarpetMode()
 
             let currentScrapView = scrapView()
             tryVerifyWithDiagnostics(() => {

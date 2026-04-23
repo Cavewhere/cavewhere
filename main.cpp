@@ -17,6 +17,8 @@
 #include <QFileInfo>
 #include <QtQml/qqml.h>
 #include <qpa/qplatformwindow.h>
+#include <QQuickStyle>
+#include <QStyleFactory>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -144,6 +146,14 @@ int main(int argc, char *argv[])
     if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORMTHEME")) {
         qputenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
     }
+#endif
+
+    // Fusion is the only built-in style that supports dark palettes on Windows and Linux.
+    // The native Windows Vista style always ignores the dark palette (Qt 6.5 blog).
+    // macOS native style handles dark mode correctly on its own.
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
+    QApplication::setStyle(QStyleFactory::create("Fusion")); // Qt Widgets
+    QQuickStyle::setStyle("Fusion");                          // Qt Quick Controls
 #endif
 
     //This needs to be first for QSettings

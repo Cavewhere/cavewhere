@@ -15,7 +15,6 @@
 #include <QSet>
 #include <QHash>
 #include <QList>
-#include <QSignalMapper>
 #include <QQmlEngine>
 
 //Our includes
@@ -57,30 +56,18 @@ private:
     QList<cwTask*> RunningTasks;
     QSet<cwTask*> WatchingTasks;
 
-    QSignalMapper* TaskStartedMapper;
-    QSignalMapper* TaskStoppedMapper;
-    QSignalMapper* TaskFinishedMapper;
-    QSignalMapper* TaskActiveMapper;
-    QSignalMapper* TaskNameMapper;
-    QSignalMapper* TaskProgressMapper;
-    QSignalMapper* TaskNumberOfStepsMapper;
-
-    QTime* ActiveTimer;
-
-    cwTask* convertToTask(QObject* task);
     void removeActiveTask(cwTask* task);
     void addActiveTask(cwTask* task);
+    void updateTask(cwTask* task, cwFutureManagerModel::Roles role);
 
-    void updateTask(QObject* taskObject, cwFutureManagerModel::Roles role);
-private slots:
-    void taskDeleted(QObject* taskObject);
-    void taskHasStarted(QObject* taskObject);
-    void taskHasStopped(QObject* taskObject);
-    void taskHasFinished(QObject* taskObject);
-    void taskIsActive(QObject* taskObject);
-    void updateTaskProgress(QObject* taskObject);
-    void updateTaskNumberOfSteps(QObject* taskObject);
-    void updateTaskName(QObject* taskObject);
+    void taskHasStarted(cwTask* task);
+    void taskHasStopped(cwTask* task);
+    void taskHasFinished(cwTask* task);
+    void taskEnded(cwTask* task);   // shared body for stopped and finished
+    void taskIsActive(cwTask* task);
+    void updateTaskProgress(cwTask* task);
+    void updateTaskNumberOfSteps(cwTask* task);
+    void updateTaskName(cwTask* task);
 };
 
 #endif // CWTASKMANAGERMODEL_H

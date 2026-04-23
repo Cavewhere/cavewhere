@@ -14,23 +14,8 @@
 #include "cwDebug.h"
 
 cwTaskManagerModel::cwTaskManagerModel(QObject *parent) :
-    QAbstractListModel(parent),
-    TaskStartedMapper(new QSignalMapper(this)),
-    TaskStoppedMapper(new QSignalMapper(this)),
-    TaskFinishedMapper(new QSignalMapper(this)),
-    TaskActiveMapper(new QSignalMapper(this)),
-    TaskNameMapper(new QSignalMapper(this)),
-    TaskProgressMapper(new QSignalMapper(this)),
-    TaskNumberOfStepsMapper(new QSignalMapper(this))
+    QAbstractListModel(parent)
 {
-    connect(TaskStartedMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(taskHasStarted(QObject*)));
-    connect(TaskStoppedMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(taskHasStopped(QObject*)));
-    connect(TaskFinishedMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(taskHasFinished(QObject*)));
-    connect(TaskActiveMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(taskIsActive(QObject*)));
-    connect(TaskNameMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(updateTaskName(QObject*)));
-    connect(TaskProgressMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(updateTaskProgress(QObject*)));
-    connect(TaskNumberOfStepsMapper, SIGNAL(mappedObject(QObject*)),
-            this, SLOT(updateTaskNumberOfSteps(QObject*)));
 }
 
 /**
@@ -94,25 +79,15 @@ void cwTaskManagerModel::addTask(cwTask *task)
 
         QTimer* timer = new QTimer(this);
         timer->setInterval(250);
-
         TaskToTimer.insert(task, timer);
 
-        connect(task, &cwTask::destroyed, this, &cwTaskManagerModel::taskDeleted);
-        connect(task, SIGNAL(preparingToStart()), TaskStartedMapper, SLOT(map()));
-        connect(task, SIGNAL(stopped()), TaskStoppedMapper, SLOT(map()));
-        connect(task, SIGNAL(finished()), TaskFinishedMapper, SLOT(map()));
-        connect(task, SIGNAL(progressChanged()), TaskProgressMapper, SLOT(map()));
-        connect(task, SIGNAL(numberOfStepsChanged(int)), TaskNumberOfStepsMapper, SLOT(map()));
-        connect(task, SIGNAL(nameChanged()), TaskNameMapper, SLOT(map()));
-        connect(timer, SIGNAL(timeout()), TaskActiveMapper, SLOT(map()));
-
-        TaskStartedMapper->setMapping(task, task);
-        TaskStoppedMapper->setMapping(task, task);
-        TaskFinishedMapper->setMapping(task, task);
-        TaskProgressMapper->setMapping(task, task);
-        TaskNumberOfStepsMapper->setMapping(task, task);
-        TaskNameMapper->setMapping(task, task);
-        TaskActiveMapper->setMapping(timer, task);
+        connect(task, &cwTask::preparingToStart, this, [this, task]() { taskHasStarted(task); });
+        connect(task, &cwTask::stopped,          this, [this, task]() { taskHasStopped(task); });
+        connect(task, &cwTask::finished,         this, [this, task]() { taskHasFinished(task); });
+        connect(task, &cwTask::progressChanged,  this, [this, task]() { updateTaskProgress(task); });
+        connect(task, &cwTask::numberOfStepsChanged, this, [this, task](int) { updateTaskNumberOfSteps(task); });
+        connect(task, &cwTask::nameChanged,      this, [this, task]() { updateTaskName(task); });
+        connect(timer, &QTimer::timeout,         this, [this, task]() { taskIsActive(task); });
     }
 }
 
@@ -127,21 +102,8 @@ void cwTaskManagerModel::removeTask(cwTask *task)
         QTimer* timer = TaskToTimer.value(task);
 
         disconnect(task, nullptr, this, nullptr);
-        disconnect(task, nullptr, TaskStartedMapper, nullptr);
-        disconnect(task, nullptr, TaskStoppedMapper, nullptr);
-        disconnect(task, nullptr, TaskFinishedMapper, nullptr);
-        disconnect(task, nullptr, TaskProgressMapper, nullptr);
-        disconnect(task, nullptr, TaskNumberOfStepsMapper, nullptr);
-        disconnect(task, nullptr, TaskNameMapper, nullptr);
-        disconnect(timer, nullptr, TaskActiveMapper, nullptr);
-
-        TaskStartedMapper->removeMappings(task);
-        TaskStoppedMapper->removeMappings(task);
-        TaskFinishedMapper->removeMappings(task);
-        TaskProgressMapper->removeMappings(task);
-        TaskNumberOfStepsMapper->removeMappings(task);
-        TaskNameMapper->removeMappings(task);
-        TaskActiveMapper->removeMappings(timer);
+        disconnect(timer, nullptr, this, nullptr);
+        timer->stop();
 
         WatchingTasks.remove(task);
         TaskToTimer.remove(task);
@@ -163,16 +125,6 @@ bool cwTaskManagerModel::isIdle() const
                         [](const cwTask* task) { return task->isRunning(); });
 }
 
-/**
- * @brief cwTaskManagerModel::convertToTask
- * @param task
- * @return Return's task as a cwTask, if task isn't a cwTask, this assert's
- */
-cwTask *cwTaskManagerModel::convertToTask(QObject *task)
-{
-    Q_ASSERT(dynamic_cast<cwTask*>(task) != nullptr);
-    return static_cast<cwTask*>(task);
-}
 
 /**
  * @brief cwTaskManagerModel::removeActiveTask
@@ -206,122 +158,54 @@ void cwTaskManagerModel::addActiveTask(cwTask *task)
     endInsertRows();
 }
 
-/**
- * @brief cwTaskManagerModel::taskDeleted
- * @param task
- */
-void cwTaskManagerModel::taskDeleted(QObject *taskObject)
+void cwTaskManagerModel::taskHasStarted(cwTask* task)
 {
-    Q_UNUSED(taskObject);
+    Q_ASSERT(TaskToTimer.contains(task));
+    TaskToTimer.value(task)->start();
 }
 
-/**
- * @brief cwTaskManagerModel::taskHasStarted
- * @param taskObject
- */
-void cwTaskManagerModel::taskHasStarted(QObject *taskObject)
+void cwTaskManagerModel::taskHasStopped(cwTask* task)
 {
-    cwTask* task = convertToTask(taskObject);
-
-    Q_ASSERT(TaskToTimer.contains(task));
-
-    QTimer* timer = TaskToTimer.value(task);
-    timer->start();
+    taskEnded(task);
 }
 
-/**
- * @brief cwTaskManagerModel::taskHasStopped
- * @param taskObject
- */
-void cwTaskManagerModel::taskHasStopped(QObject *taskObject)
+void cwTaskManagerModel::taskHasFinished(cwTask* task)
 {
-    cwTask* task = convertToTask(taskObject);
+    taskEnded(task);
+}
 
+void cwTaskManagerModel::taskEnded(cwTask* task)
+{
     Q_ASSERT(TaskToTimer.contains(task));
-
-    QTimer* timer = TaskToTimer.value(task);
-    timer->stop();
-
+    TaskToTimer.value(task)->stop();
     removeActiveTask(task);
-
     if (isIdle()) {
         emit becameIdle();
     }
 }
 
-/**
- * @brief cwTaskManagerModel::taskHasFinished
- * @param taskObject
- */
-void cwTaskManagerModel::taskHasFinished(QObject *taskObject)
+void cwTaskManagerModel::taskIsActive(cwTask* task)
 {
-    cwTask* task = convertToTask(taskObject);
-
-    Q_ASSERT(TaskToTimer.contains(task));
-
-    QTimer* timer = TaskToTimer.value(task);
-    timer->stop();
-
-    removeActiveTask(task);
-
-    if (isIdle()) {
-        emit becameIdle();
-    }
-}
-
-/**
- * @brief cwTaskManagerModel::taskIsActive
- * @param taskObject
- */
-void cwTaskManagerModel::taskIsActive(QObject *taskObject)
-{
-    cwTask* task = convertToTask(taskObject);
     addActiveTask(task);
 }
 
-/**
- * @brief cwTaskManagerModel::updateTaskProgress
- * @param taskObject
- *
- * This udpates the model with the new progress
- */
-void cwTaskManagerModel::updateTaskProgress(QObject *taskObject)
+void cwTaskManagerModel::updateTaskProgress(cwTask* task)
 {
-    updateTask(taskObject, cwFutureManagerModel::ProgressRole);
+    updateTask(task, cwFutureManagerModel::ProgressRole);
 }
 
-/**
- * @brief cwTaskManagerModel::updateTaskNumberOfSteps
- * @param taskObject
- *
- * This udpates the model with new number of steps
- */
-void cwTaskManagerModel::updateTaskNumberOfSteps(QObject *taskObject)
+void cwTaskManagerModel::updateTaskNumberOfSteps(cwTask* task)
 {
-    updateTask(taskObject, cwFutureManagerModel::NumberOfStepRole);
+    updateTask(task, cwFutureManagerModel::NumberOfStepRole);
 }
 
-/**
- * @brief cwTaskManagerModel::updateTaskName
- * @param taskObject
- *
- * This updates the model with new name of task Object
- */
-void cwTaskManagerModel::updateTaskName(QObject *taskObject)
+void cwTaskManagerModel::updateTaskName(cwTask* task)
 {
-    updateTask(taskObject, cwFutureManagerModel::NameRole);
+    updateTask(task, cwFutureManagerModel::NameRole);
 }
 
-/**
- * @brief cwTaskManagerModel::updateTask
- * @param taskObject
- * @param role
- *
- * This is a helper function to signal that the model's data has been updated
- */
-void cwTaskManagerModel::updateTask(QObject *taskObject, cwFutureManagerModel::Roles role)
+void cwTaskManagerModel::updateTask(cwTask* task, cwFutureManagerModel::Roles role)
 {
-    cwTask* task = convertToTask(taskObject);
     int index = RunningTasks.indexOf(task);
     if(index > -1) {
         QVector<int> roleChanged;
