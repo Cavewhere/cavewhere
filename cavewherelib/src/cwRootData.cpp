@@ -394,11 +394,17 @@ void cwRootData::showInFolder(const QString &path) const
 
 }
 
+#ifdef Q_OS_IOS
+void cwCopyTextToPasteboard(const QString &text);
+#endif
+
 void cwRootData::copyText(const QString &text) const
 {
-    auto clipboard = QGuiApplication::clipboard();
-    clipboard->setText(text);
-
+#ifdef Q_OS_IOS
+    cwCopyTextToPasteboard(text);
+#else
+    QGuiApplication::clipboard()->setText(text);
+#endif
 }
 
 bool cwRootData::pathExists(const QString &path) const
