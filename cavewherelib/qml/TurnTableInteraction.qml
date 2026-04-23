@@ -9,18 +9,17 @@ BaseTurnTableInteraction {
         target: null
         acceptedButtons: Qt.LeftButton
 
-        onActiveTranslationChanged: {
-            // console.log("Drag left:" + activeTranslation + persistentTranslation)
-            interactionId.pan(Qt.point(persistentTranslation.x, persistentTranslation.y))
+        onActiveChanged: {
+            if(active) {
+                interactionId.startPanning(centroid.position)
+            }
         }
 
-        onGrabChanged: (transition, point) => {
-                           if(transition === QQ.PointerDevice.GrabExclusive) {
-                               // console.log("Start panning:" + point.pressPosition);
-                               persistentTranslation = point.pressPosition
-                               interactionId.startPanning(point.pressPosition);
-                           }
-                       }
+        onCentroidChanged: {
+            if(active) {
+                interactionId.pan(centroid.position)
+            }
+        }
     }
 
     QQ.DragHandler {
@@ -28,18 +27,17 @@ BaseTurnTableInteraction {
         target: null
         acceptedButtons: Qt.RightButton
 
-        onActiveTranslationChanged: {
-            interactionId.rotate(Qt.point(persistentTranslation.x, persistentTranslation.y));
+        onActiveChanged: {
+            if(active) {
+                interactionId.startRotating(centroid.position)
+            }
         }
 
-        onGrabChanged: (transition, point) => {
-                           if(transition === QQ.PointerDevice.GrabExclusive) {
-                               // console.log("Start panning:" + point.pressPosition);
-                               persistentTranslation = point.pressPosition
-                               interactionId.startRotating(point.pressPosition);
-                           }
-                       }
-
+        onCentroidChanged: {
+            if(active) {
+                interactionId.rotate(centroid.position)
+            }
+        }
     }
 
     QQ.PinchHandler {
@@ -49,7 +47,6 @@ BaseTurnTableInteraction {
                           let zoomDelta = 1.0 - delta;
                           interactionId.zoom(centroid.position, zoomDelta)
                       }
-
     }
 
 
