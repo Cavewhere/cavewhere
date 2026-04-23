@@ -8,6 +8,7 @@ BaseTurnTableInteraction {
         id: dragHandlerLeftId
         target: null
         acceptedButtons: Qt.LeftButton
+        acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
 
         onActiveChanged: {
             if(active) {
@@ -23,9 +24,28 @@ BaseTurnTableInteraction {
     }
 
     QQ.DragHandler {
+        id: dragHandlerTouchId
+        target: null
+        acceptedDevices: QQ.PointerDevice.TouchScreen
+
+        onActiveChanged: {
+            if(active) {
+                interactionId.startRotating(centroid.position)
+            }
+        }
+
+        onCentroidChanged: {
+            if(active) {
+                interactionId.rotate(centroid.position)
+            }
+        }
+    }
+
+    QQ.DragHandler {
         id: dragHandlerRightId
         target: null
         acceptedButtons: Qt.RightButton
+        acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
 
         onActiveChanged: {
             if(active) {
@@ -43,10 +63,22 @@ BaseTurnTableInteraction {
     QQ.PinchHandler {
         target: null
 
+        onActiveChanged: {
+            if(active) {
+                interactionId.startPanning(centroid.position)
+            }
+        }
+
         onScaleChanged: (delta) => {
                           let zoomDelta = 1.0 - delta;
                           interactionId.zoom(centroid.position, zoomDelta)
                       }
+
+        onTranslationChanged: (delta) => {
+                                if(active) {
+                                    interactionId.pan(centroid.position)
+                                }
+                            }
     }
 
 
