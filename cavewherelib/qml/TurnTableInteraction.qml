@@ -23,10 +23,16 @@ BaseTurnTableInteraction {
         }
     }
 
+    QQ.Timer {
+        id: pinchCooldownTimer
+        interval: 250
+    }
+
     QQ.DragHandler {
         id: dragHandlerTouchId
         target: null
         acceptedDevices: QQ.PointerDevice.TouchScreen
+        enabled: !pinchHandlerId.active && !pinchCooldownTimer.running
 
         onActiveChanged: {
             if(active) {
@@ -61,11 +67,14 @@ BaseTurnTableInteraction {
     }
 
     QQ.PinchHandler {
+        id: pinchHandlerId
         target: null
 
         onActiveChanged: {
             if(active) {
                 interactionId.startPanning(centroid.position)
+            } else {
+                pinchCooldownTimer.restart()
             }
         }
 
