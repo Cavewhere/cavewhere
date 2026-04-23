@@ -111,6 +111,10 @@ public:
     bool hasLoadedCredentials() const override { return m_hasLoadedStoredToken; }
     bool tokenLoadedFromKeychain() const { return m_tokenLoadedFromKeychain; }
     void ensureCredentialsLoaded() override;
+    // Without a token we can't hit /user/installations; returning true here
+    // would stall sync() waiting on a signal that never fires.
+    bool supportsInstallationCheck() const override { return !m_accessToken.isEmpty(); }
+    void verifyInstallation() override;
 
     void setActive(bool active);
 

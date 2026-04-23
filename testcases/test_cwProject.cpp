@@ -13277,3 +13277,133 @@ TEST_CASE("double retire does not crash or double-delete", "[cwProject][tempClea
     // No crash, and the original temp dir is cleaned up
     CHECK_FALSE(QFileInfo::exists(tempDir));
 }
+
+// ---------------------------------------------------------------------------
+// Install-check sync gate tests
+// ---------------------------------------------------------------------------
+#include "cwRemoteAuthProvider.h"
+
+namespace {
+class StubAuthProvider : public cwRemoteAuthProvider
+{
+public:
+    using cwRemoteAuthProvider::cwRemoteAuthProvider;
+
+    bool hasLoadedCredentials() const override { return m_credsLoaded; }
+    void ensureCredentialsLoaded() override {
+        if (!m_credsLoaded) {
+            m_credsLoaded = true;
+            emit credentialsLoaded();
+        }
+    }
+    QString accessToken() const override { return QString(); }
+    bool supportsInstallationCheck() const override { return m_supports; }
+    void verifyInstallation() override {
+        ++m_verifyCalls;
+        // Emit asynchronously so the Qt::SingleShotConnection in
+        // cwProject::sync() observes the signal through the event loop,
+        // mirroring what a real network-backed provider does.
+        const bool installed = m_installed;
+        QMetaObject::invokeMethod(this, [this, installed]() {
+            emit installationVerified(installed);
+        }, Qt::QueuedConnection);
+    }
+
+    void setSupportsInstallationCheck(bool v) { m_supports = v; }
+    void setInstalled(bool v) { m_installed = v; }
+    void setCredentialsLoaded(bool v) { m_credsLoaded = v; }
+    int verifyCalls() const { return m_verifyCalls; }
+
+private:
+    bool m_supports = true;
+    bool m_installed = false;
+    bool m_credsLoaded = true;
+    int m_verifyCalls = 0;
+};
+
+// Builds a minimal project with a file:// bare remote configured, so sync()
+// reaches the install-check gate without needing HTTPS credentials.
+struct InstallGateFixture {
+    std::unique_ptr<cwRootData> rootData;
+    cwProject* project = nullptr;
+    QTemporaryDir projectDir;
+    QTemporaryDir remoteRoot;
+    QString remoteRepoPath;
+
+    InstallGateFixture() {
+        rootData = std::make_unique<cwRootData>();
+        project = rootData->project();
+        rootData->account()->setName(QStringLiteral("Install Gate Tester"));
+        rootData->account()->setEmail(QStringLiteral("install.gate@example.com"));
+        REQUIRE(projectDir.isValid());
+        const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("install-gate.cwproj"));
+        REQUIRE(project->saveAs(projectPath));
+        project->waitSaveToFinish();
+
+        REQUIRE(remoteRoot.isValid());
+        remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+        REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
+        const QString addRemoteError = project->repository()->addRemote(
+            QStringLiteral("origin"), QUrl::fromLocalFile(remoteRepoPath));
+        REQUIRE(addRemoteError.isEmpty());
+    }
+};
+} // namespace
+
+TEST_CASE("cwProject::sync() emits syncNeedsInstallation when install check returns false",
+          "[cwProject][sync][installCheck]")
+{
+    InstallGateFixture fx;
+    auto stub = std::make_unique<StubAuthProvider>();
+    stub->setInstalled(false);
+    fx.project->setAuthProvider(stub.get());
+
+    QSignalSpy needsInstallSpy(fx.project, &cwProject::syncNeedsInstallation);
+    QSignalSpy finishedSpy(fx.project, &cwProject::syncFinished);
+
+    REQUIRE(fx.project->sync());
+    REQUIRE(needsInstallSpy.wait(5000));
+    CHECK(needsInstallSpy.count() == 1);
+    CHECK(finishedSpy.count() == 0);
+    CHECK(stub->verifyCalls() == 1);
+}
+
+TEST_CASE("cwProject::sync() proceeds when install check returns true",
+          "[cwProject][sync][installCheck]")
+{
+    InstallGateFixture fx;
+    auto stub = std::make_unique<StubAuthProvider>();
+    stub->setInstalled(true);
+    fx.project->setAuthProvider(stub.get());
+
+    QSignalSpy needsInstallSpy(fx.project, &cwProject::syncNeedsInstallation);
+    QSignalSpy finishedSpy(fx.project, &cwProject::syncFinished);
+
+    REQUIRE(fx.project->sync());
+    fx.rootData->futureManagerModel()->waitForFinished();
+    fx.project->waitSaveToFinish();
+
+    CHECK(needsInstallSpy.count() == 0);
+    CHECK(finishedSpy.count() >= 1);
+    CHECK(stub->verifyCalls() == 1);
+}
+
+TEST_CASE("cwProject::sync() skips install check when provider reports unsupported",
+          "[cwProject][sync][installCheck]")
+{
+    InstallGateFixture fx;
+    auto stub = std::make_unique<StubAuthProvider>();
+    stub->setSupportsInstallationCheck(false);
+    fx.project->setAuthProvider(stub.get());
+
+    QSignalSpy needsInstallSpy(fx.project, &cwProject::syncNeedsInstallation);
+    QSignalSpy finishedSpy(fx.project, &cwProject::syncFinished);
+
+    REQUIRE(fx.project->sync());
+    fx.rootData->futureManagerModel()->waitForFinished();
+    fx.project->waitSaveToFinish();
+
+    CHECK(needsInstallSpy.count() == 0);
+    CHECK(finishedSpy.count() >= 1);
+    CHECK(stub->verifyCalls() == 0);
+}

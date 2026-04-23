@@ -208,6 +208,7 @@ signals:
     void objectPathReady(QObject* object);
     void syncInProgressChanged();
     void syncAuthFailed();
+    void syncNeedsInstallation();
     void syncFinished();
     void authProviderCredentialsNeeded();
     void lfsFilesNeedSync();
@@ -279,6 +280,7 @@ private:
     bool emitVersionGuardError(const QString& action);
     void setSqliteTemporaryProject(bool isTemp);
     void completeSyncOperation(const Monad::ResultBase& result);
+    bool continueSyncAfterGates();
 
     // void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
     //                     std::function<void (cwAddImageTask*)> setImagesFunc);

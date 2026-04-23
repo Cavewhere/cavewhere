@@ -190,6 +190,17 @@ void cwGitHubIntegration::refreshRepositories()
     refreshRepositoriesInternal(true);
 }
 
+void cwGitHubIntegration::verifyInstallation()
+{
+    // refreshRepositoriesInternal() bails when !m_active, but sync-gate
+    // callers expect the check to always run. Activate unconditionally —
+    // repository refresh activates on first sync anyway.
+    if (!m_active) {
+        setActive(true);
+    }
+    refreshRepositoriesInternal(true);
+}
+
 void cwGitHubIntegration::startInstallPolling()
 {
     constexpr qint64 kPollWindowMs = 3 * 60 * 1000;
@@ -665,11 +676,13 @@ void cwGitHubIntegration::handleInstallationsReply(QNetworkReply* reply, bool al
         setRepositories({});
         setNeedsInstallation(true);
         setErrorMessage({});
+        emit installationVerified(false);
         return;
     }
 
     // At least one installation exists; app is installed.
     setNeedsInstallation(false);
+    emit installationVerified(true);
 
     QList<qint64> installationIds;
     installationIds.reserve(installations.size());

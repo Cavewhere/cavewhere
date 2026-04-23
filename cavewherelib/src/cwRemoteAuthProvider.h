@@ -38,6 +38,20 @@ public:
      */
     virtual QString accessToken() const = 0;
 
+    /**
+     * Returns true if this provider can verify that the remote application
+     * is installed for the active account before a sync runs. Providers that
+     * return true must override verifyInstallation().
+     */
+    virtual bool supportsInstallationCheck() const { return false; }
+
+    /**
+     * Starts an asynchronous check that the remote application is installed.
+     * Concrete providers must emit installationVerified(bool) exactly once
+     * per call (true when installed, false otherwise). Default is a no-op.
+     */
+    virtual void verifyInstallation() {}
+
 signals:
     /**
      * Emitted once after ensureCredentialsLoaded() completes, regardless
@@ -50,4 +64,10 @@ signals:
      * token refresh, etc.).
      */
     void accessTokenChanged();
+
+    /**
+     * Emitted after verifyInstallation() completes. `installed` is true
+     * when the remote application is installed on at least one account.
+     */
+    void installationVerified(bool installed);
 };

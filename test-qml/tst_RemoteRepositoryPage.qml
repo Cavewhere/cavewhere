@@ -765,6 +765,83 @@ MainWindowTest {
                    "syncButton.projectModified should be false after sync")
         }
 
+        function test_syncButton_needsInstallation_showsWarningIcon() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+            syncButton.needsInstallation = true
+            verify(syncButton.icon.source.toString().includes("exclamation-triangle"),
+                   "icon should switch to exclamation-triangle when needsInstallation is true")
+            syncButton.needsInstallation = false
+        }
+
+        function test_syncButton_needsInstallation_tooltip() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+            syncButton.needsInstallation = true
+            verify(syncButton.tooltipText.includes("Install CaveWhere on GitHub"),
+                   "tooltip should mention installing CaveWhere on GitHub when needsInstallation is true")
+            syncButton.needsInstallation = false
+        }
+
+        function test_syncButton_needsInstallation_click_emitsInstallRequested() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+            syncButton.needsInstallation = true
+
+            let installSpy = Qt.createQmlObject(
+                'import QtTest; SignalSpy { signalName: "installRequested" }',
+                rootId)
+            let syncSpy = Qt.createQmlObject(
+                'import QtTest; SignalSpy { signalName: "syncRequested" }',
+                rootId)
+            installSpy.target = syncButton
+            syncSpy.target = syncButton
+            mouseClick(syncButton)
+            compare(installSpy.count, 1,
+                    "installRequested should fire on click when needsInstallation is true")
+            compare(syncSpy.count, 0,
+                    "syncRequested should not fire when needsInstallation is true")
+            installSpy.destroy()
+            syncSpy.destroy()
+            syncButton.needsInstallation = false
+        }
+
+        function test_syncButton_installAppMenuItem_visibleWhenNeedsInstallation() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+            syncButton.needsInstallation = true
+            mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
+            let installItem = findChild(syncButton, "installAppMenuItem")
+            verify(installItem !== null)
+            verify(installItem.visible,
+                   "install menu item should be visible when needsInstallation is true")
+            syncButton.needsInstallation = false
+        }
+
+        function test_syncButton_installAppMenuItem_hiddenWhenInstalled() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+            syncButton.needsInstallation = false
+            mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
+            let installItem = findChild(syncButton, "installAppMenuItem")
+            verify(installItem !== null)
+            verify(!installItem.visible,
+                   "install menu item should be hidden when needsInstallation is false")
+        }
+
+        function test_syncButton_installAppMenuItem_emitsInstallRequested() {
+            let syncButton = loadSyncFixtureAndGetSyncButton()
+            syncButton.needsInstallation = true
+            mouseClick(syncButton, syncButton.width / 2, syncButton.height / 2, Qt.RightButton)
+            let installItem = findChild(syncButton, "installAppMenuItem")
+            verify(installItem !== null)
+            verify(installItem.visible)
+
+            let spy = Qt.createQmlObject(
+                'import QtTest; SignalSpy { signalName: "installRequested" }',
+                rootId)
+            spy.target = syncButton
+            installItem.triggered()
+            compare(spy.count, 1, "installRequested should fire when menu item triggered")
+            spy.destroy()
+            syncButton.needsInstallation = false
+        }
+
         function test_testerAssisted_invalidGithubToken_revokesAccount() {
             testerAssistedGate.beginDecision(
                         "Invalid GitHub token revokes account",
