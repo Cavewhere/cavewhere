@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Our includes
+#include "cwGitHubCredentials.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwJobSettings.h"
@@ -154,10 +155,14 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
     REQUIRE(bindingStore != nullptr);
     REQUIRE(accountCoordinator != nullptr);
 
+    // PID-scoped usernames so parallel test processes do not share account IDs
+    // (upsertAccount persists via QSettings).
+    const QString usernameA = QStringLiteral("cwtestuser-a-%1").arg(QCoreApplication::applicationPid());
+    const QString usernameB = QStringLiteral("cwtestuser-b-%1").arg(QCoreApplication::applicationPid());
     const QString accountIdA = accountModel->upsertAccount(cwRemoteAccountModel::Provider::GitHub,
-                                                            QStringLiteral("cwtestuser-a"));
+                                                            usernameA);
     const QString accountIdB = accountModel->upsertAccount(cwRemoteAccountModel::Provider::GitHub,
-                                                            QStringLiteral("cwtestuser-b"));
+                                                            usernameB);
     REQUIRE(!accountIdA.isEmpty());
     REQUIRE(!accountIdB.isEmpty());
     REQUIRE(accountIdA != accountIdB);
@@ -166,15 +171,15 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
     accountModel->setAuthState(accountIdB, cwRemoteAccountModel::AuthState::Authorized);
     accountModel->setActiveAccount(cwRemoteAccountModel::Provider::GitHub, accountIdB);
 
-    const QString tokenKeyA = cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub,
-                                                                       accountIdA);
-    const QString tokenKeyB = cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub,
-                                                                       accountIdB);
-    REQUIRE(!tokenKeyA.isEmpty());
-    REQUIRE(!tokenKeyB.isEmpty());
+    const QString blobKeyA = cwRemoteCredentialStore::credentialBlobKey(cwRemoteAccountModel::Provider::GitHub,
+                                                                         accountIdA);
+    const QString blobKeyB = cwRemoteCredentialStore::credentialBlobKey(cwRemoteAccountModel::Provider::GitHub,
+                                                                         accountIdB);
+    REQUIRE(!blobKeyA.isEmpty());
+    REQUIRE(!blobKeyB.isEmpty());
 
-    const KeychainState previousA = readKeychainToken(tokenKeyA);
-    const KeychainState previousB = readKeychainToken(tokenKeyB);
+    const KeychainState previousA = readKeychainToken(blobKeyA);
+    const KeychainState previousB = readKeychainToken(blobKeyB);
     if (!previousA.success || !previousB.success) {
         SKIP("Skipping: Keychain unavailable in this environment");
     }
@@ -198,12 +203,21 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
                 }
             }
         }
-    } restoreGuard{{RestoreEntry{previousA, tokenKeyA},
-                    RestoreEntry{previousB, tokenKeyB}}};
+    } restoreGuard{{RestoreEntry{previousA, blobKeyA},
+                    RestoreEntry{previousB, blobKeyB}}};
 
     const QString tokenA = QStringLiteral("cw-test-github-lfs-token-a");
     const QString tokenB = QStringLiteral("cw-test-github-lfs-token-b");
-    if (!writeKeychainToken(tokenKeyA, tokenA) || !writeKeychainToken(tokenKeyB, tokenB)) {
+
+    auto buildBlob = [](const QString& accessToken, const QString& refreshToken) {
+        cwGitHubCredentials credentials;
+        credentials.accessToken = accessToken;
+        credentials.refreshToken = refreshToken;
+        return QString::fromUtf8(credentials.toKeychainBytes());
+    };
+
+    if (!writeKeychainToken(blobKeyA, buildBlob(tokenA, QStringLiteral("cw-test-github-refresh-a")))
+        || !writeKeychainToken(blobKeyB, buildBlob(tokenB, QStringLiteral("cw-test-github-refresh-b")))) {
         SKIP("Skipping: Could not write test token to keychain");
     }
 

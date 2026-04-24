@@ -1,6 +1,7 @@
 #include "cwGitHubLfsAuthProvider.h"
 
 // Our
+#include "cwGitHubCredentials.h"
 #include "cwGitHubIntegration.h"
 #include "cwRemoteAccountModel.h"
 #include "cwRemoteBindingStore.h"
@@ -166,13 +167,16 @@ void cwGitHubLfsAuthProvider::queueCredentialLoad(const QString& accountId) cons
         m_inFlightLoads.insert(normalized);
     }
 
-    m_credentialStore->readAccessToken(cwRemoteAccountModel::Provider::GitHub,
-                                       normalized,
-                                       const_cast<cwGitHubLfsAuthProvider*>(this),
-                                       [this, normalized](const cwRemoteCredentialStore::ReadResult& result) {
-        const QByteArray loadedHeader = (result.success && result.found)
-            ? lfsHeaderForToken(result.value)
-            : QByteArray();
+    m_credentialStore->readCredentialBlob(cwRemoteAccountModel::Provider::GitHub,
+                                          normalized,
+                                          const_cast<cwGitHubLfsAuthProvider*>(this),
+                                          [this, normalized](const cwRemoteCredentialStore::BlobReadResult& result) {
+        const QString token = (result.success && result.found)
+            ? cwGitHubCredentials::fromKeychainBytes(result.value).accessToken
+            : QString();
+        const QByteArray loadedHeader = token.isEmpty()
+            ? QByteArray()
+            : lfsHeaderForToken(token);
 
         QWriteLocker locker(&m_headerByAccountLock);
         m_inFlightLoads.remove(normalized);

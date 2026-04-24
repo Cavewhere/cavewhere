@@ -16,9 +16,11 @@
 #include <QUrlQuery>
 #include <QScopedPointer>
 #include <QScopedPointerDeleteLater>
+#include <QScopeGuard>
 #include <vector>
 
 //Our
+#include "cwGitHubCredentials.h"
 #include "cwRemoteAccountModel.h"
 #include "cwRemoteCredentialStore.h"
 
@@ -44,6 +46,7 @@ cwGitHubIntegration::cwGitHubIntegration(cwRemoteCredentialStore* credentialStor
     , m_credentialStore(credentialStore)
 {
     m_network.setRedirectPolicy(QNetworkRequest::SameOriginRedirectPolicy);
+    m_network.setTransferTimeout(std::chrono::seconds(15));
 
     setRepositories({});
 
@@ -187,6 +190,17 @@ void cwGitHubIntegration::cancelDeviceLoginFlow()
 
 void cwGitHubIntegration::refreshRepositories()
 {
+    refreshRepositoriesInternal(true);
+}
+
+void cwGitHubIntegration::verifyInstallation()
+{
+    // refreshRepositoriesInternal() bails when !m_active, but sync-gate
+    // callers expect the check to always run. Activate unconditionally —
+    // repository refresh activates on first sync anyway.
+    if (!m_active) {
+        setActive(true);
+    }
     refreshRepositoriesInternal(true);
 }
 
@@ -441,10 +455,14 @@ void cwGitHubIntegration::storeCredentialsForAccount(const QString& accountId)
         return;
     }
 
-    const auto provider = cwRemoteAccountModel::Provider::GitHub;
-    m_credentialStore->writeAccessToken(provider, accountId, m_accessToken, this);
-    m_credentialStore->writeRefreshToken(provider, accountId, m_refreshToken, this);
-    m_credentialStore->writeAccessTokenExpiresAt(provider, accountId, m_accessTokenExpiresAt, this);
+    cwGitHubCredentials credentials;
+    credentials.accessToken = m_accessToken;
+    credentials.refreshToken = m_refreshToken;
+    credentials.accessTokenExpiresAt = m_accessTokenExpiresAt;
+    m_credentialStore->writeCredentialBlob(cwRemoteAccountModel::Provider::GitHub,
+                                           accountId,
+                                           credentials.toKeychainBytes(),
+                                           this);
 }
 
 void cwGitHubIntegration::clearStoredCredentials(const QString& accountId)
@@ -453,10 +471,9 @@ void cwGitHubIntegration::clearStoredCredentials(const QString& accountId)
         return;
     }
 
-    const auto provider = cwRemoteAccountModel::Provider::GitHub;
-    m_credentialStore->deleteAccessToken(provider, accountId, this);
-    m_credentialStore->deleteRefreshToken(provider, accountId, this);
-    m_credentialStore->deleteAccessTokenExpiresAt(provider, accountId, this);
+    m_credentialStore->deleteCredentialBlob(cwRemoteAccountModel::Provider::GitHub,
+                                            accountId,
+                                            this);
 }
 
 void cwGitHubIntegration::ensureCredentialsLoaded()
@@ -480,39 +497,30 @@ void cwGitHubIntegration::loadStoredAccessToken()
         return;
     }
 
-    struct LoadState {
-        int remaining = 3;
-        bool accessTokenFound = false;
-        QString accessToken;
-        QString refreshToken;
-        qint64 expiresAt = -1;
-    };
-    auto state = std::make_shared<LoadState>();
+    m_credentialStore->readCredentialBlob(cwRemoteAccountModel::Provider::GitHub,
+                                          accountId,
+                                          this,
+        [this, accountId](const cwRemoteCredentialStore::BlobReadResult& result) {
+            m_loadingStoredToken = false;
+            m_hasLoadedStoredToken = true;
 
-    auto finalize = [this, accountId, state]() {
-        if (--state->remaining > 0) {
-            return;
-        }
+            auto emitLoaded = qScopeGuard([this] { emit credentialsLoaded(); });
 
-        m_loadingStoredToken = false;
-        m_hasLoadedStoredToken = true;
+            if (accountId != resolveActiveGitHubAccountId()) {
+                return;
+            }
+            if (!result.success || !result.found) {
+                return;
+            }
 
-        if (accountId == resolveActiveGitHubAccountId()
-            && state->accessTokenFound && !state->accessToken.isEmpty()
-            && state->refreshToken.isEmpty()) {
-            // An access token with no companion refresh token is a stale OAuth-App
-            // credential from before the GitHub App migration. GitHub App device
-            // flow always issues a refresh token. Clear it and force re-auth.
-            clearStoredCredentials(accountId);
-            emit credentialsLoaded();
-            return;
-        }
+            const cwGitHubCredentials credentials = cwGitHubCredentials::fromKeychainBytes(result.value);
+            if (credentials.accessToken.isEmpty()) {
+                return;
+            }
 
-        if (accountId == resolveActiveGitHubAccountId()
-            && state->accessTokenFound && !state->accessToken.isEmpty()) {
-            m_accessToken = state->accessToken;
-            m_refreshToken = state->refreshToken;
-            m_accessTokenExpiresAt = state->expiresAt;
+            m_accessToken = credentials.accessToken;
+            m_refreshToken = credentials.refreshToken;
+            m_accessTokenExpiresAt = credentials.accessTokenExpiresAt;
             m_tokenLoadedFromKeychain = true;
             emit accessTokenChanged();
             setAuthState(AuthState::Authorized);
@@ -520,49 +528,23 @@ void cwGitHubIntegration::loadStoredAccessToken()
             setErrorMessage({});
             m_secondsUntilNextPoll = 0;
             emit secondsUntilNextPollChanged();
-            if (m_active) {
-                if (isAccessTokenNearExpiry() && !m_refreshToken.isEmpty()) {
-                    attemptTokenRefresh([this](bool) {
-                        // Regardless of refresh outcome, kick off profile/repos.
-                        // If refresh failed, the 401 handlers will invalidate.
-                        fetchUserProfile();
-                        refreshRepositoriesInternal(true);
-                    });
-                } else {
+
+            if (!m_active) {
+                return;
+            }
+
+            if (isAccessTokenNearExpiry() && !m_refreshToken.isEmpty()) {
+                attemptTokenRefresh([this](bool) {
+                    // Regardless of refresh outcome, kick off profile/repos.
+                    // If refresh failed, the 401 handlers will invalidate.
                     fetchUserProfile();
                     refreshRepositoriesInternal(true);
-                }
+                });
+                return;
             }
-        }
 
-        emit credentialsLoaded();
-    };
-
-    const auto provider = cwRemoteAccountModel::Provider::GitHub;
-
-    m_credentialStore->readAccessToken(provider, accountId, this,
-        [state, finalize](const cwRemoteCredentialStore::ReadResult& result) {
-            if (result.success && result.found && !result.value.isEmpty()) {
-                state->accessTokenFound = true;
-                state->accessToken = result.value;
-            }
-            finalize();
-        });
-
-    m_credentialStore->readRefreshToken(provider, accountId, this,
-        [state, finalize](const cwRemoteCredentialStore::ReadResult& result) {
-            if (result.success && result.found) {
-                state->refreshToken = result.value;
-            }
-            finalize();
-        });
-
-    m_credentialStore->readAccessTokenExpiresAt(provider, accountId, this,
-        [state, finalize](bool success, bool found, qint64 epochSeconds) {
-            if (success && found) {
-                state->expiresAt = epochSeconds;
-            }
-            finalize();
+            fetchUserProfile();
+            refreshRepositoriesInternal(true);
         });
 }
 
@@ -665,11 +647,13 @@ void cwGitHubIntegration::handleInstallationsReply(QNetworkReply* reply, bool al
         setRepositories({});
         setNeedsInstallation(true);
         setErrorMessage({});
+        emit installationVerified(false);
         return;
     }
 
     // At least one installation exists; app is installed.
     setNeedsInstallation(false);
+    emit installationVerified(true);
 
     QList<qint64> installationIds;
     installationIds.reserve(installations.size());
@@ -1010,8 +994,8 @@ void cwGitHubIntegration::attemptTokenRefresh(std::function<void(bool)> completi
             m_refreshToken.clear();
             const QString accountId = resolveActiveGitHubAccountId();
             if (!accountId.isEmpty() && m_credentialStore) {
-                m_credentialStore->deleteRefreshToken(cwRemoteAccountModel::Provider::GitHub,
-                                                     accountId, this);
+                m_credentialStore->deleteCredentialBlob(cwRemoteAccountModel::Provider::GitHub,
+                                                        accountId, this);
             }
         }
 

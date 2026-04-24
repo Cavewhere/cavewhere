@@ -202,6 +202,7 @@ QQ.Item {
             requiredVersion: RootData.project.requiredVersion
             loggedIn: RootData.remote.gitHubIntegration.loggedIn
             usesTokenAuth: RootData.project.syncHealth.status.usesTokenAuth
+            needsInstallation: RootData.remote.gitHubIntegration.needsInstallation
 
             // Right-aligned popup positioning anchored below this button
             readonly property int _popupRightEdge: QC.Overlay.overlay.width - 5
@@ -222,6 +223,9 @@ QQ.Item {
             onLoginRequested: {
                 RootData.remote.accountCoordinator.loginGitHubAccount()
             }
+            onInstallRequested: {
+                installAppPopupId.open()
+            }
 
             QQ.Connections {
                 target: RootData.remote.accountCoordinator
@@ -237,6 +241,14 @@ QQ.Item {
 
             ReconnectPopup {
                 id: reconnectPopupId
+                parent: QC.Overlay.overlay
+                gitHub: RootData.remote.gitHubIntegration
+                x: syncButtonId._popupRightEdge - width
+                y: syncButtonId._popupY
+            }
+
+            GitHubInstallAppPopup {
+                id: installAppPopupId
                 parent: QC.Overlay.overlay
                 gitHub: RootData.remote.gitHubIntegration
                 x: syncButtonId._popupRightEdge - width
@@ -263,6 +275,9 @@ QQ.Item {
             target: RootData.project
             function onSyncAuthFailed() {
                 reconnectPopupId.open()
+            }
+            function onSyncNeedsInstallation() {
+                installAppPopupId.open()
             }
         }
 

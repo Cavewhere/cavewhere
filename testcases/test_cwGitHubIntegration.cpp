@@ -8,6 +8,7 @@
 
 // Ours
 #include "cwGitHubIntegration.h"
+#include "cwRemoteAuthProvider.h"
 #include "TestHelper.h"
 
 // ---------------------------------------------------------------------------
@@ -285,6 +286,102 @@ TEST_CASE("cwGitHubIntegration::refreshRepositories surfaces repos when installa
             && integration.repositories()->rowCount() == 1;
     }));
     CHECK(!integration.needsInstallation());
+}
+
+TEST_CASE("cwGitHubIntegration::installationVerified fires with false when uninstalled",
+          "[cwGitHubIntegration]")
+{
+    // Covers the sync-gating scenario: user was logged in previously but has
+    // since uninstalled CaveWhere from GitHub. A fresh /user/installations
+    // check returns empty, and the sync path should route to the install
+    // popup via the installationVerified(false) signal rather than letting
+    // the sync attempt fail with a 403 downstream.
+    PathRoutedMockServer server;
+    server.addRoute("/user/installations", 200, R"({"total_count":0,"installations":[]})");
+    REQUIRE(server.port() != 0);
+
+    cwGitHubIntegration integration(nullptr);
+    integration.setApiBaseUrl(QStringLiteral("http://127.0.0.1:%1").arg(server.port()));
+    integration.setActive(true);
+    integration.setAccessTokenForTesting(QStringLiteral("test_token"));
+
+    bool reported = false;
+    bool installedResult = true; // start non-default to prove the signal wrote it
+    QObject::connect(&integration, &cwRemoteAuthProvider::installationVerified,
+                     &integration, [&](bool installed) {
+        reported = true;
+        installedResult = installed;
+    });
+
+    integration.refreshRepositories();
+
+    REQUIRE(waitUntil([&]() { return reported; }));
+    CHECK(installedResult == false);
+    CHECK(integration.needsInstallation());
+}
+
+TEST_CASE("cwGitHubIntegration::installationVerified fires with true when installed",
+          "[cwGitHubIntegration]")
+{
+    PathRoutedMockServer server;
+    server.addRoute("/user/installations/42/repositories",
+                    200,
+                    R"({"total_count":0,"repositories":[]})");
+    server.addRoute("/user/installations",
+                    200,
+                    R"({"total_count":1,"installations":[{"id":42,"account":{"login":"vpicaver"}}]})");
+    REQUIRE(server.port() != 0);
+
+    cwGitHubIntegration integration(nullptr);
+    integration.setApiBaseUrl(QStringLiteral("http://127.0.0.1:%1").arg(server.port()));
+    integration.setActive(true);
+    integration.setAccessTokenForTesting(QStringLiteral("test_token"));
+
+    bool reported = false;
+    bool installedResult = false;
+    QObject::connect(&integration, &cwRemoteAuthProvider::installationVerified,
+                     &integration, [&](bool installed) {
+        reported = true;
+        installedResult = installed;
+    });
+
+    integration.refreshRepositories();
+
+    REQUIRE(waitUntil([&]() { return reported; }));
+    CHECK(installedResult == true);
+    CHECK(!integration.needsInstallation());
+}
+
+TEST_CASE("cwGitHubIntegration::verifyInstallation emits installationVerified",
+          "[cwGitHubIntegration]")
+{
+    // Pins the override wiring: the base-class contract is that
+    // verifyInstallation() must emit installationVerified() exactly once.
+    // Also confirms the !m_active bypass works — the sync layer calls
+    // verifyInstallation() without ever touching setActive().
+    PathRoutedMockServer server;
+    server.addRoute("/user/installations", 200, R"({"total_count":0,"installations":[]})");
+    REQUIRE(server.port() != 0);
+
+    cwGitHubIntegration integration(nullptr);
+    integration.setApiBaseUrl(QStringLiteral("http://127.0.0.1:%1").arg(server.port()));
+    integration.setAccessTokenForTesting(QStringLiteral("test_token"));
+    // Deliberately do NOT call setActive() — verifyInstallation must bypass
+    // the active gate.
+
+    bool reported = false;
+    bool installedResult = true;
+    QObject::connect(&integration, &cwRemoteAuthProvider::installationVerified,
+                     &integration, [&](bool installed) {
+        reported = true;
+        installedResult = installed;
+    });
+
+    integration.verifyInstallation();
+
+    REQUIRE(waitUntil([&]() { return reported; }));
+    CHECK(installedResult == false);
+    CHECK(integration.needsInstallation());
 }
 
 TEST_CASE("cwGitHubIntegration::startInstallPolling auto-stops when install appears", "[cwGitHubIntegration]")

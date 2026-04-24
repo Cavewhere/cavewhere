@@ -27,6 +27,7 @@
 #include "cwRootData.h"
 #include "GitRepository.h"
 #include "Account.h"
+#include "cwGitHubCredentials.h"
 #include "cwRemoteCredentialStore.h"
 #include "asyncfuture.h"
 #include "LfsServer.h"
@@ -1051,16 +1052,20 @@ cwCloneFixtureInfo TestHelper::createLocalBareRemoteForCloneTest()
 bool TestHelper::setGitHubAccessTokenForAccount(const QString& accountId,
                                                 const QString& token) const
 {
-    const QString key = cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub,
-                                                                 accountId);
+    const QString key = cwRemoteCredentialStore::credentialBlobKey(cwRemoteAccountModel::Provider::GitHub,
+                                                                    accountId);
     if (key.isEmpty()) {
         return false;
     }
 
+    cwGitHubCredentials credentials;
+    credentials.accessToken = token;
+    credentials.refreshToken = QStringLiteral("cw-test-refresh-token");
+
     QKeychain::WritePasswordJob job(QStringLiteral("CaveWhere"));
     job.setAutoDelete(false);
     job.setKey(key);
-    job.setTextData(token);
+    job.setBinaryData(credentials.toKeychainBytes());
     QSignalSpy spy(&job, &QKeychain::Job::finished);
     job.start();
     if (!spy.wait(5000)) {
@@ -1072,8 +1077,8 @@ bool TestHelper::setGitHubAccessTokenForAccount(const QString& accountId,
 
 bool TestHelper::clearGitHubAccessTokenForAccount(const QString& accountId) const
 {
-    const QString key = cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub,
-                                                                 accountId);
+    const QString key = cwRemoteCredentialStore::credentialBlobKey(cwRemoteAccountModel::Provider::GitHub,
+                                                                    accountId);
     if (key.isEmpty()) {
         return false;
     }

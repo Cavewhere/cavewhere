@@ -15,47 +15,12 @@
 #include "GitRepository.h"
 
 // Our
+#include "MockAuthProvider.h"
 #include "cwProject.h"
 #include "cwProjectSyncHealth.h"
 #include "cwRemoteAuthProvider.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
-
-// -----------------------------------------------------------------------
-// MockAuthProvider — controllable concrete cwRemoteAuthProvider for tests
-// -----------------------------------------------------------------------
-
-class MockAuthProvider : public cwRemoteAuthProvider
-{
-    Q_OBJECT
-public:
-    explicit MockAuthProvider(QObject* parent = nullptr) : cwRemoteAuthProvider(parent) {}
-
-    bool hasLoadedCredentials() const override { return m_hasLoaded; }
-    QString accessToken() const override { return m_token; }
-    void ensureCredentialsLoaded() override {}
-
-    // Simulates the keychain lookup completing (with or without a token).
-    void completeLoad(const QString& token = QString())
-    {
-        m_token = token;
-        m_hasLoaded = true;
-        if (!token.isEmpty()) {
-            emit accessTokenChanged();
-        }
-        emit credentialsLoaded();
-    }
-
-    // Simulates the user signing in / token refreshing.
-    void setToken(const QString& token)
-    {
-        m_token = token;
-        emit accessTokenChanged();
-    }
-
-    bool m_hasLoaded = false;
-    QString m_token;
-};
 
 // -----------------------------------------------------------------------
 // Helpers
@@ -469,6 +434,3 @@ TEST_CASE("cwProjectSyncHealth sets authExpired when HttpAuthFailed and creds we
     CHECK(syncHealth.status().authExpired());
     CHECK(!syncHealth.status().needsLogin());
 }
-
-
-#include "test_cwRemoteAuthProvider.moc"

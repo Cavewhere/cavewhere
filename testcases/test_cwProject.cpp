@@ -13277,3 +13277,96 @@ TEST_CASE("double retire does not crash or double-delete", "[cwProject][tempClea
     // No crash, and the original temp dir is cleaned up
     CHECK_FALSE(QFileInfo::exists(tempDir));
 }
+
+// ---------------------------------------------------------------------------
+// Install-check sync gate tests
+// ---------------------------------------------------------------------------
+#include "MockAuthProvider.h"
+
+namespace {
+// Builds a minimal project with a file:// bare remote configured, so sync()
+// reaches the install-check gate without needing HTTPS credentials.
+struct InstallGateFixture {
+    std::unique_ptr<cwRootData> rootData;
+    cwProject* project = nullptr;
+    QTemporaryDir projectDir;
+    QTemporaryDir remoteRoot;
+    QString remoteRepoPath;
+
+    InstallGateFixture() {
+        rootData = std::make_unique<cwRootData>();
+        project = rootData->project();
+        rootData->account()->setName(QStringLiteral("Install Gate Tester"));
+        rootData->account()->setEmail(QStringLiteral("install.gate@example.com"));
+        REQUIRE(projectDir.isValid());
+        const QString projectPath = QDir(projectDir.path()).filePath(QStringLiteral("install-gate.cwproj"));
+        REQUIRE(project->saveAs(projectPath));
+        project->waitSaveToFinish();
+
+        REQUIRE(remoteRoot.isValid());
+        remoteRepoPath = QDir(remoteRoot.path()).filePath(QStringLiteral("remote.git"));
+        REQUIRE(initBareRepo(remoteRepoPath) == GIT_OK);
+        const QString addRemoteError = project->repository()->addRemote(
+            QStringLiteral("origin"), QUrl::fromLocalFile(remoteRepoPath));
+        REQUIRE(addRemoteError.isEmpty());
+    }
+};
+} // namespace
+
+TEST_CASE("cwProject::sync() emits syncNeedsInstallation when install check returns false",
+          "[cwProject][sync][installCheck]")
+{
+    InstallGateFixture fx;
+    auto stub = std::make_unique<MockAuthProvider>();
+    stub->setInstalled(false);
+    fx.project->setAuthProvider(stub.get());
+
+    QSignalSpy needsInstallSpy(fx.project, &cwProject::syncNeedsInstallation);
+    QSignalSpy finishedSpy(fx.project, &cwProject::syncFinished);
+
+    REQUIRE(fx.project->sync());
+    REQUIRE(needsInstallSpy.wait(5000));
+    CHECK(needsInstallSpy.count() == 1);
+    CHECK(finishedSpy.count() == 0);
+    CHECK(stub->verifyCalls() == 1);
+}
+
+TEST_CASE("cwProject::sync() proceeds when install check returns true",
+          "[cwProject][sync][installCheck]")
+{
+    InstallGateFixture fx;
+    auto stub = std::make_unique<MockAuthProvider>();
+    stub->setInstalled(true);
+    fx.project->setAuthProvider(stub.get());
+
+    QSignalSpy needsInstallSpy(fx.project, &cwProject::syncNeedsInstallation);
+    QSignalSpy finishedSpy(fx.project, &cwProject::syncFinished);
+
+    REQUIRE(fx.project->sync());
+    fx.rootData->futureManagerModel()->waitForFinished();
+    fx.project->waitSaveToFinish();
+
+    CHECK(needsInstallSpy.count() == 0);
+    CHECK(finishedSpy.count() >= 1);
+    CHECK(stub->verifyCalls() == 1);
+}
+
+TEST_CASE("cwProject::sync() skips install check when provider reports unsupported",
+          "[cwProject][sync][installCheck]")
+{
+    InstallGateFixture fx;
+    auto stub = std::make_unique<MockAuthProvider>();
+    stub->setSupportsInstallationCheck(false);
+    fx.project->setAuthProvider(stub.get());
+
+    QSignalSpy needsInstallSpy(fx.project, &cwProject::syncNeedsInstallation);
+    QSignalSpy finishedSpy(fx.project, &cwProject::syncFinished);
+
+    REQUIRE(fx.project->sync());
+    fx.rootData->futureManagerModel()->waitForFinished();
+    fx.project->waitSaveToFinish();
+
+    CHECK(needsInstallSpy.count() == 0);
+    CHECK(finishedSpy.count() >= 1);
+    CHECK(stub->verifyCalls() == 0);
+}

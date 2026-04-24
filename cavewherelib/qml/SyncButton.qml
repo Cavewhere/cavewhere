@@ -19,9 +19,11 @@ RoundButton {
     signal setupRemoteRequested()
     signal loginRequested()
     signal logoutRequested()
+    signal installRequested()
 
     required property bool loggedIn
     required property bool usesTokenAuth
+    required property bool needsInstallation
 
     readonly property bool hasRemote: syncHealth.status.hasRemote
     readonly property bool authExpired: syncHealth.status.authExpired
@@ -35,6 +37,8 @@ RoundButton {
             return qsTr("Sync disabled — upgrade CaveWhere to v%1").arg(requiredVersion)
         if (!hasRemote)
             return qsTr("No remote configured — click to set up sync")
+        if (needsInstallation)
+            return qsTr("Install CaveWhere on GitHub — click to install")
         if (needsLogin)
             return qsTr("Sign in to GitHub — click to sync")
         if (authExpired)
@@ -56,18 +60,20 @@ RoundButton {
         return qsTr("Up to date")
     }
 
-    icon.source: !hasRemote
-        ? "qrc:/twbs-icons/icons/cloud-arrow-up.svg"
-        : (needsLogin
-           ? "qrc:/twbs-icons/icons/lock.svg"
-           : (authExpired
-              ? "qrc:/twbs-icons/icons/exclamation-triangle.svg"
-              : "qrc:/twbs-icons/icons/arrow-repeat.svg"))
+    icon.source: {
+        if (!hasRemote) return "qrc:/twbs-icons/icons/cloud-arrow-up.svg"
+        if (needsInstallation) return "qrc:/twbs-icons/icons/exclamation-triangle.svg"
+        if (needsLogin) return "qrc:/twbs-icons/icons/lock.svg"
+        if (authExpired) return "qrc:/twbs-icons/icons/exclamation-triangle.svg"
+        return "qrc:/twbs-icons/icons/arrow-repeat.svg"
+    }
     enabled: !syncInProgress && !saveWillCauseDataLoss
 
     onClicked: {
         if (!hasRemote) {
             setupRemoteRequested()
+        } else if (needsInstallation) {
+            installRequested()
         } else {
             syncRequested()
         }
@@ -157,6 +163,16 @@ RoundButton {
             enabled: !syncInProgress
             onTriggered: {
                 syncRequested()
+            }
+        }
+
+        QC.MenuItem {
+            objectName: "installAppMenuItem"
+            text: qsTr("Install CaveWhere on GitHub")
+            visible: hasRemote && needsInstallation
+            height: visible ? implicitHeight : 0
+            onTriggered: {
+                installRequested()
             }
         }
 

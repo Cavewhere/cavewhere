@@ -508,17 +508,19 @@ bool cwProject::sync()
     // whether credentials are needed. Defer to be safe so the token is
     // available for HTTPS push/LFS operations once the URL resolves.
     if (provider && !credsLoaded && (needsCreds || remoteUnknown)) {
-        auto* saveLoad = m_saveLoad;
         auto deferredSync = std::make_shared<AsyncFuture::Deferred<void>>();
         SyncFuture = deferredSync->future();
         FutureToken.addJob(cwFuture(QFuture<void>(SyncFuture), QStringLiteral("Syncing")));
         emit syncInProgressChanged();
         connect(provider, &cwRemoteAuthProvider::credentialsLoaded,
-                this, [this, saveLoad, deferredSync]() {
-                    beginSyncOperation(saveLoad->sync());
-                    AsyncFuture::observe(SyncFuture).context(this, [deferredSync]() {
+                this, [this, deferredSync]() {
+                    if (continueSyncAfterGates()) {
+                        AsyncFuture::observe(SyncFuture).context(this, [deferredSync]() {
+                            deferredSync->complete();
+                        });
+                    } else {
                         deferredSync->complete();
-                    });
+                    }
                 },
                 Qt::SingleShotConnection);
         // Emit authProviderCredentialsNeeded so cwRootData can bootstrap
@@ -527,6 +529,39 @@ bool cwProject::sync()
         // (ensureGitHubTokenLoaded) may cause credentialsLoaded to fire
         // synchronously.
         emit authProviderCredentialsNeeded();
+        return true;
+    }
+
+    return continueSyncAfterGates();
+}
+
+bool cwProject::continueSyncAfterGates()
+{
+    auto* provider = m_saveLoad->authProvider();
+
+    if (provider && provider->supportsInstallationCheck()) {
+        auto* saveLoad = m_saveLoad;
+        auto deferredSync = std::make_shared<AsyncFuture::Deferred<void>>();
+        SyncFuture = deferredSync->future();
+        FutureToken.addJob(cwFuture(QFuture<void>(SyncFuture), QStringLiteral("Syncing")));
+        emit syncInProgressChanged();
+
+        connect(provider, &cwRemoteAuthProvider::installationVerified,
+                this, [this, saveLoad, deferredSync](bool installed) {
+                    if (installed) {
+                        beginSyncOperation(saveLoad->sync());
+                        AsyncFuture::observe(SyncFuture).context(this, [deferredSync]() {
+                            deferredSync->complete();
+                        });
+                    } else {
+                        deferredSync->complete();
+                        emit syncInProgressChanged();
+                        emit syncNeedsInstallation();
+                    }
+                },
+                Qt::SingleShotConnection);
+
+        provider->verifyInstallation();
         return true;
     }
 

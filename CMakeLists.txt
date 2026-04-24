@@ -435,6 +435,8 @@ if(BUILD_TESTING)
             testlib/LoadProjectHelper.h
             testlib/cwSketchTestHelpers.cpp
             testlib/cwSketchTestHelpers.h
+            testlib/MockAuthProvider.cpp
+            testlib/MockAuthProvider.h
             QQuickGit/tests/lfs/LfsServer.cpp
             QQuickGit/tests/lfs/LfsServer.h
         QML_FILES
