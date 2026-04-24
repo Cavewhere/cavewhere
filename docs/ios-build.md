@@ -73,12 +73,13 @@ Key options:
 In Qt Creator, select the **Qt for iOS** kit and add these CMake arguments:
 
 ```
--DQT_CREATOR_SKIP_CONAN_SETUP=ON
+-DQT_CREATOR_ENABLE_PACKAGE_MANAGER_SETUP=OFF
 -DQT_ADDITIONAL_PACKAGES_PREFIX_PATH=/path/to/build/Qt_6_11_0_for_iOS/conan_deps
 ```
 
-- `QT_CREATOR_SKIP_CONAN_SETUP` prevents Qt Creator from running its own Conan
-  install (which fails because it uses the Xcode generator).
+- `QT_CREATOR_ENABLE_PACKAGE_MANAGER_SETUP=OFF` prevents Qt Creator from
+  running its own Conan install (which fails because it uses the Xcode
+  generator).
 - `QT_ADDITIONAL_PACKAGES_PREFIX_PATH` tells Qt's toolchain where to find the
   Conan-installed packages.
 
@@ -95,7 +96,7 @@ cmake -S . -B build/Qt_6_11_0_for_iOS \
     -DCMAKE_PREFIX_PATH=/Users/$USER/Qt/6.11.0/ios \
     -DCMAKE_TOOLCHAIN_FILE=/Users/$USER/Qt/6.11.0/ios/lib/cmake/Qt6/qt.toolchain.cmake \
     -DQT_ADDITIONAL_PACKAGES_PREFIX_PATH=$(pwd)/build/Qt_6_11_0_for_iOS/conan_deps \
-    -DQT_CREATOR_SKIP_CONAN_SETUP=ON \
+    -DQT_CREATOR_ENABLE_PACKAGE_MANAGER_SETUP=OFF \
     -DQT_QMAKE_EXECUTABLE=/Users/$USER/Qt/6.11.0/ios/bin/qmake \
     -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM=YOUR_TEAM_ID
 ```

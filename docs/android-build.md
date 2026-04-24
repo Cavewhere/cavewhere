@@ -94,12 +94,13 @@ In Qt Creator, select the **Qt for Android** kit (matching the ABI you ran
 Configuration**:
 
 ```
--DQT_CREATOR_SKIP_CONAN_SETUP=ON
+-DQT_CREATOR_ENABLE_PACKAGE_MANAGER_SETUP=OFF
 -DQT_ADDITIONAL_PACKAGES_PREFIX_PATH=/path/to/build/Qt_6_11_0_for_Android_arm64_v8a/conan_deps
 ```
 
-- `QT_CREATOR_SKIP_CONAN_SETUP` prevents Qt Creator's built-in Conan support
-  from running its own install with the wrong generator/profile.
+- `QT_CREATOR_ENABLE_PACKAGE_MANAGER_SETUP=OFF` prevents Qt Creator's
+  built-in Conan support from running its own install with the wrong
+  generator/profile.
 - `QT_ADDITIONAL_PACKAGES_PREFIX_PATH` points Qt's toolchain at the
   Conan-installed packages.
 
@@ -117,7 +118,7 @@ cmake -S . -B build/Qt_6_11_0_for_Android_arm64_v8a \
     -DANDROID_SDK_ROOT=$HOME/Library/Android/sdk \
     -DANDROID_NDK_ROOT=$HOME/Library/Android/sdk/ndk/27.2.12479018 \
     -DQT_ADDITIONAL_PACKAGES_PREFIX_PATH=$(pwd)/build/Qt_6_11_0_for_Android_arm64_v8a/conan_deps \
-    -DQT_CREATOR_SKIP_CONAN_SETUP=ON \
+    -DQT_CREATOR_ENABLE_PACKAGE_MANAGER_SETUP=OFF \
     -DCAVEWHERE_BUILD_NUMBER=1
 ```
 
