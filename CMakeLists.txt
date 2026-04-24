@@ -946,7 +946,7 @@ endif()
 
 
 
-if(WIN32 OR APPLE OR UNIX)
+if((WIN32 OR APPLE OR UNIX) AND NOT CW_MOBILE)
 	#### Building Installer for Windows, Mac, and Linux ####
 #	set_target_properties(CaveWhere PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 #	set_target_properties(CaveWhere PROPERTIES SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
