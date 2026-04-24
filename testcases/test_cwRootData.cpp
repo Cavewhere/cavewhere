@@ -154,10 +154,14 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
     REQUIRE(bindingStore != nullptr);
     REQUIRE(accountCoordinator != nullptr);
 
+    // PID-scoped usernames so parallel test processes do not share account IDs
+    // (upsertAccount persists via QSettings).
+    const QString usernameA = QStringLiteral("cwtestuser-a-%1").arg(QCoreApplication::applicationPid());
+    const QString usernameB = QStringLiteral("cwtestuser-b-%1").arg(QCoreApplication::applicationPid());
     const QString accountIdA = accountModel->upsertAccount(cwRemoteAccountModel::Provider::GitHub,
-                                                            QStringLiteral("cwtestuser-a"));
+                                                            usernameA);
     const QString accountIdB = accountModel->upsertAccount(cwRemoteAccountModel::Provider::GitHub,
-                                                            QStringLiteral("cwtestuser-b"));
+                                                            usernameB);
     REQUIRE(!accountIdA.isEmpty());
     REQUIRE(!accountIdB.isEmpty());
     REQUIRE(accountIdA != accountIdB);
@@ -170,12 +174,24 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
                                                                        accountIdA);
     const QString tokenKeyB = cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub,
                                                                        accountIdB);
+    // GitHub App flow persists an access + refresh token together. Seed both in the
+    // keychain so cwGitHubIntegration::loadStoredAccessToken() does not treat the
+    // entry as a stale OAuth-App credential (which it would clear on load).
+    const QString refreshKeyA = cwRemoteCredentialStore::refreshTokenKey(cwRemoteAccountModel::Provider::GitHub,
+                                                                          accountIdA);
+    const QString refreshKeyB = cwRemoteCredentialStore::refreshTokenKey(cwRemoteAccountModel::Provider::GitHub,
+                                                                          accountIdB);
     REQUIRE(!tokenKeyA.isEmpty());
     REQUIRE(!tokenKeyB.isEmpty());
+    REQUIRE(!refreshKeyA.isEmpty());
+    REQUIRE(!refreshKeyB.isEmpty());
 
     const KeychainState previousA = readKeychainToken(tokenKeyA);
     const KeychainState previousB = readKeychainToken(tokenKeyB);
-    if (!previousA.success || !previousB.success) {
+    const KeychainState previousRefreshA = readKeychainToken(refreshKeyA);
+    const KeychainState previousRefreshB = readKeychainToken(refreshKeyB);
+    if (!previousA.success || !previousB.success
+        || !previousRefreshA.success || !previousRefreshB.success) {
         SKIP("Skipping: Keychain unavailable in this environment");
     }
 
@@ -199,11 +215,17 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
             }
         }
     } restoreGuard{{RestoreEntry{previousA, tokenKeyA},
-                    RestoreEntry{previousB, tokenKeyB}}};
+                    RestoreEntry{previousB, tokenKeyB},
+                    RestoreEntry{previousRefreshA, refreshKeyA},
+                    RestoreEntry{previousRefreshB, refreshKeyB}}};
 
     const QString tokenA = QStringLiteral("cw-test-github-lfs-token-a");
     const QString tokenB = QStringLiteral("cw-test-github-lfs-token-b");
-    if (!writeKeychainToken(tokenKeyA, tokenA) || !writeKeychainToken(tokenKeyB, tokenB)) {
+    const QString refreshA = QStringLiteral("cw-test-github-refresh-a");
+    const QString refreshB = QStringLiteral("cw-test-github-refresh-b");
+    if (!writeKeychainToken(tokenKeyA, tokenA) || !writeKeychainToken(tokenKeyB, tokenB)
+        || !writeKeychainToken(refreshKeyA, refreshA)
+        || !writeKeychainToken(refreshKeyB, refreshB)) {
         SKIP("Skipping: Could not write test token to keychain");
     }
 

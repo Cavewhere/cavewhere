@@ -103,7 +103,10 @@ TEST_CASE("cwRemoteCredentialStore refresh token + expires-at key formatting", "
 TEST_CASE("cwRemoteCredentialStore write/read/delete lifecycle", "[cwRemoteCredentialStore]")
 {
     cwRemoteCredentialStore store;
-    const QString accountId = QStringLiteral("cw-credential-test-account");
+    // PID-scoped account id so parallel test processes cannot collide on the
+    // shared keychain entry.
+    const QString accountId = QStringLiteral("cw-credential-test-account-%1")
+        .arg(QCoreApplication::applicationPid());
     const QString tokenKey = cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub, accountId);
     REQUIRE(!tokenKey.isEmpty());
 
