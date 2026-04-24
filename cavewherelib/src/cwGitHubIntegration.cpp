@@ -46,6 +46,7 @@ cwGitHubIntegration::cwGitHubIntegration(cwRemoteCredentialStore* credentialStor
     , m_credentialStore(credentialStore)
 {
     m_network.setRedirectPolicy(QNetworkRequest::SameOriginRedirectPolicy);
+    m_network.setTransferTimeout(std::chrono::seconds(15));
 
     setRepositories({});
 
