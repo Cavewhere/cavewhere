@@ -45,14 +45,35 @@ endif()
 
 project(CaveWhere VERSION ${_cw_marketing_version} LANGUAGES CXX)
 
-# iOS / App Store build number (CFBundleVersion). Cache default is the sentinel
-# string "auto", which is resolved below to commits-since-tag + 1 every
-# reconfigure — so normal dev builds track git state. For TestFlight iteration
-# (App Store Connect requires a unique, strictly-increasing build number per
-# marketing version) pass -DCAVEWHERE_BUILD_NUMBER=N; that value replaces the
-# sentinel in the cache and sticks across reconfigures.
+# Mobile build number — iOS CFBundleVersion and Android android:versionCode.
+# Cache default is the sentinel string "auto", which is resolved below to
+# commits-since-tag + 1 every reconfigure (iOS only) so normal dev builds
+# track git state. For TestFlight iteration (App Store Connect requires a
+# unique, strictly-increasing build number per marketing version) pass
+# -DCAVEWHERE_BUILD_NUMBER=N; that value replaces the sentinel in the cache
+# and sticks across reconfigures. Android rejects "auto" — see the guard
+# below.
 set(CAVEWHERE_BUILD_NUMBER "auto"
-    CACHE STRING "iOS build number (CFBundleVersion); 'auto' = commits-since-tag + 1")
+    CACHE STRING "Mobile build number (iOS CFBundleVersion / Android versionCode); 'auto' = commits-since-tag + 1 (iOS only)")
+
+# Android android:versionCode is a single strictly-increasing integer across
+# every Play Store upload for the package — it does NOT reset per
+# versionName the way iOS CFBundleVersion resets per
+# CFBundleShortVersionString. So commits-since-tag + 1 can produce the same
+# number across tag cycles (e.g. first commit after tag A, first commit
+# after tag B), which would cause silent Play Store rejections. Force the
+# user to pick an explicit integer instead.
+if(ANDROID AND CAVEWHERE_BUILD_NUMBER STREQUAL "auto")
+    message(FATAL_ERROR
+        "CaveWhere: Android builds require an explicit "
+        "-DCAVEWHERE_BUILD_NUMBER=<N>. The 'auto' default is iOS-only — on "
+        "Android, android:versionCode must be strictly increasing across all "
+        "Play Store uploads for the package and does not reset per "
+        "versionName, so commits-since-tag + 1 can collide across tag cycles. "
+        "For local dev builds any integer (e.g. 1) will do; for Play Store "
+        "uploads pick the next unused integer greater than every previous "
+        "upload.")
+endif()
 
 if(CAVEWHERE_BUILD_NUMBER STREQUAL "auto")
     # Shadow the cache with a local variable so @CAVEWHERE_BUILD_NUMBER@ in
@@ -93,6 +114,24 @@ if(CW_MOBILE)
         message(FATAL_ERROR
             "CaveWhere: CAVEWHERE_BUILD_NUMBER '${CAVEWHERE_BUILD_NUMBER}' is "
             "not a valid CFBundleVersion (dot-separated integers, ≤18 chars).")
+    endif()
+
+    # Android android:versionCode is a single 32-bit signed integer, and Play
+    # Store caps it at 2,100,000,000. It must be strictly increasing across
+    # every upload under the same package name (does NOT reset per
+    # versionName), so dot-separated values are invalid here even though iOS
+    # accepts them.
+    if(ANDROID)
+        if(NOT CAVEWHERE_BUILD_NUMBER MATCHES "^[0-9]+$")
+            message(FATAL_ERROR
+                "CaveWhere: CAVEWHERE_BUILD_NUMBER '${CAVEWHERE_BUILD_NUMBER}' is "
+                "not a valid Android versionCode (single non-negative integer).")
+        endif()
+        if(CAVEWHERE_BUILD_NUMBER GREATER 2100000000)
+            message(FATAL_ERROR
+                "CaveWhere: CAVEWHERE_BUILD_NUMBER '${CAVEWHERE_BUILD_NUMBER}' "
+                "exceeds the Play Store versionCode cap of 2100000000.")
+        endif()
     endif()
 endif()
 
@@ -605,11 +644,19 @@ if(TARGET survexport)
     add_dependencies(CaveWhere survexport)
 endif()
 
-# Must be set before qt_finalize_executable — Qt processes the launch screen during finalization.
+# Must be set before qt_finalize_executable — Qt processes the launch screen
+# and Android manifest values during finalization.
 if(MOBILE_BUILD)
     set_target_properties(CaveWhere PROPERTIES
         QT_IOS_LAUNCH_SCREEN "${CMAKE_SOURCE_DIR}/ios/LaunchScreen.storyboard"
     )
+    if(ANDROID)
+        # androiddeployqt substitutes these into AndroidManifest.xml.
+        set_target_properties(CaveWhere PROPERTIES
+            QT_ANDROID_VERSION_CODE "${CAVEWHERE_BUILD_NUMBER}"
+            QT_ANDROID_VERSION_NAME "${PROJECT_VERSION}"
+        )
+    endif()
 endif()
 
 qt_finalize_executable(CaveWhere)

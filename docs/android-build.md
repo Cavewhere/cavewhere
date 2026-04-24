@@ -172,29 +172,41 @@ third-party shared libs is painful. `conanfile.py::configure()` forces
 
 ### Versioning
 
-The same `CAVEWHERE_BUILD_NUMBER` mechanism used for iOS
-`CFBundleVersion` also gates Android builds. Because `CW_MOBILE` is on,
-the top-level `CMakeLists.txt` enforces:
+The top-level `CMakeLists.txt` wires the same `CAVEWHERE_BUILD_NUMBER` cache
+variable used for iOS `CFBundleVersion` into the Android manifest via the
+`QT_ANDROID_VERSION_CODE` / `QT_ANDROID_VERSION_NAME` target properties on
+the `CaveWhere` target; `androiddeployqt` substitutes both into
+`AndroidManifest.xml` at deploy time:
 
-- `PROJECT_VERSION` must not be the `0.0.0` fallback — make sure a git
-  tag like `2026.4.2` is reachable from `HEAD` (or explicitly pass
-  `-DCAVEWHERE_BUILD_NUMBER=<N>`; see the note below).
-- `CAVEWHERE_BUILD_NUMBER` must be dot-separated non-negative integers,
-  ≤ 18 chars.
+- `android:versionName` ← `PROJECT_VERSION` (the marketing version derived
+  from the most recent reachable git tag, e.g. `2026.4.2`)
+- `android:versionCode` ← `CAVEWHERE_BUILD_NUMBER`
 
-For Play Store uploads, `versionCode` must be a single strictly-increasing
-integer per `versionName` — the shared dot-separated format in
-`CAVEWHERE_BUILD_NUMBER` accepts a bare integer, so pass a plain number
-(`-DCAVEWHERE_BUILD_NUMBER=12`).
+Semantics differ from iOS — read carefully:
 
-> **TODO** — `CAVEWHERE_BUILD_NUMBER` is currently wired into the iOS
-> `Info.plist` via `XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION` but is **not**
-> yet plumbed into `AndroidManifest.xml` (`android:versionCode` /
-> `android:versionName`). For local/dev builds that's fine — Qt's generated
-> manifest works. Before shipping to Play Store, wire these into the
-> manifest template (e.g. via `QT_ANDROID_VERSION_CODE` /
-> `QT_ANDROID_VERSION_NAME` target properties, or a `configure_file`
-> substitution on a custom `AndroidManifest.xml.in`).
+| | iOS `CFBundleVersion` | Android `versionCode` |
+|---|---|---|
+| Format | Dot-separated non-negative integers, ≤18 chars (`1`, `1.2.3`, `42`) | Single 32-bit non-negative integer |
+| Play/Apple cap | n/a | 2,100,000,000 |
+| Uniqueness scope | Strictly > previous uploads with the same `CFBundleShortVersionString` — resets per marketing version | Strictly > every previous upload for the package — does **not** reset per `versionName` |
+| Relationship to marketing version | Paired | Independent |
+
+Because of this, `CMakeLists.txt` applies two stricter rules on Android:
+
+1. `CAVEWHERE_BUILD_NUMBER` must be a single non-negative integer
+   ≤ 2,100,000,000. A value like `1.2.3` is accepted for iOS but rejected
+   at configure time on Android.
+2. The cache default `auto` (which resolves to commits-since-tag + 1 on
+   iOS) is **rejected on Android**. That default works on iOS because
+   CFBundleVersion resets per marketing version, but on Android it would
+   silently collide across tag cycles and cause Play Store rejections. You
+   must pass an explicit integer:
+   ```bash
+   cmake -DCAVEWHERE_BUILD_NUMBER=<N> ...
+   ```
+   For local dev builds, any integer (e.g. `1`) is fine; for Play Store
+   uploads, pick the next unused integer greater than every previous
+   upload. The value sticks in `CMakeCache.txt` across reconfigures.
 
 ## Troubleshooting
 
@@ -256,24 +268,28 @@ Single-ABI builds are simpler; do multi-ABI only when you need it.
    ```
    -- CaveWhere marketing version: 2026.4.2 (build 1)
    ```
-3. Build the AAB target in Qt Creator (**Build → Build Android App Bundle**)
+3. Pick a `versionCode` — the next unused integer greater than every
+   previous Play Store upload for this package. Remember: `versionCode`
+   does **not** reset when `versionName` changes. Pass it explicitly:
+   ```bash
+   cmake -B build/Qt_6_11_0_for_Android_arm64_v8a -DCAVEWHERE_BUILD_NUMBER=<N>
+   ```
+4. Build the AAB target in Qt Creator (**Build → Build Android App Bundle**)
    or from CLI:
    ```bash
    cmake --build build/Qt_6_11_0_for_Android_arm64_v8a --target aab
    ```
-4. Sign with your release keystore and upload via the Play Console.
+5. Sign with your release keystore and upload via the Play Console.
 
-### Re-uploading to Play Store on the same tag
+### Re-uploading to Play Store
 
-Play Store requires a strictly-increasing `versionCode` integer for every
-upload under the same package name. Since `auto` (commits-since-tag + 1)
-returns the same value on the same commit, override explicitly:
+Any upload — new tag or re-roll of the same commit — must use a strictly
+greater `versionCode` than every previous upload. Since Android rejects
+`auto` at configure time, this is already explicit; just bump the number:
 
 ```bash
-cmake -DCAVEWHERE_BUILD_NUMBER=<N+1> ...
+cmake -DCAVEWHERE_BUILD_NUMBER=<next-unused-integer> ...
 ```
-
-To go back to auto: `cmake -DCAVEWHERE_BUILD_NUMBER=auto ...`.
 
 ### Fallback behaviour
 
