@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Our includes
+#include "cwGitHubCredentials.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwJobSettings.h"
@@ -170,28 +171,16 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
     accountModel->setAuthState(accountIdB, cwRemoteAccountModel::AuthState::Authorized);
     accountModel->setActiveAccount(cwRemoteAccountModel::Provider::GitHub, accountIdB);
 
-    const QString tokenKeyA = cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub,
-                                                                       accountIdA);
-    const QString tokenKeyB = cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub,
-                                                                       accountIdB);
-    // GitHub App flow persists an access + refresh token together. Seed both in the
-    // keychain so cwGitHubIntegration::loadStoredAccessToken() does not treat the
-    // entry as a stale OAuth-App credential (which it would clear on load).
-    const QString refreshKeyA = cwRemoteCredentialStore::refreshTokenKey(cwRemoteAccountModel::Provider::GitHub,
-                                                                          accountIdA);
-    const QString refreshKeyB = cwRemoteCredentialStore::refreshTokenKey(cwRemoteAccountModel::Provider::GitHub,
-                                                                          accountIdB);
-    REQUIRE(!tokenKeyA.isEmpty());
-    REQUIRE(!tokenKeyB.isEmpty());
-    REQUIRE(!refreshKeyA.isEmpty());
-    REQUIRE(!refreshKeyB.isEmpty());
+    const QString blobKeyA = cwRemoteCredentialStore::credentialBlobKey(cwRemoteAccountModel::Provider::GitHub,
+                                                                         accountIdA);
+    const QString blobKeyB = cwRemoteCredentialStore::credentialBlobKey(cwRemoteAccountModel::Provider::GitHub,
+                                                                         accountIdB);
+    REQUIRE(!blobKeyA.isEmpty());
+    REQUIRE(!blobKeyB.isEmpty());
 
-    const KeychainState previousA = readKeychainToken(tokenKeyA);
-    const KeychainState previousB = readKeychainToken(tokenKeyB);
-    const KeychainState previousRefreshA = readKeychainToken(refreshKeyA);
-    const KeychainState previousRefreshB = readKeychainToken(refreshKeyB);
-    if (!previousA.success || !previousB.success
-        || !previousRefreshA.success || !previousRefreshB.success) {
+    const KeychainState previousA = readKeychainToken(blobKeyA);
+    const KeychainState previousB = readKeychainToken(blobKeyB);
+    if (!previousA.success || !previousB.success) {
         SKIP("Skipping: Keychain unavailable in this environment");
     }
 
@@ -214,18 +203,21 @@ TEST_CASE("cwRootData GitHub LFS auth provider should use GitHub integration tok
                 }
             }
         }
-    } restoreGuard{{RestoreEntry{previousA, tokenKeyA},
-                    RestoreEntry{previousB, tokenKeyB},
-                    RestoreEntry{previousRefreshA, refreshKeyA},
-                    RestoreEntry{previousRefreshB, refreshKeyB}}};
+    } restoreGuard{{RestoreEntry{previousA, blobKeyA},
+                    RestoreEntry{previousB, blobKeyB}}};
 
     const QString tokenA = QStringLiteral("cw-test-github-lfs-token-a");
     const QString tokenB = QStringLiteral("cw-test-github-lfs-token-b");
-    const QString refreshA = QStringLiteral("cw-test-github-refresh-a");
-    const QString refreshB = QStringLiteral("cw-test-github-refresh-b");
-    if (!writeKeychainToken(tokenKeyA, tokenA) || !writeKeychainToken(tokenKeyB, tokenB)
-        || !writeKeychainToken(refreshKeyA, refreshA)
-        || !writeKeychainToken(refreshKeyB, refreshB)) {
+
+    auto buildBlob = [](const QString& accessToken, const QString& refreshToken) {
+        cwGitHubCredentials credentials;
+        credentials.accessToken = accessToken;
+        credentials.refreshToken = refreshToken;
+        return QString::fromUtf8(credentials.toKeychainBytes());
+    };
+
+    if (!writeKeychainToken(blobKeyA, buildBlob(tokenA, QStringLiteral("cw-test-github-refresh-a")))
+        || !writeKeychainToken(blobKeyB, buildBlob(tokenB, QStringLiteral("cw-test-github-refresh-b")))) {
         SKIP("Skipping: Could not write test token to keychain");
     }
 

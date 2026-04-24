@@ -1,8 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <qtkeychain/keychain.h>
 
@@ -16,20 +19,17 @@ struct KeychainState
 {
     bool success = false;
     bool found = false;
-    QString token;
+    QByteArray value;
 };
 
-static bool waitForJob(QKeychain::Job* job)
+bool waitForJob(QKeychain::Job* job)
 {
     QSignalSpy spy(job, &QKeychain::Job::finished);
     job->start();
-    if (!spy.wait(KeychainWaitMs)) {
-        return false;
-    }
-    return true;
+    return spy.wait(KeychainWaitMs);
 }
 
-static KeychainState readKeychainToken(const QString& key)
+KeychainState readKeychainRaw(const QString& key)
 {
     KeychainState state;
     QKeychain::ReadPasswordJob job(KeychainService);
@@ -43,7 +43,7 @@ static KeychainState readKeychainToken(const QString& key)
     if (job.error() == QKeychain::NoError) {
         state.success = true;
         state.found = true;
-        state.token = job.textData();
+        state.value = job.binaryData();
         return state;
     }
 
@@ -56,19 +56,19 @@ static KeychainState readKeychainToken(const QString& key)
     return state;
 }
 
-static bool writeKeychainToken(const QString& key, const QString& token)
+bool writeKeychainRaw(const QString& key, const QByteArray& value)
 {
     QKeychain::WritePasswordJob job(KeychainService);
     job.setAutoDelete(false);
     job.setKey(key);
-    job.setTextData(token);
+    job.setBinaryData(value);
     if (!waitForJob(&job)) {
         return false;
     }
     return job.error() == QKeychain::NoError;
 }
 
-static bool deleteKeychainToken(const QString& key)
+bool deleteKeychainRaw(const QString& key)
 {
     QKeychain::DeletePasswordJob job(KeychainService);
     job.setAutoDelete(false);
@@ -76,218 +76,244 @@ static bool deleteKeychainToken(const QString& key)
     if (!waitForJob(&job)) {
         return false;
     }
-
     return job.error() == QKeychain::NoError || job.error() == QKeychain::EntryNotFound;
 }
-}
 
-TEST_CASE("cwRemoteCredentialStore access token key formatting", "[cwRemoteCredentialStore]")
+QString pidScopedAccountId(const char* label)
 {
-    CHECK(cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub, QStringLiteral("abc-123"))
-          == QStringLiteral("RemoteAccount/github/abc-123/AccessToken"));
-    CHECK(cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitLab, QStringLiteral(" id-with-space "))
-          == QStringLiteral("RemoteAccount/gitlab/id-with-space/AccessToken"));
-    CHECK(cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub, QString()).isEmpty());
-}
-
-TEST_CASE("cwRemoteCredentialStore refresh token + expires-at key formatting", "[cwRemoteCredentialStore]")
-{
-    CHECK(cwRemoteCredentialStore::refreshTokenKey(cwRemoteAccountModel::Provider::GitHub, QStringLiteral("abc-123"))
-          == QStringLiteral("RemoteAccount/github/abc-123/RefreshToken"));
-    CHECK(cwRemoteCredentialStore::accessTokenExpiresAtKey(cwRemoteAccountModel::Provider::GitHub, QStringLiteral("abc-123"))
-          == QStringLiteral("RemoteAccount/github/abc-123/AccessTokenExpiresAt"));
-    CHECK(cwRemoteCredentialStore::refreshTokenKey(cwRemoteAccountModel::Provider::GitHub, QString()).isEmpty());
-    CHECK(cwRemoteCredentialStore::accessTokenExpiresAtKey(cwRemoteAccountModel::Provider::GitHub, QString()).isEmpty());
-}
-
-TEST_CASE("cwRemoteCredentialStore write/read/delete lifecycle", "[cwRemoteCredentialStore]")
-{
-    cwRemoteCredentialStore store;
-    // PID-scoped account id so parallel test processes cannot collide on the
-    // shared keychain entry.
-    const QString accountId = QStringLiteral("cw-credential-test-account-%1")
+    return QStringLiteral("%1-%2").arg(QLatin1StringView(label))
         .arg(QCoreApplication::applicationPid());
-    const QString tokenKey = cwRemoteCredentialStore::accessTokenKey(cwRemoteAccountModel::Provider::GitHub, accountId);
-    REQUIRE(!tokenKey.isEmpty());
+}
 
-    const KeychainState previous = readKeychainToken(tokenKey);
-    if (!previous.success) {
-        SKIP("Skipping: Keychain unavailable in this environment");
-    }
-
-    struct RestoreGuard {
-        KeychainState previous;
-        QString key;
-        ~RestoreGuard() {
-            if (!previous.success) {
-                return;
-            }
-
-            if (previous.found) {
-                writeKeychainToken(key, previous.token);
-            } else {
-                deleteKeychainToken(key);
-            }
-        }
-    } restoreGuard{previous, tokenKey};
-
-    const QString expectedToken = QStringLiteral("cw-credential-store-test-token");
-    store.writeAccessToken(cwRemoteAccountModel::Provider::GitHub, accountId, expectedToken, &store);
-
+bool waitFor(const std::function<bool()>& predicate, int timeoutMs = KeychainWaitMs)
+{
     QElapsedTimer timer;
     timer.start();
-    KeychainState state;
-    while (timer.elapsed() < KeychainWaitMs) {
-        state = readKeychainToken(tokenKey);
-        if (state.success && state.found && state.token == expectedToken) {
-            break;
+    while (timer.elapsed() < timeoutMs) {
+        if (predicate()) {
+            return true;
         }
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
     }
-    REQUIRE(state.success);
-    CHECK(state.found);
-    CHECK(state.token == expectedToken);
+    return predicate();
+}
+
+struct KeychainRestoreGuard
+{
+    KeychainState previous;
+    QString key;
+    ~KeychainRestoreGuard() {
+        if (!previous.success) {
+            return;
+        }
+        if (previous.found) {
+            writeKeychainRaw(key, previous.value);
+        } else {
+            deleteKeychainRaw(key);
+        }
+    }
+};
+}
+
+TEST_CASE("cwRemoteCredentialStore::credentialBlobKey formatting", "[cwRemoteCredentialStore]")
+{
+    CHECK(cwRemoteCredentialStore::credentialBlobKey(cwRemoteAccountModel::Provider::GitHub,
+                                                      QStringLiteral("abc-123"))
+          == QStringLiteral("RemoteAccount/github/abc-123/Credentials"));
+    CHECK(cwRemoteCredentialStore::credentialBlobKey(cwRemoteAccountModel::Provider::GitLab,
+                                                      QStringLiteral(" id-with-space "))
+          == QStringLiteral("RemoteAccount/gitlab/id-with-space/Credentials"));
+    CHECK(cwRemoteCredentialStore::credentialBlobKey(cwRemoteAccountModel::Provider::GitHub,
+                                                      QString()).isEmpty());
+}
+
+TEST_CASE("cwRemoteCredentialStore blob write/read/delete round-trip", "[cwRemoteCredentialStore]")
+{
+    cwRemoteCredentialStore store;
+    const auto provider = cwRemoteAccountModel::Provider::GitHub;
+    const QString accountId = pidScopedAccountId("cw-credstore-roundtrip");
+    const QString key = cwRemoteCredentialStore::credentialBlobKey(provider, accountId);
+    REQUIRE(!key.isEmpty());
+
+    const KeychainState probe = readKeychainRaw(key);
+    if (!probe.success) {
+        SKIP("Skipping: Keychain unavailable in this environment");
+    }
+    KeychainRestoreGuard guard{probe, key};
+
+    QJsonObject expectedObject;
+    expectedObject.insert(QStringLiteral("v"), 1);
+    expectedObject.insert(QStringLiteral("accessToken"), QStringLiteral("ghs_credstore_test"));
+    expectedObject.insert(QStringLiteral("refreshToken"), QStringLiteral("ghr_credstore_test"));
+    expectedObject.insert(QStringLiteral("accessTokenExpiresAt"), 1800000000.0);
+    const QByteArray expected = QJsonDocument(expectedObject).toJson(QJsonDocument::Compact);
+
+    store.writeCredentialBlob(provider, accountId, expected, &store);
+
+    REQUIRE(waitFor([&]() {
+        const KeychainState state = readKeychainRaw(key);
+        return state.success && state.found && state.value == expected;
+    }));
 
     bool callbackReceived = false;
-    cwRemoteCredentialStore::ReadResult readResult;
-    store.readAccessToken(cwRemoteAccountModel::Provider::GitHub,
-                          accountId,
-                          &store,
-                          [&](const cwRemoteCredentialStore::ReadResult& result) {
-                              callbackReceived = true;
-                              readResult = result;
-                          });
+    cwRemoteCredentialStore::BlobReadResult readResult;
+    store.readCredentialBlob(provider, accountId, &store,
+        [&](const cwRemoteCredentialStore::BlobReadResult& result) {
+            callbackReceived = true;
+            readResult = result;
+        });
 
-    timer.restart();
-    while (timer.elapsed() < KeychainWaitMs && !callbackReceived) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-    }
-    REQUIRE(callbackReceived);
+    REQUIRE(waitFor([&]() { return callbackReceived; }));
     CHECK(readResult.success);
     CHECK(readResult.found);
-    CHECK(readResult.value == expectedToken);
+    CHECK(readResult.value == expected);
 
-    store.deleteAccessToken(cwRemoteAccountModel::Provider::GitHub, accountId, &store);
-    timer.restart();
-    while (timer.elapsed() < KeychainWaitMs) {
-        state = readKeychainToken(tokenKey);
-        if (state.success && !state.found) {
-            break;
-        }
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-    }
-    REQUIRE(state.success);
-    CHECK_FALSE(state.found);
+    store.deleteCredentialBlob(provider, accountId, &store);
+    REQUIRE(waitFor([&]() {
+        const KeychainState state = readKeychainRaw(key);
+        return state.success && !state.found;
+    }));
 }
 
-TEST_CASE("cwRemoteCredentialStore refresh token + expires-at lifecycle", "[cwRemoteCredentialStore]")
+TEST_CASE("cwRemoteCredentialStore read of absent key reports not-found", "[cwRemoteCredentialStore]")
 {
     cwRemoteCredentialStore store;
-    // PID-scoped account id so parallel test processes cannot collide.
-    const QString accountId = QStringLiteral("cw-credstore-refresh-%1")
-        .arg(QCoreApplication::applicationPid());
     const auto provider = cwRemoteAccountModel::Provider::GitHub;
-    const QString refreshKey = cwRemoteCredentialStore::refreshTokenKey(provider, accountId);
-    const QString expiresAtKey = cwRemoteCredentialStore::accessTokenExpiresAtKey(provider, accountId);
-    REQUIRE(!refreshKey.isEmpty());
-    REQUIRE(!expiresAtKey.isEmpty());
+    const QString accountId = pidScopedAccountId("cw-credstore-absent");
+    const QString key = cwRemoteCredentialStore::credentialBlobKey(provider, accountId);
 
-    const KeychainState refreshProbe = readKeychainToken(refreshKey);
-    if (!refreshProbe.success) {
+    const KeychainState probe = readKeychainRaw(key);
+    if (!probe.success) {
         SKIP("Skipping: Keychain unavailable in this environment");
     }
+    REQUIRE(deleteKeychainRaw(key));
 
-    // Ensure cleanup regardless of test outcome.
-    struct Cleanup {
-        cwRemoteCredentialStore* store;
-        cwRemoteAccountModel::Provider provider;
-        QString accountId;
-        ~Cleanup() {
-            store->deleteRefreshToken(provider, accountId, store);
-            store->deleteAccessTokenExpiresAt(provider, accountId, store);
-            QElapsedTimer t; t.start();
-            while (t.elapsed() < KeychainWaitMs) {
-                QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-                if (t.elapsed() > 200) break;
-            }
-        }
-    } cleanup{&store, provider, accountId};
+    bool callbackReceived = false;
+    cwRemoteCredentialStore::BlobReadResult readResult;
+    store.readCredentialBlob(provider, accountId, &store,
+        [&](const cwRemoteCredentialStore::BlobReadResult& result) {
+            callbackReceived = true;
+            readResult = result;
+        });
 
-    const QString expectedRefresh = QStringLiteral("ghr_refresh_test_token");
-    const qint64 expectedExpiresAt = 1800000000LL; // arbitrary future epoch
-    store.writeRefreshToken(provider, accountId, expectedRefresh, &store);
-    store.writeAccessTokenExpiresAt(provider, accountId, expectedExpiresAt, &store);
+    REQUIRE(waitFor([&]() { return callbackReceived; }));
+    CHECK(readResult.success);
+    CHECK_FALSE(readResult.found);
+    CHECK(readResult.value.isEmpty());
+}
 
-    QElapsedTimer timer;
-    timer.start();
-    KeychainState refreshState;
-    KeychainState expiresState;
-    while (timer.elapsed() < KeychainWaitMs) {
-        refreshState = readKeychainToken(refreshKey);
-        expiresState = readKeychainToken(expiresAtKey);
-        if (refreshState.success && refreshState.found
-            && expiresState.success && expiresState.found) {
-            break;
-        }
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+TEST_CASE("cwRemoteCredentialStore concurrent reads observe identical content",
+          "[cwRemoteCredentialStore]")
+{
+    cwRemoteCredentialStore store;
+    const auto provider = cwRemoteAccountModel::Provider::GitHub;
+    const QString accountId = pidScopedAccountId("cw-credstore-concurrent");
+    const QString key = cwRemoteCredentialStore::credentialBlobKey(provider, accountId);
+    REQUIRE(!key.isEmpty());
+
+    const KeychainState probe = readKeychainRaw(key);
+    if (!probe.success) {
+        SKIP("Skipping: Keychain unavailable in this environment");
     }
-    REQUIRE(refreshState.success);
-    CHECK(refreshState.found);
-    CHECK(refreshState.token == expectedRefresh);
-    REQUIRE(expiresState.success);
-    CHECK(expiresState.found);
-    CHECK(expiresState.token == QString::number(expectedExpiresAt));
+    KeychainRestoreGuard guard{probe, key};
 
-    bool refreshCbReceived = false;
-    cwRemoteCredentialStore::ReadResult refreshCbResult;
-    store.readRefreshToken(provider, accountId, &store,
-                           [&](const cwRemoteCredentialStore::ReadResult& r) {
-                               refreshCbReceived = true;
-                               refreshCbResult = r;
-                           });
+    QJsonObject blobObject;
+    blobObject.insert(QStringLiteral("v"), 1);
+    blobObject.insert(QStringLiteral("accessToken"), QStringLiteral("ghs_concurrent"));
+    blobObject.insert(QStringLiteral("refreshToken"), QStringLiteral("ghr_concurrent"));
+    const QByteArray blob = QJsonDocument(blobObject).toJson(QJsonDocument::Compact);
+    REQUIRE(writeKeychainRaw(key, blob));
 
-    bool expiresCbReceived = false;
-    bool expiresCbSuccess = false;
-    bool expiresCbFound = false;
-    qint64 expiresCbValue = -1;
-    store.readAccessTokenExpiresAt(provider, accountId, &store,
-                                   [&](bool success, bool found, qint64 epoch) {
-                                       expiresCbReceived = true;
-                                       expiresCbSuccess = success;
-                                       expiresCbFound = found;
-                                       expiresCbValue = epoch;
-                                   });
+    cwRemoteCredentialStore::BlobReadResult first;
+    cwRemoteCredentialStore::BlobReadResult second;
+    bool firstReceived = false;
+    bool secondReceived = false;
 
-    timer.restart();
-    while (timer.elapsed() < KeychainWaitMs && (!refreshCbReceived || !expiresCbReceived)) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    store.readCredentialBlob(provider, accountId, &store,
+        [&](const cwRemoteCredentialStore::BlobReadResult& result) {
+            firstReceived = true;
+            first = result;
+        });
+    store.readCredentialBlob(provider, accountId, &store,
+        [&](const cwRemoteCredentialStore::BlobReadResult& result) {
+            secondReceived = true;
+            second = result;
+        });
+
+    REQUIRE(waitFor([&]() { return firstReceived && secondReceived; }));
+    CHECK(first.success);
+    CHECK(first.found);
+    CHECK(first.value == blob);
+    CHECK(second.success);
+    CHECK(second.found);
+    CHECK(second.value == blob);
+}
+
+TEST_CASE("cwRemoteCredentialStore writing an empty blob keeps the item present",
+          "[cwRemoteCredentialStore]")
+{
+    cwRemoteCredentialStore store;
+    const auto provider = cwRemoteAccountModel::Provider::GitHub;
+    const QString accountId = pidScopedAccountId("cw-credstore-empty");
+    const QString key = cwRemoteCredentialStore::credentialBlobKey(provider, accountId);
+    REQUIRE(!key.isEmpty());
+
+    const KeychainState probe = readKeychainRaw(key);
+    if (!probe.success) {
+        SKIP("Skipping: Keychain unavailable in this environment");
     }
-    REQUIRE(refreshCbReceived);
-    CHECK(refreshCbResult.success);
-    CHECK(refreshCbResult.found);
-    CHECK(refreshCbResult.value == expectedRefresh);
+    KeychainRestoreGuard guard{probe, key};
 
-    REQUIRE(expiresCbReceived);
-    CHECK(expiresCbSuccess);
-    CHECK(expiresCbFound);
-    CHECK(expiresCbValue == expectedExpiresAt);
+    store.writeCredentialBlob(provider, accountId, QByteArray(), &store);
 
-    // Empty-string write deletes refresh token; negative epoch deletes expires-at.
-    store.writeRefreshToken(provider, accountId, QString(), &store);
-    store.writeAccessTokenExpiresAt(provider, accountId, -1, &store);
+    REQUIRE(waitFor([&]() {
+        const KeychainState state = readKeychainRaw(key);
+        return state.success && state.found && state.value.isEmpty();
+    }));
 
-    timer.restart();
-    while (timer.elapsed() < KeychainWaitMs) {
-        refreshState = readKeychainToken(refreshKey);
-        expiresState = readKeychainToken(expiresAtKey);
-        if (refreshState.success && !refreshState.found
-            && expiresState.success && !expiresState.found) {
-            break;
-        }
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    bool callbackReceived = false;
+    cwRemoteCredentialStore::BlobReadResult readResult;
+    store.readCredentialBlob(provider, accountId, &store,
+        [&](const cwRemoteCredentialStore::BlobReadResult& result) {
+            callbackReceived = true;
+            readResult = result;
+        });
+    REQUIRE(waitFor([&]() { return callbackReceived; }));
+    CHECK(readResult.success);
+    CHECK(readResult.found);
+    CHECK(readResult.value.isEmpty());
+}
+
+TEST_CASE("cwRemoteCredentialStore read of malformed bytes returns them verbatim",
+          "[cwRemoteCredentialStore]")
+{
+    // Store is opaque: it does not parse the blob. Malformed content surfaces to
+    // the caller unchanged; interpretation (e.g. cwGitHubCredentials::fromKeychainBytes)
+    // is the provider layer's problem.
+    cwRemoteCredentialStore store;
+    const auto provider = cwRemoteAccountModel::Provider::GitHub;
+    const QString accountId = pidScopedAccountId("cw-credstore-garbage");
+    const QString key = cwRemoteCredentialStore::credentialBlobKey(provider, accountId);
+    REQUIRE(!key.isEmpty());
+
+    const KeychainState probe = readKeychainRaw(key);
+    if (!probe.success) {
+        SKIP("Skipping: Keychain unavailable in this environment");
     }
-    REQUIRE(refreshState.success);
-    CHECK_FALSE(refreshState.found);
-    REQUIRE(expiresState.success);
-    CHECK_FALSE(expiresState.found);
+    KeychainRestoreGuard guard{probe, key};
+
+    const QByteArray garbage = QByteArrayLiteral("this is not json {");
+    REQUIRE(writeKeychainRaw(key, garbage));
+
+    bool callbackReceived = false;
+    cwRemoteCredentialStore::BlobReadResult readResult;
+    store.readCredentialBlob(provider, accountId, &store,
+        [&](const cwRemoteCredentialStore::BlobReadResult& result) {
+            callbackReceived = true;
+            readResult = result;
+        });
+    REQUIRE(waitFor([&]() { return callbackReceived; }));
+    CHECK(readResult.success);
+    CHECK(readResult.found);
+    CHECK(readResult.value == garbage);
 }
