@@ -93,6 +93,11 @@ class CaveWhereConan(ConanFile):
         self.options["openssl"].shared = True
 
         if self.settings.os == "Android":
+            # On Android, Conan-built OpenSSL is only used for the static libs
+            # that libssh2/libgit2/qtkeychain link into the app binary. Qt's
+            # TLS plugin dlopens OpenSSL separately at runtime via KDAB's
+            # prebuilt libssl_3.so/libcrypto_3.so, wired up through
+            # QT_ANDROID_EXTRA_LIBS in the top-level CMakeLists.txt.
             self.options["openssl"].shared = False
         #     self.options["openssl"].no_asm = True #Windows building android, probably can comment out for other platforms
 

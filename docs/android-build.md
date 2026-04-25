@@ -13,6 +13,13 @@
 - Ninja (`brew install ninja` on macOS)
 - CMake < 4.0 (pinned via the Conan profile)
 - JDK 17 (required by Gradle for recent Android plugin versions)
+- KDAB's prebuilt Android OpenSSL — required for Qt's TLS backend. Clone
+  [KDAB/android_openssl](https://github.com/KDAB/android_openssl) to any
+  location. The build defaults to
+  `$HOME/Library/Android/sdk/android_openssl`; override with
+  `-DANDROID_OPENSSL_DIR=<path>` if you put it elsewhere. Conan's own
+  OpenSSL is built static on Android and used only by libssh2/libgit2/etc.,
+  since Android can't load Conan's versioned `libssl.so.3` from an APK.
 
 ## 1. Create the Android Conan Profile
 
