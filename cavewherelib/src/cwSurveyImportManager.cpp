@@ -100,7 +100,11 @@ void cwSurveyImportManager::importSurvexToTrip(const QUrl& fileUrl, cwTrip* trip
         return;
     }
 
-    const QString path = fileUrl.toLocalFile();
+    // cwSurvexImporter uses QFile, which on Android understands content://
+    // URIs natively, so pass the URL string through when there is no local
+    // file path (e.g. files picked via the Android Storage Access Framework).
+    const QString localPath = fileUrl.toLocalFile();
+    const QString path = localPath.isEmpty() ? fileUrl.toString() : localPath;
     if (path.isEmpty()) return;
 
     auto importer = new cwSurvexImporter(this);

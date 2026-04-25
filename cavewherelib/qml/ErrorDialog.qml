@@ -6,7 +6,7 @@ import cavewherelib
 
 QQ.Loader {
     id: loadedId
-    anchors.centerIn: parent
+    anchors.fill: parent
 
     property ErrorListModel model
 
@@ -36,7 +36,7 @@ QQ.Loader {
         property alias errorDialog: errorDialogId
         property ErrorListModel model
 
-        anchors.centerIn: parent
+        anchors.fill: parent
 
         QC.Dialog {
             id: errorDialogId
@@ -45,7 +45,9 @@ QQ.Loader {
 
             anchors.centerIn: parent
             modal: true
-            width: 600
+            closePolicy: QC.Popup.CloseOnEscape | QC.Popup.CloseOnPressOutside
+            width: Math.min(600, (parent ? parent.width : 600) - 2 * Theme.pageMargin)
+            height: Math.min(implicitHeight, (parent ? parent.height : implicitHeight) - 2 * Theme.pageMargin)
 
             standardButtons: QC.Dialog.Ok
             title: issueCount + " issue" + ((issueCount > 1) ? "s" : "") + " has occurred"
