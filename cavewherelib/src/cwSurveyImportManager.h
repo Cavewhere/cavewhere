@@ -25,6 +25,7 @@ class cwCompassImporter;
 class cwWallsImporter;
 class cwCSVImporterTask;
 class cwErrorListModel;
+class cwTrip;
 #include "cwGlobals.h"
 
 /**
@@ -54,6 +55,7 @@ public:
     void setErrorModel(cwErrorListModel* errorModel);
 
     Q_INVOKABLE void importSurvex();
+    Q_INVOKABLE void importSurvexToTrip(const QUrl& fileUrl, cwTrip* trip);
     Q_INVOKABLE void importWalls();
     Q_INVOKABLE void importWallsSrv();
     Q_INVOKABLE void importCompassDataFile(QList<QUrl> filenames);

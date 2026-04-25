@@ -9,18 +9,25 @@
 #include "cwSurveyImportManager.h"
 #include "cwImportTreeDataDialog.h"
 #include "cwSurvexImporter.h"
+#include "cwSurvexGlobalData.h"
+#include "cwTreeImportDataNode.h"
 #include "cwCompassImporter.h"
 #include "cwWallsImporter.h"
 #include "cwCavingRegion.h"
+#include "cwCave.h"
 #include "cwTrip.h"
+#include "cwTeam.h"
+#include "cwTripCalibration.h"
 #include "cwSurveyChunk.h"
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwSurveyImportManager.h"
 #include "cwErrorListModel.h"
+#include "cwError.h"
 
 //Qt includes
 #include <QFileDialog>
+#include <QPointer>
 #include <QSettings>
 
 cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
@@ -68,6 +75,101 @@ void cwSurveyImportManager::importSurvex() {
         files << filename;
         survexImportDialog->setInputFiles(files);
     }
+}
+
+/**
+ * @brief cwSurveyImportManager::importSurvexToTrip
+ *
+ * Imports a single .svx file directly into the supplied trip. The trip must
+ * be empty (zero chunks) — this prevents destroying user-entered data. Trip
+ * date, team and calibration are copied from the first imported sub-trip;
+ * survey chunks from every imported sub-trip are flattened into the target.
+ * Parser warnings and the not-empty rejection are pushed to ErrorModel.
+ */
+void cwSurveyImportManager::importSurvexToTrip(const QUrl& fileUrl, cwTrip* trip)
+{
+    if (!trip) return;
+
+    if (trip->chunkCount() > 0) {
+        if (ErrorModel) {
+            ErrorModel->append(cwError(
+                QStringLiteral("Cannot import survex into trip \"%1\": it already has survey chunks. Add a new empty trip first.")
+                    .arg(trip->name()),
+                cwError::Fatal));
+        }
+        return;
+    }
+
+    const QString path = fileUrl.toLocalFile();
+    if (path.isEmpty()) return;
+
+    auto importer = new cwSurvexImporter(this);
+    importer->setInputFiles(QStringList{path});
+
+    QPointer<cwTrip> tripGuard(trip);
+    connect(importer, &cwTask::finished, this, [this, importer, tripGuard]() {
+        if (importer->hasParseErrors() && ErrorModel) {
+            const QStringList errs = importer->parseErrors();
+            for (const QString& msg : errs) {
+                ErrorModel->append(cwError(msg, cwError::Warning));
+            }
+        }
+
+        if (!tripGuard) {
+            importer->deleteLater();
+            return;
+        }
+
+        // Re-check chunk count: trip may have gained chunks while the
+        // background parse was running.
+        if (tripGuard->chunkCount() > 0) {
+            if (ErrorModel) {
+                ErrorModel->append(cwError(
+                    QStringLiteral("Survex import dropped: trip \"%1\" gained chunks while parsing.")
+                        .arg(tripGuard->name()),
+                    cwError::Fatal));
+            }
+            importer->deleteLater();
+            return;
+        }
+
+        // Mark every parsed top-level block as a Trip so cavesHelper()
+        // walks them. The default ImportType is NoImport, which would
+        // otherwise drop all chunks.
+        const QList<cwTreeImportDataNode*> rootNodes = importer->data()->nodes();
+        for (cwTreeImportDataNode* node : rootNodes) {
+            node->setImportType(cwTreeImportDataNode::Trip);
+        }
+
+        const QList<cwCave*> caves = importer->data()->caves();
+        bool metadataCopied = false;
+        for (cwCave* cave : caves) {
+            const QList<cwTrip*> trips = cave->trips();
+            for (cwTrip* importedTrip : trips) {
+                if (!metadataCopied) {
+                    tripGuard->setDate(importedTrip->date());
+                    if (importedTrip->team() && tripGuard->team()) {
+                        tripGuard->team()->setData(importedTrip->team()->data());
+                    }
+                    if (importedTrip->calibrations() && tripGuard->calibrations()) {
+                        tripGuard->calibrations()->setData(importedTrip->calibrations()->data());
+                    }
+                    metadataCopied = true;
+                }
+                const QList<cwSurveyChunk*> chunks = importedTrip->chunks();
+                for (cwSurveyChunk* src : chunks) {
+                    auto* copy = new cwSurveyChunk();
+                    copy->setData(src->data());
+                    tripGuard->addChunk(copy);
+                }
+            }
+        }
+        for (cwCave* cave : caves) cave->deleteLater();
+
+        importer->deleteLater();
+    });
+
+    importer->start();
 }
 
 /**

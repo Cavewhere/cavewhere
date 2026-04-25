@@ -8,6 +8,7 @@
 // pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
+import QtQuick.Dialogs as QD
 import cavewherelib
 import QtQml
 import QtQuick.Layouts
@@ -33,6 +34,12 @@ StandardPage {
 
         RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
                                                    cavePageArea.tripPageName(lastTrip));
+        return lastTrip;
+    }
+
+    function importSurvexAsNewTrip(fileUrl) {
+        var newTrip = addTripAndNavigate()
+        RootData.surveyImportManager.importSurvexToTrip(fileUrl, newTrip)
     }
 
     function registerSubPages() {
@@ -126,6 +133,12 @@ StandardPage {
             onAdd: cavePageArea.addTripAndNavigate()
         }
 
+        QC.Button {
+            objectName: "importSurvexButton"
+            text: "Import Survex"
+            onClicked: survexImportDialogId.open()
+        }
+
         ExportImportButtons {
             id: exportButton
             visible: RootData.desktopBuild
@@ -140,6 +153,18 @@ StandardPage {
                 let row = tv.currentItem as RowDelegate
                 return row ? row.tripObjectRole : null
             }
+        }
+    }
+
+    QD.FileDialog {
+        id: survexImportDialogId
+        title: "Import Survex (.svx)"
+        nameFilters: [ "Survex files (*.svx)", "All files (*)" ]
+        currentFolder: RootData.lastDirectory
+        fileMode: QD.FileDialog.OpenFile
+        onAccepted: {
+            RootData.lastDirectory = selectedFile
+            cavePageArea.importSurvexAsNewTrip(selectedFile)
         }
     }
 

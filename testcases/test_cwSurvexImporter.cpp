@@ -14,7 +14,15 @@
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
+#include "cwStation.h"
+#include "cwDistanceReading.h"
+#include "cwTreeImportDataNode.h"
+#include "cwSurvexGlobalData.h"
 #include "cwTripCalibration.h"
+
+//Qt includes
+#include <QTemporaryDir>
+#include <QFile>
 
 TEST_CASE("Import LRUD data correctly", "[SurvexImport]") {
     class Row {
@@ -124,5 +132,65 @@ TEST_CASE("Import chunk calibration applies to trip calibration", "[SurvexImport
     // now apply to the trip-level calibration.
     CHECK(trip->calibrations()->tapeCalibration() == -1.0);
     delete importer;
+}
+
+TEST_CASE("Survex passage data with '-' placeholders imports as empty LRUDs", "[SurvexImport]") {
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("dash_lrud.svx"));
+    {
+        QFile f(path);
+        REQUIRE(f.open(QIODevice::WriteOnly | QIODevice::Text));
+        f.write(
+            "*begin dashlrud\n"
+            "*data normal from to tape compass clino\n"
+            "1 2 10.0 90 0\n"
+            "2 3 5.0 180 -5\n"
+            "*data passage station left right up down\n"
+            "1 1.0 2.0 0.5 0.3\n"
+            "2 - - - -\n"
+            "3 0.5 - 1.0 -\n"
+            "*end dashlrud\n");
+    }
+
+    auto importer = std::make_unique<cwSurvexImporter>();
+    importer->setInputFiles(QStringList() << path);
+    importer->start();
+    importer->waitToFinish();
+
+    REQUIRE_FALSE(importer->hasParseErrors());
+
+    REQUIRE(importer->data()->nodes().size() == 1);
+    importer->data()->nodes().first()->setImportType(cwTreeImportDataNode::Trip);
+
+    QList<cwCave*> caves = importer->data()->caves();
+    REQUIRE(caves.size() == 1);
+    REQUIRE(caves.first()->trips().size() == 1);
+
+    cwTrip* trip = caves.first()->trips().first();
+    REQUIRE(trip->chunks().size() == 1);
+    cwSurveyChunk* chunk = trip->chunk(0);
+    REQUIRE(chunk->stationCount() >= 3);
+
+    // Station "1": all four LRUDs valid.
+    cwStation s1 = chunk->station(0);
+    CHECK(s1.left().state() == cwDistanceReading::State::Valid);
+    CHECK(s1.right().state() == cwDistanceReading::State::Valid);
+    CHECK(s1.up().state() == cwDistanceReading::State::Valid);
+    CHECK(s1.down().state() == cwDistanceReading::State::Valid);
+
+    // Station "2": all four LRUDs are "-", so they must be Empty (not Invalid).
+    cwStation s2 = chunk->station(1);
+    CHECK(s2.left().state() == cwDistanceReading::State::Empty);
+    CHECK(s2.right().state() == cwDistanceReading::State::Empty);
+    CHECK(s2.up().state() == cwDistanceReading::State::Empty);
+    CHECK(s2.down().state() == cwDistanceReading::State::Empty);
+
+    // Station "3": mixed.
+    cwStation s3 = chunk->station(2);
+    CHECK(s3.left().state() == cwDistanceReading::State::Valid);
+    CHECK(s3.right().state() == cwDistanceReading::State::Empty);
+    CHECK(s3.up().state() == cwDistanceReading::State::Valid);
+    CHECK(s3.down().state() == cwDistanceReading::State::Empty);
 }
 

@@ -651,12 +651,19 @@ void cwSurvexImporter::parsePassageData(QString line) {
         return;
     }
 
+    // Survex uses "-" as a "no measurement" sentinel in passage data.
+    // Treat it as empty so cwDistanceReading lands in State::Empty
+    // rather than State::Invalid.
+    auto cleanLrud = [](QString v) -> QString {
+        return v.trimmed() == QLatin1String("-") ? QString() : v;
+    };
+
     //Create or find a station from the name
     cwStation station(stationName);
-    station.setLeft(extractData(data, Left));
-    station.setRight(extractData(data, Right));
-    station.setUp(extractData(data, Up));
-    station.setDown(extractData(data, Down));
+    station.setLeft(cleanLrud(extractData(data, Left)));
+    station.setRight(cleanLrud(extractData(data, Right)));
+    station.setUp(cleanLrud(extractData(data, Up)));
+    station.setDown(cleanLrud(extractData(data, Down)));
 
     //Add the station to the current LRUD chunk
     nodeData(CurrentBlock)->LRUDChunks.last().Stations.append(station);
