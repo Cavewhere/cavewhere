@@ -24,7 +24,7 @@ arch=armv8
 build_type=Release
 compiler=clang
 compiler.cppstd=gnu20
-compiler.libcxx=c++_static
+compiler.libcxx=c++_shared
 compiler.version=18
 os=Android
 os.api_level=24
@@ -56,27 +56,30 @@ Update the fields for your environment:
 
 ## 2. Install Conan Dependencies
 
-Conan deps must be built with the Ninja generator — the Xcode quirks that
-motivated this on iOS don't apply, but Ninja is still the right default for a
-command-line cross-compile. Install for both Debug and Release so multi-config
-IDE tooling can find them:
+Conan deps must be built with the Ninja generator. Unlike iOS (Xcode, a
+multi-config generator), Qt Creator's Android kits use a single-config
+generator and append `-Debug` / `-Release` to the build directory. The
+top-level `CMakeLists.txt` looks for conan deps at
+`${CMAKE_BINARY_DIR}/conan_deps`, so the `-of` path must include the
+matching suffix — one install per configuration:
 
 ```bash
 conan install . -o "&:system_qt=True" -o "&:mobile=True" --build=missing \
     -pr:h android -pr:b default \
-    -of build/Qt_6_11_0_for_Android_arm64_v8a/conan_deps \
+    -of build/Qt_6_11_0_for_Android_arm64_v8a-Release/conan_deps \
     -s build_type=Release
 
 conan install . -o "&:system_qt=True" -o "&:mobile=True" --build=missing \
     -pr:h android -pr:b default \
-    -of build/Qt_6_11_0_for_Android_arm64_v8a/conan_deps \
+    -of build/Qt_6_11_0_for_Android_arm64_v8a-Debug/conan_deps \
     -s build_type=Debug
 ```
 
-Adjust the output path (`-of`) to match the build directory Qt Creator
-generates for your kit (e.g. `Qt_6_11_0_for_Android_arm64_v8a`,
-`Qt_6_11_0_for_Android_x86_64`). You need a separate `conan_deps` directory
-per ABI.
+Adjust the output paths to match the exact build directory names Qt
+Creator generates for your kit. In Qt Creator check **Projects → Build
+Settings → Build directory** for the current configuration; whatever path
+is there, append `/conan_deps` and pass that to `-of`. You need a separate
+`conan_deps` directory per (ABI, build-type) pair.
 
 Key options:
 
@@ -95,14 +98,17 @@ Configuration**:
 
 ```
 -DQT_CREATOR_ENABLE_PACKAGE_MANAGER_SETUP=OFF
--DQT_ADDITIONAL_PACKAGES_PREFIX_PATH=/path/to/build/Qt_6_11_0_for_Android_arm64_v8a/conan_deps
+-DQT_ADDITIONAL_PACKAGES_PREFIX_PATH=%{buildDir}/conan_deps
 ```
 
 - `QT_CREATOR_ENABLE_PACKAGE_MANAGER_SETUP=OFF` prevents Qt Creator's
   built-in Conan support from running its own install with the wrong
   generator/profile.
 - `QT_ADDITIONAL_PACKAGES_PREFIX_PATH` points Qt's toolchain at the
-  Conan-installed packages.
+  Conan-installed packages. `%{buildDir}` is a Qt Creator macro that
+  expands to the current configuration's build directory (including the
+  `-Debug` / `-Release` suffix), which keeps this argument the same
+  across build configurations.
 
 Qt Creator populates the Android SDK / NDK paths and `QT_HOST_PATH` from the
 selected kit, so you don't need to pass them explicitly in the IDE.
@@ -110,17 +116,21 @@ selected kit, so you don't need to pass them explicitly in the IDE.
 ### Configure from Command Line
 
 ```bash
-cmake -S . -B build/Qt_6_11_0_for_Android_arm64_v8a \
+BUILD_DIR=build/Qt_6_11_0_for_Android_arm64_v8a-Release
+cmake -S . -B $BUILD_DIR \
     -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_TOOLCHAIN_FILE=$HOME/Qt/6.11.0/android_arm64_v8a/lib/cmake/Qt6/qt.toolchain.cmake \
     -DQT_HOST_PATH=$HOME/Qt/6.11.0/macos \
     -DANDROID_SDK_ROOT=$HOME/Library/Android/sdk \
     -DANDROID_NDK_ROOT=$HOME/Library/Android/sdk/ndk/27.2.12479018 \
-    -DQT_ADDITIONAL_PACKAGES_PREFIX_PATH=$(pwd)/build/Qt_6_11_0_for_Android_arm64_v8a/conan_deps \
+    -DQT_ADDITIONAL_PACKAGES_PREFIX_PATH=$(pwd)/$BUILD_DIR/conan_deps \
     -DQT_CREATOR_ENABLE_PACKAGE_MANAGER_SETUP=OFF \
     -DCAVEWHERE_BUILD_NUMBER=1
 ```
+
+Use the same `-Debug` / `-Release` suffix convention as Qt Creator so the
+build dir matches the `-of` path passed to `conan install`.
 
 - `QT_HOST_PATH` must point to a host-architecture Qt install of the same
   version as the target Android kit (for native build tools like
@@ -162,7 +172,7 @@ That flag drives:
 - Adding `conan_deps` to `CMAKE_MODULE_PATH` / `CMAKE_PREFIX_PATH`.
 - Refusing to build with the marketing-version fallback `0.0.0` (see below).
 
-### Static Linking
+### Static Linking, shared STL
 
 Conan dependencies are built as static libraries for Android (protobuf,
 abseil, libgit2, libssh2, openssl, etc.) because Qt for Android loads the
@@ -170,6 +180,13 @@ app as a shared library and pulling another layer of runtime loading for
 third-party shared libs is painful. `conanfile.py::configure()` forces
 `openssl.shared=False`, `protobuf.shared=False`, and
 `abseil.shared=False` when `os=Android`.
+
+The C++ standard library itself, on the other hand, is *shared*
+(`compiler.libcxx=c++_shared` in the profile) because Qt for Android's own
+modules link against `libc++_shared.so`. Building Conan deps against
+`c++_static` would yield two copies of the STL in the same process —
+classic ODR hazard with `std::string`, iostreams, etc. `androiddeployqt`
+bundles `libc++_shared.so` into the APK automatically.
 
 ### Versioning
 

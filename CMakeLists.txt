@@ -201,14 +201,38 @@ function(cw_prepend_conan_buildenv_path)
             list(PREPEND CMAKE_PREFIX_PATH "${_cw_conan_deps_dir}")
             message(STATUS "CaveWhere: Prepending Conan deps to CMAKE_MODULE_PATH and CMAKE_PREFIX_PATH: ${_cw_conan_deps_dir}")
 
+            # Android-specific: the NDK toolchain sets
+            # CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY, which blocks the
+            # CMAKE_PREFIX_PATH fallback. Putting conan_deps on
+            # CMAKE_FIND_ROOT_PATH makes find_package() discover configs
+            # there even under that mode, and filename search is
+            # case-insensitive so `find_package(PROJ)` resolves
+            # `proj-config.cmake` without needing a case-matched
+            # <pkg>_DIR entry.
+            if(ANDROID)
+                list(PREPEND CMAKE_FIND_ROOT_PATH "${_cw_conan_deps_dir}")
+            endif()
+
             # Set <package>_DIR for Conan packages so config-mode find_package
             # uses the correct Conan-generated *Config.cmake instead of stale build-dir configs.
-            # ZLIB is provided by the iOS SDK; overriding it breaks Qt's internal ZLIB usage.
-            set(_cw_skip_dir_packages "ZLIB")
-            file(GLOB _cw_conan_configs "${_cw_conan_deps_dir}/*Config.cmake")
+            # On iOS, ZLIB comes from the SDK and overriding ZLIB_DIR breaks
+            # Qt's internal ZLIB usage. On Android the NDK ships libz.so but
+            # no ZLIBConfig.cmake, so Conan's ZLIBConfig is the only way to
+            # satisfy OpenSSLConfig's find_dependency(ZLIB CONFIG REQUIRED).
+            set(_cw_skip_dir_packages "")
+            if(APPLE)
+                list(APPEND _cw_skip_dir_packages "ZLIB")
+            endif()
+            file(GLOB _cw_conan_configs "${_cw_conan_deps_dir}/*[Cc]onfig.cmake")
             foreach(_cw_cfg IN LISTS _cw_conan_configs)
                 get_filename_component(_cw_cfg_name "${_cw_cfg}" NAME_WE)
-                string(REGEX REPLACE "Config$" "" _cw_pkg_name "${_cw_cfg_name}")
+                # Conan generates both PascalCase (BZip2Config.cmake → BZip2) and
+                # kebab-lowercase (absl-config.cmake → absl) config names; strip
+                # either tail so <pkg>_DIR matches the find_package() package
+                # name. Needed on Android because the NDK toolchain sets
+                # CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY, which suppresses the
+                # CMAKE_PREFIX_PATH fallback and makes <pkg>_DIR the only route.
+                string(REGEX REPLACE "-?[Cc]onfig$" "" _cw_pkg_name "${_cw_cfg_name}")
                 if(NOT "${_cw_pkg_name}" IN_LIST _cw_skip_dir_packages)
                     set(${_cw_pkg_name}_DIR "${_cw_conan_deps_dir}" CACHE PATH "Conan ${_cw_pkg_name} dir" FORCE)
                     message(STATUS "CaveWhere: Setting ${_cw_pkg_name}_DIR = ${_cw_conan_deps_dir}")
@@ -219,6 +243,7 @@ function(cw_prepend_conan_buildenv_path)
         set(CMAKE_PROGRAM_PATH "${CMAKE_PROGRAM_PATH}" PARENT_SCOPE)
         set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" PARENT_SCOPE)
         set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}" PARENT_SCOPE)
+        set(CMAKE_FIND_ROOT_PATH "${CMAKE_FIND_ROOT_PATH}" PARENT_SCOPE)
     endif()
 endfunction()
 cw_prepend_conan_buildenv_path()
