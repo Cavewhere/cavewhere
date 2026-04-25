@@ -94,6 +94,20 @@ else()
     set(CW_MOBILE OFF)
 endif()
 
+# MOBILE_BUILD is the cache-exposed twin of CW_MOBILE that subdirectories
+# gate on (e.g. cavewherelib adds the CW_MOBILE_BUILD compile define under
+# it). Force it here — before any add_subdirectory() — so subdirs see the
+# right value when they're evaluated.
+option(MOBILE_BUILD "Builds as mobile: for ios or android" OFF)
+if(CW_MOBILE)
+    set(MOBILE_BUILD ON CACHE BOOL "Builds as mobile: for ios or android" FORCE)
+endif()
+
+if(MOBILE_BUILD)
+    # Mobile builds are fully static (including protobuf); tests are disabled to avoid duplicate protobuf runtimes via plugins.
+    set(BUILD_TESTING OFF CACHE BOOL "Disable tests for mobile builds" FORCE)
+endif()
+
 # App Store format validation (iOS only). Catches typos like
 # -DCAVEWHERE_BUILD_NUMBER=not-a-number before Xcode starts.
 if(CW_MOBILE)
@@ -343,15 +357,6 @@ add_subdirectory(QQuickGit)
 # set(QML_IMPORT_PATH ${CMAKE_BINARY_DIR} CACHE STRING "" FORCE)
 
 set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
-option(MOBILE_BUILD "Builds as mobile: for ios or android" OFF)
-if(CW_MOBILE)
-    set(MOBILE_BUILD ON CACHE BOOL "Builds as mobile: for ios or android" FORCE)
-endif()
-
-if(MOBILE_BUILD)
-    # Mobile builds are fully static (including protobuf); tests are disabled to avoid duplicate protobuf runtimes via plugins.
-    set(BUILD_TESTING OFF CACHE BOOL "Disable tests for mobile builds" FORCE)
-endif()
 
 add_subdirectory(MarkScope)
 add_subdirectory(QuickQanava)

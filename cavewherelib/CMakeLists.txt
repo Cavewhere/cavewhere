@@ -204,6 +204,20 @@ endforeach()
 # Set the singleton QML files as singletons
 set_source_files_properties(${qml_singletons} PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
+# JS files are only used via relative `import "X.js" as X` imports, never as
+# module-level scripts. Skip the qmldir entry so the Android QML engine
+# doesn't try to resolve them through the android_rcc_bundle path (the module
+# is statically linked, so the bundle has no copy).
+set(cavewhere_JS_FILES "")
+foreach(file ${cavewhere_RELATIVE_QML_FILES})
+    if(file MATCHES "\\.js$")
+        list(APPEND cavewhere_JS_FILES "${file}")
+    endif()
+endforeach()
+if(cavewhere_JS_FILES)
+    set_source_files_properties(${cavewhere_JS_FILES} PROPERTIES QT_QML_SKIP_QMLDIR_ENTRY TRUE)
+endif()
+
 # Add QML module with the regular QML files and the singleton files
 # if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
 #     # macOS
