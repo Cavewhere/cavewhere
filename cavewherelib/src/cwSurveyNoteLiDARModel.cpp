@@ -5,6 +5,7 @@
 #include "cwNoteLiDAR.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwGlobals.h"
 
 // Qt
 #include <QDir>
@@ -24,7 +25,7 @@ void cwSurveyNoteLiDARModel::addFromFiles(QList<QUrl> files)
     QList<QUrl> glbUrls;
     glbUrls.reserve(files.size());
     for (const QUrl& u : files) {
-        const QFileInfo fi(u.toLocalFile());
+        const QFileInfo fi(cwGlobals::importPathFromUrl(u));
         if (fi.suffix().compare(QStringLiteral("glb"), Qt::CaseInsensitive) == 0) {
             glbUrls.append(u);
         }

@@ -58,6 +58,34 @@ QString cwGlobals::convertFromURL(QString filenameUrl)
 }
 
 /**
+ * Resolves a QUrl picked from a QML FileDialog into a path that QFile /
+ * QFileInfo can open. For local files this is the filesystem path; for
+ * Android Storage Access Framework "content://" URIs (which have no local
+ * path), the URL string itself is returned — Qt 6's QFile and QFileInfo
+ * understand content:// natively on Android.
+ *
+ * Returns an empty string for invalid or empty URLs.
+ */
+QString cwGlobals::importPathFromUrl(const QUrl& url)
+{
+    const QString local = url.toLocalFile();
+    if (!local.isEmpty()) return local;
+    if (url.isEmpty()) return QString();
+    return url.toString();
+}
+
+QStringList cwGlobals::importPathsFromUrls(const QList<QUrl>& urls)
+{
+    QStringList paths;
+    paths.reserve(urls.size());
+    for (const QUrl& url : urls) {
+        const QString path = importPathFromUrl(url);
+        if (!path.isEmpty()) paths.append(path);
+    }
+    return paths;
+}
+
+/**
  * @brief cwGlobals::findExecutable
  * @param executables - A list of executables, [cavern.exe, cavern]
  * @return Returns the first exectuable that exists base on the QApplication::applicationPath()

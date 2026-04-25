@@ -2111,7 +2111,8 @@ void cwSaveLoad::addImages(QList<QUrl> noteImagePaths,
         pdfFilePaths.reserve(noteImagePaths.size());
 
         for (const QUrl& url : noteImagePaths) {
-            const QString path = url.toLocalFile();
+            const QString path = cwGlobals::importPathFromUrl(url);
+            if (path.isEmpty()) continue;
             if (isPDF(path)) {
                 pdfFilePaths.append(path);
             } else {
@@ -2314,11 +2315,7 @@ void cwSaveLoad::addFiles(QList<QUrl> files,
             return AsyncFuture::completed(ResultBase(QStringLiteral("Import destination directory is invalid.")));
         }
 
-        QList<QString> sourceFilePaths;
-        sourceFilePaths.reserve(files.size());
-        for (const QUrl& url : files) {
-            sourceFilePaths.append(url.toLocalFile());
-        }
+        const QList<QString> sourceFilePaths = cwGlobals::importPathsFromUrls(files);
 
         auto copyFuture = copyFilesAndEmitResults<QString>(
                     sourceFilePaths,

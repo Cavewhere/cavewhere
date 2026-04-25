@@ -12,6 +12,7 @@
 #include <QString>
 #include <QFileDialog>
 #include <QDir>
+#include <QUrl>
 
 //Std includes
 #include <numbers>
@@ -35,6 +36,8 @@ public:
 
     static QString addExtension(QString filename, QString extensionHint);
     static QString convertFromURL(QString filenameUrl);
+    static QString importPathFromUrl(const QUrl& url);
+    static QStringList importPathsFromUrls(const QList<QUrl>& urls);
     static QString findExecutable(QStringList executables);
     static QString findExecutable(const QStringList& executables, const QList<QDir>& dirs);
     static QList<QDir> systemPaths();

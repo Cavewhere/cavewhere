@@ -8,6 +8,7 @@
 #include "cwSurveyNoteSketchModel.h"
 #include "cwSketch.h"
 #include "cwPDFConverter.h"
+#include "cwGlobals.h"
 
 // Qt
 #include <QFileInfo>
@@ -118,7 +119,7 @@ bool cwSurveyNotesConcatModel::isPdfPath(const QString& absolutePath)
 
 bool cwSurveyNotesConcatModel::isGlbUrl(const QUrl& fileUrl)
 {
-    const QFileInfo fileInfo(fileUrl.toLocalFile());
+    const QFileInfo fileInfo(cwGlobals::importPathFromUrl(fileUrl));
     return fileInfo.suffix().compare(QStringLiteral("glb"), Qt::CaseInsensitive) == 0;
 }
 
@@ -134,13 +135,14 @@ bool cwSurveyNotesConcatModel::isImageLikeUrl(const QUrl& fileUrl)
         return s;
     }();
 
-    const QFileInfo fileInfo(fileUrl.toLocalFile());
+    const QString path = cwGlobals::importPathFromUrl(fileUrl);
+    const QFileInfo fileInfo(path);
     const QString suffixLower = fileInfo.suffix().toLower();
 
     if (supportedImageSuffixes.contains(suffixLower)) {
         return true;
     }
-    if (isPdfPath(fileInfo.absoluteFilePath())) {
+    if (isPdfPath(path)) {
         return true;
     }
     return false;
