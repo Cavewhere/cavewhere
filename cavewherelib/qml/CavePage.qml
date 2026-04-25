@@ -499,6 +499,12 @@ StandardPage {
                         onAdd: cavePageArea.addTripAndNavigate()
                     }
 
+                    QC.Button {
+                        objectName: "importSurvexButton"
+                        text: "Import Survex"
+                        onClicked: survexImportDialogId.open()
+                    }
+
                     RowLayout {
                         spacing: Theme.delegatePadding
 
