@@ -1,36 +1,44 @@
 import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
-QQ.MouseArea {
-    id: rightClickMouseArea
-    acceptedButtons: Qt.RightButton
+QQ.Item {
+    id: root
 
-    property point clickPos;
+    property point clickPos
     property RemoveAskBox removeChallenge
     required property int row
     required property string name
 
-    onClicked: (mouse) => {
-        clickPos = Qt.point(mouse.x, mouse.y)
+    function showMenu(x, y) {
+        clickPos = Qt.point(x, y)
         rightClickMenu.popup()
-        mouse.accepted = false
+    }
+
+    QQ.TapHandler {
+        acceptedButtons: Qt.RightButton
+        onTapped: (eventPoint) => root.showMenu(eventPoint.position.x,
+                                                eventPoint.position.y)
+    }
+
+    QQ.TapHandler {
+        onLongPressed: root.showMenu(point.position.x, point.position.y)
     }
 
     QC.Menu {
         id: rightClickMenu
         QC.MenuItem {
-            text: "Remove " + rightClickMouseArea.name
+            text: "Remove " + root.name
 
             onTriggered: {
-                var pos = rightClickMouseArea.mapToItem(rightClickMouseArea.removeChallenge.parent,
-                                                        rightClickMouseArea.clickPos.x,
-                                                        rightClickMouseArea.clickPos.y)
-                rightClickMouseArea.removeChallenge.x = pos.x
-                rightClickMouseArea.removeChallenge.y = pos.y
+                var pos = root.mapToItem(root.removeChallenge.parent,
+                                         root.clickPos.x,
+                                         root.clickPos.y)
+                root.removeChallenge.x = pos.x
+                root.removeChallenge.y = pos.y
 
-                rightClickMouseArea.removeChallenge.indexToRemove = rightClickMouseArea.row
-                rightClickMouseArea.removeChallenge.removeName = rightClickMouseArea.name
-                rightClickMouseArea.removeChallenge.show()
+                root.removeChallenge.indexToRemove = root.row
+                root.removeChallenge.removeName = root.name
+                root.removeChallenge.show()
             }
         }
     }
