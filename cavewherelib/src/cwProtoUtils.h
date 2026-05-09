@@ -55,7 +55,7 @@ class PenStroke;
 class Scale;
 class Sketch;
 class FixStation;
-class Vector3d;
+class DoubleVector3d;
 }
 
 namespace QtProto {
@@ -173,7 +173,7 @@ CAVEWHERE_LIB_EXPORT cwSketchData  fromProtoSketch   (const CavewhereProto::Sket
 // Fix stations / world origin
 CAVEWHERE_LIB_EXPORT void saveFixStation(CavewhereProto::FixStation* protoFix, const cwFixStation& fix);
 CAVEWHERE_LIB_EXPORT cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix);
-CAVEWHERE_LIB_EXPORT void saveVector3d(CavewhereProto::Vector3d* protoVec, const cwGeoPoint& point);
-CAVEWHERE_LIB_EXPORT cwGeoPoint fromProtoVector3d(const CavewhereProto::Vector3d& protoVec);
+CAVEWHERE_LIB_EXPORT void saveDoubleVector3d(CavewhereProto::DoubleVector3d* protoVec, const cwGeoPoint& point);
+CAVEWHERE_LIB_EXPORT cwGeoPoint fromProtoDoubleVector3d(const CavewhereProto::DoubleVector3d& protoVec);
 
 } // namespace cwProtoUtils

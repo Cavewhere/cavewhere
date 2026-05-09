@@ -1833,7 +1833,7 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
             cwProtoUtils::saveString(protoMetadata->mutable_globalcs(), region->globalCS());
         }
         if (region->worldOrigin() != cwGeoPoint{}) {
-            cwProtoUtils::saveVector3d(protoMetadata->mutable_worldorigin(), region->worldOrigin());
+            cwProtoUtils::saveDoubleVector3d(protoMetadata->mutable_worldorigin(), region->worldOrigin());
         }
     }
 
@@ -2878,7 +2878,7 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                 loadData.region.globalCS = QString::fromStdString(metadataProto.globalcs());
             }
             if (metadataProto.has_worldorigin()) {
-                loadData.region.worldOrigin = cwProtoUtils::fromProtoVector3d(metadataProto.worldorigin());
+                loadData.region.worldOrigin = cwProtoUtils::fromProtoDoubleVector3d(metadataProto.worldorigin());
             }
         }
 

@@ -843,14 +843,14 @@ cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
     return fix;
 }
 
-void saveVector3d(CavewhereProto::Vector3d* protoVec, const cwGeoPoint& point)
+void saveDoubleVector3d(CavewhereProto::DoubleVector3d* protoVec, const cwGeoPoint& point)
 {
     protoVec->set_x(point.x);
     protoVec->set_y(point.y);
     protoVec->set_z(point.z);
 }
 
-cwGeoPoint fromProtoVector3d(const CavewhereProto::Vector3d& protoVec)
+cwGeoPoint fromProtoDoubleVector3d(const CavewhereProto::DoubleVector3d& protoVec)
 {
     return cwGeoPoint(protoVec.x(), protoVec.y(), protoVec.z());
 }

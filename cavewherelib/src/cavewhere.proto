@@ -25,7 +25,7 @@ message ProjectMetadata {
     optional string globalCS = 4;
     // Doubles, not QtProto.QVector3D (which is float): worldOrigin is in
     // projected CS units (e.g. UTM easting ~5e5) where float loses cm-scale.
-    optional Vector3d worldOrigin = 5;
+    optional DoubleVector3d worldOrigin = 5;
 }
 
 message Project {
@@ -44,7 +44,7 @@ message CavingRegion {
     optional string name = 5;
 }
 
-message Vector3d {
+message DoubleVector3d {
     optional double x = 1;
     optional double y = 2;
     optional double z = 3;
