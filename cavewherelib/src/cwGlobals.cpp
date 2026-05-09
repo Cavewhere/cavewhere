@@ -171,6 +171,48 @@ QList<QDir> cwGlobals::survexPath()
 #endif
 }
 
+/**
+ * Returns candidate directories that may contain PROJ's runtime data
+ * (proj.db plus grid shifts). Filtered to dirs that actually contain
+ * proj.db. Resolution order:
+ *   1. Bundled location next to / inside the executable
+ *      - macOS .app: Contents/Resources/proj/
+ *      - Other:      <appDir>/proj/
+ *   2. PROJ_DATA env var (Conan's runenv sets this; respect anything
+ *      the user already has)
+ */
+QStringList cwGlobals::projDataPath()
+{
+    QStringList candidates;
+
+    const QString appDir = QCoreApplication::applicationDirPath();
+    candidates.append(appDir + QStringLiteral("/proj"));
+#ifdef Q_OS_MAC
+    candidates.append(appDir + QStringLiteral("/../Resources/proj"));
+#endif
+
+    const QByteArray envProjData = qgetenv("PROJ_DATA");
+    if (!envProjData.isEmpty()) {
+        for (const QByteArray& part : envProjData.split(QDir::listSeparator().toLatin1())) {
+            if (!part.isEmpty()) {
+                candidates.append(QString::fromLocal8Bit(part));
+            }
+        }
+    }
+
+    QStringList valid;
+    valid.reserve(candidates.size());
+    for (const QString& c : candidates) {
+        const QString clean = QDir(c).absolutePath();
+        if (QFileInfo::exists(clean + QStringLiteral("/proj.db"))) {
+            if (!valid.contains(clean)) {
+                valid.append(clean);
+            }
+        }
+    }
+    return valid;
+}
+
 static bool isPathInsideDir(const QString& candidate, const QDir& baseDir) {
     if (candidate.isEmpty() || !baseDir.exists()) {
         return false;

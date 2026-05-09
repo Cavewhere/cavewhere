@@ -31,6 +31,8 @@
 #include "cwJobSettings.h"
 #include "cwSketchSettings.h"
 #include "cwSurveyNoteModel.h"
+#include "cwCoordinateTransform.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -496,6 +498,13 @@ void cwRootData::initCavewherelib()
             break;
         }
     }
+
+    // Tell PROJ where to find proj.db / grid-shift files. Conan's runenv
+    // exports PROJ_DATA when the binary is launched from the dev shell, but
+    // launches from Finder, the Qt Creator runner, or installed app bundles
+    // do not — so we resolve the bundled location explicitly and apply it
+    // to every PJ_CONTEXT cwCoordinateTransform creates.
+    cwCoordinateTransform::setProjSearchPaths(cwGlobals::projDataPath());
 }
 
 cwRemoteServices* cwRootData::remote() const

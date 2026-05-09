@@ -582,6 +582,8 @@ if(BUILD_TESTING)
 
     cw_link_absl_static(cavewhere-test)
 
+    cw_bundle_proj_data(cavewhere-test proj)
+
     #### Cavewhere qml tests ####
     # Add the executable
     qt_add_executable(cavewhere-qml-test)
@@ -631,6 +633,8 @@ if(BUILD_TESTING)
 
     # Ensure QML modules are imported without relying on QML2_IMPORT_PATH.
     qt_import_qml_plugins(cavewhere-qml-test)
+
+    cw_bundle_proj_data(cavewhere-qml-test proj)
 endif()
 
 #### CaveWhere ####
@@ -707,6 +711,12 @@ if(MOBILE_BUILD)
 endif()
 
 qt_finalize_executable(CaveWhere)
+
+# Non-mac desktop: copy PROJ data to <exe_dir>/proj/. macOS handles it
+# inside the APPLE block above (Contents/Resources/proj/).
+if(NOT APPLE AND NOT ANDROID AND NOT IOS AND NOT MOBILE_BUILD)
+    cw_bundle_proj_data(CaveWhere proj)
+endif()
 
 if(WIN32)
     set(_conan_runtime_dlls "")
@@ -957,6 +967,16 @@ if(APPLE)
                 COMMENT "Copying ${MSG_NAME} to application bundle."
             )
         endforeach()
+
+        if(CW_PROJ_DATA_DIR)
+            add_custom_command(TARGET CaveWhere POST_BUILD
+                COMMAND ${CMAKE_COMMAND}
+                    -DSRC=${CW_PROJ_DATA_DIR}
+                    -DDST=$<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/proj
+                    -P ${CW_BUNDLE_PROJ_DATA_SCRIPT}
+                COMMENT "Bundling PROJ data into CaveWhere.app/Contents/Resources/proj"
+                VERBATIM)
+        endif()
 
         add_dependencies(CaveWhere messageFiles)
 

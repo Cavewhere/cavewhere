@@ -25,6 +25,88 @@ find_package(Qt6
 find_package(xxHash REQUIRED)
 find_package(TinyGLTF REQUIRED)
 find_package(minizip REQUIRED)
+find_package(PROJ CONFIG REQUIRED)
+
+# Locate PROJ's runtime data directory (proj.db + grid-shift files). PROJ
+# can't run without proj.db; conan's runenv only sets PROJ_DATA inside the
+# dev shell, so for installed app bundles and IDE-launched test/app runs
+# we need to bundle the data ourselves and point PROJ at it from C++
+# (cwCoordinateTransform::setProjSearchPaths).
+function(_cw_resolve_proj_data_dir out_var)
+    set(${out_var} "" PARENT_SCOPE)
+
+    set(_hints "")
+    # Conan's CMakeDeps generator exposes <pkg>_PACKAGE_FOLDER_<CONFIG> /
+    # <pkg>_RES_DIRS_<CONFIG>. Conan's PROJ recipe puts proj.db in res/.
+    foreach(_cfg DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+        if(DEFINED proj_RES_DIRS_${_cfg})
+            list(APPEND _hints ${proj_RES_DIRS_${_cfg}})
+        endif()
+        if(DEFINED proj_PACKAGE_FOLDER_${_cfg})
+            list(APPEND _hints
+                "${proj_PACKAGE_FOLDER_${_cfg}}/res"
+                "${proj_PACKAGE_FOLDER_${_cfg}}/share/proj")
+        endif()
+    endforeach()
+    if(TARGET PROJ::proj)
+        foreach(_cfg RELEASE DEBUG RELWITHDEBINFO MINSIZEREL "")
+            set(_prop IMPORTED_LOCATION)
+            if(NOT _cfg STREQUAL "")
+                set(_prop IMPORTED_LOCATION_${_cfg})
+            endif()
+            get_target_property(_loc PROJ::proj ${_prop})
+            if(_loc AND NOT _loc STREQUAL "_loc-NOTFOUND")
+                get_filename_component(_libdir "${_loc}" DIRECTORY)
+                list(APPEND _hints
+                    "${_libdir}/../res"
+                    "${_libdir}/../share/proj")
+            endif()
+        endforeach()
+    endif()
+    if(_hints)
+        list(REMOVE_DUPLICATES _hints)
+    endif()
+
+    foreach(_h ${_hints})
+        if(EXISTS "${_h}/proj.db")
+            set(${out_var} "${_h}" PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+endfunction()
+
+_cw_resolve_proj_data_dir(_cw_proj_data_dir)
+set(CW_PROJ_DATA_DIR "${_cw_proj_data_dir}" CACHE PATH
+    "Source directory containing PROJ runtime data (proj.db, grid shifts)." FORCE)
+if(CW_PROJ_DATA_DIR)
+    message(STATUS "CaveWhere: PROJ data dir: ${CW_PROJ_DATA_DIR}")
+else()
+    message(WARNING
+        "CaveWhere: could not locate PROJ data dir (proj.db). Coordinate "
+        "transforms will fail at runtime unless PROJ_DATA is set in the "
+        "environment.")
+endif()
+
+# Copies PROJ's runtime data dir (proj.db, grid-shift files, schemas) into
+# `<dest_subdir>` next to or inside `target` so cwCoordinateTransform's
+# resolution in cwGlobals::projDataPath() finds it. dest_subdir is appended
+# to $<TARGET_FILE_DIR:target>, e.g. "proj" → "<exe_dir>/proj/proj.db".
+# The copy is idempotent (BundleProjData.cmake skips when proj.db is up to
+# date) so 8.4 MB of files don't re-copy on every relink.
+set(CW_BUNDLE_PROJ_DATA_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/BundleProjData.cmake"
+    CACHE INTERNAL "Path to BundleProjData.cmake helper")
+function(cw_bundle_proj_data target dest_subdir)
+    if(NOT CW_PROJ_DATA_DIR)
+        return()
+    endif()
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+            -DSRC=${CW_PROJ_DATA_DIR}
+            -DDST=$<TARGET_FILE_DIR:${target}>/${dest_subdir}
+            -P ${CW_BUNDLE_PROJ_DATA_SCRIPT}
+        COMMENT "Bundling PROJ data into $<TARGET_FILE_DIR:${target}>/${dest_subdir}"
+        VERBATIM)
+endfunction()
 
 set(BUILD_WITH_QT6 ON CACHE BOOL "Build qtkeychain with Qt 6" FORCE)
 set(BUILD_TRANSLATIONS OFF CACHE BOOL "Disable qtkeychain translations" FORCE)
@@ -115,6 +197,7 @@ target_link_libraries(cavewherelib
     MINIZIP::minizip
     surveximg
     cavernlib
+    PROJ::proj
 )
 
 cw_link_absl_static(cavewherelib)
