@@ -1828,6 +1828,15 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
     cwProtoUtils::saveString(protoMetadata->mutable_dataroot(), metadata.dataRoot);
     protoMetadata->set_syncenabled(metadata.syncEnabled);
 
+    if (region != nullptr) {
+        if (!region->globalCS().isEmpty()) {
+            cwProtoUtils::saveString(protoMetadata->mutable_globalcs(), region->globalCS());
+        }
+        if (region->worldOrigin() != cwGeoPoint{}) {
+            cwProtoUtils::saveVector3d(protoMetadata->mutable_worldorigin(), region->worldOrigin());
+        }
+    }
+
     return protoProject;
 }
 
@@ -1884,6 +1893,11 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
     }
     protoCave->set_lengthunit(static_cast<CavewhereProto::Units_LengthUnit>(cave->length()->unit()));
     protoCave->set_depthunit(static_cast<CavewhereProto::Units_LengthUnit>(cave->depth()->unit()));
+
+    for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
+        cwProtoUtils::saveFixStation(protoCave->add_fixstations(), fix);
+    }
+
     return protoCave;
 }
 
@@ -2690,6 +2704,11 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                         ? static_cast<cwUnits::LengthUnit>(caveProto.depthunit())
                         : cwUnits::Meters;
 
+                cave.fixStations.reserve(caveProto.fixstations_size());
+                for (const auto& protoFix : caveProto.fixstations()) {
+                    cave.fixStations.append(cwProtoUtils::fromProtoFixStation(protoFix));
+                }
+
                 // Load all trips for this cave
                 QDir caveDir = caveFileInfo.absoluteDir();
                 QDir tripsDir(caveDir.filePath("trips"));
@@ -2854,6 +2873,12 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
             }
             if (metadataProto.has_syncenabled()) {
                 loadData.metadata.syncEnabled = metadataProto.syncenabled();
+            }
+            if (metadataProto.has_globalcs()) {
+                loadData.region.globalCS = QString::fromStdString(metadataProto.globalcs());
+            }
+            if (metadataProto.has_worldorigin()) {
+                loadData.region.worldOrigin = cwProtoUtils::fromProtoVector3d(metadataProto.worldorigin());
             }
         }
 

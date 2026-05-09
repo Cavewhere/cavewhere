@@ -122,6 +122,42 @@ StandardPage {
         }
     }
 
+    ColumnLayout {
+        id: fixStationsBlock
+
+        readonly property int fixCount: cavePageArea.currentCave
+                                        ? cavePageArea.currentCave.fixStations.count
+                                        : 0
+
+        spacing: Theme.tightSpacing
+
+        QC.Label {
+            text: "Fix stations: " + fixStationsBlock.fixCount
+        }
+
+        QQ.ListView {
+            Layout.fillWidth: true
+            implicitHeight: Math.min(contentHeight, 4 * Theme.fontSizeBody * 1.5)
+            visible: fixStationsBlock.fixCount > 0
+            model: cavePageArea.currentCave ? cavePageArea.currentCave.fixStations : null
+            interactive: false
+            delegate: QC.Label {
+                required property string stationName
+                required property string inputCS
+                required property double easting
+                required property double northing
+                required property double elevation
+                text: "%1  %2  (%3, %4, %5)"
+                    .arg(stationName)
+                    .arg(inputCS)
+                    .arg(easting)
+                    .arg(northing)
+                    .arg(elevation)
+                font.pixelSize: Theme.fontSizeSmall
+            }
+        }
+    }
+
     QQ.Flow {
         id: actionBar
         spacing: Theme.actionBarSpacing
@@ -218,6 +254,7 @@ StandardPage {
                     QQ.Item { implicitHeight: Theme.delegatePadding }
 
                     LayoutItemProxy { target: leadsRow }
+                    LayoutItemProxy { target: fixStationsBlock }
                 }
             }
         }

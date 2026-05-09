@@ -22,6 +22,10 @@ message ProjectMetadata {
     optional string dataRoot = 1;
     reserved 2; // Removed: GitMode enum (only ManagedNew was ever used)
     optional bool syncEnabled = 3;
+    optional string globalCS = 4;
+    // Doubles, not QtProto.QVector3D (which is float): worldOrigin is in
+    // projected CS units (e.g. UTM easting ~5e5) where float loses cm-scale.
+    optional Vector3d worldOrigin = 5;
 }
 
 message Project {
@@ -38,6 +42,23 @@ message CavingRegion {
     optional QtProto.QString legacy_cavewhereVersion = 3;
     optional string cavewhereVersion = 4;
     optional string name = 5;
+}
+
+message Vector3d {
+    optional double x = 1;
+    optional double y = 2;
+    optional double z = 3;
+}
+
+message FixStation {
+    optional string id = 1;
+    optional string stationName = 2;
+    optional string inputCS = 3;
+    optional double easting = 4;
+    optional double northing = 5;
+    optional double elevation = 6;
+    optional double horizontalVariance = 7;
+    optional double verticalVariance = 8;
 }
 
 message Cave {
@@ -57,6 +78,8 @@ message Cave {
 
     //Deprecated types, don't use
     optional QtProto.QString legacy_name = 1;
+
+    repeated FixStation fixStations = 11;
 }
 
 message Trip {

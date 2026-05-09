@@ -20,6 +20,7 @@ class cwCavingRegion;
 #include "cwSanitizedNameSet.h"
 #include "cwSurveyNetwork.h"
 #include "cwCaveData.h"
+#include "cwFixStationModel.h"
 
 //Qt includes
 #include <QObject>
@@ -43,6 +44,7 @@ class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
     Q_PROPERTY(cwLength* length READ length CONSTANT)
     Q_PROPERTY(cwLength* depth READ depth CONSTANT)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
+    Q_PROPERTY(cwFixStationModel* fixStations READ fixStations CONSTANT)
 
 public:
     enum Roles {
@@ -65,6 +67,7 @@ public:
     cwLength* depth() const;
 
     cwErrorModel* errorModel() const;
+    cwFixStationModel* fixStations() const { return FixStations; }
 
     int tripCount() const;
     Q_INVOKABLE cwTrip* trip(int index) const;
@@ -122,6 +125,7 @@ private:
     cwLength* Depth;
 
     cwErrorModel* ErrorModel; //!<
+    cwFixStationModel* FixStations;
 
     cwStationPositionLookup StationPositionModel;
     bool StationPositionModelStale;

@@ -9,6 +9,7 @@
 #include "cwTripData.h"
 #include "cwStationPositionLookup.h"
 #include "cwUnits.h"
+#include "cwFixStation.h"
 
 struct cwCaveData {
     QString name;
@@ -17,6 +18,7 @@ struct cwCaveData {
     QUuid id;
     cwUnits::LengthUnit lengthUnit = cwUnits::Meters;
     cwUnits::LengthUnit depthUnit = cwUnits::Meters;
+    QList<cwFixStation> fixStations;
 };
 
 #endif // CWCAVEDATA_H

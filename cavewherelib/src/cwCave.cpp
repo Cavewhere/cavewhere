@@ -24,6 +24,7 @@ cwCave::cwCave(QObject* parent) :
     Length(new cwLength(this)),
     Depth(new cwLength(this)),
     ErrorModel(new cwErrorModel(this)),
+    FixStations(new cwFixStationModel(this)),
     StationPositionModelStale(false),
     Id(QUuid::createUuid())
 {
@@ -456,7 +457,8 @@ cwCaveData cwCave::data() const
         StationPositionModel,
         Id,
         static_cast<cwUnits::LengthUnit>(length()->unit()),
-        static_cast<cwUnits::LengthUnit>(depth()->unit())
+        static_cast<cwUnits::LengthUnit>(depth()->unit()),
+        FixStations->fixStations()
     };
 }
 
@@ -468,6 +470,8 @@ void cwCave::setData(const cwCaveData &data)
     depth()->setUnit(data.depthUnit);
 
     clearTrips();
+
+    FixStations->setFixStations(data.fixStations);
 
     //Insert all trips
     for(const auto& tripData : data.trips) {

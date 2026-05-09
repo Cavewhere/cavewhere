@@ -259,9 +259,29 @@ cwProject *cwCavingRegion::parentProject() const
     return dynamic_cast<cwProject*>(parent());
 }
 
+void cwCavingRegion::setGlobalCS(const QString& cs)
+{
+    if (m_globalCS == cs) {
+        return;
+    }
+    m_globalCS = cs;
+    emit globalCSChanged();
+}
+
+void cwCavingRegion::setWorldOrigin(const cwGeoPoint& origin)
+{
+    if (m_worldOrigin == origin) {
+        return;
+    }
+    m_worldOrigin = origin;
+    emit worldOriginChanged();
+}
+
 void cwCavingRegion::setData(const cwCavingRegionData &data)
 {
     setName(data.name);
+    setGlobalCS(data.globalCS);
+    setWorldOrigin(data.worldOrigin);
 
     clearCaves();
 
@@ -276,10 +296,12 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
 }
 
 cwCavingRegionData cwCavingRegion::data() const
-{    
+{
     return {
         m_name.value(),
-        cwData::toDataList<cwCaveData>(m_caves)
+        cwData::toDataList<cwCaveData>(m_caves),
+        m_globalCS,
+        m_worldOrigin
     };
 }
 

@@ -23,6 +23,8 @@
 #include "cwPenStroke.h"
 #include "cwScale.h"
 #include "cwSketchData.h"
+#include "cwFixStation.h"
+#include "cwGeoPoint.h"
 
 //Forward declarations
 class cwTripCalibration;
@@ -52,6 +54,8 @@ class PenPoint;
 class PenStroke;
 class Scale;
 class Sketch;
+class FixStation;
+class Vector3d;
 }
 
 namespace QtProto {
@@ -165,5 +169,11 @@ CAVEWHERE_LIB_EXPORT cwPenPoint    fromProtoPenPoint (const CavewhereProto::PenP
 CAVEWHERE_LIB_EXPORT cwPenStroke   fromProtoPenStroke(const CavewhereProto::PenStroke& protoStroke);
 CAVEWHERE_LIB_EXPORT cwScale::Data fromProtoScale    (const CavewhereProto::Scale&     protoScale);
 CAVEWHERE_LIB_EXPORT cwSketchData  fromProtoSketch   (const CavewhereProto::Sketch&    protoSketch);
+
+// Fix stations / world origin
+CAVEWHERE_LIB_EXPORT void saveFixStation(CavewhereProto::FixStation* protoFix, const cwFixStation& fix);
+CAVEWHERE_LIB_EXPORT cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix);
+CAVEWHERE_LIB_EXPORT void saveVector3d(CavewhereProto::Vector3d* protoVec, const cwGeoPoint& point);
+CAVEWHERE_LIB_EXPORT cwGeoPoint fromProtoVector3d(const CavewhereProto::Vector3d& protoVec);
 
 } // namespace cwProtoUtils

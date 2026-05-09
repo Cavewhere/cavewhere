@@ -26,6 +26,7 @@ class cwProject;
 #include "cwSanitizedNameSet.h"
 #include "cwUndoer.h"
 #include "cwGlobals.h"
+#include "cwGeoPoint.h"
 
 
 class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cwUndoer
@@ -35,6 +36,8 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged BINDABLE bindableName)
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
+    Q_PROPERTY(QString globalCS READ globalCS WRITE setGlobalCS NOTIFY globalCSChanged)
+    Q_PROPERTY(cwGeoPoint worldOrigin READ worldOrigin WRITE setWorldOrigin NOTIFY worldOriginChanged)
 
 public:
     enum Roles {
@@ -50,6 +53,12 @@ public:
     QString name() const { return m_name.value(); }
     void setName(const QString& name) { m_name = name; }
     QBindable<QString> bindableName() { return &m_name; }
+
+    QString globalCS() const { return m_globalCS; }
+    void setGlobalCS(const QString& cs);
+
+    cwGeoPoint worldOrigin() const { return m_worldOrigin; }
+    void setWorldOrigin(const cwGeoPoint& origin);
 
     bool hasCaves() const;
     Q_INVOKABLE int caveCount() const;
@@ -89,6 +98,9 @@ signals:
 
     void caveCountChanged();
 
+    void globalCSChanged();
+    void worldOriginChanged();
+
 public slots:
 
 protected:
@@ -100,6 +112,9 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwCavingRegion, QString, m_name, QString(), &cwCavingRegion::nameChanged);
 
     cwSanitizedNameSet m_caveNames;
+
+    QString m_globalCS;
+    cwGeoPoint m_worldOrigin;
 
     // cwCavingRegion& copy(const cwCavingRegion& object);
 

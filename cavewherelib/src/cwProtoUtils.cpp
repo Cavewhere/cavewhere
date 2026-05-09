@@ -803,4 +803,56 @@ cwSketchData fromProtoSketch(const CavewhereProto::Sketch& protoSketch)
     return data;
 }
 
+void saveFixStation(CavewhereProto::FixStation* protoFix, const cwFixStation& fix)
+{
+    if (!fix.id().isNull()) {
+        saveQUuid(protoFix->mutable_id(), fix.id());
+    }
+    if (!fix.stationName().isEmpty()) {
+        saveString(protoFix->mutable_stationname(), fix.stationName());
+    }
+    if (!fix.inputCS().isEmpty()) {
+        saveString(protoFix->mutable_inputcs(), fix.inputCS());
+    }
+    protoFix->set_easting(fix.easting());
+    protoFix->set_northing(fix.northing());
+    protoFix->set_elevation(fix.elevation());
+    protoFix->set_horizontalvariance(fix.horizontalVariance());
+    protoFix->set_verticalvariance(fix.verticalVariance());
+}
+
+cwFixStation fromProtoFixStation(const CavewhereProto::FixStation& protoFix)
+{
+    cwFixStation fix;
+    if (protoFix.has_id()) {
+        fix.setId(toUuid(protoFix.id()));
+    } else {
+        fix.setId(QUuid());
+    }
+    if (protoFix.has_stationname()) {
+        fix.setStationName(QString::fromStdString(protoFix.stationname()));
+    }
+    if (protoFix.has_inputcs()) {
+        fix.setInputCS(QString::fromStdString(protoFix.inputcs()));
+    }
+    fix.setEasting(protoFix.easting());
+    fix.setNorthing(protoFix.northing());
+    fix.setElevation(protoFix.elevation());
+    fix.setHorizontalVariance(protoFix.horizontalvariance());
+    fix.setVerticalVariance(protoFix.verticalvariance());
+    return fix;
+}
+
+void saveVector3d(CavewhereProto::Vector3d* protoVec, const cwGeoPoint& point)
+{
+    protoVec->set_x(point.x);
+    protoVec->set_y(point.y);
+    protoVec->set_z(point.z);
+}
+
+cwGeoPoint fromProtoVector3d(const CavewhereProto::Vector3d& protoVec)
+{
+    return cwGeoPoint(protoVec.x(), protoVec.y(), protoVec.z());
+}
+
 } // namespace cwProtoUtils
