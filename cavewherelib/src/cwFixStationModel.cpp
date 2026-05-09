@@ -20,6 +20,11 @@ int cwFixStationModel::rowCount(const QModelIndex& parent) const
     return m_fixStations.size();
 }
 
+QModelIndex cwFixStationModel::index(int row, int column, const QModelIndex& parent) const
+{
+    return QAbstractListModel::index(row, column, parent);
+}
+
 QVariant cwFixStationModel::data(const QModelIndex& index, int role) const
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_fixStations.size()) {

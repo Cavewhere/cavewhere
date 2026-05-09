@@ -3625,11 +3625,17 @@ void cwSaveLoad::connectCave(cwCave *cave)
 
     connect(cave, &cwCave::nameChanged, this, saveCaveName);
 
-    auto saveCaveUnits = [cave, this]() {
+    auto saveCave = [cave, this]() {
         d->saveObject(this, cave);
     };
-    connect(cave->length(), &cwUnitValue::unitChanged, this, saveCaveUnits);
-    connect(cave->depth(), &cwUnitValue::unitChanged, this, saveCaveUnits);
+    connect(cave->length(), &cwUnitValue::unitChanged, this, saveCave);
+    connect(cave->depth(), &cwUnitValue::unitChanged, this, saveCave);
+
+    cwFixStationModel* fixModel = cave->fixStations();
+    connect(fixModel, &QAbstractItemModel::rowsInserted, this, saveCave);
+    connect(fixModel, &QAbstractItemModel::rowsRemoved, this, saveCave);
+    connect(fixModel, &QAbstractItemModel::modelReset, this, saveCave);
+    connect(fixModel, &QAbstractItemModel::dataChanged, this, saveCave);
 }
 
 

@@ -51,10 +51,24 @@ StandardPage {
                 }
 
                 if(PageView.page.name !== "Leads") {
-                    var page = RootData.pageSelectionModel.registerPage(PageView.page,
-                                                                        "Leads",
-                                                                        caveLeadsPage,
-                                                                        {"cave":currentCave});
+                    RootData.pageSelectionModel.registerPage(PageView.page,
+                                                             "Leads",
+                                                             caveLeadsPage,
+                                                             {"cave":currentCave});
+                }
+            }
+
+            var oldFixStationsPage = PageView.page.childPage("Fix Stations")
+            if(oldFixStationsPage !== RootData.pageSelectionModel.currentPage) {
+                if(oldFixStationsPage !== null) {
+                    RootData.pageSelectionModel.unregisterPage(oldFixStationsPage)
+                }
+
+                if(PageView.page.name !== "Fix Stations") {
+                    RootData.pageSelectionModel.registerPage(PageView.page,
+                                                             "Fix Stations",
+                                                             fixStationsSubPage,
+                                                             {"cave":currentCave});
                 }
             }
         }
@@ -72,6 +86,13 @@ StandardPage {
         CaveLeadPage {
             anchors.fill: parent
 
+        }
+    }
+
+    QQ.Component {
+        id: fixStationsSubPage
+        FixStationPage {
+            anchors.fill: parent
         }
     }
 
@@ -122,38 +143,19 @@ StandardPage {
         }
     }
 
-    ColumnLayout {
-        id: fixStationsBlock
-
-        readonly property int fixCount: cavePageArea.currentCave
-                                        ? cavePageArea.currentCave.fixStations.count
-                                        : 0
-
-        spacing: Theme.tightSpacing
+    RowLayout {
+        id: fixStationsRow
+        spacing: Theme.delegatePadding
 
         QC.Label {
-            text: "Fix stations: " + fixStationsBlock.fixCount
+            text: "Fix stations:"
         }
 
-        QQ.ListView {
-            Layout.fillWidth: true
-            implicitHeight: Math.min(contentHeight, 4 * Theme.fontSizeBody * 1.5)
-            visible: fixStationsBlock.fixCount > 0
-            model: cavePageArea.currentCave ? cavePageArea.currentCave.fixStations : null
-            interactive: false
-            delegate: QC.Label {
-                required property string stationName
-                required property string inputCS
-                required property double easting
-                required property double northing
-                required property double elevation
-                text: "%1  %2  (%3, %4, %5)"
-                    .arg(stationName)
-                    .arg(inputCS)
-                    .arg(easting)
-                    .arg(northing)
-                    .arg(elevation)
-                font.pixelSize: Theme.fontSizeSmall
+        LinkText {
+            objectName: "fixStationsLink"
+            text: cavePageArea.currentCave ? cavePageArea.currentCave.fixStations.count : 0
+            onClicked: {
+                RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Fix Stations");
             }
         }
     }
@@ -254,7 +256,7 @@ StandardPage {
                     QQ.Item { implicitHeight: Theme.delegatePadding }
 
                     LayoutItemProxy { target: leadsRow }
-                    LayoutItemProxy { target: fixStationsBlock }
+                    LayoutItemProxy { target: fixStationsRow }
                 }
             }
         }
@@ -521,6 +523,21 @@ StandardPage {
                             text: leadModelId.rowCount()
                             onClicked: {
                                 RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
+                            }
+                        }
+                    }
+
+                    QC.Label { text: "·"; color: Theme.textSubtle }
+
+                    RowLayout {
+                        spacing: Theme.delegatePadding
+
+                        QC.Label { text: "Fix stations:" }
+
+                        LinkText {
+                            text: cavePageArea.currentCave ? cavePageArea.currentCave.fixStations.count : 0
+                            onClicked: {
+                                RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Fix Stations");
                             }
                         }
                     }

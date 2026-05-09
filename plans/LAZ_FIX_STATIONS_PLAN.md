@@ -117,7 +117,7 @@ Loop closure is delegated to survex's `cavern` (already integrated via `cwCavern
   - Internal storage: `QList<cwFixStation> m_fixStations` (value list, not pointers).
   - Emits `dataChanged(index, index, {role})` per cell on edit; `beginInsertRows`/`endInsertRows` on add; `beginRemoveRows`/`endRemoveRows` on delete.
 - `cwCave` (`cavewherelib/src/cwCave.{h,cpp}`) owns one `cwFixStationModel*` as a child; expose via `Q_PROPERTY(cwFixStationModel* fixStations READ fixStations CONSTANT)`. The model is the public surface — no parallel `addFixStation` API on cwCave; QML calls `cave.fixStations.addFixStation(...)`.
-- `cwCavingRegion` (`cavewherelib/src/cwCavingRegion.{h,cpp}`): add `QString m_globalCS`, `globalCSChanged()`, **and the data side of `worldOrigin` (`cwGeoPoint m_worldOrigin`, `worldOrigin()` getter, `setWorldOrigin()` setter, `worldOriginChanged()` signal)**. PR 3 needs the getter to subtract during line-plot parsing; the recompute *policy* and the `Q_INVOKABLE recomputeWorldOrigin()` action land in PR 4. Default `(0,0,0)` so PR 3's subtraction is a no-op for un-fixed caves until PR 4 wires up recompute.
+- `cwCavingRegion` (`cavewherelib/src/cwCavingRegion.{h,cpp}`): add `QString m_globalCS`, `globalCSChanged()`, **and the data side of `worldOrigin` (`cwGeoPoint m_worldOrigin`, `worldOrigin()` getter, `setWorldOrigin()` setter, `worldOriginChanged()` signal)**. PR 4 needs the getter to subtract during line-plot parsing; the recompute *policy* and the `Q_INVOKABLE recomputeWorldOrigin()` action land in PR 5. Default `(0,0,0)` so PR 4's subtraction is a no-op for un-fixed caves until PR 5 wires up recompute.
 - Update `cavewherelib/src/cavewhere.proto`:
   - Cave (line 43–60, next free field 11): `repeated FixStation fixStations = 11;`
   - CavingRegion: `optional string globalCS = 6;` and `optional Vector3d worldOrigin = 7;`
@@ -126,10 +126,26 @@ Loop closure is delegated to survex's `cavern` (already integrated via `cwCavern
 - Tests:
   - `testcases/test_cwFixStation.cpp` — value-class semantics (copy, equality, COW).
   - `testcases/test_cwFixStationModel.cpp` — add/remove/edit, role lookups, `dataChanged` signal emission, proto round-trip.
-- Read-only `ListView` placeholder on `CavePage.qml`; full editor lands in PR 3.
+- Read-only `ListView` placeholder on `CavePage.qml`; full editor lands in PR 4.
 
-### PR 3 — Survex export + import wiring (loop closure is cavern's job)
+### PR 3a — CS editing UI (`CSComboBox` + `DataMainPage` globalCS + `FixStationPage` Input-CS swap)
+PR 2 shipped the data side (`region->globalCS()`, per-fix `inputCS()`) but the user has nowhere to *edit* either field. PR 3a lands the editing UI as a self-contained, no-survex-dependency change so it can ship and be exercised by hand before PR 3b touches the export/import pipeline.
+
+- New `cavewherelib/qml/CSComboBox.qml` — editable combo seeded from `cwCoordinateTransform.commonProjectedCSList()` (the `Q_INVOKABLE` declared in PR 1), validates via `cwCoordinateTransform.isValidCS()`. Surfaces the proj error message inline when invalid; commits the new CS to the bound property only when validation passes.
+- `cavewherelib/qml/DataMainPage.qml` — add a "Coordinate system:" row beneath the region-name `DoubleClickTextInput` (line 31 area):
+  - `CSComboBox` bound to `RootData.region.globalCS`. `objectName: "globalCSComboBox"` so PR 4 tests can find it.
+  - Inline `QC.Label` warning (in `Theme.errorBackground`) when the user picks a geographic CS — `*fix` requires a projected CS. Advisory only; the model still updates.
+  - "Recenter world origin" button next to the combo. **Action stub in PR 3a** (logs a warning); PR 5 wires it to `RootData.region.recomputeWorldOrigin()`. The action runs as a `cwFuture` job; the global progress UI shows it like other long-running tasks.
+- `cavewherelib/qml/FixStationPage.qml` — replace the Input-CS `DoubleClickTextInput` cell with `CSComboBox` in both wide and narrow delegates. Cell continues to write back via `setData(model.index(row), value, FixStationModel.InputCSRole)`. Add `objectName: "inputCSComboBox.<index>"` (or similar per-row pattern) for PR 4 tests.
+- (Optional, PR 3a) Replace the Station column's `DoubleClickTextInput` with `StationNameComboBox` so users pick from real station names rather than typing.
+- (Optional, PR 3a) Numeric validators (`DoubleValidator`) on Easting/Northing/Elevation cells instead of `Number(newText)`.
+- C++ tests: none required — `cwCoordinateTransform::isValidCS` and `commonProjectedCSList` are already covered by `[CoordinateTransform]` from PR 1.
+- Manual smoke: open a project, set globalCS to `EPSG:32612`, add a fix, set its `inputCS` to `EPSG:4326`, save + reload — both fields persist (round-trip plumbing already works from PR 2). PR 4 locks this in as an automated QML test.
+
+### PR 3b — Survex export + import wiring (loop closure is cavern's job)
 **Key insight**: CaveWhere shells out to survex's `cavern` for loop closure, then **parses the resulting `.3d` file directly** via `cwSurvex3DFileReader::readNetworkAndLookup()` (called from `cwLinePlotTask.cpp:163-167`). The old `survexport` CSV path is no longer used on this branch. Adding `*cs` + `*fix` lines to the exported `.svx` is enough — cavern does proper LSQ loop closure across multiple fixes for free, distributes residuals, and emits absolute coordinates in the `.3d`. The internal BFS in `cwSurveyNetworkBuilderRule` builds a connectivity graph used by *scrap morphing* and `cwTriangulateInData`, not the canonical 3D solve, and is left alone.
+
+PR 3b depends on PR 3a only for *manual testability* (you need the UI to set `globalCS` / `inputCS` to exercise the new exporter); the C++ exporter/importer code is otherwise independent and could be developed in parallel.
 
 - `cavewherelib/src/cwSurvexExporterRule.cpp` — rename `fixFirstStation()` → `writeFixStations()` (around lines 516–532):
   - If cave has fixes: emit `*cs <inputCS>` then `*fix <station> <e> <n> <z>` per fix; emit `*cs out <globalCS>` once for the cave so cavern outputs in our chosen projected CS.
@@ -144,14 +160,54 @@ Loop closure is delegated to survex's `cavern` (already integrated via `cwCavern
   - Geo `#FIX`: `EPSG:4326`.
   - **Always append a `cwError` warning** explaining the assumed datum and inviting the user to change `inputCS` on the fix if it's actually WGS84 (`EPSG:326xx`) or another datum. CaveWhere can't determine the datum from the Walls header alone.
 - Survex importer: search `cavewherelib/src/cwSurvexImporter.cpp` for `*fix` parsing; if absent, parse it alongside `*equate`/`*calibrate`. Capture the most recent `*cs` to populate `inputCS`.
-- Full QML editor lands here on `CavePage.qml` (see UI section below).
-- Tests:
+- C++ tests:
   - `testcases/test_cwSurvexExporterRule_fix.cpp` — golden `*cs`/`*fix` output for one and multiple fixes; verifies error path for fix referencing a missing station and duplicate fix names.
   - `testcases/test_cwLinePlotTask_fix.cpp` — small fixture cave with two fixes; runs the full export → cavern → `.3d` → `cwSurvex3DFileReader` pipeline; verifies station positions match expected coords minus worldOrigin.
   - `testcases/test_cwWallsImporter_fix.cpp` — rect + geo `#FIX`, including the datum-assumption warning entry.
 
-### PR 4 — World-origin offset (recompute policy + state machine)
-The data side (`m_worldOrigin`, getter, signal) already landed in PR 2 so PR 3 could subtract. PR 4 adds the *recompute policy* and the explicit user action.
+### PR 4 — QML tests for FixStationPage + project CS round trip
+PR 2 shipped `FixStationPage.qml`, the `fixStationsRow` on `CavePage.qml` (wide and narrow), the `RemoveAskBox` confirmation flow, and the in-place editor cells. PR 3a added `CSComboBox` to the Input-CS column and the project-`globalCS` row on `DataMainPage.qml`. PR 3b wired `*cs`/`*fix` through to the survex exporter and the line-plot pipeline. PR 4 locks the **complete CS surface** in with QML tests — both UIs together so the test exercises the full end-to-end round trip a real user walks through (set globalCS → add fix → set inputCS → save/reload → render) rather than two disjoint surfaces.
+
+**Pattern**: mirror `test-qml/tst_Leads.qml` and `test-qml/tst_CavePage.qml`. Use `MainWindowTest`, drive a real project via `RootData.project.newProject()`, navigate via `RootData.pageSelectionModel.gotoPageByName(...)`, and locate widgets via `ObjectFinder.findObjectByChain(...)` against `objectName`s on the page.
+
+- New `test-qml/tst_FixStationPage.qml`. Cases:
+  - **Empty state**: brand-new cave → navigate via the `fixStationsLink` on `CavePage.qml` → `fixStationPage` is current and `noFixStationsHelpBox` visible; the `fixStationTableView` has zero rows.
+  - **Add fix**: click `addFixBar`'s add button → `tryCompare` row count to 1; help box hides; default row appears with empty station / CS and zeroed coordinates.
+  - **Edit cell**: `mouseClick` (then `clickToEdit`) on the Station cell of row 0, type `"A1"`, commit; `tryCompare` `cave.fixStations.fixStationAt(0).stationName` to `"A1"`. Repeat for Easting/Northing/Elevation numerics. Verify the model's `dataChanged` is what drives the cell text after editing (i.e. open another row's editor and ensure the previous edit committed).
+  - **Edit Input CS via `CSComboBox`**: open the combo on row 0, pick `"EPSG:32612"` from the dropdown; `tryCompare` `cave.fixStations.fixStationAt(0).inputCS` to `"EPSG:32612"`. Then type a free-text EPSG (`"EPSG:4326"`) — verify the combo accepts it and the model is updated. Type a bogus value (`"NOT_A_CS"`) — verify the inline `cwCoordinateTransform.isValidCS()` error is shown and the model **is not** updated.
+  - **Remove fix (confirmed)**: right-click row 0, click "Remove A1", `tryCompare` `removeChallange` (the existing `objectName` on `RemoveAskBox`) `visible` to `true`, click its `removeButton`, `tryCompare` row count back to 0 and help box visible again.
+  - **Remove fix (cancelled)**: same setup, click `cancelButton` instead, verify row count unchanged and `removeChallange.visible === false`.
+  - **Long-press menu (touch path)**: trigger `TapHandler.onLongPressed` — verify the same menu/RemoveAskBox flow fires. Use the existing `MainWindowTest` long-press helper if present, otherwise call the handler directly via `ObjectFinder` like `tst_CavePage.qml` does.
+  - **Narrow layout**: shrink the window to below `Theme.breakpointPanelCollapse`, navigate to the Fix Stations page, verify the narrow flow delegate is used and that "Add Fix", cell edit, `CSComboBox` selection, and right-click flows still work.
+  - **Count link round-trip**: add two fixes, return to `cavePage`, `tryCompare` `fixStationsLink.text` to `"2"`. Remove one, expect `"1"`. (Covers the `count` Q_PROPERTY notify path that was added in PR 2 cleanup.)
+
+- New `test-qml/tst_DataMainPage_globalCS.qml`. Cases:
+  - **Set project globalCS via `CSComboBox`**: navigate to `DataMainPage.qml`; the new "Coordinate system:" row's `CSComboBox` is empty by default. Pick `"EPSG:32612"` from the dropdown; `tryCompare` `RootData.region.globalCS` to `"EPSG:32612"`. Free-text another value (`"EPSG:32613"`); verify model update. Bogus value → inline validation error, no model update.
+  - **Geographic-CS warning**: pick `"EPSG:4326"` (lat/lon); verify the inline `Theme.errorBackground` warning appears (text says `*fix` requires a projected CS). The model **does** update — the warning is advisory, not blocking — but the warning is what the user sees.
+
+- New `test-qml/tst_FixStations_RoundTrip.qml`. The end-to-end test the user actually wants to lock in:
+  1. New project → set `globalCS` to `"EPSG:32612"` via the `DataMainPage` combo.
+  2. Add a cave; navigate to Fix Stations page.
+  3. Add two fixes via `addFixBar`. Edit station name, set `inputCS = "EPSG:4326"` via `CSComboBox`, set numeric easting/northing/elevation on each.
+  4. `saveAs` to a `QTemporaryDir` (use `applicationPid()` in the path per CLAUDE.md test-conc rules); `RootData.project.newProject()` to clear; load back.
+  5. Verify on `DataMainPage` that the `CSComboBox` shows `"EPSG:32612"` and `RootData.region.globalCS` matches.
+  6. Navigate into the cave's Fix Stations page; `tryCompare` row count to 2; verify each fix's `stationName`, `inputCS`, and coordinates round-trip exactly. Confirm the `CSComboBox` cell in the Input-CS column displays `"EPSG:4326"` for both rows.
+
+- Wire all three `tst_*.qml` files into `test-qml/CMakeLists.txt` (auto-globbed in this project, but verify).
+
+- **Use the existing `cw.TestLib` helpers**: `TestHelper.testcasesDatasetPath`, `ObjectFinder.findObjectByChain`, the `clickToEdit` and `setNoteOverlaysCollapsed` patterns from `tst_Leads.qml` (the latter is needed only if a test path crosses the note overlay; not expected here).
+
+- **objectName audit before writing tests**: when writing the tests, verify each chain target. Current `objectName`s after PR 2 + PR 3a:
+  - `fixStationPage` (root)
+  - `addFixBar` (the `AddAndSearchBar`) — its inner add button is `addButton` per `AddAndSearchBar.qml`.
+  - `fixStationTableView` (the `TableStaticView`)
+  - `noFixStationsHelpBox` (empty-state help box)
+  - `fixStationsLink` on `CavePage.qml` (the count `LinkText`)
+  - `removeChallange` on the page-level `RemoveAskBox` (the existing `objectName` inside `RemoveAskBox.qml`; intentionally misspelled)
+  - **PR 3a must add** `objectName: "globalCSComboBox"` on `DataMainPage.qml`'s combo and `objectName: "inputCSComboBox.<index>"` (or similar per-row pattern) on the cell combos in `FixStationPage.qml`. Listed as PR 3a deliverables so PR 4 can rely on them.
+
+### PR 5 — World-origin offset (recompute policy + state machine)
+The data side (`m_worldOrigin`, getter, signal) already landed in PR 2 so PR 3b could subtract in `cwLinePlotTask`. PR 5 adds the *recompute policy* and the explicit user action wired to the "Recenter world origin" button shipped (as a stub) in PR 3a.
 
 - `cwCavingRegion`: add `Q_INVOKABLE recomputeWorldOrigin()`.
 - **Centroid sources (broader than just fixes)** — bias toward the geometric center of all visible content so distant caves and LAZ tiles stay near origin:
@@ -159,7 +215,7 @@ The data side (`m_worldOrigin`, getter, signal) already landed in PR 2 so PR 3 c
   2. `worldOrigin` = arithmetic mean of those points.
   3. If no candidates exist (empty project) → `(0,0,0)`.
 - **State machine — when does `worldOrigin` change?** Spelled out to avoid scene-jump churn:
-  - Initial state: `(0,0,0)`. PR 3's subtraction is a no-op.
+  - Initial state: `(0,0,0)`. PR 4's subtraction is a no-op.
   - First time `worldOrigin == (0,0,0)` **and** there is at least one valid candidate point (a fix that resolves to a real station with a valid `inputCS`, or a finished-loading LAZ layer), automatically run `recomputeWorldOrigin()`. This is the only auto-recompute. (Invalid fixes — bad CS, missing station name — don't trigger it.)
   - After that, `worldOrigin` is **sticky**: edits to fix coordinates, fix additions, LAZ swaps, or cave growth never auto-recompute (would cause the whole scene to jump). Deleting the last fix leaves `worldOrigin` stale-but-harmless; the user can press Recenter if they care.
   - The user can press **"Recenter world origin"** at any time to recompute manually. This action is registered as a `cwFuture` job (see below) so the user sees progress.
@@ -171,11 +227,11 @@ The data side (`m_worldOrigin`, getter, signal) already landed in PR 2 so PR 3 c
   5. When the resolve finishes, the auto-recompute trigger above fires (because `worldOrigin == (0,0,0)` and we now have valid candidates), the centroid is computed, and LAZ layers reload a second time against the fresh `worldOrigin`.
   
   All of (3)–(5) compose into a single tracked `cwFuture` so progress and cancellation work uniformly. Two LAZ reload waves is wasteful but rare (users change `globalCS` once, intentionally) — accept it; optimize only if profiling demands.
-- **"Recenter" runs as a tracked job** via `cwFutureManagerToken::addJob(cwFuture)` (header at `cavewherelib/src/cwFutureManagerToken.h`). The future is backed by a `QPromise<void>` that the worker advances as it (1) recomputes the centroid, (2) re-runs the line-plot solve so `cwStationPositionLookup` is in the new offset, (3) for each `cwLazLayer` triggers a reload (see PR 5 — also a tracked sub-job). `setProgressRange/setProgressValue` on the promise drive the UI bar in `cwFutureManagerModel`.
-- For per-frame GPU access (future-proofing): extend `GlobalUniform` (`cwRhiScene.h:83`, populated near line 159 of `cwRhiScene.cpp`) with `QVector3D worldOrigin` (16-byte aligned). Not consumed by current shaders yet — wire only the C++ side; shader use lands with PR 6 if the LAZ shader needs it.
+- **"Recenter" runs as a tracked job** via `cwFutureManagerToken::addJob(cwFuture)` (header at `cavewherelib/src/cwFutureManagerToken.h`). The future is backed by a `QPromise<void>` that the worker advances as it (1) recomputes the centroid, (2) re-runs the line-plot solve so `cwStationPositionLookup` is in the new offset, (3) for each `cwLazLayer` triggers a reload (see PR 6 — also a tracked sub-job). `setProgressRange/setProgressValue` on the promise drive the UI bar in `cwFutureManagerModel`.
+- For per-frame GPU access (future-proofing): extend `GlobalUniform` (`cwRhiScene.h:83`, populated near line 159 of `cwRhiScene.cpp`) with `QVector3D worldOrigin` (16-byte aligned). Not consumed by current shaders yet — wire only the C++ side; shader use lands with PR 7 if the LAZ shader needs it.
 - Tests: `testcases/test_cwCavingRegion_worldOrigin.cpp` — auto-compute on first fix; sticky after that; manual recompute; centroid policy with fixes / LAZ / cave bboxes / empty.
 
-### PR 5 — LAZ data + loader (no rendering)
+### PR 6 — LAZ data + loader (no rendering)
 - `conanfile.py`: add `pdal/[>=2.6.0]`. CMake `find_package(PDAL CONFIG REQUIRED)`, link `pdal::pdalcpp`.
 - New `cavewherelib/src/cwLazData.h`:
   ```cpp
@@ -233,7 +289,7 @@ The data side (`m_worldOrigin`, getter, signal) already landed in PR 2 so PR 3 c
 
 **Deferred — generic GIS layer abstraction**: a future PR may introduce an abstract `cwGisLayer` base (with concrete subclasses for raster terrain GeoTIFF, vector overlays, additional point-cloud formats, etc.) and a polymorphic `cwGisLayerModel`. We deliberately don't introduce that hierarchy now: with only one concrete layer type, the right shape of the abstraction can't be known and a premature base class will likely need rework once a second format lands. The current `cwLazLayer*` / `cwLazLayerModel` shapes are designed so this future refactor is mechanical: rename + extract base, keep proto field tags by promoting `LazLayer` to a `oneof` inside a generic `GisLayer` message.
 
-### PR 6 — Point-cloud rendering
+### PR 7 — Point-cloud rendering
 - Mirror the `cwRenderLinePlot` / `cwRHILinePlot` pattern.
 - `cavewherelib/src/cwRenderPointCloud.{h,cpp}` — `: cwRenderObject`. Holds `std::shared_ptr<cwLazData>`, `visible`, `opacity`, `pointSize`. Implements `createRHIObject()`.
 - `cavewherelib/src/cwRHIPointCloud.{h,cpp}` — `: cwRHIObject`. `QRhiBuffer*` for positions (and optional colors), `QRhiGraphicsPipeline*` with topology Points, SRB referencing the global UBO. `initialize` / `synchronize` / `updateResources` / `gather` (or `render`) per `cwRHIObject` contract.
@@ -260,20 +316,30 @@ The data side (`m_worldOrigin`, getter, signal) already landed in PR 2 so PR 3 c
 
 All text via `QC.Label` (or `BodyText` for paragraphs). All sizes/colors via `Theme.qml` tokens. Body ordering per CLAUDE.md.
 
-### `cavewherelib/qml/CavePage.qml` (left column, after `CaveLengthAndDepth` at line 97)
-- New component `cavewherelib/qml/FixStationTable.qml` — header label plus a `TableView` (or `ListView` of row delegates) bound to `cave.fixStations` (the `cwFixStationModel`):
-  - Columns/cells use role names (`stationName`, `inputCS`, `easting`, `northing`, `elevation`).
-  - Delegate cell types: `StationNameComboBox` (existing), new `CSComboBox`, numeric `QC.TextField`s. Each writes back via `model.<role> = value`, which routes through `setData` on the model.
-  - Per-row delete button calls `cave.fixStations.removeAt(index)`.
-- "Add fix" button calls `cave.fixStations.addFixStation()` — appends a default row that the user can then edit in place.
+### `cavewherelib/qml/CavePage.qml` (already wired in PR 2)
+- `fixStationsRow` (label + clickable count) appears in both wide and narrow layouts, mirroring `leadsRow`.
+- Click navigates to a registered `"Fix Stations"` sub-page (`FixStationPage.qml`).
+- Right-click / long-press on a fix-station row pops the standard `RemoveAskBox` confirmation, mirroring how cave/trip rows handle delete.
+
+### `cavewherelib/qml/FixStationPage.qml` (PR 3a finishes the editor; PR 4 tests it)
+PR 2 already created the page with `TableStaticView` wide / `Flow` narrow delegates, "Add Fix" via `AddAndSearchBar`, `RemoveAskBox`, and `DoubleClickTextInput` cells. PR 3a upgrades the cells; PR 4 covers the result with QML round-trip tests.
+- **PR 3a: Replace the plain `DoubleClickTextInput` for the Input CS column with `CSComboBox`** (see below). Same on both wide and narrow delegates.
+- (Optional, PR 3a) Replace the Station column's `DoubleClickTextInput` with `StationNameComboBox` so users pick from real station names rather than typing.
+- (Optional, PR 3a) Numeric validators (`DoubleValidator`) on Easting/Northing/Elevation cells instead of `Number(newText)`.
+- All cells continue to write back via `setData(model.index(row), value, FixStationModel.<Role>Role)`.
 
 ### New `cavewherelib/qml/CSComboBox.qml`
-Editable combo seeded from `cwCoordinateTransform.commonProjectedCSList()` plus free-text EPSG. Validates entries via `cwCoordinateTransform.isValidCS(text)` (the `Q_INVOKABLE static` declared in PR 1) and surfaces the proj error message inline when invalid.
+Editable combo seeded from `cwCoordinateTransform.commonProjectedCSList()` plus free-text EPSG. Validates entries via `cwCoordinateTransform.isValidCS(text)` (the `Q_INVOKABLE static` declared in PR 1) and surfaces the proj error message inline when invalid. Used by:
+- The Input CS column in `FixStationPage.qml` (per-fix CS).
+- The project's globalCS field on `DataMainPage.qml` (see below).
 
-### New `cavewherelib/qml/RegionSettingsPage.qml`
-- `CSComboBox` bound to `region.globalCS`. Inline warning (`QC.Label`) if a geographic CS is selected.
-- "Recenter world origin" button → `region.recomputeWorldOrigin()`. The action runs as a `cwFuture` job; the global progress UI shows it just like other long-running tasks.
-- Embedded `LazLayerPanel`.
+### Project globalCS — `cavewherelib/qml/DataMainPage.qml` (PR 3a)
+The plan originally proposed a separate `RegionSettingsPage.qml`, but the project name and add-cave bar already live on `DataMainPage.qml`, and `globalCS` is a sibling of those — region-level metadata the user sees once when they set up the project. Adding it here avoids a new top-level page just for one field.
+
+- Add a row beneath the region-name `DoubleClickTextInput` (line 31 area) with a `QC.Label { text: "Coordinate system:" }` and a `CSComboBox` bound to `RootData.region.globalCS`. `objectName: "globalCSComboBox"` so PR 4 tests can find it.
+- Inline `QC.Label` warning (in `Theme.errorBackground`) when the user picks a geographic CS — `*fix` requires a projected CS.
+- "Recenter world origin" button next to the combo → `RootData.region.recomputeWorldOrigin()` (action stub in PR 3; the recompute itself lands in PR 5). The action runs as a `cwFuture` job; the global progress UI shows it like other long-running tasks.
+- LAZ layer management (PR 6+) embeds the `LazLayerPanel` further down on `DataMainPage.qml`, since LAZ layers are also region-scoped.
 
 ### New `cavewherelib/qml/LazLayerPanel.qml`
 List of `region.lazLayers`: name, source path, visibility checkbox, opacity slider, point-size slider, source-CS override, per-row `loadProgress` indicator (visible while `loadStatus == Loading`), delete. "Add LAZ…" opens `Qt.labs.platform.FileDialog`.
@@ -326,20 +392,27 @@ cmake --build build/<preset> --target cavewhere-test
 # After PR 2
 ./build/<preset>/cavewhere-test "[FixStation]" -d yes 2>&1 | tee /tmp/cw-test.log
 
-# After PR 3 — solver + export + import
+# After PR 3a — CS editing UI (no automated tests; manual smoke + PR 4 will lock it in)
+# Manual: launch app, verify globalCS combo on DataMainPage and Input-CS combo on FixStationPage commit and persist.
+
+# After PR 3b — survex export + import + worldOrigin subtraction
 ./build/<preset>/cavewhere-test "[NetworkBuilder][FixStation]" -d yes 2>&1 | tee /tmp/cw-test.log
 ./build/<preset>/cavewhere-test "[SurvexExporter][FixStation]" -d yes 2>&1 | tee /tmp/cw-test.log
 ./build/<preset>/cavewhere-test "[WallsImporter][FixStation]" -d yes 2>&1 | tee /tmp/cw-test.log
 
-# After PR 5 — LAZ load (use a small fixture .laz checked into test-qml/datasets/)
+# After PR 4 — QML tests for FixStationPage + DataMainPage globalCS round trip
+./build/<preset>/cavewhere-qml-test --platform offscreen -input test-qml/tst_FixStationPage.qml
+./build/<preset>/cavewhere-qml-test --platform offscreen -input test-qml/tst_DataMainPage_globalCS.qml
+./build/<preset>/cavewhere-qml-test --platform offscreen -input test-qml/tst_FixStations_RoundTrip.qml
+
+# After PR 6 — LAZ load (use a small fixture .laz checked into test-qml/datasets/)
 ./build/<preset>/cavewhere-test "[LAZLoader]" -d yes 2>&1 | tee /tmp/cw-test.log
 
-# QML tests after PR 3 / PR 5 / PR 6
-./build/<preset>/cavewhere-qml-test --platform offscreen -input test-qml/tst_FixStationTable.qml
+# QML tests after PR 6 / PR 7
 ./build/<preset>/cavewhere-qml-test --platform offscreen -input test-qml/tst_LazLayerPanel.qml
 ```
 
-End-to-end manual test (after PR 6):
+End-to-end manual test (after PR 7):
 1. Open a project. Region Settings → set globalCS = `EPSG:32612` (UTM 12N).
 2. On CavePage: add fix station "A1" with `inputCS=EPSG:4326`, lat/lon for a known point.
 3. Add a LAZ layer covering the same area.
