@@ -100,6 +100,27 @@ QQ.Rectangle {
             }
             return qsTr("GLB")
         }
+        readonly property string revealFilePath: {
+            const project = RootData.project
+            if (project === null || noteObject === null) {
+                return ""
+            }
+            const note = noteObject as Note
+            if (note !== null) {
+                return project.absolutePath(note)
+            }
+            const lidar = noteObject as NoteLiDAR
+            if (lidar !== null) {
+                return project.absolutePath(lidar)
+            }
+            return ""
+        }
+        readonly property bool revealSupported: {
+            const project = RootData.project
+            return project !== null
+                && !project.isTemporaryProject
+                && project.fileType === Project.GitFileType
+        }
 
         width: maxImageWidth
         height: maxImageWidth
@@ -233,6 +254,25 @@ QQ.Rectangle {
             gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
             onSingleTapped: {
                 galleryView.currentIndex = container.index
+            }
+        }
+
+        QQ.TapHandler {
+            acceptedButtons: Qt.RightButton
+            enabled: container.revealSupported
+            onTapped: {
+                contextMenuLoader.active = true
+                contextMenuLoader.item.popup()
+            }
+        }
+
+        QQ.Loader {
+            id: contextMenuLoader
+            active: false
+            sourceComponent: QC.Menu {
+                RevealInFileManagerMenuItem {
+                    filePath: container.revealFilePath
+                }
             }
         }
     }
