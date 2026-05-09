@@ -20,6 +20,10 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QDir>
+#include <QDirIterator>
+#include <QFileInfo>
+#include <QDateTime>
+#include <QThread>
 
 TEST_CASE("cwFixStationModel starts empty", "[FixStation][cwFixStationModel]") {
     cwFixStationModel model;
@@ -235,4 +239,75 @@ TEST_CASE("cwFixStation proto round-trip preserves all fields", "[FixStation][pr
     CHECK(restored.elevation() == original.elevation());
     CHECK(restored.horizontalVariance() == original.horizontalVariance());
     CHECK(restored.verticalVariance() == original.verticalVariance());
+}
+
+TEST_CASE("Loading a project does not re-save the cave file",
+          "[FixStation][cwSaveLoad]") {
+    // Regression guard: cwSaveLoad::connectCave wires fix-station model
+    // signals (rowsInserted/rowsRemoved/modelReset/dataChanged) to a per-cave
+    // save lambda. If connectCave were ever invoked before the cave's data
+    // was populated during load, the modelReset emitted by setFixStations()
+    // would fire that lambda and rewrite the cave's .cwcave file mid-load.
+    // This test asserts the cave file is byte-identical (mtime unchanged)
+    // after a clean load.
+    auto creatorRoot = std::make_unique<cwRootData>();
+    auto creatorProject = creatorRoot->project();
+    auto creatorRegion = creatorProject->cavingRegion();
+
+    creatorRegion->addCave();
+    auto cave = creatorRegion->cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setName(QStringLiteral("Cave with fix"));
+
+    cwFixStation a;
+    a.setStationName(QStringLiteral("A1"));
+    a.setInputCS(QStringLiteral("EPSG:32612"));
+    a.setEasting(500123.456);
+    a.setNorthing(4194567.89);
+    a.setElevation(2750.5);
+    cave->fixStations()->setFixStations({a});
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("fixstations-load-stable-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(creatorProject->saveAs(projectPath));
+    creatorRoot->futureManagerModel()->waitForFinished();
+    creatorProject->waitSaveToFinish();
+
+    const QString savedProjectFile = creatorProject->filename();
+    REQUIRE(QFileInfo::exists(savedProjectFile));
+
+    // Locate the cave's .cwcave file on disk.
+    const QDir projectDir(QFileInfo(savedProjectFile).absoluteDir());
+    QFileInfoList caveFiles;
+    QDirIterator it(projectDir.absolutePath(),
+                    QDir::Dirs | QDir::NoDotAndDotDot,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+        QDir d(it.filePath());
+        caveFiles.append(d.entryInfoList(QStringList() << QStringLiteral("*.cwcave"), QDir::Files));
+    }
+    REQUIRE(caveFiles.size() == 1);
+    const QString caveFilePath = caveFiles.first().absoluteFilePath();
+    const QDateTime mtimeBeforeLoad = QFileInfo(caveFilePath).lastModified();
+
+    // Sleep long enough that any save during load would produce a distinct
+    // mtime even on coarse-resolution filesystems (HFS+ is 1s; APFS / ext4 are
+    // sub-millisecond, so 50 ms covers either).
+    QThread::msleep(50);
+
+    // Load into a fresh project; flush any saves that might have been queued.
+    auto loaderRoot = std::make_unique<cwRootData>();
+    auto loaderProject = loaderRoot->project();
+    addTokenManager(loaderProject);
+    loaderProject->loadOrConvert(savedProjectFile);
+    loaderRoot->futureManagerModel()->waitForFinished();
+    loaderProject->waitLoadToFinish();
+    loaderProject->waitSaveToFinish();
+
+    const QDateTime mtimeAfterLoad = QFileInfo(caveFilePath).lastModified();
+    CHECK(mtimeAfterLoad == mtimeBeforeLoad);
 }

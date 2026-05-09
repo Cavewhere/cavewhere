@@ -36,13 +36,17 @@ cwFixStation::cwFixStation(const cwFixStation& other) :
 cwFixStation& cwFixStation::operator=(const cwFixStation& other)
 {
     if (this != &other) {
-        data.operator=(other.data);
+        data = other.data;
     }
     return *this;
 }
 
 cwFixStation::~cwFixStation() = default;
 
+// Equality includes Id because it is part of the fix's persistent identity:
+// two default-constructed cwFixStation values therefore compare unequal (each
+// gets a fresh QUuid in its data block). cwFixStationModel::setData relies on
+// per-field comparison rather than this operator for no-op detection.
 bool cwFixStation::operator==(const cwFixStation& other) const
 {
     if (data == other.data) {
