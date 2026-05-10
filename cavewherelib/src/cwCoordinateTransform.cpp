@@ -10,7 +10,6 @@
 
 //Qt includes
 #include <QHash>
-#include <QRegularExpression>
 
 //Std includes
 #include <vector>
@@ -258,41 +257,48 @@ QString cwCoordinateTransform::utmZoneToEpsg(int zone, bool north)
     return QStringLiteral("EPSG:%1").arg(base + zone);
 }
 
-QVariantMap cwCoordinateTransform::parseCSMode(const QString& cs)
-{
-    QVariantMap result;
-    result.insert(QStringLiteral("raw"), cs);
+namespace {
+    struct ParsedCS {
+        cwCoordinateSystem::Mode mode = cwCoordinateSystem::Local;
+        int  utmZone  = -1;
+        bool utmNorth = true;
+    };
 
-    const QString trimmed = cs.trimmed();
-    if (trimmed.isEmpty()) {
-        result.insert(QStringLiteral("mode"), QStringLiteral("local"));
-        return result;
-    }
-
-    // Lat/Lon (WGS84). Cheap path: literal EPSG:4326 (case-insensitive).
-    if (trimmed.compare(QStringLiteral("EPSG:4326"), Qt::CaseInsensitive) == 0) {
-        result.insert(QStringLiteral("mode"), QStringLiteral("latlon"));
-        return result;
-    }
-
-    // WGS84 UTM. EPSG:326NN (north) or EPSG:327NN (south), zone 01..60.
-    static const QRegularExpression utmRe(
-        QStringLiteral("^EPSG:(326|327)(\\d{2})$"),
-        QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpressionMatch m = utmRe.match(trimmed);
-    if (m.hasMatch()) {
-        const int zone = m.captured(2).toInt();
-        if (zone >= 1 && zone <= 60) {
-            const bool north = m.captured(1) == QStringLiteral("326");
-            result.insert(QStringLiteral("mode"), QStringLiteral("utm"));
-            result.insert(QStringLiteral("utmZone"), zone);
-            result.insert(QStringLiteral("utmNorth"), north);
-            return result;
+    ParsedCS parseCS(const QString& cs)
+    {
+        ParsedCS r;
+        const QString trimmed = cs.trimmed();
+        if (trimmed.isEmpty()) {
+            return r;
         }
-    }
 
-    result.insert(QStringLiteral("mode"), QStringLiteral("custom"));
-    return result;
+        if (trimmed.compare(QStringLiteral("EPSG:4326"), Qt::CaseInsensitive) == 0) {
+            r.mode = cwCoordinateSystem::LatLon;
+            return r;
+        }
+
+        if (trimmed.startsWith(QStringLiteral("EPSG:"), Qt::CaseInsensitive)) {
+            bool ok = false;
+            const int code = trimmed.mid(5).toInt(&ok);
+            if (ok) {
+                if (code >= 32601 && code <= 32660) {
+                    r.mode = cwCoordinateSystem::UTM;
+                    r.utmZone = code - 32600;
+                    r.utmNorth = true;
+                    return r;
+                }
+                if (code >= 32701 && code <= 32760) {
+                    r.mode = cwCoordinateSystem::UTM;
+                    r.utmZone = code - 32700;
+                    r.utmNorth = false;
+                    return r;
+                }
+            }
+        }
+
+        r.mode = cwCoordinateSystem::Custom;
+        return r;
+    }
 }
 
 QString cwCoordinateTransform::nameFor(const QString& cs)
@@ -305,7 +311,8 @@ QString cwCoordinateTransform::nameFor(const QString& cs)
     // Per-thread cache: QML label bindings hit the same CS string repeatedly
     // (one cache entry covers every fix-station row using the same projection),
     // and proj_create is non-trivial — sqlite query + CRS construction. Pairs
-    // with the thread_local validatorContext() above; no mutex needed.
+    // with the thread_local validatorContext() above; no mutex needed. Capped
+    // because CSCustomDialog lets users browse all ~7000 EPSG entries.
     thread_local QHash<QString, QString> cache;
     auto it = cache.constFind(key);
     if (it != cache.constEnd()) {
@@ -318,14 +325,18 @@ QString cwCoordinateTransform::nameFor(const QString& cs)
     }
 
     PJ* p = proj_create(ctx, key.toUtf8().constData());
-    if (!p) {
-        cache.insert(key, QString());
-        return QString();
+    QString result;
+    if (p) {
+        const char* name = proj_get_name(p);
+        if (name) {
+            result = QString::fromUtf8(name);
+        }
+        proj_destroy(p);
     }
 
-    const char* name = proj_get_name(p);
-    QString result = name ? QString::fromUtf8(name) : QString();
-    proj_destroy(p);
+    if (cache.size() >= 256) {
+        cache.clear();
+    }
     cache.insert(key, result);
     return result;
 }
@@ -352,26 +363,19 @@ QString cwCoordinateSystem::utmZoneToEpsg(int zone, bool north)
     return cwCoordinateTransform::utmZoneToEpsg(zone, north);
 }
 
-QVariantMap cwCoordinateSystem::parseCSMode(const QString& cs)
+cwCoordinateSystem::Mode cwCoordinateSystem::modeFor(const QString& cs)
 {
-    return cwCoordinateTransform::parseCSMode(cs);
-}
-
-QString cwCoordinateSystem::modeFor(const QString& cs)
-{
-    return cwCoordinateTransform::parseCSMode(cs).value(QStringLiteral("mode")).toString();
+    return parseCS(cs).mode;
 }
 
 int cwCoordinateSystem::utmZoneFor(const QString& cs)
 {
-    const QVariantMap m = cwCoordinateTransform::parseCSMode(cs);
-    return m.value(QStringLiteral("utmZone"), -1).toInt();
+    return parseCS(cs).utmZone;
 }
 
 bool cwCoordinateSystem::utmNorthFor(const QString& cs)
 {
-    const QVariantMap m = cwCoordinateTransform::parseCSMode(cs);
-    return m.value(QStringLiteral("utmNorth"), true).toBool();
+    return parseCS(cs).utmNorth;
 }
 
 QString cwCoordinateSystem::nameFor(const QString& cs)

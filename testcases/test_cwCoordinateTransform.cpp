@@ -246,50 +246,53 @@ TEST_CASE("cwCoordinateTransform::nameFor returns the human-readable description
     CHECK(osgbName.contains("British", Qt::CaseInsensitive));
 }
 
-TEST_CASE("cwCoordinateTransform::parseCSMode classifies CS strings",
-          "[cwCoordinateTransform][parseCSMode]")
+TEST_CASE("cwCoordinateSystem::modeFor classifies CS strings",
+          "[cwCoordinateTransform][modeFor]")
 {
-    SECTION("Empty / whitespace → local") {
-        CHECK(cwCoordinateTransform::parseCSMode("").value("mode").toString() == "local");
-        CHECK(cwCoordinateTransform::parseCSMode("   ").value("mode").toString() == "local");
+    using Mode = cwCoordinateSystem::Mode;
+
+    SECTION("Empty / whitespace → Local") {
+        CHECK(cwCoordinateSystem::modeFor("")    == Mode::Local);
+        CHECK(cwCoordinateSystem::modeFor("   ") == Mode::Local);
     }
 
-    SECTION("EPSG:4326 → latlon") {
-        const QVariantMap m = cwCoordinateTransform::parseCSMode("EPSG:4326");
-        CHECK(m.value("mode").toString() == "latlon");
-        CHECK(m.value("raw").toString() == "EPSG:4326");
-        // Case-insensitive
-        CHECK(cwCoordinateTransform::parseCSMode("epsg:4326").value("mode").toString() == "latlon");
+    SECTION("EPSG:4326 → LatLon (case-insensitive)") {
+        CHECK(cwCoordinateSystem::modeFor("EPSG:4326") == Mode::LatLon);
+        CHECK(cwCoordinateSystem::modeFor("epsg:4326") == Mode::LatLon);
     }
 
-    SECTION("WGS84 UTM north → utm + zone + north=true") {
-        const QVariantMap m = cwCoordinateTransform::parseCSMode("EPSG:32616");
-        CHECK(m.value("mode").toString() == "utm");
-        CHECK(m.value("utmZone").toInt() == 16);
-        CHECK(m.value("utmNorth").toBool() == true);
+    SECTION("WGS84 UTM north → UTM + zone + north=true") {
+        CHECK(cwCoordinateSystem::modeFor("EPSG:32616")    == Mode::UTM);
+        CHECK(cwCoordinateSystem::utmZoneFor("EPSG:32616")  == 16);
+        CHECK(cwCoordinateSystem::utmNorthFor("EPSG:32616") == true);
     }
 
-    SECTION("WGS84 UTM south → utm + zone + north=false") {
-        const QVariantMap m = cwCoordinateTransform::parseCSMode("EPSG:32760");
-        CHECK(m.value("mode").toString() == "utm");
-        CHECK(m.value("utmZone").toInt() == 60);
-        CHECK(m.value("utmNorth").toBool() == false);
+    SECTION("WGS84 UTM south → UTM + zone + north=false") {
+        CHECK(cwCoordinateSystem::modeFor("EPSG:32760")    == Mode::UTM);
+        CHECK(cwCoordinateSystem::utmZoneFor("EPSG:32760")  == 60);
+        CHECK(cwCoordinateSystem::utmNorthFor("EPSG:32760") == false);
     }
 
-    SECTION("Non-WGS84 UTM falls through to custom (e.g. ETRS89/UTM 32N)") {
-        CHECK(cwCoordinateTransform::parseCSMode("EPSG:25832").value("mode").toString() == "custom");
+    SECTION("Non-WGS84 UTM falls through to Custom (e.g. ETRS89/UTM 32N)") {
+        CHECK(cwCoordinateSystem::modeFor("EPSG:25832") == Mode::Custom);
     }
 
-    SECTION("OSGB / Lambert / arbitrary → custom") {
-        CHECK(cwCoordinateTransform::parseCSMode("EPSG:27700").value("mode").toString() == "custom");
-        CHECK(cwCoordinateTransform::parseCSMode("EPSG:2154").value("mode").toString() == "custom");
-        CHECK(cwCoordinateTransform::parseCSMode("ESRI:54030").value("mode").toString() == "custom");
+    SECTION("OSGB / Lambert / arbitrary → Custom") {
+        CHECK(cwCoordinateSystem::modeFor("EPSG:27700") == Mode::Custom);
+        CHECK(cwCoordinateSystem::modeFor("EPSG:2154")  == Mode::Custom);
+        CHECK(cwCoordinateSystem::modeFor("ESRI:54030") == Mode::Custom);
     }
 
-    SECTION("Out-of-range UTM EPSG (zone 00 / 99) is custom, not utm") {
-        CHECK(cwCoordinateTransform::parseCSMode("EPSG:32600").value("mode").toString() == "custom");
-        CHECK(cwCoordinateTransform::parseCSMode("EPSG:32661").value("mode").toString() == "custom");
-        CHECK(cwCoordinateTransform::parseCSMode("EPSG:32700").value("mode").toString() == "custom");
-        CHECK(cwCoordinateTransform::parseCSMode("EPSG:32761").value("mode").toString() == "custom");
+    SECTION("Out-of-range UTM EPSG (zone 00 / 99) is Custom, not UTM") {
+        CHECK(cwCoordinateSystem::modeFor("EPSG:32600") == Mode::Custom);
+        CHECK(cwCoordinateSystem::modeFor("EPSG:32661") == Mode::Custom);
+        CHECK(cwCoordinateSystem::modeFor("EPSG:32700") == Mode::Custom);
+        CHECK(cwCoordinateSystem::modeFor("EPSG:32761") == Mode::Custom);
+    }
+
+    SECTION("utmZoneFor returns -1 for non-UTM modes") {
+        CHECK(cwCoordinateSystem::utmZoneFor("")           == -1);
+        CHECK(cwCoordinateSystem::utmZoneFor("EPSG:4326")  == -1);
+        CHECK(cwCoordinateSystem::utmZoneFor("EPSG:27700") == -1);
     }
 }

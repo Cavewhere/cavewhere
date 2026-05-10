@@ -12,7 +12,6 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
-#include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 #include <memory>
 
@@ -56,7 +55,6 @@ public:
     static bool isValidCS(const QString& cs);
     static bool isGeographic(const QString& cs);
     static QString utmZoneToEpsg(int zone, bool north);
-    static QVariantMap parseCSMode(const QString& cs);
     static QString nameFor(const QString& cs);
 
     /**
@@ -95,6 +93,12 @@ class CAVEWHERE_LIB_EXPORT cwCoordinateSystem : public QObject
 public:
     explicit cwCoordinateSystem(QObject* parent = nullptr) : QObject(parent) {}
 
+    /**
+     * Picker modes. Custom is the escape hatch that opens the CSCustomDialog.
+     */
+    enum Mode { Local, LatLon, UTM, Custom };
+    Q_ENUM(Mode)
+
     Q_INVOKABLE static bool isValidCS(const QString& cs);
     Q_INVOKABLE static QStringList commonProjectedCSList();
 
@@ -113,20 +117,14 @@ public:
     Q_INVOKABLE static QString utmZoneToEpsg(int zone, bool north);
 
     /**
-     * Round-trip a CS string back to a picker mode. Returns a map with key
-     * "mode" set to one of "local", "latlon", "utm", "custom"; for "utm"
-     * the map also contains "utmZone" (int) and "utmNorth" (bool); "raw"
-     * always carries the original cs string.
+     * Round-trip a CS string back to a picker mode (Local / LatLon / UTM /
+     * Custom). Splitting the parse into three Q_INVOKABLEs lets QML bind
+     * each slice as a strict-typed property. utmZoneFor returns -1 and
+     * utmNorthFor returns true when mode is not UTM.
      */
-    Q_INVOKABLE static QVariantMap parseCSMode(const QString& cs);
-
-    /**
-     * Field-at-a-time slices of parseCSMode() so QML callers can use
-     * strict-typed properties instead of `property var`.
-     */
-    Q_INVOKABLE static QString modeFor(const QString& cs);
-    Q_INVOKABLE static int     utmZoneFor(const QString& cs);
-    Q_INVOKABLE static bool    utmNorthFor(const QString& cs);
+    Q_INVOKABLE static Mode modeFor(const QString& cs);
+    Q_INVOKABLE static int  utmZoneFor(const QString& cs);
+    Q_INVOKABLE static bool utmNorthFor(const QString& cs);
 
     /**
      * Human-readable description for a CS (e.g. "OSGB36 / British National

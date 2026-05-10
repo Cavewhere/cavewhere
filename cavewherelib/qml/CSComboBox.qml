@@ -18,9 +18,9 @@ QQ.Item {
     property string value: ""
     property bool allowGeographic: true
 
-    readonly property string currentMode: CoordinateSystem.modeFor(rootId.value)
+    readonly property int currentMode: CoordinateSystem.modeFor(rootId.value)
     readonly property string resolvedDescription: {
-        if (rootId.currentMode !== "custom") {
+        if (rootId.currentMode !== CoordinateSystem.Custom) {
             return rootId.value
         }
         const name = CoordinateSystem.nameFor(rootId.value)
@@ -34,18 +34,18 @@ QQ.Item {
 
     function commitMode(mode) {
         switch (mode) {
-        case "local":
+        case CoordinateSystem.Local:
             rootId.committed("")
             return
-        case "latlon":
+        case CoordinateSystem.LatLon:
             rootId.committed("EPSG:4326")
             return
-        case "utm":
+        case CoordinateSystem.UTM:
             rootId.committed(CoordinateSystem.utmZoneToEpsg(
                 zoneSpinId.value,
                 hemiComboId.currentIndex === 0))
             return
-        case "custom":
+        case CoordinateSystem.Custom:
             customDialogLoader.active = true
             customDialogLoader.item.open()
             return
@@ -63,26 +63,28 @@ QQ.Item {
             id: modeComboId
             objectName: "csModePicker"
 
-            // Two parallel arrays: visible labels (shown in the popup) and
-            // canonical mode keys. allowGeographic == false hides the
-            // "latlon" entry — survex's cavern can't emit geographic output.
+            // allowGeographic == false hides LatLon — survex's cavern can't
+            // emit geographic output.
             readonly property bool hideGeographic: !rootId.allowGeographic
+
+            readonly property var modes: hideGeographic
+                ? [CoordinateSystem.Local,
+                   CoordinateSystem.UTM,
+                   CoordinateSystem.Custom]
+                : [CoordinateSystem.Local,
+                   CoordinateSystem.LatLon,
+                   CoordinateSystem.UTM,
+                   CoordinateSystem.Custom]
 
             model: hideGeographic
                 ? [qsTr("Local"), qsTr("UTM"), qsTr("Custom...")]
                 : [qsTr("Local"), qsTr("Lat/Lon (WGS84)"), qsTr("UTM"), qsTr("Custom...")]
 
             function modeAt(index) {
-                const modes = hideGeographic
-                    ? ["local", "utm", "custom"]
-                    : ["local", "latlon", "utm", "custom"]
                 return modes[index]
             }
 
             function indexForMode(mode) {
-                const modes = hideGeographic
-                    ? ["local", "utm", "custom"]
-                    : ["local", "latlon", "utm", "custom"]
                 const i = modes.indexOf(mode)
                 return i >= 0 ? i : 0
             }
@@ -91,7 +93,7 @@ QQ.Item {
 
             onActivated: (index) => {
                 const mode = modeAt(index)
-                if (mode === rootId.currentMode && mode !== "custom") {
+                if (mode === rootId.currentMode && mode !== CoordinateSystem.Custom) {
                     return
                 }
                 rootId.commitMode(mode)
@@ -101,7 +103,7 @@ QQ.Item {
         QC.SpinBox {
             id: zoneSpinId
             objectName: "csUtmZone"
-            visible: rootId.currentMode === "utm"
+            visible: rootId.currentMode === CoordinateSystem.UTM
             from: 1
             to: 60
             value: {
@@ -110,8 +112,8 @@ QQ.Item {
             }
             editable: true
             onValueModified: {
-                if (rootId.currentMode === "utm") {
-                    rootId.commitMode("utm")
+                if (rootId.currentMode === CoordinateSystem.UTM) {
+                    rootId.commitMode(CoordinateSystem.UTM)
                 }
             }
         }
@@ -119,20 +121,20 @@ QQ.Item {
         QC.ComboBox {
             id: hemiComboId
             objectName: "csUtmHemisphere"
-            visible: rootId.currentMode === "utm"
+            visible: rootId.currentMode === CoordinateSystem.UTM
             model: ["N", "S"]
             currentIndex: CoordinateSystem.utmNorthFor(rootId.value) ? 0 : 1
             onActivated: {
-                if (rootId.currentMode === "utm") {
-                    rootId.commitMode("utm")
+                if (rootId.currentMode === CoordinateSystem.UTM) {
+                    rootId.commitMode(CoordinateSystem.UTM)
                 }
             }
         }
 
         QC.Label {
             objectName: "csResolvedLabel"
-            visible: rootId.currentMode === "custom"
-                     || rootId.currentMode === "utm"
+            visible: rootId.currentMode === CoordinateSystem.Custom
+                     || rootId.currentMode === CoordinateSystem.UTM
             text: rootId.resolvedDescription
             color: Theme.textSubtle
             font.family: Theme.fontFamilyMono
