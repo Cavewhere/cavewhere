@@ -21,6 +21,7 @@
 class cwCamera;
 class cwCaptureCenterline;
 class cwCaptureLeads;
+class cwCaptureLeadLines;
 class cwSurveyNetwork;
 #include "cwScaleBarItem.h"
 #include "cwScale.h"
@@ -153,6 +154,7 @@ private:
     cwSurveyNetwork buildCenterlineNetwork() const;
     cwCaptureCenterline* createCenterlineItem(QGraphicsItemGroup* parent, double imageScale) const;
     cwCaptureLeads* createLeadsItem(QGraphicsItemGroup* parent, double imageScale) const;
+    cwCaptureLeadLines* createLeadLinesItem(QGraphicsItemGroup* parent, double imageScale, cwCaptureLeads* leadsPeer) const;
 
 
 private slots:
@@ -165,6 +167,7 @@ private slots:
 private:
     cwCaptureCenterline* CenterlineItem;
     cwCaptureLeads* LeadsItem;
+    cwCaptureLeadLines* LeadLinesItem;
     bool m_leadsVisible = false;
 };
 

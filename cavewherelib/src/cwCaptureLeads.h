@@ -20,6 +20,7 @@
 
 // Our includes
 #include "cwGlobals.h"
+#include "cwSurveyNetwork.h"
 
 class cwCamera;
 class cwCavingRegion;
@@ -27,26 +28,34 @@ class cwCavingRegion;
 class CAVEWHERE_LIB_EXPORT cwCaptureLeads : public QGraphicsItem
 {
 public:
+    struct LeadDrawData {
+        QPointF markerPos;
+        QString text;
+        QRectF  labelRect;
+        QPointF leaderStart;
+        QPointF leaderEnd;
+        bool    hasLeader = false;
+    };
+
     explicit cwCaptureLeads(QGraphicsItem* parent = nullptr);
 
     void setRegion(cwCavingRegion* region);
     void setCamera(cwCamera* camera);
     void setViewport(const QRect& viewport);
     void setImageScale(double scale);
+    void setNetwork(const cwSurveyNetwork& network);
+
+    const QVector<LeadDrawData>& layout() const { return m_leads; }
 
     QRectF boundingRect() const override;
     QPainterPath shape() const override;
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
 private:
-    struct LeadDrawData {
-        QPointF position;
-        QString text;
-    };
-
     void rebuildGeometry();
 
     QPointer<cwCavingRegion> m_region;
+    cwSurveyNetwork m_network;
     cwCamera* m_camera;
     QRect m_viewport;
     QRectF m_boundingRect;
@@ -57,7 +66,6 @@ private:
     QFont m_glyphFont;
     QPen m_labelPen;
     QFont m_labelFont;
-    qreal m_textOffsetX;
     qreal m_textMaxWidth;
 };
 

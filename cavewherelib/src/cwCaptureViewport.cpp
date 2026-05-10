@@ -18,6 +18,7 @@
 #include "cw3dRegionViewer.h"
 #include "cwCaptureCenterline.h"
 #include "cwCaptureLeads.h"
+#include "cwCaptureLeadLines.h"
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"
 #include "cwGlobals.h"
@@ -35,6 +36,9 @@
 
 namespace {
 // Z-values define stacking order of overlays drawn on top of the rendered map tiles.
+// LeadLeaders sits below the tiles (z = 0) so it shows through transparent
+// regions and is hidden behind opaque cave-passage ink.
+constexpr qreal LeadLeadersZValue = -100.0;
 constexpr qreal CenterlineZValue = 1500.0;
 constexpr qreal LeadsZValue = 1600.0;
 constexpr qreal ScaleBarZValue = 2000.0;
@@ -58,7 +62,8 @@ cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     Item(nullptr),
     m_scaleBar(new cwScaleBarItem()),
     CenterlineItem(nullptr),
-    LeadsItem(nullptr)
+    LeadsItem(nullptr),
+    LeadLinesItem(nullptr)
 {
     connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwCaptureViewport::updateTransformForItems);
     connect(this, &cwCaptureViewport::positionOnPaperChanged, this, &cwCaptureViewport::updateItemsPosition);
@@ -149,6 +154,7 @@ void cwCaptureViewport::capture()
             PreviewItem = nullptr;
             CenterlineItem = nullptr;
             LeadsItem = nullptr;
+            LeadLinesItem = nullptr;
         }
         PreviewItem = new QGraphicsItemGroup();
         previewItemChanged();
@@ -156,12 +162,14 @@ void cwCaptureViewport::capture()
         imageScale = 1.0;
         CenterlineItem = createCenterlineItem(PreviewItem, imageScale);
         LeadsItem = createLeadsItem(PreviewItem, imageScale);
+        LeadLinesItem = createLeadLinesItem(PreviewItem, imageScale, LeadsItem);
     } else {
         if(Item != NULL) {
             delete Item;
             Item = nullptr;
             CenterlineItem = nullptr;
             LeadsItem = nullptr;
+            LeadLinesItem = nullptr;
         }
         Item = new QGraphicsItemGroup();
         fullResolutionItemChanged();
@@ -169,6 +177,7 @@ void cwCaptureViewport::capture()
         imageScale = ItemScale * resolution();
         CenterlineItem = createCenterlineItem(Item, imageScale);
         LeadsItem = createLeadsItem(Item, imageScale);
+        LeadLinesItem = createLeadLinesItem(Item, imageScale, LeadsItem);
     }
 
     //Updates the scale for the items
@@ -468,6 +477,7 @@ void cwCaptureViewport::deleteSceneItems()
         PreviewItem = nullptr;
         CenterlineItem = nullptr;
         LeadsItem = nullptr;
+        LeadLinesItem = nullptr;
     }
 
     if(Item != nullptr) {
@@ -475,6 +485,7 @@ void cwCaptureViewport::deleteSceneItems()
         Item = nullptr;
         CenterlineItem = nullptr;
         LeadsItem = nullptr;
+        LeadLinesItem = nullptr;
     }
 
     delete m_scaleBar;
@@ -550,6 +561,7 @@ cwCaptureLeads* cwCaptureViewport::createLeadsItem(QGraphicsItemGroup* parent, d
     leads->setCamera(CaptureCamera);
     leads->setViewport(viewport());
     leads->setImageScale(imageScale);
+    leads->setNetwork(buildCenterlineNetwork());
 
     if(!m_sceneManager.isNull()) {
         leads->setRegion(m_sceneManager->cavingRegion());
@@ -559,6 +571,24 @@ cwCaptureLeads* cwCaptureViewport::createLeadsItem(QGraphicsItemGroup* parent, d
 
     parent->addToGroup(leads);
     return leads;
+}
+
+cwCaptureLeadLines* cwCaptureViewport::createLeadLinesItem(QGraphicsItemGroup* parent, double imageScale, cwCaptureLeads* leadsPeer) const
+{
+    if(parent == nullptr) {
+        return nullptr;
+    }
+
+    auto* lines = new cwCaptureLeadLines();
+    lines->setZValue(LeadLeadersZValue);
+    lines->setLeads(leadsPeer);
+
+    const QSizeF localSize = QSizeF(viewport().size()) * imageScale;
+    lines->setBoundingRect(QRectF(QPointF(0.0, 0.0), localSize));
+    lines->setVisible(m_leadsVisible);
+
+    parent->addToGroup(lines);
+    return lines;
 }
 
 /**
@@ -785,6 +815,9 @@ void cwCaptureViewport::setLeadsVisible(bool visible)
 
     if(LeadsItem != nullptr) {
         LeadsItem->setVisible(visible);
+    }
+    if(LeadLinesItem != nullptr) {
+        LeadLinesItem->setVisible(visible);
     }
 
     emit leadsVisibleChanged();
