@@ -26,8 +26,11 @@ cwCavingRegion
 ├── worldOrigin            (QVector3D in globalCS)
 ├── lazLayers : cwLazLayerModel   ── QAbstractListModel of cwLazLayer* (QObject)
 │                                    each layer owns cwLazData (worldOrigin-relative)
-│                                    roles: Layer, Name, SourcePath, Visible,
-│                                           Opacity, PointSize, LoadStatus, LoadProgress, PointCount
+│                                    roles: Layer, Name, SourcePath, PointSize,
+│                                           LoadStatus, LoadProgress, PointCount
+│                                    (visibility lives on the render side via
+│                                     cwKeywordItemModel + cwRenderPointCloudVisibility,
+│                                     same pattern as scraps — not a layer property)
 └── caves : [cwCave]
     └── fixStations : cwFixStationModel  ── QAbstractListModel of cwFixStation (value type)
                                             roles: StationName, InputCS,
@@ -117,11 +120,11 @@ Loop closure is delegated to survex's `cavern` (already integrated via `cwCavern
   - Internal storage: `QList<cwFixStation> m_fixStations` (value list, not pointers).
   - Emits `dataChanged(index, index, {role})` per cell on edit; `beginInsertRows`/`endInsertRows` on add; `beginRemoveRows`/`endRemoveRows` on delete.
 - `cwCave` (`cavewherelib/src/cwCave.{h,cpp}`) owns one `cwFixStationModel*` as a child; expose via `Q_PROPERTY(cwFixStationModel* fixStations READ fixStations CONSTANT)`. The model is the public surface — no parallel `addFixStation` API on cwCave; QML calls `cave.fixStations.addFixStation(...)`.
-- `cwCavingRegion` (`cavewherelib/src/cwCavingRegion.{h,cpp}`): add `QString m_globalCS`, `globalCSChanged()`, **and the data side of `worldOrigin` (`cwGeoPoint m_worldOrigin`, `worldOrigin()` getter, `setWorldOrigin()` setter, `worldOriginChanged()` signal)**. PR 4 needs the getter to subtract during line-plot parsing; the recompute *policy* and the `Q_INVOKABLE recomputeWorldOrigin()` action land in PR 5. Default `(0,0,0)` so PR 4's subtraction is a no-op for un-fixed caves until PR 5 wires up recompute.
+- `cwCavingRegion` (`cavewherelib/src/cwCavingRegion.{h,cpp}`): add `QString m_globalCS`, `globalCSChanged()`, **and the runtime-only data side of `worldOrigin` (`cwGeoPoint m_worldOrigin`, `worldOrigin()` getter, `setWorldOrigin()` setter, `worldOriginChanged()` signal)**. PR 4 needs the getter to subtract during line-plot parsing; the recompute *policy* and the `Q_INVOKABLE recomputeWorldOrigin()` action land in PR 5. Default `(0,0,0)` so PR 4's subtraction is a no-op for un-fixed caves until PR 5 wires up recompute. **`worldOrigin` is not serialized** — it's recomputed from the fix-station centroid on every load (PR 5 policy), so we don't need to persist it.
 - Update `cavewherelib/src/cavewhere.proto`:
-  - Cave (line 43–60, next free field 11): `repeated FixStation fixStations = 11;`
-  - CavingRegion: `optional string globalCS = 6;` and `optional Vector3d worldOrigin = 7;`
-  - New top-level `message FixStation { id, stationName, inputCS, easting, northing, elevation, horizontalVariance, verticalVariance }` and `message Vector3d { double x = 1; double y = 2; double z = 3; }`.
+  - Cave (next free field 11): `repeated FixStation fixStations = 11;`
+  - `ProjectMetadata`: `optional string globalCS = 4;` (project-level, alongside `dataRoot`/`syncEnabled`). `worldOrigin` is *not* serialized — see above; tag 5 is reserved on `ProjectMetadata` for the historical worldOrigin field that was considered and dropped.
+  - New top-level `message FixStation { id, stationName, inputCS, easting, northing, elevation, horizontalVariance, verticalVariance }`.
 - Serialization: `cwFixStationModel::toProto()` / `fromProto()`. Wire into the existing Cave converter.
 - Tests:
   - `testcases/test_cwFixStation.cpp` — value-class semantics (copy, equality, COW).
@@ -245,24 +248,25 @@ The data side (`m_worldOrigin`, getter, signal) already landed in PR 2 so PR 3b 
 
 ### PR 6 — LAZ data + loader (no rendering)
 - `conanfile.py`: add `pdal/[>=2.6.0]`. CMake `find_package(PDAL CONFIG REQUIRED)`, link `pdal::pdalcpp`.
-- New `cavewherelib/src/cwLazData.h`:
-  ```cpp
-  struct cwLazData {
-      QByteArray positions;            // packed float[3], worldOrigin-relative
-      QByteArray colors;               // optional uint8[3]
-      QByteArray intensities;          // optional uint16
-      qsizetype  pointCount = 0;
-      QVector3D  bboxMin, bboxMax;     // worldOrigin-relative (post-offset, ok in float)
-      QString    sourceCS;
-  };
-  ```
+- **Extend `cwGeometry` to support point clouds** (`cavewherelib/src/cwGeometry.{h,cpp}`):
+  - Add `Type::Points` to the `Type` enum and a `"Points"` case to `toString(Type)`.
+  - Loosen `isEmpty()`: indexed primitives (`Triangles`) still require both vertex data and indices, but non-indexed primitives (`Points`, and optionally `Lines`) are non-empty when `m_vertexData` alone is non-empty. Point clouds draw in vertex order, so emitting a trivial `0..N-1` index array would just waste 4 bytes per point.
+  - No new attributes needed — the existing `Semantic::Position` + `Vec3` format covers the LAZ payload (we're dropping color/intensity per the design discussion).
 - New `cwLazLoader` (`cavewherelib/src/cwLazLoader.{h,cpp}`):
   ```cpp
+  // Payload is a cwGeometry with Type::Points and a single Position(Vec3) attribute,
+  // worldOrigin-relative. The layer pulls bbox + sourceCS from sibling fields below
+  // (or the layer computes the bbox after the future resolves; see cwLazLayer).
+  struct cwLazLoadResult {
+      cwGeometry geometry;             // Type::Points, Position(Vec3), worldOrigin-relative
+      QVector3D  bboxMin, bboxMax;     // worldOrigin-relative (post-offset, ok in float)
+      QString    sourceCS;             // resolved CS used during load
+  };
+
   // Returns a QFuture so the result can be wrapped in cwFuture and added to
   // cwFutureManagerModel via cwFutureManagerToken for UI progress tracking.
-  // The future is driven by a QPromise<std::shared_ptr<cwLazData>> on the
-  // worker thread.
-  QFuture<std::shared_ptr<cwLazData>> load(
+  // The future is driven by a QPromise<cwLazLoadResult> on the worker thread.
+  QFuture<cwLazLoadResult> load(
       const QString& path,
       const QString& sourceCSOverride,    // empty = use LAZ-embedded
       const QString& globalCS,
@@ -270,21 +274,30 @@ The data side (`m_worldOrigin`, getter, signal) already landed in PR 2 so PR 3b 
       qsizetype maxPoints = -1);
   ```
   Implementation: PDAL `readers.las` → streaming `PointTable`/`PointView`. The worker:
+  - Constructs the result `cwGeometry` with `{ {Position, Vec3} }` layout and `Type::Points`.
   - Constructs its own `cwCoordinateTransform(sourceCS, globalCS)` — single-thread instance.
-  - Per chunk of points: reproject (no-op if `transform.isIdentity()`) into `cwGeoPoint`, subtract `worldOrigin`, narrow to `float[3]`, append to `positions`.
+  - Per chunk of points: reproject (no-op if `transform.isIdentity()`) into `cwGeoPoint`, subtract `worldOrigin`, narrow to `QVector3D`, append to a local `QVector<QVector3D>` buffer; flush via `geometry.set<QVector3D>(Position, buffer)` periodically (or build once at the end if memory permits — point counts are typically in the millions, decide based on profiling).
+  - Tracks bbox in floats during the same pass so we don't iterate the buffer twice.
   - Reports progress via `QPromise::setProgressValue(...)` so the UI bar updates as points stream.
   - Honors `QPromise::isCanceled()` for early termination if the user closes the project mid-load.
   - **Production path uses `AsyncFuture::observe(future).context(this, callback)` per CLAUDE.md** — no `waitForFinished` outside tests.
-- New `cwLazLayer : QObject` (`cavewherelib/src/cwLazLayer.{h,cpp}`) — represents a single loaded LAZ. `Q_PROPERTY` for: `id`, `name`, `sourcePath`, `sourceCS` (override), `visible`, `opacity`, `pointSize`, plus read-only `loadStatus` (enum: Idle / Loading / Loaded / Error), `errorMessage`, `pointCount`, `loadProgress` (0.0–1.0, mirrors the QFuture's progress for inline indicators). Holds `std::shared_ptr<cwLazData>`. Triggers async reload when `sourcePath`/`sourceCS`/region `globalCS`/`worldOrigin` change.
-  - On reload: build the `QFuture` via `cwLazLoader`, wrap in `cwFuture(future, "Loading <basename>.laz")`, hand to the region's `cwFutureManagerToken::addJob(...)` so it appears in the global progress UI alongside other long-running tasks.
+- New `cwLazLayer : QObject` (`cavewherelib/src/cwLazLayer.{h,cpp}`) — represents a single loaded LAZ. `Q_PROPERTY` for: `sourcePath`, `pointSize`, plus read-only `name` (derived from `QFileInfo(sourcePath).baseName()`), `sourceCS` (read from the LAZ file's embedded CS via PDAL), `loadStatus` (enum: Idle / Loading / Loaded / Error), `errorMessage`, `pointCount` (derived from `m_geometry.vertexCount()`), `bboxMin`/`bboxMax`, `loadProgress` (0.0–1.0, mirrors the QFuture's progress for inline indicators). Holds `cwGeometry m_geometry` plus the bbox + resolved `m_sourceCS` from the load result. Triggers async reload when `sourcePath` or region `globalCS`/`worldOrigin` change.
+  - **No `visible` property.** Visibility lives in the render system (PR 7), driven by `cwKeywordItemModel` + a per-layer `cwRenderPointCloudVisibility` shim — the same architecture `cwScrapManager` uses for scraps (see `cwScrapManager::addKeywordItemForScrap()`, `cwRenderTexturedItemVisibility`). The data model has no visibility state; the user's filter chips toggle render-side flags through `cwKeywordVisibility`. (Also exposes a `cwKeywordModel* keywordModel()` populated with `Type=LAZ Layer` / `FileName` / `ObjectId` / `Name`, mirroring `cwScrap::keywordModel()`.)
+  - **Only `sourcePath` is persisted** (see proto bullet below). All other read-only metadata (`name`, `sourceCS`, `bbox`, `pointCount`) is recovered by re-running the loader against the saved path. The `pointSize` runtime override resets to default on load — a deliberate v1 simplification, easy to extend later by adding a field to the `LazLayer` proto without changing the data flow.
+  - On reload: build the `QFuture` via `cwLazLoader`, wrap in `cwFuture(future, "Loading <basename>.laz")`, hand to the region's `cwFutureManagerToken::addJob(...)` so it appears in the global progress UI alongside other long-running tasks. When the future resolves, move the `cwGeometry` into `m_geometry` and copy bbox + sourceCS.
   - **QObject (not value type) because layers have async lifecycle and per-layer signals** — different from `cwFixStation` which is a pure value row.
+  - Color and intensity are intentionally not stored. The PR 7 shader is per-layer-uniform-colored, so per-point RGB is dead weight (~triples the memory footprint with uint8[3]+uint16). If intensity-shaded rendering becomes a requirement, re-add a `Color0` attribute to the loader's `cwGeometry` layout — single-field change.
 - New `cwLazLayerModel : QAbstractListModel` (`cavewherelib/src/cwLazLayerModel.{h,cpp}`):
   - `QML_NAMED_ELEMENT(LazLayerModel)`. Mirrors `cwLeadModel` shape.
-  - Roles enum: `Layer` (the `cwLazLayer*` itself), `Name`, `SourcePath`, `Visible`, `Opacity`, `PointSize`, `LoadStatus`, `LoadProgress`, `PointCount`.
+  - Roles enum: `Layer` (the `cwLazLayer*` itself), `Name`, `SourcePath`, `PointSize`, `LoadStatus`, `LoadProgress`, `PointCount`. (No `Visible` role — visibility is rendered-side state managed by `cwKeywordItemModel`, not a row attribute.)
   - `rowCount`, `data`, `setData`, `roleNames`, plus `Q_INVOKABLE addLayer(QString sourcePath)`, `removeAt(int)`, `layerAt(int)`.
   - Internally owns `QList<cwLazLayer*>` (children of the model). Forwards each layer's property-change signals to `dataChanged(index, index, {role})`.
 - `cwCavingRegion` exposes one `cwLazLayerModel*` via `Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)`. QML uses `region.lazLayers` directly as the model for a `ListView` / `TableView`. The region also holds the `cwFutureManagerToken` it hands to layers when reloads start.
-- Proto: `repeated LazLayer lazLayers = 8;` on CavingRegion (`Vector3d worldOrigin` already added in PR 2). New `message LazLayer { id, name, sourcePath, sourceCS, visible, opacity, pointSize }`. Serialization via `cwLazLayerModel::toProto()` / `fromProto()`.
+- **Proto + save/load wiring**:
+  - Proto: add `repeated LazLayer lazLayers = <next free tag>;` on `ProjectMetadata` — same message that already carries `globalCS = 4` and reserves tag 5 for the dropped `worldOrigin` field. (LAZ layers are project-level, not per-cave, so they belong here next to the other region-wide settings.) New `message LazLayer { optional string sourcePath = 1; }` — **just the path**. Everything else is derivable from the LAZ file (name from filename, sourceCS from embedded VLR, bbox from header, point count from data) or is session-only UI state (`pointSize` defaults each load; visibility is render-system state driven by `cwKeywordItemModel`, never on the data model in the first place — same as scraps). Geometry, bbox, and recomputed `worldOrigin` are never serialized — they're rebuilt by re-loading `sourcePath` against the current `globalCS` and the `worldOrigin` recomputed from fix stations on load. (The `.laz` file itself lives next to the project — committed via LFS for `.cwproj` directories — and is the source of truth for everything except the path itself.)
+  - Add `cwLazLayerModel::toProto()` / `fromProto(...)` mirroring `cwFixStationModel`'s pattern from PR 2.
+  - Wire into the existing serialization path: `cwRegionIOTask` / `cwRegionLoadTask` / `cwSaveLoad` (the same call sites that PR 2 extended for fix stations). On load, after `fromProto` repopulates the model with one layer per saved path, each layer kicks off its async reload via `cwLazLoader` so geometry / bbox / sourceCS are rebuilt against the current region origin. `loadStatus` starts at `Idle` and transitions through `Loading → Loaded` (or `Error` if the source file is missing).
+  - Missing-file handling: if `sourcePath` doesn't resolve at load time, the layer surfaces `loadStatus == Error` with a clear `errorMessage` ("File not found: …") rather than dropping the row — the user keeps the path and can re-link by editing it. The `cwLazLayerModel` row stays in the proto for the next save.
 - **Git LFS for `.laz` files** — `.laz` files are large binary blobs that don't compress further in git:
   - Add a top-level `/Users/cave/Documents/projects/cavewhere_4/.gitattributes` to the cavewhere repo with:
     ```
@@ -293,34 +306,327 @@ The data side (`m_worldOrigin`, getter, signal) already landed in PR 2 so PR 3b 
     ```
     so any test-fixture or doc-bundled point cloud lives in LFS, not the pack.
   - When CaveWhere initializes a new `.cwproj` git-backed project (search for `QQuickGit::GitRepository::create` / first-commit code path; see `cwRecentProjectModel.cpp:127` and the cloner in `cwRemoteRepositoryCloner.cpp`), write a `.gitattributes` into the project that includes the same `*.laz` / `*.las` LFS rules (in addition to whatever existing rules cover note images). Existing repos without `.gitattributes` should still load LAZ correctly; the rules only matter on commit.
-- Region settings page UI for managing LAZ files (see UI section).
+- LAZ layer management UI lands in PR 6.5 (Geospatial Layer Management UI). PR 6 stops at the C++ data path: model populates correctly, persistence round-trips, missing-file rows survive — verified by the C++ tests below. The user-facing add/remove surface is its own PR.
 - Tests:
-  - `testcases/test_cwLazLoader.cpp` — generate a tiny synthetic `.laz` in `QTemporaryDir + PID` (do not check a binary fixture into the repo unless > a few hundred points become necessary, in which case it goes through LFS). Verify pointCount, offset applied, source-CS reprojected, identity-transform path.
-  - `testcases/test_cwLazLayerModel.cpp` — add/remove rows, role lookup, per-layer property change propagates to `dataChanged`, proto round-trip.
+  - `testcases/test_cwLazLoader.cpp` — generate a tiny synthetic `.laz` in `QTemporaryDir + PID` (do not check a binary fixture into the repo unless > a few hundred points become necessary, in which case it goes through LFS). Verify the resulting `cwGeometry` has `Type::Points`, a single `Position(Vec3)` attribute, the expected `vertexCount()`, that worldOrigin offset was applied, that source-CS reprojection ran (and the identity-transform path is a no-op).
+  - `testcases/test_cwGeometry.cpp` — extend with cases for `Type::Points`: layout-only construction (Position/Vec3), `set<QVector3D>(Position, ...)` round-trip via `values<QVector3D>(Position)`, and that `isEmpty()` returns false for a non-empty point cloud with no indices.
+  - `testcases/test_cwLazLayerModel.cpp` — add/remove rows, role lookup, per-layer property change propagates to `dataChanged`, in-memory proto round-trip via `toProto()`/`fromProto()`.
   - `testcases/test_cwLazLayer_progress.cpp` — verify `loadProgress` / `loadStatus` transitions during a slow load, and that the layer's `cwFuture` ends up in `cwFutureManagerModel`.
+  - **`testcases/test_cwLazLayerSaveLoad.cpp`** — full project save/load round-trip through `cwProject`/`cwSaveLoad` (matches `tst_FixStations_RoundTrip.qml`'s shape but at the C++ level, since LAZ-layer UI doesn't exist until PR 6's panel is wired up). Generates two synthetic `.laz` files in `QTemporaryDir + PID`, adds a `cwLazLayer` for each, saves the project to a `.cw` bundle, loads into a fresh region, asserts: row count, each row's `sourcePath` round-trips exactly, and each layer reloads its geometry to a non-zero `vertexCount()` (with bbox + sourceCS rebuilt from the file) after the post-load reload future settles. Also documents the v1 trade-off: the test asserts that the `pointSize` runtime override (e.g. setting `pointSize = 5.0` before save) resets to default on load — intentional, not a regression. Also covers the missing-file case: rename one of the `.laz` files between save and load, verify the row reappears with `loadStatus == Error` and `sourcePath` intact.
 
 **Deferred — generic GIS layer abstraction**: a future PR may introduce an abstract `cwGisLayer` base (with concrete subclasses for raster terrain GeoTIFF, vector overlays, additional point-cloud formats, etc.) and a polymorphic `cwGisLayerModel`. We deliberately don't introduce that hierarchy now: with only one concrete layer type, the right shape of the abstraction can't be known and a premature base class will likely need rework once a second format lands. The current `cwLazLayer*` / `cwLazLayerModel` shapes are designed so this future refactor is mechanical: rename + extract base, keep proto field tags by promoting `LazLayer` to a `oneof` inside a generic `GisLayer` message.
 
+### PR 6.5 — Geospatial Layer Management UI
+
+PR 6 builds the C++ side of LAZ layers but the original plan covered the user-facing surface in a single line (`"Add LAZ… opens Qt.labs.platform.FileDialog"`) — incomplete and inconsistent with the rest of the app, which uses `QtQuick.Dialogs.FileDialog` everywhere (see `NotesFileDialog.qml`, `ExportImportButtons.qml`). PR 7 lands rendering, so users need to be able to add/remove LAZ files **before** PR 7 to validate the data path end-to-end (drag a file in, save, reopen, see the row reappear) without depending on the renderer.
+
+Outcome: a `QC.GroupBox { title: "Geospatial" }` on `DataMainPage` wraps the existing CS picker plus a new `Layers: N` `LinkText`. Clicking the link navigates to a new "Geospatial Layers" sub-page where the user adds files via the standard multi-select FileDialog and removes rows via `RemoveAskBox` + right-click menu. Page is named "Geospatial Layers" (not "LAZ Layers") so future raster/vector layer types can land in the same surface without a rename.
+
+**Loading progress is intentionally not surfaced on the page.** PR 6 already wraps every LAZ load in a `cwFuture` and hands it to `cwFutureManagerToken::addJob(...)`, so loads appear in the existing global progress UI driven by `cwFutureManagerModel` (`cavewherelib/src/cwFutureManagerModel.h`) — same surface that scrap triangulation, region loads, etc. already use. Duplicating per-row progress bars would just split the user's attention. The page shows the *committed state* of each layer (filename, resolved source CS, point count); the *act* of loading lives globally.
+
+#### `DataMainPage.qml` — wrap CS in a "Geospatial" GroupBox
+
+Replace the current `RowLayout { Label("Coordinate system:"); CSComboBox; }` block with a `QC.GroupBox` (mirrors `cavewherelib/qml/AppearanceSettingsItem.qml:11-57`):
+
+```qml
+QC.GroupBox {
+    objectName: "geospatialGroupBox"
+    title: "Geospatial"
+    Layout.fillWidth: true
+
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: Theme.tightSpacing
+
+        RowLayout {
+            QC.Label { text: "Coordinate system:" }
+            CSComboBox {
+                objectName: "globalCSComboBox"
+                value: RootData.region.globalCS
+                allowGeographic: false
+                onCommitted: (newCS) => RootData.region.globalCS = newCS
+            }
+            QQ.Item { Layout.fillWidth: true }
+        }
+
+        RowLayout {
+            QC.Label { text: "Layers:" }
+            LinkText {
+                objectName: "geospatialLayersLink"
+                text: RootData.region.lazLayers.count
+                onClicked: RootData.pageSelectionModel.gotoPageByName(
+                    pageId.PageView.page, "Geospatial Layers")
+            }
+            QQ.Item { Layout.fillWidth: true }
+        }
+    }
+}
+```
+
+Register the sub-page via the same `pageSelectionModel.registerPage()` pattern used in `CavePage.qml:54-57` for "Leads" and `CavePage.qml:68-71` for "Fix Stations":
+
+```qml
+Component.onCompleted: {
+    RootData.pageSelectionModel.registerPage(pageId.PageView.page,
+                                             "Geospatial Layers",
+                                             geospatialLayerPageComponent);
+}
+
+QQ.Component {
+    id: geospatialLayerPageComponent
+    GeospatialLayerPage { anchors.fill: parent }
+}
+```
+
+`Layers: N` binds to `RootData.region.lazLayers.count`. Add `Q_PROPERTY(int count READ rowCount NOTIFY countChanged)` on `cwLazLayerModel` if PR 6 omitted it (mirror `cwFixStationModel::count`); auto-updates on `rowsInserted`/`rowsRemoved`.
+
+#### New `cavewherelib/qml/GeospatialLayerPage.qml`
+
+`StandardPage` with `objectName: "geospatialLayerPage"`. Layout mirrors `FixStationPage.qml` so test infrastructure is reusable:
+
+1. **Header row** — `AddAndSearchBar { addButtonText: "Add LAZ Files"; onAdd: lazFileDialog.open() }` (same component used at `DataMainPage.qml:90-101` for "Add Cave"; `signal add()` declared at `AddAndSearchBar.qml:10`).
+
+2. **Empty-state help box** — `objectName: "noGeospatialLayersHelpBox"`, visible when `region.lazLayers.count === 0`. Mirrors `noFixStationsHelpBox` in `FixStationPage.qml`.
+
+3. **Table** — `TableStaticView` with a delegate ternary that swaps between wide and narrow components based on the page's `isNarrow` property (see "Layout (wide / narrow)" below).
+
+4. **`QD.FileDialog`** — `objectName: "lazFileDialog"`:
+   ```qml
+   import QtQuick.Dialogs as QD
+   QD.FileDialog {
+       id: lazFileDialog
+       title: "Add LAZ Files"
+       nameFilters: [ "LAZ point clouds (*.laz *.las)", "All files (*)" ]
+       currentFolder: RootData.lastDirectory
+       fileMode: QD.FileDialog.OpenFiles
+       onAccepted: geospatialLayerPage.addLazFiles(selectedFiles)
+   }
+   ```
+   Multi-select by default — typical LiDAR exports are a directory of tiles.
+
+5. **`RemoveAskBox`** at page level with `objectName: "removeChallange"` (intentionally misspelled — matches the existing convention used by `tst_FixStationPage.qml`):
+   ```qml
+   RemoveAskBox {
+       id: removeChallengeId
+       objectName: "removeChallange"
+       onRemove: RootData.region.lazLayers.removeAt(indexToRemove)
+   }
+   ```
+
+6. **`DataRightClickMouseMenu`** per row — passes `removeChallenge: removeChallengeId`, `row: delegateId.index`, `name: delegateId.nameRole`. Drives `RemoveAskBox`.
+
+#### Layout (wide / narrow)
+
+Mirrors `FixStationPage.qml`'s row-delegate-ternary approach (not `CavePage.qml`'s page-level Loader swap — the page header / FileDialog / RemoveAskBox don't change with width, only the row shape does). Convention across the app:
+
+- Trigger: `Theme.breakpointPanelCollapse` (600 px), defined at `Theme.qml:86`.
+- Per-page property: `readonly property bool isNarrow: width < Theme.breakpointPanelCollapse` (matches `FixStationPage.qml:22` and `CavePage.qml:99`).
+- Wide → `TableStaticView` with row delegate using `RowLayout` of fixed-column cells.
+- Narrow → same `TableStaticView`, alternate row delegate using `QQ.Flow` for wrapping.
+- Both delegates declared **inline** in the page file (no `WideGeospatialLayerDelegate.qml` / `NarrowGeospatialLayerDelegate.qml` — matches FixStationPage and CavePage).
+
+Page shape:
+
+```qml
+StandardPage {
+    id: geospatialLayerPage
+    objectName: "geospatialLayerPage"
+
+    readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
+
+    function addLazFiles(urls) { /* see helper below */ }
+
+    // ... AddAndSearchBar, FileDialog, helpBox, RemoveAskBox above ...
+
+    TableStaticView {
+        objectName: "geospatialLayerTableView"
+        model: RootData.region.lazLayers
+        delegate: geospatialLayerPage.isNarrow ? narrowDelegateComponent : wideDelegateComponent
+    }
+
+    QQ.Component {
+        id: wideDelegateComponent
+        QQ.Item {
+            id: wideDelegateId
+            required property int index
+            required property string nameRole         // filename basename
+            required property string sourceCSRole     // resolved CS from .laz
+            required property int pointCountRole
+
+            implicitHeight: rowLayout.implicitHeight + Theme.delegatePadding
+            width: ListView.view ? ListView.view.width : 0
+
+            TableRowBackground { isSelected: false; rowIndex: wideDelegateId.index; anchors.fill: parent }
+
+            RowLayout {
+                id: rowLayout
+                anchors.fill: parent
+                anchors.margins: Theme.delegatePadding
+                spacing: Theme.columnGap
+
+                QC.Label { Layout.preferredWidth: 220; text: wideDelegateId.nameRole; elide: Text.ElideMiddle }
+                QC.Label { Layout.preferredWidth: 140; text: wideDelegateId.sourceCSRole; color: Theme.subtleTextColor }
+                QC.Label { Layout.preferredWidth: 120; text: wideDelegateId.pointCountRole.toLocaleString() }
+                QQ.Item { Layout.fillWidth: true }
+            }
+
+            DataRightClickMouseMenu {
+                anchors.fill: parent
+                removeChallenge: removeChallengeId
+                row: wideDelegateId.index
+                name: wideDelegateId.nameRole
+            }
+        }
+    }
+
+    QQ.Component {
+        id: narrowDelegateComponent
+        QQ.Item {
+            id: narrowDelegateId
+            required property int index
+            required property string nameRole
+            required property string sourceCSRole
+            required property int pointCountRole
+
+            implicitHeight: flowId.implicitHeight + Theme.delegatePadding
+            width: ListView.view ? ListView.view.width : 0
+
+            TableRowBackground { isSelected: false; rowIndex: narrowDelegateId.index; anchors.fill: parent }
+
+            QQ.Flow {
+                id: flowId
+                width: parent.width
+                spacing: Theme.flowSpacing
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: Theme.delegatePadding
+
+                QC.Label { font.bold: true; text: narrowDelegateId.nameRole }
+                QC.Label { text: narrowDelegateId.sourceCSRole; color: Theme.subtleTextColor }
+                QC.Label { text: narrowDelegateId.pointCountRole.toLocaleString() + " pts" }
+            }
+
+            DataRightClickMouseMenu {
+                anchors.fill: parent
+                removeChallenge: removeChallengeId
+                row: narrowDelegateId.index
+                name: narrowDelegateId.nameRole
+            }
+        }
+    }
+}
+```
+
+Roles consumed: `Name`, `SourceCS`, `PointCount`. `LoadStatus` and `LoadProgress` roles still exist on `cwLazLayerModel` for PR 7's keyword/visibility integration, but **no UI on this page reads them** — load progress is owned by the global `cwFutureManagerModel` surface. `SourceCS` is added in this PR if PR 6's role enum doesn't include it (single-line addition; populated from `cwLazLayer::sourceCS` after the load future settles).
+
+Tests run at the default `MainWindowTest` width, which is wide. No need to test the narrow delegate explicitly — neither `tst_FixStationPage.qml` nor `tst_CavePage.qml` does.
+
+**Persistent error feedback** (file gone missing between save and load) is currently weak — a row whose source can't be resolved shows up with empty `sourceCS` and `pointCount = 0`. Acceptable for v1; if real users find it confusing, a follow-up PR can either (a) add an `ErrorIconBar` to the row gated on `Layer.loadStatus === LazLayer.Error`, mirroring the cave/trip pattern at `CavePage.qml:404,636`, or (b) surface failed futures in `cwFutureManagerModel`'s UI as persistent rows. Both additive; no rework of this PR's shape.
+
+#### Add helper — handle Android content:// URLs
+
+```qml
+function addLazFiles(urls) {
+    if (urls.length === 0) {
+        return;
+    }
+    RootData.lastDirectory = urls[urls.length - 1]
+    for (let i = 0; i < urls.length; ++i) {
+        const localPath = CwGlobals.importPathFromUrl(urls[i])
+        RootData.region.lazLayers.addLayer(localPath)
+    }
+}
+```
+
+`cwGlobals::importPathFromUrl(const QUrl&)` already exists at `cavewherelib/src/cwGlobals.cpp:69-75` (used by the recent survex content:// fix, commit `da6cc919`). Verify it's exposed to QML; if not yet `Q_INVOKABLE` on the registered singleton, expose it via the existing `cwGlobals` registration in this PR (one-line change).
+
+#### Tests
+
+**New `test-qml/tst_GeospatialLayerPage.qml`** — mirror `tst_FixStationPage.qml`'s structure. ~6 cases:
+
+- `test_emptyStateShowsHelpBox` — fresh project → page → `noGeospatialLayersHelpBox.visible === true`, table count 0.
+- `test_addLayerViaModel` — call `region.lazLayers.addLayer(syntheticLazPath)` directly (FileDialog isn't drivable on offscreen). Generate the LAZ via the same fixture helper PR 6's `test_cwLazLoader.cpp` uses (synthetic .laz in `QTemporaryDir + PID`). `RootData.futureManagerModel.waitForFinished()` to settle the load. Assert row appears, help box hides, `Name`/`SourceCS`/`PointCount` populated.
+- `test_addLayerViaFileDialogPath` — call `geospatialLayerPage.addLazFiles([Qt.resolvedUrl(...)])` directly, exercising the `importPathFromUrl` helper path. Verify one row added.
+- `test_removeLayerConfirmed` — add a layer, drive `removeChallange` directly: `indexToRemove = 0; removeName = "..."; show()`, click `removeButton`, assert layer count 0, help box back.
+- `test_removeLayerCancelled` — same setup, click `cancelButton`, count unchanged.
+- `test_geospatialLayersLinkCount` — start on `dataMainPage`, find `geospatialLayersLink`, assert text "0". Add 2 layers via model. `tryCompare(geospatialLayersLink, "text", "2")`.
+
+**Extend `test-qml/tst_DataMainPage_globalCS.qml`** — one new case `test_geospatialGroupBoxWraps` verifying:
+- `geospatialGroupBox` exists.
+- `globalCSComboBox` is a child of `geospatialGroupBox` (still reachable for the existing CS tests).
+- `geospatialLayersLink` is a child of `geospatialGroupBox`.
+
+The FileDialog itself isn't drivable in `--platform offscreen`. Document in a test comment; the indirection through `addLazFiles(urls)` makes it testable via direct call (same approach `tst_FixStationPage.qml` takes for the `committed(string)` signal).
+
+#### Persistence
+
+Adding rows hits PR 6's existing `cwLazLayerModel::toProto()` on save. No save/load wiring changes here. The existing `test_cwLazLayerSaveLoad.cpp` covers the C++ round-trip; this PR doesn't duplicate that.
+
+#### Missing-file behavior at add time
+
+If the user picks a path that doesn't exist (or a content:// URL that fails to resolve), `cwLazLayer::loadStatus` transitions to `Error` (PR 6's behavior) and the row shows up with empty `sourceCS` and `pointCount = 0`. The user can right-click → Remove. Same data path as load-time missing files, so there's only one error path to reason about.
+
+#### Critical files
+
+| File | Change |
+|------|--------|
+| `cavewherelib/qml/DataMainPage.qml` | Wrap CS row in `QC.GroupBox { title: "Geospatial" }`; add `Layers: N` `LinkText`; register "Geospatial Layers" sub-page |
+| `cavewherelib/qml/GeospatialLayerPage.qml` | **New** — full sub-page (AddAndSearchBar, FileDialog, TableStaticView with wide/narrow delegate ternary, RemoveAskBox, DataRightClickMouseMenu) |
+| `cavewherelib/src/cwGlobals.h/cpp` | Verify `importPathFromUrl(QUrl)` is `Q_INVOKABLE` on the QML singleton; expose if not |
+| `cavewherelib/src/cwLazLayerModel.h/cpp` | Add `Q_PROPERTY(int count READ rowCount NOTIFY countChanged)` if PR 6 omitted it; add `SourceCS` role if PR 6's enum doesn't include it |
+| `test-qml/tst_GeospatialLayerPage.qml` | **New** — page-level QML test (empty state, add via model, add via helper, remove confirmed/cancelled, link count) |
+| `test-qml/tst_DataMainPage_globalCS.qml` | Add `test_geospatialGroupBoxWraps` case |
+
+(CMakeLists.txt registration is automatic in this project — no manual entry needed.)
+
+#### Reused patterns (no new abstractions)
+
+- `cavewherelib/qml/AppearanceSettingsItem.qml:11-57` — `QC.GroupBox { title: ... }` + content layout.
+- `cavewherelib/qml/AddAndSearchBar.qml:10` — `signal add()`; same pattern as `DataMainPage` "Add Cave".
+- `cavewherelib/qml/NotesFileDialog.qml:9-17` — `QtQuick.Dialogs FileDialog` with `OpenFiles` multi-select.
+- `cavewherelib/qml/FixStationPage.qml:22, 175, 188-353` — `isNarrow` property + `TableStaticView` delegate ternary + inline wide/narrow components; `RemoveAskBox` (`objectName: "removeChallange"`) + `DataRightClickMouseMenu` integration. **The closest structural analog** — copy this shape.
+- `Theme.qml:86` — `breakpointPanelCollapse: 600` is the canonical width threshold.
+- `cavewherelib/qml/CavePage.qml:54-57, 68-71` — `pageSelectionModel.registerPage(...)`.
+- `cavewherelib/qml/CavePage.qml:139, 156` — `LinkText { text: ...count }` + `onClicked: gotoPageByName(...)`.
+- `cavewherelib/src/cwFutureManagerModel.h` — already tracks long-running operations; PR 6's `cwFutureManagerToken::addJob` registration means the global progress UI shows LAZ loads automatically with no per-page work.
+- `cavewherelib/src/cwGlobals.cpp:69-75` — `importPathFromUrl(QUrl)` helper.
+
+#### Out of scope (lands in PR 7)
+
+- Visible point cloud rendering.
+- Keyword filter chip integration for LAZ Type / FileName / Name / ObjectId.
+- Per-layer `pointSize` slider (no live render to drive yet).
+
+#### Out of scope (deferred follow-up)
+
+- Persistent per-row error indicator (`ErrorIconBar` gated on `Layer.loadStatus === LazLayer.Error`). v1 surfaces missing-file rows by leaving `sourceCS` empty and `pointCount = 0`; if real users find that confusing, a follow-up adds the icon. Decision deferred so this PR stays narrow.
+
 ### PR 7 — Point-cloud rendering
 - Mirror the `cwRenderLinePlot` / `cwRHILinePlot` pattern.
-- `cavewherelib/src/cwRenderPointCloud.{h,cpp}` — `: cwRenderObject`. Holds `std::shared_ptr<cwLazData>`, `visible`, `opacity`, `pointSize`. Implements `createRHIObject()`.
+- `cavewherelib/src/cwRenderPointCloud.{h,cpp}` — `: cwRenderObject`. Holds `std::shared_ptr<cwLazData>`, `pointSize`, and a per-render-id visibility map (mirroring `cwRenderTexturedItems`'s `setVisible(itemId, bool)` API). `cwRenderObject` already carries `visible` for the whole render object, but per-layer visibility within a single point-cloud render needs the per-id approach so the keyword shim can target one layer without mutating the others. Implements `createRHIObject()`.
+- New `cavewherelib/src/cwRenderPointCloudVisibility.{h,cpp}` — mirror of `cwRenderTexturedItemVisibility` (~30 lines). `QObject` with `Q_PROPERTY(bool visible)` and a `(cwRenderPointCloud*, uint32_t itemId)` ctor; `setVisible(bool)` forwards to `m_items->setVisible(m_itemId, visible)`. This is the object that `cwKeywordItem::setObject()` points at.
 - `cavewherelib/src/cwRHIPointCloud.{h,cpp}` — `: cwRHIObject`. `QRhiBuffer*` for positions (and optional colors), `QRhiGraphicsPipeline*` with topology Points, SRB referencing the global UBO. `initialize` / `synchronize` / `updateResources` / `gather` (or `render`) per `cwRHIObject` contract.
 - `cavewherelib/shaders/PointCloud.vert` + `PointCloud.frag`:
   - vert: `gl_Position = viewProjectionMatrix * vec4(inPosition, 1.0); gl_PointSize = u_pointSize;`
-  - frag: optional round-disc discard + `vec4(color, opacity)`
+  - frag: optional round-disc discard + `vec4(color, 1.0)`
   - Register in `cavewherelib/shaders/CMakeLists.txt:239-255` next to the LinePlot block.
 - Wire `cwLazLayer` ↔ `cwRenderPointCloud` from `cwRegionSceneManager` (one render object per layer, kept in sync with layer list).
-- **Keyword/visibility integration** — register each LAZ layer with the global `cwKeywordItemModel`, mirroring the scrap pattern in `cwScrapManager::addKeywordItemForScrap()` (`cavewherelib/src/cwScrapManager.cpp:777`):
+- **Keyword/visibility integration** — visibility for LAZ layers is *only* expressed through `cwKeywordItemModel`; it is not a property of `cwLazLayer`. Mirror the scrap pattern in `cwScrapManager::addKeywordItemForScrap()` (`cavewherelib/src/cwScrapManager.cpp:1326-1352`):
   - Each `cwLazLayer` exposes a `cwKeywordModel* keywordModel()` populated with at minimum:
-    - `cwKeywordModel::TypeKey` → e.g. `"LAZ Layer"` (visible in the existing type filter alongside `"Scrap"`, `"NoteLiDAR"`).
+    - `cwKeywordModel::TypeKey` → e.g. `"LAZ Layer"` (shows up in the existing type filter alongside `"Scrap"`, `"NoteLiDAR"`).
     - `cwKeywordModel::FileNameKey` → the source LAZ filename (basename; full path also acceptable — match what `cwNoteLiDAR` already uses).
-    - `cwKeywordModel::ObjectIdKey` → short form of `layer.id()`.
-    - `"Name"` keyword when the user-given layer name differs from the filename.
-  - In a new `cwLazLayerManager` (or extend `cwRegionSceneManager`), per-layer create a `cwKeywordItem`, `addExtension(layer->keywordModel())`, attach a visibility object (analogous to `cwRenderTexturedItemVisibility` at `cwScrapManager.cpp:792`) bound to the layer's render ID, and register via `cwKeywordItemModel::addItem(...)`. Remove on layer deletion. Update keyword entries when the layer's filename or name changes.
-  - This makes the existing `cwKeywordFilterPipelineModel` automatically gain LAZ-layer filtering by Type and Filename — no new UI surface needed beyond the standard filter chip.
-- 3D viewer overlay toggle (see UI section) — operates on the per-layer `visible` property, which the keyword visibility object reflects.
+    - `cwKeywordModel::ObjectIdKey` → short stable id (e.g. hash of `sourcePath`).
+    - `"Name"` keyword equal to the derived display name when it differs from the filename.
+  - In a new `cwLazLayerManager` (or extend `cwRegionSceneManager`), per-layer:
+    1. Create a `cwKeywordItem` parented to the manager.
+    2. `keywordItem->keywordModel()->addExtension(layer->keywordModel())` — pulls Type/FileName/ObjectId/Name through.
+    3. Construct `auto* visibility = new cwRenderPointCloudVisibility(m_renderPointCloud, renderId, keywordItem)` — the QObject shim that forwards `setVisible(bool)` to `cwRenderPointCloud::setVisible(itemId, bool)`.
+    4. `keywordItem->setObject(visibility)` — this is what `cwKeywordVisibility` discovers via `cwKeywordItemModel::ObjectRole` and drives.
+    5. `m_keywordItemModel->addItem(keywordItem)`.
+    
+    On layer removal, `removeItem(keywordItem)` and `deleteLater()` both shim and item (mirror `cwScrapManager::removeKeywordItemForScrap`). When the layer's filename or derived name changes, update the keyword extension.
+  - The user's filter chips already drive `cwKeywordVisibility::setVisibleModel/setHideModel` — so the existing pipeline automatically toggles each `cwRenderPointCloudVisibility::setVisible(bool)` when a chip filters Type=LAZ Layer, FileName=…, etc. **No new visibility UI is needed**; LAZ layers participate in the same filter machinery as scraps.
 - Visual smoke test + headless RHI unit test verifying pipeline creation + draw without crash.
-- New `testcases/test_cwLazLayerKeywords.cpp` — adding a layer registers a keyword item with correct `Type` / `FileName` / `ObjectId`; removal unregisters; renaming the layer or changing source path updates the entry.
+- New `testcases/test_cwLazLayerKeywords.cpp` — adding a layer registers a keyword item with correct `Type` / `FileName` / `ObjectId`; removal unregisters; changing `sourcePath` updates the entry. **Visibility round-trip**: the registered `cwKeywordItem::object()` is a `cwRenderPointCloudVisibility`, and calling `setVisible(false)` on it flips the matching id in `cwRenderPointCloud` (mirroring the assertion at `test_cwScrapManager.cpp:332-339`).
 
 ---
 
@@ -351,13 +657,13 @@ The plan originally proposed a separate `RegionSettingsPage.qml`, but the projec
 - Add a row beneath the region-name `DoubleClickTextInput` (line 31 area) with a `QC.Label { text: "Coordinate system:" }` and a `CSComboBox` bound to `RootData.region.globalCS`. `objectName: "globalCSComboBox"` so PR 4 tests can find it.
 - Inline `QC.Label` warning (in `Theme.errorBackground`) when the user picks a geographic CS — `*fix` requires a projected CS.
 - "Recenter world origin" button next to the combo → `RootData.region.recomputeWorldOrigin()` (action stub in PR 3; the recompute itself lands in PR 5). The action runs as a `cwFuture` job; the global progress UI shows it like other long-running tasks.
-- LAZ layer management (PR 6+) embeds the `LazLayerPanel` further down on `DataMainPage.qml`, since LAZ layers are also region-scoped.
+- LAZ layer management (PR 6.5) wraps the CS row in a `QC.GroupBox { title: "Geospatial" }` and adds a `Layers: N` `LinkText` to a sub-page. See PR 6.5 for the full design.
 
-### New `cavewherelib/qml/LazLayerPanel.qml`
-List of `region.lazLayers`: name, source path, visibility checkbox, opacity slider, point-size slider, source-CS override, per-row `loadProgress` indicator (visible while `loadStatus == Loading`), delete. "Add LAZ…" opens `Qt.labs.platform.FileDialog`.
+### Geospatial Layers — `cavewherelib/qml/GeospatialLayerPage.qml` (PR 6.5)
+Sub-page reachable from the `Layers: N` `LinkText` inside the Geospatial GroupBox on `DataMainPage`. Wide/narrow delegate ternary mirroring `FixStationPage.qml`. Columns: filename, resolved source CS, point count. Right-click → `RemoveAskBox`. "Add LAZ Files…" opens a multi-select `QtQuick.Dialogs.FileDialog`; URLs run through `cwGlobals::importPathFromUrl` (Android content:// support) before reaching `region.lazLayers.addLayer(...)`. Per-row load progress is **not** shown — `cwFutureManagerModel` already surfaces in-flight loads in the global progress UI. **No visibility checkbox** — visibility is driven by the global keyword filter chips (Type=LAZ Layer, FileName=…) the existing `cwKeywordFilterPipelineModel` UI already exposes, same as scraps. Full spec in the PR 6.5 section above.
 
 ### 3D viewer overlay
-Find the existing 3D viewer host (search for `cwScene` / `cwLinePlot` in `cavewherelib/qml/`). Add an overlay panel toggling LAZ visibility and opacity per layer.
+No LAZ-specific overlay panel needed. LAZ layer visibility is controlled by the existing keyword filter chips in the 3D viewer UI (Type=LAZ Layer, FileName=…) — the same chip machinery that scraps and note LiDAR already feed into.
 
 ---
 
@@ -420,8 +726,9 @@ cmake --build build/<preset> --target cavewhere-test
 # After PR 6 — LAZ load (use a small fixture .laz checked into test-qml/datasets/)
 ./build/<preset>/cavewhere-test "[LAZLoader]" -d yes 2>&1 | tee /tmp/cw-test.log
 
-# QML tests after PR 6 / PR 7
-./build/<preset>/cavewhere-qml-test --platform offscreen -input test-qml/tst_LazLayerPanel.qml
+# After PR 6.5 — Geospatial Layer Management UI
+./build/<preset>/cavewhere-qml-test --platform offscreen -input test-qml/tst_GeospatialLayerPage.qml
+./build/<preset>/cavewhere-qml-test --platform offscreen -input test-qml/tst_DataMainPage_globalCS.qml
 ```
 
 End-to-end manual test (after PR 7):
