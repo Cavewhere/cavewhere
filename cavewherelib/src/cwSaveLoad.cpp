@@ -3372,6 +3372,16 @@ void cwSaveLoad::connectTreeModel()
 
             saveProject(projectRootDir(), region);
         });
+
+        // globalCS / worldOrigin live in the project metadata file. Without
+        // these handlers the save pipeline wouldn't see the change, so the
+        // dirty bit (and any autosave keyed off it) wouldn't fire and the
+        // edit could be dropped on close.
+        const auto saveMetadata = [this, region]() {
+            saveProject(projectRootDir(), region);
+        };
+        connect(region, &cwCavingRegion::globalCSChanged, this, saveMetadata);
+        connect(region, &cwCavingRegion::worldOriginChanged, this, saveMetadata);
     }
 }
 

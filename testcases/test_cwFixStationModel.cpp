@@ -13,6 +13,9 @@
 //Test helpers
 #include "LoadProjectHelper.h"
 
+//Submodule includes
+#include "GitRepository.h"
+
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
 
@@ -214,6 +217,53 @@ TEST_CASE("cwFixStations and globalCS/worldOrigin survive a project save/load",
     CHECK(loadedB.id() == b.id());
 
     CHECK(loadedUnfixed->fixStations()->count() == 0);
+}
+
+TEST_CASE("Changing globalCS or worldOrigin marks the project modified",
+          "[FixStation][cwSaveLoad][globalCS]") {
+    // Regression: cwSaveLoad::connectObjects() wires cave / trip / note /
+    // sketch signals but does not listen to cwCavingRegion::globalCSChanged
+    // or worldOriginChanged. Without that, editing the region CS in an open
+    // project leaves cwProject::modified() == false, so an autosave / commit
+    // pipeline keyed off the dirty bit never runs and the change can be
+    // dropped on close.
+    //
+    // Standalone cwProject (no cwRootData) so subsystems like
+    // cwLinePlotManager don't trigger spurious auto-saves that would dirty
+    // the baseline before we make our own change.
+    QQuickGit::Account account;
+    account.setName(QStringLiteral("Test"));
+    account.setEmail(QStringLiteral("test@example.com"));
+
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    project->setGitAccount(&account);
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("Cave"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("globalcs-dirty-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+
+    REQUIRE(isProjectModified(project.get()) == false);
+
+    SECTION("setGlobalCS marks modified") {
+        region->setGlobalCS(QStringLiteral("EPSG:32612"));
+        CHECK(isProjectModified(project.get()));
+    }
+
+    SECTION("setWorldOrigin marks modified") {
+        region->setWorldOrigin(cwGeoPoint(500000.0, 4194000.0, 2700.0));
+        CHECK(isProjectModified(project.get()));
+    }
 }
 
 TEST_CASE("cwFixStation proto round-trip preserves all fields", "[FixStation][proto]") {
