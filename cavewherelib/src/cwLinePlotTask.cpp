@@ -164,6 +164,7 @@ struct cwLinePlotTask::LinePlotWorker {
         if (parsed.lookup.isEmpty()) {
             return result;
         }
+        applyWorldOriginOffset(parsed.lookup, InputData.regionData.worldOrigin);
         updateStationPositionForCaves(parsed.lookup, result);
         result.setRegionNetwork(std::move(parsed.network));
 
@@ -312,9 +313,13 @@ private:
             QString name = iter.key();
             QVector3D position = iter.value();
 
-            position.setX(qRound(position.x() * positionFactor) / positionFactor);
-            position.setY(qRound(position.y() * positionFactor) / positionFactor);
-            position.setZ(qRound(position.z() * positionFactor) / positionFactor);
+            // std::round keeps the intermediate value in double; qRound returns
+            // int and overflows for UTM-scale coordinates (a 5.47e6m northing
+            // multiplied by 1000 already exceeds INT_MAX, and the user-visible
+            // crash on projects with no worldOrigin / large fixes traced here).
+            position.setX(float(std::round(double(position.x()) * positionFactor) / positionFactor));
+            position.setY(float(std::round(double(position.y()) * positionFactor) / positionFactor));
+            position.setZ(float(std::round(double(position.z()) * positionFactor) / positionFactor));
 
             QRegularExpressionMatch match = regex.match(name);
             if(match.hasMatch()) {
@@ -422,6 +427,25 @@ private:
                 cwCave* cave = Region.cave(i);
                 cave->setStationPositionLookup(CaveStationLookups[i]);
             }
+        }
+    }
+
+    // Translate every station in lookup by -worldOrigin in place. Cavern
+    // emits .3d coordinates in our globalCS; subtracting worldOrigin keeps
+    // the position lookup (and downstream geometry) close to (0,0,0) for
+    // float precision in shaders. No-op when worldOrigin == (0,0,0), which
+    // is the un-fixed-project default.
+    static void applyWorldOriginOffset(cwStationPositionLookup& lookup,
+                                       const cwGeoPoint& worldOrigin)
+    {
+        const QVector3D offset = worldOrigin.toVector3D();
+        if (offset.isNull()) {
+            return;
+        }
+        const QMap<QString, QVector3D> positions = lookup.positions();
+        lookup.clearStations();
+        for (auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
+            lookup.setPosition(it.key(), it.value() - offset);
         }
     }
 

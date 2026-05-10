@@ -21,6 +21,7 @@
 #include "cwStation.h"
 #include "cwSurvexGlobalData.h"
 #include "cwGlobals.h"
+#include "cwFixStation.h"
 class cwSurveyChunk;
 class cwShot;
 class cwSurvexNodeData;
@@ -39,6 +40,15 @@ public:
     QString lastImport();
 
     cwTreeImportData* data();
+
+    /**
+     * Fix stations captured from `*fix` directives. Each fix carries the
+     * inputCS from the most-recently-seen `*cs` (or empty if none was seen
+     * before the fix). Cave-attachment of these fixes happens in the
+     * import-accept flow (follow-up — the tree-data structure doesn't yet
+     * model fix stations, so the importer keeps them on the side).
+     */
+    QList<cwFixStation> capturedFixStations() const { return CapturedFixStations; }
 
 public slots:
     void setInputFiles(QStringList filenames);
@@ -126,6 +136,9 @@ private:
 
     State CurrentState;
 
+    QString CurrentInputCS; // Last seen *cs; empty until first *cs.
+    QList<cwFixStation> CapturedFixStations;
+
     //Data map <Type, index>
     QMap<DataFormatType, int> DataFormat;
 
@@ -185,6 +198,8 @@ private:
     void parseEquate(QString line);
     void parseExport(QString line);
     void parseFlags(QString line);
+    void parseCS(QString line);
+    void parseFix(QString line);
 
     void runStats(QString filename);
 

@@ -106,7 +106,9 @@ public:
     }
 
     static Monad::ResultBase writeRegion(QTextStream& stream, const cwSurveyDataArtifact::Region& region);
-    static Monad::ResultBase writeCave(QTextStream& stream, const cwSurveyDataArtifact::Cave& cave);
+    static Monad::ResultBase writeCave(QTextStream& stream,
+                                       const cwSurveyDataArtifact::Cave& cave,
+                                       const QString& globalCS = QString());
     static Monad::ResultBase writeTrip(QTextStream& stream, const cwSurveyDataArtifact::Trip& trip);
 
 signals:
@@ -142,7 +144,9 @@ private:
                            const cwSurveyDataArtifact::Trip& trip,
                            const cwSurveyDataArtifact::SurveyChunk& chunk,
                            int textPadding = -11);
-    static void fixFirstStation(QTextStream &stream, const cwSurveyDataArtifact::Cave& cave);
+    static void writeFixStations(QTextStream& stream,
+                                 const cwSurveyDataArtifact::Cave& cave,
+                                 const QString& globalCS);
 };
 
 #endif // CWSURVEXEXPORTERRULE_H

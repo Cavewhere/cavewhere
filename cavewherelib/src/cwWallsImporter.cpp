@@ -63,11 +63,55 @@ void WallsImporterVisitor::ensureValidTrip()
 
 void WallsImporterVisitor::parsedFixStation(FixStation station)
 {
-    Q_UNUSED(station);
     ensureValidTrip();
-    if (Importer->shouldWarn(cwWallsImporter::CANT_IMPORT_FIX_STATIONS)) {
-        Importer->addImportError(WallsMessage("warning", "This data contains #FIX stations, which can't currently be imported into Cavewhere"));
+
+    cwFixStation fix;
+    const cwStation renamed = Importer->createStation(station.name());
+    fix.setStationName(renamed.name());
+
+    // Walls files don't carry a datum/CRS, so we infer one from the fix
+    // shape: rect-style (#FIX east/north) → NAD83 UTM (the typical US Walls
+    // assumption); geo-style (#FIX lat/long) → WGS84. Both carry an explicit
+    // warning so the user can correct the datum on the cwFixStation row.
+    const bool hasRect = station.east().isValid() && station.north().isValid();
+    const bool hasGeo  = station.latitude().isValid() && station.longitude().isValid();
+
+    if (hasRect) {
+        // No way to infer the UTM zone from a Walls #FIX, so we don't pick a
+        // specific EPSG:269nn — the user must finish setting inputCS in the
+        // fix-station editor. EPSG:26900 is intentionally invalid (no zone)
+        // so it's obviously a placeholder rather than a silent guess.
+        fix.setInputCS(QStringLiteral("EPSG:26900"));
+        fix.setEasting(station.east().get(Length::Meters));
+        fix.setNorthing(station.north().get(Length::Meters));
+        if (station.rectUp().isValid()) {
+            fix.setElevation(station.rectUp().get(Length::Meters));
+        }
+        Importer->addImportError(WallsMessage("warning",
+            QString("#FIX %1 is rect-style: assumed NAD83 UTM (EPSG:26900 placeholder; pick the right zone in CaveWhere). "
+                    "If your Walls coords are actually WGS84 UTM (EPSG:326xx) or another datum, change inputCS on the fix.")
+                .arg(station.name())));
+    } else if (hasGeo) {
+        fix.setInputCS(QStringLiteral("EPSG:4326"));
+        // FixStation::longitude is east, latitude is north. cwFixStation
+        // stores easting=lon, northing=lat (matches the proj
+        // x=lon/y=lat convention after normalize_for_visualization).
+        fix.setEasting(station.longitude().get(Angle::Degrees));
+        fix.setNorthing(station.latitude().get(Angle::Degrees));
+        if (station.rectUp().isValid()) {
+            fix.setElevation(station.rectUp().get(Length::Meters));
+        }
+        Importer->addImportError(WallsMessage("warning",
+            QString("#FIX %1 is geo-style: assumed WGS84 (EPSG:4326). Change inputCS on the fix if a different datum is required.")
+                .arg(station.name())));
+    } else {
+        Importer->addImportError(WallsMessage("warning",
+            QString("#FIX %1 has neither rect nor geo coordinates; skipped.")
+                .arg(station.name())));
+        return;
     }
+
+    Importer->CapturedFixStations.append(fix);
 }
 
 void WallsImporterVisitor::parsedVector(Vector v)

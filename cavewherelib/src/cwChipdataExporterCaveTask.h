@@ -25,7 +25,7 @@ class cwChipdataExportCaveTask : public cwCaveExporterTask
 public:
     explicit cwChipdataExportCaveTask(QObject *parent = 0);
 
-    bool writeCave(QTextStream& stream, const cwCaveData &cave);
+    bool writeCave(QTextStream& stream, const cwCaveData &cave, const QString& globalCS = QString()) override;
 
 signals:
 

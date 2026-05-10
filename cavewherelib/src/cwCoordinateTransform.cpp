@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QHash>
+#include <QDir>
 
 //Std includes
 #include <vector>
@@ -58,6 +59,29 @@ PJ_CONTEXT* cwCoordinateTransformPrivate::createContext()
 void cwCoordinateTransform::setProjSearchPaths(const QStringList& paths)
 {
     g_projSearchPaths = paths;
+
+    // Also apply to the default PROJ context. The contexts cwCoordinateTransform
+    // creates pick up g_projSearchPaths in createContext(), but PROJ users that
+    // hit PJ_DEFAULT_CTX directly — notably survex's cavern, which we link as
+    // a library and which uses PJ_DEFAULT_CTX for its *cs validation — would
+    // otherwise miss proj.db when launches don't carry PROJ_DATA in env
+    // (Finder, Qt Creator, app bundles).
+    if (!paths.isEmpty()) {
+        std::vector<QByteArray> utf8;
+        std::vector<const char*> raw;
+        utf8.reserve(paths.size());
+        raw.reserve(paths.size());
+        for (const QString& p : paths) {
+            utf8.push_back(p.toUtf8());
+            raw.push_back(utf8.back().constData());
+        }
+        proj_context_set_search_paths(PJ_DEFAULT_CTX, static_cast<int>(raw.size()), raw.data());
+
+        // Belt-and-suspenders: PROJ_DATA covers any PROJ-using code that
+        // creates its own context after we run (env is read at context
+        // creation when no programmatic paths are set on that context).
+        qputenv("PROJ_DATA", paths.join(QDir::listSeparator()).toUtf8());
+    }
 }
 
 cwCoordinateTransform::cwCoordinateTransform(const QString& srcCS, const QString& dstCS)

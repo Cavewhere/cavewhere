@@ -21,6 +21,8 @@
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwProject.h"
+#include "cwFixStationModel.h"
+#include "cwFixStation.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -886,4 +888,110 @@ TEST_CASE("cwLinePlotManager skips cavern when cave or trip has no shots", "[Lin
     }
 }
 
+TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change",
+          "[LinePlotManager][fix]")
+{
+    // The picker writes to cwCavingRegion::globalCS and the fix-station
+    // editor mutates cave->fixStations(). Both feed the *cs out / *fix
+    // lines in the survex export, so the manager must observe both and
+    // re-run cavern when either changes — otherwise cavern keeps emitting
+    // a stale .3d that doesn't carry the user's CS/fix edits.
+    //
+    // We verify the connection in two complementary ways:
+    //   (a) a signal spy on stationPositionInCavesChanged fires once per
+    //       publish — incremented after each provoked change confirms the
+    //       run pipeline executed end-to-end;
+    //   (b) for fix-station edits, resolved positions actually move to the
+    //       new fix coords, proving cavern saw the new *fix line.
+
+    cwCavingRegion region;
+    auto* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave 1"));
+    region.addCave(cave);
+
+    auto* trip = new cwTrip();
+    cave->addTrip(trip);
+    auto* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+
+    cwShot shot;
+    shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+    shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+    shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+    chunk->appendShot(cwStation(QStringLiteral("a1")), cwStation(QStringLiteral("a2")), shot);
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    // Sanity: with no globalCS / fixes, a1 sits at the origin.
+    REQUIRE(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+
+    cwSignalSpy positionSpy(plotManager.get(), &cwLinePlotManager::stationPositionInCavesChanged);
+
+    SECTION("region.setGlobalCS triggers a re-run") {
+        REQUIRE(positionSpy.count() == 0);
+        region.setGlobalCS(QStringLiteral("EPSG:32616"));
+        plotManager->waitToFinish();
+        CHECK(positionSpy.count() >= 1);
+    }
+
+    SECTION("appending a fix station triggers a re-run and moves resolved positions") {
+        // Survex rejects *fix-with-*cs unless *cs out is also set, so the
+        // realistic test scenario is "globalCS is set, then a fix is added".
+        // Set globalCS first; the spy after that captures only fix-related
+        // re-runs. We don't reset the spy between this and the parent
+        // setRegion run, so we tally only what happens after this point.
+        region.setGlobalCS(QStringLiteral("EPSG:32616"));
+        plotManager->waitToFinish();
+        const int spyAfterGlobalCS = positionSpy.count();
+        REQUIRE(spyAfterGlobalCS >= 1); // setting globalCS itself triggered a run
+
+        // Fix a1 in EPSG:32616. Cavern propagates the fix through the rest
+        // of the cave: a2 (10m magnetic north of a1) should land 10m
+        // further north than a1 in projected coords.
+        cwFixStation fix;
+        fix.setStationName(QStringLiteral("a1"));
+        fix.setInputCS(QStringLiteral("EPSG:32616"));
+        fix.setEasting(100.0);
+        fix.setNorthing(200.0);
+        fix.setElevation(50.0);
+        cave->fixStations()->appendFixStation(fix);
+
+        plotManager->waitToFinish();
+
+        CHECK(positionSpy.count() > spyAfterGlobalCS);
+        CHECK(cave->stationPositionLookup().position("a1") == QVector3D(100.0f, 200.0f, 50.0f));
+        CHECK(cave->stationPositionLookup().position("a2") == QVector3D(100.0f, 210.0f, 50.0f));
+
+        SECTION("setData on the fix-station model triggers a re-run") {
+            const int spyBefore = positionSpy.count();
+
+            auto* fixModel = cave->fixStations();
+            REQUIRE(fixModel->rowCount() == 1);
+            fixModel->setData(fixModel->index(0),
+                              QVariant::fromValue(300.0),
+                              cwFixStationModel::EastingRole);
+
+            plotManager->waitToFinish();
+
+            CHECK(positionSpy.count() > spyBefore);
+            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(300.0f, 200.0f, 50.0f));
+            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(300.0f, 210.0f, 50.0f));
+        }
+
+        SECTION("removeAt on the fix-station model triggers a re-run") {
+            const int spyBefore = positionSpy.count();
+
+            cave->fixStations()->removeAt(0);
+            plotManager->waitToFinish();
+
+            CHECK(positionSpy.count() > spyBefore);
+            // Without explicit fixes the legacy fallback (*fix a1 0 0 0)
+            // re-anchors the cave at the origin.
+            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0f, 0.0f, 0.0f));
+            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0f, 10.0f, 0.0f));
+        }
+    }
+}
 

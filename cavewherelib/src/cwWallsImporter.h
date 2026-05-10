@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwTreeDataImporter.h"
+#include "cwFixStation.h"
 #include "cwWallsImportData.h"
 #include "cwCave.h"
 #include "cwTrip.h"
@@ -91,6 +92,15 @@ public:
     bool hasImportErrors();
     QStringList importErrors();
 
+    /**
+     * Fix stations captured from `#FIX` directives, including the assumed
+     * inputCS (EPSG:269xx for rect/UTM, EPSG:4326 for geo). Walls files don't
+     * carry an explicit datum, so a datum-assumption warning is appended to
+     * importErrors() when this list is non-empty. The cave-attachment of
+     * these fixes happens in the import-accept flow (follow-up).
+     */
+    QList<cwFixStation> capturedFixStations() const { return CapturedFixStations; }
+
     cwTreeImportData* data();
 
     static void importCalibrations(const WallsUnits units, cwTrip& trip);
@@ -130,6 +140,7 @@ private:
     cwStationRenamer StationRenamer;
     QHash<QString, QDate> StationDates;
     QHash<QString, cwStation> StationMap; // used to apply station-only LRUD lines
+    QList<cwFixStation> CapturedFixStations;
 
     QSet<WarningType> EmittedWarnings;
 

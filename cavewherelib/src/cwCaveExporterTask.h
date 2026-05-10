@@ -25,7 +25,7 @@ public:
     ~cwCaveExporterTask() = default;
 
     void setData(const cwCaveData& cave);
-    virtual bool writeCave(QTextStream& stream, const cwCaveData& cave) = 0;
+    virtual bool writeCave(QTextStream& stream, const cwCaveData& cave, const QString& globalCS = QString()) = 0;
 
 protected:
     cwCaveData Cave;

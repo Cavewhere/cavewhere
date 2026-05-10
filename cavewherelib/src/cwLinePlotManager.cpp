@@ -24,6 +24,7 @@
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwSurveyNetworkArtifact.h"
+#include "cwFixStationModel.h"
 #include "asyncfuture.h"
 
 #include <QFuture>
@@ -79,7 +80,21 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(runSurvex()));
     connect(Region, SIGNAL(removedCaves(int,int)), SLOT(runSurvex()));
 
+    // globalCS feeds the *cs out / *cs lines on the survex export, so the
+    // line plot needs to re-run when the user changes the region's CS.
+    connect(Region, &cwCavingRegion::globalCSChanged, this, &cwLinePlotManager::runSurvex);
+
     SurveySignaler->setRegion(Region);
+
+    // Hook fix-station edits on every existing cave, plus any future caves.
+    for (cwCave* cave : Region->caves()) {
+        connectFixStations(cave);
+    }
+    connect(Region, &cwCavingRegion::insertedCaves, this, [this](int begin, int end) {
+        for (int i = begin; i <= end && i < Region->caveCount(); ++i) {
+            connectFixStations(Region->cave(i));
+        }
+    });
 
     //Connect all sub data
     connectCaves(Region);
@@ -89,6 +104,19 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     }
 
     updateLinePlot(cwLinePlotTask::LinePlotResultData());
+}
+
+void cwLinePlotManager::connectFixStations(cwCave* cave) {
+    if (!cave) { return; }
+    auto* model = cave->fixStations();
+    if (!model) { return; }
+    // setData on a cwFixStation row, addFixStation, removeAt — all funnel
+    // through the model's standard signals. Anything that changes a fix
+    // changes the *cs/*fix block survex sees.
+    connect(model, &cwFixStationModel::dataChanged, this, [this](){ runSurvex(); });
+    connect(model, &cwFixStationModel::rowsInserted, this, [this](){ runSurvex(); });
+    connect(model, &cwFixStationModel::rowsRemoved,  this, [this](){ runSurvex(); });
+    connect(model, &cwFixStationModel::modelReset,   this, [this](){ runSurvex(); });
 }
 
 void cwLinePlotManager::setRenderLinePlot(cwRenderLinePlot* linePlot) {

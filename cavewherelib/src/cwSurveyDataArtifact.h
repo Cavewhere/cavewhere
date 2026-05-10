@@ -20,6 +20,7 @@ class cwSurveyChunk;
 #include "cwShot.h"
 #include "cwStation.h"
 #include "cwTeamMember.h"
+#include "cwFixStation.h"
 
 /**
  * @brief The cwSurveyDataArtifact class extends cwArtifact to support survey data.
@@ -61,6 +62,11 @@ public:
     struct Cave {
         QString name;
         QVector<Trip> trips;
+        // Filtered list — only fixes whose stationName resolves to a real
+        // station in the cave and whose names are unique. Validation runs
+        // on the main thread in the Cave(cwCave*) constructor so dropped
+        // entries surface as cwError on the cave.
+        QList<cwFixStation> fixStations;
 
         Cave() = default;
 
@@ -70,6 +76,7 @@ public:
 
     struct Region {
         QVector<Cave> caves;
+        QString globalCS;
 
         Region() = default;
 

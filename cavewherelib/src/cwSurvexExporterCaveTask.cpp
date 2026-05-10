@@ -8,7 +8,11 @@
 //Our includes
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterTripTask.h"
+#include "cwSurvexExporterUtils.h"
 #include "cwTrip.h"
+
+//Qt includes
+#include <QSet>
 
 cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
     cwCaveExporterTask(parent)
@@ -22,7 +26,7 @@ cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
 /**
   \brief Writes the cave data to the stream
   */
-bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& cave) {
+bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& cave, const QString& globalCS) {
 
     if(!checkData(cave)) {
         if(isRunning()) {
@@ -35,8 +39,7 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
 
     stream << "*begin " << caveName << " ;" << cave.name << Qt::endl << Qt::endl;
 
-    //Add fix station to tie the cave down
-    fixFirstStation(stream, cave);
+    writeFixStations(stream, cave, globalCS);
 
     //Haven't done anything
     TotalProgress = 0;
@@ -57,26 +60,38 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
 }
 
 /**
- * @brief cwSurvexExporterCaveTask::fixFirstStation
- * @param stream
- * @param cave
- *
- * This fixes the first station in the cave, if the cave has any stations.
+ * Emit the *cs / *fix block for the cave. Validates the snapshot's
+ * fixStations against the actual station names; rejected fixes are dropped
+ * silently here (the user-facing exporter — cwSurvexExporterRule — runs
+ * the same validation at snapshot time and surfaces errors on the cave).
+ * Falls back to `*fix <firstStation> 0 0 0` when no valid fix exists so
+ * un-fixed caves still resolve in cavern.
  */
-void cwSurvexExporterCaveTask::fixFirstStation(QTextStream &stream, const cwCaveData &cave)
+void cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData &cave, const QString& globalCS)
 {
-    if(!cave.trips.isEmpty()) {
-        const cwTripData& firstTrip = cave.trips.first();
-        if(!firstTrip.chunks.isEmpty()) {
-            const cwSurveyChunkData& firstChunk = firstTrip.chunks.first();
-            if(!firstChunk.stations.isEmpty()) {
-                cwStation station = firstChunk.stations.first();
-                if(!station.isValid()) { return; }
-
-                stream << "*fix " << station.name() << " " << 0 << " " << 0 << " " << 0 << Qt::endl;
+    QSet<QString> stationNamesLower;
+    QString firstValidStation;
+    for (const cwTripData& trip : cave.trips) {
+        for (const cwSurveyChunkData& chunk : trip.chunks) {
+            for (const cwStation& station : chunk.stations) {
+                if (station.isValid()) {
+                    stationNamesLower.insert(station.name().toLower());
+                    if (firstValidStation.isEmpty()) {
+                        firstValidStation = station.name();
+                    }
+                }
             }
         }
     }
+
+    QStringList errors;
+    const QList<cwFixStation> validFixes = cwSurvexExporterUtils::validateFixStations(
+        cave.fixStations, stationNamesLower, errors);
+    for (const QString& message : std::as_const(errors)) {
+        Errors.append(message);
+    }
+
+    cwSurvexExporterUtils::writeFixStations(stream, validFixes, firstValidStation, globalCS);
 }
 
 

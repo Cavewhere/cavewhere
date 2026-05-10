@@ -27,7 +27,8 @@ cwChipdataExportCaveTask::cwChipdataExportCaveTask(QObject *parent) :
 /**
   Writes all the trips to the data stream
   */
-bool cwChipdataExportCaveTask::writeCave(QTextStream& stream, const cwCaveData &cave) {
+bool cwChipdataExportCaveTask::writeCave(QTextStream& stream, const cwCaveData &cave, const QString& globalCS) {
+    Q_UNUSED(globalCS);
     //Haven't done anything
     TotalProgress = 0;
 

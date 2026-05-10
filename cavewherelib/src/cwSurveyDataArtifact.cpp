@@ -4,6 +4,12 @@
 #include "cwSurveyChunk.h"
 #include "cwTeam.h"
 #include "cwTrip.h"
+#include "cwCave.h"
+#include "cwFixStationModel.h"
+#include "cwErrorModel.h"
+#include "cwErrorListModel.h"
+#include "cwError.h"
+#include "cwSurvexExporterUtils.h"
 
 cwSurveyDataArtifact::cwSurveyDataArtifact(QObject *parent)
     : cwArtifact(parent)
@@ -92,9 +98,34 @@ cwSurveyDataArtifact::Cave::Cave(const cwCave *cave) {
     for (int i = 0; i < tripCount; ++i) {
         trips.append(Trip(cave->trip(i)));
     }
+
+    // Validate fixes against the cave's actual station names so the survex
+    // exporter only sees consistent input. Errors flow back to the cave's
+    // errorModel — main thread, called before the snapshot is moved into
+    // the export worker.
+    QSet<QString> stationNamesLower;
+    for (const Trip& trip : std::as_const(trips)) {
+        for (const SurveyChunk& chunk : trip.chunks) {
+            for (const cwStation& station : chunk.stations) {
+                if (station.isValid()) {
+                    stationNamesLower.insert(station.name().toLower());
+                }
+            }
+        }
+    }
+
+    QStringList fixErrors;
+    fixStations = cwSurvexExporterUtils::validateFixStations(
+        cave->fixStations()->fixStations(), stationNamesLower, fixErrors);
+
+    cwErrorListModel* errors = cave->errorModel()->errors();
+    for (const QString& message : std::as_const(fixErrors)) {
+        errors->append(cwError(message, cwError::Warning));
+    }
 }
 
 cwSurveyDataArtifact::Region::Region(const cwCavingRegion *region) {
+    globalCS = region->globalCS();
     int caveCount = region->caveCount();
     caves.reserve(caveCount);
     for (int i = 0; i < caveCount; ++i) {

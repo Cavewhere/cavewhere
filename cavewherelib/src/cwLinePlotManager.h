@@ -84,6 +84,7 @@ private:
     bool AutomaticUpdate = true;
 
     void connectCaves(cwCavingRegion* region);
+    void connectFixStations(cwCave* cave);
 
     void validateResultsData(cwLinePlotTask::LinePlotResultData& results);
 

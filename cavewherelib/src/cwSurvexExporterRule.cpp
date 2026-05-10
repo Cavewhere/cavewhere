@@ -79,15 +79,16 @@ ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream, const cwSurveyDa
     return ResultBase();
 }
 
-ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream, const cwSurveyDataArtifact::Cave& cave)
+ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream,
+                                           const cwSurveyDataArtifact::Cave& cave,
+                                           const QString& globalCS)
 {
     QString caveName = cave.name;
     caveName = caveName.remove(" ");
 
     stream << "*begin " << caveName << " ;" << cave.name << Qt::endl << Qt::endl;
 
-    //Add fix station to tie the cave down
-    fixFirstStation(stream, cave);
+    writeFixStations(stream, cave, globalCS);
 
 
     //Go throug all the trips and save them
@@ -106,10 +107,34 @@ ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream, const cwSurvey
 {
     stream << "*begin  ;All the caves" << Qt::endl;
 
+    // Cavern requires *cs out whenever any *cs appears in the file. When
+    // globalCS is unset but a cave has a fix with inputCS, fall back to
+    // that fix's CS for *cs out — otherwise survex errors with "input
+    // projection is set but output projection isn't" the moment the fix
+    // emits its own *cs.
+    QString outputCS = region.globalCS;
+    if (outputCS.isEmpty()) {
+        for (const auto& cave : region.caves) {
+            for (const auto& fix : cave.fixStations) {
+                if (!fix.inputCS().trimmed().isEmpty()) {
+                    outputCS = fix.inputCS().trimmed();
+                    break;
+                }
+            }
+            if (!outputCS.isEmpty()) {
+                break;
+            }
+        }
+    }
+
+    if (!outputCS.isEmpty()) {
+        stream << "*cs out " << outputCS << Qt::endl;
+    }
+
     for(int i = 0; i < region.caves.size(); i++) {
         const cwSurveyDataArtifact::Cave& cave = region.caves.at(i);
 
-        auto result = writeCave(stream, cave);
+        auto result = writeCave(stream, cave, outputCS);
         if(result.hasError()) {
             return result;
         }
@@ -509,27 +534,28 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
 }
 
 /**
- * @brief cwSurvexExporterCaveTask::fixFirstStation
- * @param stream
- * @param cave
- *
- * This fixes the first station in the cave, if the cave has any stations.
+ * Emits the cave's *cs / *fix block. If cave.fixStations is empty, falls
+ * back to fixing the first station to (0,0,0) so legacy un-fixed caves keep
+ * resolving in cavern. Validation already filtered cave.fixStations during
+ * snapshot construction (see cwSurveyDataArtifact::Cave::Cave).
  */
-void cwSurvexExporterRule::fixFirstStation(QTextStream &stream, const cwSurveyDataArtifact::Cave &cave)
+void cwSurvexExporterRule::writeFixStations(QTextStream &stream,
+                                            const cwSurveyDataArtifact::Cave &cave,
+                                            const QString& globalCS)
 {
-
-    if(!cave.trips.isEmpty()) {
-        const auto trips = cave.trips;
-        const cwSurveyDataArtifact::Trip& firstTrip = trips.first();
-        if(!firstTrip.chunks.isEmpty()) {
-            const auto chunks = firstTrip.chunks;
-            const cwSurveyDataArtifact::SurveyChunk& firstChunk = chunks.first();
-            if(!firstChunk.stations.isEmpty()) {
+    QString fallback;
+    if (cave.fixStations.isEmpty() && !cave.trips.isEmpty()) {
+        const cwSurveyDataArtifact::Trip& firstTrip = cave.trips.first();
+        if (!firstTrip.chunks.isEmpty()) {
+            const cwSurveyDataArtifact::SurveyChunk& firstChunk = firstTrip.chunks.first();
+            if (!firstChunk.stations.isEmpty()) {
                 const cwStation& station = firstChunk.stations.first();
-                if(!station.isValid()) { return; }
-                stream << "*fix " << station.name() << " " << 0 << " " << 0 << " " << 0 << Qt::endl;
+                if (station.isValid()) {
+                    fallback = station.name();
+                }
             }
         }
     }
 
+    cwSurvexExporterUtils::writeFixStations(stream, cave.fixStations, fallback, globalCS);
 }

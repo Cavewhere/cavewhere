@@ -153,6 +153,8 @@ void cwSurvexImporter::clear() {
     IncludeStack.clear();
     IncludeFiles.clear();
     BeginEndStateStack.clear();
+    CurrentInputCS.clear();
+    CapturedFixStations.clear();
     TotalNumberOfLines = 0;
     CurrentTotalNumberOfLines = 0;
 }
@@ -339,6 +341,10 @@ void cwSurvexImporter::parseLine(QString line) {
                 parseEquate(arg);
             } else if(compare(command, "flags")) {
                 parseFlags(arg);
+            } else if(compare(command, "cs")) {
+                parseCS(arg);
+            } else if(compare(command, "fix")) {
+                parseFix(arg);
             } else {
                 addWarning(QString("Unknown survex keyword:") + command);
             }
@@ -1006,6 +1012,68 @@ void cwSurvexImporter::parseFlags(QString line)
             flagOperator = false;
         }
     }
+}
+
+/**
+ * Capture the most recent `*cs` so following `*fix` directives can carry
+ * its CS as inputCS. Survex's *cs accepts EPSG:NNNN, ESRI:NNNN, UTM<zone>N|S,
+ * LONG-LAT, etc. We pass the value through verbatim — the cwFixStation
+ * inputCS field is plain text and the rest of the pipeline (export, picker)
+ * handles those forms downstream. `*cs out ...` (output CS) is ignored on
+ * import; that's a region-level concern handled by globalCS.
+ */
+void cwSurvexImporter::parseCS(QString line)
+{
+    const QString trimmed = line.trimmed();
+    if (trimmed.startsWith(QStringLiteral("out"), Qt::CaseInsensitive)) {
+        return;
+    }
+    CurrentInputCS = trimmed;
+}
+
+/**
+ * Parse a `*fix <station> [<reference>] <x> <y> <z> [<varH> <varV>]` line.
+ * Survex accepts both `*fix A 100 200 300` and the reference form
+ * `*fix A reference 100 200 300`; we accept both shapes by counting
+ * trailing numerics.
+ */
+void cwSurvexImporter::parseFix(QString line)
+{
+    const QStringList parts = line.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+    if (parts.size() < 4) {
+        addWarning(QStringLiteral("*fix needs at least station + 3 coordinates"));
+        return;
+    }
+
+    auto isNumber = [](const QString& s) {
+        bool ok = false;
+        s.toDouble(&ok);
+        return ok;
+    };
+
+    int coordStart = -1;
+    for (int i = parts.size() - 3; i >= 1; --i) {
+        if (isNumber(parts.at(i)) && isNumber(parts.at(i + 1)) && isNumber(parts.at(i + 2))) {
+            coordStart = i;
+            break;
+        }
+    }
+    if (coordStart < 0) {
+        addWarning(QStringLiteral("*fix coordinates couldn't be parsed: %1").arg(line));
+        return;
+    }
+
+    cwFixStation fix;
+    fix.setStationName(fullStationName(parts.first()));
+    fix.setInputCS(CurrentInputCS);
+    fix.setEasting(parts.at(coordStart).toDouble());
+    fix.setNorthing(parts.at(coordStart + 1).toDouble());
+    fix.setElevation(parts.at(coordStart + 2).toDouble());
+    if (coordStart + 4 < parts.size() && isNumber(parts.at(coordStart + 3)) && isNumber(parts.at(coordStart + 4))) {
+        fix.setHorizontalVariance(parts.at(coordStart + 3).toDouble());
+        fix.setVerticalVariance(parts.at(coordStart + 4).toDouble());
+    }
+    CapturedFixStations.append(fix);
 }
 
 /**
