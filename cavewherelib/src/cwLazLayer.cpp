@@ -42,12 +42,16 @@ cwLazLayer::cwLazLayer(QObject* parent) :
         AsyncFuture::observe(m_loadRestarter.future())
             .context(this, [this]() {
                 QFuture<cwLazLoadResult> finished = m_loadRestarter.future();
-                if (finished.isCanceled() || finished.resultCount() == 0) {
-                    setErrorMessage(QStringLiteral("Load cancelled or failed: %1")
-                                        .arg(m_sourcePath));
+                if (finished.resultCount() == 0) {
+                    setErrorMessage(QStringLiteral("Load failed: %1").arg(m_sourcePath));
                     setLoadStatus(LoadStatus::Error);
                     return;
                 }
+                // result() returns const T& — the local copy is a shallow
+                // refcount bump (cwGeometry's vertex data is QByteArray,
+                // CoW), so this isn't a deep copy. takeResult() returns a
+                // default-constructed value when delivered through an
+                // AsyncFuture Deferred — copy is the safe path.
                 cwLazLoadResult result = finished.result();
                 applyResult(std::move(result));
             });
