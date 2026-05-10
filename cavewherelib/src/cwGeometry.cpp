@@ -46,6 +46,7 @@ const char *cwGeometry::toString(Type t) {
     switch (t) {
     case Type::Triangles: return "Triangles";
     case Type::Lines:     return "Lines";
+    case Type::Points:    return "Points";
     case Type::None:      return "None";
     }
     return "Unknown";

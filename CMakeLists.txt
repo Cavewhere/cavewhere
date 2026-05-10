@@ -472,6 +472,10 @@ endif()
 find_package(Catch2 REQUIRED)
 find_package(Protobuf REQUIRED)
 find_package(OpenSSL REQUIRED)
+# laslib is also a private dep of cavewherelib; we re-find it here so the
+# testlib's LazFixtureHelper can link against it directly without dragging
+# the LASlib include path into cavewherelib's PUBLIC interface.
+find_package(laslib CONFIG REQUIRED)
 
 find_package(Qt6
     COMPONENTS
@@ -505,6 +509,8 @@ if(BUILD_TESTING)
             testlib/LoadProjectHelper.h
             testlib/cwSketchTestHelpers.cpp
             testlib/cwSketchTestHelpers.h
+            testlib/LazFixtureHelper.cpp
+            testlib/LazFixtureHelper.h
             testlib/MockAuthProvider.cpp
             testlib/MockAuthProvider.h
             QQuickGit/tests/lfs/LfsServer.cpp
@@ -532,6 +538,7 @@ if(BUILD_TESTING)
         Qt6::Qml
         qt6keychain
         cavewherelib
+        laslib::laslib
     )
 
     target_compile_definitions(cavewhere-testlib PUBLIC

@@ -247,7 +247,7 @@ The data side (`m_worldOrigin`, getter, signal) already landed in PR 2 so PR 3b 
 - Tests: `testcases/test_cwCavingRegion_worldOrigin.cpp` — auto-compute on first fix; sticky after that; manual recompute; centroid policy with fixes / LAZ / cave bboxes / empty.
 
 ### PR 6 — LAZ data + loader (no rendering)
-- `conanfile.py`: add `pdal/[>=2.6.0]`. CMake `find_package(PDAL CONFIG REQUIRED)`, link `pdal::pdalcpp`.
+- `conanfile.py`: add `laslib/[>=2.0.2]`. CMake `find_package(laslib CONFIG REQUIRED)`, link `laslib::laslib` PUBLICly so test executables that write synthetic .laz fixtures can include `<LASlib/laswriter.hpp>` transitively. (PDAL was the original choice, but it's not packaged in conancenter; LASlib is the LAStools reader/writer that lives in the LASzip family — bundles LASzip, supports both .las and .laz, picks compression by file extension.)
 - **Extend `cwGeometry` to support point clouds** (`cavewherelib/src/cwGeometry.{h,cpp}`):
   - Add `Type::Points` to the `Type` enum and a `"Points"` case to `toString(Type)`.
   - Loosen `isEmpty()`: indexed primitives (`Triangles`) still require both vertex data and indices, but non-indexed primitives (`Points`, and optionally `Lines`) are non-empty when `m_vertexData` alone is non-empty. Point clouds draw in vertex order, so emitting a trivial `0..N-1` index array would just waste 4 bytes per point.
@@ -273,7 +273,7 @@ The data side (`m_worldOrigin`, getter, signal) already landed in PR 2 so PR 3b 
       const cwGeoPoint& worldOrigin,
       qsizetype maxPoints = -1);
   ```
-  Implementation: PDAL `readers.las` → streaming `PointTable`/`PointView`. The worker:
+  Implementation: LASlib `LASreadOpener` → `LASreader` streaming via `read_point()`. The worker:
   - Constructs the result `cwGeometry` with `{ {Position, Vec3} }` layout and `Type::Points`.
   - Constructs its own `cwCoordinateTransform(sourceCS, globalCS)` — single-thread instance.
   - Per chunk of points: reproject (no-op if `transform.isIdentity()`) into `cwGeoPoint`, subtract `worldOrigin`, narrow to `QVector3D`, append to a local `QVector<QVector3D>` buffer; flush via `geometry.set<QVector3D>(Position, buffer)` periodically (or build once at the end if memory permits — point counts are typically in the millions, decide based on profiling).

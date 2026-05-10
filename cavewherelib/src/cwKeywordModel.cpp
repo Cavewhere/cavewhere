@@ -11,6 +11,7 @@ const QString cwKeywordModel::DateKey = QStringLiteral("Date");
 const QString cwKeywordModel::CaverKey = QStringLiteral("Caver");
 const QString cwKeywordModel::FileNameKey = QStringLiteral("File Name");
 const QString cwKeywordModel::ObjectIdKey = QStringLiteral("Object id");
+const QString cwKeywordModel::NameKey = QStringLiteral("Name");
 
 cwKeywordModel::cwKeywordModel(QObject *parent) :
     QAbstractListModel (parent)

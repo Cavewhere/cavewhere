@@ -49,6 +49,7 @@ public:
     static const QString CaverKey;
     static const QString FileNameKey;
     static const QString ObjectIdKey;
+    static const QString NameKey;
 
     Q_INVOKABLE cwKeyword createKeyword(const QString key, QString value) const;
 

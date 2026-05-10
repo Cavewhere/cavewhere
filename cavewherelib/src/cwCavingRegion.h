@@ -23,10 +23,12 @@
 class cwCave;
 class cwProject;
 #include "cwCavingRegionData.h"
+#include "cwLazLayerModel.h"
 #include "cwSanitizedNameSet.h"
 #include "cwUndoer.h"
 #include "cwGlobals.h"
 #include "cwGeoPoint.h"
+#include "cwFutureManagerToken.h"
 
 
 class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cwUndoer
@@ -38,6 +40,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
     Q_PROPERTY(QString globalCS READ globalCS WRITE setGlobalCS NOTIFY globalCSChanged)
     Q_PROPERTY(cwGeoPoint worldOrigin READ worldOrigin WRITE setWorldOrigin NOTIFY worldOriginChanged)
+    Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)
 
 public:
     enum Roles {
@@ -61,6 +64,9 @@ public:
     void setWorldOrigin(const cwGeoPoint& origin);
 
     Q_INVOKABLE void recomputeWorldOrigin();
+
+    cwLazLayerModel* lazLayers() const { return m_lazLayers; }
+    void setFutureManagerToken(const cwFutureManagerToken& token);
 
     bool hasCaves() const;
     Q_INVOKABLE int caveCount() const;
@@ -117,6 +123,7 @@ private:
 
     QString m_globalCS;
     cwGeoPoint m_worldOrigin;
+    cwLazLayerModel* m_lazLayers = nullptr;
 
     // cwCavingRegion& copy(const cwCavingRegion& object);
 

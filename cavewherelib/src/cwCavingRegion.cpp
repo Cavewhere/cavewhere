@@ -12,6 +12,7 @@
 #include "cwDebug.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
+#include "cwLazLayerModel.h"
 #include "cwProject.h"
 #include "cwData.h"
 #include "cwNameUtils.h"
@@ -21,8 +22,14 @@
 #include <QDebug>
 
 cwCavingRegion::cwCavingRegion(QObject *parent) :
-    QAbstractListModel(parent)
+    QAbstractListModel(parent),
+    m_lazLayers(new cwLazLayerModel(this))
 {
+}
+
+void cwCavingRegion::setFutureManagerToken(const cwFutureManagerToken& token)
+{
+    m_lazLayers->setFutureManagerToken(token);
 }
 
 // /**
@@ -271,6 +278,7 @@ void cwCavingRegion::setGlobalCS(const QString& cs)
     // The stored worldOrigin was computed in the old CS, so reset it.
     // The next line-plot completion will auto-recompute against the new CS.
     setWorldOrigin(cwGeoPoint{});
+    m_lazLayers->setRegionGlobalCS(cs);
     emit globalCSChanged();
 }
 
@@ -280,6 +288,7 @@ void cwCavingRegion::setWorldOrigin(const cwGeoPoint& origin)
         return;
     }
     m_worldOrigin = origin;
+    m_lazLayers->setRegionWorldOrigin(origin);
     emit worldOriginChanged();
 }
 
@@ -346,15 +355,26 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
         newCaves.append(newCave);
     }
     addCaves(newCaves);
+
+    m_lazLayers->clear();
+    for (const QString& path : data.lazLayerSourcePaths) {
+        m_lazLayers->addLayer(path);
+    }
 }
 
 cwCavingRegionData cwCavingRegion::data() const
 {
+    QStringList paths;
+    paths.reserve(m_lazLayers->count());
+    for (cwLazLayer* layer : m_lazLayers->layers()) {
+        paths.append(layer->sourcePath());
+    }
     return {
         m_name.value(),
         cwData::toDataList<cwCaveData>(m_caves),
         m_globalCS,
-        m_worldOrigin
+        m_worldOrigin,
+        paths
     };
 }
 

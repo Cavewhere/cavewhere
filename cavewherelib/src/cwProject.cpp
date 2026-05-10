@@ -1702,6 +1702,9 @@ void cwProject::setUndoStack(QUndoStack *undoStack) {
 void cwProject::setFutureManagerToken(const cwFutureManagerToken &token) {
     FutureToken = token;
     m_saveLoad->setFutureManagerToken(token);
+    if (Region != nullptr) {
+        Region->setFutureManagerToken(token);
+    }
 }
 
 cwFutureManagerToken cwProject::futureManagerToken() const {

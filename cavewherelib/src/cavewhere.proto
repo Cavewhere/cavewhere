@@ -24,6 +24,14 @@ message ProjectMetadata {
     reserved 5; // Removed: worldOrigin (derived from fix-station centroid; recomputed on load)
     optional bool syncEnabled = 3;
     optional string globalCS = 4;
+    repeated LazLayer lazLayers = 6;
+}
+
+// Geospatial layers (point clouds, etc.). Only the path is persisted —
+// everything else (CRS, point count, bbox) is recovered by re-running the
+// loader against the file.
+message LazLayer {
+    optional string sourcePath = 1;
 }
 
 message Project {

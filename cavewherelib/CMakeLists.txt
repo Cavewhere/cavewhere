@@ -26,6 +26,7 @@ find_package(xxHash REQUIRED)
 find_package(TinyGLTF REQUIRED)
 find_package(minizip REQUIRED)
 find_package(PROJ CONFIG REQUIRED)
+find_package(laslib CONFIG REQUIRED)
 
 # Locate PROJ's runtime data directory (proj.db + grid-shift files). PROJ
 # can't run without proj.db; conan's runenv only sets PROJ_DATA inside the
@@ -198,6 +199,7 @@ target_link_libraries(cavewherelib
     surveximg
     cavernlib
     PROJ::proj
+    laslib::laslib
 )
 
 cw_link_absl_static(cavewherelib)

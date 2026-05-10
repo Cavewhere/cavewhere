@@ -51,6 +51,7 @@ public:
     enum class Type {
         Triangles,
         Lines,
+        Points,
         None
     };
 
@@ -365,7 +366,14 @@ public:
     }
 
     bool isEmpty() const {
-        return m_vertexData.isEmpty() || m_indices.isEmpty();
+        if (m_vertexData.isEmpty()) {
+            return true;
+        }
+        // Non-indexed primitives (Points) draw in vertex order — indices are optional.
+        if (m_type == Type::Points) {
+            return false;
+        }
+        return m_indices.isEmpty();
     }
 
     void dump() const;

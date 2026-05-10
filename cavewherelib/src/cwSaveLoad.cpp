@@ -19,6 +19,7 @@
 #include "cwFutureManagerModel.h"
 #include "cwTeam.h"
 #include "cwCavingRegion.h"
+#include "cwLazLayerModel.h"
 #include "cwProject.h"
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyNoteLiDARModel.h"
@@ -351,6 +352,9 @@ QSet<QString> cavewhereTrackedExtensions()
         QStringLiteral("pdf"),
         // 3D assets
         QStringLiteral("glb"),
+        // Point clouds (geospatial layers)
+        QStringLiteral("laz"),
+        QStringLiteral("las"),
     };
     return trackedExtensions;
 }
@@ -1832,6 +1836,9 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
         if (!region->globalCS().isEmpty()) {
             cwProtoUtils::saveString(protoMetadata->mutable_globalcs(), region->globalCS());
         }
+        if (cwLazLayerModel* lazLayers = region->lazLayers()) {
+            lazLayers->writeTo(protoMetadata);
+        }
     }
 
     return protoProject;
@@ -2874,6 +2881,12 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
             if (metadataProto.has_globalcs()) {
                 loadData.region.globalCS = QString::fromStdString(metadataProto.globalcs());
             }
+            loadData.region.lazLayerSourcePaths.reserve(metadataProto.lazlayers_size());
+            for (int i = 0; i < metadataProto.lazlayers_size(); ++i) {
+                const auto& protoLayer = metadataProto.lazlayers(i);
+                loadData.region.lazLayerSourcePaths.append(
+                    QString::fromStdString(protoLayer.sourcepath()));
+            }
         }
 
         if (loadData.metadata.dataRoot.isEmpty()) {
@@ -3377,6 +3390,14 @@ void cwSaveLoad::connectTreeModel()
             saveProject(projectRootDir(), region);
         };
         connect(region, &cwCavingRegion::globalCSChanged, this, saveMetadata);
+
+        // LAZ layers live in the project metadata file (one repeated entry per
+        // sourcePath). Without these handlers the dirty bit wouldn't trigger
+        // a metadata write when the user adds or removes a layer.
+        if (auto* lazLayers = region->lazLayers()) {
+            connect(lazLayers, &QAbstractItemModel::rowsInserted, this, saveMetadata);
+            connect(lazLayers, &QAbstractItemModel::rowsRemoved, this, saveMetadata);
+        }
     }
 }
 

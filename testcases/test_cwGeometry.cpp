@@ -230,6 +230,62 @@ TEST_CASE("cwGeometry: transform and flags", "[cwGeometry]") {
     REQUIRE_FALSE(g.cullBackfaces());
 }
 
+TEST_CASE("cwGeometry: Type::Points (non-indexed)", "[cwGeometry]") {
+    cwGeometry g({
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
+    });
+    g.setType(cwGeometry::Type::Points);
+
+    SECTION("type round-trips and toString covers Points") {
+        REQUIRE(g.type() == cwGeometry::Type::Points);
+        REQUIRE(QString::fromLatin1(cwGeometry::toString(cwGeometry::Type::Points)) ==
+                QStringLiteral("Points"));
+    }
+
+    SECTION("isEmpty returns false for non-empty point cloud with no indices") {
+        QVector<QVector3D> points = {
+            { 1.0f, 2.0f, 3.0f },
+            { 4.0f, 5.0f, 6.0f },
+            { 7.0f, 8.0f, 9.0f }
+        };
+        REQUIRE(g.set(cwGeometry::Semantic::Position, points));
+        REQUIRE(g.indices().isEmpty());
+        // Non-indexed primitives draw in vertex order — no indices needed.
+        REQUIRE_FALSE(g.isEmpty());
+        REQUIRE(g.vertexCount() == points.size());
+    }
+
+    SECTION("set<QVector3D> + values<QVector3D> round-trip") {
+        QVector<QVector3D> in = {
+            { 0.0f, 0.0f, 0.0f },
+            { -1.5f, 2.5f, 3.5f },
+            { 1000.0f, -1000.0f, 0.5f }
+        };
+        REQUIRE(g.set(cwGeometry::Semantic::Position, in));
+        QVector<QVector3D> out = g.values<QVector3D>(cwGeometry::Semantic::Position);
+        REQUIRE(out.size() == in.size());
+        for (int i = 0; i < in.size(); ++i) {
+            requireEqual(out[i], in[i]);
+        }
+    }
+
+    SECTION("isEmpty stays true for an empty Points geometry") {
+        REQUIRE(g.isEmpty());
+    }
+
+    SECTION("Triangles still requires indices to be non-empty") {
+        cwGeometry tri({
+            { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
+        });
+        tri.setType(cwGeometry::Type::Triangles);
+        tri.resizeVertices(3);
+        // Triangles without indices: still considered empty.
+        REQUIRE(tri.isEmpty());
+        tri.appendTriangle(0, 1, 2);
+        REQUIRE_FALSE(tri.isEmpty());
+    }
+}
+
 TEST_CASE("cwGeometry: attribute lookup and format mismatch safety", "[cwGeometry]") {
     cwGeometry g({
         { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
