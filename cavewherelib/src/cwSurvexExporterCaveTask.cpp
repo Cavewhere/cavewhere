@@ -75,7 +75,7 @@ void cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCav
         for (const cwSurveyChunkData& chunk : trip.chunks) {
             for (const cwStation& station : chunk.stations) {
                 if (station.isValid()) {
-                    stationNamesLower.insert(station.name().toLower());
+                    stationNamesLower.insert(cwStation::canonicalKey(station.name()));
                     if (firstValidStation.isEmpty()) {
                         firstValidStation = station.name();
                     }

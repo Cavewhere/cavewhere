@@ -10,8 +10,37 @@
 
 #include "cwClinoReading.h"
 #include "cwFixStation.h"
+#include "cwStation.h"
 
 namespace cwSurvexExporterUtils {
+
+/**
+ * Survex requires *cs out whenever any *cs appears, so when the user hasn't
+ * set a globalCS but a fix has its own inputCS, fall back to that fix's CS
+ * for *cs out — otherwise cavern errors with "input projection is set but
+ * output projection isn't" the moment the per-cave *cs is emitted.
+ *
+ * The Region template parameter is duck-typed: it must expose `.globalCS`
+ * and `.caves`, and each cave must expose `.fixStations`. This works for
+ * both cwSurveyDataArtifact::Region (Rule export path) and
+ * cwCavingRegionData (line-plot export path).
+ */
+template <typename Region>
+QString resolveOutputCS(const Region& region)
+{
+    if (!region.globalCS.isEmpty()) {
+        return region.globalCS;
+    }
+    for (const auto& cave : region.caves) {
+        for (const cwFixStation& fix : cave.fixStations) {
+            const QString cs = fix.inputCS().trimmed();
+            if (!cs.isEmpty()) {
+                return cs;
+            }
+        }
+    }
+    return QString();
+}
 
 // Valid survex *team role keywords (must match role_tab in survex/src/commands.c)
 inline bool isValidSurvexRole(const QString& role)
@@ -64,7 +93,7 @@ inline QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
     QSet<QString> seenLower;
     kept.reserve(fixes.size());
     for (const cwFixStation& fix : fixes) {
-        const QString lower = fix.stationName().trimmed().toLower();
+        const QString lower = cwStation::canonicalKey(fix.stationName().trimmed());
         if (lower.isEmpty() || !stationNamesLower.contains(lower)) {
             errors.append(QStringLiteral("Fix references unknown station: \"%1\"")
                               .arg(fix.stationName()));

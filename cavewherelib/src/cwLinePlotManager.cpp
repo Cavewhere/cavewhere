@@ -110,13 +110,11 @@ void cwLinePlotManager::connectFixStations(cwCave* cave) {
     if (!cave) { return; }
     auto* model = cave->fixStations();
     if (!model) { return; }
-    // setData on a cwFixStation row, addFixStation, removeAt — all funnel
-    // through the model's standard signals. Anything that changes a fix
-    // changes the *cs/*fix block survex sees.
-    connect(model, &cwFixStationModel::dataChanged, this, [this](){ runSurvex(); });
-    connect(model, &cwFixStationModel::rowsInserted, this, [this](){ runSurvex(); });
-    connect(model, &cwFixStationModel::rowsRemoved,  this, [this](){ runSurvex(); });
-    connect(model, &cwFixStationModel::modelReset,   this, [this](){ runSurvex(); });
+    const auto rerun = [this](){ runSurvex(); };
+    connect(model, &cwFixStationModel::dataChanged,  this, rerun);
+    connect(model, &cwFixStationModel::rowsInserted, this, rerun);
+    connect(model, &cwFixStationModel::rowsRemoved,  this, rerun);
+    connect(model, &cwFixStationModel::modelReset,   this, rerun);
 }
 
 void cwLinePlotManager::setRenderLinePlot(cwRenderLinePlot* linePlot) {

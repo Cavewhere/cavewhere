@@ -99,16 +99,15 @@ cwSurveyDataArtifact::Cave::Cave(const cwCave *cave) {
         trips.append(Trip(cave->trip(i)));
     }
 
-    // Validate fixes against the cave's actual station names so the survex
-    // exporter only sees consistent input. Errors flow back to the cave's
-    // errorModel — main thread, called before the snapshot is moved into
-    // the export worker.
+    // Validate fixes on the main thread, before the snapshot is moved into
+    // the export worker, so cwError reaches the cave's errorModel without
+    // a worker→GUI thread hop.
     QSet<QString> stationNamesLower;
     for (const Trip& trip : std::as_const(trips)) {
         for (const SurveyChunk& chunk : trip.chunks) {
             for (const cwStation& station : chunk.stations) {
                 if (station.isValid()) {
-                    stationNamesLower.insert(station.name().toLower());
+                    stationNamesLower.insert(cwStation::canonicalKey(station.name()));
                 }
             }
         }

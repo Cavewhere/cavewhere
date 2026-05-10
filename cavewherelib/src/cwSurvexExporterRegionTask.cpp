@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwSurvexExporterRegionTask.h"
+#include "cwSurvexExporterUtils.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwDebug.h"
@@ -48,24 +49,7 @@ bool cwSurvexExporterRegionTask::writeRegion(QTextStream& stream, const cwCaving
 
     stream << "*begin  ;All the caves" << Qt::endl;
 
-    // Mirror cwSurvexExporterRule: when globalCS is unset, fall back to the
-    // first fix's inputCS so *cs out is always set whenever any *cs is
-    // emitted — survex rejects *cs without a matching *cs out.
-    QString outputCS = region.globalCS;
-    if (outputCS.isEmpty()) {
-        for (const cwCaveData& cave : region.caves) {
-            for (const cwFixStation& fix : cave.fixStations) {
-                if (!fix.inputCS().trimmed().isEmpty()) {
-                    outputCS = fix.inputCS().trimmed();
-                    break;
-                }
-            }
-            if (!outputCS.isEmpty()) {
-                break;
-            }
-        }
-    }
-
+    const QString outputCS = cwSurvexExporterUtils::resolveOutputCS(region);
     if (!outputCS.isEmpty()) {
         stream << "*cs out " << outputCS << Qt::endl;
     }

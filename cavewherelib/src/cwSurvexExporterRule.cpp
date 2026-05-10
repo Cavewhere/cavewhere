@@ -107,26 +107,7 @@ ResultBase cwSurvexExporterRule::writeRegion(QTextStream &stream, const cwSurvey
 {
     stream << "*begin  ;All the caves" << Qt::endl;
 
-    // Cavern requires *cs out whenever any *cs appears in the file. When
-    // globalCS is unset but a cave has a fix with inputCS, fall back to
-    // that fix's CS for *cs out — otherwise survex errors with "input
-    // projection is set but output projection isn't" the moment the fix
-    // emits its own *cs.
-    QString outputCS = region.globalCS;
-    if (outputCS.isEmpty()) {
-        for (const auto& cave : region.caves) {
-            for (const auto& fix : cave.fixStations) {
-                if (!fix.inputCS().trimmed().isEmpty()) {
-                    outputCS = fix.inputCS().trimmed();
-                    break;
-                }
-            }
-            if (!outputCS.isEmpty()) {
-                break;
-            }
-        }
-    }
-
+    const QString outputCS = cwSurvexExporterUtils::resolveOutputCS(region);
     if (!outputCS.isEmpty()) {
         stream << "*cs out " << outputCS << Qt::endl;
     }

@@ -26,8 +26,7 @@ cwCompassExportCaveTask::cwCompassExportCaveTask(QObject *parent) :
 /**
   Writes all the trips to the data stream
   */
-bool cwCompassExportCaveTask::writeCave(QTextStream& stream, const cwCaveData &cave, const QString& globalCS) {
-    Q_UNUSED(globalCS);
+bool cwCompassExportCaveTask::writeCave(QTextStream& stream, const cwCaveData &cave, const QString& /*globalCS*/) {
     //Haven't done anything
     TotalProgress = 0;
 
