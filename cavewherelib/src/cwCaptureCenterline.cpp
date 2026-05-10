@@ -12,20 +12,30 @@
 #include <QPainter>
 #include <QtGlobal>
 
+namespace {
+const QColor LineColor(200, 200, 200);
+const QColor ForegroundColor(20, 20, 20);
+constexpr qreal PenWidth = 1.0;
+constexpr qreal LabelFontPointSize = 8.0;
+constexpr qreal BaseStationRadius = 2.0;
+constexpr qreal BaseLabelOffsetX = 4.0;
+constexpr qreal BaseLabelOffsetY = -4.0;
+}
+
 cwCaptureCenterline::cwCaptureCenterline(QGraphicsItem* parent)
     : QGraphicsItem(parent)
     , m_camera(nullptr)
-    , m_linePen(QColor(200, 200, 200))
-    , m_stationPen(QColor(20, 20, 20))
-    , m_stationBrush(QColor(20, 20, 20))
-    , m_labelPen(QColor(20, 20, 20))
+    , m_linePen(LineColor)
+    , m_stationPen(ForegroundColor)
+    , m_stationBrush(ForegroundColor)
+    , m_labelPen(ForegroundColor)
     , m_imageScale(1.0)
-    , m_baseStationRadius(2.0)
-    , m_baseLabelOffset(4.0, -4.0)
+    , m_baseStationRadius(BaseStationRadius)
+    , m_baseLabelOffset(BaseLabelOffsetX, BaseLabelOffsetY)
 {
-    m_linePen.setWidthF(1.0);
-    m_stationPen.setWidthF(1.0);
-    m_labelFont.setPointSizeF(8.0);
+    m_linePen.setWidthF(PenWidth);
+    m_stationPen.setWidthF(PenWidth);
+    m_labelFont.setPointSizeF(LabelFontPointSize);
     setFlag(QGraphicsItem::ItemClipsToShape, true);
 }
 

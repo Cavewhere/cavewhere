@@ -20,6 +20,7 @@
 //Our includes
 class cwCamera;
 class cwCaptureCenterline;
+class cwCaptureLeads;
 class cwSurveyNetwork;
 #include "cwScaleBarItem.h"
 #include "cwScale.h"
@@ -44,6 +45,7 @@ class cwCaptureViewport : public cwCaptureItem
     Q_PROPERTY(double cameraAzimuth READ cameraAzimuth WRITE setCameraAzimuth NOTIFY cameraAzimuthChanged)
     Q_PROPERTY(double cameraPitch READ cameraPitch WRITE setCameraPitch NOTIFY cameraPitchChanged)
     Q_PROPERTY(bool scaleBarVisible READ scaleBarVisible WRITE setScaleBarVisible NOTIFY scaleBarVisibleChanged)
+    Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
 
 public:
 
@@ -91,6 +93,9 @@ public:
     bool scaleBarVisible() const;
     void setScaleBarVisible(bool visible);
 
+    bool leadsVisible() const;
+    void setLeadsVisible(bool visible);
+
 signals:
     void resolutionChanged();
     void viewportChanged();
@@ -103,6 +108,7 @@ signals:
     void cameraAzimuthChanged();
     void positionAfterScaleChanged();
     void scaleBarVisibleChanged();
+    void leadsVisibleChanged();
 
     void sceneManagerChanged();
 
@@ -146,6 +152,7 @@ private:
     void deleteSceneItems();
     cwSurveyNetwork buildCenterlineNetwork() const;
     cwCaptureCenterline* createCenterlineItem(QGraphicsItemGroup* parent, double imageScale) const;
+    cwCaptureLeads* createLeadsItem(QGraphicsItemGroup* parent, double imageScale) const;
 
 
 private slots:
@@ -157,6 +164,8 @@ private slots:
 
 private:
     cwCaptureCenterline* CenterlineItem;
+    cwCaptureLeads* LeadsItem;
+    bool m_leadsVisible = false;
 };
 
 /**
@@ -222,6 +231,10 @@ inline cwScaleBarItem* cwCaptureViewport::scaleBarItem() const {
 
 inline bool cwCaptureViewport::scaleBarVisible() const {
     return m_scaleBarVisible;
+}
+
+inline bool cwCaptureViewport::leadsVisible() const {
+    return m_leadsVisible;
 }
 
 /**

@@ -17,6 +17,7 @@
 #include "cwCamera.h"
 #include "cw3dRegionViewer.h"
 #include "cwCaptureCenterline.h"
+#include "cwCaptureLeads.h"
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"
 #include "cwGlobals.h"
@@ -31,6 +32,13 @@
 #undef far
 #undef near
 #endif
+
+namespace {
+// Z-values define stacking order of overlays drawn on top of the rendered map tiles.
+constexpr qreal CenterlineZValue = 1500.0;
+constexpr qreal LeadsZValue = 1600.0;
+constexpr qreal ScaleBarZValue = 2000.0;
+}
 
 cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     cwCaptureItem(parent),
@@ -49,14 +57,15 @@ cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     PreviewItem(nullptr),
     Item(nullptr),
     m_scaleBar(new cwScaleBarItem()),
-    CenterlineItem(nullptr)
+    CenterlineItem(nullptr),
+    LeadsItem(nullptr)
 {
     connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwCaptureViewport::updateTransformForItems);
     connect(this, &cwCaptureViewport::positionOnPaperChanged, this, &cwCaptureViewport::updateItemsPosition);
     connect(this, &cwCaptureViewport::rotationChanged, this, &cwCaptureViewport::updateTransformForItems);
     connect(this, &cwCaptureViewport::boundingBoxChanged, this, &cwCaptureViewport::updateScaleBarGeometry);
 
-    m_scaleBar->setZValue(2000.0);
+    m_scaleBar->setZValue(ScaleBarZValue);
     m_scaleBar->setVisible(false);
 
     updateScaleBarScale();
@@ -139,23 +148,27 @@ void cwCaptureViewport::capture()
             delete PreviewItem;
             PreviewItem = nullptr;
             CenterlineItem = nullptr;
+            LeadsItem = nullptr;
         }
         PreviewItem = new QGraphicsItemGroup();
         previewItemChanged();
 
         imageScale = 1.0;
         CenterlineItem = createCenterlineItem(PreviewItem, imageScale);
+        LeadsItem = createLeadsItem(PreviewItem, imageScale);
     } else {
         if(Item != NULL) {
             delete Item;
             Item = nullptr;
             CenterlineItem = nullptr;
+            LeadsItem = nullptr;
         }
         Item = new QGraphicsItemGroup();
         fullResolutionItemChanged();
 
         imageScale = ItemScale * resolution();
         CenterlineItem = createCenterlineItem(Item, imageScale);
+        LeadsItem = createLeadsItem(Item, imageScale);
     }
 
     //Updates the scale for the items
@@ -454,12 +467,14 @@ void cwCaptureViewport::deleteSceneItems()
         delete PreviewItem;
         PreviewItem = nullptr;
         CenterlineItem = nullptr;
+        LeadsItem = nullptr;
     }
 
     if(Item != nullptr) {
         delete Item;
         Item = nullptr;
         CenterlineItem = nullptr;
+        LeadsItem = nullptr;
     }
 
     delete m_scaleBar;
@@ -514,7 +529,7 @@ cwCaptureCenterline* cwCaptureViewport::createCenterlineItem(QGraphicsItemGroup*
     }
 
     auto* centerline = new cwCaptureCenterline();
-    centerline->setZValue(1500.0);
+    centerline->setZValue(CenterlineZValue);
     centerline->setCamera(CaptureCamera);
     centerline->setViewport(viewport());
     centerline->setImageScale(imageScale);
@@ -522,6 +537,28 @@ cwCaptureCenterline* cwCaptureViewport::createCenterlineItem(QGraphicsItemGroup*
 
     parent->addToGroup(centerline);
     return centerline;
+}
+
+cwCaptureLeads* cwCaptureViewport::createLeadsItem(QGraphicsItemGroup* parent, double imageScale) const
+{
+    if(parent == nullptr) {
+        return nullptr;
+    }
+
+    auto* leads = new cwCaptureLeads();
+    leads->setZValue(LeadsZValue);
+    leads->setCamera(CaptureCamera);
+    leads->setViewport(viewport());
+    leads->setImageScale(imageScale);
+
+    if(!m_sceneManager.isNull()) {
+        leads->setRegion(m_sceneManager->cavingRegion());
+    }
+
+    leads->setVisible(m_leadsVisible);
+
+    parent->addToGroup(leads);
+    return leads;
 }
 
 /**
@@ -736,6 +773,21 @@ void cwCaptureViewport::setScaleBarVisible(bool visible)
     m_scaleBar->setVisible(visible);
 
     emit scaleBarVisibleChanged();
+}
+
+void cwCaptureViewport::setLeadsVisible(bool visible)
+{
+    if(m_leadsVisible == visible) {
+        return;
+    }
+
+    m_leadsVisible = visible;
+
+    if(LeadsItem != nullptr) {
+        LeadsItem->setVisible(visible);
+    }
+
+    emit leadsVisibleChanged();
 }
 
 void cwCaptureViewport::updateScaleBarScale()
