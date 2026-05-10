@@ -57,6 +57,7 @@ public:
     static bool isGeographic(const QString& cs);
     static QString utmZoneToEpsg(int zone, bool north);
     static QVariantMap parseCSMode(const QString& cs);
+    static QString nameFor(const QString& cs);
 
     /**
      * Set the directories PROJ searches for proj.db and grid-shift files.
@@ -134,6 +135,12 @@ public:
     Q_INVOKABLE static QString modeFor(const QString& cs);
     Q_INVOKABLE static int     utmZoneFor(const QString& cs);
     Q_INVOKABLE static bool    utmNorthFor(const QString& cs);
+
+    /**
+     * Human-readable description for a CS (e.g. "OSGB36 / British National
+     * Grid" for "EPSG:27700"). Returns "" for empty/invalid strings.
+     */
+    Q_INVOKABLE static QString nameFor(const QString& cs);
 };
 
 #endif // CWCOORDINATETRANSFORM_H

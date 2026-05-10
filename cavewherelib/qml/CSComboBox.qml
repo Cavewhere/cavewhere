@@ -19,6 +19,13 @@ QQ.Item {
     property bool allowGeographic: true
 
     readonly property string currentMode: CoordinateSystem.modeFor(rootId.value)
+    readonly property string resolvedDescription: {
+        if (rootId.currentMode !== "custom") {
+            return rootId.value
+        }
+        const name = CoordinateSystem.nameFor(rootId.value)
+        return name.length > 0 ? rootId.value + " — " + name : rootId.value
+    }
 
     signal committed(string newCS)
 
@@ -126,10 +133,11 @@ QQ.Item {
             objectName: "csResolvedLabel"
             visible: rootId.currentMode === "custom"
                      || rootId.currentMode === "utm"
-            text: rootId.value
+            text: rootId.resolvedDescription
             color: Theme.textSubtle
             font.family: Theme.fontFamilyMono
             elide: QC.Label.ElideRight
+            Layout.fillWidth: true
         }
     }
 

@@ -8,6 +8,7 @@
 #include "cwCoordinateTransform.h"
 
 //Qt includes
+#include <QHash>
 #include <QRegularExpression>
 
 //PROJ includes
@@ -310,6 +311,41 @@ QVariantMap cwCoordinateTransform::parseCSMode(const QString& cs)
     return result;
 }
 
+QString cwCoordinateTransform::nameFor(const QString& cs)
+{
+    const QString key = cs.trimmed();
+    if (key.isEmpty()) {
+        return QString();
+    }
+
+    // Per-thread cache: QML label bindings hit the same CS string repeatedly
+    // (one cache entry covers every fix-station row using the same projection),
+    // and proj_create is non-trivial — sqlite query + CRS construction. Pairs
+    // with the thread_local validatorContext() above; no mutex needed.
+    thread_local QHash<QString, QString> cache;
+    auto it = cache.constFind(key);
+    if (it != cache.constEnd()) {
+        return *it;
+    }
+
+    PJ_CONTEXT* ctx = validatorContext();
+    if (!ctx) {
+        return QString();
+    }
+
+    PJ* p = proj_create(ctx, key.toUtf8().constData());
+    if (!p) {
+        cache.insert(key, QString());
+        return QString();
+    }
+
+    const char* name = proj_get_name(p);
+    QString result = name ? QString::fromUtf8(name) : QString();
+    proj_destroy(p);
+    cache.insert(key, result);
+    return result;
+}
+
 // ---- cwCoordinateSystem (QML singleton facade) ----
 
 bool cwCoordinateSystem::isValidCS(const QString& cs)
@@ -352,4 +388,9 @@ bool cwCoordinateSystem::utmNorthFor(const QString& cs)
 {
     const QVariantMap m = cwCoordinateTransform::parseCSMode(cs);
     return m.value(QStringLiteral("utmNorth"), true).toBool();
+}
+
+QString cwCoordinateSystem::nameFor(const QString& cs)
+{
+    return cwCoordinateTransform::nameFor(cs);
 }

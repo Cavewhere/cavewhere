@@ -224,6 +224,28 @@ TEST_CASE("cwCoordinateTransform::utmZoneToEpsg builds WGS84 UTM codes",
     CHECK(cwCoordinateTransform::utmZoneToEpsg(-5, false).isEmpty());
 }
 
+TEST_CASE("cwCoordinateTransform::nameFor returns the human-readable description",
+          "[cwCoordinateTransform][nameFor]")
+{
+    // Empty / invalid inputs return empty.
+    CHECK(cwCoordinateTransform::nameFor("").isEmpty());
+    CHECK(cwCoordinateTransform::nameFor("NOT_A_CRS").isEmpty());
+
+    // Known EPSG codes return non-empty strings containing recognizable
+    // tokens. We don't hard-code the exact name string because PROJ's
+    // labels can differ slightly across versions.
+    const QString utmName = cwCoordinateTransform::nameFor("EPSG:32616");
+    INFO("UTM name: " << utmName.toStdString());
+    CHECK_FALSE(utmName.isEmpty());
+    CHECK(utmName.contains("UTM", Qt::CaseInsensitive));
+    CHECK(utmName.contains("16"));
+
+    const QString osgbName = cwCoordinateTransform::nameFor("EPSG:27700");
+    INFO("OSGB name: " << osgbName.toStdString());
+    CHECK_FALSE(osgbName.isEmpty());
+    CHECK(osgbName.contains("British", Qt::CaseInsensitive));
+}
+
 TEST_CASE("cwCoordinateTransform::parseCSMode classifies CS strings",
           "[cwCoordinateTransform][parseCSMode]")
 {
