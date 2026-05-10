@@ -78,10 +78,7 @@ StandardPage {
                     objectName: "recenterWorldOriginAction"
                     text: qsTr("Recenter world origin")
                     enabled: RootData.region.globalCS !== ""
-                    onTriggered: {
-                        // PR 5 wires this to cwCavingRegion::recomputeWorldOrigin().
-                        console.log("Recenter world origin: not yet implemented")
-                    }
+                    onTriggered: RootData.region.recomputeWorldOrigin()
                 }
             }
         }

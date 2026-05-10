@@ -84,6 +84,10 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     // line plot needs to re-run when the user changes the region's CS.
     connect(Region, &cwCavingRegion::globalCSChanged, this, &cwLinePlotManager::runSurvex);
 
+    // worldOrigin is subtracted by cwLinePlotTask::applyWorldOriginOffset, so
+    // the line plot must re-solve when it changes (auto-compute or manual recenter).
+    connect(Region, &cwCavingRegion::worldOriginChanged, this, &cwLinePlotManager::runSurvex);
+
     SurveySignaler->setRegion(Region);
 
     // Hook fix-station edits on every existing cave, plus any future caves.
@@ -374,6 +378,16 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     emit stationPositionInCavesChanged(results.caveData().keys());
     emit stationPositionInTripsChanged(cw::toList(results.trips()));
     emit stationPositionInScrapsChanged(cw::toList(results.scraps()));
+
+    // First-time auto-compute of worldOrigin: when it's still the (0,0,0)
+    // sentinel and we now have at least one valid fix, recenter the scene.
+    // recomputeWorldOrigin() is a no-op when no candidates exist, and the
+    // resulting setWorldOrigin() emits worldOriginChanged → re-runs survex
+    // so the lookup positions land in offset-relative coords. Sticky after:
+    // once worldOrigin is non-zero, this branch never fires again.
+    if (Region->worldOrigin() == cwGeoPoint{}) {
+        Region->recomputeWorldOrigin();
+    }
 }
 
 

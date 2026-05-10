@@ -60,6 +60,8 @@ public:
     cwGeoPoint worldOrigin() const { return m_worldOrigin; }
     void setWorldOrigin(const cwGeoPoint& origin);
 
+    Q_INVOKABLE void recomputeWorldOrigin();
+
     bool hasCaves() const;
     Q_INVOKABLE int caveCount() const;
     Q_INVOKABLE cwCave* cave(int index) const;

@@ -1832,9 +1832,6 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
         if (!region->globalCS().isEmpty()) {
             cwProtoUtils::saveString(protoMetadata->mutable_globalcs(), region->globalCS());
         }
-        if (region->worldOrigin() != cwGeoPoint{}) {
-            cwProtoUtils::saveDoubleVector3d(protoMetadata->mutable_worldorigin(), region->worldOrigin());
-        }
     }
 
     return protoProject;
@@ -2877,9 +2874,6 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
             if (metadataProto.has_globalcs()) {
                 loadData.region.globalCS = QString::fromStdString(metadataProto.globalcs());
             }
-            if (metadataProto.has_worldorigin()) {
-                loadData.region.worldOrigin = cwProtoUtils::fromProtoDoubleVector3d(metadataProto.worldorigin());
-            }
         }
 
         if (loadData.metadata.dataRoot.isEmpty()) {
@@ -3373,15 +3367,16 @@ void cwSaveLoad::connectTreeModel()
             saveProject(projectRootDir(), region);
         });
 
-        // globalCS / worldOrigin live in the project metadata file. Without
-        // these handlers the save pipeline wouldn't see the change, so the
-        // dirty bit (and any autosave keyed off it) wouldn't fire and the
-        // edit could be dropped on close.
+        // globalCS lives in the project metadata file. Without this handler
+        // the save pipeline wouldn't see the change, so the dirty bit (and
+        // any autosave keyed off it) wouldn't fire and the edit could be
+        // dropped on close. worldOrigin is intentionally not persisted —
+        // it's a derived centroid of fix-station coords, recomputed on the
+        // first line-plot completion of each session.
         const auto saveMetadata = [this, region]() {
             saveProject(projectRootDir(), region);
         };
         connect(region, &cwCavingRegion::globalCSChanged, this, saveMetadata);
-        connect(region, &cwCavingRegion::worldOriginChanged, this, saveMetadata);
     }
 }
 

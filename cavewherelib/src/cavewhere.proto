@@ -21,11 +21,9 @@ message FileVersion {
 message ProjectMetadata {
     optional string dataRoot = 1;
     reserved 2; // Removed: GitMode enum (only ManagedNew was ever used)
+    reserved 5; // Removed: worldOrigin (derived from fix-station centroid; recomputed on load)
     optional bool syncEnabled = 3;
     optional string globalCS = 4;
-    // Doubles, not QtProto.QVector3D (which is float): worldOrigin is in
-    // projected CS units (e.g. UTM easting ~5e5) where float loses cm-scale.
-    optional DoubleVector3d worldOrigin = 5;
 }
 
 message Project {

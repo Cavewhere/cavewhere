@@ -111,17 +111,18 @@ TEST_CASE("cwFixStationModel setFixStations replaces contents", "[FixStation][cw
     CHECK(model.fixStationAt(1).stationName() == QStringLiteral("Y"));
 }
 
-TEST_CASE("cwFixStations and globalCS/worldOrigin survive a project save/load",
+TEST_CASE("cwFixStations and globalCS survive a project save/load",
           "[FixStation][cwSaveLoad]") {
     // Build a project with two caves: one with two fixes, one with none.
-    // Set globalCS + worldOrigin on the region. Save to a temp dir, reload into
-    // a fresh project, and verify everything came back intact.
+    // Set globalCS on the region. Save to a temp dir, reload into a fresh
+    // project, and verify everything came back intact. worldOrigin is not
+    // persisted — it's a derived centroid recomputed on the first
+    // line-plot completion of each session.
     auto creatorRoot = std::make_unique<cwRootData>();
     auto creatorProject = creatorRoot->project();
     auto creatorRegion = creatorProject->cavingRegion();
 
     creatorRegion->setGlobalCS(QStringLiteral("EPSG:32612"));
-    creatorRegion->setWorldOrigin(cwGeoPoint(500000.0, 4194000.0, 2700.0));
 
     creatorRegion->addCave();
     auto fixedCave = creatorRegion->cave(0);
@@ -176,10 +177,6 @@ TEST_CASE("cwFixStations and globalCS/worldOrigin survive a project save/load",
     REQUIRE(loadedRegion != nullptr);
 
     CHECK(loadedRegion->globalCS() == QStringLiteral("EPSG:32612"));
-    const cwGeoPoint loadedOrigin = loadedRegion->worldOrigin();
-    CHECK(loadedOrigin.x == 500000.0);
-    CHECK(loadedOrigin.y == 4194000.0);
-    CHECK(loadedOrigin.z == 2700.0);
 
     REQUIRE(loadedRegion->caveCount() == 2);
 
@@ -219,14 +216,13 @@ TEST_CASE("cwFixStations and globalCS/worldOrigin survive a project save/load",
     CHECK(loadedUnfixed->fixStations()->count() == 0);
 }
 
-TEST_CASE("Changing globalCS or worldOrigin marks the project modified",
+TEST_CASE("Changing globalCS marks the project modified",
           "[FixStation][cwSaveLoad][globalCS]") {
     // Regression: cwSaveLoad::connectObjects() wires cave / trip / note /
-    // sketch signals but does not listen to cwCavingRegion::globalCSChanged
-    // or worldOriginChanged. Without that, editing the region CS in an open
-    // project leaves cwProject::modified() == false, so an autosave / commit
-    // pipeline keyed off the dirty bit never runs and the change can be
-    // dropped on close.
+    // sketch signals but does not listen to cwCavingRegion::globalCSChanged.
+    // Without that, editing the region CS in an open project leaves
+    // cwProject::modified() == false, so an autosave / commit pipeline keyed
+    // off the dirty bit never runs and the change can be dropped on close.
     //
     // Standalone cwProject (no cwRootData) so subsystems like
     // cwLinePlotManager don't trigger spurious auto-saves that would dirty
@@ -255,15 +251,8 @@ TEST_CASE("Changing globalCS or worldOrigin marks the project modified",
 
     REQUIRE(isProjectModified(project.get()) == false);
 
-    SECTION("setGlobalCS marks modified") {
-        region->setGlobalCS(QStringLiteral("EPSG:32612"));
-        CHECK(isProjectModified(project.get()));
-    }
-
-    SECTION("setWorldOrigin marks modified") {
-        region->setWorldOrigin(cwGeoPoint(500000.0, 4194000.0, 2700.0));
-        CHECK(isProjectModified(project.get()));
-    }
+    region->setGlobalCS(QStringLiteral("EPSG:32612"));
+    CHECK(isProjectModified(project.get()));
 }
 
 TEST_CASE("cwFixStation proto round-trip preserves all fields", "[FixStation][proto]") {

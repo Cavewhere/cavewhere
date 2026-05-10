@@ -8,7 +8,10 @@
 //Our includes
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwCoordinateTransform.h"
 #include "cwDebug.h"
+#include "cwFixStation.h"
+#include "cwFixStationModel.h"
 #include "cwProject.h"
 #include "cwData.h"
 #include "cwNameUtils.h"
@@ -265,6 +268,9 @@ void cwCavingRegion::setGlobalCS(const QString& cs)
         return;
     }
     m_globalCS = cs;
+    // The stored worldOrigin was computed in the old CS, so reset it.
+    // The next line-plot completion will auto-recompute against the new CS.
+    setWorldOrigin(cwGeoPoint{});
     emit globalCSChanged();
 }
 
@@ -275,6 +281,53 @@ void cwCavingRegion::setWorldOrigin(const cwGeoPoint& origin)
     }
     m_worldOrigin = origin;
     emit worldOriginChanged();
+}
+
+void cwCavingRegion::recomputeWorldOrigin()
+{
+    const QString globalCSTrimmed = m_globalCS.trimmed();
+
+    QList<cwGeoPoint> candidates;
+    for (cwCave* cave : m_caves) {
+        if (cave == nullptr || cave->fixStations() == nullptr) {
+            continue;
+        }
+        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
+            QString inputCS = fix.inputCS().trimmed();
+            if (inputCS.isEmpty()) {
+                inputCS = globalCSTrimmed;
+            }
+            if (inputCS.isEmpty() || !cwCoordinateTransform::isValidCS(inputCS)) {
+                continue;
+            }
+
+            const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
+
+            if (globalCSTrimmed.isEmpty()
+                || inputCS.compare(globalCSTrimmed, Qt::CaseInsensitive) == 0) {
+                candidates.append(p);
+            } else {
+                cwCoordinateTransform t(inputCS, globalCSTrimmed);
+                if (!t.isValid()) {
+                    continue;
+                }
+                candidates.append(t.transform(p));
+            }
+        }
+    }
+
+    if (candidates.isEmpty()) {
+        return;
+    }
+
+    cwGeoPoint sum;
+    for (const auto& p : candidates) {
+        sum.x += p.x;
+        sum.y += p.y;
+        sum.z += p.z;
+    }
+    const double n = double(candidates.size());
+    setWorldOrigin(cwGeoPoint{sum.x / n, sum.y / n, sum.z / n});
 }
 
 void cwCavingRegion::setData(const cwCavingRegionData &data)
