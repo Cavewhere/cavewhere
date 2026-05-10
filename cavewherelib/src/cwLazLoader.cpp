@@ -14,6 +14,7 @@
 
 //Std includes
 #include <cstring>
+#include <limits>
 
 //Our includes
 #include "cwConcurrent.h"
@@ -78,76 +79,74 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
                                          ? qsizetype(totalPoints)
                                          : std::min(qsizetype(totalPoints), maxPoints);
 
-            // cwGeometry's vertex count is int-typed; clamp before allocation
-            // so a corrupt or 4-billion-point header can't cause UB or a near-
-            // unbounded allocation. (LAS 1.4 supports U64 npoints.)
-            if (effectiveMax > qsizetype(std::numeric_limits<int>::max())) {
-                qWarning() << "cwLazLoader: file" << path
-                           << "reports" << totalPoints
-                           << "points; clamping to INT_MAX";
-                effectiveMax = std::numeric_limits<int>::max();
-            }
-
-            promise.setProgressRange(0, int(effectiveMax > 0 ? effectiveMax : 1));
+            // QProgressRange takes int. Clamp the *progress reporting* (not
+            // the load itself) to INT_MAX — for files larger than that the
+            // bar just looks "stuck" near full but the load still completes.
+            const int progressMax = effectiveMax > qsizetype(std::numeric_limits<int>::max())
+                                        ? std::numeric_limits<int>::max()
+                                        : int(effectiveMax > 0 ? effectiveMax : 1);
+            promise.setProgressRange(0, progressMax);
             promise.setProgressValue(0);
 
             // Reserve once — vertexData is contiguous, incremental grows would
             // copy ~12 * N bytes on each resize.
-            result.geometry.resizeVertices(int(effectiveMax));
+            result.geometry.resizeVertices(effectiveMax);
 
             const cwGeometry::VertexAttribute* positionAttribute =
                 result.geometry.attribute(cwGeometry::Semantic::Position);
             Q_ASSERT(positionAttribute);
             // Single Vec3 Position attribute → stride == sizeof(QVector3D), so
-            // the vertex buffer is a packed array of QVector3D and we can
-            // memcpy chunks directly.
+            // the vertex buffer is a packed array of QVector3D and we write
+            // converted points directly into it (no intermediate buffer).
             Q_ASSERT(result.geometry.vertexStride() == int(sizeof(QVector3D)));
             Q_ASSERT(positionAttribute->byteOffset == 0);
 
             constexpr int chunkSize = 64 * 1024;
             QVector<cwGeoPoint> sourceChunk;
-            QVector<QVector3D> destChunk;
             sourceChunk.reserve(chunkSize);
-            destChunk.reserve(chunkSize);
+
+            QVector3D* const dstBase = reinterpret_cast<QVector3D*>(
+                result.geometry.vertexDataMutable().data());
+            const bool hasTransform = !transform.isIdentity();
 
             qsizetype written = 0;
-            int progressMark = 0;
-            float minX = 0, minY = 0, minZ = 0, maxX = 0, maxY = 0, maxZ = 0;
+            qsizetype progressMark = 0;
+            // Sentinel init — first real point pulls them in, no per-point
+            // "is this the first?" branch needed in the inner loop.
+            float minX = std::numeric_limits<float>::infinity();
+            float minY = std::numeric_limits<float>::infinity();
+            float minZ = std::numeric_limits<float>::infinity();
+            float maxX = -std::numeric_limits<float>::infinity();
+            float maxY = -std::numeric_limits<float>::infinity();
+            float maxZ = -std::numeric_limits<float>::infinity();
 
             const auto flushChunk = [&]() {
                 if (sourceChunk.isEmpty()) {
                     return;
                 }
-                if (!transform.isIdentity()) {
+                if (hasTransform) {
                     transform.transformInPlace(sourceChunk.data(), sourceChunk.size());
                 }
-                destChunk.resize(sourceChunk.size());
+                QVector3D* dst = dstBase + written;
                 for (int i = 0; i < sourceChunk.size(); ++i) {
                     const QVector3D v = sourceChunk[i].toVector3D(worldOrigin);
-                    destChunk[i] = v;
+                    dst[i] = v;
 
-                    if (written == 0 && i == 0) {
-                        minX = maxX = v.x();
-                        minY = maxY = v.y();
-                        minZ = maxZ = v.z();
-                    } else {
-                        if (v.x() < minX) minX = v.x();
-                        if (v.y() < minY) minY = v.y();
-                        if (v.z() < minZ) minZ = v.z();
-                        if (v.x() > maxX) maxX = v.x();
-                        if (v.y() > maxY) maxY = v.y();
-                        if (v.z() > maxZ) maxZ = v.z();
-                    }
+                    if (v.x() < minX) minX = v.x();
+                    if (v.y() < minY) minY = v.y();
+                    if (v.z() < minZ) minZ = v.z();
+                    if (v.x() > maxX) maxX = v.x();
+                    if (v.y() > maxY) maxY = v.y();
+                    if (v.z() > maxZ) maxZ = v.z();
                 }
-
-                std::memcpy(result.geometry.vertexDataMutable().data()
-                                + written * sizeof(QVector3D),
-                            destChunk.constData(),
-                            destChunk.size() * sizeof(QVector3D));
 
                 written += sourceChunk.size();
                 sourceChunk.clear();
-                destChunk.clear();
+            };
+
+            const auto reportProgress = [&]() {
+                const qsizetype scaled = std::min<qsizetype>(written, progressMax);
+                promise.setProgressValue(int(scaled));
             };
 
             while (written + qsizetype(sourceChunk.size()) < effectiveMax
@@ -162,16 +161,16 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
 
                 if (sourceChunk.size() >= chunkSize) {
                     flushChunk();
-                    if (int(written) - progressMark > chunkSize) {
-                        promise.setProgressValue(int(written));
-                        progressMark = int(written);
+                    if (written - progressMark > chunkSize) {
+                        reportProgress();
+                        progressMark = written;
                     }
                 }
             }
             flushChunk();
 
             if (written < effectiveMax) {
-                result.geometry.resizeVertices(int(written));
+                result.geometry.resizeVertices(written);
             }
 
             if (written > 0) {
@@ -179,7 +178,7 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
                 result.bboxMax = QVector3D(maxX, maxY, maxZ);
             }
 
-            promise.setProgressValue(int(written));
+            reportProgress();
 
             reader->close();
             delete reader;

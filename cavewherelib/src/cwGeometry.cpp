@@ -16,10 +16,10 @@ const cwGeometry::VertexAttribute *cwGeometry::attribute(Semantic semantic) cons
 
 void cwGeometry::dump() const
 {
-    const int vtxCount   = vertexCount();
-    const int attrCount  = m_attributes.size();
-    const int idxCount   = m_indices.size();
-    const int vtxBytes   = m_vertexData.size();
+    const qsizetype vtxCount   = vertexCount();
+    const int attrCount        = m_attributes.size();
+    const qsizetype idxCount   = m_indices.size();
+    const qsizetype vtxBytes   = m_vertexData.size();
 
     qDebug().noquote()
         << "cwGeometry dump:"

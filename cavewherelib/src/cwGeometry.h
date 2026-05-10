@@ -124,18 +124,19 @@ public:
     }
 
     // ----- Sizing -----
-    void resizeVertices(int vertexCount) {
+    // qsizetype: int byte-arithmetic overflows around 179M Vec3 vertices.
+    void resizeVertices(qsizetype vertexCount) {
         if (m_vertexStride <= 0) {
             return;
         }
-        m_vertexData.resize(vertexCount * m_vertexStride);
+        m_vertexData.resize(vertexCount * qsizetype(m_vertexStride));
     }
 
-    int vertexCount() const {
+    qsizetype vertexCount() const {
         if (m_vertexStride <= 0) {
             return 0;
         }
-        return m_vertexData.size() / m_vertexStride;
+        return m_vertexData.size() / qsizetype(m_vertexStride);
     }
 
     void clearVertexData() {
@@ -202,11 +203,11 @@ public:
             return false;
         }
 
-        const int count = values.size();
+        const qsizetype count = values.size();
         ensureVertexCapacityForCount(count);
         resizeVertices(count);
 
-        for (int i = 0; i < count; ++i) {
+        for (qsizetype i = 0; i < count; ++i) {
             if (!set(attribute, i, values[i])) {
                 return false;
             }
@@ -216,7 +217,7 @@ public:
 
     // Per element set: T is one of float, QVector2D, QVector3D, QVector4D
     template <typename T>
-    bool set(Semantic semantic, int vertexIndex, const T& value) {
+    bool set(Semantic semantic, qsizetype vertexIndex, const T& value) {
         const VertexAttribute* attribute = this->attribute(semantic);
         if (attribute == nullptr) {
             return false;
@@ -226,7 +227,7 @@ public:
 
     // Per element set: T is one of float, QVector2D, QVector3D, QVector4D
     template <typename T>
-    bool set(const VertexAttribute* attribute, int vertexIndex, const T& value) {
+    bool set(const VertexAttribute* attribute, qsizetype vertexIndex, const T& value) {
         Q_ASSERT(attribute);
 
         static_assert(
@@ -250,7 +251,7 @@ public:
     }
 
     template <typename T>
-    T value(Semantic semantic, int vertexIndex) const {
+    T value(Semantic semantic, qsizetype vertexIndex) const {
         static_assert(
             std::is_same<T, float>::value ||
                 std::is_same<T, QVector2D>::value ||
@@ -268,7 +269,7 @@ public:
     }
 
     template <typename T>
-    T value(const VertexAttribute* attribute, int vertexIndex) const {
+    T value(const VertexAttribute* attribute, qsizetype vertexIndex) const {
         Q_ASSERT(attribute);
 
         static_assert(
@@ -314,7 +315,7 @@ public:
         QVector<T> result;
         result.reserve(vertexCount());
 
-        for (int i = 0; i < vertexCount(); ++i) {
+        for (qsizetype i = 0; i < vertexCount(); ++i) {
             result.push_back(value<T>(attribute, i));
         }
 
@@ -416,33 +417,33 @@ private:
     }
 
     template<typename This>
-    auto elementPointerImp(This* thiz, int vertexIndex, const VertexAttribute& attribute) const {
+    auto elementPointerImp(This* thiz, qsizetype vertexIndex, const VertexAttribute& attribute) const {
         Q_ASSERT(thiz->m_vertexStride > 0);
         Q_ASSERT(vertexIndex >= 0);
         Q_ASSERT(vertexIndex < thiz->vertexCount());
 
         const qsizetype offset =
-            static_cast<qsizetype>(vertexIndex) * thiz->m_vertexStride + attribute.byteOffset;
+            vertexIndex * qsizetype(thiz->m_vertexStride) + qsizetype(attribute.byteOffset);
 
         Q_ASSERT(offset >= 0);
-        Q_ASSERT(offset + static_cast<qsizetype>(attribute.byteSize()) <= thiz->m_vertexData.size());
+        Q_ASSERT(offset + qsizetype(attribute.byteSize()) <= thiz->m_vertexData.size());
 
         return thiz->m_vertexData.data() + offset;
     }
 
-    char* elementPointer(int vertexIndex, const VertexAttribute& attribute) {
+    char* elementPointer(qsizetype vertexIndex, const VertexAttribute& attribute) {
         return elementPointerImp(this, vertexIndex, attribute);
     }
 
-    const char* elementPointer(int vertexIndex, const VertexAttribute& attribute) const {
-        return elementPointerImp(this ,vertexIndex, attribute);
+    const char* elementPointer(qsizetype vertexIndex, const VertexAttribute& attribute) const {
+        return elementPointerImp(this, vertexIndex, attribute);
     }
 
-    void ensureVertexCapacityForCount(int count) {
+    void ensureVertexCapacityForCount(qsizetype count) {
         if (m_vertexStride <= 0) {
             return;
         }
-        const int required = count * m_vertexStride;
+        const qsizetype required = count * qsizetype(m_vertexStride);
         if (m_vertexData.size() < required) {
             m_vertexData.resize(required);
         }
