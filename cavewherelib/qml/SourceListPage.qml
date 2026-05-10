@@ -1,10 +1,7 @@
 import QtQuick
 import QtQuick.Controls as QC
 import QtQuick.Layouts
-import QtQuick.Dialogs
-import QtCore
 import cavewherelib
-import QQuickGit
 
 StandardPage {
     id: pageId
@@ -40,9 +37,14 @@ StandardPage {
                     objectName: "addMenuNew"
                     text: "New Project"
                     onTriggered: {
-                        whereDialogId.repositoryName = ""
-                        whereDialogId.description = ""
-                        whereDialogId.open()
+                        function newProject() {
+                            RootData.newProject();
+                            RootData.pageSelectionModel.gotoPageByName(null, "View");
+                        }
+
+                        pageId.askToSaveDialog.taskName = "creating a new project"
+                        pageId.askToSaveDialog.afterSaveFunc = newProject
+                        pageId.askToSaveDialog.askToSave()
                     }
                 }
 
@@ -168,11 +170,6 @@ StandardPage {
             visible: listViewId.count === 0
             text: qsTr("No caving areas created or opened yet.")
         }
-    }
-
-    SourceLocationDialog {
-        id: whereDialogId
-        anchors.fill: parent
     }
 
     LoadProjectDialog {
