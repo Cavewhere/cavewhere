@@ -68,20 +68,12 @@ public:
      */
     static void setProjSearchPaths(const QStringList& paths);
 
-    /**
-     * Internal: create a fresh PJ_CONTEXT with the configured search paths
-     * applied. Caller owns the returned pointer and must
-     * proj_context_destroy() it. Used by cwCRSSearchModel and other
-     * sibling helpers that need direct PROJ access.
-     */
-    static void* createProjContext();
-
 private:
-    // Pimpl: hides <proj.h> from the public include path so the test
-    // executable (and other consumers that link cavewherelib but don't
-    // see PROJ::proj's include dirs) doesn't need to find proj.h.
-    struct Private;
-    std::unique_ptr<Private> m_d;
+    // Pimpl hides <proj.h> from the public include path so consumers that
+    // link cavewherelib but don't see PROJ::proj's include dirs (e.g. the
+    // test executable) don't need to find proj.h. Sibling .cpp files that
+    // do need PROJ types include cwCoordinateTransformPrivate.h.
+    std::unique_ptr<class cwCoordinateTransformPrivate> m_d;
 };
 
 /**

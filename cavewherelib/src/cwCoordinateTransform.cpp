@@ -6,34 +6,14 @@
 **************************************************************************/
 
 #include "cwCoordinateTransform.h"
+#include "cwCoordinateTransformPrivate.h"
 
 //Qt includes
 #include <QHash>
 #include <QRegularExpression>
 
-//PROJ includes
-#include <proj.h>
-
 //Std includes
 #include <vector>
-
-struct cwCoordinateTransform::Private
-{
-    PJ_CONTEXT* ctx = nullptr;
-    PJ*         pj  = nullptr;
-    bool        identity = false;
-    QString     error;
-
-    ~Private()
-    {
-        if (pj) {
-            proj_destroy(pj);
-        }
-        if (ctx) {
-            proj_context_destroy(ctx);
-        }
-    }
-};
 
 namespace {
     QStringList g_projSearchPaths;
@@ -42,29 +22,38 @@ namespace {
     {
         return a.trimmed().compare(b.trimmed(), Qt::CaseInsensitive) == 0;
     }
+}
 
-    // Build a fresh PJ_CONTEXT with the configured search paths applied.
+cwCoordinateTransformPrivate::~cwCoordinateTransformPrivate()
+{
+    if (pj) {
+        proj_destroy(pj);
+    }
+    if (ctx) {
+        proj_context_destroy(ctx);
+    }
+}
+
+PJ_CONTEXT* cwCoordinateTransformPrivate::createContext()
+{
     // PROJ contexts don't inherit search paths from the global default, so
     // we set them explicitly on every context we create.
-    PJ_CONTEXT* makeContextWithPaths()
-    {
-        PJ_CONTEXT* ctx = proj_context_create();
-        if (!ctx) {
-            return nullptr;
-        }
-        if (!g_projSearchPaths.isEmpty()) {
-            std::vector<QByteArray> utf8;
-            utf8.reserve(g_projSearchPaths.size());
-            std::vector<const char*> raw;
-            raw.reserve(g_projSearchPaths.size());
-            for (const QString& p : g_projSearchPaths) {
-                utf8.push_back(p.toUtf8());
-                raw.push_back(utf8.back().constData());
-            }
-            proj_context_set_search_paths(ctx, static_cast<int>(raw.size()), raw.data());
-        }
-        return ctx;
+    PJ_CONTEXT* ctx = proj_context_create();
+    if (!ctx) {
+        return nullptr;
     }
+    if (!g_projSearchPaths.isEmpty()) {
+        std::vector<QByteArray> utf8;
+        utf8.reserve(g_projSearchPaths.size());
+        std::vector<const char*> raw;
+        raw.reserve(g_projSearchPaths.size());
+        for (const QString& p : g_projSearchPaths) {
+            utf8.push_back(p.toUtf8());
+            raw.push_back(utf8.back().constData());
+        }
+        proj_context_set_search_paths(ctx, static_cast<int>(raw.size()), raw.data());
+    }
+    return ctx;
 }
 
 void cwCoordinateTransform::setProjSearchPaths(const QStringList& paths)
@@ -72,13 +61,8 @@ void cwCoordinateTransform::setProjSearchPaths(const QStringList& paths)
     g_projSearchPaths = paths;
 }
 
-void* cwCoordinateTransform::createProjContext()
-{
-    return makeContextWithPaths();
-}
-
 cwCoordinateTransform::cwCoordinateTransform(const QString& srcCS, const QString& dstCS)
-    : m_d(std::make_unique<Private>())
+    : m_d(std::make_unique<cwCoordinateTransformPrivate>())
 {
     if (srcCS.isEmpty() || dstCS.isEmpty()) {
         m_d->error = QStringLiteral("Source or destination CS is empty");
@@ -90,7 +74,7 @@ cwCoordinateTransform::cwCoordinateTransform(const QString& srcCS, const QString
         return;
     }
 
-    m_d->ctx = makeContextWithPaths();
+    m_d->ctx = cwCoordinateTransformPrivate::createContext();
     if (!m_d->ctx) {
         m_d->error = QStringLiteral("Failed to create PROJ context");
         return;
@@ -217,7 +201,7 @@ namespace {
     {
         thread_local ValidatorContext tls;
         if (!tls.ctx) {
-            tls.ctx = makeContextWithPaths();
+            tls.ctx = cwCoordinateTransformPrivate::createContext();
         }
         return tls.ctx;
     }

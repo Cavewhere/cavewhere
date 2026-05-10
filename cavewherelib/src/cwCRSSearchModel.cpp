@@ -7,9 +7,7 @@
 
 #include "cwCRSSearchModel.h"
 #include "cwCoordinateTransform.h"
-
-//PROJ includes
-#include <proj.h>
+#include "cwCoordinateTransformPrivate.h"
 
 //Qt includes
 #include <QSet>
@@ -20,8 +18,7 @@ namespace {
         // Reuse a per-thread context with the cwCoordinateTransform-configured
         // search paths so proj.db is found wherever it's been deployed.
         thread_local struct Holder {
-            PJ_CONTEXT* ctx = static_cast<PJ_CONTEXT*>(
-                cwCoordinateTransform::createProjContext());
+            PJ_CONTEXT* ctx = cwCoordinateTransformPrivate::createContext();
             ~Holder() { if (ctx) { proj_context_destroy(ctx); } }
         } holder;
         return holder.ctx;
