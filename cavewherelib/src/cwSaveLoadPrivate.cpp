@@ -113,6 +113,160 @@ bool cwSaveLoadPrivate::fsRemoveDirRecursive(const QString& path)
 #endif
 }
 
+namespace {
+bool defaultRenameDirectory(const QString& src, const QString& dst)
+{
+    return QDir().rename(src, dst);
+}
+}
+
+cwSaveLoadPrivate::RenameDirectoryFn cwSaveLoadPrivate::renameDirectoryFn = &defaultRenameDirectory;
+
+Monad::ResultBase cwSaveLoadPrivate::copyDirectoryRecursively(const QDir& sourceDir,
+                                                              const QDir& destinationDir)
+{
+    if (!sourceDir.exists()) {
+        return Monad::ResultBase(QStringLiteral("Source directory '%1' does not exist.").arg(sourceDir.absolutePath()));
+    }
+
+    if (QFileInfo::exists(destinationDir.absolutePath())) {
+        return Monad::ResultBase(QStringLiteral("Destination '%1' already exists.").arg(destinationDir.absolutePath()));
+    }
+
+    if (!QDir().mkpath(destinationDir.absolutePath())) {
+        return Monad::ResultBase(QStringLiteral("Cannot create directory '%1'.").arg(destinationDir.absolutePath()));
+    }
+
+    const QFileInfoList entries = sourceDir.entryInfoList(QDir::NoDotAndDotDot
+                                                          | QDir::AllEntries
+                                                          | QDir::Hidden
+                                                          | QDir::System);
+    for (const QFileInfo& entry : entries) {
+        const QString targetPath = destinationDir.absoluteFilePath(entry.fileName());
+        // Refuse symlinks: entry.isDir() returns true for symlinks-to-dirs,
+        // so naive recursion would escape the source tree (e.g. a symlink
+        // pointing to '/' would copy the entire filesystem). Project
+        // directories aren't expected to contain symlinks.
+        if (entry.isSymLink()) {
+            return Monad::ResultBase(
+                QStringLiteral("Refusing to copy symlink '%1'.").arg(entry.absoluteFilePath()));
+        }
+        if (entry.isDir()) {
+            auto result = copyDirectoryRecursively(QDir(entry.absoluteFilePath()), QDir(targetPath));
+            if (result.hasError()) {
+                return result;
+            }
+        } else {
+            if (QFileInfo::exists(targetPath) && !QFile::remove(targetPath)) {
+                return Monad::ResultBase(QStringLiteral("Can't overwrite '%1'.").arg(targetPath));
+            }
+            if (!QFile::copy(entry.absoluteFilePath(), targetPath)) {
+                return Monad::ResultBase(QStringLiteral("Can't copy '%1' to '%2'.").arg(entry.absoluteFilePath(), targetPath));
+            }
+        }
+    }
+
+    return Monad::ResultBase();
+}
+
+Monad::ResultBase cwSaveLoadPrivate::validatePathSafeForRecursiveRemoval(const QString& path)
+{
+    if (path.isEmpty()) {
+        return Monad::ResultBase(QStringLiteral("path is empty"));
+    }
+
+    const QFileInfo info(path);
+    if (!info.isAbsolute()) {
+        return Monad::ResultBase(QStringLiteral("path is not absolute: '%1'").arg(path));
+    }
+
+    if (path.contains(QStringLiteral("/.."))
+        || path.contains(QStringLiteral("\\.."))) {
+        return Monad::ResultBase(QStringLiteral("path contains '..': '%1'").arg(path));
+    }
+
+    const QString cleaned = QDir::cleanPath(info.absoluteFilePath());
+    if (QDir(cleaned).isRoot()) {
+        return Monad::ResultBase(QStringLiteral("refusing to remove filesystem root: '%1'").arg(cleaned));
+    }
+
+    if (!info.exists()) {
+        return Monad::ResultBase(QStringLiteral("path does not exist: '%1'").arg(path));
+    }
+
+    if (!info.isDir()) {
+        return Monad::ResultBase(QStringLiteral("path is not a directory: '%1'").arg(path));
+    }
+
+    return Monad::ResultBase();
+}
+
+Monad::ResultBase cwSaveLoadPrivate::moveDirectoryRobust(const QString& sourcePath,
+                                                         const QString& destinationPath)
+{
+    // Reject obviously bad inputs up-front. We will eventually delete sourcePath
+    // (in the copy-fallback branch), so refuse anything that's empty, relative,
+    // or a filesystem root. This applies to both the rename and copy branches.
+    if (sourcePath.isEmpty() || destinationPath.isEmpty()) {
+        return Monad::ResultBase(QStringLiteral("Source or destination path is empty."));
+    }
+
+    const QString cleanSrc = QDir::cleanPath(QFileInfo(sourcePath).absoluteFilePath());
+    const QString cleanDst = QDir::cleanPath(QFileInfo(destinationPath).absoluteFilePath());
+
+    // Reject overlapping source and destination. If destination equals source
+    // or sits inside source, deleting the source after copy would also wipe
+    // the freshly-copied destination.
+    if (cleanDst == cleanSrc
+        || cleanDst.startsWith(cleanSrc + QStringLiteral("/"))) {
+        return Monad::ResultBase(
+            QStringLiteral("Destination '%1' is inside source '%2'; refusing to move.")
+                .arg(destinationPath, sourcePath));
+    }
+
+    // Fast path: same-filesystem rename.
+    if (renameDirectoryFn(sourcePath, destinationPath)) {
+        return Monad::ResultBase();
+    }
+
+    // Cross-filesystem (e.g. pcloud) — fall back to copy + recursive delete.
+    auto copyResult = copyDirectoryRecursively(QDir(sourcePath), QDir(destinationPath));
+    if (copyResult.hasError()) {
+        return copyResult;
+    }
+
+    // Pre-deletion safety checks. We do not want a misuse of this helper
+    // (empty path, root, non-existent dir, ...) to wipe a user's filesystem.
+    auto safety = validatePathSafeForRecursiveRemoval(sourcePath);
+    if (safety.hasError()) {
+        return Monad::ResultBase(
+            QStringLiteral("Saved to '%1' but refused to remove source: %2")
+                .arg(destinationPath, safety.errorMessage()),
+            Monad::ResultBase::Warning);
+    }
+
+    // Final sanity check before deleting: the copy reported success, so the
+    // destination must exist as a directory. If it doesn't, something is
+    // very wrong — bail without touching the source.
+    if (!QFileInfo(destinationPath).isDir()) {
+        return Monad::ResultBase(
+            QStringLiteral("Copy reported success but destination '%1' is not a directory; "
+                           "leaving source '%2' intact.")
+                .arg(destinationPath, sourcePath));
+    }
+
+    if (!fsRemoveDirRecursive(sourcePath)) {
+        // Destination is intact; only the source cleanup failed. Return a Warning
+        // so the message rides up through the result chain — hasError() is false
+        // for ResultBase::Warning, so callers don't treat it as a failure.
+        return Monad::ResultBase(
+            QStringLiteral("Saved to '%1' but couldn't remove temp source '%2'.")
+                .arg(destinationPath, sourcePath),
+            Monad::ResultBase::Warning);
+    }
+    return Monad::ResultBase();
+}
+
 // ============================================================================
 // Job static helpers and methods
 // ============================================================================

@@ -1043,44 +1043,6 @@ Result<ProjectDestination> projectDestination(const QString& destinationUrl)
     return Result<ProjectDestination>({sanitizedBaseName, rootDirPath, projectFilePath});
 }
 
-ResultBase copyDirectoryRecursively(const QDir& sourceDir, const QDir& destinationDir)
-{
-    if (!sourceDir.exists()) {
-        return ResultBase(QStringLiteral("Source directory '%1' does not exist.").arg(sourceDir.absolutePath()));
-    }
-
-    if (QFileInfo::exists(destinationDir.absolutePath())) {
-        return ResultBase(QStringLiteral("Destination '%1' already exists.").arg(destinationDir.absolutePath()));
-    }
-
-    if (!QDir().mkpath(destinationDir.absolutePath())) {
-        return ResultBase(QStringLiteral("Cannot create directory '%1'.").arg(destinationDir.absolutePath()));
-    }
-
-    const QFileInfoList entries = sourceDir.entryInfoList(QDir::NoDotAndDotDot
-                                                          | QDir::AllEntries
-                                                          | QDir::Hidden
-                                                          | QDir::System);
-    for (const QFileInfo& entry : entries) {
-        const QString targetPath = destinationDir.absoluteFilePath(entry.fileName());
-        if (entry.isDir()) {
-            auto result = copyDirectoryRecursively(QDir(entry.absoluteFilePath()), QDir(targetPath));
-            if (result.hasError()) {
-                return result;
-            }
-        } else {
-            if (QFileInfo::exists(targetPath) && !QFile::remove(targetPath)) {
-                return ResultBase(QStringLiteral("Can't overwrite '%1'.").arg(targetPath));
-            }
-            if (!QFile::copy(entry.absoluteFilePath(), targetPath)) {
-                return ResultBase(QStringLiteral("Can't copy '%1' to '%2'.").arg(entry.absoluteFilePath(), targetPath));
-            }
-        }
-    }
-
-    return ResultBase();
-}
-
 }
 
 ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, ProjectTransferMode mode)
@@ -1112,19 +1074,29 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
 
     waitForFinished();
 
+    // Captured non-fatal warning from the transfer step (e.g. copy succeeded
+    // but temp source cleanup failed on a cloud volume). Surfaced as the
+    // function's return value if the rest of transferProjectTo succeeds.
+    ResultBase transferWarning;
+
     if (!sameRoot) {
         if (mode == ProjectTransferMode::Move) {
-            if (!QDir().rename(currentRootPath, targetRootPath)) {
-                return ResultBase(QStringLiteral("Couldn't move project to '%1'.").arg(targetRootPath));
+            auto moveResult = cwSaveLoadPrivate::moveDirectoryRobust(currentRootPath, targetRootPath);
+            if (moveResult.hasError()) {
+                return moveResult;
             }
-            // Project root was moved out — remove the now-empty QTemporaryDir parent(s).
-            // waitForFinished() was called above, so no in-flight jobs.
+            if (!moveResult.errorMessage().isEmpty()) {
+                transferWarning = moveResult;
+            }
+            // Project root was moved out (or copied + source removed) — remove the
+            // now-empty QTemporaryDir parent(s). waitForFinished() was called above,
+            // so no in-flight jobs. fsRemoveDirRecursive handles both cases.
             for (const QString& dir : std::as_const(d->m_ownedTempDirs)) {
                 removeTemporaryProjectDir(dir);
             }
             d->m_ownedTempDirs.clear();
         } else if (mode == ProjectTransferMode::Copy) {
-            auto copyResult = copyDirectoryRecursively(QDir(currentRootPath), QDir(targetRootPath));
+            auto copyResult = cwSaveLoadPrivate::copyDirectoryRecursively(QDir(currentRootPath), QDir(targetRootPath));
             if (copyResult.hasError()) {
                 return copyResult;
             }
@@ -1170,6 +1142,9 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
         if (renameResult.hasError()) {
             return renameResult;
         }
+        if (transferWarning.errorMessage().isEmpty() && !renameResult.errorMessage().isEmpty()) {
+            transferWarning = renameResult;
+        }
     }
 
     setFileName(desiredFilePath);
@@ -1185,7 +1160,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     setSaveEnabled(true);
     enableGuard.dismiss();
 
-    return ResultBase();
+    return transferWarning;
 }
 
 Monad::ResultBase cwSaveLoad::renameDataRootOnDisk(const QDir& targetRootDir,
@@ -1207,13 +1182,16 @@ Monad::ResultBase cwSaveLoad::renameDataRootOnDisk(const QDir& targetRootDir,
         if (QFileInfo::exists(newDataRootPath)) {
             return ResultBase(QStringLiteral("Destination data root '%1' already exists.").arg(newDataRootPath));
         }
-        if (!QDir().rename(oldDataRootPath, newDataRootPath)) {
-            return ResultBase(QStringLiteral("Couldn't rename data root to '%1'.").arg(newDataRootPath));
+        auto moveResult = cwSaveLoadPrivate::moveDirectoryRobust(oldDataRootPath, newDataRootPath);
+        if (moveResult.hasError()) {
+            return moveResult;
         }
-    } else {
-        QDir(targetRootDir).mkpath(newDataRootName);
+        d->projectMetadata.dataRoot = newDataRootName;
+        emit dataRootChanged();
+        return moveResult;
     }
 
+    QDir(targetRootDir).mkpath(newDataRootName);
     d->projectMetadata.dataRoot = newDataRootName;
     emit dataRootChanged();
 
@@ -3221,12 +3199,7 @@ void cwSaveLoad::connectTreeModel()
                 if (!QFileInfo::exists(oldDataRootPath) || QFileInfo::exists(newDataRootPath)) {
                     return Monad::ResultBase();
                 }
-                if (!QDir().rename(oldDataRootPath, newDataRootPath)) {
-                    return Monad::ResultBase(
-                                QStringLiteral("Failed to rename dataRoot: %1 -> %2")
-                                .arg(oldDataRootPath, newDataRootPath));
-                }
-                return Monad::ResultBase();
+                return cwSaveLoadPrivate::moveDirectoryRobust(oldDataRootPath, newDataRootPath);
             }),
                         this);
 
@@ -3290,12 +3263,7 @@ void cwSaveLoad::enqueueProjectRenameJobs(const QString& oldDescriptorPath,
             }
             return Monad::ResultBase();
         }
-        if (!QDir().rename(oldDataRootPath, newDataRootPath)) {
-            return Monad::ResultBase(
-                        QStringLiteral("Failed to rename dataRoot: %1 -> %2")
-                        .arg(oldDataRootPath, newDataRootPath));
-        }
-        return Monad::ResultBase();
+        return cwSaveLoadPrivate::moveDirectoryRobust(oldDataRootPath, newDataRootPath);
     }),
                 this);
 

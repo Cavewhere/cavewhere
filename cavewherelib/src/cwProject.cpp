@@ -734,6 +734,12 @@ bool cwProject::saveAs(QString newFilename)
         return false;
     }
 
+    // Save succeeded; surface any non-fatal warnings (e.g. copy fallback
+    // succeeded but the temp source couldn't be removed on a cloud volume).
+    if (!result.errorMessage().isEmpty()) {
+        ErrorModel->append(cwError(result.errorMessage(), cwError::Warning));
+    }
+
     const QString baseName = QFileInfo(newFilename).completeBaseName();
     if (!baseName.isEmpty() && wasTemporary) {
         cavingRegion()->setName(baseName);
