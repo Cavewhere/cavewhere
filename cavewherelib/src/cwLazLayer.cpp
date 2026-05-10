@@ -9,10 +9,6 @@
 
 //Qt includes
 #include <QFileInfo>
-#include <QFutureWatcher>
-
-//AsyncFuture
-#include <asyncfuture.h>
 
 //Our includes
 #include "cwFuture.h"
@@ -26,18 +22,39 @@ constexpr const char* kLazLayerType = "LAZ Layer";
 cwLazLayer::cwLazLayer(QObject* parent) :
     QObject(parent),
     m_id(QUuid::createUuid()),
-    m_keywordModel(new cwKeywordModel(this))
+    m_keywordModel(new cwKeywordModel(this)),
+    m_loadRestarter(this)
 {
     updateTypeKeyword();
     updateIdKeyword();
+
+    // Each restart() begins a new load run; register that run with the global
+    // future manager and chain the result delivery onto it. Restarter cancels
+    // the previous future and waits for it to settle before this fires again,
+    // so we can never have two applyResult chains racing each other.
+    m_loadRestarter.onFutureChanged([this]() {
+        if (m_futureManagerToken.isValid()) {
+            m_futureManagerToken.addJob(cwFuture(
+                QFuture<void>(m_loadRestarter.future()),
+                QStringLiteral("Loading %1.laz").arg(m_name)));
+        }
+
+        AsyncFuture::observe(m_loadRestarter.future())
+            .context(this, [this]() {
+                QFuture<cwLazLoadResult> finished = m_loadRestarter.future();
+                if (finished.isCanceled() || finished.resultCount() == 0) {
+                    setErrorMessage(QStringLiteral("Load cancelled or failed: %1")
+                                        .arg(m_sourcePath));
+                    setLoadStatus(LoadStatus::Error);
+                    return;
+                }
+                cwLazLoadResult result = finished.result();
+                applyResult(std::move(result));
+            });
+    });
 }
 
-cwLazLayer::~cwLazLayer()
-{
-    // Per CLAUDE.md: cancel in-flight futures so the worker stops reading
-    // when the layer is destroyed.
-    m_loadFuture.cancel();
-}
+cwLazLayer::~cwLazLayer() = default;
 
 void cwLazLayer::setSourcePath(const QString& path)
 {
@@ -109,58 +126,17 @@ void cwLazLayer::reload()
         return;
     }
 
-    // Cancel any prior in-flight load so the supersede path is explicit, not
-    // just an epoch check that lets the old worker run to completion.
-    m_loadFuture.cancel();
-
     setErrorMessage(QString());
     setLoadStatus(LoadStatus::Loading);
-    m_loadProgress = 0.0;
-    emit loadProgressChanged();
 
-    const quint64 epoch = ++m_loadEpoch;
-
-    m_loadFuture = cwLazLoader::load({
-        .path = m_sourcePath,
-        .sourceCSOverride = m_sourceCSOverride,
-        .globalCS = m_regionGlobalCS,
-        .worldOrigin = m_regionWorldOrigin
+    m_loadRestarter.restart([this]() {
+        return cwLazLoader::load({
+            .path = m_sourcePath,
+            .sourceCSOverride = m_sourceCSOverride,
+            .globalCS = m_regionGlobalCS,
+            .worldOrigin = m_regionWorldOrigin
+        });
     });
-
-    if (m_futureManagerToken.isValid()) {
-        m_futureManagerToken.addJob(cwFuture(
-            QFuture<void>(m_loadFuture),
-            QStringLiteral("Loading %1.laz").arg(m_name)));
-    }
-
-    auto* watcher = new QFutureWatcher<cwLazLoadResult>(this);
-    connect(watcher, &QFutureWatcher<cwLazLoadResult>::progressValueChanged,
-            this, [this, epoch, watcher]() {
-        if (epoch != m_loadEpoch) return;
-        const int min = watcher->progressMinimum();
-        const int max = watcher->progressMaximum();
-        const int v = watcher->progressValue();
-        const double frac = (max > min) ? double(v - min) / double(max - min) : 0.0;
-        if (!qFuzzyCompare(m_loadProgress, frac)) {
-            m_loadProgress = frac;
-            emit loadProgressChanged();
-        }
-    });
-    connect(watcher, &QFutureWatcher<cwLazLoadResult>::finished,
-            this, [this, epoch, watcher]() {
-        watcher->deleteLater();
-        if (epoch != m_loadEpoch) {
-            return;
-        }
-        if (watcher->isCanceled() || watcher->future().resultCount() == 0) {
-            setErrorMessage(QStringLiteral("Load cancelled or failed: %1").arg(m_sourcePath));
-            setLoadStatus(LoadStatus::Error);
-            return;
-        }
-        cwLazLoadResult result = watcher->result();
-        applyResult(std::move(result));
-    });
-    watcher->setFuture(m_loadFuture);
 }
 
 void cwLazLayer::applyResult(cwLazLoadResult&& result)
@@ -176,9 +152,6 @@ void cwLazLayer::applyResult(cwLazLoadResult&& result)
 
     emit pointCountChanged();
     emit bboxChanged();
-
-    m_loadProgress = 1.0;
-    emit loadProgressChanged();
 
     if (m_geometry.vertexCount() == 0) {
         setErrorMessage(QStringLiteral("Could not read points from %1").arg(m_sourcePath));

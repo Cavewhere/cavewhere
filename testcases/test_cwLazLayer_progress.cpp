@@ -27,7 +27,6 @@ TEST_CASE("cwLazLayer: status transitions Idle → Loading → Loaded",
     REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Idle);
 
     QSignalSpy statusSpy(&layer, &cwLazLayer::loadStatusChanged);
-    QSignalSpy progressSpy(&layer, &cwLazLayer::loadProgressChanged);
     QSignalSpy pointCountSpy(&layer, &cwLazLayer::pointCountChanged);
 
     layer.setSourcePath(path);

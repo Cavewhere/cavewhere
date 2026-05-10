@@ -9,12 +9,14 @@
 #define CWLAZLAYER_H
 
 //Qt includes
-#include <QFuture>
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
 #include <QUuid>
 #include <QVector3D>
+
+//AsyncFuture
+#include <asyncfuture.h>
 
 //Our includes
 #include "CaveWhereLibExport.h"
@@ -52,7 +54,6 @@ class CAVEWHERE_LIB_EXPORT cwLazLayer : public QObject
     Q_PROPERTY(int pointCount READ pointCount NOTIFY pointCountChanged)
     Q_PROPERTY(QVector3D bboxMin READ bboxMin NOTIFY bboxChanged)
     Q_PROPERTY(QVector3D bboxMax READ bboxMax NOTIFY bboxChanged)
-    Q_PROPERTY(double loadProgress READ loadProgress NOTIFY loadProgressChanged)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
 
 public:
@@ -83,7 +84,6 @@ public:
     int pointCount() const { return m_geometry.vertexCount(); }
     QVector3D bboxMin() const { return m_bboxMin; }
     QVector3D bboxMax() const { return m_bboxMax; }
-    double loadProgress() const { return m_loadProgress; }
 
     QUuid id() const { return m_id; }
 
@@ -95,7 +95,7 @@ public:
     void setRegionWorldOrigin(const cwGeoPoint& origin);
 
     /// Kicks off an async load against the current globalCS / worldOrigin.
-    /// Re-entrant: a new load supersedes any in-flight one.
+    /// Re-entrant: rapid restarts coalesce into a single in-flight run.
     void reload();
 
 signals:
@@ -107,7 +107,6 @@ signals:
     void errorMessageChanged();
     void pointCountChanged();
     void bboxChanged();
-    void loadProgressChanged();
 
 private:
     void setLoadStatus(LoadStatus status);
@@ -128,7 +127,6 @@ private:
     QString m_errorMessage;
     QVector3D m_bboxMin;
     QVector3D m_bboxMax;
-    double m_loadProgress = 0.0;
     QUuid m_id;
 
     cwGeometry m_geometry;
@@ -138,11 +136,9 @@ private:
     QString m_regionGlobalCS;
     cwGeoPoint m_regionWorldOrigin;
 
-    QFuture<cwLazLoadResult> m_loadFuture;
-    // Two reloads can fire faster than the watcher's `finished` slot is
-    // dispatched on the UI thread; the epoch lets the slot drop a stale
-    // result without racing the future cancellation.
-    quint64 m_loadEpoch = 0;
+    // Coalesces rapid reload() calls and serializes cancel-then-restart so a
+    // new load only begins once the previous one has actually stopped.
+    AsyncFuture::Restarter<cwLazLoadResult> m_loadRestarter;
 };
 
 #endif // CWLAZLAYER_H

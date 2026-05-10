@@ -39,7 +39,6 @@ QVariant cwLazLayerModel::data(const QModelIndex& index, int role) const
     case SourceCSRole:     return layer->sourceCS();
     case PointSizeRole:    return layer->pointSize();
     case LoadStatusRole:   return QVariant::fromValue(layer->loadStatus());
-    case LoadProgressRole: return layer->loadProgress();
     case PointCountRole:   return layer->pointCount();
     default:               return QVariant();
     }
@@ -54,7 +53,6 @@ QHash<int, QByteArray> cwLazLayerModel::roleNames() const
         {SourceCSRole,     "sourceCS"},
         {PointSizeRole,    "pointSize"},
         {LoadStatusRole,   "loadStatus"},
-        {LoadProgressRole, "loadProgress"},
         {PointCountRole,   "pointCount"}
     };
 }
@@ -196,7 +194,6 @@ void cwLazLayerModel::connectLayer(cwLazLayer* layer)
     connect(layer, &cwLazLayer::sourceCSChanged, this, [emitForRole]() { emitForRole(SourceCSRole); });
     connect(layer, &cwLazLayer::pointSizeChanged, this, [emitForRole]() { emitForRole(PointSizeRole); });
     connect(layer, &cwLazLayer::loadStatusChanged, this, [emitForRole]() { emitForRole(LoadStatusRole); });
-    connect(layer, &cwLazLayer::loadProgressChanged, this, [emitForRole]() { emitForRole(LoadProgressRole); });
     connect(layer, &cwLazLayer::pointCountChanged, this, [emitForRole]() { emitForRole(PointCountRole); });
 }
 

@@ -40,7 +40,6 @@ public:
         SourceCSRole,
         PointSizeRole,
         LoadStatusRole,
-        LoadProgressRole,
         PointCountRole
     };
     Q_ENUM(Roles)
