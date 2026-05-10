@@ -197,3 +197,77 @@ TEST_CASE("cwCoordinateTransform::commonProjectedCSList lists valid EPSG codes",
         CHECK(cwCoordinateTransform::isValidCS(cs));
     }
 }
+
+TEST_CASE("cwCoordinateTransform::isGeographic detects WGS84 lat/long",
+          "[cwCoordinateTransform][isGeographic]")
+{
+    CHECK(cwCoordinateTransform::isGeographic("EPSG:4326"));
+    CHECK(cwCoordinateTransform::isGeographic("epsg:4326"));
+    CHECK_FALSE(cwCoordinateTransform::isGeographic("EPSG:32616"));
+    CHECK_FALSE(cwCoordinateTransform::isGeographic("EPSG:27700"));
+    CHECK_FALSE(cwCoordinateTransform::isGeographic(""));
+    CHECK_FALSE(cwCoordinateTransform::isGeographic("NOT_A_CRS"));
+}
+
+TEST_CASE("cwCoordinateTransform::utmZoneToEpsg builds WGS84 UTM codes",
+          "[cwCoordinateTransform][utm]")
+{
+    CHECK(cwCoordinateTransform::utmZoneToEpsg(1, true)  == "EPSG:32601");
+    CHECK(cwCoordinateTransform::utmZoneToEpsg(16, true) == "EPSG:32616");
+    CHECK(cwCoordinateTransform::utmZoneToEpsg(60, true) == "EPSG:32660");
+    CHECK(cwCoordinateTransform::utmZoneToEpsg(1, false)  == "EPSG:32701");
+    CHECK(cwCoordinateTransform::utmZoneToEpsg(60, false) == "EPSG:32760");
+
+    // Out-of-range zones return empty.
+    CHECK(cwCoordinateTransform::utmZoneToEpsg(0, true).isEmpty());
+    CHECK(cwCoordinateTransform::utmZoneToEpsg(61, true).isEmpty());
+    CHECK(cwCoordinateTransform::utmZoneToEpsg(-5, false).isEmpty());
+}
+
+TEST_CASE("cwCoordinateTransform::parseCSMode classifies CS strings",
+          "[cwCoordinateTransform][parseCSMode]")
+{
+    SECTION("Empty / whitespace → local") {
+        CHECK(cwCoordinateTransform::parseCSMode("").value("mode").toString() == "local");
+        CHECK(cwCoordinateTransform::parseCSMode("   ").value("mode").toString() == "local");
+    }
+
+    SECTION("EPSG:4326 → latlon") {
+        const QVariantMap m = cwCoordinateTransform::parseCSMode("EPSG:4326");
+        CHECK(m.value("mode").toString() == "latlon");
+        CHECK(m.value("raw").toString() == "EPSG:4326");
+        // Case-insensitive
+        CHECK(cwCoordinateTransform::parseCSMode("epsg:4326").value("mode").toString() == "latlon");
+    }
+
+    SECTION("WGS84 UTM north → utm + zone + north=true") {
+        const QVariantMap m = cwCoordinateTransform::parseCSMode("EPSG:32616");
+        CHECK(m.value("mode").toString() == "utm");
+        CHECK(m.value("utmZone").toInt() == 16);
+        CHECK(m.value("utmNorth").toBool() == true);
+    }
+
+    SECTION("WGS84 UTM south → utm + zone + north=false") {
+        const QVariantMap m = cwCoordinateTransform::parseCSMode("EPSG:32760");
+        CHECK(m.value("mode").toString() == "utm");
+        CHECK(m.value("utmZone").toInt() == 60);
+        CHECK(m.value("utmNorth").toBool() == false);
+    }
+
+    SECTION("Non-WGS84 UTM falls through to custom (e.g. ETRS89/UTM 32N)") {
+        CHECK(cwCoordinateTransform::parseCSMode("EPSG:25832").value("mode").toString() == "custom");
+    }
+
+    SECTION("OSGB / Lambert / arbitrary → custom") {
+        CHECK(cwCoordinateTransform::parseCSMode("EPSG:27700").value("mode").toString() == "custom");
+        CHECK(cwCoordinateTransform::parseCSMode("EPSG:2154").value("mode").toString() == "custom");
+        CHECK(cwCoordinateTransform::parseCSMode("ESRI:54030").value("mode").toString() == "custom");
+    }
+
+    SECTION("Out-of-range UTM EPSG (zone 00 / 99) is custom, not utm") {
+        CHECK(cwCoordinateTransform::parseCSMode("EPSG:32600").value("mode").toString() == "custom");
+        CHECK(cwCoordinateTransform::parseCSMode("EPSG:32661").value("mode").toString() == "custom");
+        CHECK(cwCoordinateTransform::parseCSMode("EPSG:32700").value("mode").toString() == "custom");
+        CHECK(cwCoordinateTransform::parseCSMode("EPSG:32761").value("mode").toString() == "custom");
+    }
+}

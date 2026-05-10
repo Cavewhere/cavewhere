@@ -7,6 +7,9 @@
 
 #include "cwCoordinateTransform.h"
 
+//Qt includes
+#include <QRegularExpression>
+
 //PROJ includes
 #include <proj.h>
 
@@ -66,6 +69,11 @@ namespace {
 void cwCoordinateTransform::setProjSearchPaths(const QStringList& paths)
 {
     g_projSearchPaths = paths;
+}
+
+void* cwCoordinateTransform::createProjContext()
+{
+    return makeContextWithPaths();
 }
 
 cwCoordinateTransform::cwCoordinateTransform(const QString& srcCS, const QString& dstCS)
@@ -194,12 +202,7 @@ QStringList cwCoordinateTransform::commonProjectedCSList()
     return list;
 }
 
-bool cwCoordinateTransform::isValidCS(const QString& cs)
-{
-    if (cs.trimmed().isEmpty()) {
-        return false;
-    }
-
+namespace {
     // Reuse a per-thread context so QML validators (CSComboBox) can call
     // this on every keystroke without paying for proj_context_create +
     // search-path setup each time. PROJ contexts are not thread-safe, so
@@ -208,20 +211,103 @@ bool cwCoordinateTransform::isValidCS(const QString& cs)
         PJ_CONTEXT* ctx = nullptr;
         ~ValidatorContext() { if (ctx) { proj_context_destroy(ctx); } }
     };
-    thread_local ValidatorContext tls;
-    if (!tls.ctx) {
-        tls.ctx = makeContextWithPaths();
+
+    PJ_CONTEXT* validatorContext()
+    {
+        thread_local ValidatorContext tls;
         if (!tls.ctx) {
-            return false;
+            tls.ctx = makeContextWithPaths();
         }
+        return tls.ctx;
+    }
+}
+
+bool cwCoordinateTransform::isValidCS(const QString& cs)
+{
+    if (cs.trimmed().isEmpty()) {
+        return false;
     }
 
-    PJ* p = proj_create(tls.ctx, cs.toUtf8().constData());
+    PJ_CONTEXT* ctx = validatorContext();
+    if (!ctx) {
+        return false;
+    }
+
+    PJ* p = proj_create(ctx, cs.toUtf8().constData());
     const bool valid = (p != nullptr);
     if (p) {
         proj_destroy(p);
     }
     return valid;
+}
+
+bool cwCoordinateTransform::isGeographic(const QString& cs)
+{
+    if (cs.trimmed().isEmpty()) {
+        return false;
+    }
+
+    PJ_CONTEXT* ctx = validatorContext();
+    if (!ctx) {
+        return false;
+    }
+
+    PJ* p = proj_create(ctx, cs.toUtf8().constData());
+    if (!p) {
+        return false;
+    }
+
+    const PJ_TYPE type = proj_get_type(p);
+    proj_destroy(p);
+    return type == PJ_TYPE_GEOGRAPHIC_2D_CRS
+        || type == PJ_TYPE_GEOGRAPHIC_3D_CRS
+        || type == PJ_TYPE_GEOGRAPHIC_CRS;
+}
+
+QString cwCoordinateTransform::utmZoneToEpsg(int zone, bool north)
+{
+    if (zone < 1 || zone > 60) {
+        return QString();
+    }
+    const int base = north ? 32600 : 32700;
+    return QStringLiteral("EPSG:%1").arg(base + zone);
+}
+
+QVariantMap cwCoordinateTransform::parseCSMode(const QString& cs)
+{
+    QVariantMap result;
+    result.insert(QStringLiteral("raw"), cs);
+
+    const QString trimmed = cs.trimmed();
+    if (trimmed.isEmpty()) {
+        result.insert(QStringLiteral("mode"), QStringLiteral("local"));
+        return result;
+    }
+
+    // Lat/Lon (WGS84). Cheap path: literal EPSG:4326 (case-insensitive).
+    if (trimmed.compare(QStringLiteral("EPSG:4326"), Qt::CaseInsensitive) == 0) {
+        result.insert(QStringLiteral("mode"), QStringLiteral("latlon"));
+        return result;
+    }
+
+    // WGS84 UTM. EPSG:326NN (north) or EPSG:327NN (south), zone 01..60.
+    static const QRegularExpression utmRe(
+        QStringLiteral("^EPSG:(326|327)(\\d{2})$"),
+        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch m = utmRe.match(trimmed);
+    if (m.hasMatch()) {
+        const int zone = m.captured(2).toInt();
+        if (zone >= 1 && zone <= 60) {
+            const bool north = m.captured(1) == QStringLiteral("326");
+            result.insert(QStringLiteral("mode"), QStringLiteral("utm"));
+            result.insert(QStringLiteral("utmZone"), zone);
+            result.insert(QStringLiteral("utmNorth"), north);
+            return result;
+        }
+    }
+
+    result.insert(QStringLiteral("mode"), QStringLiteral("custom"));
+    return result;
 }
 
 // ---- cwCoordinateSystem (QML singleton facade) ----
@@ -234,4 +320,36 @@ bool cwCoordinateSystem::isValidCS(const QString& cs)
 QStringList cwCoordinateSystem::commonProjectedCSList()
 {
     return cwCoordinateTransform::commonProjectedCSList();
+}
+
+bool cwCoordinateSystem::isGeographic(const QString& cs)
+{
+    return cwCoordinateTransform::isGeographic(cs);
+}
+
+QString cwCoordinateSystem::utmZoneToEpsg(int zone, bool north)
+{
+    return cwCoordinateTransform::utmZoneToEpsg(zone, north);
+}
+
+QVariantMap cwCoordinateSystem::parseCSMode(const QString& cs)
+{
+    return cwCoordinateTransform::parseCSMode(cs);
+}
+
+QString cwCoordinateSystem::modeFor(const QString& cs)
+{
+    return cwCoordinateTransform::parseCSMode(cs).value(QStringLiteral("mode")).toString();
+}
+
+int cwCoordinateSystem::utmZoneFor(const QString& cs)
+{
+    const QVariantMap m = cwCoordinateTransform::parseCSMode(cs);
+    return m.value(QStringLiteral("utmZone"), -1).toInt();
+}
+
+bool cwCoordinateSystem::utmNorthFor(const QString& cs)
+{
+    const QVariantMap m = cwCoordinateTransform::parseCSMode(cs);
+    return m.value(QStringLiteral("utmNorth"), true).toBool();
 }

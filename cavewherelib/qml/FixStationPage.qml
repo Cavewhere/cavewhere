@@ -71,6 +71,29 @@ StandardPage {
         }
     }
 
+    component CSCell : QQ.Item {
+        id: csCell
+        property int columnWidth: 0
+        property string value
+        property int rowIndex
+
+        implicitWidth: columnWidth
+        implicitHeight: combo.implicitHeight
+        clip: true
+
+        CSComboBox {
+            id: combo
+            objectName: "inputCSComboBox." + csCell.rowIndex
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            value: csCell.value
+            allowGeographic: true
+            onCommitted: (newCS) => fixStationPage.commitEdit(
+                csCell.rowIndex, FixStationModel.InputCSRole, newCS, false)
+        }
+    }
+
     RemoveAskBox {
         id: removeChallengeId
         onRemove: fixStationPage.removeFix(indexToRemove)
@@ -209,10 +232,9 @@ StandardPage {
                     rowIndex: wideDelegateId.index
                 }
 
-                WideCell {
+                CSCell {
                     columnWidth: csColumn.columnWidth
                     value: wideDelegateId.inputCS
-                    role: FixStationModel.InputCSRole
                     rowIndex: wideDelegateId.index
                 }
 
@@ -296,11 +318,12 @@ StandardPage {
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
 
-                FixField {
+                CSComboBox {
+                    objectName: "inputCSComboBox." + narrowDelegateId.index
                     value: narrowDelegateId.inputCS
-                    role: FixStationModel.InputCSRole
-                    rowIndex: narrowDelegateId.index
-                    color: Theme.textSubtle
+                    allowGeographic: true
+                    onCommitted: (newCS) => fixStationPage.commitEdit(
+                        narrowDelegateId.index, FixStationModel.InputCSRole, newCS, false)
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }

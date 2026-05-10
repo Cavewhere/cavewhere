@@ -28,14 +28,61 @@ StandardPage {
         anchors.margins: Theme.pageMargin
         spacing: 8
 
-        DoubleClickTextInput {
-            objectName: "regionNameInput"
-            font.bold: true
-            font.pixelSize: Theme.fontSizeTitle
-            text: RootData.region.name
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
 
-            onFinishedEditting: (newText) => {
-                RootData.region.name = newText
+            DoubleClickTextInput {
+                objectName: "regionNameInput"
+                font.bold: true
+                font.pixelSize: Theme.fontSizeTitle
+                text: RootData.region.name
+
+                onFinishedEditting: (newText) => {
+                    RootData.region.name = newText
+                }
+            }
+
+            QQ.Item { Layout.fillWidth: true }
+
+            ContextMenuButton {
+                objectName: "regionContextMenu"
+                menu: regionContextMenuComponent
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
+
+            QC.Label {
+                text: "Coordinate system:"
+            }
+
+            CSComboBox {
+                objectName: "globalCSComboBox"
+                value: RootData.region.globalCS
+                allowGeographic: false
+                onCommitted: (newCS) => {
+                    RootData.region.globalCS = newCS
+                }
+            }
+
+            QQ.Item { Layout.fillWidth: true }
+        }
+
+        QQ.Component {
+            id: regionContextMenuComponent
+            QC.Menu {
+                QC.MenuItem {
+                    objectName: "recenterWorldOriginAction"
+                    text: qsTr("Recenter world origin")
+                    enabled: RootData.region.globalCS !== ""
+                    onTriggered: {
+                        // PR 5 wires this to cwCavingRegion::recomputeWorldOrigin().
+                        console.log("Recenter world origin: not yet implemented")
+                    }
+                }
             }
         }
 

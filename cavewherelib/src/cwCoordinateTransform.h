@@ -12,6 +12,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 #include <memory>
 
@@ -53,6 +54,9 @@ public:
 
     static QStringList commonProjectedCSList();
     static bool isValidCS(const QString& cs);
+    static bool isGeographic(const QString& cs);
+    static QString utmZoneToEpsg(int zone, bool north);
+    static QVariantMap parseCSMode(const QString& cs);
 
     /**
      * Set the directories PROJ searches for proj.db and grid-shift files.
@@ -62,6 +66,14 @@ public:
      * class apply these paths via proj_context_set_search_paths().
      */
     static void setProjSearchPaths(const QStringList& paths);
+
+    /**
+     * Internal: create a fresh PJ_CONTEXT with the configured search paths
+     * applied. Caller owns the returned pointer and must
+     * proj_context_destroy() it. Used by cwCRSSearchModel and other
+     * sibling helpers that need direct PROJ access.
+     */
+    static void* createProjContext();
 
 private:
     // Pimpl: hides <proj.h> from the public include path so the test
@@ -92,6 +104,36 @@ public:
 
     Q_INVOKABLE static bool isValidCS(const QString& cs);
     Q_INVOKABLE static QStringList commonProjectedCSList();
+
+    /**
+     * True iff cs parses as a geographic CRS (lat/long), e.g. EPSG:4326.
+     * Used by the picker to keep geographic systems out of region-level
+     * globalCS — survex's cavern only emits projected output.
+     */
+    Q_INVOKABLE static bool isGeographic(const QString& cs);
+
+    /**
+     * Build the WGS84 UTM EPSG code for a zone (1..60) and hemisphere.
+     * North → EPSG:326NN, south → EPSG:327NN. Returns "" if zone is out of
+     * range. Pure arithmetic — no PROJ call.
+     */
+    Q_INVOKABLE static QString utmZoneToEpsg(int zone, bool north);
+
+    /**
+     * Round-trip a CS string back to a picker mode. Returns a map with key
+     * "mode" set to one of "local", "latlon", "utm", "custom"; for "utm"
+     * the map also contains "utmZone" (int) and "utmNorth" (bool); "raw"
+     * always carries the original cs string.
+     */
+    Q_INVOKABLE static QVariantMap parseCSMode(const QString& cs);
+
+    /**
+     * Field-at-a-time slices of parseCSMode() so QML callers can use
+     * strict-typed properties instead of `property var`.
+     */
+    Q_INVOKABLE static QString modeFor(const QString& cs);
+    Q_INVOKABLE static int     utmZoneFor(const QString& cs);
+    Q_INVOKABLE static bool    utmNorthFor(const QString& cs);
 };
 
 #endif // CWCOORDINATETRANSFORM_H
