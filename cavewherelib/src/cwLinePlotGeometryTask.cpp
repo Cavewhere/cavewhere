@@ -99,31 +99,39 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
 
             if(chunk.stations.size() < 2) { continue; }
 
-            const cwStation& firstStation = chunk.stations.at(0);
-
-            QString fullName = fullStationName(caveIndex, cave.name, firstStation.name());
-            if(!StationIndexLookup.contains(fullName)) {
-                continue;
+            // Empty leading stations (bug #435) won't appear in the lookup —
+            // bootstrap from the first station that does.
+            int startIndex = 0;
+            auto bootstrapIt = StationIndexLookup.constEnd();
+            while(startIndex < chunk.stations.size()) {
+                auto it = StationIndexLookup.constFind(
+                    fullStationName(caveIndex, cave.name, chunk.stations.at(startIndex).name()));
+                if(it != StationIndexLookup.constEnd()) {
+                    bootstrapIt = it;
+                    break;
+                }
+                startIndex++;
             }
+            if(startIndex >= chunk.stations.size() - 1) { continue; }
 
-            unsigned int previousStationIndex = StationIndexLookup.value(fullName, 0);
+            unsigned int previousStationIndex = bootstrapIt.value();
 
             QVector3D previousPoint = PointData.at(previousStationIndex);
             minDepth = qMin(minDepth, (double)previousPoint.z());
             maxDepth = qMax(maxDepth, (double)previousPoint.z());
 
             //Go through all the the stations/shots in the chunk
-            for(int stationIndex = 1; stationIndex < chunk.stations.size(); stationIndex++) {
+            for(int stationIndex = startIndex + 1; stationIndex < chunk.stations.size(); stationIndex++) {
                 const cwStation& station = chunk.stations.at(stationIndex);
                 const cwShot& shot = chunk.shots.at(stationIndex - 1);
 
-                //Look up the index
-                fullName = fullStationName(caveIndex, cave.name, station.name());
-                if(StationIndexLookup.contains(fullName)) {
-                    unsigned int stationIndex = StationIndexLookup.value(fullStationName(caveIndex, cave.name, station.name()), 0);
+                auto it = StationIndexLookup.constFind(
+                    fullStationName(caveIndex, cave.name, station.name()));
+                if(it != StationIndexLookup.constEnd()) {
+                    unsigned int currentStationIndex = it.value();
 
                     //Depth and length calculation
-                    QVector3D currentPoint = PointData.at(stationIndex);
+                    QVector3D currentPoint = PointData.at(currentStationIndex);
                     if(shot.isDistanceIncluded()) {
                         minDepth = qMin(minDepth, (double)currentPoint.z());
                         maxDepth = qMax(maxDepth, (double)currentPoint.z());
@@ -132,9 +140,9 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
                     previousPoint = currentPoint;
 
                     IndexData.append(previousStationIndex);
-                    IndexData.append(stationIndex);
+                    IndexData.append(currentStationIndex);
 
-                    previousStationIndex = stationIndex;
+                    previousStationIndex = currentStationIndex;
                 }
             }
         }

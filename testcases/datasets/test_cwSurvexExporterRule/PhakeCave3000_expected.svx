@@ -44,7 +44,6 @@ a11         1           0.2         3           0.5
 a12         0           2           8           35         
 
 *data passage station left right up down ignoreall
-a10         -           -           -           -          
 a13         1.8         0           1.8         1.7        
 a14         0           2           2           1.9        
 

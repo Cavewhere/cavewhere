@@ -5,6 +5,8 @@
 #include <QString>
 
 #include "cwClinoReading.h"
+#include "cwDistanceReading.h"
+#include "cwStation.h"
 
 namespace cwSurvexExporterUtils {
 inline QString verticalClinoText(const cwClinoReading& reading)
@@ -24,6 +26,14 @@ inline QString verticalClinoText(const cwClinoReading& reading)
     }
 
     return value >= 0.0 ? QStringLiteral("UP") : QStringLiteral("DOWN");
+}
+
+inline bool stationHasLrudData(const cwStation& station)
+{
+    return station.left().state()  == cwDistanceReading::State::Valid
+        || station.right().state() == cwDistanceReading::State::Valid
+        || station.up().state()    == cwDistanceReading::State::Valid
+        || station.down().state()  == cwDistanceReading::State::Valid;
 }
 } // namespace cwSurvexExporterUtils
 

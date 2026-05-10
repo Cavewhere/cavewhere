@@ -278,16 +278,21 @@ void cwSurvexExporterRule::writeLRUDData(QTextStream& stream, const cwSurveyData
         stream << "*data passage station left right up down ignoreall" << Qt::endl;
 
         for(const cwStation& station : chunk.stations) {
-            if(station.isValid()) {
-                QString dataLine = dataLineTemplate
-                                       .arg(station.name(), textPadding)
-                                       .arg(toSupportedLength(trip, station.left()), textPadding)
-                                       .arg(toSupportedLength(trip, station.right()), textPadding)
-                                       .arg(toSupportedLength(trip, station.up()), textPadding)
-                                       .arg(toSupportedLength(trip, station.down()), textPadding);
+            if(!station.isValid()) { continue; }
 
-                stream << dataLine << Qt::endl;
-            }
+            // Stub "name - - - -" lines make cavern fail with "Cross section
+            // specified at non-existent station" when the station isn't in
+            // any exported shot (e.g. orphans from dropped empty rows).
+            if(!cwSurvexExporterUtils::stationHasLrudData(station)) { continue; }
+
+            QString dataLine = dataLineTemplate
+                                   .arg(station.name(), textPadding)
+                                   .arg(toSupportedLength(trip, station.left()), textPadding)
+                                   .arg(toSupportedLength(trip, station.right()), textPadding)
+                                   .arg(toSupportedLength(trip, station.up()), textPadding)
+                                   .arg(toSupportedLength(trip, station.down()), textPadding);
+
+            stream << dataLine << Qt::endl;
         }
 
         stream << Qt::endl;
@@ -413,6 +418,10 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
+        // Stub "from to - - -" lines make cavern fail with "Tape reading may
+        // not be omitted". The chunk's errorModel already warns the user.
+        if(!shot.isValid()) { continue; }
+
         QString distance = toSupportedLength(trip, shot.distance());
         QString compass = compassToString(shot.compass());
         QString backCompass = compassToString(shot.backCompass());
@@ -429,7 +438,6 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
         }
 
         //Make sure the model is good
-        if(distance.isEmpty()) { continue; }
         if(compass.isEmpty() && backCompass.isEmpty()) {
             if(clino.compare("up", Qt::CaseInsensitive) != 0 &&
                 clino.compare("down", Qt::CaseInsensitive) != 0 &&

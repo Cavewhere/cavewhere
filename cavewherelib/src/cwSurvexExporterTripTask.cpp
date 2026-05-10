@@ -195,17 +195,22 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, const cwTrip* 
         stream << QStringLiteral("*data passage station left right up down ignoreall") << Qt::endl;
 
         foreach(cwStation station, chunk->stations()) {
-            if(station.isValid()) {
-                const cwTripCalibration* calibration = trip->calibrations();
-                QString dataLine = dataLineTemplate
-                        .arg(station.name(), TextPadding)
-                        .arg(toSupportedLength(calibration, station.left()), TextPadding)
-                        .arg(toSupportedLength(calibration, station.right()), TextPadding)
-                        .arg(toSupportedLength(calibration, station.up()), TextPadding)
-                        .arg(toSupportedLength(calibration, station.down()), TextPadding);
+            if(!station.isValid()) { continue; }
 
-                stream << dataLine << Qt::endl;
-            }
+            // Stub "name - - - -" lines make cavern fail with "Cross section
+            // specified at non-existent station" when the station isn't in
+            // any exported shot (e.g. orphans from dropped empty rows).
+            if(!cwSurvexExporterUtils::stationHasLrudData(station)) { continue; }
+
+            const cwTripCalibration* calibration = trip->calibrations();
+            QString dataLine = dataLineTemplate
+                    .arg(station.name(), TextPadding)
+                    .arg(toSupportedLength(calibration, station.left()), TextPadding)
+                    .arg(toSupportedLength(calibration, station.right()), TextPadding)
+                    .arg(toSupportedLength(calibration, station.up()), TextPadding)
+                    .arg(toSupportedLength(calibration, station.down()), TextPadding);
+
+            stream << dataLine << Qt::endl;
         }
 
         stream << Qt::endl;
@@ -331,6 +336,10 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
+        // Stub "from to - - -" lines make cavern fail with "Tape reading may
+        // not be omitted". The chunk's errorModel already warns the user.
+        if(!shot.isValid()) { continue; }
+
         QString distance = toSupportedLength(chunk->parentTrip()->calibrations(), shot.distance());
         QString compass = compassToString(shot.compass());
         QString backCompass = compassToString(shot.backCompass());
@@ -347,7 +356,6 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
         }
 
         //Make sure the model is good
-        if(distance.isEmpty()) { continue; }
         if(compass.isEmpty() && backCompass.isEmpty()) {
             if(clino.compare(QStringLiteral("up"), Qt::CaseInsensitive) != 0 &&
                     clino.compare(QStringLiteral("down"), Qt::CaseInsensitive) != 0 &&
