@@ -35,6 +35,12 @@ Item {
         return currentPanel
     }
 
+    SignalSpy {
+        id: commitRequestedSpy
+        target: rootId.currentPanel
+        signalName: "commitRequested"
+    }
+
     TestCase {
         name: "GitWorkingTreePanel"
         when: windowShown
@@ -44,6 +50,7 @@ Item {
                 rootId.currentPanel.destroy()
                 rootId.currentPanel = null
             }
+            commitRequestedSpy.clear()
         }
 
         function test_directoryPathNotUndefined() {
@@ -57,6 +64,31 @@ Item {
         function test_panelCreates() {
             let panel = rootId.createPanel()
             verify(panel !== null)
+        }
+
+        function test_commitClearsFields() {
+            let panel = rootId.createPanel()
+            verify(panel !== null)
+
+            let subjectField = findChild(panel, "subjectField")
+            let descriptionField = findChild(panel, "descriptionField")
+            let commitButton = findChild(panel, "commitButton")
+            verify(subjectField !== null, "subjectField not found")
+            verify(descriptionField !== null, "descriptionField not found")
+            verify(commitButton !== null, "commitButton not found")
+
+            subjectField.text = "  Fix the thing  "
+            descriptionField.text = "  more detail  "
+
+            // Button is disabled without uncommitted files; emit clicked directly
+            // to exercise the onClicked handler.
+            commitButton.clicked()
+
+            compare(commitRequestedSpy.count, 1, "commitRequested should fire once")
+            compare(commitRequestedSpy.signalArguments[0][0], "Fix the thing")
+            compare(commitRequestedSpy.signalArguments[0][1], "more detail")
+            compare(subjectField.text, "", "subjectField should be cleared after commit")
+            compare(descriptionField.text, "", "descriptionField should be cleared after commit")
         }
     }
 }
