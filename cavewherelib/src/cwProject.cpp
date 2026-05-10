@@ -1235,6 +1235,7 @@ void cwProject::newProject() {
 
     //Clear all the caves
     Region->clearCaves();
+    Region->lazLayers()->clear();
     if(UndoStack) {
         UndoStack->clear();
     }

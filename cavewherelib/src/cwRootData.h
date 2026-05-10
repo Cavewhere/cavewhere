@@ -163,6 +163,8 @@ public:
     Q_INVOKABLE void showInFolder(const QString& path) const;
     Q_INVOKABLE void copyText(const QString& text) const;
     Q_INVOKABLE QString urlToLocal(const QUrl& url) const { return url.toLocalFile(); }
+    Q_INVOKABLE QString importPathFromUrl(const QUrl& url) const;
+    Q_INVOKABLE QStringList importPathsFromUrls(const QList<QUrl>& urls) const;
     Q_INVOKABLE bool pathExists(const QString& path) const;
     Q_INVOKABLE QString fileBaseName(const QString& path) const;
     Q_INVOKABLE QString fileName(const QString& path) const;

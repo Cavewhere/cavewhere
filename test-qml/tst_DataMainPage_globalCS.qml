@@ -76,5 +76,23 @@ MainWindowTest {
             const ctxButton = findChild(RootData.pageView.currentPageItem, "regionContextMenu")
             verify(ctxButton !== null, "regionContextMenu button must exist on dataMainPage")
         }
+
+        function test_geospatialGroupBoxWraps() {
+            gotoDataMainPage()
+
+            const dataPage = RootData.pageView.currentPageItem
+            const groupBox = findChild(dataPage, "geospatialGroupBox")
+            verify(groupBox !== null, "geospatialGroupBox must exist on dataMainPage")
+
+            // The CS picker and the layers link both live inside the
+            // Geospatial GroupBox so the screen reads as a single section.
+            const picker = findChild(groupBox, "globalCSComboBox")
+            verify(picker !== null,
+                   "globalCSComboBox must be a descendant of geospatialGroupBox")
+
+            const link = findChild(groupBox, "geospatialLayersLink")
+            verify(link !== null,
+                   "geospatialLayersLink must be a descendant of geospatialGroupBox")
+        }
     }
 }

@@ -316,7 +316,7 @@ The data side (`m_worldOrigin`, getter, signal) already landed in PR 2 so PR 3b 
 
 **Deferred — generic GIS layer abstraction**: a future PR may introduce an abstract `cwGisLayer` base (with concrete subclasses for raster terrain GeoTIFF, vector overlays, additional point-cloud formats, etc.) and a polymorphic `cwGisLayerModel`. We deliberately don't introduce that hierarchy now: with only one concrete layer type, the right shape of the abstraction can't be known and a premature base class will likely need rework once a second format lands. The current `cwLazLayer*` / `cwLazLayerModel` shapes are designed so this future refactor is mechanical: rename + extract base, keep proto field tags by promoting `LazLayer` to a `oneof` inside a generic `GisLayer` message.
 
-### PR 6.5 — Geospatial Layer Management UI
+### PR 6.5 — Geospatial Layer Management UI ✅ Implemented
 
 PR 6 builds the C++ side of LAZ layers but the original plan covered the user-facing surface in a single line (`"Add LAZ… opens Qt.labs.platform.FileDialog"`) — incomplete and inconsistent with the rest of the app, which uses `QtQuick.Dialogs.FileDialog` everywhere (see `NotesFileDialog.qml`, `ExportImportButtons.qml`). PR 7 lands rendering, so users need to be able to add/remove LAZ files **before** PR 7 to validate the data path end-to-end (drag a file in, save, reopen, see the row reappear) without depending on the renderer.
 

@@ -110,6 +110,7 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 - Register modules via `qt_add_qml_module` in CMakeLists.txt
 - Use `Loader` for deferred/conditional loading; avoid expensive operations in bindings
 - Use `QCanvasPainterItem` (C++) for custom painting; do not use QML `Canvas` or `Shapes`
+- Prefer `TapHandler` over `MouseArea` for click/tap handling in new components. TapHandler composes cleanly with other handlers and is the modern Qt input API. Existing MouseArea usages are legacy — don't refactor them unless touching the file for other reasons.
 - **QML item body ordering** — arrange members in this order, with blank lines between groups:
   1. `id` (not required, but always first when present)
   2. `objectName` (only if needed for QML testing)

@@ -419,6 +419,16 @@ QString cwRootData::sanitizeFileName(const QString &name) const
     return cwSaveLoad::sanitizeFileName(name);
 }
 
+QString cwRootData::importPathFromUrl(const QUrl &url) const
+{
+    return cwGlobals::importPathFromUrl(url);
+}
+
+QStringList cwRootData::importPathsFromUrls(const QList<QUrl> &urls) const
+{
+    return cwGlobals::importPathsFromUrls(urls);
+}
+
 QString cwRootData::fileBaseName(const QString &path) const
 {
     QFileInfo info(path);

@@ -13,6 +13,7 @@
 
 //Our includes
 #include "cwZip.h"
+#include "LazFixtureHelper.h"
 #include "cwFutureManagerModel.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
@@ -245,6 +246,15 @@ void TestHelper::loadProjectFromPath(cwProject* project, const QString& localPat
 QString TestHelper::copyToTempDir(const QString &filename)
 {
     return copyToTempFolder(filename);
+}
+
+QString TestHelper::writeMinimalLazInTempDir(const QString &tag)
+{
+    const QString path = QStringLiteral("%1/%2-%3.laz")
+                             .arg(sharedTempRoot())
+                             .arg(tag)
+                             .arg(QCoreApplication::applicationPid());
+    return writeMinimalLaz(path);
 }
 
 QUrl TestHelper::copyToTempDirUrl(const QString &filename)

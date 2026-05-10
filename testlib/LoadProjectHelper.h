@@ -298,6 +298,13 @@ public:
         return QUrl::fromLocalFile(path);
     }
 
+    /**
+     * Writes a small synthetic .laz under the shared temp directory and
+     * returns its absolute path. The file name is tagged with @a tag and the
+     * test process PID so concurrent test runs don't collide.
+     */
+    Q_INVOKABLE QString writeMinimalLazInTempDir(const QString& tag);
+
 };
 
 #endif // LOADPROJECTHELPER

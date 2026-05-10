@@ -23,6 +23,34 @@ StandardPage {
         return "Cave=" + cave.name;
     }
 
+    function registerGeospatialPage() {
+        if (PageView.page === null) return
+        if (PageView.page.childPage("Geospatial Layers") !== null) return
+        RootData.pageSelectionModel.registerPage(PageView.page,
+                                                 "Geospatial Layers",
+                                                 geospatialLayerPageComponent);
+    }
+
+    PageView.onPageChanged: registerGeospatialPage()
+
+    // cwPageSelectionModel::clearHistory() (invoked by newProject/loadProject)
+    // wipes "Data"'s child pages but keeps DataMainPage cached, so
+    // PageView.onPageChanged won't re-fire. Listen on the global signal so
+    // the link is reachable again after a project reset.
+    Connections {
+        target: RootData.pageSelectionModel
+        function onCurrentPageChanged() {
+            pageId.registerGeospatialPage()
+        }
+    }
+
+    QQ.Component {
+        id: geospatialLayerPageComponent
+        GeospatialLayerPage {
+            anchors.fill: parent
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Theme.pageMargin
@@ -51,24 +79,55 @@ StandardPage {
             }
         }
 
-        RowLayout {
+        QC.GroupBox {
+            objectName: "geospatialGroupBox"
+            title: "Geospatial"
             Layout.fillWidth: true
-            spacing: 6
 
-            QC.Label {
-                text: "Coordinate system:"
-            }
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Theme.tightSpacing
 
-            CSComboBox {
-                objectName: "globalCSComboBox"
-                value: RootData.region.globalCS
-                allowGeographic: false
-                onCommitted: (newCS) => {
-                    RootData.region.globalCS = newCS
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    QC.Label {
+                        text: "Coordinate system:"
+                    }
+
+                    CSComboBox {
+                        objectName: "globalCSComboBox"
+                        value: RootData.region.globalCS
+                        allowGeographic: false
+                        onCommitted: (newCS) => {
+                            RootData.region.globalCS = newCS
+                        }
+                    }
+
+                    QQ.Item { Layout.fillWidth: true }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    QC.Label {
+                        text: "Layers:"
+                    }
+
+                    LinkText {
+                        objectName: "geospatialLayersLink"
+                        text: RootData.region.lazLayers.count
+                        onClicked: {
+                            RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                                       "Geospatial Layers");
+                        }
+                    }
+
+                    QQ.Item { Layout.fillWidth: true }
                 }
             }
-
-            QQ.Item { Layout.fillWidth: true }
         }
 
         QQ.Component {
