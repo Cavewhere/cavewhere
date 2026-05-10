@@ -20,10 +20,10 @@
 
 // Our includes
 #include "cwGlobals.h"
-#include "cwSurveyNetwork.h"
 
 class cwCamera;
 class cwCavingRegion;
+class cwCaptureLabelPlacer;
 
 class CAVEWHERE_LIB_EXPORT cwCaptureLeads : public QGraphicsItem
 {
@@ -43,7 +43,13 @@ public:
     void setCamera(cwCamera* camera);
     void setViewport(const QRect& viewport);
     void setImageScale(double scale);
-    void setNetwork(const cwSurveyNetwork& network);
+    void setExportDpi(int dpi);
+    void setPlacer(cwCaptureLabelPlacer* placer);
+
+    qreal markerRadius() const;
+    QVector<QPointF> leadMarkerPositions() const;
+
+    void placeLeadLabels();
 
     const QVector<LeadDrawData>& layout() const { return m_leads; }
 
@@ -55,11 +61,12 @@ private:
     void rebuildGeometry();
 
     QPointer<cwCavingRegion> m_region;
-    cwSurveyNetwork m_network;
     cwCamera* m_camera;
     QRect m_viewport;
     QRectF m_boundingRect;
     qreal m_imageScale;
+    int m_exportDpi = 96;
+    cwCaptureLabelPlacer* m_placer = nullptr;
     QVector<LeadDrawData> m_leads;
     QPen m_glyphPen;
     QBrush m_glyphBrush;

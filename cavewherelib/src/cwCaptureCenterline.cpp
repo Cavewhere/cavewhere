@@ -7,10 +7,17 @@
 // Our includes
 #include "cwCaptureCenterline.h"
 #include "cwCamera.h"
+#include "cwCaptureLabelPlacer.h"
 
 // Qt includes
+#include <QFontMetricsF>
 #include <QPainter>
+#include <QPainterPath>
 #include <QtGlobal>
+#include <QtMath>
+
+// Std includes
+#include <algorithm>
 
 namespace {
 const QColor LineColor(200, 200, 200);
@@ -18,8 +25,6 @@ const QColor ForegroundColor(20, 20, 20);
 constexpr qreal PenWidth = 1.0;
 constexpr qreal LabelFontPointSize = 8.0;
 constexpr qreal BaseStationRadius = 2.0;
-constexpr qreal BaseLabelOffsetX = 4.0;
-constexpr qreal BaseLabelOffsetY = -4.0;
 }
 
 cwCaptureCenterline::cwCaptureCenterline(QGraphicsItem* parent)
@@ -31,7 +36,6 @@ cwCaptureCenterline::cwCaptureCenterline(QGraphicsItem* parent)
     , m_labelPen(ForegroundColor)
     , m_imageScale(1.0)
     , m_baseStationRadius(BaseStationRadius)
-    , m_baseLabelOffset(BaseLabelOffsetX, BaseLabelOffsetY)
 {
     m_linePen.setWidthF(PenWidth);
     m_stationPen.setWidthF(PenWidth);
@@ -44,7 +48,6 @@ void cwCaptureCenterline::setNetwork(const cwSurveyNetwork& network)
     if(m_network == network) {
         return;
     }
-
     m_network = network;
     rebuildGeometry();
 }
@@ -54,7 +57,6 @@ void cwCaptureCenterline::setCamera(cwCamera* camera)
     if(m_camera == camera) {
         return;
     }
-
     m_camera = camera;
     rebuildGeometry();
 }
@@ -64,7 +66,6 @@ void cwCaptureCenterline::setViewport(const QRect& viewport)
     if(m_viewport == viewport) {
         return;
     }
-
     prepareGeometryChange();
     m_viewport = viewport;
     m_boundingRect = QRectF(QPointF(0.0, 0.0), QSizeF(m_viewport.size()) * m_imageScale);
@@ -76,11 +77,42 @@ void cwCaptureCenterline::setImageScale(double scale)
     if(qFuzzyCompare(m_imageScale, scale)) {
         return;
     }
-
     prepareGeometryChange();
     m_imageScale = scale;
     m_boundingRect = QRectF(QPointF(0.0, 0.0), QSizeF(m_viewport.size()) * m_imageScale);
     rebuildGeometry();
+}
+
+void cwCaptureCenterline::setExportDpi(int dpi)
+{
+    m_exportDpi = qMax(1, dpi);
+}
+
+void cwCaptureCenterline::setPlacer(cwCaptureLabelPlacer* placer)
+{
+    m_placer = placer;
+}
+
+QVector<QPointF> cwCaptureCenterline::stationPositions() const
+{
+    QVector<QPointF> positions;
+    positions.reserve(m_stationData.size());
+    for(const auto& station : m_stationData) {
+        positions.append(station.position);
+    }
+    return positions;
+}
+
+QVector<QPair<QString, QRectF>> cwCaptureCenterline::placedLabels() const
+{
+    QVector<QPair<QString, QRectF>> labels;
+    labels.reserve(m_stationData.size());
+    for(const auto& station : m_stationData) {
+        if(!station.labelRect.isEmpty()) {
+            labels.append({station.name, station.labelRect});
+        }
+    }
+    return labels;
 }
 
 QRectF cwCaptureCenterline::boundingRect() const
@@ -113,7 +145,6 @@ void cwCaptureCenterline::paint(QPainter* painter, const QStyleOptionGraphicsIte
     painter->drawLines(m_lines);
 
     const qreal stationRadius = m_baseStationRadius;
-    const QPointF labelOffset = m_baseLabelOffset;
 
     painter->setPen(m_stationPen);
     painter->setBrush(m_stationBrush);
@@ -126,11 +157,21 @@ void cwCaptureCenterline::paint(QPainter* painter, const QStyleOptionGraphicsIte
 
     painter->setPen(m_labelPen);
     painter->setFont(m_labelFont);
+    const QFontMetricsF paintMetrics(painter->font(), painter->device());
     for(const auto& station : std::as_const(m_stationData)) {
         if(!m_boundingRect.contains(station.position)) {
             continue;
         }
-        painter->drawText(station.position + labelOffset, station.name);
+        if(station.labelRect.isEmpty()) {
+            continue;
+        }
+        // The placer reserved a rect tightly sized to glyph ink; draw at the
+        // baseline-left point that puts the painter's own tight ink rect at
+        // labelRect's top-left.
+        const QRectF tight = paintMetrics.tightBoundingRect(station.name);
+        painter->drawText(
+            cwCaptureLabelPlacer::baselineForGlyphInkRect(station.labelRect, tight),
+            station.name);
     }
 
     painter->restore();
@@ -141,17 +182,9 @@ void cwCaptureCenterline::rebuildGeometry()
     m_lines.clear();
     m_stationData.clear();
 
-    if(m_camera == nullptr) {
-        update();
-        return;
-    }
-
-    if(m_viewport.width() <= 0 || m_viewport.height() <= 0) {
-        update();
-        return;
-    }
-
-    if(m_network.isEmpty()) {
+    if(m_camera == nullptr
+       || m_viewport.width() <= 0 || m_viewport.height() <= 0
+       || m_network.isEmpty()) {
         update();
         return;
     }
@@ -170,7 +203,7 @@ void cwCaptureCenterline::rebuildGeometry()
         const QPointF localPoint = (projected - m_viewport.topLeft()) * m_imageScale;
 
         stationPoints.insert(station, localPoint);
-        m_stationData.append({station, localPoint});
+        m_stationData.append({station, localPoint, QRectF()});
     }
 
     for(const QString& station : stationNames) {
@@ -195,4 +228,71 @@ void cwCaptureCenterline::rebuildGeometry()
     }
 
     update();
+}
+
+void cwCaptureCenterline::placeStationLabels()
+{
+    if(m_placer == nullptr || m_stationData.isEmpty()) {
+        return;
+    }
+
+    // Build a font whose QFontMetricsF / QPainterPath::addText return
+    // paper-pixel-aligned sizes that match the painter's eventual SVG render
+    // at the export DPI. Independent of m_imageScale and host display DPI.
+    QFont placementFont = m_labelFont;
+    const int pixelSize = qMax(1,
+        qRound(m_labelFont.pointSizeF() * m_exportDpi
+               * cwCaptureLabelPlacer::PointsToPixelsAt72Dpi));
+    placementFont.setPixelSize(pixelSize);
+
+    // Stable order: top-to-bottom, left-to-right. Deterministic placements
+    // across rebuilds and across exports.
+    std::sort(m_stationData.begin(), m_stationData.end(),
+              [](const StationDrawData& a, const StationDrawData& b) {
+                  if(a.position.y() != b.position.y()) {
+                      return a.position.y() < b.position.y();
+                  }
+                  return a.position.x() < b.position.x();
+              });
+
+    // Note: station dots are seeded into the placer's obstacle set by
+    // cwCaptureViewport before the placer is finalized, so this method does
+    // NOT call addObstacleRect or finalize.
+
+    int placed = 0;
+    int dropped = 0;
+    for(StationDrawData& station : m_stationData) {
+        if(station.name.isEmpty()) {
+            continue;
+        }
+
+        QPainterPath path;
+        path.addText(QPointF(0.0, 0.0), placementFont, station.name);
+        const QRectF tightInk = path.boundingRect();
+        if(tightInk.isEmpty()) {
+            continue;
+        }
+
+        cwCaptureLabelPlacer::LabelRequest req{
+            station.name,
+            station.position,
+            tightInk.size()
+        };
+        const cwCaptureLabelPlacer::Placement p = m_placer->placeLabel(req);
+        if(p.placed) {
+            // Painter draws at labelRect.topLeft() with AlignLeft|AlignTop;
+            // its glyph baseline lands at top + ascent. Adjust the rect so
+            // that the rect's TOP is the glyph's ink top (not baseline-
+            // ascent). Specifically: placer returned a rect tightly sized to
+            // glyph ink; that already matches what the painter renders.
+            station.labelRect = p.labelRect;
+            placed++;
+        } else {
+            dropped++;
+        }
+    }
+
+    qDebug() << "[centerline-labels] stations=" << m_stationData.size()
+             << "placed=" << placed
+             << "dropped=" << dropped;
 }

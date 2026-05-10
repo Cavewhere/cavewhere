@@ -21,6 +21,7 @@
 #include "cwSurveyNetwork.h"
 
 class cwCamera;
+class cwCaptureLabelPlacer;
 
 class CAVEWHERE_LIB_EXPORT cwCaptureCenterline : public QGraphicsItem
 {
@@ -31,6 +32,15 @@ public:
     void setCamera(cwCamera* camera);
     void setViewport(const QRect& viewport);
     void setImageScale(double scale);
+    void setExportDpi(int dpi);
+    void setPlacer(cwCaptureLabelPlacer* placer);
+
+    void placeStationLabels();
+
+    QVector<QPointF> stationPositions() const;
+    qreal stationDotRadius() const { return m_baseStationRadius; }
+
+    QVector<QPair<QString, QRectF>> placedLabels() const;
 
     QRectF boundingRect() const override;
     QPainterPath shape() const override;
@@ -40,6 +50,7 @@ private:
     struct StationDrawData {
         QString name;
         QPointF position;
+        QRectF  labelRect;
     };
 
     void rebuildGeometry();
@@ -49,6 +60,8 @@ private:
     QRect m_viewport;
     QRectF m_boundingRect;
     qreal m_imageScale;
+    int m_exportDpi = 96;
+    cwCaptureLabelPlacer* m_placer = nullptr;
     QVector<QLineF> m_lines;
     QVector<StationDrawData> m_stationData;
     QPen m_linePen;
@@ -57,7 +70,6 @@ private:
     QPen m_labelPen;
     QFont m_labelFont;
     qreal m_baseStationRadius;
-    QPointF m_baseLabelOffset;
 };
 
 #endif // CWCAPTURECENTERLINE_H

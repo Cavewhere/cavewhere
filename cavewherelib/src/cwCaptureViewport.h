@@ -155,6 +155,7 @@ private:
     cwCaptureCenterline* createCenterlineItem(QGraphicsItemGroup* parent, double imageScale) const;
     cwCaptureLeads* createLeadsItem(QGraphicsItemGroup* parent, double imageScale) const;
     cwCaptureLeadLines* createLeadLinesItem(QGraphicsItemGroup* parent, double imageScale, cwCaptureLeads* leadsPeer) const;
+    void placeLabelsAfterTiles(QGraphicsItemGroup* parent, double imageScale);
 
 
 private slots:
