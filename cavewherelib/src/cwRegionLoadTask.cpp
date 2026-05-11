@@ -346,22 +346,7 @@ void cwRegionLoadTask::loadSurveyNoteModel(const CavewhereProto::SurveyNoteModel
  */
 void cwRegionLoadTask::loadTripCalibration(const CavewhereProto::TripCalibration& protoTripCalibration, cwTripCalibration *tripCalibration)
 {
-    tripCalibration->setCorrectedCompassBacksight(protoTripCalibration.correctedcompassbacksight());
-    tripCalibration->setCorrectedClinoBacksight(protoTripCalibration.correctedclinobacksight());
-    tripCalibration->setCorrectedCompassFrontsight(protoTripCalibration.correctedcompassfrontsight());
-    tripCalibration->setCorrectedClinoFrontsight(protoTripCalibration.correctedclinofrontsight());
-    tripCalibration->setTapeCalibration(protoTripCalibration.tapecalibration());
-    tripCalibration->setFrontCompassCalibration(protoTripCalibration.frontcompasscalibration());
-    tripCalibration->setFrontClinoCalibration(protoTripCalibration.frontclinocalibration());
-    tripCalibration->setBackCompassCalibration(
-        protoTripCalibration.has_backcompasscalibration()
-            ? protoTripCalibration.backcompasscalibration()
-            : protoTripCalibration.legacy_backcompassscalibration());
-    tripCalibration->setBackClinoCalibration(protoTripCalibration.backclinocalibration());
-    tripCalibration->setDeclination(protoTripCalibration.declination());
-    tripCalibration->setDistanceUnit((cwUnits::LengthUnit)protoTripCalibration.distanceunit());
-    tripCalibration->setFrontSights(protoTripCalibration.frontsights());
-    tripCalibration->setBackSights(protoTripCalibration.backsights());
+    tripCalibration->setData(cwProtoUtils::fromProtoTripCalibration(protoTripCalibration));
 }
 
 /**
