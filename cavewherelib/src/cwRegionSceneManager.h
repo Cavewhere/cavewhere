@@ -77,6 +77,7 @@ private:
     void connectLazLayers();
     void disconnectLazLayers();
     void rebuildLazRenderObjects();
+    void clearPointClouds();
     void addLazLayer(cwLazLayer* layer);
     void removeLazLayer(cwLazLayer* layer);
     void syncLazLayerGeometry(cwLazLayer* layer);

@@ -82,9 +82,8 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
     auto* rhi = data.renderData.cb->rhi();
     QRhiResourceUpdateBatch* batch = data.resourceUpdateBatch;
 
-    // QRhiBuffer::Immutable is rebuilt rather than partially updated. For
-    // multi-million-point loads this is one upload per geometry change, not
-    // per frame, so the rebuild cost is acceptable.
+    // Immutable buffers must be recreated on size change; uploads are batched
+    // once per geometry change (not per frame), so the rebuild cost is fine.
     if (!m_vertexBuffer || m_vertexBufferCapacity != byteSize) {
         delete m_vertexBuffer;
         m_vertexBuffer = rhi->newBuffer(QRhiBuffer::Immutable,

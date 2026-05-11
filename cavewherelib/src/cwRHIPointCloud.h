@@ -17,9 +17,6 @@
 #include <QMatrix4x4>
 #include <QVector3D>
 
-class QRhiBuffer;
-class QRhiShaderResourceBindings;
-class QRhiGraphicsPipeline;
 class cwRhiItemRenderer;
 
 class cwRHIPointCloud : public cwRHIObject

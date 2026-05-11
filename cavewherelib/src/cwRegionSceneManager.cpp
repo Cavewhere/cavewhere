@@ -89,18 +89,12 @@ void cwRegionSceneManager::disconnectLazLayers()
     if (Region) {
         disconnect(Region->lazLayers(), nullptr, this, nullptr);
     }
-    for (auto* renderObject : std::as_const(m_pointClouds)) {
-        delete renderObject;
-    }
-    m_pointClouds.clear();
+    clearPointClouds();
 }
 
 void cwRegionSceneManager::rebuildLazRenderObjects()
 {
-    for (auto* renderObject : std::as_const(m_pointClouds)) {
-        delete renderObject;
-    }
-    m_pointClouds.clear();
+    clearPointClouds();
 
     if (!Region) {
         return;
@@ -109,6 +103,18 @@ void cwRegionSceneManager::rebuildLazRenderObjects()
     for (auto* layer : layers) {
         addLazLayer(layer);
     }
+}
+
+void cwRegionSceneManager::clearPointClouds()
+{
+    // setScene(nullptr) unhooks each render object from cwScene before delete;
+    // ~cwRenderObject doesn't do this itself, so deleting directly would leave
+    // dangling pointers in cwScene::m_newRenderObjects and crash on next sync.
+    for (auto* renderObject : std::as_const(m_pointClouds)) {
+        renderObject->setScene(nullptr);
+        delete renderObject;
+    }
+    m_pointClouds.clear();
 }
 
 void cwRegionSceneManager::addLazLayer(cwLazLayer* layer)
@@ -121,9 +127,10 @@ void cwRegionSceneManager::addLazLayer(cwLazLayer* layer)
     renderObject->setScene(scene());
     m_pointClouds.insert(layer->id(), renderObject);
 
+    // bboxChanged also fires during applyResult, immediately before
+    // loadStatusChanged(Loaded). Connecting both would push the geometry
+    // twice and rebuild the immutable vertex buffer twice per load.
     connect(layer, &cwLazLayer::loadStatusChanged,
-            this, [this, layer]() { syncLazLayerGeometry(layer); });
-    connect(layer, &cwLazLayer::bboxChanged,
             this, [this, layer]() { syncLazLayerGeometry(layer); });
 
     syncLazLayerGeometry(layer);
@@ -138,7 +145,9 @@ void cwRegionSceneManager::removeLazLayer(cwLazLayer* layer)
     if (it == m_pointClouds.end()) {
         return;
     }
-    delete it.value();
+    cwRenderPointCloud* renderObject = it.value();
+    renderObject->setScene(nullptr);
+    delete renderObject;
     m_pointClouds.erase(it);
     disconnect(layer, nullptr, this, nullptr);
 }
