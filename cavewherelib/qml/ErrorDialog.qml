@@ -40,6 +40,7 @@ QQ.Loader {
 
         QC.Dialog {
             id: errorDialogId
+            objectName: "errorDialog"
 
             property int issueCount: itemId.model ? itemId.model.count : 0
 
@@ -47,7 +48,6 @@ QQ.Loader {
             modal: true
             width: 600
 
-            standardButtons: QC.Dialog.Ok
             title: issueCount + " issue" + ((issueCount > 1) ? "s" : "") + " has occurred"
 
             onAccepted: {
@@ -56,6 +56,21 @@ QQ.Loader {
 
             onRejected:  {
                 itemId.model.clear();
+            }
+
+            footer: QC.DialogButtonBox {
+                QC.Button {
+                    objectName: "errorDialogCopyAllButton"
+                    text: qsTr("Copy All")
+                    QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.ActionRole
+                    enabled: errorDialogId.issueCount > 0
+                    onClicked: {
+                        if (itemId.model) {
+                            RootData.copyText(itemId.model.allMessagesAsText())
+                        }
+                    }
+                }
+                standardButtons: QC.DialogButtonBox.Ok
             }
 
             GroupBox {

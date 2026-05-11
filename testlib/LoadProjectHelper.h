@@ -34,6 +34,7 @@
 #include "CaveWhereTestLibExport.h"
 #include "cwFutureManagerModel.h"
 #include "cwRootData.h"
+#include "cwErrorListModel.h"
 
 namespace QQuickGit {
 class GitRepository;
@@ -297,6 +298,13 @@ public:
     Q_INVOKABLE QUrl toLocalUrl(const QString& path) {
         return QUrl::fromLocalFile(path);
     }
+
+    Q_INVOKABLE QString clipboardText() const;
+    Q_INVOKABLE void setClipboardText(const QString& text) const;
+
+    Q_INVOKABLE void appendError(cwErrorListModel* model,
+                                 const QString& message,
+                                 int type) const;
 
 };
 

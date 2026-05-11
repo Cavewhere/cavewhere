@@ -165,6 +165,36 @@ TEST_CASE("Basic QML Gadget List operations") {
             CHECK(dataChangedSpy.first().last().value<QVector<int>>().first() == model.roleForName("suppressed"));
         }
 
+        SECTION("allMessagesAsText") {
+            const QString text = model.allMessagesAsText();
+            const QStringList lines = text.split('\n');
+            REQUIRE(lines.size() == size);
+            for (int i = 0; i < size; i++) {
+                CHECK(lines.at(i) == QStringLiteral("[Fatal] Error %1").arg(i));
+            }
+        }
+
+        SECTION("allMessagesAsText mixed types") {
+            cwErrorListModel mixed;
+            cwError warning;
+            warning.setMessage("be careful");
+            warning.setType(cwError::Warning);
+
+            cwError fatal;
+            fatal.setMessage("kaboom");
+            fatal.setType(cwError::Fatal);
+
+            mixed.append(warning);
+            mixed.append(fatal);
+
+            CHECK(mixed.allMessagesAsText() == QStringLiteral("[Warning] be careful\n[Fatal] kaboom"));
+        }
+
+        SECTION("allMessagesAsText empty") {
+            cwErrorListModel empty;
+            CHECK(empty.allMessagesAsText() == QString());
+        }
+
         SECTION("roleNames") {
             auto roleNames = model.roleNames().values();
             CHECK(roleNames.contains("suppressed") == true);
