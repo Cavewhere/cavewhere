@@ -9,6 +9,7 @@
 #include "cwCaptureLeads.h"
 #include "cwCamera.h"
 #include "cwCaptureLabelPlacer.h"
+#include "cwCaptureLeadLines.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
@@ -334,6 +335,13 @@ void cwCaptureLeads::placeLeadLabels()
             entry.leaderEnd = p.leaderEnd;
             const qreal leaderLength = QLineF(entry.leaderStart, entry.leaderEnd).length();
             entry.hasLeader = leaderLength >= MinLeaderLengthPaperPx;
+            if(entry.hasLeader) {
+                // Register the leader so subsequent label placements (later
+                // leads + all stations) avoid sitting on the drawn line.
+                m_placer->addLineObstacle(
+                    QLineF(entry.leaderStart, entry.leaderEnd),
+                    cwCaptureLeadLines::LeaderPenWidthPaperPx);
+            }
             placed++;
         } else {
             entry.labelRect = QRectF();

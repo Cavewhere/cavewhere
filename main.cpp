@@ -8,6 +8,7 @@
 //Qt includes
 #include <QGuiApplication>
 #include <QApplication>
+#include <QFont>
 #include <QQmlContext>
 #include <QMessageBox>
 #include <QQmlApplicationEngine>
@@ -32,6 +33,8 @@
 #include "cwGlobals.h"
 #include "cwMetaTypeSystem.h"
 #include "cwTask.h"
+#include "cwSettings.h"
+#include "cwFontSettings.h"
 
 //QuickQanave includes
 #include <QuickQanava>
@@ -169,6 +172,23 @@ int main(int argc, char *argv[])
 
     //Load all the fonts
     cwGlobals::loadFonts();
+
+    // Default QFont() resolves to .AppleSystemUIFont on macOS, which SVG
+    // viewers cannot render. Align C++ rendering with the user's configured
+    // font family (QML UI already follows Theme.fontFamily).
+    cwSettings::initialize();
+    auto syncAppFont = []() {
+        const QString configured = cwFontSettings::instance()->fontFamily();
+        const QString family = configured.isEmpty()
+            ? cwFontSettings::fontEntries().first().family
+            : configured;
+        QFont f = QApplication::font();
+        f.setFamily(family);
+        QApplication::setFont(f);
+    };
+    syncAppFont();
+    QObject::connect(cwFontSettings::instance(), &cwFontSettings::fontFamilyChanged,
+                     qApp, syncAppFont);
 
     //Clear the settings for testing
     QSettings settings;

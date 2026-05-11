@@ -26,6 +26,11 @@ class cwCaptureLeads;
 class CAVEWHERE_LIB_EXPORT cwCaptureLeadLines : public QGraphicsItem
 {
 public:
+    // Stroke width of the rendered leader line, in paper pixels. Shared with
+    // cwCaptureLeads so its placer-side leader-obstacle registration uses the
+    // same width the painter eventually strokes.
+    static constexpr qreal LeaderPenWidthPaperPx = 0.6;
+
     explicit cwCaptureLeadLines(QGraphicsItem* parent = nullptr);
 
     void setLeads(const cwCaptureLeads* leads);

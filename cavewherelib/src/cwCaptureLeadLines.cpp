@@ -14,7 +14,6 @@
 
 namespace {
 const QColor LeaderColor(80, 80, 80);
-constexpr qreal LeaderPenWidth = 0.6;
 }
 
 cwCaptureLeadLines::cwCaptureLeadLines(QGraphicsItem* parent)
@@ -22,7 +21,7 @@ cwCaptureLeadLines::cwCaptureLeadLines(QGraphicsItem* parent)
     , m_leads(nullptr)
     , m_leaderPen(LeaderColor)
 {
-    m_leaderPen.setWidthF(LeaderPenWidth);
+    m_leaderPen.setWidthF(LeaderPenWidthPaperPx);
     m_leaderPen.setCapStyle(Qt::RoundCap);
     setFlag(QGraphicsItem::ItemClipsToShape, true);
 }

@@ -15,7 +15,9 @@
 #include <QFile>
 #include <QFont>
 #include <QImage>
+#include <QLineF>
 #include <QPainterPath>
+#include <QPointF>
 #include <QRegularExpression>
 #include <QStack>
 #include <QString>
@@ -40,10 +42,22 @@ struct ParsedImage {
     QImage image;
 };
 
-struct ParsedSvg {
-    QList<ParsedText>  texts;
-    QList<ParsedImage> images;
+struct ParsedLeaderSegment {
+    QLineF segment;
 };
+
+struct ParsedSvg {
+    QList<ParsedText>           texts;
+    QList<ParsedImage>          images;
+    QList<ParsedLeaderSegment>  leaderSegments;
+};
+
+// Hex color emitted by cwCaptureLeadLines for leader strokes (RGB 80,80,80).
+constexpr const char* LeaderStrokeColor = "#505050";
+
+// Shared SVG-numeric-list separator: any whitespace and/or commas. Used by
+// both transform parsing and polyline `points` parsing.
+static const QRegularExpression SvgNumSeparatorRe(QStringLiteral("[\\s,]+"));
 
 // Parse an SVG `transform="matrix(a,b,c,d,e,f)"` (the form QSvgGenerator
 // emits) into a QTransform. Returns identity for unrecognized strings.
@@ -51,7 +65,6 @@ QTransform parseTransformAttribute(const QString& attribute)
 {
     static const QRegularExpression matrixRe(
         QStringLiteral("matrix\\s*\\(([^)]+)\\)"));
-    static const QRegularExpression separatorRe(QStringLiteral("[\\s,]+"));
 
     const auto match = matrixRe.match(attribute);
     if(!match.hasMatch()) {
@@ -59,7 +72,7 @@ QTransform parseTransformAttribute(const QString& attribute)
     }
 
     const QStringList parts = match.captured(1)
-        .split(separatorRe, Qt::SkipEmptyParts);
+        .split(SvgNumSeparatorRe, Qt::SkipEmptyParts);
     if(parts.size() != 6) {
         return QTransform();
     }
@@ -169,6 +182,10 @@ ParsedSvg parseSvgFile(const QString& path)
 
     QStack<QTransform> txStack;
     txStack.push(QTransform());
+    // Tracks whether the current group nesting is inside a stroke="#505050"
+    // group emitted by cwCaptureLeadLines. Inherited from parent on push.
+    QStack<bool> leaderStack;
+    leaderStack.push(false);
 
     while(!xml.atEnd()) {
         xml.readNext();
@@ -185,6 +202,26 @@ ParsedSvg parseSvgFile(const QString& path)
                               * childTx;
                 }
                 txStack.push(childTx);
+
+                bool inheritedLeader = leaderStack.top();
+                if(attrs.hasAttribute(QStringLiteral("stroke"))) {
+                    inheritedLeader = attrs.value(QStringLiteral("stroke"))
+                                          .compare(QLatin1String(LeaderStrokeColor),
+                                                   Qt::CaseInsensitive) == 0;
+                }
+                leaderStack.push(inheritedLeader);
+            } else if(name == QLatin1String("polyline") && leaderStack.top()) {
+                // Single-segment leader line. Parse "x1,y1 x2,y2".
+                const QStringList toks = attrs.value(QStringLiteral("points"))
+                    .toString().split(SvgNumSeparatorRe, Qt::SkipEmptyParts);
+                if(toks.size() >= 4) {
+                    const QPointF p1(toks[0].toDouble(), toks[1].toDouble());
+                    const QPointF p2(toks[2].toDouble(), toks[3].toDouble());
+                    const QLineF local(p1, p2);
+                    const QLineF scene(txStack.top().map(local.p1()),
+                                       txStack.top().map(local.p2()));
+                    out.leaderSegments.append({scene});
+                }
             } else if(name == QLatin1String("text")) {
                 const double x = attrs.value(QStringLiteral("x")).toDouble();
                 const double y = attrs.value(QStringLiteral("y")).toDouble();
@@ -221,6 +258,7 @@ ParsedSvg parseSvgFile(const QString& path)
         } else if(xml.isEndElement()) {
             if(xml.name() == QLatin1String("g") && txStack.size() > 1) {
                 txStack.pop();
+                leaderStack.pop();
             }
         }
     }
@@ -299,6 +337,43 @@ QList<SvgPassageOverlap> SvgOverlapAnalyzer::passageOverlaps(const QUrl& svgUrl)
             ? 100.0 * double(opaquePixels) / double(totalPixels)
             : 0.0;
         result.append(entry);
+    }
+
+    return result;
+}
+
+QList<SvgTextLeaderCollision> SvgOverlapAnalyzer::textLeaderCollisions(const QUrl& svgUrl) const
+{
+    const ParsedSvg parsed = parseSvgFile(svgUrl.toLocalFile());
+
+    QList<SvgTextLeaderCollision> result;
+    if(parsed.leaderSegments.isEmpty() || parsed.texts.isEmpty()) {
+        return result;
+    }
+
+    for(const ParsedText& t : parsed.texts) {
+        if(t.rect.isEmpty()) {
+            continue;
+        }
+        // A leader anchors at one corner of its own label; that boundary
+        // contact is not an overlap. Shrink the rect so the intersect check
+        // ignores that touch point.
+        const QRectF shrunk = t.rect.adjusted(
+            DegenerateRectEpsilon,  DegenerateRectEpsilon,
+            -DegenerateRectEpsilon, -DegenerateRectEpsilon);
+        if(shrunk.width() <= 0.0 || shrunk.height() <= 0.0) {
+            continue;
+        }
+        for(const ParsedLeaderSegment& seg : parsed.leaderSegments) {
+            if(cwCaptureLabelPlacer::segmentIntersectsRect(seg.segment, shrunk)) {
+                SvgTextLeaderCollision c;
+                c.text = t.text;
+                c.textRect = t.rect;
+                c.leaderStart = seg.segment.p1();
+                c.leaderEnd = seg.segment.p2();
+                result.append(c);
+            }
+        }
     }
 
     return result;

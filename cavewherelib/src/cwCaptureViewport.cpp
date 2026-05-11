@@ -672,12 +672,13 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
              << "bounds=" << parentBounds
              << "exportDpi=" << exportDpi;
 
-    // Place labels. Stations first (typically more constrained), then leads.
-    if(CenterlineItem != nullptr) {
-        CenterlineItem->placeStationLabels();
-    }
+    // Place leads first so each placement registers its leader line into
+    // the placer; stations placed afterwards then avoid those leaders.
     if(LeadsItem != nullptr) {
         LeadsItem->placeLeadLabels();
+    }
+    if(CenterlineItem != nullptr) {
+        CenterlineItem->placeStationLabels();
     }
 
     LeadLinesItem = createLeadLinesItem(parent, imageScale, LeadsItem);

@@ -59,6 +59,23 @@ public:
 };
 Q_DECLARE_METATYPE(SvgTextCollision)
 
+class CAVEWHERE_TESTLIB_EXPORT SvgTextLeaderCollision
+{
+    Q_GADGET
+    QML_NAMED_ELEMENT(svgTextLeaderCollision)
+    Q_PROPERTY(QString text MEMBER text)
+    Q_PROPERTY(QRectF textRect MEMBER textRect)
+    Q_PROPERTY(QPointF leaderStart MEMBER leaderStart)
+    Q_PROPERTY(QPointF leaderEnd MEMBER leaderEnd)
+
+public:
+    QString text;
+    QRectF  textRect;
+    QPointF leaderStart;
+    QPointF leaderEnd;
+};
+Q_DECLARE_METATYPE(SvgTextLeaderCollision)
+
 class CAVEWHERE_TESTLIB_EXPORT SvgOverlapAnalyzer : public QObject
 {
     Q_OBJECT
@@ -68,8 +85,9 @@ class CAVEWHERE_TESTLIB_EXPORT SvgOverlapAnalyzer : public QObject
 public:
     explicit SvgOverlapAnalyzer(QObject* parent = nullptr);
 
-    Q_INVOKABLE QList<SvgPassageOverlap> passageOverlaps(const QUrl& svgUrl) const;
-    Q_INVOKABLE QList<SvgTextCollision>  textCollisions(const QUrl& svgUrl) const;
+    Q_INVOKABLE QList<SvgPassageOverlap>      passageOverlaps(const QUrl& svgUrl) const;
+    Q_INVOKABLE QList<SvgTextCollision>       textCollisions(const QUrl& svgUrl) const;
+    Q_INVOKABLE QList<SvgTextLeaderCollision> textLeaderCollisions(const QUrl& svgUrl) const;
 };
 
 #endif // SVGOVERLAPANALYZER_H

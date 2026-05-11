@@ -119,6 +119,26 @@ QPointF closestPointOnRect(const QRectF& rect, const QPointF& p)
 
 } // anonymous namespace
 
+bool cwCaptureLabelPlacer::segmentIntersectsRect(const QLineF& seg, const QRectF& rect)
+{
+    if(rect.contains(seg.p1()) || rect.contains(seg.p2())) {
+        return true;
+    }
+    const QLineF edges[4] = {
+        QLineF(rect.topLeft(),     rect.topRight()),
+        QLineF(rect.topRight(),    rect.bottomRight()),
+        QLineF(rect.bottomRight(), rect.bottomLeft()),
+        QLineF(rect.bottomLeft(),  rect.topLeft()),
+    };
+    QPointF dummy;
+    for(const QLineF& edge : edges) {
+        if(seg.intersects(edge, &dummy) == QLineF::BoundedIntersection) {
+            return true;
+        }
+    }
+    return false;
+}
+
 cwCaptureLabelPlacer::cwCaptureLabelPlacer() = default;
 
 void cwCaptureLabelPlacer::setObstacleBounds(const QRectF& parentBounds, qreal cellSizePaperPx)
@@ -223,6 +243,15 @@ void cwCaptureLabelPlacer::finalize()
 void cwCaptureLabelPlacer::clearPlacements()
 {
     m_placedLabels.clear();
+    m_lineObstacles.clear();
+}
+
+void cwCaptureLabelPlacer::addLineObstacle(const QLineF& segment, qreal thicknessPaperPx)
+{
+    if(segment.p1() == segment.p2()) {
+        return;
+    }
+    m_lineObstacles.append({segment, thicknessPaperPx});
 }
 
 cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequest& request)
@@ -265,6 +294,19 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
         // truncate the label, which we'd rather drop than render clipped.
         if(!clampRect.contains(candidate)) {
             return false;
+        }
+
+        // Avoid leader-line obstacles registered after finalize. Inflate the
+        // candidate by half the leader's thickness plus the standard label
+        // margin so the rejected zone is "rect with margin" vs "segment with
+        // thickness".
+        for(const LineObstacle& line : m_lineObstacles) {
+            const qreal expand = line.thickness * 0.5 + m_labelMargin;
+            const QRectF expandedCandidate = candidate.adjusted(-expand, -expand,
+                                                                 expand,  expand);
+            if(cwCaptureLabelPlacer::segmentIntersectsRect(line.segment, expandedCandidate)) {
+                return false;
+            }
         }
 
         // Avoid previously placed labels.

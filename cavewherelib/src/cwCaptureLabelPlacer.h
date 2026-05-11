@@ -10,6 +10,7 @@
 
 // Qt includes
 #include <QImage>
+#include <QLineF>
 #include <QPointF>
 #include <QRectF>
 #include <QSizeF>
@@ -56,6 +57,11 @@ public:
                        inkRect.top()  - tightAtOrigin.top());
     }
 
+    // Shared between the placer's line-obstacle check and the SVG test
+    // analyzer so both apply identical geometry — the test would otherwise
+    // silently drift from the placer's semantics.
+    static bool segmentIntersectsRect(const QLineF& seg, const QRectF& rect);
+
     cwCaptureLabelPlacer();
 
     void setObstacleBounds(const QRectF& parentBounds, qreal cellSizePaperPx);
@@ -73,7 +79,19 @@ public:
     void clearPlacements();
     Placement placeLabel(const LabelRequest& request);
 
+    // Registers a line segment as a post-finalize obstacle. Subsequent
+    // placeLabel() calls reject candidates whose rect intersects the
+    // segment expanded by half the thickness plus the standard label
+    // margin. Use for already-drawn leader lines so later labels don't sit
+    // on top of them.
+    void addLineObstacle(const QLineF& segment, qreal thicknessPaperPx);
+
 private:
+    struct LineObstacle {
+        QLineF segment;
+        qreal  thickness;
+    };
+
     QRectF              m_bounds;
     QRectF              m_viewportBounds;
     qreal               m_cellSize    = 2.0;
@@ -84,6 +102,7 @@ private:
     QVector<float>      m_dt;           // squared distance during build, sqrt'd in finalize()
     bool                m_finalized = false;
     cwCollisionRectKdTree m_placedLabels;
+    QVector<LineObstacle> m_lineObstacles;
 };
 
 #endif // CWCAPTURELABELPLACER_H

@@ -131,10 +131,31 @@ MainWindowTest {
                             "overlapPct=", c.overlapPercent.toFixed(1))
             }
 
+            let leaderCollisions = SvgOverlap.textLeaderCollisions(outUrl)
+            let leaderBad = []
+            for (let i = 0; i < leaderCollisions.length; i++) {
+                let c = leaderCollisions[i]
+                // "?" lead-marker glyphs sit AT the leader's endpoint by
+                // design (the leader points to the marker). Skip them.
+                let isLeadMarker = c.text === "?"
+                console.log("[text-leader-collision]", c.text,
+                            "rect=", c.textRect.x.toFixed(1), c.textRect.y.toFixed(1),
+                                     c.textRect.width.toFixed(1), c.textRect.height.toFixed(1),
+                            "leader=", c.leaderStart.x.toFixed(1), c.leaderStart.y.toFixed(1),
+                                       "->",
+                                       c.leaderEnd.x.toFixed(1), c.leaderEnd.y.toFixed(1),
+                            isLeadMarker ? "[lead-marker, skipped]" : "")
+                if (!isLeadMarker) {
+                    leaderBad.push(c.text)
+                }
+            }
+
             verify(passageBad.length === 0,
                    "Labels overlapping rendered passage ink: " + passageBad.join(", "))
             verify(textCollisions.length === 0,
                    "Labels overlap each other: " + textCollisions.length + " pairs")
+            verify(leaderBad.length === 0,
+                   "Labels overlap leader lines: " + leaderBad.join(", "))
         }
     }
 }
