@@ -140,3 +140,43 @@ TEST_CASE("placeLabel drops a label when every candidate's leader must cross",
     const auto placement = placer.placeLabel(req);
     CHECK_FALSE(placement.placed);
 }
+
+TEST_CASE("placeLabel prefers candidates whose leader avoids soft obstacles",
+          "[cwCaptureLabelPlacer]")
+{
+    // Hard obstacle at the anchor forces a non-zero leader. A single soft
+    // segment above the anchor would only be crossed by upward-going
+    // leaders; the scorer should prefer a sideways or downward placement.
+    cwCaptureLabelPlacer placer = makePlacer(QRectF(0, 0, 400, 400), 2.0);
+    placer.addObstacleRect(QRectF(195.0, 195.0, 10.0, 10.0));
+    placer.finalize();
+    const QLineF softLine(150.0, 190.0, 250.0, 190.0);
+    placer.addSoftLineObstacle(softLine, 1.0);
+
+    const QSizeF labelSize(10.0, 10.0);
+    cwCaptureLabelPlacer::LabelRequest req{
+        QStringLiteral("S"), QPointF(200.0, 200.0), labelSize};
+    const auto placement = placer.placeLabel(req);
+    REQUIRE(placement.placed);
+
+    const QLineF leader(placement.leaderStart, placement.leaderEnd);
+    CHECK_FALSE(cwCaptureLabelPlacer::segmentsCross(leader, softLine));
+}
+
+TEST_CASE("placeLabel biases toward the DT-gradient direction",
+          "[cwCaptureLabelPlacer]")
+{
+    // A wide obstacle band south of the anchor means the DT gradient
+    // points north. With no soft obstacles and a symmetric viewport,
+    // the scored search should pick a cell north of the anchor.
+    cwCaptureLabelPlacer placer = makePlacer(QRectF(0, 0, 400, 400), 2.0);
+    placer.addObstacleRect(QRectF(0.0, 210.0, 400.0, 190.0));
+    placer.finalize();
+
+    const QSizeF labelSize(10.0, 10.0);
+    cwCaptureLabelPlacer::LabelRequest req{
+        QStringLiteral("D"), QPointF(200.0, 210.0), labelSize};
+    const auto placement = placer.placeLabel(req);
+    REQUIRE(placement.placed);
+    CHECK(placement.labelRect.center().y() < 210.0);
+}

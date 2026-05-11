@@ -22,7 +22,6 @@
 namespace {
 const QColor LineColor(200, 200, 200);
 const QColor ForegroundColor(20, 20, 20);
-constexpr qreal PenWidth = 1.0;
 constexpr qreal LabelFontPointSize = 8.0;
 constexpr qreal BaseStationRadius = 2.0;
 }
@@ -37,8 +36,8 @@ cwCaptureCenterline::cwCaptureCenterline(QGraphicsItem* parent)
     , m_imageScale(1.0)
     , m_baseStationRadius(BaseStationRadius)
 {
-    m_linePen.setWidthF(PenWidth);
-    m_stationPen.setWidthF(PenWidth);
+    m_linePen.setWidthF(cwCaptureCenterline::LinePenWidthPaperPx);
+    m_stationPen.setWidthF(cwCaptureCenterline::LinePenWidthPaperPx);
     m_labelFont.setPointSizeF(LabelFontPointSize);
     setFlag(QGraphicsItem::ItemClipsToShape, true);
 }

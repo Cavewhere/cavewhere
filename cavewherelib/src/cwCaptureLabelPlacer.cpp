@@ -117,6 +117,17 @@ QPointF closestPointOnRect(const QRectF& rect, const QPointF& p)
                    qBound(rect.top(),    p.y(), rect.bottom()));
 }
 
+// Score-function tunables. Centerline-avoidance dominates: a single soft
+// crossing outweighs ~200 paper-px of extra leader length. Direction bias
+// is mild — DT-gradient direction is a tiebreaker, not a hard preference.
+constexpr qreal kSoftCrossPenalty = 200.0; // paper-px per crossing
+constexpr qreal kDirectionPenalty = 80.0;  // paper-px per radian
+
+// How many extra spiral rings to scan after the first hit. Bigger = more
+// candidates compared, more time. 3 rings keeps the candidate list small
+// (~24 cells) while giving the scorer enough diversity to find a winner.
+constexpr int   kCandidateWindow = 3;
+
 } // anonymous namespace
 
 bool cwCaptureLabelPlacer::segmentsCross(const QLineF& a, const QLineF& b,
@@ -279,6 +290,7 @@ void cwCaptureLabelPlacer::clearPlacements()
 {
     m_placedLabels.clear();
     m_lineObstacles.clear();
+    m_softLineObstacles.clear();
 }
 
 void cwCaptureLabelPlacer::addLineObstacle(const QLineF& segment, qreal thicknessPaperPx)
@@ -287,6 +299,14 @@ void cwCaptureLabelPlacer::addLineObstacle(const QLineF& segment, qreal thicknes
         return;
     }
     m_lineObstacles.append({segment, thicknessPaperPx});
+}
+
+void cwCaptureLabelPlacer::addSoftLineObstacle(const QLineF& segment, qreal thicknessPaperPx)
+{
+    if(segment.p1() == segment.p2()) {
+        return;
+    }
+    m_softLineObstacles.append({segment, thicknessPaperPx});
 }
 
 cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequest& request)
@@ -312,6 +332,31 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
 
     const QRectF clampRect = m_viewportBounds.isEmpty() ? m_bounds : m_viewportBounds;
     const qreal collisionPad = m_labelMargin;
+
+    // Preferred leader direction = DT gradient at the anchor. Points along
+    // the direction of fastest growth: perpendicular to nearby passage walls
+    // for a mid-passage anchor, along the passage axis at a passage end.
+    auto dtAt = [&](int x, int y) -> float {
+        x = qBound(0, x, m_maskW - 1);
+        y = qBound(0, y, m_maskH - 1);
+        return m_dt[cellIndex(x, y, m_maskW)];
+    };
+    QPointF preferredDir(0.0, -1.0);
+    if(anchorCellX >= 0 && anchorCellX < m_maskW
+       && anchorCellY >= 0 && anchorCellY < m_maskH) {
+        const float gx = dtAt(anchorCellX + 1, anchorCellY) - dtAt(anchorCellX - 1, anchorCellY);
+        const float gy = dtAt(anchorCellX, anchorCellY + 1) - dtAt(anchorCellX, anchorCellY - 1);
+        const qreal gmag = std::hypot(qreal(gx), qreal(gy));
+        if(gmag > 1.0e-6) {
+            preferredDir = QPointF(qreal(gx) / gmag, qreal(gy) / gmag);
+        }
+    }
+
+    struct Candidate {
+        QRectF  labelRect;
+        QPointF leaderStart;
+    };
+    QVector<Candidate> candidates;
 
     auto tryCell = [&](int cx, int cy) -> bool {
         if(cx < 0 || cy < 0 || cx >= m_maskW || cy >= m_maskH) {
@@ -352,36 +397,93 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
             }
         }
 
-        // Avoid previously placed labels.
+        // Avoid previously placed labels. Brute-force scan — N is small
+        // (~30 labels per export) and we need a read-only test that doesn't
+        // commit, since later candidates may score better than this one.
         const QRectF collisionRect = candidate.adjusted(-collisionPad, -collisionPad,
                                                          collisionPad,  collisionPad);
-        if(!m_placedLabels.addRect(collisionRect.toAlignedRect())) {
-            return false;
+        for(const QRectF& placed : std::as_const(m_placedLabels)) {
+            if(placed.intersects(collisionRect)) {
+                return false;
+            }
         }
 
-        result.placed = true;
-        result.labelRect = candidate;
-        result.leaderEnd = request.anchorPos;
-        result.leaderStart = candidateLeaderStart;
+        candidates.append({candidate, candidateLeaderStart});
         return true;
     };
 
-    if(tryCell(anchorCellX, anchorCellY)) {
-        return result;
+    int firstHitRadius = -1;
+    auto windowExhausted = [&](int r) {
+        return firstHitRadius >= 0 && r > firstHitRadius + kCandidateWindow;
+    };
+
+    tryCell(anchorCellX, anchorCellY);
+    if(!candidates.isEmpty()) {
+        firstHitRadius = 0;
     }
 
     for(int r = 1; r <= maxRadius; r++) {
-        // Top and bottom edges of the ring (full width).
-        for(int dx = -r; dx <= r; dx++) {
-            if(tryCell(anchorCellX + dx, anchorCellY - r)) return result;
-            if(tryCell(anchorCellX + dx, anchorCellY + r)) return result;
+        if(windowExhausted(r)) {
+            break;
         }
-        // Left and right edges of the ring (excluding corners already covered).
+        for(int dx = -r; dx <= r; dx++) {
+            tryCell(anchorCellX + dx, anchorCellY - r);
+            tryCell(anchorCellX + dx, anchorCellY + r);
+        }
         for(int dy = -r + 1; dy <= r - 1; dy++) {
-            if(tryCell(anchorCellX - r, anchorCellY + dy)) return result;
-            if(tryCell(anchorCellX + r, anchorCellY + dy)) return result;
+            tryCell(anchorCellX - r, anchorCellY + dy);
+            tryCell(anchorCellX + r, anchorCellY + dy);
+        }
+        if(firstHitRadius < 0 && !candidates.isEmpty()) {
+            firstHitRadius = r;
         }
     }
 
+    if(candidates.isEmpty()) {
+        return result;
+    }
+
+    auto scoreCandidate = [&](const Candidate& c) -> qreal {
+        int softCrossings = 0;
+        const QLineF leader(c.leaderStart, request.anchorPos);
+        for(const LineObstacle& line : std::as_const(m_softLineObstacles)) {
+            if(cwCaptureLabelPlacer::segmentsCross(leader, line.segment)) {
+                softCrossings++;
+            }
+        }
+
+        const QPointF delta = c.labelRect.center() - request.anchorPos;
+        const qreal   mag   = std::hypot(delta.x(), delta.y());
+        qreal directionDeviation = 0.0;
+        if(mag > 1.0e-6) {
+            const qreal dot = (delta.x() * preferredDir.x()
+                             + delta.y() * preferredDir.y()) / mag;
+            directionDeviation = std::acos(qBound(qreal(-1.0), dot, qreal(1.0)));
+        }
+
+        return mag
+             + kSoftCrossPenalty * qreal(softCrossings)
+             + kDirectionPenalty * directionDeviation;
+    };
+
+    int     bestIndex = 0;
+    qreal   bestScore = scoreCandidate(candidates[0]);
+    for(int i = 1; i < candidates.size(); i++) {
+        const qreal s = scoreCandidate(candidates[i]);
+        if(s < bestScore) {
+            bestScore = s;
+            bestIndex = i;
+        }
+    }
+
+    const Candidate& winner = candidates[bestIndex];
+    const QRectF committed = winner.labelRect.adjusted(-collisionPad, -collisionPad,
+                                                         collisionPad,  collisionPad);
+    m_placedLabels.append(committed);
+
+    result.placed      = true;
+    result.labelRect   = winner.labelRect;
+    result.leaderEnd   = request.anchorPos;
+    result.leaderStart = winner.leaderStart;
     return result;
 }

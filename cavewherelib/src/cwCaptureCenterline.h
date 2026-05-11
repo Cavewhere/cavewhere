@@ -26,6 +26,11 @@ class cwCaptureLabelPlacer;
 class CAVEWHERE_LIB_EXPORT cwCaptureCenterline : public QGraphicsItem
 {
 public:
+    // Stroke thickness used when rendering centerline legs, in paper pixels
+    // at the export DPI. Exposed so the placer can treat the centerline as
+    // a soft obstacle with the right inflation.
+    static constexpr qreal LinePenWidthPaperPx = 1.0;
+
     explicit cwCaptureCenterline(QGraphicsItem* parent = nullptr);
 
     void setNetwork(const cwSurveyNetwork& network);
@@ -44,6 +49,8 @@ public:
 
     QVector<QPointF> stationPositions() const;
     qreal stationDotRadius() const;
+
+    const QVector<QLineF>& lines() const { return m_lines; }
 
     QVector<QPair<QString, QRectF>> placedLabels() const;
 

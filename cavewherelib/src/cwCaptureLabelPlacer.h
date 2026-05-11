@@ -20,7 +20,6 @@
 
 // Our includes
 #include "cwGlobals.h"
-#include "cwCollisionRectKdTree.h"
 
 class CAVEWHERE_LIB_EXPORT cwCaptureLabelPlacer
 {
@@ -101,6 +100,12 @@ public:
     // on top of them.
     void addLineObstacle(const QLineF& segment, qreal thicknessPaperPx);
 
+    // Registers a line segment as a *soft* obstacle: candidate leaders that
+    // cross it incur a scoring penalty during placeLabel(), but are not
+    // hard-rejected. Use for centerline legs so leaders prefer routes that
+    // don't visually cut across cave passages they could go around.
+    void addSoftLineObstacle(const QLineF& segment, qreal thicknessPaperPx);
+
 private:
     struct LineObstacle {
         QLineF segment;
@@ -116,8 +121,9 @@ private:
     int                 m_maskH = 0;
     QVector<float>      m_dt;           // squared distance during build, sqrt'd in finalize()
     bool                m_finalized = false;
-    cwCollisionRectKdTree m_placedLabels;
+    QVector<QRectF>       m_placedLabels;
     QVector<LineObstacle> m_lineObstacles;
+    QVector<LineObstacle> m_softLineObstacles;
 };
 
 #endif // CWCAPTURELABELPLACER_H

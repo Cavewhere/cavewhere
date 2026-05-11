@@ -678,6 +678,17 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
 
     placer.finalize();
 
+    // Register centerline legs as soft obstacles so leaders prefer routes
+    // that don't visually cut across them. Soft = scoring penalty, not a
+    // hard rejection — better to ship a slightly-crossed leader than drop.
+    if(CenterlineItem != nullptr) {
+        const qreal centerlineThickness =
+            cwCaptureCenterline::LinePenWidthPaperPx * paperPxToLocal;
+        for(const QLineF& seg : CenterlineItem->lines()) {
+            placer.addSoftLineObstacle(seg, centerlineThickness);
+        }
+    }
+
     qDebug() << "[placer] tilesSampled=" << tilesSampled << "/" << tilesSeen
              << "bounds=" << parentBounds
              << "exportDpi=" << exportDpi;
