@@ -10,9 +10,11 @@
 #define CWREGIONSCENEMANAGER_H
 
 //Qt includes
+#include <QHash>
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QUuid>
 
 //Our includes
 class cwScene;
@@ -20,8 +22,10 @@ class cwGLLinePlot;
 class cwRenderGridPlane;
 class cwCavingRegion;
 class cwGLTerrain;
+class cwLazLayer;
 class cwRenderObject;
 class cwRenderLinePlot;
+class cwRenderPointCloud;
 class cwRenderScraps;
 class cwRenderRadialGradient;
 #include "cwRenderTexturedItems.h"
@@ -70,6 +74,13 @@ signals:
 public slots:
 
 private:
+    void connectLazLayers();
+    void disconnectLazLayers();
+    void rebuildLazRenderObjects();
+    void addLazLayer(cwLazLayer* layer);
+    void removeLazLayer(cwLazLayer* layer);
+    void syncLazLayerGeometry(cwLazLayer* layer);
+
     cwScene* Scene; //!<
 
     //The terrain that's rendered
@@ -78,6 +89,8 @@ private:
     cwRenderTexturedItems* m_items;
     cwRenderGridPlane* m_plane;
     cwRenderRadialGradient* m_background;
+
+    QHash<QUuid, cwRenderPointCloud*> m_pointClouds;
 
     //For rendering label
     QPointer<cwCavingRegion> Region;
