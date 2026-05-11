@@ -9,6 +9,7 @@
 #define CWCAPTURELABELPLACER_H
 
 // Qt includes
+#include <QFont>
 #include <QImage>
 #include <QLineF>
 #include <QPointF>
@@ -61,6 +62,11 @@ public:
     // analyzer so both apply identical geometry — the test would otherwise
     // silently drift from the placer's semantics.
     static bool segmentIntersectsRect(const QLineF& seg, const QRectF& rect);
+
+    // Returns `base` with setPixelSize derived from its pointSizeF and the
+    // given DPI. Use to size fonts so QFontMetricsF / QPainterPath::addText
+    // return paper-pixel-aligned bounds at the export resolution.
+    static QFont scaledFont(const QFont& base, int dpi);
 
     cwCaptureLabelPlacer();
 

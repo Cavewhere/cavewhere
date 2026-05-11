@@ -51,7 +51,6 @@ constexpr qreal ScaleBarZValue = 2000.0;
 constexpr qreal PlacerMaskCellPaperPx = 2.0;
 constexpr qreal PlacerLabelMarginPaperPx = 3.0;
 constexpr qreal StationDotObstacleMarginPaperPx = 1.0;
-constexpr int   PreviewExportDpi = 96;
 }
 
 cwCaptureViewport::cwCaptureViewport(QObject *parent) :
@@ -587,10 +586,13 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         return;
     }
 
-    // Export DPI: preview renders to screen at Qt's logical app DPI; full-res
-    // renders to QSvgGenerator at resolution(). Font construction in the
-    // placer uses this to size glyph rects in paper-pixel units.
-    const int exportDpi = previewCapture() ? PreviewExportDpi : resolution();
+    // The parent item's setScale value (inches-per-local-pixel). Driving the
+    // font and placer off this — instead of a fixed preview DPI — keeps the
+    // rendered glyph the same scene-inch size on both paths.
+    const double hiResScale = paperSizeOfItem().width()
+                              / (ItemScale * resolution() * viewport().width());
+    const double itemSetScale = previewCapture() ? ItemScale : hiResScale;
+    const int exportDpi = qMax(1, qRound(1.0 / itemSetScale));
 
     // Find the parent-coord bounds covering every tile. Each cwGraphicsImageItem
     // has pos() in parent coords and scale() that maps its pixel size to its
@@ -618,10 +620,15 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
                               QSizeF(viewport().size()) * imageScale);
     }
 
+    // Convert 300-DPI-paper-px constants into the active path's local
+    // coords, so cell discretization, label margin, and dot/marker radii
+    // all reserve the same scene-inch span in preview and export.
+    const double paperPxToLocal = 1.0 / (resolution() * itemSetScale);
+
     cwCaptureLabelPlacer placer;
-    placer.setObstacleBounds(parentBounds, PlacerMaskCellPaperPx);
+    placer.setObstacleBounds(parentBounds, PlacerMaskCellPaperPx * paperPxToLocal);
     placer.setViewportBounds(parentBounds);
-    placer.setLabelMarginPaperPx(PlacerLabelMarginPaperPx);
+    placer.setLabelMarginPaperPx(PlacerLabelMarginPaperPx * paperPxToLocal);
     placer.setAlphaThreshold(cwCaptureLabelPlacer::DefaultAlphaThreshold);
 
     int tilesSeen = 0;
@@ -641,18 +648,21 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
     CenterlineItem = createCenterlineItem(parent, imageScale);
     if(CenterlineItem != nullptr) {
         CenterlineItem->setExportDpi(exportDpi);
+        CenterlineItem->setPaperPxToLocal(paperPxToLocal);
         CenterlineItem->setPlacer(&placer);
     }
     LeadsItem = createLeadsItem(parent, imageScale);
     if(LeadsItem != nullptr) {
         LeadsItem->setExportDpi(exportDpi);
+        LeadsItem->setPaperPxToLocal(paperPxToLocal);
         LeadsItem->setPlacer(&placer);
         LeadsItem->setVisible(m_leadsVisible);
     }
 
     // Seed static dot/marker obstacles BEFORE finalize so labels avoid them.
     if(CenterlineItem != nullptr) {
-        const qreal dotHalf = CenterlineItem->stationDotRadius() + StationDotObstacleMarginPaperPx;
+        const qreal dotHalf = CenterlineItem->stationDotRadius()
+                              + StationDotObstacleMarginPaperPx * paperPxToLocal;
         for(const QPointF& pos : CenterlineItem->stationPositions()) {
             placer.addObstacleRect(QRectF(pos.x() - dotHalf, pos.y() - dotHalf,
                                            dotHalf * 2.0, dotHalf * 2.0));

@@ -35,10 +35,15 @@ public:
     void setExportDpi(int dpi);
     void setPlacer(cwCaptureLabelPlacer* placer);
 
+    // Scale factor for converting paper-pixels-at-export-DPI into the item's
+    // local coord system. Lets a single 300-DPI-paper-px constant produce the
+    // same scene-inch size in both preview and full-res paths.
+    void setPaperPxToLocal(double scale);
+
     void placeStationLabels();
 
     QVector<QPointF> stationPositions() const;
-    qreal stationDotRadius() const { return m_baseStationRadius; }
+    qreal stationDotRadius() const;
 
     QVector<QPair<QString, QRectF>> placedLabels() const;
 
@@ -52,6 +57,8 @@ private:
         QPointF position;
         QRectF  labelRect;
     };
+
+    QFont scaledLabelFont() const;
 
     void rebuildGeometry();
 
@@ -70,6 +77,7 @@ private:
     QPen m_labelPen;
     QFont m_labelFont;
     qreal m_baseStationRadius;
+    double m_paperPxToLocal = 1.0;
 };
 
 #endif // CWCAPTURECENTERLINE_H

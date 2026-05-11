@@ -141,6 +141,14 @@ bool cwCaptureLabelPlacer::segmentIntersectsRect(const QLineF& seg, const QRectF
 
 cwCaptureLabelPlacer::cwCaptureLabelPlacer() = default;
 
+QFont cwCaptureLabelPlacer::scaledFont(const QFont& base, int dpi)
+{
+    QFont f = base;
+    const int px = qMax(1, qRound(base.pointSizeF() * dpi * PointsToPixelsAt72Dpi));
+    f.setPixelSize(px);
+    return f;
+}
+
 void cwCaptureLabelPlacer::setObstacleBounds(const QRectF& parentBounds, qreal cellSizePaperPx)
 {
     m_bounds = parentBounds;

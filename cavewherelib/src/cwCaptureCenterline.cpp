@@ -93,6 +93,16 @@ void cwCaptureCenterline::setPlacer(cwCaptureLabelPlacer* placer)
     m_placer = placer;
 }
 
+void cwCaptureCenterline::setPaperPxToLocal(double scale)
+{
+    m_paperPxToLocal = qMax(0.0, scale);
+}
+
+qreal cwCaptureCenterline::stationDotRadius() const
+{
+    return m_baseStationRadius * m_paperPxToLocal;
+}
+
 QVector<QPointF> cwCaptureCenterline::stationPositions() const
 {
     QVector<QPointF> positions;
@@ -101,6 +111,11 @@ QVector<QPointF> cwCaptureCenterline::stationPositions() const
         positions.append(station.position);
     }
     return positions;
+}
+
+QFont cwCaptureCenterline::scaledLabelFont() const
+{
+    return cwCaptureLabelPlacer::scaledFont(m_labelFont, m_exportDpi);
 }
 
 QVector<QPair<QString, QRectF>> cwCaptureCenterline::placedLabels() const
@@ -144,7 +159,7 @@ void cwCaptureCenterline::paint(QPainter* painter, const QStyleOptionGraphicsIte
     painter->setBrush(Qt::NoBrush);
     painter->drawLines(m_lines);
 
-    const qreal stationRadius = m_baseStationRadius;
+    const qreal stationRadius = stationDotRadius();
 
     painter->setPen(m_stationPen);
     painter->setBrush(m_stationBrush);
@@ -156,8 +171,9 @@ void cwCaptureCenterline::paint(QPainter* painter, const QStyleOptionGraphicsIte
     }
 
     painter->setPen(m_labelPen);
-    painter->setFont(m_labelFont);
-    const QFontMetricsF paintMetrics(painter->font(), painter->device());
+    const QFont renderFont = scaledLabelFont();
+    painter->setFont(renderFont);
+    const QFontMetricsF paintMetrics(renderFont);
     for(const auto& station : std::as_const(m_stationData)) {
         if(!m_boundingRect.contains(station.position)) {
             continue;
@@ -236,14 +252,9 @@ void cwCaptureCenterline::placeStationLabels()
         return;
     }
 
-    // Build a font whose QFontMetricsF / QPainterPath::addText return
-    // paper-pixel-aligned sizes that match the painter's eventual SVG render
-    // at the export DPI. Independent of m_imageScale and host display DPI.
-    QFont placementFont = m_labelFont;
-    const int pixelSize = qMax(1,
-        qRound(m_labelFont.pointSizeF() * m_exportDpi
-               * cwCaptureLabelPlacer::PointsToPixelsAt72Dpi));
-    placementFont.setPixelSize(pixelSize);
+    // Use the same scaled font for placement that paint() uses, so the
+    // placer's reserved rect matches the painter's rendered glyph rect.
+    const QFont placementFont = scaledLabelFont();
 
     // Stable order: top-to-bottom, left-to-right. Deterministic placements
     // across rebuilds and across exports.

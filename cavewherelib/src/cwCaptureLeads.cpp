@@ -104,14 +104,26 @@ void cwCaptureLeads::setPlacer(cwCaptureLabelPlacer* placer)
     m_placer = placer;
 }
 
+void cwCaptureLeads::setPaperPxToLocal(double scale)
+{
+    m_paperPxToLocal = qMax(0.0, scale);
+}
+
 qreal cwCaptureLeads::markerRadius() const
 {
-    QFont placementGlyphFont = m_glyphFont;
-    placementGlyphFont.setPixelSize(qMax(1,
-        qRound(m_glyphFont.pointSizeF() * m_exportDpi * cwCaptureLabelPlacer::PointsToPixelsAt72Dpi)));
-    const QFontMetricsF metrics(placementGlyphFont);
+    const QFontMetricsF metrics(scaledGlyphFont());
     const QRectF ink = metrics.tightBoundingRect(QStringLiteral("?"));
-    return qMax(ink.width(), ink.height()) * 0.5 + GlyphPadding;
+    return qMax(ink.width(), ink.height()) * 0.5 + GlyphPadding * m_paperPxToLocal;
+}
+
+QFont cwCaptureLeads::scaledGlyphFont() const
+{
+    return cwCaptureLabelPlacer::scaledFont(m_glyphFont, m_exportDpi);
+}
+
+QFont cwCaptureLeads::scaledLabelFont() const
+{
+    return cwCaptureLabelPlacer::scaledFont(m_labelFont, m_exportDpi);
 }
 
 QVector<QPointF> cwCaptureLeads::leadMarkerPositions() const
@@ -149,10 +161,9 @@ void cwCaptureLeads::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
     painter->setRenderHint(QPainter::Antialiasing, true);
     painter->setClipRect(m_boundingRect);
 
-    painter->setFont(m_glyphFont);
-    const QFontMetricsF glyphMetrics(painter->font(), painter->device());
-    const QRectF glyphInk = glyphMetrics.tightBoundingRect(QStringLiteral("?"));
-    const qreal radius = qMax(glyphInk.width(), glyphInk.height()) * 0.5 + GlyphPadding;
+    const QFont glyphRenderFont = scaledGlyphFont();
+    painter->setFont(glyphRenderFont);
+    const qreal radius = markerRadius();
 
     for(const auto& lead : std::as_const(m_leads)) {
         if(!m_boundingRect.contains(lead.markerPos)) {
@@ -171,8 +182,9 @@ void cwCaptureLeads::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
     }
 
     painter->setPen(m_labelPen);
-    painter->setFont(m_labelFont);
-    const QFontMetricsF labelPaintMetrics(painter->font(), painter->device());
+    const QFont labelRenderFont = scaledLabelFont();
+    painter->setFont(labelRenderFont);
+    const QFontMetricsF labelPaintMetrics(labelRenderFont);
     for(const auto& lead : std::as_const(m_leads)) {
         if(lead.text.isEmpty() || lead.labelRect.isEmpty()) {
             continue;
@@ -293,13 +305,9 @@ void cwCaptureLeads::placeLeadLabels()
         return;
     }
 
-    // Font configured to match SVG-rendered glyph rect (export DPI in pixel
-    // size). QPainterPath::addText with this font returns the tight ink rect
-    // in paper-pixel coords, matching the painter's eventual render.
-    QFont placementLabelFont = m_labelFont;
-    const int labelPx = qMax(1,
-        qRound(m_labelFont.pointSizeF() * m_exportDpi * cwCaptureLabelPlacer::PointsToPixelsAt72Dpi));
-    placementLabelFont.setPixelSize(labelPx);
+    // Use the same scaled font for placement that paint() uses, so the
+    // placer's reserved rect matches the painter's rendered glyph rect.
+    const QFont placementLabelFont = scaledLabelFont();
 
     int placed = 0;
     int dropped = 0;
@@ -340,7 +348,7 @@ void cwCaptureLeads::placeLeadLabels()
                 // leads + all stations) avoid sitting on the drawn line.
                 m_placer->addLineObstacle(
                     QLineF(entry.leaderStart, entry.leaderEnd),
-                    cwCaptureLeadLines::LeaderPenWidthPaperPx);
+                    cwCaptureLeadLines::LeaderPenWidthPaperPx * m_paperPxToLocal);
             }
             placed++;
         } else {

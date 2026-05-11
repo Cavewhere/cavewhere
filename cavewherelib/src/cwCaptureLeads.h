@@ -46,6 +46,11 @@ public:
     void setExportDpi(int dpi);
     void setPlacer(cwCaptureLabelPlacer* placer);
 
+    // Scale factor for converting paper-pixels-at-export-DPI into the item's
+    // local coord system. Lets a single 300-DPI-paper-px constant produce the
+    // same scene-inch size in both preview and full-res paths.
+    void setPaperPxToLocal(double scale);
+
     qreal markerRadius() const;
     QVector<QPointF> leadMarkerPositions() const;
 
@@ -58,6 +63,9 @@ public:
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
 private:
+    QFont scaledGlyphFont() const;
+    QFont scaledLabelFont() const;
+
     void rebuildGeometry();
 
     QPointer<cwCavingRegion> m_region;
@@ -74,6 +82,7 @@ private:
     QPen m_labelPen;
     QFont m_labelFont;
     qreal m_textMaxWidth;
+    double m_paperPxToLocal = 1.0;
 };
 
 #endif // CWCAPTURELEADS_H
