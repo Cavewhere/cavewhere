@@ -393,6 +393,14 @@ QQ.Rectangle {
                 }
             }
 
+            QQ.Connections {
+                target: galleryView.model
+                function onRowsInserted(parent, first, last) {
+                    //Defer past ListView's own insertion handling, which shifts
+                    //currentIndex when rows are inserted at/before it.
+                    Qt.callLater(() => { galleryView.currentIndex = first })
+                }
+            }
         }
     }
 
