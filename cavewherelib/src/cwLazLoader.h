@@ -56,6 +56,22 @@ public:
     };
 
     static QFuture<cwLazLoadResult> load(const Request& request);
+
+    /**
+     * Header-only probe. Opens the LAZ, reads the embedded CS (OGC WKT) and
+     * raw bounding box, then closes — no point iteration, microseconds. Used
+     * to auto-adopt the project CS + worldOrigin on the first add to an
+     * otherwise empty project.
+     */
+    struct ProbeResult {
+        bool valid = false;        //!< false if the file could not be opened
+        QString sourceCS;          //!< empty for older GeoTIFF-only LAZs
+        cwGeoPoint bboxMin;        //!< raw LAZ source-CS coordinates
+        cwGeoPoint bboxMax;        //!< raw LAZ source-CS coordinates
+        cwGeoPoint bboxCenter;     //!< midpoint of bbox in source CS
+    };
+
+    static ProbeResult probeHeader(const QString& path);
 };
 
 #endif // CWLAZLOADER_H

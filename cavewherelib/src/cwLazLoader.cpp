@@ -23,23 +23,19 @@
 // LAStools / LASlib
 #include <LASlib/lasreader.hpp>
 
-namespace {
-
 // LASlib stores the OGC WKT CRS in vlr_geo_ogc_wkt when the file uses the
 // modern (LAS 1.4 / OGC WKT) CRS encoding. PROJ accepts WKT strings directly,
 // so we pass it straight through. Older LAS files use GeoTIFF GeoKeys
 // (vlr_geo_keys / vlr_geo_key_entries), which we don't decode here — those
 // files load with an empty source CS and the transform short-circuits to
 // identity. The user can supply an explicit override to handle that case.
-QString extractEmbeddedCS(const LASheader& header)
+static QString extractEmbeddedCS(const LASheader& header)
 {
     if (header.vlr_geo_ogc_wkt != nullptr && header.vlr_geo_ogc_wkt[0] != '\0') {
         return QString::fromLatin1(header.vlr_geo_ogc_wkt);
     }
     return QString();
 }
-
-} // namespace
 
 QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
 {
@@ -185,4 +181,31 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
 
             promise.addResult(std::move(result));
         });
+}
+
+cwLazLoader::ProbeResult cwLazLoader::probeHeader(const QString& path)
+{
+    ProbeResult result;
+
+    const QByteArray pathBytes = path.toUtf8();
+
+    LASreadOpener opener;
+    opener.set_file_name(pathBytes.constData(), FALSE);
+    LASreader* reader = opener.open();
+    if (reader == nullptr) {
+        return result;
+    }
+
+    const LASheader& header = reader->header;
+    result.sourceCS = extractEmbeddedCS(header);
+    result.bboxMin = cwGeoPoint(header.min_x, header.min_y, header.min_z);
+    result.bboxMax = cwGeoPoint(header.max_x, header.max_y, header.max_z);
+    result.bboxCenter = cwGeoPoint(0.5 * (header.min_x + header.max_x),
+                                   0.5 * (header.min_y + header.max_y),
+                                   0.5 * (header.min_z + header.max_z));
+    result.valid = true;
+
+    reader->close();
+    delete reader;
+    return result;
 }

@@ -156,6 +156,29 @@ MainWindowTest {
             compare(RootData.region.lazLayers.count, 1)
         }
 
+        function test_noProjectCSHelpBoxShowsForNoCSLayers() {
+            gotoGeospatialLayers()
+
+            const page = RootData.pageView.currentPageItem
+            const noCSHelp = findChild(page, "noProjectCSHelpBox")
+            verify(noCSHelp !== null, "noProjectCSHelpBox must exist")
+            tryVerify(() => !noCSHelp.visible, 2000,
+                      "no-CS hint should be hidden on a fresh project")
+
+            // TestHelper writes a no-CS fixture, so auto-adopt sets a worldOrigin
+            // but leaves globalCS empty — exactly the state that should surface
+            // the hint to the user.
+            const lazPath = TestHelper.writeMinimalLazInTempDir("nocshint")
+            RootData.region.lazLayers.addLayer(lazPath)
+            tryCompare(RootData.region.lazLayers, "count", 1)
+            waitForLazLoadsToFinish()
+
+            compare(RootData.region.globalCS, "",
+                    "globalCS must stay empty for a no-CS LAZ")
+            tryVerify(() => noCSHelp.visible, 2000,
+                      "no-CS hint should appear once a no-CS layer is present")
+        }
+
         function test_geospatialLayersLinkCount() {
             RootData.pageSelectionModel.currentPageAddress = "Source/Data"
             tryVerify(() => RootData.pageView.currentPageItem !== null

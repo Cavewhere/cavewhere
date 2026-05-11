@@ -86,6 +86,14 @@ StandardPage {
         visible: RootData.region.lazLayers.count === 0
     }
 
+    HelpBox {
+        objectName: "noProjectCSHelpBox"
+        text: "One or more layers don't have an embedded coordinate system.<br>"
+              + "Set the project's coordinate system on the <b>Data</b> page to align them with surveys."
+        visible: RootData.region.lazLayers.count > 0
+                 && RootData.region.globalCS === ""
+    }
+
     QQ.Component {
         id: wideDelegateComponent
 

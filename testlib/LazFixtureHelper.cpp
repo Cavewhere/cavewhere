@@ -8,7 +8,9 @@
 
 #include <LASlib/laswriter.hpp>
 
-bool writeSyntheticLazFile(const QString& outPath, const QVector<QVector3D>& points)
+bool writeSyntheticLazFile(const QString& outPath,
+                           const QVector<QVector3D>& points,
+                           const QString& wktCS)
 {
     LASheader header;
     header.clean_las_header();
@@ -17,6 +19,14 @@ bool writeSyntheticLazFile(const QString& outPath, const QVector<QVector3D>& poi
     header.z_scale_factor = 0.001;
     header.point_data_format = 0;
     header.point_data_record_length = 20;
+
+    QByteArray wktBytes;
+    if (!wktCS.isEmpty()) {
+        wktBytes = wktCS.toLatin1();
+        // LASheader copies the string into its own buffer; length excludes
+        // the implicit null terminator (matches set_geo_ogc_wkt's convention).
+        header.set_geo_ogc_wkt(wktBytes.size(), wktBytes.constData());
+    }
 
     LASpoint pointTemplate;
     pointTemplate.init(&header, header.point_data_format,
@@ -51,7 +61,7 @@ QString tempLazPath(QTemporaryDir& dir, const QString& tag)
                             .arg(QCoreApplication::applicationPid()));
 }
 
-QString writeMinimalLaz(const QString& path)
+QString writeMinimalLaz(const QString& path, const QString& wktCS)
 {
     const QVector<QVector3D> points = {
         { 0.0f, 0.0f, 0.0f },
@@ -60,7 +70,7 @@ QString writeMinimalLaz(const QString& path)
         { 3.0f, 3.0f, 3.0f },
         { 4.0f, 4.0f, 4.0f }
     };
-    if (!writeSyntheticLazFile(path, points)) {
+    if (!writeSyntheticLazFile(path, points, wktCS)) {
         return QString();
     }
     return path;

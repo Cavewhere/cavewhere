@@ -12,6 +12,8 @@
 
 //Our includes
 #include "cavewhere.pb.h"
+#include "cwCavingRegion.h"
+#include "cwLazLoader.h"
 
 cwLazLayerModel::cwLazLayerModel(QObject* parent) :
     QAbstractListModel(parent)
@@ -59,6 +61,8 @@ QHash<int, QByteArray> cwLazLayerModel::roleNames() const
 
 cwLazLayer* cwLazLayerModel::addLayer(const QString& sourcePath)
 {
+    maybeAutoAdoptCS(sourcePath);
+
     auto* layer = new cwLazLayer(this);
     connectLayer(layer);
 
@@ -205,4 +209,28 @@ int cwLazLayerModel::indexOf(cwLazLayer* layer) const
         }
     }
     return -1;
+}
+
+void cwLazLayerModel::maybeAutoAdoptCS(const QString& sourcePath)
+{
+    auto* region = qobject_cast<cwCavingRegion*>(parent());
+    if (region == nullptr) {
+        return;
+    }
+    if (!region->globalCS().isEmpty()) {
+        return;
+    }
+
+    const auto probe = cwLazLoader::probeHeader(sourcePath);
+    if (!probe.valid) {
+        return;
+    }
+
+    // setGlobalCS resets worldOrigin to {} internally; the setWorldOrigin
+    // call below restores a meaningful origin from the bbox center. Order
+    // matters — flip these and the origin gets wiped after we set it.
+    if (!probe.sourceCS.isEmpty()) {
+        region->setGlobalCS(probe.sourceCS);
+    }
+    region->setWorldOrigin(probe.bboxCenter);
 }

@@ -12,12 +12,15 @@ class cwLazLayer;
  * Test helper: writes a small synthetic point cloud to a .laz file.
  *
  * Path must end in .laz or .las — LASlib picks compression by extension. All
- * points share LAS point format 0 (x/y/z only); no CRS VLR is written.
+ * points share LAS point format 0 (x/y/z only). If @a wktCS is non-empty, the
+ * file gets an OGC WKT CRS VLR that cwLazLoader's extractEmbeddedCS will read
+ * back; otherwise no CRS VLR is written (older GeoTIFF-only equivalent).
  *
  * Returns true on success.
  */
 bool writeSyntheticLazFile(const QString& outPath,
-                           const QVector<QVector3D>& points);
+                           const QVector<QVector3D>& points,
+                           const QString& wktCS = QString());
 
 /**
  * Build a PID-tagged .laz path inside @a dir. Including
@@ -28,9 +31,10 @@ QString tempLazPath(QTemporaryDir& dir, const QString& tag);
 
 /**
  * Write a small (5-point) synthetic .laz at @a path. Returns the same path
- * for chaining.
+ * for chaining. If @a wktCS is empty, the file has no embedded CS (older
+ * GeoTIFF-only equivalent).
  */
-QString writeMinimalLaz(const QString& path);
+QString writeMinimalLaz(const QString& path, const QString& wktCS = QString());
 
 /**
  * Spin until @a layer reaches Loaded or Error, or @a timeoutMs elapses.

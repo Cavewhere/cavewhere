@@ -24,6 +24,8 @@ namespace CavewhereProto {
 class ProjectMetadata;
 }
 
+class cwCavingRegion;
+
 class CAVEWHERE_LIB_EXPORT cwLazLayerModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -73,6 +75,7 @@ signals:
 private:
     void connectLayer(cwLazLayer* layer);
     int indexOf(cwLazLayer* layer) const;
+    void maybeAutoAdoptCS(const QString& sourcePath);
 
     QList<cwLazLayer*> m_layers;
     cwFutureManagerToken m_futureManagerToken;
