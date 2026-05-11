@@ -137,6 +137,17 @@ private:
     void updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi);
     bool needsUpdate(cwSceneUpdate::Flag flag) const { return (m_updateFlags & flag) == flag; }
 
+    void ensurePointCloudPass(QRhi* rhi, QSize size);
+
+    // Release a PassConfig's GPU resources in dependency order: drop effects
+    // (their SRBs reference cfg.color/depth), evict pipelines keyed on rpDesc,
+    // then delete the target chain. Leaves cfg in a default-constructed state.
+    void destroyPassConfig(PassConfig& cfg);
+
+    // Swap-chain rpDesc isn't available until the first render(), so the
+    // post-process effects' initialize() is deferred to then.
+    bool m_effectsInitialized = false;
+
 
 };
 

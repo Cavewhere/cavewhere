@@ -33,8 +33,14 @@ void main(void)
     // Perspective-correct screen size of a fixed world-space radius: a sphere of
     // radius `basePointSize` at clip-space depth `gl_Position.w` projects to
     // `projectionMatrix[1][1] * viewportSize.y * 0.5 / gl_Position.w` pixels.
+    // abs() because projectionMatrix is pre-multiplied by Qt RHI's
+    // clipSpaceCorrMatrix — [1][1] is negative on Metal/Vulkan/D3D and a
+    // signed sizePx would always hit the lower clamp on those backends.
     float sizePx = basePointSize * devicePixelRatio
-                 * projectionMatrix[1][1] * viewportSize.y * 0.5
+                 * abs(projectionMatrix[1][1]) * viewportSize.y * 0.5
                  / gl_Position.w;
-    gl_PointSize = clamp(sizePx, 1.0, maxPointSizePx);
+    // 5px floor so far-away points stay visible (1px sprites alias to noise)
+    // and so each sprite covers more than EDL's sampling radius — otherwise
+    // the silhouette response samples background and no rim shading appears.
+    gl_PointSize = clamp(sizePx, 5.0, maxPointSizePx);
 }

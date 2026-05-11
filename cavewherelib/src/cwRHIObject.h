@@ -140,24 +140,35 @@ protected:
 // Post-process effect run on a pass's output. Each PassConfig may carry a
 // chain of these; chains longer than one currently require ping-pong
 // intermediates not yet implemented.
+//
+// Effects emit their draw inline inside an already-open render pass — the
+// scene begins the pass against the output target (typically the swap-chain),
+// invokes each effect's apply(), and ends the pass after the rest of the
+// scene-level draws. This keeps the pass count to one for the swap-chain.
 class cwRhiPostProcessEffect {
 public:
     virtual ~cwRhiPostProcessEffect() = default;
 
     // outputRPDesc is the render-pass descriptor the effect writes to
     // (typically the swap-chain's, for the last effect in a chain).
+    // outputSampleCount must match the destination render target's sample
+    // count — mismatched MSAA pipelines silently write only sample 0 on
+    // Metal/Vulkan, producing dim translucent output after resolve.
     virtual void initialize(QRhi* rhi,
                             QRhiRenderPassDescriptor* outputRPDesc,
+                            int outputSampleCount,
                             QRhiBuffer* globalUBO) = 0;
 
     // Called when an input texture is recreated (e.g. on swap-chain resize) so
     // the effect can rebuild SRBs that reference it.
     virtual void resize(QSize outputSize) { Q_UNUSED(outputSize); }
 
+    // Emit pipeline+SRB+draw into `cb` (which must be inside an open beginPass
+    // against the output target). `inputColor`/`inputDepth` are the source
+    // pass's offscreen textures.
     virtual void apply(QRhiCommandBuffer* cb,
                        QRhiTexture* inputColor,
                        QRhiTexture* inputDepth,
-                       QRhiRenderTarget* output,
                        QSize outputSize) = 0;
 };
 
