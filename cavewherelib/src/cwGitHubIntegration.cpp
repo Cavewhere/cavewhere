@@ -80,6 +80,7 @@ void cwGitHubIntegration::startDeviceLogin()
     }
 
     setErrorMessage({});
+    setLastPollError({});
     if (m_hasOpenedVerificationUrl) {
         m_hasOpenedVerificationUrl = false;
         emit verificationOpenedChanged();
@@ -107,6 +108,7 @@ void cwGitHubIntegration::cancelLogin()
     setRepositories({});
     emit accessTokenChanged();
     setAuthState(AuthState::Idle);
+    setLastPollError({});
 
     if (m_secondsUntilNextPoll != 0) {
         m_secondsUntilNextPoll = 0;
@@ -140,6 +142,7 @@ void cwGitHubIntegration::cancelDeviceLoginFlow()
     } else {
         setAuthState(AuthState::Authorized);
     }
+    setLastPollError({});
 }
 
 void cwGitHubIntegration::refreshRepositories()
@@ -188,6 +191,7 @@ void cwGitHubIntegration::reloadAccessTokenFromCredentialStore()
 
     setRepositories({});
     setErrorMessage({});
+    setLastPollError({});
     setAuthState(AuthState::Idle);
     m_hasLoadedStoredToken = false;
     loadStoredAccessToken();
@@ -290,6 +294,15 @@ void cwGitHubIntegration::setErrorMessage(const QString& message)
     emit errorMessageChanged();
 }
 
+void cwGitHubIntegration::setLastPollError(const QString& message)
+{
+    if (m_lastPollError == message) {
+        return;
+    }
+    m_lastPollError = message;
+    emit lastPollErrorChanged();
+}
+
 void cwGitHubIntegration::handleDeviceCode(const cwGitHubDeviceAuth::DeviceCodeInfo& info)
 {
     m_deviceInfo = info;
@@ -304,18 +317,33 @@ void cwGitHubIntegration::handleDeviceCode(const cwGitHubDeviceAuth::DeviceCodeI
 void cwGitHubIntegration::handleAccessToken(const cwGitHubDeviceAuth::AccessTokenResult& result)
 {
     if (!result.success) {
-        if (result.errorName == QStringLiteral("authorization_pending") ||
-            result.errorName == QStringLiteral("slow_down")) {
-            // Expected interim errors while waiting for the user.
+        if (result.errorName == QStringLiteral("authorization_pending")) {
+            setLastPollError(tr("Still waiting for you to authorize on GitHub."));
             return;
         }
 
-        setErrorMessage(result.errorDescription.isEmpty() ? result.errorName : result.errorDescription);
-        setAuthState(AuthState::Error);
-        emit authorizationFailed(m_errorMessage);
+        if (result.errorName == QStringLiteral("slow_down")) {
+            setLastPollError(tr("GitHub asked us to slow down. Trying again in %1 s.")
+                                 .arg(m_secondsUntilNextPoll));
+            return;
+        }
+
+        if (result.errorName == QStringLiteral("expired_token") ||
+            result.errorName == QStringLiteral("access_denied")) {
+            setLastPollError({});
+            setErrorMessage(result.errorDescription.isEmpty() ? result.errorName : result.errorDescription);
+            setAuthState(AuthState::Error);
+            emit authorizationFailed(m_errorMessage);
+            return;
+        }
+
+        // Transient/unknown error — keep polling but tell the user what happened.
+        const QString reason = result.errorDescription.isEmpty() ? result.errorName : result.errorDescription;
+        setLastPollError(tr("Last attempt failed: %1").arg(reason));
         return;
     }
 
+    setLastPollError({});
     m_accessToken = result.accessToken;
     m_tokenLoadedFromKeychain = false;
     emit accessTokenChanged();

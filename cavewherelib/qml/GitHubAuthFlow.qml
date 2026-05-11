@@ -66,6 +66,17 @@ ColumnLayout {
         text: qsTr("Trying connection in %1 s").arg(gitHubIntegration.secondsUntilNextPoll)
     }
 
+    QC.Label {
+        Layout.fillWidth: true
+        visible: gitHubIntegration.authState === GitHubIntegration.AwaitingVerification
+                 && gitHubIntegration.verificationOpened
+                 && gitHubIntegration.lastPollError.length > 0
+        wrapMode: QC.Label.WrapAtWordBoundaryOrAnywhere
+        color: Theme.textSubtle
+        font.pixelSize: Theme.fontSizeSmall
+        text: gitHubIntegration.lastPollError
+    }
+
     RowLayout {
         Layout.fillWidth: true
         visible: gitHubIntegration.authState !== GitHubIntegration.AwaitingVerification
