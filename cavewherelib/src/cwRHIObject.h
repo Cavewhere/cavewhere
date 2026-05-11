@@ -23,6 +23,10 @@ public:
         QRhiCommandBuffer* cb;
         cwRhiItemRenderer* renderer;
         cwSceneUpdate::Flag updateFlag;
+        // Active pass's render-pass descriptor — offscreen when the pass has a
+        // PassConfig entry in cwRhiScene, swap-chain otherwise. Back-ends key
+        // their pipelines on this so they rebuild when a pass switches targets.
+        QRhiRenderPassDescriptor* renderPassDescriptor = nullptr;
     };
 
     struct ResourceUpdateData {
@@ -37,7 +41,9 @@ public:
 
     //For rendering
     enum class RenderPass : int {
-        Opaque = 0,
+        Background = 0,   // radial gradient — was implicit; now an explicit named pass
+        PointCloud,       // LAZ point clouds — offscreen target + EDL composite
+        Opaque,           // line plot, grid, compass, scraps
         Transparent,
         Overlay,
         ShadowMap,
@@ -128,6 +134,31 @@ protected:
         return batches.last();
     }
 
+};
+
+
+// Post-process effect run on a pass's output. Each PassConfig may carry a
+// chain of these; chains longer than one currently require ping-pong
+// intermediates not yet implemented.
+class cwRhiPostProcessEffect {
+public:
+    virtual ~cwRhiPostProcessEffect() = default;
+
+    // outputRPDesc is the render-pass descriptor the effect writes to
+    // (typically the swap-chain's, for the last effect in a chain).
+    virtual void initialize(QRhi* rhi,
+                            QRhiRenderPassDescriptor* outputRPDesc,
+                            QRhiBuffer* globalUBO) = 0;
+
+    // Called when an input texture is recreated (e.g. on swap-chain resize) so
+    // the effect can rebuild SRBs that reference it.
+    virtual void resize(QSize outputSize) { Q_UNUSED(outputSize); }
+
+    virtual void apply(QRhiCommandBuffer* cb,
+                       QRhiTexture* inputColor,
+                       QRhiTexture* inputDepth,
+                       QRhiRenderTarget* output,
+                       QSize outputSize) = 0;
 };
 
 

@@ -14,6 +14,9 @@ QString cwSceneUpdate::flagToString(Flag flag) {
         if (isFlagSet(flag, Flag::DevicePixelRatio)) {
             flagNames << "DevicePixelRatio";
         }
+        if (isFlagSet(flag, Flag::ViewportSize)) {
+            flagNames << "ViewportSize";
+        }
     }
     return flagNames.join(" | ");
 }

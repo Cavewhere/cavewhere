@@ -54,6 +54,23 @@ cwRhiScene::~cwRhiScene()
     }
     delete m_globalUniformBuffer;
 
+    // Tear down per-pass offscreen targets before the pipeline cache so
+    // pipelines keyed on the per-pass rpDesc are released first. Effects must
+    // be destroyed before the textures they sample, since their destructors
+    // may release SRBs that still reference cfg.color / cfg.depth.
+    for (auto& kv : m_passConfigs) {
+        PassConfig& cfg = kv.second;
+        cfg.effects.clear();
+        if (cfg.rpDesc) {
+            evictPipelinesFor(cfg.rpDesc);
+        }
+        delete cfg.target;
+        delete cfg.rpDesc;
+        delete cfg.color;
+        delete cfg.depth;
+    }
+    m_passConfigs.clear();
+
     for (auto record : std::as_const(m_pipelineCache)) {
         delete record->pipeline;
         delete record->layout;
@@ -149,11 +166,28 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
 
 void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
 {
-    auto renderData = cwRHIObject::RenderData({cb, renderer, m_updateFlags});
-
     auto rhi = cb->rhi();
+
+    // The renderer's render target is the authoritative source for viewport
+    // pixel size — it accounts for devicePixelRatio, where cwCamera's
+    // viewportChanged signal carries pre-DPR units.
+    if (renderer && renderer->renderTarget()) {
+        const QSize currentSize = renderer->renderTarget()->pixelSize();
+        if (currentSize != m_viewportSize) {
+            m_viewportSize = currentSize;
+            m_updateFlags |= cwSceneUpdate::Flag::ViewportSize;
+        }
+    }
+
+    QRhiRenderPassDescriptor* swapchainRPDesc =
+        (renderer && renderer->renderTarget())
+        ? renderer->renderTarget()->renderPassDescriptor()
+        : nullptr;
+
+    cwRHIObject::RenderData renderData{cb, renderer, m_updateFlags, swapchainRPDesc};
+
     QRhiResourceUpdateBatch* resources = rhi->nextResourceUpdateBatch();
-    auto resourceUpdateData = cwRHIObject::ResourceUpdateData({resources, renderData});
+    cwRHIObject::ResourceUpdateData resourceUpdateData{resources, renderData};
 
     //Upate uniforms for all the objects
     updateGlobalUniformBuffer(resources, rhi);
@@ -176,16 +210,28 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     using PassBatchesArray = std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>;
     PassBatchesArray passBatches;
 
-    //For future implementations
-    // const std::array<cwRHIObject::RenderPass, 3> passOrder = {
-    //     cwRHIObject::RenderPass::Opaque,
-    //     cwRHIObject::RenderPass::Transparent,
-    //     cwRHIObject::RenderPass::Overlay
-    // };
-
-    const std::array<cwRHIObject::RenderPass, 1> passOrder = {
+    // Pass order. Passes without an entry in m_passConfigs render straight
+    // to the swap-chain; passes with an entry use the offscreen target there.
+    const std::array<cwRHIObject::RenderPass, 5> passOrder = {
+        cwRHIObject::RenderPass::Background,
+        cwRHIObject::RenderPass::PointCloud,
         cwRHIObject::RenderPass::Opaque,
+        cwRHIObject::RenderPass::Transparent,
+        cwRHIObject::RenderPass::Overlay,
     };
+
+    // Per-pass render-data: gather() reads renderData.renderPassDescriptor
+    // when building pipeline keys, so each pass needs its own copy with the
+    // pass's rpDesc (offscreen target or swap-chain fallback).
+    std::array<cwRHIObject::RenderData, kPassCount> perPassRenderData;
+    for (int i = 0; i < kPassCount; ++i) {
+        perPassRenderData[i] = renderData;
+        const auto pass = static_cast<cwRHIObject::RenderPass>(i);
+        auto cfgIt = m_passConfigs.find(pass);
+        if (cfgIt != m_passConfigs.end() && cfgIt->second.rpDesc) {
+            perPassRenderData[i].renderPassDescriptor = cfgIt->second.rpDesc;
+        }
+    }
 
     quint32 objectOrder = 0;
     for (auto object : std::as_const(m_rhiObjects)) {
@@ -198,7 +244,9 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
         for (cwRHIObject::RenderPass pass : passOrder) {
             const int passIndex = static_cast<int>(pass);
             auto& batches = passBatches[passIndex];
-            const cwRHIObject::GatherContext context { &renderData, pass, objectOrder };
+            const cwRHIObject::GatherContext context {
+                &perPassRenderData[passIndex], pass, objectOrder
+            };
             gathered |= object->gather(context, batches);
         }
 
@@ -355,6 +403,19 @@ void cwRhiScene::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi*
             );
     }
 
+    if (needsUpdate(cwSceneUpdate::Flag::ViewportSize)) {
+        const float viewportSize[2] = {
+            float(m_viewportSize.width()),
+            float(m_viewportSize.height()),
+        };
+        batch->updateDynamicBuffer(
+            m_globalUniformBuffer,
+            offsetof(GlobalUniform, viewportSize),
+            sizeof(GlobalUniform::viewportSize),
+            viewportSize
+            );
+    }
+
     m_updateFlags = cwSceneUpdate::Flag::None;
 }
 
@@ -407,6 +468,26 @@ void cwRhiScene::releasePipeline(PipelineRecord* record)
     delete record->pipeline;
     delete record->layout;
     delete record;
+}
+
+void cwRhiScene::evictPipelinesFor(QRhiRenderPassDescriptor* descriptor)
+{
+    if (!descriptor) {
+        return;
+    }
+
+    auto it = m_pipelineCache.begin();
+    while (it != m_pipelineCache.end()) {
+        if (it.key().renderPass == descriptor) {
+            PipelineRecord* record = it.value();
+            it = m_pipelineCache.erase(it);
+            delete record->pipeline;
+            delete record->layout;
+            delete record;
+        } else {
+            ++it;
+        }
+    }
 }
 
 QRhiSampler* cwRhiScene::sharedLinearClampSampler(QRhi* rhi)

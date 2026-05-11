@@ -36,7 +36,8 @@ private:
     void releasePipeline();
     bool ensurePipeline(const RenderData& data);
     bool ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer);
-    cwRhiPipelineKey buildPipelineKey(QRhiRenderTarget* target) const;
+    cwRhiPipelineKey buildPipelineKey(QRhiRenderTarget* target,
+                                      QRhiRenderPassDescriptor* renderPassDescriptor) const;
 
     bool m_resourcesInitialized = false;
 

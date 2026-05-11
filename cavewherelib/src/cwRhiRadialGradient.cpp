@@ -103,6 +103,10 @@ bool cwRhiRadialGradient::gather(const GatherContext& context, QVector<PipelineB
         return false;
     }
 
+    if (context.renderPass != RenderPass::Background) {
+        return false;
+    }
+
     const RenderData& renderData = *context.renderData;
     if (!ensurePipeline(renderData)) {
         return false;
@@ -147,7 +151,7 @@ bool cwRhiRadialGradient::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    const auto key = buildPipelineKey(target);
+    const auto key = buildPipelineKey(target, data.renderPassDescriptor);
     if (!m_hasPipelineKey || !(m_pipelineKey == key)) {
         releasePipeline();
 
@@ -245,10 +249,11 @@ void cwRhiRadialGradient::releasePipeline()
     m_hasPipelineKey = false;
 }
 
-cwRhiPipelineKey cwRhiRadialGradient::buildPipelineKey(QRhiRenderTarget* target) const
+cwRhiPipelineKey cwRhiRadialGradient::buildPipelineKey(QRhiRenderTarget* target,
+                                                       QRhiRenderPassDescriptor* renderPassDescriptor) const
 {
     cwRhiPipelineKey key;
-    key.renderPass = target ? target->renderPassDescriptor() : nullptr;
+    key.renderPass = renderPassDescriptor;
     key.sampleCount = target ? target->sampleCount() : 1;
     key.vertexShader = QString::fromUtf8(kVertexShaderPath);
     key.fragmentShader = QString::fromUtf8(kFragmentShaderPath);

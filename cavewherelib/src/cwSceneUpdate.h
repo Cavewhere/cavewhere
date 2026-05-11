@@ -11,6 +11,7 @@ enum class Flag : int {
     ViewMatrix = 0x1,
     ProjectionMatrix = 0x2,
     DevicePixelRatio = 0x4,
+    ViewportSize = 0x8,
 };
 
 inline Flag operator|(Flag lhs, Flag rhs) {

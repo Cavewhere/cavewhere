@@ -193,7 +193,7 @@ bool cwRHIGridPlane::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    const auto key = buildPipelineKey(target);
+    const auto key = buildPipelineKey(target, data.renderPassDescriptor);
     if (!m_hasPipelineKey || !(m_pipelineKey == key)) {
         releasePipeline();
 
@@ -291,10 +291,11 @@ bool cwRHIGridPlane::ensureShaderResources(QRhi* rhi)
     return true;
 }
 
-cwRhiPipelineKey cwRHIGridPlane::buildPipelineKey(QRhiRenderTarget* target) const
+cwRhiPipelineKey cwRHIGridPlane::buildPipelineKey(QRhiRenderTarget* target,
+                                                  QRhiRenderPassDescriptor* renderPassDescriptor) const
 {
     cwRhiPipelineKey key;
-    key.renderPass = target ? target->renderPassDescriptor() : nullptr;
+    key.renderPass = renderPassDescriptor;
     key.sampleCount = target ? target->sampleCount() : 1;
     key.vertexShader = QStringLiteral(":/shaders/grid.vert.qsb");
     key.fragmentShader = QStringLiteral(":/shaders/grid.frag.qsb");
