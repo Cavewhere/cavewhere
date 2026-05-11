@@ -313,7 +313,10 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
 
 void cwRhiScene::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi)
 {
-    if(needsUpdate(cwSceneUpdate::Flag::ProjectionMatrix) || needsUpdate(cwSceneUpdate::Flag::ViewMatrix)) {
+    const bool projectionChanged = needsUpdate(cwSceneUpdate::Flag::ProjectionMatrix);
+    const bool viewChanged = needsUpdate(cwSceneUpdate::Flag::ViewMatrix);
+
+    if (projectionChanged || viewChanged) {
         m_projectionCorrectedMatrix = rhi->clipSpaceCorrMatrix() * m_projectionMatrix;
         m_viewProjectionMatrix = m_projectionCorrectedMatrix * m_viewMatrix;
 
@@ -323,25 +326,33 @@ void cwRhiScene::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi*
             sizeof(GlobalUniform::viewProjectionMatrix),
             m_viewProjectionMatrix.constData()
             );
+    }
 
+    if (projectionChanged) {
+        batch->updateDynamicBuffer(
+            m_globalUniformBuffer,
+            offsetof(GlobalUniform, projectionMatrix),
+            sizeof(GlobalUniform::projectionMatrix),
+            m_projectionCorrectedMatrix.constData()
+            );
+    }
 
-        if(needsUpdate(cwSceneUpdate::Flag::ProjectionMatrix)) {
-            batch->updateDynamicBuffer(
-                m_globalUniformBuffer,
-                offsetof(GlobalUniform, projectionMatrix),
-                sizeof(GlobalUniform::projectionMatrix),
-                m_projectionCorrectedMatrix.constData()
-                );
-        }
+    if (viewChanged) {
+        batch->updateDynamicBuffer(
+            m_globalUniformBuffer,
+            offsetof(GlobalUniform, viewMatrix),
+            sizeof(GlobalUniform::viewMatrix),
+            m_viewMatrix.constData()
+            );
+    }
 
-        if(needsUpdate(cwSceneUpdate::Flag::ViewMatrix)) {
-            batch->updateDynamicBuffer(
-                m_globalUniformBuffer,
-                offsetof(GlobalUniform, viewMatrix),
-                sizeof(GlobalUniform::viewMatrix),
-                m_viewMatrix.constData()
-                );
-        }
+    if (needsUpdate(cwSceneUpdate::Flag::DevicePixelRatio)) {
+        batch->updateDynamicBuffer(
+            m_globalUniformBuffer,
+            offsetof(GlobalUniform, devicePixelRatio),
+            sizeof(GlobalUniform::devicePixelRatio),
+            &m_devicePixelRatio
+            );
     }
 
     m_updateFlags = cwSceneUpdate::Flag::None;
