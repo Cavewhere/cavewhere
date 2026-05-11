@@ -119,6 +119,33 @@ QPointF closestPointOnRect(const QRectF& rect, const QPointF& p)
 
 } // anonymous namespace
 
+bool cwCaptureLabelPlacer::segmentsCross(const QLineF& a, const QLineF& b,
+                                         QPointF* outIntersection)
+{
+    // Endpoints that coincide should not count as a crossing — a leader
+    // ending at the same point as another's endpoint (or touching it) is
+    // a T-touch, not an X-cross.
+    constexpr qreal kEndpointEpsilonSq = 1.0e-12;
+    auto sqDist = [](const QPointF& p, const QPointF& q) {
+        const qreal dx = p.x() - q.x();
+        const qreal dy = p.y() - q.y();
+        return dx * dx + dy * dy;
+    };
+
+    QPointF intersection;
+    if(a.intersects(b, &intersection) != QLineF::BoundedIntersection) {
+        return false;
+    }
+    if(sqDist(intersection, a.p1()) < kEndpointEpsilonSq) return false;
+    if(sqDist(intersection, a.p2()) < kEndpointEpsilonSq) return false;
+    if(sqDist(intersection, b.p1()) < kEndpointEpsilonSq) return false;
+    if(sqDist(intersection, b.p2()) < kEndpointEpsilonSq) return false;
+    if(outIntersection != nullptr) {
+        *outIntersection = intersection;
+    }
+    return true;
+}
+
 bool cwCaptureLabelPlacer::segmentIntersectsRect(const QLineF& seg, const QRectF& rect)
 {
     if(rect.contains(seg.p1()) || rect.contains(seg.p2())) {
@@ -308,11 +335,19 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
         // candidate by half the leader's thickness plus the standard label
         // margin so the rejected zone is "rect with margin" vs "segment with
         // thickness".
+        const QPointF candidateLeaderStart = closestPointOnRect(candidate, request.anchorPos);
+        const QLineF  candidateLeader(candidateLeaderStart, request.anchorPos);
         for(const LineObstacle& line : m_lineObstacles) {
             const qreal expand = line.thickness * 0.5 + m_labelMargin;
             const QRectF expandedCandidate = candidate.adjusted(-expand, -expand,
                                                                  expand,  expand);
             if(cwCaptureLabelPlacer::segmentIntersectsRect(line.segment, expandedCandidate)) {
+                return false;
+            }
+            // The label rect can be clear of the existing leader while the
+            // new leader still crosses it. Reject that case so leaders
+            // don't visually intersect each other in the export.
+            if(cwCaptureLabelPlacer::segmentsCross(candidateLeader, line.segment)) {
                 return false;
             }
         }
@@ -327,7 +362,7 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
         result.placed = true;
         result.labelRect = candidate;
         result.leaderEnd = request.anchorPos;
-        result.leaderStart = closestPointOnRect(candidate, request.anchorPos);
+        result.leaderStart = candidateLeaderStart;
         return true;
     };
 

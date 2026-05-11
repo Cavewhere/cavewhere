@@ -342,6 +342,32 @@ QList<SvgPassageOverlap> SvgOverlapAnalyzer::passageOverlaps(const QUrl& svgUrl)
     return result;
 }
 
+QList<SvgLeaderLeaderCollision> SvgOverlapAnalyzer::leaderLeaderCollisions(const QUrl& svgUrl) const
+{
+    const ParsedSvg parsed = parseSvgFile(svgUrl.toLocalFile());
+
+    QList<SvgLeaderLeaderCollision> result;
+    const int n = parsed.leaderSegments.size();
+    for(int i = 0; i < n; i++) {
+        const QLineF& a = parsed.leaderSegments[i].segment;
+        for(int j = i + 1; j < n; j++) {
+            const QLineF& b = parsed.leaderSegments[j].segment;
+            QPointF intersection;
+            if(!cwCaptureLabelPlacer::segmentsCross(a, b, &intersection)) {
+                continue;
+            }
+            SvgLeaderLeaderCollision c;
+            c.leaderAStart = a.p1();
+            c.leaderAEnd   = a.p2();
+            c.leaderBStart = b.p1();
+            c.leaderBEnd   = b.p2();
+            c.intersection = intersection;
+            result.append(c);
+        }
+    }
+    return result;
+}
+
 QList<SvgTextLeaderCollision> SvgOverlapAnalyzer::textLeaderCollisions(const QUrl& svgUrl) const
 {
     const ParsedSvg parsed = parseSvgFile(svgUrl.toLocalFile());

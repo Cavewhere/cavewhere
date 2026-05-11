@@ -63,6 +63,15 @@ public:
     // silently drift from the placer's semantics.
     static bool segmentIntersectsRect(const QLineF& seg, const QRectF& rect);
 
+    // True when two segments cross at a point interior to both — shared
+    // endpoints (T-touch) do not count as a cross. Used by the placer to
+    // reject candidate leaders that would cross a previously placed leader,
+    // and by the SVG analyzer to flag the same condition post-export. When
+    // `outIntersection` is non-null, the intersection point is written
+    // through it on a true result, sparing callers a second QLineF::intersects.
+    static bool segmentsCross(const QLineF& a, const QLineF& b,
+                              QPointF* outIntersection = nullptr);
+
     // Returns `base` with setPixelSize derived from its pointSizeF and the
     // given DPI. Use to size fonts so QFontMetricsF / QPainterPath::addText
     // return paper-pixel-aligned bounds at the export resolution.

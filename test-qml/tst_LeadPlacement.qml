@@ -150,12 +150,25 @@ MainWindowTest {
                 }
             }
 
+            let leaderCrossings = SvgOverlap.leaderLeaderCollisions(outUrl)
+            for (let i = 0; i < leaderCrossings.length; i++) {
+                let c = leaderCrossings[i]
+                console.log("[leader-leader-collision]",
+                            "A=", c.leaderAStart.x.toFixed(1), c.leaderAStart.y.toFixed(1),
+                            "->", c.leaderAEnd.x.toFixed(1), c.leaderAEnd.y.toFixed(1),
+                            "B=", c.leaderBStart.x.toFixed(1), c.leaderBStart.y.toFixed(1),
+                            "->", c.leaderBEnd.x.toFixed(1), c.leaderBEnd.y.toFixed(1),
+                            "at", c.intersection.x.toFixed(1), c.intersection.y.toFixed(1))
+            }
+
             verify(passageBad.length === 0,
                    "Labels overlapping rendered passage ink: " + passageBad.join(", "))
             verify(textCollisions.length === 0,
                    "Labels overlap each other: " + textCollisions.length + " pairs")
             verify(leaderBad.length === 0,
                    "Labels overlap leader lines: " + leaderBad.join(", "))
+            verify(leaderCrossings.length === 0,
+                   "Leader lines cross each other: " + leaderCrossings.length + " pairs")
         }
     }
 }
