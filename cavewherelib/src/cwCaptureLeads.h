@@ -9,7 +9,6 @@
 #define CWCAPTURELEADS_H
 
 // Qt includes
-#include <QBrush>
 #include <QFont>
 #include <QGraphicsItem>
 #include <QPainterPath>
@@ -77,7 +76,6 @@ private:
     cwCaptureLabelPlacer* m_placer = nullptr;
     QVector<LeadDrawData> m_leads;
     QPen m_glyphPen;
-    QBrush m_glyphBrush;
     QFont m_glyphFont;
     QPen m_labelPen;
     QFont m_labelFont;

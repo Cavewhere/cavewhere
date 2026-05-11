@@ -30,7 +30,6 @@
 
 namespace {
 const QColor ForegroundColor(20, 20, 20);
-const QColor BackgroundColor(255, 255, 255);
 constexpr qreal PenWidth = 1.0;
 constexpr qreal FontPointSize = 8.0;
 constexpr qreal GlyphPadding = 1.5;
@@ -43,7 +42,6 @@ cwCaptureLeads::cwCaptureLeads(QGraphicsItem* parent)
     , m_camera(nullptr)
     , m_imageScale(1.0)
     , m_glyphPen(ForegroundColor)
-    , m_glyphBrush(BackgroundColor)
     , m_labelPen(ForegroundColor)
     , m_textMaxWidth(TextMaxWidth)
 {
@@ -171,7 +169,7 @@ void cwCaptureLeads::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
         }
 
         painter->setPen(m_glyphPen);
-        painter->setBrush(m_glyphBrush);
+        painter->setBrush(Qt::NoBrush);
         painter->drawEllipse(lead.markerPos, radius, radius);
 
         const QRectF glyphRect(lead.markerPos.x() - radius,
