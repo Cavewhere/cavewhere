@@ -19,7 +19,7 @@ layout(std140, binding = 0) uniform GlobalBlock {
 
 // TODO: promote to a per-layer uniform once UI sliders for point size land.
 const float basePointSize = 0.05;
-const float maxPointSizePx = 16.0;
+const float maxPointSizePx = 64.0;
 
 out gl_PerVertex {
     vec4 gl_Position;
@@ -39,8 +39,10 @@ void main(void)
     float sizePx = basePointSize * devicePixelRatio
                  * abs(projectionMatrix[1][1]) * viewportSize.y * 0.5
                  / gl_Position.w;
-    // 5px floor so far-away points stay visible (1px sprites alias to noise)
-    // and so each sprite covers more than EDL's sampling radius — otherwise
-    // the silhouette response samples background and no rim shading appears.
-    gl_PointSize = clamp(sizePx, 5.0, maxPointSizePx);
+    // 1px floor: zoomed-out clouds were getting darker than zoomed-in ones
+    // because a large min clamp made far points overdraw and stack EDL
+    // darkening. Letting size shrink to a single pixel keeps overdraw flat
+    // across zoom levels. EDL response gets noisier on lone 1px sprites but
+    // that's preferable to the inconsistent intensity.
+    gl_PointSize = clamp(sizePx, 1.0, maxPointSizePx);
 }

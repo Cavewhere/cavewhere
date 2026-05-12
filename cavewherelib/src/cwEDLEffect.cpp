@@ -8,6 +8,9 @@
 // Our includes
 #include "cwEDLEffect.h"
 
+#include <algorithm>
+#include <cmath>
+
 cwEDLEffect::cwEDLEffect()
 {
 }
@@ -39,6 +42,7 @@ void cwEDLEffect::initialize(QRhi* rhi,
     // Vulkan, and D3D store textures top-left (Y-down); OpenGL stores them
     // bottom-left (Y-up). The shader uses textureYFlip to compensate.
     m_uniformData.textureYFlip = rhi->isYUpInFramebuffer() ? 0.0f : 1.0f;
+    m_uniformsDirty = true;
 
     if (!m_edlUBO) {
         const quint32 size = rhi->ubufAligned(sizeof(EdlUniform));
@@ -153,6 +157,53 @@ bool cwEDLEffect::ensureBindings(QRhiTexture* color, QRhiTexture* depth)
     return true;
 }
 
+void cwEDLEffect::updateFrameUniforms(const FrameUniformContext& ctx)
+{
+    // Skip the recompute when nothing relevant changed — the UBO retains the
+    // last value, so we only pay the upload on projection/viewport/DPR edits.
+    const bool projectionChanged = !m_frameStateSeen
+                                   || ctx.projectionMatrix != m_lastProjectionMatrix;
+    const bool viewportChanged = !m_frameStateSeen
+                                 || ctx.viewportSize != m_lastViewportSize
+                                 || ctx.devicePixelRatio != m_lastDevicePixelRatio;
+    if (!projectionChanged && !viewportChanged) {
+        return;
+    }
+    m_frameStateSeen = true;
+    m_lastProjectionMatrix = ctx.projectionMatrix;
+    m_lastViewportSize = ctx.viewportSize;
+    m_lastDevicePixelRatio = ctx.devicePixelRatio;
+
+    if (projectionChanged) {
+        // Mirrors linearDepthFromNear() in EDL.frag — see the shader for the
+        // derivation. QMatrix4x4::operator()(row, col) maps to GLSL's
+        // projectionMatrix[col][row].
+        const float a = ctx.projectionMatrix(2, 2);
+        const float b = ctx.projectionMatrix(2, 3);
+        const bool isPerspective = ctx.projectionMatrix(3, 2) < -0.5f;
+
+        auto depthFromNear = [&](float d) {
+            if (isPerspective) {
+                return -b * d / ((d + a) * a);
+            }
+            return -d / a;
+        };
+
+        const float midZ = depthFromNear(0.5f);
+        const float farZ = depthFromNear(1.0f);
+        const float normalizer = std::log2(farZ / std::max(midZ, 1e-6f));
+        m_uniformData.strength = m_strengthBaseline / std::max(normalizer, 1.0f);
+    }
+
+    if (viewportChanged && ctx.viewportSize.isValid()) {
+        const float scale = m_radiusPx * ctx.devicePixelRatio;
+        m_uniformData.sampleOffset[0] = scale / float(ctx.viewportSize.width());
+        m_uniformData.sampleOffset[1] = scale / float(ctx.viewportSize.height());
+    }
+
+    m_uniformsDirty = true;
+}
+
 void cwEDLEffect::apply(QRhiCommandBuffer* cb,
                         QRhiTexture* inputColor,
                         QRhiTexture* inputDepth,
@@ -167,9 +218,6 @@ void cwEDLEffect::apply(QRhiCommandBuffer* cb,
     }
 
     if (m_uniformsDirty) {
-        // First-frame upload of EDL parameters. They never change in this
-        // version (constants from the plan); when UI sliders land, set dirty
-        // again on parameter change and feed the batch through here.
         auto* batch = m_rhi->nextResourceUpdateBatch();
         batch->updateDynamicBuffer(m_edlUBO, 0, sizeof(EdlUniform), &m_uniformData);
         cb->resourceUpdate(batch);

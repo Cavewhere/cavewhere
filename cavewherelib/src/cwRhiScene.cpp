@@ -392,12 +392,17 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     const QSize outputSize = renderer->renderTarget()->pixelSize();
     cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
 
+    const cwRhiPostProcessEffect::FrameUniformContext effectFrameCtx{
+        m_projectionCorrectedMatrix, m_viewportSize, m_devicePixelRatio
+    };
+
     QRhiGraphicsPipeline* boundPipeline = nullptr;
     for (cwRHIObject::RenderPass pass : passOrder) {
         if (pass == RP::PointCloud && runPointCloudOffscreenPass) {
             // Cloud batches were drawn offscreen; this slot runs the effect chain.
             PassConfig& cfg = pcCfgIt->second;
             for (auto& fx : cfg.effects) {
+                fx->updateFrameUniforms(effectFrameCtx);
                 fx->apply(cb, cfg.color, cfg.depth, outputSize);
             }
             // Effects bind their own pipeline + SRB; reset the tracker.
@@ -426,9 +431,12 @@ void cwRhiScene::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi*
             sizeof(GlobalUniform::viewProjectionMatrix),
             m_viewProjectionMatrix.constData()
             );
-    }
 
-    if (projectionChanged) {
+        // Upload projectionMatrix alongside viewProjection, not only when the
+        // ProjectionMatrix flag is set. EDL reads projectionMatrix to detect
+        // ortho vs perspective and to linearize depth, and the corrected
+        // matrix can change without the upstream flag firing (e.g. first
+        // sync after setCamera() where ViewMatrix is the only flag). Cheap.
         batch->updateDynamicBuffer(
             m_globalUniformBuffer,
             offsetof(GlobalUniform, projectionMatrix),

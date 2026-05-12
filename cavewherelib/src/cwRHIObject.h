@@ -8,6 +8,8 @@ class QRhiResourceUpdateBatch;
 
 #include <rhi/qrhi.h>
 #include <functional>
+#include <QMatrix4x4>
+#include <QSize>
 #include <QVector>
 
 //Our includes
@@ -147,6 +149,15 @@ protected:
 // scene-level draws. This keeps the pass count to one for the swap-chain.
 class cwRhiPostProcessEffect {
 public:
+    // Frame-level state that effects may need to precompute their own uniforms.
+    // Provided by cwRhiScene once per frame before apply(). Effects that don't
+    // care leave the default updateFrameUniforms() no-op.
+    struct FrameUniformContext {
+        QMatrix4x4 projectionMatrix;  // already pre-multiplied by clipSpaceCorrMatrix
+        QSize viewportSize;
+        float devicePixelRatio;
+    };
+
     virtual ~cwRhiPostProcessEffect() = default;
 
     // outputRPDesc is the render-pass descriptor the effect writes to
@@ -162,6 +173,11 @@ public:
     // Called when an input texture is recreated (e.g. on swap-chain resize) so
     // the effect can rebuild SRBs that reference it.
     virtual void resize(QSize outputSize) { Q_UNUSED(outputSize); }
+
+    // Push per-frame CPU-side state. Called from cwRhiScene before apply() so
+    // the effect can derive UBO contents (e.g. projection-dependent constants)
+    // without re-reading them from the global UBO (which lives in GPU memory).
+    virtual void updateFrameUniforms(const FrameUniformContext&) {}
 
     // Emit pipeline+SRB+draw into `cb` (which must be inside an open beginPass
     // against the output target). `inputColor`/`inputDepth` are the source

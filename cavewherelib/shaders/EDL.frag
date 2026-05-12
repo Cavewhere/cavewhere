@@ -11,9 +11,13 @@
 // compare its depth to a ring of 8 neighbors. Pixels behind a silhouette
 // edge (neighbors closer) get darkened in proportion to the depth gap.
 //
-// Operates in log2(depth) space for stability across the depth range
-// (otherwise the EDL response collapses near the far plane where the
-// depth buffer is logarithmic).
+// Operates in log2(linear view-space Z). The window-space depth buffer is
+// hyperbolic under perspective (d = A + B/z_view), so log2 of the raw
+// depth would produce wildly different EDL intensities at different
+// distances from the camera. Linearizing to view-space Z first makes the
+// response depend on the depth-ratio between neighbors, not on where you
+// happen to be in the depth range. Works the same way under orthographic,
+// where d is already linear in z_view.
 
 layout(std140, binding = 0) uniform GlobalBlock {
     mat4 viewProjectionMatrix;
@@ -24,14 +28,16 @@ layout(std140, binding = 0) uniform GlobalBlock {
 };
 
 layout(std140, binding = 1) uniform EdlBlock {
-    float strength;        // ~300 baseline scale; CloudCompare default ~1.0 modulates the exponent
-    float radiusPx;        // ~1.4 default; sampling radius in logical (pre-DPR) pixels
+    // Effective darkening exponent. Computed CPU-side as
+    //   baseline_strength / max(log2(linearDepthFromNear(1)/linearDepthFromNear(0.5)), 1)
+    // so silhouette response stays consistent across ortho and perspective.
+    float strength;
     // 1.0 when the backend's framebuffer is Y-down (Metal/Vulkan/D3D) so the
     // offscreen texture's V axis follows native top-left convention and we
-    // must flip V when sampling; 0.0 on OpenGL (Y-up framebuffer, V=0 is
-    // bottom as expected). Set from C++ via QRhi::isYUpInFramebuffer().
+    // must flip V when sampling; 0.0 on OpenGL (Y-up framebuffer).
     float textureYFlip;
-    float _pad0;
+    // radiusPx * devicePixelRatio / viewportSize, precomputed CPU-side.
+    vec2 sampleOffset;
 };
 
 layout(binding = 2) uniform sampler2D uColor;
@@ -39,6 +45,34 @@ layout(binding = 3) uniform sampler2D uDepth;
 
 layout(location = 0) in vec2 vUV;
 layout(location = 0) out vec4 fragColor;
+
+// Linear distance from the near plane to the fragment, in view-space units.
+// Always >= 0 (0 at near, far-near at far). Used instead of abs(view-space Z)
+// because CaveWhere's ortho camera uses a symmetric near=-far setup — the
+// visible range straddles z_view = 0, and log2(abs(z_view)) would hit -inf
+// at the camera plane, blowing up the EDL response to fully black there.
+// Distance-from-near is always positive and bounded away from zero except
+// exactly at the near plane (clamped with +1e-6 at sample time).
+//
+// projectionMatrix here is Qt RHI's clipSpaceCorrMatrix * P, so window-space
+// depth is [0,1]. P[2][3] (column 2, row 3) is -1 for perspective, 0 for ortho.
+float linearDepthFromNear(float d)
+{
+    float a = projectionMatrix[2][2];
+    float b = projectionMatrix[3][2];
+    if (projectionMatrix[2][3] < -0.5) {
+        // Perspective. Derivation:
+        //   z_view(d)  = -b / (d + a)
+        //   z_near     = z_view(0) = -b/a
+        //   depth_from_near = z_near - z_view(d)
+        //                   = -b/a + b/(d+a)
+        //                   = -b * d / ((d + a) * a)
+        return -b * d / ((d + a) * a);
+    }
+    // Orthographic. d = a*z + b, so z_view(d) = (d-b)/a and z_near = -b/a.
+    // depth_from_near = z_near - z_view(d) = -d/a.
+    return -d / a;
+}
 
 void main()
 {
@@ -57,21 +91,18 @@ void main()
         discard;
     }
 
-    float logD0 = log2(d0 + 1e-6);
+    // Linearize as distance from near plane (always >= 0).
+    float logZ0 = log2(linearDepthFromNear(d0) + 1e-6);
 
-    // 8-tap ring of neighbours. Direction vectors are precomputed; radius is
-    // scaled by devicePixelRatio so it's perceptually constant across DPR.
     const vec2 dirs[8] = vec2[](
         vec2( 1.0,  0.0), vec2(-1.0,  0.0), vec2( 0.0,  1.0), vec2( 0.0, -1.0),
         vec2( 0.707,  0.707), vec2(-0.707,  0.707),
         vec2( 0.707, -0.707), vec2(-0.707, -0.707));
 
-    vec2 px = (radiusPx * devicePixelRatio) / viewportSize;
-
     float response = 0.0;
     for (int i = 0; i < 8; ++i) {
-        float di = texture(uDepth, uv + dirs[i] * px).r;
-        response += max(0.0, logD0 - log2(di + 1e-6));
+        float di = texture(uDepth, uv + dirs[i] * sampleOffset).r;
+        response += max(0.0, logZ0 - log2(linearDepthFromNear(di) + 1e-6));
     }
     response /= 8.0;
 
