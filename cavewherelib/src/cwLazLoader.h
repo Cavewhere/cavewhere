@@ -28,6 +28,12 @@ struct CAVEWHERE_LIB_EXPORT cwLazLoadResult
     QVector3D bboxMin;
     QVector3D bboxMax;
     QString sourceCS; // CS actually used during load (override > LAZ-embedded > "")
+    // Mean planar spacing between points in meters, derived from XY bbox area:
+    //   sqrt((dx * dy) / pointCount)
+    // Drives world-space point radius in PointCloud.vert so points just touch
+    // their neighbors — gap-free coverage is what lets EDL produce surfaces
+    // rather than punching the background through. 0 when no points loaded.
+    float meanSpacingXY = 0.0f;
 };
 
 /**

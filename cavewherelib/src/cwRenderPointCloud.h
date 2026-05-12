@@ -25,11 +25,19 @@ class cwRenderPointCloud : public cwRenderObject
     friend class cwRHIPointCloud;
 
 public:
+    // Bundle of fields handed across the model→render boundary in one shot.
+    // Mirrors cwLazLoadResult / cwLazLayer's load-time outputs that the
+    // renderer consumes together.
+    struct GeometryData {
+        cwGeometry geometry;
+        QVector3D bboxMin;
+        QVector3D bboxMax;
+        float meanSpacingXY = 0.0f;
+    };
+
     explicit cwRenderPointCloud(QObject* parent = nullptr);
 
-    void setGeometry(cwGeometry geometry,
-                     QVector3D bboxMin,
-                     QVector3D bboxMax);
+    void setGeometry(GeometryData data);
 
     void clear();
 
@@ -38,6 +46,7 @@ public:
     QVector3D bboxMax() const;
     float pointSize() const;
     void setPointSize(float pointSize);
+    float meanSpacingXY() const;
 
 protected:
     cwRHIObject* createRHIObject() override;
@@ -48,6 +57,9 @@ private:
         QVector3D bboxMin;
         QVector3D bboxMax;
         float pointSize = 2.0f;
+        // Mean planar inter-point spacing in meters (sqrt(area / N)). Drives
+        // per-cloud point radius in PointCloud.vert. 0 until first load.
+        float meanSpacingXY = 0.0f;
 
         // cwTracked compares with != to detect changes; geometry's
         // QByteArray COW makes this assignment cheap, and a coarse
@@ -76,6 +88,11 @@ inline QVector3D cwRenderPointCloud::bboxMax() const
 inline float cwRenderPointCloud::pointSize() const
 {
     return m_data.value().pointSize;
+}
+
+inline float cwRenderPointCloud::meanSpacingXY() const
+{
+    return m_data.value().meanSpacingXY;
 }
 
 #endif // CWRENDERPOINTCLOUD_H

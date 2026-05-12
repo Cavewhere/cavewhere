@@ -14,14 +14,13 @@ cwRenderPointCloud::cwRenderPointCloud(QObject* parent) :
 {
 }
 
-void cwRenderPointCloud::setGeometry(cwGeometry geometry,
-                                     QVector3D bboxMin,
-                                     QVector3D bboxMax)
+void cwRenderPointCloud::setGeometry(GeometryData geometry)
 {
     Data data = m_data.value();
-    data.geometry = std::move(geometry);
-    data.bboxMin = bboxMin;
-    data.bboxMax = bboxMax;
+    data.geometry = std::move(geometry.geometry);
+    data.bboxMin = geometry.bboxMin;
+    data.bboxMax = geometry.bboxMax;
+    data.meanSpacingXY = geometry.meanSpacingXY;
     m_data.setValue(data);
     update();
 }

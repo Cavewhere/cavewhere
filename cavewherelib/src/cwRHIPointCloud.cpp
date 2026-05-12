@@ -17,6 +17,7 @@
 #include <QDebug>
 #include <QFile>
 
+
 cwRHIPointCloud::cwRHIPointCloud()
 {
 }
@@ -24,6 +25,7 @@ cwRHIPointCloud::cwRHIPointCloud()
 cwRHIPointCloud::~cwRHIPointCloud()
 {
     delete m_vertexBuffer;
+    delete m_perCloudUBO;
     delete m_srb;
     releasePipeline();
 }
@@ -94,6 +96,26 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
     }
 
     batch->uploadStaticBuffer(m_vertexBuffer, vertexData.constData());
+
+    // Per-cloud uniform — world-space point radius derived from the cloud's
+    // measured mean spacing. * 0.5 because the spacing is *between* points, and
+    // a radius of half that just covers the gap to a neighbor. The shader
+    // applies a further `gapFudge` constant on top to compensate for clustering.
+    const float worldRadius = value.meanSpacingXY * 0.5f;
+
+    if (!m_perCloudUBO) {
+        const quint32 size = rhi->ubufAligned(sizeof(PerCloudUniform));
+        m_perCloudUBO = rhi->newBuffer(QRhiBuffer::Dynamic,
+                                       QRhiBuffer::UniformBuffer,
+                                       size);
+        m_perCloudUBO->create();
+    }
+
+    if (m_lastUploadedWorldRadius != worldRadius) {
+        const PerCloudUniform uniform{ worldRadius, {0.0f, 0.0f, 0.0f} };
+        batch->updateDynamicBuffer(m_perCloudUBO, 0, sizeof(PerCloudUniform), &uniform);
+        m_lastUploadedWorldRadius = worldRadius;
+    }
 
     m_data.resetChanged();
 }
@@ -222,7 +244,8 @@ bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
 
             record->layout = localRhi->newShaderResourceBindings();
             record->layout->setBindings({
-                QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr)
+                QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr),
+                QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, nullptr),
             });
             record->layout->create();
 
@@ -276,7 +299,8 @@ bool cwRHIPointCloud::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* render
 
     m_srb = rhi->newShaderResourceBindings();
     m_srb->setBindings({
-        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer())
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer()),
+        QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, m_perCloudUBO),
     });
     m_srb->create();
 
@@ -301,12 +325,12 @@ cwRhiPipelineKey cwRHIPointCloud::buildPipelineKey(QRhiRenderTarget* target,
     key.depthTest = 1;
     key.depthWrite = 1;
     key.globalBinding = 0;
-    key.perDrawBinding = 0xFF;
+    key.perDrawBinding = 1;
     key.textureBinding = 0xFF;
     key.globalStages = 0x1;
-    key.perDrawStages = 0;
+    key.perDrawStages = 0x1;
     key.textureStages = 0;
-    key.hasPerDraw = 0;
+    key.hasPerDraw = 1;
     key.topology = static_cast<quint8>(QRhiGraphicsPipeline::Points);
     return key;
 }

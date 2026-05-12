@@ -164,9 +164,12 @@ void cwRegionSceneManager::syncLazLayerGeometry(cwLazLayer* layer)
     cwRenderPointCloud* renderObject = it.value();
 
     if (layer->loadStatus() == cwLazLayer::LoadStatus::Loaded) {
-        renderObject->setGeometry(layer->geometry(),
-                                  layer->bboxMin(),
-                                  layer->bboxMax());
+        renderObject->setGeometry({
+            .geometry = layer->geometry(),
+            .bboxMin = layer->bboxMin(),
+            .bboxMax = layer->bboxMax(),
+            .meanSpacingXY = layer->meanSpacingXY(),
+        });
     } else {
         renderObject->clear();
     }

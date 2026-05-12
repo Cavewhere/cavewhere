@@ -148,6 +148,7 @@ void cwLazLayer::applyResult(cwLazLoadResult&& result)
     m_geometry = std::move(result.geometry);
     m_bboxMin = result.bboxMin;
     m_bboxMax = result.bboxMax;
+    m_meanSpacingXY = result.meanSpacingXY;
 
     if (m_sourceCS != result.sourceCS) {
         m_sourceCS = result.sourceCS;
@@ -156,6 +157,7 @@ void cwLazLayer::applyResult(cwLazLoadResult&& result)
 
     emit pointCountChanged();
     emit bboxChanged();
+    emit meanSpacingXYChanged();
 
     if (m_geometry.vertexCount() == 0) {
         setErrorMessage(QStringLiteral("Could not read points from %1").arg(m_sourcePath));

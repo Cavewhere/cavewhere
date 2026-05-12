@@ -17,6 +17,9 @@
 #include <QMatrix4x4>
 #include <QVector3D>
 
+// Std includes
+#include <limits>
+
 class cwRhiItemRenderer;
 
 class cwRHIPointCloud : public cwRHIObject
@@ -39,11 +42,23 @@ private:
     cwRhiPipelineKey buildPipelineKey(QRhiRenderTarget* target,
                                       QRhiRenderPassDescriptor* renderPassDescriptor) const;
 
+    // std140 layout: a single float padded to a 16-byte vec4 slot. Mirrors the
+    // PerCloudBlock declaration in PointCloud.vert.
+    struct PerCloudUniform {
+        float worldRadius = 0.0f;
+        float pad[3] = {0.0f, 0.0f, 0.0f};
+    };
+
     bool m_resourcesInitialized = false;
 
     QRhiVertexInputLayout m_inputLayout;
     QRhiBuffer* m_vertexBuffer = nullptr;
     qsizetype m_vertexBufferCapacity = 0;
+    // Per-cloud uniform block (binding 1): world-space point radius derived
+    // from the cloud's mean point spacing. NaN sentinel forces the first
+    // upload since NaN != worldRadius for any non-NaN worldRadius.
+    QRhiBuffer* m_perCloudUBO = nullptr;
+    float m_lastUploadedWorldRadius = std::numeric_limits<float>::quiet_NaN();
     QRhiShaderResourceBindings* m_srb = nullptr;
     cwRhiScene* m_scene = nullptr;
     cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;

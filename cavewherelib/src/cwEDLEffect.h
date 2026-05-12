@@ -60,7 +60,7 @@ private:
     // CPU-side knobs. m_strengthBaseline is the user-tunable value (when
     // sliders land); UBO strength = baseline / max(log-span, 1.0) so silhouette
     // response is consistent between ortho and perspective.
-    float m_strengthBaseline = 1000.0f;
+    float m_strengthBaseline = 1500.0f;
     float m_radiusPx = 1.4f;
 
     QMatrix4x4 m_lastProjectionMatrix;

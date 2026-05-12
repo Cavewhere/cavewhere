@@ -13,6 +13,7 @@
 #include <QVector>
 
 //Std includes
+#include <cmath>
 #include <cstring>
 #include <limits>
 
@@ -172,6 +173,14 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
             if (written > 0) {
                 result.bboxMin = QVector3D(minX, minY, minZ);
                 result.bboxMax = QVector3D(maxX, maxY, maxZ);
+
+                // Mean planar spacing — treats the cloud as a roughly 2D surface
+                // (terrestrial/airborne LAZ). The 1e-3 floor on dx,dy protects
+                // against a degenerate bbox (vertical-only scan) producing
+                // spacing = 0 and a sub-pixel point size downstream.
+                const double dx = std::max(double(maxX - minX), 1e-3);
+                const double dy = std::max(double(maxY - minY), 1e-3);
+                result.meanSpacingXY = float(std::sqrt(dx * dy / double(written)));
             }
 
             reportProgress();

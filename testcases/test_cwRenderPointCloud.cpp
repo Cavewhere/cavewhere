@@ -41,11 +41,17 @@ TEST_CASE("cwRenderPointCloud: setGeometry populates Data", "[cwRenderPointCloud
     const QVector3D bboxMin(-1.0f, -2.0f, -3.0f);
     const QVector3D bboxMax(1.0f, 2.0f, 3.0f);
 
-    cloud.setGeometry(makePointGeometry(points), bboxMin, bboxMax);
+    cloud.setGeometry({
+        .geometry = makePointGeometry(points),
+        .bboxMin = bboxMin,
+        .bboxMax = bboxMax,
+        .meanSpacingXY = 0.5f,
+    });
 
     REQUIRE(cloud.pointCount() == points.size());
     REQUIRE(cloud.bboxMin() == bboxMin);
     REQUIRE(cloud.bboxMax() == bboxMax);
+    REQUIRE(cloud.meanSpacingXY() == 0.5f);
 }
 
 TEST_CASE("cwRenderPointCloud: clear resets vertex data but keeps pointSize",
@@ -53,9 +59,12 @@ TEST_CASE("cwRenderPointCloud: clear resets vertex data but keeps pointSize",
     cwRenderPointCloud cloud;
     cloud.setPointSize(5.5f);
 
-    cloud.setGeometry(makePointGeometry({ QVector3D(1.0f, 1.0f, 1.0f) }),
-                      QVector3D(1.0f, 1.0f, 1.0f),
-                      QVector3D(1.0f, 1.0f, 1.0f));
+    cloud.setGeometry({
+        .geometry = makePointGeometry({ QVector3D(1.0f, 1.0f, 1.0f) }),
+        .bboxMin = QVector3D(1.0f, 1.0f, 1.0f),
+        .bboxMax = QVector3D(1.0f, 1.0f, 1.0f),
+        .meanSpacingXY = 0.0f,
+    });
     REQUIRE(cloud.pointCount() == 1);
 
     cloud.clear();
