@@ -23,9 +23,7 @@ MainWindowTest {
         }
 
         function init() {
-            while (cave.rowCount() > 0) {
-                cave.removeTrip(cave.rowCount() - 1)
-            }
+            cave.clearTrips()
             cavePage().selection.clear()
         }
 
@@ -143,11 +141,6 @@ MainWindowTest {
         }
 
         // ── Selection shifts with row removal from the MIDDLE ────────────────
-        //
-        // This is the case the hand-rolled cwRowSelectionModel got wrong:
-        // it only clamped indices >= rowCount, so removing from the middle
-        // left the selection pointing at the wrong trip. ItemSelectionModel
-        // uses QPersistentModelIndex internally and shifts correctly.
 
         function test_selectionFollowsRowRemovalFromMiddle() {
             setupCaveWithTrips()

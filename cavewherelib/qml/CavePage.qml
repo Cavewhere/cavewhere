@@ -295,9 +295,12 @@ StandardPage {
 
     property alias selection: selectionModelId
 
-    // Translates a click + modifier into ItemSelectionModel flags. Uses
-    // selection.currentIndex as the shift anchor — it's a QPersistentModelIndex
-    // internally, so it follows the row when the underlying model mutates.
+    function isRowSelected(row) {
+        return selectionModelId.selectedIndexes.some(i => i.row === row)
+    }
+
+    // selectionModelId.currentIndex is a QPersistentModelIndex, so it follows
+    // the row when earlier rows are inserted or removed.
     function applySelectionClick(row, modifiers) {
         if (row < 0 || row >= tripProxyModel.count) {
             return
@@ -419,8 +422,7 @@ StandardPage {
                             }
 
                             TableRowBackground {
-                                isSelected: cavePageArea.selection.selectedIndexes
-                                            .some(i => i.row === rowDelegateId.index)
+                                isSelected: cavePageArea.isRowSelected(rowDelegateId.index)
                                 rowIndex: rowDelegateId.index
                                 anchors.fill: parent
                             }
@@ -669,8 +671,7 @@ StandardPage {
                 width: QQ.ListView.view ? QQ.ListView.view.width : 0
 
                 TableRowBackground {
-                    isSelected: cavePageArea.selection.selectedIndexes
-                                .some(i => i.row === flowDelegateId.index)
+                    isSelected: cavePageArea.isRowSelected(flowDelegateId.index)
                     rowIndex: flowDelegateId.index
                     anchors.fill: parent
                 }
