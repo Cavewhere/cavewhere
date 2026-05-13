@@ -573,8 +573,12 @@ void cwScrap::updateNoteTransformation() {
     //Do the calculations
     cwNoteTransformationData averageTransformation = averageFunc(shotStations);
 
+    //Only Plan stores north in magnetic; profile scraps are gravity-up so declination must not enter storage.
+    const double storageDeclination = (type() == Plan)
+        ? -parentNote()->parentTrip()->calibrations()->declination()
+        : 0.0;
     averageTransformation.north = cwNoteTranformation::northAdjustedForDeclination(averageTransformation.north,
-                                                                                   -parentNote()->parentTrip()->calibrations()->declination());
+                                                                                   storageDeclination);
 
     NoteTransformation->setData(averageTransformation);
 }
