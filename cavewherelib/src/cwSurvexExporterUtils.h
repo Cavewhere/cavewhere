@@ -7,12 +7,67 @@
 #include <QSet>
 #include <QList>
 #include <QTextStream>
+#include <optional>
 
 #include "cwClinoReading.h"
 #include "cwFixStation.h"
 #include "cwStation.h"
 
 namespace cwSurvexExporterUtils {
+
+// Resolve a fix's input CS, falling back to the region's globalCS when the
+// fix doesn't override it. Returns trimmed string (empty when neither
+// provides a CS).
+inline QString resolveFixCS(const cwFixStation& fix, const QString& globalCS)
+{
+    QString cs = fix.inputCS().trimmed();
+    if (cs.isEmpty()) {
+        cs = globalCS.trimmed();
+    }
+    return cs;
+}
+
+inline void writeCoordTriplet(QTextStream& stream, double e, double n, double z)
+{
+    stream << QString::number(e, 'f', 6) << ' '
+           << QString::number(n, 'f', 6) << ' '
+           << QString::number(z, 'f', 6);
+}
+
+// Representative location for a `*declination auto X Y Z` directive, derived
+// from a cave's first fix station. Survex IGRF only needs one representative
+// point per scope, so additional fixes are intentionally ignored.
+struct DeclinationContext {
+    QString inputCS;
+    double easting = 0.0;
+    double northing = 0.0;
+    double elevation = 0.0;
+};
+
+inline std::optional<DeclinationContext> makeDeclinationContext(
+    const QList<cwFixStation>& fixes, const QString& globalCS)
+{
+    if (fixes.isEmpty()) {
+        return std::nullopt;
+    }
+    const cwFixStation& fix = fixes.first();
+    const QString cs = resolveFixCS(fix, globalCS);
+    if (cs.isEmpty()) {
+        return std::nullopt;
+    }
+    return DeclinationContext{ cs, fix.easting(), fix.northing(), fix.elevation() };
+}
+
+// Emit `*cs <inputCS>` + `*declination auto X Y Z` inside the current trip
+// block. Survex re-evaluates IGRF for the trip's `*date`, so the literal
+// `*calibrate DECLINATION` line is suppressed by the caller.
+inline void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx)
+{
+    stream << "*cs " << ctx.inputCS << Qt::endl;
+    stream << "*declination auto ";
+    writeCoordTriplet(stream, ctx.easting, ctx.northing, ctx.elevation);
+    stream << Qt::endl;
+}
 
 /**
  * Survex requires *cs out whenever any *cs appears, so when the user hasn't
@@ -143,10 +198,7 @@ inline void writeFixStations(QTextStream& stream,
     QString currentCS;
     bool csEmitted = false;
     for (const cwFixStation& fix : fixes) {
-        QString cs = fix.inputCS().trimmed();
-        if (cs.isEmpty()) {
-            cs = globalCSTrimmed;
-        }
+        const QString cs = resolveFixCS(fix, globalCSTrimmed);
         if (!csEmitted || cs != currentCS) {
             if (!cs.isEmpty()) {
                 stream << "*cs " << cs << Qt::endl;
@@ -154,11 +206,9 @@ inline void writeFixStations(QTextStream& stream,
             currentCS = cs;
             csEmitted = true;
         }
-        stream << "*fix " << fix.stationName()
-               << ' ' << QString::number(fix.easting(),   'f', 6)
-               << ' ' << QString::number(fix.northing(),  'f', 6)
-               << ' ' << QString::number(fix.elevation(), 'f', 6)
-               << Qt::endl;
+        stream << "*fix " << fix.stationName() << ' ';
+        writeCoordTriplet(stream, fix.easting(), fix.northing(), fix.elevation());
+        stream << Qt::endl;
     }
 }
 

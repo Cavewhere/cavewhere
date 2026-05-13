@@ -15,6 +15,7 @@
 #include "cwDistanceReading.h"
 #include "cwClinoReading.h"
 #include "cwCompassReading.h"
+#include "cwSurvexExporterUtils.h"
 #include "CaveWhereLibExport.h"
 class cwTrip;
 class cwSurveyChunk;
@@ -34,7 +35,9 @@ public:
 
     void setData(const cwTripData& trip);
 
-    void writeTrip(QTextStream& stream, cwTrip* trip);
+    void writeTrip(QTextStream& stream,
+                   cwTrip* trip,
+                   const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext = std::nullopt);
 
 
 signals:
@@ -49,7 +52,9 @@ private:
     inline static const int TextPadding = -11;
 
     void writeChunk(QTextStream& stream, bool hasFrontSight, bool hasBackSight, cwSurveyChunk* chunk);
-    void writeCalibrations(QTextStream& stream, cwTripCalibration* calibrations);
+    void writeCalibrations(QTextStream& stream,
+                           cwTripCalibration* calibrations,
+                           const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext);
     void writeCalibration(QTextStream& stream, QString type, double value, double scale = 1.0);
     void writeLengthUnits(QTextStream& stream, cwUnits::LengthUnit unit);
     void writeShotData(QTextStream& stream, const cwTrip* trip);

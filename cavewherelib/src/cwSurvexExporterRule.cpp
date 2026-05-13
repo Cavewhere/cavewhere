@@ -61,14 +61,16 @@ void cwSurvexExporterRule::setSurvexFileName(cwFileNameArtifact* survexFilename)
     }
 }
 
-ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream, const cwSurveyDataArtifact::Trip& trip)
+ResultBase cwSurvexExporterRule::writeTrip(QTextStream &stream,
+                                           const cwSurveyDataArtifact::Trip& trip,
+                                           const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext)
 {
     //Write header
     stream << "*begin ; " << trip.name << Qt::endl;
 
     writeDate(stream, trip.date);
     writeTeamData(stream, trip.teamMembers);
-    writeCalibrations(stream, trip.calibration);
+    writeCalibrations(stream, trip.calibration, declinationContext);
     stream << Qt::endl;
     writeShotData(stream, trip);
     stream << Qt::endl;
@@ -90,11 +92,12 @@ ResultBase cwSurvexExporterRule::writeCave(QTextStream& stream,
 
     writeFixStations(stream, cave, globalCS);
 
+    const auto declinationContext = cwSurvexExporterUtils::makeDeclinationContext(
+        cave.fixStations, globalCS);
 
-    //Go throug all the trips and save them
     for(int i = 0; i < cave.trips.size(); i++) {
         const cwSurveyDataArtifact::Trip& trip = cave.trips.at(i);
-        writeTrip(stream, trip);
+        writeTrip(stream, trip, declinationContext);
         stream << Qt::endl;
     }
 
@@ -159,7 +162,9 @@ void cwSurvexExporterRule::updatePipeline()
 
   This will write all the calibrations for the trip to the stream
   */
-void cwSurvexExporterRule::writeCalibrations(QTextStream& stream, const cwTripCalibrationData& calibrations) {
+void cwSurvexExporterRule::writeCalibrations(QTextStream& stream,
+                                             const cwTripCalibrationData& calibrations,
+                                             const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext) {
     writeLengthUnits(stream, calibrations.distanceUnit());
 
     writeCalibration(stream, "TAPE", calibrations.tapeCalibration());
@@ -176,9 +181,11 @@ void cwSurvexExporterRule::writeCalibrations(QTextStream& stream, const cwTripCa
     double backClinoScale = calibrations.hasCorrectedClinoBacksight() ? -1.0 : 1.0;
     writeCalibration(stream, "BACKCLINO", calibrations.backClinoCalibration(), backClinoScale);
 
-    // Snapshot path: only the manual value is available on the data class.
-    // The QObject-aware exporter (phase 3) will emit *declination auto.
-    writeCalibration(stream, "DECLINATION", calibrations.declinationManual());
+    if (calibrations.autoDeclination() && declinationContext) {
+        cwSurvexExporterUtils::writeDeclinationAuto(stream, *declinationContext);
+    } else {
+        writeCalibration(stream, "DECLINATION", calibrations.declinationManual());
+    }
 }
 
 void cwSurvexExporterRule::writeCalibration(QTextStream& stream, QString type, double value, double scale) {

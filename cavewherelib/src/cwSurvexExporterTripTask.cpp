@@ -51,13 +51,15 @@ void cwSurvexExporterTripTask::runTask() {
 /**
   \brief Writes a trip to a stream
   */
-void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
+void cwSurvexExporterTripTask::writeTrip(QTextStream& stream,
+                                         cwTrip* trip,
+                                         const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext) {
     //Write header
     stream << QStringLiteral("*begin ; ") << trip->name() << Qt::endl;
 
     writeDate(stream, trip->date().date());
     writeTeamData(stream, trip->team());
-    writeCalibrations(stream, trip->calibrations()); stream << Qt::endl;
+    writeCalibrations(stream, trip->calibrations(), declinationContext); stream << Qt::endl;
     writeShotData(stream, trip); stream << Qt::endl;
     writeLRUDData(stream, trip);
 
@@ -69,7 +71,9 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
 
   This will write all the calibrations for the trip to the stream
   */
-void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream, cwTripCalibration* calibrations) {
+void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream,
+                                                 cwTripCalibration* calibrations,
+                                                 const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext) {
     writeLengthUnits(stream, calibrations->distanceUnit());
 
     writeCalibration(stream, QStringLiteral("TAPE"), calibrations->tapeCalibration());
@@ -86,7 +90,11 @@ void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream, cwTripCali
     double backClinoScale = calibrations->hasCorrectedClinoBacksight() ? -1.0 : 1.0;
     writeCalibration(stream, QStringLiteral("BACKCLINO"), calibrations->backClinoCalibration(), backClinoScale);
 
-    writeCalibration(stream, QStringLiteral("DECLINATION"), calibrations->declination());
+    if (calibrations->autoDeclination() && declinationContext) {
+        cwSurvexExporterUtils::writeDeclinationAuto(stream, *declinationContext);
+    } else {
+        writeCalibration(stream, QStringLiteral("DECLINATION"), calibrations->declination());
+    }
 }
 
 void cwSurvexExporterTripTask::writeCalibration(QTextStream& stream, QString type, double value, double scale) {

@@ -11,6 +11,7 @@
 #include "cwFutureFileNameArtifact.h"
 #include "cwSurveyDataArtifact.h"
 #include "cwFileNameArtifact.h"
+#include "cwSurvexExporterUtils.h"
 #include "CaveWhereLibExport.h"
 // #include "cwReadingStates.h"
 // #include "cwUnits.h"
@@ -109,7 +110,9 @@ public:
     static Monad::ResultBase writeCave(QTextStream& stream,
                                        const cwSurveyDataArtifact::Cave& cave,
                                        const QString& globalCS = QString());
-    static Monad::ResultBase writeTrip(QTextStream& stream, const cwSurveyDataArtifact::Trip& trip);
+    static Monad::ResultBase writeTrip(QTextStream& stream,
+                                       const cwSurveyDataArtifact::Trip& trip,
+                                       const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext = std::nullopt);
 
 signals:
     void surveyDataChanged();
@@ -127,7 +130,9 @@ private:
     cwFutureFileNameArtifact* m_survexFileArtifact;
 
 
-    static void writeCalibrations(QTextStream& stream, const cwTripCalibrationData& calibrations);
+    static void writeCalibrations(QTextStream& stream,
+                                  const cwTripCalibrationData& calibrations,
+                                  const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext);
     static void writeCalibration(QTextStream& stream, QString type, double value, double scale = 1.0);
 
     static void writeLengthUnits(QTextStream &stream, cwUnits::LengthUnit unit);

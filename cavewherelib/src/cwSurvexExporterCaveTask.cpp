@@ -41,6 +41,9 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
 
     writeFixStations(stream, cave, globalCS);
 
+    const auto declinationContext = cwSurvexExporterUtils::makeDeclinationContext(
+        cave.fixStations, globalCS);
+
     //Haven't done anything
     TotalProgress = 0;
 
@@ -49,7 +52,7 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         const cwTripData& tripData = cave.trips.at(i);
         auto trip = std::make_unique<cwTrip>();
         trip->setData(tripData);
-        TripExporter->writeTrip(stream, trip.get());
+        TripExporter->writeTrip(stream, trip.get(), declinationContext);
         TotalProgress += trip->numberOfStations();
         stream << Qt::endl;
     }
