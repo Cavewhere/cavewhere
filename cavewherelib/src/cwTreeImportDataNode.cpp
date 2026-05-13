@@ -50,6 +50,16 @@ cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
  }
 
  /**
+   \brief Sets the title of the block (from a Survex `*title` directive)
+   */
+ void cwTreeImportDataNode::setTitle(QString title) {
+     if(Title != title) {
+         Title = title;
+         emit titleChanged();
+     }
+ }
+
+ /**
    \brief Sets how this block will be exported
    */
  void cwTreeImportDataNode::setImportType(ImportType type) {

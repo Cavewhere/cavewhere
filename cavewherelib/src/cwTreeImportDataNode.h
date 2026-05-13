@@ -58,6 +58,10 @@ public:
     void setName(QString name);
     QString name() const;
 
+    void setTitle(QString title);
+    QString title() const;
+    QString displayName() const;
+
     void setDate(QDate date);
     QDate date() const;
 
@@ -88,6 +92,7 @@ public:
 
 signals:
     void nameChanged();
+    void titleChanged();
     void importTypeChanged();
 
 private:
@@ -97,6 +102,7 @@ private:
 
     //Mutible elements
     QString Name;
+    QString Title;
     ImportType Type;
 
     QDate Date;
@@ -132,6 +138,26 @@ inline int cwTreeImportDataNode::chunkCount() {
   */
 inline QString cwTreeImportDataNode::name() const {
     return Name;
+}
+
+/**
+  \brief Get's the title of the block (from a Survex `*title` directive).
+
+  Empty if no `*title` was seen during import. Unlike Name, the title is purely a
+  display label and never participates in station-name prefixing.
+  */
+inline QString cwTreeImportDataNode::title() const {
+    return Title;
+}
+
+/**
+  \brief The label to surface to the user (title if set, otherwise name).
+
+  Centralizes the precedence rule so callers don't have to reproduce the
+  `Title.isEmpty() ? Name : Title` ternary.
+  */
+inline QString cwTreeImportDataNode::displayName() const {
+    return Title.isEmpty() ? Name : Title;
 }
 
 /**

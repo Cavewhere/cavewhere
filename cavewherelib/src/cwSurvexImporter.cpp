@@ -326,6 +326,8 @@ void cwSurvexImporter::parseLine(QString line) {
                 loadFile(arg);
             } else if(compare(command, "date")) {
                 parseDate(arg);
+            } else if(compare(command, "title")) {
+                parseTitle(arg);
             } else if(compare(command, "team")) {
                 parseTeamMember(arg);
             } else if(compare(command, "calibrate")) {
@@ -755,6 +757,24 @@ void cwSurvexImporter::parseDate(QString dateString) {
     }
 
     CurrentBlock->setDate(date);
+}
+
+/**
+  \brief Extracts the title from a `*title` line and stores it on the current block.
+
+  Survex titles are typically quoted strings (e.g. `*title "Big Room Survey"`),
+  but bare unquoted forms are also accepted. The title is purely a display label;
+  it does NOT participate in station-name prefixing — that role is reserved for
+  the `*begin <name>` block name.
+  */
+void cwSurvexImporter::parseTitle(QString line) {
+    QString title = line.trimmed();
+
+    if(title.size() >= 2 && title.startsWith('"') && title.endsWith('"')) {
+        title = title.mid(1, title.size() - 2);
+    }
+
+    CurrentBlock->setTitle(title);
 }
 
 /**

@@ -179,6 +179,7 @@ private:
     bool compare(QString s1, QString s2) const;
 
     void parseDate(QString args);
+    void parseTitle(QString args);
     void parseTeamMember(QString line);
     void parseCalibrate(QString line);
     void parseUnits(QString line);

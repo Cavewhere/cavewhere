@@ -52,8 +52,15 @@ void cwSurvexExporterTripTask::runTask() {
   \brief Writes a trip to a stream
   */
 void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
-    //Write header
+    //Write header. The `*begin` block is anonymous (the trip name follows as a comment
+    //for human readers) and a `*title` directive preserves the name across a round-trip
+    //even when it contains characters Survex doesn't allow in block names (e.g. spaces).
     stream << QStringLiteral("*begin ; ") << trip->name() << Qt::endl;
+    if(!trip->name().isEmpty()) {
+        QString sanitized = trip->name();
+        sanitized.replace(QLatin1Char('"'), QLatin1Char('\''));
+        stream << QStringLiteral("*title \"") << sanitized << QStringLiteral("\"") << Qt::endl;
+    }
 
     writeDate(stream, trip->date().date());
     writeTeamData(stream, trip->team());
