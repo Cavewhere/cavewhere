@@ -233,12 +233,12 @@ TEST_CASE("Declination is stripped: 0° and 7° produce identical geometry", "[T
 {
     auto f1 = makeRegion();
     addChunk(f1.trip, {"a1", "a2", "a3"});
-    f1.trip->calibrations()->setDeclination(0.0);
+    f1.trip->calibrations()->setDeclinationManual(0.0);
     const auto r1 = runAndWait(f1.trip);
 
     auto f2 = makeRegion();
     addChunk(f2.trip, {"a1", "a2", "a3"});
-    f2.trip->calibrations()->setDeclination(7.0);
+    f2.trip->calibrations()->setDeclinationManual(7.0);
     const auto r2 = runAndWait(f2.trip);
 
     REQUIRE(r1.size() == 1);

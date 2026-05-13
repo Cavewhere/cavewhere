@@ -182,8 +182,9 @@ cwLinePlotTask::Input buildLinePlotInput(const QString &tripName,
                                          const QList<cwSurveyChunkData> &chunks)
 {
     cwTripCalibrationData stripped = calibration;
-    stripped.setDeclination(0.0); // see module header — declination is
-                                  // applied downstream at scrap/3D time.
+    // see module header — declination is applied downstream at scrap/3D time.
+    stripped.setDeclinationManual(0.0);
+    stripped.setAutoDeclination(false);
 
     cwTripData tripData;
     tripData.name = tripName;

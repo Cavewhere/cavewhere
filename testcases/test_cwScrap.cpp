@@ -410,7 +410,7 @@ TEST_CASE("Manual scrap rotation uses declination during triangulation", "[cwScr
 
     const double startingDeclination = 0.0;
     const double endingDeclination = 12.5;
-    calibration->setDeclination(startingDeclination);
+    calibration->setDeclinationManual(startingDeclination);
     noteTransform->setNorthUp(30.0);
 
     const double originalNorthUp = noteTransform->northUp();
@@ -419,7 +419,7 @@ TEST_CASE("Manual scrap rotation uses declination during triangulation", "[cwScr
     const double originalEffectiveNorthUp = scrap->noteTransformAdjustedDeclination().north;
     CHECK(originalEffectiveNorthUp == Catch::Approx(cwNoteTranformation::northAdjustedForDeclination(originalNorthUp, calibration->declination())).epsilon(1e-6));
 
-    calibration->setDeclination(endingDeclination);
+    calibration->setDeclinationManual(endingDeclination);
 
     const double updatedNorthUp = noteTransform->northUp();
 

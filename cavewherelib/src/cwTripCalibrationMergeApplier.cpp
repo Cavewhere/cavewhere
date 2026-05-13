@@ -104,13 +104,22 @@ Monad::ResultBase cwTripCalibrationMergeApplier::applyTripCalibrationMergePlan(c
         doublesEqual,
         plan.applyMode));
 
-    mergedData.setDeclination(cwSyncMergeApplyUtils::chooseBundleValue(
-        currentCalibrationData.declination(),
-        loadedCalibrationData.declination(),
+    mergedData.setDeclinationManual(cwSyncMergeApplyUtils::chooseBundleValue(
+        currentCalibrationData.declinationManual(),
+        loadedCalibrationData.declinationManual(),
         baseCalibrationData.has_value()
-            ? std::optional<double>(baseCalibrationData->declination())
+            ? std::optional<double>(baseCalibrationData->declinationManual())
             : std::nullopt,
         doublesEqual,
+        plan.applyMode));
+
+    mergedData.setAutoDeclination(cwSyncMergeApplyUtils::chooseBundleValue(
+        currentCalibrationData.autoDeclination(),
+        loadedCalibrationData.autoDeclination(),
+        baseCalibrationData.has_value()
+            ? std::optional<bool>(baseCalibrationData->autoDeclination())
+            : std::nullopt,
+        [](bool lhs, bool rhs) { return lhs == rhs; },
         plan.applyMode));
 
     mergedData.setDistanceUnit(cwSyncMergeApplyUtils::chooseBundleValue(

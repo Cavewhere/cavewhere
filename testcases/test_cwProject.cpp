@@ -9659,7 +9659,7 @@ TEST_CASE("Test save changes", "[cwProject]") {
         }
 
         SECTION("Make sure trip calibration changes are saved") {
-            trip->calibrations()->setDeclination(12.0);
+            trip->calibrations()->setDeclinationManual(12.0);
             project->waitSaveToFinish();
 
             CHECK(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(trip)));
@@ -9942,7 +9942,7 @@ TEST_CASE("Trip calibration persistence", "[cwProject]") {
         calibration->setFrontClinoCalibration(fClino);
         calibration->setBackCompassCalibration(bComp);
         calibration->setBackClinoCalibration(bClino);
-        calibration->setDeclination(decl);
+        calibration->setDeclinationManual(decl);
 
         project->waitSaveToFinish();
 
@@ -9985,15 +9985,15 @@ TEST_CASE("Trip calibration persistence", "[cwProject]") {
     SECTION("Last write wins for calibration fields") {
         auto calibration = trip->calibrations();
 
-        calibration->setDeclination(5.0);
+        calibration->setDeclinationManual(5.0);
         project->waitSaveToFinish();
 
-        calibration->setDeclination(9.5);
+        calibration->setDeclinationManual(9.5);
         calibration->setFrontCompassCalibration(0.2);
         project->waitSaveToFinish();
 
         // Final overwrite before reload
-        calibration->setDeclination(12.75);
+        calibration->setDeclinationManual(12.75);
         calibration->setFrontCompassCalibration(-0.15);
         project->waitSaveToFinish();
 

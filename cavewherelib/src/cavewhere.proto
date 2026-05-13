@@ -177,6 +177,9 @@ message TripCalibration {
     optional bool backSights = 11;
     optional bool correctedCompassFrontsight = 12;
     optional bool correctedClinoFrontsight = 13;
+    // Missing field on load → forced false, so legacy stored declination stays
+    // the manual value rather than being silently overwritten by auto-IGRF.
+    optional bool auto_declination = 15;
 }
 
 // ChunkCalibration message removed: per-shot calibration overrides were unused

@@ -1,23 +1,21 @@
 #include "cwTripCalibration.h"
 
+#include "cwTrip.h"
+#include "cwCave.h"
+#include "cwFixStationModel.h"
+#include "cwFixStation.h"
+#include "cwCavingRegion.h"
+#include "cwGeoPoint.h"
+#include "cwDeclination.h"
+
+#include "Monad/Result.h"
+
 cwTripCalibration::cwTripCalibration(QObject *parent)
-    : QObject(parent)
+    : QObject(parent),
+      m_cachedResolvedDeclination(m_data.declinationManual()),
+      m_cachedAutoDeclinationAvailable(false)
 {
 }
-
-// cwTripCalibration::cwTripCalibration(const cwTripCalibration &other)
-//     : QObject(nullptr),
-//     m_data(other.m_data)
-// {
-// }
-
-// cwTripCalibration& cwTripCalibration::operator=(const cwTripCalibration &other)
-// {
-//     if (this != &other) {
-//         m_data = other.m_data;
-//     }
-//     return *this;
-// }
 
 void cwTripCalibration::setCorrectedCompassBacksight(bool value)
 {
@@ -100,13 +98,30 @@ void cwTripCalibration::setBackClinoCalibration(double value)
     }
 }
 
-void cwTripCalibration::setDeclination(double value)
+void cwTripCalibration::setDeclinationManual(double value)
 {
-    if (m_data.declination() != value) {
-        m_data.setDeclination(value);
-        emit declinationChanged(value);
+    if (m_data.declinationManual() != value) {
+        m_data.setDeclinationManual(value);
+        emit declinationManualChanged(value);
         emit calibrationsChanged();
+        refreshResolved();
     }
+}
+
+void cwTripCalibration::setAutoDeclination(bool value)
+{
+    if (m_data.autoDeclination() != value) {
+        m_data.setAutoDeclination(value);
+        emit autoDeclinationChanged(value);
+        emit calibrationsChanged();
+        refreshResolved();
+    }
+}
+
+void cwTripCalibration::setImportedDeclination(double value)
+{
+    setDeclinationManual(value);
+    setAutoDeclination(false);
 }
 
 void cwTripCalibration::setDistanceUnit(cwUnits::LengthUnit value)
@@ -156,11 +171,131 @@ void cwTripCalibration::setData(const cwTripCalibrationData &data) {
     setBackCompassCalibration(data.backCompassCalibration());
     setBackClinoCalibration(data.backClinoCalibration());
 
-    setDeclination(data.declination());
+    // Batch the two declination fields so refreshResolved runs once at the end,
+    // not twice (once per setter).
+    const bool manualChanged = m_data.declinationManual() != data.declinationManual();
+    const bool autoChanged = m_data.autoDeclination() != data.autoDeclination();
+    if (manualChanged) {
+        m_data.setDeclinationManual(data.declinationManual());
+        emit declinationManualChanged(data.declinationManual());
+    }
+    if (autoChanged) {
+        m_data.setAutoDeclination(data.autoDeclination());
+        emit autoDeclinationChanged(data.autoDeclination());
+    }
+    if (manualChanged || autoChanged) {
+        emit calibrationsChanged();
+        refreshResolved();
+    }
+
     setDistanceUnit(data.distanceUnit());
 
     setFrontSights(data.hasFrontSights());
     setBackSights(data.hasBackSights());
+}
+
+void cwTripCalibration::setParentTrip(cwTrip* trip)
+{
+    if (m_parentTrip == trip) {
+        return;
+    }
+
+    if (m_parentTrip) {
+        disconnect(m_parentTrip, nullptr, this, nullptr);
+    }
+
+    m_parentTrip = trip;
+
+    if (m_parentTrip) {
+        connect(m_parentTrip, &cwTrip::dateChanged,
+                this, &cwTripCalibration::refreshResolved);
+        connect(m_parentTrip, &cwTrip::parentCaveChanged,
+                this, &cwTripCalibration::rewireCaveSignals);
+    }
+
+    rewireCaveSignals();
+}
+
+void cwTripCalibration::rewireCaveSignals()
+{
+    cwCave* newCave = m_parentTrip ? m_parentTrip->parentCave() : nullptr;
+    if (m_wiredCave == newCave) {
+        refreshResolved();
+        return;
+    }
+
+    if (m_wiredCave && m_wiredCave->fixStations()) {
+        disconnect(m_wiredCave->fixStations(), nullptr, this, nullptr);
+    }
+
+    m_wiredCave = newCave;
+
+    if (m_wiredCave && m_wiredCave->fixStations()) {
+        auto* fixModel = m_wiredCave->fixStations();
+        connect(fixModel, &QAbstractItemModel::dataChanged,
+                this, &cwTripCalibration::refreshResolved);
+        connect(fixModel, &QAbstractItemModel::rowsInserted,
+                this, &cwTripCalibration::refreshResolved);
+        connect(fixModel, &QAbstractItemModel::rowsRemoved,
+                this, &cwTripCalibration::refreshResolved);
+        connect(fixModel, &QAbstractItemModel::modelReset,
+                this, &cwTripCalibration::refreshResolved);
+    }
+
+    refreshResolved();
+}
+
+Monad::Result<double> cwTripCalibration::resolveAuto() const
+{
+    if (!m_parentTrip || !m_wiredCave || !m_wiredCave->fixStations()
+        || m_wiredCave->fixStations()->count() == 0) {
+        return Monad::Result<double>(QStringLiteral("No fix station available"));
+    }
+
+    const cwFixStation fix = m_wiredCave->fixStations()->fixStationAt(0);
+    QString sourceCS = fix.inputCS().trimmed();
+    if (sourceCS.isEmpty()) {
+        if (auto* region = m_wiredCave->parentRegion()) {
+            sourceCS = region->globalCS().trimmed();
+        }
+    }
+    const cwGeoPoint location(fix.easting(), fix.northing(), fix.elevation());
+    return cwDeclination::compute(location, sourceCS, m_parentTrip->date());
+}
+
+void cwTripCalibration::refreshResolved()
+{
+    const Monad::Result<double> autoResult = resolveAuto();
+    const bool newAvailable = !autoResult.hasError();
+    const double newResolved = (m_data.autoDeclination() && newAvailable)
+        ? autoResult.value()
+        : m_data.declinationManual();
+
+    const bool resolvedChanged = (newResolved != m_cachedResolvedDeclination);
+    const bool availableChanged = (newAvailable != m_cachedAutoDeclinationAvailable);
+
+    m_cachedResolvedDeclination = newResolved;
+    m_cachedAutoDeclinationAvailable = newAvailable;
+
+    // External inputs don't dirty stored data, so calibrationsChanged is
+    // emitted only by the explicit setters, not here.
+    if (resolvedChanged) {
+        emit declinationChanged(newResolved);
+    }
+    if (availableChanged) {
+        emit autoDeclinationAvailableChanged(newAvailable);
+    }
+
+    updateWarnings();
+}
+
+void cwTripCalibration::updateWarnings()
+{
+    const QString newWarning;
+    if (newWarning != m_cachedDeclinationWarning) {
+        m_cachedDeclinationWarning = newWarning;
+        emit declinationWarningChanged(newWarning);
+    }
 }
 
 int cwTripCalibration::mapToLengthUnit(int supportedUnitIndex)

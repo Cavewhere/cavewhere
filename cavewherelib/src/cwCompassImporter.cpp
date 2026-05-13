@@ -377,7 +377,7 @@ void cwCompassImporter::parseSurveyFormatAndCalibration(QFile *file)
 
         double declination;
         if(convertNumber(declinationString, "declination", &declination)) {
-            CurrentTrip->calibrations()->setDeclination(declination);
+            CurrentTrip->calibrations()->setImportedDeclination(declination);
         }
 
         if(!(compassCorrectionString.isEmpty() ||

@@ -374,7 +374,7 @@ void cwWallsImporter::importCalibrations(const WallsUnits units, cwTrip &trip)
     trip.calibrations()->setFrontClinoCalibration(units.incv().get(Angle::Degrees));
     trip.calibrations()->setBackCompassCalibration(units.incab().get(Angle::Degrees));
     trip.calibrations()->setBackClinoCalibration(units.incvb().get(Angle::Degrees));
-    trip.calibrations()->setDeclination(units.decl().get(Angle::Degrees));
+    trip.calibrations()->setImportedDeclination(units.decl().get(Angle::Degrees));
 }
 
 

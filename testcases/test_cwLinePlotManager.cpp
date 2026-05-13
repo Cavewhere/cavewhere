@@ -276,7 +276,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
         }
 
         SECTION("Trip calibration changed re-runs line plot") {
-            trip->calibrations()->setDeclination(45.0);
+            trip->calibrations()->setDeclinationManual(45.0);
 
             plotManager->waitToFinish();
 
@@ -593,14 +593,14 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             }
 
             SECTION("Turn on setDeclination") {
-                trip->calibrations()->setDeclination(180.0);
+                trip->calibrations()->setDeclinationManual(180.0);
                 plotManager->waitToFinish();
 
                 CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
                 CHECK(cave->stationPositionLookup().position("a2") == QVector3D(-0.17, -10.0, -0.26));
 
                 SECTION("Turn it off") {
-                    trip->calibrations()->setDeclination(0.0);
+                    trip->calibrations()->setDeclinationManual(0.0);
                     plotManager->waitToFinish();
 
                     CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
@@ -911,6 +911,8 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
 
     auto* trip = new cwTrip();
     cave->addTrip(trip);
+    // Test asserts on raw magnetic bearings — disable auto-IGRF.
+    trip->calibrations()->setAutoDeclination(false);
     auto* chunk = new cwSurveyChunk();
     trip->addChunk(chunk);
 

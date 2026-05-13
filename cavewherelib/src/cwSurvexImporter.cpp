@@ -864,7 +864,7 @@ void cwSurvexImporter::parseCalibrate(QString line) {
             calibration->setBackClinoCalibration(calibrationValue);
 
         } else if (type == "declination") {
-            calibration->setDeclination(calibrationValue);
+            calibration->setImportedDeclination(calibrationValue);
 
         } else if (type == "counter") {
             addWarning("cavewhere cannot handle 'COUNTER' calibration");

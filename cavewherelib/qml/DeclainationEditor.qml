@@ -35,10 +35,10 @@ GroupBox {
             ClickTextInput {
                 id: tapeCalInput
                 objectName: "declinationEdit"
-                text: Utils.fixed(editorId.calibration.declination, 2)
+                text: Utils.fixed(editorId.calibration.declinationManual, 2)
 
                 onFinishedEditting: (newText) => {
-                    editorId.calibration.declination = newText
+                    editorId.calibration.declinationManual = newText
                 }
             }
         }

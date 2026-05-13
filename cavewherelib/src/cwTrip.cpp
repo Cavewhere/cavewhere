@@ -31,6 +31,7 @@ cwTrip::cwTrip(QObject *parent) :
 //    DistanceUnit = cwUnits::Meters;
     Team = new cwTeam(this);
     Calibration = new cwTripCalibration(this);
+    Calibration->setParentTrip(this);
     DateTime = QDateTime(QDate::currentDate(), QTime());
     Notes = new cwSurveyNoteModel(this);
     NotesLidar = new cwSurveyNoteLiDARModel(this);

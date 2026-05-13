@@ -74,7 +74,7 @@ TEST_CASE("Trip Calibration Getters and setters should work", "[cwTripCalibratio
     CHECK(tripCalibration->backClinoCalibration() == 5.0);
     CHECK(calibrationChanged.size() == 9);
 
-    tripCalibration->setDeclination(6.0);
+    tripCalibration->setDeclinationManual(6.0);
     CHECK(tripCalibration->declination() == 6.0);
     CHECK(calibrationChanged.size() == 10);
 

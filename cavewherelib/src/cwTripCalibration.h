@@ -10,12 +10,17 @@
 
 //Qt includes
 #include <QObject>
+#include <QPointer>
 #include <QStringList>
 #include <QQmlEngine>
 #include "cwGlobals.h"
 
 //Our includes
 #include "cwUnits.h"
+#include "Monad/Result.h"
+
+class cwTrip;
+class cwCave;
 
 class cwTripCalibrationData {
 public:
@@ -51,8 +56,11 @@ public:
     inline double backClinoCalibration() const { return d->m_BackClinoCalibration; }
     inline void setBackClinoCalibration(double value) { d->m_BackClinoCalibration = value; }
 
-    inline double declination() const { return d->m_Declination; }
-    inline void setDeclination(double value) { d->m_Declination = value; }
+    inline double declinationManual() const { return d->m_Declination; }
+    inline void setDeclinationManual(double value) { d->m_Declination = value; }
+
+    inline bool autoDeclination() const { return d->m_AutoDeclination; }
+    inline void setAutoDeclination(bool value) { d->m_AutoDeclination = value; }
 
     inline cwUnits::LengthUnit distanceUnit() const { return d->m_DistanceUnit; }
     inline void setDistanceUnit(cwUnits::LengthUnit value) { d->m_DistanceUnit = value; }
@@ -78,6 +86,7 @@ private:
             , m_BackCompassCalibration(0.0)
             , m_BackClinoCalibration(0.0)
             , m_Declination(0.0)
+            , m_AutoDeclination(true)
             , m_DistanceUnit(cwUnits::Meters)
             , m_FrontSights(true)
             , m_BackSights(true)
@@ -95,6 +104,7 @@ private:
             , m_BackCompassCalibration(other.m_BackCompassCalibration)
             , m_BackClinoCalibration(other.m_BackClinoCalibration)
             , m_Declination(other.m_Declination)
+            , m_AutoDeclination(other.m_AutoDeclination)
             , m_DistanceUnit(other.m_DistanceUnit)
             , m_FrontSights(other.m_FrontSights)
             , m_BackSights(other.m_BackSights)
@@ -110,6 +120,7 @@ private:
         double m_BackCompassCalibration;
         double m_BackClinoCalibration;
         double m_Declination;
+        bool m_AutoDeclination;
         cwUnits::LengthUnit m_DistanceUnit;
         bool m_FrontSights;
         bool m_BackSights;
@@ -156,7 +167,15 @@ class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
     Q_PROPERTY(double frontClinoCalibration READ frontClinoCalibration WRITE setFrontClinoCalibration NOTIFY frontClinoCalibrationChanged)
     Q_PROPERTY(double backCompassCalibration READ backCompassCalibration WRITE setBackCompassCalibration NOTIFY backCompassCalibrationChanged)
     Q_PROPERTY(double backClinoCalibration READ backClinoCalibration WRITE setBackClinoCalibration NOTIFY backClinoCalibrationChanged)
-    Q_PROPERTY(double declination READ declination WRITE setDeclination NOTIFY declinationChanged)
+
+    // Resolved declination: auto-IGRF when autoDeclination is on and the parent
+    // cave has a usable fix station + trip date, else the stored manual value.
+    Q_PROPERTY(double declination READ declination NOTIFY declinationChanged)
+    Q_PROPERTY(double declinationManual READ declinationManual WRITE setDeclinationManual NOTIFY declinationManualChanged)
+    Q_PROPERTY(bool autoDeclination READ autoDeclination WRITE setAutoDeclination NOTIFY autoDeclinationChanged)
+    Q_PROPERTY(bool autoDeclinationAvailable READ autoDeclinationAvailable NOTIFY autoDeclinationAvailableChanged)
+    Q_PROPERTY(QString declinationWarning READ declinationWarning NOTIFY declinationWarningChanged)
+
     Q_PROPERTY(cwUnits::LengthUnit distanceUnit READ distanceUnit WRITE setDistanceUnit NOTIFY distanceUnitChanged)
     Q_PROPERTY(QStringList supportedUnits READ supportedUnits NOTIFY supportedUnitsChanged)
     Q_PROPERTY(bool frontSights READ hasFrontSights WRITE setFrontSights NOTIFY frontSightsChanged)
@@ -164,11 +183,6 @@ class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
 
 public:
     explicit cwTripCalibration(QObject *parent = nullptr);
-
-    // [[deprecated]]
-    // cwTripCalibration(const cwTripCalibration &other);
-    // [[deprecated]]
-    // cwTripCalibration& operator=(const cwTripCalibration &other);
 
     // Getters that delegate to the internal data instance:
     bool hasCorrectedCompassBacksight() const { return m_data.hasCorrectedCompassBacksight(); }
@@ -180,10 +194,17 @@ public:
     double frontClinoCalibration() const { return m_data.frontClinoCalibration(); }
     double backCompassCalibration() const { return m_data.backCompassCalibration(); }
     double backClinoCalibration() const { return m_data.backClinoCalibration(); }
-    double declination() const { return m_data.declination(); }
+    double declinationManual() const { return m_data.declinationManual(); }
+    bool autoDeclination() const { return m_data.autoDeclination(); }
     cwUnits::LengthUnit distanceUnit() const { return m_data.distanceUnit(); }
     bool hasFrontSights() const { return m_data.hasFrontSights(); }
     bool hasBackSights() const { return m_data.hasBackSights(); }
+
+    // Resolved value (cached). Returns auto when autoDeclination is true and
+    // resolveAuto() succeeds; manual otherwise.
+    double declination() const { return m_cachedResolvedDeclination; }
+    bool autoDeclinationAvailable() const { return m_cachedAutoDeclinationAvailable; }
+    QString declinationWarning() const { return m_cachedDeclinationWarning; }
 
     // Setters that update the internal data and emit signals if changed:
     void setCorrectedCompassBacksight(bool value);
@@ -195,7 +216,14 @@ public:
     void setFrontClinoCalibration(double value);
     void setBackCompassCalibration(double value);
     void setBackClinoCalibration(double value);
-    void setDeclination(double value);
+    void setDeclinationManual(double value);
+    void setAutoDeclination(bool value);
+
+    // Atomic helper for importers: explicit-from-file declination is stored
+    // as the manual value and auto resolution is forced off, so a cave with
+    // a fix station doesn't silently overwrite the imported value.
+    void setImportedDeclination(double value);
+
     void setDistanceUnit(cwUnits::LengthUnit value);
     void setFrontSights(bool value);
     void setBackSights(bool value);
@@ -205,6 +233,11 @@ public:
     // New getter that returns the entire data structure:
     cwTripCalibrationData data() const { return m_data; }
     void setData(const cwTripCalibrationData& data);
+
+    // Wires the calibration to its owning trip so it can resolve auto
+    // declination from the trip's date + parent cave's fix station. Called by
+    // cwTrip in its constructor.
+    void setParentTrip(cwTrip* trip);
 
     Q_INVOKABLE int mapToLengthUnit(int supportedUnitIndex);
     Q_INVOKABLE int mapToSupportUnit(int lengthUnit);
@@ -219,18 +252,38 @@ signals:
     void frontClinoCalibrationChanged(double calibration);
     void backCompassCalibrationChanged(double calibration);
     void backClinoCalibrationChanged(double calibration);
+
+    // declinationChanged tracks the resolved value (manual edits, auto toggle,
+    // date / fix-station changes). declinationManualChanged fires only when
+    // the stored manual value is edited — UI binding target.
     void declinationChanged(double declination);
+    void declinationManualChanged(double declination);
+    void autoDeclinationChanged(bool autoDeclination);
+    void autoDeclinationAvailableChanged(bool available);
+    void declinationWarningChanged(const QString& warning);
+
     void distanceUnitChanged(cwUnits::LengthUnit unit);
     void supportedUnitsChanged();
     void frontSightsChanged();
     void backSightsChanged();
     void calibrationsChanged();
 
-public slots:
-
 private:
-    // The instance of the public data class
     cwTripCalibrationData m_data;
+
+    QPointer<cwTrip> m_parentTrip;
+    QPointer<cwCave> m_wiredCave;
+
+    // Cached so the hot read path (declination(), called from scrap, line
+    // plot, and survex export) stays O(1). Refreshed on every input change.
+    double m_cachedResolvedDeclination;
+    bool m_cachedAutoDeclinationAvailable;
+    QString m_cachedDeclinationWarning;
+
+    Monad::Result<double> resolveAuto() const;
+    void refreshResolved();
+    void rewireCaveSignals();
+    void updateWarnings();
 };
 
 

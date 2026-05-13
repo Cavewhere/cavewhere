@@ -121,7 +121,7 @@ TEST_CASE("cwNoteLiDARManager applies declination for manual north", "[cwNoteLiD
     auto* transform = note.noteTransformation();
     REQUIRE(transform != nullptr);
     transform->setNorthUp(10.0);
-    trip.calibrations()->setDeclination(5.0);
+    trip.calibrations()->setDeclinationManual(5.0);
 
     auto compareMatrix = [](const QMatrix4x4& actual, const QMatrix4x4& expected) {
         const float* actualData = actual.constData();

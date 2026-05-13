@@ -126,17 +126,17 @@ TEST_CASE("cwTrip merge applier merges calibration fields independently", "[cwTr
 
     cwTripData baseTripData = currentTrip.data();
     baseTripData.calibrations.setTapeCalibration(1.0);
-    baseTripData.calibrations.setDeclination(2.0);
+    baseTripData.calibrations.setDeclinationManual(2.0);
     baseTripData.calibrations.setFrontSights(true);
     currentTrip.calibrations()->setData(baseTripData.calibrations);
 
     cwTripData loadedTripData = currentTrip.data();
     loadedTripData.calibrations.setTapeCalibration(3.0); // Remote-only change.
-    loadedTripData.calibrations.setDeclination(2.0); // Unchanged from base.
+    loadedTripData.calibrations.setDeclinationManual(2.0); // Unchanged from base.
     loadedTripData.calibrations.setFrontSights(false); // Remote-only change.
 
     cwTripCalibrationData oursCalibration = currentTrip.calibrations()->data();
-    oursCalibration.setDeclination(4.0); // Local-only change.
+    oursCalibration.setDeclinationManual(4.0); // Local-only change.
     currentTrip.calibrations()->setData(oursCalibration);
 
     cwTripMergePlan plan;
@@ -149,7 +149,7 @@ TEST_CASE("cwTrip merge applier merges calibration fields independently", "[cwTr
 
     const cwTripCalibrationData merged = currentTrip.calibrations()->data();
     CHECK(merged.tapeCalibration() == 3.0);
-    CHECK(merged.declination() == 4.0);
+    CHECK(merged.declinationManual() == 4.0);
     CHECK(merged.hasFrontSights() == false);
 }
 

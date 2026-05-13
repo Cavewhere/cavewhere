@@ -281,7 +281,8 @@ void saveTripCalibration(CavewhereProto::TripCalibration* proto, cwTripCalibrati
     proto->set_frontclinocalibration(tripCalibration->frontClinoCalibration());
     proto->set_backcompasscalibration(tripCalibration->backCompassCalibration());
     proto->set_backclinocalibration(tripCalibration->backClinoCalibration());
-    proto->set_declination(tripCalibration->declination());
+    proto->set_declination(tripCalibration->declinationManual());
+    proto->set_auto_declination(tripCalibration->autoDeclination());
     proto->set_distanceunit((CavewhereProto::Units_LengthUnit)tripCalibration->distanceUnit());
     proto->set_frontsights(tripCalibration->hasFrontSights());
     proto->set_backsights(tripCalibration->hasBackSights());
@@ -392,7 +393,8 @@ cwTripCalibrationData fromProtoTripCalibration(const CavewhereProto::TripCalibra
                 ? proto.backcompasscalibration()
                 : proto.legacy_backcompassscalibration());
     tripCalibration.setBackClinoCalibration(proto.backclinocalibration());
-    tripCalibration.setDeclination(proto.declination());
+    tripCalibration.setDeclinationManual(proto.declination());
+    tripCalibration.setAutoDeclination(proto.has_auto_declination() ? proto.auto_declination() : false);
     tripCalibration.setDistanceUnit((cwUnits::LengthUnit)proto.distanceunit());
     tripCalibration.setFrontSights(proto.has_frontsights() ? proto.frontsights() : true);
     tripCalibration.setBackSights(proto.has_backsights() ? proto.backsights() : false);

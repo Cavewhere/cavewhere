@@ -176,7 +176,9 @@ void cwSurvexExporterRule::writeCalibrations(QTextStream& stream, const cwTripCa
     double backClinoScale = calibrations.hasCorrectedClinoBacksight() ? -1.0 : 1.0;
     writeCalibration(stream, "BACKCLINO", calibrations.backClinoCalibration(), backClinoScale);
 
-    writeCalibration(stream, "DECLINATION", calibrations.declination());
+    // Snapshot path: only the manual value is available on the data class.
+    // The QObject-aware exporter (phase 3) will emit *declination auto.
+    writeCalibration(stream, "DECLINATION", calibrations.declinationManual());
 }
 
 void cwSurvexExporterRule::writeCalibration(QTextStream& stream, QString type, double value, double scale) {

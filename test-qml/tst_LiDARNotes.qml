@@ -203,7 +203,7 @@ MainWindowTest {
                       })
 
             let trip = RootData.region.cave(0).trip(0)
-            trip.calibration.declination = 12.5
+            trip.calibration.declinationManual = 12.5
             tryVerify(() => {
                           return northFieldObject.text === "274.5"
                       })

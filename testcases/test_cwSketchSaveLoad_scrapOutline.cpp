@@ -199,7 +199,7 @@ TEST_CASE("Sketch-derived scraps round trip through a full project save/load",
         trip->setName(QStringLiteral("Trip"));
         // Zero declination so trip-local == global and the comparison is
         // robust against any calibration drift across versions.
-        trip->calibrations()->setDeclination(0.0);
+        trip->calibrations()->setDeclinationManual(0.0);
         populateTripWithChain(trip);
 
         // Drive the line plot so the cave's global station lookup populates.
