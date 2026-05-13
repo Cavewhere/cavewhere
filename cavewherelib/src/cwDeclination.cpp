@@ -23,8 +23,6 @@ extern "C" {
 
 namespace {
 
-const QString WGS84_EPSG = QStringLiteral("EPSG:4326");
-
 double decimalYear(const QDateTime& dt)
 {
     const QDate d = dt.date();
@@ -54,7 +52,7 @@ const cwCoordinateTransform& transformToWgs84(const QString& sourceCS)
             cache.clear();
         }
         it = cache.insert(sourceCS,
-                          std::make_shared<cwCoordinateTransform>(sourceCS, WGS84_EPSG));
+                          std::make_shared<cwCoordinateTransform>(sourceCS, cwCoordinateTransform::Wgs84));
     }
     return **it;
 }
@@ -81,7 +79,7 @@ Monad::Result<double> compute(const cwGeoPoint& location,
     // cwCoordinateTransform's normalize_for_visualization step makes
     // EPSG:4326 deliver (x=lon, y=lat) regardless of CRS metadata.
     cwGeoPoint wgs84Point;
-    if (normalizedCS.compare(WGS84_EPSG, Qt::CaseInsensitive) == 0) {
+    if (normalizedCS.compare(cwCoordinateTransform::Wgs84, Qt::CaseInsensitive) == 0) {
         wgs84Point = location;
     } else {
         const cwCoordinateTransform& transform = transformToWgs84(normalizedCS);

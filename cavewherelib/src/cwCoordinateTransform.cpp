@@ -15,6 +15,8 @@
 //Std includes
 #include <vector>
 
+const QString cwCoordinateTransform::Wgs84 = QStringLiteral("EPSG:4326");
+
 namespace {
     QStringList g_projSearchPaths;
 
@@ -296,7 +298,7 @@ namespace {
             return r;
         }
 
-        if (trimmed.compare(QStringLiteral("EPSG:4326"), Qt::CaseInsensitive) == 0) {
+        if (trimmed.compare(cwCoordinateTransform::Wgs84, Qt::CaseInsensitive) == 0) {
             r.mode = cwCoordinateSystem::LatLon;
             return r;
         }
@@ -375,6 +377,11 @@ bool cwCoordinateSystem::isValidCS(const QString& cs)
 QStringList cwCoordinateSystem::commonProjectedCSList()
 {
     return cwCoordinateTransform::commonProjectedCSList();
+}
+
+QString cwCoordinateSystem::wgs84()
+{
+    return cwCoordinateTransform::Wgs84;
 }
 
 bool cwCoordinateSystem::isGeographic(const QString& cs)

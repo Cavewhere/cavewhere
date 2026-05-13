@@ -51,6 +51,10 @@ public:
     cwGeoPoint transform(const cwGeoPoint& src) const;
     void transformInPlace(cwGeoPoint* pts, qsizetype n) const;
 
+    // Canonical WGS84 geographic CRS string. Prefer this over the literal
+    // "EPSG:4326" so the value lives in exactly one place.
+    static const QString Wgs84;
+
     static QStringList commonProjectedCSList();
     static bool isValidCS(const QString& cs);
     static bool isGeographic(const QString& cs);
@@ -101,6 +105,9 @@ public:
 
     Q_INVOKABLE static bool isValidCS(const QString& cs);
     Q_INVOKABLE static QStringList commonProjectedCSList();
+
+    /// QML-facing alias for cwCoordinateTransform::Wgs84.
+    Q_INVOKABLE static QString wgs84();
 
     /**
      * True iff cs parses as a geographic CRS (lat/long), e.g. EPSG:4326.

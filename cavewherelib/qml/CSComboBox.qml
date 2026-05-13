@@ -38,7 +38,7 @@ QQ.Item {
             rootId.committed("")
             return
         case CoordinateSystem.LatLon:
-            rootId.committed("EPSG:4326")
+            rootId.committed(CoordinateSystem.wgs84())
             return
         case CoordinateSystem.UTM:
             rootId.committed(CoordinateSystem.utmZoneToEpsg(

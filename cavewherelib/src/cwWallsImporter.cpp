@@ -1,5 +1,6 @@
 #include "cwWallsImporter.h"
 
+#include "cwCoordinateTransform.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyChunk.h"
@@ -92,7 +93,7 @@ void WallsImporterVisitor::parsedFixStation(FixStation station)
                     "If your Walls coords are actually WGS84 UTM (EPSG:326xx) or another datum, change inputCS on the fix.")
                 .arg(station.name())));
     } else if (hasGeo) {
-        fix.setInputCS(QStringLiteral("EPSG:4326"));
+        fix.setInputCS(cwCoordinateTransform::Wgs84);
         // FixStation::longitude is east, latitude is north. cwFixStation
         // stores easting=lon, northing=lat (matches the proj
         // x=lon/y=lat convention after normalize_for_visualization).
