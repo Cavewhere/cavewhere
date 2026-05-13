@@ -98,6 +98,7 @@ private:
         QMap<DataFormatType, int> DataFormat;
         DataEntryType DataType;
         QString Filename;
+        int ColumnCount;
 
         static QMap<DataFormatType, int> defaultDataFormat();
     };
@@ -169,8 +170,10 @@ private:
 
     QMap<DataFormatType, int> currentDataFormat() const;
     DataEntryType currentDataEntryType() const;
+    int currentColumnCount() const;
     void setCurrentDataFormat(QMap<DataFormatType, int> format);
     void setCurrentDataEntryType(DataEntryType type);
+    void setCurrentColumnCount(int count);
 
     QString currentFile() const;
     int currentLineNumber() const;

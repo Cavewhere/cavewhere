@@ -111,6 +111,7 @@ void cwSurvexImporter::importSurvex(QString filename) {
 cwSurvexImporter::BeginEndState::BeginEndState() {
     DataFormat = defaultDataFormat();
     DataType = Normal;
+    ColumnCount = DataFormat.size();
 }
 
 /**
@@ -432,11 +433,16 @@ void cwSurvexImporter::parseDataFormat(QString line) {
     } else {
         addError("Normal, passage data, nosurvey are supported, using default format");
         setCurrentDataEntryType(Normal);
-        setCurrentDataFormat(BeginEndState::defaultDataFormat());
+        const auto defaultFormat = BeginEndState::defaultDataFormat();
+        setCurrentDataFormat(defaultFormat);
+        setCurrentColumnCount(defaultFormat.size());
+        return;
     }
 
     QMap<DataFormatType, int> dataFormat;
     dataFormat.clear();
+
+    const int columnCount = dataFormatList.size() - 1; //Number of columns after normal/passage/nosurvey
 
     for(int i = 1; i < dataFormatList.size(); i++) {
         QString format = dataFormatList.at(i);
@@ -452,11 +458,11 @@ void cwSurvexImporter::parseDataFormat(QString line) {
             dataFormat[Distance] = index;
         } else if(compare(format, "compass") || compare(format, "bearing")) {
             dataFormat[Compass] = index;
-        } else if(compare(format, "backcompass")) {
+        } else if(compare(format, "backcompass") || compare(format, "backbearing")) {
             dataFormat[BackCompass] = index;
         } else if(compare(format, "clino") || compare(format, "gradient")) {
             dataFormat[Clino] = index;
-        } else if(compare(format, "backclino")) {
+        } else if(compare(format, "backclino") || compare(format, "backgradient")) {
             dataFormat[BackClino] = index;
         } else if(compare(format, "ignore")) {
             dataFormat[Ignore] = index;
@@ -473,13 +479,13 @@ void cwSurvexImporter::parseDataFormat(QString line) {
         } else if(compare(format, "down")) {
             dataFormat[Down] = index;
         } else {
-            addError(QString("Unknown *data keyword: ") + format + " Using default format");
-            dataFormat = BeginEndState::defaultDataFormat();
-            break;
+            addWarning(QString("Unknown *data keyword '%1', treating as ignore").arg(format));
+            dataFormat[Ignore] = index;
         }
     }
 
     setCurrentDataFormat(dataFormat);
+    setCurrentColumnCount(columnCount);
 }
 
 void cwSurvexImporter::addError(QString error) {
@@ -512,9 +518,10 @@ QStringList cwSurvexImporter::parseData(QString line) {
     data.removeAll(""); //Remove all empty ones
 
     QMap<DataFormatType, int> dataFormat = currentDataFormat();
+    int expectedColumnCount = currentColumnCount();
 
     //Make sure the there's the same number of columns as needed
-    if(dataFormat.size() != data.size() && !dataFormat.contains(IgnoreAll)) {
+    if(expectedColumnCount != data.size() && !dataFormat.contains(IgnoreAll)) {
         addError("Can't extract data. To many or not enough data columns, skipping data");
         return QStringList();
     }
@@ -726,6 +733,16 @@ void cwSurvexImporter::setCurrentDataFormat(QMap<DataFormatType, int> format) {
 void cwSurvexImporter::setCurrentDataEntryType(DataEntryType type) {
     Q_ASSERT(!BeginEndStateStack.isEmpty());
     BeginEndStateStack.last().DataType = type;
+}
+
+int cwSurvexImporter::currentColumnCount() const {
+    if(BeginEndStateStack.isEmpty()) { return 0; }
+    return BeginEndStateStack.last().ColumnCount;
+}
+
+void cwSurvexImporter::setCurrentColumnCount(int count) {
+    Q_ASSERT(!BeginEndStateStack.isEmpty());
+    BeginEndStateStack.last().ColumnCount = count;
 }
 
 
