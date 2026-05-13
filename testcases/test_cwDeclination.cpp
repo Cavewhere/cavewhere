@@ -39,9 +39,7 @@ TEST_CASE("cwDeclination: WGS84 geographic input near Boulder, CO", "[cwDeclinat
 {
     auto result = cwDeclination::compute(BoulderWgs84, Wgs84, makeDate(2024, 1, 1));
     REQUIRE_FALSE(result.hasError());
-    // Loose bounds — exact value tracks whichever IGRF version survex ships.
-    CHECK(result.value() > 5.0);
-    CHECK(result.value() < 11.0);
+    CHECK_THAT(result.value(), WithinAbs(7.89, 0.01));
 }
 
 TEST_CASE("cwDeclination: UTM input transforms to lat/lon and gives same value as direct geographic", "[cwDeclination]")
