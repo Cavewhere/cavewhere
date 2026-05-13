@@ -738,8 +738,8 @@ StandardPage {
     RemoveAskBox {
         id: removeChallengeId
         onRemove: {
-            let proxyIndex = tableViewId.model.index(indexToRemove, 0)
-            let sourceIndex = tableViewId.model.mapToSource(proxyIndex)
+            let proxyIndex = tripProxyModel.index(indexToRemove, 0)
+            let sourceIndex = tripProxyModel.mapToSource(proxyIndex)
             cavePageArea.currentCave.removeTrip(sourceIndex.row)
         }
     }
