@@ -299,6 +299,48 @@ StandardPage {
         return selectionModelId.selectedIndexes.some(i => i.row === row)
     }
 
+    function tripForProxyRow(row) {
+        if (!cavePageArea.currentCave) {
+            return null
+        }
+        const sourceIndex = tripProxyModel.mapToSource(tripProxyModel.index(row, 0))
+        return cavePageArea.currentCave.trip(sourceIndex.row)
+    }
+
+    function tripForProxyIndex(proxyIndex) {
+        if (!cavePageArea.currentCave) {
+            return null
+        }
+        const sourceIndex = tripProxyModel.mapToSource(proxyIndex)
+        return cavePageArea.currentCave.trip(sourceIndex.row)
+    }
+
+    // The right-click menu's scope: when the clicked row is part of a
+    // multi-selection the action covers the whole selection; otherwise
+    // just that row. One pass over selectedIndexes builds both "row is
+    // in selection" and "selection's trips".
+    function getCalibrationsForRow(row) {
+        const indexes = selectionModelId.selectedIndexes
+        if (indexes.length > 1) {
+            let rowInSelection = false
+            const selectedCalibrations = []
+            for (let i = 0; i < indexes.length; ++i) {
+                if (indexes[i].row === row) {
+                    rowInSelection = true
+                }
+                const trip = tripForProxyIndex(indexes[i])
+                if (trip) {
+                    selectedCalibrations.push(trip.calibration)
+                }
+            }
+            if (rowInSelection) {
+                return selectedCalibrations
+            }
+        }
+        const trip = tripForProxyRow(row)
+        return trip ? [trip.calibration] : []
+    }
+
     // selectionModelId.currentIndex is a QPersistentModelIndex, so it follows
     // the row when earlier rows are inserted or removed.
     function applySelectionClick(row, modifiers) {
@@ -369,6 +411,12 @@ StandardPage {
                             columnWidth: 50
                             text: "Length"
                             sortRole: CavePageModel.TripDistanceRole
+                        },
+                        TableStaticColumn {
+                            id: declColumn
+                            columnWidth: 95
+                            text: "Decl"
+                            sortRole: CavePageModel.DeclinationRole
                         }
                     ]
                 }
@@ -409,6 +457,8 @@ StandardPage {
                             required property date tripDateRole
                             required property string usedStationsRole
                             required property real tripDistanceRole
+                            required property real declinationRole
+                            required property bool autoDeclinationRole
                             required property int index
 
                             implicitWidth: layoutId.width
@@ -419,6 +469,7 @@ StandardPage {
                                 removeChallenge: removeChallengeId
                                 row: rowDelegateId.index
                                 name: rowDelegateId.tripNameRole
+                                tripCalibrations: cavePageArea.getCalibrationsForRow(rowDelegateId.index)
                             }
 
                             TableRowBackground {
@@ -510,6 +561,29 @@ StandardPage {
                                             }
 
                                             return Utils.fixed(rowDelegateId.tripDistanceRole, 2) + " " + unit;
+                                        }
+                                    }
+                                }
+
+                                QQ.Item {
+                                    implicitWidth: declColumn.columnWidth
+                                    implicitHeight: declRowId.implicitHeight
+                                    clip: true
+
+                                    RowLayout {
+                                        id: declRowId
+                                        spacing: 4
+
+                                        QC.Label {
+                                            elide: QQ.Text.ElideRight
+                                            text: Utils.fixed(rowDelegateId.declinationRole, 2) + "°"
+                                        }
+
+                                        QC.Label {
+                                            elide: QQ.Text.ElideRight
+                                            color: Theme.textSubtle
+                                            font.pixelSize: Theme.fontSizeCaption
+                                            text: rowDelegateId.autoDeclinationRole ? "auto" : "manual"
                                         }
                                     }
                                 }
@@ -665,6 +739,8 @@ StandardPage {
                 required property date tripDateRole
                 required property string usedStationsRole
                 required property real tripDistanceRole
+                required property real declinationRole
+                required property bool autoDeclinationRole
                 required property int index
 
                 implicitHeight: flowId.implicitHeight + Theme.delegatePadding
@@ -723,6 +799,14 @@ StandardPage {
                         }
                         color: Theme.textSubtle
                     }
+
+                    QC.Label { text: "·"; color: Theme.textSubtle }
+
+                    QC.Label {
+                        text: Utils.fixed(flowDelegateId.declinationRole, 2) + "° "
+                              + (flowDelegateId.autoDeclinationRole ? "auto" : "manual")
+                        color: Theme.textSubtle
+                    }
                 }
 
                 DataRightClickMouseMenu {
@@ -730,6 +814,7 @@ StandardPage {
                     removeChallenge: removeChallengeId
                     row: flowDelegateId.index
                     name: flowDelegateId.tripNameRole
+                    tripCalibrations: cavePageArea.getCalibrationsForRow(flowDelegateId.index)
                 }
             }
         }

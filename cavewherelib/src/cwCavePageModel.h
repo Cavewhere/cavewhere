@@ -25,7 +25,12 @@ public:
         TripNameRole,
         TripDateRole,
         UsedStationsRole,
-        TripDistanceRole
+        TripDistanceRole,
+        DeclinationRole,
+        // True when auto is both selected AND resolvable (fix station +
+        // valid date); a trip with autoDeclination=true but no fix station
+        // reports false here so the UI can show "manual".
+        AutoDeclinationRole
     };
     Q_ENUM(Roles);
 

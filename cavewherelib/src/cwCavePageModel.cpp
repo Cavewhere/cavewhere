@@ -4,6 +4,7 @@
 #include "cwTripLengthTask.h"
 #include "cwUsedStationTaskManager.h"
 #include "cwErrorListModel.h"
+#include "cwTripCalibration.h"
 
 cwCavePageModel::cwCavePageModel(QObject *parent)
     : QAbstractItemModel(parent)
@@ -36,6 +37,7 @@ void cwCavePageModel::setCave(cwCave* cave)
         if(data.trip) {
             data.trip->disconnect(this);
             data.trip->errorModel()->disconnect(this);
+            data.trip->calibrations()->disconnect(this);
         }
     };
 
@@ -115,15 +117,25 @@ void cwCavePageModel::setCave(cwCave* cave)
             }
         });
 
-        auto dataChangedForErrorCount = [this, tripIndex]() {
-            int i = tripIndex();
-            Q_ASSERT(i >= 0);
-            QModelIndex idx = index(i);
-            emit dataChanged(idx, idx, {ErrorCountRole});
+        auto emitRoleChanged = [this, tripIndex](int role) {
+            int row = tripIndex();
+            if (row >= 0) {
+                QModelIndex idx = index(row);
+                emit dataChanged(idx, idx, {role});
+            }
         };
 
-        connect(trip->errorModel(), &cwErrorModel::warningCountChanged, this, dataChangedForErrorCount);
-        connect(trip->errorModel(), &cwErrorModel::fatalCountChanged, this, dataChangedForErrorCount);
+        auto emitErrorCountChanged = [emitRoleChanged]() { emitRoleChanged(ErrorCountRole); };
+        connect(trip->errorModel(), &cwErrorModel::warningCountChanged, this, emitErrorCountChanged);
+        connect(trip->errorModel(), &cwErrorModel::fatalCountChanged, this, emitErrorCountChanged);
+
+        auto emitAutoDeclinationChanged = [emitRoleChanged]() { emitRoleChanged(AutoDeclinationRole); };
+        auto* calibration = trip->calibrations();
+        connect(calibration, &cwTripCalibration::declinationChanged, this, [emitRoleChanged]() {
+            emitRoleChanged(DeclinationRole);
+        });
+        connect(calibration, &cwTripCalibration::autoDeclinationChanged, this, emitAutoDeclinationChanged);
+        connect(calibration, &cwTripCalibration::autoDeclinationAvailableChanged, this, emitAutoDeclinationChanged);
 
         lengthTask->setTrip(trip);
         usedStationsManager->setTrip(trip);
@@ -247,6 +259,11 @@ QVariant cwCavePageModel::data(const QModelIndex &index, int role) const
         return tripData.usedStations;
     case TripDistanceRole:
         return tripData.length;
+    case DeclinationRole:
+        return trip->calibrations()->declination();
+    case AutoDeclinationRole:
+        return trip->calibrations()->autoDeclination()
+               && trip->calibrations()->autoDeclinationAvailable();
     default:
         return QVariant();
     }
@@ -260,6 +277,8 @@ QHash<int, QByteArray> cwCavePageModel::roleNames() const
         {TripNameRole, "tripNameRole"},
         {TripDateRole, "tripDateRole"},
         {UsedStationsRole, "usedStationsRole"},
-        {TripDistanceRole, "tripDistanceRole"}
+        {TripDistanceRole, "tripDistanceRole"},
+        {DeclinationRole, "declinationRole"},
+        {AutoDeclinationRole, "autoDeclinationRole"}
     };
 }
