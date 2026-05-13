@@ -8,6 +8,8 @@ PanZoomInteraction {
     BaseNoteLeadInteraction {
         id: leadInteraction
         scrapView: handler.scrapView
+
+        onPointOutsideScrap: outsideScrapWarning.show()
     }
 
     NotePointAddHandler {
@@ -19,7 +21,14 @@ PanZoomInteraction {
     }
 
     HelpBox {
-        id: stationHelpBox
+        id: leadHelpBox
         text: "Click to add a lead"
+        visible: !outsideScrapWarning.visible
+    }
+
+    AutoHideErrorBox {
+        id: outsideScrapWarning
+        objectName: "outsideScrapLeadWarning"
+        text: "Leads must be placed inside a scrap"
     }
 }

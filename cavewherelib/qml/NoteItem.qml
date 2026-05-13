@@ -18,6 +18,7 @@ ImageItem {
 
     property Note note;
     property bool scrapsVisible: false
+    property alias scrapCount: scrapViewId.count
 
     imageRotation: note ? note.rotate : 0
     image.source: note ? RootData.cavewhereImageUrl(note.image, RootData.project.absolutePath(note)) : ""

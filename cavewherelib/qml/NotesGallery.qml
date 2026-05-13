@@ -598,6 +598,20 @@ QQ.Rectangle {
         note: noteGallery.currentNoteLiDAR
     }
 
+    HelpQuoteBox {
+        id: addScrapHintId
+        objectName: "addScrapHint"
+        pointAtObject: addScrapId
+        pointAtObjectPosition: Qt.point(addScrapId.width / 2.0, addScrapId.height)
+        triangleOffset: 0.0
+        triangleOnRight: true
+        text: "Create a scrap first, then add stations or leads"
+        z: 10
+        visible: (noteGallery.state === "ADD-STATION" || noteGallery.state === "ADD-LEAD")
+                 && noteGallery.currentNote !== null
+                 && noteArea.scrapCount === 0
+    }
+
     QQ.SequentialAnimation {
 //        id: renderViewId
 //        width: 1024

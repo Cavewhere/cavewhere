@@ -21,6 +21,7 @@ Item {
     property real margin: 3.0
     // property int triangleEdge: Qt.TopEdge
     property real triangleOffset: 5.0
+    property bool triangleOnRight: false
     property Item pointAtObject
     property point pointAtObjectPosition
 
@@ -58,9 +59,13 @@ Item {
             property size triangle: Qt.size(6, 12)
             property real triangleOffset: 10
             property real topEdge: triangle.height + root.triangleOffset
-            property point boxTopLeft: Qt.point(-(triangleOffset + 2 * triangle.width), topEdge)
-            property point boxBottomRight: Qt.point(childrenContainer.width + boxTopLeft.x,
-                                                    childrenContainer.height + boxTopLeft.y)
+            property real triangleStubWidth: triangleOffset + 2 * triangle.width
+            property point boxTopLeft: root.triangleOnRight
+                ? Qt.point(-(childrenContainer.width - triangleStubWidth), topEdge)
+                : Qt.point(-triangleStubWidth, topEdge)
+            property point boxBottomRight: root.triangleOnRight
+                ? Qt.point(triangleStubWidth, childrenContainer.height + boxTopLeft.y)
+                : Qt.point(childrenContainer.width + boxTopLeft.x, childrenContainer.height + boxTopLeft.y)
 
             strokeColor: root.borderColor
             strokeWidth: root.borderWidth
