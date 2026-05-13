@@ -80,7 +80,7 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 
 ### Survey Import/Export
 
-`cwSurveyImportManager` handles Compass, Survex, and Walls formats via the `dewalls` submodule. `cwSurveyExportManager` outputs Survex. `cwSurveyNetwork` performs loop closure detection.
+`cwSurveyImportManager` handles Compass, Survex, and Walls formats via the `dewalls` submodule. `cwSurveyExportManager` outputs Survex and Compass; Compass station names are written in uppercase (Compass is case-sensitive; CaveWhere is not). `cwSurveyNetwork` performs loop closure detection.
 
 ### Remote/Git Features
 
