@@ -873,6 +873,14 @@ void cwCaptureViewport::updateBoundingBox()
 {
     QTransform transform = previewItem()->transform();
     QRectF paperRect = previewItem()->sceneBoundingRect();
+    if(paperRect.isEmpty()) {
+        // Label items (centerline / leads / lead leaders) are added by
+        // placeLabelsAfterTiles() once tile rendering completes, so the group
+        // is empty during capture start. Fall back to the expected viewport-
+        // sized rect so the QML captureItem has correct bounds immediately.
+        paperRect = QRectF(previewItem()->pos(),
+                           QSizeF(viewport().size()) * ItemScale);
+    }
     setBoundingBox(paperRect);
 }
 
