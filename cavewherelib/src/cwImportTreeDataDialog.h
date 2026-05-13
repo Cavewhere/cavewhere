@@ -18,6 +18,7 @@ class cwCavingRegion;
 //Qt includes
 class QItemSelectionModel;
 class QAction;
+class QWindow;
 #include <QItemSelection>
 #include <QDebug>
 
@@ -34,7 +35,7 @@ public:
         QString errorsLabel;
     };
 
-    explicit cwImportTreeDataDialog(Names names, cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent = 0);
+    explicit cwImportTreeDataDialog(Names names, cwTreeDataImporter* importer, cwCavingRegion* region, QWindow* transientParent = nullptr);
     virtual ~cwImportTreeDataDialog();
 
     void open();

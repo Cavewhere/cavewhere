@@ -23,10 +23,11 @@
 #include <QPixmapCache>
 #include <QMessageBox>
 #include <QDebug>
+#include <QWindow>
 
 
-cwImportTreeDataDialog::cwImportTreeDataDialog(Names names, cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent) :
-    QDialog(parent),
+cwImportTreeDataDialog::cwImportTreeDataDialog(Names names, cwTreeDataImporter* importer, cwCavingRegion* region, QWindow* transientParent) :
+    QDialog(nullptr),
     Region(region),
     Model(new cwTreeDataImporterModel(this)),
     Importer(importer),
@@ -62,6 +63,12 @@ cwImportTreeDataDialog::cwImportTreeDataDialog(Names names, cwTreeDataImporter* 
     setWindowTitle(names.windowTitle);
 
     updateImportButton(Model->index(0, 0), Model->index(Model->rowCount() - 1, 0));
+
+    //Transient parent keeps the dialog above the main window on macOS (issue #481).
+    if(transientParent != nullptr) {
+        create();
+        windowHandle()->setTransientParent(transientParent);
+    }
 }
 
 cwImportTreeDataDialog::~cwImportTreeDataDialog() {
@@ -326,6 +333,8 @@ void cwImportTreeDataDialog::importerFinishedRunning() {
     updateImportWarningLabel();
 
     show();
+    raise();
+    activateWindow();
 }
 
 /**

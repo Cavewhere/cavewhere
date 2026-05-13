@@ -22,6 +22,34 @@
 //Qt includes
 #include <QFileDialog>
 #include <QSettings>
+#include <QGuiApplication>
+#include <QQuickWindow>
+#include <QWindow>
+
+namespace {
+    //Transient parent keeps the dialog above the main window on macOS (issue #481).
+    QWindow* mainQuickWindow() {
+        const auto topLevel = QGuiApplication::topLevelWindows();
+        for(QWindow* candidate : topLevel) {
+            if(qobject_cast<QQuickWindow*>(candidate) && candidate->isVisible()) {
+                return candidate;
+            }
+        }
+        return nullptr;
+    }
+
+    void launchImportDialog(cwImportTreeDataDialog::Names names,
+                            cwTreeDataImporter* importer,
+                            cwCavingRegion* region,
+                            QUndoStack* undoStack,
+                            const QStringList& files) {
+        auto* dialog = new cwImportTreeDataDialog(names, importer, region, mainQuickWindow());
+        dialog->setUndoStack(undoStack);
+        dialog->setAttribute(Qt::WA_DeleteOnClose, true);
+        dialog->open();
+        dialog->setInputFiles(files);
+    }
+}
 
 cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
     QObject(parent),
@@ -60,13 +88,7 @@ void cwSurveyImportManager::importSurvex() {
     if (QFileInfo(filename).exists()) {
         settings.setValue(ImportSurvexKey, filename);
         cwImportTreeDataDialog::Names names{"Survex Importer", "Survex Errors"};
-        cwImportTreeDataDialog* survexImportDialog = new cwImportTreeDataDialog(names, new cwSurvexImporter(), cavingRegion());
-        survexImportDialog->setUndoStack(UndoStack);
-        survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-        survexImportDialog->open();
-        QStringList files;
-        files << filename;
-        survexImportDialog->setInputFiles(files);
+        launchImportDialog(names, new cwSurvexImporter(), cavingRegion(), UndoStack, {filename});
     }
 }
 
@@ -146,13 +168,7 @@ void cwSurveyImportManager::importWalls() {
     if (QFileInfo(filename).exists()) {
         settings.setValue(ImportWallsKey, filename);
         cwImportTreeDataDialog::Names names{"Walls Importer", "Walls Errors"};
-        cwImportTreeDataDialog* wallsImportDialog = new cwImportTreeDataDialog(names, new cwWallsImporter(), cavingRegion());
-        wallsImportDialog->setUndoStack(UndoStack);
-        wallsImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-        wallsImportDialog->open();
-        QStringList files;
-        files << filename;
-        wallsImportDialog->setInputFiles(files);
+        launchImportDialog(names, new cwWallsImporter(), cavingRegion(), UndoStack, {filename});
     }
 }
 
@@ -164,11 +180,7 @@ void cwSurveyImportManager::importWallsSrv() {
     if (!filenames.isEmpty()) {
         settings.setValue(ImportWallsKey, filenames[0]);
         cwImportTreeDataDialog::Names names{"Walls Importer", "Walls Errors"};
-        cwImportTreeDataDialog* wallsImportDialog = new cwImportTreeDataDialog(names, new cwWallsImporter(), cavingRegion());
-        wallsImportDialog->setUndoStack(UndoStack);
-        wallsImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-        wallsImportDialog->open();
-        wallsImportDialog->setInputFiles(filenames);
+        launchImportDialog(names, new cwWallsImporter(), cavingRegion(), UndoStack, filenames);
     }
 }
 
