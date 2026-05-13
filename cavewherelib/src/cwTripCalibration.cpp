@@ -2,6 +2,8 @@
 
 #include "cwTrip.h"
 #include "cwCave.h"
+#include "cwErrorModel.h"
+#include "cwErrorListModel.h"
 #include "cwFixStationModel.h"
 #include "cwFixStation.h"
 #include "cwCavingRegion.h"
@@ -9,6 +11,8 @@
 #include "cwDeclination.h"
 
 #include "Monad/Result.h"
+
+#include <cmath>
 
 cwTripCalibration::cwTripCalibration(QObject *parent)
     : QObject(parent),
@@ -200,6 +204,9 @@ void cwTripCalibration::setParentTrip(cwTrip* trip)
         return;
     }
 
+    // Pull any active warning off the old parent before we forget it exists.
+    clearActiveDeclinationWarning();
+
     if (m_parentTrip) {
         disconnect(m_parentTrip, nullptr, this, nullptr);
     }
@@ -286,16 +293,55 @@ void cwTripCalibration::refreshResolved()
         emit autoDeclinationAvailableChanged(newAvailable);
     }
 
-    updateWarnings();
+    updateWarnings(autoResult);
 }
 
-void cwTripCalibration::updateWarnings()
+void cwTripCalibration::updateWarnings(const Monad::Result<double>& autoResult)
 {
-    const QString newWarning;
-    if (newWarning != m_cachedDeclinationWarning) {
-        m_cachedDeclinationWarning = newWarning;
-        emit declinationWarningChanged(newWarning);
+    QString newWarning;
+
+    const QDateTime tripDate = m_parentTrip ? m_parentTrip->date() : QDateTime();
+    const bool autoSucceeds = !autoResult.hasError();
+
+    if (m_data.autoDeclination() && !tripDate.isValid()) {
+        newWarning = QStringLiteral(
+            "Trip has no date; auto declination unavailable. "
+            "Using stored manual value.");
+    } else if (!m_data.autoDeclination() && autoSucceeds) {
+        const double computed = autoResult.value();
+        const double manual = m_data.declinationManual();
+        const double diff = std::abs(manual - computed);
+        if (diff >= 0.5) {
+            newWarning = QStringLiteral(
+                "Manual declination %1° differs from computed %2° by %3°. "
+                "Verify it's still correct.")
+                .arg(manual, 0, 'f', 1)
+                .arg(computed, 0, 'f', 1)
+                .arg(diff, 0, 'f', 1);
+        }
     }
+
+    if (newWarning == m_declinationWarningError.message()) {
+        return;
+    }
+
+    clearActiveDeclinationWarning();
+    if (!newWarning.isEmpty() && m_parentTrip) {
+        m_declinationWarningError = cwError(newWarning, cwError::Warning);
+        m_parentTrip->errorModel()->errors()->append(m_declinationWarningError);
+    }
+
+    emit declinationWarningChanged(newWarning);
+}
+
+void cwTripCalibration::clearActiveDeclinationWarning()
+{
+    // remove() is a no-op when the entry isn't in the list, so a
+    // default-constructed m_declinationWarningError is safe here.
+    if (m_parentTrip) {
+        m_parentTrip->errorModel()->errors()->remove(m_declinationWarningError);
+    }
+    m_declinationWarningError = cwError();
 }
 
 int cwTripCalibration::mapToLengthUnit(int supportedUnitIndex)

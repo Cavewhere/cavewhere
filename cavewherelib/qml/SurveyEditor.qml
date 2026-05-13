@@ -208,6 +208,11 @@ QQ.Item {
                             }
                         }
                     }
+
+                    SurveyErrorOverview {
+                        trip: currentTrip
+                        Layout.fillWidth: true
+                    }
                 }
 
                 BreakLine { }
@@ -327,10 +332,6 @@ QQ.Item {
                 SectionLabel {
                     text: "Data"
                     Layout.alignment: Qt.AlignHCenter
-                }
-
-                SurveyErrorOverview {
-                    trip: currentTrip
                 }
 
                 AddButton {
