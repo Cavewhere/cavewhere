@@ -12,6 +12,9 @@
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
 
+//Qt includes
+#include <QThread>
+
 cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
     QObject(parent),
     ParentNode(nullptr),
@@ -115,6 +118,16 @@ cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
  void cwTreeImportDataNode::addChunk(cwSurveyChunk* chunk) {
      chunk->setParent(this);
      Chunks.append(chunk);
+ }
+
+ void cwTreeImportDataNode::moveTreeToThread(cwTreeImportDataNode* node, QThread* targetThread) {
+     if(node == nullptr) {
+         return;
+     }
+     for(cwTreeImportDataNode* child : node->ChildNodes) {
+         moveTreeToThread(child, targetThread);
+     }
+     node->moveToThread(targetThread);
  }
 
  /**

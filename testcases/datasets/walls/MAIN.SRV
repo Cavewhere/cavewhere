@@ -1,0 +1,6 @@
+; Main Passage Trip
+; Alice; Bob
+#units d=meters a=degrees v=degrees decl=0
+A1	A2	5.0	0	0
+A2	A3	4.0	45	-5
+A3	A4	3.0	90	-10

@@ -23,6 +23,7 @@ class cwTripCalibration;
 #include <QString>
 #include <QObject>
 #include <QDate>
+class QThread;
 
 
 class CAVEWHERE_LIB_EXPORT cwTreeImportDataNode : public QObject
@@ -80,6 +81,10 @@ public:
 
     void setIncludeDistance(bool includeLength);
     bool isDistanceInclude() const;
+
+    //Child nodes are linked by ParentNode pointers rather than Qt parent/child,
+    //so moveToThread doesn't reach them automatically. This walks the tree.
+    static void moveTreeToThread(cwTreeImportDataNode* node, QThread* targetThread);
 
 signals:
     void nameChanged();
