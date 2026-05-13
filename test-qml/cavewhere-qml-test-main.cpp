@@ -41,9 +41,6 @@ public slots:
         QSettings settings;
         settings.clear();
 
-        //Init libgit2
-        QQuickGit::GitRepository::initGitEngine();
-
         auto id = qmlTypeId("cavewherelib", 1, 0, "RootData");
         cwRootData* rootData = engine->rootContext()->engine()->singletonInstance<cwRootData*>(id);
 
@@ -75,6 +72,11 @@ int main(int argc, char **argv) \
     QApplication app(argc, argv);
 
     cwMetaTypeSystem::registerTypes();
+
+    // Wire SURVEXLIB and PROJ_DATA search paths so tests that touch coordinate
+    // transforms (e.g. cwTripCalibration::autoDeclinationAvailable) work
+    // without relying on the dev shell's conanrun environment.
+    cwRootData::initCavewherelib();
 
     cwGlobals::loadFonts();
 
