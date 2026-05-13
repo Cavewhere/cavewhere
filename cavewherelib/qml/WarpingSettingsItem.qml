@@ -196,19 +196,8 @@ ColumnLayout {
                 }
             }
 
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignRight
-                spacing: 8
-
-                QC.Button {
-                    text: "Restore Defaults"
-                    onClicked: {
-                        if(root.warpingSettings) {
-                            root.warpingSettings.resetToDefaults()
-                        }
-                    }
-                }
+            RestoreDefaultsButton {
+                settings: root.warpingSettings
             }
         }
     }

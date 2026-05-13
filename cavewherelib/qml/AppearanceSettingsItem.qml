@@ -187,5 +187,9 @@ ColumnLayout {
         }
     }
 
+    RestoreDefaultsButton {
+        settings: RootData.settings.fontSettings
+    }
+
     QQ.Item { Layout.fillHeight: true }
 }

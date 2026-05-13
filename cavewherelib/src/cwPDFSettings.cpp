@@ -22,7 +22,16 @@ void cwPDFSettings::setResolutionImport(int resolutionImport) {
         QSettings settings;
         settings.setValue(importResolutionKey(), ResolutionImport);
         emit resolutionImportChanged();
+        emit isAtDefaultsChanged();
     }
+}
+
+bool cwPDFSettings::isAtDefaults() const {
+    return ResolutionImport == DefaultResolutionImport;
+}
+
+void cwPDFSettings::resetToDefaults() {
+    setResolutionImport(DefaultResolutionImport);
 }
 
 void cwPDFSettings::initialize()

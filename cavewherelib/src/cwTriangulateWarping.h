@@ -21,6 +21,7 @@ class CAVEWHERE_LIB_EXPORT cwTriangulateWarping : public QObject
     Q_PROPERTY(bool useShotInterpolationSpacing READ useShotInterpolationSpacing WRITE setUseShotInterpolationSpacing NOTIFY useShotInterpolationSpacingChanged)
     Q_PROPERTY(bool useMaxClosestStations READ useMaxClosestStations WRITE setUseMaxClosestStations NOTIFY useMaxClosestStationsChanged)
     Q_PROPERTY(bool useSmoothingRadius READ useSmoothingRadius WRITE setUseSmoothingRadius NOTIFY useSmoothingRadiusChanged)
+    Q_PROPERTY(bool isAtDefaults READ isAtDefaults NOTIFY isAtDefaultsChanged)
 
 public:
     explicit cwTriangulateWarping(QObject* parent = nullptr);
@@ -49,6 +50,7 @@ public:
     bool useSmoothingRadius() const;
     void setUseSmoothingRadius(bool enabled);
 
+    bool isAtDefaults() const;
     Q_INVOKABLE void resetToDefaults();
 
 signals:
@@ -59,6 +61,7 @@ signals:
     void useShotInterpolationSpacingChanged();
     void useMaxClosestStationsChanged();
     void useSmoothingRadiusChanged();
+    void isAtDefaultsChanged();
 
 private:
     cwTriangulateWarpingData m_settings;

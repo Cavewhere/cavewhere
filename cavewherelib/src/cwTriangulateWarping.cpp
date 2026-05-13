@@ -34,6 +34,7 @@ void cwTriangulateWarping::setGridResolutionMeters(double distance)
 
     m_settings.gridResolutionMeters = distance;
     emit gridResolutionMetersChanged();
+    emit isAtDefaultsChanged();
 }
 
 int cwTriangulateWarping::maxClosestStations() const
@@ -49,6 +50,7 @@ void cwTriangulateWarping::setMaxClosestStations(int count)
 
     m_settings.maxClosestStations = count;
     emit maxClosestStationsChanged();
+    emit isAtDefaultsChanged();
 }
 
 double cwTriangulateWarping::shotInterpolationSpacingMeters() const
@@ -64,6 +66,7 @@ void cwTriangulateWarping::setShotInterpolationSpacingMeters(double spacing)
 
     m_settings.shotInterpolationSpacingMeters = spacing;
     emit shotInterpolationSpacingMetersChanged();
+    emit isAtDefaultsChanged();
 }
 
 double cwTriangulateWarping::smoothingRadiusMeters() const
@@ -79,6 +82,7 @@ void cwTriangulateWarping::setSmoothingRadiusMeters(double distance)
 
     m_settings.smoothingRadiusMeters = distance;
     emit smoothingRadiusMetersChanged();
+    emit isAtDefaultsChanged();
 }
 
 bool cwTriangulateWarping::useShotInterpolationSpacing() const
@@ -94,6 +98,7 @@ void cwTriangulateWarping::setUseShotInterpolationSpacing(bool enabled)
 
     m_settings.useShotInterpolationSpacing = enabled;
     emit useShotInterpolationSpacingChanged();
+    emit isAtDefaultsChanged();
 }
 
 bool cwTriangulateWarping::useMaxClosestStations() const
@@ -109,6 +114,7 @@ void cwTriangulateWarping::setUseMaxClosestStations(bool enabled)
 
     m_settings.useMaxClosestStations = enabled;
     emit useMaxClosestStationsChanged();
+    emit isAtDefaultsChanged();
 }
 
 bool cwTriangulateWarping::useSmoothingRadius() const
@@ -124,6 +130,12 @@ void cwTriangulateWarping::setUseSmoothingRadius(bool enabled)
 
     m_settings.useSmoothingRadius = enabled;
     emit useSmoothingRadiusChanged();
+    emit isAtDefaultsChanged();
+}
+
+bool cwTriangulateWarping::isAtDefaults() const
+{
+    return m_settings == cwTriangulateWarpingData{};
 }
 
 void cwTriangulateWarping::resetToDefaults()

@@ -134,5 +134,61 @@ MainWindowTest {
             let card = ObjectFinder.findObjectByChain(rootId, "rootId->appearanceSettings->GroupBox->defaultCard")
             verify(!card.active)
         }
+
+        // ── Restore Defaults button ───────────────────────────────────────────
+
+        function findResetButton() {
+            return ObjectFinder.findObjectByChain(rootId, "rootId->appearanceSettings->restoreDefaultsButton")
+        }
+
+        function test_restoreDefaultsButtonDisabledAtDefault() {
+            let btn = findResetButton()
+            verify(btn !== null, "restoreDefaultsButton not found")
+            verify(!btn.enabled)
+        }
+
+        function test_restoreDefaultsButtonEnabledWhenSizeChanged() {
+            RootData.settings.fontSettings.fontBaseSize = RootData.settings.fontSettings.defaultFontBaseSize + 2
+            let btn = findResetButton()
+            tryVerify(function() { return btn.enabled })
+        }
+
+        function test_restoreDefaultsButtonEnabledWhenFamilyChanged() {
+            let entries = RootData.settings.fontSettings.fontEntries
+            if (entries.length < 2) {
+                skip("Need at least 2 font entries to switch family")
+            }
+            RootData.settings.fontSettings.fontFamily = entries[1].family
+            let btn = findResetButton()
+            tryVerify(function() { return btn.enabled })
+        }
+
+        function test_clickingRestoreDefaultsResetsValues() {
+            let entries = RootData.settings.fontSettings.fontEntries
+            let defaultFamily = entries[0].family
+            let defaultSize = entries[0].defaultSize
+
+            if (entries.length >= 2) {
+                RootData.settings.fontSettings.fontFamily = entries[1].family
+            }
+            RootData.settings.fontSettings.fontBaseSize = RootData.settings.fontSettings.fontBaseSize + 2
+            waitForRendering(rootId)
+
+            let btn = findResetButton()
+            verify(btn !== null, "restoreDefaultsButton not found")
+            verify(btn.enabled)
+            mouseClick(btn)
+
+            tryCompare(RootData.settings.fontSettings, "fontFamily", defaultFamily)
+            tryCompare(RootData.settings.fontSettings, "fontBaseSize", defaultSize)
+        }
+
+        function test_clickingRestoreDefaultsDisablesButton() {
+            RootData.settings.fontSettings.fontBaseSize = RootData.settings.fontSettings.defaultFontBaseSize + 2
+            let btn = findResetButton()
+            tryVerify(function() { return btn.enabled })
+            mouseClick(btn)
+            tryVerify(function() { return !btn.enabled })
+        }
     }
 }
