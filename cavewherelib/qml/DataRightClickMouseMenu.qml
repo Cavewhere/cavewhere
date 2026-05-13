@@ -16,11 +16,14 @@ QQ.Item {
 
     QQ.TapHandler {
         acceptedButtons: Qt.RightButton
+        acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
         onTapped: (eventPoint) => root.showMenu(eventPoint.position.x,
                                                 eventPoint.position.y)
     }
 
+    // Touch-only so mouse left-clicks pass through to the LinkText below.
     QQ.TapHandler {
+        acceptedDevices: QQ.PointerDevice.TouchScreen
         onLongPressed: root.showMenu(point.position.x, point.position.y)
     }
 
