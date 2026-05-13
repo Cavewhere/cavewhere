@@ -56,11 +56,30 @@ QQ.Rectangle {
         }
     }
 
+    //Exit any carpet sub-tool when the user clicks away — switching
+    //to a different note image, or navigating to a different page.
+    //Fixes #342.
+    function _exitCarpetMode() {
+        if(mode === "CARPET" && state !== "CARPET") {
+            state = ""
+        }
+    }
+
     signal imagesAdded(list<url> images)
     signal backClicked();
 
     anchors.margins: 3
     color: Theme.background
+
+    onCurrentNoteChanged: _exitCarpetMode()
+
+    QQ.Connections {
+        target: RootData.pageSelectionModel
+        enabled: noteGallery.mode === "CARPET"
+        function onCurrentPageAddressChanged() {
+            noteGallery._exitCarpetMode()
+        }
+    }
 
     LoadNotesWidget {
         id: loadNoteWidgetId
