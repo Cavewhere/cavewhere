@@ -11,6 +11,7 @@ import QtQuick as QQ
 import QtQuick.Dialogs as QD
 import cavewherelib
 import QtQml
+import QtQml.Models as QQModels
 import QtQuick.Layouts
 import QtQuick.Controls as QC
 import "Utils.js" as Utils
@@ -287,6 +288,44 @@ StandardPage {
         }
     }
 
+    QQModels.ItemSelectionModel {
+        id: selectionModelId
+        model: tripProxyModel
+    }
+
+    property alias selection: selectionModelId
+
+    // Translates a click + modifier into ItemSelectionModel flags. Uses
+    // selection.currentIndex as the shift anchor — it's a QPersistentModelIndex
+    // internally, so it follows the row when the underlying model mutates.
+    function applySelectionClick(row, modifiers) {
+        if (row < 0 || row >= tripProxyModel.count) {
+            return
+        }
+
+        const idx = tripProxyModel.index(row, 0)
+        const isShift = (modifiers & Qt.ShiftModifier) !== 0
+        const isCtrl = (modifiers & (Qt.ControlModifier | Qt.MetaModifier)) !== 0
+        const anchor = selectionModelId.currentIndex
+
+        if (isShift && anchor.valid) {
+            const lo = Math.min(anchor.row, row)
+            const hi = Math.max(anchor.row, row)
+            selectionModelId.select(tripProxyModel.index(lo, 0),
+                                    QQModels.ItemSelectionModel.ClearAndSelect | QQModels.ItemSelectionModel.Rows)
+            for (let r = lo + 1; r <= hi; ++r) {
+                selectionModelId.select(tripProxyModel.index(r, 0),
+                                        QQModels.ItemSelectionModel.Select | QQModels.ItemSelectionModel.Rows)
+            }
+        } else if (isCtrl) {
+            selectionModelId.select(idx,
+                                    QQModels.ItemSelectionModel.Toggle | QQModels.ItemSelectionModel.Rows)
+        } else {
+            selectionModelId.setCurrentIndex(idx,
+                                             QQModels.ItemSelectionModel.ClearAndSelect | QQModels.ItemSelectionModel.Rows)
+        }
+    }
+
     LeadModel {
         id: leadModelId
         regionModel: RootData.regionTreeModel
@@ -353,6 +392,13 @@ StandardPage {
                         columnModel: columnModelId
                         Layout.fillHeight: true
 
+                        // Per-row MouseAreas grab row taps first; this only
+                        // fires for empty space below the last row.
+                        QQ.TapHandler {
+                            acceptedButtons: Qt.LeftButton
+                            onTapped: cavePageArea.selection.clear()
+                        }
+
                         component RowDelegate : QQ.Item {
                             id: rowDelegateId
                             required property Trip tripObjectRole
@@ -373,7 +419,8 @@ StandardPage {
                             }
 
                             TableRowBackground {
-                                isSelected: tableViewId.currentIndex === rowDelegateId.index
+                                isSelected: cavePageArea.selection.selectedIndexes
+                                            .some(i => i.row === rowDelegateId.index)
                                 rowIndex: rowDelegateId.index
                                 anchors.fill: parent
                             }
@@ -382,8 +429,9 @@ StandardPage {
                                 anchors.fill: parent
                                 acceptedButtons: Qt.LeftButton
 
-                                onClicked: {
+                                onClicked: (mouse) => {
                                     tableViewId.currentIndex = rowDelegateId.index
+                                    cavePageArea.applySelectionClick(rowDelegateId.index, mouse.modifiers)
                                 }
                             }
 
@@ -479,6 +527,11 @@ StandardPage {
         QQ.ListView {
             clip: true
             model: tripProxyModel
+
+            QQ.TapHandler {
+                acceptedButtons: Qt.LeftButton
+                onTapped: cavePageArea.selection.clear()
+            }
 
             header: ColumnLayout {
                 width: parent ? parent.width : 0
@@ -616,7 +669,8 @@ StandardPage {
                 width: QQ.ListView.view ? QQ.ListView.view.width : 0
 
                 TableRowBackground {
-                    isSelected: QQ.ListView.view && QQ.ListView.view.currentIndex === flowDelegateId.index
+                    isSelected: cavePageArea.selection.selectedIndexes
+                                .some(i => i.row === flowDelegateId.index)
                     rowIndex: flowDelegateId.index
                     anchors.fill: parent
                 }
@@ -624,7 +678,10 @@ StandardPage {
                 QQ.MouseArea {
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton
-                    onClicked: QQ.ListView.view.currentIndex = flowDelegateId.index
+                    onClicked: (mouse) => {
+                        QQ.ListView.view.currentIndex = flowDelegateId.index
+                        cavePageArea.applySelectionClick(flowDelegateId.index, mouse.modifiers)
+                    }
                 }
 
                 QQ.Flow {
