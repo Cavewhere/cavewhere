@@ -223,10 +223,13 @@ TEST_CASE("Sketch-derived scraps round trip through a full project save/load",
             REQUIRE(spy.wait(5000));
         }
 
-        // Two closed strokes: ScrapOutline around (0,5) covers a1/a2;
-        // Wall around (0,20) covers a3/a4. Each must produce one scrap.
-        drawClosedSquare(sketch, cwPenStroke::ScrapOutline, 0.0, 5.0, 4.0);
-        drawClosedSquare(sketch, cwPenStroke::Wall,         0.0, 20.0, 4.0);
+        // Two closed strokes: ScrapOutline around (0,5) covers a1/a2 with
+        // half-size 7 (y range -2..12); Wall around (0,20) covers a3 with
+        // half-size 7 (y range 13..27). Each must produce one scrap.
+        // Stations on the polygon edge are excluded by containsPoint, so
+        // half-size must strictly exceed the station-to-center distance.
+        drawClosedSquare(sketch, cwPenStroke::ScrapOutline, 0.0, 5.0, 7.0);
+        drawClosedSquare(sketch, cwPenStroke::Wall,         0.0, 20.0, 7.0);
 
         REQUIRE(waitForDerivedScraps(root->scrapManager(), sketch, 2));
 
