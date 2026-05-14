@@ -457,7 +457,7 @@ TEST_CASE("Auto-calculate scrap transform handles declination correctly", "[cwSc
         root->futureManagerModel()->waitForFinished();
     };
 
-    calibration->setDeclination(0.0);
+    calibration->setDeclinationManual(0.0);
     scrap->setCalculateNoteTransform(true);
     settle();
 
@@ -469,7 +469,7 @@ TEST_CASE("Auto-calculate scrap transform handles declination correctly", "[cwSc
         scrap->updateNoteTransformation();
         const double upDec0 = scrap->noteTransformAdjustedDeclination().north;
 
-        calibration->setDeclination(kDeclination);
+        calibration->setDeclinationManual(kDeclination);
         settle();
         scrap->updateNoteTransformation();
         const double upDec15 = scrap->noteTransformAdjustedDeclination().north;
@@ -483,7 +483,7 @@ TEST_CASE("Auto-calculate scrap transform handles declination correctly", "[cwSc
         scrap->updateNoteTransformation();
         const double upDec0 = scrap->noteTransformAdjustedDeclination().north;
 
-        calibration->setDeclination(kDeclination);
+        calibration->setDeclinationManual(kDeclination);
         settle();
         scrap->updateNoteTransformation();
         const double upDec15 = scrap->noteTransformAdjustedDeclination().north;
@@ -497,7 +497,7 @@ TEST_CASE("Auto-calculate scrap transform handles declination correctly", "[cwSc
         scrap->updateNoteTransformation();
         const double upDec0 = scrap->noteTransformAdjustedDeclination().north;
 
-        calibration->setDeclination(kDeclination);
+        calibration->setDeclinationManual(kDeclination);
         settle();
         scrap->updateNoteTransformation();
         const double upDec15 = scrap->noteTransformAdjustedDeclination().north;
