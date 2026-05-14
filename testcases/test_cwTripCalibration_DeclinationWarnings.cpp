@@ -149,6 +149,42 @@ TEST_CASE("declinationWarning: no fix station → no warning even when manual is
     CHECK(tripWarningCount(trip) == 0);
 }
 
+TEST_CASE("declinationWarning: text-only change updates in place — no row churn, no count signal",
+          "[cwTripCalibration_DeclinationWarnings]")
+{
+    auto f = buildBoulderFixture();
+    const double autoValue = f.calibration->declination();
+    f.calibration->setAutoDeclination(false);
+    f.calibration->setDeclinationManual(autoValue + 5.0);
+    REQUIRE(!f.calibration->declinationWarning().isEmpty());
+    REQUIRE(tripWarningCount(f.trip) == 1);
+
+    auto* errors = f.trip->errorModel()->errors();
+    QSignalSpy rowsRemovedSpy(errors, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy rowsInsertedSpy(errors, &QAbstractItemModel::rowsInserted);
+    QSignalSpy dataChangedSpy(errors, &QAbstractItemModel::dataChanged);
+    QSignalSpy countChangedSpy(errors, &cwErrorListModel::countChanged);
+    QSignalSpy warningCountSpy(f.trip->errorModel(), &cwErrorModel::warningCountChanged);
+
+    // Change to a different far-from-auto value. The warning text changes
+    // (different numbers in the formatted message) but the row count and
+    // warning count must not move.
+    f.calibration->setDeclinationManual(autoValue + 3.0);
+
+    CHECK(rowsRemovedSpy.count() == 0);
+    CHECK(rowsInsertedSpy.count() == 0);
+    CHECK(countChangedSpy.count() == 0);
+    CHECK(warningCountSpy.count() == 0);
+    REQUIRE(dataChangedSpy.count() == 1);
+
+    const auto args = dataChangedSpy.takeFirst();
+    const auto roles = args.at(2).value<QList<int>>();
+    CHECK(roles.contains(static_cast<int>(cwErrorListModel::ErrorRoles::MessageRole)));
+
+    CHECK(tripWarningCount(f.trip) == 1);
+    CHECK(tripHasMessage(f.trip, QStringLiteral("differs")));
+}
+
 TEST_CASE("declinationWarning: declinationWarningChanged emits on transitions",
           "[cwTripCalibration_DeclinationWarnings]")
 {

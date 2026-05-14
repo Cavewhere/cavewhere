@@ -321,8 +321,24 @@ void cwTripCalibration::updateWarnings(const Monad::Result<double>& autoResult)
         }
     }
 
-    if (newWarning == m_declinationWarningError.message()) {
+    const QString previousWarning = m_declinationWarningError.message();
+    if (newWarning == previousWarning) {
         return;
+    }
+
+    if (!previousWarning.isEmpty() && !newWarning.isEmpty() && m_parentTrip) {
+        // Text-only change: update the existing row in place so QML delegates
+        // survive the edit and warningCount stays quiet.
+        auto* errors = m_parentTrip->errorModel()->errors();
+        const int row = errors->indexOf(m_declinationWarningError);
+        if (row >= 0) {
+            errors->setData(errors->index(row),
+                            newWarning,
+                            static_cast<int>(cwErrorListModel::ErrorRoles::MessageRole));
+            m_declinationWarningError.setMessage(newWarning);
+            emit declinationWarningChanged(newWarning);
+            return;
+        }
     }
 
     clearActiveDeclinationWarning();
