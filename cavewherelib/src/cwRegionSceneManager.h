@@ -22,6 +22,8 @@ class cwGLLinePlot;
 class cwRenderGridPlane;
 class cwCavingRegion;
 class cwGLTerrain;
+class cwKeywordItem;
+class cwKeywordItemModel;
 class cwLazLayer;
 class cwRenderObject;
 class cwRenderLinePlot;
@@ -63,6 +65,8 @@ public:
 
     cwRenderTexturedItems *items() const;
 
+    void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
+
 signals:
     void sceneChanged();
     void cavingRegionChanged();
@@ -92,6 +96,12 @@ private:
     cwRenderRadialGradient* m_background;
 
     QHash<QUuid, cwRenderPointCloud*> m_pointClouds;
+
+    QHash<QUuid, QPointer<cwKeywordItem>> m_lazKeywordItems;
+    QPointer<cwKeywordItemModel> m_keywordItemModel;
+
+    void addKeywordItemForLazLayer(cwLazLayer* layer);
+    void removeKeywordItemForLazLayer(cwLazLayer* layer);
 
     //For rendering label
     QPointer<cwCavingRegion> Region;

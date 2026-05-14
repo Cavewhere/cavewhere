@@ -16,6 +16,9 @@
 
 
 #include "cwCavingRegion.h"
+#include "cwKeywordItem.h"
+#include "cwKeywordItemModel.h"
+#include "cwKeywordModel.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 
@@ -107,6 +110,16 @@ void cwRegionSceneManager::rebuildLazRenderObjects()
 
 void cwRegionSceneManager::clearPointClouds()
 {
+    for (const auto& item : std::as_const(m_lazKeywordItems)) {
+        if (m_keywordItemModel && item) {
+            m_keywordItemModel->removeItem(item);
+        }
+        if (item) {
+            item->deleteLater();
+        }
+    }
+    m_lazKeywordItems.clear();
+
     // setScene(nullptr) unhooks each render object from cwScene before delete;
     // ~cwRenderObject doesn't do this itself, so deleting directly would leave
     // dangling pointers in cwScene::m_newRenderObjects and crash on next sync.
@@ -134,6 +147,7 @@ void cwRegionSceneManager::addLazLayer(cwLazLayer* layer)
             this, [this, layer]() { syncLazLayerGeometry(layer); });
 
     syncLazLayerGeometry(layer);
+    addKeywordItemForLazLayer(layer);
 }
 
 void cwRegionSceneManager::removeLazLayer(cwLazLayer* layer)
@@ -141,6 +155,7 @@ void cwRegionSceneManager::removeLazLayer(cwLazLayer* layer)
     if (!layer) {
         return;
     }
+    removeKeywordItemForLazLayer(layer);
     auto it = m_pointClouds.find(layer->id());
     if (it == m_pointClouds.end()) {
         return;
@@ -180,6 +195,54 @@ void cwRegionSceneManager::syncLazLayerGeometry(cwLazLayer* layer)
   */
 cwCavingRegion* cwRegionSceneManager::cavingRegion() const {
     return Region;
+}
+
+void cwRegionSceneManager::setKeywordItemModel(cwKeywordItemModel* keywordItemModel)
+{
+    m_keywordItemModel = keywordItemModel;
+}
+
+void cwRegionSceneManager::addKeywordItemForLazLayer(cwLazLayer* layer)
+{
+    if (!m_keywordItemModel || !layer) {
+        return;
+    }
+
+    if (m_lazKeywordItems.contains(layer->id())) {
+        return;
+    }
+
+    auto pointCloudIt = m_pointClouds.constFind(layer->id());
+    if (pointCloudIt == m_pointClouds.constEnd()) {
+        return;
+    }
+
+    auto* keywordItem = new cwKeywordItem();
+    keywordItem->keywordModel()->addExtension(layer->keywordModel());
+    keywordItem->setObject(pointCloudIt.value());
+    m_keywordItemModel->addItem(keywordItem);
+
+    m_lazKeywordItems.insert(layer->id(), keywordItem);
+}
+
+void cwRegionSceneManager::removeKeywordItemForLazLayer(cwLazLayer* layer)
+{
+    if (!layer) {
+        return;
+    }
+    auto it = m_lazKeywordItems.find(layer->id());
+    if (it == m_lazKeywordItems.end()) {
+        return;
+    }
+
+    if (m_keywordItemModel && it.value()) {
+        m_keywordItemModel->removeItem(it.value());
+    }
+    if (it.value()) {
+        it.value()->deleteLater();
+    }
+
+    m_lazKeywordItems.erase(it);
 }
 
 void cwRegionSceneManager::setCapturing(bool newCapturing)

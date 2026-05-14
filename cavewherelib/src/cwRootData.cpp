@@ -169,6 +169,7 @@ cwRootData::cwRootData(QObject *parent) :
     License->setVersion(version());
 
     RegionSceneManager = new cwRegionSceneManager(this);
+    RegionSceneManager->setKeywordItemModel(m_keywordItemModel);
     RegionSceneManager->setCavingRegion(Region);
 
     ScrapManager->setRenderScraps(RegionSceneManager->items()); //scraps());
