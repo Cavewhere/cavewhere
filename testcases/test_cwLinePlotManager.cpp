@@ -945,6 +945,18 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
         // re-runs. We don't reset the spy between this and the parent
         // setRegion run, so we tally only what happens after this point.
         region.setGlobalCS(QStringLiteral("EPSG:32616"));
+
+        // Pre-set worldOrigin to a non-sentinel value so the first-solve
+        // auto-compute branch in cwLinePlotManager::publishLinePlotResults
+        // is skipped. Otherwise the first run after the fix is added would
+        // auto-compute worldOrigin and queue a second run via
+        // worldOriginChanged → runSurvex; waitToFinish only blocks on the
+        // first run, so the assertions below would race the second run and
+        // intermittently see un-shifted positions. The value is arbitrary:
+        // the auto-compute guard only checks against the default sentinel.
+        const cwGeoPoint kAutoComputeSuppressor{1.0, 1.0, 1.0};
+        region.setWorldOrigin(kAutoComputeSuppressor);
+
         plotManager->waitToFinish();
         const int spyAfterGlobalCS = positionSpy.count();
         REQUIRE(spyAfterGlobalCS >= 1); // setting globalCS itself triggered a run
@@ -963,10 +975,8 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
         plotManager->waitToFinish();
 
         // Reported positions are shifted by -worldOrigin for shader float
-        // precision (see cwLinePlotTask::applyWorldOriginOffset). The first
-        // completed solve also auto-computes worldOrigin from the fix centroid,
-        // so after this run worldOrigin == (100, 200, 50) and a1 lands at the
-        // origin. Add worldOrigin back to recover absolute projected coords.
+        // precision (see cwLinePlotTask::applyWorldOriginOffset). Add the
+        // current worldOrigin back to recover absolute projected coords.
         const auto absolutePosition = [&](const QString& station) {
             return cave->stationPositionLookup().position(station)
                 + region.worldOrigin().toVector3D();
