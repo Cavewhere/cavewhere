@@ -40,6 +40,7 @@ class cwTrip;
 class cwSketch;
 class cwKeywordModel;
 class cwScrapEditingScope;
+class cwTripCalibration;
 
 /**
   cwScrap holds a polygon of points that represents a scrap
@@ -132,6 +133,7 @@ public:
 
     cwTrip* parentTrip() const;
     cwCave* parentCave() const;
+    cwTripCalibration* tripCalibration() const;
 
     cwAbstractScrapViewMatrix* viewMatrix() const;
     ScrapType type() const;

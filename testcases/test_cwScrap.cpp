@@ -348,7 +348,7 @@ TEST_CASE("Auto calculate should work on projected profile azimuth", "[cwScrap]"
 
 TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
     QList<TestRow> rows;
-    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/ProjectProfile-test-startRunning.cw"), 0.8519, 257.162, 0.05, 0.005, 134.4));
+    rows.append(TestRow(testcasesDatasetPath("scrapAutoCalculate/ProjectProfile-test-startRunning.cw"), 359.852, 257.162, 0.05, 0.005, 134.4));
     rows[0].CaveName = "My Cave";
     rows[0].TripName = "Best Trip";
 
@@ -435,6 +435,77 @@ TEST_CASE("Manual scrap rotation uses declination during triangulation", "[cwScr
 
     scrap->setType(cwScrap::ProjectedProfile);
     CHECK(scrap->noteTransformAdjustedDeclination().north == Catch::Approx(originalNorthUp).epsilon(1e-6));
+}
+
+TEST_CASE("Auto-calculate scrap transform handles declination correctly", "[cwScrap]") {
+    auto root = std::make_unique<cwRootData>();
+    root->settings()->jobSettings()->setAutomaticUpdate(true);
+    fileToProject(root->project(),
+                  testcasesDatasetPath("scrapAutoCalculate/ProjectProfile-test-v3.cw"));
+
+    cwScrap* scrap = firstScrap(root->project());
+    REQUIRE(scrap);
+    REQUIRE(scrap->parentNote());
+    REQUIRE(scrap->parentNote()->parentTrip());
+
+    cwTripCalibration* calibration = scrap->parentNote()->parentTrip()->calibrations();
+    REQUIRE(calibration);
+
+    auto settle = [&]() {
+        root->linePlotManager()->waitToFinish();
+        root->taskManagerModel()->waitForTasks();
+        root->futureManagerModel()->waitForFinished();
+    };
+
+    calibration->setDeclination(0.0);
+    scrap->setCalculateNoteTransform(true);
+    settle();
+
+    constexpr double kDeclination = 15.0;
+    constexpr double kToleranceDegrees = 1.0;
+
+    SECTION("ProjectedProfile: up direction must not rotate with declination") {
+        scrap->setType(cwScrap::ProjectedProfile);
+        scrap->updateNoteTransformation();
+        const double upDec0 = scrap->noteTransformAdjustedDeclination().north;
+
+        calibration->setDeclination(kDeclination);
+        settle();
+        scrap->updateNoteTransformation();
+        const double upDec15 = scrap->noteTransformAdjustedDeclination().north;
+
+        INFO("upDec0=" << upDec0 << " upDec15=" << upDec15);
+        CHECK(upDec15 == Catch::Approx(upDec0).margin(kToleranceDegrees));
+    }
+
+    SECTION("RunningProfile: up direction must not rotate with declination") {
+        scrap->setType(cwScrap::RunningProfile);
+        scrap->updateNoteTransformation();
+        const double upDec0 = scrap->noteTransformAdjustedDeclination().north;
+
+        calibration->setDeclination(kDeclination);
+        settle();
+        scrap->updateNoteTransformation();
+        const double upDec15 = scrap->noteTransformAdjustedDeclination().north;
+
+        INFO("upDec0=" << upDec0 << " upDec15=" << upDec15);
+        CHECK(upDec15 == Catch::Approx(upDec0).margin(kToleranceDegrees));
+    }
+
+    SECTION("Plan: effective up rotates by declination") {
+        scrap->setType(cwScrap::Plan);
+        scrap->updateNoteTransformation();
+        const double upDec0 = scrap->noteTransformAdjustedDeclination().north;
+
+        calibration->setDeclination(kDeclination);
+        settle();
+        scrap->updateNoteTransformation();
+        const double upDec15 = scrap->noteTransformAdjustedDeclination().north;
+
+        const double expected = cwNoteTranformation::northAdjustedForDeclination(upDec0, kDeclination);
+        INFO("upDec0=" << upDec0 << " upDec15=" << upDec15 << " expected=" << expected);
+        CHECK(upDec15 == Catch::Approx(expected).margin(kToleranceDegrees));
+    }
 }
 
 TEST_CASE("Guess neighbor station name", "[cwScrap]") {

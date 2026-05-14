@@ -406,11 +406,11 @@ QVariant cwScrap::leadData(cwScrap::LeadDataRole role, int leadIndex) const
     case LeadSize:
         return lead.size();
     case LeadUnits: {
-        auto calibration = parentNote()->parentTrip()->calibrations();
+        auto calibration = tripCalibration();
         return calibration->mapToSupportUnit(calibration->distanceUnit());
     }
     case LeadSupportedUnits:
-        return parentNote()->parentTrip()->calibrations()->supportedUnits();
+        return tripCalibration()->supportedUnits();
     case LeadCompleted:
         return lead.completed();
     default:
@@ -575,10 +575,20 @@ void cwScrap::updateNoteTransformation() {
     //Do the calculations
     cwNoteTransformationData averageTransformation = averageFunc(shotStations);
 
+    //Only Plan stores north in magnetic; profile scraps are gravity-up so declination must not enter storage.
+    const double storageDeclination = (type() == Plan)
+        ? -tripCalibration()->declination()
+        : 0.0;
     averageTransformation.north = cwNoteTranformation::northAdjustedForDeclination(averageTransformation.north,
-                                                                                   -parentNote()->parentTrip()->calibrations()->declination());
+                                                                                   storageDeclination);
 
     NoteTransformation->setData(averageTransformation);
+}
+
+cwTripCalibration* cwScrap::tripCalibration() const {
+    if(parentNote() == nullptr) { return nullptr; }
+    if(parentNote()->parentTrip() == nullptr) { return nullptr; }
+    return parentNote()->parentTrip()->calibrations();
 }
 
 cwNoteTransformationData cwScrap::noteTransformAdjustedDeclination() const {
@@ -591,18 +601,13 @@ cwNoteTransformationData cwScrap::noteTransformAdjustedDeclination(cwNoteTransfo
         return transformData;
     }
 
-    if(parentNote() == nullptr || parentNote()->parentTrip() == nullptr) {
-        return transformData;
-    }
-
-    cwTripCalibration* calibration = parentNote()->parentTrip()->calibrations();
+    cwTripCalibration* calibration = tripCalibration();
     if(calibration == nullptr) {
         return transformData;
     }
 
-    const double adjustedNorth = cwNoteTranformation::northAdjustedForDeclination(transformData.north,
-                                                                                   calibration->declination());
-    transformData.north = adjustedNorth;
+    transformData.north = cwNoteTranformation::northAdjustedForDeclination(transformData.north,
+                                                                           calibration->declination());
     return transformData;
 }
 
