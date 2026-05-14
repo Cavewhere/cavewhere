@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Our includes
+#include "BoulderFixtureHelper.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwError.h"
@@ -22,47 +23,11 @@
 //Qt includes
 #include <QDateTime>
 #include <QSignalSpy>
-#include <QTimeZone>
 
 //Std includes
 #include <memory>
 
 namespace {
-
-const QString Wgs84 = QStringLiteral("EPSG:4326");
-
-QDateTime makeDate(int year, int month, int day)
-{
-    return QDateTime(QDate(year, month, day), QTime(0, 0), QTimeZone::UTC);
-}
-
-struct Fixture {
-    std::unique_ptr<cwCavingRegion> region;
-    cwCave* cave;
-    cwTrip* trip;
-    cwTripCalibration* calibration;
-};
-
-Fixture buildBoulderFixture()
-{
-    auto region = std::make_unique<cwCavingRegion>();
-    auto* cave = new cwCave();
-    region->addCave(cave);
-
-    cwFixStation fix;
-    fix.setStationName(QStringLiteral("Entrance"));
-    fix.setInputCS(Wgs84);
-    fix.setEasting(-105.27);
-    fix.setNorthing(40.015);
-    fix.setElevation(1655.0);
-    cave->fixStations()->appendFixStation(fix);
-
-    cave->addTrip();
-    cwTrip* trip = cave->trip(0);
-    trip->setDate(makeDate(2024, 6, 1));
-
-    return { std::move(region), cave, trip, trip->calibrations() };
-}
 
 int tripWarningCount(cwTrip* trip)
 {
@@ -159,7 +124,7 @@ TEST_CASE("declinationWarning: missing-date warning clears when date is restored
     REQUIRE(!f.calibration->declinationWarning().isEmpty());
     REQUIRE(tripWarningCount(f.trip) == 1);
 
-    f.trip->setDate(makeDate(2024, 6, 1));
+    f.trip->setDate(makeUtcDate(2024, 6, 1));
     CHECK(f.calibration->declinationWarning().isEmpty());
     CHECK(tripWarningCount(f.trip) == 0);
 }
@@ -174,7 +139,7 @@ TEST_CASE("declinationWarning: no fix station → no warning even when manual is
     region->addCave(cave);
     cave->addTrip();
     cwTrip* trip = cave->trip(0);
-    trip->setDate(makeDate(2024, 6, 1));
+    trip->setDate(makeUtcDate(2024, 6, 1));
 
     cwTripCalibration* calibration = trip->calibrations();
     calibration->setAutoDeclination(false);
