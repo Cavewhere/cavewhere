@@ -1,5 +1,6 @@
 #include "cwRemoteRepositoryCloner.h"
 
+#include "cwGitHostingProvider.h"
 #include "cwRecentProjectModel.h"
 #include "cwSaveLoad.h"
 #include "cwGitHubIntegration.h"
@@ -10,6 +11,23 @@
 #include <QDebug>
 #include <QDir>
 #include <QUrl>
+
+#include <array>
+
+namespace {
+
+constexpr auto kHttp404Token = "404";
+
+// Substrings libgit2 / libcurl produce for DNS, refused, timeout failures.
+// Matched case-insensitively against the raw error message.
+constexpr std::array<const char*, 4> kUnreachableTokens = {
+    "resolve",   // "failed to resolve address" / "could not resolve host"
+    "connect",   // "failed to connect to ..." / "connection refused"
+    "timed out",
+    "timeout"
+};
+
+}
 
 cwRemoteRepositoryCloner::cwRemoteRepositoryCloner(QObject* parent) :
     QObject(parent),
@@ -56,7 +74,7 @@ void cwRemoteRepositoryCloner::setGitHubIntegration(cwGitHubIntegration* gh)
         const QString token = m_gitHubIntegration
                               ? m_gitHubIntegration->accessToken()
                               : QString{};
-        if (m_cloneFailedDueToAuthError && !token.isEmpty() && !m_pendingCloneUrl.isEmpty()) {
+        if (shouldAutoRetryClone(m_cloneErrorKind, token, m_pendingCloneUrl)) {
             clone(m_pendingCloneUrl, m_pendingCloneParentDir);
         } else {
             m_cloneRepository->setCredentials(QQuickGit::GitCredentials{token});
@@ -204,7 +222,7 @@ void cwRemoteRepositoryCloner::resetCloneState()
 {
     setCloneErrorMessage(QString());
     setCloneStatusMessage(QString());
-    setCloneFailedDueToAuthError(false);
+    applyCloneError(None);
 }
 
 void cwRemoteRepositoryCloner::setCloneErrorMessage(const QString& message)
@@ -234,13 +252,76 @@ void cwRemoteRepositoryCloner::setPendingCloneDir(const QString& dir)
     emit pendingCloneDirChanged();
 }
 
-void cwRemoteRepositoryCloner::setCloneFailedDueToAuthError(bool value)
+void cwRemoteRepositoryCloner::setCloneErrorKind(CloneErrorKind kind)
 {
-    if (m_cloneFailedDueToAuthError == value) {
+    if (m_cloneErrorKind == kind) {
         return;
     }
-    m_cloneFailedDueToAuthError = value;
+    m_cloneErrorKind = kind;
+    emit cloneErrorKindChanged();
     emit cloneFailedDueToAuthErrorChanged();
+}
+
+void cwRemoteRepositoryCloner::setCloneErrorFriendlyMessage(const QString& message)
+{
+    if (m_cloneErrorFriendlyMessage == message) {
+        return;
+    }
+    m_cloneErrorFriendlyMessage = message;
+    emit cloneErrorFriendlyMessageChanged();
+}
+
+void cwRemoteRepositoryCloner::applyCloneError(CloneErrorKind kind)
+{
+    setCloneErrorFriendlyMessage(friendlyCloneErrorMessage(kind, QUrl(m_pendingCloneUrl)));
+    setCloneErrorKind(kind);
+}
+
+cwRemoteRepositoryCloner::CloneErrorKind cwRemoteRepositoryCloner::classifyCloneError(
+    int errorCode, const QString& errorMessage)
+{
+    if (errorCode == static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed)) {
+        return Auth;
+    }
+    if (errorMessage.contains(QLatin1String(kHttp404Token))) {
+        return NotFoundOrAccess;
+    }
+    for (const char* token : kUnreachableTokens) {
+        if (errorMessage.contains(QLatin1String(token), Qt::CaseInsensitive)) {
+            return HostUnreachable;
+        }
+    }
+    return Other;
+}
+
+QString cwRemoteRepositoryCloner::friendlyCloneErrorMessage(CloneErrorKind kind, const QUrl& cloneUrl)
+{
+    const auto& info = cwGitHostingProvider::forUrl(cloneUrl);
+
+    switch (kind) {
+    case None:
+    case Other:
+        return QString();
+    case Auth:
+        return info.authMessage;
+    case NotFoundOrAccess:
+        return cwGitHostingProvider::notFoundOrAccessMessage(info, cloneUrl);
+    case HostUnreachable: {
+        const QString host = cloneUrl.host();
+        const QString hostDisplay = host.isEmpty() ? QStringLiteral("the server") : host;
+        return QStringLiteral(
+            "Couldn't reach %1. Check your internet connection and "
+            "that the repository URL is correct.").arg(hostDisplay);
+    }
+    }
+    return QString();
+}
+
+bool cwRemoteRepositoryCloner::shouldAutoRetryClone(CloneErrorKind kind,
+                                                    const QString& token,
+                                                    const QString& pendingUrl)
+{
+    return kind == Auth && !token.isEmpty() && !pendingUrl.isEmpty();
 }
 
 void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
@@ -255,16 +336,17 @@ void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
 
     if (m_cloneWatcher->hasError()) {
         const auto result = m_cloneWatcher->future().result();
-        const bool isAuthError = result.errorCode()
-            == static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed);
-        setCloneFailedDueToAuthError(isAuthError);
-        setCloneErrorMessage(m_cloneWatcher->errorMessage());
+        const QString rawMessage = m_cloneWatcher->errorMessage();
+        const CloneErrorKind kind = classifyCloneError(result.errorCode(), rawMessage);
+
+        setCloneErrorMessage(rawMessage);
+        applyCloneError(kind);
         setCloneStatusMessage(QString());
         if (!m_pendingCloneDir.isEmpty()) {
             QDir(m_pendingCloneDir).removeRecursively();
         }
         setPendingCloneDir(QString());
-        if (!isAuthError) {
+        if (kind != Auth) {
             m_pendingCloneUrl.clear();
             m_pendingCloneParentDir = QUrl();
         }
