@@ -41,4 +41,8 @@ ColumnLayout {
             }
         }
     }
+
+    RestoreDefaultsButton {
+        settings: settingsId.jobSettings
+    }
 }

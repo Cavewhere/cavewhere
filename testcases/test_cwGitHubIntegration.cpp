@@ -8,8 +8,19 @@
 
 // Ours
 #include "cwGitHubIntegration.h"
+#include "cwGitHubDeviceAuth.h"
 #include "cwRemoteAuthProvider.h"
 #include "TestHelper.h"
+
+class cwGitHubIntegrationTestAccess
+{
+public:
+    static void deliverAccessTokenResult(cwGitHubIntegration& integration,
+                                         const cwGitHubDeviceAuth::AccessTokenResult& result)
+    {
+        integration.handleAccessToken(result);
+    }
+};
 
 // ---------------------------------------------------------------------------
 // Minimal single-response HTTP/1.1 mock server
@@ -448,4 +459,78 @@ TEST_CASE("cwGitHubIntegration::setActive(false) stops polling", "[cwGitHubInteg
 
     integration.setActive(false);
     CHECK(!integration.installPollActive());
+}
+
+TEST_CASE("cwGitHubIntegration: authorization_pending surfaces retry reason and stays awaiting", "[cwGitHubIntegration]")
+{
+    cwGitHubIntegration integration(nullptr);
+
+    cwGitHubDeviceAuth::AccessTokenResult result;
+    result.success = false;
+    result.errorName = QStringLiteral("authorization_pending");
+    result.errorDescription = QStringLiteral("The authorization request is still pending.");
+
+    cwGitHubIntegrationTestAccess::deliverAccessTokenResult(integration, result);
+
+    CHECK(integration.lastPollError().contains(QStringLiteral("Still waiting")));
+    CHECK(integration.errorMessage().isEmpty());
+    CHECK(integration.authState() != cwGitHubIntegration::AuthState::Error);
+}
+
+TEST_CASE("cwGitHubIntegration: slow_down surfaces retry reason and stays awaiting", "[cwGitHubIntegration]")
+{
+    cwGitHubIntegration integration(nullptr);
+
+    cwGitHubDeviceAuth::AccessTokenResult result;
+    result.success = false;
+    result.errorName = QStringLiteral("slow_down");
+    result.errorDescription = QStringLiteral("You are polling too frequently.");
+
+    cwGitHubIntegrationTestAccess::deliverAccessTokenResult(integration, result);
+
+    CHECK(integration.lastPollError().contains(QStringLiteral("slow down")));
+    CHECK(integration.errorMessage().isEmpty());
+    CHECK(integration.authState() != cwGitHubIntegration::AuthState::Error);
+}
+
+TEST_CASE("cwGitHubIntegration: expired_token transitions to terminal Error", "[cwGitHubIntegration]")
+{
+    cwGitHubIntegration integration(nullptr);
+
+    cwGitHubDeviceAuth::AccessTokenResult result;
+    result.success = false;
+    result.errorName = QStringLiteral("expired_token");
+    result.errorDescription = QStringLiteral("The device code has expired.");
+
+    bool authorizationFailedFired = false;
+    QObject::connect(&integration, &cwGitHubIntegration::authorizationFailed,
+                     [&](const QString&) { authorizationFailedFired = true; });
+
+    cwGitHubIntegrationTestAccess::deliverAccessTokenResult(integration, result);
+
+    CHECK(integration.authState() == cwGitHubIntegration::AuthState::Error);
+    CHECK(integration.errorMessage() == QStringLiteral("The device code has expired."));
+    CHECK(integration.lastPollError().isEmpty());
+    CHECK(authorizationFailedFired);
+}
+
+TEST_CASE("cwGitHubIntegration: unknown error keeps polling and surfaces reason (regression for #472)", "[cwGitHubIntegration]")
+{
+    cwGitHubIntegration integration(nullptr);
+
+    cwGitHubDeviceAuth::AccessTokenResult result;
+    result.success = false;
+    result.errorName = QStringLiteral("parse_error");
+    result.errorDescription = QStringLiteral("Failed to parse token response.");
+
+    bool authorizationFailedFired = false;
+    QObject::connect(&integration, &cwGitHubIntegration::authorizationFailed,
+                     [&](const QString&) { authorizationFailedFired = true; });
+
+    cwGitHubIntegrationTestAccess::deliverAccessTokenResult(integration, result);
+
+    CHECK(integration.lastPollError().contains(QStringLiteral("Failed to parse token response.")));
+    CHECK(integration.authState() != cwGitHubIntegration::AuthState::Error);
+    CHECK(integration.errorMessage().isEmpty());
+    CHECK_FALSE(authorizationFailedFired);
 }

@@ -283,6 +283,13 @@ ColumnLayout {
                 text: "Scale Bar"
                 checked: true
             }
+
+            QC.CheckBox {
+                id: leadsCheckBoxId
+                objectName: "leadsCheckBox"
+                text: "Leads"
+                checked: false
+            }
         }
 
         states: [
@@ -341,6 +348,13 @@ ColumnLayout {
                         checked: layerProperties.layerObject.scaleBarVisible
                         onCheckedChanged: {
                             layerProperties.layerObject.scaleBarVisible = scaleBarCheckBoxId.checked
+                        }
+                    }
+
+                    leadsCheckBoxId {
+                        checked: layerProperties.layerObject.leadsVisible
+                        onCheckedChanged: {
+                            layerProperties.layerObject.leadsVisible = leadsCheckBoxId.checked
                         }
                     }
                 }

@@ -19,12 +19,15 @@ QC.Label {
 
     opacity: 0.0
 
-    onVisibleChanged: {
+    function fadeInIfVisible() {
         if(visible) {
             opacity = 0.0
             fadeIn.restart()
         }
     }
+
+    Component.onCompleted: fadeInIfVisible()
+    onVisibleChanged: fadeInIfVisible()
 
     NumberAnimation {
         id: fadeIn

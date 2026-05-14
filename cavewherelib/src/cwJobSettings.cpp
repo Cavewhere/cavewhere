@@ -34,6 +34,7 @@ void cwJobSettings::setThreadCount(int threadCount) {
             settings.setValue(threadCountKey(), threadCount);
             setThreadCountPrivate(threadCount);
             emit threadCountChanged();
+            emit isAtDefaultsChanged();
         }
     }
 }
@@ -66,5 +67,15 @@ void cwJobSettings::setAutomaticUpdate(bool automaticUpdate) {
         settings.setValue(automaticUpdateKey(), automaticUpdate);
         AutomaticUpdate = automaticUpdate;
         emit automaticUpdateChanged();
+        emit isAtDefaultsChanged();
     }
+}
+
+bool cwJobSettings::isAtDefaults() const {
+    return threadCount() == idleThreadCount() && automaticUpdate();
+}
+
+void cwJobSettings::resetToDefaults() {
+    setThreadCount(idleThreadCount());
+    setAutomaticUpdate(true);
 }

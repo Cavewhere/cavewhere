@@ -17,6 +17,9 @@
 #include "cwCamera.h"
 #include "cw3dRegionViewer.h"
 #include "cwCaptureCenterline.h"
+#include "cwCaptureLeads.h"
+#include "cwCaptureLabelPlacer.h"
+#include "cwCaptureLeadLines.h"
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"
 #include "cwGlobals.h"
@@ -31,6 +34,24 @@
 #undef far
 #undef near
 #endif
+
+namespace {
+// Z-values define stacking order of overlays drawn on top of the rendered map tiles.
+// LeadLeaders sits below the tiles (z = 0) so it shows through transparent
+// regions and is hidden behind opaque cave-passage ink.
+constexpr qreal LeadLeadersZValue = -100.0;
+constexpr qreal CenterlineZValue = 1500.0;
+constexpr qreal LeadsZValue = 1600.0;
+constexpr qreal ScaleBarZValue = 2000.0;
+
+// Placer mask: cellSize is the obstacle/DT grid resolution in paper-pixel
+// units (smaller = more accurate, more memory). LabelMargin is the per-label
+// clearance added around glyph ink so labels don't abut passage edges.
+// StationDotMargin pads each station dot when seeded as an obstacle.
+constexpr qreal PlacerMaskCellPaperPx = 2.0;
+constexpr qreal PlacerLabelMarginPaperPx = 3.0;
+constexpr qreal StationDotObstacleMarginPaperPx = 1.0;
+}
 
 cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     cwCaptureItem(parent),
@@ -49,14 +70,16 @@ cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     PreviewItem(nullptr),
     Item(nullptr),
     m_scaleBar(new cwScaleBarItem()),
-    CenterlineItem(nullptr)
+    CenterlineItem(nullptr),
+    LeadsItem(nullptr),
+    LeadLinesItem(nullptr)
 {
     connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwCaptureViewport::updateTransformForItems);
     connect(this, &cwCaptureViewport::positionOnPaperChanged, this, &cwCaptureViewport::updateItemsPosition);
     connect(this, &cwCaptureViewport::rotationChanged, this, &cwCaptureViewport::updateTransformForItems);
     connect(this, &cwCaptureViewport::boundingBoxChanged, this, &cwCaptureViewport::updateScaleBarGeometry);
 
-    m_scaleBar->setZValue(2000.0);
+    m_scaleBar->setZValue(ScaleBarZValue);
     m_scaleBar->setVisible(false);
 
     updateScaleBarScale();
@@ -139,24 +162,29 @@ void cwCaptureViewport::capture()
             delete PreviewItem;
             PreviewItem = nullptr;
             CenterlineItem = nullptr;
+            LeadsItem = nullptr;
+            LeadLinesItem = nullptr;
         }
         PreviewItem = new QGraphicsItemGroup();
         previewItemChanged();
 
         imageScale = 1.0;
-        CenterlineItem = createCenterlineItem(PreviewItem, imageScale);
     } else {
         if(Item != NULL) {
             delete Item;
             Item = nullptr;
             CenterlineItem = nullptr;
+            LeadsItem = nullptr;
+            LeadLinesItem = nullptr;
         }
         Item = new QGraphicsItemGroup();
         fullResolutionItemChanged();
 
         imageScale = ItemScale * resolution();
-        CenterlineItem = createCenterlineItem(Item, imageScale);
     }
+    // Label items (centerline / leads / lead leaders) are deferred to
+    // placeLabelsAfterTiles() once tile rendering has finished, so their
+    // layout can use the rendered tile alpha as obstacle data.
 
     //Updates the scale for the items
     updateTransformForItems();
@@ -216,7 +244,7 @@ void cwCaptureViewport::capture()
         });
     };
 
-    *capturedImage = [runData, nextJob, this](const CaptureJob& job, const QImage& image) {
+    *capturedImage = [runData, nextJob, imageScale, this](const CaptureJob& job, const QImage& image) {
         Q_ASSERT(CapturingImages);
 
         QGraphicsItemGroup* parent = previewCapture() ? PreviewItem : Item;
@@ -254,6 +282,10 @@ void cwCaptureViewport::capture()
             if(previewCapture()) {
                 updateBoundingBox();
             }
+
+            // Lay out and create the label overlays now that the tile alpha is
+            // available as an obstacle source.
+            placeLabelsAfterTiles(parent, imageScale);
 
             //Clean up
             m_sceneManager->setCapturing(false);
@@ -454,12 +486,16 @@ void cwCaptureViewport::deleteSceneItems()
         delete PreviewItem;
         PreviewItem = nullptr;
         CenterlineItem = nullptr;
+        LeadsItem = nullptr;
+        LeadLinesItem = nullptr;
     }
 
     if(Item != nullptr) {
         delete Item;
         Item = nullptr;
         CenterlineItem = nullptr;
+        LeadsItem = nullptr;
+        LeadLinesItem = nullptr;
     }
 
     delete m_scaleBar;
@@ -513,15 +549,180 @@ cwCaptureCenterline* cwCaptureViewport::createCenterlineItem(QGraphicsItemGroup*
         return nullptr;
     }
 
-    auto* centerline = new cwCaptureCenterline();
-    centerline->setZValue(1500.0);
+    auto* centerline = new cwCaptureCenterline(parent);
+    centerline->setZValue(CenterlineZValue);
     centerline->setCamera(CaptureCamera);
     centerline->setViewport(viewport());
     centerline->setImageScale(imageScale);
     centerline->setNetwork(buildCenterlineNetwork());
 
-    parent->addToGroup(centerline);
     return centerline;
+}
+
+cwCaptureLeads* cwCaptureViewport::createLeadsItem(QGraphicsItemGroup* parent, double imageScale) const
+{
+    if(parent == nullptr) {
+        return nullptr;
+    }
+
+    auto* leads = new cwCaptureLeads(parent);
+    leads->setZValue(LeadsZValue);
+    leads->setCamera(CaptureCamera);
+    leads->setViewport(viewport());
+    leads->setImageScale(imageScale);
+
+    if(!m_sceneManager.isNull()) {
+        leads->setRegion(m_sceneManager->cavingRegion());
+    }
+
+    leads->setVisible(m_leadsVisible);
+
+    return leads;
+}
+
+void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double imageScale)
+{
+    if(parent == nullptr) {
+        return;
+    }
+
+    // The parent item's setScale value (inches-per-local-pixel). Driving the
+    // font and placer off this — instead of a fixed preview DPI — keeps the
+    // rendered glyph the same scene-inch size on both paths.
+    const double hiResScale = paperSizeOfItem().width()
+                              / (ItemScale * resolution() * viewport().width());
+    const double itemSetScale = previewCapture() ? ItemScale : hiResScale;
+    const int exportDpi = qMax(1, qRound(1.0 / itemSetScale));
+
+    // Find the parent-coord bounds covering every tile. Each cwGraphicsImageItem
+    // has pos() in parent coords and scale() that maps its pixel size to its
+    // parent-coord extent (typically 1.0 / devicePixelRatio).
+    QRectF parentBounds;
+    QList<cwGraphicsImageItem*> tiles;
+    const QList<QGraphicsItem*> children = parent->childItems();
+    for(QGraphicsItem* child : children) {
+        auto* tile = dynamic_cast<cwGraphicsImageItem*>(child);
+        if(tile == nullptr) {
+            continue;
+        }
+        tiles.append(tile);
+        const qreal tileScale = tile->scale();
+        const QImage img = tile->image();
+        if(img.isNull()) {
+            continue;
+        }
+        const QRectF tileRect(tile->pos(),
+                              QSizeF(img.width() * tileScale, img.height() * tileScale));
+        parentBounds = parentBounds.isEmpty() ? tileRect : parentBounds.united(tileRect);
+    }
+    if(parentBounds.isEmpty()) {
+        parentBounds = QRectF(QPointF(0.0, 0.0),
+                              QSizeF(viewport().size()) * imageScale);
+    }
+
+    // Convert 300-DPI-paper-px constants into the active path's local
+    // coords, so cell discretization, label margin, and dot/marker radii
+    // all reserve the same scene-inch span in preview and export.
+    const double paperPxToLocal = 1.0 / (resolution() * itemSetScale);
+
+    cwCaptureLabelPlacer placer;
+    placer.setObstacleBounds(parentBounds, PlacerMaskCellPaperPx * paperPxToLocal);
+    placer.setViewportBounds(parentBounds);
+    placer.setLabelMarginPaperPx(PlacerLabelMarginPaperPx * paperPxToLocal);
+    placer.setAlphaThreshold(cwCaptureLabelPlacer::DefaultAlphaThreshold);
+
+    int tilesSeen = 0;
+    int tilesSampled = 0;
+    for(cwGraphicsImageItem* tile : std::as_const(tiles)) {
+        tilesSeen++;
+        const QImage img = tile->image();
+        if(img.isNull()) {
+            continue;
+        }
+        tilesSampled++;
+        placer.addTileAlpha(img, tile->pos(), tile->scale());
+    }
+
+    // Build label items now; we hand them the placer + DPI so they can compute
+    // glyph rects that match the painter's eventual render.
+    CenterlineItem = createCenterlineItem(parent, imageScale);
+    if(CenterlineItem != nullptr) {
+        CenterlineItem->setExportDpi(exportDpi);
+        CenterlineItem->setPaperPxToLocal(paperPxToLocal);
+        CenterlineItem->setPlacer(&placer);
+    }
+    LeadsItem = createLeadsItem(parent, imageScale);
+    if(LeadsItem != nullptr) {
+        LeadsItem->setExportDpi(exportDpi);
+        LeadsItem->setPaperPxToLocal(paperPxToLocal);
+        LeadsItem->setPlacer(&placer);
+        LeadsItem->setVisible(m_leadsVisible);
+    }
+
+    // Seed static dot/marker obstacles BEFORE finalize so labels avoid them.
+    if(CenterlineItem != nullptr) {
+        const qreal dotHalf = CenterlineItem->stationDotRadius()
+                              + StationDotObstacleMarginPaperPx * paperPxToLocal;
+        for(const QPointF& pos : CenterlineItem->stationPositions()) {
+            placer.addObstacleRect(QRectF(pos.x() - dotHalf, pos.y() - dotHalf,
+                                           dotHalf * 2.0, dotHalf * 2.0));
+        }
+    }
+    if(LeadsItem != nullptr) {
+        const qreal markerRadius = LeadsItem->markerRadius();
+        for(const QPointF& pos : LeadsItem->leadMarkerPositions()) {
+            placer.addObstacleRect(QRectF(pos.x() - markerRadius, pos.y() - markerRadius,
+                                           markerRadius * 2.0, markerRadius * 2.0));
+        }
+    }
+
+    placer.finalize();
+
+    // Register centerline legs as soft obstacles so leaders prefer routes
+    // that don't visually cut across them. Soft = scoring penalty, not a
+    // hard rejection — better to ship a slightly-crossed leader than drop.
+    if(CenterlineItem != nullptr) {
+        const qreal centerlineThickness =
+            cwCaptureCenterline::LinePenWidthPaperPx * paperPxToLocal;
+        for(const QLineF& seg : CenterlineItem->lines()) {
+            placer.addSoftLineObstacle(seg, centerlineThickness);
+        }
+    }
+
+    qDebug() << "[placer] tilesSampled=" << tilesSampled << "/" << tilesSeen
+             << "bounds=" << parentBounds
+             << "exportDpi=" << exportDpi;
+
+    // Place leads first so each placement registers its leader line into
+    // the placer; stations placed afterwards then avoid those leaders.
+    if(LeadsItem != nullptr) {
+        LeadsItem->placeLeadLabels();
+    }
+    if(CenterlineItem != nullptr) {
+        CenterlineItem->placeStationLabels();
+    }
+
+    LeadLinesItem = createLeadLinesItem(parent, imageScale, LeadsItem);
+    if(LeadLinesItem != nullptr) {
+        LeadLinesItem->setVisible(m_leadsVisible);
+    }
+}
+
+cwCaptureLeadLines* cwCaptureViewport::createLeadLinesItem(QGraphicsItemGroup* parent, double imageScale, cwCaptureLeads* leadsPeer) const
+{
+    if(parent == nullptr) {
+        return nullptr;
+    }
+
+    auto* lines = new cwCaptureLeadLines(parent);
+    lines->setZValue(LeadLeadersZValue);
+    lines->setLeads(leadsPeer);
+
+    const QSizeF localSize = QSizeF(viewport().size()) * imageScale;
+    lines->setBoundingRect(QRectF(QPointF(0.0, 0.0), localSize));
+    lines->setVisible(m_leadsVisible);
+
+    return lines;
 }
 
 /**
@@ -672,6 +873,14 @@ void cwCaptureViewport::updateBoundingBox()
 {
     QTransform transform = previewItem()->transform();
     QRectF paperRect = previewItem()->sceneBoundingRect();
+    if(paperRect.isEmpty()) {
+        // Label items (centerline / leads / lead leaders) are added by
+        // placeLabelsAfterTiles() once tile rendering completes, so the group
+        // is empty during capture start. Fall back to the expected viewport-
+        // sized rect so the QML captureItem has correct bounds immediately.
+        paperRect = QRectF(previewItem()->pos(),
+                           QSizeF(viewport().size()) * ItemScale);
+    }
     setBoundingBox(paperRect);
 }
 
@@ -736,6 +945,24 @@ void cwCaptureViewport::setScaleBarVisible(bool visible)
     m_scaleBar->setVisible(visible);
 
     emit scaleBarVisibleChanged();
+}
+
+void cwCaptureViewport::setLeadsVisible(bool visible)
+{
+    if(m_leadsVisible == visible) {
+        return;
+    }
+
+    m_leadsVisible = visible;
+
+    if(LeadsItem != nullptr) {
+        LeadsItem->setVisible(visible);
+    }
+    if(LeadLinesItem != nullptr) {
+        LeadLinesItem->setVisible(visible);
+    }
+
+    emit leadsVisibleChanged();
 }
 
 void cwCaptureViewport::updateScaleBarScale()

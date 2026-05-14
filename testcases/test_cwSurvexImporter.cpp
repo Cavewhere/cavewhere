@@ -194,3 +194,60 @@ TEST_CASE("Survex passage data with '-' placeholders imports as empty LRUDs", "[
     CHECK(s3.down().state() == cwDistanceReading::State::Empty);
 }
 
+TEST_CASE("Unknown *data columns are tolerated with a warning", "[SurvexImport]") {
+    //Issue #173: previously backtape (and other unknown column names) caused
+    //the entire data format to be reset, which produced a parse error and
+    //prevented the file from being imported.
+    cwSurvexImporter* importer = new cwSurvexImporter();
+    importer->setInputFiles(QStringList() << testcasesDatasetPath("survex/issue173.svx"));
+    importer->start();
+    importer->waitToFinish();
+
+    QStringList allMessages = importer->parseErrors();
+
+    QStringList errorMessages;
+    QStringList warningMessages;
+    for(const QString& message : allMessages) {
+        if(message.startsWith(QStringLiteral("Error:"))) {
+            errorMessages.append(message);
+        } else if(message.startsWith(QStringLiteral("Warning:"))) {
+            warningMessages.append(message);
+        }
+    }
+
+    INFO("All parser messages:\n" << allMessages.join('\n').toStdString());
+    CHECK(errorMessages.isEmpty());
+
+    bool warnsAboutBackTape = false;
+    bool warnsAboutFnord = false;
+    for(const QString& warning : warningMessages) {
+        if(warning.contains(QStringLiteral("backtape"), Qt::CaseInsensitive)) {
+            warnsAboutBackTape = true;
+        }
+        if(warning.contains(QStringLiteral("fnord"), Qt::CaseInsensitive)) {
+            warnsAboutFnord = true;
+        }
+    }
+    CHECK(warnsAboutBackTape);
+    CHECK(warnsAboutFnord);
+
+    REQUIRE(importer->data()->nodes().size() == 1);
+    importer->data()->nodes().first()->setImportType(cwTreeImportDataNode::Trip);
+
+    QList<cwCave*> caves = importer->data()->caves();
+    REQUIRE(caves.size() == 1);
+    REQUIRE(caves.first()->trips().size() == 1);
+
+    cwTrip* trip = caves.first()->trips().first();
+    REQUIRE(trip->chunks().size() == 1);
+
+    cwSurveyChunk* chunk = trip->chunks().first();
+    //Three shots → four stations
+    CHECK(chunk->stationCount() == 4);
+    CHECK(chunk->shotCount() == 3);
+    CHECK(chunk->station(0).name().toStdString() == "1");
+    CHECK(chunk->station(3).name().toStdString() == "4");
+
+    delete importer;
+}
+

@@ -58,7 +58,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
     case cwTreeImportDataNode::Cave:
         currentCave = new cwCave(this);
 
-        currentCave->setName(currentBlock->name());
+        currentCave->setName(currentBlock->displayName());
         currentTrip = nullptr;
         caves->append(currentCave);
 
@@ -70,7 +70,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
         currentTrip = new cwTrip(this);
 
         //Copy the name and date
-        currentTrip->setName(currentBlock->name());
+        currentTrip->setName(currentBlock->displayName());
         currentTrip->setDate(QDateTime(currentBlock->date(), QTime()));
 
         //Copy all the team members
@@ -88,7 +88,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
         }
 
         //Sets the trip name
-        QString tripName = currentBlock->name();
+        QString tripName = currentBlock->displayName();
         if(tripName.isEmpty()) {
             tripName = QString("Trip %1").arg(currentCave->tripCount() + 1);
         }

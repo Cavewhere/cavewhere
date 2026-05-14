@@ -84,12 +84,31 @@ QQ.Rectangle {
         noteGallery.backClicked()
     }
 
+    //Exit any carpet sub-tool when the user clicks away — switching
+    //to a different note image, or navigating to a different page.
+    //Fixes #342.
+    function _exitCarpetMode() {
+        if(mode === "CARPET" && state !== "CARPET") {
+            state = ""
+        }
+    }
+
     signal imagesAdded(list<url> images)
     signal backClicked();
     signal noteIndexChangeRequested(int index)
 
     anchors.margins: 3
     color: Theme.background
+
+    onCurrentNoteChanged: _exitCarpetMode()
+
+    QQ.Connections {
+        target: RootData.pageSelectionModel
+        enabled: noteGallery.mode === "CARPET"
+        function onCurrentPageAddressChanged() {
+            noteGallery._exitCarpetMode()
+        }
+    }
 
     LoadNotesWidget {
         id: loadNoteWidgetId
@@ -178,6 +197,46 @@ QQ.Rectangle {
         required property int index
         property real maxImageWidth: QQ.ListView.view ? QQ.ListView.view.width : 0
         readonly property bool hasIconSource: iconPath !== undefined && iconPath.toString().length > 0
+        readonly property string fallbackFileName: {
+            if (!noteObject) {
+                return ""
+            }
+            if (noteObject.filename !== undefined && noteObject.filename !== "") {
+                return RootData.fileName(noteObject.filename)
+            }
+            if (noteObject.name !== undefined && noteObject.name !== "") {
+                return noteObject.name
+            }
+            return ""
+        }
+        readonly property string fallbackFileExtension: {
+            const dotIndex = fallbackFileName.lastIndexOf(".")
+            if (dotIndex > 0 && dotIndex < fallbackFileName.length - 1) {
+                return fallbackFileName.slice(dotIndex + 1).toUpperCase()
+            }
+            return qsTr("GLB")
+        }
+        readonly property string revealFilePath: {
+            const project = RootData.project
+            if (project === null || noteObject === null) {
+                return ""
+            }
+            const note = noteObject as Note
+            if (note !== null) {
+                return project.absolutePath(note)
+            }
+            const lidar = noteObject as NoteLiDAR
+            if (lidar !== null) {
+                return project.absolutePath(lidar)
+            }
+            return ""
+        }
+        readonly property bool revealSupported: {
+            const project = RootData.project
+            return project !== null
+                && !project.isTemporaryProject
+                && project.fileType === Project.GitFileType
+        }
 
         width: maxImageWidth
         height: maxImageWidth
@@ -285,6 +344,25 @@ QQ.Rectangle {
             onSingleTapped: {
                 RootData.sketchManager.flushIconIfDirty(container.noteObject)
                 galleryView.currentIndex = container.index
+            }
+        }
+
+        QQ.TapHandler {
+            acceptedButtons: Qt.RightButton
+            enabled: container.revealSupported
+            onTapped: {
+                contextMenuLoader.active = true
+                contextMenuLoader.item.popup()
+            }
+        }
+
+        QQ.Loader {
+            id: contextMenuLoader
+            active: false
+            sourceComponent: QC.Menu {
+                RevealInFileManagerMenuItem {
+                    filePath: container.revealFilePath
+                }
             }
         }
     }
@@ -418,6 +496,14 @@ QQ.Rectangle {
                 }
             }
 
+            QQ.Connections {
+                target: galleryView.model
+                function onRowsInserted(parent, first, last) {
+                    //Defer past ListView's own insertion handling, which shifts
+                    //currentIndex when rows are inserted at/before it.
+                    Qt.callLater(() => { galleryView.currentIndex = first })
+                }
+            }
         }
     }
 
@@ -613,6 +699,20 @@ QQ.Rectangle {
         visible: noteGallery.currentSketch !== null
         isNarrow: noteGallery.isNarrow
         sketch: noteGallery.currentSketch
+    }
+
+    HelpQuoteBox {
+        id: addScrapHintId
+        objectName: "addScrapHint"
+        pointAtObject: addScrapId
+        pointAtObjectPosition: Qt.point(addScrapId.width / 2.0, addScrapId.height)
+        triangleOffset: 0.0
+        triangleOnRight: true
+        text: "Create a scrap first, then add stations or leads"
+        z: 10
+        visible: (noteGallery.state === "ADD-STATION" || noteGallery.state === "ADD-LEAD")
+                 && noteGallery.currentNote !== null
+                 && noteArea.scrapCount === 0
     }
 
     QQ.SequentialAnimation {

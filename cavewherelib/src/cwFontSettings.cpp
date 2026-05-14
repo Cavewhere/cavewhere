@@ -43,6 +43,7 @@ void cwFontSettings::setFontBaseSize(int size)
         QSettings settings;
         settings.setValue(fontBaseSizeKey(), size);
         emit fontBaseSizeChanged();
+        emit isAtDefaultsChanged();
     }
 }
 
@@ -66,7 +67,21 @@ void cwFontSettings::setFontFamily(const QString& family)
         if (oldSize != FontBaseSize) {
             emit fontBaseSizeChanged();
         }
+        emit isAtDefaultsChanged();
     }
+}
+
+bool cwFontSettings::isAtDefaults() const
+{
+    const cwFontEntry& defaultEntry = fontEntries().first();
+    return FontFamily == defaultEntry.family && FontBaseSize == defaultEntry.defaultSize;
+}
+
+void cwFontSettings::resetToDefaults()
+{
+    const cwFontEntry& defaultEntry = fontEntries().first();
+    setFontFamily(defaultEntry.family);
+    setFontBaseSize(defaultEntry.defaultSize);
 }
 
 cwFontSettings* cwFontSettings::instance()

@@ -40,8 +40,12 @@ ColumnLayout {
             HelpArea {
                 id: resolutionHelpId
                 Layout.fillWidth: true
-                text: "The rasterization resolution for all PDF / SVG in pixels per inch. By default the import resolution is 300ppi. 300ppi is good balance to size vs quality. Using 72ppi (the lowest resolution for pdf) and 92ppi for svg, will import 1 to 1. PDF / SVG rasterization supported upto 600 ppi or 256mb, but will need a large amount of memory."
+                text: "The rasterization resolution for all PDF / SVG in pixels per inch. By default the import resolution is 96ppi, a good balance of size vs quality. Using 72ppi (the lowest resolution for pdf) and 92ppi for svg will import 1 to 1. PDF / SVG rasterization is supported up to 600 ppi or 256mb, but high resolutions require a large amount of memory."
             }
         }
+    }
+
+    RestoreDefaultsButton {
+        settings: itemId.pdfSettings
     }
 }

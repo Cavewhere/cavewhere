@@ -10,6 +10,7 @@
 #include <optional>
 
 #include "cwClinoReading.h"
+#include "cwDistanceReading.h"
 #include "cwFixStation.h"
 #include "cwStation.h"
 
@@ -212,6 +213,13 @@ inline void writeFixStations(QTextStream& stream,
     }
 }
 
+inline bool stationHasLrudData(const cwStation& station)
+{
+    return station.left().state()  == cwDistanceReading::State::Valid
+        || station.right().state() == cwDistanceReading::State::Valid
+        || station.up().state()    == cwDistanceReading::State::Valid
+        || station.down().state()  == cwDistanceReading::State::Valid;
+}
 } // namespace cwSurvexExporterUtils
 
 #endif // CWSURVEXEXPORTERUTILS_H

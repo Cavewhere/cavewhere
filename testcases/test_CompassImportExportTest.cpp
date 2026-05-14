@@ -166,7 +166,7 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
         cwStation loadStation = loadedChunk->station(i);
         cwStation importStation = importedChunk->station(i);
 
-        CHECK(loadStation.name().toStdString() == importStation.name().toStdString());
+        CHECK(loadStation.name().compare(importStation.name(), Qt::CaseInsensitive) == 0);
         CHECK(loadStation.left().state() == importStation.left().state());
         CHECK(loadStation.left() == importStation.left());
         CHECK(loadStation.right().state() == importStation.right().state());
@@ -207,7 +207,7 @@ TEST_CASE("Export compass handles UP/DOWN clino values - ISSUE #121", "[Compass]
     auto chunk = new cwSurveyChunk();
     trip->addChunk(chunk);
 
-    const QStringList stations = {"s1", "s2", "s3", "s4", "s5"};
+    const QStringList stations = {"S1", "S2", "S3", "S4", "S5"};
     const QStringList clinos = {"Up", "Down", "90", "-90"};
     const QStringList compasses = {"0", "90", "180", "270"};
     for(int i = 0; i < clinos.size(); i++) {
@@ -270,14 +270,14 @@ TEST_CASE("Export compass handles UP/DOWN clino values - ISSUE #121", "[Compass]
         }
     }
 
-    REQUIRE(clinoByFrom.contains("s1"));
-    REQUIRE(clinoByFrom.contains("s2"));
-    REQUIRE(clinoByFrom.contains("s3"));
-    REQUIRE(clinoByFrom.contains("s4"));
-    CHECK(clinoByFrom.value("s1") == 90.0);
-    CHECK(clinoByFrom.value("s2") == -90.0);
-    CHECK(clinoByFrom.value("s3") == 90.0);
-    CHECK(clinoByFrom.value("s4") == -90.0);
+    REQUIRE(clinoByFrom.contains("S1"));
+    REQUIRE(clinoByFrom.contains("S2"));
+    REQUIRE(clinoByFrom.contains("S3"));
+    REQUIRE(clinoByFrom.contains("S4"));
+    CHECK(clinoByFrom.value("S1") == 90.0);
+    CHECK(clinoByFrom.value("S2") == -90.0);
+    CHECK(clinoByFrom.value("S3") == 90.0);
+    CHECK(clinoByFrom.value("S4") == -90.0);
 }
 
 TEST_CASE("Test 15 char format is okay", "[Compass]") {

@@ -47,6 +47,25 @@ MainWindowTest {
 
         }
 
+        function test_autoSelectNewNote() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+
+            tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
+
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery");
+            let noteGalleryView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView");
+
+            tryVerify(() => { return noteGalleryView.count === 1 });
+            compare(noteGalleryView.currentIndex, 0);
+
+            let phakeCavePath = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
+            noteGallery.imagesAdded([phakeCavePath]);
+
+            tryVerify(() => { return noteGalleryView.count === 2 });
+            tryCompare(noteGalleryView, "currentIndex", 1);
+        }
+
         function test_removeNote() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"

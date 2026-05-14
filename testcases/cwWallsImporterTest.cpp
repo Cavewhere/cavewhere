@@ -3,6 +3,17 @@
 #include "wallsunits.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
+#include "cwCave.h"
+#include "cwSurveyChunk.h"
+#include "cwTreeImportData.h"
+#include "cwTreeImportDataNode.h"
+#include "LoadProjectHelper.h"
+
+#include <QMutex>
+#include <QMutexLocker>
+#include <QStringList>
+
+#include <memory>
 
 typedef UnitizedDouble<Length> ULength;
 typedef UnitizedDouble<Angle> UAngle;
@@ -68,4 +79,75 @@ TEST_CASE( "importCalibrations", "[cwWallsImporter]" ) {
     cwWallsImporter::importCalibrations(units, trip);
     CHECK( trip.calibrations()->hasCorrectedCompassBacksight() );
     CHECK( !trip.calibrations()->hasCorrectedClinoBacksight() );
+}
+
+namespace {
+    QMutex g_wallsWarningsMutex;
+    QStringList g_wallsWarnings;
+
+    void captureWarningsHandler(QtMsgType type, const QMessageLogContext&, const QString& msg) {
+        if(type == QtWarningMsg) {
+            QMutexLocker lock(&g_wallsWarningsMutex);
+            g_wallsWarnings << msg;
+        }
+    }
+
+    //RAII so a failed assertion can't leak our handler into later test cases.
+    struct WarningCapture {
+        QtMessageHandler previous;
+        WarningCapture() {
+            QMutexLocker lock(&g_wallsWarningsMutex);
+            g_wallsWarnings.clear();
+            previous = qInstallMessageHandler(captureWarningsHandler);
+        }
+        ~WarningCapture() {
+            qInstallMessageHandler(previous);
+        }
+        QStringList captured() const {
+            QMutexLocker lock(&g_wallsWarningsMutex);
+            return g_wallsWarnings;
+        }
+    };
+}
+
+TEST_CASE("Import a Walls .wpj project end-to-end", "[cwWallsImporter]") {
+    WarningCapture warnings;
+
+    std::unique_ptr<cwWallsImporter> importer(new cwWallsImporter());
+    importer->setInputFiles(QStringList() << testcasesDatasetSourcePath("walls/test_cave.wpj"));
+    importer->start();
+    importer->waitToFinish();
+
+    //The importer should not emit any Qt warnings; the cross-thread setParent
+    //regression appeared as such a warning and silently dropped imported data.
+    const QStringList captured = warnings.captured();
+    for(const QString& w : captured) {
+        INFO("Unexpected Qt warning: " << w.toStdString());
+    }
+    CHECK(captured.isEmpty());
+
+    REQUIRE_FALSE(importer->hasParseErrors());
+    REQUIRE(importer->parseErrors().isEmpty());
+
+    cwTreeImportData* data = importer->data();
+    REQUIRE(data->nodes().size() == 1);
+
+    cwTreeImportDataNode* root = data->nodes().first();
+    root->setImportType(cwTreeImportDataNode::Cave);
+    REQUIRE(root->childNodeCount() == 1);
+    root->childNode(0)->setImportType(cwTreeImportDataNode::Trip);
+
+    QList<cwCave*> caves = data->caves();
+    REQUIRE(caves.size() == 1);
+    REQUIRE(caves.first()->trips().size() == 1);
+
+    cwTrip* trip = caves.first()->trips().first();
+    REQUIRE(trip->chunks().size() == 1);
+
+    cwSurveyChunk* chunk = trip->chunk(0);
+    REQUIRE(chunk->stationCount() == 4);
+    CHECK(chunk->station(0).name() == "A1");
+    CHECK(chunk->station(1).name() == "A2");
+    CHECK(chunk->station(2).name() == "A3");
+    CHECK(chunk->station(3).name() == "A4");
 }

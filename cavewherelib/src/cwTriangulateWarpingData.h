@@ -17,4 +17,6 @@ struct cwTriangulateWarpingData
     bool useShotInterpolationSpacing = true;
     bool useMaxClosestStations = true;
     bool useSmoothingRadius = true;
+
+    bool operator==(const cwTriangulateWarpingData& other) const = default;
 };

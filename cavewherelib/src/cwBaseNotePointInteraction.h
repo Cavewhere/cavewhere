@@ -42,6 +42,7 @@ protected:
 
 signals:
     void scrapViewChanged();
+    void pointOutsideScrap();
 
 private:
     QPointer<cwScrapView> ScrapView;

@@ -997,3 +997,118 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
     }
 }
 
+TEST_CASE("cwLinePlotManager handles chunks with empty shots (bug #435)", "[LinePlotManager]")
+{
+    // Empty shot rows used to emit "from to - - -" / "name - - - -" stubs that
+    // cavern rejected, killing the entire line plot.
+
+    auto makeShot = [](const QString& dist, const QString& compass, const QString& clino) {
+        cwShot s;
+        s.setDistance(cwDistanceReading(dist));
+        s.setCompass(cwCompassReading(compass));
+        s.setClino(cwClinoReading(clino));
+        return s;
+    };
+
+    SECTION("Empty leading station + empty leading shot is dropped") {
+        cwCavingRegion region;
+        cwCave* cave = new cwCave();
+        cave->setName("Cave 1");
+        region.addCave(cave);
+        cwTrip* trip = new cwTrip();
+        trip->setName("Trip 1");
+        cave->addTrip(trip);
+
+        cwSurveyChunk* chunk1 = new cwSurveyChunk();
+        trip->addChunk(chunk1);
+        chunk1->appendShot(cwStation("a1"), cwStation("a2"), makeShot("10.0", "0.0", "0.0"));
+
+        cwSurveyChunk* chunk2 = new cwSurveyChunk();
+        trip->addChunk(chunk2);
+        cwSurveyChunkData data;
+        data.stations = { cwStation(), cwStation("a2"), cwStation("a3") };
+        data.shots = { cwShot(), makeShot("5.0", "90.0", "0.0") };
+        chunk2->setData(data);
+
+        auto plotManager = std::make_unique<cwLinePlotManager>();
+        plotManager->setRegion(&region);
+        plotManager->waitToFinish();
+
+        CHECK(cave->stationPositionLookup().hasPosition("a1"));
+        CHECK(cave->stationPositionLookup().hasPosition("a2"));
+        CHECK(cave->stationPositionLookup().hasPosition("a3"));
+        // Geometry must include both chunk1 (10m) and chunk2's a2->a3 (5m).
+        CHECK(cave->length()->value() == Catch::Approx(15.0).epsilon(0.01));
+    }
+
+    SECTION("Empty trailing shot with valid trailing station is dropped") {
+        cwCavingRegion region;
+        cwCave* cave = new cwCave();
+        cave->setName("Cave 1");
+        region.addCave(cave);
+        cwTrip* trip = new cwTrip();
+        trip->setName("Trip 1");
+        cave->addTrip(trip);
+
+        cwSurveyChunk* chunk = new cwSurveyChunk();
+        trip->addChunk(chunk);
+        cwSurveyChunkData data;
+        data.stations = {
+            cwStation("a1"), cwStation("a2"), cwStation("a3"), cwStation("x")
+        };
+        data.shots = {
+            makeShot("10.0", "0.0", "0.0"),
+            makeShot("5.0", "90.0", "0.0"),
+            cwShot()
+        };
+        chunk->setData(data);
+
+        auto plotManager = std::make_unique<cwLinePlotManager>();
+        plotManager->setRegion(&region);
+        plotManager->waitToFinish();
+
+        CHECK(cave->stationPositionLookup().hasPosition("a1"));
+        CHECK(cave->stationPositionLookup().hasPosition("a2"));
+        CHECK(cave->stationPositionLookup().hasPosition("a3"));
+        CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+        CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+        CHECK(cave->stationPositionLookup().position("a3") == QVector3D(5.0, 10.0, 0.0));
+        // Length covers a1->a2 + a2->a3 only; the dropped a3->x has no distance.
+        CHECK(cave->length()->value() == Catch::Approx(15.0).epsilon(0.01));
+    }
+
+    SECTION("Empty middle shot lets cavern run on the rest of the cave") {
+        cwCavingRegion region;
+        cwCave* cave = new cwCave();
+        cave->setName("Cave 1");
+        region.addCave(cave);
+        cwTrip* trip = new cwTrip();
+        trip->setName("Trip 1");
+        cave->addTrip(trip);
+
+        cwSurveyChunk* chunk1 = new cwSurveyChunk();
+        trip->addChunk(chunk1);
+        chunk1->appendShot(cwStation("a1"), cwStation("a2"), makeShot("10.0", "0.0", "0.0"));
+
+        cwSurveyChunk* chunk2 = new cwSurveyChunk();
+        trip->addChunk(chunk2);
+        cwSurveyChunkData data;
+        data.stations = { cwStation("a2"), cwStation("ghost") };
+        data.shots = { cwShot() };
+        chunk2->setData(data);
+
+        cwSurveyChunk* chunk3 = new cwSurveyChunk();
+        trip->addChunk(chunk3);
+        chunk3->appendShot(cwStation("a2"), cwStation("a4"), makeShot("5.0", "90.0", "0.0"));
+
+        auto plotManager = std::make_unique<cwLinePlotManager>();
+        plotManager->setRegion(&region);
+        plotManager->waitToFinish();
+
+        CHECK(cave->stationPositionLookup().hasPosition("a1"));
+        CHECK(cave->stationPositionLookup().hasPosition("a2"));
+        CHECK(cave->stationPositionLookup().hasPosition("a4"));
+        // Geometry must cover chunk1 (10m) + chunk3 (5m); chunk2 is dropped.
+        CHECK(cave->length()->value() == Catch::Approx(15.0).epsilon(0.01));
+    }
+}

@@ -405,6 +405,11 @@ MainWindowTest {
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
+            //Re-enter the carpet tool — page navigation exits it (#342)
+            let carpet_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            mouseClick(carpet_obj1)
+            wait(500)
+
             //Select the same scrap again
             imageId_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(imageId_obj1, 493.154, 663.103)

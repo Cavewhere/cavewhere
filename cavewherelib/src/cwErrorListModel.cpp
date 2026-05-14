@@ -166,6 +166,27 @@ void cwErrorListModel::append(const QList<cwError> &errors)
     emit countChanged();
 }
 
+QString cwErrorListModel::allMessagesAsText() const
+{
+    QStringList lines;
+    lines.reserve(m_errors.size());
+    for (const cwError& error : m_errors) {
+        QString prefix;
+        switch (error.type()) {
+        case cwError::Warning:
+            prefix = QStringLiteral("[Warning] ");
+            break;
+        case cwError::Fatal:
+            prefix = QStringLiteral("[Fatal] ");
+            break;
+        case cwError::NoError:
+            break;
+        }
+        lines.append(prefix + error.message());
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
 QHash<int, QByteArray> cwErrorListModel::roleNames() const
 {
     return {

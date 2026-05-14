@@ -19,6 +19,7 @@ ImageItem {
     property Note note;
     property bool scrapsVisible: false
     property bool isNarrow: false
+    property alias scrapCount: scrapViewId.count
 
     readonly property list<ScrapPointView> _pointViews: {
         const s = scrapViewId.selectedScrapItem

@@ -1,0 +1,10 @@
+; Issue #173: unknown *data columns (like backtape) should be tolerated
+; with a warning rather than failing the import.
+*begin issue173
+
+*data normal from to tape compass clino backtape backcompass backclino fnord
+1 2 5.0 90.0 0.0 5.0 270.0 0.0 xyzzy
+2 3 4.0 180.0 -5.0 4.0 0.0 5.0 xyzzy
+3 4 3.0 45.0 10.0 3.0 225.0 -10.0 xyzzy
+
+*end issue173

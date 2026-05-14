@@ -80,7 +80,7 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 
 ### Survey Import/Export
 
-`cwSurveyImportManager` handles Compass, Survex, and Walls formats via the `dewalls` submodule. `cwSurveyExportManager` outputs Survex. `cwSurveyNetwork` performs loop closure detection.
+`cwSurveyImportManager` handles Compass, Survex, and Walls formats via the `dewalls` submodule. `cwSurveyExportManager` outputs Survex and Compass; Compass station names are written in uppercase (Compass is case-sensitive; CaveWhere is not). `cwSurveyNetwork` performs loop closure detection.
 
 ### Remote/Git Features
 
@@ -100,6 +100,7 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 - Full `const` correctness; use Qt signal/slot patterns with `Q_OBJECT`
 - Use function pointer syntax for `connect`/`disconnect` (e.g. `connect(obj, &Class::signal, this, &Class::slot)`), not the `SIGNAL()`/`SLOT()` string macros
 - Address Sanitizer is enabled in macOS Debug builds
+- **No magic numbers.** Extract numeric or color literals (z-values, radii, offsets, font sizes, RGB tuples, etc.) to named `constexpr` / `const` constants — typically in an anonymous `namespace { ... }` at the top of the `.cpp`. Applies even when an adjacent file uses raw literals; fix both rather than match the bad sibling.
 - **`AsyncFuture::waitForFinished` is only for test code.** It spins a nested `QEventLoop`, which delivers queued signals and causes re-entrancy bugs (use-after-free, iterator invalidation). In production code, use `AsyncFuture::observe(future).context(this, callback)` instead — Qt automatically disconnects when `this` is destroyed, so destructors only need to call `future.cancel()`. Existing `waitForFinish()`/`waitToFinish()` methods on managers (e.g. `cwProject`, `cwScrapManager`) exist solely for test use.
 
 ### QML

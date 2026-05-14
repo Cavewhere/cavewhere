@@ -34,6 +34,7 @@
 #include "CaveWhereTestLibExport.h"
 #include "cwFutureManagerModel.h"
 #include "cwRootData.h"
+#include "cwErrorListModel.h"
 
 namespace QQuickGit {
 class GitRepository;
@@ -304,6 +305,13 @@ public:
      * test process PID so concurrent test runs don't collide.
      */
     Q_INVOKABLE QString writeMinimalLazInTempDir(const QString& tag);
+
+    Q_INVOKABLE QString clipboardText() const;
+    Q_INVOKABLE void setClipboardText(const QString& text) const;
+
+    Q_INVOKABLE void appendError(cwErrorListModel* model,
+                                 const QString& message,
+                                 int type) const;
 
 };
 

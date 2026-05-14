@@ -33,6 +33,7 @@ class CAVEWHERE_LIB_EXPORT cwFontSettings : public QObject
     Q_PROPERTY(QList<cwFontEntry> fontEntries READ fontEntries CONSTANT)
     Q_PROPERTY(int minFontBaseSize READ minFontBaseSize CONSTANT)
     Q_PROPERTY(int maxFontBaseSize READ maxFontBaseSize CONSTANT)
+    Q_PROPERTY(bool isAtDefaults READ isAtDefaults NOTIFY isAtDefaultsChanged)
 
 public:
     static constexpr int MinFontBaseSize = 10;
@@ -50,12 +51,16 @@ public:
     QString fontFamily() const;
     void setFontFamily(const QString& family);
 
+    bool isAtDefaults() const;
+    Q_INVOKABLE void resetToDefaults();
+
     static cwFontSettings* instance();
     static void initialize();
 
 signals:
     void fontBaseSizeChanged();
     void fontFamilyChanged();
+    void isAtDefaultsChanged();
 
 private:
     explicit cwFontSettings(QObject* parent = nullptr);

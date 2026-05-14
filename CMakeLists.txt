@@ -513,6 +513,8 @@ if(BUILD_TESTING)
             testlib/LazFixtureHelper.h
             testlib/MockAuthProvider.cpp
             testlib/MockAuthProvider.h
+            testlib/SvgOverlapAnalyzer.cpp
+            testlib/SvgOverlapAnalyzer.h
             QQuickGit/tests/lfs/LfsServer.cpp
             QQuickGit/tests/lfs/LfsServer.h
         QML_FILES

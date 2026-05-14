@@ -56,17 +56,8 @@ void cwBaseNotePointInteraction::addPoint(QPointF notePosition)
     //Select the scrap that we're going to add the station to
     cwScrapItem* scrapItem = selectScrapForAdding(scrapItems);
 
-    //Make sure we have a scrap to add to
     if(scrapItem == nullptr) {
-        //Do something to notify the user that they've clicked outside the bounds
-        return;
-    }
-
-    cwScrap* scrap = scrapItem->scrap();
-
-    //Make sure we have a scrap to add to
-    if(scrap == nullptr) {
-        //Do something to notify the user that they've clicked outside the bounds
+        emit pointOutsideScrap();
         return;
     }
 

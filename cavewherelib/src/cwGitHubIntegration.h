@@ -60,10 +60,13 @@ class CAVEWHERE_LIB_EXPORT cwGitHubIntegration : public cwRemoteAuthProvider
     QML_NAMED_ELEMENT(GitHubIntegration)
     QML_UNCREATABLE("Access via RootData.gitHubIntegration")
 
+    friend class cwGitHubIntegrationTestAccess;
+
     Q_PROPERTY(AuthState authState READ authState NOTIFY authStateChanged)
     Q_PROPERTY(QString userCode READ userCode NOTIFY deviceCodeChanged)
     Q_PROPERTY(QUrl verificationUrl READ verificationUrl NOTIFY deviceCodeChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
+    Q_PROPERTY(QString lastPollError READ lastPollError NOTIFY lastPollErrorChanged)
     Q_PROPERTY(QRangeModel* repositories READ repositories NOTIFY repositoriesChanged)
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
@@ -96,6 +99,7 @@ public:
     QString userCode() const { return m_deviceInfo.userCode; }
     QUrl verificationUrl() const { return m_deviceInfo.verificationWebAddress; }
     QString errorMessage() const { return m_errorMessage; }
+    QString lastPollError() const { return m_lastPollError; }
     QRangeModel* repositories() const { return m_repositories; }
     bool active() const { return m_active; }
     bool busy() const { return m_busy; }
@@ -149,6 +153,7 @@ signals:
     void authStateChanged();
     void deviceCodeChanged();
     void errorMessageChanged();
+    void lastPollErrorChanged();
     void repositoriesChanged();
     void activeChanged();
     void busyChanged();
@@ -177,6 +182,7 @@ private:
     void setAuthState(AuthState state);
     void setBusy(bool busy);
     void setErrorMessage(const QString& message);
+    void setLastPollError(const QString& message);
     void handleDeviceCode(const cwGitHubDeviceAuth::DeviceCodeInfo& info);
     void handleAccessToken(const cwGitHubDeviceAuth::AccessTokenResult& result);
     void handleInstallationsReply(QNetworkReply* reply, bool allowRefreshRetry);
@@ -223,6 +229,7 @@ private:
     QString m_refreshToken;
     qint64 m_accessTokenExpiresAt = -1; // epoch seconds; -1 means non-expiring / unknown
     QString m_errorMessage;
+    QString m_lastPollError;
     QRangeModel* m_repositories = nullptr;
     QNetworkAccessManager m_network;
     bool m_active = false;

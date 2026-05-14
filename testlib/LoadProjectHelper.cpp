@@ -2,6 +2,8 @@
 
 //Qt includes
 #include <QCoreApplication>
+#include <QGuiApplication>
+#include <QClipboard>
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
@@ -266,6 +268,29 @@ bool TestHelper::fileExists(const QUrl &filename) const
 {
     QFileInfo info(filename.toLocalFile());
     return info.exists();
+}
+
+QString TestHelper::clipboardText() const
+{
+    return QGuiApplication::clipboard()->text();
+}
+
+void TestHelper::setClipboardText(const QString &text) const
+{
+    QGuiApplication::clipboard()->setText(text);
+}
+
+void TestHelper::appendError(cwErrorListModel *model,
+                             const QString &message,
+                             int type) const
+{
+    if (!model) {
+        return;
+    }
+    cwError error;
+    error.setMessage(message);
+    error.setType(static_cast<cwError::ErrorType>(type));
+    model->append(error);
 }
 
 size_t TestHelper::fileSize(const QUrl &filename) const

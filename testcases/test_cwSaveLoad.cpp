@@ -7,6 +7,7 @@
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwSaveLoad.h"
+#include "cwSaveLoadPrivate.h"
 #include "cwRootData.h"
 #include "cwDiff.h"
 #include "cwJobSettings.h"
@@ -3605,5 +3606,223 @@ TEST_CASE("v6 conversion zero-pads note filenames to preserve ordering", "[cwSav
         INFO("Note index " << i << " should have name \"" << expected.toStdString() << "\""
              << " but got \"" << loadedNotes[i].name.toStdString() << "\"");
         CHECK(loadedNotes[i].name == expected);
+    }
+}
+
+namespace {
+// Writes a small directory tree under root with two files in a nested subdir,
+// suitable for verifying recursive directory move/copy. Returns true on success.
+bool populateMoveDirRobustFixture(const QString& root) {
+    QDir parent;
+    if (!parent.mkpath(root + QStringLiteral("/inner"))) {
+        return false;
+    }
+    QFile a(root + QStringLiteral("/a.txt"));
+    if (!a.open(QIODevice::WriteOnly)) return false;
+    a.write("alpha");
+    a.close();
+
+    QFile b(root + QStringLiteral("/inner/b.txt"));
+    if (!b.open(QIODevice::WriteOnly)) return false;
+    b.write("beta");
+    b.close();
+    return true;
+}
+
+bool moveDirRobustFixtureLooksMoved(const QString& root) {
+    return QFileInfo::exists(root + QStringLiteral("/a.txt"))
+        && QFileInfo::exists(root + QStringLiteral("/inner/b.txt"));
+}
+
+// RAII guard for the rename test seam.
+struct RenameSeamGuard {
+    cwSaveLoadPrivate::RenameDirectoryFn previous;
+    explicit RenameSeamGuard(cwSaveLoadPrivate::RenameDirectoryFn replacement) {
+        previous = cwSaveLoadPrivate::renameDirectoryFn;
+        cwSaveLoadPrivate::renameDirectoryFn = replacement;
+    }
+    ~RenameSeamGuard() {
+        cwSaveLoadPrivate::renameDirectoryFn = previous;
+    }
+};
+
+bool alwaysFailRename(const QString&, const QString&) { return false; }
+} // namespace
+
+TEST_CASE("moveDirectoryRobust same-filesystem rename succeeds", "[cwSaveLoad][moveDirectoryRobust]") {
+    QTemporaryDir tmp;
+    REQUIRE(tmp.isValid());
+
+    const QString src = tmp.filePath(QStringLiteral("src"));
+    const QString dst = tmp.filePath(QStringLiteral("dst"));
+    REQUIRE(populateMoveDirRobustFixture(src));
+
+    auto result = cwSaveLoadPrivate::moveDirectoryRobust(src, dst);
+
+    CHECK_FALSE(result.hasError());
+    CHECK(result.errorMessage().isEmpty());
+    CHECK_FALSE(QFileInfo::exists(src));
+    CHECK(moveDirRobustFixtureLooksMoved(dst));
+}
+
+TEST_CASE("moveDirectoryRobust forced copy-fallback succeeds", "[cwSaveLoad][moveDirectoryRobust]") {
+    QTemporaryDir tmp;
+    REQUIRE(tmp.isValid());
+
+    const QString src = tmp.filePath(QStringLiteral("src"));
+    const QString dst = tmp.filePath(QStringLiteral("dst"));
+    REQUIRE(populateMoveDirRobustFixture(src));
+
+    Monad::ResultBase result;
+    {
+        RenameSeamGuard guard(&alwaysFailRename);
+        result = cwSaveLoadPrivate::moveDirectoryRobust(src, dst);
+    }
+
+    CHECK_FALSE(result.hasError());
+    CHECK(result.errorMessage().isEmpty()); // No warning: copy + delete both succeeded.
+    CHECK_FALSE(QFileInfo::exists(src));
+    CHECK(moveDirRobustFixtureLooksMoved(dst));
+}
+
+TEST_CASE("moveDirectoryRobust copy-fallback surfaces destination-exists error", "[cwSaveLoad][moveDirectoryRobust]") {
+    QTemporaryDir tmp;
+    REQUIRE(tmp.isValid());
+
+    const QString src = tmp.filePath(QStringLiteral("src"));
+    const QString dst = tmp.filePath(QStringLiteral("dst"));
+    REQUIRE(populateMoveDirRobustFixture(src));
+    REQUIRE(QDir().mkpath(dst)); // pre-create destination so copyDirectoryRecursively rejects it
+
+    Monad::ResultBase result;
+    {
+        RenameSeamGuard guard(&alwaysFailRename);
+        result = cwSaveLoadPrivate::moveDirectoryRobust(src, dst);
+    }
+
+    CHECK(result.hasError());
+    CHECK(result.errorMessage().contains(QStringLiteral("already exists")));
+    // Source must be left intact when copy fails.
+    CHECK(QFileInfo::exists(src + QStringLiteral("/a.txt")));
+}
+
+TEST_CASE("moveDirectoryRobust rejects empty paths", "[cwSaveLoad][moveDirectoryRobust]") {
+    QTemporaryDir tmp;
+    REQUIRE(tmp.isValid());
+    const QString src = tmp.filePath(QStringLiteral("src"));
+    REQUIRE(populateMoveDirRobustFixture(src));
+
+    auto emptySrc = cwSaveLoadPrivate::moveDirectoryRobust(QString(), tmp.filePath(QStringLiteral("dst")));
+    CHECK(emptySrc.hasError());
+    CHECK(emptySrc.errorMessage().contains(QStringLiteral("empty")));
+
+    auto emptyDst = cwSaveLoadPrivate::moveDirectoryRobust(src, QString());
+    CHECK(emptyDst.hasError());
+    CHECK(emptyDst.errorMessage().contains(QStringLiteral("empty")));
+
+    // Source must be left intact.
+    CHECK(QFileInfo::exists(src + QStringLiteral("/a.txt")));
+}
+
+TEST_CASE("moveDirectoryRobust refuses to copy a symlink in the source tree", "[cwSaveLoad][moveDirectoryRobust]") {
+    QTemporaryDir tmp;
+    REQUIRE(tmp.isValid());
+    const QString src = tmp.filePath(QStringLiteral("src"));
+    const QString dst = tmp.filePath(QStringLiteral("dst"));
+    REQUIRE(populateMoveDirRobustFixture(src));
+
+    // Plant a symlink in src pointing at the parent temp dir. Without the
+    // symlink guard, the recursive copy would escape the source tree.
+    const QString linkPath = src + QStringLiteral("/escape-link");
+    REQUIRE(QFile::link(tmp.path(), linkPath));
+
+    Monad::ResultBase result;
+    {
+        RenameSeamGuard guard(&alwaysFailRename);
+        result = cwSaveLoadPrivate::moveDirectoryRobust(src, dst);
+    }
+
+    CHECK(result.hasError());
+    CHECK(result.errorMessage().contains(QStringLiteral("symlink")));
+    // Source must be left intact when copy aborts.
+    CHECK(QFileInfo::exists(src + QStringLiteral("/a.txt")));
+}
+
+TEST_CASE("moveDirectoryRobust rejects destination inside source", "[cwSaveLoad][moveDirectoryRobust]") {
+    QTemporaryDir tmp;
+    REQUIRE(tmp.isValid());
+    const QString src = tmp.filePath(QStringLiteral("src"));
+    REQUIRE(populateMoveDirRobustFixture(src));
+    const QString dstInside = src + QStringLiteral("/copy");
+
+    auto result = cwSaveLoadPrivate::moveDirectoryRobust(src, dstInside);
+
+    CHECK(result.hasError());
+    CHECK(result.errorMessage().contains(QStringLiteral("inside source")));
+    CHECK(QFileInfo::exists(src + QStringLiteral("/a.txt")));
+    CHECK_FALSE(QFileInfo::exists(dstInside));
+}
+
+TEST_CASE("validatePathSafeForRecursiveRemoval guards", "[cwSaveLoad][validatePathSafeForRecursiveRemoval]") {
+    using Helper = cwSaveLoadPrivate;
+
+    SECTION("empty path is rejected") {
+        auto r = Helper::validatePathSafeForRecursiveRemoval(QString());
+        CHECK(r.hasError());
+        CHECK(r.errorMessage().contains(QStringLiteral("empty")));
+    }
+
+    SECTION("relative path is rejected") {
+        auto r = Helper::validatePathSafeForRecursiveRemoval(QStringLiteral("relative/dir"));
+        CHECK(r.hasError());
+        CHECK(r.errorMessage().contains(QStringLiteral("not absolute")));
+    }
+
+    SECTION("path with .. is rejected") {
+        auto r = Helper::validatePathSafeForRecursiveRemoval(QStringLiteral("/tmp/foo/../bar"));
+        CHECK(r.hasError());
+        CHECK(r.errorMessage().contains(QStringLiteral("'..'")));
+    }
+
+    SECTION("filesystem root is rejected") {
+        // QDir("/").isRoot() is true on Unix, as is QDir("C:/").isRoot() on Windows.
+#ifdef Q_OS_WIN
+        const QString root = QStringLiteral("C:/");
+#else
+        const QString root = QStringLiteral("/");
+#endif
+        auto r = Helper::validatePathSafeForRecursiveRemoval(root);
+        CHECK(r.hasError());
+        CHECK(r.errorMessage().contains(QStringLiteral("filesystem root")));
+    }
+
+    SECTION("non-existent path is rejected") {
+        QTemporaryDir tmp;
+        REQUIRE(tmp.isValid());
+        const QString missing = tmp.filePath(QStringLiteral("does-not-exist"));
+        auto r = Helper::validatePathSafeForRecursiveRemoval(missing);
+        CHECK(r.hasError());
+        CHECK(r.errorMessage().contains(QStringLiteral("does not exist")));
+    }
+
+    SECTION("file (not directory) is rejected") {
+        QTemporaryDir tmp;
+        REQUIRE(tmp.isValid());
+        const QString filePath = tmp.filePath(QStringLiteral("a-file.txt"));
+        QFile f(filePath);
+        REQUIRE(f.open(QIODevice::WriteOnly));
+        f.write("x");
+        f.close();
+        auto r = Helper::validatePathSafeForRecursiveRemoval(filePath);
+        CHECK(r.hasError());
+        CHECK(r.errorMessage().contains(QStringLiteral("not a directory")));
+    }
+
+    SECTION("valid temp directory is accepted") {
+        QTemporaryDir tmp;
+        REQUIRE(tmp.isValid());
+        auto r = Helper::validatePathSafeForRecursiveRemoval(tmp.path());
+        CHECK_FALSE(r.hasError());
+        CHECK(r.errorMessage().isEmpty());
     }
 }

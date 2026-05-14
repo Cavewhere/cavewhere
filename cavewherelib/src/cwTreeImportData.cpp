@@ -20,7 +20,10 @@ cwTreeImportData::cwTreeImportData(QObject* parent) :
 }
 
 void cwTreeImportData::setNodes(QList<cwTreeImportDataNode*> nodes) {
+    //Importers build the node tree on a worker thread. Move the whole tree onto
+    //this object's thread before reparenting so setParent doesn't cross threads.
     foreach(cwTreeImportDataNode* node, nodes) {
+        cwTreeImportDataNode::moveTreeToThread(node, thread());
         node->setParent(this);
         node->setParentNode(nullptr);
     }
