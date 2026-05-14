@@ -962,9 +962,19 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
 
         plotManager->waitToFinish();
 
+        // Reported positions are shifted by -worldOrigin for shader float
+        // precision (see cwLinePlotTask::applyWorldOriginOffset). The first
+        // completed solve also auto-computes worldOrigin from the fix centroid,
+        // so after this run worldOrigin == (100, 200, 50) and a1 lands at the
+        // origin. Add worldOrigin back to recover absolute projected coords.
+        const auto absolutePosition = [&](const QString& station) {
+            return cave->stationPositionLookup().position(station)
+                + region.worldOrigin().toVector3D();
+        };
+
         CHECK(positionSpy.count() > spyAfterGlobalCS);
-        CHECK(cave->stationPositionLookup().position("a1") == QVector3D(100.0f, 200.0f, 50.0f));
-        CHECK(cave->stationPositionLookup().position("a2") == QVector3D(100.0f, 210.0f, 50.0f));
+        CHECK(absolutePosition("a1") == QVector3D(100.0f, 200.0f, 50.0f));
+        CHECK(absolutePosition("a2") == QVector3D(100.0f, 210.0f, 50.0f));
 
         SECTION("setData on the fix-station model triggers a re-run") {
             const int spyBefore = positionSpy.count();
@@ -978,8 +988,8 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
             plotManager->waitToFinish();
 
             CHECK(positionSpy.count() > spyBefore);
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(300.0f, 200.0f, 50.0f));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(300.0f, 210.0f, 50.0f));
+            CHECK(absolutePosition("a1") == QVector3D(300.0f, 200.0f, 50.0f));
+            CHECK(absolutePosition("a2") == QVector3D(300.0f, 210.0f, 50.0f));
         }
 
         SECTION("removeAt on the fix-station model triggers a re-run") {
@@ -991,8 +1001,8 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
             CHECK(positionSpy.count() > spyBefore);
             // Without explicit fixes the legacy fallback (*fix a1 0 0 0)
             // re-anchors the cave at the origin.
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0f, 0.0f, 0.0f));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0f, 10.0f, 0.0f));
+            CHECK(absolutePosition("a1") == QVector3D(0.0f, 0.0f, 0.0f));
+            CHECK(absolutePosition("a2") == QVector3D(0.0f, 10.0f, 0.0f));
         }
     }
 }
