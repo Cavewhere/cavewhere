@@ -7,8 +7,9 @@
 
 #include "cwDeepLinkHandler.h"
 
+#include "cwGitHostingProvider.h"
+
 //Qt includes
-#include <QHash>
 #include <QUrlQuery>
 #include <QRegularExpression>
 
@@ -163,50 +164,19 @@ bool cwDeepLinkHandler::isHostAllowed(const QString& host)
 
 QString cwDeepLinkHandler::hostDisplayName(const QUrl& url)
 {
-    static const QHash<QString, QString> names = {
-        {QStringLiteral("github.com"),    QStringLiteral("GitHub")},
-        {QStringLiteral("gitlab.com"),    QStringLiteral("GitLab")},
-        {QStringLiteral("bitbucket.org"), QStringLiteral("Bitbucket")},
-    };
-    return names.value(url.host().toLower());
+    return cwGitHostingProvider::forUrl(url).displayName;
 }
 
 QUrl cwDeepLinkHandler::collaboratorSettingsUrl(const QUrl& repoUrl)
 {
-    if (!repoUrl.isValid() || repoUrl.scheme() != QStringLiteral("https"))
+    if (!repoUrl.isValid() || repoUrl.scheme() != QStringLiteral("https")) {
         return {};
-
-    const QString host = repoUrl.host().toLower();
-    QString path = repoUrl.path();
-
-    // Strip trailing .git and slashes
-    if (path.endsWith(QStringLiteral(".git")))
-        path.chop(4);
-    while (path.endsWith(QLatin1Char('/')))
-        path.chop(1);
-
-    if (host == QStringLiteral("github.com"))
-        path += QStringLiteral("/settings/access");
-    else if (host == QStringLiteral("gitlab.com"))
-        path += QStringLiteral("/-/project_members");
-    else if (host == QStringLiteral("bitbucket.org"))
-        path += QStringLiteral("/admin/access-keys");
-    else
-        return {};
-
-    QUrl url;
-    url.setScheme(QStringLiteral("https"));
-    url.setHost(repoUrl.host());
-    url.setPath(path);
-    return url;
+    }
+    return cwGitHostingProvider::collaboratorSettingsUrl(
+        cwGitHostingProvider::forUrl(repoUrl), repoUrl);
 }
 
 const QStringList& cwDeepLinkHandler::allowedHosts()
 {
-    static const QStringList hosts = {
-        QStringLiteral("github.com"),
-        QStringLiteral("gitlab.com"),
-        QStringLiteral("bitbucket.org"),
-    };
-    return hosts;
+    return cwGitHostingProvider::knownHosts();
 }

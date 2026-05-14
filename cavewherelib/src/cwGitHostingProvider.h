@@ -42,7 +42,7 @@ namespace cwGitHostingProvider {
     CAVEWHERE_LIB_EXPORT const cwGitHostingProviderInfo& forUrl(const QUrl& cloneUrl);
 
     /// Host strings of non-generic entries (used by the deep-link allowlist).
-    CAVEWHERE_LIB_EXPORT QStringList knownHosts();
+    CAVEWHERE_LIB_EXPORT const QStringList& knownHosts();
 
     /**
      * @brief Derived https web URL for the cloned repository.

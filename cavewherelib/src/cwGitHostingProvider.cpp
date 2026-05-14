@@ -110,7 +110,7 @@ const cwGitHostingProviderInfo& cwGitHostingProvider::forUrl(const QUrl& cloneUr
     return forHost(cloneUrl.host());
 }
 
-QStringList cwGitHostingProvider::knownHosts()
+const QStringList& cwGitHostingProvider::knownHosts()
 {
     static const QStringList hosts = [] {
         QStringList out;
