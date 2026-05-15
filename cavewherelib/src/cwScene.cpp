@@ -20,15 +20,12 @@
 
 cwScene::cwScene(QObject *parent) :
     QObject(parent),
-    GeometryItersecter(new cwGeometryItersecter()),
+    GeometryItersecter(new cwGeometryItersecter(this)),
     Camera(nullptr)
 {
 }
 
-cwScene::~cwScene()
-{
-    delete GeometryItersecter;
-}
+cwScene::~cwScene() = default;
 
 /**
  * @brief cwScene::addItem

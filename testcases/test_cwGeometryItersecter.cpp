@@ -50,6 +50,7 @@ TEST_CASE("Ray intersects a single triangle true triangle test", "[cwGeometryIte
 
     cwGeometryItersecter intersector;
     intersector.addObject(makeTriangleObject(1, worldFromModel));
+    intersector.waitForFinish();
 
     // Expected: hit at world z=10 directly below origin (inside triangle)
     // Direction is unit-length along -Z, so tWorld = 100 - 10 = 90.
@@ -75,6 +76,7 @@ TEST_CASE("Ray intersects multiple triangles and returns the closest hit", "[cwG
     cwGeometryItersecter intersector;
     intersector.addObject(makeTriangleObject(100, tA));
     intersector.addObject(makeTriangleObject(200, tB));
+    intersector.waitForFinish();
 
     // Should pick the closer one (z=60), thus tWorld ≈ 40
     const double t = intersector.intersects(ray);

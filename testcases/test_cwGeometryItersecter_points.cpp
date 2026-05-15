@@ -77,6 +77,7 @@ TEST_CASE("Ray straight through a point hits and reports correct fields", "[cwGe
 
     cwGeometryItersecter intersector;
     intersector.addObject(makeSinglePointObject(nullptr, 1, QVector3D(0.0f, 0.0f, 0.0f)));
+    intersector.waitForFinish();
 
     const cwRayHit hit = intersector.intersectsDetailed(ray);
 
@@ -98,6 +99,7 @@ TEST_CASE("Ray within pickRadius of a point still hits", "[cwGeometryItersecter]
 
     cwGeometryItersecter intersector;
     intersector.addObject(makeSinglePointObject(nullptr, 1, QVector3D(0.0f, 0.0f, 0.0f)));
+    intersector.waitForFinish();
 
     const cwRayHit hit = intersector.intersectsDetailed(ray);
     REQUIRE(hit.hit());
@@ -112,6 +114,7 @@ TEST_CASE("Ray beyond pickRadius does not hit the point", "[cwGeometryItersecter
 
     cwGeometryItersecter intersector;
     intersector.addObject(makeSinglePointObject(nullptr, 1, QVector3D(0.0f, 0.0f, 0.0f)));
+    intersector.waitForFinish();
 
     const cwRayHit hit = intersector.intersectsDetailed(ray);
     REQUIRE_FALSE(hit.hit());
@@ -129,6 +132,7 @@ TEST_CASE("Point cloud picks at translated modelMatrix", "[cwGeometryItersecter]
     intersector.addObject(makeSinglePointObject(nullptr, 1,
                                                 QVector3D(0.0f, 0.0f, 20.0f),
                                                 modelMatrix));
+    intersector.waitForFinish();
 
     const cwRayHit hit = intersector.intersectsDetailed(ray);
     REQUIRE(hit.hit());
@@ -146,6 +150,7 @@ TEST_CASE("Closest of two point clouds is returned", "[cwGeometryItersecter][poi
     cwGeometryItersecter intersector;
     intersector.addObject(makeSinglePointObject(nullptr, 1, QVector3D(0.0f, 0.0f, 0.0f)));
     intersector.addObject(makeSinglePointObject(nullptr, 2, QVector3D(0.0f, 0.0f, 50.0f)));
+    intersector.waitForFinish();
 
     const cwRayHit hit = intersector.intersectsDetailed(ray);
     REQUIRE(hit.hit());
@@ -162,6 +167,7 @@ TEST_CASE("Mixed triangle and point — closer one wins regardless of type", "[c
         cwGeometryItersecter intersector;
         intersector.addObject(makeTriangleAtZ(1, 10.0f));
         intersector.addObject(makeSinglePointObject(nullptr, 2, QVector3D(0.0f, 0.0f, 50.0f)));
+        intersector.waitForFinish();
 
         const cwRayHit hit = intersector.intersectsDetailed(ray);
         REQUIRE(hit.hit());
@@ -173,6 +179,7 @@ TEST_CASE("Mixed triangle and point — closer one wins regardless of type", "[c
         cwGeometryItersecter intersector;
         intersector.addObject(makeTriangleAtZ(1, 50.0f));
         intersector.addObject(makeSinglePointObject(nullptr, 2, QVector3D(0.0f, 0.0f, 10.0f)));
+        intersector.waitForFinish();
 
         const cwRayHit hit = intersector.intersectsDetailed(ray);
         REQUIRE(hit.hit());
@@ -196,6 +203,7 @@ TEST_CASE("Hidden render object is skipped during picking", "[cwGeometryItersect
     // If visibility is honored, the visible (further) cloud wins.
     intersector.addObject(makeSinglePointObject(&hiddenOwner, 1, QVector3D(0.0f, 0.0f, 50.0f)));
     intersector.addObject(makeSinglePointObject(&visibleOwner, 2, QVector3D(0.0f, 0.0f, 10.0f)));
+    intersector.waitForFinish();
 
     const cwRayHit hit = intersector.intersectsDetailed(ray);
     REQUIRE(hit.hit());
@@ -210,6 +218,7 @@ TEST_CASE("Ray with origin inside a point's sphere does not produce a hit", "[cw
 
     cwGeometryItersecter intersector;
     intersector.addObject(makeSinglePointObject(nullptr, 1, QVector3D(0.0f, 0.0f, 0.0f)));
+    intersector.waitForFinish();
 
     const cwRayHit hit = intersector.intersectsDetailed(ray);
     REQUIRE_FALSE(hit.hit());

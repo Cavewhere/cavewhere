@@ -9,20 +9,27 @@
 #define CWGEOMETRYITERSECTER_H
 
 //Qt includes
+#include <QObject>
 #include <QVector>
 #include <QVector3D>
 #include <QRay3D>
 #include <QBox3D>
+#include <atomic>
 #include <cstdint>
+#include <memory>
 
 //Our includes
 #include "cwRayHit.h"
 #include "cwGeometry.h"
+#include "cwFutureManagerToken.h"
+#include "asyncfuture.h"
 #include "CaveWhereLibExport.h"
 class cwRenderObject;
 
-class CAVEWHERE_LIB_EXPORT cwGeometryItersecter
+class CAVEWHERE_LIB_EXPORT cwGeometryItersecter : public QObject
 {
+    Q_OBJECT
+
 public:
     struct Key {
         cwRenderObject* parentObject = nullptr;
@@ -65,26 +72,8 @@ public:
         float m_pickRadius = 0.0f;
     };
 
-    // BVH primitive handles + node layout are public nested types so the
-    // build helpers in the .cpp's anonymous namespace can reach them. The
-    // BVH arrays themselves are still private state.
-    struct Primitive {
-        enum class Kind : uint8_t { Triangle, Point };
-        Kind kind = Kind::Triangle;
-        uint32_t nodeIndex = 0;       // index into Nodes
-        uint32_t primitiveIndex = 0;  // triangle: first index into indices(); point: vertex index
-    };
-
-    struct BvhNode {
-        QBox3D bbox;
-        // Inner: left = leftChild, right = rightChild. Leaf: left = firstPrim, right = primitiveCount.
-        uint32_t left = 0;
-        uint32_t right = 0;
-        uint8_t splitAxis = 0;
-        bool isLeaf = false;
-    };
-
-    cwGeometryItersecter();
+    explicit cwGeometryItersecter(QObject* parent = nullptr);
+    ~cwGeometryItersecter() override = default;
 
     void addObject(const cwGeometryItersecter::Object& object);
     void clear(cwRenderObject* parentObject = nullptr);
@@ -98,6 +87,22 @@ public:
 
     double intersects(const QRay3D& ray) const;
     cwRayHit intersectsDetailed(const QRay3D& ray) const;
+
+    // Wired by cwRootData so the async BVH build shows up as a job in the
+    // task panel. No-op until called.
+    void setFutureManagerToken(cwFutureManagerToken token);
+
+    // Test-only: spin the event loop until the most recently scheduled
+    // build has completed (or returns immediately if no build is in
+    // flight). Mirrors cwProject::waitForFinish() / cwScrapManager::
+    // waitForFinish() — production code should listen for the bvhReady()
+    // signal instead, because waitForFinished spins a nested event loop.
+    void waitForFinish();
+
+signals:
+    // Emitted on the UI thread each time a fresh BVH atomically replaces
+    // the previous one. Picks made before this fires return no-hit.
+    void bvhReady();
 
 private:
 
@@ -115,24 +120,137 @@ private:
         static QBox3D lineToBoundingBox(const cwGeometryItersecter::Object & object, int indexInIndexes);
     };
 
+    // BVH primitive handles + node layout — internal build / traversal
+    // state.
+    struct Primitive {
+        enum class Kind : uint8_t { Triangle, Point };
+        Kind kind = Kind::Triangle;
+        uint32_t nodeIndex = 0;       // index into the build-time Nodes snapshot
+        uint32_t primitiveIndex = 0;  // triangle: first index into indices(); point: vertex index
+    };
+
+    struct BvhNode {
+        QBox3D bbox;
+        // Inner: left = leftChild, right = rightChild. Leaf: left = firstPrim, right = primitiveCount.
+        uint32_t left = 0;
+        uint32_t right = 0;
+        uint8_t splitAxis = 0;
+        bool isLeaf = false;
+    };
+
+    // SubRange records a terminal range from the serial split that the
+    // parallel pass picks up. rootSlot is pre-claimed during serial split.
+    struct SubRange {
+        uint32_t rootSlot;
+        qsizetype begin;
+        qsizetype end;
+    };
+
+    // Phase A work-item: a contiguous range of primitives belonging to
+    // one source Node, planned by launchBuildJob and consumed by parallel
+    // workers. Splitting a single huge Node into multiple chunks is what
+    // gives us parallelism for monolithic point clouds.
+    struct EnumChunk {
+        uint32_t nodeIndex = 0;
+        // For Triangles: index of the first triangle (always a multiple
+        // of 3 when multiplied by 3 in geometry().indices()).
+        // For Points: starting vertex index.
+        uint32_t inputBegin = 0;
+        uint32_t count = 0;       // primitives, not indices/floats
+        uint32_t outBegin = 0;    // first slot in the shared BuildPrim array
+    };
+
+    // Result of median-axis selection. axis < 0 means the centroid box is
+    // degenerate on every axis and the range can't be subdivided.
+    struct MedianSplitResult {
+        qsizetype mid;
+        int axis;
+    };
+
     QList<Node> Nodes;
 
-    // Flat BVH built lazily from Nodes' triangle + point primitives.
-    // Lines stay on the linear nearestNeighbor() path (their existing
-    // per-segment Node granularity already serves that fallback well).
-    mutable QVector<BvhNode> m_bvhNodes;
-    mutable QVector<Primitive> m_primitives;
-    mutable bool m_bvhDirty = true;
+    // Snapshot of Nodes captured at build-job launch and consumed by the
+    // worker thread. Stored as a shared_ptr so traversal (which holds a
+    // strong ref via m_bvh) can dereference Node pointers safely even after
+    // a later rebuild swaps in a different snapshot.
+    struct BvhData {
+        std::shared_ptr<QList<Node>> nodesSnapshot;
+        QVector<BvhNode> bvhNodes;
+        QVector<Primitive> primitives;
+    };
 
-    // BuildPrim is opaque to callers; defined in the .cpp's anonymous namespace.
+    // Live BVH. nullptr until the first async build completes; the worker
+    // installs via atomic store on the UI thread (via .context() callback)
+    // so picks never see a torn buffer. std::atomic_load/store on
+    // std::shared_ptr are deprecated in C++20 but still the only portable
+    // option on libc++ — std::atomic<std::shared_ptr<T>> is not yet
+    // supported there (requires trivially-copyable T).
+    std::shared_ptr<BvhData> m_bvh;
+
+    // Coalesces rapid mutations into a single rebuild and cancels the
+    // in-flight build when a new mutation arrives.
+    AsyncFuture::Restarter<void> m_bvhRestarter;
+    cwFutureManagerToken m_futureManagerToken;
+
+    // BuildPrim and BuildContext are defined in the .cpp; declared here so
+    // recursive helpers can take them by reference.
     struct BuildPrim;
+    struct BuildContext;
 
-    void markBvhDirty() { m_bvhDirty = true; }
-    void ensureBvh() const;
-    void buildBvh() const;
-    uint32_t buildBvhRecursive(QVector<BuildPrim>& prims, int begin, int end) const;
-    QBox3D primitiveWorldBox(const Primitive& prim) const;
-    void testPrimitive(const Primitive& prim, const QRay3D& ray, cwRayHit& best) const;
+    void scheduleBuild();
+    QFuture<void> launchBuildJob();
+
+    static QBox3D primitiveWorldBox(const QList<Node>& nodes, const Primitive& prim);
+    static void testPrimitive(const QList<Node>& nodes,
+                              const Primitive& prim,
+                              const QRay3D& ray,
+                              cwRayHit& best);
+
+    // Phase A: how many BVH primitives a single Node contributes. Lines
+    // stay out of the BVH and contribute zero. Points contribute zero
+    // unless pickRadius > 0.
+    static qsizetype countNodePrimitives(const Object& object);
+
+    // Phase A workers: fill BuildPrim slots for one chunk of a Triangles
+    // or Points-typed Node, respectively.
+    static void enumerateTrianglesChunk(const Object& object,
+                                        const EnumChunk& chunk,
+                                        QVector<BuildPrim>& prims);
+    static void enumeratePointsChunk(const Object& object,
+                                     const EnumChunk& chunk,
+                                     QVector<BuildPrim>& prims);
+
+    // Phase B: compute the centroid AABB, pick the longest axis, and
+    // partition prims by median centroid along that axis. Returns
+    // {-1, 0} when the centroid box is degenerate on every axis.
+    static MedianSplitResult medianSplit(QVector<BuildPrim>& prims,
+                                         qsizetype begin,
+                                         qsizetype end);
+
+    // Top-down split that allocates upper inner nodes serially and stops at
+    // depthLeft == 0 (or when the range is leaf-sized / degenerate),
+    // recording each terminal range as a SubRange for parallel processing.
+    // Upper inner-node slots get their left/right/splitAxis set here; their
+    // bboxes stay default and are filled by the bottom-up pass after the
+    // parallel subtree builders finish. outUpperInnerNodes captures upper
+    // inner-node slots in pre-order so the bottom-up pass can iterate
+    // children-before-parents in reverse.
+    static uint32_t serialSplitToFanout(BuildContext& ctx,
+                                        qsizetype begin,
+                                        qsizetype end,
+                                        int depthLeft,
+                                        QVector<SubRange>& outSubRanges,
+                                        QVector<uint32_t>& outUpperInnerNodes);
+
+    // Fills the subtree rooted at selfIndex via sequential top-down median
+    // split, claiming child slots via ctx.nextNode.fetch_add. Safe to call
+    // concurrently on disjoint subranges: outNodes is pre-sized to its
+    // upper bound (no reallocations during the parallel pass) and each
+    // call writes only to slots it itself claims.
+    static void buildBvhSubtree(BuildContext& ctx,
+                                qsizetype begin,
+                                qsizetype end,
+                                uint32_t selfIndex);
 
     template <typename Iterator>
     Iterator findNodeImpl(Iterator begin, Iterator end, const Key& objectKey) const {
@@ -155,7 +273,6 @@ private:
     void addPoints(const cwGeometryItersecter::Object& object);
 
     double nearestNeighbor(const QRay3D& ray) const;
-//    double LineLineIntersect(QVector3D p1, QVector3D p2, QVector3D p3, QVector3D p4) const;
 
     // Helpers: transform point (w=1) and direction (w=0)
     static inline QVector3D mapPoint(const QMatrix4x4& m, const QVector3D& p) {

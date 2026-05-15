@@ -22,6 +22,8 @@
 #include "cwQMLReload.h"
 #include "cwLicenseAgreement.h"
 #include "cwRegionSceneManager.h"
+#include "cwScene.h"
+#include "cwGeometryItersecter.h"
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
@@ -170,6 +172,15 @@ cwRootData::cwRootData(QObject *parent) :
 
     RegionSceneManager = new cwRegionSceneManager(this);
     RegionSceneManager->setCavingRegion(Region);
+
+    // The picking BVH builds asynchronously and publishes progress as
+    // "Accelerating picking" while large clouds (e.g. multi-million-point
+    // LAZ) are getting indexed.
+    if (auto* scene = RegionSceneManager->scene()) {
+        if (auto* intersector = scene->geometryItersecter()) {
+            intersector->setFutureManagerToken(FutureManagerModel->token());
+        }
+    }
 
     ScrapManager->setRenderScraps(RegionSceneManager->items()); //scraps());
     LinePlotManager->setRenderLinePlot(RegionSceneManager->linePlot());

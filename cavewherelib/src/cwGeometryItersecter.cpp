@@ -9,16 +9,21 @@
 #include "cwDebug.h"
 #include "cwGeometryItersecter.h"
 #include "cwRenderObject.h"
+#include "cwConcurrent.h"
+#include "cwTask.h"
 
 //Std limits
 #include <algorithm>
+#include <atomic>
 #include <limits>
 #include <math.h>
 
 //Qt includes
 #include <QtNumeric>
 #include <QPlane3D>
+#include <QPromise>
 #include <QSphere3D>
+#include <QThreadPool>
 #include <QVarLengthArray>
 
 namespace {
@@ -26,6 +31,22 @@ namespace {
     // broad-phase AABB so that rays passing tangentially through the
     // outermost spheres aren't rejected by the box test.
     constexpr float kPointAabbPadScale = 1.0f;
+
+    // Leaf threshold — the largest count of primitives we'll let stop
+    // subdivision. Bigger leaves trade a slightly longer per-leaf linear
+    // scan for far fewer BVH nodes. 16 keeps BVH overhead at ~N/8 nodes,
+    // which is the difference between a 100M-point LAZ fitting in RAM and
+    // not.
+    constexpr int kBvhLeafSize = 16;
+
+    // Each Phase A worker fills approximately this many BuildPrim slots.
+    // 64K per chunk balances task overhead against load balance across
+    // cores — typical LAZ clouds (10M-100M points) yield 150-1500 chunks.
+    constexpr qsizetype kEnumChunkSize = 64 * 1024;
+
+    // Job name surfaced in the cwFutureManagerModel UI while the async
+    // BVH build is running.
+    constexpr auto kAcceleratingPickingJobName = QLatin1StringView("Accelerating picking");
 
     // Visibility guard shared by every traversal entry point. A null parent
     // means the object isn't owned by a cwRenderObject (test fixtures), so
@@ -36,8 +57,100 @@ namespace {
     }
 }
 
-cwGeometryItersecter::cwGeometryItersecter()
+// Per-primitive work item carried only during the build. Holds just the
+// centroid (for median split) and the final primitive handle (for emission
+// into m_primitives). The per-primitive AABB is *not* stored — it's
+// re-derived from geometry at leaf creation. At 100M points this is the
+// difference between a ~5 GB and a ~2.5 GB build-time temporary.
+struct cwGeometryItersecter::BuildPrim {
+    QVector3D centroid;
+    cwGeometryItersecter::Primitive prim;
+};
+
+// Bundle of references the recursive Phase B helpers all need. Saves
+// passing six parameters through every recursive call.
+struct cwGeometryItersecter::BuildContext {
+    const QList<Node>& nodes;
+    QVector<BuildPrim>& prims;
+    QVector<BvhNode>& outNodes;
+    std::atomic<uint32_t>& nextNode;
+    // Only set during the parallel Phase B pass; serialSplitToFanout
+    // leaves it null because the serial split doesn't create leaves.
+    std::atomic<qsizetype>* leafPrimCounter = nullptr;
+};
+
+namespace {
+    // Pick the longest axis of a centroid AABB. Returns -1 when every
+    // extent is zero (collinear / duplicate centroids).
+    int dominantSplitAxis(const QVector3D& extent)
+    {
+        int axis = 0;
+        if (extent.y() > extent.x()) {
+            axis = 1;
+        }
+        if (extent.z() > extent[axis]) {
+            axis = 2;
+        }
+        return extent[axis] > 0.0f ? axis : -1;
+    }
+}
+
+cwGeometryItersecter::MedianSplitResult
+cwGeometryItersecter::medianSplit(QVector<BuildPrim>& prims,
+                                  qsizetype begin,
+                                  qsizetype end)
 {
+    QBox3D centroidBox;
+    for (qsizetype i = begin; i < end; ++i) {
+        centroidBox.unite(prims[i].centroid);
+    }
+    const QVector3D extent = centroidBox.maximum() - centroidBox.minimum();
+    const int axis = dominantSplitAxis(extent);
+    if (axis < 0) {
+        return {0, -1};
+    }
+    const qsizetype mid = (begin + end) / 2;
+    std::nth_element(prims.begin() + begin,
+                     prims.begin() + mid,
+                     prims.begin() + end,
+                     [axis](const BuildPrim& a, const BuildPrim& b) {
+                         return a.centroid[axis] < b.centroid[axis];
+                     });
+    return {mid, axis};
+}
+
+qsizetype cwGeometryItersecter::countNodePrimitives(const Object& object)
+{
+    const cwGeometry& geometry = object.geometry();
+    switch (geometry.type()) {
+    case cwGeometry::Type::Triangles:
+        return geometry.indices().size() / 3;
+    case cwGeometry::Type::Points:
+        return object.pickRadius() > 0.0f ? geometry.vertexCount() : 0;
+    default:
+        return 0;
+    }
+}
+
+cwGeometryItersecter::cwGeometryItersecter(QObject* parent) :
+    QObject(parent),
+    m_bvhRestarter(this)
+{
+    m_bvhRestarter.onFutureChanged([this]() {
+        if (m_futureManagerToken.isValid()) {
+            m_futureManagerToken.addJob({m_bvhRestarter.future(), kAcceleratingPickingJobName});
+        }
+    });
+}
+
+void cwGeometryItersecter::setFutureManagerToken(cwFutureManagerToken token)
+{
+    m_futureManagerToken = token;
+}
+
+void cwGeometryItersecter::waitForFinish()
+{
+    AsyncFuture::waitForFinished(m_bvhRestarter.future());
 }
 
 /**
@@ -75,7 +188,7 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
 {
     if(parentObject == nullptr) {
         Nodes.clear();
-        markBvhDirty();
+        scheduleBuild();
         return;
     }
 
@@ -88,7 +201,7 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
             iter++;
         }
     }
-    markBvhDirty();
+    scheduleBuild();
 }
 
 /**
@@ -108,7 +221,7 @@ void cwGeometryItersecter::removeObject(const Key &objectKey)
     auto iter = findNode(objectKey);
     if (iter != Nodes.end()) {
         Nodes.erase(iter);
-        markBvhDirty();
+        scheduleBuild();
     }
 }
 
@@ -122,7 +235,7 @@ void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4
     auto iter = findNode(objectKey);
     if (iter != Nodes.end()) {
         iter->Object.setModelMatrix(modelMatrix);
-        markBvhDirty();
+        scheduleBuild();
     }
 }
 
@@ -148,45 +261,6 @@ double cwGeometryItersecter::intersects(const QRay3D &ray) const
         return hit.tWorld();
     }
     return nearestNeighbor(ray);
-
-
-    // QList<double> intersections;
-
-    // qDebug() << "Test!" << ray;
-    // for(const Node& node : Nodes) {
-    //     double t = node.BoundingBox.intersection(ray);
-    //     qDebug() << "Node:" << node.BoundingBox << t;
-    //     if(!qIsNaN(t)) {
-    //         if(node.Object.type() == Triangles) {
-    //             Q_ASSERT(node.Object.indexes().size() % 3 == 0);
-    //             for(int i = 0; i < node.Object.indexes().size(); i+=3) {
-    //                 QBox3D box = Node::triangleToBoundingBox(node.Object, i);
-    //                 t = box.intersection(ray);
-    //                 if(!qIsNaN(t)) {
-    //                     intersections.append(t);
-    //                 }
-    //             }
-    //         } else {
-    //             //Line nodes, are direct
-    //             intersections.append(t);
-    //         }
-    //     }
-    // }
-
-    // qDebug() << "Intersections:" << intersections.size() << intersections;
-
-    // //See if we've intersected anything
-    // if(intersections.size() == 0) {
-    //     return nearestNeighbor(ray); //Do a nearest neighbor search
-    // }
-
-    // //Find the max value int intersections
-    // double maxValue = -std::numeric_limits<double>::max();
-    // for(double t : intersections) {
-    //     maxValue = std::max(t, maxValue);
-    // }
-
-    // return maxValue;
 }
 
 /**
@@ -215,7 +289,7 @@ void cwGeometryItersecter::addTriangles(const cwGeometryItersecter::Object &obje
     }
 
     Nodes.append(Node(box, object));
-    markBvhDirty();
+    scheduleBuild();
 }
 
 /**
@@ -245,7 +319,7 @@ void cwGeometryItersecter::addLines(const cwGeometryItersecter::Object &object)
             Nodes.append(node);
         }
     }
-    markBvhDirty();
+    scheduleBuild();
 }
 
 /**
@@ -285,7 +359,7 @@ void cwGeometryItersecter::addPoints(const cwGeometryItersecter::Object &object)
     const QVector3D padVec(pad, pad, pad);
 
     Nodes.append(Node(QBox3D(box.minimum() - padVec, box.maximum() + padVec), object));
-    markBvhDirty();
+    scheduleBuild();
 }
 
 
@@ -345,10 +419,16 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
 {
     cwRayHit best;
 
-    ensureBvh();
-    if (m_bvhNodes.isEmpty()) {
+    // Snapshot the current BVH so a concurrent build can swap m_bvh
+    // mid-traversal without invalidating our pointers.
+    std::shared_ptr<BvhData> bvh = std::atomic_load(&m_bvh);
+    if (!bvh || bvh->bvhNodes.isEmpty()) {
         return best;
     }
+
+    const QVector<BvhNode>& nodes = bvh->bvhNodes;
+    const QVector<Primitive>& prims = bvh->primitives;
+    const QList<Node>& nodeSnapshot = *bvh->nodesSnapshot;
 
     // Stack-based traversal with near-first child ordering. 64 is plenty for
     // realistic BVH depths (~log2 of primitive count, well under 30 for 1M).
@@ -359,7 +439,7 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
         const uint32_t idx = stack.last();
         stack.removeLast();
 
-        const BvhNode& bn = m_bvhNodes[idx];
+        const BvhNode& bn = nodes[idx];
 
         // Box reject: skip if ray misses the AABB or the entry t is already
         // farther than our current best hit (closest-wins early exit).
@@ -375,7 +455,7 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
             const uint32_t first = bn.left;
             const uint32_t count = bn.right;
             for (uint32_t p = first; p < first + count; ++p) {
-                testPrimitive(m_primitives[p], ray, best);
+                testPrimitive(nodeSnapshot, prims[p], ray, best);
             }
         } else {
             uint32_t nearChild = bn.left;
@@ -392,11 +472,12 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
     return best;
 }
 
-void cwGeometryItersecter::testPrimitive(const Primitive& prim,
+void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
+                                         const Primitive& prim,
                                          const QRay3D& ray,
-                                         cwRayHit& best) const
+                                         cwRayHit& best)
 {
-    const Node& node = Nodes[prim.nodeIndex];
+    const Node& node = nodes[prim.nodeIndex];
     if (!isPickable(node.Object)) {
         return;
     }
@@ -477,28 +558,10 @@ void cwGeometryItersecter::testPrimitive(const Primitive& prim,
     best.m_firstIndex = static_cast<int>(prim.primitiveIndex);
 }
 
-// Per-primitive work item carried only during the build. Holds just the
-// centroid (for median split) and the final primitive handle (for emission
-// into m_primitives). The per-primitive AABB is *not* stored — it's
-// re-derived from geometry at leaf creation. At 100M points this is the
-// difference between a ~5 GB and a ~2.5 GB build-time temporary.
-struct cwGeometryItersecter::BuildPrim {
-    QVector3D centroid;
-    cwGeometryItersecter::Primitive prim;
-};
-
-namespace {
-    // Leaf threshold — the largest count of primitives we'll let stop
-    // subdivision. Bigger leaves trade a slightly longer per-leaf linear
-    // scan for far fewer BVH nodes. 16 keeps BVH overhead at ~N/8 nodes,
-    // which is the difference between a 100M-point LAZ fitting in RAM and
-    // not.
-    constexpr int kBvhLeafSize = 16;
-}
-
-QBox3D cwGeometryItersecter::primitiveWorldBox(const Primitive& prim) const
+QBox3D cwGeometryItersecter::primitiveWorldBox(const QList<Node>& nodes,
+                                               const Primitive& prim)
 {
-    const Node& node = Nodes[prim.nodeIndex];
+    const Node& node = nodes[prim.nodeIndex];
     const cwGeometry& geometry = node.Object.geometry();
     const QMatrix4x4& worldFromModel = node.Object.modelMatrix();
     auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
@@ -525,165 +588,367 @@ QBox3D cwGeometryItersecter::primitiveWorldBox(const Primitive& prim) const
     return QBox3D(centerWorld - padVec, centerWorld + padVec);
 }
 
-// Median-split build over [begin, end). Returns the index of the freshly
-// appended BVH node. Children are emitted depth-first, so the serialized
-// layout puts each subtree contiguously after its root. Inner node boxes
-// are derived from their children's boxes after recursion returns, which
-// lets us skip storing a per-primitive AABB in BuildPrim.
-uint32_t cwGeometryItersecter::buildBvhRecursive(QVector<BuildPrim>& prims,
-                                                 int begin,
-                                                 int end) const
+uint32_t cwGeometryItersecter::serialSplitToFanout(BuildContext& ctx,
+                                                   qsizetype begin,
+                                                   qsizetype end,
+                                                   int depthLeft,
+                                                   QVector<SubRange>& outSubRanges,
+                                                   QVector<uint32_t>& outUpperInnerNodes)
 {
-    const uint32_t selfIndex = static_cast<uint32_t>(m_bvhNodes.size());
-    m_bvhNodes.append(BvhNode{});
+    const uint32_t selfIndex = ctx.nextNode.fetch_add(1);
+    const qsizetype count = end - begin;
 
-    const int count = end - begin;
+    auto recordSubrange = [&]() {
+        // Slot reserved here; the parallel subtree builder fills it.
+        outSubRanges.append(SubRange{selfIndex, begin, end});
+    };
+
+    if (depthLeft == 0 || count <= kBvhLeafSize) {
+        recordSubrange();
+        return selfIndex;
+    }
+
+    const MedianSplitResult split = medianSplit(ctx.prims, begin, end);
+    if (split.axis < 0) {
+        // Degenerate centroid bounds — let the parallel builder make a leaf.
+        recordSubrange();
+        return selfIndex;
+    }
+
+    // Track this as an upper inner node so the bottom-up bbox pass picks
+    // it up. Recording before recursion gives us pre-order; iterating in
+    // reverse later yields children-before-parents.
+    outUpperInnerNodes.append(selfIndex);
+
+    const uint32_t leftIndex = serialSplitToFanout(ctx, begin, split.mid,
+                                                   depthLeft - 1,
+                                                   outSubRanges, outUpperInnerNodes);
+    const uint32_t rightIndex = serialSplitToFanout(ctx, split.mid, end,
+                                                    depthLeft - 1,
+                                                    outSubRanges, outUpperInnerNodes);
+
+    BvhNode& self = ctx.outNodes[selfIndex];
+    self.left = leftIndex;
+    self.right = rightIndex;
+    self.splitAxis = static_cast<uint8_t>(split.axis);
+    self.isLeaf = false;
+    // bbox stays default; filled in the bottom-up pass after subtrees finish.
+    return selfIndex;
+}
+
+void cwGeometryItersecter::buildBvhSubtree(BuildContext& ctx,
+                                           qsizetype begin,
+                                           qsizetype end,
+                                           uint32_t selfIndex)
+{
+    const qsizetype count = end - begin;
 
     auto makeLeaf = [&]() {
         QBox3D box;
-        for (int i = begin; i < end; ++i) {
-            box.unite(primitiveWorldBox(prims[i].prim));
+        for (qsizetype i = begin; i < end; ++i) {
+            box.unite(primitiveWorldBox(ctx.nodes, ctx.prims[i].prim));
         }
-        BvhNode& self = m_bvhNodes[selfIndex];
+        BvhNode& self = ctx.outNodes[selfIndex];
         self.bbox = box;
         self.left = static_cast<uint32_t>(begin);
         self.right = static_cast<uint32_t>(count);
         self.isLeaf = true;
-        return selfIndex;
+        if (ctx.leafPrimCounter != nullptr) {
+            ctx.leafPrimCounter->fetch_add(count, std::memory_order_relaxed);
+        }
     };
 
     if (count <= kBvhLeafSize) {
-        return makeLeaf();
+        makeLeaf();
+        return;
     }
 
-    QBox3D centroidBox;
-    for (int i = begin; i < end; ++i) {
-        centroidBox.unite(prims[i].centroid);
-    }
-    const QVector3D extent = centroidBox.maximum() - centroidBox.minimum();
-    int axis = 0;
-    if (extent.y() > extent.x()) {
-        axis = 1;
-    }
-    if (extent.z() > extent[axis]) {
-        axis = 2;
+    const MedianSplitResult split = medianSplit(ctx.prims, begin, end);
+    if (split.axis < 0) {
+        makeLeaf();
+        return;
     }
 
-    // Degenerate centroid bounds — every primitive lies on the split axis.
-    // Fall back to a leaf to avoid infinite recursion.
-    if (extent[axis] <= 0.0f) {
-        return makeLeaf();
-    }
+    const uint32_t leftIndex = ctx.nextNode.fetch_add(1);
+    const uint32_t rightIndex = ctx.nextNode.fetch_add(1);
 
-    const int mid = (begin + end) / 2;
-    std::nth_element(prims.begin() + begin,
-                     prims.begin() + mid,
-                     prims.begin() + end,
-                     [axis](const BuildPrim& a, const BuildPrim& b) {
-                         return a.centroid[axis] < b.centroid[axis];
-                     });
+    buildBvhSubtree(ctx, begin, split.mid, leftIndex);
+    buildBvhSubtree(ctx, split.mid, end, rightIndex);
 
-    const uint32_t leftIndex = buildBvhRecursive(prims, begin, mid);
-    const uint32_t rightIndex = buildBvhRecursive(prims, mid, end);
+    QBox3D box = ctx.outNodes[leftIndex].bbox;
+    box.unite(ctx.outNodes[rightIndex].bbox);
 
-    QBox3D box = m_bvhNodes[leftIndex].bbox;
-    box.unite(m_bvhNodes[rightIndex].bbox);
-
-    BvhNode& self = m_bvhNodes[selfIndex];
+    BvhNode& self = ctx.outNodes[selfIndex];
     self.bbox = box;
     self.left = leftIndex;
     self.right = rightIndex;
-    self.splitAxis = static_cast<uint8_t>(axis);
+    self.splitAxis = static_cast<uint8_t>(split.axis);
     self.isLeaf = false;
-    return selfIndex;
 }
 
-void cwGeometryItersecter::ensureBvh() const
+void cwGeometryItersecter::enumerateTrianglesChunk(const Object& object,
+                                                   const EnumChunk& chunk,
+                                                   QVector<BuildPrim>& prims)
 {
-    if (!m_bvhDirty) {
-        return;
+    const cwGeometry& geometry = object.geometry();
+    auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+    const QMatrix4x4& worldFromModel = object.modelMatrix();
+    const QVector<uint32_t>& indices = geometry.indices();
+
+    for (uint32_t i = 0; i < chunk.count; ++i) {
+        const uint32_t triIdx = chunk.inputBegin + i;
+        const uint32_t indexBase = triIdx * 3;
+        const QVector3D a = mapPoint(worldFromModel,
+            geometry.value<QVector3D>(positionAttribute, indices.at(indexBase + 0)));
+        const QVector3D b = mapPoint(worldFromModel,
+            geometry.value<QVector3D>(positionAttribute, indices.at(indexBase + 1)));
+        const QVector3D c = mapPoint(worldFromModel,
+            geometry.value<QVector3D>(positionAttribute, indices.at(indexBase + 2)));
+
+        BuildPrim& bp = prims[chunk.outBegin + i];
+        bp.prim.kind = Primitive::Kind::Triangle;
+        bp.prim.nodeIndex = chunk.nodeIndex;
+        bp.prim.primitiveIndex = indexBase;
+        bp.centroid = (a + b + c) * (1.0f / 3.0f);
     }
-    buildBvh();
 }
 
-void cwGeometryItersecter::buildBvh() const
+void cwGeometryItersecter::enumeratePointsChunk(const Object& object,
+                                                const EnumChunk& chunk,
+                                                QVector<BuildPrim>& prims)
 {
-    m_bvhNodes.clear();
-    m_primitives.clear();
-    m_bvhDirty = false;
+    const cwGeometry& geometry = object.geometry();
+    auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+    const QMatrix4x4& worldFromModel = object.modelMatrix();
+    const char* base = geometry.vertexData().constData() + positionAttribute->byteOffset;
+    const int stride = geometry.vertexStride();
 
-    // Gather every triangle and point primitive in world space. Lines stay
-    // out of the BVH — they're served by the linear nearestNeighbor path
-    // and have no real ray-segment math to accelerate.
-    QVector<BuildPrim> prims;
-    for (int n = 0; n < Nodes.size(); ++n) {
-        const Node& node = Nodes[n];
-        const cwGeometry& geometry = node.Object.geometry();
-        auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
-        if (positionAttribute == nullptr) {
-            continue;
-        }
+    for (uint32_t i = 0; i < chunk.count; ++i) {
+        const uint32_t vertIdx = chunk.inputBegin + i;
+        const float* p = reinterpret_cast<const float*>(base + vertIdx * stride);
+        const QVector3D centerWorld = mapPoint(worldFromModel,
+                                               QVector3D(p[0], p[1], p[2]));
 
-        const QMatrix4x4& worldFromModel = node.Object.modelMatrix();
-        const cwGeometry::Type type = geometry.type();
+        BuildPrim& bp = prims[chunk.outBegin + i];
+        bp.prim.kind = Primitive::Kind::Point;
+        bp.prim.nodeIndex = chunk.nodeIndex;
+        bp.prim.primitiveIndex = vertIdx;
+        bp.centroid = centerWorld;
+    }
+}
 
-        if (type == cwGeometry::Type::Triangles) {
-            const QVector<uint32_t>& indices = geometry.indices();
-            for (int i = 0; i + 2 < indices.size(); i += 3) {
-                const QVector3D a = mapPoint(worldFromModel,
-                    geometry.value<QVector3D>(positionAttribute, indices.at(i + 0)));
-                const QVector3D b = mapPoint(worldFromModel,
-                    geometry.value<QVector3D>(positionAttribute, indices.at(i + 1)));
-                const QVector3D c = mapPoint(worldFromModel,
-                    geometry.value<QVector3D>(positionAttribute, indices.at(i + 2)));
+void cwGeometryItersecter::scheduleBuild()
+{
+    m_bvhRestarter.restart([this]() { return launchBuildJob(); });
+}
 
-                BuildPrim bp;
-                bp.prim.kind = Primitive::Kind::Triangle;
-                bp.prim.nodeIndex = static_cast<uint32_t>(n);
-                bp.prim.primitiveIndex = static_cast<uint32_t>(i);
-                bp.centroid = (a + b + c) * (1.0f / 3.0f);
-                prims.append(bp);
-            }
-        } else if (type == cwGeometry::Type::Points) {
-            const float radius = node.Object.pickRadius();
-            if (radius <= 0.0f) {
+QFuture<void> cwGeometryItersecter::launchBuildJob()
+{
+    // Snapshot Nodes on the caller (UI) thread. QList is implicitly shared,
+    // so this is a cheap header copy; subsequent UI-side mutations branch
+    // to a fresh detach, leaving the worker's view stable.
+    auto snapshot = std::make_shared<QList<Node>>(Nodes);
+
+    // Worker writes its produced BvhData into a slot that survives even if
+    // `this` is destroyed mid-build. The .context(this) callback below
+    // installs it into m_bvh on the UI thread, and Qt's automatic
+    // disconnect on QObject destruction ensures we never touch `this` after
+    // it goes away.
+    auto resultSlot = std::make_shared<std::shared_ptr<BvhData>>();
+
+    QFuture<void> worker = cwConcurrent::run([snapshot, resultSlot](QPromise<void>& promise) {
+        // Count total primitives + plan Phase A chunks. Each EnumChunk maps
+        // to a contiguous slice of the final BuildPrim vector so workers
+        // can write without contention.
+        QVector<EnumChunk> chunks;
+        qsizetype totalPrims = 0;
+        const QList<Node>& nodes = *snapshot;
+        for (int n = 0; n < nodes.size(); ++n) {
+            const qsizetype primCount = countNodePrimitives(nodes[n].Object);
+            if (primCount <= 0) {
                 continue;
             }
-
-            const char* base = geometry.vertexData().constData() + positionAttribute->byteOffset;
-            const int stride = geometry.vertexStride();
-            const qsizetype vertexCount = geometry.vertexCount();
-
-            for (qsizetype i = 0; i < vertexCount; ++i) {
-                const float* p = reinterpret_cast<const float*>(base + i * stride);
-                const QVector3D centerWorld = mapPoint(worldFromModel,
-                                                       QVector3D(p[0], p[1], p[2]));
-
-                BuildPrim bp;
-                bp.prim.kind = Primitive::Kind::Point;
-                bp.prim.nodeIndex = static_cast<uint32_t>(n);
-                bp.prim.primitiveIndex = static_cast<uint32_t>(i);
-                bp.centroid = centerWorld;
-                prims.append(bp);
+            qsizetype filled = 0;
+            while (filled < primCount) {
+                const qsizetype take = std::min<qsizetype>(primCount - filled, kEnumChunkSize);
+                EnumChunk c;
+                c.nodeIndex = static_cast<uint32_t>(n);
+                c.inputBegin = static_cast<uint32_t>(filled);
+                c.count = static_cast<uint32_t>(take);
+                c.outBegin = static_cast<uint32_t>(totalPrims);
+                chunks.append(c);
+                filled += take;
+                totalPrims += take;
             }
         }
-    }
 
-    if (prims.isEmpty()) {
-        return;
-    }
+        if (promise.isCanceled()) {
+            return;
+        }
 
-    // Tight upper bound on a binary tree with N primitives at leaf size L:
-    // 2 * ceil(N/L) nodes. +1 to absorb the single-node degenerate case.
-    const qsizetype reserveCount =
-        2 * ((prims.size() + kBvhLeafSize - 1) / kBvhLeafSize) + 1;
-    m_bvhNodes.reserve(reserveCount);
-    buildBvhRecursive(prims, 0, prims.size());
+        // Range covers both phases: Phase A reports primitives-enumerated
+        // in [0, totalPrims], Phase B reports primitives-folded-into-leaves
+        // in [totalPrims, 2 * totalPrims]. The Phase B half is silent
+        // recursion work that would otherwise pin the bar at 100% while
+        // the user waits.
+        promise.setProgressRange(0, static_cast<int>(std::min<qsizetype>(2 * totalPrims, std::numeric_limits<int>::max())));
+        promise.setProgressValue(0);
 
-    m_primitives.resize(prims.size());
-    for (int i = 0; i < prims.size(); ++i) {
-        m_primitives[i] = prims[i].prim;
-    }
+        QVector<BuildPrim> prims;
+        prims.resize(totalPrims);
+
+        if (totalPrims > 0 && !chunks.isEmpty()) {
+            std::atomic<qsizetype> primsDone{0};
+
+            // Workers push their own progress when they finish a chunk —
+            // setProgressValue is thread-safe, so the orchestrator can
+            // just block on waitForFinished() without polling.
+            auto enumFuture = cwConcurrent::map(chunks, [snapshot, &prims, &primsDone, &promise](EnumChunk& chunk) {
+                if (promise.isCanceled()) {
+                    return;
+                }
+                const Node& node = (*snapshot)[chunk.nodeIndex];
+                const cwGeometry& geometry = node.Object.geometry();
+                if (geometry.attribute(cwGeometry::Semantic::Position) == nullptr) {
+                    return;
+                }
+
+                if (geometry.type() == cwGeometry::Type::Triangles) {
+                    enumerateTrianglesChunk(node.Object, chunk, prims);
+                } else if (geometry.type() == cwGeometry::Type::Points) {
+                    enumeratePointsChunk(node.Object, chunk, prims);
+                }
+
+                const qsizetype done = primsDone.fetch_add(chunk.count, std::memory_order_relaxed) + chunk.count;
+                promise.setProgressValue(static_cast<int>(
+                    std::min<qsizetype>(done, std::numeric_limits<int>::max())));
+            });
+
+            // Release our pool slot so mapped workers can't deadlock
+            // against us on small machines, then block on the inner
+            // future via its underlying condition variable.
+            QThreadPool* pool = cwTask::threadPool();
+            pool->releaseThread();
+            enumFuture.waitForFinished();
+            pool->reserveThread();
+        }
+
+        if (promise.isCanceled()) {
+            return;
+        }
+
+        // Phase B: parallel top-down median split.
+        //
+        // 1. Serial split splits the root range until we hit
+        //    kParallelFanoutDepth levels deep (or run out of primitives),
+        //    pre-claiming a slot for every node it touches. Each terminal
+        //    range gets recorded as a SubRange with a pre-claimed root
+        //    slot for the parallel pass.
+        //
+        // 2. Parallel pass: cwConcurrent::map runs buildBvhSubtree on
+        //    every SubRange. Subtree builders write to disjoint slot
+        //    ranges (each fetch_add'd from the same atomic), so the
+        //    pre-sized bvhNodes vector serves as a shared lock-free
+        //    output buffer — no contention.
+        //
+        // 3. Bottom-up bbox: the serial pass left upper inner-node
+        //    bboxes default. We walk the recorded upper-inner-node
+        //    slots in reverse pre-order and union each one from its
+        //    children's bboxes.
+        //
+        // 4. Truncate bvhNodes to the actual node count.
+        constexpr int kParallelFanoutDepth = 4;  // 2^4 = up to 16 subranges
+        QVector<BvhNode> bvhNodes;
+        if (!prims.isEmpty()) {
+            // Tight upper bound for median split with leaf threshold L:
+            // a split where both halves are leaves makes each half ~L/2,
+            // so worst-case leaf count is 2*ceil(N/L). Inner nodes add
+            // (leaves - 1), giving 4*ceil(N/L) - 1 total. Add slack for
+            // degenerate-centroid leaves that terminate early.
+            const qsizetype upperBoundCount =
+                4 * ((prims.size() + kBvhLeafSize - 1) / kBvhLeafSize) + 1;
+            // Pre-size (not just reserve) so concurrent writers can
+            // safely index into the vector. BvhNode is POD-ish; default
+            // construction is cheap.
+            bvhNodes.resize(upperBoundCount);
+
+            std::atomic<uint32_t> nextNode{0};
+            QVector<SubRange> subRanges;
+            QVector<uint32_t> upperInnerNodes;
+
+            BuildContext serialCtx{*snapshot, prims, bvhNodes, nextNode, nullptr};
+            serialSplitToFanout(serialCtx, 0, prims.size(),
+                                kParallelFanoutDepth,
+                                subRanges, upperInnerNodes);
+
+            if (promise.isCanceled()) {
+                return;
+            }
+
+            if (!subRanges.isEmpty()) {
+                std::atomic<qsizetype> phaseBPrims{0};
+                BuildContext parallelCtx{*snapshot, prims, bvhNodes, nextNode, &phaseBPrims};
+
+                auto buildFuture = cwConcurrent::map(subRanges,
+                    [&parallelCtx, &phaseBPrims, &promise, totalPrims](SubRange& r) {
+                        if (promise.isCanceled()) {
+                            return;
+                        }
+                        buildBvhSubtree(parallelCtx, r.begin, r.end, r.rootSlot);
+                        // Push progress once per subtree: ~16 updates across
+                        // Phase B, which is plenty for a visibly-moving bar
+                        // and avoids serializing on the QPromise mutex from
+                        // deep inside the recursion.
+                        promise.setProgressValue(static_cast<int>(
+                            std::min<qsizetype>(totalPrims + phaseBPrims.load(std::memory_order_relaxed),
+                                                std::numeric_limits<int>::max())));
+                    });
+
+                QThreadPool* pool = cwTask::threadPool();
+                pool->releaseThread();
+                buildFuture.waitForFinished();
+                pool->reserveThread();
+            }
+
+            // Bottom-up bbox pass. upperInnerNodes is in pre-order, so
+            // reverse iteration visits children before parents (parent's
+            // selfIndex was fetch_add'd before its children's).
+            for (int i = upperInnerNodes.size() - 1; i >= 0; --i) {
+                const uint32_t slot = upperInnerNodes[i];
+                BvhNode& self = bvhNodes[slot];
+                QBox3D box = bvhNodes[self.left].bbox;
+                box.unite(bvhNodes[self.right].bbox);
+                self.bbox = box;
+            }
+
+            bvhNodes.resize(nextNode.load(std::memory_order_relaxed));
+        }
+
+        if (promise.isCanceled()) {
+            return;
+        }
+
+        auto out = std::make_shared<BvhData>();
+        out->nodesSnapshot = snapshot;
+        out->bvhNodes = std::move(bvhNodes);
+        out->primitives.resize(prims.size());
+        for (qsizetype i = 0; i < prims.size(); ++i) {
+            out->primitives[i] = prims[i].prim;
+        }
+        *resultSlot = std::move(out);
+    });
+
+    // Install the freshly built BVH on the UI thread. .context(this, ...)
+    // is auto-disconnected by Qt when `this` is destroyed, so the lambda
+    // never fires after destruction.
+    AsyncFuture::observe(worker).context(this, [this, resultSlot]() {
+        if (*resultSlot) {
+            std::atomic_store(&m_bvh, *resultSlot);
+            emit bvhReady();
+        }
+    });
+
+    return worker;
 }
 
 cwRayHit cwGeometryItersecter::rayTriangleMT(const QRay3D &rayModel,

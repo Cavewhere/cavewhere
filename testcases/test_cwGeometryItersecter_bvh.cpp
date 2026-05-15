@@ -75,6 +75,7 @@ TEST_CASE("BVH rebuilds after mutation", "[cwGeometryItersecter][bvh]")
 
     // Start with one point at z=0
     intersector.addObject(makePointObject(1, {QVector3D(0.0f, 0.0f, 0.0f)}));
+    intersector.waitForFinish();
     {
         const cwRayHit hit = intersector.intersectsDetailed(ray);
         REQUIRE(hit.hit());
@@ -83,6 +84,7 @@ TEST_CASE("BVH rebuilds after mutation", "[cwGeometryItersecter][bvh]")
 
     // Add a closer point at z=50 — BVH must rebuild and prefer the closer one
     intersector.addObject(makePointObject(2, {QVector3D(0.0f, 0.0f, 50.0f)}));
+    intersector.waitForFinish();
     {
         const cwRayHit hit = intersector.intersectsDetailed(ray);
         REQUIRE(hit.hit());
@@ -91,6 +93,7 @@ TEST_CASE("BVH rebuilds after mutation", "[cwGeometryItersecter][bvh]")
 
     // Remove the closer point — BVH must rebuild and the farther one wins again
     intersector.removeObject(nullptr, 2);
+    intersector.waitForFinish();
     {
         const cwRayHit hit = intersector.intersectsDetailed(ray);
         REQUIRE(hit.hit());
@@ -99,6 +102,7 @@ TEST_CASE("BVH rebuilds after mutation", "[cwGeometryItersecter][bvh]")
 
     // Remove everything — no hit at all
     intersector.removeObject(nullptr, 1);
+    intersector.waitForFinish();
     {
         const cwRayHit hit = intersector.intersectsDetailed(ray);
         REQUIRE_FALSE(hit.hit());
@@ -114,6 +118,7 @@ TEST_CASE("BVH rebuilds after setModelMatrix", "[cwGeometryItersecter][bvh]")
 
     // Point at model origin, no transform — sits at world z=0
     intersector.addObject(makePointObject(1, {QVector3D(0.0f, 0.0f, 0.0f)}));
+    intersector.waitForFinish();
     {
         const cwRayHit hit = intersector.intersectsDetailed(ray);
         REQUIRE(hit.hit());
@@ -124,6 +129,7 @@ TEST_CASE("BVH rebuilds after setModelMatrix", "[cwGeometryItersecter][bvh]")
     QMatrix4x4 m;
     m.translate(0.0f, 0.0f, 20.0f);
     intersector.setModelMatrix(nullptr, 1, m);
+    intersector.waitForFinish();
     {
         const cwRayHit hit = intersector.intersectsDetailed(ray);
         REQUIRE(hit.hit());
@@ -152,6 +158,7 @@ TEST_CASE("BVH finds closest hit across many primitives", "[cwGeometryItersecter
 
     cwGeometryItersecter intersector;
     intersector.addObject(makePointObject(1, points));
+    intersector.waitForFinish();
 
     const cwRayHit hit = intersector.intersectsDetailed(ray);
     REQUIRE(hit.hit());
@@ -175,6 +182,7 @@ TEST_CASE("BVH returns closest across mixed triangle + point primitives", "[cwGe
 
     // Add a single point closer than every triangle.
     intersector.addObject(makePointObject(100, {QVector3D(0.0f, 0.0f, 50.0f)}));
+    intersector.waitForFinish();
 
     const cwRayHit hit = intersector.intersectsDetailed(ray);
     REQUIRE(hit.hit());
@@ -182,6 +190,7 @@ TEST_CASE("BVH returns closest across mixed triangle + point primitives", "[cwGe
 
     // Remove the point — the closest triangle (z=9, id=10) should win.
     intersector.removeObject(nullptr, 100);
+    intersector.waitForFinish();
     const cwRayHit hit2 = intersector.intersectsDetailed(ray);
     REQUIRE(hit2.hit());
     REQUIRE(hit2.objectId() == 10u);
@@ -209,6 +218,7 @@ TEST_CASE("BVH perf smoke: 100k random points pickable quickly", "[cwGeometryIte
 
     cwGeometryItersecter intersector;
     intersector.addObject(makePointObject(1, points, QMatrix4x4(), 0.5f));
+    intersector.waitForFinish();
 
     const QRay3D ray(QVector3D(50.0f, 50.0f, 200.0f),
                      QVector3D(0.0f, 0.0f, -1.0f));

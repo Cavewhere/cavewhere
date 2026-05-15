@@ -27,6 +27,18 @@ public:
         return QtConcurrent::mapped(cwTask::threadPool(), sequence, map);
     }
 
+    // Fire-and-forget parallel iteration: like mapped() but the functor
+    // returns void and the future is QFuture<void>. Callers that only need
+    // to side-effect (fill a shared buffer, push progress, etc.) should
+    // prefer this over mapped() to avoid storing dummy result values.
+    template <typename Sequence, typename MapFunctor>
+    static auto map(
+        Sequence &&sequence,
+        MapFunctor &&map)
+    {
+        return QtConcurrent::map(cwTask::threadPool(), sequence, map);
+    }
+
 
     // static void startThreadPool() {
     //     //I'm not sure if these ratios are the best
