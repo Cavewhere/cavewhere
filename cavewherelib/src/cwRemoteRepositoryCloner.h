@@ -35,8 +35,6 @@ private:
     Q_PROPERTY(QString pendingCloneDir READ pendingCloneDir NOTIFY pendingCloneDirChanged)
     Q_PROPERTY(CloneErrorKind cloneErrorKind READ cloneErrorKind NOTIFY cloneErrorKindChanged)
     Q_PROPERTY(QString cloneErrorFriendlyMessage READ cloneErrorFriendlyMessage NOTIFY cloneErrorFriendlyMessageChanged)
-    // Deprecated compat shim: prefer cloneErrorKind === RemoteRepositoryCloner.Auth.
-    Q_PROPERTY(bool cloneFailedDueToAuthError READ cloneFailedDueToAuthError NOTIFY cloneFailedDueToAuthErrorChanged)
     Q_PROPERTY(cwRecentProjectModel* recentProjectModel READ recentProjectModel WRITE setRecentProjectModel REQUIRED)
     Q_PROPERTY(QQuickGit::GitFutureWatcher* cloneWatcher READ cloneWatcher WRITE setCloneWatcher REQUIRED)
     Q_PROPERTY(QQuickGit::Account* account READ account WRITE setAccount NOTIFY accountChanged)
@@ -50,7 +48,6 @@ public:
     QString pendingCloneDir() const { return m_pendingCloneDir; }
     CloneErrorKind cloneErrorKind() const { return m_cloneErrorKind; }
     QString cloneErrorFriendlyMessage() const { return m_cloneErrorFriendlyMessage; }
-    bool cloneFailedDueToAuthError() const { return m_cloneErrorKind == Auth; }
 
     cwRecentProjectModel* recentProjectModel() const { return m_recentProjectModel; }
     void setRecentProjectModel(cwRecentProjectModel* recentProjectModel);
@@ -81,7 +78,6 @@ signals:
     void pendingCloneDirChanged();
     void cloneErrorKindChanged();
     void cloneErrorFriendlyMessageChanged();
-    void cloneFailedDueToAuthErrorChanged();
     void accountChanged();
     void gitHubIntegrationChanged();
     void repositoryCloned(QString repositoryPath);

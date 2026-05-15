@@ -13,13 +13,10 @@ ColumnLayout {
     // URL to clone — set by the parent (text field or deep link)
     property string urlText
 
-    // Auth-error message — callers can override for their context
-    property string authErrorMessage: qsTr("Select a GitHub account to clone from GitHub.")
-
     property url selectedDestinationFolder: ""
 
     readonly property bool isCloning: cloneWatcherId.state === GitFutureWatcher.Loading
-    readonly property bool cloneFailedDueToAuthError: clonerId.cloneFailedDueToAuthError
+    readonly property int cloneErrorKind: clonerId.cloneErrorKind
 
     // Emitted after clone succeeds with the path of the cloned project file.
     // The caller is responsible for asking to save the current project and then loading the file.
@@ -135,8 +132,23 @@ ColumnLayout {
         ErrorHelpArea {
             objectName: "remoteCloneErrorArea"
             Layout.fillWidth: true
-            text: clonerId.cloneFailedDueToAuthError ? root.authErrorMessage : clonerId.cloneErrorMessage
-            visible: clonerId.cloneErrorMessage.length > 0
+            text: clonerId.cloneErrorFriendlyMessage.length > 0
+                  ? clonerId.cloneErrorFriendlyMessage
+                  : clonerId.cloneErrorMessage
+            visible: clonerId.cloneErrorKind !== RemoteRepositoryCloner.None
+
+            onLinkActivated: function(link) { Qt.openUrlExternally(link) }
+        }
+
+        QC.Label {
+            objectName: "remoteCloneErrorDetails"
+            Layout.fillWidth: true
+            visible: clonerId.cloneErrorFriendlyMessage.length > 0
+                     && clonerId.cloneErrorMessage.length > 0
+            text: qsTr("Details: %1").arg(clonerId.cloneErrorMessage)
+            color: Theme.textSubtle
+            font.pixelSize: Theme.fontSizeSmall
+            wrapMode: QC.Label.WrapAtWordBoundaryOrAnywhere
         }
     }
 }

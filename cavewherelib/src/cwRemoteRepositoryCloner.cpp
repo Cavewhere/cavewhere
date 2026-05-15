@@ -259,7 +259,6 @@ void cwRemoteRepositoryCloner::setCloneErrorKind(CloneErrorKind kind)
     }
     m_cloneErrorKind = kind;
     emit cloneErrorKindChanged();
-    emit cloneFailedDueToAuthErrorChanged();
 }
 
 void cwRemoteRepositoryCloner::setCloneErrorFriendlyMessage(const QString& message)

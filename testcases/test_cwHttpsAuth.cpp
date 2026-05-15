@@ -173,16 +173,16 @@ TEST_CASE("cwRemoteRepositoryCloner::setGitHubIntegration emits signal and wires
 }
 
 // -----------------------------------------------------------------------
-// cwRemoteRepositoryCloner::cloneFailedDueToAuthError
+// cwRemoteRepositoryCloner::cloneErrorKind (Auth-specific behavior)
 // -----------------------------------------------------------------------
 
-TEST_CASE("cloneFailedDueToAuthError is false by default", "[cwHttpsAuth]")
+TEST_CASE("cloneErrorKind is None by default", "[cwHttpsAuth]")
 {
     cwRemoteRepositoryCloner cloner;
-    CHECK_FALSE(cloner.cloneFailedDueToAuthError());
+    CHECK(cloner.cloneErrorKind() == cwRemoteRepositoryCloner::None);
 }
 
-TEST_CASE("cloneFailedDueToAuthError becomes true when clone fails with HttpAuthFailed", "[cwHttpsAuth]")
+TEST_CASE("cloneErrorKind becomes Auth when clone fails with HttpAuthFailed", "[cwHttpsAuth]")
 {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -195,7 +195,7 @@ TEST_CASE("cloneFailedDueToAuthError becomes true when clone fails with HttpAuth
     cloner.setRecentProjectModel(&recentProjectModel);
     cloner.setCloneWatcher(&watcher);
 
-    QSignalSpy authSpy(&cloner, &cwRemoteRepositoryCloner::cloneFailedDueToAuthErrorChanged);
+    QSignalSpy kindSpy(&cloner, &cwRemoteRepositoryCloner::cloneErrorKindChanged);
 
     // Simulate a clone failure with the HttpAuthFailed error code via a pre-completed future.
     auto errorFuture = AsyncFuture::completed(
@@ -204,13 +204,13 @@ TEST_CASE("cloneFailedDueToAuthError becomes true when clone fails with HttpAuth
     watcher.setFuture(errorFuture);
 
     // Allow the async callback in AbstractResultFutureWatcher to fire.
-    authSpy.wait(1000);
+    kindSpy.wait(1000);
 
-    CHECK(cloner.cloneFailedDueToAuthError());
-    CHECK(authSpy.count() == 1);
+    CHECK(cloner.cloneErrorKind() == cwRemoteRepositoryCloner::Auth);
+    CHECK(kindSpy.count() == 1);
 }
 
-TEST_CASE("cloneFailedDueToAuthError is false for non-auth clone failures", "[cwHttpsAuth]")
+TEST_CASE("cloneErrorKind is not Auth for non-auth clone failures", "[cwHttpsAuth]")
 {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -231,10 +231,10 @@ TEST_CASE("cloneFailedDueToAuthError is false for non-auth clone failures", "[cw
     QSignalSpy stateSpy(&watcher, &QQuickGit::GitFutureWatcher::stateChanged);
     stateSpy.wait(1000);
 
-    CHECK_FALSE(cloner.cloneFailedDueToAuthError());
+    CHECK(cloner.cloneErrorKind() != cwRemoteRepositoryCloner::Auth);
 }
 
-TEST_CASE("cloneFailedDueToAuthError clears when a new clone starts", "[cwHttpsAuth]")
+TEST_CASE("cloneErrorKind resets to None when a new clone starts", "[cwHttpsAuth]")
 {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -247,19 +247,19 @@ TEST_CASE("cloneFailedDueToAuthError clears when a new clone starts", "[cwHttpsA
     cloner.setRecentProjectModel(&recentProjectModel);
     cloner.setCloneWatcher(&watcher);
 
-    // Put the cloner into the auth-error state.
+    // Put the cloner into the Auth state.
     auto errorFuture = AsyncFuture::completed(
         Monad::ResultBase(QStringLiteral("401 Unauthorized: no access token"),
                           static_cast<int>(QQuickGit::GitRepository::GitErrorCode::HttpAuthFailed)));
     watcher.setFuture(errorFuture);
 
-    QSignalSpy authSpy(&cloner, &cwRemoteRepositoryCloner::cloneFailedDueToAuthErrorChanged);
-    authSpy.wait(1000);
-    REQUIRE(cloner.cloneFailedDueToAuthError());
+    QSignalSpy kindSpy(&cloner, &cwRemoteRepositoryCloner::cloneErrorKindChanged);
+    kindSpy.wait(1000);
+    REQUIRE(cloner.cloneErrorKind() == cwRemoteRepositoryCloner::Auth);
 
-    // Starting a new clone must clear the flag immediately (before the future completes).
+    // Starting a new clone must reset the kind immediately (before the future completes).
     cloner.clone(QStringLiteral("https://github.com/Cavewhere/fake-repo.git"));
-    CHECK_FALSE(cloner.cloneFailedDueToAuthError());
+    CHECK(cloner.cloneErrorKind() == cwRemoteRepositoryCloner::None);
 }
 
 // -----------------------------------------------------------------------

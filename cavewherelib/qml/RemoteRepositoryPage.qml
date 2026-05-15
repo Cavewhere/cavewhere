@@ -143,7 +143,6 @@ StandardPage {
                     id: cloneAreaId
                     Layout.fillWidth: true
                     urlText: manualUrlField.textField.text
-                    authErrorMessage: qsTr("Select a GitHub account below to clone from GitHub.")
                     onReadyToOpen: function(filePath) {
                         function loadAndView() {
                             RootData.loadProject(filePath)
