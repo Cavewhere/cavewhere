@@ -11,6 +11,7 @@
 #include "cwRenderObject.h"
 
 //Std limits
+#include <algorithm>
 #include <limits>
 #include <math.h>
 
@@ -18,6 +19,7 @@
 #include <QtNumeric>
 #include <QPlane3D>
 #include <QSphere3D>
+#include <QVarLengthArray>
 
 namespace {
     // Multiplier applied to a point's pickRadius when expanding the cloud's
@@ -73,6 +75,7 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
 {
     if(parentObject == nullptr) {
         Nodes.clear();
+        markBvhDirty();
         return;
     }
 
@@ -85,6 +88,7 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
             iter++;
         }
     }
+    markBvhDirty();
 }
 
 /**
@@ -104,6 +108,7 @@ void cwGeometryItersecter::removeObject(const Key &objectKey)
     auto iter = findNode(objectKey);
     if (iter != Nodes.end()) {
         Nodes.erase(iter);
+        markBvhDirty();
     }
 }
 
@@ -117,6 +122,7 @@ void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4
     auto iter = findNode(objectKey);
     if (iter != Nodes.end()) {
         iter->Object.setModelMatrix(modelMatrix);
+        markBvhDirty();
     }
 }
 
@@ -209,6 +215,7 @@ void cwGeometryItersecter::addTriangles(const cwGeometryItersecter::Object &obje
     }
 
     Nodes.append(Node(box, object));
+    markBvhDirty();
 }
 
 /**
@@ -238,6 +245,7 @@ void cwGeometryItersecter::addLines(const cwGeometryItersecter::Object &object)
             Nodes.append(node);
         }
     }
+    markBvhDirty();
 }
 
 /**
@@ -277,6 +285,7 @@ void cwGeometryItersecter::addPoints(const cwGeometryItersecter::Object &object)
     const QVector3D padVec(pad, pad, pad);
 
     Nodes.append(Node(QBox3D(box.minimum() - padVec, box.maximum() + padVec), object));
+    markBvhDirty();
 }
 
 
@@ -336,59 +345,306 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
 {
     cwRayHit best;
 
-    for (const Node& node : Nodes) {
-        if (!isPickable(node.Object)) {
+    ensureBvh();
+    if (m_bvhNodes.isEmpty()) {
+        return best;
+    }
+
+    // Stack-based traversal with near-first child ordering. 64 is plenty for
+    // realistic BVH depths (~log2 of primitive count, well under 30 for 1M).
+    QVarLengthArray<uint32_t, 64> stack;
+    stack.append(0);
+
+    while (!stack.isEmpty()) {
+        const uint32_t idx = stack.last();
+        stack.removeLast();
+
+        const BvhNode& bn = m_bvhNodes[idx];
+
+        // Box reject: skip if ray misses the AABB or the entry t is already
+        // farther than our current best hit (closest-wins early exit).
+        const double tBox = bn.bbox.intersection(ray);
+        if (qIsNaN(tBox)) {
+            continue;
+        }
+        if (best.hit() && tBox >= best.tWorld()) {
             continue;
         }
 
-        const cwGeometry::Type type = node.Object.geometry().type();
-        if (type != cwGeometry::Type::Triangles && type != cwGeometry::Type::Points) {
+        if (bn.isLeaf) {
+            const uint32_t first = bn.left;
+            const uint32_t count = bn.right;
+            for (uint32_t p = first; p < first + count; ++p) {
+                testPrimitive(m_primitives[p], ray, best);
+            }
+        } else {
+            uint32_t nearChild = bn.left;
+            uint32_t farChild = bn.right;
+            if (ray.direction()[bn.splitAxis] < 0.0f) {
+                std::swap(nearChild, farChild);
+            }
+            // Push far first so near pops first.
+            stack.append(farChild);
+            stack.append(nearChild);
+        }
+    }
+
+    return best;
+}
+
+void cwGeometryItersecter::testPrimitive(const Primitive& prim,
+                                         const QRay3D& ray,
+                                         cwRayHit& best) const
+{
+    const Node& node = Nodes[prim.nodeIndex];
+    if (!isPickable(node.Object)) {
+        return;
+    }
+
+    const QMatrix4x4& worldFromModel = node.Object.modelMatrix();
+    const QRay3D rayModel = transformRayToModel(worldFromModel, ray);
+    const cwGeometry& geometry = node.Object.geometry();
+    auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+    Q_ASSERT(positionAttribute);
+
+    if (prim.kind == Primitive::Kind::Triangle) {
+        const QVector<uint32_t>& indices = geometry.indices();
+        const int i = static_cast<int>(prim.primitiveIndex);
+        const QVector3D a = geometry.value<QVector3D>(positionAttribute, indices.at(i + 0));
+        const QVector3D b = geometry.value<QVector3D>(positionAttribute, indices.at(i + 1));
+        const QVector3D c = geometry.value<QVector3D>(positionAttribute, indices.at(i + 2));
+
+        cwRayHit local = rayTriangleMT(rayModel, a, b, c, geometry.cullBackfaces());
+        if (!local.hit()) {
+            return;
+        }
+
+        const QVector3D pWorld = mapPoint(worldFromModel, local.pointModel());
+        const QVector3D nWorld = transformNormalToWorld(worldFromModel, local.normalModel());
+        const double tWorld = ray.projectedDistance(pWorld);
+
+        if (tWorld > 0.0 && (!best.hit() || tWorld < best.tWorld())) {
+            best = local;
+            best.m_hit = true;
+            best.m_pointWorld = pWorld;
+            best.m_normalWorld = nWorld;
+            best.m_tWorld = tWorld;
+            best.m_object = node.Object.parent();
+            best.m_objectId = node.Object.id();
+            best.m_firstIndex = i;
+        }
+        return;
+    }
+
+    // Point primitive — ray-vs-sphere using the Object's pickRadius.
+    const float radius = node.Object.pickRadius();
+    if (radius <= 0.0f) {
+        return;
+    }
+
+    const char* base = geometry.vertexData().constData() + positionAttribute->byteOffset;
+    const int stride = geometry.vertexStride();
+    const float* p = reinterpret_cast<const float*>(base + prim.primitiveIndex * stride);
+    const QVector3D center(p[0], p[1], p[2]);
+
+    float tNear = 0.0f;
+    float tFar = 0.0f;
+    if (!QSphere3D(center, radius).intersection(rayModel, &tNear, &tFar)) {
+        return;
+    }
+    if (tNear <= 0.0f) {
+        // Ray points away from sphere, or origin sits inside it.
+        return;
+    }
+
+    const QVector3D pWorld = mapPoint(worldFromModel, center);
+    const double tWorld = ray.projectedDistance(pWorld);
+    if (tWorld <= 0.0 || (best.hit() && tWorld >= best.tWorld())) {
+        return;
+    }
+
+    best.m_hit = true;
+    best.m_tModel = tNear;
+    best.m_u = std::numeric_limits<float>::quiet_NaN();
+    best.m_v = std::numeric_limits<float>::quiet_NaN();
+    best.m_pointModel = center;
+    best.m_normalModel = -rayModel.direction().normalized();
+    best.m_pointWorld = pWorld;
+    best.m_normalWorld = -ray.direction().normalized();
+    best.m_tWorld = tWorld;
+    best.m_object = node.Object.parent();
+    best.m_objectId = node.Object.id();
+    best.m_firstIndex = static_cast<int>(prim.primitiveIndex);
+}
+
+// Per-primitive work item carried only during the build. Holds just the
+// centroid (for median split) and the final primitive handle (for emission
+// into m_primitives). The per-primitive AABB is *not* stored — it's
+// re-derived from geometry at leaf creation. At 100M points this is the
+// difference between a ~5 GB and a ~2.5 GB build-time temporary.
+struct cwGeometryItersecter::BuildPrim {
+    QVector3D centroid;
+    cwGeometryItersecter::Primitive prim;
+};
+
+namespace {
+    // Leaf threshold — the largest count of primitives we'll let stop
+    // subdivision. Bigger leaves trade a slightly longer per-leaf linear
+    // scan for far fewer BVH nodes. 16 keeps BVH overhead at ~N/8 nodes,
+    // which is the difference between a 100M-point LAZ fitting in RAM and
+    // not.
+    constexpr int kBvhLeafSize = 16;
+}
+
+QBox3D cwGeometryItersecter::primitiveWorldBox(const Primitive& prim) const
+{
+    const Node& node = Nodes[prim.nodeIndex];
+    const cwGeometry& geometry = node.Object.geometry();
+    const QMatrix4x4& worldFromModel = node.Object.modelMatrix();
+    auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+    Q_ASSERT(positionAttribute);
+
+    if (prim.kind == Primitive::Kind::Triangle) {
+        const QVector<uint32_t>& indices = geometry.indices();
+        const QVector3D a = mapPoint(worldFromModel,
+            geometry.value<QVector3D>(positionAttribute, indices.at(prim.primitiveIndex + 0)));
+        const QVector3D b = mapPoint(worldFromModel,
+            geometry.value<QVector3D>(positionAttribute, indices.at(prim.primitiveIndex + 1)));
+        const QVector3D c = mapPoint(worldFromModel,
+            geometry.value<QVector3D>(positionAttribute, indices.at(prim.primitiveIndex + 2)));
+        return Node::triangleToBoundingBox(a, b, c);
+    }
+
+    // Point primitive — pad the vertex by pickRadius on each axis.
+    const char* base = geometry.vertexData().constData() + positionAttribute->byteOffset;
+    const int stride = geometry.vertexStride();
+    const float* p = reinterpret_cast<const float*>(base + prim.primitiveIndex * stride);
+    const QVector3D centerWorld = mapPoint(worldFromModel, QVector3D(p[0], p[1], p[2]));
+    const float radius = node.Object.pickRadius();
+    const QVector3D padVec(radius, radius, radius);
+    return QBox3D(centerWorld - padVec, centerWorld + padVec);
+}
+
+// Median-split build over [begin, end). Returns the index of the freshly
+// appended BVH node. Children are emitted depth-first, so the serialized
+// layout puts each subtree contiguously after its root. Inner node boxes
+// are derived from their children's boxes after recursion returns, which
+// lets us skip storing a per-primitive AABB in BuildPrim.
+uint32_t cwGeometryItersecter::buildBvhRecursive(QVector<BuildPrim>& prims,
+                                                 int begin,
+                                                 int end) const
+{
+    const uint32_t selfIndex = static_cast<uint32_t>(m_bvhNodes.size());
+    m_bvhNodes.append(BvhNode{});
+
+    const int count = end - begin;
+
+    auto makeLeaf = [&]() {
+        QBox3D box;
+        for (int i = begin; i < end; ++i) {
+            box.unite(primitiveWorldBox(prims[i].prim));
+        }
+        BvhNode& self = m_bvhNodes[selfIndex];
+        self.bbox = box;
+        self.left = static_cast<uint32_t>(begin);
+        self.right = static_cast<uint32_t>(count);
+        self.isLeaf = true;
+        return selfIndex;
+    };
+
+    if (count <= kBvhLeafSize) {
+        return makeLeaf();
+    }
+
+    QBox3D centroidBox;
+    for (int i = begin; i < end; ++i) {
+        centroidBox.unite(prims[i].centroid);
+    }
+    const QVector3D extent = centroidBox.maximum() - centroidBox.minimum();
+    int axis = 0;
+    if (extent.y() > extent.x()) {
+        axis = 1;
+    }
+    if (extent.z() > extent[axis]) {
+        axis = 2;
+    }
+
+    // Degenerate centroid bounds — every primitive lies on the split axis.
+    // Fall back to a leaf to avoid infinite recursion.
+    if (extent[axis] <= 0.0f) {
+        return makeLeaf();
+    }
+
+    const int mid = (begin + end) / 2;
+    std::nth_element(prims.begin() + begin,
+                     prims.begin() + mid,
+                     prims.begin() + end,
+                     [axis](const BuildPrim& a, const BuildPrim& b) {
+                         return a.centroid[axis] < b.centroid[axis];
+                     });
+
+    const uint32_t leftIndex = buildBvhRecursive(prims, begin, mid);
+    const uint32_t rightIndex = buildBvhRecursive(prims, mid, end);
+
+    QBox3D box = m_bvhNodes[leftIndex].bbox;
+    box.unite(m_bvhNodes[rightIndex].bbox);
+
+    BvhNode& self = m_bvhNodes[selfIndex];
+    self.bbox = box;
+    self.left = leftIndex;
+    self.right = rightIndex;
+    self.splitAxis = static_cast<uint8_t>(axis);
+    self.isLeaf = false;
+    return selfIndex;
+}
+
+void cwGeometryItersecter::ensureBvh() const
+{
+    if (!m_bvhDirty) {
+        return;
+    }
+    buildBvh();
+}
+
+void cwGeometryItersecter::buildBvh() const
+{
+    m_bvhNodes.clear();
+    m_primitives.clear();
+    m_bvhDirty = false;
+
+    // Gather every triangle and point primitive in world space. Lines stay
+    // out of the BVH — they're served by the linear nearestNeighbor path
+    // and have no real ray-segment math to accelerate.
+    QVector<BuildPrim> prims;
+    for (int n = 0; n < Nodes.size(); ++n) {
+        const Node& node = Nodes[n];
+        const cwGeometry& geometry = node.Object.geometry();
+        auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+        if (positionAttribute == nullptr) {
             continue;
         }
 
         const QMatrix4x4& worldFromModel = node.Object.modelMatrix();
-        const QRay3D rayModel = transformRayToModel(worldFromModel, ray);
-
-        // Optional broad-phase: skip whole object if its model-space AABB misses
-        if (qIsNaN(node.BoundingBox.intersection(rayModel))) {
-            continue;
-        }
-
-        const cwGeometry& geometry = node.Object.geometry();
-
-        auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
-        Q_ASSERT(positionAttribute);
+        const cwGeometry::Type type = geometry.type();
 
         if (type == cwGeometry::Type::Triangles) {
             const QVector<uint32_t>& indices = geometry.indices();
+            for (int i = 0; i + 2 < indices.size(); i += 3) {
+                const QVector3D a = mapPoint(worldFromModel,
+                    geometry.value<QVector3D>(positionAttribute, indices.at(i + 0)));
+                const QVector3D b = mapPoint(worldFromModel,
+                    geometry.value<QVector3D>(positionAttribute, indices.at(i + 1)));
+                const QVector3D c = mapPoint(worldFromModel,
+                    geometry.value<QVector3D>(positionAttribute, indices.at(i + 2)));
 
-            for (int i = 0; i < indices.size(); i += 3) {
-                const QVector3D a = geometry.value<QVector3D>(positionAttribute, indices.at(i + 0));
-                const QVector3D b = geometry.value<QVector3D>(positionAttribute, indices.at(i + 1));
-                const QVector3D c = geometry.value<QVector3D>(positionAttribute, indices.at(i + 2));
-
-                cwRayHit local = rayTriangleMT(rayModel, a, b, c, node.Object.geometry().cullBackfaces());
-                if (!local.hit()) {
-                    continue;
-                }
-
-                const QVector3D pWorld = mapPoint(worldFromModel, local.pointModel());
-                const QVector3D nWorld = transformNormalToWorld(worldFromModel, local.normalModel());
-                const double tWorld = ray.projectedDistance(pWorld);
-
-                if (tWorld > 0.0 && (!best.hit() || tWorld < best.tWorld())) {
-                    best = local;
-                    best.m_hit = true;
-                    best.m_pointWorld = pWorld;
-                    best.m_normalWorld = nWorld;
-                    best.m_tWorld = tWorld;
-                    best.m_object = node.Object.parent();
-                    best.m_objectId = node.Object.id();
-                    best.m_firstIndex = i;
-                }
+                BuildPrim bp;
+                bp.prim.kind = Primitive::Kind::Triangle;
+                bp.prim.nodeIndex = static_cast<uint32_t>(n);
+                bp.prim.primitiveIndex = static_cast<uint32_t>(i);
+                bp.centroid = (a + b + c) * (1.0f / 3.0f);
+                prims.append(bp);
             }
-        } else {
-            // Type::Points — ray-vs-sphere per vertex, closest hit (near root) wins.
+        } else if (type == cwGeometry::Type::Points) {
             const float radius = node.Object.pickRadius();
             if (radius <= 0.0f) {
                 continue;
@@ -396,48 +652,38 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
 
             const char* base = geometry.vertexData().constData() + positionAttribute->byteOffset;
             const int stride = geometry.vertexStride();
-            const QVector3D worldNormal = -ray.direction().normalized();
-            const QVector3D modelNormal = -rayModel.direction().normalized();
-
             const qsizetype vertexCount = geometry.vertexCount();
+
             for (qsizetype i = 0; i < vertexCount; ++i) {
                 const float* p = reinterpret_cast<const float*>(base + i * stride);
-                const QVector3D center(p[0], p[1], p[2]);
+                const QVector3D centerWorld = mapPoint(worldFromModel,
+                                                       QVector3D(p[0], p[1], p[2]));
 
-                float tNear = 0.0f;
-                float tFar = 0.0f;
-                if (!QSphere3D(center, radius).intersection(rayModel, &tNear, &tFar)) {
-                    continue;
-                }
-                if (tNear <= 0.0f) {
-                    // Ray points away from the sphere, or origin sits inside
-                    // it — skip rather than report a back-face hit.
-                    continue;
-                }
-
-                const QVector3D pWorld = mapPoint(worldFromModel, center);
-                const double tWorld = ray.projectedDistance(pWorld);
-                if (tWorld <= 0.0 || (best.hit() && tWorld >= best.tWorld())) {
-                    continue;
-                }
-
-                best.m_hit = true;
-                best.m_tModel = tNear;
-                best.m_u = std::numeric_limits<float>::quiet_NaN();
-                best.m_v = std::numeric_limits<float>::quiet_NaN();
-                best.m_pointModel = center;
-                best.m_normalModel = modelNormal;
-                best.m_pointWorld = pWorld;
-                best.m_normalWorld = worldNormal;
-                best.m_tWorld = tWorld;
-                best.m_object = node.Object.parent();
-                best.m_objectId = node.Object.id();
-                best.m_firstIndex = static_cast<int>(i);
+                BuildPrim bp;
+                bp.prim.kind = Primitive::Kind::Point;
+                bp.prim.nodeIndex = static_cast<uint32_t>(n);
+                bp.prim.primitiveIndex = static_cast<uint32_t>(i);
+                bp.centroid = centerWorld;
+                prims.append(bp);
             }
         }
     }
 
-    return best;
+    if (prims.isEmpty()) {
+        return;
+    }
+
+    // Tight upper bound on a binary tree with N primitives at leaf size L:
+    // 2 * ceil(N/L) nodes. +1 to absorb the single-node degenerate case.
+    const qsizetype reserveCount =
+        2 * ((prims.size() + kBvhLeafSize - 1) / kBvhLeafSize) + 1;
+    m_bvhNodes.reserve(reserveCount);
+    buildBvhRecursive(prims, 0, prims.size());
+
+    m_primitives.resize(prims.size());
+    for (int i = 0; i < prims.size(); ++i) {
+        m_primitives[i] = prims[i].prim;
+    }
 }
 
 cwRayHit cwGeometryItersecter::rayTriangleMT(const QRay3D &rayModel,

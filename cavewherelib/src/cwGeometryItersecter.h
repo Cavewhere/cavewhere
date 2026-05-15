@@ -13,6 +13,7 @@
 #include <QVector3D>
 #include <QRay3D>
 #include <QBox3D>
+#include <cstdint>
 
 //Our includes
 #include "cwRayHit.h"
@@ -64,6 +65,25 @@ public:
         float m_pickRadius = 0.0f;
     };
 
+    // BVH primitive handles + node layout are public nested types so the
+    // build helpers in the .cpp's anonymous namespace can reach them. The
+    // BVH arrays themselves are still private state.
+    struct Primitive {
+        enum class Kind : uint8_t { Triangle, Point };
+        Kind kind = Kind::Triangle;
+        uint32_t nodeIndex = 0;       // index into Nodes
+        uint32_t primitiveIndex = 0;  // triangle: first index into indices(); point: vertex index
+    };
+
+    struct BvhNode {
+        QBox3D bbox;
+        // Inner: left = leftChild, right = rightChild. Leaf: left = firstPrim, right = primitiveCount.
+        uint32_t left = 0;
+        uint32_t right = 0;
+        uint8_t splitAxis = 0;
+        bool isLeaf = false;
+    };
+
     cwGeometryItersecter();
 
     void addObject(const cwGeometryItersecter::Object& object);
@@ -96,6 +116,23 @@ private:
     };
 
     QList<Node> Nodes;
+
+    // Flat BVH built lazily from Nodes' triangle + point primitives.
+    // Lines stay on the linear nearestNeighbor() path (their existing
+    // per-segment Node granularity already serves that fallback well).
+    mutable QVector<BvhNode> m_bvhNodes;
+    mutable QVector<Primitive> m_primitives;
+    mutable bool m_bvhDirty = true;
+
+    // BuildPrim is opaque to callers; defined in the .cpp's anonymous namespace.
+    struct BuildPrim;
+
+    void markBvhDirty() { m_bvhDirty = true; }
+    void ensureBvh() const;
+    void buildBvh() const;
+    uint32_t buildBvhRecursive(QVector<BuildPrim>& prims, int begin, int end) const;
+    QBox3D primitiveWorldBox(const Primitive& prim) const;
+    void testPrimitive(const Primitive& prim, const QRay3D& ray, cwRayHit& best) const;
 
     template <typename Iterator>
     Iterator findNodeImpl(Iterator begin, Iterator end, const Key& objectKey) const {
