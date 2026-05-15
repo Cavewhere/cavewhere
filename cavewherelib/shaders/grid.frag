@@ -14,14 +14,9 @@ layout(location = 1) in vec4 projectedPosition;
 
 layout(location = 0) out vec4 fragColor;
 
-// layout(std140, binding = 1) uniform FragmentUniforms {
-//     float devicePixelRatio;
-//     float contourSpacing1;
-//     float contourWidth1;
-//     float contourSpacing2;
-//     float contourWidth2;
-// };
-
+layout(std140, binding = 1) uniform FragmentUniforms {
+    vec4 lineColor;
+};
 
 const float devicePixelRatio = 1.0f;
 const float contourSpacing1 = 100.0f;
@@ -52,7 +47,7 @@ void main() {
     float c = contour(contourSpacing1, contourWidth1 * devicePixelRatio)
             * contour(contourSpacing2, contourWidth2 * devicePixelRatio);
     float ca = 1.0 - min(1.0, c);
-    fragColor = vec4(c, c, c, ca) * vec4(0.0, 0.0, 0.0, 1.0);
+    fragColor = vec4(lineColor.rgb, ca * lineColor.a);
     // fragColor = vec4(1.0, 0.0, 0.0, 1.0);
 
     // if(vPosition.z >= 100.0) {

@@ -12,6 +12,7 @@ cwRHIGridPlane::~cwRHIGridPlane()
 {
     delete m_vertexBuffer;
     delete m_uniformBuffer;
+    delete m_fragmentUniformBuffer;
     delete m_srb;
 
     releasePipeline();
@@ -54,6 +55,10 @@ void cwRHIGridPlane::initializeResources(const ResourceUpdateData& data)
     m_uniformBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, uniformBufferSize);
     m_uniformBuffer->create();
 
+    const auto fragmentUniformBufferSize = rhi->ubufAligned(sizeof(FragmentUniformData));
+    m_fragmentUniformBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, fragmentUniformBufferSize);
+    m_fragmentUniformBuffer->create();
+
     // Input layout
     QRhiVertexInputLayout inputLayout;
     inputLayout.setBindings({
@@ -72,6 +77,7 @@ void cwRHIGridPlane::synchronize(const SynchronizeData& data)
 
     m_modelMatrix = gridPlane->m_modelMatrix;
     m_scaleMatrix = gridPlane->m_scaleMatrix;
+    m_color.setValue(gridPlane->color());
     gridPlane->m_modelMatrix.resetChanged();
     gridPlane->m_scaleMatrix.resetChanged();
 }
@@ -109,6 +115,22 @@ void cwRHIGridPlane::updateResources(const ResourceUpdateData & data)
                 m_scaleMatrix.resetChanged();
             }
         }
+    }
+
+    if (m_color.isChanged()) {
+        const QColor& c = m_color.value();
+        FragmentUniformData fragmentData;
+        fragmentData.lineColor[0] = static_cast<float>(c.redF());
+        fragmentData.lineColor[1] = static_cast<float>(c.greenF());
+        fragmentData.lineColor[2] = static_cast<float>(c.blueF());
+        fragmentData.lineColor[3] = static_cast<float>(c.alphaF());
+        data.resourceUpdateBatch->updateDynamicBuffer(
+            m_fragmentUniformBuffer,
+            0,
+            sizeof(FragmentUniformData),
+            &fragmentData
+            );
+        m_color.resetChanged();
     }
 }
 
@@ -230,7 +252,8 @@ bool cwRHIGridPlane::ensurePipeline(const RenderData& data)
 
             record->layout = localRhi->newShaderResourceBindings();
             record->layout->setBindings({
-                QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr)
+                QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr),
+                QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, nullptr)
             });
             record->layout->create();
 
@@ -274,13 +297,14 @@ bool cwRHIGridPlane::ensureShaderResources(QRhi* rhi)
         }
     }
 
-    if (!rhi || !m_uniformBuffer) {
+    if (!rhi || !m_uniformBuffer || !m_fragmentUniformBuffer) {
         return false;
     }
 
     m_srb = rhi->newShaderResourceBindings();
     m_srb->setBindings({
-        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, m_uniformBuffer)
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, m_uniformBuffer),
+        QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, m_fragmentUniformBuffer)
     });
     m_srb->create();
 
@@ -307,7 +331,8 @@ cwRhiPipelineKey cwRHIGridPlane::buildPipelineKey(QRhiRenderTarget* target,
     key.globalBinding = 0;
     key.perDrawBinding = 0xFF;
     key.textureBinding = 0xFF;
-    key.globalStages = 0x1; // vertex stage
+    using Stage = cwRenderMaterialState::ShaderStage;
+    key.globalStages = cwShaderStageMask(Stage::Vertex | Stage::Fragment);
     key.perDrawStages = 0;
     key.textureStages = 0;
     key.hasPerDraw = 0;

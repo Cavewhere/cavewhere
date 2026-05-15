@@ -13,6 +13,7 @@
 #include "cwTracked.h"
 
 //Qt includes
+#include <QColor>
 #include <QMatrix4x4>
 #include <QObjectBindableProperty>
 #include <QPlane3D>
@@ -22,6 +23,7 @@ class cwRenderGridPlane : public cwRenderObject {
 
     Q_PROPERTY(double extent READ extent WRITE setExtent NOTIFY extentChanged BINDABLE bindableExtent)
     Q_PROPERTY(QPlane3D plane READ plane WRITE setPlane NOTIFY planeChanged BINDABLE bindablePlane)
+    Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
 
     friend class cwRHIGridPlane;
 
@@ -41,9 +43,13 @@ public:
     void setPlane(const QPlane3D& plane) { m_plane = plane; }
     QBindable<QPlane3D> bindablePlane() { return &m_plane; }
 
+    QColor color() const { return m_color; }
+    void setColor(const QColor& color);
+
 signals:
     void extentChanged();
     void planeChanged();
+    void colorChanged();
 
 protected:
     virtual cwRHIObject* createRHIObject() override;
@@ -58,6 +64,8 @@ private:
                                          double, m_extent,
                                          3000.0,
                                          &cwRenderGridPlane::extentChanged);
+
+    QColor m_color = QColor(Qt::black);
 
     QProperty<QMatrix4x4> m_modelMatrixProperty;
     QProperty<QMatrix4x4> m_scaleMatrixProperty;

@@ -20,6 +20,8 @@ QQ.Rectangle {
     property bool animationToVisible: true
     property bool animationToInvisible: true
 
+    signal linkActivated(string link)
+
     color: Theme.surfaceRaised
     implicitHeight: layout.implicitHeight
     radius: 5
@@ -74,6 +76,8 @@ QQ.Rectangle {
                 font.pixelSize: Theme.fontSizeBody
 
                 text: "No documentation"
+
+                onLinkActivated: function(link) { helpArea.linkActivated(link) }
             }
         }
     }

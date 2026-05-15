@@ -57,11 +57,6 @@ cwCavingRegion* cwRegionSceneManager::cavingRegion() const {
     return Region;
 }
 
-void cwRegionSceneManager::setKeywordItemModel(cwKeywordItemModel* keywordItemModel)
-{
-    m_lazLayers->setKeywordItemModel(keywordItemModel);
-}
-
 void cwRegionSceneManager::setCapturing(bool newCapturing)
 {
     if (m_capturing == newCapturing) {

@@ -19,10 +19,22 @@ class CAVEWHERE_LIB_EXPORT cwRemoteRepositoryCloner : public QObject
     Q_OBJECT
     QML_NAMED_ELEMENT(RemoteRepositoryCloner)
 
+public:
+    enum CloneErrorKind {
+        None,
+        Auth,
+        NotFoundOrAccess,
+        HostUnreachable,
+        Other
+    };
+    Q_ENUM(CloneErrorKind)
+
+private:
     Q_PROPERTY(QString cloneErrorMessage READ cloneErrorMessage NOTIFY cloneErrorMessageChanged)
     Q_PROPERTY(QString cloneStatusMessage READ cloneStatusMessage NOTIFY cloneStatusMessageChanged)
     Q_PROPERTY(QString pendingCloneDir READ pendingCloneDir NOTIFY pendingCloneDirChanged)
-    Q_PROPERTY(bool cloneFailedDueToAuthError READ cloneFailedDueToAuthError NOTIFY cloneFailedDueToAuthErrorChanged)
+    Q_PROPERTY(CloneErrorKind cloneErrorKind READ cloneErrorKind NOTIFY cloneErrorKindChanged)
+    Q_PROPERTY(QString cloneErrorFriendlyMessage READ cloneErrorFriendlyMessage NOTIFY cloneErrorFriendlyMessageChanged)
     Q_PROPERTY(cwRecentProjectModel* recentProjectModel READ recentProjectModel WRITE setRecentProjectModel REQUIRED)
     Q_PROPERTY(QQuickGit::GitFutureWatcher* cloneWatcher READ cloneWatcher WRITE setCloneWatcher REQUIRED)
     Q_PROPERTY(QQuickGit::Account* account READ account WRITE setAccount NOTIFY accountChanged)
@@ -34,7 +46,8 @@ public:
     QString cloneErrorMessage() const { return m_cloneErrorMessage; }
     QString cloneStatusMessage() const { return m_cloneStatusMessage; }
     QString pendingCloneDir() const { return m_pendingCloneDir; }
-    bool cloneFailedDueToAuthError() const { return m_cloneFailedDueToAuthError; }
+    CloneErrorKind cloneErrorKind() const { return m_cloneErrorKind; }
+    QString cloneErrorFriendlyMessage() const { return m_cloneErrorFriendlyMessage; }
 
     cwRecentProjectModel* recentProjectModel() const { return m_recentProjectModel; }
     void setRecentProjectModel(cwRecentProjectModel* recentProjectModel);
@@ -53,11 +66,18 @@ public:
     Q_INVOKABLE void clone(const QString& urlText, const QUrl& destinationParentDir);
     Q_INVOKABLE void resetCloneState();
 
+    static CloneErrorKind classifyCloneError(int errorCode, const QString& errorMessage);
+    static QString friendlyCloneErrorMessage(CloneErrorKind kind, const QUrl& cloneUrl);
+    static bool shouldAutoRetryClone(CloneErrorKind kind,
+                                     const QString& token,
+                                     const QString& pendingUrl);
+
 signals:
     void cloneErrorMessageChanged();
     void cloneStatusMessageChanged();
     void pendingCloneDirChanged();
-    void cloneFailedDueToAuthErrorChanged();
+    void cloneErrorKindChanged();
+    void cloneErrorFriendlyMessageChanged();
     void accountChanged();
     void gitHubIntegrationChanged();
     void repositoryCloned(QString repositoryPath);
@@ -69,7 +89,9 @@ private:
     void setCloneErrorMessage(const QString& message);
     void setCloneStatusMessage(const QString& message);
     void setPendingCloneDir(const QString& dir);
-    void setCloneFailedDueToAuthError(bool value);
+    void setCloneErrorKind(CloneErrorKind kind);
+    void setCloneErrorFriendlyMessage(const QString& message);
+    void applyCloneError(CloneErrorKind kind, const QString& cloneUrl);
     void handleCloneWatcherStateChanged();
     void handleCloneWatcherProgressTextChanged();
 
@@ -80,8 +102,9 @@ private:
     QQuickGit::GitRepository* m_cloneRepository = nullptr;
     QString m_cloneErrorMessage;
     QString m_cloneStatusMessage;
+    QString m_cloneErrorFriendlyMessage;
     QString m_pendingCloneDir;
     QString m_pendingCloneUrl;
     QUrl m_pendingCloneParentDir;
-    bool m_cloneFailedDueToAuthError = false;
+    CloneErrorKind m_cloneErrorKind = None;
 };

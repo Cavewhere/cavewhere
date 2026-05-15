@@ -317,7 +317,7 @@ cwRhiPipelineKey cwRHILinePlot::buildPipelineKey(QRhiRenderTarget* target,
     key.globalBinding = 0;
     key.perDrawBinding = 0xFF;
     key.textureBinding = 0xFF;
-    key.globalStages = 0x1; // vertex stage for camera uniform
+    key.globalStages = cwShaderStageMask(cwRenderMaterialState::ShaderStage::Vertex);
     key.perDrawStages = 0;
     key.textureStages = 0;
     key.hasPerDraw = 0;

@@ -22,6 +22,7 @@
 #include "cwQMLReload.h"
 #include "cwLicenseAgreement.h"
 #include "cwRegionSceneManager.h"
+#include "cwLazLayersSceneNode.h"
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
@@ -169,7 +170,7 @@ cwRootData::cwRootData(QObject *parent) :
     License->setVersion(version());
 
     RegionSceneManager = new cwRegionSceneManager(this);
-    RegionSceneManager->setKeywordItemModel(m_keywordItemModel);
+    RegionSceneManager->lazLayersSceneNode()->setKeywordItemModel(m_keywordItemModel);
     RegionSceneManager->setCavingRegion(Region);
 
     ScrapManager->setRenderScraps(RegionSceneManager->items()); //scraps());
