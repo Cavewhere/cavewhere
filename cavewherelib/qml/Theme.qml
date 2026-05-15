@@ -86,6 +86,13 @@ QtObject {
     readonly property real floatingWidgetRadius: 3
     readonly property color errorBackground: danger
 
+    // View (3D scene) radial background gradient + grid lines
+    readonly property QtObject viewBackground: QtObject {
+        readonly property color gradientInner: dark ? "#1a2a3d" : "#92D7F8"
+        readonly property color gradientOuter: dark ? "#0b0e13" : "#F3F8FB"
+        readonly property color gridLineColor: dark ? "#585a5e" : "#000000"
+    }
+
     // Sidebar-specific palette (original colors retained)
     readonly property QtObject sidebar: QtObject {
         readonly property color background: palette.window

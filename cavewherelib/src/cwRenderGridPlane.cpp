@@ -89,6 +89,16 @@ cwRenderGridPlane::cwRenderGridPlane(QObject* parent) :
     });
 }
 
+void cwRenderGridPlane::setColor(const QColor& color)
+{
+    if (m_color == color) {
+        return;
+    }
+    m_color = color;
+    emit colorChanged();
+    update();
+}
+
 cwRHIObject* cwRenderGridPlane::createRHIObject()
 {
     return new cwRHIGridPlane();

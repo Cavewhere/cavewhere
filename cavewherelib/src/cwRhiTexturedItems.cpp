@@ -524,15 +524,7 @@ QByteArray cwRhiTexturedItems::Item::buildPerDrawUniformPayload() const
 
 quint8 cwRhiTexturedItems::toStageMask(cwRenderMaterialState::ShaderStages stages)
 {
-    using Stage = cwRenderMaterialState::ShaderStage;
-    quint8 mask = 0;
-    if (stages.testFlag(Stage::Vertex)) {
-        mask |= 0x1;
-    }
-    if (stages.testFlag(Stage::Fragment)) {
-        mask |= 0x2;
-    }
-    return mask;
+    return cwShaderStageMask(stages);
 }
 
 cwRhiPipelineKey cwRhiTexturedItems::makePipelineKey(QRhiRenderPassDescriptor* renderPass,

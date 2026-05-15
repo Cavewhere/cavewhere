@@ -12,6 +12,7 @@ class QRhi;
 class QRhiBuffer;
 class QRhiGraphicsPipeline;
 class QRhiShaderResourceBindings;
+#include <QColor>
 #include <QMatrix4x4>
 
 
@@ -33,9 +34,14 @@ private:
         float modelMatrix[16]; // scale-only matrix used for contour sampling
     };
 
+    struct FragmentUniformData {
+        float lineColor[4];
+    };
+
     QRhiVertexInputLayout m_inputLayout;
     QRhiBuffer* m_vertexBuffer = nullptr;
     QRhiBuffer* m_uniformBuffer = nullptr;
+    QRhiBuffer* m_fragmentUniformBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
     cwRhiScene* m_scene = nullptr;
     cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;
@@ -44,6 +50,7 @@ private:
 
     cwTracked<QMatrix4x4> m_modelMatrix;
     cwTracked<QMatrix4x4> m_scaleMatrix;
+    cwTracked<QColor> m_color;
     bool m_resourcesInitialized = false;
 
     void initializeResources(const ResourceUpdateData& data);

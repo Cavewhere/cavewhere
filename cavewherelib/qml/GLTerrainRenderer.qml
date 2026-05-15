@@ -26,6 +26,24 @@ Item {
         sampleCount:4
     }
 
+    Binding {
+        target: RootData.regionSceneManager.background
+        property: "color1"
+        value: Theme.viewBackground.gradientInner
+    }
+
+    Binding {
+        target: RootData.regionSceneManager.background
+        property: "color2"
+        value: Theme.viewBackground.gradientOuter
+    }
+
+    Binding {
+        target: RootData.regionSceneManager.gridPlane
+        property: "color"
+        value: Theme.viewBackground.gridLineColor
+    }
+
     TurnTableInteraction {
         id: turnTableInteractionId
         objectName: "turnTableInteraction"
