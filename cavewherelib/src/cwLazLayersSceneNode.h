@@ -67,7 +67,7 @@ private:
     QPointer<cwKeywordItemModel> m_keywordItemModel;
     QPointer<cwLazLayerModel> m_model;
 
-    QHash<QUuid, cwRenderPointCloud*> m_pointClouds;
+    QHash<QUuid, QPointer<cwRenderPointCloud>> m_pointClouds;
     QHash<QUuid, QPointer<cwKeywordItem>> m_keywordItems;
 };
 

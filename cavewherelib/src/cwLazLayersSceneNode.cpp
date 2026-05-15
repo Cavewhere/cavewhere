@@ -56,8 +56,10 @@ void cwLazLayersSceneNode::setLazLayerModel(cwLazLayerModel* model)
 
 void cwLazLayersSceneNode::setVisibleForAll(bool visible)
 {
-    for (auto* renderObject : std::as_const(m_pointClouds)) {
-        renderObject->setVisible(visible);
+    for (const auto& renderObject : std::as_const(m_pointClouds)) {
+        if (renderObject) {
+            renderObject->setVisible(visible);
+        }
     }
 }
 
@@ -123,12 +125,15 @@ void cwLazLayersSceneNode::clear()
     }
     m_keywordItems.clear();
 
-    // setScene(nullptr) unhooks each render object from cwScene before delete;
-    // ~cwRenderObject doesn't do this itself, so deleting directly would leave
-    // dangling pointers in cwScene::m_newRenderObjects and crash on next sync.
-    for (auto* renderObject : std::as_const(m_pointClouds)) {
-        renderObject->setScene(nullptr);
-        delete renderObject;
+    // QPointer entries auto-null when cwScene tears down first and takes the
+    // render objects with it (they are QObject children of the scene). In the
+    // steady-state remove path the entry is still live, so unhook from the
+    // scene's sync queues before delete.
+    for (const auto& renderObject : std::as_const(m_pointClouds)) {
+        if (renderObject) {
+            renderObject->setScene(nullptr);
+            delete renderObject;
+        }
     }
     m_pointClouds.clear();
 }
