@@ -574,7 +574,7 @@ int cwBaseTurnTableInteraction::startDragDistance() const {
     return QGuiApplication::styleHints()->startDragDistance();
 }
 
-cwRayTriangleHit cwBaseTurnTableInteraction::pick(QPointF qtViewPoint) const
+cwRayHit cwBaseTurnTableInteraction::pick(QPointF qtViewPoint) const
 {
     Q_ASSERT(Camera);
     Q_ASSERT(scene());
@@ -584,7 +584,7 @@ cwRayTriangleHit cwBaseTurnTableInteraction::pick(QPointF qtViewPoint) const
 
     //Create a ray from the back projection front and back plane
     const auto ray = Camera->frustrumRay(mappedPos);
-    return scene()->geometryItersecter()->intersectsTriangleDetailed(ray);
+    return scene()->geometryItersecter()->intersectsDetailed(ray);
 }
 
 void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)

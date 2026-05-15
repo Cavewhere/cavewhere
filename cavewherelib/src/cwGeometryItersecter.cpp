@@ -8,6 +8,7 @@
 //Our includes
 #include "cwDebug.h"
 #include "cwGeometryItersecter.h"
+#include "cwRenderObject.h"
 
 //Std limits
 #include <limits>
@@ -16,6 +17,22 @@
 //Qt includes
 #include <QtNumeric>
 #include <QPlane3D>
+#include <QSphere3D>
+
+namespace {
+    // Multiplier applied to a point's pickRadius when expanding the cloud's
+    // broad-phase AABB so that rays passing tangentially through the
+    // outermost spheres aren't rejected by the box test.
+    constexpr float kPointAabbPadScale = 1.0f;
+
+    // Visibility guard shared by every traversal entry point. A null parent
+    // means the object isn't owned by a cwRenderObject (test fixtures), so
+    // treat it as pickable.
+    bool isPickable(const cwGeometryItersecter::Object& object) {
+        const cwRenderObject* parent = object.parent();
+        return parent == nullptr || parent->isVisible();
+    }
+}
 
 cwGeometryItersecter::cwGeometryItersecter()
 {
@@ -35,6 +52,9 @@ void cwGeometryItersecter::addObject(const cwGeometryItersecter::Object &object)
         break;
     case cwGeometry::Type::Lines:
         addLines(object);
+        break;
+    case cwGeometry::Type::Points:
+        addPoints(object);
         break;
     default:
         break;
@@ -117,7 +137,7 @@ QBox3D cwGeometryItersecter::boundingBox(const Key &objectKey) const
  */
 double cwGeometryItersecter::intersects(const QRay3D &ray) const
 {
-    const cwRayTriangleHit hit = intersectsTriangleDetailed(ray);
+    const cwRayHit hit = intersectsDetailed(ray);
     if (hit.hit()) {
         return hit.tWorld();
     }
@@ -235,6 +255,45 @@ void cwGeometryItersecter::addLines(const cwGeometryItersecter::Object &object)
     }
 }
 
+/**
+ * @brief cwGeometryItersecter::addPoints
+ * @param object
+ *
+ * Adds the object as a point cloud. One Node per cloud with a combined AABB
+ * expanded by Object::pickRadius() so that broad-phase ray rejection doesn't
+ * miss rays that graze the outermost sphere of a point.
+ */
+void cwGeometryItersecter::addPoints(const cwGeometryItersecter::Object &object)
+{
+    const cwGeometry& geometry = object.geometry();
+    auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+    if (positionAttribute == nullptr) {
+        qDebug() << "Can't add point object" << object.parent() << object.id() << "— missing Position attribute" << LOCATION;
+        return;
+    }
+
+    const qsizetype vertexCount = geometry.vertexCount();
+    if (vertexCount <= 0) {
+        return;
+    }
+
+    removeObject(object.parent(), object.id());
+
+    const char* base = geometry.vertexData().constData() + positionAttribute->byteOffset;
+    const int stride = geometry.vertexStride();
+
+    QBox3D box;
+    for (qsizetype i = 0; i < vertexCount; ++i) {
+        const float* p = reinterpret_cast<const float*>(base + i * stride);
+        box.unite(QVector3D(p[0], p[1], p[2]));
+    }
+
+    const float pad = object.pickRadius() * kPointAabbPadScale;
+    const QVector3D padVec(pad, pad, pad);
+
+    Nodes.append(Node(QBox3D(box.minimum() - padVec, box.maximum() + padVec), object));
+}
+
 
 /**
  * @brief cwGeometryItersecter::nearestNeighbor
@@ -249,6 +308,10 @@ double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
     double bestDistance = std::numeric_limits<double>::max();
 
     for(const Node& node : Nodes) {
+        if (!isPickable(node.Object)) {
+            continue;
+        }
+
         if(node.Object.geometry().type() == cwGeometry::Type::Triangles) {
             continue;
         }
@@ -284,12 +347,17 @@ double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
     return bestT;
 }
 
-cwRayTriangleHit cwGeometryItersecter::cwGeometryItersecter::intersectsTriangleDetailed(const QRay3D &ray) const
+cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
 {
-    cwRayTriangleHit best;
+    cwRayHit best;
 
     for (const Node& node : Nodes) {
-        if (node.Object.geometry().type() != cwGeometry::Type::Triangles) {
+        if (!isPickable(node.Object)) {
+            continue;
+        }
+
+        const cwGeometry::Type type = node.Object.geometry().type();
+        if (type != cwGeometry::Type::Triangles && type != cwGeometry::Type::Points) {
             continue;
         }
 
@@ -302,37 +370,84 @@ cwRayTriangleHit cwGeometryItersecter::cwGeometryItersecter::intersectsTriangleD
         }
 
         const cwGeometry& geometry = node.Object.geometry();
-        const QVector<uint32_t>& indices = geometry.indices();
 
         auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
         Q_ASSERT(positionAttribute);
 
-        for (int i = 0; i < indices.size(); i += 3) {
-            const QVector3D a = geometry.value<QVector3D>(positionAttribute, indices.at(i + 0));
-            const QVector3D b = geometry.value<QVector3D>(positionAttribute, indices.at(i + 1));
-            const QVector3D c = geometry.value<QVector3D>(positionAttribute, indices.at(i + 2));
+        if (type == cwGeometry::Type::Triangles) {
+            const QVector<uint32_t>& indices = geometry.indices();
 
-            // Optional narrow-phase AABB check per triangle:
-            // if (qIsNaN(Node::triangleToBoundingBox(a, b, c).intersection(rayModel))) { continue; }
+            for (int i = 0; i < indices.size(); i += 3) {
+                const QVector3D a = geometry.value<QVector3D>(positionAttribute, indices.at(i + 0));
+                const QVector3D b = geometry.value<QVector3D>(positionAttribute, indices.at(i + 1));
+                const QVector3D c = geometry.value<QVector3D>(positionAttribute, indices.at(i + 2));
 
-            cwRayTriangleHit local = rayTriangleMT(rayModel, a, b, c, node.Object.geometry().cullBackfaces());
-            if (!local.hit()) {
+                cwRayHit local = rayTriangleMT(rayModel, a, b, c, node.Object.geometry().cullBackfaces());
+                if (!local.hit()) {
+                    continue;
+                }
+
+                const QVector3D pWorld = mapPoint(worldFromModel, local.pointModel());
+                const QVector3D nWorld = transformNormalToWorld(worldFromModel, local.normalModel());
+                const double tWorld = ray.projectedDistance(pWorld);
+
+                if (tWorld > 0.0 && (!best.hit() || tWorld < best.tWorld())) {
+                    best = local;
+                    best.m_hit = true;
+                    best.m_pointWorld = pWorld;
+                    best.m_normalWorld = nWorld;
+                    best.m_tWorld = tWorld;
+                    best.m_object = node.Object.parent();
+                    best.m_objectId = node.Object.id();
+                    best.m_firstIndex = i;
+                }
+            }
+        } else {
+            // Type::Points — ray-vs-sphere per vertex, closest hit (near root) wins.
+            const float radius = node.Object.pickRadius();
+            if (radius <= 0.0f) {
                 continue;
             }
 
-            // Lift to world and compute world t
-            const QVector3D pWorld = mapPoint(worldFromModel, local.pointModel());
-            const QVector3D nWorld = transformNormalToWorld(worldFromModel, local.normalModel());
-            const double tWorld = ray.projectedDistance(pWorld);
+            const char* base = geometry.vertexData().constData() + positionAttribute->byteOffset;
+            const int stride = geometry.vertexStride();
+            const QVector3D worldNormal = -ray.direction().normalized();
+            const QVector3D modelNormal = -rayModel.direction().normalized();
 
-            if (tWorld > 0.0 && (!best.hit() || tWorld < best.tWorld())) {
-                best = local;
+            const qsizetype vertexCount = geometry.vertexCount();
+            for (qsizetype i = 0; i < vertexCount; ++i) {
+                const float* p = reinterpret_cast<const float*>(base + i * stride);
+                const QVector3D center(p[0], p[1], p[2]);
+
+                float tNear = 0.0f;
+                float tFar = 0.0f;
+                if (!QSphere3D(center, radius).intersection(rayModel, &tNear, &tFar)) {
+                    continue;
+                }
+                if (tNear <= 0.0f) {
+                    // Ray points away from the sphere, or origin sits inside
+                    // it — skip rather than report a back-face hit.
+                    continue;
+                }
+
+                const QVector3D pWorld = mapPoint(worldFromModel, center);
+                const double tWorld = ray.projectedDistance(pWorld);
+                if (tWorld <= 0.0 || (best.hit() && tWorld >= best.tWorld())) {
+                    continue;
+                }
+
                 best.m_hit = true;
+                best.m_tModel = tNear;
+                best.m_u = std::numeric_limits<float>::quiet_NaN();
+                best.m_v = std::numeric_limits<float>::quiet_NaN();
+                best.m_pointModel = center;
+                best.m_normalModel = modelNormal;
                 best.m_pointWorld = pWorld;
-                best.m_normalWorld = nWorld;
+                best.m_normalWorld = worldNormal;
                 best.m_tWorld = tWorld;
+                best.m_object = node.Object.parent();
                 best.m_objectId = node.Object.id();
-                best.m_firstIndex = i;
+                best.m_firstIndex = static_cast<int>(i);
             }
         }
     }
@@ -340,13 +455,13 @@ cwRayTriangleHit cwGeometryItersecter::cwGeometryItersecter::intersectsTriangleD
     return best;
 }
 
-cwRayTriangleHit cwGeometryItersecter::rayTriangleMT(const QRay3D &rayModel,
-                                                     const QVector3D &a,
-                                                     const QVector3D &b,
-                                                     const QVector3D &c,
-                                                     bool cullBackfaces)
+cwRayHit cwGeometryItersecter::rayTriangleMT(const QRay3D &rayModel,
+                                             const QVector3D &a,
+                                             const QVector3D &b,
+                                             const QVector3D &c,
+                                             bool cullBackfaces)
 {
-    cwRayTriangleHit result;
+    cwRayHit result;
 
     const QVector3D edge1 = b - a;
     const QVector3D edge2 = c - a;

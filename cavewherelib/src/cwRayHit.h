@@ -13,9 +13,9 @@
 //Our include
 #include "cwRenderObject.h"
 
-class cwRayTriangleHit {
+class cwRayHit {
     Q_GADGET
-    QML_VALUE_TYPE(cwRayTriangleHit)
+    QML_VALUE_TYPE(cwRayHit)
 
     // Model-space
     Q_PROPERTY(bool hit READ hit CONSTANT)
@@ -39,7 +39,7 @@ class cwRayTriangleHit {
 
 public:
     // Constructors
-    cwRayTriangleHit() = default;
+    cwRayHit() = default;
 
     // Read accessors only
     bool hit() const { return m_hit; }
@@ -58,7 +58,9 @@ public:
     qulonglong objectId() const { return m_objectId; }
     int firstIndex() const { return m_firstIndex; }
 
-    // Public fields for direct initialization
+private:
+    // Only the intersecter populates these; everyone else reads via the
+    // public getters above.
     bool m_hit = false;
 
     float m_tModel = std::numeric_limits<float>::quiet_NaN();
@@ -76,4 +78,4 @@ public:
     int m_firstIndex = -1;
 };
 
-Q_DECLARE_METATYPE(cwRayTriangleHit)
+Q_DECLARE_METATYPE(cwRayHit)

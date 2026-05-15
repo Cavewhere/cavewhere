@@ -32,7 +32,7 @@ Interaction {
     readonly property bool hasCustomValueEntry: valueEntryComponent !== null
     readonly property real measuredValue: _measuredValue
 
-    property var _firstPick: null // type: cwRayTriangleHit
+    property var _firstPick: null // type: cwRayHit
     property point _firstScreenPoint: Qt.point(0, 0)
     property point _secondScreenPoint: Qt.point(0, 0)
     property QQ.vector3d _secondPoint: Qt.vector3d(0, 0, 0)

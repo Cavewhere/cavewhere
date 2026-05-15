@@ -15,7 +15,7 @@
 #include <QBox3D>
 
 //Our includes
-#include "cwRayTriangleHit.h"
+#include "cwRayHit.h"
 #include "cwGeometry.h"
 #include "CaveWhereLibExport.h"
 class cwRenderObject;
@@ -31,23 +31,18 @@ public:
     class Object {
     public:
         Object() { }
-        // Object(cwRenderObject* parent,
-        //        uint64_t id,
-        //        QVector<QVector3D> points,
-        //        QVector<uint32_t> indexes,
-        //        cwGeometry::PrimitiveType type,
-        //        const QMatrix4x4& modelMatrix = QMatrix4x4(),
-        //        bool cullBackfaces = false) :
-        //     m_key(parent, id),
-        //     m_geometry(type, points, indexes, modelMatrix, cullBackfaces)
 
-        // {}
+        // pickRadius is the world-space sphere radius around each vertex used
+        // for ray-vs-point intersection. Only consulted when geometry.type()
+        // == cwGeometry::Type::Points.
         Object(Key key,
                cwGeometry geometry,
-               QMatrix4x4 modelMatrix = QMatrix4x4()) :
+               QMatrix4x4 modelMatrix = QMatrix4x4(),
+               float pickRadius = 0.0f) :
             m_key(key),
             m_geometry(geometry),
-            m_modelMatrix(modelMatrix)
+            m_modelMatrix(modelMatrix),
+            m_pickRadius(pickRadius)
         {}
 
         Key key() const { return m_key; }
@@ -59,19 +54,14 @@ public:
         void setModelMatrix(const QMatrix4x4 matrix) { m_modelMatrix = matrix; }
         const QMatrix4x4& modelMatrix() const { return m_modelMatrix; }
 
-        // const QVector<QVector3D>& points() const { return m_geometry.vertices; }
-        // const QVector<uint32_t>& indexes() const { return m_geometry.indices; }
-        // cwGeometry::PrimitiveType type() const { return m_geometry.type; }
-        // bool cullBackfaces() const { return m_geometry.cullBackfaces; }
-
-        // const QMatrix4x4& modelMatrix() const { return m_geometry.transform; }
-        // void setMatrix(const QMatrix4x4& modelMatrix) { m_geometry.transform = modelMatrix; }
+        float pickRadius() const { return m_pickRadius; }
 
     private:
 
         Key m_key;
         cwGeometry m_geometry;
         QMatrix4x4 m_modelMatrix;
+        float m_pickRadius = 0.0f;
     };
 
     cwGeometryItersecter();
@@ -87,7 +77,7 @@ public:
     QBox3D boundingBox(const Key& objectKey) const;
 
     double intersects(const QRay3D& ray) const;
-    cwRayTriangleHit intersectsTriangleDetailed(const QRay3D& ray) const;
+    cwRayHit intersectsDetailed(const QRay3D& ray) const;
 
 private:
 
@@ -125,6 +115,7 @@ private:
 
     void addTriangles(const cwGeometryItersecter::Object& object);
     void addLines(const cwGeometryItersecter::Object& object);
+    void addPoints(const cwGeometryItersecter::Object& object);
 
     double nearestNeighbor(const QRay3D& ray) const;
 //    double LineLineIntersect(QVector3D p1, QVector3D p2, QVector3D p3, QVector3D p4) const;
@@ -158,11 +149,11 @@ private:
         return hn.toVector3D().normalized();
     }
 
-    static cwRayTriangleHit rayTriangleMT(const QRay3D& rayModel,
-                                          const QVector3D& a,
-                                          const QVector3D& b,
-                                          const QVector3D& c,
-                                          bool cullBackfaces);
+    static cwRayHit rayTriangleMT(const QRay3D& rayModel,
+                                  const QVector3D& a,
+                                  const QVector3D& b,
+                                  const QVector3D& c,
+                                  bool cullBackfaces);
 
     // static inline double worldT(const QRay3D& rayWorld, const QVector3D& hitWorld) {
     //     // Parameter/distance along the original world ray

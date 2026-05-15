@@ -12,7 +12,7 @@
 //Our includes
 #include "cwInteraction.h"
 #include "cwCamera.h"
-#include "cwRayTriangleHit.h"
+#include "cwRayHit.h"
 #include "cwScene.h"
 class cwMatrix4x4Animation;
 
@@ -77,7 +77,7 @@ public:
     void setGridPlane(const QPlane3D& gridPlane) { m_gridPlane = gridPlane; }
     QBindable<QPlane3D> bindableGridPlane() { return &m_gridPlane; }
 
-    Q_INVOKABLE cwRayTriangleHit pick(QPointF qtViewPoint) const;
+    Q_INVOKABLE cwRayHit pick(QPointF qtViewPoint) const;
 
     Q_INVOKABLE void zoomTo(const QBox3D& box);
 
