@@ -10,11 +10,9 @@
 #define CWREGIONSCENEMANAGER_H
 
 //Qt includes
-#include <QHash>
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
-#include <QUuid>
 
 //Our includes
 class cwScene;
@@ -22,12 +20,10 @@ class cwGLLinePlot;
 class cwRenderGridPlane;
 class cwCavingRegion;
 class cwGLTerrain;
-class cwKeywordItem;
 class cwKeywordItemModel;
-class cwLazLayer;
+class cwLazLayersSceneNode;
 class cwRenderObject;
 class cwRenderLinePlot;
-class cwRenderPointCloud;
 class cwRenderScraps;
 class cwRenderRadialGradient;
 #include "cwRenderTexturedItems.h"
@@ -67,6 +63,8 @@ public:
 
     void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
 
+    cwLazLayersSceneNode* lazLayersSceneNode() const { return m_lazLayers; }
+
 signals:
     void sceneChanged();
     void cavingRegionChanged();
@@ -78,14 +76,6 @@ signals:
 public slots:
 
 private:
-    void connectLazLayers();
-    void disconnectLazLayers();
-    void rebuildLazRenderObjects();
-    void clearPointClouds();
-    void addLazLayer(cwLazLayer* layer);
-    void removeLazLayer(cwLazLayer* layer);
-    void syncLazLayerGeometry(cwLazLayer* layer);
-
     cwScene* Scene; //!<
 
     //The terrain that's rendered
@@ -95,13 +85,7 @@ private:
     cwRenderGridPlane* m_plane;
     cwRenderRadialGradient* m_background;
 
-    QHash<QUuid, cwRenderPointCloud*> m_pointClouds;
-
-    QHash<QUuid, QPointer<cwKeywordItem>> m_lazKeywordItems;
-    QPointer<cwKeywordItemModel> m_keywordItemModel;
-
-    void addKeywordItemForLazLayer(cwLazLayer* layer);
-    void removeKeywordItemForLazLayer(cwLazLayer* layer);
+    cwLazLayersSceneNode* m_lazLayers;
 
     //For rendering label
     QPointer<cwCavingRegion> Region;

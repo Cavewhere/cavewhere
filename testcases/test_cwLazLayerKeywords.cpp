@@ -12,8 +12,9 @@
 #include "cwKeywordModel.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
-#include "cwRegionSceneManager.h"
+#include "cwLazLayersSceneNode.h"
 #include "cwRenderPointCloud.h"
+#include "cwScene.h"
 
 #include "LazFixtureHelper.h"
 
@@ -22,11 +23,13 @@ namespace {
 struct LazKeywordFixture {
     cwCavingRegion region;
     cwKeywordItemModel keywordItemModel;
-    cwRegionSceneManager sceneManager;
+    cwScene scene;
+    cwLazLayersSceneNode node;
 
     LazKeywordFixture() {
-        sceneManager.setKeywordItemModel(&keywordItemModel);
-        sceneManager.setCavingRegion(&region);
+        node.setScene(&scene);
+        node.setKeywordItemModel(&keywordItemModel);
+        node.setLazLayerModel(region.lazLayers());
     }
 };
 
