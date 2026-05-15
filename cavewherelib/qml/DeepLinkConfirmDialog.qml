@@ -49,7 +49,7 @@ QQ.Item {
                     _selectedUsername = accountSelectionModel.data(idx, RemoteAccountSelectionModel.UsernameRole) ?? ""
                     // Load the keychain token now so the subsequent Clone click has
                     // credentials available. rootId.open() calls cloneAreaId.reset()
-                    // before _autoSelectAccount(), which clears cloneFailedDueToAuthError,
+                    // before _autoSelectAccount(), which resets cloneErrorKind to None,
                     // so the cloner's token-arrival auto-retry cannot fire here.
                     _activateSelectedAccount()
                     return
@@ -69,7 +69,7 @@ QQ.Item {
         readonly property bool _showAuthFlow: {
             if (_isSshUrl) return false
             if (_gitHub.authState === GitHubIntegration.Authorized) return false
-            return _addingAccount || cloneAreaId.cloneFailedDueToAuthError
+            return _addingAccount || cloneAreaId.cloneErrorKind === RemoteRepositoryCloner.Auth
         }
 
         readonly property string _repoDisplay: {
@@ -213,7 +213,6 @@ QQ.Item {
                 id: cloneAreaId
                 Layout.fillWidth: true
                 urlText: dialogId.repoUrl
-                authErrorMessage: qsTr("Sign in to GitHub above to retry.")
                 onReadyToOpen: function(filePath) { rootId.openRequested(filePath) }
             }
         }

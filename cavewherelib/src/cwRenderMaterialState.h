@@ -70,4 +70,15 @@ struct cwRenderMaterialState
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(cwRenderMaterialState::ShaderStages)
 
+/**
+ * @brief Packs a ShaderStages flag set into the quint8 bitmask used by cwRhiPipelineKey.
+ *
+ * The bit values match the underlying ShaderStage enum (Vertex=0x1, Fragment=0x2),
+ * but going through this helper keeps callers free of raw hex literals.
+ */
+inline quint8 cwShaderStageMask(cwRenderMaterialState::ShaderStages stages)
+{
+    return static_cast<quint8>(stages.toInt());
+}
+
 #endif // CWRENDERMATERIALSTATE_H

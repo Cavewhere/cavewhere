@@ -10,11 +10,9 @@
 #define CWREGIONSCENEMANAGER_H
 
 //Qt includes
-#include <QHash>
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
-#include <QUuid>
 
 //Our includes
 class cwScene;
@@ -22,12 +20,12 @@ class cwGLLinePlot;
 class cwRenderGridPlane;
 class cwCavingRegion;
 class cwGLTerrain;
-class cwLazLayer;
+class cwKeywordItemModel;
+class cwLazLayersSceneNode;
 class cwRenderObject;
 class cwRenderLinePlot;
-class cwRenderPointCloud;
 class cwRenderScraps;
-class cwRenderRadialGradient;
+#include "cwRenderRadialGradient.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRenderGridPlane.h"
 
@@ -42,6 +40,7 @@ class cwRegionSceneManager : public QObject
     Q_PROPERTY(cwScene* scene READ scene NOTIFY sceneChanged)
     Q_PROPERTY(cwRenderGridPlane* gridPlane READ gridPlane CONSTANT)
     Q_PROPERTY(cwRenderTexturedItems* items READ items CONSTANT)
+    Q_PROPERTY(cwRenderRadialGradient* background READ background CONSTANT)
 
     Q_PROPERTY(bool capturing READ isCapturing WRITE setCapturing NOTIFY capturingChanged FINAL)
 
@@ -63,6 +62,10 @@ public:
 
     cwRenderTexturedItems *items() const;
 
+    cwLazLayersSceneNode* lazLayersSceneNode() const { return m_lazLayers; }
+
+    cwRenderRadialGradient* background() const;
+
 signals:
     void sceneChanged();
     void cavingRegionChanged();
@@ -74,14 +77,6 @@ signals:
 public slots:
 
 private:
-    void connectLazLayers();
-    void disconnectLazLayers();
-    void rebuildLazRenderObjects();
-    void clearPointClouds();
-    void addLazLayer(cwLazLayer* layer);
-    void removeLazLayer(cwLazLayer* layer);
-    void syncLazLayerGeometry(cwLazLayer* layer);
-
     cwScene* Scene; //!<
 
     //The terrain that's rendered
@@ -91,7 +86,7 @@ private:
     cwRenderGridPlane* m_plane;
     cwRenderRadialGradient* m_background;
 
-    QHash<QUuid, cwRenderPointCloud*> m_pointClouds;
+    cwLazLayersSceneNode* m_lazLayers;
 
     //For rendering label
     QPointer<cwCavingRegion> Region;
@@ -119,6 +114,11 @@ inline bool cwRegionSceneManager::isCapturing() const
 inline cwRenderTexturedItems *cwRegionSceneManager::items() const
 {
     return m_items;
+}
+
+inline cwRenderRadialGradient* cwRegionSceneManager::background() const
+{
+    return m_background;
 }
 
 

@@ -59,19 +59,26 @@ void cwScene::addItem(cwRenderObject *item)
  */
 void cwScene::removeItem(cwRenderObject *item)
 {
-    if(!m_renderingObjects.contains(item)) {
+    if (item == nullptr) {
         return;
     }
 
-    if(m_newRenderObjects.contains(item)) {
-        m_newRenderObjects.removeOne(item);
+    // Drop live references before the caller deletes `item` (issue #491);
+    // synchroize() dereferences entries in m_newRenderObjects and
+    // m_toUpdateRenderObjects.
+    const qsizetype removedCount = m_renderingObjects.removeAll(item)
+                                   + m_newRenderObjects.removeAll(item)
+                                   + (m_toUpdateRenderObjects.remove(item) ? 1 : 0);
+    if (removedCount == 0) {
+        return;
     }
 
-    if(!m_renderingObjects.contains(item)) {
+    // Pointer used as hash key only (never dereferenced) so the next sync
+    // drops the matching m_rhiObjectLookup entry.
+    if (!m_toDeleteRenderObjects.contains(item)) {
         m_toDeleteRenderObjects.append(item);
-        item->setScene(nullptr);
-        update();
     }
+    update();
 }
 
 void cwScene::updateItem(cwRenderObject *item)
@@ -145,6 +152,13 @@ cwGeometryItersecter *cwScene::geometryItersecter() const
 void cwScene::update()
 {
     emit needsRendering();
+}
+
+int cwScene::pendingItemCount() const
+{
+    return m_renderingObjects.size()
+           + m_newRenderObjects.size()
+           + m_toUpdateRenderObjects.size();
 }
 
 

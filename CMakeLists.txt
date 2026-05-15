@@ -511,6 +511,8 @@ if(BUILD_TESTING)
             testlib/cwSketchTestHelpers.h
             testlib/LazFixtureHelper.cpp
             testlib/LazFixtureHelper.h
+            testlib/BoulderFixtureHelper.cpp
+            testlib/BoulderFixtureHelper.h
             testlib/MockAuthProvider.cpp
             testlib/MockAuthProvider.h
             testlib/SvgOverlapAnalyzer.cpp

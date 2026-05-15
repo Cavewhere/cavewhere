@@ -435,6 +435,14 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
         regionPtr->m_caves.insert(index, Caves[i]);
         regionPtr->m_caveNames.insert(Caves[i]->name());
         Caves[i]->setParent(regionPtr);
+
+        // The cave's grid-convergence readout depends on the region's
+        // globalCS when a fix station omits its own inputCS. UniqueConnection
+        // keeps re-insert/undo paths from doubling up.
+        QObject::connect(regionPtr, &cwCavingRegion::globalCSChanged,
+                         Caves[i], &cwCave::recomputeGridConvergenceText,
+                         Qt::UniqueConnection);
+        Caves[i]->recomputeGridConvergenceText();
     }
 
     OwnsCaves = false;

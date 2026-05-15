@@ -22,6 +22,7 @@
 #include "cwQMLReload.h"
 #include "cwLicenseAgreement.h"
 #include "cwRegionSceneManager.h"
+#include "cwLazLayersSceneNode.h"
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
 #include "cwTaskManagerModel.h"
@@ -171,6 +172,7 @@ cwRootData::cwRootData(QObject *parent) :
     License->setVersion(version());
 
     RegionSceneManager = new cwRegionSceneManager(this);
+    RegionSceneManager->lazLayersSceneNode()->setKeywordItemModel(m_keywordItemModel);
     RegionSceneManager->setCavingRegion(Region);
 
     // The picking BVH builds asynchronously and publishes progress as

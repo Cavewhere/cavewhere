@@ -55,6 +55,9 @@ public:
 
     void releaseResources();
 
+    // Live pointers held in queues that cwRhiScene::synchroize() dereferences.
+    int pendingItemCount() const;
+
 signals:
     void cameraChanged();
     void needsRendering();

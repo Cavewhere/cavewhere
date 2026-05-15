@@ -265,7 +265,7 @@ cwRhiPipelineKey cwRhiRadialGradient::buildPipelineKey(QRhiRenderTarget* target,
     key.globalBinding = 0;
     key.perDrawBinding = 0xFF;
     key.textureBinding = 0xFF;
-    key.globalStages = 0x2; // Fragment stage
+    key.globalStages = cwShaderStageMask(cwRenderMaterialState::ShaderStage::Fragment);
     key.perDrawStages = 0;
     key.textureStages = 0;
     key.hasPerDraw = 0;
