@@ -222,7 +222,7 @@ void cwRemoteRepositoryCloner::resetCloneState()
 {
     setCloneErrorMessage(QString());
     setCloneStatusMessage(QString());
-    applyCloneError(None);
+    applyCloneError(None, QString());
 }
 
 void cwRemoteRepositoryCloner::setCloneErrorMessage(const QString& message)
@@ -270,9 +270,9 @@ void cwRemoteRepositoryCloner::setCloneErrorFriendlyMessage(const QString& messa
     emit cloneErrorFriendlyMessageChanged();
 }
 
-void cwRemoteRepositoryCloner::applyCloneError(CloneErrorKind kind)
+void cwRemoteRepositoryCloner::applyCloneError(CloneErrorKind kind, const QString& cloneUrl)
 {
-    setCloneErrorFriendlyMessage(friendlyCloneErrorMessage(kind, QUrl(m_pendingCloneUrl)));
+    setCloneErrorFriendlyMessage(friendlyCloneErrorMessage(kind, QUrl(cloneUrl)));
     setCloneErrorKind(kind);
 }
 
@@ -304,7 +304,7 @@ QString cwRemoteRepositoryCloner::friendlyCloneErrorMessage(CloneErrorKind kind,
     case Auth:
         return info.authMessage;
     case NotFoundOrAccess:
-        return cwGitHostingProvider::notFoundOrAccessMessage(info, cloneUrl);
+        return cwGitHostingProvider::notFoundOrAccessMessage(info);
     case HostUnreachable: {
         const QString host = cloneUrl.host();
         const QString hostDisplay = host.isEmpty() ? QStringLiteral("the server") : host;
@@ -339,7 +339,7 @@ void cwRemoteRepositoryCloner::handleCloneWatcherStateChanged()
         const CloneErrorKind kind = classifyCloneError(result.errorCode(), rawMessage);
 
         setCloneErrorMessage(rawMessage);
-        applyCloneError(kind);
+        applyCloneError(kind, m_pendingCloneUrl);
         setCloneStatusMessage(QString());
         if (!m_pendingCloneDir.isEmpty()) {
             QDir(m_pendingCloneDir).removeRecursively();

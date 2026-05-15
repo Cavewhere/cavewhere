@@ -183,11 +183,8 @@ QUrl cwGitHostingProvider::collaboratorSettingsUrl(const cwGitHostingProviderInf
     return out;
 }
 
-QString cwGitHostingProvider::notFoundOrAccessMessage(const cwGitHostingProviderInfo& info,
-                                                     const QUrl& cloneUrl)
+QString cwGitHostingProvider::notFoundOrAccessMessage(const cwGitHostingProviderInfo& info)
 {
-    Q_UNUSED(cloneUrl);
-
     if (info.invitationsUrl.isEmpty() || info.invitationsLinkLabel.isEmpty()) {
         return info.notFoundMessage;
     }

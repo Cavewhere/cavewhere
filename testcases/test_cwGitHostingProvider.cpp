@@ -175,24 +175,17 @@ TEST_CASE("cwGitHostingProvider::notFoundOrAccessMessage composes a clickable su
     const auto& github = cwGitHostingProvider::forHost(QStringLiteral("github.com"));
 
     SECTION("GitHub embeds the pending-invitations link, not the repo URL") {
-        const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(
-            github, QUrl(QStringLiteral("https://github.com/owner/repo.git")));
+        const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(github);
         CHECK(msg.contains(github.notFoundMessage));
         CHECK(msg.contains(QStringLiteral(
             "<a href=\"https://github.com/notifications?query=reason%3Ainvitation\">")));
         CHECK(msg.contains(github.invitationsLinkLabel));
-        // The repo URL must NOT appear — it 404s for the same reason the
-        // clone failed, so linking to it would just send the user to another
-        // 404 page.
-        CHECK_FALSE(msg.contains(QStringLiteral("github.com/owner/repo<")));
-        CHECK_FALSE(msg.contains(QStringLiteral("github.com/owner/repo\"")));
     }
 
     SECTION("GitLab omits the link (no clean invitations page)") {
         const auto& gitlab = cwGitHostingProvider::forHost(QStringLiteral("gitlab.com"));
         REQUIRE(gitlab.invitationsUrl.isEmpty());
-        const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(
-            gitlab, QUrl(QStringLiteral("https://gitlab.com/owner/repo.git")));
+        const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(gitlab);
         CHECK(msg == gitlab.notFoundMessage);
         CHECK_FALSE(msg.contains(QStringLiteral("<a href")));
     }
@@ -200,16 +193,14 @@ TEST_CASE("cwGitHostingProvider::notFoundOrAccessMessage composes a clickable su
     SECTION("Bitbucket omits the link (no clean invitations page)") {
         const auto& bitbucket = cwGitHostingProvider::forHost(QStringLiteral("bitbucket.org"));
         REQUIRE(bitbucket.invitationsUrl.isEmpty());
-        const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(
-            bitbucket, QUrl(QStringLiteral("https://bitbucket.org/team/repo.git")));
+        const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(bitbucket);
         CHECK(msg == bitbucket.notFoundMessage);
         CHECK_FALSE(msg.contains(QStringLiteral("<a href")));
     }
 
     SECTION("Generic provider has no link") {
         const auto& generic = cwGitHostingProvider::forHost(QStringLiteral("unknown.example"));
-        const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(
-            generic, QUrl(QStringLiteral("https://unknown.example/owner/repo.git")));
+        const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(generic);
         CHECK(msg == generic.notFoundMessage);
         CHECK_FALSE(msg.contains(QStringLiteral("<a href")));
     }

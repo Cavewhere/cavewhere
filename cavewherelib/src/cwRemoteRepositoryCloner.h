@@ -91,7 +91,7 @@ private:
     void setPendingCloneDir(const QString& dir);
     void setCloneErrorKind(CloneErrorKind kind);
     void setCloneErrorFriendlyMessage(const QString& message);
-    void applyCloneError(CloneErrorKind kind);
+    void applyCloneError(CloneErrorKind kind, const QString& cloneUrl);
     void handleCloneWatcherStateChanged();
     void handleCloneWatcherProgressTextChanged();
 

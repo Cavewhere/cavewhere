@@ -73,8 +73,7 @@ namespace cwGitHostingProvider {
      * intentionally NOT the repo URL — that URL 404s for the same reason
      * the clone failed.
      */
-    CAVEWHERE_LIB_EXPORT QString notFoundOrAccessMessage(const cwGitHostingProviderInfo& info,
-                                                         const QUrl& cloneUrl);
+    CAVEWHERE_LIB_EXPORT QString notFoundOrAccessMessage(const cwGitHostingProviderInfo& info);
 }
 
 #endif // CWGITHOSTINGPROVIDER_H
