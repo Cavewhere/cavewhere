@@ -161,6 +161,52 @@ StandardPage {
         }
     }
 
+    ColumnLayout {
+        id: gridConvergenceCell
+        spacing: Theme.tightSpacing
+
+        RowLayout {
+            spacing: Theme.delegatePadding
+
+            LabelWithHelp {
+                text: "Grid convergence:"
+                helpArea: gridConvergenceHelpArea
+            }
+
+            QC.Label {
+                objectName: "gridConvergenceValue"
+                text: cavePageArea.currentCave ? cavePageArea.currentCave.gridConvergenceText : ""
+
+                QQ.HoverHandler {
+                    id: gridConvergenceHoverId
+                }
+
+                QC.ToolTip.visible: gridConvergenceHoverId.hovered
+                                    && cavePageArea.currentCave
+                                    && cavePageArea.currentCave.gridConvergenceDetailText !== cavePageArea.currentCave.gridConvergenceText
+                QC.ToolTip.text: cavePageArea.currentCave ? cavePageArea.currentCave.gridConvergenceDetailText : ""
+            }
+        }
+
+        HelpArea {
+            id: gridConvergenceHelpArea
+            objectName: "gridConvergenceHelp"
+            Layout.fillWidth: true
+            text: "<p><b>Grid convergence</b> is the angle between <i>true north</i> " +
+                  "(the direction to the geographic pole) and <i>grid north</i> " +
+                  "(the y-axis of the projected coordinate system).</p>" +
+                  "<p>It depends on both the projection and the location — inside one " +
+                  "UTM zone, convergence can vary by a degree or more between the " +
+                  "central meridian and the zone edge.</p>" +
+                  "<p>When CaveWhere computes 3D positions via survex/cavern, the " +
+                  "bearing correction applied to each compass reading is " +
+                  "<b>(magnetic declination − grid convergence)</b>, so corrected " +
+                  "bearings end up aligned to grid north (the projection's y-axis), " +
+                  "not true north. This readout shows the convergence value being " +
+                  "used at this cave's anchor.</p>"
+        }
+    }
+
     QQ.Flow {
         id: actionBar
         spacing: Theme.actionBarSpacing
@@ -258,6 +304,7 @@ StandardPage {
 
                     LayoutItemProxy { target: leadsRow }
                     LayoutItemProxy { target: fixStationsRow }
+                    LayoutItemProxy { target: gridConvergenceCell }
                 }
             }
         }

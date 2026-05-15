@@ -253,8 +253,19 @@ bool cwCoordinateTransform::isValidCS(const QString& cs)
 
 bool cwCoordinateTransform::isGeographic(const QString& cs)
 {
-    if (cs.trimmed().isEmpty()) {
+    const QString key = cs.trimmed();
+    if (key.isEmpty()) {
         return false;
+    }
+
+    // Per-thread cache: callers like cwCave::recomputeGridConvergenceText
+    // hit this on every fix-station edit. Without the cache each call pays
+    // proj_create + proj_get_type + proj_destroy. Capped like nameFor's
+    // cache so CSCustomDialog browsing can't grow it unboundedly.
+    thread_local QHash<QString, bool> cache;
+    auto it = cache.constFind(key);
+    if (it != cache.constEnd()) {
+        return *it;
     }
 
     PJ_CONTEXT* ctx = validatorContext();
@@ -262,16 +273,22 @@ bool cwCoordinateTransform::isGeographic(const QString& cs)
         return false;
     }
 
-    PJ* p = proj_create(ctx, cs.toUtf8().constData());
+    PJ* p = proj_create(ctx, key.toUtf8().constData());
     if (!p) {
         return false;
     }
 
     const PJ_TYPE type = proj_get_type(p);
     proj_destroy(p);
-    return type == PJ_TYPE_GEOGRAPHIC_2D_CRS
+    const bool geographic = type == PJ_TYPE_GEOGRAPHIC_2D_CRS
         || type == PJ_TYPE_GEOGRAPHIC_3D_CRS
         || type == PJ_TYPE_GEOGRAPHIC_CRS;
+
+    if (cache.size() >= 256) {
+        cache.clear();
+    }
+    cache.insert(key, geographic);
+    return geographic;
 }
 
 QString cwCoordinateTransform::utmZoneToEpsg(int zone, bool north)
