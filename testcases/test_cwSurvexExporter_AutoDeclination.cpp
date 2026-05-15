@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Our includes
+#include "BoulderFixtureHelper.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwFixStation.h"
@@ -29,7 +30,6 @@
 #include <QDateTime>
 #include <QSignalSpy>
 #include <QTextStream>
-#include <QTimeZone>
 
 //Std includes
 #include <memory>
@@ -37,11 +37,6 @@
 namespace {
 
 const QString kUtmZ13N = QStringLiteral("EPSG:32613");
-
-QDateTime makeDate(int year, int month, int day)
-{
-    return QDateTime(QDate(year, month, day), QTime(0, 0), QTimeZone::UTC);
-}
 
 // Build a region with one cave, one trip carrying one shot, and one fix
 // station in the named CS. Region returned by unique_ptr so QObject parenting
@@ -53,7 +48,7 @@ struct ExporterFixture {
     cwTripCalibration* calibration;
 };
 
-ExporterFixture buildBoulderFixture()
+ExporterFixture buildBoulderUtmFixture()
 {
     auto region = std::make_unique<cwCavingRegion>();
     region->setGlobalCS(kUtmZ13N);
@@ -72,7 +67,7 @@ ExporterFixture buildBoulderFixture()
     cave->addTrip();
     cwTrip* trip = cave->trip(0);
     trip->setName(QStringLiteral("BoulderTrip"));
-    trip->setDate(makeDate(2024, 6, 1));
+    trip->setDate(makeUtcDate(2024, 6, 1));
 
     auto chunk = new cwSurveyChunk();
     trip->addChunk(chunk);
@@ -104,7 +99,7 @@ QString exportRegion(const cwCavingRegion* region)
 TEST_CASE("cwSurvexExporterRule: autoDeclination on + fix station emits *declination auto and suppresses *calibrate DECLINATION",
           "[cwSurvexExporter_Auto]")
 {
-    auto fixture = buildBoulderFixture();
+    auto fixture = buildBoulderUtmFixture();
     REQUIRE(fixture.calibration->autoDeclination() == true);
     fixture.calibration->setDeclinationManual(99.0); // sentinel: must not appear in output
 
@@ -123,7 +118,7 @@ TEST_CASE("cwSurvexExporterRule: autoDeclination on + fix station emits *declina
 TEST_CASE("cwSurvexExporterRule: autoDeclination off emits literal *calibrate DECLINATION and no auto command",
           "[cwSurvexExporter_Auto]")
 {
-    auto fixture = buildBoulderFixture();
+    auto fixture = buildBoulderUtmFixture();
     fixture.calibration->setAutoDeclination(false);
     fixture.calibration->setDeclinationManual(12.34);
 
@@ -147,7 +142,7 @@ TEST_CASE("cwSurvexExporterRule: autoDeclination on but no fix station falls bac
     cave->addTrip();
     cwTrip* trip = cave->trip(0);
     trip->setName(QStringLiteral("UnfixedTrip"));
-    trip->setDate(makeDate(2024, 6, 1));
+    trip->setDate(makeUtcDate(2024, 6, 1));
     auto chunk = new cwSurveyChunk();
     trip->addChunk(chunk);
     chunk->appendNewShot();
@@ -172,7 +167,7 @@ TEST_CASE("cwSurvexExporterRule: autoDeclination on but no fix station falls bac
 TEST_CASE("cwSurvexExporterTripTask: writeTrip with a valid DeclinationContext emits *declination auto",
           "[cwSurvexExporter_Auto]")
 {
-    auto fixture = buildBoulderFixture();
+    auto fixture = buildBoulderUtmFixture();
     REQUIRE(fixture.calibration->autoDeclination() == true);
 
     const cwSurvexExporterUtils::DeclinationContext ctx{
@@ -203,7 +198,7 @@ TEST_CASE("cwSurvexExporterTripTask: writeTrip with no DeclinationContext falls 
     // carries the stored manual value.
     cwTrip trip;
     trip.setName(QStringLiteral("FreeTrip"));
-    trip.setDate(makeDate(2024, 6, 1));
+    trip.setDate(makeUtcDate(2024, 6, 1));
     auto chunk = new cwSurveyChunk();
     trip.addChunk(chunk);
     chunk->appendNewShot();

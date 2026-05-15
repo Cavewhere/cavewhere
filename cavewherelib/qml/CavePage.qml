@@ -161,6 +161,52 @@ StandardPage {
         }
     }
 
+    ColumnLayout {
+        id: gridConvergenceCell
+        spacing: Theme.tightSpacing
+
+        RowLayout {
+            spacing: Theme.delegatePadding
+
+            LabelWithHelp {
+                text: "Grid convergence:"
+                helpArea: gridConvergenceHelpArea
+            }
+
+            QC.Label {
+                objectName: "gridConvergenceValue"
+                text: cavePageArea.currentCave ? cavePageArea.currentCave.gridConvergenceText : ""
+
+                QQ.HoverHandler {
+                    id: gridConvergenceHoverId
+                }
+
+                QC.ToolTip.visible: gridConvergenceHoverId.hovered
+                                    && cavePageArea.currentCave
+                                    && cavePageArea.currentCave.gridConvergenceDetailText !== cavePageArea.currentCave.gridConvergenceText
+                QC.ToolTip.text: cavePageArea.currentCave ? cavePageArea.currentCave.gridConvergenceDetailText : ""
+            }
+        }
+
+        HelpArea {
+            id: gridConvergenceHelpArea
+            objectName: "gridConvergenceHelp"
+            Layout.fillWidth: true
+            text: "<p><b>Grid convergence</b> is the angle between <i>true north</i> " +
+                  "(the direction to the geographic pole) and <i>grid north</i> " +
+                  "(the y-axis of the projected coordinate system).</p>" +
+                  "<p>It depends on both the projection and the location — inside one " +
+                  "UTM zone, convergence can vary by a degree or more between the " +
+                  "central meridian and the zone edge.</p>" +
+                  "<p>When CaveWhere computes 3D positions via survex/cavern, the " +
+                  "bearing correction applied to each compass reading is " +
+                  "<b>(magnetic declination − grid convergence)</b>, so corrected " +
+                  "bearings end up aligned to grid north (the projection's y-axis), " +
+                  "not true north. This readout shows the convergence value being " +
+                  "used at this cave's anchor.</p>"
+        }
+    }
+
     QQ.Flow {
         id: actionBar
         spacing: Theme.actionBarSpacing
@@ -212,7 +258,6 @@ StandardPage {
         active: !cavePageArea.isNarrow
         visible: !cavePageArea.isNarrow
         Layout.fillWidth: true
-        Layout.fillHeight: true
         sourceComponent: wideTableComponent
     }
 
@@ -226,49 +271,71 @@ StandardPage {
     }
 
     // --- Wide layout ---
-    RowLayout {
-        id: wideLayoutId
+    // Page-level Flickable so the stats column can grow (e.g. when the
+    // grid-convergence HelpArea expands) past the viewport and the user
+    // can scroll the entire page. Using Flickable + attached ScrollBar
+    // because QC.ScrollView's attached ScrollBar.vertical doesn't
+    // auto-anchor under Qt 6.11 macOS — the bar ends up at (0,0).
+    QQ.Flickable {
+        id: wideFlickableId
         visible: !cavePageArea.isNarrow
         anchors.fill: parent
-        anchors.margins: Theme.pageMargin
-        spacing: Theme.columnGap
+        clip: true
+        contentWidth: width
+        contentHeight: wideLayoutId.implicitHeight + 2 * Theme.pageMargin
+        // Desktop page, not a touch list — no overshoot bounce.
+        boundsBehavior: QQ.Flickable.StopAtBounds
 
-        ColumnLayout {
-            Layout.minimumWidth: statsColumnId.implicitWidth + Theme.statsPadding
-            Layout.maximumWidth: Theme.infoColumnMaxWidth
-            Layout.alignment: Qt.AlignTop
-            spacing: Theme.flowSpacing
-
-            LayoutItemProxy { target: caveNameText }
-
-            QQ.Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: statsColumnId.implicitHeight + Theme.statsPadding
-                color: Theme.borderSubtle
-
-                ColumnLayout {
-                    id: statsColumnId
-                    anchors.centerIn: parent
-                    spacing: Theme.tightSpacing
-
-                    LayoutItemProxy { target: lengthStat }
-                    LayoutItemProxy { target: depthStat }
-
-                    QQ.Item { implicitHeight: Theme.delegatePadding }
-
-                    LayoutItemProxy { target: leadsRow }
-                    LayoutItemProxy { target: fixStationsRow }
-                }
-            }
+        QC.ScrollBar.vertical: QC.ScrollBar {
+            objectName: "cavePageVerticalScrollBar"
+            policy: QC.ScrollBar.AsNeeded
         }
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            spacing: Theme.sectionSpacing
+        RowLayout {
+            id: wideLayoutId
+            x: Theme.pageMargin
+            y: Theme.pageMargin
+            width: wideFlickableId.width - 2 * Theme.pageMargin
+            spacing: Theme.columnGap
 
-            LayoutItemProxy { target: actionBar }
-            LayoutItemProxy { target: wideLoaderId }
+            ColumnLayout {
+                Layout.minimumWidth: statsColumnId.implicitWidth + Theme.statsPadding
+                Layout.maximumWidth: Theme.infoColumnMaxWidth
+                Layout.alignment: Qt.AlignTop
+                spacing: Theme.flowSpacing
+
+                LayoutItemProxy { target: caveNameText }
+
+                QQ.Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: statsColumnId.implicitHeight + Theme.statsPadding
+                    color: Theme.borderSubtle
+
+                    ColumnLayout {
+                        id: statsColumnId
+                        anchors.centerIn: parent
+                        spacing: Theme.tightSpacing
+
+                        LayoutItemProxy { target: lengthStat }
+                        LayoutItemProxy { target: depthStat }
+
+                        QQ.Item { implicitHeight: Theme.delegatePadding }
+
+                        LayoutItemProxy { target: leadsRow }
+                        LayoutItemProxy { target: fixStationsRow }
+                        LayoutItemProxy { target: gridConvergenceCell }
+                    }
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
+                spacing: Theme.sectionSpacing
+
+                LayoutItemProxy { target: actionBar }
+                LayoutItemProxy { target: wideLoaderId }
+            }
         }
     }
 
@@ -430,171 +497,168 @@ StandardPage {
                     }
                 }
 
-                QC.ScrollView {
-                    id: scrollViewId
-                    implicitWidth: tableViewId.implicitWidth +
-                                   QC.ScrollBar.vertical.implicitWidth
-                    Layout.fillHeight: true
+                TableStaticView {
+                    id: tableViewId
+                    objectName: "tripTableView"
+                    model: tripProxyModel
+                    columnModel: columnModelId
+                    Layout.fillWidth: true
+                    // Render every row at full height; the page-level
+                    // Flickable handles scrolling, so we disable the
+                    // ListView's own flick interaction.
+                    Layout.preferredHeight: tableViewId.contentHeight
+                    interactive: false
 
-                    TableStaticView {
-                        id: tableViewId
-                        objectName: "tripTableView"
-                        model: tripProxyModel
-                        columnModel: columnModelId
-                        Layout.fillHeight: true
-
-                        // Per-row MouseAreas grab row taps first; this only
-                        // fires for empty space below the last row.
-                        QQ.TapHandler {
-                            acceptedButtons: Qt.LeftButton
-                            onTapped: cavePageArea.selection.clear()
-                        }
-
-                        component RowDelegate : QQ.Item {
-                            id: rowDelegateId
-                            required property Trip tripObjectRole
-                            required property string tripNameRole
-                            required property date tripDateRole
-                            required property string usedStationsRole
-                            required property real tripDistanceRole
-                            required property real declinationRole
-                            required property bool autoDeclinationRole
-                            required property int index
-
-                            implicitWidth: layoutId.width
-                            implicitHeight: layoutId.height
-
-                            DataRightClickMouseMenu {
-                                anchors.fill: parent
-                                removeChallenge: removeChallengeId
-                                row: rowDelegateId.index
-                                name: rowDelegateId.tripNameRole
-                                tripCalibrations: cavePageArea.getCalibrationsForRow(rowDelegateId.index)
-                            }
-
-                            TableRowBackground {
-                                isSelected: cavePageArea.isRowSelected(rowDelegateId.index)
-                                rowIndex: rowDelegateId.index
-                                anchors.fill: parent
-                            }
-
-                            QQ.MouseArea {
-                                anchors.fill: parent
-                                acceptedButtons: Qt.LeftButton
-
-                                onClicked: (mouse) => {
-                                    tableViewId.currentIndex = rowDelegateId.index
-                                    cavePageArea.applySelectionClick(rowDelegateId.index, mouse.modifiers)
-                                }
-                            }
-
-                            RowLayout {
-                                id: layoutId
-
-                                spacing: 0
-
-                                QQ.Item {
-                                    implicitWidth: nameColumn.columnWidth
-                                    implicitHeight: rowLayout.height
-                                    clip: true
-
-                                    RowLayout {
-                                        id: rowLayout
-                                        spacing: 1
-
-                                        ErrorIconBar {
-                                            errorModel: rowDelegateId.tripObjectRole.errorModel
-                                        }
-
-                                        LinkText {
-                                            text: rowDelegateId.tripNameRole
-                                            elide: QQ.Text.ElideRight
-
-                                            onClicked: {
-                                                RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                                                           tripPageName(rowDelegateId.tripObjectRole));
-                                            }
-                                        }
-                                    }
-                                }
-
-                                QQ.Item {
-                                    implicitWidth: dateColumn.columnWidth
-                                    implicitHeight: dateId.implicitHeight
-                                    clip: true
-                                    QC.Label {
-                                        id: dateId
-                                        elide: QQ.Text.ElideRight
-                                        text: Qt.formatDateTime(rowDelegateId.tripDateRole, "yyyy-MM-dd")
-                                    }
-                                }
-
-                                QQ.Item {
-                                    implicitWidth: stationsColumn.columnWidth
-                                    implicitHeight: usedStationsId.implicitHeight
-                                    clip: true
-
-                                    QC.Label {
-                                        id: usedStationsId
-                                        elide: QQ.Text.ElideRight
-                                        text: usedStationsRole
-                                    }
-                                }
-
-                                QQ.Item {
-                                    implicitWidth: lengthColumn.columnWidth
-                                    implicitHeight: lengthId.implicitHeight
-                                    clip: true
-
-                                    QC.Label {
-                                        id: lengthId
-                                        elide: QQ.Text.ElideRight
-                                        text: {
-                                            var unit = ""
-                                            switch(rowDelegateId.tripObjectRole.calibration.distanceUnit) {
-                                            case Units.Meters:
-                                                unit = "m"
-                                                break;
-                                            case Units.Feet:
-                                                unit = "ft"
-                                                break;
-                                            }
-
-                                            return Utils.fixed(rowDelegateId.tripDistanceRole, 2) + " " + unit;
-                                        }
-                                    }
-                                }
-
-                                QQ.Item {
-                                    implicitWidth: declColumn.columnWidth
-                                    implicitHeight: declRowId.implicitHeight
-                                    clip: true
-
-                                    RowLayout {
-                                        id: declRowId
-                                        spacing: 4
-
-                                        QC.Label {
-                                            elide: QQ.Text.ElideRight
-                                            text: Utils.fixed(rowDelegateId.declinationRole, 2) + "°"
-                                        }
-
-                                        QC.Label {
-                                            elide: QQ.Text.ElideRight
-                                            color: Theme.textSubtle
-                                            font.pixelSize: Theme.fontSizeCaption
-                                            text: rowDelegateId.autoDeclinationRole ? "auto" : "manual"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        delegate: RowDelegate {}
+                    // Per-row MouseAreas grab row taps first; this only
+                    // fires for empty space below the last row.
+                    QQ.TapHandler {
+                        acceptedButtons: Qt.LeftButton
+                        onTapped: cavePageArea.selection.clear()
                     }
+
+                    component RowDelegate : QQ.Item {
+                        id: rowDelegateId
+                        required property Trip tripObjectRole
+                        required property string tripNameRole
+                        required property date tripDateRole
+                        required property string usedStationsRole
+                        required property real tripDistanceRole
+                        required property real declinationRole
+                        required property bool autoDeclinationRole
+                        required property int index
+
+                        implicitWidth: layoutId.width
+                        implicitHeight: layoutId.height
+
+                        DataRightClickMouseMenu {
+                            anchors.fill: parent
+                            removeChallenge: removeChallengeId
+                            row: rowDelegateId.index
+                            name: rowDelegateId.tripNameRole
+                            tripCalibrations: cavePageArea.getCalibrationsForRow(rowDelegateId.index)
+                        }
+
+                        TableRowBackground {
+                            isSelected: cavePageArea.isRowSelected(rowDelegateId.index)
+                            rowIndex: rowDelegateId.index
+                            anchors.fill: parent
+                        }
+
+                        QQ.MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton
+
+                            onClicked: (mouse) => {
+                                tableViewId.currentIndex = rowDelegateId.index
+                                cavePageArea.applySelectionClick(rowDelegateId.index, mouse.modifiers)
+                            }
+                        }
+
+                        RowLayout {
+                            id: layoutId
+
+                            spacing: 0
+
+                            QQ.Item {
+                                implicitWidth: nameColumn.columnWidth
+                                implicitHeight: rowLayout.height
+                                clip: true
+
+                                RowLayout {
+                                    id: rowLayout
+                                    spacing: 1
+
+                                    ErrorIconBar {
+                                        errorModel: rowDelegateId.tripObjectRole.errorModel
+                                    }
+
+                                    LinkText {
+                                        text: rowDelegateId.tripNameRole
+                                        elide: QQ.Text.ElideRight
+
+                                        onClicked: {
+                                            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                                                                                       tripPageName(rowDelegateId.tripObjectRole));
+                                        }
+                                    }
+                                }
+                            }
+
+                            QQ.Item {
+                                implicitWidth: dateColumn.columnWidth
+                                implicitHeight: dateId.implicitHeight
+                                clip: true
+                                QC.Label {
+                                    id: dateId
+                                    elide: QQ.Text.ElideRight
+                                    text: Qt.formatDateTime(rowDelegateId.tripDateRole, "yyyy-MM-dd")
+                                }
+                            }
+
+                            QQ.Item {
+                                implicitWidth: stationsColumn.columnWidth
+                                implicitHeight: usedStationsId.implicitHeight
+                                clip: true
+
+                                QC.Label {
+                                    id: usedStationsId
+                                    elide: QQ.Text.ElideRight
+                                    text: usedStationsRole
+                                }
+                            }
+
+                            QQ.Item {
+                                implicitWidth: lengthColumn.columnWidth
+                                implicitHeight: lengthId.implicitHeight
+                                clip: true
+
+                                QC.Label {
+                                    id: lengthId
+                                    elide: QQ.Text.ElideRight
+                                    text: {
+                                        var unit = ""
+                                        switch(rowDelegateId.tripObjectRole.calibration.distanceUnit) {
+                                        case Units.Meters:
+                                            unit = "m"
+                                            break;
+                                        case Units.Feet:
+                                            unit = "ft"
+                                            break;
+                                        }
+
+                                        return Utils.fixed(rowDelegateId.tripDistanceRole, 2) + " " + unit;
+                                    }
+                                }
+                            }
+
+                            QQ.Item {
+                                implicitWidth: declColumn.columnWidth
+                                implicitHeight: declRowId.implicitHeight
+                                clip: true
+
+                                RowLayout {
+                                    id: declRowId
+                                    spacing: 4
+
+                                    QC.Label {
+                                        elide: QQ.Text.ElideRight
+                                        text: Utils.fixed(rowDelegateId.declinationRole, 2) + "°"
+                                    }
+
+                                    QC.Label {
+                                        elide: QQ.Text.ElideRight
+                                        color: Theme.textSubtle
+                                        font.pixelSize: Theme.fontSizeCaption
+                                        text: rowDelegateId.autoDeclinationRole ? "auto" : "manual"
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    delegate: RowDelegate {}
                 }
             }
-
     }
 
     QQ.Component {

@@ -130,18 +130,34 @@ QVariant cwErrorListModel::data(const QModelIndex &index, int role) const
 
 bool cwErrorListModel::setData(const QModelIndex &index, const QVariant &value, int role)
 {
-    if(index.isValid()) {
-        switch(role) {
-        case static_cast<int>(ErrorRoles::SuppressedRole): {
-            cwError& error = m_errors[index.row()];
-            error.setSupressed(value.toBool());
-            emit dataChanged(index, index, {static_cast<int>(ErrorRoles::SuppressedRole)});
-        }
-        default:
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_errors.size()) {
+        return false;
+    }
+
+    switch (role) {
+    case static_cast<int>(ErrorRoles::SuppressedRole): {
+        cwError& error = m_errors[index.row()];
+        const bool newValue = value.toBool();
+        if (error.suppressed() == newValue) {
             return false;
         }
+        error.setSupressed(newValue);
+        emit dataChanged(index, index, {static_cast<int>(ErrorRoles::SuppressedRole)});
+        return true;
     }
-    return false;
+    case static_cast<int>(ErrorRoles::MessageRole): {
+        cwError& error = m_errors[index.row()];
+        const QString newValue = value.toString();
+        if (error.message() == newValue) {
+            return false;
+        }
+        error.setMessage(newValue);
+        emit dataChanged(index, index, {static_cast<int>(ErrorRoles::MessageRole)});
+        return true;
+    }
+    default:
+        return false;
+    }
 }
 
 void cwErrorListModel::append(const cwError &error)

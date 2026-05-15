@@ -45,6 +45,8 @@ class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
     Q_PROPERTY(cwLength* depth READ depth CONSTANT)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
     Q_PROPERTY(cwFixStationModel* fixStations READ fixStations CONSTANT)
+    Q_PROPERTY(QString gridConvergenceText READ gridConvergenceText NOTIFY gridConvergenceTextChanged)
+    Q_PROPERTY(QString gridConvergenceDetailText READ gridConvergenceDetailText NOTIFY gridConvergenceTextChanged)
 
 public:
     enum Roles {
@@ -68,6 +70,22 @@ public:
 
     cwErrorModel* errorModel() const;
     cwFixStationModel* fixStations() const { return FixStations; }
+
+    /**
+     * Compact grid-convergence string for inline display. Format:
+     * "0.7° at <stationName>" when computable, "n/a (geographic CS)" /
+     * "n/a (no fix station)" otherwise. CS name lives in the
+     * gridConvergenceDetailText sibling for tooltip use.
+     */
+    QString gridConvergenceText() const { return m_gridConvergenceText; }
+
+    /**
+     * Full grid-convergence string with CS name appended for tooltip
+     * display: "0.7° at <stationName> (WGS 84 / UTM zone 13N)". For n/a
+     * cases this matches gridConvergenceText since there's nothing extra
+     * to show.
+     */
+    QString gridConvergenceDetailText() const { return m_gridConvergenceDetailText; }
 
     int tripCount() const;
     Q_INVOKABLE cwTrip* trip(int index) const;
@@ -117,6 +135,15 @@ signals:
     void stationPositionPositionChanged();
     void surveyNetworkChanged();
 
+    void gridConvergenceTextChanged();
+
+public slots:
+    /// Recompute m_gridConvergenceText eagerly. CavePage's binding reads
+    /// the cached string on each property read — letting it call
+    /// cwGridConvergence directly would re-do the PROJ work every time
+    /// a dependent binding re-evaluates.
+    void recomputeGridConvergenceText();
+
 private:
     QList<cwTrip*> Trips;
     QString Name;
@@ -133,6 +160,9 @@ private:
 
     cwSurveyNetwork Network;
     cwSanitizedNameSet m_tripNames;
+
+    QString m_gridConvergenceText;
+    QString m_gridConvergenceDetailText;
 
     cwCave& Copy(const cwCave& object);
     void addTripNullHelper();

@@ -12,7 +12,11 @@
 #include "cwLength.h"
 #include "cwErrorModel.h"
 #include "cwCavingRegion.h"
+#include "cwCoordinateTransform.h"
 #include "cwData.h"
+#include "cwFixStation.h"
+#include "cwFixStationModel.h"
+#include "cwGridConvergence.h"
 #include "cwNameUtils.h"
 
 //Qt includes
@@ -35,6 +39,26 @@ cwCave::cwCave(QObject* parent) :
     Depth->setUpdateValue(true);
 
 //    ErrorModel->addParent(this);
+
+    connect(FixStations, &cwFixStationModel::countChanged,
+            this, &cwCave::recomputeGridConvergenceText);
+    connect(FixStations, &QAbstractItemModel::modelReset,
+            this, &cwCave::recomputeGridConvergenceText);
+    // Filter dataChanged on the roles that actually influence the
+    // formatted convergence — variance/id edits would otherwise walk
+    // PROJ only to be discarded by the change-detection guard.
+    connect(FixStations, &QAbstractItemModel::dataChanged, this,
+            [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
+                if (roles.isEmpty()
+                    || roles.contains(cwFixStationModel::InputCSRole)
+                    || roles.contains(cwFixStationModel::EastingRole)
+                    || roles.contains(cwFixStationModel::NorthingRole)
+                    || roles.contains(cwFixStationModel::ElevationRole)
+                    || roles.contains(cwFixStationModel::StationNameRole)) {
+                    recomputeGridConvergenceText();
+                }
+            });
+    recomputeGridConvergenceText();
 }
 
 // /**
@@ -216,6 +240,60 @@ void cwCave::clearTrips() {
 cwCavingRegion *cwCave::parentRegion() const
 {
     return dynamic_cast<cwCavingRegion*>(parent());
+}
+
+void cwCave::recomputeGridConvergenceText()
+{
+    struct Texts { QString compact; QString detail; };
+    const Texts texts = [this]() -> Texts {
+        const QList<cwFixStation>& fixes = FixStations->fixStations();
+        if (fixes.isEmpty()) {
+            const QString t = QStringLiteral("n/a (no fix station)");
+            return { t, t };
+        }
+
+        const cwFixStation& first = fixes.first();
+        QString sourceCS = first.inputCS().trimmed();
+        if (sourceCS.isEmpty()) {
+            const cwCavingRegion* region = parentRegion();
+            sourceCS = region ? region->globalCS().trimmed() : QString();
+        }
+
+        if (sourceCS.isEmpty()) {
+            const QString t = QStringLiteral("n/a (no coordinate system)");
+            return { t, t };
+        }
+        if (cwCoordinateTransform::isGeographic(sourceCS)) {
+            const QString t = QStringLiteral("n/a (geographic CS)");
+            return { t, t };
+        }
+
+        const cwGeoPoint location(first.easting(), first.northing(), first.elevation());
+        const auto result = cwGridConvergence::computeAt(location, sourceCS);
+        if (result.hasError()) {
+            const QString t = QStringLiteral("n/a (%1)").arg(result.errorMessage());
+            return { t, t };
+        }
+
+        const QString stationName = first.stationName().isEmpty()
+            ? QStringLiteral("fix station")
+            : first.stationName();
+        const QString csName = cwCoordinateTransform::nameFor(sourceCS);
+        const QString csLabel = csName.isEmpty() ? sourceCS : csName;
+
+        const QString compact = QStringLiteral("%1° at %2")
+            .arg(result.value(), 0, 'f', 2)
+            .arg(stationName);
+        const QString detail = QStringLiteral("%1 (%2)").arg(compact, csLabel);
+        return { compact, detail };
+    }();
+
+    if (texts.compact != m_gridConvergenceText
+        || texts.detail != m_gridConvergenceDetailText) {
+        m_gridConvergenceText = texts.compact;
+        m_gridConvergenceDetailText = texts.detail;
+        emit gridConvergenceTextChanged();
+    }
 }
 
 /**

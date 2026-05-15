@@ -10,6 +10,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 //Our includes
+#include "BoulderFixtureHelper.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
@@ -22,53 +23,11 @@
 //Qt includes
 #include <QDateTime>
 #include <QSignalSpy>
-#include <QTimeZone>
 
 //Std includes
 #include <memory>
 
 using Catch::Matchers::WithinAbs;
-
-namespace {
-
-const QString Wgs84 = QStringLiteral("EPSG:4326");
-
-QDateTime makeDate(int year, int month, int day)
-{
-    return QDateTime(QDate(year, month, day), QTime(0, 0), QTimeZone::UTC);
-}
-
-// region owns the cave (and transitively the trip + calibration) via QObject
-// parenting, so the unique_ptr handles cleanup even when a REQUIRE early-exits.
-struct BoulderFixture {
-    std::unique_ptr<cwCavingRegion> region;
-    cwCave* cave;
-    cwTrip* trip;
-    cwTripCalibration* calibration;
-};
-
-BoulderFixture buildBoulderFixture()
-{
-    auto region = std::make_unique<cwCavingRegion>();
-    auto* cave = new cwCave();
-    region->addCave(cave);
-
-    cwFixStation fix;
-    fix.setStationName(QStringLiteral("Entrance"));
-    fix.setInputCS(Wgs84);
-    fix.setEasting(-105.27);
-    fix.setNorthing(40.015);
-    fix.setElevation(1655.0);
-    cave->fixStations()->appendFixStation(fix);
-
-    cave->addTrip();
-    cwTrip* trip = cave->trip(0);
-    trip->setDate(makeDate(2024, 6, 1));
-
-    return { std::move(region), cave, trip, trip->calibrations() };
-}
-
-} // namespace
 
 TEST_CASE("cwTripCalibration: default-constructed defaults", "[cwTripCalibration_Auto]")
 {
@@ -110,7 +69,7 @@ TEST_CASE("cwTripCalibration: no fix station → autoDeclinationAvailable false,
     region->addCave(cave);
     cave->addTrip();
     cwTrip* trip = cave->trip(0);
-    trip->setDate(makeDate(2024, 6, 1));
+    trip->setDate(makeUtcDate(2024, 6, 1));
 
     cwTripCalibration* calibration = trip->calibrations();
     calibration->setDeclinationManual(7.5);
@@ -127,7 +86,7 @@ TEST_CASE("cwTripCalibration: declinationChanged fires when fix station is added
     region->addCave(cave);
     cave->addTrip();
     cwTrip* trip = cave->trip(0);
-    trip->setDate(makeDate(2024, 6, 1));
+    trip->setDate(makeUtcDate(2024, 6, 1));
     cwTripCalibration* calibration = trip->calibrations();
 
     REQUIRE(calibration->autoDeclinationAvailable() == false);
@@ -138,7 +97,7 @@ TEST_CASE("cwTripCalibration: declinationChanged fires when fix station is added
 
     cwFixStation fix;
     fix.setStationName(QStringLiteral("Entrance"));
-    fix.setInputCS(Wgs84);
+    fix.setInputCS(kWgs84);
     fix.setEasting(-105.27);
     fix.setNorthing(40.015);
     fix.setElevation(1655.0);
@@ -158,7 +117,7 @@ TEST_CASE("cwTripCalibration: declinationChanged fires when trip date changes", 
     QSignalSpy declinationSpy(fixture.calibration, &cwTripCalibration::declinationChanged);
 
     // 44-year IGRF drift at Boulder is well above numerical noise.
-    fixture.trip->setDate(makeDate(1980, 6, 1));
+    fixture.trip->setDate(makeUtcDate(1980, 6, 1));
 
     CHECK(declinationSpy.count() >= 1);
     const double resolvedAt1980 = fixture.calibration->declination();

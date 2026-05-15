@@ -17,6 +17,7 @@
 
 //Our includes
 #include "cwUnits.h"
+#include "cwError.h"
 #include "Monad/Result.h"
 
 class cwTrip;
@@ -204,7 +205,7 @@ public:
     // resolveAuto() succeeds; manual otherwise.
     double declination() const { return m_cachedResolvedDeclination; }
     bool autoDeclinationAvailable() const { return m_cachedAutoDeclinationAvailable; }
-    QString declinationWarning() const { return m_cachedDeclinationWarning; }
+    QString declinationWarning() const { return m_declinationWarningError.message(); }
 
     // Setters that update the internal data and emit signals if changed:
     void setCorrectedCompassBacksight(bool value);
@@ -278,12 +279,15 @@ private:
     // plot, and survex export) stays O(1). Refreshed on every input change.
     double m_cachedResolvedDeclination;
     bool m_cachedAutoDeclinationAvailable;
-    QString m_cachedDeclinationWarning;
+
+    // Owned slot in parent trip's errorModel — empty message means inactive.
+    cwError m_declinationWarningError;
 
     Monad::Result<double> resolveAuto() const;
     void refreshResolved();
     void rewireCaveSignals();
-    void updateWarnings();
+    void updateWarnings(const Monad::Result<double>& autoResult);
+    void clearActiveDeclinationWarning();
 };
 
 

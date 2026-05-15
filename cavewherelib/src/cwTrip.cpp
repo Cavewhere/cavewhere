@@ -31,7 +31,6 @@ cwTrip::cwTrip(QObject *parent) :
 //    DistanceUnit = cwUnits::Meters;
     Team = new cwTeam(this);
     Calibration = new cwTripCalibration(this);
-    Calibration->setParentTrip(this);
     DateTime = QDateTime(QDate::currentDate(), QTime());
     Notes = new cwSurveyNoteModel(this);
     NotesLidar = new cwSurveyNoteLiDARModel(this);
@@ -39,6 +38,11 @@ cwTrip::cwTrip(QObject *parent) :
     ErrorModel = new cwErrorModel(this);
     KeywordModel = new cwKeywordModel(this);
     Id = QUuid::createUuid();
+
+    // After ErrorModel exists — setParentTrip registers the calibration's
+    // child error model under this trip's, so its declination warnings
+    // aggregate into the trip's warningCount.
+    Calibration->setParentTrip(this);
 
     Notes->setParentTrip(this);
     NotesLidar->setParentTrip(this);
@@ -147,9 +151,13 @@ void cwTrip::setId(const QUuid& id)
   Sets the date of the trip
   */
 void cwTrip::setDate(QDateTime date) {
-    if(date != DateTime && !date.isNull()) {
-        pushUndo(new DateCommand(this, QDateTime(date.date(), QTime()))); //Strips the time away
+    if (date == DateTime) {
+        return;
     }
+    const QDateTime normalized = date.isValid()
+        ? QDateTime(date.date(), QTime())
+        : QDateTime();
+    pushUndo(new DateCommand(this, normalized));
 }
 
 
