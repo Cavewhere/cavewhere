@@ -22,7 +22,7 @@ brew install terminal-notifier   # clickable macOS notifications
 brew install coreutils           # gtimeout for test timeouts
 ```
 
-Conan 2, CMake, and Qt 6.11 (`~/Qt/6.11.0/macos`) must be installed.
+Conan 2, CMake, and Qt 6.11 (`~/Qt/6.11.1/macos`) must be installed.
 
 ## Running manually
 
