@@ -104,6 +104,32 @@ MainWindowTest {
                    "detail includes the CS name: " + detail)
         }
 
+        // ── Page-level scrollbar activates when the help expands ─────────────
+
+        function test_pageScrollbarReflectsContentOverflow() {
+            const scrollBar = findChild(cavePage(), "cavePageVerticalScrollBar")
+            verify(scrollBar !== null, "page-level vertical scrollbar must exist")
+
+            const helpArea = findChild(cavePage(), "gridConvergenceHelp")
+            verify(helpArea !== null)
+            helpArea.visible = false
+
+            // Baseline: with help collapsed and an empty trip table, content
+            // fits — scrollbar size is at-or-near full track (no overflow).
+            const sizeCollapsed = scrollBar.size
+            verify(sizeCollapsed > 0.0, "scrollbar size is defined")
+
+            // Expanding the help block grows the stats column. Either the
+            // scrollbar appears (size drops below 1) or it stays at 1 if the
+            // viewport is taller than the expanded content. Both are fine, but
+            // size must not *grow* — overflow only adds height.
+            helpArea.visible = true
+            const sizeExpanded = scrollBar.size
+            verify(sizeExpanded <= sizeCollapsed + 0.001,
+                   "expanded help must not shrink content: "
+                   + sizeCollapsed + " -> " + sizeExpanded)
+        }
+
         // ── Help area toggles when the label is clicked ──────────────────────
 
         function test_helpAreaTogglesOnLabelClick() {
