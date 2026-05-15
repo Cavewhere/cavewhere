@@ -32,7 +32,8 @@ TEST_CASE("cwGitHostingProvider::forHost looks up by canonical host", "[GitHosti
         CHECK(info.host.isEmpty());
         CHECK(info.displayName.isEmpty());
         CHECK(info.collaboratorPathSuffix.isEmpty());
-        CHECK_FALSE(info.openLinkLabel.isEmpty());
+        CHECK(info.invitationsUrl.isEmpty());
+        CHECK(info.invitationsLinkLabel.isEmpty());
         CHECK_FALSE(info.authMessage.isEmpty());
         CHECK_FALSE(info.notFoundMessage.isEmpty());
     }
@@ -173,33 +174,42 @@ TEST_CASE("cwGitHostingProvider::notFoundOrAccessMessage composes a clickable su
 {
     const auto& github = cwGitHostingProvider::forHost(QStringLiteral("github.com"));
 
-    SECTION("Embeds <a href> link when web URL can be derived") {
+    SECTION("GitHub embeds the pending-invitations link, not the repo URL") {
         const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(
             github, QUrl(QStringLiteral("https://github.com/owner/repo.git")));
         CHECK(msg.contains(github.notFoundMessage));
-        CHECK(msg.contains(QStringLiteral("<a href=\"https://github.com/owner/repo\">")));
-        CHECK(msg.contains(github.openLinkLabel));
+        CHECK(msg.contains(QStringLiteral(
+            "<a href=\"https://github.com/notifications?query=reason%3Ainvitation\">")));
+        CHECK(msg.contains(github.invitationsLinkLabel));
+        // The repo URL must NOT appear — it 404s for the same reason the
+        // clone failed, so linking to it would just send the user to another
+        // 404 page.
+        CHECK_FALSE(msg.contains(QStringLiteral("github.com/owner/repo<")));
+        CHECK_FALSE(msg.contains(QStringLiteral("github.com/owner/repo\"")));
     }
 
-    SECTION("Omits link when web URL cannot be derived (host mismatch)") {
+    SECTION("GitLab omits the link (no clean invitations page)") {
+        const auto& gitlab = cwGitHostingProvider::forHost(QStringLiteral("gitlab.com"));
+        REQUIRE(gitlab.invitationsUrl.isEmpty());
         const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(
-            github, QUrl(QStringLiteral("https://gitlab.com/owner/repo")));
-        CHECK(msg == github.notFoundMessage);
+            gitlab, QUrl(QStringLiteral("https://gitlab.com/owner/repo.git")));
+        CHECK(msg == gitlab.notFoundMessage);
         CHECK_FALSE(msg.contains(QStringLiteral("<a href")));
     }
 
-    SECTION("Generic provider with https URL still gets a link") {
+    SECTION("Bitbucket omits the link (no clean invitations page)") {
+        const auto& bitbucket = cwGitHostingProvider::forHost(QStringLiteral("bitbucket.org"));
+        REQUIRE(bitbucket.invitationsUrl.isEmpty());
+        const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(
+            bitbucket, QUrl(QStringLiteral("https://bitbucket.org/team/repo.git")));
+        CHECK(msg == bitbucket.notFoundMessage);
+        CHECK_FALSE(msg.contains(QStringLiteral("<a href")));
+    }
+
+    SECTION("Generic provider has no link") {
         const auto& generic = cwGitHostingProvider::forHost(QStringLiteral("unknown.example"));
         const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(
             generic, QUrl(QStringLiteral("https://unknown.example/owner/repo.git")));
-        CHECK(msg.contains(QStringLiteral("<a href=\"https://unknown.example/owner/repo\">")));
-        CHECK(msg.contains(generic.openLinkLabel));
-    }
-
-    SECTION("Generic provider with ssh URL has no link") {
-        const auto& generic = cwGitHostingProvider::forHost(QStringLiteral("unknown.example"));
-        const QString msg = cwGitHostingProvider::notFoundOrAccessMessage(
-            generic, QUrl(QStringLiteral("ssh://git@unknown.example/owner/repo.git")));
         CHECK(msg == generic.notFoundMessage);
         CHECK_FALSE(msg.contains(QStringLiteral("<a href")));
     }

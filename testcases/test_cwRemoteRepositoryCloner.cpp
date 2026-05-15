@@ -150,11 +150,20 @@ TEST_CASE("cwRemoteRepositoryCloner::friendlyCloneErrorMessage produces the expe
         CHECK_FALSE(unknown.contains(QStringLiteral("GitHub")));
     }
 
-    SECTION("NotFoundOrAccess embeds an <a href> to the web URL") {
+    SECTION("NotFoundOrAccess embeds the pending-invitations link for GitHub") {
         const QString msg =
             cwRemoteRepositoryCloner::friendlyCloneErrorMessage(Kind::NotFoundOrAccess, githubUrl);
-        CHECK(msg.contains(QStringLiteral("<a href=\"https://github.com/owner/repo\">")));
+        CHECK(msg.contains(QStringLiteral(
+            "<a href=\"https://github.com/notifications?query=reason%3Ainvitation\">")));
         CHECK(msg.contains(QStringLiteral("GitHub")));
+        CHECK(msg.contains(QStringLiteral("Check pending invitations")));
+    }
+
+    SECTION("NotFoundOrAccess for hosts without an invitations page omits the link") {
+        const QString msg =
+            cwRemoteRepositoryCloner::friendlyCloneErrorMessage(Kind::NotFoundOrAccess, gitlabUrl);
+        CHECK_FALSE(msg.isEmpty());
+        CHECK_FALSE(msg.contains(QStringLiteral("<a href")));
     }
 
     SECTION("HostUnreachable includes the host name") {

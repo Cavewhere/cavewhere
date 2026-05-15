@@ -26,7 +26,8 @@ struct cwGitHostingProviderInfo {
     QString host;                   // canonical lowercase, e.g. "github.com" (empty for generic fallback)
     QString displayName;            // "GitHub" (empty for generic)
     QString collaboratorPathSuffix; // "/settings/access" / "/-/project_members" / etc. (empty for generic)
-    QString openLinkLabel;          // "Open repository on GitHub" / etc.
+    QString invitationsUrl;         // full URL to a "pending invitations" page (empty when no good target)
+    QString invitationsLinkLabel;   // label rendered for invitationsUrl (empty when no link)
     QString authMessage;            // shown when an auth error happens during clone
     QString notFoundMessage;        // shown when a 404 happens during clone (no <a>; link added by helper)
 };
@@ -67,8 +68,10 @@ namespace cwGitHostingProvider {
      * @brief Friendly RichText for a 404 "doesn't exist / no access" failure.
      *
      * Returns @p info.notFoundMessage with an embedded `<a href="...">` link
-     * suffix when repositoryWebUrl can be derived; otherwise the plain
-     * notFoundMessage.
+     * to @p info.invitationsUrl when set (e.g. GitHub's pending-invitations
+     * page); otherwise the plain notFoundMessage. The link target is
+     * intentionally NOT the repo URL — that URL 404s for the same reason
+     * the clone failed.
      */
     CAVEWHERE_LIB_EXPORT QString notFoundOrAccessMessage(const cwGitHostingProviderInfo& info,
                                                          const QUrl& cloneUrl);

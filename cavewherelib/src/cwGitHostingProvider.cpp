@@ -21,7 +21,8 @@ const std::array<cwGitHostingProviderInfo, 4>& providers()
             QStringLiteral("github.com"),
             QStringLiteral("GitHub"),
             QStringLiteral("/settings/access"),
-            QStringLiteral("Open repository on GitHub"),
+            QStringLiteral("https://github.com/notifications?query=reason%3Ainvitation"),
+            QStringLiteral("Check pending invitations on GitHub"),
             QStringLiteral(
                 "Your GitHub credentials are invalid or have expired. "
                 "Sign in to GitHub to retry cloning."),
@@ -35,7 +36,11 @@ const std::array<cwGitHostingProviderInfo, 4>& providers()
             QStringLiteral("gitlab.com"),
             QStringLiteral("GitLab"),
             QStringLiteral("/-/project_members"),
-            QStringLiteral("Open project on GitLab"),
+            // GitLab has no clean "pending invitations" page equivalent;
+            // membership requests are usually accepted via email, and project
+            // members appear directly on the dashboard.
+            QString(),
+            QString(),
             QStringLiteral(
                 "Your GitLab credentials are invalid or have expired. "
                 "Sign in to GitLab to retry cloning."),
@@ -49,7 +54,10 @@ const std::array<cwGitHostingProviderInfo, 4>& providers()
             QStringLiteral("bitbucket.org"),
             QStringLiteral("Bitbucket"),
             QStringLiteral("/admin/access-keys"),
-            QStringLiteral("Open repository on Bitbucket"),
+            // Bitbucket workspace invitations are typically email-based with
+            // no consistent dashboard URL; omit the link rather than guess.
+            QString(),
+            QString(),
             QStringLiteral(
                 "Your Bitbucket credentials are invalid or have expired. "
                 "Sign in to Bitbucket to retry cloning."),
@@ -63,7 +71,8 @@ const std::array<cwGitHostingProviderInfo, 4>& providers()
             QString(),
             QString(),
             QString(),
-            QStringLiteral("Open repository in browser"),
+            QString(),
+            QString(),
             QStringLiteral(
                 "Your credentials are invalid or have expired. "
                 "Sign in again to retry cloning."),
@@ -177,13 +186,14 @@ QUrl cwGitHostingProvider::collaboratorSettingsUrl(const cwGitHostingProviderInf
 QString cwGitHostingProvider::notFoundOrAccessMessage(const cwGitHostingProviderInfo& info,
                                                      const QUrl& cloneUrl)
 {
-    const QUrl webUrl = repositoryWebUrl(info, cloneUrl);
-    if (webUrl.isEmpty()) {
+    Q_UNUSED(cloneUrl);
+
+    if (info.invitationsUrl.isEmpty() || info.invitationsLinkLabel.isEmpty()) {
         return info.notFoundMessage;
     }
 
     return info.notFoundMessage
         + QStringLiteral(" <a href=\"%1\">%2</a>")
-              .arg(webUrl.toString().toHtmlEscaped(),
-                   info.openLinkLabel.toHtmlEscaped());
+              .arg(info.invitationsUrl.toHtmlEscaped(),
+                   info.invitationsLinkLabel.toHtmlEscaped());
 }
