@@ -170,11 +170,11 @@ private:
     QList<Node> Nodes;
 
     // Snapshot of Nodes captured at build-job launch and consumed by the
-    // worker thread. Stored as a shared_ptr so traversal (which holds a
-    // strong ref via m_bvh) can dereference Node pointers safely even after
-    // a later rebuild swaps in a different snapshot.
+    // worker thread. QList is implicitly shared, so this is a header copy
+    // that keeps the buffer alive for traversal even after a later rebuild
+    // swaps in a different snapshot via m_bvh.
     struct BvhData {
-        std::shared_ptr<QList<Node>> nodesSnapshot;
+        QList<Node> nodesSnapshot;
         QVector<BvhNode> bvhNodes;
         QVector<Primitive> primitives;
     };

@@ -428,7 +428,7 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
 
     const QVector<BvhNode>& nodes = bvh->bvhNodes;
     const QVector<Primitive>& prims = bvh->primitives;
-    const QList<Node>& nodeSnapshot = *bvh->nodesSnapshot;
+    const QList<Node>& nodeSnapshot = bvh->nodesSnapshot;
 
     // Stack-based traversal with near-first child ordering. 64 is plenty for
     // realistic BVH depths (~log2 of primitive count, well under 30 for 1M).
@@ -745,9 +745,12 @@ void cwGeometryItersecter::scheduleBuild()
 QFuture<void> cwGeometryItersecter::launchBuildJob()
 {
     // Snapshot Nodes on the caller (UI) thread. QList is implicitly shared,
-    // so this is a cheap header copy; subsequent UI-side mutations branch
-    // to a fresh detach, leaving the worker's view stable.
-    auto snapshot = std::make_shared<QList<Node>>(Nodes);
+    // so this is a cheap header copy that bumps the buffer refcount;
+    // subsequent UI-side mutations branch to a fresh detach, leaving the
+    // worker's view stable. Workers must use const access (.at(), const
+    // ref) so they never trigger their own detach — concurrent detaches
+    // on a shared buffer race and free memory still being read.
+    auto snapshot = Nodes;
 
     // Worker writes its produced BvhData into a slot that survives even if
     // `this` is destroyed mid-build. The .context(this) callback below
@@ -762,9 +765,8 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         // can write without contention.
         QVector<EnumChunk> chunks;
         qsizetype totalPrims = 0;
-        const QList<Node>& nodes = *snapshot;
-        for (int n = 0; n < nodes.size(); ++n) {
-            const qsizetype primCount = countNodePrimitives(nodes[n].Object);
+        for (int n = 0; n < snapshot.size(); ++n) {
+            const qsizetype primCount = countNodePrimitives(snapshot.at(n).Object);
             if (primCount <= 0) {
                 continue;
             }
@@ -803,11 +805,11 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             // Workers push their own progress when they finish a chunk —
             // setProgressValue is thread-safe, so the orchestrator can
             // just block on waitForFinished() without polling.
-            auto enumFuture = cwConcurrent::map(chunks, [snapshot, &prims, &primsDone, &promise](EnumChunk& chunk) {
+            auto enumFuture = cwConcurrent::map(chunks, [&snapshot, &prims, &primsDone, &promise](EnumChunk& chunk) {
                 if (promise.isCanceled()) {
                     return;
                 }
-                const Node& node = (*snapshot)[chunk.nodeIndex];
+                const Node& node = snapshot.at(chunk.nodeIndex);
                 const cwGeometry& geometry = node.Object.geometry();
                 if (geometry.attribute(cwGeometry::Semantic::Position) == nullptr) {
                     return;
@@ -876,7 +878,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             QVector<SubRange> subRanges;
             QVector<uint32_t> upperInnerNodes;
 
-            BuildContext serialCtx{*snapshot, prims, bvhNodes, nextNode, nullptr};
+            BuildContext serialCtx{snapshot, prims, bvhNodes, nextNode, nullptr};
             serialSplitToFanout(serialCtx, 0, prims.size(),
                                 kParallelFanoutDepth,
                                 subRanges, upperInnerNodes);
@@ -887,7 +889,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
 
             if (!subRanges.isEmpty()) {
                 std::atomic<qsizetype> phaseBPrims{0};
-                BuildContext parallelCtx{*snapshot, prims, bvhNodes, nextNode, &phaseBPrims};
+                BuildContext parallelCtx{snapshot, prims, bvhNodes, nextNode, &phaseBPrims};
 
                 auto buildFuture = cwConcurrent::map(subRanges,
                     [&parallelCtx, &phaseBPrims, &promise, totalPrims](SubRange& r) {
@@ -929,7 +931,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         }
 
         auto out = std::make_shared<BvhData>();
-        out->nodesSnapshot = snapshot;
+        out->nodesSnapshot = std::move(snapshot);
         out->bvhNodes = std::move(bvhNodes);
         out->primitives.resize(prims.size());
         for (qsizetype i = 0; i < prims.size(); ++i) {
