@@ -200,30 +200,15 @@ void cwGeometryItersecter::addTriangles(const cwGeometryItersecter::Object &obje
 
     removeObject(object.parent(), object.id());
 
-    float min = -std::numeric_limits<float>::max();
-    float max = -std::numeric_limits<float>::min();
-
-    QVector3D maxPosition(min, min, min);
-    QVector3D minPosition(max, max, max);
-
     auto positionAttribute = object.geometry().attribute(cwGeometry::Semantic::Position);
     Q_ASSERT(positionAttribute);
 
+    QBox3D box;
     for(int i = 0; i < object.geometry().vertexCount(); i++) {
-        auto position = object.geometry().value<QVector3D>(positionAttribute, i);
-        maxPosition = QVector3D(std::max(maxPosition.x(), position.x()),
-                                std::max(maxPosition.y(), position.y()),
-                                std::max(maxPosition.z(), position.z()));
-        minPosition = QVector3D(std::min(minPosition.x(), position.x()),
-                                std::min(minPosition.y(), position.y()),
-                                std::min(minPosition.z(), position.z()));
+        box.unite(object.geometry().value<QVector3D>(positionAttribute, i));
     }
 
-    //Make sure the object is unique
-    Q_ASSERT(std::find_if(Nodes.begin(), Nodes.end(), [object](const Node& node) {
-        return node.Object.parent() == object.parent() && node.Object.id() == object.id();
-    }) == Nodes.end());
-    Nodes.append(Node(QBox3D(minPosition, maxPosition), object));
+    Nodes.append(Node(box, object));
 }
 
 /**

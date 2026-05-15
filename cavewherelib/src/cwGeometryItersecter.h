@@ -154,13 +154,6 @@ private:
                                   const QVector3D& b,
                                   const QVector3D& c,
                                   bool cullBackfaces);
-
-    // static inline double worldT(const QRay3D& rayWorld, const QVector3D& hitWorld) {
-    //     // Parameter/distance along the original world ray
-    //     return rayWorld.projectedDistance(hitWorld);
-    // }
-
-
 };
 
 inline uint32_t qHash(const cwGeometryItersecter::Object& object) {
