@@ -123,15 +123,6 @@ QC.Popup {
         }
 
         CopySection {
-            objectNameRoot: "Local"
-            headerText: qsTr("Local (m)")
-            valueText: root._formatXYZ(root.picker.scenePoint.x,
-                                       root.picker.scenePoint.y,
-                                       root.picker.scenePoint.z,
-                                       root._coordPrecision)
-        }
-
-        CopySection {
             visible: root.picker.globalCS !== ""
             objectNameRoot: "CS"
             headerText: root._crsHeader
