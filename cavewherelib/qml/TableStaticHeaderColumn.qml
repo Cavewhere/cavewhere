@@ -25,7 +25,7 @@ QQ.Rectangle {
     // Qt6: add cellPadding (and font etc) as public API in headerview
     readonly property real cellPadding: 2
 
-    implicitWidth: textId.implicitWidth + (cellPadding * 2)
+    implicitWidth: columnWidth
     implicitHeight: textId.implicitHeight + (cellPadding * 2)
     color: Theme.surfaceMuted
     border.color: Theme.borderSubtle
