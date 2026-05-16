@@ -83,7 +83,7 @@ private:
     double  m_zoom = 1.0;
     QPointF m_pan;
     bool    m_viewInitialized = false;
-    bool    m_zoomLocked = true;
+    bool    m_zoomLocked = false;
     bool    m_debugOverlayVisible = false;
     QPointer<cwWorldToScreenMatrix> m_worldToScreenMatrix;
 
