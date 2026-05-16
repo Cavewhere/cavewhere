@@ -3736,7 +3736,14 @@ TEST_CASE("moveDirectoryRobust refuses to copy a symlink in the source tree", "[
 
     // Plant a symlink in src pointing at the parent temp dir. Without the
     // symlink guard, the recursive copy would escape the source tree.
+    // On Windows, QFile::link writes a .lnk shortcut and QFileInfo::isSymLink()
+    // only recognises shortcuts whose name ends in ".lnk", so the path we
+    // hand to QFile::link must include that extension explicitly on Qt 6.11+.
+#ifdef Q_OS_WIN
+    const QString linkPath = src + QStringLiteral("/escape-link.lnk");
+#else
     const QString linkPath = src + QStringLiteral("/escape-link");
+#endif
     REQUIRE(QFile::link(tmp.path(), linkPath));
 
     Monad::ResultBase result;
