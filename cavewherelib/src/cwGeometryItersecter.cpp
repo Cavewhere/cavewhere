@@ -52,13 +52,28 @@ namespace {
     // BVH build is running.
     constexpr auto kAcceleratingPickingJobName = QLatin1StringView("Accelerating picking");
 
-    // QPromise's progress range is int; clamp accumulated qsizetype values
-    // so huge clouds (totalPrims > INT_MAX) don't wrap.
-    void setSaturatedProgress(QPromise<void>& promise, qsizetype value)
-    {
-        promise.setProgressValue(static_cast<int>(
-            std::min<qsizetype>(value, std::numeric_limits<int>::max())));
-    }
+    // Fixed progress resolution: per-mille (0..1000). Decouples the
+    // setProgressValue range (int) from absolute primitive counts so
+    // multi-billion-point clouds can still report monotonic progress
+    // without saturating at INT_MAX.
+    constexpr int kProgressResolution = 1000;
+
+    // Per-phase progress reporter. `base` and `total` are constant for
+    // the lifetime of a phase; only `done` is the running count passed
+    // in at each call. Scales (base + done) into [0, kProgressResolution]
+    // and pushes to the promise.
+    struct ProgressScaler {
+        QPromise<void>& promise;
+        qsizetype base;
+        qsizetype total;
+
+        void report(qsizetype done) const
+        {
+            Q_ASSERT(total > 0);
+            promise.setProgressValue(static_cast<int>(
+                ((base + done) * kProgressResolution) / total));
+        }
+    };
 
     // Visibility guard shared by every traversal entry point. A null parent
     // means the object isn't owned by a cwRenderObject (test fixtures), so
@@ -80,13 +95,10 @@ struct cwGeometryItersecter::BuildPrim {
 };
 
 // Per-call progress accounting for the serial Phase B-1 split. Phase B-1
-// runs single-threaded so `done` is a plain counter, not atomic. Bundled
-// into one nullable pointer on BuildContext to keep "set together or not at
-// all" enforced by the type.
+// runs single-threaded so `done` is a plain counter, not atomic.
 struct cwGeometryItersecter::SplitProgress {
-    QPromise<void>& promise;
+    ProgressScaler scaler;
     qsizetype done = 0;
-    qsizetype base = 0;
 };
 
 // Bundle of references the recursive Phase B helpers all need. Saves
@@ -644,8 +656,7 @@ uint32_t cwGeometryItersecter::serialSplitToFanout(BuildContext& ctx,
     // calls equals the phaseB1Budget reserved in launchBuildJob().
     if (ctx.splitProgress != nullptr) {
         ctx.splitProgress->done += count;
-        setSaturatedProgress(ctx.splitProgress->promise,
-                             ctx.splitProgress->base + ctx.splitProgress->done);
+        ctx.splitProgress->scaler.report(ctx.splitProgress->done);
     }
 
     // Track this as an upper inner node so the bottom-up bbox pass picks
@@ -826,7 +837,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         // runs nth_element over ~totalPrims items in aggregate.
         const qsizetype phaseB1Budget = static_cast<qsizetype>(kParallelFanoutDepth) * totalPrims;
         const qsizetype totalProgress = totalPrims + phaseB1Budget + totalPrims;
-        promise.setProgressRange(0, static_cast<int>(std::min<qsizetype>(totalProgress, std::numeric_limits<int>::max())));
+        promise.setProgressRange(0, kProgressResolution);
         promise.setProgressValue(0);
 
         QVector<BuildPrim> prims;
@@ -834,11 +845,12 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
 
         if (totalPrims > 0 && !chunks.isEmpty()) {
             std::atomic<qsizetype> primsDone{0};
+            const ProgressScaler phaseAScaler{promise, /*base=*/0, totalProgress};
 
             // Workers push their own progress when they finish a chunk —
             // setProgressValue is thread-safe, so the orchestrator can
             // just block on waitForFinished() without polling.
-            auto enumFuture = cwConcurrent::map(chunks, [&snapshot, &prims, &primsDone, &promise](EnumChunk& chunk) {
+            auto enumFuture = cwConcurrent::map(chunks, [&snapshot, &prims, &primsDone, &promise, &phaseAScaler](EnumChunk& chunk) {
                 if (promise.isCanceled()) {
                     return;
                 }
@@ -855,7 +867,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
                 }
 
                 const qsizetype done = primsDone.fetch_add(chunk.count, std::memory_order_relaxed) + chunk.count;
-                setSaturatedProgress(promise, done);
+                phaseAScaler.report(done);
             });
 
             // Release our pool slot so mapped workers can't deadlock
@@ -910,7 +922,9 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             QVector<SubRange> subRanges;
             QVector<uint32_t> upperInnerNodes;
 
-            SplitProgress splitProgress{promise, /*done=*/0, /*base=*/totalPrims};
+            SplitProgress splitProgress{
+                ProgressScaler{promise, /*base=*/totalPrims, /*total=*/totalProgress},
+                /*done=*/0};
             BuildContext serialCtx{snapshot, prims, bvhNodes, nextNode,
                                    /*leafPrimCounter=*/nullptr,
                                    /*splitProgress=*/&splitProgress};
@@ -926,9 +940,11 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
                 std::atomic<qsizetype> phaseBPrims{0};
                 BuildContext parallelCtx{snapshot, prims, bvhNodes, nextNode, &phaseBPrims};
 
-                const qsizetype phaseB2Base = totalPrims + phaseB1Budget;
+                const ProgressScaler phaseB2Scaler{promise,
+                                                   /*base=*/totalPrims + phaseB1Budget,
+                                                   /*total=*/totalProgress};
                 auto buildFuture = cwConcurrent::map(subRanges,
-                    [&parallelCtx, &phaseBPrims, &promise, phaseB2Base](SubRange& r) {
+                    [&parallelCtx, &phaseBPrims, &promise, &phaseB2Scaler](SubRange& r) {
                         if (promise.isCanceled()) {
                             return;
                         }
@@ -937,8 +953,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
                         // Phase B-2, which is plenty for a visibly-moving bar
                         // and avoids serializing on the QPromise mutex from
                         // deep inside the recursion.
-                        setSaturatedProgress(promise,
-                            phaseB2Base + phaseBPrims.load(std::memory_order_relaxed));
+                        phaseB2Scaler.report(phaseBPrims.load(std::memory_order_relaxed));
                     });
 
                 QThreadPool* pool = cwTask::threadPool();
