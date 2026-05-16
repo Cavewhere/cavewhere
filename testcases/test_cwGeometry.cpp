@@ -8,6 +8,11 @@
 #include <QVector3D>
 #include <QVector4D>
 #include <QMatrix4x4>
+#include <QtNumeric>
+
+#include <array>
+#include <cstdint>
+#include <limits>
 
 #include "cwGeometry.h"
 
@@ -299,4 +304,270 @@ TEST_CASE("cwGeometry: attribute lookup and format mismatch safety", "[cwGeometr
     // Format mismatch: try to set Vec2 data into Vec3 attribute, expect false
     QVector<QVector2D> badPositions = { {1.0f, 2.0f} };
     REQUIRE_FALSE(g.set(cwGeometry::Semantic::Position, badPositions));
+}
+
+// ============================================================
+// R1: integer / half / byte attribute support
+// ============================================================
+
+TEST_CASE("cwGeometry: componentByteSize covers every AttributeFormat", "[cwGeometry]") {
+    using F = cwGeometry::AttributeFormat;
+    REQUIRE(cwGeometry::componentByteSize(F::Float) == 4);
+    REQUIRE(cwGeometry::componentByteSize(F::Vec2) == 4);
+    REQUIRE(cwGeometry::componentByteSize(F::Vec3) == 4);
+    REQUIRE(cwGeometry::componentByteSize(F::Vec4) == 4);
+    REQUIRE(cwGeometry::componentByteSize(F::UInt) == 4);
+    REQUIRE(cwGeometry::componentByteSize(F::UInt2) == 4);
+    REQUIRE(cwGeometry::componentByteSize(F::UInt3) == 4);
+    REQUIRE(cwGeometry::componentByteSize(F::UInt4) == 4);
+    REQUIRE(cwGeometry::componentByteSize(F::SInt) == 4);
+    REQUIRE(cwGeometry::componentByteSize(F::SInt4) == 4);
+    REQUIRE(cwGeometry::componentByteSize(F::Half) == 2);
+    REQUIRE(cwGeometry::componentByteSize(F::Half4) == 2);
+    REQUIRE(cwGeometry::componentByteSize(F::UNormByte) == 1);
+    REQUIRE(cwGeometry::componentByteSize(F::UNormByte2) == 1);
+    REQUIRE(cwGeometry::componentByteSize(F::UNormByte4) == 1);
+}
+
+TEST_CASE("cwGeometry: toUNormByte clamps and quantises", "[cwGeometry]") {
+    REQUIRE(cwGeometry::toUNormByte(0.0f) == 0);
+    REQUIRE(cwGeometry::toUNormByte(1.0f) == 255);
+    REQUIRE(cwGeometry::toUNormByte(-0.5f) == 0);
+    REQUIRE(cwGeometry::toUNormByte(2.0f) == 255);
+    REQUIRE(cwGeometry::toUNormByte(0.5f) == 128); // round half to even (lround → away from zero), 127.5 → 128
+}
+
+TEST_CASE("cwGeometry: quint32 round-trip and Position+Classification layout", "[cwGeometry]") {
+    cwGeometry g({
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
+        { cwGeometry::Semantic::Classification, cwGeometry::AttributeFormat::UInt }
+    });
+
+    REQUIRE(g.attributes().size() == 2);
+    const cwGeometry::VertexAttribute* pos = g.attribute(cwGeometry::Semantic::Position);
+    const cwGeometry::VertexAttribute* cls = g.attribute(cwGeometry::Semantic::Classification);
+    REQUIRE(pos != nullptr);
+    REQUIRE(cls != nullptr);
+    REQUIRE(pos->byteOffset == 0);
+    REQUIRE(cls->byteOffset == 12);
+    REQUIRE(g.vertexStride() == 16);
+
+    QVector<quint32> classes = { 0u, 2u, 5u, 255u, std::numeric_limits<quint32>::max() };
+    REQUIRE(g.set(cwGeometry::Semantic::Classification, classes));
+    REQUIRE(g.vertexCount() == classes.size());
+
+    // Position values default to zero — set them too so round-trip is exercised.
+    QVector<QVector3D> positions = {
+        { 0.0f, 0.0f, 0.0f },
+        { 1.0f, 2.0f, 3.0f },
+        { 4.0f, 5.0f, 6.0f },
+        { 7.0f, 8.0f, 9.0f },
+        { -1.0f, -2.0f, -3.0f }
+    };
+    REQUIRE(g.set(cwGeometry::Semantic::Position, positions));
+
+    QVector<quint32> outClasses = g.values<quint32>(cwGeometry::Semantic::Classification);
+    REQUIRE(outClasses == classes);
+
+    QVector<QVector3D> outPositions = g.values<QVector3D>(cwGeometry::Semantic::Position);
+    REQUIRE(outPositions.size() == positions.size());
+    for (int i = 0; i < positions.size(); ++i) {
+        requireEqual(outPositions[i], positions[i]);
+    }
+
+    REQUIRE(g.value<quint32>(cwGeometry::Semantic::Classification, 3) == 255u);
+}
+
+TEST_CASE("cwGeometry: qint32 round-trip", "[cwGeometry]") {
+    cwGeometry g({
+        { cwGeometry::Semantic::Custom, cwGeometry::AttributeFormat::SInt }
+    });
+
+    QVector<qint32> values = {
+        0, -1, 1, std::numeric_limits<qint32>::min(), std::numeric_limits<qint32>::max()
+    };
+    REQUIRE(g.set(cwGeometry::Semantic::Custom, values));
+    REQUIRE(g.values<qint32>(cwGeometry::Semantic::Custom) == values);
+}
+
+TEST_CASE("cwGeometry: qfloat16 round-trip", "[cwGeometry]") {
+    cwGeometry g({
+        { cwGeometry::Semantic::Custom, cwGeometry::AttributeFormat::Half }
+    });
+
+    QVector<qfloat16> values = {
+        qfloat16(0.0f), qfloat16(1.0f), qfloat16(-0.5f), qfloat16(123.5f)
+    };
+    REQUIRE(g.set(cwGeometry::Semantic::Custom, values));
+    QVector<qfloat16> out = g.values<qfloat16>(cwGeometry::Semantic::Custom);
+    REQUIRE(out.size() == values.size());
+    for (int i = 0; i < values.size(); ++i) {
+        REQUIRE(float(out[i]) == float(values[i]));
+    }
+}
+
+TEST_CASE("cwGeometry: quint8 (UNormByte) round-trip", "[cwGeometry]") {
+    cwGeometry g({
+        { cwGeometry::Semantic::Custom, cwGeometry::AttributeFormat::UNormByte }
+    });
+
+    QVector<quint8> values = { 0, 1, 127, 128, 255 };
+    REQUIRE(g.set(cwGeometry::Semantic::Custom, values));
+    REQUIRE(g.values<quint8>(cwGeometry::Semantic::Custom) == values);
+}
+
+TEST_CASE("cwGeometry: std::array variants round-trip", "[cwGeometry]") {
+    SECTION("UInt2 / UInt3 / UInt4") {
+        cwGeometry g({
+            { cwGeometry::Semantic::Custom, cwGeometry::AttributeFormat::UInt3 }
+        });
+
+        QVector<std::array<quint32, 3>> values = {
+            { 1u, 2u, 3u },
+            { 100u, 200u, 300u },
+            { 0u, 0u, std::numeric_limits<quint32>::max() }
+        };
+        REQUIRE(g.set(cwGeometry::Semantic::Custom, values));
+        QVector<std::array<quint32, 3>> out = g.values<std::array<quint32, 3>>(cwGeometry::Semantic::Custom);
+        REQUIRE(out == values);
+    }
+
+    SECTION("SInt4") {
+        cwGeometry g({
+            { cwGeometry::Semantic::Custom, cwGeometry::AttributeFormat::SInt4 }
+        });
+
+        QVector<std::array<qint32, 4>> values = {
+            { -1, 0, 1, 2 },
+            { std::numeric_limits<qint32>::min(), 0, 0, std::numeric_limits<qint32>::max() }
+        };
+        REQUIRE(g.set(cwGeometry::Semantic::Custom, values));
+        REQUIRE(g.values<std::array<qint32, 4>>(cwGeometry::Semantic::Custom) == values);
+    }
+
+    SECTION("Half2") {
+        cwGeometry g({
+            { cwGeometry::Semantic::Custom, cwGeometry::AttributeFormat::Half2 }
+        });
+
+        QVector<std::array<qfloat16, 2>> values = {
+            { qfloat16(0.0f), qfloat16(1.0f) },
+            { qfloat16(-1.5f), qfloat16(2.5f) }
+        };
+        REQUIRE(g.set(cwGeometry::Semantic::Custom, values));
+        QVector<std::array<qfloat16, 2>> out = g.values<std::array<qfloat16, 2>>(cwGeometry::Semantic::Custom);
+        REQUIRE(out.size() == values.size());
+        for (int i = 0; i < values.size(); ++i) {
+            REQUIRE(float(out[i][0]) == float(values[i][0]));
+            REQUIRE(float(out[i][1]) == float(values[i][1]));
+        }
+    }
+
+    SECTION("UNormByte4") {
+        cwGeometry g({
+            { cwGeometry::Semantic::Color0, cwGeometry::AttributeFormat::UNormByte4 }
+        });
+
+        QVector<std::array<quint8, 4>> values = {
+            { 0, 0, 0, 255 },
+            { 255, 128, 64, 0 },
+            { 1, 2, 3, 4 }
+        };
+        REQUIRE(g.set(cwGeometry::Semantic::Color0, values));
+        REQUIRE(g.values<std::array<quint8, 4>>(cwGeometry::Semantic::Color0) == values);
+    }
+}
+
+TEST_CASE("cwGeometry: mixed Vec3 + UInt + Vec2 round-trip", "[cwGeometry]") {
+    cwGeometry g({
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
+        { cwGeometry::Semantic::Classification, cwGeometry::AttributeFormat::UInt },
+        { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2 }
+    });
+
+    REQUIRE(g.vertexStride() == 12 + 4 + 8);
+    REQUIRE(g.attribute(cwGeometry::Semantic::Position)->byteOffset == 0);
+    REQUIRE(g.attribute(cwGeometry::Semantic::Classification)->byteOffset == 12);
+    REQUIRE(g.attribute(cwGeometry::Semantic::TexCoord0)->byteOffset == 16);
+
+    QVector<QVector3D> positions = { {1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f} };
+    QVector<quint32> classes = { 7u, 42u };
+    QVector<QVector2D> uvs = { {0.1f, 0.2f}, {0.3f, 0.4f} };
+
+    REQUIRE(g.set(cwGeometry::Semantic::Position, positions));
+    REQUIRE(g.set(cwGeometry::Semantic::Classification, classes));
+    REQUIRE(g.set(cwGeometry::Semantic::TexCoord0, uvs));
+
+    QVector<QVector3D> outPos = g.values<QVector3D>(cwGeometry::Semantic::Position);
+    QVector<quint32> outCls   = g.values<quint32>(cwGeometry::Semantic::Classification);
+    QVector<QVector2D> outUv  = g.values<QVector2D>(cwGeometry::Semantic::TexCoord0);
+
+    REQUIRE(outCls == classes);
+    REQUIRE(outPos.size() == positions.size());
+    REQUIRE(outUv.size() == uvs.size());
+    for (int i = 0; i < positions.size(); ++i) {
+        requireEqual(outPos[i], positions[i]);
+        requireEqual(outUv[i], uvs[i]);
+    }
+}
+
+TEST_CASE("cwGeometry: alignment-aware buildLayout", "[cwGeometry]") {
+    SECTION("UNormByte then Vec3 — Vec3 aligned to 4, stride padded to 16") {
+        cwGeometry g({
+            { cwGeometry::Semantic::Custom, cwGeometry::AttributeFormat::UNormByte },
+            { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
+        });
+
+        REQUIRE(g.attributes()[0].byteOffset == 0);
+        REQUIRE(g.attributes()[1].byteOffset == 4);
+        REQUIRE(g.vertexStride() == 16); // 4 + 12
+    }
+
+    SECTION("UNormByte then Half2 — Half2 aligned to 2, stride padded to 8") {
+        cwGeometry g({
+            { cwGeometry::Semantic::Custom, cwGeometry::AttributeFormat::UNormByte },
+            { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Half2 }
+        });
+
+        REQUIRE(g.attributes()[0].byteOffset == 0);
+        REQUIRE(g.attributes()[1].byteOffset == 2); // padded from 1 → 2 to align to component size
+        REQUIRE(g.vertexStride() == 8);              // 2 + 4 = 6 → padded up to 8
+    }
+
+    SECTION("Three UNormBytes pack tight at 0/1/2, stride padded to 4") {
+        cwGeometry g({
+            { cwGeometry::Semantic::Color0, cwGeometry::AttributeFormat::UNormByte },
+            { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::UNormByte },
+            { cwGeometry::Semantic::TexCoord1, cwGeometry::AttributeFormat::UNormByte }
+        });
+
+        REQUIRE(g.attributes()[0].byteOffset == 0);
+        REQUIRE(g.attributes()[1].byteOffset == 1);
+        REQUIRE(g.attributes()[2].byteOffset == 2);
+        REQUIRE(g.vertexStride() == 4);
+    }
+
+    SECTION("Half2 then Float — Float aligned to 4, stride padded to 8") {
+        cwGeometry g({
+            { cwGeometry::Semantic::Custom, cwGeometry::AttributeFormat::Half2 },
+            { cwGeometry::Semantic::Tangent, cwGeometry::AttributeFormat::Float }
+        });
+
+        REQUIRE(g.attributes()[0].byteOffset == 0);
+        REQUIRE(g.attributes()[1].byteOffset == 4);
+        REQUIRE(g.vertexStride() == 8);
+    }
+}
+
+TEST_CASE("cwGeometry: toString covers Classification + new formats", "[cwGeometry]") {
+    REQUIRE(QString::fromLatin1(cwGeometry::toString(cwGeometry::Semantic::Classification)) ==
+            QStringLiteral("Classification"));
+    REQUIRE(QString::fromLatin1(cwGeometry::toString(cwGeometry::AttributeFormat::UInt)) ==
+            QStringLiteral("UInt"));
+    REQUIRE(QString::fromLatin1(cwGeometry::toString(cwGeometry::AttributeFormat::SInt4)) ==
+            QStringLiteral("SInt4"));
+    REQUIRE(QString::fromLatin1(cwGeometry::toString(cwGeometry::AttributeFormat::Half2)) ==
+            QStringLiteral("Half2"));
+    REQUIRE(QString::fromLatin1(cwGeometry::toString(cwGeometry::AttributeFormat::UNormByte4)) ==
+            QStringLiteral("UNormByte4"));
 }
