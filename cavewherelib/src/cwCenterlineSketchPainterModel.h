@@ -9,6 +9,7 @@
 #define CWCENTERLINESKETCHPAINTERMODEL_H
 
 //Qt includes
+#include <QColor>
 #include <QPointer>
 #include <QQmlEngine>
 #include <QVector>
@@ -31,6 +32,10 @@ class CAVEWHERE_LIB_EXPORT cwCenterlineSketchPainterModel : public cwAbstractSke
     // different map scales. Positions and shot-line widths are in world
     // meters — those scale with mapScale and user zoom.
     Q_PROPERTY(cwScale* mapScale READ mapScale WRITE setMapScale NOTIFY mapScaleChanged)
+    // Ink colors are baked into the path/text snapshot, so a write triggers
+    // updateModel(). Both default to Qt::black for unthemed usage.
+    Q_PROPERTY(QColor stationColor READ stationColor WRITE setStationColor NOTIFY stationColorChanged)
+    Q_PROPERTY(QColor shotLineColor READ shotLineColor WRITE setShotLineColor NOTIFY shotLineColorChanged)
 
 public:
     explicit cwCenterlineSketchPainterModel(QObject *parent = nullptr);
@@ -40,6 +45,12 @@ public:
 
     cwScale *mapScale() const { return m_mapScale; }
     void setMapScale(cwScale *scale);
+
+    QColor stationColor() const { return m_stationColor; }
+    void setStationColor(const QColor &color);
+
+    QColor shotLineColor() const { return m_shotLineColor; }
+    void setShotLineColor(const QColor &color);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
 
@@ -53,6 +64,8 @@ signals:
     void survey2DGeometryChanged();
     void mapScaleChanged();
     void textRowsChanged();
+    void stationColorChanged();
+    void shotLineColorChanged();
 
 protected:
     Path path(const QModelIndex &index) const override;
@@ -61,10 +74,15 @@ private slots:
     void updateModel();
 
 private:
+    void scheduleColorUpdate();
+
     QPointer<cwSurvey2DGeometryArtifact> m_geometryArtifact;
     QPointer<cwScale> m_mapScale;
     QVector<Path> m_paths;
     QVector<cwGridTextModel::TextRow> m_textRows;
+    QColor m_stationColor = Qt::black;
+    QColor m_shotLineColor = Qt::black;
+    bool m_colorUpdatePending = false;
 };
 
 #endif // CWCENTERLINESKETCHPAINTERMODEL_H

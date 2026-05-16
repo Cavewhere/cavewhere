@@ -8,6 +8,7 @@
 //Our includes
 #include "cwSketchPainterPathModel.h"
 #include "cwSketchStrokeGeometry.h"
+#include "cwPenStroke.h"
 
 //Qt includes
 #include <QPolygonF>
@@ -17,6 +18,7 @@ namespace {
 constexpr char kPointsRoleName[] = "points";
 constexpr char kWidthRoleName[]  = "strokeWidth";
 constexpr char kColorRoleName[]  = "color";
+constexpr char kKindRoleName[]   = "kind";
 } // namespace
 
 cwSketchPainterPathModel::cwSketchPainterPathModel(QObject *parent)
@@ -24,6 +26,43 @@ cwSketchPainterPathModel::cwSketchPainterPathModel(QObject *parent)
 {
     connect(this, &cwSketchPainterPathModel::activeStrokeIndexChanged,
             this, &cwSketchPainterPathModel::onActiveStrokeIndexChanged);
+}
+
+void cwSketchPainterPathModel::setWallStrokeColor(const QColor &color)
+{
+    if (m_wallStrokeColor == color) {
+        return;
+    }
+    m_wallStrokeColor = color;
+    emit wallStrokeColorChanged();
+    scheduleColorRebuild();
+}
+
+void cwSketchPainterPathModel::setNonWallStrokeColor(const QColor &color)
+{
+    if (m_nonWallStrokeColor == color) {
+        return;
+    }
+    m_nonWallStrokeColor = color;
+    emit nonWallStrokeColorChanged();
+    scheduleColorRebuild();
+}
+
+// Coalesce wall+nonWall writes that arrive in the same event-loop turn
+// (a theme toggle fires both bindings) into a single rebuild pass.
+// addOrUpdateFinishPath batches by (width, rgba), so a color change
+// shifts batch membership — finished paths must be torn down and rebuilt.
+void cwSketchPainterPathModel::scheduleColorRebuild()
+{
+    if (m_colorRebuildPending) {
+        return;
+    }
+    m_colorRebuildPending = true;
+    QMetaObject::invokeMethod(this, [this]() {
+        m_colorRebuildPending = false;
+        rebuildAllFinished();
+        updateActivePath();
+    }, Qt::QueuedConnection);
 }
 
 int cwSketchPainterPathModel::rowCount(const QModelIndex &parent) const
@@ -84,6 +123,7 @@ void cwSketchPainterPathModel::resolveRoles()
     m_pointsRole = names.key(kPointsRoleName, -1);
     m_widthRole  = names.key(kWidthRoleName,  -1);
     m_colorRole  = names.key(kColorRoleName,  -1);
+    m_kindRole   = names.key(kKindRoleName,   -1);
     if (m_pointsRole < 0 || m_widthRole < 0 || m_colorRole < 0) {
         qWarning("cwSketchPainterPathModel: source model is missing required "
                  "role names (points/strokeWidth/color)");
@@ -110,10 +150,20 @@ double cwSketchPainterPathModel::strokeWidth(int row) const
 QColor cwSketchPainterPathModel::strokeColor(int row) const
 {
     if (!m_strokeModel || m_colorRole < 0) {
-        return Qt::black;
+        return m_wallStrokeColor;
     }
     QColor c = m_strokeModel->index(row, 0).data(m_colorRole).value<QColor>();
-    return c.isValid() ? c : QColor(Qt::black);
+    return c.isValid() ? c : defaultColorForKind(row);
+}
+
+QColor cwSketchPainterPathModel::defaultColorForKind(int row) const
+{
+    const int kind = (m_strokeModel && m_kindRole >= 0)
+        ? m_strokeModel->index(row, 0).data(m_kindRole).toInt()
+        : static_cast<int>(cwPenStroke::Wall);
+    return (kind == cwPenStroke::Wall)
+        ? m_wallStrokeColor
+        : m_nonWallStrokeColor;
 }
 
 cwAbstractSketchPainterPathModel::Path
@@ -191,7 +241,7 @@ void cwSketchPainterPathModel::updateActivePath()
     if (m_activeStrokeIndex < 0 || !m_strokeModel
         || m_activeStrokeIndex >= m_strokeModel->rowCount()) {
         m_activePath.strokeWidth = 0.0;
-        m_activePath.strokeColor = QColor(Qt::black);
+        m_activePath.strokeColor = m_wallStrokeColor;
         const QModelIndex rowIdx = index(0);
         emit dataChanged(rowIdx, rowIdx,
                          { PainterPathRole, StrokeWidthRole, StrokeColorRole });

@@ -142,6 +142,7 @@ QQ.Item {
         id: gridModel
         lineColor: Theme.sketchGridLine
         labelColor: Theme.sketchGridLabel
+        labelBackgroundColor: Theme.sketchGridLabelBackground
         labelFont: Qt.font({ family: Theme.fontFamily, pixelSize: Theme.fontSizeSmall })
         majorGridInterval: 5
         minorGridInterval: 1
@@ -161,6 +162,11 @@ QQ.Item {
         mapMatrix: worldToScreenId.matrix
         activeStrokeIndex: sketchItemId._activeStrokeIndex
         grid: gridModel
+
+        pathModel.wallStrokeColor: Theme.sketchStrokeWall
+        pathModel.nonWallStrokeColor: Theme.sketchStrokeNonWall
+        linePlotModel.stationColor: Theme.sketchStation
+        linePlotModel.shotLineColor: Theme.sketchShotLine
 
         onRequestAnchorSelection: (components) => {
             sketchItemId._handleAnchorSelectionRequest(components)

@@ -73,6 +73,41 @@ void cwCenterlineSketchPainterModel::setMapScale(cwScale *scale)
     updateModel();
 }
 
+void cwCenterlineSketchPainterModel::setStationColor(const QColor &color)
+{
+    if (m_stationColor == color) {
+        return;
+    }
+    m_stationColor = color;
+    emit stationColorChanged();
+    scheduleColorUpdate();
+}
+
+void cwCenterlineSketchPainterModel::setShotLineColor(const QColor &color)
+{
+    if (m_shotLineColor == color) {
+        return;
+    }
+    m_shotLineColor = color;
+    emit shotLineColorChanged();
+    scheduleColorUpdate();
+}
+
+// Coalesce station+shotLine writes that arrive in the same event-loop turn
+// (a theme toggle fires both bindings) into a single updateModel() so the
+// async snapshot pipeline only runs once per theme change.
+void cwCenterlineSketchPainterModel::scheduleColorUpdate()
+{
+    if (m_colorUpdatePending) {
+        return;
+    }
+    m_colorUpdatePending = true;
+    QMetaObject::invokeMethod(this, [this]() {
+        m_colorUpdatePending = false;
+        updateModel();
+    }, Qt::QueuedConnection);
+}
+
 int cwCenterlineSketchPainterModel::rowCount(const QModelIndex &parent) const
 {
     if (parent.isValid()) {
@@ -125,19 +160,29 @@ void cwCenterlineSketchPainterModel::updateModel()
         QVector<cwGridTextModel::TextRow> textRows;
     };
 
+    // Capture colors by value into the worker; QColor is a trivially-copyable
+    // value type and the worker must not touch this object's members.
+    const QColor stationColor = m_stationColor;
+    const QColor shotLineColor = m_shotLineColor;
+
     auto convertToPainterPaths = [stationRadiusWorld,
                                   labelTargetHeightWorld,
-                                  shotLineWidthWorld]
+                                  shotLineWidthWorld,
+                                  stationColor,
+                                  shotLineColor]
         (const Result<cwSurvey2DGeometry> result) -> QFuture<Result<Snapshot>> {
         const cwSurvey2DGeometry geometry = result.value();
         return cwConcurrent::run([geometry,
                                   stationRadiusWorld,
                                   labelTargetHeightWorld,
-                                  shotLineWidthWorld]() {
+                                  shotLineWidthWorld,
+                                  stationColor,
+                                  shotLineColor]() {
             // strokeWidth == 0 flags a fill pass (see cwAbstractSketchPainterPathModel).
-            auto makePath = [](QPainterPath path, double strokeWidth) {
+            auto makePath = [](QPainterPath path, const QColor &color, double strokeWidth) {
                 Path p;
                 p.painterPath = std::move(path);
+                p.strokeColor = color;
                 p.strokeWidth = strokeWidth;
                 return p;
             };
@@ -150,7 +195,7 @@ void cwCenterlineSketchPainterModel::updateModel()
                 lines.moveTo(line.p1());
                 lines.lineTo(line.p2());
             }
-            snapshot.paths.append(makePath(std::move(lines), shotLineWidthWorld));
+            snapshot.paths.append(makePath(std::move(lines), shotLineColor, shotLineWidthWorld));
 
             QPainterPath symbols;
             for (const auto &station : geometry.stations) {
@@ -158,7 +203,7 @@ void cwCenterlineSketchPainterModel::updateModel()
                                    stationRadiusWorld,
                                    stationRadiusWorld);
             }
-            snapshot.paths.append(makePath(std::move(symbols), 0.0));
+            snapshot.paths.append(makePath(std::move(symbols), stationColor, 0.0));
 
             // The shared painter text helper anchors glyphs at
             // bounds.topLeft; a non-zero height would shift the Y-flipped
@@ -179,7 +224,7 @@ void cwCenterlineSketchPainterModel::updateModel()
                 row.bounds      = QRectF(worldAnchor, QSizeF(0.0, 0.0));
                 row.position    = worldAnchor;
                 row.font        = font;
-                row.fillColor   = Qt::black;
+                row.fillColor   = stationColor;
                 row.strokeColor = Qt::transparent;
                 snapshot.textRows.append(row);
             }

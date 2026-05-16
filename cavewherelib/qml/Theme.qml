@@ -41,9 +41,15 @@ QtObject {
     readonly property color borderSubtle: dark ? "#353a42" : "#e4e4e4"
     readonly property color divider: dark ? "#2c3138" : "#d8d8d8"
 
-    // Sketch grid
-    readonly property color sketchGridLine: dark ? "#1eb6dd" : "#1eb6dd"
-    readonly property color sketchGridLabel: dark ? "#5bc8e3" : "#178ba8"
+    // Sketch palette. Cave maps are paper-first; dark mode uses tuned
+    // light grays rather than a literal color inversion.
+    readonly property color sketchGridLine:            dark ? "#3a566c" : "#1eb6dd"
+    readonly property color sketchGridLabel:           sketchGridLine
+    readonly property color sketchGridLabelBackground: background
+    readonly property color sketchStrokeWall:          dark ? "#d4d4d4" : "#202020"
+    readonly property color sketchStrokeNonWall:       dark ? "#9a9a9a" : "#606060"
+    readonly property color sketchStation:             sketchStrokeWall
+    readonly property color sketchShotLine:            sketchStrokeNonWall
 
     // Diff colors
     readonly property color diffAddedBackground: dark ? "#1a3626" : "#dafbe1"

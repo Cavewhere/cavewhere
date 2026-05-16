@@ -30,6 +30,8 @@ class CAVEWHERE_LIB_EXPORT cwSketchPainterPathModel : public cwAbstractSketchPai
 
     Q_PROPERTY(QAbstractItemModel *strokeModel READ strokeModel WRITE setStrokeModel NOTIFY strokeModelChanged)
     Q_PROPERTY(int activeStrokeIndex READ activeStrokeIndex WRITE setActiveStrokeIndex NOTIFY activeStrokeIndexChanged BINDABLE bindableActiveStrokeIndex)
+    Q_PROPERTY(QColor wallStrokeColor READ wallStrokeColor WRITE setWallStrokeColor NOTIFY wallStrokeColorChanged)
+    Q_PROPERTY(QColor nonWallStrokeColor READ nonWallStrokeColor WRITE setNonWallStrokeColor NOTIFY nonWallStrokeColorChanged)
 
 public:
     explicit cwSketchPainterPathModel(QObject *parent = nullptr);
@@ -43,9 +45,18 @@ public:
     void setActiveStrokeIndex(int index) { m_activeStrokeIndex = index; }
     QBindable<int> bindableActiveStrokeIndex() { return &m_activeStrokeIndex; }
 
+    // Fallback colors when a stroke's `color` role is invalid, keyed by `kind`.
+    QColor wallStrokeColor() const { return m_wallStrokeColor; }
+    void setWallStrokeColor(const QColor &color);
+
+    QColor nonWallStrokeColor() const { return m_nonWallStrokeColor; }
+    void setNonWallStrokeColor(const QColor &color);
+
 signals:
     void strokeModelChanged();
     void activeStrokeIndexChanged();
+    void wallStrokeColorChanged();
+    void nonWallStrokeColorChanged();
 
 protected:
     Path path(const QModelIndex &index) const override;
@@ -73,11 +84,18 @@ private:
     int m_pointsRole = -1;
     int m_widthRole  = -1;
     int m_colorRole  = -1;
+    int m_kindRole   = -1;
     void resolveRoles();
 
     QVector<cwPenPoint> strokePoints(int row) const;
     double              strokeWidth(int row) const;
     QColor              strokeColor(int row) const;
+    QColor              defaultColorForKind(int row) const;
+    void                scheduleColorRebuild();
+
+    QColor m_wallStrokeColor    = Qt::black;
+    QColor m_nonWallStrokeColor = Qt::black;
+    bool   m_colorRebuildPending = false;
 
     void onSourceRowsInserted(const QModelIndex &parent, int first, int last);
     void onSourceRowsAboutToBeRemoved(const QModelIndex &parent, int first, int last);
