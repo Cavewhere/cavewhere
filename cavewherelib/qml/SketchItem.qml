@@ -24,9 +24,10 @@ QQ.Item {
 
     // Fresh sketches (viewInitialized === false) start centered at 1×; otherwise each sketch remembers its own view.
     readonly property double zoom: sketch ? sketch.viewState.zoom : 1.0
+    readonly property point _centeredPan: Qt.point(width / 2, height / 2)
     readonly property point pan: (sketch && sketch.viewState.viewInitialized)
         ? sketch.viewState.pan
-        : Qt.point(width / 2, height / 2)
+        : _centeredPan
 
     readonly property int strokeKind: toolbarId.strokeKind
     readonly property double strokeWidth: {
@@ -454,12 +455,26 @@ QQ.Item {
         }
     }
 
-    QQ.NumberAnimation {
+    // Reset both zoom AND pan — animating only zoom left the world origin at the user's last pan offset (issue #457).
+    QQ.ParallelAnimation {
         id: zoomResetAnimationId
-        target: sketchItemId.sketch ? sketchItemId.sketch.viewState : null
-        property: "zoom"
-        to: 1.0
-        duration: 250
-        easing.type: Easing.InOutQuad
+
+        readonly property var viewState: sketchItemId.sketch ? sketchItemId.sketch.viewState : null
+
+        QQ.NumberAnimation {
+            target: zoomResetAnimationId.viewState
+            property: "zoom"
+            to: 1.0
+            duration: 250
+            easing.type: Easing.InOutQuad
+        }
+
+        QQ.PropertyAnimation {
+            target: zoomResetAnimationId.viewState
+            property: "pan"
+            to: sketchItemId._centeredPan
+            duration: 250
+            easing.type: Easing.InOutQuad
+        }
     }
 }
