@@ -47,8 +47,8 @@ public:
     void setModelMatrix(QMatrix4x4 matrix);
     QMatrix4x4 modelMatrix() const;
 
-    void addPointItem(QQuickItem* object);
-    void removePointItem(QQuickItem* object);
+    Q_INVOKABLE void addPointItem(QQuickItem* object);
+    Q_INVOKABLE void removePointItem(QQuickItem* object);
 
     QMatrix4x4 matrix() const;
 

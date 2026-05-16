@@ -6,12 +6,14 @@
 **************************************************************************/
 
 import QtQuick
-import cavewherelib
+import QtQuick.Controls as QC
 import QtQuick.Window
+import cavewherelib
 
 
 Item {
     property alias turnTableInteraction: turnTableInteractionId
+    property alias coordinatePickerInteraction: coordinatePickerId
     property alias interactionManager: interactionManagerId
     property alias leadView: leadViewId
     property alias renderer: rendererId
@@ -53,10 +55,25 @@ Item {
         gridPlane: RootData.regionSceneManager.gridPlane.plane
     }
 
+    // While the picker is the active Interaction, the turn-table is disabled.
+    // The picker forwards rotate + zoom gestures to the turn-table so the
+    // user can still orient the camera; left-click is reserved for picking.
+    CoordinatePickerInteraction {
+        id: coordinatePickerId
+        objectName: "coordinatePicker"
+        camera: rendererId.camera
+        scene: rendererId.scene
+        region: RootData.region
+        turnTableInteraction: turnTableInteractionId
+
+        onDeactivated: pickButtonId.checked = false
+    }
+
     InteractionManager {
         id: interactionManagerId
         interactions: [
-            turnTableInteractionId
+            turnTableInteractionId,
+            coordinatePickerId
         ]
         defaultInteraction: turnTableInteractionId
     }
@@ -101,6 +118,39 @@ Item {
             compassRotation: turnTableInteractionId.cameraRotation
             sampleCount: 4
         }
+    }
+
+    QC.RoundButton {
+        id: pickButtonId
+        objectName: "coordinatePickerButton"
+        anchors {
+            left: parent.left
+            bottom: parent.bottom
+            margins: 20
+        }
+        checkable: true
+        text: "⌖"
+        font.pixelSize: Theme.fontSizeTitle
+        QC.ToolTip.visible: hovered
+        QC.ToolTip.text: qsTr("Pick coordinates")
+        // Guard: when deactivate() runs externally (e.g. another interaction
+        // takes over), onDeactivated below sets checked = false; this guard
+        // prevents the toggle from calling deactivate() again and re-emitting.
+        onCheckedChanged: {
+            if (checked && interactionManagerId.activeInteraction !== coordinatePickerId) {
+                coordinatePickerId.activate()
+            } else if (!checked && interactionManagerId.activeInteraction === coordinatePickerId) {
+                coordinatePickerId.deactivate()
+            }
+        }
+    }
+
+    CoordinatePickerPopup {
+        id: pickPopupId
+        objectName: "coordinatePickerPopup"
+        parent: rendererId
+        picker: coordinatePickerId
+        visible: coordinatePickerId.hasPick && pickButtonId.checked
     }
 }
 
