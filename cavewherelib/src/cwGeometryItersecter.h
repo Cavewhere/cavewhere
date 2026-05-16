@@ -192,9 +192,10 @@ private:
     AsyncFuture::Restarter<void> m_bvhRestarter;
     cwFutureManagerToken m_futureManagerToken;
 
-    // BuildPrim and BuildContext are defined in the .cpp; declared here so
-    // recursive helpers can take them by reference.
+    // BuildPrim, SplitProgress, and BuildContext are defined in the .cpp;
+    // declared here so recursive helpers can take them by reference.
     struct BuildPrim;
+    struct SplitProgress;
     struct BuildContext;
 
     void scheduleBuild();

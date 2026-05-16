@@ -44,9 +44,21 @@ namespace {
     // cores — typical LAZ clouds (10M-100M points) yield 150-1500 chunks.
     constexpr qsizetype kEnumChunkSize = 64 * 1024;
 
+    // Phase B-1 splits the root range serially down this many levels
+    // (2^4 = up to 16 SubRanges fed to the parallel Phase B-2 builder).
+    constexpr int kParallelFanoutDepth = 4;
+
     // Job name surfaced in the cwFutureManagerModel UI while the async
     // BVH build is running.
     constexpr auto kAcceleratingPickingJobName = QLatin1StringView("Accelerating picking");
+
+    // QPromise's progress range is int; clamp accumulated qsizetype values
+    // so huge clouds (totalPrims > INT_MAX) don't wrap.
+    void setSaturatedProgress(QPromise<void>& promise, qsizetype value)
+    {
+        promise.setProgressValue(static_cast<int>(
+            std::min<qsizetype>(value, std::numeric_limits<int>::max())));
+    }
 
     // Visibility guard shared by every traversal entry point. A null parent
     // means the object isn't owned by a cwRenderObject (test fixtures), so
@@ -67,6 +79,16 @@ struct cwGeometryItersecter::BuildPrim {
     cwGeometryItersecter::Primitive prim;
 };
 
+// Per-call progress accounting for the serial Phase B-1 split. Phase B-1
+// runs single-threaded so `done` is a plain counter, not atomic. Bundled
+// into one nullable pointer on BuildContext to keep "set together or not at
+// all" enforced by the type.
+struct cwGeometryItersecter::SplitProgress {
+    QPromise<void>& promise;
+    qsizetype done = 0;
+    qsizetype base = 0;
+};
+
 // Bundle of references the recursive Phase B helpers all need. Saves
 // passing six parameters through every recursive call.
 struct cwGeometryItersecter::BuildContext {
@@ -77,6 +99,8 @@ struct cwGeometryItersecter::BuildContext {
     // Only set during the parallel Phase B pass; serialSplitToFanout
     // leaves it null because the serial split doesn't create leaves.
     std::atomic<qsizetype>* leafPrimCounter = nullptr;
+    // Non-null only during Phase B-1 (see launchBuildJob).
+    SplitProgress* splitProgress = nullptr;
 };
 
 namespace {
@@ -615,6 +639,15 @@ uint32_t cwGeometryItersecter::serialSplitToFanout(BuildContext& ctx,
         return selfIndex;
     }
 
+    // medianSplit's nth_element on `count` items dominates this recursion
+    // level, so attribute `count` units after it returns. Sum across all
+    // calls equals the phaseB1Budget reserved in launchBuildJob().
+    if (ctx.splitProgress != nullptr) {
+        ctx.splitProgress->done += count;
+        setSaturatedProgress(ctx.splitProgress->promise,
+                             ctx.splitProgress->base + ctx.splitProgress->done);
+    }
+
     // Track this as an upper inner node so the bottom-up bbox pass picks
     // it up. Recording before recursion gives us pre-order; iterating in
     // reverse later yields children-before-parents.
@@ -788,12 +821,12 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             return;
         }
 
-        // Range covers both phases: Phase A reports primitives-enumerated
-        // in [0, totalPrims], Phase B reports primitives-folded-into-leaves
-        // in [totalPrims, 2 * totalPrims]. The Phase B half is silent
-        // recursion work that would otherwise pin the bar at 100% while
-        // the user waits.
-        promise.setProgressRange(0, static_cast<int>(std::min<qsizetype>(2 * totalPrims, std::numeric_limits<int>::max())));
+        // Phase B-1 is otherwise silent for seconds on large clouds, so
+        // reserve a slice of the bar for it. Each of its recursion levels
+        // runs nth_element over ~totalPrims items in aggregate.
+        const qsizetype phaseB1Budget = static_cast<qsizetype>(kParallelFanoutDepth) * totalPrims;
+        const qsizetype totalProgress = totalPrims + phaseB1Budget + totalPrims;
+        promise.setProgressRange(0, static_cast<int>(std::min<qsizetype>(totalProgress, std::numeric_limits<int>::max())));
         promise.setProgressValue(0);
 
         QVector<BuildPrim> prims;
@@ -822,8 +855,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
                 }
 
                 const qsizetype done = primsDone.fetch_add(chunk.count, std::memory_order_relaxed) + chunk.count;
-                promise.setProgressValue(static_cast<int>(
-                    std::min<qsizetype>(done, std::numeric_limits<int>::max())));
+                setSaturatedProgress(promise, done);
             });
 
             // Release our pool slot so mapped workers can't deadlock
@@ -845,7 +877,8 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         //    kParallelFanoutDepth levels deep (or run out of primitives),
         //    pre-claiming a slot for every node it touches. Each terminal
         //    range gets recorded as a SubRange with a pre-claimed root
-        //    slot for the parallel pass.
+        //    slot for the parallel pass. Progress is reported per
+        //    successful medianSplit (see splitProgress* fields below).
         //
         // 2. Parallel pass: cwConcurrent::map runs buildBvhSubtree on
         //    every SubRange. Subtree builders write to disjoint slot
@@ -859,7 +892,6 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         //    children's bboxes.
         //
         // 4. Truncate bvhNodes to the actual node count.
-        constexpr int kParallelFanoutDepth = 4;  // 2^4 = up to 16 subranges
         QVector<BvhNode> bvhNodes;
         if (!prims.isEmpty()) {
             // Tight upper bound for median split with leaf threshold L:
@@ -878,7 +910,10 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             QVector<SubRange> subRanges;
             QVector<uint32_t> upperInnerNodes;
 
-            BuildContext serialCtx{snapshot, prims, bvhNodes, nextNode, nullptr};
+            SplitProgress splitProgress{promise, /*done=*/0, /*base=*/totalPrims};
+            BuildContext serialCtx{snapshot, prims, bvhNodes, nextNode,
+                                   /*leafPrimCounter=*/nullptr,
+                                   /*splitProgress=*/&splitProgress};
             serialSplitToFanout(serialCtx, 0, prims.size(),
                                 kParallelFanoutDepth,
                                 subRanges, upperInnerNodes);
@@ -891,19 +926,19 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
                 std::atomic<qsizetype> phaseBPrims{0};
                 BuildContext parallelCtx{snapshot, prims, bvhNodes, nextNode, &phaseBPrims};
 
+                const qsizetype phaseB2Base = totalPrims + phaseB1Budget;
                 auto buildFuture = cwConcurrent::map(subRanges,
-                    [&parallelCtx, &phaseBPrims, &promise, totalPrims](SubRange& r) {
+                    [&parallelCtx, &phaseBPrims, &promise, phaseB2Base](SubRange& r) {
                         if (promise.isCanceled()) {
                             return;
                         }
                         buildBvhSubtree(parallelCtx, r.begin, r.end, r.rootSlot);
                         // Push progress once per subtree: ~16 updates across
-                        // Phase B, which is plenty for a visibly-moving bar
+                        // Phase B-2, which is plenty for a visibly-moving bar
                         // and avoids serializing on the QPromise mutex from
                         // deep inside the recursion.
-                        promise.setProgressValue(static_cast<int>(
-                            std::min<qsizetype>(totalPrims + phaseBPrims.load(std::memory_order_relaxed),
-                                                std::numeric_limits<int>::max())));
+                        setSaturatedProgress(promise,
+                            phaseB2Base + phaseBPrims.load(std::memory_order_relaxed));
                     });
 
                 QThreadPool* pool = cwTask::threadPool();
