@@ -16,20 +16,32 @@ const cwGeometry::VertexAttribute *cwGeometry::attribute(Semantic semantic) cons
 
 void cwGeometry::dump() const
 {
-    const qsizetype vtxCount   = vertexCount();
-    const int attrCount        = m_attributes.size();
-    const qsizetype idxCount   = m_indices.size();
-    const qsizetype vtxBytes   = m_vertexData.size();
+    const qsizetype vtxCount  = vertexCount();
+    const int attrCount       = m_attributes.size();
+    const qsizetype idxCount  = m_indices.size();
+    const qsizetype bufCount  = m_vertexBuffers.size();
+    qsizetype totalVtxBytes   = 0;
+    for (const QByteArray& b : m_vertexBuffers) {
+        totalVtxBytes += b.size();
+    }
 
     qDebug().noquote()
         << "cwGeometry dump:"
         << "\n  Type:           " << toString(m_type)
+        << "\n  Layout:         " << toString(m_layoutMode)
         << "\n  Vertices:       " << vtxCount
-        << "\n  Vertex stride:  " << m_vertexStride << " bytes"
-        << "\n  Vertex bytes:   " << vtxBytes
+        << "\n  Buffers:        " << bufCount
+        << "\n  Vertex bytes:   " << totalVtxBytes
         << "\n  Indices:        " << idxCount
         << "\n  Cull backfaces: " << (m_cullBackfaces ? "true" : "false")
         << "\n  Attributes:     " << attrCount;
+
+    for (qsizetype i = 0; i < bufCount; ++i) {
+        qDebug().noquote()
+            << "    buffer[" << i << "]"
+            << " stride=" << m_bufferStrides[i]
+            << " bytes="  << m_vertexBuffers[i].size();
+    }
 
     for (int i = 0; i < attrCount; ++i) {
         const VertexAttribute& a = m_attributes[i];
@@ -37,7 +49,9 @@ void cwGeometry::dump() const
             << "    [" << i << "]"
             << " semantic=" << toString(a.semantic)
             << " format="   << toString(a.format)
-            << " offset="   << a.byteOffset
+            << " buffer="   << a.bufferIndex
+            << " offset="   << a.byteOffsetInBuffer
+            << " stride="   << a.bufferStride
             << " size="     << a.byteSize() << "B";
     }
 }
@@ -63,6 +77,14 @@ const char *cwGeometry::toString(Semantic s) {
     case Semantic::TexCoord1:      return "TexCoord1";
     case Semantic::Classification: return "Classification";
     case Semantic::Custom:         return "Custom";
+    }
+    return "Unknown";
+}
+
+const char *cwGeometry::toString(LayoutMode m) {
+    switch (m) {
+    case LayoutMode::Interleaved: return "Interleaved";
+    case LayoutMode::Separated:   return "Separated";
     }
     return "Unknown";
 }

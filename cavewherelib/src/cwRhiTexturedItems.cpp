@@ -1,6 +1,7 @@
 #include "cwRhiTexturedItems.h"
 
 #include "cwRenderTexturedItems.h"
+#include "cwRhiAttributeFormat.h"
 #include "cwRhiItemRenderer.h"
 
 #include <QByteArray>
@@ -55,13 +56,11 @@ void cwRhiTexturedItems::initialize(const ResourceUpdateData& data)
         data.resourceUpdateBatch->generateMips(m_sharedData.loadingTexture);
     }
 
-    m_inputLayout.setBindings({
-        int(sizeof(QVector3D) + sizeof(QVector2D))
-    });
-    m_inputLayout.setAttributes({
-        { 0, 0, QRhiVertexInputAttribute::Float3, 0 },
-        { 0, 1, QRhiVertexInputAttribute::Float2, int(sizeof(QVector3D)) }
-    });
+    // Build the vertex input layout from the canonical textured-item layout —
+    // same bit-for-bit result as the previous hardcoded version, but routed
+    // through buildRhiInputLayout so every cwGeometry consumer uses one path.
+    const cwGeometry layoutProbe(cwRenderTexturedItems::geometryLayout());
+    m_inputLayout = buildRhiInputLayout(layoutProbe);
 
     m_resourcesInitialized = true;
 }
@@ -327,7 +326,11 @@ void cwRhiTexturedItems::Item::updateGeometryBuffers(const ResourceUpdateData& d
     }
 
     QRhiResourceUpdateBatch* batch = data.resourceUpdateBatch;
-    const QByteArray vertexData = geometry.vertexData();
+    // Textured items use a single Interleaved buffer (validated by
+    // cwRenderTexturedItems::geometryMatchesLayout) — bind 0 only.
+    const auto bufferViews = geometry.vertexBuffers();
+    Q_ASSERT(bufferViews.size() <= 1);
+    const QByteArray vertexData = bufferViews.isEmpty() ? QByteArray() : *bufferViews[0].data;
     const auto indices = geometry.indices();
     const int indexBytes = indices.size() * int(sizeof(uint32_t));
 

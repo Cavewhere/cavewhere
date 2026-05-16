@@ -51,9 +51,13 @@ private:
 
     bool m_resourcesInitialized = false;
 
+    // m_inputLayout and m_vertexBuffers are built lazily from the geometry on
+    // the first non-empty updateResources call. Until then, ensurePipeline
+    // returns false and the cloud doesn't draw.
+    bool m_layoutBuilt = false;
     QRhiVertexInputLayout m_inputLayout;
-    QRhiBuffer* m_vertexBuffer = nullptr;
-    qsizetype m_vertexBufferCapacity = 0;
+    QVector<QRhiBuffer*> m_vertexBuffers;
+    QVector<qsizetype> m_vertexBufferCapacities;
     // Per-cloud uniform block (binding 1): world-space point radius derived
     // from the cloud's mean point spacing. NaN sentinel forces the first
     // upload since NaN != worldRadius for any non-NaN worldRadius.

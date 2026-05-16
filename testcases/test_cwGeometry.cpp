@@ -45,19 +45,20 @@ TEST_CASE("cwGeometry: layout construction and stride", "[cwGeometry]") {
         });
 
         REQUIRE(g.attributes().size() == 3);
-        REQUIRE(g.vertexStride() == int((3 + 3 + 2) * sizeof(float)));
+        REQUIRE(g.vertexBuffers().size() == 1);
+        REQUIRE(g.vertexBuffers()[0].stride == int((3 + 3 + 2) * sizeof(float)));
 
         const cwGeometry::VertexAttribute* pos = g.attribute(cwGeometry::Semantic::Position);
         REQUIRE(pos != nullptr);
-        REQUIRE(pos->byteOffset == 0);
+        REQUIRE(pos->byteOffsetInBuffer == 0);
 
         const cwGeometry::VertexAttribute* nrm = g.attribute(cwGeometry::Semantic::Normal);
         REQUIRE(nrm != nullptr);
-        REQUIRE(nrm->byteOffset == int(3 * sizeof(float)));
+        REQUIRE(nrm->byteOffsetInBuffer == int(3 * sizeof(float)));
 
         const cwGeometry::VertexAttribute* uv0 = g.attribute(cwGeometry::Semantic::TexCoord0);
         REQUIRE(uv0 != nullptr);
-        REQUIRE(uv0->byteOffset == int((3 + 3) * sizeof(float)));
+        REQUIRE(uv0->byteOffsetInBuffer == int((3 + 3) * sizeof(float)));
     }
 
     SECTION("QVector layout builds identically") {
@@ -67,7 +68,7 @@ TEST_CASE("cwGeometry: layout construction and stride", "[cwGeometry]") {
         };
         cwGeometry g(layout);
         REQUIRE(g.attributes().size() == 2);
-        REQUIRE(g.vertexStride() == int((3 + 2) * sizeof(float)));
+        REQUIRE(g.vertexBuffers()[0].stride == int((3 + 2) * sizeof(float)));
     }
 }
 
@@ -81,7 +82,7 @@ TEST_CASE("cwGeometry: resize, counts, and emptiness", "[cwGeometry]") {
 
     g.resizeVertices(4);
     REQUIRE(g.vertexCount() == 4);
-    REQUIRE(g.vertexData().size() == 4 * g.vertexStride());
+    REQUIRE(g.vertexBuffer(0)->size() == 4 * g.vertexBuffers()[0].stride);
 
     g.appendTriangle(0, 1, 2);
     REQUIRE_FALSE(g.isEmpty());
@@ -162,7 +163,7 @@ TEST_CASE("cwGeometry: bulk set and bulk get values()", "[cwGeometry]") {
 
     REQUIRE(g.set(cwGeometry::Semantic::Position, positions));
     REQUIRE(g.vertexCount() == positions.size());
-    REQUIRE(g.vertexData().size() == positions.size() * g.vertexStride());
+    REQUIRE(g.vertexBuffer(0)->size() == positions.size() * g.vertexBuffers()[0].stride);
 
     REQUIRE(g.set(cwGeometry::Semantic::Normal, normals));
 
@@ -348,9 +349,9 @@ TEST_CASE("cwGeometry: quint32 round-trip and Position+Classification layout", "
     const cwGeometry::VertexAttribute* cls = g.attribute(cwGeometry::Semantic::Classification);
     REQUIRE(pos != nullptr);
     REQUIRE(cls != nullptr);
-    REQUIRE(pos->byteOffset == 0);
-    REQUIRE(cls->byteOffset == 12);
-    REQUIRE(g.vertexStride() == 16);
+    REQUIRE(pos->byteOffsetInBuffer == 0);
+    REQUIRE(cls->byteOffsetInBuffer == 12);
+    REQUIRE(g.vertexBuffers()[0].stride == 16);
 
     QVector<quint32> classes = { 0u, 2u, 5u, 255u, std::numeric_limits<quint32>::max() };
     REQUIRE(g.set(cwGeometry::Semantic::Classification, classes));
@@ -485,10 +486,10 @@ TEST_CASE("cwGeometry: mixed Vec3 + UInt + Vec2 round-trip", "[cwGeometry]") {
         { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2 }
     });
 
-    REQUIRE(g.vertexStride() == 12 + 4 + 8);
-    REQUIRE(g.attribute(cwGeometry::Semantic::Position)->byteOffset == 0);
-    REQUIRE(g.attribute(cwGeometry::Semantic::Classification)->byteOffset == 12);
-    REQUIRE(g.attribute(cwGeometry::Semantic::TexCoord0)->byteOffset == 16);
+    REQUIRE(g.vertexBuffers()[0].stride == 12 + 4 + 8);
+    REQUIRE(g.attribute(cwGeometry::Semantic::Position)->byteOffsetInBuffer == 0);
+    REQUIRE(g.attribute(cwGeometry::Semantic::Classification)->byteOffsetInBuffer == 12);
+    REQUIRE(g.attribute(cwGeometry::Semantic::TexCoord0)->byteOffsetInBuffer == 16);
 
     QVector<QVector3D> positions = { {1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f} };
     QVector<quint32> classes = { 7u, 42u };
@@ -518,9 +519,9 @@ TEST_CASE("cwGeometry: alignment-aware buildLayout", "[cwGeometry]") {
             { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
         });
 
-        REQUIRE(g.attributes()[0].byteOffset == 0);
-        REQUIRE(g.attributes()[1].byteOffset == 4);
-        REQUIRE(g.vertexStride() == 16); // 4 + 12
+        REQUIRE(g.attributes()[0].byteOffsetInBuffer == 0);
+        REQUIRE(g.attributes()[1].byteOffsetInBuffer == 4);
+        REQUIRE(g.vertexBuffers()[0].stride == 16); // 4 + 12
     }
 
     SECTION("UNormByte then Half2 — Half2 aligned to 2, stride padded to 8") {
@@ -529,9 +530,9 @@ TEST_CASE("cwGeometry: alignment-aware buildLayout", "[cwGeometry]") {
             { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Half2 }
         });
 
-        REQUIRE(g.attributes()[0].byteOffset == 0);
-        REQUIRE(g.attributes()[1].byteOffset == 2); // padded from 1 → 2 to align to component size
-        REQUIRE(g.vertexStride() == 8);              // 2 + 4 = 6 → padded up to 8
+        REQUIRE(g.attributes()[0].byteOffsetInBuffer == 0);
+        REQUIRE(g.attributes()[1].byteOffsetInBuffer == 2); // padded from 1 → 2 to align to component size
+        REQUIRE(g.vertexBuffers()[0].stride == 8);              // 2 + 4 = 6 → padded up to 8
     }
 
     SECTION("Three UNormBytes pack tight at 0/1/2, stride padded to 4") {
@@ -541,10 +542,10 @@ TEST_CASE("cwGeometry: alignment-aware buildLayout", "[cwGeometry]") {
             { cwGeometry::Semantic::TexCoord1, cwGeometry::AttributeFormat::UNormByte }
         });
 
-        REQUIRE(g.attributes()[0].byteOffset == 0);
-        REQUIRE(g.attributes()[1].byteOffset == 1);
-        REQUIRE(g.attributes()[2].byteOffset == 2);
-        REQUIRE(g.vertexStride() == 4);
+        REQUIRE(g.attributes()[0].byteOffsetInBuffer == 0);
+        REQUIRE(g.attributes()[1].byteOffsetInBuffer == 1);
+        REQUIRE(g.attributes()[2].byteOffsetInBuffer == 2);
+        REQUIRE(g.vertexBuffers()[0].stride == 4);
     }
 
     SECTION("Half2 then Float — Float aligned to 4, stride padded to 8") {
@@ -553,9 +554,9 @@ TEST_CASE("cwGeometry: alignment-aware buildLayout", "[cwGeometry]") {
             { cwGeometry::Semantic::Tangent, cwGeometry::AttributeFormat::Float }
         });
 
-        REQUIRE(g.attributes()[0].byteOffset == 0);
-        REQUIRE(g.attributes()[1].byteOffset == 4);
-        REQUIRE(g.vertexStride() == 8);
+        REQUIRE(g.attributes()[0].byteOffsetInBuffer == 0);
+        REQUIRE(g.attributes()[1].byteOffsetInBuffer == 4);
+        REQUIRE(g.vertexBuffers()[0].stride == 8);
     }
 }
 
@@ -570,4 +571,117 @@ TEST_CASE("cwGeometry: toString covers Classification + new formats", "[cwGeomet
             QStringLiteral("Half2"));
     REQUIRE(QString::fromLatin1(cwGeometry::toString(cwGeometry::AttributeFormat::UNormByte4)) ==
             QStringLiteral("UNormByte4"));
+}
+
+// ============================================================
+// R2: LayoutMode + multi-buffer storage
+// ============================================================
+
+TEST_CASE("cwGeometry: default layoutMode is Interleaved", "[cwGeometry]") {
+    cwGeometry g({
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
+        { cwGeometry::Semantic::Classification, cwGeometry::AttributeFormat::UInt }
+    });
+    REQUIRE(g.layoutMode() == cwGeometry::LayoutMode::Interleaved);
+    REQUIRE(g.vertexBuffers().size() == 1);
+    REQUIRE(g.vertexBuffers()[0].stride == 16);
+
+    const auto locs = g.attributeLocations();
+    REQUIRE(locs.size() == 2);
+    REQUIRE(locs[0].bindingIndex == 0);
+    REQUIRE(locs[0].byteOffset == 0);
+    REQUIRE(locs[1].bindingIndex == 0);
+    REQUIRE(locs[1].byteOffset == 12);
+}
+
+TEST_CASE("cwGeometry: Separated mode places each attribute in its own buffer", "[cwGeometry]") {
+    cwGeometry g({
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
+        { cwGeometry::Semantic::Classification, cwGeometry::AttributeFormat::UInt },
+        { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2 }
+    }, cwGeometry::LayoutMode::Separated);
+
+    REQUIRE(g.layoutMode() == cwGeometry::LayoutMode::Separated);
+    const auto buffers = g.vertexBuffers();
+    REQUIRE(buffers.size() == 3);
+    REQUIRE(buffers[0].stride == 12); // Vec3
+    REQUIRE(buffers[1].stride == 4);  // UInt
+    REQUIRE(buffers[2].stride == 8);  // Vec2
+
+    const auto locs = g.attributeLocations();
+    REQUIRE(locs.size() == 3);
+    for (int i = 0; i < 3; ++i) {
+        REQUIRE(locs[i].bindingIndex == i);
+        REQUIRE(locs[i].byteOffset == 0);
+    }
+}
+
+TEST_CASE("cwGeometry: Separated mode round-trips through set<T>/value<T> identically to Interleaved", "[cwGeometry]") {
+    const QVector<cwGeometry::AttributeDesc> layout = {
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
+        { cwGeometry::Semantic::Classification, cwGeometry::AttributeFormat::UInt },
+        { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2 }
+    };
+
+    QVector<QVector3D> positions = { {1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}, {7.0f, 8.0f, 9.0f} };
+    QVector<quint32> classes = { 7u, 42u, 255u };
+    QVector<QVector2D> uvs = { {0.1f, 0.2f}, {0.3f, 0.4f}, {0.5f, 0.6f} };
+
+    cwGeometry interleaved(layout, cwGeometry::LayoutMode::Interleaved);
+    cwGeometry separated(layout, cwGeometry::LayoutMode::Separated);
+
+    for (cwGeometry* g : { &interleaved, &separated }) {
+        REQUIRE(g->set(cwGeometry::Semantic::Position, positions));
+        REQUIRE(g->set(cwGeometry::Semantic::Classification, classes));
+        REQUIRE(g->set(cwGeometry::Semantic::TexCoord0, uvs));
+    }
+
+    REQUIRE(separated.values<quint32>(cwGeometry::Semantic::Classification) == classes);
+    REQUIRE(separated.values<QVector2D>(cwGeometry::Semantic::TexCoord0).size() == uvs.size());
+    auto outPos = separated.values<QVector3D>(cwGeometry::Semantic::Position);
+    auto outUv  = separated.values<QVector2D>(cwGeometry::Semantic::TexCoord0);
+    REQUIRE(outPos.size() == positions.size());
+    REQUIRE(outUv.size() == uvs.size());
+    for (int i = 0; i < positions.size(); ++i) {
+        requireEqual(outPos[i], positions[i]);
+        requireEqual(outUv[i], uvs[i]);
+    }
+
+    // Both modes report the same vertexCount and observable values.
+    REQUIRE(interleaved.vertexCount() == separated.vertexCount());
+    REQUIRE(interleaved.values<quint32>(cwGeometry::Semantic::Classification)
+            == separated.values<quint32>(cwGeometry::Semantic::Classification));
+}
+
+TEST_CASE("cwGeometry: Separated mode pads sub-4-byte attributes to a 4-byte buffer stride", "[cwGeometry]") {
+    cwGeometry g({
+        { cwGeometry::Semantic::Color0, cwGeometry::AttributeFormat::UNormByte },
+        { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Half2 }
+    }, cwGeometry::LayoutMode::Separated);
+
+    const auto buffers = g.vertexBuffers();
+    REQUIRE(buffers.size() == 2);
+    REQUIRE(buffers[0].stride == 4); // UNormByte: byteSize=1, padded to 4
+    REQUIRE(buffers[1].stride == 4); // Half2:     byteSize=4
+}
+
+TEST_CASE("cwGeometry: mutableVertexBuffer writes are visible through value<T>", "[cwGeometry]") {
+    cwGeometry g({
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
+    });
+    g.resizeVertices(2);
+
+    QVector3D* dst = reinterpret_cast<QVector3D*>(g.mutableVertexBuffer(0)->data());
+    dst[0] = QVector3D(1.0f, 2.0f, 3.0f);
+    dst[1] = QVector3D(4.0f, 5.0f, 6.0f);
+
+    requireEqual(g.value<QVector3D>(cwGeometry::Semantic::Position, 0), QVector3D(1.0f, 2.0f, 3.0f));
+    requireEqual(g.value<QVector3D>(cwGeometry::Semantic::Position, 1), QVector3D(4.0f, 5.0f, 6.0f));
+}
+
+TEST_CASE("cwGeometry: toString covers LayoutMode", "[cwGeometry]") {
+    REQUIRE(QString::fromLatin1(cwGeometry::toString(cwGeometry::LayoutMode::Interleaved)) ==
+            QStringLiteral("Interleaved"));
+    REQUIRE(QString::fromLatin1(cwGeometry::toString(cwGeometry::LayoutMode::Separated)) ==
+            QStringLiteral("Separated"));
 }

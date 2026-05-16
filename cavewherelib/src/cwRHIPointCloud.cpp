@@ -9,6 +9,7 @@
 #include "cwRHIPointCloud.h"
 #include "cwRenderMaterialState.h"
 #include "cwRenderPointCloud.h"
+#include "cwRhiAttributeFormat.h"
 #include "cwRhiItemRenderer.h"
 #include "cwRhiScene.h"
 #include "cwScene.h"
@@ -24,7 +25,9 @@ cwRHIPointCloud::cwRHIPointCloud()
 
 cwRHIPointCloud::~cwRHIPointCloud()
 {
-    delete m_vertexBuffer;
+    for (QRhiBuffer* buffer : m_vertexBuffers) {
+        delete buffer;
+    }
     delete m_perCloudUBO;
     delete m_srb;
     releasePipeline();
@@ -46,15 +49,9 @@ void cwRHIPointCloud::initialize(const ResourceUpdateData& data)
 
 void cwRHIPointCloud::initializeResources(const ResourceUpdateData& /*data*/)
 {
-    // Buffer is created lazily in updateResources once we know the point count.
-    QRhiVertexInputLayout inputLayout;
-    inputLayout.setBindings({
-        { sizeof(QVector3D) }
-    });
-    inputLayout.setAttributes({
-        { 0, 0, QRhiVertexInputAttribute::Float3, 0 }
-    });
-    m_inputLayout = inputLayout;
+    // The input layout is built from the geometry on the first non-empty
+    // updateResources call (we don't know the attribute set yet). UBOs and
+    // SRBs that don't depend on geometry are created on demand below.
 }
 
 void cwRHIPointCloud::synchronize(const SynchronizeData& data)
@@ -73,10 +70,10 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
     }
 
     const auto& value = m_data.value();
-    const QByteArray& vertexData = value.geometry.vertexData();
-    const qsizetype byteSize = vertexData.size();
+    const cwGeometry& geometry = value.geometry;
+    const auto bufferViews = geometry.vertexBuffers();
 
-    if (byteSize == 0) {
+    if (geometry.vertexCount() == 0 || bufferViews.isEmpty()) {
         m_data.resetChanged();
         return;
     }
@@ -84,18 +81,39 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
     auto* rhi = data.renderData.cb->rhi();
     QRhiResourceUpdateBatch* batch = data.resourceUpdateBatch;
 
-    // Immutable buffers must be recreated on size change; uploads are batched
-    // once per geometry change (not per frame), so the rebuild cost is fine.
-    if (!m_vertexBuffer || m_vertexBufferCapacity != byteSize) {
-        delete m_vertexBuffer;
-        m_vertexBuffer = rhi->newBuffer(QRhiBuffer::Immutable,
-                                        QRhiBuffer::VertexBuffer,
-                                        quint32(byteSize));
-        m_vertexBuffer->create();
-        m_vertexBufferCapacity = byteSize;
+    // Build the input layout from the geometry the first time we see a
+    // non-empty geometry. The geometry's attribute set is treated as
+    // immutable for the lifetime of this RHI object.
+    if (!m_layoutBuilt) {
+        m_inputLayout = buildRhiInputLayout(geometry);
+        m_layoutBuilt = true;
     }
 
-    batch->uploadStaticBuffer(m_vertexBuffer, vertexData.constData());
+    // Allocate one QRhiBuffer per cwGeometry vertex buffer. Interleaved
+    // geometry has 1 buffer (current LAZ case); Separated would have N.
+    if (m_vertexBuffers.size() != bufferViews.size()) {
+        for (QRhiBuffer* buffer : m_vertexBuffers) {
+            delete buffer;
+        }
+        m_vertexBuffers.assign(bufferViews.size(), nullptr);
+        m_vertexBufferCapacities.assign(bufferViews.size(), 0);
+    }
+
+    // Immutable buffers must be recreated on size change; uploads are batched
+    // once per geometry change (not per frame), so the rebuild cost is fine.
+    for (qsizetype i = 0; i < bufferViews.size(); ++i) {
+        const QByteArray* data = bufferViews[i].data;
+        const qsizetype byteSize = data->size();
+        if (!m_vertexBuffers[i] || m_vertexBufferCapacities[i] != byteSize) {
+            delete m_vertexBuffers[i];
+            m_vertexBuffers[i] = rhi->newBuffer(QRhiBuffer::Immutable,
+                                                QRhiBuffer::VertexBuffer,
+                                                quint32(byteSize));
+            m_vertexBuffers[i]->create();
+            m_vertexBufferCapacities[i] = byteSize;
+        }
+        batch->uploadStaticBuffer(m_vertexBuffers[i], data->constData());
+    }
 
     // Per-cloud uniform — world-space point radius derived from the cloud's
     // measured mean spacing. * 0.5 because the spacing is *between* points, and
@@ -130,14 +148,19 @@ void cwRHIPointCloud::render(const RenderData& data)
         return;
     }
 
-    if (!m_pipelineRecord || !m_pipelineRecord->pipeline || !m_vertexBuffer) {
+    if (!m_pipelineRecord || !m_pipelineRecord->pipeline || m_vertexBuffers.isEmpty()) {
         return;
     }
 
     data.cb->setGraphicsPipeline(m_pipelineRecord->pipeline);
     data.cb->setShaderResources(m_srb);
-    const QRhiCommandBuffer::VertexInput vertexInput(m_vertexBuffer, 0);
-    data.cb->setVertexInput(0, 1, &vertexInput);
+
+    QVarLengthArray<QRhiCommandBuffer::VertexInput, 4> inputs;
+    inputs.reserve(m_vertexBuffers.size());
+    for (QRhiBuffer* buffer : m_vertexBuffers) {
+        inputs.append(QRhiCommandBuffer::VertexInput(buffer, 0));
+    }
+    data.cb->setVertexInput(0, inputs.size(), inputs.constData());
     data.cb->draw(quint32(m_data.value().geometry.vertexCount()));
 }
 
@@ -163,7 +186,7 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     }
 
     auto* pipeline = m_pipelineRecord ? m_pipelineRecord->pipeline : nullptr;
-    if (!pipeline || !m_vertexBuffer || !m_srb) {
+    if (!pipeline || m_vertexBuffers.isEmpty() || !m_srb) {
         return false;
     }
 
@@ -174,7 +197,9 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     auto& batch = acquirePipelineBatch(batches, state);
     cwRHIObject::Drawable drawable;
     drawable.type = cwRHIObject::Drawable::Type::NonIndexed;
-    drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(m_vertexBuffer, 0));
+    for (QRhiBuffer* buffer : m_vertexBuffers) {
+        drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(buffer, 0));
+    }
     drawable.vertexCount = quint32(vertexCount);
     drawable.bindings = m_srb;
 
@@ -194,6 +219,12 @@ void cwRHIPointCloud::releasePipeline()
 bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
 {
     if (!m_resourcesInitialized) {
+        return false;
+    }
+
+    // m_inputLayout is built from the geometry in the first non-empty
+    // updateResources call — until then, the pipeline can't be created.
+    if (!m_layoutBuilt) {
         return false;
     }
 

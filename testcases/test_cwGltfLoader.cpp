@@ -37,12 +37,14 @@ void requireLayoutMatches(const cwGeometry& geometry,
         const auto& actual = attributes[i];
         REQUIRE(actual.semantic == expected.semantic);
         REQUIRE(actual.format == expected.format);
-        REQUIRE(actual.byteOffset == offset);
+        REQUIRE(actual.byteOffsetInBuffer == offset);
         offset += actual.byteSize();
     }
 
-    REQUIRE(geometry.vertexStride() == offset);
-    REQUIRE(geometry.vertexStride() == expectedStride(layout));
+    const auto buffers = geometry.vertexBuffers();
+    REQUIRE(buffers.size() == 1);
+    REQUIRE(buffers[0].stride == offset);
+    REQUIRE(buffers[0].stride == expectedStride(layout));
 }
 }
 
@@ -62,16 +64,18 @@ TEST_CASE("GLTF loader repacks geometry for textured items", "[cwGltfLoader]")
     for (const auto& mesh : scene.meshes) {
         for (const auto& geometry : mesh.geometries) {
             sawGeometry = true;
-            REQUIRE_FALSE(geometry.vertexData().isEmpty());
+            const auto buffers = geometry.vertexBuffers();
+            REQUIRE(buffers.size() == 1);
+            REQUIRE_FALSE(buffers[0].data->isEmpty());
             REQUIRE(geometry.vertexCount() == kExpectedVertexCount);
-            REQUIRE(geometry.vertexStride() > 0);
+            REQUIRE(buffers[0].stride > 0);
             REQUIRE(geometry.indices().size() == kExpectedIndexCount);
 
             requireLayoutMatches(geometry, options.requestedLayout);
 
             REQUIRE(geometry.attribute(cwGeometry::Semantic::Position) != nullptr);
             REQUIRE(geometry.attribute(cwGeometry::Semantic::TexCoord0) != nullptr);
-            REQUIRE(geometry.vertexData().size() == geometry.vertexCount() * geometry.vertexStride());
+            REQUIRE(buffers[0].data->size() == geometry.vertexCount() * buffers[0].stride);
         }
     }
 
@@ -91,9 +95,11 @@ TEST_CASE("GLTF loader preserves full geometry when no options are provided", "[
     for (const auto& mesh : scene.meshes) {
         for (const auto& geometry : mesh.geometries) {
             sawGeometry = true;
-            REQUIRE_FALSE(geometry.vertexData().isEmpty());
+            const auto buffers = geometry.vertexBuffers();
+            REQUIRE(buffers.size() == 1);
+            REQUIRE_FALSE(buffers[0].data->isEmpty());
             REQUIRE(geometry.vertexCount() == kExpectedVertexCount);
-            REQUIRE(geometry.vertexStride() > 0);
+            REQUIRE(buffers[0].stride > 0);
             REQUIRE(geometry.indices().size() == kExpectedIndexCount);
 
             const auto* position = geometry.attribute(cwGeometry::Semantic::Position);
@@ -114,8 +120,8 @@ TEST_CASE("GLTF loader preserves full geometry when no options are provided", "[
             REQUIRE(normal->format == cwGeometry::AttributeFormat::Vec3);
             REQUIRE(texCoord0->format == cwGeometry::AttributeFormat::Vec2);
 
-            REQUIRE(geometry.vertexStride() == 32);
-            REQUIRE(geometry.vertexData().size() == geometry.vertexCount() * geometry.vertexStride());
+            REQUIRE(buffers[0].stride == 32);
+            REQUIRE(buffers[0].data->size() == geometry.vertexCount() * buffers[0].stride);
         }
     }
 

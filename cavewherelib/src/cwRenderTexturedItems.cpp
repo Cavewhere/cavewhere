@@ -24,6 +24,11 @@ Monad::Result<cwGeometry> geometryMatchesLayout(const cwGeometry& geometry,
                                              .arg(attributes.size()));
     }
 
+    // cwRhiTexturedItems expects a single interleaved vertex buffer.
+    if (geometry.layoutMode() != cwGeometry::LayoutMode::Interleaved) {
+        return Monad::Result<cwGeometry>(QStringLiteral("Geometry must use Interleaved layout"));
+    }
+
     int expectedOffset = 0;
     for (int i = 0; i < layout.size(); ++i) {
         const auto& expected = layout[i];
@@ -31,23 +36,29 @@ Monad::Result<cwGeometry> geometryMatchesLayout(const cwGeometry& geometry,
         if (actual.semantic != expected.semantic || actual.format != expected.format) {
             return Monad::Result<cwGeometry>(QStringLiteral("Attribute %1 mismatch").arg(i));
         }
-        if (actual.byteOffset != expectedOffset) {
+        if (actual.byteOffsetInBuffer != expectedOffset) {
             return Monad::Result<cwGeometry>(QStringLiteral("Attribute %1 offset mismatch").arg(i));
         }
         expectedOffset += actual.byteSize();
     }
 
-    if (geometry.vertexStride() != expectedOffset) {
+    const auto buffers = geometry.vertexBuffers();
+    if (buffers.size() != 1) {
+        return Monad::Result<cwGeometry>(QStringLiteral("Expected 1 vertex buffer, got %1")
+                                             .arg(buffers.size()));
+    }
+    const int stride = buffers[0].stride;
+    if (stride != expectedOffset) {
         return Monad::Result<cwGeometry>(QStringLiteral("Vertex stride mismatch (expected %1, got %2)")
                                              .arg(expectedOffset)
-                                             .arg(geometry.vertexStride()));
+                                             .arg(stride));
     }
 
-    if (geometry.vertexStride() <= 0) {
+    if (stride <= 0) {
         return Monad::Result<cwGeometry>(QStringLiteral("Invalid vertex stride"));
     }
 
-    if (geometry.vertexData().size() % geometry.vertexStride() != 0) {
+    if (buffers[0].data->size() % stride != 0) {
         return Monad::Result<cwGeometry>(QStringLiteral("Vertex buffer size is not a multiple of stride"));
     }
 

@@ -289,7 +289,7 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
                 return;
             }
 
-            // Reserve once — vertexData is contiguous, incremental grows would
+            // Reserve once — the buffer is contiguous; incremental grows would
             // copy ~12 * N bytes on each resize.
             result.geometry.resizeVertices(effectiveMax);
 
@@ -299,11 +299,13 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
             // Single Vec3 Position attribute → stride == sizeof(QVector3D), so
             // the vertex buffer is a packed array of QVector3D and we write
             // converted points directly into it (no intermediate buffer).
-            Q_ASSERT(result.geometry.vertexStride() == int(sizeof(QVector3D)));
-            Q_ASSERT(positionAttribute->byteOffset == 0);
+            Q_ASSERT(positionAttribute->bufferStride == int(sizeof(QVector3D)));
+            Q_ASSERT(positionAttribute->byteOffsetInBuffer == 0);
 
-            QVector3D* const dstBase = reinterpret_cast<QVector3D*>(
-                result.geometry.vertexDataMutable().data());
+            QByteArray* const positionBuffer =
+                result.geometry.mutableVertexBuffer(positionAttribute->bufferIndex);
+            Q_ASSERT(positionBuffer);
+            QVector3D* const dstBase = reinterpret_cast<QVector3D*>(positionBuffer->data());
 
             const int workerCount = chooseWorkerCount(effectiveMax);
             QVector<WorkerRange> ranges = buildRanges(effectiveMax, workerCount, dstBase);

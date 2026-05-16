@@ -98,6 +98,31 @@ public:
         UNormByte4
     };
 
+    // Storage layout for vertex data. Chosen at construction; immutable.
+    //   Interleaved — single buffer, all attributes share one stride. The
+    //                 traditional "vertex struct" layout. GPU-friendly for
+    //                 the common case where the vertex shader reads all
+    //                 attributes together.
+    //   Separated   — one buffer per attribute, each tightly packed. Lets
+    //                 callers (or the GPU) update / upload one attribute
+    //                 independently of the others.
+    enum class LayoutMode {
+        Interleaved,
+        Separated
+    };
+
+    // Maps 1:1 to QRhiVertexInputBinding (one entry per `setBindings`).
+    struct VertexBuffer {
+        const QByteArray* data; // non-null
+        int stride;             // bytes between consecutive vertices in this buffer
+    };
+
+    // Maps 1:1 to QRhiVertexInputAttribute (one entry per `setAttributes`).
+    struct AttributeLocation {
+        int bindingIndex; // index into vertexBuffers()
+        int byteOffset;   // bytes from start of a vertex in that buffer
+    };
+
     // Bytes per component for a given format.
     // Float / UInt / SInt families: 4. Half family: 2. UNormByte family: 1.
     static int componentByteSize(AttributeFormat f) {
@@ -138,7 +163,13 @@ public:
     struct VertexAttribute {
         Semantic semantic = Semantic::Custom;
         AttributeFormat format = AttributeFormat::Vec3;
-        int byteOffset = 0;
+        // Storage descriptors baked at buildLayout time so set<T>/value<T>
+        // touch no per-call branch on LayoutMode.
+        // Interleaved: bufferIndex=0, bufferStride=totalStride, byteOffsetInBuffer=running offset.
+        // Separated:   bufferIndex=i, bufferStride=byteSize,    byteOffsetInBuffer=0.
+        int bufferIndex = 0;
+        int bufferStride = 0;
+        int byteOffsetInBuffer = 0;
 
         int componentCount() const {
             switch (format) {
@@ -182,46 +213,96 @@ public:
 
     cwGeometry() = default;
 
-    cwGeometry(std::initializer_list<AttributeDesc> layout) {
-        buildLayout(layout.begin(), layout.end());
+    cwGeometry(std::initializer_list<AttributeDesc> layout,
+               LayoutMode mode = LayoutMode::Interleaved) {
+        buildLayout(layout.begin(), layout.end(), mode);
     }
 
-    cwGeometry(QVector<AttributeDesc> layout) {
-        buildLayout(layout.begin(), layout.end());
+    cwGeometry(QVector<AttributeDesc> layout,
+               LayoutMode mode = LayoutMode::Interleaved) {
+        buildLayout(layout.begin(), layout.end(), mode);
     }
 
-    cwGeometry(std::span<AttributeDesc> layout) {
-        buildLayout(layout.begin(), layout.end());
+    cwGeometry(std::span<AttributeDesc> layout,
+               LayoutMode mode = LayoutMode::Interleaved) {
+        buildLayout(layout.begin(), layout.end(), mode);
+    }
+
+    LayoutMode layoutMode() const {
+        return m_layoutMode;
     }
 
     const VertexAttribute* attribute(Semantic semantic) const;
-
-    int vertexStride() const {
-        return m_vertexStride;
-    }
 
     const QVector<VertexAttribute>& attributes() const {
         return m_attributes;
     }
 
+    // Views onto the raw vertex storage, suitable for handing to
+    // QRhiVertexInputLayout::setBindings() / setAttributes().
+    //   Interleaved: vertexBuffers() returns 1 VertexBuffer; attributeLocations()
+    //                returns N entries all with bindingIndex=0.
+    //   Separated:   vertexBuffers() returns N VertexBuffers; attributeLocations()
+    //                returns N entries with bindingIndex=i, byteOffset=0.
+    QList<VertexBuffer> vertexBuffers() const {
+        QList<VertexBuffer> out;
+        out.reserve(int(m_vertexBuffers.size()));
+        for (qsizetype i = 0; i < m_vertexBuffers.size(); ++i) {
+            out.append({ &m_vertexBuffers[i], m_bufferStrides[i] });
+        }
+        return out;
+    }
+
+    QList<AttributeLocation> attributeLocations() const {
+        QList<AttributeLocation> out;
+        out.reserve(m_attributes.size());
+        for (const VertexAttribute& a : m_attributes) {
+            out.append({ a.bufferIndex, a.byteOffsetInBuffer });
+        }
+        return out;
+    }
+
+    // Direct read access to a single vertex buffer by binding index.
+    // Most callers should prefer attribute(...) + value<T>(...).
+    const QByteArray* vertexBuffer(int bindingIndex) const {
+        Q_ASSERT(bindingIndex >= 0 && bindingIndex < m_vertexBuffers.size());
+        return &m_vertexBuffers[bindingIndex];
+    }
+
+    // Power-user write accessor for bulk producers (e.g. cwLazLoader's
+    // parallel chunk writer). The templated set<T> is too slow per-vertex
+    // for those hot paths. Returns null if bindingIndex is out of range.
+    QByteArray* mutableVertexBuffer(int bindingIndex) {
+        if (bindingIndex < 0 || bindingIndex >= m_vertexBuffers.size()) {
+            return nullptr;
+        }
+        return &m_vertexBuffers[bindingIndex];
+    }
+
     // ----- Sizing -----
     // qsizetype: int byte-arithmetic overflows around 179M Vec3 vertices.
+    // Resizes every backing buffer so all attributes have the same vertex count.
     void resizeVertices(qsizetype vertexCount) {
-        if (m_vertexStride <= 0) {
-            return;
+        for (qsizetype i = 0; i < m_vertexBuffers.size(); ++i) {
+            const int stride = m_bufferStrides[i];
+            if (stride <= 0) {
+                continue;
+            }
+            m_vertexBuffers[i].resize(vertexCount * qsizetype(stride));
         }
-        m_vertexData.resize(vertexCount * qsizetype(m_vertexStride));
     }
 
     qsizetype vertexCount() const {
-        if (m_vertexStride <= 0) {
+        if (m_vertexBuffers.isEmpty() || m_bufferStrides[0] <= 0) {
             return 0;
         }
-        return m_vertexData.size() / qsizetype(m_vertexStride);
+        return m_vertexBuffers[0].size() / qsizetype(m_bufferStrides[0]);
     }
 
     void clearVertexData() {
-        m_vertexData.clear();
+        for (QByteArray& buf : m_vertexBuffers) {
+            buf.clear();
+        }
     }
 
     void setIndices(QVector<uint32_t> indices) {
@@ -425,16 +506,8 @@ public:
         m_cullBackfaces = enable;
     }
 
-    const QByteArray& vertexData() const {
-        return m_vertexData;
-    }
-
-    QByteArray& vertexDataMutable() {
-        return m_vertexData;
-    }
-
     bool isEmpty() const {
-        if (m_vertexData.isEmpty()) {
+        if (vertexCount() == 0) {
             return true;
         }
         // Non-indexed primitives (Points) draw in vertex order — indices are optional.
@@ -449,19 +522,24 @@ public:
     static const char* toString(Type t);
     static const char* toString(Semantic s);
     static const char* toString(AttributeFormat f);
+    static const char* toString(LayoutMode m);
 
 private:
-    // In class cwGeometry (private)
-    // Alignment-aware: each attribute's byteOffset is rounded up to its
-    // component byte size (so a Vec3 lands on a 4-byte boundary, a Half2 on
-    // a 2-byte boundary). The final stride is rounded up to 4 bytes — the
-    // safe vertex-buffer minimum for Vulkan / D3D / Metal bindings.
+    // Builds m_attributes, m_vertexBuffers, and m_bufferStrides. Each
+    // VertexAttribute is stamped with bufferIndex/bufferStride/byteOffsetInBuffer
+    // so the templated hot path (set<T> / value<T> / elementPointer) never
+    // checks m_layoutMode at runtime.
+    //
+    // Interleaved: 1 buffer, all attributes share one stride; each attribute's
+    //              offset is rounded up to its component byte size; the total
+    //              stride is rounded up to 4 bytes — the safe vertex-buffer
+    //              minimum for Vulkan / D3D / Metal bindings.
+    // Separated:   N buffers, each with stride = max(byteSize, 4). Sub-4-byte
+    //              attributes pay 3 bytes/vertex padding (use UNormByte4 for
+    //              tight packing of 4 byte channels).
     template <class It>
-    void buildLayout(It first, It last) {
-        // m_attributes.clear();
-        // m_vertexData.clear();
-        // m_indices.clear();
-        // m_vertexStride = 0;
+    void buildLayout(It first, It last, LayoutMode mode) {
+        m_layoutMode = mode;
 
         const auto count = std::distance(first, last);
         if (count > 0) {
@@ -470,21 +548,53 @@ private:
 
         constexpr int kVertexBufferAlignment = 4;
 
-        int offset = 0;
-        for (; first != last; ++first) {
-            const AttributeDesc& d = *first;
-            VertexAttribute a;
-            a.semantic = d.semantic;
-            a.format = d.format;
-            const int compSize = componentByteSize(d.format);
-            if (compSize > 0) {
-                offset = roundUpToAlignment(offset, compSize);
+        if (mode == LayoutMode::Interleaved) {
+            int offset = 0;
+            for (auto it = first; it != last; ++it) {
+                const AttributeDesc& d = *it;
+                VertexAttribute a;
+                a.semantic = d.semantic;
+                a.format = d.format;
+                a.bufferIndex = 0;
+                const int compSize = componentByteSize(d.format);
+                if (compSize > 0) {
+                    offset = roundUpToAlignment(offset, compSize);
+                }
+                a.byteOffsetInBuffer = offset;
+                m_attributes.push_back(a);
+                offset += a.byteSize();
             }
-            a.byteOffset = offset;
-            m_attributes.push_back(a);
-            offset += a.byteSize();
+            const int stride = roundUpToAlignment(offset, kVertexBufferAlignment);
+            // Stamp the shared stride into every attribute after the total is known.
+            for (VertexAttribute& a : m_attributes) {
+                a.bufferStride = stride;
+            }
+            m_vertexBuffers.resize(1);
+            m_bufferStrides.resize(1);
+            m_bufferStrides[0] = stride;
+        } else {
+            // Separated: one buffer per attribute.
+            int bindingIndex = 0;
+            for (auto it = first; it != last; ++it) {
+                const AttributeDesc& d = *it;
+                VertexAttribute a;
+                a.semantic = d.semantic;
+                a.format = d.format;
+                a.bufferIndex = bindingIndex;
+                a.byteOffsetInBuffer = 0;
+                // Per-buffer stride. Sub-4-byte attributes pad up to 4 (the
+                // vertex-binding safe minimum) — wasteful for UNormByte but
+                // avoids per-buffer alignment surprises.
+                a.bufferStride = roundUpToAlignment(a.byteSize(), kVertexBufferAlignment);
+                m_attributes.push_back(a);
+                ++bindingIndex;
+            }
+            m_vertexBuffers.resize(m_attributes.size());
+            m_bufferStrides.resize(m_attributes.size());
+            for (int i = 0; i < m_attributes.size(); ++i) {
+                m_bufferStrides[i] = m_attributes[i].bufferStride;
+            }
         }
-        m_vertexStride = roundUpToAlignment(offset, kVertexBufferAlignment);
     }
 
     static int roundUpToAlignment(int value, int alignment) {
@@ -505,18 +615,22 @@ private:
     }
 
     template<typename This>
-    auto elementPointerImp(This* thiz, qsizetype vertexIndex, const VertexAttribute& attribute) const {
-        Q_ASSERT(thiz->m_vertexStride > 0);
+    static auto elementPointerImp(This* thiz, qsizetype vertexIndex, const VertexAttribute& attribute) {
+        Q_ASSERT(attribute.bufferStride > 0);
         Q_ASSERT(vertexIndex >= 0);
         Q_ASSERT(vertexIndex < thiz->vertexCount());
+        Q_ASSERT(attribute.bufferIndex >= 0
+                 && attribute.bufferIndex < thiz->m_vertexBuffers.size());
 
         const qsizetype offset =
-            vertexIndex * qsizetype(thiz->m_vertexStride) + qsizetype(attribute.byteOffset);
+            vertexIndex * qsizetype(attribute.bufferStride)
+            + qsizetype(attribute.byteOffsetInBuffer);
 
         Q_ASSERT(offset >= 0);
-        Q_ASSERT(offset + qsizetype(attribute.byteSize()) <= thiz->m_vertexData.size());
+        Q_ASSERT(offset + qsizetype(attribute.byteSize())
+                 <= thiz->m_vertexBuffers[attribute.bufferIndex].size());
 
-        return thiz->m_vertexData.data() + offset;
+        return thiz->m_vertexBuffers[attribute.bufferIndex].data() + offset;
     }
 
     char* elementPointer(qsizetype vertexIndex, const VertexAttribute& attribute) {
@@ -528,20 +642,24 @@ private:
     }
 
     void ensureVertexCapacityForCount(qsizetype count) {
-        if (m_vertexStride <= 0) {
-            return;
-        }
-        const qsizetype required = count * qsizetype(m_vertexStride);
-        if (m_vertexData.size() < required) {
-            m_vertexData.resize(required);
+        for (qsizetype i = 0; i < m_vertexBuffers.size(); ++i) {
+            const int stride = m_bufferStrides[i];
+            if (stride <= 0) {
+                continue;
+            }
+            const qsizetype required = count * qsizetype(stride);
+            if (m_vertexBuffers[i].size() < required) {
+                m_vertexBuffers[i].resize(required);
+            }
         }
     }
 
     Type m_type = Type::None;
-    QByteArray m_vertexData;
+    LayoutMode m_layoutMode = LayoutMode::Interleaved;
+    QVector<QByteArray> m_vertexBuffers;
+    QVector<int> m_bufferStrides;
     QVector<uint32_t> m_indices;
     QVector<VertexAttribute> m_attributes;
-    int m_vertexStride = 0;
     QMatrix4x4 m_transform;
     bool m_cullBackfaces = true;
 

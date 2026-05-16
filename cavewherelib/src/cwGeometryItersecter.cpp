@@ -382,8 +382,9 @@ void cwGeometryItersecter::addPoints(const cwGeometryItersecter::Object &object)
 
     removeObject(object.parent(), object.id());
 
-    const char* base = geometry.vertexData().constData() + positionAttribute->byteOffset;
-    const int stride = geometry.vertexStride();
+    const char* base = geometry.vertexBuffer(positionAttribute->bufferIndex)->constData()
+                       + positionAttribute->byteOffsetInBuffer;
+    const int stride = positionAttribute->bufferStride;
 
     QBox3D box;
     for (qsizetype i = 0; i < vertexCount; ++i) {
@@ -559,8 +560,9 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
         return;
     }
 
-    const char* base = geometry.vertexData().constData() + positionAttribute->byteOffset;
-    const int stride = geometry.vertexStride();
+    const char* base = geometry.vertexBuffer(positionAttribute->bufferIndex)->constData()
+                       + positionAttribute->byteOffsetInBuffer;
+    const int stride = positionAttribute->bufferStride;
     const float* p = reinterpret_cast<const float*>(base + prim.primitiveIndex * stride);
     const QVector3D center(p[0], p[1], p[2]);
 
@@ -615,8 +617,9 @@ QBox3D cwGeometryItersecter::primitiveWorldBox(const QList<Node>& nodes,
     }
 
     // Point primitive — pad the vertex by pickRadius on each axis.
-    const char* base = geometry.vertexData().constData() + positionAttribute->byteOffset;
-    const int stride = geometry.vertexStride();
+    const char* base = geometry.vertexBuffer(positionAttribute->bufferIndex)->constData()
+                       + positionAttribute->byteOffsetInBuffer;
+    const int stride = positionAttribute->bufferStride;
     const float* p = reinterpret_cast<const float*>(base + prim.primitiveIndex * stride);
     const QVector3D centerWorld = mapPoint(worldFromModel, QVector3D(p[0], p[1], p[2]));
     const float radius = node.Object.pickRadius();
@@ -764,8 +767,9 @@ void cwGeometryItersecter::enumeratePointsChunk(const Object& object,
     const cwGeometry& geometry = object.geometry();
     auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
     const QMatrix4x4& worldFromModel = object.modelMatrix();
-    const char* base = geometry.vertexData().constData() + positionAttribute->byteOffset;
-    const int stride = geometry.vertexStride();
+    const char* base = geometry.vertexBuffer(positionAttribute->bufferIndex)->constData()
+                       + positionAttribute->byteOffsetInBuffer;
+    const int stride = positionAttribute->bufferStride;
 
     for (uint32_t i = 0; i < chunk.count; ++i) {
         const uint32_t vertIdx = chunk.inputBegin + i;
