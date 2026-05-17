@@ -59,6 +59,16 @@ public:
         None
     };
 
+    static const char* typeName(Type t) {
+        switch (t) {
+        case Type::Triangles: return "Triangles";
+        case Type::Lines:     return "Lines";
+        case Type::Points:    return "Points";
+        case Type::None:      return "None";
+        }
+        Q_UNREACHABLE_RETURN("Unknown");
+    }
+
     enum class Semantic {
         Position,
         Normal,

@@ -88,6 +88,21 @@ public:
     double intersects(const QRay3D& ray) const;
     cwRayHit intersectsDetailed(const QRay3D& ray) const;
 
+    // Debug-only snapshot of what the picker currently knows about. Reads
+    // the built BVH's source-node snapshot if available (post-bvhReady);
+    // falls back to the live Nodes list otherwise. Use from tests and the
+    // cw.picking log handler; not meant for production hot paths.
+    struct DebugStatistics {
+        bool hasBvh = false;             // true if read from m_bvh, false from Nodes
+        qsizetype sourceNodeCount = 0;   // total source nodes (one per addObject call)
+        qsizetype triangleSourceNodes = 0;
+        qsizetype lineSourceNodes = 0;
+        qsizetype pointSourceNodes = 0;
+        qsizetype totalPrimitives = 0;   // sum of countNodePrimitives across source nodes
+        qsizetype bvhNodeCount = 0;      // BvhNode count if bvh built, else 0
+    };
+    DebugStatistics debugStatistics() const;
+
     // Wired by cwRootData so the async BVH build shows up as a job in the
     // task panel. No-op until called.
     void setFutureManagerToken(cwFutureManagerToken token);
@@ -200,6 +215,10 @@ private:
     struct SplitProgress;
     struct BuildContext;
 
+    // Per-pick rejection counters used by the cw.picking logging category.
+    // Defined in the .cpp because it's purely a debug aid.
+    struct PickStats;
+
     void scheduleBuild();
     QFuture<void> launchBuildJob();
 
@@ -207,7 +226,8 @@ private:
     static void testPrimitive(const QList<Node>& nodes,
                               const Primitive& prim,
                               const QRay3D& ray,
-                              cwRayHit& best);
+                              cwRayHit& best,
+                              PickStats* stats);
 
     // Phase A: how many BVH primitives a single Node contributes. Lines
     // stay out of the BVH and contribute zero. Points contribute zero

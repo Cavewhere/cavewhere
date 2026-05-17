@@ -152,6 +152,7 @@ cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInD
         { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
         { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2 }
     };
+    geometry.setType(cwGeometry::Type::Triangles);
     geometry.set(cwGeometry::Semantic::Position, points);
     geometry.set(cwGeometry::Semantic::TexCoord0, texCoords);
     geometry.setIndices(scrapGeometry.indices);

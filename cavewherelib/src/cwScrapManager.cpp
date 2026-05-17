@@ -50,6 +50,9 @@
 //Async future
 #include "asyncfuture.h"
 
+//Picking diagnostics
+#include "cwPickingLog.h"
+
 //Std includes
 #include <algorithm>
 #include <ranges>
@@ -1570,8 +1573,12 @@ void cwScrapManager::updateScrapWithNewNoteTransform()
   */
 void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
                                   const QList<cwTriangulatedData>& scrapDataset) {
+    qCDebug(lcPick).nospace()
+        << "ScrapManager::taskFinished scraps=" << scrapsToUpdate.size()
+        << " dataset=" << scrapDataset.size();
     if(scrapDataset.isEmpty()) {
         //No scrap data udpated...
+        qCDebug(lcPick) << "ScrapManager::taskFinished EARLY RETURN: empty dataset";
         return;
     }
 
@@ -1638,6 +1645,17 @@ void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
 
         Q_ASSERT(m_scrapToRenderId.contains(scrap));
         auto id = m_scrapToRenderId.value(scrap);
+        const cwGeometry& g = triangleData.scrapGeometry();
+        qCDebug(lcPick).nospace()
+            << "ScrapManager::taskFinished pushing scrap=" << scrap
+            << " renderId=" << id
+            << " geometry: vertexCount=" << g.vertexCount()
+            << " indexCount=" << g.indices().size()
+            << " type=" << cwGeometry::typeName(g.type())
+            << " layoutMode=" << static_cast<int>(g.layoutMode())
+            << " attributes=" << g.attributes().size()
+            << " vertexBuffers=" << g.vertexBuffers().size()
+            << " isEmpty=" << g.isEmpty();
         m_renderScraps->updateGeometry(id, triangleData.scrapGeometry());
         m_renderScraps->updateTexture(id, triangleData.croppedImageData().image);
     }
