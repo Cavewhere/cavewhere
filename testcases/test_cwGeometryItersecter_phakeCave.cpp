@@ -58,9 +58,9 @@ TEST_CASE("Loading Phake Cave 3000 should register every scrap with the picker",
     // category's enabled flag directly avoids clobbering any global filter
     // rules a sibling test or QT_LOGGING_RULES env var may have installed.
     const bool wasEnabled = lcPick().isDebugEnabled();
-    lcPick().setEnabled(QtDebugMsg, true);
+    const_cast<QLoggingCategory&>(lcPick()).setEnabled(QtDebugMsg, true);
     auto restoreFilter = qScopeGuard([wasEnabled]() {
-        lcPick().setEnabled(QtDebugMsg, wasEnabled);
+        const_cast<QLoggingCategory&>(lcPick()).setEnabled(QtDebugMsg, wasEnabled);
     });
 
     cwJobSettings::initialize();

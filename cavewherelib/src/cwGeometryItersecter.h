@@ -218,6 +218,7 @@ private:
     // Per-pick rejection counters used by the cw.picking logging category.
     // Defined in the .cpp because it's purely a debug aid.
     struct PickStats;
+    friend QDebug operator<<(QDebug d, const cwGeometryItersecter::PickStats& s);
 
     void scheduleBuild();
     QFuture<void> launchBuildJob();

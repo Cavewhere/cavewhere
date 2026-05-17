@@ -68,7 +68,7 @@ struct cwGeometryItersecter::PickStats {
     int primsAccepted = 0;         // became the new best
 };
 
-static QDebug operator<<(QDebug d, const cwGeometryItersecter::PickStats& s)
+QDebug operator<<(QDebug d, const cwGeometryItersecter::PickStats& s)
 {
     QDebugStateSaver saver(d);
     d.nospace()
