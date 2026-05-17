@@ -846,7 +846,20 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
     }
 
     const QVector3D pWorld = mapPoint(worldFromModel, center);
-    const double tWorld = ray.projectedDistance(pWorld);
+
+    // Rank by sphere-entry depth in world space, not by the depth of
+    // the projected center. Center depth ignores how head-on a hit is,
+    // so a near-grazing point at shallow depth would beat a head-on
+    // point at slightly greater depth — even though the head-on point's
+    // sphere surface (what the user sees as the front of the splat)
+    // is closer to the camera. tNear naturally blends depth and
+    // perpendicular distance via tNear = tCenter - sqrt(r^2 - d^2).
+    // pointWorld remains the center so coordinate readouts snap to the
+    // data point rather than to the sphere surface.
+    const QVector3D entryWorld =
+        mapPoint(worldFromModel,
+                 rayModel.origin() + tNear * rayModel.direction());
+    const double tWorld = ray.projectedDistance(entryWorld);
     if (tWorld <= 0.0) {
         if (stats != nullptr) {
             ++stats->primsRayBehind;

@@ -85,9 +85,13 @@ TEST_CASE("Ray straight through a point hits and reports correct fields", "[cwGe
     REQUIRE(hit.firstIndex() == 0);
     REQUIRE(hit.pointWorld().z() == Approx(0.0f).margin(1e-4));
     // pointWorld is the vertex center (so callers can identify which point
-    // was clicked), and tWorld is the distance from ray origin to that
-    // center — 10.0 along a unit -Z ray from z=10 to z=0.
-    REQUIRE(hit.tWorld() == Approx(10.0).margin(1e-4));
+    // was clicked). tWorld is the sphere-entry depth — distance from the
+    // ray origin to where the ray first touches the point's pickRadius
+    // sphere — which matches the triangle path's "tWorld is the surface
+    // intersection distance" semantics and ensures consistent ranking when
+    // points and triangles compete for the same hit. For a head-on ray
+    // from z=10 to a point at z=0 with pickRadius=0.1, tWorld = 9.9.
+    REQUIRE(hit.tWorld() == Approx(10.0 - kPickRadius).margin(1e-4));
 }
 
 TEST_CASE("Ray within pickRadius of a point still hits", "[cwGeometryItersecter][points]")
