@@ -1019,7 +1019,17 @@ if(APPLE)
         add_dependencies(CaveWhere copy_installMac)
 
 
-        # if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+            ## Ad-hoc re-sign with get-task-allow so Instruments / lldb can attach.
+            ## No developer certificate is required for ad-hoc signing (-s -).
+            add_custom_command(TARGET CaveWhere POST_BUILD
+                COMMAND codesign --force --sign -
+                        --entitlements "${CMAKE_SOURCE_DIR}/entitlements.plist"
+                        "$<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/.."
+                COMMENT "Ad-hoc signing CaveWhere.app with get-task-allow (Debug)"
+            )
+        endif()
+
         if(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
             ## This allows for profiling to work correctly for macos
             # Query the available code signing identities.
