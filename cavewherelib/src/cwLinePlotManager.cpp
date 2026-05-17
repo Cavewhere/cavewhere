@@ -80,9 +80,10 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(runSurvex()));
     connect(Region, SIGNAL(removedCaves(int,int)), SLOT(runSurvex()));
 
-    // globalCS feeds the *cs out / *cs lines on the survex export, so the
-    // line plot needs to re-run when the user changes the region's CS.
-    connect(Region, &cwCavingRegion::globalCSChanged, this, &cwLinePlotManager::runSurvex);
+    // globalCoordinateSystem feeds the *cs out / *cs lines on the survex
+    // export, so the line plot needs to re-run when the user changes the
+    // region's CS.
+    connect(Region, &cwCavingRegion::globalCoordinateSystemChanged, this, &cwLinePlotManager::runSurvex);
 
     // worldOrigin is subtracted by cwLinePlotTask::applyWorldOriginOffset, so
     // the line plot must re-solve when it changes (auto-compute or manual recenter).

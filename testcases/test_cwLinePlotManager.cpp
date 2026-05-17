@@ -933,7 +933,7 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
 
     SECTION("region.setGlobalCS triggers a re-run") {
         REQUIRE(positionSpy.count() == 0);
-        region.setGlobalCS(QStringLiteral("EPSG:32616"));
+        region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
         plotManager->waitToFinish();
         CHECK(positionSpy.count() >= 1);
     }
@@ -944,7 +944,7 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
         // Set globalCS first; the spy after that captures only fix-related
         // re-runs. We don't reset the spy between this and the parent
         // setRegion run, so we tally only what happens after this point.
-        region.setGlobalCS(QStringLiteral("EPSG:32616"));
+        region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
 
         // Pre-set worldOrigin to a non-sentinel value so the first-solve
         // auto-compute branch in cwLinePlotManager::publishLinePlotResults

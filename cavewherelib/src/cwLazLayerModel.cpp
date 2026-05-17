@@ -8,12 +8,15 @@
 #include "cwLazLayerModel.h"
 
 //Qt includes
+#include <QDir>
+#include <QFileInfo>
+#include <QPointer>
 #include <QVariant>
 
 //Our includes
-#include "cavewhere.pb.h"
 #include "cwCavingRegion.h"
 #include "cwLazLoader.h"
+#include "cwProject.h"
 
 cwLazLayerModel::cwLazLayerModel(QObject* parent) :
     QAbstractListModel(parent)
@@ -48,7 +51,7 @@ QVariant cwLazLayerModel::data(const QModelIndex& index, int role) const
 
 QHash<int, QByteArray> cwLazLayerModel::roleNames() const
 {
-    return {
+    static const QHash<int, QByteArray> roles = {
         {LayerRole,        "layer"},
         {NameRole,         "name"},
         {SourcePathRole,   "sourcePath"},
@@ -57,28 +60,43 @@ QHash<int, QByteArray> cwLazLayerModel::roleNames() const
         {LoadStatusRole,   "loadStatus"},
         {PointCountRole,   "pointCount"}
     };
+    return roles;
 }
 
-cwLazLayer* cwLazLayerModel::addLayer(const QString& sourcePath)
+void cwLazLayerModel::addFromFiles(QList<QUrl> urls)
 {
-    maybeAutoAdoptCS(sourcePath);
+    if (urls.isEmpty()) {
+        return;
+    }
+    auto* p = this->project();
+    if (p == nullptr) {
+        qWarning() << "cwLazLayerModel::addFromFiles: no parent project — drop";
+        return;
+    }
+    if (m_gisLayersDir.absolutePath().isEmpty()) {
+        qWarning() << "cwLazLayerModel::addFromFiles: GIS Layers dir not set —"
+                   << "did setFileName run yet? Drop.";
+        return;
+    }
 
-    auto* layer = new cwLazLayer(this);
-    connectLayer(layer);
+    // Auto-adopt CS / worldOrigin from the first incoming file before the
+    // copy, so the region values are set in time for the post-rescan layers
+    // to inherit them. Probing the source path is cheap (header only).
+    for (const QUrl& url : urls) {
+        if (url.isLocalFile()) {
+            maybeAdoptRegionDefaultsFromLaz(url.toLocalFile());
+            break;
+        }
+    }
 
-    layer->setFutureManagerToken(m_futureManagerToken);
-    layer->setRegionGlobalCS(m_regionGlobalCS);
-    layer->setRegionWorldOrigin(m_regionWorldOrigin);
-
-    const int row = m_layers.size();
-    beginInsertRows(QModelIndex(), row, row);
-    m_layers.append(layer);
-    endInsertRows();
-
-    layer->setSourcePath(sourcePath);
-
-    emit countChanged();
-    return layer;
+    QPointer<cwLazLayerModel> self(this);
+    const QDir destinationDir = m_gisLayersDir;
+    p->addFiles(urls, destinationDir,
+                [self](QList<QString> /*relativePaths*/) {
+        if (self) {
+            self->rescan();
+        }
+    });
 }
 
 void cwLazLayerModel::removeAt(int index)
@@ -104,7 +122,7 @@ cwLazLayer* cwLazLayerModel::layerAt(int index) const
 void cwLazLayerModel::setFutureManagerToken(const cwFutureManagerToken& token)
 {
     m_futureManagerToken = token;
-    for (cwLazLayer* layer : m_layers) {
+    for (cwLazLayer* layer : std::as_const(m_layers)) {
         layer->setFutureManagerToken(token);
     }
 }
@@ -115,7 +133,7 @@ void cwLazLayerModel::setRegionGlobalCS(const QString& cs)
         return;
     }
     m_regionGlobalCS = cs;
-    for (cwLazLayer* layer : m_layers) {
+    for (cwLazLayer* layer : std::as_const(m_layers)) {
         layer->setRegionGlobalCS(cs);
     }
 }
@@ -126,47 +144,73 @@ void cwLazLayerModel::setRegionWorldOrigin(const cwGeoPoint& origin)
         return;
     }
     m_regionWorldOrigin = origin;
-    for (cwLazLayer* layer : m_layers) {
+    for (cwLazLayer* layer : std::as_const(m_layers)) {
         layer->setRegionWorldOrigin(origin);
     }
 }
 
-void cwLazLayerModel::writeTo(CavewhereProto::ProjectMetadata* metadata) const
+void cwLazLayerModel::setGisLayersDir(const QDir& dir)
 {
-    metadata->clear_lazlayers();
-    for (cwLazLayer* layer : m_layers) {
-        CavewhereProto::LazLayer* protoLayer = metadata->add_lazlayers();
-        protoLayer->set_sourcepath(layer->sourcePath().toStdString());
+    if (m_gisLayersDir.absolutePath() == dir.absolutePath()) {
+        return;
     }
+    m_gisLayersDir = dir;
+    // Defer the rescan to the event loop. During project load, this setter
+    // is called from cwSaveLoad::setFileName which runs *before* cwCavingRegion
+    // ::setData applies the proto's globalCoordinateSystem and worldOrigin.
+    // Running rescan synchronously here makes maybeAutoAdoptCS seed values
+    // that setData then overwrites with proto defaults (worldOrigin isn't
+    // persisted, so it's always {0,0,0} on load). Queuing lets setData run
+    // first; auto-adopt then only fills the gaps the proto left unset.
+    QMetaObject::invokeMethod(this, &cwLazLayerModel::rescan, Qt::QueuedConnection);
 }
 
-void cwLazLayerModel::readFrom(const CavewhereProto::ProjectMetadata& metadata)
+void cwLazLayerModel::rescan()
 {
     clear();
-    if (metadata.lazlayers_size() == 0) {
+
+    if (m_gisLayersDir.absolutePath().isEmpty() || !m_gisLayersDir.exists()) {
         return;
     }
 
-    QList<cwLazLayer*> newLayers;
-    newLayers.reserve(metadata.lazlayers_size());
-    for (int i = 0; i < metadata.lazlayers_size(); ++i) {
-        auto* layer = new cwLazLayer(this);
-        connectLayer(layer);
-        layer->setFutureManagerToken(m_futureManagerToken);
-        layer->setRegionGlobalCS(m_regionGlobalCS);
-        layer->setRegionWorldOrigin(m_regionWorldOrigin);
-        newLayers.append(layer);
+    // Linux's filesystem is case-sensitive, so the upper-case patterns matter;
+    // on macOS/Windows the filter is case-insensitive and the duplication is
+    // harmless (matches dedupe by absolute path inside entryInfoList).
+    const QStringList nameFilters{
+        QStringLiteral("*.laz"),
+        QStringLiteral("*.las"),
+        QStringLiteral("*.LAZ"),
+        QStringLiteral("*.LAS")
+    };
+    const QFileInfoList entries = m_gisLayersDir.entryInfoList(
+                nameFilters,
+                QDir::Files | QDir::NoDotAndDotDot,
+                QDir::Name);
+
+    if (entries.isEmpty()) {
+        return;
     }
 
-    beginInsertRows(QModelIndex(), 0, metadata.lazlayers_size() - 1);
+    // worldOrigin isn't persisted in the proto, so on every load we'd start at
+    // (0,0,0) and the geometry would sit at raw UTM coords offscreen. Seeding
+    // from the first LAZ's header fills the gap on projects that have LAZ
+    // files but no fix stations.
+    maybeAdoptRegionDefaultsFromLaz(entries.first().absoluteFilePath());
+
+    QList<cwLazLayer*> newLayers;
+    newLayers.reserve(entries.size());
+    for (int i = 0; i < entries.size(); ++i) {
+        newLayers.append(createLayer());
+    }
+
+    beginInsertRows(QModelIndex(), 0, newLayers.size() - 1);
     m_layers = newLayers;
     endInsertRows();
 
-    // Kick off async loads after the rows are committed so dataChanged
-    // signals from in-flight load progress route through valid indices.
-    for (int i = 0; i < metadata.lazlayers_size(); ++i) {
-        m_layers[i]->setSourcePath(
-            QString::fromStdString(metadata.lazlayers(i).sourcepath()));
+    // Kick off async loads after rows are committed so dataChanged signals
+    // from load progress route through valid indices.
+    for (int i = 0; i < entries.size(); ++i) {
+        m_layers.at(i)->setSourcePath(entries.at(i).absoluteFilePath());
     }
 
     emit countChanged();
@@ -201,6 +245,16 @@ void cwLazLayerModel::connectLayer(cwLazLayer* layer)
     connect(layer, &cwLazLayer::pointCountChanged, this, [emitForRole]() { emitForRole(PointCountRole); });
 }
 
+cwLazLayer* cwLazLayerModel::createLayer()
+{
+    auto* layer = new cwLazLayer(this);
+    connectLayer(layer);
+    layer->setFutureManagerToken(m_futureManagerToken);
+    layer->setRegionGlobalCS(m_regionGlobalCS);
+    layer->setRegionWorldOrigin(m_regionWorldOrigin);
+    return layer;
+}
+
 int cwLazLayerModel::indexOf(cwLazLayer* layer) const
 {
     for (int i = 0; i < m_layers.size(); ++i) {
@@ -211,13 +265,17 @@ int cwLazLayerModel::indexOf(cwLazLayer* layer) const
     return -1;
 }
 
-void cwLazLayerModel::maybeAutoAdoptCS(const QString& sourcePath)
+void cwLazLayerModel::maybeAdoptRegionDefaultsFromLaz(const QString& sourcePath)
 {
     auto* region = qobject_cast<cwCavingRegion*>(parent());
     if (region == nullptr) {
         return;
     }
-    if (!region->globalCS().isEmpty()) {
+
+    const bool needsCS = region->globalCoordinateSystem().isEmpty();
+    const bool needsOrigin = (region->worldOrigin() == cwGeoPoint{});
+
+    if (!needsCS && !needsOrigin) {
         return;
     }
 
@@ -226,11 +284,28 @@ void cwLazLayerModel::maybeAutoAdoptCS(const QString& sourcePath)
         return;
     }
 
-    // setGlobalCS resets worldOrigin to {} internally; the setWorldOrigin
-    // call below restores a meaningful origin from the bbox center. Order
-    // matters — flip these and the origin gets wiped after we set it.
-    if (!probe.sourceCS.isEmpty()) {
-        region->setGlobalCS(probe.sourceCS);
+    // setGlobalCoordinateSystem resets worldOrigin to {} internally; the
+    // setWorldOrigin call below restores a meaningful origin from the bbox
+    // center. Order matters — flip these and the origin gets wiped after we
+    // set it.
+    if (needsCS && !probe.sourceCS.isEmpty()) {
+        region->setGlobalCoordinateSystem(probe.sourceCS);
     }
-    region->setWorldOrigin(probe.bboxCenter);
+    if (needsOrigin) {
+        region->setWorldOrigin(probe.bboxCenter);
+    }
+}
+
+cwProject* cwLazLayerModel::project() const
+{
+    auto* region = qobject_cast<cwCavingRegion*>(parent());
+    if (region == nullptr) {
+        return nullptr;
+    }
+    return region->parentProject();
+}
+
+QString cwLazLayerModel::folderName()
+{
+    return QStringLiteral("GIS Layers");
 }

@@ -49,12 +49,12 @@ void cwCoordinatePicker::setRegion(cwCavingRegion* region)
         return;
     }
     if (m_region) {
-        disconnect(m_region, &cwCavingRegion::globalCSChanged,
+        disconnect(m_region, &cwCavingRegion::globalCoordinateSystemChanged,
                    this, &cwCoordinatePicker::rebuildWgs84Transform);
     }
     m_region = region;
     if (m_region) {
-        connect(m_region, &cwCavingRegion::globalCSChanged,
+        connect(m_region, &cwCavingRegion::globalCoordinateSystemChanged,
                 this, &cwCoordinatePicker::rebuildWgs84Transform);
     }
     // A stale pick from the old region would silently misreport coordinates
@@ -66,10 +66,10 @@ void cwCoordinatePicker::setRegion(cwCavingRegion* region)
 
 void cwCoordinatePicker::rebuildWgs84Transform()
 {
-    const QString cs = m_region ? m_region->globalCS() : QString();
-    // Keep m_globalCSCached in sync so the globalCS Q_PROPERTY reflects the
-    // current region between picks (the getter reads this cache).
-    m_globalCSCached = cs;
+    const QString cs = m_region ? m_region->globalCoordinateSystem() : QString();
+    // Keep the cache in sync so the globalCoordinateSystem Q_PROPERTY reflects
+    // the current region between picks (the getter reads this cache).
+    m_globalCoordinateSystemCached = cs;
     if (cs.isEmpty()) {
         m_wgs84Transform.reset();
         return;
@@ -109,7 +109,7 @@ void cwCoordinatePicker::pick(QPointF screenPoint)
                                double(m_scenePoint.y()) + origin.y,
                                double(m_scenePoint.z()) + origin.z);
 
-    m_globalCSCached = m_region->globalCS();
+    m_globalCoordinateSystemCached = m_region->globalCoordinateSystem();
     m_hasWgs84 = false;
     m_wgs84Lat = 0.0;
     m_wgs84Lon = 0.0;

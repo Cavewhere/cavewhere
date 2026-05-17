@@ -27,7 +27,7 @@ MainWindowTest {
             while (cave.fixStations.count > 0) {
                 cave.fixStations.removeAt(0)
             }
-            RootData.region.globalCS = "EPSG:32613"
+            RootData.region.globalCoordinateSystem = "EPSG:32613"
 
             // Reset the help-area visibility — tests share one CavePage
             // instance, so a previous toggle would otherwise bleed in.
@@ -234,7 +234,7 @@ MainWindowTest {
 
             // Switch to a geographic global CS — fix falls back to globalCS
             // since inputCS is empty, so the readout flips to "geographic CS".
-            RootData.region.globalCS = "EPSG:4326"
+            RootData.region.globalCoordinateSystem = "EPSG:4326"
 
             tryVerify(() => cave.gridConvergenceText === "n/a (geographic CS)", 500,
                       "label must recompute when globalCS changes")

@@ -71,6 +71,10 @@ struct cwSaveLoadPrivate {
         QString oldPath;
         QString path;
         QString dataRoot;
+        // Project root (parent of dataRoot when dataRoot is set, equal to
+        // dataRoot otherwise). Used by ensureInsideRoot so jobs may target
+        // siblings of dataRoot inside the project (e.g. "GIS Layers/").
+        QString projectRoot;
 
         Job() = default;
         Job(const void* objectId, Kind kind, Action action)

@@ -263,7 +263,7 @@ Monad::Result<double> cwTripCalibration::resolveAuto() const
     QString sourceCS = fix.inputCS().trimmed();
     if (sourceCS.isEmpty()) {
         if (auto* region = m_wiredCave->parentRegion()) {
-            sourceCS = region->globalCS().trimmed();
+            sourceCS = region->globalCoordinateSystem().trimmed();
         }
     }
     const cwGeoPoint location(fix.easting(), fix.northing(), fix.elevation());

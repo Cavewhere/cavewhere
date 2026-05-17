@@ -122,7 +122,7 @@ TEST_CASE("cwFixStations and globalCS survive a project save/load",
     auto creatorProject = creatorRoot->project();
     auto creatorRegion = creatorProject->cavingRegion();
 
-    creatorRegion->setGlobalCS(QStringLiteral("EPSG:32612"));
+    creatorRegion->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     creatorRegion->addCave();
     auto fixedCave = creatorRegion->cave(0);
@@ -176,7 +176,7 @@ TEST_CASE("cwFixStations and globalCS survive a project save/load",
     auto loadedRegion = loaderProject->cavingRegion();
     REQUIRE(loadedRegion != nullptr);
 
-    CHECK(loadedRegion->globalCS() == QStringLiteral("EPSG:32612"));
+    CHECK(loadedRegion->globalCoordinateSystem() == QStringLiteral("EPSG:32612"));
 
     REQUIRE(loadedRegion->caveCount() == 2);
 
@@ -251,7 +251,7 @@ TEST_CASE("Changing globalCS marks the project modified",
 
     REQUIRE(isProjectModified(project.get()) == false);
 
-    region->setGlobalCS(QStringLiteral("EPSG:32612"));
+    region->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
     CHECK(isProjectModified(project.get()));
 }
 

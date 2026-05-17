@@ -39,26 +39,26 @@ MainWindowTest {
         function test_setGlobalCSViaPicker() {
             gotoDataMainPage()
 
-            const picker = findChild(RootData.pageView.currentPageItem, "globalCSComboBox")
-            verify(picker !== null, "globalCSComboBox must exist on dataMainPage")
+            const picker = findChild(RootData.pageView.currentPageItem, "globalCoordinateSystemComboBox")
+            verify(picker !== null, "globalCoordinateSystemComboBox must exist on dataMainPage")
 
-            compare(RootData.region.globalCS, "")
+            compare(RootData.region.globalCoordinateSystem, "")
 
             picker.committed("EPSG:32612")
-            tryCompare(RootData.region, "globalCS", "EPSG:32612")
+            tryCompare(RootData.region, "globalCoordinateSystem", "EPSG:32612")
 
             picker.committed("EPSG:32613")
-            tryCompare(RootData.region, "globalCS", "EPSG:32613")
+            tryCompare(RootData.region, "globalCoordinateSystem", "EPSG:32613")
 
             picker.committed("")
-            tryCompare(RootData.region, "globalCS", "")
+            tryCompare(RootData.region, "globalCoordinateSystem", "")
         }
 
         function test_globalCSPickerHidesGeographic() {
             gotoDataMainPage()
 
-            const picker = findChild(RootData.pageView.currentPageItem, "globalCSComboBox")
-            verify(picker !== null, "globalCSComboBox must exist on dataMainPage")
+            const picker = findChild(RootData.pageView.currentPageItem, "globalCoordinateSystemComboBox")
+            verify(picker !== null, "globalCoordinateSystemComboBox must exist on dataMainPage")
 
             // Survex's cavern can't emit geographic output, so the project's
             // globalCS picker must hide the Lat/Lon mode entirely.
@@ -86,9 +86,9 @@ MainWindowTest {
 
             // The CS picker and the layers link both live inside the
             // Geospatial GroupBox so the screen reads as a single section.
-            const picker = findChild(groupBox, "globalCSComboBox")
+            const picker = findChild(groupBox, "globalCoordinateSystemComboBox")
             verify(picker !== null,
-                   "globalCSComboBox must be a descendant of geospatialGroupBox")
+                   "globalCoordinateSystemComboBox must be a descendant of geospatialGroupBox")
 
             const link = findChild(groupBox, "geospatialLayersLink")
             verify(link !== null,

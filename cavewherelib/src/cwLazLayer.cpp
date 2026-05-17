@@ -8,12 +8,16 @@
 #include "cwLazLayer.h"
 
 //Qt includes
+#include <QDebug>
 #include <QFileInfo>
+#include <QLoggingCategory>
 
 //Our includes
 #include "cwFuture.h"
 #include "cwKeyword.h"
 #include "cwKeywordModel.h"
+
+Q_LOGGING_CATEGORY(lcLazLayer, "cw.laz.layer")
 
 namespace {
 constexpr const char* kLazLayerType = "LAZ Layer";
@@ -129,6 +133,13 @@ void cwLazLayer::reload()
     if (m_sourcePath.isEmpty()) {
         return;
     }
+
+    qCDebug(lcLazLayer) << QFileInfo(m_sourcePath).fileName()
+                        << "reload() worldOrigin=("
+                        << m_regionWorldOrigin.x << ","
+                        << m_regionWorldOrigin.y << ","
+                        << m_regionWorldOrigin.z << ")"
+                        << "globalCSSet=" << !m_regionGlobalCS.isEmpty();
 
     setErrorMessage(QString());
     setLoadStatus(LoadStatus::Loading);

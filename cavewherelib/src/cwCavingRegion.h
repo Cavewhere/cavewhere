@@ -38,7 +38,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged BINDABLE bindableName)
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
-    Q_PROPERTY(QString globalCS READ globalCS WRITE setGlobalCS NOTIFY globalCSChanged)
+    Q_PROPERTY(QString globalCoordinateSystem READ globalCoordinateSystem WRITE setGlobalCoordinateSystem NOTIFY globalCoordinateSystemChanged)
     Q_PROPERTY(cwGeoPoint worldOrigin READ worldOrigin WRITE setWorldOrigin NOTIFY worldOriginChanged)
     Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)
 
@@ -57,8 +57,8 @@ public:
     void setName(const QString& name) { m_name = name; }
     QBindable<QString> bindableName() { return &m_name; }
 
-    QString globalCS() const { return m_globalCS; }
-    void setGlobalCS(const QString& cs);
+    QString globalCoordinateSystem() const { return m_globalCoordinateSystem; }
+    void setGlobalCoordinateSystem(const QString& cs);
 
     cwGeoPoint worldOrigin() const { return m_worldOrigin; }
     void setWorldOrigin(const cwGeoPoint& origin);
@@ -106,7 +106,7 @@ signals:
 
     void caveCountChanged();
 
-    void globalCSChanged();
+    void globalCoordinateSystemChanged();
     void worldOriginChanged();
 
 public slots:
@@ -121,7 +121,7 @@ private:
 
     cwSanitizedNameSet m_caveNames;
 
-    QString m_globalCS;
+    QString m_globalCoordinateSystem;
     cwGeoPoint m_worldOrigin;
     cwLazLayerModel* m_lazLayers = nullptr;
 

@@ -76,16 +76,16 @@ inline void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& 
  * for *cs out — otherwise cavern errors with "input projection is set but
  * output projection isn't" the moment the per-cave *cs is emitted.
  *
- * The Region template parameter is duck-typed: it must expose `.globalCS`
- * and `.caves`, and each cave must expose `.fixStations`. This works for
- * both cwSurveyDataArtifact::Region (Rule export path) and
- * cwCavingRegionData (line-plot export path).
+ * The Region template parameter is duck-typed: it must expose
+ * `.globalCoordinateSystem` and `.caves`, and each cave must expose
+ * `.fixStations`. This works for both cwSurveyDataArtifact::Region
+ * (Rule export path) and cwCavingRegionData (line-plot export path).
  */
 template <typename Region>
 QString resolveOutputCS(const Region& region)
 {
-    if (!region.globalCS.isEmpty()) {
-        return region.globalCS;
+    if (!region.globalCoordinateSystem.isEmpty()) {
+        return region.globalCoordinateSystem;
     }
     for (const auto& cave : region.caves) {
         for (const cwFixStation& fix : cave.fixStations) {

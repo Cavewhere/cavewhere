@@ -69,7 +69,7 @@ MainWindowTest {
             const lazPath = TestHelper.writeMinimalLazInTempDir("addviamodel")
             verify(lazPath.length > 0, "fixture should produce a non-empty path")
 
-            RootData.region.lazLayers.addLayer(lazPath)
+            RootData.region.lazLayers.addFromFiles([Qt.url("file://" + lazPath)])
             tryCompare(RootData.region.lazLayers, "count", 1)
 
             waitForLazLoadsToFinish()
@@ -112,7 +112,7 @@ MainWindowTest {
             gotoGeospatialLayers()
 
             const lazPath = TestHelper.writeMinimalLazInTempDir("removeconfirmed")
-            RootData.region.lazLayers.addLayer(lazPath)
+            RootData.region.lazLayers.addFromFiles([Qt.url("file://" + lazPath)])
             tryCompare(RootData.region.lazLayers, "count", 1)
             waitForLazLoadsToFinish()
 
@@ -139,7 +139,7 @@ MainWindowTest {
             gotoGeospatialLayers()
 
             const lazPath = TestHelper.writeMinimalLazInTempDir("removecancelled")
-            RootData.region.lazLayers.addLayer(lazPath)
+            RootData.region.lazLayers.addFromFiles([Qt.url("file://" + lazPath)])
             tryCompare(RootData.region.lazLayers, "count", 1)
             waitForLazLoadsToFinish()
 
@@ -166,15 +166,15 @@ MainWindowTest {
                       "no-CS hint should be hidden on a fresh project")
 
             // TestHelper writes a no-CS fixture, so auto-adopt sets a worldOrigin
-            // but leaves globalCS empty — exactly the state that should surface
-            // the hint to the user.
+            // but leaves globalCoordinateSystem empty — exactly the state that
+            // should surface the hint to the user.
             const lazPath = TestHelper.writeMinimalLazInTempDir("nocshint")
-            RootData.region.lazLayers.addLayer(lazPath)
+            RootData.region.lazLayers.addFromFiles([Qt.url("file://" + lazPath)])
             tryCompare(RootData.region.lazLayers, "count", 1)
             waitForLazLoadsToFinish()
 
-            compare(RootData.region.globalCS, "",
-                    "globalCS must stay empty for a no-CS LAZ")
+            compare(RootData.region.globalCoordinateSystem, "",
+                    "globalCoordinateSystem must stay empty for a no-CS LAZ")
             tryVerify(() => noCSHelp.visible, 2000,
                       "no-CS hint should appear once a no-CS layer is present")
         }
@@ -191,8 +191,8 @@ MainWindowTest {
 
             const lazPathA = TestHelper.writeMinimalLazInTempDir("linkcountA")
             const lazPathB = TestHelper.writeMinimalLazInTempDir("linkcountB")
-            RootData.region.lazLayers.addLayer(lazPathA)
-            RootData.region.lazLayers.addLayer(lazPathB)
+            RootData.region.lazLayers.addFromFiles([Qt.url("file://" + lazPathA),
+                                                    Qt.url("file://" + lazPathB)])
             tryCompare(link, "text", "2")
 
             waitForLazLoadsToFinish()

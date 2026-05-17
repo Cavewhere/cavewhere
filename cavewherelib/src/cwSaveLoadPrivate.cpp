@@ -423,23 +423,14 @@ Monad::ResultBase cwSaveLoadPrivate::Job::execute() const {
         return target == root || target.startsWith(root + QStringLiteral("/"));
     };
 
-    auto isProjectFile = [&](const QString& targetPath) {
-        const QString root = QDir::cleanPath(QDir(dataRoot).absolutePath());
-        const QString target = QDir::cleanPath(QFileInfo(targetPath).absolutePath());
-        const QString parentOfRoot = QDir(root).absolutePath() + QStringLiteral("/") + QStringLiteral("..");
-        const QString normalizedParent = QDir::cleanPath(QDir(parentOfRoot).absolutePath());
-        const bool isProjectFileWrite = (action == Action::WriteFile && kind == Kind::File);
-        const bool isInProjectRoot = (target == normalizedParent)
-                || target.startsWith(normalizedParent + QStringLiteral("/"));
-
-        return isProjectFileWrite && isInProjectRoot;
-    };
-
+    // Allow jobs anywhere inside the project root — this subsumes dataRoot
+    // (always a subdir) and covers project-level siblings like the GIS Layers
+    // folder, plus the project file itself.
     auto ensureInsideRoot = [&](const QString& targetPath) -> Monad::ResultBase {
-        if (!isInsideRoot(dataRoot, targetPath) && !isProjectFile(targetPath)) [[unlikely]] {
-            return Monad::ResultBase(QStringLiteral("Path outside dataRoot: %1").arg(targetPath));
+        if (!isInsideRoot(projectRoot, targetPath)) [[unlikely]] {
+            return Monad::ResultBase(QStringLiteral("Path outside project root: %1").arg(targetPath));
         }
-            return Monad::ResultBase();
+        return Monad::ResultBase();
     };
 
     switch(action) {
@@ -810,10 +801,12 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
     Q_ASSERT(job.oldPath.isEmpty());
 
     const QString dataRootName = context->dataRoot();
+    const QString projectRootPath = context->projectRootDir().absolutePath();
     const QString dataRootPath = dataRootName.isEmpty()
-            ? context->projectRootDir().absolutePath()
+            ? projectRootPath
             : context->projectRootDir().absoluteFilePath(dataRootName);
     job.dataRoot = normalizeQueuedPath(QDir(dataRootPath).absolutePath());
+    job.projectRoot = normalizeQueuedPath(QDir(projectRootPath).absolutePath());
 
     auto toDirOrFilePath = [](const Job& job, const QString& path) {
         return job.kind == Job::Kind::Directory ? QFileInfo(path).absoluteDir().absolutePath() : path;
@@ -947,10 +940,12 @@ void cwSaveLoadPrivate::addExplicitFileSystemJob(Job job, cwSaveLoad* context) {
     Q_ASSERT(job.action != Job::Action::Move);
 
     const QString dataRootName = context->dataRoot();
+    const QString projectRootPath = context->projectRootDir().absolutePath();
     const QString dataRootPath = dataRootName.isEmpty()
-            ? context->projectRootDir().absolutePath()
+            ? projectRootPath
             : context->projectRootDir().absoluteFilePath(dataRootName);
     job.dataRoot = normalizeQueuedPath(QDir(dataRootPath).absolutePath());
+    job.projectRoot = normalizeQueuedPath(QDir(projectRootPath).absolutePath());
     if (!job.path.isEmpty()) {
         job.path = normalizeQueuedPath(job.path);
     }
