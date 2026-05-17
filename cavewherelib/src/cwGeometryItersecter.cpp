@@ -8,6 +8,7 @@
 //Our includes
 #include "cwDebug.h"
 #include "cwGeometryItersecter.h"
+#include "cwPickingLog.h"
 #include "cwRenderObject.h"
 #include "cwConcurrent.h"
 #include "cwTask.h"
@@ -25,6 +26,66 @@
 #include <QSphere3D>
 #include <QThreadPool>
 #include <QVarLengthArray>
+
+Q_LOGGING_CATEGORY(lcPick, "cw.picking", QtWarningMsg)
+
+// Logging category lcPick is defined at top-of-file and declared in
+// cwPickingLog.h so cwRenderTexturedItems.cpp and cwScrapManager.cpp
+// can share the same name ("cw.picking"). Enable with:
+//   QT_LOGGING_RULES="cw.picking.debug=true"
+
+namespace {
+    QString formatKey(const cwGeometryItersecter::Object& object)
+    {
+        const cwRenderObject* parent = object.parent();
+        const char* parentClass = parent != nullptr
+            ? parent->metaObject()->className()
+            : "(null)";
+        return QStringLiteral("{%1@%2, id=%3}")
+            .arg(QLatin1String(parentClass))
+            .arg(reinterpret_cast<quintptr>(parent), 0, 16)
+            .arg(object.id());
+    }
+}
+
+// Per-pick rejection counters. Populated by intersectsDetailed and
+// testPrimitive when the cw.picking category has debug enabled; nullptr
+// otherwise so the hot path pays nothing. Defined here (not in the anon
+// namespace) because cwGeometryItersecter::PickStats is forward-declared
+// in the header for the testPrimitive signature.
+struct cwGeometryItersecter::PickStats {
+    int nodesVisited = 0;
+    int nodesBoxMiss = 0;          // ray missed the BVH-node AABB
+    int nodesPrunedByBest = 0;     // AABB hit but farther than current best
+    int leavesVisited = 0;
+    int primsTested = 0;
+    int primsNotPickable = 0;      // parent cwRenderObject not visible
+    int primsPointRadiusZero = 0;  // Point primitive with pickRadius == 0
+    int primsSphereMiss = 0;       // ray missed the point's sphere
+    int primsRayBehind = 0;        // tNear/tWorld <= 0 (origin past prim)
+    int primsTriMiss = 0;          // ray-triangle test rejected
+    int primsFartherThanBest = 0;  // hit but farther than current best
+    int primsAccepted = 0;         // became the new best
+};
+
+static QDebug operator<<(QDebug d, const cwGeometryItersecter::PickStats& s)
+{
+    QDebugStateSaver saver(d);
+    d.nospace()
+        << "traversal: nodesVisited=" << s.nodesVisited
+        << " boxMiss=" << s.nodesBoxMiss
+        << " prunedByBest=" << s.nodesPrunedByBest
+        << " leaves=" << s.leavesVisited
+        << " | prims tested=" << s.primsTested
+        << " accepted=" << s.primsAccepted
+        << " notPickable=" << s.primsNotPickable
+        << " ptRadius0=" << s.primsPointRadiusZero
+        << " sphereMiss=" << s.primsSphereMiss
+        << " rayBehind=" << s.primsRayBehind
+        << " triMiss=" << s.primsTriMiss
+        << " fartherThanBest=" << s.primsFartherThanBest;
+    return d;
+}
 
 namespace {
     // Multiplier applied to a point's pickRadius when expanding the cloud's
@@ -184,6 +245,29 @@ void cwGeometryItersecter::setFutureManagerToken(cwFutureManagerToken token)
     m_futureManagerToken = token;
 }
 
+cwGeometryItersecter::DebugStatistics cwGeometryItersecter::debugStatistics() const
+{
+    DebugStatistics stats;
+    const QList<Node>& source = (m_bvh && !m_bvh->nodesSnapshot.isEmpty())
+                                ? m_bvh->nodesSnapshot
+                                : Nodes;
+    stats.hasBvh = static_cast<bool>(m_bvh);
+    stats.sourceNodeCount = source.size();
+    for (const Node& n : source) {
+        stats.totalPrimitives += countNodePrimitives(n.Object);
+        switch (n.Object.geometry().type()) {
+        case cwGeometry::Type::Triangles: ++stats.triangleSourceNodes; break;
+        case cwGeometry::Type::Lines:     ++stats.lineSourceNodes;     break;
+        case cwGeometry::Type::Points:    ++stats.pointSourceNodes;    break;
+        default:                                                       break;
+        }
+    }
+    if (m_bvh) {
+        stats.bvhNodeCount = m_bvh->bvhNodes.size();
+    }
+    return stats;
+}
+
 void cwGeometryItersecter::waitForFinish()
 {
     AsyncFuture::waitForFinished(m_bvhRestarter.future());
@@ -208,6 +292,20 @@ void cwGeometryItersecter::addObject(const cwGeometryItersecter::Object &object)
         addPoints(object);
         break;
     default:
+        // The renderer doesn't require geometry().type() but the picker does;
+        // a triangulation task that forgets setType() drops out of picking
+        // silently. Warn so the regression isn't invisible — but only when
+        // there's actual geometry to drop, since a default-constructed empty
+        // cwGeometry has Type::None legitimately.
+        if (object.geometry().vertexCount() > 0
+            || !object.geometry().indices().isEmpty()) {
+            qCWarning(lcPick).nospace()
+                << "addObject DROPPED " << formatKey(object)
+                << " geometry.type()=" << cwGeometry::typeName(object.geometry().type())
+                << " vertexCount=" << object.geometry().vertexCount()
+                << " indexCount=" << object.geometry().indices().size()
+                << " — upstream forgot to set Type::Triangles/Lines/Points";
+        }
         break;
     }
 }
@@ -256,6 +354,10 @@ void cwGeometryItersecter::removeObject(const Key &objectKey)
 {
     auto iter = findNode(objectKey);
     if (iter != Nodes.end()) {
+        qCDebug(lcPick).nospace()
+            << "removeObject {parent=" << objectKey.parentObject
+            << ", id=" << objectKey.id << "}"
+            << " Nodes.size before=" << Nodes.size();
         Nodes.erase(iter);
         scheduleBuild();
     }
@@ -296,6 +398,7 @@ double cwGeometryItersecter::intersects(const QRay3D &ray) const
     if (hit.hit()) {
         return hit.tWorld();
     }
+    qCDebug(lcPick) << "intersects: BVH miss, falling back to nearestNeighbor";
     return nearestNeighbor(ray);
 }
 
@@ -325,6 +428,11 @@ void cwGeometryItersecter::addTriangles(const cwGeometryItersecter::Object &obje
     }
 
     Nodes.append(Node(box, object));
+    qCDebug(lcPick).nospace()
+        << "addTriangles " << formatKey(object)
+        << " tris=" << (object.geometry().indices().size() / 3)
+        << " box=[" << box.minimum() << " .. " << box.maximum() << "]"
+        << " Nodes.size=" << Nodes.size();
     scheduleBuild();
 }
 
@@ -347,14 +455,22 @@ void cwGeometryItersecter::addLines(const cwGeometryItersecter::Object &object)
 
     removeObject(object.parent(), object.id());
 
+    int linesAppended = 0;
     for(int i = 0; i < object.geometry().indices().size(); i+=2) {
         Node node = Node(object, i);
 
         //Make sure the node is valid
         if(!node.BoundingBox.isNull()) {
             Nodes.append(node);
+            ++linesAppended;
         }
     }
+    qCDebug(lcPick).nospace()
+        << "addLines " << formatKey(object)
+        << " segments=" << (object.geometry().indices().size() / 2)
+        << " nodesAppended=" << linesAppended
+        << " Nodes.size=" << Nodes.size()
+        << " (note: Lines are picker-visible only via nearestNeighbor)";
     scheduleBuild();
 }
 
@@ -396,6 +512,15 @@ void cwGeometryItersecter::addPoints(const cwGeometryItersecter::Object &object)
     const QVector3D padVec(pad, pad, pad);
 
     Nodes.append(Node(QBox3D(box.minimum() - padVec, box.maximum() + padVec), object));
+    qCDebug(lcPick).nospace()
+        << "addPoints " << formatKey(object)
+        << " vertices=" << vertexCount
+        << " pickRadius=" << object.pickRadius()
+        << " box=[" << box.minimum() << " .. " << box.maximum() << "]"
+        << " Nodes.size=" << Nodes.size()
+        << (object.pickRadius() <= 0.0f
+            ? " WARNING: pickRadius<=0 so 0 prims will be enumerated"
+            : "");
     scheduleBuild();
 }
 
@@ -412,14 +537,23 @@ double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
     double bestT = 0.0;
     double bestDistance = std::numeric_limits<double>::max();
 
+    const bool debug = lcPick().isDebugEnabled();
+    int nodesScanned = 0;
+    int nodesSkippedNotPickable = 0;
+    int nodesSkippedTriangles = 0;
+
     for(const Node& node : Nodes) {
         if (!isPickable(node.Object)) {
+            ++nodesSkippedNotPickable;
             continue;
         }
 
         if(node.Object.geometry().type() == cwGeometry::Type::Triangles) {
+            ++nodesSkippedTriangles;
             continue;
         }
+
+        ++nodesScanned;
 
         QVector3D min = node.BoundingBox.minimum();
         QVector3D max = node.BoundingBox.maximum();
@@ -446,7 +580,25 @@ double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
     }
 
     if(bestT == 0.0) {
+        if (debug) {
+            qCDebug(lcPick).nospace()
+                << "nearestNeighbor MISS"
+                << " | totalNodes=" << Nodes.size()
+                << " scanned=" << nodesScanned
+                << " skippedNotPickable=" << nodesSkippedNotPickable
+                << " skippedTriangles=" << nodesSkippedTriangles;
+        }
         return qSNaN();
+    }
+
+    if (debug) {
+        qCDebug(lcPick).nospace()
+            << "nearestNeighbor HIT t=" << bestT
+            << " distance=" << bestDistance
+            << " | totalNodes=" << Nodes.size()
+            << " scanned=" << nodesScanned
+            << " skippedNotPickable=" << nodesSkippedNotPickable
+            << " skippedTriangles=" << nodesSkippedTriangles;
     }
 
     return bestT;
@@ -456,13 +608,34 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
 {
     cwRayHit best;
 
+    const bool debug = lcPick().isDebugEnabled();
+    PickStats stats;
+    PickStats* statsPtr = debug ? &stats : nullptr;
+
     if (!m_bvh || m_bvh->bvhNodes.isEmpty()) {
+        if (debug) {
+            qCDebug(lcPick).nospace()
+                << "intersectsDetailed: no BVH yet (m_bvh="
+                << (m_bvh ? "built but empty" : "null")
+                << ", Nodes.size=" << Nodes.size()
+                << ", ray.origin=" << ray.origin()
+                << ", ray.dir=" << ray.direction() << ")";
+        }
         return best;
     }
 
     const QVector<BvhNode>& nodes = m_bvh->bvhNodes;
     const QVector<Primitive>& prims = m_bvh->primitives;
     const QList<Node>& nodeSnapshot = m_bvh->nodesSnapshot;
+
+    if (debug) {
+        qCDebug(lcPick).nospace()
+            << "intersectsDetailed: BVH nodes=" << nodes.size()
+            << ", prims=" << prims.size()
+            << ", source nodes=" << nodeSnapshot.size()
+            << ", ray.origin=" << ray.origin()
+            << ", ray.dir=" << ray.direction();
+    }
 
     // Stack-based traversal with near-first child ordering. 64 is plenty for
     // realistic BVH depths (~log2 of primitive count, well under 30 for 1M).
@@ -474,22 +647,34 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
         stack.removeLast();
 
         const BvhNode& bn = nodes[idx];
+        if (debug) {
+            ++stats.nodesVisited;
+        }
 
         // Box reject: skip if ray misses the AABB or the entry t is already
         // farther than our current best hit (closest-wins early exit).
         const double tBox = bn.bbox.intersection(ray);
         if (qIsNaN(tBox)) {
+            if (debug) {
+                ++stats.nodesBoxMiss;
+            }
             continue;
         }
         if (best.hit() && tBox >= best.tWorld()) {
+            if (debug) {
+                ++stats.nodesPrunedByBest;
+            }
             continue;
         }
 
         if (bn.isLeaf) {
+            if (debug) {
+                ++stats.leavesVisited;
+            }
             const uint32_t first = bn.left;
             const uint32_t count = bn.right;
             for (uint32_t p = first; p < first + count; ++p) {
-                testPrimitive(nodeSnapshot, prims[p], ray, best);
+                testPrimitive(nodeSnapshot, prims[p], ray, best, statsPtr);
             }
         } else {
             uint32_t nearChild = bn.left;
@@ -503,16 +688,74 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
         }
     }
 
+    if (debug) {
+        if (best.hit()) {
+            qCDebug(lcPick).nospace()
+                << "intersectsDetailed HIT tWorld=" << best.tWorld()
+                << " pWorld=" << best.pointWorld()
+                << " object=" << best.object()
+                << " objectId=" << best.objectId()
+                << " firstIndex=" << best.firstIndex()
+                << " | " << stats;
+        } else {
+            qCDebug(lcPick).nospace() << "intersectsDetailed MISS | " << stats;
+
+            // Linear scan over prims to summarize by source cwRenderObject.
+            // Capped because enabling debug on a 100M-primitive cloud
+            // shouldn't freeze the UI thread on every miss.
+            constexpr qsizetype kMissDumpPrimCap = 1'000'000;
+            const qsizetype scanLimit = std::min<qsizetype>(prims.size(), kMissDumpPrimCap);
+            QHash<const cwRenderObject*, qsizetype> primsBySource;
+            QHash<const cwRenderObject*, const char*> typeBySource;
+            primsBySource.reserve(nodeSnapshot.size());
+            typeBySource.reserve(nodeSnapshot.size());
+            for (qsizetype i = 0; i < scanLimit; ++i) {
+                const Node& n = nodeSnapshot.at(prims.at(i).nodeIndex);
+                primsBySource[n.Object.parent()]++;
+                typeBySource[n.Object.parent()] =
+                    cwGeometry::typeName(n.Object.geometry().type());
+            }
+            qCDebug(lcPick).nospace()
+                << "  live BVH sources: " << primsBySource.size()
+                << " distinct cwRenderObject*"
+                << (prims.size() > kMissDumpPrimCap
+                    ? QStringLiteral(" (sampled first %1 of %2 prims)")
+                          .arg(kMissDumpPrimCap).arg(prims.size())
+                    : QString{});
+            for (auto it = primsBySource.constBegin();
+                 it != primsBySource.constEnd(); ++it) {
+                const cwRenderObject* parent = it.key();
+                const char* parentClass = parent != nullptr
+                    ? parent->metaObject()->className()
+                    : "(null)";
+                qCDebug(lcPick).nospace()
+                    << "    " << QLatin1String(parentClass)
+                    << "@" << parent
+                    << " type=" << typeBySource.value(parent, "?")
+                    << " prims=" << it.value()
+                    << " visible=" << (parent != nullptr ? parent->isVisible() : true);
+            }
+        }
+    }
+
     return best;
 }
 
 void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
                                          const Primitive& prim,
                                          const QRay3D& ray,
-                                         cwRayHit& best)
+                                         cwRayHit& best,
+                                         PickStats* stats)
 {
+    if (stats != nullptr) {
+        ++stats->primsTested;
+    }
+
     const Node& node = nodes[prim.nodeIndex];
     if (!isPickable(node.Object)) {
+        if (stats != nullptr) {
+            ++stats->primsNotPickable;
+        }
         return;
     }
 
@@ -531,6 +774,9 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
 
         cwRayHit local = rayTriangleMT(rayModel, a, b, c, geometry.cullBackfaces());
         if (!local.hit()) {
+            if (stats != nullptr) {
+                ++stats->primsTriMiss;
+            }
             return;
         }
 
@@ -538,15 +784,29 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
         const QVector3D nWorld = transformNormalToWorld(worldFromModel, local.normalModel());
         const double tWorld = ray.projectedDistance(pWorld);
 
-        if (tWorld > 0.0 && (!best.hit() || tWorld < best.tWorld())) {
-            best = local;
-            best.m_hit = true;
-            best.m_pointWorld = pWorld;
-            best.m_normalWorld = nWorld;
-            best.m_tWorld = tWorld;
-            best.m_object = node.Object.parent();
-            best.m_objectId = node.Object.id();
-            best.m_firstIndex = i;
+        if (tWorld <= 0.0) {
+            if (stats != nullptr) {
+                ++stats->primsRayBehind;
+            }
+            return;
+        }
+        if (best.hit() && tWorld >= best.tWorld()) {
+            if (stats != nullptr) {
+                ++stats->primsFartherThanBest;
+            }
+            return;
+        }
+
+        best = local;
+        best.m_hit = true;
+        best.m_pointWorld = pWorld;
+        best.m_normalWorld = nWorld;
+        best.m_tWorld = tWorld;
+        best.m_object = node.Object.parent();
+        best.m_objectId = node.Object.id();
+        best.m_firstIndex = i;
+        if (stats != nullptr) {
+            ++stats->primsAccepted;
         }
         return;
     }
@@ -554,6 +814,9 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
     // Point primitive — ray-vs-sphere using the Object's pickRadius.
     const float radius = node.Object.pickRadius();
     if (radius <= 0.0f) {
+        if (stats != nullptr) {
+            ++stats->primsPointRadiusZero;
+        }
         return;
     }
 
@@ -566,16 +829,31 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
     float tNear = 0.0f;
     float tFar = 0.0f;
     if (!QSphere3D(center, radius).intersection(rayModel, &tNear, &tFar)) {
+        if (stats != nullptr) {
+            ++stats->primsSphereMiss;
+        }
         return;
     }
     if (tNear <= 0.0f) {
         // Ray points away from sphere, or origin sits inside it.
+        if (stats != nullptr) {
+            ++stats->primsRayBehind;
+        }
         return;
     }
 
     const QVector3D pWorld = mapPoint(worldFromModel, center);
     const double tWorld = ray.projectedDistance(pWorld);
-    if (tWorld <= 0.0 || (best.hit() && tWorld >= best.tWorld())) {
+    if (tWorld <= 0.0) {
+        if (stats != nullptr) {
+            ++stats->primsRayBehind;
+        }
+        return;
+    }
+    if (best.hit() && tWorld >= best.tWorld()) {
+        if (stats != nullptr) {
+            ++stats->primsFartherThanBest;
+        }
         return;
     }
 
@@ -591,6 +869,9 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
     best.m_object = node.Object.parent();
     best.m_objectId = node.Object.id();
     best.m_firstIndex = static_cast<int>(prim.primitiveIndex);
+    if (stats != nullptr) {
+        ++stats->primsAccepted;
+    }
 }
 
 QBox3D cwGeometryItersecter::primitiveWorldBox(const QList<Node>& nodes,
@@ -803,6 +1084,51 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
     // ref) so they never trigger their own detach — concurrent detaches
     // on a shared buffer race and free memory still being read.
     auto snapshot = Nodes;
+
+    if (lcPick().isDebugEnabled()) {
+        int triNodes = 0;
+        int lineNodes = 0;
+        int pointNodes = 0;
+        int otherNodes = 0;
+        qsizetype totalPrims = 0;
+        for (const Node& n : std::as_const(snapshot)) {
+            const qsizetype primCount = countNodePrimitives(n.Object);
+            totalPrims += primCount;
+            switch (n.Object.geometry().type()) {
+            case cwGeometry::Type::Triangles: ++triNodes; break;
+            case cwGeometry::Type::Lines:     ++lineNodes; break;
+            case cwGeometry::Type::Points:    ++pointNodes; break;
+            default:                          ++otherNodes; break;
+            }
+        }
+        qCDebug(lcPick).nospace()
+            << "launchBuildJob snapshot: " << snapshot.size() << " source nodes"
+            << " (Triangles=" << triNodes
+            << " Lines=" << lineNodes
+            << " Points=" << pointNodes
+            << " other=" << otherNodes << ")"
+            << " totalPrims=" << totalPrims;
+
+        // Per-source-node breakdown, capped so a 10k-scrap project doesn't
+        // blast 10k lines per rebuild.
+        const int dumpCap = 32;
+        const int dumpCount = std::min<int>(snapshot.size(), dumpCap);
+        for (int i = 0; i < dumpCount; ++i) {
+            const Node& n = snapshot.at(i);
+            const cwRenderObject* parent = n.Object.parent();
+            qCDebug(lcPick).nospace()
+                << "  [" << i << "] " << formatKey(n.Object)
+                << " type=" << cwGeometry::typeName(n.Object.geometry().type())
+                << " prims=" << countNodePrimitives(n.Object)
+                << " visible=" << (parent != nullptr ? parent->isVisible() : true)
+                << " box=[" << n.BoundingBox.minimum()
+                << " .. " << n.BoundingBox.maximum() << "]";
+        }
+        if (snapshot.size() > dumpCap) {
+            qCDebug(lcPick).nospace()
+                << "  ... " << (snapshot.size() - dumpCap) << " more source nodes elided";
+        }
+    }
 
     // Worker writes its produced BvhData into a slot that survives even if
     // `this` is destroyed mid-build. The .context(this) callback below
@@ -1026,7 +1352,14 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
     AsyncFuture::observe(worker).context(this, [this, resultSlot]() {
         if (*resultSlot) {
             m_bvh = *resultSlot;
+            qCDebug(lcPick).nospace()
+                << "bvhReady installed: bvhNodes=" << m_bvh->bvhNodes.size()
+                << " primitives=" << m_bvh->primitives.size()
+                << " sourceNodes=" << m_bvh->nodesSnapshot.size();
             emit bvhReady();
+        } else {
+            qCDebug(lcPick) << "build worker finished without producing a BvhData"
+                            << "(canceled or zero prims)";
         }
     });
 

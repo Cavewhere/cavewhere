@@ -1,11 +1,13 @@
 #include "cwRenderTexturedItems.h"
 #include "cwGeometryItersecter.h"
+#include "cwPickingLog.h"
 #include "cwRhiTexturedItems.h"
 #include "Monad/Result.h"
 
 #include <QtGlobal>
 
 namespace {
+
 Monad::Result<cwGeometry> geometryMatchesLayout(const cwGeometry& geometry,
                                                 const QVector<cwGeometry::AttributeDesc>& layout)
 {
@@ -78,8 +80,10 @@ Monad::Result<cwGeometry> geometryMatchesLayout(const cwGeometry& geometry,
 
 cwGeometry handleGeometryError(const Monad::Result<cwGeometry>& geometryResult) {
     if (geometryResult.hasError()) {
-        qWarning().noquote() << "cwRenderTexturedItems: rejecting geometry with incompatible layout:"
-                             << geometryResult.errorMessage();
+        qCWarning(lcPick).noquote()
+            << "cwRenderTexturedItems: rejecting geometry with incompatible layout:"
+            << geometryResult.errorMessage()
+            << "-> returning empty geometry (picker.addObject will be SKIPPED)";
     }
     return geometryResult.value();
 }
@@ -134,7 +138,19 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     if (!commandItem.geometry.isEmpty()) {
         if (auto* intersector = geometryItersecter()) {
             intersector->addObject(cwGeometryItersecter::Object({this, id}, commandItem.geometry, item.modelMatrix));
+        } else {
+            qCDebug(lcPick).nospace()
+                << "addItem id=" << id
+                << " geometry non-empty but geometryItersecter()==nullptr"
+                << " (scene wiring not ready) - picker WILL NOT see this item";
         }
+    } else {
+        qCDebug(lcPick).nospace()
+            << "addItem id=" << id
+            << " inputGeometryEmpty=" << item.geometry.isEmpty()
+            << " transformedGeometryEmpty=true"
+            << " -> picker.addObject SKIPPED at addItem"
+            << " (later updateGeometry(id, nonEmpty) would still register it)";
     }
 
     return id;
@@ -144,6 +160,10 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
 {
     auto entry = m_frontState.find(id);
     if (entry == m_frontState.end()) {
+        qCDebug(lcPick).nospace()
+            << "updateGeometry id=" << id
+            << " IGNORED: id not in m_frontState"
+            << " (addItem was never called for this id, or it was already removed)";
         return;
     }
 
@@ -158,7 +178,21 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
         entry->geometry = cwGeometry();
     }
 
-    if (auto* intersector = geometryItersecter()) {
+    auto* intersector = geometryItersecter();
+    qCDebug(lcPick).nospace()
+        << "updateGeometry id=" << id
+        << " inputVertexCount=" << geometry.vertexCount()
+        << " inputIndexCount=" << geometry.indices().size()
+        << " inputType=" << cwGeometry::typeName(geometry.type())
+        << " inputLayoutMode=" << static_cast<int>(geometry.layoutMode())
+        << " transformedEmpty=" << payload.geometry.isEmpty()
+        << " hasIntersector=" << (intersector != nullptr)
+        << " action="
+        << (intersector == nullptr ? "no-intersector"
+            : payload.geometry.isEmpty() ? "removeObject"
+            : "addObject");
+
+    if (intersector != nullptr) {
         if (!payload.geometry.isEmpty()) {
             intersector->addObject(cwGeometryItersecter::Object({this, id}, payload.geometry, modelMatrix));
         } else {
