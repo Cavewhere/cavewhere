@@ -179,12 +179,14 @@ private:
         QVector<Primitive> primitives;
     };
 
-    // Live BVH. nullptr until the first async build completes; the worker
-    // installs via atomic store on the UI thread (via .context() callback)
-    // so picks never see a torn buffer. std::atomic_load/store on
-    // std::shared_ptr are deprecated in C++20 but still the only portable
-    // option on libc++ — std::atomic<std::shared_ptr<T>> is not yet
-    // supported there (requires trivially-copyable T).
+    // Live BVH. nullptr until the first async build completes. Only
+    // accessed from the main thread: pick queries (intersects/
+    // intersectsDetailed) and the .context() install callback both run
+    // on the thread owning `this`, and scheduleBuild() (which clears
+    // m_bvh) is invoked from the same main-thread mutators that touch
+    // Nodes. The worker thread never touches m_bvh directly — it writes
+    // into a side channel (resultSlot, see launchBuildJob) that the
+    // .context() callback drains on the main thread.
     std::shared_ptr<BvhData> m_bvh;
 
     // Coalesces rapid mutations into a single rebuild and cancels the

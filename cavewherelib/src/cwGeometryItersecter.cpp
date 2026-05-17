@@ -456,16 +456,13 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
 {
     cwRayHit best;
 
-    // Snapshot the current BVH so a concurrent build can swap m_bvh
-    // mid-traversal without invalidating our pointers.
-    std::shared_ptr<BvhData> bvh = std::atomic_load(&m_bvh);
-    if (!bvh || bvh->bvhNodes.isEmpty()) {
+    if (!m_bvh || m_bvh->bvhNodes.isEmpty()) {
         return best;
     }
 
-    const QVector<BvhNode>& nodes = bvh->bvhNodes;
-    const QVector<Primitive>& prims = bvh->primitives;
-    const QList<Node>& nodeSnapshot = bvh->nodesSnapshot;
+    const QVector<BvhNode>& nodes = m_bvh->bvhNodes;
+    const QVector<Primitive>& prims = m_bvh->primitives;
+    const QList<Node>& nodeSnapshot = m_bvh->nodesSnapshot;
 
     // Stack-based traversal with near-first child ordering. 64 is plenty for
     // realistic BVH depths (~log2 of primitive count, well under 30 for 1M).
@@ -787,6 +784,13 @@ void cwGeometryItersecter::enumeratePointsChunk(const Object& object,
 
 void cwGeometryItersecter::scheduleBuild()
 {
+    // Drop the current BVH. Every caller of scheduleBuild() has just
+    // mutated Nodes or a Node's modelMatrix, so the existing acceleration
+    // is functionally wrong from this point on — keeping it alive only
+    // delays freeing several GiB on large point clouds. Picks return
+    // no-hit (handled by the null check in intersectsDetailed) until the
+    // new build completes.
+    m_bvh.reset();
     m_bvhRestarter.restart([this]() { return launchBuildJob(); });
 }
 
@@ -843,6 +847,13 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         const qsizetype totalProgress = totalPrims + phaseB1Budget + totalPrims;
         promise.setProgressRange(0, kProgressResolution);
         promise.setProgressValue(0);
+
+        // Cancel guard right before the largest allocation in the worker.
+        // A canceled worker that gets here would otherwise spend ~6 GiB on
+        // a 269M-point cloud before the next isCanceled() check at line ~886.
+        if (promise.isCanceled()) {
+            return;
+        }
 
         QVector<BuildPrim> prims;
         prims.resize(totalPrims);
@@ -978,19 +989,34 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             }
 
             bvhNodes.resize(nextNode.load(std::memory_order_relaxed));
+            // The pre-size at line ~923 uses a loose upper bound
+            // (4*ceil(N/L) + 1); the actual count is typically ~half that.
+            // Without squeeze, the unused capacity (~1.5 GiB on a 269M-point
+            // cloud) stays allocated for the lifetime of this BvhData.
+            bvhNodes.squeeze();
         }
 
         if (promise.isCanceled()) {
             return;
         }
 
+        // Extract Primitives from BuildPrims into a fresh, tight vector,
+        // then release the BuildPrim temporary explicitly. This bounds the
+        // window where both vectors coexist to just the copy loop instead
+        // of holding the 6 GiB BuildPrim buffer through the BvhData
+        // assembly + resultSlot handoff.
+        QVector<Primitive> finalPrims;
+        finalPrims.resize(prims.size());
+        for (qsizetype i = 0; i < prims.size(); ++i) {
+            finalPrims[i] = prims[i].prim;
+        }
+        prims.clear();
+        prims.squeeze();
+
         auto out = std::make_shared<BvhData>();
         out->nodesSnapshot = std::move(snapshot);
         out->bvhNodes = std::move(bvhNodes);
-        out->primitives.resize(prims.size());
-        for (qsizetype i = 0; i < prims.size(); ++i) {
-            out->primitives[i] = prims[i].prim;
-        }
+        out->primitives = std::move(finalPrims);
         *resultSlot = std::move(out);
     });
 
@@ -999,7 +1025,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
     // never fires after destruction.
     AsyncFuture::observe(worker).context(this, [this, resultSlot]() {
         if (*resultSlot) {
-            std::atomic_store(&m_bvh, *resultSlot);
+            m_bvh = *resultSlot;
             emit bvhReady();
         }
     });
