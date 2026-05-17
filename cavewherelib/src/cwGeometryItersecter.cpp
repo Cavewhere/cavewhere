@@ -23,7 +23,6 @@
 #include <QtNumeric>
 #include <QPlane3D>
 #include <QPromise>
-#include <QSphere3D>
 #include <QThreadPool>
 #include <QVarLengthArray>
 
@@ -145,6 +144,52 @@ namespace {
     bool isPickable(const cwGeometryItersecter::Object& object) {
         const cwRenderObject* parent = object.parent();
         return parent == nullptr || parent->isVisible();
+    }
+
+    struct RaySphereHit {
+        bool hit;
+        double tNear;
+        double dSq;
+    };
+
+    // QSphere3D::intersection is float32; at world-magnitude coordinates
+    // (~10^4) (V·D)^2 - V·V cancels into r^2 noise and returns garbage.
+    // Build the perpendicular vector by subtraction in double instead,
+    // so the small (~r) result keeps full precision.
+    RaySphereHit raySphereIntersectDouble(const QRay3D& ray,
+                                          const QVector3D& center,
+                                          float radius)
+    {
+        const double ox = ray.origin().x();
+        const double oy = ray.origin().y();
+        const double oz = ray.origin().z();
+        const double dx = ray.direction().x();
+        const double dy = ray.direction().y();
+        const double dz = ray.direction().z();
+        const double cx = center.x();
+        const double cy = center.y();
+        const double cz = center.z();
+
+        const double dDotD = dx*dx + dy*dy + dz*dz;
+        // Reject zero-length, negative (impossible for sum-of-squares
+        // but cheap), and NaN-direction rays before they poison
+        // tNear/dSq with inf/NaN.
+        if (!(dDotD > 0.0)) {
+            return {false, 0.0, 0.0};
+        }
+        const double invDDotD = 1.0 / dDotD;
+        const double tCenter =
+            ((cx - ox)*dx + (cy - oy)*dy + (cz - oz)*dz) * invDDotD;
+        const double perpX = cx - (ox + tCenter * dx);
+        const double perpY = cy - (oy + tCenter * dy);
+        const double perpZ = cz - (oz + tCenter * dz);
+        const double dSq = perpX*perpX + perpY*perpY + perpZ*perpZ;
+        const double rSq = double(radius) * double(radius);
+
+        if (dSq > rSq) {
+            return {false, 0.0, dSq};
+        }
+        return {true, tCenter - std::sqrt((rSq - dSq) * invDDotD), dSq};
     }
 }
 
@@ -671,12 +716,21 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
         }
 
         if (bn.isLeaf) {
+            const uint32_t first = bn.left;
+            const uint32_t primCount = bn.right;
             if (debug) {
                 ++stats.leavesVisited;
+                qCDebug(lcPick).nospace()
+                    << "leaf " << idx << ": " << primCount << " prims, bbox=["
+                    << bn.bbox.minimum() << " .. " << bn.bbox.maximum() << "]"
+                    << " bestSoFar="
+                    << (best.hit() ? QString("tWorld=%1").arg(best.tWorld())
+                                   : QStringLiteral("none"));
             }
-            const uint32_t first = bn.left;
-            const uint32_t count = bn.right;
-            for (uint32_t p = first; p < first + count; ++p) {
+            for (uint32_t p = first; p < first + primCount; ++p) {
+                if (debug) {
+                    dumpLeafPrimitive(nodeSnapshot, prims[p], ray, idx, p - first);
+                }
                 testPrimitive(nodeSnapshot, prims[p], ray, best, statsPtr);
             }
         } else {
@@ -829,16 +883,14 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
     const float* p = reinterpret_cast<const float*>(base + prim.primitiveIndex * stride);
     const QVector3D center(p[0], p[1], p[2]);
 
-    float tNear = 0.0f;
-    float tFar = 0.0f;
-    if (!QSphere3D(center, radius).intersection(rayModel, &tNear, &tFar)) {
+    const RaySphereHit sphere = raySphereIntersectDouble(rayModel, center, radius);
+    if (!sphere.hit) {
         if (stats != nullptr) {
             ++stats->primsSphereMiss;
         }
         return;
     }
-    if (tNear <= 0.0f) {
-        // Ray points away from sphere, or origin sits inside it.
+    if (sphere.tNear <= 0.0) {
         if (stats != nullptr) {
             ++stats->primsRayBehind;
         }
@@ -856,9 +908,16 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
     // perpendicular distance via tNear = tCenter - sqrt(r^2 - d^2).
     // pointWorld remains the center so coordinate readouts snap to the
     // data point rather than to the sphere surface.
-    const QVector3D entryWorld =
-        mapPoint(worldFromModel,
-                 rayModel.origin() + tNear * rayModel.direction());
+    //
+    // Compute the entry point component-wise so the tNear*direction
+    // multiplication stays in double; otherwise narrowing tNear to
+    // float first would discard ~half of the precision the double
+    // sphere math just paid for at world-magnitude coords.
+    const QVector3D entryModel(
+        float(rayModel.origin().x() + sphere.tNear * rayModel.direction().x()),
+        float(rayModel.origin().y() + sphere.tNear * rayModel.direction().y()),
+        float(rayModel.origin().z() + sphere.tNear * rayModel.direction().z()));
+    const QVector3D entryWorld = mapPoint(worldFromModel, entryModel);
     const double tWorld = ray.projectedDistance(entryWorld);
     if (tWorld <= 0.0) {
         if (stats != nullptr) {
@@ -874,7 +933,7 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
     }
 
     best.m_hit = true;
-    best.m_tModel = tNear;
+    best.m_tModel = float(sphere.tNear);
     best.m_u = std::numeric_limits<float>::quiet_NaN();
     best.m_v = std::numeric_limits<float>::quiet_NaN();
     best.m_pointModel = center;
@@ -888,6 +947,76 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
     if (stats != nullptr) {
         ++stats->primsAccepted;
     }
+}
+
+void cwGeometryItersecter::dumpLeafPrimitive(const QList<Node>& nodes,
+                                             const Primitive& prim,
+                                             const QRay3D& ray,
+                                             uint32_t leafIdx,
+                                             uint32_t localIdx)
+{
+    const Node& node = nodes.at(prim.nodeIndex);
+    const cwGeometry& geometry = node.Object.geometry();
+    auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+    if (positionAttribute == nullptr) {
+        return;
+    }
+    const QMatrix4x4& worldFromModel = node.Object.modelMatrix();
+    const QRay3D rayModel = transformRayToModel(worldFromModel, ray);
+
+    const cwRenderObject* parent = node.Object.parent();
+    const char* parentClass = parent != nullptr
+        ? parent->metaObject()->className()
+        : "(null)";
+
+    if (prim.kind == Primitive::Kind::Point) {
+        const char* base = geometry.vertexBuffer(positionAttribute->bufferIndex)->constData()
+                           + positionAttribute->byteOffsetInBuffer;
+        const int stride = positionAttribute->bufferStride;
+        const float* p = reinterpret_cast<const float*>(base + prim.primitiveIndex * stride);
+        const QVector3D centerModel(p[0], p[1], p[2]);
+        const QVector3D centerWorld = mapPoint(worldFromModel, centerModel);
+
+        const float radius = node.Object.pickRadius();
+        const double tCenter = ray.projectedDistance(centerWorld);
+
+        // dPerp is in model space; equals world-space d only for
+        // identity model matrices (which is all current callers).
+        const RaySphereHit sphere = raySphereIntersectDouble(rayModel, centerModel, radius);
+        const double dPerp = std::sqrt(sphere.dSq);
+        QString tNearStr = QStringLiteral("MISS");
+        if (sphere.hit) {
+            const QVector3D entryWorld = mapPoint(worldFromModel,
+                rayModel.origin() + float(sphere.tNear) * rayModel.direction());
+            tNearStr = QString::number(ray.projectedDistance(entryWorld));
+        }
+
+        qCDebug(lcPick).nospace()
+            << "  leaf " << leafIdx << " [" << localIdx << "] POINT"
+            << " " << QLatin1String(parentClass) << "@" << parent
+            << " vert=" << prim.primitiveIndex
+            << " center=" << centerWorld
+            << " d=" << dPerp
+            << " tCenter=" << tCenter
+            << " tNear=" << tNearStr
+            << " radius=" << radius;
+        return;
+    }
+
+    // Triangle
+    const QVector<uint32_t>& indices = geometry.indices();
+    const int i = static_cast<int>(prim.primitiveIndex);
+    const QVector3D a = mapPoint(worldFromModel,
+        geometry.value<QVector3D>(positionAttribute, indices.at(i + 0)));
+    const QVector3D b = mapPoint(worldFromModel,
+        geometry.value<QVector3D>(positionAttribute, indices.at(i + 1)));
+    const QVector3D c = mapPoint(worldFromModel,
+        geometry.value<QVector3D>(positionAttribute, indices.at(i + 2)));
+    qCDebug(lcPick).nospace()
+        << "  leaf " << leafIdx << " [" << localIdx << "] TRI"
+        << " " << QLatin1String(parentClass) << "@" << parent
+        << " idx0=" << i
+        << " a=" << a << " b=" << b << " c=" << c;
 }
 
 QBox3D cwGeometryItersecter::primitiveWorldBox(const QList<Node>& nodes,

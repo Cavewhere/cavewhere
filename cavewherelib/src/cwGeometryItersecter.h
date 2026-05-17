@@ -229,6 +229,13 @@ private:
                               cwRayHit& best,
                               PickStats* stats);
 
+    // Debug-only per-primitive diagnostic; gated on lcPick debug.
+    static void dumpLeafPrimitive(const QList<Node>& nodes,
+                                  const Primitive& prim,
+                                  const QRay3D& ray,
+                                  uint32_t leafIdx,
+                                  uint32_t localIdx);
+
     // Phase A: how many BVH primitives a single Node contributes. Lines
     // stay out of the BVH and contribute zero. Points contribute zero
     // unless pickRadius > 0.
