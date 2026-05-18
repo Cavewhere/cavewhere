@@ -4,6 +4,12 @@ import cavewherelib
 BaseTurnTableInteraction {
     id: interactionId
 
+    QQ.LoggingCategory {
+        id: interactLog
+        name: "cw.interaction.qml"
+        defaultLogLevel: QQ.LoggingCategory.Warning
+    }
+
     QQ.DragHandler {
         id: dragHandlerLeftId
         target: null
@@ -12,12 +18,14 @@ BaseTurnTableInteraction {
 
         onActiveChanged: {
             if(active) {
+                console.debug(interactLog, "left-drag startPanning", centroid.position)
                 interactionId.startPanning(centroid.position)
             }
         }
 
         onCentroidChanged: {
             if(active) {
+                console.debug(interactLog, "left-drag pan", centroid.position)
                 interactionId.pan(centroid.position)
             }
         }
@@ -36,12 +44,14 @@ BaseTurnTableInteraction {
 
         onActiveChanged: {
             if(active) {
+                console.debug(interactLog, "touch-drag startRotating", centroid.position)
                 interactionId.startRotating(centroid.position)
             }
         }
 
         onCentroidChanged: {
             if(active) {
+                console.debug(interactLog, "touch-drag rotate", centroid.position)
                 interactionId.rotate(centroid.position)
             }
         }
@@ -55,12 +65,14 @@ BaseTurnTableInteraction {
 
         onActiveChanged: {
             if(active) {
+                console.debug(interactLog, "right-drag startRotating", centroid.position)
                 interactionId.startRotating(centroid.position)
             }
         }
 
         onCentroidChanged: {
             if(active) {
+                console.debug(interactLog, "right-drag rotate", centroid.position)
                 interactionId.rotate(centroid.position)
             }
         }
@@ -72,6 +84,7 @@ BaseTurnTableInteraction {
 
         onActiveChanged: {
             if(active) {
+                console.debug(interactLog, "pinch startPanning", centroid.position)
                 interactionId.startPanning(centroid.position)
             } else {
                 pinchCooldownTimer.restart()
@@ -80,11 +93,13 @@ BaseTurnTableInteraction {
 
         onScaleChanged: (delta) => {
                           let zoomDelta = 1.0 - delta;
+                          console.debug(interactLog, "pinch zoom", centroid.position, "delta=", zoomDelta)
                           interactionId.zoom(centroid.position, zoomDelta)
                       }
 
         onTranslationChanged: (delta) => {
                                 if(active) {
+                                    console.debug(interactLog, "pinch pan", centroid.position)
                                     interactionId.pan(centroid.position)
                                 }
                             }
@@ -100,6 +115,7 @@ BaseTurnTableInteraction {
         onRotationChanged: {
             let deltaRotation = rotationScale * (rotation - lastRotation);
             if(deltaRotation !== 0.0) {
+                console.debug(interactLog, "wheel zoom", point.position, "delta=", -deltaRotation)
                 interactionId.zoom(point.position, -deltaRotation)
                 lastRotation = rotation
             }

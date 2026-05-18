@@ -1,0 +1,8 @@
+#ifndef CWINTERACTIONLOG_H
+#define CWINTERACTIONLOG_H
+
+#include <QLoggingCategory>
+
+Q_DECLARE_LOGGING_CATEGORY(lcInteract)
+
+#endif // CWINTERACTIONLOG_H

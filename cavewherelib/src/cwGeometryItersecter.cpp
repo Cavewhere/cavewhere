@@ -47,6 +47,16 @@ namespace {
     }
 }
 
+// Closest sphere-miss seen during a traversal; tryPromoteNearMiss snaps
+// best to it when no true hit exists.
+struct cwGeometryItersecter::NearMissResult {
+    bool valid = false;
+    double dSq = (std::numeric_limits<double>::max)();
+    double tCenterModel = 0.0;
+    Primitive prim;
+    float radius = 0.0f;
+};
+
 // Per-pick rejection counters. Populated by intersectsDetailed and
 // testPrimitive when the cw.picking category has debug enabled; nullptr
 // otherwise so the hot path pays nothing. Defined here (not in the anon
@@ -94,6 +104,10 @@ namespace {
     // broad-phase AABB so that rays passing tangentially through the
     // outermost spheres aren't rejected by the box test.
     constexpr float kPointAabbPadScale = 1.0f;
+
+    // Tube-pick fallback radius as a multiplier of pickRadius. Lets the
+    // user clicking near a point in a sub-pixel gap still pivot on it.
+    constexpr float kTubeFactor = 5.0f;
 
     // Leaf threshold — the largest count of primitives we'll let stop
     // subdivision. Bigger leaves trade a slightly longer per-leaf linear
@@ -148,7 +162,8 @@ namespace {
 
     struct RaySphereHit {
         bool hit;
-        double tNear;
+        double tNear;    // sphere-entry depth (valid only when hit)
+        double tCenter;  // perpendicular-projection depth of the sphere center
         double dSq;
     };
 
@@ -175,7 +190,7 @@ namespace {
         // but cheap), and NaN-direction rays before they poison
         // tNear/dSq with inf/NaN.
         if (!(dDotD > 0.0)) {
-            return {false, 0.0, 0.0};
+            return {false, 0.0, 0.0, 0.0};
         }
         const double invDDotD = 1.0 / dDotD;
         const double tCenter =
@@ -187,9 +202,9 @@ namespace {
         const double rSq = double(radius) * double(radius);
 
         if (dSq > rSq) {
-            return {false, 0.0, dSq};
+            return {false, 0.0, tCenter, dSq};
         }
-        return {true, tCenter - std::sqrt((rSq - dSq) * invDDotD), dSq};
+        return {true, tCenter - std::sqrt((rSq - dSq) * invDDotD), tCenter, dSq};
     }
 }
 
@@ -438,7 +453,9 @@ QBox3D cwGeometryItersecter::boundingBox(const Key &objectKey) const
 /**
  * @brief cwGeometryItersecter::intersects
  * @param ray
- * @return Closes intersection to on the ray, or if no match, use nearest neighbor search
+ * @return Closest intersection along the ray, or NaN when the BVH (with
+ *         the tube-pick fallback in intersectsDetailed) finds nothing.
+ *         Callers can then fall back to a grid plane / projected pivot.
  */
 double cwGeometryItersecter::intersects(const QRay3D &ray) const
 {
@@ -446,8 +463,7 @@ double cwGeometryItersecter::intersects(const QRay3D &ray) const
     if (hit.hit()) {
         return hit.tWorld();
     }
-    qCDebug(lcPick) << "intersects: BVH miss, falling back to nearestNeighbor";
-    return nearestNeighbor(ray);
+    return qSNaN();
 }
 
 /**
@@ -518,7 +534,7 @@ void cwGeometryItersecter::addLines(const cwGeometryItersecter::Object &object)
         << " segments=" << (object.geometry().indices().size() / 2)
         << " nodesAppended=" << linesAppended
         << " Nodes.size=" << Nodes.size()
-        << " (note: Lines are picker-visible only via nearestNeighbor)";
+        << " (note: Lines are currently not picker-visible — the BVH skips them)";
     scheduleBuild();
 }
 
@@ -573,85 +589,6 @@ void cwGeometryItersecter::addPoints(const cwGeometryItersecter::Object &object)
 }
 
 
-/**
- * @brief cwGeometryItersecter::nearestNeighbor
- * @param ray
- * @return Finds the point on the ray that's the nearest neigbor of the ray
- */
-double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
-{
-    std::array<QVector3D, 8> points;
-
-    double bestT = 0.0;
-    double bestDistance = std::numeric_limits<double>::max();
-
-    const bool debug = lcPick().isDebugEnabled();
-    int nodesScanned = 0;
-    int nodesSkippedNotPickable = 0;
-    int nodesSkippedTriangles = 0;
-
-    for(const Node& node : Nodes) {
-        if (!isPickable(node.Object)) {
-            ++nodesSkippedNotPickable;
-            continue;
-        }
-
-        if(node.Object.geometry().type() == cwGeometry::Type::Triangles) {
-            ++nodesSkippedTriangles;
-            continue;
-        }
-
-        ++nodesScanned;
-
-        QVector3D min = node.BoundingBox.minimum();
-        QVector3D max = node.BoundingBox.maximum();
-
-        points[0] = min;
-        points[1] = QVector3D(max.x(), min.y(), min.z());
-        points[2] = QVector3D(max.x(), max.y(), min.z());
-        points[3] = QVector3D(min.x(), max.y(), min.z());
-        points[4] = QVector3D(min.x(), min.y(), max.z());
-        points[5] = QVector3D(max.x(), min.y(), max.z());
-        points[6] = QVector3D(min.x(), max.y(), max.z());
-        points[7] = max;
-
-        for(const QVector3D& point : points) {
-            double distance = ray.distance(point);
-            if(distance < bestDistance) {
-                double t = ray.projectedDistance(point);
-                if(t > 0.0) {
-                    bestDistance = distance;
-                    bestT = t;
-                }
-            }
-        }
-    }
-
-    if(bestT == 0.0) {
-        if (debug) {
-            qCDebug(lcPick).nospace()
-                << "nearestNeighbor MISS"
-                << " | totalNodes=" << Nodes.size()
-                << " scanned=" << nodesScanned
-                << " skippedNotPickable=" << nodesSkippedNotPickable
-                << " skippedTriangles=" << nodesSkippedTriangles;
-        }
-        return qSNaN();
-    }
-
-    if (debug) {
-        qCDebug(lcPick).nospace()
-            << "nearestNeighbor HIT t=" << bestT
-            << " distance=" << bestDistance
-            << " | totalNodes=" << Nodes.size()
-            << " scanned=" << nodesScanned
-            << " skippedNotPickable=" << nodesSkippedNotPickable
-            << " skippedTriangles=" << nodesSkippedTriangles;
-    }
-
-    return bestT;
-}
-
 cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
 {
     cwRayHit best;
@@ -676,11 +613,25 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
     const QVector<Primitive>& prims = m_bvh->primitives;
     const QList<Node>& nodeSnapshot = m_bvh->nodesSnapshot;
 
+    // AABB tests are inflated by tubeDist so leaves the tube-pick fallback
+    // might want to consider actually get visited. A single global max
+    // (vs per-subtree padding) keeps BVH memory flat for 300M-point clouds.
+    // Disabling the toggle collapses the inflation to a tight test.
+    const float tubeDist = m_tubePickEnabled
+                           ? m_bvh->maxPickRadius * kTubeFactor
+                           : 0.0f;
+    const QVector3D tubePad(tubeDist, tubeDist, tubeDist);
+
+    NearMissResult nearMiss;
+    NearMissResult* nearMissPtr = m_tubePickEnabled ? &nearMiss : nullptr;
+
     if (debug) {
         qCDebug(lcPick).nospace()
             << "intersectsDetailed: BVH nodes=" << nodes.size()
             << ", prims=" << prims.size()
             << ", source nodes=" << nodeSnapshot.size()
+            << ", maxPickRadius=" << m_bvh->maxPickRadius
+            << ", tubeDist=" << tubeDist
             << ", ray.origin=" << ray.origin()
             << ", ray.dir=" << ray.direction();
     }
@@ -699,9 +650,14 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
             ++stats.nodesVisited;
         }
 
-        // Box reject: skip if ray misses the AABB or the entry t is already
-        // farther than our current best hit (closest-wins early exit).
-        const double tBox = bn.bbox.intersection(ray);
+        // Box reject. Skip the inflated-box construction (which re-sorts
+        // min/max via qMin/qMax) when tubeDist is 0 — toggle off, no
+        // Point objects, or all-zero radii — so the disabled path
+        // matches the pre-tube traversal cost.
+        const double tBox = (tubeDist == 0.0f)
+            ? bn.bbox.intersection(ray)
+            : QBox3D(bn.bbox.minimum() - tubePad,
+                     bn.bbox.maximum() + tubePad).intersection(ray);
         if (qIsNaN(tBox)) {
             if (debug) {
                 ++stats.nodesBoxMiss;
@@ -731,7 +687,7 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
                 if (debug) {
                     dumpLeafPrimitive(nodeSnapshot, prims[p], ray, idx, p - first);
                 }
-                testPrimitive(nodeSnapshot, prims[p], ray, best, statsPtr);
+                testPrimitive(nodeSnapshot, prims[p], ray, best, nearMissPtr, statsPtr);
             }
         } else {
             uint32_t nearChild = bn.left;
@@ -743,6 +699,14 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
             stack.append(farChild);
             stack.append(nearChild);
         }
+    }
+
+    // Without the tube fallback, a sub-pixel cursor gap in a dense LAZ
+    // surface returns NaN from intersects() and the camera-pivot path in
+    // cwBaseTurnTableInteraction snaps to the grid plane at the wrong
+    // depth, jerking the view.
+    if (m_tubePickEnabled) {
+        tryPromoteNearMiss(best, nearMiss, nodeSnapshot, ray, debug);
     }
 
     if (debug) {
@@ -802,6 +766,7 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
                                          const Primitive& prim,
                                          const QRay3D& ray,
                                          cwRayHit& best,
+                                         NearMissResult* nearMiss,
                                          PickStats* stats)
 {
     if (stats != nullptr) {
@@ -888,6 +853,19 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
         if (stats != nullptr) {
             ++stats->primsSphereMiss;
         }
+        // tCenter > 0 filters primitives behind the camera; the dSq
+        // threshold is applied once in tryPromoteNearMiss. Skipped
+        // entirely when nearMiss is null (tube-pick disabled), so the
+        // sphere-miss hot path matches the pre-tube cost.
+        if (nearMiss != nullptr
+            && sphere.dSq < nearMiss->dSq
+            && sphere.tCenter > 0.0) {
+            nearMiss->valid = true;
+            nearMiss->dSq = sphere.dSq;
+            nearMiss->tCenterModel = sphere.tCenter;
+            nearMiss->prim = prim;
+            nearMiss->radius = radius;
+        }
         return;
     }
     if (sphere.tNear <= 0.0) {
@@ -932,20 +910,86 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
         return;
     }
 
+    fillPointHit(best, node, prim, ray, rayModel,
+                 center, pWorld, double(sphere.tNear), tWorld);
+    if (stats != nullptr) {
+        ++stats->primsAccepted;
+    }
+}
+
+void cwGeometryItersecter::fillPointHit(cwRayHit& best,
+                                        const Node& node,
+                                        const Primitive& prim,
+                                        const QRay3D& ray,
+                                        const QRay3D& rayModel,
+                                        const QVector3D& centerModel,
+                                        const QVector3D& centerWorld,
+                                        double tModel,
+                                        double tWorld)
+{
     best.m_hit = true;
-    best.m_tModel = float(sphere.tNear);
+    best.m_tModel = float(tModel);
     best.m_u = std::numeric_limits<float>::quiet_NaN();
     best.m_v = std::numeric_limits<float>::quiet_NaN();
-    best.m_pointModel = center;
+    best.m_pointModel = centerModel;
     best.m_normalModel = -rayModel.direction().normalized();
-    best.m_pointWorld = pWorld;
+    best.m_pointWorld = centerWorld;
     best.m_normalWorld = -ray.direction().normalized();
     best.m_tWorld = tWorld;
     best.m_object = node.Object.parent();
     best.m_objectId = node.Object.id();
     best.m_firstIndex = static_cast<int>(prim.primitiveIndex);
-    if (stats != nullptr) {
-        ++stats->primsAccepted;
+}
+
+void cwGeometryItersecter::tryPromoteNearMiss(cwRayHit& best,
+                                              const NearMissResult& nearMiss,
+                                              const QList<Node>& nodeSnapshot,
+                                              const QRay3D& ray,
+                                              bool debug)
+{
+    if (best.hit() || !nearMiss.valid) {
+        return;
+    }
+    const double tubeLimit = double(nearMiss.radius) * double(kTubeFactor);
+    if (nearMiss.dSq > tubeLimit * tubeLimit) {
+        if (debug) {
+            qCDebug(lcPick).nospace()
+                << "tube-pick rejected: best near-miss d=" << std::sqrt(nearMiss.dSq)
+                << " > tube limit " << tubeLimit;
+        }
+        return;
+    }
+
+    const Node& node = nodeSnapshot.at(nearMiss.prim.nodeIndex);
+    const cwGeometry& geometry = node.Object.geometry();
+    const auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+    Q_ASSERT(positionAttribute);
+
+    const QMatrix4x4& worldFromModel = node.Object.modelMatrix();
+    const QVector3D centerModel = geometry.value<QVector3D>(
+        positionAttribute, nearMiss.prim.primitiveIndex);
+    const QVector3D centerWorld = mapPoint(worldFromModel, centerModel);
+    const double tWorld = ray.projectedDistance(centerWorld);
+    if (tWorld <= 0.0) {
+        if (debug) {
+            qCDebug(lcPick).nospace()
+                << "tube-pick rejected: tWorld=" << tWorld
+                << " <= 0 after reprojection to world space"
+                << " (model matrix may mirror or skew)";
+        }
+        return;
+    }
+
+    const QRay3D rayModel = transformRayToModel(worldFromModel, ray);
+    fillPointHit(best, node, nearMiss.prim, ray, rayModel,
+                 centerModel, centerWorld, nearMiss.tCenterModel, tWorld);
+    if (debug) {
+        qCDebug(lcPick).nospace()
+            << "tube-pick promoted: d=" << std::sqrt(nearMiss.dSq)
+            << " (<= " << tubeLimit << ")"
+            << " tWorld=" << tWorld
+            << " pWorld=" << centerWorld
+            << " vert=" << nearMiss.prim.primitiveIndex;
     }
 }
 
@@ -1488,6 +1532,9 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         out->nodesSnapshot = std::move(snapshot);
         out->bvhNodes = std::move(bvhNodes);
         out->primitives = std::move(finalPrims);
+        for (const Node& n : out->nodesSnapshot) {
+            out->maxPickRadius = std::max(out->maxPickRadius, n.Object.pickRadius());
+        }
         *resultSlot = std::move(out);
     });
 

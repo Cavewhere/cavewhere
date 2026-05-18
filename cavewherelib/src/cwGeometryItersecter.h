@@ -88,6 +88,14 @@ public:
     double intersects(const QRay3D& ray) const;
     cwRayHit intersectsDetailed(const QRay3D& ray) const;
 
+    // Escape hatch for the BVH-tube fallback that snaps to a sphere-miss
+    // within kTubeFactor * pickRadius of the ray. Disabling reverts to
+    // strict sphere intersection — picks return no-hit when the cursor
+    // sits in a sub-pixel gap, and the AABB box tests stop being
+    // inflated, recovering the pre-tube traversal cost on huge clouds.
+    void setTubePickEnabled(bool enabled) { m_tubePickEnabled = enabled; }
+    bool isTubePickEnabled() const { return m_tubePickEnabled; }
+
     // Debug-only snapshot of what the picker currently knows about. Reads
     // the built BVH's source-node snapshot if available (post-bvhReady);
     // falls back to the live Nodes list otherwise. Use from tests and the
@@ -192,7 +200,14 @@ private:
         QList<Node> nodesSnapshot;
         QVector<BvhNode> bvhNodes;
         QVector<Primitive> primitives;
+        // Max pickRadius across nodesSnapshot — cached once at build time
+        // so the per-pick tube-box test doesn't have to rescan. Triangles
+        // and zero-radius Points contribute 0; harmless for those paths
+        // since they don't take the tube fallback.
+        float maxPickRadius = 0.0f;
     };
+
+    bool m_tubePickEnabled = true;
 
     // Live BVH. nullptr until the first async build completes. Only
     // accessed from the main thread: pick queries (intersects/
@@ -219,6 +234,12 @@ private:
     // Defined in the .cpp because it's purely a debug aid.
     struct PickStats;
 
+    // Tube-pick fallback: tracks the closest sphere-miss seen during a
+    // traversal so intersectsDetailed can snap to a point the user almost
+    // clicked. Defined in the .cpp because it's an internal traversal
+    // detail.
+    struct NearMissResult;
+
     void scheduleBuild();
     QFuture<void> launchBuildJob();
 
@@ -227,7 +248,32 @@ private:
                               const Primitive& prim,
                               const QRay3D& ray,
                               cwRayHit& best,
+                              NearMissResult* nearMiss,
                               PickStats* stats);
+
+    // Shared cwRayHit field fill for any Point primitive — used by the
+    // sphere-hit path in testPrimitive and the tube-pick promote in
+    // tryPromoteNearMiss. Pre-computed by the caller because the two
+    // paths source tModel and the world point differently.
+    static void fillPointHit(cwRayHit& best,
+                             const Node& node,
+                             const Primitive& prim,
+                             const QRay3D& ray,
+                             const QRay3D& rayModel,
+                             const QVector3D& centerModel,
+                             const QVector3D& centerWorld,
+                             double tModel,
+                             double tWorld);
+
+    // Post-traversal tube-pick promote. Snaps best to the closest tracked
+    // sphere-miss whose perpendicular distance is within kTubeFactor *
+    // pickRadius. No-op when best already hit, nearMiss is empty, or the
+    // miss is beyond the tube.
+    static void tryPromoteNearMiss(cwRayHit& best,
+                                   const NearMissResult& nearMiss,
+                                   const QList<Node>& nodeSnapshot,
+                                   const QRay3D& ray,
+                                   bool debug);
 
     // Debug-only per-primitive diagnostic; gated on lcPick debug.
     static void dumpLeafPrimitive(const QList<Node>& nodes,
@@ -301,8 +347,6 @@ private:
     void addTriangles(const cwGeometryItersecter::Object& object);
     void addLines(const cwGeometryItersecter::Object& object);
     void addPoints(const cwGeometryItersecter::Object& object);
-
-    double nearestNeighbor(const QRay3D& ray) const;
 
     // Helpers: transform point (w=1) and direction (w=0)
     static inline QVector3D mapPoint(const QMatrix4x4& m, const QVector3D& p) {
