@@ -79,7 +79,7 @@ QString writeRegionToString(const cwSurveyDataArtifact::Region& region)
 TEST_CASE("cwSurvexExporterRule emits *cs out at region level when globalCS is set",
           "[cwSurvexExporterRule_fix]") {
     cwSurveyDataArtifact::Region region;
-    region.globalCS = QStringLiteral("EPSG:32616");
+    region.globalCoordinateSystem =QStringLiteral("EPSG:32616");
 
     cwSurveyDataArtifact::Cave cave;
     cave.name = QStringLiteral("TestCave");
@@ -170,7 +170,7 @@ TEST_CASE("cwSurvexExporterRule derives *cs out from the first fix's inputCS whe
 
     SECTION("explicit globalCS overrides any fix inputCS") {
         cwSurveyDataArtifact::Region region;
-        region.globalCS = QStringLiteral("EPSG:32616");
+        region.globalCoordinateSystem =QStringLiteral("EPSG:32616");
 
         cwSurveyDataArtifact::Cave cave;
         cave.name = QStringLiteral("Override");
@@ -189,7 +189,7 @@ TEST_CASE("cwSurvexExporterRule derives *cs out from the first fix's inputCS whe
 TEST_CASE("cwSurvexExporterRule emits *cs and *fix per fix station",
           "[cwSurvexExporterRule_fix]") {
     cwSurveyDataArtifact::Region region;
-    region.globalCS = QStringLiteral("EPSG:32616");
+    region.globalCoordinateSystem =QStringLiteral("EPSG:32616");
 
     cwSurveyDataArtifact::Cave cave;
     cave.name = QStringLiteral("Multi");
@@ -233,7 +233,7 @@ TEST_CASE("cwSurvexExporterRule falls back to *fix firstStation 0 0 0 with no fi
           "[cwSurvexExporterRule_fix]") {
     auto buildRegion = [](const QString& globalCS) {
         cwSurveyDataArtifact::Region region;
-        region.globalCS = globalCS;
+        region.globalCoordinateSystem =globalCS;
 
         cwSurveyDataArtifact::Cave cave;
         cave.name = QStringLiteral("Legacy");

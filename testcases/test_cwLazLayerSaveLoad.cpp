@@ -3,8 +3,10 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QUrl>
 
 #include "cwCavingRegion.h"
 #include "cwFutureManagerModel.h"
@@ -15,7 +17,7 @@
 
 #include "LazFixtureHelper.h"
 
-TEST_CASE("cwLazLayer save/load round-trip preserves sourcePath",
+TEST_CASE("cwLazLayer save/load round-trip preserves layer files",
           "[cwLazLayer][cwSaveLoad]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -29,11 +31,23 @@ TEST_CASE("cwLazLayer save/load round-trip preserves sourcePath",
     REQUIRE(region != nullptr);
     REQUIRE(region->lazLayers() != nullptr);
 
-    region->lazLayers()->addLayer(lazA);
-    region->lazLayers()->addLayer(lazB);
+    addLazAndWait(root.get(), {lazA, lazB});
     REQUIRE(region->lazLayers()->count() == 2);
 
-    // Wait for the initial loads to settle so vertexCount is non-zero.
+    // Originals are copies, not moves — sources should still exist on disk.
+    REQUIRE(QFileInfo::exists(lazA));
+    REQUIRE(QFileInfo::exists(lazB));
+
+    // Both layers must now point at files inside GIS Layers/ (basenames
+    // preserved when no collision).
+    const QString p0 = region->lazLayers()->layerAt(0)->sourcePath();
+    const QString p1 = region->lazLayers()->layerAt(1)->sourcePath();
+    REQUIRE(QFileInfo(p0).fileName() == QFileInfo(lazA).fileName());
+    REQUIRE(QFileInfo(p1).fileName() == QFileInfo(lazB).fileName());
+    REQUIRE(QFileInfo(p0).absolutePath().endsWith(cwLazLayerModel::folderName()));
+    REQUIRE(QFileInfo(p1).absolutePath().endsWith(cwLazLayerModel::folderName()));
+
+    // Wait for the initial loads to settle so pointCount is non-zero.
     REQUIRE(waitForLazLayerLoaded(region->lazLayers()->layerAt(0)));
     REQUIRE(waitForLazLayerLoaded(region->lazLayers()->layerAt(1)));
     REQUIRE(region->lazLayers()->layerAt(0)->pointCount() > 0);
@@ -58,14 +72,23 @@ TEST_CASE("cwLazLayer save/load round-trip preserves sourcePath",
     REQUIRE(reloadedRegion != nullptr);
     REQUIRE(reloadedRegion->lazLayers() != nullptr);
     REQUIRE(reloadedRegion->lazLayers()->count() == 2);
-    REQUIRE(reloadedRegion->lazLayers()->layerAt(0)->sourcePath() == lazA);
-    REQUIRE(reloadedRegion->lazLayers()->layerAt(1)->sourcePath() == lazB);
+
+    // The reloaded layer's sourcePath is inside the new project's GIS Layers/
+    // (saveAs copies the folder across). Compare basenames only.
+    auto* reloaded0 = reloadedRegion->lazLayers()->layerAt(0);
+    auto* reloaded1 = reloadedRegion->lazLayers()->layerAt(1);
+    REQUIRE(QFileInfo(reloaded0->sourcePath()).fileName()
+            == QFileInfo(lazA).fileName());
+    REQUIRE(QFileInfo(reloaded1->sourcePath()).fileName()
+            == QFileInfo(lazB).fileName());
+    REQUIRE(QFile::exists(reloaded0->sourcePath()));
+    REQUIRE(QFile::exists(reloaded1->sourcePath()));
 
     // Geometry rebuilt by re-running cwLazLoader against the saved path.
-    REQUIRE(waitForLazLayerLoaded(reloadedRegion->lazLayers()->layerAt(0)));
-    REQUIRE(waitForLazLayerLoaded(reloadedRegion->lazLayers()->layerAt(1)));
-    REQUIRE(reloadedRegion->lazLayers()->layerAt(0)->pointCount() > 0);
-    REQUIRE(reloadedRegion->lazLayers()->layerAt(1)->pointCount() > 0);
+    REQUIRE(waitForLazLayerLoaded(reloaded0));
+    REQUIRE(waitForLazLayerLoaded(reloaded1));
+    REQUIRE(reloaded0->pointCount() > 0);
+    REQUIRE(reloaded1->pointCount() > 0);
 }
 
 TEST_CASE("cwLazLayer save/load: pointSize runtime override resets to default",
@@ -78,7 +101,9 @@ TEST_CASE("cwLazLayer save/load: pointSize runtime override resets to default",
     auto root = std::make_unique<cwRootData>();
     auto* project = root->project();
     auto* region = project->cavingRegion();
-    auto* layer = region->lazLayers()->addLayer(laz);
+    addLazAndWait(root.get(), {laz});
+    auto* layer = region->lazLayers()->layerAt(0);
+    REQUIRE(layer != nullptr);
 
     layer->setPointSize(11.0); // Non-default override.
     REQUIRE(layer->pointSize() == 11.0);
@@ -91,8 +116,6 @@ TEST_CASE("cwLazLayer save/load: pointSize runtime override resets to default",
     project->waitSaveToFinish();
     root->futureManagerModel()->waitForFinished();
 
-    // saveAs places the .cwproj inside a sibling directory; project->filename()
-    // returns the actual on-disk path after the move.
     const QString actualPath = project->filename();
 
     auto root2 = std::make_unique<cwRootData>();
@@ -114,7 +137,9 @@ TEST_CASE("cwLazLayer save/load: missing source file → loadStatus == Error",
 
     auto root = std::make_unique<cwRootData>();
     auto* project = root->project();
-    auto* layer = project->cavingRegion()->lazLayers()->addLayer(laz);
+    addLazAndWait(root.get(), {laz});
+    auto* layer = project->cavingRegion()->lazLayers()->layerAt(0);
+    REQUIRE(layer != nullptr);
     REQUIRE(waitForLazLayerLoaded(layer));
 
     const QString projectPath = QDir(tempDir.path())
@@ -125,15 +150,20 @@ TEST_CASE("cwLazLayer save/load: missing source file → loadStatus == Error",
     root->futureManagerModel()->waitForFinished();
     const QString actualPath = project->filename();
 
-    // Delete the source file before reload so the row reappears as Error.
-    REQUIRE(QFile::remove(laz));
+    // Delete the copied file from inside the saved project's GIS Layers/
+    // before reload so the row reappears as Error. The copy in GIS Layers/ is
+    // what gets loaded, not the external original.
+    const QString gisLayersFile = QFileInfo(actualPath).absoluteDir()
+                                      .filePath(cwLazLayerModel::folderName()
+                                                + QLatin1Char('/')
+                                                + QFileInfo(laz).fileName());
+    REQUIRE(QFile::exists(gisLayersFile));
+    REQUIRE(QFile::remove(gisLayersFile));
 
     auto root2 = std::make_unique<cwRootData>();
     root2->project()->loadFile(actualPath);
     root2->project()->waitLoadToFinish();
 
-    auto* reloaded = root2->project()->cavingRegion()->lazLayers()->layerAt(0);
-    REQUIRE(reloaded != nullptr);
-    REQUIRE(reloaded->sourcePath() == laz);
-    REQUIRE(reloaded->loadStatus() == cwLazLayer::LoadStatus::Error);
+    // With the file removed, rescan() finds nothing — model is empty.
+    REQUIRE(root2->project()->cavingRegion()->lazLayers()->count() == 0);
 }

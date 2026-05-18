@@ -672,10 +672,12 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
         }
 
         if (bn.isLeaf) {
+            if (debug) {
+                ++stats.leavesVisited;
+            }
             const uint32_t first = bn.left;
             const uint32_t primCount = bn.right;
             if (debug) {
-                ++stats.leavesVisited;
                 qCDebug(lcPick).nospace()
                     << "leaf " << idx << ": " << primCount << " prims, bbox=["
                     << bn.bbox.minimum() << " .. " << bn.bbox.maximum() << "]"

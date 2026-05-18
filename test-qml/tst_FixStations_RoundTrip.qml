@@ -35,10 +35,10 @@ MainWindowTest {
                             && RootData.pageView.currentPageItem.objectName === "dataMainPage",
                       5000)
             const dataPage = RootData.pageView.currentPageItem
-            const picker = findChild(dataPage, "globalCSComboBox")
-            verify(picker !== null, "globalCSComboBox must exist")
+            const picker = findChild(dataPage, "globalCoordinateSystemComboBox")
+            verify(picker !== null, "globalCoordinateSystemComboBox must exist")
             picker.committed(cs)
-            tryCompare(RootData.region, "globalCS", cs)
+            tryCompare(RootData.region, "globalCoordinateSystem", cs)
         }
 
         function setInputCSViaPicker(rowIndex, cs) {
@@ -101,7 +101,7 @@ MainWindowTest {
             tryVerify(() => RootData.region.caveCount === 1, 10000,
                       "reloaded project should contain the round-trip cave")
 
-            tryCompare(RootData.region, "globalCS", "EPSG:32612")
+            tryCompare(RootData.region, "globalCoordinateSystem", "EPSG:32612")
 
             const reloadedModel = RootData.region.cave(0).fixStations
             tryCompare(reloadedModel, "count", 2)
@@ -124,7 +124,7 @@ MainWindowTest {
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "dataMainPage",
                       5000)
-            const reloadedPicker = findChild(RootData.pageView.currentPageItem, "globalCSComboBox")
+            const reloadedPicker = findChild(RootData.pageView.currentPageItem, "globalCoordinateSystemComboBox")
             tryCompare(reloadedPicker, "value", "EPSG:32612")
         }
     }

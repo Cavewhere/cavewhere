@@ -3,8 +3,14 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QSignalSpy>
+#include <QUrl>
 
+#include "cwCavingRegion.h"
+#include "cwFutureManagerModel.h"
 #include "cwLazLayer.h"
+#include "cwLazLayerModel.h"
+#include "cwProject.h"
+#include "cwRootData.h"
 
 #include <LASlib/laswriter.hpp>
 
@@ -89,4 +95,18 @@ bool waitForLazLayerLoaded(cwLazLayer* layer, int timeoutMs)
         waited += 100;
     }
     return false;
+}
+
+void addLazAndWait(cwRootData* root, const QStringList& externalPaths)
+{
+    auto* project = root->project();
+    auto* region = project->cavingRegion();
+    QList<QUrl> urls;
+    urls.reserve(externalPaths.size());
+    for (const QString& p : externalPaths) {
+        urls.append(QUrl::fromLocalFile(p));
+    }
+    region->lazLayers()->addFromFiles(urls);
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
 }

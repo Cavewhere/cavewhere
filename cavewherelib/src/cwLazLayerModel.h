@@ -10,8 +10,10 @@
 
 //Qt includes
 #include <QAbstractListModel>
+#include <QDir>
 #include <QList>
 #include <QQmlEngine>
+#include <QUrl>
 
 //Our includes
 #include "CaveWhereLibExport.h"
@@ -19,12 +21,8 @@
 #include "cwGeoPoint.h"
 #include "cwLazLayer.h"
 
-//Protobuf
-namespace CavewhereProto {
-class ProjectMetadata;
-}
-
 class cwCavingRegion;
+class cwProject;
 
 class CAVEWHERE_LIB_EXPORT cwLazLayerModel : public QAbstractListModel
 {
@@ -53,9 +51,10 @@ public:
     QVariant data(const QModelIndex& index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    Q_INVOKABLE cwLazLayer* addLayer(const QString& sourcePath);
+    Q_INVOKABLE void addFromFiles(QList<QUrl> urls);
     Q_INVOKABLE void removeAt(int index);
     Q_INVOKABLE cwLazLayer* layerAt(int index) const;
+    Q_INVOKABLE void rescan();
 
     int count() const { return m_layers.size(); }
     const QList<cwLazLayer*>& layers() const { return m_layers; }
@@ -64,10 +63,12 @@ public:
     void setRegionGlobalCS(const QString& cs);
     void setRegionWorldOrigin(const cwGeoPoint& origin);
 
-    void writeTo(CavewhereProto::ProjectMetadata* metadata) const;
-    void readFrom(const CavewhereProto::ProjectMetadata& metadata);
+    void setGisLayersDir(const QDir& dir);
+    QDir gisLayersDir() const { return m_gisLayersDir; }
 
     void clear();
+
+    static QString folderName();
 
 signals:
     void countChanged();
@@ -75,12 +76,15 @@ signals:
 private:
     void connectLayer(cwLazLayer* layer);
     int indexOf(cwLazLayer* layer) const;
-    void maybeAutoAdoptCS(const QString& sourcePath);
+    void maybeAdoptRegionDefaultsFromLaz(const QString& sourcePath);
+    cwProject* project() const;
+    cwLazLayer* createLayer();
 
     QList<cwLazLayer*> m_layers;
     cwFutureManagerToken m_futureManagerToken;
     QString m_regionGlobalCS;
     cwGeoPoint m_regionWorldOrigin;
+    QDir m_gisLayersDir;
 };
 
 #endif // CWLAZLAYERMODEL_H

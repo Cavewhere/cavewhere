@@ -2,11 +2,13 @@
 #define LAZFIXTUREHELPER_H
 
 #include <QString>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QVector>
 #include <QVector3D>
 
 class cwLazLayer;
+class cwRootData;
 
 /**
  * Test helper: writes a small synthetic point cloud to a .laz file.
@@ -41,5 +43,13 @@ QString writeMinimalLaz(const QString& path, const QString& wktCS = QString());
  * Returns true if a terminal state was reached.
  */
 bool waitForLazLayerLoaded(cwLazLayer* layer, int timeoutMs = 5000);
+
+/**
+ * Hand @a externalPaths to @a root's region.lazLayers via addFromFiles and
+ * spin both the project save-flush and the future manager to completion. Each
+ * input is copied into the project's GIS Layers folder, then surfaced by
+ * rescan; on return the model has one row per resulting file.
+ */
+void addLazAndWait(cwRootData* root, const QStringList& externalPaths);
 
 #endif // LAZFIXTUREHELPER_H

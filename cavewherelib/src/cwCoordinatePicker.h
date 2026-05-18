@@ -52,7 +52,7 @@ class cwCoordinatePicker : public cwInteraction
     Q_PROPERTY(double wgs84Latitude  READ wgs84Latitude  NOTIFY pickChanged)
     Q_PROPERTY(double wgs84Longitude READ wgs84Longitude NOTIFY pickChanged)
     Q_PROPERTY(double elevation READ elevation NOTIFY pickChanged)
-    Q_PROPERTY(QString globalCS READ globalCS NOTIFY pickChanged)
+    Q_PROPERTY(QString globalCoordinateSystem READ globalCoordinateSystem NOTIFY pickChanged)
     Q_PROPERTY(bool hasWgs84 READ hasWgs84 NOTIFY pickChanged)
 
 public:
@@ -77,7 +77,7 @@ public:
     double wgs84Latitude()  const { return m_wgs84Lat; }
     double wgs84Longitude() const { return m_wgs84Lon; }
     double elevation() const { return m_globalPoint.z; }
-    QString globalCS() const { return m_globalCSCached; }
+    QString globalCoordinateSystem() const { return m_globalCoordinateSystemCached; }
     bool hasWgs84() const { return m_hasWgs84; }
 
     Q_INVOKABLE void pick(QPointF screenPoint);
@@ -104,10 +104,10 @@ private:
     cwGeoPoint m_globalPoint;
     double m_wgs84Lat = 0.0;
     double m_wgs84Lon = 0.0;
-    QString m_globalCSCached;
+    QString m_globalCoordinateSystemCached;
 
     // PROJ setup (proj_create_crs_to_crs + normalize) is non-trivial. Cache the
-    // transform and rebuild only when the region's globalCS changes.
+    // transform and rebuild only when the region's globalCoordinateSystem changes.
     std::unique_ptr<cwCoordinateTransform> m_wgs84Transform;
 };
 

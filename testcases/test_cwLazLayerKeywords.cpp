@@ -1,6 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -20,16 +22,41 @@
 
 namespace {
 
+// Helper: write a .laz directly into the model's GIS Layers folder and
+// trigger a rescan so it surfaces as a layer row. This bypasses the
+// project-based addFromFiles copy pipeline, which is sufficient for tests
+// that only care about model + keyword registration behavior.
 struct LazKeywordFixture {
+    QTemporaryDir tempDir;
+    QDir gisLayersDir;
     cwCavingRegion region;
     cwKeywordItemModel keywordItemModel;
     cwScene scene;
     cwLazLayersSceneNode node;
 
-    LazKeywordFixture() {
+    LazKeywordFixture()
+    {
+        const QString gisLayersPath = QDir(tempDir.path())
+                                          .filePath(cwLazLayerModel::folderName());
+        QDir().mkpath(gisLayersPath);
+        gisLayersDir = QDir(gisLayersPath);
+        region.lazLayers()->setGisLayersDir(gisLayersDir);
+
         node.setScene(&scene);
         node.setKeywordItemModel(&keywordItemModel);
         node.setLazLayerModel(region.lazLayers());
+    }
+
+    // Drops a .laz file into the GIS Layers folder under the given tag,
+    // triggers a rescan, and returns the layer at row 0 (assumes only one
+    // file in the folder).
+    cwLazLayer* addLazFile(const QString& tag)
+    {
+        const QString fileName = QStringLiteral("%1.laz").arg(tag);
+        const QString filePath = gisLayersDir.filePath(fileName);
+        REQUIRE(!writeMinimalLaz(filePath).isEmpty());
+        region.lazLayers()->rescan();
+        return region.lazLayers()->layerAt(region.lazLayers()->count() - 1);
     }
 };
 
@@ -76,32 +103,26 @@ QString keywordValue(cwKeywordItem* item, const QString& key) {
 
 TEST_CASE("Adding a LAZ layer registers a keyword item with Type / FileName / ObjectId",
           "[LAZLayerKeywords]") {
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
     LazKeywordFixture f;
-
     REQUIRE(f.keywordItemModel.rowCount() == 0);
 
-    const QString path = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("kw")));
-    cwLazLayer* layer = f.region.lazLayers()->addLayer(path);
+    cwLazLayer* layer = f.addLazFile(QStringLiteral("kw"));
     REQUIRE(layer != nullptr);
 
     cwKeywordItem* kwItem = findLazKeywordItem(&f.keywordItemModel, layer);
     REQUIRE(kwItem != nullptr);
 
     REQUIRE(keywordValue(kwItem, cwKeywordModel::TypeKey) == QStringLiteral("LAZ Layer"));
-    REQUIRE(keywordValue(kwItem, cwKeywordModel::FileNameKey) == QFileInfo(path).fileName());
+    REQUIRE(keywordValue(kwItem, cwKeywordModel::FileNameKey) ==
+            QFileInfo(layer->sourcePath()).fileName());
     REQUIRE(keywordValue(kwItem, cwKeywordModel::ObjectIdKey) ==
             layer->id().toString(QUuid::WithoutBraces).left(8));
 }
 
 TEST_CASE("Removing a LAZ layer unregisters its keyword item", "[LAZLayerKeywords]") {
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
     LazKeywordFixture f;
 
-    const QString path = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("rm")));
-    cwLazLayer* layer = f.region.lazLayers()->addLayer(path);
+    cwLazLayer* layer = f.addLazFile(QStringLiteral("rm"));
     REQUIRE(findLazKeywordItem(&f.keywordItemModel, layer) != nullptr);
 
     f.region.lazLayers()->removeAt(0);
@@ -111,18 +132,16 @@ TEST_CASE("Removing a LAZ layer unregisters its keyword item", "[LAZLayerKeyword
 
 TEST_CASE("Changing sourcePath updates the LAZ keyword item's FileName / Name",
           "[LAZLayerKeywords]") {
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
     LazKeywordFixture f;
 
-    const QString pathA = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("orig")));
-    const QString pathB = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("renamed")));
-
-    cwLazLayer* layer = f.region.lazLayers()->addLayer(pathA);
+    cwLazLayer* layer = f.addLazFile(QStringLiteral("orig"));
     cwKeywordItem* kwItem = findLazKeywordItem(&f.keywordItemModel, layer);
     REQUIRE(kwItem != nullptr);
-    REQUIRE(keywordValue(kwItem, cwKeywordModel::FileNameKey) == QFileInfo(pathA).fileName());
+    REQUIRE(keywordValue(kwItem, cwKeywordModel::FileNameKey) ==
+            QFileInfo(layer->sourcePath()).fileName());
 
+    const QString pathB = f.gisLayersDir.filePath(QStringLiteral("renamed.laz"));
+    REQUIRE(!writeMinimalLaz(pathB).isEmpty());
     layer->setSourcePath(pathB);
 
     REQUIRE(keywordValue(kwItem, cwKeywordModel::FileNameKey) == QFileInfo(pathB).fileName());
@@ -130,12 +149,9 @@ TEST_CASE("Changing sourcePath updates the LAZ keyword item's FileName / Name",
 
 TEST_CASE("LAZ keyword item visibility round-trip toggles render-side visibility",
           "[LAZLayerKeywords]") {
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
     LazKeywordFixture f;
 
-    const QString path = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("vis")));
-    cwLazLayer* layer = f.region.lazLayers()->addLayer(path);
+    cwLazLayer* layer = f.addLazFile(QStringLiteral("vis"));
     cwKeywordItem* kwItem = findLazKeywordItem(&f.keywordItemModel, layer);
     REQUIRE(kwItem != nullptr);
 

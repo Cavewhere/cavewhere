@@ -24,11 +24,11 @@ QC.Popup {
     // Cache the CRS header so binding evaluations during pick changes don't
     // re-run the PROJ name lookup + qsTr interpolation each time.
     readonly property string _crsHeader: {
-        if (picker.globalCS === "") {
+        if (picker.globalCoordinateSystem === "") {
             return ""
         }
-        const name = CoordinateSystem.nameFor(picker.globalCS)
-        return qsTr("Project CRS — %1").arg(name !== "" ? name : picker.globalCS)
+        const name = CoordinateSystem.nameFor(picker.globalCoordinateSystem)
+        return qsTr("Project CRS — %1").arg(name !== "" ? name : picker.globalCoordinateSystem)
     }
 
     function _formatXYZ(x, y, z, precision) {
@@ -123,7 +123,7 @@ QC.Popup {
         }
 
         CopySection {
-            visible: root.picker.globalCS !== ""
+            visible: root.picker.globalCoordinateSystem !== ""
             objectNameRoot: "CS"
             headerText: root._crsHeader
             valueText: root._formatXYZ(root.picker.csX,
@@ -141,7 +141,7 @@ QC.Popup {
         }
 
         CopySection {
-            visible: root.picker.globalCS !== ""
+            visible: root.picker.globalCoordinateSystem !== ""
             objectNameRoot: "Elev"
             headerText: qsTr("Elevation")
             valueText: "%1 m".arg(Number(root.picker.elevation).toFixed(root._coordPrecision))

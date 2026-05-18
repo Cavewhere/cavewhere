@@ -4,13 +4,19 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <QCoreApplication>
+#include <QDir>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QUrl>
 
 #include "cwCavingRegion.h"
+#include "cwFutureManagerModel.h"
 #include "cwGeoPoint.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
+#include "cwProject.h"
+#include "cwRootData.h"
 
 #include "LazFixtureHelper.h"
 
@@ -43,26 +49,27 @@ TEST_CASE("Auto-adopt: empty project + LAZ with embedded CS adopts both",
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
-    cwCavingRegion region;
-    REQUIRE(region.globalCS().isEmpty());
-    REQUIRE(region.worldOrigin() == cwGeoPoint{});
+    auto root = std::make_unique<cwRootData>();
+    auto* region = root->project()->cavingRegion();
+    REQUIRE(region->globalCoordinateSystem().isEmpty());
+    REQUIRE(region->worldOrigin() == cwGeoPoint{});
 
-    QSignalSpy csSpy(&region, &cwCavingRegion::globalCSChanged);
-    QSignalSpy originSpy(&region, &cwCavingRegion::worldOriginChanged);
+    QSignalSpy csSpy(region, &cwCavingRegion::globalCoordinateSystemChanged);
+    QSignalSpy originSpy(region, &cwCavingRegion::worldOriginChanged);
 
     const QString path = writeMinimalLaz(
         tempLazPath(tempDir, QStringLiteral("with-cs")),
         kUtmZone10N);
     REQUIRE(!path.isEmpty());
 
-    region.lazLayers()->addLayer(path);
+    addLazAndWait(root.get(), QStringList{path});
 
-    REQUIRE(region.globalCS() == kUtmZone10N);
+    REQUIRE(region->globalCoordinateSystem() == kUtmZone10N);
     REQUIRE(csSpy.size() == 1);
 
     // bbox of minimalLazPoints() is (0,0,0)-(4,4,4) → center (2,2,2).
     const cwGeoPoint expectedCenter{2.0, 2.0, 2.0};
-    REQUIRE(region.worldOrigin() == expectedCenter);
+    REQUIRE(region->worldOrigin() == expectedCenter);
     REQUIRE(originSpy.size() >= 1);
 }
 
@@ -71,38 +78,40 @@ TEST_CASE("Auto-adopt: empty project + LAZ without embedded CS only sets worldOr
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
-    cwCavingRegion region;
+    auto root = std::make_unique<cwRootData>();
+    auto* region = root->project()->cavingRegion();
 
     const QString path = writeMinimalLaz(
         tempLazPath(tempDir, QStringLiteral("no-cs")));
     REQUIRE(!path.isEmpty());
 
-    region.lazLayers()->addLayer(path);
+    addLazAndWait(root.get(), QStringList{path});
 
-    REQUIRE(region.globalCS().isEmpty());
-    REQUIRE(region.worldOrigin() == cwGeoPoint{2.0, 2.0, 2.0});
+    REQUIRE(region->globalCoordinateSystem().isEmpty());
+    REQUIRE(region->worldOrigin() == cwGeoPoint{2.0, 2.0, 2.0});
 }
 
-TEST_CASE("Auto-adopt: project with existing globalCS is left untouched",
+TEST_CASE("Auto-adopt: project with existing globalCoordinateSystem is left untouched",
           "[cwLazAutoAdoptCS]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
-    cwCavingRegion region;
+    auto root = std::make_unique<cwRootData>();
+    auto* region = root->project()->cavingRegion();
     const QString existingCS = QStringLiteral("EPSG:32611");  // UTM 11N
     const cwGeoPoint existingOrigin{500000.0, 4000000.0, 100.0};
-    region.setGlobalCS(existingCS);                  // resets worldOrigin to {}
-    region.setWorldOrigin(existingOrigin);
+    region->setGlobalCoordinateSystem(existingCS);    // resets worldOrigin to {}
+    region->setWorldOrigin(existingOrigin);
 
     const QString path = writeMinimalLaz(
         tempLazPath(tempDir, QStringLiteral("preset")),
         kUtmZone10N);
     REQUIRE(!path.isEmpty());
 
-    region.lazLayers()->addLayer(path);
+    addLazAndWait(root.get(), QStringList{path});
 
-    REQUIRE(region.globalCS() == existingCS);
-    REQUIRE(region.worldOrigin() == existingOrigin);
+    REQUIRE(region->globalCoordinateSystem() == existingCS);
+    REQUIRE(region->worldOrigin() == existingOrigin);
 }
 
 TEST_CASE("Auto-adopt: second add to fresh project leaves CS unchanged",
@@ -110,11 +119,12 @@ TEST_CASE("Auto-adopt: second add to fresh project leaves CS unchanged",
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
-    cwCavingRegion region;
+    auto root = std::make_unique<cwRootData>();
+    auto* region = root->project()->cavingRegion();
 
     const QString first = writeMinimalLaz(
         tempLazPath(tempDir, QStringLiteral("first")), kUtmZone10N);
-    region.lazLayers()->addLayer(first);
+    addLazAndWait(root.get(), QStringList{first});
 
     const QString utm11n = QStringLiteral(
         "PROJCS[\"WGS 84 / UTM zone 11N\",GEOGCS[\"WGS 84\","
@@ -129,8 +139,8 @@ TEST_CASE("Auto-adopt: second add to fresh project leaves CS unchanged",
 
     const QString second = writeMinimalLaz(
         tempLazPath(tempDir, QStringLiteral("second")), utm11n);
-    region.lazLayers()->addLayer(second);
+    addLazAndWait(root.get(), QStringList{second});
 
-    // First add wins; subsequent adds skip auto-adopt because globalCS is set.
-    REQUIRE(region.globalCS() == kUtmZone10N);
+    // First add wins; subsequent adds skip auto-adopt because the CS is set.
+    REQUIRE(region->globalCoordinateSystem() == kUtmZone10N);
 }

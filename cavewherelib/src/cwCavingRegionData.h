@@ -10,9 +10,8 @@
 struct cwCavingRegionData {
     QString name;
     QList<cwCaveData> caves;
-    QString globalCS;
+    QString globalCoordinateSystem;
     cwGeoPoint worldOrigin;
-    QStringList lazLayerSourcePaths; // Persisted paths for region.lazLayers
 };
 
 

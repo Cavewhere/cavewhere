@@ -51,7 +51,7 @@ struct ExporterFixture {
 ExporterFixture buildBoulderUtmFixture()
 {
     auto region = std::make_unique<cwCavingRegion>();
-    region->setGlobalCS(kUtmZ13N);
+    region->setGlobalCoordinateSystem(kUtmZ13N);
     auto* cave = new cwCave();
     cave->setName(QStringLiteral("BoulderCave"));
     region->addCave(cave);

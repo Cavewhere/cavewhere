@@ -49,7 +49,7 @@ TEST_CASE("recomputeWorldOrigin sets worldOrigin to a single fix's coords",
           "[cwCavingRegion][worldOrigin]")
 {
     cwCavingRegion region;
-    region.setGlobalCS(QStringLiteral("EPSG:32612"));
+    region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -72,7 +72,7 @@ TEST_CASE("recomputeWorldOrigin averages multiple fixes",
           "[cwCavingRegion][worldOrigin]")
 {
     cwCavingRegion region;
-    region.setGlobalCS(QStringLiteral("EPSG:32612"));
+    region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -96,7 +96,7 @@ TEST_CASE("recomputeWorldOrigin falls back to globalCS when fix inputCS is empty
           "[cwCavingRegion][worldOrigin]")
 {
     cwCavingRegion region;
-    region.setGlobalCS(QStringLiteral("EPSG:32612"));
+    region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -134,7 +134,7 @@ TEST_CASE("recomputeWorldOrigin reprojects when fix inputCS differs from globalC
           "[cwCavingRegion][worldOrigin]")
 {
     cwCavingRegion region;
-    region.setGlobalCS(QStringLiteral("EPSG:32612"));
+    region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -156,12 +156,12 @@ TEST_CASE("setGlobalCS resets worldOrigin so the next solve re-arms auto-compute
           "[cwCavingRegion][worldOrigin]")
 {
     cwCavingRegion region;
-    region.setGlobalCS(QStringLiteral("EPSG:32612"));
+    region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
     region.setWorldOrigin(cwGeoPoint{500000.0, 4194000.0, 2700.0});
     REQUIRE(region.worldOrigin() != cwGeoPoint{});
 
     QSignalSpy spy(&region, &cwCavingRegion::worldOriginChanged);
-    region.setGlobalCS(QStringLiteral("EPSG:32613"));
+    region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
 
     CHECK(region.worldOrigin() == cwGeoPoint{});
     CHECK(spy.count() == 1);

@@ -15,6 +15,12 @@
 #include "cwRenderPointCloud.h"
 #include "cwScene.h"
 
+#include <QDebug>
+#include <QFileInfo>
+#include <QLoggingCategory>
+
+Q_LOGGING_CATEGORY(lcLazSceneNode, "cw.laz.scenenode")
+
 cwLazLayersSceneNode::cwLazLayersSceneNode(QObject* parent) :
     QObject(parent)
 {
@@ -148,6 +154,11 @@ void cwLazLayersSceneNode::addLayer(cwLazLayer* layer)
     renderObject->setScene(m_scene);
     m_pointClouds.insert(layer->id(), renderObject);
 
+    if (m_scene.isNull()) {
+        qCWarning(lcLazSceneNode) << "addLayer: scene is null — render object has no scene"
+                                  << "layer=" << QFileInfo(layer->sourcePath()).fileName();
+    }
+
     // bboxChanged also fires during applyResult, immediately before
     // loadStatusChanged(Loaded). Connecting both would push the geometry
     // twice and rebuild the immutable vertex buffer twice per load.
@@ -182,9 +193,15 @@ void cwLazLayersSceneNode::syncLayerGeometry(cwLazLayer* layer)
     }
     auto it = m_pointClouds.find(layer->id());
     if (it == m_pointClouds.end()) {
+        qCWarning(lcLazSceneNode) << "syncLayerGeometry: no render object for layer"
+                                  << QFileInfo(layer->sourcePath()).fileName()
+                                  << "— addLayer was never called for this layer.";
         return;
     }
     cwRenderPointCloud* renderObject = it.value();
+    if (!renderObject) {
+        return;
+    }
 
     if (layer->loadStatus() == cwLazLayer::LoadStatus::Loaded) {
         renderObject->setGeometry({

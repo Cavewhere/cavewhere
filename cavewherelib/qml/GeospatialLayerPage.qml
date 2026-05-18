@@ -25,11 +25,7 @@ StandardPage {
             return
         }
         RootData.lastDirectory = urls[urls.length - 1]
-        const paths = RootData.importPathsFromUrls(urls)
-        for (let i = 0; i < paths.length; ++i) {
-            if (paths[i].length === 0) continue
-            RootData.region.lazLayers.addLayer(paths[i])
-        }
+        RootData.region.lazLayers.addFromFiles(urls)
     }
 
     RemoveAskBox {
@@ -91,7 +87,7 @@ StandardPage {
         text: "One or more layers don't have an embedded coordinate system.<br>"
               + "Set the project's coordinate system on the <b>Data</b> page to align them with surveys."
         visible: RootData.region.lazLayers.count > 0
-                 && RootData.region.globalCS === ""
+                 && RootData.region.globalCoordinateSystem === ""
     }
 
     QQ.Component {

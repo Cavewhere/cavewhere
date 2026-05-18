@@ -1733,6 +1733,21 @@ void cwSaveLoad::setFileName(const QString &filename)
         d->projectFileName = filename;
         d->repository->setDirectory(QFileInfo(filename).absoluteDir());
 
+        // Repoint the GIS Layers folder so the laz model scans the new root.
+        // Applies to newProject (temp dir), load, save-as, and rename paths
+        // — all of which funnel through setFileName.
+        if (!d->projectFileName.isEmpty()) {
+            if (auto* region = d->m_regionTreeModel
+                    ? d->m_regionTreeModel->cavingRegion()
+                    : nullptr) {
+                if (auto* lazLayers = region->lazLayers()) {
+                    lazLayers->setGisLayersDir(
+                                QDir(projectRootDir().absoluteFilePath(
+                                         cwLazLayerModel::folderName())));
+                }
+            }
+        }
+
         emit fileNameChanged();
     }
 }
@@ -1741,6 +1756,13 @@ void cwSaveLoad::setFileName(const QString &filename)
 void cwSaveLoad::setCavingRegion(cwCavingRegion *region)
 {
     d->m_regionTreeModel->setCavingRegion(region);
+    if (region != nullptr && !d->projectFileName.isEmpty()) {
+        if (auto* lazLayers = region->lazLayers()) {
+            lazLayers->setGisLayersDir(
+                        QDir(projectRootDir().absoluteFilePath(
+                                 cwLazLayerModel::folderName())));
+        }
+    }
 }
 
 const cwCavingRegion *cwSaveLoad::cavingRegion() const
@@ -1811,11 +1833,9 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
     protoMetadata->set_syncenabled(metadata.syncEnabled);
 
     if (region != nullptr) {
-        if (!region->globalCS().isEmpty()) {
-            cwProtoUtils::saveString(protoMetadata->mutable_globalcs(), region->globalCS());
-        }
-        if (cwLazLayerModel* lazLayers = region->lazLayers()) {
-            lazLayers->writeTo(protoMetadata);
+        if (!region->globalCoordinateSystem().isEmpty()) {
+            cwProtoUtils::saveString(protoMetadata->mutable_globalcoordinatesystem(),
+                                     region->globalCoordinateSystem());
         }
     }
 
@@ -2856,14 +2876,9 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
             if (metadataProto.has_syncenabled()) {
                 loadData.metadata.syncEnabled = metadataProto.syncenabled();
             }
-            if (metadataProto.has_globalcs()) {
-                loadData.region.globalCS = QString::fromStdString(metadataProto.globalcs());
-            }
-            loadData.region.lazLayerSourcePaths.reserve(metadataProto.lazlayers_size());
-            for (int i = 0; i < metadataProto.lazlayers_size(); ++i) {
-                const auto& protoLayer = metadataProto.lazlayers(i);
-                loadData.region.lazLayerSourcePaths.append(
-                    QString::fromStdString(protoLayer.sourcepath()));
+            if (metadataProto.has_globalcoordinatesystem()) {
+                loadData.region.globalCoordinateSystem =
+                    QString::fromStdString(metadataProto.globalcoordinatesystem());
             }
         }
 
@@ -3122,6 +3137,12 @@ void cwSaveLoad::disconnectTreeModel()
     // touch it. This explicit call is the only disconnect for the region.
     if (auto* region = d->m_regionTreeModel->cavingRegion()) {
         disconnect(region, nullptr, this, nullptr);
+        // lazLayers is a child of region and its connections survive
+        // disconnectObjects(); each reconnect cycle would otherwise
+        // accumulate duplicate rowsAboutToBeRemoved / rowsRemoved handlers.
+        if (auto* lazLayers = region->lazLayers()) {
+            disconnect(lazLayers, nullptr, this, nullptr);
+        }
     }
 
     //Disconnect from the tree model
@@ -3353,22 +3374,41 @@ void cwSaveLoad::connectTreeModel()
             saveProject(projectRootDir(), region);
         });
 
-        // globalCS lives in the project metadata file. Without this handler
-        // the save pipeline wouldn't see the change, so the dirty bit (and
-        // any autosave keyed off it) wouldn't fire and the edit could be
-        // dropped on close. worldOrigin is intentionally not persisted —
+        // globalCoordinateSystem lives in the project metadata file. Without
+        // this handler the save pipeline wouldn't see the change, so the dirty
+        // bit (and any autosave keyed off it) wouldn't fire and the edit could
+        // be dropped on close. worldOrigin is intentionally not persisted —
         // it's a derived centroid of fix-station coords, recomputed on the
         // first line-plot completion of each session.
         const auto saveMetadata = [this, region]() {
             saveProject(projectRootDir(), region);
         };
-        connect(region, &cwCavingRegion::globalCSChanged, this, saveMetadata);
+        connect(region, &cwCavingRegion::globalCoordinateSystemChanged, this, saveMetadata);
 
-        // LAZ layers live in the project metadata file (one repeated entry per
-        // sourcePath). Without these handlers the dirty bit wouldn't trigger
-        // a metadata write when the user adds or removes a layer.
+        // LAZ layers live in "GIS Layers/" inside the project root and are
+        // discovered by directory scan, so adds go through cwProject::addFiles
+        // (which already flushes + commits after copy). Watch removal here so
+        // the queued delete + metadata flush + commit all fire together.
         if (auto* lazLayers = region->lazLayers()) {
-            connect(lazLayers, &QAbstractItemModel::rowsInserted, this, saveMetadata);
+            connect(lazLayers, &QAbstractItemModel::rowsAboutToBeRemoved,
+                    this, [this, lazLayers](const QModelIndex& parent, int first, int last) {
+                Q_UNUSED(parent);
+                for (int row = first; row <= last; ++row) {
+                    cwLazLayer* layer = lazLayers->layerAt(row);
+                    if (layer == nullptr) {
+                        continue;
+                    }
+                    const QString sourcePath = layer->sourcePath();
+                    if (sourcePath.isEmpty()) {
+                        continue;
+                    }
+                    cwSaveLoadPrivate::Job job;
+                    job.action = cwSaveLoadPrivate::Job::Action::Remove;
+                    job.kind = cwSaveLoadPrivate::Job::Kind::File;
+                    job.oldPath = sourcePath;
+                    d->addExplicitFileSystemJob(job, this);
+                }
+            });
             connect(lazLayers, &QAbstractItemModel::rowsRemoved, this, saveMetadata);
         }
     }

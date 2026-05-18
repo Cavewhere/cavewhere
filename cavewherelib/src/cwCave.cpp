@@ -256,7 +256,7 @@ void cwCave::recomputeGridConvergenceText()
         QString sourceCS = first.inputCS().trimmed();
         if (sourceCS.isEmpty()) {
             const cwCavingRegion* region = parentRegion();
-            sourceCS = region ? region->globalCS().trimmed() : QString();
+            sourceCS = region ? region->globalCoordinateSystem().trimmed() : QString();
         }
 
         if (sourceCS.isEmpty()) {

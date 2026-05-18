@@ -269,17 +269,17 @@ cwProject *cwCavingRegion::parentProject() const
     return dynamic_cast<cwProject*>(parent());
 }
 
-void cwCavingRegion::setGlobalCS(const QString& cs)
+void cwCavingRegion::setGlobalCoordinateSystem(const QString& cs)
 {
-    if (m_globalCS == cs) {
+    if (m_globalCoordinateSystem == cs) {
         return;
     }
-    m_globalCS = cs;
+    m_globalCoordinateSystem = cs;
     // The stored worldOrigin was computed in the old CS, so reset it.
     // The next line-plot completion will auto-recompute against the new CS.
     setWorldOrigin(cwGeoPoint{});
     m_lazLayers->setRegionGlobalCS(cs);
-    emit globalCSChanged();
+    emit globalCoordinateSystemChanged();
 }
 
 void cwCavingRegion::setWorldOrigin(const cwGeoPoint& origin)
@@ -294,7 +294,7 @@ void cwCavingRegion::setWorldOrigin(const cwGeoPoint& origin)
 
 void cwCavingRegion::recomputeWorldOrigin()
 {
-    const QString globalCSTrimmed = m_globalCS.trimmed();
+    const QString globalCSTrimmed = m_globalCoordinateSystem.trimmed();
 
     QList<cwGeoPoint> candidates;
     for (cwCave* cave : m_caves) {
@@ -342,7 +342,7 @@ void cwCavingRegion::recomputeWorldOrigin()
 void cwCavingRegion::setData(const cwCavingRegionData &data)
 {
     setName(data.name);
-    setGlobalCS(data.globalCS);
+    setGlobalCoordinateSystem(data.globalCoordinateSystem);
     setWorldOrigin(data.worldOrigin);
 
     clearCaves();
@@ -355,26 +355,15 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
         newCaves.append(newCave);
     }
     addCaves(newCaves);
-
-    m_lazLayers->clear();
-    for (const QString& path : data.lazLayerSourcePaths) {
-        m_lazLayers->addLayer(path);
-    }
 }
 
 cwCavingRegionData cwCavingRegion::data() const
 {
-    QStringList paths;
-    paths.reserve(m_lazLayers->count());
-    for (cwLazLayer* layer : m_lazLayers->layers()) {
-        paths.append(layer->sourcePath());
-    }
     return {
         m_name.value(),
         cwData::toDataList<cwCaveData>(m_caves),
-        m_globalCS,
-        m_worldOrigin,
-        paths
+        m_globalCoordinateSystem,
+        m_worldOrigin
     };
 }
 
@@ -439,7 +428,7 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
         // The cave's grid-convergence readout depends on the region's
         // globalCS when a fix station omits its own inputCS. UniqueConnection
         // keeps re-insert/undo paths from doubling up.
-        QObject::connect(regionPtr, &cwCavingRegion::globalCSChanged,
+        QObject::connect(regionPtr, &cwCavingRegion::globalCoordinateSystemChanged,
                          Caves[i], &cwCave::recomputeGridConvergenceText,
                          Qt::UniqueConnection);
         Caves[i]->recomputeGridConvergenceText();
