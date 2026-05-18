@@ -60,6 +60,7 @@ public:
     const QList<cwLazLayer*>& layers() const { return m_layers; }
 
     void setFutureManagerToken(const cwFutureManagerToken& token);
+    cwFutureManagerToken futureManagerToken() const { return m_futureManagerToken; }
     void setRegionGlobalCS(const QString& cs);
     void setRegionWorldOrigin(const cwGeoPoint& origin);
 

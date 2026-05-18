@@ -69,11 +69,24 @@ Item {
         onDeactivated: pickButtonId.checked = false
     }
 
+    LazClipInteractionView {
+        id: lazClipInteractionId
+        objectName: "lazClipInteraction"
+        camera: rendererId.camera
+        region: RootData.region
+        lazLayersSceneNode: RootData.regionSceneManager.lazLayersSceneNode
+        turnTableInteraction: turnTableInteractionId
+
+        onDeactivated: lazClipButtonId.checked = false
+        onClipSucceeded: lazClipButtonId.checked = false
+    }
+
     InteractionManager {
         id: interactionManagerId
         interactions: [
             turnTableInteractionId,
-            coordinatePickerId
+            coordinatePickerId,
+            lazClipInteractionId
         ]
         defaultInteraction: turnTableInteractionId
     }
@@ -151,6 +164,83 @@ Item {
         parent: rendererId
         picker: coordinatePickerId
         visible: coordinatePickerId.hasPick && pickButtonId.checked
+    }
+
+    // Toggling on while in perspective shows the ortho-prompt instead of
+    // activating immediately — the clipper is top-down XY only.
+    QC.RoundButton {
+        id: lazClipButtonId
+        objectName: "lazClipButton"
+        anchors {
+            left: pickButtonId.right
+            bottom: parent.bottom
+            leftMargin: 10
+            bottomMargin: 20
+        }
+        checkable: true
+        icon.source: "qrc:/twbs-icons/icons/crop.svg"
+        QC.ToolTip.visible: hovered
+        QC.ToolTip.text: qsTr("Clip point cloud")
+        onCheckedChanged: {
+            if (checked && interactionManagerId.activeInteraction !== lazClipInteractionId) {
+                if (rendererId.orthoProjection.enabled) {
+                    lazClipInteractionId.activate()
+                } else {
+                    orthoPromptId.visible = true
+                }
+            } else if (!checked && interactionManagerId.activeInteraction === lazClipInteractionId) {
+                lazClipInteractionId.deactivate()
+            }
+        }
+    }
+
+    ShadowRectangle {
+        id: orthoPromptId
+        objectName: "lazClipOrthoPrompt"
+        visible: false
+        color: Theme.info
+        radius: 5
+        width: orthoPromptColumnId.width + 30
+        height: orthoPromptColumnId.height + 20
+        anchors.top: parent.top
+        anchors.topMargin: 80
+        anchors.horizontalCenter: parent.horizontalCenter
+
+        Column {
+            id: orthoPromptColumnId
+            anchors.centerIn: parent
+            spacing: 10
+
+            QC.Label {
+                anchors.horizontalCenter: parent.horizontalCenter
+                font.pixelSize: Theme.fontSizeUI
+                text: qsTr("Clipping needs an orthographic top-down view.\nSwitch to ortho now?")
+                horizontalAlignment: QC.Label.AlignHCenter
+            }
+
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 10
+
+                QC.Button {
+                    objectName: "lazClipOrthoSwitchButton"
+                    text: qsTr("Switch to ortho")
+                    onClicked: {
+                        rendererId.orthoProjection.enabled = true
+                        orthoPromptId.visible = false
+                        lazClipInteractionId.activate()
+                    }
+                }
+                QC.Button {
+                    objectName: "lazClipOrthoCancelButton"
+                    text: qsTr("Cancel")
+                    onClicked: {
+                        orthoPromptId.visible = false
+                        lazClipButtonId.checked = false
+                    }
+                }
+            }
+        }
     }
 }
 

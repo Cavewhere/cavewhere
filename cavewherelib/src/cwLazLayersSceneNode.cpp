@@ -12,6 +12,7 @@
 #include "cwKeywordModel.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
+#include "cwRenderObject.h"
 #include "cwRenderPointCloud.h"
 #include "cwScene.h"
 
@@ -76,6 +77,29 @@ cwRenderPointCloud* cwLazLayersSceneNode::pointCloudForLayer(cwLazLayer* layer) 
     }
     auto it = m_pointClouds.constFind(layer->id());
     return it == m_pointClouds.constEnd() ? nullptr : it.value();
+}
+
+QList<cwLazLayer*> cwLazLayersSceneNode::visibleLayers() const
+{
+    QList<cwLazLayer*> result;
+    if (m_model.isNull()) {
+        return result;
+    }
+    const QList<cwLazLayer*>& all = m_model->layers();
+    result.reserve(all.size());
+    for (cwLazLayer* layer : all) {
+        if (layer == nullptr) {
+            continue;
+        }
+        auto it = m_pointClouds.constFind(layer->id());
+        if (it == m_pointClouds.constEnd() || it.value().isNull()) {
+            continue;
+        }
+        if (it.value()->isVisible()) {
+            result.append(layer);
+        }
+    }
+    return result;
 }
 
 void cwLazLayersSceneNode::connectModel()

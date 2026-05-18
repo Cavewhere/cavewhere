@@ -158,5 +158,8 @@
         <file>twbs-icons/icons/geo-alt.svg</file>
         <file>twbs-icons/icons/brush.svg</file>
         <file>twbs-icons/icons/border.svg</file>
+        <file>twbs-icons/icons/crop.svg</file>
+        <file>twbs-icons/icons/eraser.svg</file>
+        <file>twbs-icons/icons/x-lg.svg</file>
     </qresource>
 </RCC>

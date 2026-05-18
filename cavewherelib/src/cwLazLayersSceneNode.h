@@ -10,8 +10,10 @@
 
 //Qt includes
 #include <QHash>
+#include <QList>
 #include <QObject>
 #include <QPointer>
+#include <QQmlEngine>
 #include <QUuid>
 
 //Our includes
@@ -36,6 +38,8 @@ class cwScene;
 class CAVEWHERE_LIB_EXPORT cwLazLayersSceneNode : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(LazLayersSceneNode)
+    QML_UNCREATABLE("Owned by cwRegionSceneManager")
 
 public:
     explicit cwLazLayersSceneNode(QObject* parent = nullptr);
@@ -51,6 +55,11 @@ public:
 
     /// Test accessor: render object backing @a layer, or nullptr.
     cwRenderPointCloud* pointCloudForLayer(cwLazLayer* layer) const;
+
+    /// Subset of the bound model's layers whose render object is currently
+    /// visible (keyword-filter pipeline gates this). Returns layers in the
+    /// same order they appear in the model.
+    QList<cwLazLayer*> visibleLayers() const;
 
 private:
     void connectModel();

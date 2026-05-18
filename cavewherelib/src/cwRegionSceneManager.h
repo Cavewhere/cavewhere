@@ -41,6 +41,7 @@ class cwRegionSceneManager : public QObject
     Q_PROPERTY(cwRenderGridPlane* gridPlane READ gridPlane CONSTANT)
     Q_PROPERTY(cwRenderTexturedItems* items READ items CONSTANT)
     Q_PROPERTY(cwRenderRadialGradient* background READ background CONSTANT)
+    Q_PROPERTY(cwLazLayersSceneNode* lazLayersSceneNode READ lazLayersSceneNode CONSTANT)
 
     Q_PROPERTY(bool capturing READ isCapturing WRITE setCapturing NOTIFY capturingChanged FINAL)
 

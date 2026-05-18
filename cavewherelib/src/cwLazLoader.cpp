@@ -42,6 +42,11 @@ static QString extractEmbeddedCS(const LASheader& header)
     return QString();
 }
 
+QString cwLazLoader::resolveSourceCS(const QString& override, const LASheader& header)
+{
+    return override.isEmpty() ? extractEmbeddedCS(header) : override;
+}
+
 namespace {
 
 struct WorkerRange {

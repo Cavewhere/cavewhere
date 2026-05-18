@@ -66,6 +66,11 @@ public:
 
     QRay3D frustrumRay(QPoint point) const;
 
+    /// Convenience: takes a Qt viewport pixel (origin top-left, e.g. from a
+    /// QML TapHandler eventPoint) and returns the corresponding world-space
+    /// frustum ray. Handles the Y-flip that frustrumRay() alone doesn't.
+    QRay3D rayFromQtViewport(QPointF qtViewportPoint) const;
+
     static QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point, const QRect& viewport);
     Q_INVOKABLE QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point) const;
     // Returns true when a point in normalized device coordinates lies outside the clip volume.
