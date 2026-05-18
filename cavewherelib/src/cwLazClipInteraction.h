@@ -65,7 +65,7 @@ public:
     };
     Q_ENUM(State)
 
-    enum class Mode {
+    enum class Mode : int {
         Keep,
         Remove
     };

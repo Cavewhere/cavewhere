@@ -187,14 +187,14 @@ void cwLazClipInteraction::commit(Mode mode)
         if (layer == nullptr) {
             continue;
         }
-        cwLazClipSource src;
-        src.sourcePath = layer->sourcePath();
-        src.sourceCSOverride = layer->sourceCSOverride();
-        req.sources.append(src);
+        // cwGeometry is implicitly shared — this is a header copy + refcount
+        // bump, not a buffer clone. Main-thread mutation of layer->geometry()
+        // after this point would detach into a new buffer.
+        req.sources.append(layer->geometry());
     }
     req.polygonLocalXY = m_polygonLocalXY;
     req.worldOrigin = m_region->worldOrigin();
-    req.globalCS = m_region->globalCoordinateSystem();
+    req.outputWktCS = m_region->globalCoordinateSystem();
     // Two parallel Mode enums (QML-facing + operation-facing). Switch with
     // no default: so adding a new enumerator fails to compile here until
     // both sides are updated. Asserts also catch silent reordering.
@@ -225,7 +225,7 @@ void cwLazClipInteraction::commit(Mode mode)
 
     AsyncFuture::observe(m_currentClip).context(this,
         [this, modelGuard](cwLazClipOperation::Result result) {
-            if (result.success) {
+            if (!result.hasError()) {
                 if (modelGuard) {
                     modelGuard->rescan();
                 }
@@ -233,7 +233,7 @@ void cwLazClipInteraction::commit(Mode mode)
                 emit polygonChanged();
                 setErrorMessage(QString());
                 setState(State::Idle);
-                emit clipSucceeded(result.outputPath);
+                emit clipSucceeded(result.value().outputPath);
             } else if (m_currentClip.isCanceled()) {
                 // User-initiated cancel: drop the polygon and go straight to
                 // Idle instead of surfacing the worker's "Clip cancelled."
@@ -243,10 +243,10 @@ void cwLazClipInteraction::commit(Mode mode)
                 setErrorMessage(QString());
                 setState(State::Idle);
             } else {
-                setErrorMessage(result.errorMessage);
+                setErrorMessage(result.errorMessage());
                 // Drop back to Closed so the user can retry or cancel.
                 setState(State::Closed);
-                emit clipFailed(result.errorMessage);
+                emit clipFailed(result.errorMessage());
             }
         });
 }

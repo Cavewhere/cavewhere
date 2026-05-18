@@ -1,14 +1,15 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <QCoreApplication>
+#include <QFile>
 #include <QPolygonF>
 #include <QTemporaryDir>
+#include <QVector3D>
 
 #include "cwGeoPoint.h"
+#include "cwGeometry.h"
 #include "cwLazClipOperation.h"
 #include "cwLazLoader.h"
-
-#include "LazFixtureHelper.h"
 
 namespace {
 
@@ -20,6 +21,21 @@ QPolygonF squareAround(double cx, double cy, double half)
       << QPointF(cx + half, cy + half)
       << QPointF(cx - half, cy + half);
     return p;
+}
+
+cwGeometry pointGeometry(const QVector<QVector3D>& points)
+{
+    cwGeometry geom {
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
+    };
+    geom.set(cwGeometry::Semantic::Position, points);
+    geom.setType(cwGeometry::Type::Points);
+    return geom;
+}
+
+QString outputPath(const QTemporaryDir& dir, const QString& stem)
+{
+    return dir.filePath(stem + QStringLiteral(".laz"));
 }
 
 } // namespace
@@ -34,12 +50,10 @@ TEST_CASE("cwLazClipOperation: keep mode retains points inside polygon", "[cwLaz
         { 50.0f, 50.0f, 2.0f },   // outside
         { -50.0f, 0.0f, 3.0f }    // outside
     };
-    const QString sourcePath = tempLazPath(tempDir, QStringLiteral("clip-keep-in"));
-    REQUIRE(writeSyntheticLazFile(sourcePath, input));
-    const QString outPath = tempLazPath(tempDir, QStringLiteral("clip-keep-out"));
+    const QString outPath = outputPath(tempDir, QStringLiteral("clip-keep-out"));
 
     cwLazClipOperation::Request req;
-    req.sources.append({ sourcePath, QString() });
+    req.sources.append(pointGeometry(input));
     req.polygonLocalXY = squareAround(0.0, 0.0, 10.0);
     req.worldOrigin = cwGeoPoint(0.0, 0.0, 0.0);
     req.mode = cwLazClipOperation::Mode::Keep;
@@ -49,9 +63,9 @@ TEST_CASE("cwLazClipOperation: keep mode retains points inside polygon", "[cwLaz
     future.waitForFinished();
     REQUIRE(future.resultCount() == 1);
     const auto result = future.result();
-    REQUIRE(result.success);
-    REQUIRE(result.pointsWritten == 2);
-    REQUIRE(result.outputPath == outPath);
+    REQUIRE_FALSE(result.hasError());
+    REQUIRE(result.value().pointsWritten == 2);
+    REQUIRE(result.value().outputPath == outPath);
 
     auto loadFuture = cwLazLoader::load({.path = outPath});
     loadFuture.waitForFinished();
@@ -69,20 +83,41 @@ TEST_CASE("cwLazClipOperation: remove mode retains points outside polygon", "[cw
         { 50.0f, 50.0f, 0.0f },   // outside
         { -50.0f, 0.0f, 0.0f }    // outside
     };
-    const QString sourcePath = tempLazPath(tempDir, QStringLiteral("clip-rm-in"));
-    REQUIRE(writeSyntheticLazFile(sourcePath, input));
-    const QString outPath = tempLazPath(tempDir, QStringLiteral("clip-rm-out"));
 
     cwLazClipOperation::Request req;
-    req.sources.append({ sourcePath, QString() });
+    req.sources.append(pointGeometry(input));
     req.polygonLocalXY = squareAround(0.0, 0.0, 10.0);
     req.mode = cwLazClipOperation::Mode::Remove;
-    req.outputPath = outPath;
+    req.outputPath = outputPath(tempDir, QStringLiteral("clip-rm-out"));
 
     auto future = cwLazClipOperation::run(req);
     future.waitForFinished();
-    REQUIRE(future.result().success);
-    REQUIRE(future.result().pointsWritten == 2);
+    REQUIRE_FALSE(future.result().hasError());
+    REQUIRE(future.result().value().pointsWritten == 2);
+}
+
+TEST_CASE("cwLazClipOperation: source without Position attribute is rejected", "[cwLazClipOperation]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwGeometry malformed {
+        { cwGeometry::Semantic::Color0, cwGeometry::AttributeFormat::Vec3 }
+    };
+    malformed.setType(cwGeometry::Type::Points);
+
+    cwLazClipOperation::Request req;
+    req.sources.append(malformed);
+    req.polygonLocalXY = squareAround(0.0, 0.0, 10.0);
+    req.outputPath = outputPath(tempDir, QStringLiteral("malformed"));
+
+    auto future = cwLazClipOperation::run(req);
+    future.waitForFinished();
+    const auto result = future.result();
+    REQUIRE(result.hasError());
+    REQUIRE(result.errorCodeTo<cwLazClipOperation::ErrorCode>()
+            == cwLazClipOperation::MissingPosition);
+    // Preflight must reject before opening the writer.
+    REQUIRE_FALSE(QFile::exists(req.outputPath));
 }
 
 TEST_CASE("cwLazClipOperation: empty source list fails fast", "[cwLazClipOperation]") {
@@ -91,74 +126,84 @@ TEST_CASE("cwLazClipOperation: empty source list fails fast", "[cwLazClipOperati
 
     cwLazClipOperation::Request req;
     req.polygonLocalXY = squareAround(0.0, 0.0, 1.0);
-    req.outputPath = tempLazPath(tempDir, QStringLiteral("empty"));
+    req.outputPath = outputPath(tempDir, QStringLiteral("empty"));
 
     auto future = cwLazClipOperation::run(req);
     future.waitForFinished();
-    REQUIRE_FALSE(future.result().success);
-    REQUIRE_FALSE(future.result().errorMessage.isEmpty());
-    REQUIRE(future.result().pointsWritten == 0);
+    const auto result = future.result();
+    REQUIRE(result.hasError());
+    REQUIRE(result.errorCodeTo<cwLazClipOperation::ErrorCode>()
+            == cwLazClipOperation::NoSources);
+    REQUIRE(result.value().pointsWritten == 0);
 }
 
 TEST_CASE("cwLazClipOperation: polygon with fewer than 3 vertices is rejected", "[cwLazClipOperation]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
-    const QString sourcePath = tempLazPath(tempDir, QStringLiteral("poly2-in"));
-    REQUIRE(writeSyntheticLazFile(sourcePath, {{0,0,0}, {1,1,1}}));
-
     cwLazClipOperation::Request req;
-    req.sources.append({ sourcePath, QString() });
+    req.sources.append(pointGeometry({{0,0,0}, {1,1,1}}));
     QPolygonF degenerate;
     degenerate << QPointF(0, 0) << QPointF(1, 1);
     req.polygonLocalXY = degenerate;
-    req.outputPath = tempLazPath(tempDir, QStringLiteral("poly2-out"));
+    req.outputPath = outputPath(tempDir, QStringLiteral("poly2-out"));
 
     auto future = cwLazClipOperation::run(req);
     future.waitForFinished();
-    REQUIRE_FALSE(future.result().success);
+    REQUIRE(future.result().errorCodeTo<cwLazClipOperation::ErrorCode>()
+            == cwLazClipOperation::BadPolygon);
+}
+
+TEST_CASE("cwLazClipOperation: non-finite worldOrigin is rejected", "[cwLazClipOperation]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwLazClipOperation::Request req;
+    req.sources.append(pointGeometry({{0,0,0}, {1,1,1}, {2,2,2}}));
+    req.polygonLocalXY = squareAround(0.0, 0.0, 1.0);
+    req.worldOrigin = cwGeoPoint(std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0);
+    req.outputPath = outputPath(tempDir, QStringLiteral("nan-out"));
+
+    auto future = cwLazClipOperation::run(req);
+    future.waitForFinished();
+    REQUIRE(future.result().errorCodeTo<cwLazClipOperation::ErrorCode>()
+            == cwLazClipOperation::NonFiniteInput);
 }
 
 TEST_CASE("cwLazClipOperation: unions points from multiple sources into one output", "[cwLazClipOperation]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
-    const QString srcA = tempLazPath(tempDir, QStringLiteral("u-a"));
-    const QString srcB = tempLazPath(tempDir, QStringLiteral("u-b"));
-    REQUIRE(writeSyntheticLazFile(srcA, {{0,0,0}, {2,2,2}, {100,100,0}}));
-    REQUIRE(writeSyntheticLazFile(srcB, {{3,3,3}, {4,4,4}, {200,200,0}}));
-
-    const QString outPath = tempLazPath(tempDir, QStringLiteral("u-out"));
     cwLazClipOperation::Request req;
-    req.sources.append({ srcA, QString() });
-    req.sources.append({ srcB, QString() });
+    req.sources.append(pointGeometry({{0,0,0}, {2,2,2}, {100,100,0}}));
+    req.sources.append(pointGeometry({{3,3,3}, {4,4,4}, {200,200,0}}));
     req.polygonLocalXY = squareAround(0.0, 0.0, 10.0);
     req.mode = cwLazClipOperation::Mode::Keep;
-    req.outputPath = outPath;
+    req.outputPath = outputPath(tempDir, QStringLiteral("u-out"));
 
     auto future = cwLazClipOperation::run(req);
     future.waitForFinished();
-    REQUIRE(future.result().success);
-    REQUIRE(future.result().pointsWritten == 4); // 2 from A + 2 from B
+    REQUIRE_FALSE(future.result().hasError());
+    REQUIRE(future.result().value().pointsWritten == 4); // 2 from A + 2 from B
 }
 
-TEST_CASE("cwLazClipOperation: polygon test uses worldOrigin-relative coords", "[cwLazClipOperation]") {
+TEST_CASE("cwLazClipOperation: output preserves absolute coords via worldOrigin", "[cwLazClipOperation]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
-    // Source-CS absolute coords; only the first two land inside a small
-    // polygon at the LOCAL origin once worldOrigin (1000,2000) is applied.
+    // Geometry is worldOrigin-relative — local (5,5) maps to absolute
+    // (1005, 2005) once worldOrigin (1000, 2000) is reapplied on write.
+    // Reloading via cwLazLoader resubtracts worldOrigin so the round-trip
+    // returns the original local coordinates.
     const QVector<QVector3D> input = {
-        { 1000.0f, 2000.0f, 0.0f },    // local (0,0)
-        { 1005.0f, 2005.0f, 0.0f },    // local (5,5)
-        { 1500.0f, 2500.0f, 0.0f }     // local (500,500)
+        { 0.0f, 0.0f, 0.0f },    // inside polygon at local origin
+        { 5.0f, 5.0f, 0.0f },    // inside
+        { 500.0f, 500.0f, 0.0f } // outside
     };
-    const QString sourcePath = tempLazPath(tempDir, QStringLiteral("origin-in"));
-    REQUIRE(writeSyntheticLazFile(sourcePath, input));
-    const QString outPath = tempLazPath(tempDir, QStringLiteral("origin-out"));
+    const QString outPath = outputPath(tempDir, QStringLiteral("origin-out"));
 
     cwLazClipOperation::Request req;
-    req.sources.append({ sourcePath, QString() });
+    req.sources.append(pointGeometry(input));
     req.polygonLocalXY = squareAround(0.0, 0.0, 10.0);
     req.worldOrigin = cwGeoPoint(1000.0, 2000.0, 0.0);
     req.mode = cwLazClipOperation::Mode::Keep;
@@ -166,6 +211,15 @@ TEST_CASE("cwLazClipOperation: polygon test uses worldOrigin-relative coords", "
 
     auto future = cwLazClipOperation::run(req);
     future.waitForFinished();
-    REQUIRE(future.result().success);
-    REQUIRE(future.result().pointsWritten == 2);
+    REQUIRE_FALSE(future.result().hasError());
+    REQUIRE(future.result().value().pointsWritten == 2);
+
+    // Round-trip via cwLazLoader with the same worldOrigin must restore
+    // the original local coordinates.
+    auto loadFuture = cwLazLoader::load({
+        .path = outPath,
+        .worldOrigin = cwGeoPoint(1000.0, 2000.0, 0.0)
+    });
+    loadFuture.waitForFinished();
+    REQUIRE(loadFuture.result().geometry.vertexCount() == 2);
 }
