@@ -39,7 +39,13 @@ cwLazClipInteraction::cwLazClipInteraction(QQuickItem* parent) :
             this, &cwLazClipInteraction::onDeactivated);
 }
 
-cwLazClipInteraction::~cwLazClipInteraction() = default;
+cwLazClipInteraction::~cwLazClipInteraction()
+{
+    // The .context(this, ...) callback is auto-disconnected on destroy, but
+    // the worker keeps consuming file handles and writing the output until
+    // it sees promise.isCanceled() — propagate so it actually stops.
+    m_currentClip.cancel();
+}
 
 void cwLazClipInteraction::setCamera(cwCamera* camera)
 {
@@ -189,24 +195,35 @@ void cwLazClipInteraction::commit(Mode mode)
     req.polygonLocalXY = m_polygonLocalXY;
     req.worldOrigin = m_region->worldOrigin();
     req.globalCS = m_region->globalCoordinateSystem();
-    req.mode = (mode == Mode::Keep) ? cwLazClipOperation::Mode::Keep
-                                     : cwLazClipOperation::Mode::Remove;
+    // Two parallel Mode enums (QML-facing + operation-facing). Switch with
+    // no default: so adding a new enumerator fails to compile here until
+    // both sides are updated. Asserts also catch silent reordering.
+    static_assert(int(cwLazClipOperation::Mode::Keep) == int(Mode::Keep));
+    static_assert(int(cwLazClipOperation::Mode::Remove) == int(Mode::Remove));
+    switch (mode) {
+    case Mode::Keep:
+        req.mode = cwLazClipOperation::Mode::Keep;
+        break;
+    case Mode::Remove:
+        req.mode = cwLazClipOperation::Mode::Remove;
+        break;
+    }
     req.outputPath = outPath;
 
     setState(State::Processing);
 
     QPointer<cwLazLayerModel> modelGuard(model);
-    auto future = cwLazClipOperation::run(req);
+    m_currentClip = cwLazClipOperation::run(req);
 
     cwFutureManagerToken token = model->futureManagerToken();
     if (token.isValid()) {
         const QString jobName = (mode == Mode::Keep)
                                     ? tr("Cropping %1 LAZ layer(s)").arg(visible.size())
                                     : tr("Erasing from %1 LAZ layer(s)").arg(visible.size());
-        token.addJob(cwFuture(QFuture<void>(future), jobName));
+        token.addJob(cwFuture(QFuture<void>(m_currentClip), jobName));
     }
 
-    AsyncFuture::observe(future).context(this,
+    AsyncFuture::observe(m_currentClip).context(this,
         [this, modelGuard](cwLazClipOperation::Result result) {
             if (result.success) {
                 if (modelGuard) {
@@ -217,6 +234,14 @@ void cwLazClipInteraction::commit(Mode mode)
                 setErrorMessage(QString());
                 setState(State::Idle);
                 emit clipSucceeded(result.outputPath);
+            } else if (m_currentClip.isCanceled()) {
+                // User-initiated cancel: drop the polygon and go straight to
+                // Idle instead of surfacing the worker's "Clip cancelled."
+                // string as an error.
+                m_polygonLocalXY.clear();
+                emit polygonChanged();
+                setErrorMessage(QString());
+                setState(State::Idle);
             } else {
                 setErrorMessage(result.errorMessage);
                 // Drop back to Closed so the user can retry or cancel.
@@ -229,8 +254,11 @@ void cwLazClipInteraction::commit(Mode mode)
 void cwLazClipInteraction::cancel()
 {
     if (m_state == State::Processing) {
-        // In-flight: the future will resolve and clean itself up via the
-        // observe.context callback. Don't yank state out from under it.
+        // Propagate cancel to the worker. It checks promise.isCanceled()
+        // between chunks, exits the loop, removes the partial output, and
+        // returns a "Clip cancelled." result that the observe.context
+        // callback handles via the error branch.
+        m_currentClip.cancel();
         return;
     }
     m_polygonLocalXY.clear();
@@ -311,7 +339,7 @@ QString cwLazClipInteraction::nextOutputPath() const
     for (const QString& f : files) {
         const auto m = rx.match(f);
         if (m.hasMatch()) {
-            maxIndex = std::max(maxIndex, m.captured(1).toInt());
+            maxIndex = (std::max)(maxIndex, m.captured(1).toInt());
         }
     }
     const QString name = QStringLiteral("clip_%1.laz")

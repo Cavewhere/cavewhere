@@ -12,7 +12,6 @@
 //Qt includes
 #include <QCanvasPainter>
 #include <QPointF>
-#include <QVariant>
 
 namespace {
 constexpr float kClosedOutlineWidth = 2.0f;
@@ -69,10 +68,9 @@ void cwLazClipPolygonRenderer::synchronize(QCanvasPainterItem* item)
 
     // GUI thread is blocked during synchronize — safe to call back into the
     // interaction to project each world-XY vertex through the camera.
-    const QVariantList worldPoints = interaction->polygonPointsWorld();
+    const QPolygonF& worldPoints = interaction->polygonLocalXY();
     m_polygonScreen.reserve(worldPoints.size());
-    for (const QVariant& v : worldPoints) {
-        const QPointF wxy = v.toPointF();
+    for (const QPointF& wxy : worldPoints) {
         m_polygonScreen.append(interaction->worldToScreen(wxy));
     }
 }

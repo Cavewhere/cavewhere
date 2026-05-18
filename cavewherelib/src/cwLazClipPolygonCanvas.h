@@ -93,9 +93,12 @@ private:
     QPointF m_hoverScreenPos;
     bool m_snapActive = false;
 
-    QColor m_outlineColor;
-    QColor m_fillColor;
-    QColor m_vertexBorderColor;
+    // Opaque fallbacks so the renderer always has valid colors before QML
+    // binds Theme tokens — otherwise QCanvasPainter strokes/fills become
+    // backend-defined (often black or transparent).
+    QColor m_outlineColor = QColor(255, 255, 255);
+    QColor m_fillColor = QColor(255, 255, 255, 46);
+    QColor m_vertexBorderColor = QColor(0, 0, 0);
 };
 
 #endif // CWLAZCLIPPOLYGONCANVAS_H

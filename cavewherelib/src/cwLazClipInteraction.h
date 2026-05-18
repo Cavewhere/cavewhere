@@ -9,6 +9,7 @@
 #define CWLAZCLIPINTERACTION_H
 
 //Qt includes
+#include <QFuture>
 #include <QPointF>
 #include <QPointer>
 #include <QPolygonF>
@@ -88,6 +89,12 @@ public:
     int pointCount() const { return m_polygonLocalXY.size(); }
     QVariantList polygonPointsWorld() const;
 
+    /// C++-only accessor for the polygon vertices in worldOrigin-relative
+    /// XY. Used by cwLazClipPolygonRenderer on every frame sync — avoids
+    /// the per-frame QVariantList allocation that the Q_PROPERTY accessor
+    /// above incurs.
+    const QPolygonF& polygonLocalXY() const { return m_polygonLocalXY; }
+
     /// Adds a polygon vertex by unprojecting @a screenPos to world XY at
     /// z = 0 (worldOrigin-relative). If the click is within snap range of
     /// the first vertex and the polygon already has >=3 points, closes it
@@ -153,6 +160,11 @@ private:
     QPolygonF m_polygonLocalXY;
     State m_state = State::Idle;
     QString m_errorMessage;
+
+    // Retain the in-flight clip so the destructor can cancel it — the
+    // .context(this, ...) callback is auto-disconnected on destroy, but
+    // the worker keeps reading/writing LAZ files until told to stop.
+    QFuture<cwLazClipOperation::Result> m_currentClip;
 };
 
 #endif // CWLAZCLIPINTERACTION_H

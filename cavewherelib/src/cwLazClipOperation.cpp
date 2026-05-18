@@ -10,6 +10,7 @@
 //Qt includes
 #include <QByteArray>
 #include <QDebug>
+#include <QFile>
 #include <QFileInfo>
 #include <QPromise>
 
@@ -190,8 +191,8 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
             // Progress range is int. For files >INT_MAX the bar caps at full
             // before the run actually finishes; the clip itself still
             // completes.
-            const int progressMax = totalPoints > qint64(std::numeric_limits<int>::max())
-                                        ? std::numeric_limits<int>::max()
+            const int progressMax = totalPoints > qint64((std::numeric_limits<int>::max)())
+                                        ? (std::numeric_limits<int>::max)()
                                         : int(totalPoints > 0 ? totalPoints : 1);
             promise.setProgressRange(0, progressMax);
             promise.setProgressValue(0);
@@ -253,15 +254,17 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
             delete writer;
 
             if (promise.isCanceled()) {
+                // Partial output is meaningless — drop it before the caller
+                // ever sees the path, so a rescan can't surface it.
+                QFile::remove(request.outputPath);
                 result.errorMessage = QStringLiteral("Clip cancelled.");
                 promise.addResult(std::move(result));
                 return;
             }
             if (anySourceFailed) {
+                QFile::remove(request.outputPath);
                 result.errorMessage =
                     QStringLiteral("One or more source LAZ files could not be read.");
-                // Leave the partial output on disk — caller decides whether
-                // to publish it or unlink it.
             }
             result.success = !anySourceFailed;
             promise.setProgressValue(progressMax);
