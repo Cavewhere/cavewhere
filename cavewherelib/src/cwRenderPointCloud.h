@@ -47,6 +47,8 @@ public:
     float pointSize() const;
     void setPointSize(float pointSize);
     float meanSpacingXY() const;
+    float gapFudge() const;
+    void setGapFudge(float gapFudge);
 
 protected:
     cwRHIObject* createRHIObject() override;
@@ -60,6 +62,7 @@ private:
         // Mean planar inter-point spacing in meters (sqrt(area / N)). Drives
         // per-cloud point radius in PointCloud.vert. 0 until first load.
         float meanSpacingXY = 0.0f;
+        float gapFudge = 2.0f;
 
         // cwTracked compares with != to detect changes; geometry's
         // QByteArray COW makes this assignment cheap, and a coarse
@@ -93,6 +96,11 @@ inline float cwRenderPointCloud::pointSize() const
 inline float cwRenderPointCloud::meanSpacingXY() const
 {
     return m_data.value().meanSpacingXY;
+}
+
+inline float cwRenderPointCloud::gapFudge() const
+{
+    return m_data.value().gapFudge;
 }
 
 #endif // CWRENDERPOINTCLOUD_H

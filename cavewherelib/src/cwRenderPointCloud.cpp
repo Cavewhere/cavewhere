@@ -54,6 +54,7 @@ void cwRenderPointCloud::clear()
 {
     Data data;
     data.pointSize = m_data.value().pointSize;
+    data.gapFudge = m_data.value().gapFudge;
     m_data.setValue(data);
 
     if (auto* intersecter = geometryItersecter()) {
@@ -70,6 +71,17 @@ void cwRenderPointCloud::setPointSize(float pointSize)
         return;
     }
     data.pointSize = pointSize;
+    m_data.setValue(data);
+    update();
+}
+
+void cwRenderPointCloud::setGapFudge(float gapFudge)
+{
+    Data data = m_data.value();
+    if (qFuzzyCompare(data.gapFudge, gapFudge)) {
+        return;
+    }
+    data.gapFudge = gapFudge;
     m_data.setValue(data);
     update();
 }

@@ -21,15 +21,13 @@ layout(std140, binding = 0) uniform GlobalBlock {
 // mean inter-point spacing — uploaded by cwRHIPointCloud when the geometry
 // changes. Each loaded LAZ gets its own UBO with its own value, so sparse
 // terrain clouds and dense terrestrial scans both render with gap-free coverage.
+// gapFudge is a runtime-tunable multiplier on the radius-fills-the-gap value
+// (hold P + mouse wheel in the 3D view to adjust between 1.0 and 10.0).
 layout(std140, binding = 1) uniform PerCloudBlock {
     float worldRadius;
+    float gapFudge;
 };
 
-// Empirical multiplier on the radius-fills-the-gap value. Real-world clouds are
-// never perfectly uniform — a value > 1 buys overlap so dense clusters stay
-// flush while sparse pockets still get covered. Tune in [1.0, 2.0]; bigger
-// values increase overdraw which lets EDL stack darken on overlapping points.
-const float gapFudge = 2.0;
 const float maxPointSizePx = 64.0;
 
 out gl_PerVertex {

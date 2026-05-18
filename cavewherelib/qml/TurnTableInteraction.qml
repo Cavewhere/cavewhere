@@ -4,6 +4,14 @@ import cavewherelib
 BaseTurnTableInteraction {
     id: interactionId
 
+    // Set true by GLTerrainRenderer while the P key is held. When true, the
+    // wheel re-routes from camera zoom to point-cloud gapFudge tuning.
+    property bool pKeyHeld: false
+
+    // Per-wheel-tick delta applied to gapFudge while P is held. ~0.2 covers the
+    // full [1.0, 10.0] range in about a dozen ticks at the existing wheel scale.
+    readonly property real gapFudgeStep: 0.2
+
     QQ.LoggingCategory {
         id: interactLog
         name: "cw.interaction.qml"
@@ -114,11 +122,22 @@ BaseTurnTableInteraction {
         rotationScale: 0.1
         onRotationChanged: {
             let deltaRotation = rotationScale * (rotation - lastRotation);
-            if(deltaRotation !== 0.0) {
-                console.debug(interactLog, "wheel zoom", point.position, "delta=", -deltaRotation)
-                interactionId.zoom(point.position, -deltaRotation)
-                lastRotation = rotation
+            if(deltaRotation === 0.0) {
+                return
             }
+
+            if(interactionId.pKeyHeld && interactionId.scene) {
+                // Wheel up (positive delta) grows points; wheel down shrinks.
+                let next = interactionId.scene.pointCloudGapFudge
+                         + deltaRotation * interactionId.gapFudgeStep
+                interactionId.scene.pointCloudGapFudge = next
+                lastRotation = rotation
+                return
+            }
+
+            console.debug(interactLog, "wheel zoom", point.position, "delta=", -deltaRotation)
+            interactionId.zoom(point.position, -deltaRotation)
+            lastRotation = rotation
         }
     }
 }

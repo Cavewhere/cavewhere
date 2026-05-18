@@ -42,11 +42,12 @@ private:
     cwRhiPipelineKey buildPipelineKey(QRhiRenderTarget* target,
                                       QRhiRenderPassDescriptor* renderPassDescriptor) const;
 
-    // std140 layout: a single float padded to a 16-byte vec4 slot. Mirrors the
+    // std140 layout: two floats padded to a 16-byte vec4 slot. Mirrors the
     // PerCloudBlock declaration in PointCloud.vert.
     struct PerCloudUniform {
         float worldRadius = 0.0f;
-        float pad[3] = {0.0f, 0.0f, 0.0f};
+        float gapFudge = 2.0f;
+        float pad[2] = {0.0f, 0.0f};
     };
 
     bool m_resourcesInitialized = false;
@@ -59,10 +60,11 @@ private:
     QVector<QRhiBuffer*> m_vertexBuffers;
     QVector<qsizetype> m_vertexBufferCapacities;
     // Per-cloud uniform block (binding 1): world-space point radius derived
-    // from the cloud's mean point spacing. NaN sentinel forces the first
-    // upload since NaN != worldRadius for any non-NaN worldRadius.
+    // from the cloud's mean point spacing, plus a user-tunable gapFudge.
+    // NaN sentinels force the first upload since NaN != anything.
     QRhiBuffer* m_perCloudUBO = nullptr;
     float m_lastUploadedWorldRadius = std::numeric_limits<float>::quiet_NaN();
+    float m_lastUploadedGapFudge = std::numeric_limits<float>::quiet_NaN();
     QRhiShaderResourceBindings* m_srb = nullptr;
     cwRhiScene* m_scene = nullptr;
     cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;
