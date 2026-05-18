@@ -4,6 +4,10 @@ import cavewherelib
 BaseTurnTableInteraction {
     id: interactionId
 
+    // Target whose gapFudge property the hold-P + wheel gesture writes to.
+    // Externally bound so the interaction doesn't depend on scene structure.
+    property LazLayersSceneNode pointCloudGapFudgeTarget: null
+
     // Set true by GLTerrainRenderer while the P key is held. When true, the
     // wheel re-routes from camera zoom to point-cloud gapFudge tuning.
     property bool pKeyHeld: false
@@ -126,11 +130,10 @@ BaseTurnTableInteraction {
                 return
             }
 
-            if(interactionId.pKeyHeld && interactionId.scene) {
+            if(interactionId.pKeyHeld && interactionId.pointCloudGapFudgeTarget) {
                 // Wheel up (positive delta) grows points; wheel down shrinks.
-                let next = interactionId.scene.pointCloudGapFudge
-                         + deltaRotation * interactionId.gapFudgeStep
-                interactionId.scene.pointCloudGapFudge = next
+                interactionId.pointCloudGapFudgeTarget.gapFudge
+                    += deltaRotation * interactionId.gapFudgeStep
                 lastRotation = rotation
                 return
             }

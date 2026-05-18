@@ -19,7 +19,14 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 
+#include <algorithm>
+
 Q_LOGGING_CATEGORY(lcLazSceneNode, "cw.laz.scenenode")
+
+namespace {
+    constexpr float kMinGapFudge = 1.0f;
+    constexpr float kMaxGapFudge = 10.0f;
+}
 
 cwLazLayersSceneNode::cwLazLayersSceneNode(QObject* parent) :
     QObject(parent)
@@ -151,6 +158,7 @@ void cwLazLayersSceneNode::addLayer(cwLazLayer* layer)
     }
 
     auto* renderObject = new cwRenderPointCloud();
+    renderObject->setGapFudge(m_gapFudge);
     renderObject->setScene(m_scene);
     m_pointClouds.insert(layer->id(), renderObject);
 
@@ -252,4 +260,21 @@ void cwLazLayersSceneNode::removeKeywordItemForLayer(cwLazLayer* layer)
         it.value()->deleteLater();
     }
     m_keywordItems.erase(it);
+}
+
+void cwLazLayersSceneNode::setGapFudge(float gapFudge)
+{
+    const float clamped = std::clamp(gapFudge, kMinGapFudge, kMaxGapFudge);
+    if (qFuzzyCompare(m_gapFudge, clamped)) {
+        return;
+    }
+    m_gapFudge = clamped;
+
+    for (const auto& renderObject : std::as_const(m_pointClouds)) {
+        if (renderObject) {
+            renderObject->setGapFudge(clamped);
+        }
+    }
+
+    emit gapFudgeChanged(clamped);
 }

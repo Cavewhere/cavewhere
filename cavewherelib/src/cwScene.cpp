@@ -9,7 +9,6 @@
 //Our includes
 #include "cwScene.h"
 #include "cwRenderObject.h"
-#include "cwRenderPointCloud.h"
 #include "cwDebug.h"
 #include "cwRHIObject.h"
 #include "cwCamera.h"
@@ -18,15 +17,6 @@
 
 //Qt includes
 #include <rhi/qrhi.h>
-#include <QtGlobal>
-
-//Std includes
-#include <algorithm>
-
-namespace {
-    constexpr float kMinPointCloudGapFudge = 1.0f;
-    constexpr float kMaxPointCloudGapFudge = 10.0f;
-}
 
 cwScene::cwScene(QObject *parent) :
     QObject(parent),
@@ -57,14 +47,6 @@ void cwScene::addItem(cwRenderObject *item)
         m_newRenderObjects.append(item);
         item->setScene(this);
         item->setParent(this);
-
-        // Newly-added point clouds inherit the scene-wide gapFudge so a user
-        // who has tuned the value sees consistent point sizing across loads.
-        if (auto* pointCloud = qobject_cast<cwRenderPointCloud*>(item)) {
-            m_pointClouds.insert(pointCloud);
-            pointCloud->setGapFudge(m_pointCloudGapFudge);
-        }
-
         update();
     }
 }
@@ -96,11 +78,6 @@ void cwScene::removeItem(cwRenderObject *item)
     if (!m_toDeleteRenderObjects.contains(item)) {
         m_toDeleteRenderObjects.append(item);
     }
-
-    if (auto* pointCloud = qobject_cast<cwRenderPointCloud*>(item)) {
-        m_pointClouds.remove(pointCloud);
-    }
-
     update();
 }
 
@@ -182,21 +159,6 @@ int cwScene::pendingItemCount() const
     return m_renderingObjects.size()
            + m_newRenderObjects.size()
            + m_toUpdateRenderObjects.size();
-}
-
-void cwScene::setPointCloudGapFudge(float gapFudge)
-{
-    const float clamped = std::clamp(gapFudge, kMinPointCloudGapFudge, kMaxPointCloudGapFudge);
-    if (qFuzzyCompare(m_pointCloudGapFudge, clamped)) {
-        return;
-    }
-    m_pointCloudGapFudge = clamped;
-
-    for (cwRenderPointCloud* pointCloud : std::as_const(m_pointClouds)) {
-        pointCloud->setGapFudge(clamped);
-    }
-
-    emit pointCloudGapFudgeChanged(clamped);
 }
 
 

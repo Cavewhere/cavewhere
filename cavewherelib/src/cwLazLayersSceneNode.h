@@ -12,6 +12,7 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <QQmlEngine>
 #include <QUuid>
 
 //Our includes
@@ -36,6 +37,10 @@ class cwScene;
 class CAVEWHERE_LIB_EXPORT cwLazLayersSceneNode : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(LazLayersSceneNode)
+    QML_UNCREATABLE("Access via RegionSceneManager.lazLayersSceneNode")
+
+    Q_PROPERTY(float gapFudge READ gapFudge WRITE setGapFudge NOTIFY gapFudgeChanged)
 
 public:
     explicit cwLazLayersSceneNode(QObject* parent = nullptr);
@@ -51,6 +56,14 @@ public:
 
     /// Test accessor: render object backing @a layer, or nullptr.
     cwRenderPointCloud* pointCloudForLayer(cwLazLayer* layer) const;
+
+    float gapFudge() const { return m_gapFudge; }
+
+public slots:
+    void setGapFudge(float gapFudge);
+
+signals:
+    void gapFudgeChanged(float gapFudge);
 
 private:
     void connectModel();
@@ -69,6 +82,8 @@ private:
 
     QHash<QUuid, QPointer<cwRenderPointCloud>> m_pointClouds;
     QHash<QUuid, QPointer<cwKeywordItem>> m_keywordItems;
+
+    float m_gapFudge = 2.0f;
 };
 
 #endif // CWLAZLAYERSSCENENODE_H

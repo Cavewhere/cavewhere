@@ -81,6 +81,7 @@ Item {
         camera: rendererId.camera
         scene: rendererId.scene
         gridPlane: RootData.regionSceneManager.gridPlane.plane
+        pointCloudGapFudgeTarget: RootData.regionSceneManager.lazLayersSceneNode
     }
 
     // While the picker is the active Interaction, the turn-table is disabled.
