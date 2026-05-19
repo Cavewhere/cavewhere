@@ -134,4 +134,23 @@ TestCase {
         clipperId.commit(LazClipInteraction.Keep)
         compare(clipFailedSpy.count, 1)
     }
+
+    // commit() never deactivates on its own — the QML Crop/Erase buttons
+    // do that. So calling commit() leaves the interaction "active"
+    // (deactivatedSpy stays at 0) until the QML side calls deactivate().
+    // This test pins that contract so future refactors don't accidentally
+    // re-introduce a hidden deactivate() inside commit() and double-fire
+    // the signal once the QML also deactivates.
+    function test_commitDoesNotDeactivateOnItsOwn() {
+        clipperId.addWorldPoint(Qt.point(0, 0))
+        clipperId.addWorldPoint(Qt.point(10, 0))
+        clipperId.addWorldPoint(Qt.point(10, 10))
+        clipperId.closePolygon()
+
+        clipperId.commit(LazClipInteraction.Keep)
+        // Synchronous failure path (no scene node) — clipFailed fires but
+        // no deactivate emission.
+        compare(clipFailedSpy.count, 1)
+        compare(deactivatedSpy.count, 0)
+    }
 }

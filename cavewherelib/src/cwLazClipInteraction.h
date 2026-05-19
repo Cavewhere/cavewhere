@@ -26,6 +26,7 @@
 #include "cwLazClipOperation.h"
 #include "cwLazLayersSceneNode.h"
 
+class cwErrorListModel;
 class cwLazLayer;
 class cwLazLayerModel;
 
@@ -152,6 +153,17 @@ private:
 
     cwLazLayerModel* lazLayerModel() const;
     QString nextOutputPath() const;
+    cwErrorListModel* projectErrorModel() const;
+
+    /// Emits clipFailed and pushes a Fatal cwError onto the project's
+    /// error model so the failure shows up in the global errors UI even
+    /// when the clip view has already deactivated.
+    void reportFailure(const QString& message);
+
+    /// Drop the polygon, clear errors, return to Idle. Shared cleanup
+    /// for the cancel path and all three terminal branches of commit()'s
+    /// async callback.
+    void resetPolygonToIdle();
 
     QPointer<cwCamera> m_camera;
     QPointer<cwCavingRegion> m_region;

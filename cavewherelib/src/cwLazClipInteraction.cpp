@@ -21,11 +21,14 @@
 //Our includes
 #include "cwCamera.h"
 #include "cwCavingRegion.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
 #include "cwFuture.h"
 #include "cwFutureManagerToken.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwLazLayersSceneNode.h"
+#include "cwProject.h"
 
 namespace {
 // Ray-direction.z threshold for "looking straight down -z". 1.0 is
@@ -164,27 +167,27 @@ void cwLazClipInteraction::commit(Mode mode)
         return;
     }
     if (m_region.isNull()) {
-        emit clipFailed(QStringLiteral("No region available."));
+        reportFailure(QStringLiteral("No region available."));
         return;
     }
     cwLazLayerModel* model = lazLayerModel();
     if (model == nullptr) {
-        emit clipFailed(QStringLiteral("No LAZ layer model available."));
+        reportFailure(QStringLiteral("No LAZ layer model available."));
         return;
     }
     if (m_sceneNode.isNull()) {
-        emit clipFailed(QStringLiteral("LAZ scene node not bound — cannot resolve visible layers."));
+        reportFailure(QStringLiteral("LAZ scene node not bound — cannot resolve visible layers."));
         return;
     }
     const QList<cwLazLayer*> visible = m_sceneNode->visibleLayers();
     if (visible.isEmpty()) {
-        emit clipFailed(QStringLiteral("No visible LAZ layers to clip."));
+        reportFailure(QStringLiteral("No visible LAZ layers to clip."));
         return;
     }
 
     const QString outPath = nextOutputPath();
     if (outPath.isEmpty()) {
-        emit clipFailed(QStringLiteral("Could not determine output path in GIS Layers."));
+        reportFailure(QStringLiteral("Could not determine output path in GIS Layers."));
         return;
     }
 
@@ -236,30 +239,19 @@ void cwLazClipInteraction::commit(Mode mode)
                 if (modelGuard) {
                     modelGuard->rescan();
                 }
-                m_polygonLocalXY.clear();
-                emit polygonChanged();
-                setErrorMessage(QString());
-                setState(State::Idle);
+                resetPolygonToIdle();
                 emit clipSucceeded(result.value().outputPath);
-                // Drop out of clip mode so InteractionManager's
-                // activeInteraction clears and any QML view bound to
-                // it (e.g. the toolbar's NeutralIconButton.selected)
-                // releases. The user re-enters the tool from the
-                // toolbar if they want another clip.
-                deactivate();
             } else if (m_currentClip.isCanceled()) {
                 // User-initiated cancel: drop the polygon and go straight to
                 // Idle instead of surfacing the worker's "Clip cancelled."
                 // string as an error.
-                m_polygonLocalXY.clear();
-                emit polygonChanged();
-                setErrorMessage(QString());
-                setState(State::Idle);
+                resetPolygonToIdle();
             } else {
-                setErrorMessage(result.errorMessage());
-                // Drop back to Closed so the user can retry or cancel.
-                setState(State::Closed);
-                emit clipFailed(result.errorMessage());
+                resetPolygonToIdle();
+                // The tool deactivated as soon as the user pressed Crop /
+                // Erase, so there's no in-tool banner to read this. Push
+                // the failure through the project-wide error model.
+                reportFailure(result.errorMessage());
             }
         });
 }
@@ -274,15 +266,47 @@ void cwLazClipInteraction::cancel()
         m_currentClip.cancel();
         return;
     }
+    resetPolygonToIdle();
+}
+
+void cwLazClipInteraction::onDeactivated()
+{
+    // Processing means commit() already queued the worker; deactivation
+    // is the normal Crop/Erase exit, not an abort.
+    if (m_state == State::Processing) {
+        return;
+    }
+    cancel();
+}
+
+void cwLazClipInteraction::resetPolygonToIdle()
+{
     m_polygonLocalXY.clear();
     emit polygonChanged();
     setErrorMessage(QString());
     setState(State::Idle);
 }
 
-void cwLazClipInteraction::onDeactivated()
+void cwLazClipInteraction::reportFailure(const QString& message)
 {
-    cancel();
+    emit clipFailed(message);
+
+    cwErrorListModel* errors = projectErrorModel();
+    if (errors != nullptr) {
+        errors->append(cwError(message, cwError::Fatal));
+    }
+}
+
+cwErrorListModel* cwLazClipInteraction::projectErrorModel() const
+{
+    if (m_region.isNull()) {
+        return nullptr;
+    }
+    cwProject* project = m_region->parentProject();
+    if (project == nullptr) {
+        return nullptr;
+    }
+    return project->errorModel();
 }
 
 void cwLazClipInteraction::setState(State newState)

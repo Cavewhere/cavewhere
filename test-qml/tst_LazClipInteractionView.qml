@@ -83,5 +83,49 @@ Item {
             compare(clipViewId.pointCount, 0)
             compare(clipViewId.errorMessage, "")
         }
+
+        // Clicking the Cancel button exits the tool the same way Escape
+        // does — the button's onClicked is wired to deactivate().
+        function test_cancelButtonDeactivates() {
+            clipViewId.activate()
+            tryVerify(() => clipViewId.activeFocus, 2000)
+
+            clipViewId.addWorldPoint(Qt.point(0, 0))
+            clipViewId.addWorldPoint(Qt.point(10, 0))
+            clipViewId.addWorldPoint(Qt.point(10, 10))
+            clipViewId.closePolygon()
+            compare(clipViewId.state, LazClipInteraction.Closed)
+
+            let cancelButton = findChild(clipViewId, "lazClipCancelButton")
+            verify(cancelButton !== null, "Cancel button should be findable")
+            mouseClick(cancelButton)
+
+            compare(deactivatedSpy.count, 1)
+            tryVerify(() => interactionManagerId.activeInteraction === turnTableId, 2000)
+            compare(clipViewId.state, LazClipInteraction.Idle)
+            compare(clipViewId.pointCount, 0)
+        }
+
+        // Pressing Crop must immediately exit the tool (the worker runs in
+        // the background under cwFutureManagerToken). With no scene node
+        // bound, commit() takes its synchronous-failure path, which still
+        // leaves the QML to deactivate the view.
+        function test_cropButtonDeactivatesEvenOnSynchronousFailure() {
+            clipViewId.activate()
+            tryVerify(() => clipViewId.activeFocus, 2000)
+
+            clipViewId.addWorldPoint(Qt.point(0, 0))
+            clipViewId.addWorldPoint(Qt.point(10, 0))
+            clipViewId.addWorldPoint(Qt.point(10, 10))
+            clipViewId.closePolygon()
+            compare(clipViewId.state, LazClipInteraction.Closed)
+
+            let cropButton = findChild(clipViewId, "lazClipCropButton")
+            verify(cropButton !== null, "Crop button should be findable")
+            mouseClick(cropButton)
+
+            compare(deactivatedSpy.count, 1)
+            tryVerify(() => interactionManagerId.activeInteraction === turnTableId, 2000)
+        }
     }
 }

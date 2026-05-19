@@ -109,6 +109,8 @@ LazClipInteraction {
         visible: clipperId.state === LazClipInteraction.Closed
                   || clipperId.state === LazClipInteraction.Processing
 
+        // Crop/Erase are fire-and-forget: failures surface via
+        // cwProject::errorModel(), not an in-tool banner.
         IconButton {
             id: cropButtonId
             objectName: "lazClipCropButton"
@@ -117,7 +119,10 @@ LazClipInteraction {
             text: qsTr("Crop")
             toolTip: qsTr("Crop — keep points inside the polygon")
             enabled: clipperId.canCommit
-            onClicked: clipperId.commit(LazClipInteraction.Keep)
+            onClicked: {
+                clipperId.commit(LazClipInteraction.Keep)
+                clipperId.deactivate()
+            }
         }
 
         IconButton {
@@ -128,7 +133,10 @@ LazClipInteraction {
             text: qsTr("Erase")
             toolTip: qsTr("Erase — remove points inside the polygon")
             enabled: clipperId.canCommit
-            onClicked: clipperId.commit(LazClipInteraction.Remove)
+            onClicked: {
+                clipperId.commit(LazClipInteraction.Remove)
+                clipperId.deactivate()
+            }
         }
 
         IconButton {
@@ -137,11 +145,8 @@ LazClipInteraction {
             iconSource: "qrc:/twbs-icons/icons/x-lg.svg"
             sourceSize: Qt.size(21, 21)
             text: qsTr("Cancel")
-            toolTip: qsTr("Cancel — discard the polygon")
-            // Cancel stays available during Processing as a UI affordance,
-            // but the C++ commit() ignores it then — the in-flight clip
-            // resolves on its own. See cwLazClipInteraction::cancel().
-            onClicked: clipperId.cancel()
+            toolTip: qsTr("Cancel — discard the polygon and exit")
+            onClicked: clipperId.deactivate()
         }
     }
 
