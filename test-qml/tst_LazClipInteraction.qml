@@ -19,9 +19,16 @@ TestCase {
         signalName: "clipFailed"
     }
 
+    SignalSpy {
+        id: deactivatedSpy
+        target: clipperId
+        signalName: "deactivated"
+    }
+
     function init() {
         clipperId.cancel()
         clipFailedSpy.clear()
+        deactivatedSpy.clear()
     }
 
     function test_startsIdle() {
@@ -81,6 +88,38 @@ TestCase {
         clipperId.addWorldPoint(Qt.point(5, 5))
         compare(clipperId.state, LazClipInteraction.Closed)
         compare(clipperId.pointCount, 3)
+    }
+
+    // deactivate() is what the view's Escape handler calls. It emits the
+    // deactivated signal (InteractionManager uses this to switch back to
+    // the default interaction), and the wired-up onDeactivated slot then
+    // calls cancel() — so an in-progress polygon and any error must be
+    // cleared as a side-effect of deactivation alone.
+    function test_deactivateResetsStateAndEmitsSignal() {
+        clipperId.addWorldPoint(Qt.point(0, 0))
+        clipperId.addWorldPoint(Qt.point(10, 0))
+        compare(clipperId.state, LazClipInteraction.Drawing)
+        compare(clipperId.pointCount, 2)
+
+        clipperId.deactivate()
+
+        compare(deactivatedSpy.count, 1)
+        compare(clipperId.state, LazClipInteraction.Idle)
+        compare(clipperId.pointCount, 0)
+        compare(clipperId.errorMessage, "")
+    }
+
+    function test_deactivateClearsClosedPolygon() {
+        clipperId.addWorldPoint(Qt.point(0, 0))
+        clipperId.addWorldPoint(Qt.point(10, 0))
+        clipperId.addWorldPoint(Qt.point(10, 10))
+        clipperId.closePolygon()
+        compare(clipperId.state, LazClipInteraction.Closed)
+
+        clipperId.deactivate()
+        compare(deactivatedSpy.count, 1)
+        compare(clipperId.state, LazClipInteraction.Idle)
+        compare(clipperId.pointCount, 0)
     }
 
     function test_commitFailsWithNoSceneNode() {

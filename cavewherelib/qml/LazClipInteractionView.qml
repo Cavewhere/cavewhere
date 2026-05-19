@@ -189,5 +189,11 @@ LazClipInteraction {
         text: qsTr("Clipping…")
     }
 
-    QQ.Keys.onEscapePressed: clipperId.cancel()
+    // deactivate() emits the deactivated signal that InteractionManager
+    // listens on, which clears activeInteraction and restores the default
+    // (turn-table) interaction. The C++ onDeactivated slot also runs and
+    // calls cancel() to drop any in-progress polygon and error state, so
+    // a plain deactivate() here fully exits the tool — no need to call
+    // cancel() separately.
+    QQ.Keys.onEscapePressed: clipperId.deactivate()
 }
