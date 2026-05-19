@@ -149,13 +149,14 @@ private:
         static QBox3D lineToBoundingBox(const cwGeometryItersecter::Object & object, int indexInIndexes);
     };
 
-    // BVH primitive handles + node layout — internal build / traversal
-    // state.
+    // BVH primitive handle. One slot per triangle (primitiveIndex is
+    // the first index into indices()) or per point (primitiveIndex is
+    // the vertex index). The owning SubBvh's `object` field provides the
+    // geometry context.
     struct Primitive {
         enum class Kind : uint8_t { Triangle, Point };
         Kind kind = Kind::Triangle;
-        uint32_t nodeIndex = 0;       // index into the build-time Nodes snapshot
-        uint32_t primitiveIndex = 0;  // triangle: first index into indices(); point: vertex index
+        uint32_t primitiveIndex = 0;
     };
 
     struct BvhNode {
@@ -175,14 +176,12 @@ private:
         qsizetype end;
     };
 
-    // Phase A work-item: a contiguous range of primitives belonging to
-    // one source Node, planned by launchBuildJob and consumed by parallel
-    // workers. Splitting a single huge Node into multiple chunks is what
-    // gives us parallelism for monolithic point clouds.
+    // Phase A work-item: a contiguous range of primitives. Splitting one
+    // big Object into multiple chunks is what gives us parallelism for
+    // monolithic point clouds.
     struct EnumChunk {
-        uint32_t nodeIndex = 0;
-        // For Triangles: index of the first triangle (always a multiple
-        // of 3 when multiplied by 3 in geometry().indices()).
+        // For Triangles: index of the first triangle (multiplied by 3
+        // when indexing into geometry().indices()).
         // For Points: starting vertex index.
         uint32_t inputBegin = 0;
         uint32_t count = 0;       // primitives, not indices/floats
@@ -297,7 +296,6 @@ private:
     // serialSplitToFanout + parallel buildBvhSubtree pipeline. Returns
     // nullptr for Objects that contribute no primitives.
     static std::shared_ptr<SubBvh> buildSubBvh(const Object& object,
-                                               uint32_t nodeIndexInSnapshot,
                                                QPromise<void>& promise);
 
     // Build the world-space top-level BVH over the per-Object root boxes.
@@ -312,11 +310,13 @@ private:
 
     // Per-primitive bounding box in the Object's **model space**. Used
     // when constructing leaf bboxes for a sub-BVH.
-    static QBox3D primitiveModelBox(const QList<Node>& nodes, const Primitive& prim);
+    static QBox3D primitiveModelBox(const Object& object, const Primitive& prim);
     // Per-primitive ray test. rayModel/worldFromModel/modelToWorld are
     // computed once per top-level leaf by intersectsDetailed and passed
     // through so this hot-path function never re-inverts the matrix.
-    static void testPrimitive(const QList<Node>& nodes,
+    // `object` comes from the SubBvh — decoupling from BvhData::
+    // nodesSnapshot ordering, which is not stable across rebuilds.
+    static void testPrimitive(const Object& object,
                               const Primitive& prim,
                               const QRay3D& ray,
                               const QRay3D& rayModel,
@@ -331,7 +331,7 @@ private:
     // tryPromoteNearMiss. Pre-computed by the caller because the two
     // paths source tModel and the world point differently.
     static void fillPointHit(cwRayHit& best,
-                             const Node& node,
+                             const Object& object,
                              const Primitive& prim,
                              const QRay3D& ray,
                              const QRay3D& rayModel,
@@ -346,12 +346,11 @@ private:
     // miss is beyond the tube.
     static void tryPromoteNearMiss(cwRayHit& best,
                                    const NearMissResult& nearMiss,
-                                   const QList<Node>& nodeSnapshot,
                                    const QRay3D& ray,
                                    bool debug);
 
     // Debug-only per-primitive diagnostic; gated on lcPick debug.
-    static void dumpLeafPrimitive(const QList<Node>& nodes,
+    static void dumpLeafPrimitive(const Object& object,
                                   const Primitive& prim,
                                   const QRay3D& ray,
                                   uint32_t leafIdx,

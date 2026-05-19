@@ -56,7 +56,17 @@ struct cwGeometryItersecter::SubBvh {
     QVector<BvhNode> bvhNodes;          // model space
     QVector<Primitive> primitives;
     QBox3D modelRootBox;                // bvhNodes[0].bbox, cached
-    float objectPickRadius = 0.0f;      // for tube-pick padding within this sub-BVH
+
+    // Owning copy of the Object (cheap — cwGeometry is implicitly shared).
+    // Holding it here decouples sub-BVH primitives from BvhData::
+    // nodesSnapshot ordering: across rebuilds, the same Object may move
+    // to a different snapshot index, so traversal cannot key on
+    // prim.nodeIndex anymore. Note: object.modelMatrix() may be stale
+    // relative to the current BvhData snapshot; the caller passes the
+    // fresh worldFromModel/modelToWorld in from BvhData::modelMatrices.
+    // pickRadius / geometry / parent / id are stable across modelMatrix
+    // changes (addObject re-replacing geometry evicts the cache entirely).
+    Object object;
 };
 
 // Closest sphere-miss seen during a traversal; tryPromoteNearMiss snaps
@@ -67,6 +77,13 @@ struct cwGeometryItersecter::NearMissResult {
     double tCenterModel = 0.0;
     Primitive prim;
     float radius = 0.0f;
+    // Pointer into the owning SubBvh::object — valid for the duration
+    // of intersectsDetailed (SubBvh is held alive by m_bvh->subBvhs).
+    // SubBvh::object's modelMatrix may be stale (sub-BVHs survive
+    // modelMatrix changes), so worldFromModel below carries the fresh
+    // matrix from BvhData::modelMatrices.
+    const Object* object = nullptr;
+    QMatrix4x4 worldFromModel;
 };
 
 // Per-pick rejection counters. Populated by intersectsDetailed and
@@ -246,7 +263,7 @@ struct cwGeometryItersecter::SplitProgress {
 // Bundle of references the recursive Phase B helpers all need. Saves
 // passing six parameters through every recursive call.
 struct cwGeometryItersecter::BuildContext {
-    const QList<Node>& nodes;
+    const Object& object;
     QVector<BuildPrim>& prims;
     QVector<BvhNode>& outNodes;
     std::atomic<uint32_t>& nextNode;
@@ -671,7 +688,6 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
 
     const QVector<BvhNode>& topLevel = m_bvh->topLevel;
     const QVector<std::shared_ptr<const SubBvh>>& subBvhs = m_bvh->subBvhs;
-    const QList<Node>& nodeSnapshot = m_bvh->nodesSnapshot;
 
     // Top-level tube pad uses the global max across all Objects: a single
     // value keeps the AABB-test fast path identical to the pre-tube cost
@@ -688,7 +704,7 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
         qCDebug(lcPick).nospace()
             << "intersectsDetailed: topLevel=" << topLevel.size()
             << ", subBvhs=" << subBvhs.size()
-            << ", source nodes=" << nodeSnapshot.size()
+            << ", source nodes=" << m_bvh->nodesSnapshot.size()
             << ", maxPickRadius=" << m_bvh->maxPickRadius
             << ", topTubeDist=" << topTubeDist
             << ", ray.origin=" << ray.origin()
@@ -740,15 +756,23 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
         // Top-level leaf — descend the Object's sub-BVH in model space.
         const uint32_t slot = bn.left;
         const SubBvh& sub = *subBvhs.at(slot);
+
+        // Hoist visibility check: every primitive in the sub-BVH belongs
+        // to the same Object, so a single isPickable() guard short-
+        // circuits the entire descent when the Object is hidden.
+        if (!isPickable(sub.object)) {
+            continue;
+        }
+
         const QMatrix4x4& worldFromModel = m_bvh->modelMatrices.at(slot);
         const QMatrix4x4& modelToWorld = m_bvh->inverseModelMatrices.at(slot);
         const QRay3D rayModel = transformRayWithInverse(modelToWorld, ray);
 
         // Per-Object tube pad applies to the model-space boxes within
-        // this sub-BVH. Triangle-only Objects have objectPickRadius == 0,
+        // this sub-BVH. Triangle-only Objects have pickRadius() == 0,
         // which collapses the pad to zero and matches the pre-tube cost.
         const float subTubeDist = m_tubePickEnabled
-                                  ? sub.objectPickRadius * kTubeFactor
+                                  ? sub.object.pickRadius() * kTubeFactor
                                   : 0.0f;
         const QVector3D subTubePad(subTubeDist, subTubeDist, subTubeDist);
 
@@ -803,9 +827,9 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
                 }
                 for (uint32_t p = first; p < first + primCount; ++p) {
                     if (debug) {
-                        dumpLeafPrimitive(nodeSnapshot, sub.primitives.at(p), ray, sidx, p - first);
+                        dumpLeafPrimitive(sub.object, sub.primitives.at(p), ray, sidx, p - first);
                     }
-                    testPrimitive(nodeSnapshot, sub.primitives.at(p),
+                    testPrimitive(sub.object, sub.primitives.at(p),
                                   ray, rayModel, worldFromModel, modelToWorld,
                                   best, nearMissPtr, statsPtr);
                 }
@@ -826,7 +850,7 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
     // cwBaseTurnTableInteraction snaps to the grid plane at the wrong
     // depth, jerking the view.
     if (m_tubePickEnabled) {
-        tryPromoteNearMiss(best, nearMiss, nodeSnapshot, ray, debug);
+        tryPromoteNearMiss(best, nearMiss, ray, debug);
     }
 
     if (debug) {
@@ -840,25 +864,19 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
                 << " | " << stats;
         } else {
             qCDebug(lcPick).nospace() << "intersectsDetailed MISS | " << stats;
-            // Per-Object summary across the published sub-BVHs. The source
-            // Node for each sub-BVH is derived from the first primitive's
-            // nodeIndex (all prims in a sub-BVH point to the same Node).
+            // Per-Object summary across the published sub-BVHs.
             qCDebug(lcPick).nospace()
                 << "  live BVH sources: " << subBvhs.size() << " sub-BVHs";
             for (qsizetype i = 0; i < subBvhs.size(); ++i) {
                 const SubBvh& sb = *subBvhs[i];
-                if (sb.primitives.isEmpty()) {
-                    continue;
-                }
-                const Node& n = nodeSnapshot.at(sb.primitives.first().nodeIndex);
-                const cwRenderObject* parent = n.Object.parent();
+                const cwRenderObject* parent = sb.object.parent();
                 const char* parentClass = parent != nullptr
                     ? parent->metaObject()->className()
                     : "(null)";
                 qCDebug(lcPick).nospace()
                     << "    [" << i << "] " << QLatin1String(parentClass)
                     << "@" << parent
-                    << " type=" << cwGeometry::typeName(n.Object.geometry().type())
+                    << " type=" << cwGeometry::typeName(sb.object.geometry().type())
                     << " prims=" << sb.primitives.size()
                     << " visible=" << (parent != nullptr ? parent->isVisible() : true);
             }
@@ -868,7 +886,7 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
     return best;
 }
 
-void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
+void cwGeometryItersecter::testPrimitive(const Object& object,
                                          const Primitive& prim,
                                          const QRay3D& ray,
                                          const QRay3D& rayModel,
@@ -878,19 +896,13 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
                                          NearMissResult* nearMiss,
                                          PickStats* stats)
 {
+    // Visibility is guaranteed by the caller (intersectsDetailed hoists
+    // isPickable() to once per top-level leaf, before this descent).
     if (stats != nullptr) {
         ++stats->primsTested;
     }
 
-    const Node& node = nodes[prim.nodeIndex];
-    if (!isPickable(node.Object)) {
-        if (stats != nullptr) {
-            ++stats->primsNotPickable;
-        }
-        return;
-    }
-
-    const cwGeometry& geometry = node.Object.geometry();
+    const cwGeometry& geometry = object.geometry();
     auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
     Q_ASSERT(positionAttribute);
 
@@ -931,8 +943,8 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
         best.m_pointWorld = pWorld;
         best.m_normalWorld = nWorld;
         best.m_tWorld = tWorld;
-        best.m_object = node.Object.parent();
-        best.m_objectId = node.Object.id();
+        best.m_object = object.parent();
+        best.m_objectId = object.id();
         best.m_firstIndex = i;
         if (stats != nullptr) {
             ++stats->primsAccepted;
@@ -941,7 +953,7 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
     }
 
     // Point primitive — ray-vs-sphere using the Object's pickRadius.
-    const float radius = node.Object.pickRadius();
+    const float radius = object.pickRadius();
     if (radius <= 0.0f) {
         if (stats != nullptr) {
             ++stats->primsPointRadiusZero;
@@ -972,6 +984,8 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
             nearMiss->tCenterModel = sphere.tCenter;
             nearMiss->prim = prim;
             nearMiss->radius = radius;
+            nearMiss->object = &object;
+            nearMiss->worldFromModel = worldFromModel;
         }
         return;
     }
@@ -1017,7 +1031,7 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
         return;
     }
 
-    fillPointHit(best, node, prim, ray, rayModel,
+    fillPointHit(best, object, prim, ray, rayModel,
                  center, pWorld, double(sphere.tNear), tWorld);
     if (stats != nullptr) {
         ++stats->primsAccepted;
@@ -1025,7 +1039,7 @@ void cwGeometryItersecter::testPrimitive(const QList<Node>& nodes,
 }
 
 void cwGeometryItersecter::fillPointHit(cwRayHit& best,
-                                        const Node& node,
+                                        const Object& object,
                                         const Primitive& prim,
                                         const QRay3D& ray,
                                         const QRay3D& rayModel,
@@ -1043,18 +1057,17 @@ void cwGeometryItersecter::fillPointHit(cwRayHit& best,
     best.m_pointWorld = centerWorld;
     best.m_normalWorld = -ray.direction().normalized();
     best.m_tWorld = tWorld;
-    best.m_object = node.Object.parent();
-    best.m_objectId = node.Object.id();
+    best.m_object = object.parent();
+    best.m_objectId = object.id();
     best.m_firstIndex = static_cast<int>(prim.primitiveIndex);
 }
 
 void cwGeometryItersecter::tryPromoteNearMiss(cwRayHit& best,
                                               const NearMissResult& nearMiss,
-                                              const QList<Node>& nodeSnapshot,
                                               const QRay3D& ray,
                                               bool debug)
 {
-    if (best.hit() || !nearMiss.valid) {
+    if (best.hit() || !nearMiss.valid || nearMiss.object == nullptr) {
         return;
     }
     const double tubeLimit = double(nearMiss.radius) * double(kTubeFactor);
@@ -1067,12 +1080,14 @@ void cwGeometryItersecter::tryPromoteNearMiss(cwRayHit& best,
         return;
     }
 
-    const Node& node = nodeSnapshot.at(nearMiss.prim.nodeIndex);
-    const cwGeometry& geometry = node.Object.geometry();
+    const Object& object = *nearMiss.object;
+    const cwGeometry& geometry = object.geometry();
     const auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
     Q_ASSERT(positionAttribute);
 
-    const QMatrix4x4& worldFromModel = node.Object.modelMatrix();
+    // Use the snapshotted modelMatrix (the SubBvh-stored Object's matrix
+    // may be stale across modelMatrix changes — see SubBvh::object).
+    const QMatrix4x4& worldFromModel = nearMiss.worldFromModel;
     const QVector3D centerModel = geometry.value<QVector3D>(
         positionAttribute, nearMiss.prim.primitiveIndex);
     const QVector3D centerWorld = mapPoint(worldFromModel, centerModel);
@@ -1088,7 +1103,7 @@ void cwGeometryItersecter::tryPromoteNearMiss(cwRayHit& best,
     }
 
     const QRay3D rayModel = transformRayToModel(worldFromModel, ray);
-    fillPointHit(best, node, nearMiss.prim, ray, rayModel,
+    fillPointHit(best, object, nearMiss.prim, ray, rayModel,
                  centerModel, centerWorld, nearMiss.tCenterModel, tWorld);
     if (debug) {
         qCDebug(lcPick).nospace()
@@ -1100,22 +1115,21 @@ void cwGeometryItersecter::tryPromoteNearMiss(cwRayHit& best,
     }
 }
 
-void cwGeometryItersecter::dumpLeafPrimitive(const QList<Node>& nodes,
+void cwGeometryItersecter::dumpLeafPrimitive(const Object& object,
                                              const Primitive& prim,
                                              const QRay3D& ray,
                                              uint32_t leafIdx,
                                              uint32_t localIdx)
 {
-    const Node& node = nodes.at(prim.nodeIndex);
-    const cwGeometry& geometry = node.Object.geometry();
+    const cwGeometry& geometry = object.geometry();
     auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
     if (positionAttribute == nullptr) {
         return;
     }
-    const QMatrix4x4& worldFromModel = node.Object.modelMatrix();
+    const QMatrix4x4& worldFromModel = object.modelMatrix();
     const QRay3D rayModel = transformRayToModel(worldFromModel, ray);
 
-    const cwRenderObject* parent = node.Object.parent();
+    const cwRenderObject* parent = object.parent();
     const char* parentClass = parent != nullptr
         ? parent->metaObject()->className()
         : "(null)";
@@ -1128,7 +1142,7 @@ void cwGeometryItersecter::dumpLeafPrimitive(const QList<Node>& nodes,
         const QVector3D centerModel(p[0], p[1], p[2]);
         const QVector3D centerWorld = mapPoint(worldFromModel, centerModel);
 
-        const float radius = node.Object.pickRadius();
+        const float radius = object.pickRadius();
         const double tCenter = ray.projectedDistance(centerWorld);
 
         // dPerp is in model space; equals world-space d only for
@@ -1170,11 +1184,10 @@ void cwGeometryItersecter::dumpLeafPrimitive(const QList<Node>& nodes,
         << " a=" << a << " b=" << b << " c=" << c;
 }
 
-QBox3D cwGeometryItersecter::primitiveModelBox(const QList<Node>& nodes,
+QBox3D cwGeometryItersecter::primitiveModelBox(const Object& object,
                                                const Primitive& prim)
 {
-    const Node& node = nodes[prim.nodeIndex];
-    const cwGeometry& geometry = node.Object.geometry();
+    const cwGeometry& geometry = object.geometry();
     auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
     Q_ASSERT(positionAttribute);
 
@@ -1192,7 +1205,7 @@ QBox3D cwGeometryItersecter::primitiveModelBox(const QList<Node>& nodes,
     const int stride = positionAttribute->bufferStride;
     const float* p = reinterpret_cast<const float*>(base + prim.primitiveIndex * stride);
     const QVector3D centerModel(p[0], p[1], p[2]);
-    const float radius = node.Object.pickRadius();
+    const float radius = object.pickRadius();
     const QVector3D padVec(radius, radius, radius);
     return QBox3D(centerModel - padVec, centerModel + padVec);
 }
@@ -1263,7 +1276,7 @@ void cwGeometryItersecter::buildBvhSubtree(BuildContext& ctx,
     auto makeLeaf = [&]() {
         QBox3D box;
         for (qsizetype i = begin; i < end; ++i) {
-            box.unite(primitiveModelBox(ctx.nodes, ctx.prims[i].prim));
+            box.unite(primitiveModelBox(ctx.object, ctx.prims[i].prim));
         }
         BvhNode& self = ctx.outNodes[selfIndex];
         self.bbox = box;
@@ -1324,7 +1337,6 @@ void cwGeometryItersecter::enumerateTrianglesChunk(const Object& object,
 
         BuildPrim& bp = prims[chunk.outBegin + i];
         bp.prim.kind = Primitive::Kind::Triangle;
-        bp.prim.nodeIndex = chunk.nodeIndex;
         bp.prim.primitiveIndex = indexBase;
         bp.centroid = (a + b + c) * (1.0f / 3.0f);
     }
@@ -1348,7 +1360,6 @@ void cwGeometryItersecter::enumeratePointsChunk(const Object& object,
 
         BuildPrim& bp = prims[chunk.outBegin + i];
         bp.prim.kind = Primitive::Kind::Point;
-        bp.prim.nodeIndex = chunk.nodeIndex;
         bp.prim.primitiveIndex = vertIdx;
         bp.centroid = centerModel;
     }
@@ -1378,21 +1389,12 @@ void cwGeometryItersecter::scheduleTopLevelRebuild()
 
 std::shared_ptr<cwGeometryItersecter::SubBvh>
 cwGeometryItersecter::buildSubBvh(const Object& object,
-                                  uint32_t nodeIndexInSnapshot,
                                   QPromise<void>& promise)
 {
     const qsizetype primCount = countNodePrimitives(object);
     if (primCount <= 0) {
         return nullptr;
     }
-
-    // The existing pipeline addresses node geometry via prim.nodeIndex
-    // into a QList<Node>. Sub-BVH builds operate on a single Object, so
-    // use a one-entry list with nodeIndex=0 internally; rewrite the
-    // primitives' nodeIndex to nodeIndexInSnapshot before returning so
-    // traversal can find the source Node in BvhData::nodesSnapshot.
-    QList<Node> singleNode;
-    singleNode.append(Node(QBox3D(), object));
 
     // Plan Phase A chunks. Each EnumChunk maps to a contiguous slice of
     // the BuildPrim vector so chunk workers can write without contention.
@@ -1402,7 +1404,6 @@ cwGeometryItersecter::buildSubBvh(const Object& object,
         while (filled < primCount) {
             const qsizetype take = std::min<qsizetype>(primCount - filled, kEnumChunkSize);
             EnumChunk c;
-            c.nodeIndex = 0;
             c.inputBegin = static_cast<uint32_t>(filled);
             c.count = static_cast<uint32_t>(take);
             c.outBegin = static_cast<uint32_t>(filled);
@@ -1464,7 +1465,7 @@ cwGeometryItersecter::buildSubBvh(const Object& object,
     QVector<SubRange> subRanges;
     QVector<uint32_t> upperInnerNodes;
 
-    BuildContext serialCtx{singleNode, prims, bvhNodes, nextNode,
+    BuildContext serialCtx{object, prims, bvhNodes, nextNode,
                            /*leafPrimCounter=*/nullptr,
                            /*splitProgress=*/nullptr};
     serialSplitToFanout(serialCtx, 0, prims.size(),
@@ -1477,7 +1478,7 @@ cwGeometryItersecter::buildSubBvh(const Object& object,
 
     if (!subRanges.isEmpty()) {
         std::atomic<qsizetype> phaseBPrims{0};
-        BuildContext parallelCtx{singleNode, prims, bvhNodes, nextNode, &phaseBPrims};
+        BuildContext parallelCtx{object, prims, bvhNodes, nextNode, &phaseBPrims};
 
         auto buildFuture = cwConcurrent::map(subRanges,
             [&parallelCtx, &promise](SubRange& r) {
@@ -1507,12 +1508,13 @@ cwGeometryItersecter::buildSubBvh(const Object& object,
         return nullptr;
     }
 
-    // Extract Primitives, patching nodeIndex back to the snapshot index.
+    // Extract Primitives. Their nodeIndex was only meaningful during the
+    // build (singleton list index 0); runtime traversal accesses the
+    // Object via SubBvh::object, not via prim.nodeIndex.
     QVector<Primitive> finalPrims;
     finalPrims.resize(prims.size());
     for (qsizetype i = 0; i < prims.size(); ++i) {
         finalPrims[i] = prims[i].prim;
-        finalPrims[i].nodeIndex = nodeIndexInSnapshot;
     }
     prims.clear();
     prims.squeeze();
@@ -1521,7 +1523,7 @@ cwGeometryItersecter::buildSubBvh(const Object& object,
     sub->bvhNodes = std::move(bvhNodes);
     sub->primitives = std::move(finalPrims);
     sub->modelRootBox = !sub->bvhNodes.isEmpty() ? sub->bvhNodes[0].bbox : QBox3D();
-    sub->objectPickRadius = object.pickRadius();
+    sub->object = object;
     return sub;
 }
 
@@ -1709,8 +1711,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
                     return;
                 }
                 const qsizetype slot = &t - tasks.constData();
-                built[slot] = buildSubBvh(nodesSnapshot.at(t.snapshotIndex).Object,
-                                          t.snapshotIndex, promise);
+                built[slot] = buildSubBvh(nodesSnapshot.at(t.snapshotIndex).Object, promise);
                 const qsizetype d = done.fetch_add(1, std::memory_order_relaxed) + 1;
                 promise.setProgressValue(static_cast<int>(
                     (d * kProgressResolution) / std::max<qsizetype>(tasks.size(), 1)));
@@ -1751,7 +1752,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             out->modelMatrices.append(m);
             out->inverseModelMatrices.append(m.inverted());
             worldBoxes.append(wb);
-            out->maxPickRadius = std::max(out->maxPickRadius, sb.objectPickRadius);
+            out->maxPickRadius = std::max(out->maxPickRadius, sb.object.pickRadius());
         }
 
         if (promise.isCanceled()) {
