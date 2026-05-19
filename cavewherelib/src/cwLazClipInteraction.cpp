@@ -234,6 +234,12 @@ void cwLazClipInteraction::commit(Mode mode)
                 setErrorMessage(QString());
                 setState(State::Idle);
                 emit clipSucceeded(result.value().outputPath);
+                // Drop out of clip mode so InteractionManager's
+                // activeInteraction clears and any QML view bound to
+                // it (e.g. the toolbar's NeutralIconButton.selected)
+                // releases. The user re-enters the tool from the
+                // toolbar if they want another clip.
+                deactivate();
             } else if (m_currentClip.isCanceled()) {
                 // User-initiated cancel: drop the polygon and go straight to
                 // Idle instead of surfacing the worker's "Clip cancelled."

@@ -65,8 +65,6 @@ Item {
         scene: rendererId.scene
         region: RootData.region
         turnTableInteraction: turnTableInteractionId
-
-        onDeactivated: pickButtonId.checked = false
     }
 
     LazClipInteractionView {
@@ -76,9 +74,6 @@ Item {
         region: RootData.region
         lazLayersSceneNode: RootData.regionSceneManager.lazLayersSceneNode
         turnTableInteraction: turnTableInteractionId
-
-        onDeactivated: lazClipButtonId.checked = false
-        onClipSucceeded: lazClipButtonId.checked = false
     }
 
     InteractionManager {
@@ -133,7 +128,7 @@ Item {
         }
     }
 
-    QC.RoundButton {
+    NeutralIconButton {
         id: pickButtonId
         objectName: "coordinatePickerButton"
         anchors {
@@ -141,19 +136,16 @@ Item {
             bottom: parent.bottom
             margins: 20
         }
-        checkable: true
-        text: "⌖"
-        font.pixelSize: Theme.fontSizeTitle
-        QC.ToolTip.visible: hovered
-        QC.ToolTip.text: qsTr("Pick coordinates")
-        // Guard: when deactivate() runs externally (e.g. another interaction
-        // takes over), onDeactivated below sets checked = false; this guard
-        // prevents the toggle from calling deactivate() again and re-emitting.
-        onCheckedChanged: {
-            if (checked && interactionManagerId.activeInteraction !== coordinatePickerId) {
-                coordinatePickerId.activate()
-            } else if (!checked && interactionManagerId.activeInteraction === coordinatePickerId) {
+        iconSource: "qrc:/twbs-icons/icons/crosshair.svg"
+        sourceSize: Qt.size(21, 21)
+        text: qsTr("Pick")
+        toolTip: qsTr("Pick coordinates")
+        selected: interactionManagerId.activeInteraction === coordinatePickerId
+        onClicked: {
+            if (pickButtonId.selected) {
                 coordinatePickerId.deactivate()
+            } else {
+                coordinatePickerId.activate()
             }
         }
     }
@@ -163,12 +155,12 @@ Item {
         objectName: "coordinatePickerPopup"
         parent: rendererId
         picker: coordinatePickerId
-        visible: coordinatePickerId.hasPick && pickButtonId.checked
+        visible: coordinatePickerId.hasPick && pickButtonId.selected
     }
 
     // Toggling on while in perspective shows the ortho-prompt instead of
     // activating immediately — the clipper is top-down XY only.
-    QC.RoundButton {
+    NeutralIconButton {
         id: lazClipButtonId
         objectName: "lazClipButton"
         anchors {
@@ -177,19 +169,18 @@ Item {
             leftMargin: 10
             bottomMargin: 20
         }
-        checkable: true
-        icon.source: "qrc:/twbs-icons/icons/crop.svg"
-        QC.ToolTip.visible: hovered
-        QC.ToolTip.text: qsTr("Clip point cloud")
-        onCheckedChanged: {
-            if (checked && interactionManagerId.activeInteraction !== lazClipInteractionId) {
-                if (rendererId.orthoProjection.enabled) {
-                    lazClipInteractionId.activate()
-                } else {
-                    orthoPromptId.visible = true
-                }
-            } else if (!checked && interactionManagerId.activeInteraction === lazClipInteractionId) {
+        iconSource: "qrc:/twbs-icons/icons/scissors.svg"
+        sourceSize: Qt.size(21, 21)
+        text: qsTr("Clip")
+        toolTip: qsTr("Clip point cloud")
+        selected: interactionManagerId.activeInteraction === lazClipInteractionId
+        onClicked: {
+            if (lazClipButtonId.selected) {
                 lazClipInteractionId.deactivate()
+            } else if (rendererId.orthoProjection.enabled) {
+                lazClipInteractionId.activate()
+            } else {
+                orthoPromptId.visible = true
             }
         }
     }
@@ -236,7 +227,6 @@ Item {
                     text: qsTr("Cancel")
                     onClicked: {
                         orthoPromptId.visible = false
-                        lazClipButtonId.checked = false
                     }
                 }
             }

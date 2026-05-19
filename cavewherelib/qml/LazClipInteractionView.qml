@@ -73,35 +73,38 @@ LazClipInteraction {
         visible: clipperId.state === LazClipInteraction.Closed
                   || clipperId.state === LazClipInteraction.Processing
 
-        QC.RoundButton {
+        NeutralIconButton {
             id: cropButtonId
             objectName: "lazClipCropButton"
-            icon.source: "qrc:/twbs-icons/icons/crop.svg"
+            iconSource: "qrc:/twbs-icons/icons/crop.svg"
+            sourceSize: Qt.size(21, 21)
+            text: qsTr("Crop")
+            toolTip: qsTr("Crop — keep points inside the polygon")
             enabled: clipperId.canCommit
-            QC.ToolTip.visible: hovered
-            QC.ToolTip.text: qsTr("Crop — keep points inside the polygon")
             onClicked: clipperId.commit(LazClipInteraction.Keep)
         }
 
-        QC.RoundButton {
+        NeutralIconButton {
             id: eraseButtonId
             objectName: "lazClipEraseButton"
-            icon.source: "qrc:/twbs-icons/icons/eraser.svg"
+            iconSource: "qrc:/twbs-icons/icons/eraser.svg"
+            sourceSize: Qt.size(21, 21)
+            text: qsTr("Erase")
+            toolTip: qsTr("Erase — remove points inside the polygon")
             enabled: clipperId.canCommit
-            QC.ToolTip.visible: hovered
-            QC.ToolTip.text: qsTr("Erase — remove points inside the polygon")
             onClicked: clipperId.commit(LazClipInteraction.Remove)
         }
 
-        QC.RoundButton {
+        NeutralIconButton {
             id: cancelButtonId
             objectName: "lazClipCancelButton"
-            icon.source: "qrc:/twbs-icons/icons/x-lg.svg"
+            iconSource: "qrc:/twbs-icons/icons/x-lg.svg"
+            sourceSize: Qt.size(21, 21)
+            text: qsTr("Cancel")
+            toolTip: qsTr("Cancel — discard the polygon")
             // Cancel stays available during Processing as a UI affordance,
             // but the C++ commit() ignores it then — the in-flight clip
             // resolves on its own. See cwLazClipInteraction::cancel().
-            QC.ToolTip.visible: hovered
-            QC.ToolTip.text: qsTr("Cancel — discard the polygon")
             onClicked: clipperId.cancel()
         }
     }
