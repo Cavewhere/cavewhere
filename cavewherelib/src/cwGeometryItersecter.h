@@ -14,6 +14,8 @@
 #include <QVector3D>
 #include <QRay3D>
 #include <QBox3D>
+#include <QHash>
+#include <QSet>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -34,6 +36,10 @@ public:
     struct Key {
         cwRenderObject* parentObject = nullptr;
         uint64_t id = 0;
+
+        bool operator==(const Key& other) const noexcept {
+            return parentObject == other.parentObject && id == other.id;
+        }
     };
 
     class Object {
@@ -192,14 +198,35 @@ private:
 
     QList<Node> Nodes;
 
+    // Per-Object acceleration structure built once in **model space** and
+    // cached across rebuilds. Defined in the .cpp because callers only need
+    // shared_ptr<const SubBvh> here.
+    //
+    // Model-space layout lets setModelMatrix() avoid invalidating the
+    // sub-BVH entirely: a model-matrix change refreshes only the top-level
+    // bbox (the snapshot of modelMatrices in BvhData). A geometry replace
+    // for one Object invalidates only that one entry.
+    struct SubBvh;
+
     // Snapshot of Nodes captured at build-job launch and consumed by the
     // worker thread. QList is implicitly shared, so this is a header copy
     // that keeps the buffer alive for traversal even after a later rebuild
     // swaps in a different snapshot via m_bvh.
+    //
+    // Two-level layout: topLevel is a small world-space BVH whose leaves
+    // index into subBvhs / modelMatrices (parallel arrays). Each sub-BVH
+    // is model-space; traversal transforms the world ray to model space
+    // once per Object root.
     struct BvhData {
         QList<Node> nodesSnapshot;
-        QVector<BvhNode> bvhNodes;
-        QVector<Primitive> primitives;
+        QVector<BvhNode> topLevel;
+        // Parallel arrays — one slot per source Node that contributed to
+        // the BVH. topLevel leaves store indices into these.
+        QVector<std::shared_ptr<const SubBvh>> subBvhs;
+        QVector<QMatrix4x4> modelMatrices;
+        // Precomputed inverse of each modelMatrices entry — avoids paying
+        // QMatrix4x4::inverted() per top-level-leaf pick in the hot path.
+        QVector<QMatrix4x4> inverseModelMatrices;
         // Max pickRadius across nodesSnapshot — cached once at build time
         // so the per-pick tube-box test doesn't have to rescan. Triangles
         // and zero-radius Points contribute 0; harmless for those paths
@@ -218,6 +245,18 @@ private:
     // into a side channel (resultSlot, see launchBuildJob) that the
     // .context() callback drains on the main thread.
     std::shared_ptr<BvhData> m_bvh;
+
+    // Cache of per-Object sub-BVHs, keyed by source Node identity. Kept
+    // alive across rebuilds — only entries whose geometry actually changed
+    // are evicted via m_dirtyKeys. Worker threads read from a shallow QHash
+    // copy snapshot; UI-thread mutators are the only writers.
+    QHash<Key, std::shared_ptr<const SubBvh>> m_subBvhs;
+
+    // Keys whose cached sub-BVH was invalidated since the last snapshot —
+    // any rebuild job must produce fresh sub-BVHs for these even if the
+    // QHash entry happened to still exist (e.g. add → schedule → add again
+    // for the same Key before the first build observed it).
+    QSet<Key> m_dirtyKeys;
 
     // Coalesces rapid mutations into a single rebuild and cancels the
     // in-flight build when a new mutation arrives.
@@ -240,13 +279,49 @@ private:
     // detail.
     struct NearMissResult;
 
-    void scheduleBuild();
+    // Invalidate the cached sub-BVH for one Object and schedule a rebuild.
+    // Use for addObject (which always replaces) and any mutation that
+    // changed the Object's geometry. The schedule call is coalesced via
+    // m_bvhRestarter so back-to-back invalidations don't queue extra work.
+    void scheduleObjectRebuild(const Key& key);
+
+    // Schedule a rebuild that touches only the top-level BVH; cached
+    // sub-BVHs are reused unchanged. Use for setModelMatrix (which leaves
+    // model-space geometry intact) and removeObject (which only shrinks
+    // the set of objects).
+    void scheduleTopLevelRebuild();
+
     QFuture<void> launchBuildJob();
 
-    static QBox3D primitiveWorldBox(const QList<Node>& nodes, const Primitive& prim);
+    // Build a model-space sub-BVH for one Object using the existing
+    // serialSplitToFanout + parallel buildBvhSubtree pipeline. Returns
+    // nullptr for Objects that contribute no primitives.
+    static std::shared_ptr<SubBvh> buildSubBvh(const Object& object,
+                                               uint32_t nodeIndexInSnapshot,
+                                               QPromise<void>& promise);
+
+    // Build the world-space top-level BVH over the per-Object root boxes.
+    // Sequenced after all sub-BVHs are present.
+    static QVector<BvhNode> buildTopLevel(const QVector<QBox3D>& worldBoxes);
+
+    // Release this thread's pool slot, block on the inner future, then
+    // re-acquire. Prevents nested cwConcurrent::map from deadlocking on
+    // small machines where the outer worker holds the only thread.
+    template <typename Future>
+    static void waitOnPool(Future& future);
+
+    // Per-primitive bounding box in the Object's **model space**. Used
+    // when constructing leaf bboxes for a sub-BVH.
+    static QBox3D primitiveModelBox(const QList<Node>& nodes, const Primitive& prim);
+    // Per-primitive ray test. rayModel/worldFromModel/modelToWorld are
+    // computed once per top-level leaf by intersectsDetailed and passed
+    // through so this hot-path function never re-inverts the matrix.
     static void testPrimitive(const QList<Node>& nodes,
                               const Primitive& prim,
                               const QRay3D& ray,
+                              const QRay3D& rayModel,
+                              const QMatrix4x4& worldFromModel,
+                              const QMatrix4x4& modelToWorld,
                               cwRayHit& best,
                               NearMissResult* nearMiss,
                               PickStats* stats);
@@ -348,6 +423,12 @@ private:
     void addLines(const cwGeometryItersecter::Object& object);
     void addPoints(const cwGeometryItersecter::Object& object);
 
+    // Erase the Node matching `key` from Nodes plus its cached sub-BVH and
+    // dirty mark, without scheduling. Returns true if a Node was erased.
+    // Used by add* (which then re-appends and schedules an object rebuild)
+    // and removeObject (which schedules a top-level rebuild).
+    bool eraseNodeIfPresent(const Key& key);
+
     // Helpers: transform point (w=1) and direction (w=0)
     static inline QVector3D mapPoint(const QMatrix4x4& m, const QVector3D& p) {
         const QVector4D hp = m * QVector4D(p, 1.0f);
@@ -363,6 +444,14 @@ private:
                                              const QRay3D& rayWorld)
     {
         const QMatrix4x4 modelToWorld = modelMatrix.inverted();
+        return transformRayWithInverse(modelToWorld, rayWorld);
+    }
+
+    // Same as transformRayToModel but takes the already-inverted matrix.
+    // Used in the pick hot path where BvhData caches inverses up front.
+    static inline QRay3D transformRayWithInverse(const QMatrix4x4& modelToWorld,
+                                                 const QRay3D& rayWorld)
+    {
         const QVector3D originModel    = mapPoint(modelToWorld,    rayWorld.origin());
         const QVector3D directionModel = mapDirection(modelToWorld, rayWorld.direction());
         return QRay3D(originModel, directionModel);
@@ -372,6 +461,14 @@ private:
                                                    const QVector3D& nModel)
     {
         const QMatrix4x4 modelFromWorld = worldFromModel.inverted();
+        return transformNormalWithInverse(modelFromWorld, nModel);
+    }
+
+    // Variant that takes the pre-inverted matrix — avoids the QMatrix4x4::inverted()
+    // call inside the pick hot path when BvhData has it cached.
+    static inline QVector3D transformNormalWithInverse(const QMatrix4x4& modelFromWorld,
+                                                       const QVector3D& nModel)
+    {
         const QMatrix4x4 normalXform = modelFromWorld.transposed();
         const QVector4D hn = normalXform * QVector4D(nModel, 0.0f);
         return hn.toVector3D().normalized();
@@ -386,6 +483,12 @@ private:
 
 inline uint32_t qHash(const cwGeometryItersecter::Object& object) {
     return object.id();
+}
+
+inline size_t qHash(const cwGeometryItersecter::Key& key, size_t seed = 0) noexcept {
+    return qHashMulti(seed,
+                      reinterpret_cast<quintptr>(key.parentObject),
+                      key.id);
 }
 
 #endif // CWGEOMETRYITERSECTER_H
