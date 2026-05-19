@@ -43,6 +43,10 @@ LazClipInteraction {
 
     TurnTableForwardingHandlers {
         turnTableInteraction: clipperId.turnTableInteraction
+        // Top-down ortho is a hard requirement for screen→world ray casting
+        // in cwLazClipInteraction (see header). Rotating away from top-down
+        // would silently break the clip; suppress right-drag rotation here.
+        rotationEnabled: false
     }
 
     LazClipPolygonCanvas {

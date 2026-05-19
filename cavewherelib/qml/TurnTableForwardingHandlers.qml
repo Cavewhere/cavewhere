@@ -18,11 +18,13 @@ QQ.Item {
     id: rootId
 
     required property BaseTurnTableInteraction turnTableInteraction
+    property bool rotationEnabled: true
 
     anchors.fill: parent
 
     QQ.DragHandler {
         target: null
+        enabled: rootId.rotationEnabled
         acceptedButtons: Qt.RightButton
         acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
         onActiveChanged: {
