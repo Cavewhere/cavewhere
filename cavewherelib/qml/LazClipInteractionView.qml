@@ -14,10 +14,46 @@ LazClipInteraction {
 
     required property BaseTurnTableInteraction turnTableInteraction
 
+    // Stash whether the user had the pitch locked already, so we can
+    // restore that state on deactivate instead of always unlocking.
+    property bool _previousPitchLocked: false
+
     anchors.fill: parent
     visible: false
     enabled: false
     focus: visible
+
+    onActivated: {
+        // The clip tool only works at top-down: cwLazClipInteraction
+        // refuses to add polygon points otherwise. Snap the camera to
+        // plan view and lock pitch so the user can't tilt off-axis via
+        // the plan/profile buttons or direct pitch input while drawing.
+        //
+        // setPitch() early-returns when pitchLocked, so the lock must
+        // stay off until the animation finishes — otherwise every
+        // animated frame is dropped. pitchSnapAnimation.onFinished
+        // re-engages the lock.
+        _previousPitchLocked = turnTableInteraction.pitchLocked
+        turnTableInteraction.pitchLocked = false
+        pitchSnapAnimation.to = 90.0
+        pitchSnapAnimation.restart()
+    }
+
+    onDeactivated: {
+        // Stop a mid-flight snap so it doesn't keep dragging pitch
+        // toward 90 after the tool is gone.
+        pitchSnapAnimation.stop()
+        turnTableInteraction.pitchLocked = _previousPitchLocked
+    }
+
+    QQ.NumberAnimation {
+        id: pitchSnapAnimation
+        target: clipperId.turnTableInteraction
+        property: "pitch"
+        duration: 200
+        easing.type: QQ.Easing.InOutQuad
+        onFinished: clipperId.turnTableInteraction.pitchLocked = true
+    }
 
     // acceptedButtons: NoButton lets clicks fall through to the TapHandler.
     QQ.MouseArea {
@@ -73,7 +109,7 @@ LazClipInteraction {
         visible: clipperId.state === LazClipInteraction.Closed
                   || clipperId.state === LazClipInteraction.Processing
 
-        NeutralIconButton {
+        IconButton {
             id: cropButtonId
             objectName: "lazClipCropButton"
             iconSource: "qrc:/twbs-icons/icons/crop.svg"
@@ -84,7 +120,7 @@ LazClipInteraction {
             onClicked: clipperId.commit(LazClipInteraction.Keep)
         }
 
-        NeutralIconButton {
+        IconButton {
             id: eraseButtonId
             objectName: "lazClipEraseButton"
             iconSource: "qrc:/twbs-icons/icons/eraser.svg"
@@ -95,7 +131,7 @@ LazClipInteraction {
             onClicked: clipperId.commit(LazClipInteraction.Remove)
         }
 
-        NeutralIconButton {
+        IconButton {
             id: cancelButtonId
             objectName: "lazClipCancelButton"
             iconSource: "qrc:/twbs-icons/icons/x-lg.svg"

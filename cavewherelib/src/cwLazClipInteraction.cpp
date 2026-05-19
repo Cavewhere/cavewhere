@@ -28,7 +28,12 @@
 #include "cwLazLayersSceneNode.h"
 
 namespace {
-constexpr float kGroundParallelEpsilon = 1e-6f;
+// Ray-direction.z threshold for "looking straight down -z". 1.0 is
+// exactly top-down; tighter than 0.999 lets a sub-degree of float
+// wobble through (e.g. animations landing at 89.99°) while rejecting
+// any meaningful tilt — at which point the ground-plane intersection
+// drifts away from where the user clicked on screen.
+constexpr float kTopDownDirectionZ = -0.999f;
 constexpr int kClipNameDigits = 3;
 } // namespace
 
@@ -98,7 +103,9 @@ void cwLazClipInteraction::addPoint(QPointF screenPos)
 
     QPointF worldXY;
     if (!screenToWorldXY(screenPos, worldXY)) {
-        setErrorMessage(QStringLiteral("Could not project click to ground plane."));
+        setErrorMessage(QStringLiteral(
+            "Clipping requires a top-down (plan) view — rotate the camera "
+            "to look straight down before adding polygon points."));
         return;
     }
     addWorldPoint(worldXY);
@@ -305,8 +312,11 @@ bool cwLazClipInteraction::screenToWorldXY(QPointF screenPos, QPointF& outWorldX
     const QVector3D origin = ray.origin();
     const QVector3D direction = ray.direction();
 
-    if (std::abs(direction.z()) < kGroundParallelEpsilon) {
-        // Ray runs along the ground plane — no unique intersection.
+    // The clip tool only works when the camera is looking straight down
+    // -z: at any other rotation, the ground-plane intersection lands at
+    // an XY the user did not click. Profile (ray parallel to ground)
+    // and any tilt away from top-down both fall into this branch.
+    if (direction.z() > kTopDownDirectionZ) {
         return false;
     }
     const float t = -origin.z() / direction.z();

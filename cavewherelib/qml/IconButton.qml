@@ -23,9 +23,9 @@ QQ.Rectangle {
     signal clicked();
 
     activeFocusOnTab: true
-    Accessible.role: Accessible.Button
-    Accessible.name: container.toolTip !== "" ? container.toolTip : container.text
-    Accessible.onPressAction: container.clicked()
+    QQ.Accessible.role: QQ.Accessible.Button
+    QQ.Accessible.name: container.toolTip !== "" ? container.toolTip : container.text
+    QQ.Accessible.onPressAction: container.clicked()
 
     QC.ToolTip {
         visible: container.toolTip !== "" && mouseArea.containsMouse
@@ -48,9 +48,9 @@ QQ.Rectangle {
         return Theme.transparent
     }
 
-    Keys.onReturnPressed: container.clicked()
-    Keys.onEnterPressed: container.clicked()
-    Keys.onSpacePressed: container.clicked()
+    QQ.Keys.onReturnPressed: container.clicked()
+    QQ.Keys.onEnterPressed: container.clicked()
+    QQ.Keys.onSpacePressed: container.clicked()
 
 
     QQ.Image {

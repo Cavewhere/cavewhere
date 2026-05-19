@@ -128,7 +128,7 @@ Item {
         }
     }
 
-    NeutralIconButton {
+    IconButton {
         id: pickButtonId
         objectName: "coordinatePickerButton"
         anchors {
@@ -160,7 +160,7 @@ Item {
 
     // Toggling on while in perspective shows the ortho-prompt instead of
     // activating immediately — the clipper is top-down XY only.
-    NeutralIconButton {
+    IconButton {
         id: lazClipButtonId
         objectName: "lazClipButton"
         anchors {
