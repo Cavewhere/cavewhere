@@ -447,6 +447,9 @@ bool cwGeometryItersecter::eraseNodeIfPresent(const Key& key)
 void cwGeometryItersecter::clear(cwRenderObject *parentObject)
 {
     if(parentObject == nullptr) {
+        qCDebug(lcPick).nospace()
+            << "clear(all) — dropping " << Nodes.size() << " Nodes, "
+            << m_subBvhs.size() << " cached sub-BVHs";
         Nodes.clear();
         m_subBvhs.clear();
         m_dirtyKeys.clear();
@@ -454,6 +457,7 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
         return;
     }
 
+    int erased = 0;
     QList<Node>::iterator iter = Nodes.begin();
     while(iter != Nodes.end()) {
         Node& currentNode = *iter;
@@ -462,10 +466,14 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
             m_subBvhs.remove(key);
             m_dirtyKeys.remove(key);
             iter = Nodes.erase(iter);
+            ++erased;
         } else {
             iter++;
         }
     }
+    qCDebug(lcPick).nospace()
+        << "clear(parent=" << parentObject << ") — erased " << erased
+        << " Nodes; remaining=" << Nodes.size();
     scheduleTopLevelRebuild();
 }
 
@@ -500,13 +508,20 @@ void cwGeometryItersecter::setModelMatrix(cwRenderObject *parentObject, uint64_t
 void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4& modelMatrix)
 {
     auto iter = findNode(objectKey);
-    if (iter != Nodes.end()) {
-        iter->Object.setModelMatrix(modelMatrix);
-        // No sub-BVH invalidation — sub-BVHs are model-space and
-        // unaffected by modelMatrix changes. Only the top-level needs
-        // refreshing.
-        scheduleTopLevelRebuild();
+    if (iter == Nodes.end()) {
+        qCDebug(lcPick).nospace()
+            << "setModelMatrix {parent=" << objectKey.parentObject
+            << ", id=" << objectKey.id << "} — Key not in Nodes; no-op";
+        return;
     }
+    qCDebug(lcPick).nospace()
+        << "setModelMatrix {parent=" << objectKey.parentObject
+        << ", id=" << objectKey.id << "} — top-level rebuild only"
+        << " (sub-BVH cache preserved)";
+    iter->Object.setModelMatrix(modelMatrix);
+    // No sub-BVH invalidation — sub-BVHs are model-space and unaffected
+    // by modelMatrix changes. Only the top-level needs refreshing.
+    scheduleTopLevelRebuild();
 }
 
 QBox3D cwGeometryItersecter::boundingBox(const Key &objectKey) const
@@ -1372,6 +1387,11 @@ void cwGeometryItersecter::scheduleObjectRebuild(const Key& key)
     // a build that snapshotted *before* this invalidation — that callback
     // would otherwise re-populate m_subBvhs[key] with the stale sub-BVH.
     m_dirtyKeys.insert(key);
+    qCDebug(lcPick).nospace()
+        << "scheduleObjectRebuild {parent=" << key.parentObject
+        << ", id=" << key.id << "} — sub-BVH invalidated; "
+        << m_subBvhs.size() << " other sub-BVH(s) still cached, "
+        << m_dirtyKeys.size() << " dirty";
 
     // Drop the published BVH so picks return no-hit instead of landing on
     // the just-replaced geometry.
@@ -1381,6 +1401,10 @@ void cwGeometryItersecter::scheduleObjectRebuild(const Key& key)
 
 void cwGeometryItersecter::scheduleTopLevelRebuild()
 {
+    qCDebug(lcPick).nospace()
+        << "scheduleTopLevelRebuild — sub-BVH cache untouched ("
+        << m_subBvhs.size() << " entries); "
+        << m_dirtyKeys.size() << " keys already dirty";
     // Reset m_bvh: the published top-level references stale model
     // matrices / nodesSnapshot indices after the mutation.
     m_bvh.reset();
@@ -1675,6 +1699,8 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         [nodesSnapshot, subBvhSnapshot, dirtyKeysSnapshot, resultSlot, builtSlot]
         (QPromise<void>& promise) mutable {
 
+        const auto buildStart = std::chrono::steady_clock::now();
+
         struct Task {
             uint32_t snapshotIndex;
             Key key;
@@ -1700,10 +1726,34 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         promise.setProgressRange(0, kProgressResolution);
         promise.setProgressValue(0);
 
+        const bool debug = lcPick().isDebugEnabled();
+        if (debug) {
+            qsizetype reusedPrims = 0;
+            qsizetype rebuiltPrims = 0;
+            for (qsizetype i = 0; i < nodesSnapshot.size(); ++i) {
+                const Node& n = nodesSnapshot.at(i);
+                const qsizetype primCount = countNodePrimitives(n.Object);
+                if (primCount <= 0) {
+                    continue;
+                }
+                const Key key{n.Object.parent(), n.Object.id()};
+                if (!subBvhSnapshot.contains(key) || dirtyKeysSnapshot.contains(key)) {
+                    rebuiltPrims += primCount;
+                } else {
+                    reusedPrims += primCount;
+                }
+            }
+            qCDebug(lcPick).nospace()
+                << "worker: building " << tasks.size() << " sub-BVH(s) ("
+                << rebuiltPrims << " prims rebuilt, "
+                << reusedPrims << " prims reused from cache)";
+        }
+
         // buildSubBvh internally parallelizes Phase A/B for large clouds
         // via nested cwConcurrent::map — the QThreadPool absorbs the
         // double-release via waitOnPool's release/reserve dance.
         QVector<std::shared_ptr<SubBvh>> built(tasks.size());
+        QVector<double> taskMs(tasks.size(), 0.0);
         if (!tasks.isEmpty()) {
             std::atomic<qsizetype> done{0};
             auto fut = cwConcurrent::map(tasks, [&](Task& t) {
@@ -1711,12 +1761,36 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
                     return;
                 }
                 const qsizetype slot = &t - tasks.constData();
+                const auto t0 = std::chrono::steady_clock::now();
                 built[slot] = buildSubBvh(nodesSnapshot.at(t.snapshotIndex).Object, promise);
+                taskMs[slot] = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - t0).count();
                 const qsizetype d = done.fetch_add(1, std::memory_order_relaxed) + 1;
                 promise.setProgressValue(static_cast<int>(
                     (d * kProgressResolution) / std::max<qsizetype>(tasks.size(), 1)));
             });
             waitOnPool(fut);
+        }
+
+        if (debug && !tasks.isEmpty()) {
+            // Cap per-task dump so a many-Objects rebuild doesn't blast
+            // thousands of lines.
+            constexpr int kTaskDumpCap = 16;
+            const int dumpCount = std::min<int>(tasks.size(), kTaskDumpCap);
+            for (int i = 0; i < dumpCount; ++i) {
+                const qsizetype prims = built[i]
+                    ? built[i]->primitives.size()
+                    : qsizetype(0);
+                qCDebug(lcPick).nospace()
+                    << "  task[" << i << "] {parent=" << tasks[i].key.parentObject
+                    << ", id=" << tasks[i].key.id << "}"
+                    << " prims=" << prims
+                    << " ms=" << taskMs[i];
+            }
+            if (tasks.size() > kTaskDumpCap) {
+                qCDebug(lcPick).nospace()
+                    << "  ... " << (tasks.size() - kTaskDumpCap) << " more tasks elided";
+            }
         }
 
         if (promise.isCanceled()) {
@@ -1759,7 +1833,22 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             return;
         }
 
+        const auto topStart = std::chrono::steady_clock::now();
         out->topLevel = buildTopLevel(worldBoxes);
+        const double topMs = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - topStart).count();
+        const double totalMs = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - buildStart).count();
+
+        if (debug) {
+            qCDebug(lcPick).nospace()
+                << "worker done: " << totalMs << "ms total ("
+                << topMs << "ms top-level), " << tasks.size()
+                << " sub-BVH(s) built, " << out->subBvhs.size()
+                << " in final BvhData, " << out->topLevel.size()
+                << " top-level nodes";
+        }
+
         *resultSlot = std::move(out);
     });
 
