@@ -7,13 +7,16 @@
 #include <random>
 
 // Qt
+#include <QCoreApplication>
 #include <QMatrix4x4>
+#include <QThreadPool>
 #include <QVector3D>
 #include <QRay3D>
 
 // SUT
 #include "cwGeometryItersecter.h"
 #include "cwRayHit.h"
+#include "cwTask.h"
 
 using namespace Catch;
 
@@ -232,6 +235,145 @@ TEST_CASE("Tube-pick fallback works through the two-level path",
     intersector.setTubePickEnabled(false);
     cwRayHit hitStrict = intersector.intersectsDetailed(ray);
     REQUIRE_FALSE(hitStrict.hit());
+}
+
+TEST_CASE("Picks against previously-built objects keep working during an in-flight rebuild",
+          "[cwGeometryItersecter][twoLevel]")
+{
+    // Regression: scheduleObjectRebuild used to call m_bvh.reset() before
+    // restarting the worker. With a slow second object (e.g. a multi-million
+    // point LAZ cloud), that left m_bvh null for the entire build duration,
+    // so picks against the already-built first object would return no-hit
+    // until the worker finally installed the new BvhData.
+    //
+    // The published BVH is owned through shared_ptr<const SubBvh>, so it
+    // stays internally consistent across mutations to the live cache. There
+    // is no reason to null it — the worker's install callback swaps it
+    // atomically when the new build is ready.
+
+    const QRay3D rayAtObjectA(QVector3D(0.0f, 0.0f, 100.0f),
+                              QVector3D(0.0f, 0.0f, -1.0f));
+
+    cwGeometryItersecter intersector;
+
+    // Phase 1: one object, fully built.
+    intersector.addObject(makePointObject(1, {QVector3D(0.0f, 0.0f, 0.0f)}));
+    intersector.waitForFinish();
+    {
+        const cwRayHit baseline = intersector.intersectsDetailed(rayAtObjectA);
+        REQUIRE(baseline.hit());
+        REQUIRE(baseline.objectId() == 1u);
+    }
+
+    // Phase 2: kick a rebuild by adding a brand-new Object, but do NOT
+    // waitForFinish — the install callback fires via a queued connection,
+    // so without spinning the event loop the new BvhData has not yet
+    // replaced the old one. We're now in the exact window the LAZ trace
+    // exhibits: a rebuild is in flight, and the user is picking.
+    intersector.addObject(makePointObject(2, {QVector3D(50.0f, 0.0f, 0.0f)}));
+
+    // The old published BVH does not reference the new Key at all — it's a
+    // strict subset of the post-mutation state. Picks against Object 1
+    // must still succeed during the rebuild window.
+    const cwRayHit duringRebuild = intersector.intersectsDetailed(rayAtObjectA);
+    REQUIRE(duringRebuild.hit());
+    REQUIRE(duringRebuild.objectId() == 1u);
+
+    // Let the rebuild finish so the destructor doesn't tear down a live
+    // worker (and so the test cleans up deterministically).
+    intersector.waitForFinish();
+}
+
+TEST_CASE("Stale install: a re-dirtied Key never reaches picks via a late install callback",
+          "[cwGeometryItersecter][twoLevel]")
+{
+    // Race the install callback against an in-mutator invalidation.
+    //
+    // Setup: A worker that has just finished computing (resultSlot populated)
+    // has a queued .context() install callback. If the UI thread mutates the
+    // same Key BEFORE that callback fires, the in-mutator
+    // invalidatePublishedSlot finds an empty m_bvh (or the previous
+    // generation's BvhData, which doesn't contain the just-rebuilt Key).
+    // When the queued install then runs, it swaps in a BvhData whose
+    // subBvhs slot for the now-dirty Key is populated with *stale*
+    // geometry. Until the next worker finishes, picks against that Key
+    // hit data that was already replaced.
+    //
+    // Reproduction: drain the cwTask thread pool (waitForDone) without
+    // pumping the Qt event loop. The worker finishes; its install is
+    // queued but not yet delivered. Mutate the Key. Then processEvents()
+    // to deliver the now-stale install. Pick. Without the fix the pick
+    // returns the stale geometry.
+
+    const QRay3D rayAtGenB(QVector3D(0.0f, 0.0f, 100.0f),
+                           QVector3D(0.0f, 0.0f, -1.0f));
+
+    cwGeometryItersecter intersector;
+
+    // Generation A — seed the published BVH. Pick a position that we
+    // won't reuse for B/C so a pick at the B position never coincides
+    // with A.
+    intersector.addObject(makePointObject(1, {QVector3D(0.0f, 0.0f, -200.0f)}));
+    intersector.waitForFinish();
+
+    // Generation B — small, fast for the worker. We're going to let
+    // this worker's COMPUTE phase finish, but block its install.
+    intersector.addObject(makePointObject(1, {QVector3D(0.0f, 0.0f, 50.0f)}));
+
+    // AsyncFuture::Restarter defers the actual worker launch via
+    // Qt::QueuedConnection — the worker isn't queued to the pool until
+    // an event loop iteration runs the deferred startRun. Pump once to
+    // dispatch the startRun (which launches worker B on the pool) but
+    // not far enough to deliver the install callback.
+    QCoreApplication::processEvents();
+
+    // Now drain the thread pool to wait for worker B's COMPUTE phase
+    // to finish. Its resultSlot is populated; its .context() install
+    // callback is now queued on the main thread but undelivered.
+    cwTask::threadPool()->waitForDone();
+
+    // Re-dirty Key 1 BEFORE the install callback for B fires. The cloud
+    // is sized so worker C is still running when we processEvents()
+    // below — otherwise C's install would also be queued and would
+    // overwrite B's stale data, hiding the bug. The size is tuned for
+    // dev-machine timing; bump it if this ever races on faster
+    // hardware. Noise points are in [0, 500]^3 so they sit lateral to
+    // the ray (which runs along x=y=0) and can't compete with the
+    // pinned target at z=80.
+    constexpr int kStaleInstallCloudCount = 200'000;
+    constexpr float kStaleInstallCloudRange = 500.0f;
+    constexpr uint32_t kStaleInstallCloudSeed = 7;
+    intersector.addObject(makePointObject(
+        1,
+        deterministicCloud(kStaleInstallCloudCount, kStaleInstallCloudRange,
+                           QVector3D(0.0f, 0.0f, 80.0f), kStaleInstallCloudSeed)));
+
+    // Deliver B's install callback. With the bug, m_bvh is now the
+    // stale BvhData(B): keyToSlot[1] points at a slot holding SubBvh(B),
+    // and m_dirtyKeys contains Key 1 from the addObject(C) above.
+    // C's worker is still running, so its install hasn't been queued
+    // yet — only B's install fires in this pump.
+    QCoreApplication::processEvents();
+
+    // The pick must not land on B's stale geometry. Acceptable outcomes:
+    //   - no-hit (the slot was nulled out before/during the install)
+    //   - hit at C's z=80 (if C's worker also finished and installed)
+    // Unacceptable:
+    //   - hit at B's z=50 (stale install delivered live data to picks)
+    {
+        const cwRayHit hit = intersector.intersectsDetailed(rayAtGenB);
+        if (hit.hit()) {
+            REQUIRE(hit.pointWorld().z() != Approx(50.0f).margin(1e-3));
+        }
+    }
+
+    // Final settle: after waitForFinish, picks must reflect generation C.
+    intersector.waitForFinish();
+    {
+        const cwRayHit hit = intersector.intersectsDetailed(rayAtGenB);
+        REQUIRE(hit.hit());
+        REQUIRE(hit.pointWorld().z() == Approx(80.0f).margin(1e-3));
+    }
 }
 
 // ============================================================================

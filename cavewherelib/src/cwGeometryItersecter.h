@@ -216,6 +216,13 @@ private:
     // index into subBvhs / modelMatrices (parallel arrays). Each sub-BVH
     // is model-space; traversal transforms the world ray to model space
     // once per Object root.
+    //
+    // Single-owner invariant: m_bvh is the only shared_ptr<BvhData> that
+    // exists at steady state — invalidatePublishedSlot mutates subBvhs
+    // via non-const operator[] and relies on refcount==1 to avoid a
+    // QVector detach (deep copy of the whole parallel-arrays buffer).
+    // Don't snapshot a BvhData; snapshot individual SubBvhs by their
+    // shared_ptr instead.
     struct BvhData {
         QList<Node> nodesSnapshot;
         QVector<BvhNode> topLevel;
@@ -231,6 +238,13 @@ private:
         // and zero-radius Points contribute 0; harmless for those paths
         // since they don't take the tube fallback.
         float maxPickRadius = 0.0f;
+        // Reverse index: Key → slot in the parallel arrays above. Lets a
+        // mutator null out the dirty Key's sub-BVH in the published BVH so
+        // it stops contributing to picks the instant its cache entry is
+        // invalidated — without dropping the rest of the BVH while a
+        // rebuild is in flight. A null entry in subBvhs is the in-flight
+        // marker; traversal skips it. See invalidatePublishedSlot().
+        QHash<Key, int> keyToSlot;
     };
 
     bool m_tubePickEnabled = true;
@@ -289,6 +303,14 @@ private:
     // model-space geometry intact) and removeObject (which only shrinks
     // the set of objects).
     void scheduleTopLevelRebuild();
+
+    // Release the published sub-BVH for one Key while a rebuild is in
+    // flight. Leaves the rest of m_bvh intact so unrelated Objects keep
+    // serving picks — without holding a second copy of the dirty Key's
+    // sub-BVH alongside the worker's new one (critical when that sub-BVH
+    // is a multi-GB point cloud). No-op if m_bvh is null or doesn't
+    // contain key. Safe to call from the main thread alongside picks.
+    void invalidatePublishedSlot(const Key& key);
 
     QFuture<void> launchBuildJob();
 

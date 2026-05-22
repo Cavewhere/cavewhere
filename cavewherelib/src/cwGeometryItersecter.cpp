@@ -433,6 +433,7 @@ bool cwGeometryItersecter::eraseNodeIfPresent(const Key& key)
     Nodes.erase(iter);
     m_subBvhs.remove(key);
     m_dirtyKeys.remove(key);
+    invalidatePublishedSlot(key);
     return true;
 }
 
@@ -453,6 +454,10 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
         Nodes.clear();
         m_subBvhs.clear();
         m_dirtyKeys.clear();
+        // Total wipe: drop the published BVH entirely so every pick goes
+        // no-hit immediately. No retention benefit here — there's no Key
+        // left we'd want picks to still hit.
+        m_bvh.reset();
         scheduleTopLevelRebuild();
         return;
     }
@@ -465,6 +470,7 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
             const Key key{currentNode.Object.parent(), currentNode.Object.id()};
             m_subBvhs.remove(key);
             m_dirtyKeys.remove(key);
+            invalidatePublishedSlot(key);
             iter = Nodes.erase(iter);
             ++erased;
         } else {
@@ -770,7 +776,12 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray) const
 
         // Top-level leaf — descend the Object's sub-BVH in model space.
         const uint32_t slot = bn.left;
-        const SubBvh& sub = *subBvhs.at(slot);
+        const std::shared_ptr<const SubBvh>& subPtr = subBvhs.at(slot);
+        // Slot nulled mid-rebuild — see invalidatePublishedSlot.
+        if (!subPtr) {
+            continue;
+        }
+        const SubBvh& sub = *subPtr;
 
         // Hoist visibility check: every primitive in the sub-BVH belongs
         // to the same Object, so a single isPickable() guard short-
@@ -1387,15 +1398,13 @@ void cwGeometryItersecter::scheduleObjectRebuild(const Key& key)
     // a build that snapshotted *before* this invalidation — that callback
     // would otherwise re-populate m_subBvhs[key] with the stale sub-BVH.
     m_dirtyKeys.insert(key);
+    invalidatePublishedSlot(key);
     qCDebug(lcPick).nospace()
         << "scheduleObjectRebuild {parent=" << key.parentObject
         << ", id=" << key.id << "} — sub-BVH invalidated; "
         << m_subBvhs.size() << " other sub-BVH(s) still cached, "
         << m_dirtyKeys.size() << " dirty";
 
-    // Drop the published BVH so picks return no-hit instead of landing on
-    // the just-replaced geometry.
-    m_bvh.reset();
     m_bvhRestarter.restart([this]() { return launchBuildJob(); });
 }
 
@@ -1405,10 +1414,25 @@ void cwGeometryItersecter::scheduleTopLevelRebuild()
         << "scheduleTopLevelRebuild — sub-BVH cache untouched ("
         << m_subBvhs.size() << " entries); "
         << m_dirtyKeys.size() << " keys already dirty";
-    // Reset m_bvh: the published top-level references stale model
-    // matrices / nodesSnapshot indices after the mutation.
-    m_bvh.reset();
+    // m_bvh stays live during the rebuild. The stored modelMatrices /
+    // nodesSnapshot are now slightly stale for any Key whose matrix
+    // moved or whose entry was removed, but picks against the
+    // unaffected Keys remain correct and the rebuild is fast (top-
+    // level only). Callers that need a Key gone from picks instantly
+    // (removeObject, clear) call invalidatePublishedSlot first.
     m_bvhRestarter.restart([this]() { return launchBuildJob(); });
+}
+
+void cwGeometryItersecter::invalidatePublishedSlot(const Key& key)
+{
+    if (!m_bvh) {
+        return;
+    }
+    auto it = m_bvh->keyToSlot.constFind(key);
+    if (it == m_bvh->keyToSlot.constEnd()) {
+        return;
+    }
+    m_bvh->subBvhs[*it].reset();
 }
 
 std::shared_ptr<cwGeometryItersecter::SubBvh>
@@ -1812,6 +1836,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
 
         QVector<QBox3D> worldBoxes;
         worldBoxes.reserve(nodesSnapshot.size());
+        out->keyToSlot.reserve(nodesSnapshot.size());
         for (qsizetype i = 0; i < nodesSnapshot.size(); ++i) {
             const Node& n = nodesSnapshot.at(i);
             const Key key{n.Object.parent(), n.Object.id()};
@@ -1822,10 +1847,12 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             const SubBvh& sb = **it;
             const QMatrix4x4 m = n.Object.modelMatrix();
             const QBox3D wb = sb.modelRootBox.transformed(m);
+            const int slot = static_cast<int>(out->subBvhs.size());
             out->subBvhs.append(*it);
             out->modelMatrices.append(m);
             out->inverseModelMatrices.append(m.inverted());
             worldBoxes.append(wb);
+            out->keyToSlot.insert(key, slot);
             out->maxPickRadius = std::max(out->maxPickRadius, sb.object.pickRadius());
         }
 
@@ -1862,6 +1889,13 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             return;
         }
         m_bvh = *resultSlot;
+        // A worker that finished computing just before cancel still
+        // publishes here. Re-apply the dirty filter on this side of the
+        // swap — mutator-site invalidatePublishedSlot was a no-op against
+        // the old m_bvh and would otherwise miss these Keys.
+        for (const Key& dirtyKey : std::as_const(m_dirtyKeys)) {
+            invalidatePublishedSlot(dirtyKey);
+        }
         // Promote freshly built sub-BVHs to the cache, skipping any Key
         // that's been re-dirtied since the build started — those will be
         // rebuilt by the next launched job.
