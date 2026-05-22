@@ -10,6 +10,7 @@
 //Qt includes
 #include <QDir>
 #include <QFileInfo>
+#include <QLoggingCategory>
 #include <QPointer>
 #include <QVariant>
 
@@ -17,6 +18,16 @@
 #include "cwCavingRegion.h"
 #include "cwLazLoader.h"
 #include "cwProject.h"
+
+Q_LOGGING_CATEGORY(lcLazModel, "cw.laz.model")
+
+namespace {
+QString shortId(const cwLazLayer* layer) {
+    return layer == nullptr
+        ? QStringLiteral("(null)")
+        : layer->id().toString(QUuid::WithoutBraces).left(8);
+}
+} // namespace
 
 cwLazLayerModel::cwLazLayerModel(QObject* parent) :
     QAbstractListModel(parent)
@@ -167,9 +178,12 @@ void cwLazLayerModel::setGisLayersDir(const QDir& dir)
 
 void cwLazLayerModel::rescan()
 {
+    qCDebug(lcLazModel) << "rescan: BEGIN dir=" << m_gisLayersDir.absolutePath()
+                        << "currentLayers=" << m_layers.size();
     clear();
 
     if (m_gisLayersDir.absolutePath().isEmpty() || !m_gisLayersDir.exists()) {
+        qCDebug(lcLazModel) << "rescan: END (no dir)";
         return;
     }
 
@@ -203,16 +217,23 @@ void cwLazLayerModel::rescan()
         newLayers.append(createLayer());
     }
 
+    // Seed source paths before announcing the rows. setSourcePath triggers
+    // updateNameKeyword/updateFileNameKeyword on the layer's keyword model;
+    // running it after beginInsertRows lets the scene node register a keyword
+    // item carrying only Type+ObjectId, then the late keyword changes shuttle
+    // the same item through both accepted and rejected filter pipelines,
+    // thrashing cwKeywordVisibility (last-inserted wins).
+    for (int i = 0; i < entries.size(); ++i) {
+        newLayers.at(i)->setSourcePath(entries.at(i).absoluteFilePath());
+        qCDebug(lcLazModel) << "rescan: new layer" << shortId(newLayers.at(i))
+                            << "file=" << entries.at(i).fileName();
+    }
+
     beginInsertRows(QModelIndex(), 0, newLayers.size() - 1);
     m_layers = newLayers;
     endInsertRows();
 
-    // Kick off async loads after rows are committed so dataChanged signals
-    // from load progress route through valid indices.
-    for (int i = 0; i < entries.size(); ++i) {
-        m_layers.at(i)->setSourcePath(entries.at(i).absoluteFilePath());
-    }
-
+    qCDebug(lcLazModel) << "rescan: END layers=" << m_layers.size();
     emit countChanged();
 }
 
@@ -220,6 +241,11 @@ void cwLazLayerModel::clear()
 {
     if (m_layers.isEmpty()) {
         return;
+    }
+    qCDebug(lcLazModel) << "clear: destroying" << m_layers.size() << "layers";
+    for (const cwLazLayer* layer : std::as_const(m_layers)) {
+        qCDebug(lcLazModel) << "  → deleting layer" << shortId(layer)
+                            << "file=" << QFileInfo(layer->sourcePath()).fileName();
     }
     beginResetModel();
     qDeleteAll(m_layers);

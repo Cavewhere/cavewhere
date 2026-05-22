@@ -22,6 +22,19 @@
 
 Q_LOGGING_CATEGORY(lcLazSceneNode, "cw.laz.scenenode")
 
+namespace {
+QString shortId(const cwLazLayer* layer) {
+    return layer == nullptr
+        ? QStringLiteral("(null)")
+        : layer->id().toString(QUuid::WithoutBraces).left(8);
+}
+QString fileName(const cwLazLayer* layer) {
+    return layer == nullptr
+        ? QStringLiteral("(null)")
+        : QFileInfo(layer->sourcePath()).fileName();
+}
+} // namespace
+
 cwLazLayersSceneNode::cwLazLayersSceneNode(QObject* parent) :
     QObject(parent)
 {
@@ -134,17 +147,25 @@ void cwLazLayersSceneNode::disconnectModel()
 
 void cwLazLayersSceneNode::rebuild()
 {
+    qCDebug(lcLazSceneNode) << "rebuild: BEGIN model=" << (m_model.isNull() ? "(null)" : "set")
+                            << "currentPointClouds=" << m_pointClouds.size()
+                            << "currentKeywordItems=" << m_keywordItems.size();
     clear();
     if (!m_model) {
+        qCDebug(lcLazSceneNode) << "rebuild: END (no model)";
         return;
     }
     for (auto* layer : m_model->layers()) {
         addLayer(layer);
     }
+    qCDebug(lcLazSceneNode) << "rebuild: END pointClouds=" << m_pointClouds.size()
+                            << "keywordItems=" << m_keywordItems.size();
 }
 
 void cwLazLayersSceneNode::clear()
 {
+    qCDebug(lcLazSceneNode) << "clear: pointClouds=" << m_pointClouds.size()
+                            << "keywordItems=" << m_keywordItems.size();
     for (const auto& item : std::as_const(m_keywordItems)) {
         if (m_keywordItemModel && item) {
             m_keywordItemModel->removeItem(item);
@@ -170,9 +191,16 @@ void cwLazLayersSceneNode::clear()
 
 void cwLazLayersSceneNode::addLayer(cwLazLayer* layer)
 {
-    if (!layer || m_pointClouds.contains(layer->id())) {
+    if (!layer) {
+        qCDebug(lcLazSceneNode) << "addLayer: skip (null layer)";
         return;
     }
+    if (m_pointClouds.contains(layer->id())) {
+        qCDebug(lcLazSceneNode) << "addLayer: skip (already present)"
+                                << shortId(layer) << fileName(layer);
+        return;
+    }
+    qCDebug(lcLazSceneNode) << "addLayer:" << shortId(layer) << fileName(layer);
 
     auto* renderObject = new cwRenderPointCloud();
     renderObject->setScene(m_scene);
@@ -198,6 +226,7 @@ void cwLazLayersSceneNode::removeLayer(cwLazLayer* layer)
     if (!layer) {
         return;
     }
+    qCDebug(lcLazSceneNode) << "removeLayer:" << shortId(layer) << fileName(layer);
     removeKeywordItemForLayer(layer);
     auto it = m_pointClouds.find(layer->id());
     if (it == m_pointClouds.end()) {
@@ -242,13 +271,20 @@ void cwLazLayersSceneNode::syncLayerGeometry(cwLazLayer* layer)
 void cwLazLayersSceneNode::addKeywordItemForLayer(cwLazLayer* layer)
 {
     if (!m_keywordItemModel || !layer) {
+        qCDebug(lcLazSceneNode) << "addKeywordItemForLayer: skip"
+                                << "model=" << (m_keywordItemModel == nullptr ? "(null)" : "set")
+                                << "layer=" << shortId(layer);
         return;
     }
     if (m_keywordItems.contains(layer->id())) {
+        qCDebug(lcLazSceneNode) << "addKeywordItemForLayer: skip (already present)"
+                                << shortId(layer);
         return;
     }
     auto pointCloudIt = m_pointClouds.constFind(layer->id());
     if (pointCloudIt == m_pointClouds.constEnd()) {
+        qCDebug(lcLazSceneNode) << "addKeywordItemForLayer: skip (no point cloud)"
+                                << shortId(layer);
         return;
     }
 
@@ -258,6 +294,9 @@ void cwLazLayersSceneNode::addKeywordItemForLayer(cwLazLayer* layer)
     m_keywordItemModel->addItem(keywordItem);
 
     m_keywordItems.insert(layer->id(), keywordItem);
+    qCDebug(lcLazSceneNode) << "addKeywordItemForLayer: added" << shortId(layer)
+                            << "item=" << static_cast<void*>(keywordItem)
+                            << "object=" << static_cast<void*>(pointCloudIt.value());
 }
 
 void cwLazLayersSceneNode::removeKeywordItemForLayer(cwLazLayer* layer)
@@ -269,6 +308,8 @@ void cwLazLayersSceneNode::removeKeywordItemForLayer(cwLazLayer* layer)
     if (it == m_keywordItems.end()) {
         return;
     }
+    qCDebug(lcLazSceneNode) << "removeKeywordItemForLayer:" << shortId(layer)
+                            << "item=" << static_cast<void*>(it.value());
     if (m_keywordItemModel && it.value()) {
         m_keywordItemModel->removeItem(it.value());
     }
