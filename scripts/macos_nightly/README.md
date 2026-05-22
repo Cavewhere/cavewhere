@@ -38,18 +38,37 @@ NUM_RUNS=4 CPP_PARALLEL=2 QML_PARALLEL=1 ./scripts/macos_nightly/nightly-test.sh
 
 ## Scheduling with launchd (macOS)
 
-### 1. Install the plist
+The launchd job must not point directly into a dev checkout — branch switches
+or uncommitted edits in that checkout will silently change (or break) what
+runs at 1 AM. Instead it points at `nightly-launcher.sh`, which lives at a
+stable path outside any repo and fetches the latest `nightly-test.sh` from
+`origin/dev` on GitHub each run.
+
+### 1. Install the launcher
+
+Copy the launcher to a stable location outside any git checkout:
+
+```bash
+mkdir -p ~/.local/bin
+cp scripts/macos_nightly/nightly-launcher.sh ~/.local/bin/
+chmod +x ~/.local/bin/nightly-launcher.sh
+```
+
+Updating the launcher itself is rare (it only changes if you modify how the
+nightly is fetched). When you do change it, re-run the `cp` above.
+
+### 2. Install the plist
 
 ```bash
 cp scripts/macos_nightly/com.cavewhere.nightly-test.plist ~/Library/LaunchAgents/
 ```
 
 **Before loading**, edit the plist to match your system:
-- Update the script path in `ProgramArguments` if your checkout is not at `/Users/cave/Documents/projects/cavewhere`
+- Update the launcher path in `ProgramArguments` if your home directory is not `/Users/cave`
 - Update the `PATH` in `EnvironmentVariables` to include the directory containing `conan` (find it with `which conan`)
 - Update `HOME` to your home directory
 
-### 2. Grant permissions
+### 3. Grant permissions
 
 macOS requires Full Disk Access for scheduled scripts. Go to:
 
@@ -57,7 +76,7 @@ macOS requires Full Disk Access for scheduled scripts. Go to:
 
 Add `/bin/zsh` (press `Cmd+Shift+G` to type the path).
 
-### 3. Load and test
+### 4. Load and test
 
 ```bash
 # Load the agent
@@ -77,7 +96,16 @@ The agent runs at 1:00 AM daily. It persists across reboots.
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.cavewhere.nightly-test.plist
 rm ~/Library/LaunchAgents/com.cavewhere.nightly-test.plist
+rm ~/.local/bin/nightly-launcher.sh
 ```
+
+## How a nightly run flows
+
+1. launchd fires `~/.local/bin/nightly-launcher.sh` at 1 AM (deployed copy of `scripts/macos_nightly/nightly-launcher.sh`).
+2. The launcher curls the latest `scripts/macos_nightly/nightly-test.sh` from `origin/dev` on GitHub into `/var/tmp/cavewhere-nightly/nightly-test.fetched.sh` and `exec`s it.
+3. `nightly-test.sh` does its own `git clone --recursive` of `origin/dev` into `/var/tmp/cavewhere-nightly/<timestamp>/cavewhere`, builds it, and runs the test suites.
+
+This means changes to `nightly-test.sh` on `dev` take effect on the next run with no further action. Changes to `nightly-launcher.sh` itself require re-running step 1 in the setup section.
 
 ## Configuration reference
 
