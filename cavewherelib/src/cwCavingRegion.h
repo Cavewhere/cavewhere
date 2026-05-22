@@ -60,8 +60,14 @@ public:
     QString globalCoordinateSystem() const { return m_globalCoordinateSystem; }
     void setGlobalCoordinateSystem(const QString& cs);
 
-    cwGeoPoint worldOrigin() const { return m_worldOrigin; }
+    cwGeoPoint worldOrigin() const { return m_worldOrigin.value; }
     void setWorldOrigin(const cwGeoPoint& origin);
+
+    // True iff worldOrigin was set explicitly (by the user, by load, by
+    // recompute) — distinct from the default-constructed (0,0,0) that a
+    // fresh region carries. Used by cwLazLayerModel to decide whether
+    // an incoming LAZ may auto-adopt its bbox center as the region origin.
+    bool hasExplicitWorldOrigin() const { return m_worldOrigin.explicitlySet; }
 
     Q_INVOKABLE void recomputeWorldOrigin();
 
@@ -122,7 +128,18 @@ private:
     cwSanitizedNameSet m_caveNames;
 
     QString m_globalCoordinateSystem;
-    cwGeoPoint m_worldOrigin;
+
+    // Bundles the origin value with a flag tracking whether anyone has
+    // explicitly chosen it. Glued together so the value and the flag can't
+    // drift: every code path that mutates the value also touches the flag,
+    // and the CS-change reset path (which is *not* a user choice) resets
+    // both atomically.
+    struct WorldOriginState {
+        cwGeoPoint value;
+        bool explicitlySet = false;
+    };
+    WorldOriginState m_worldOrigin;
+
     cwLazLayerModel* m_lazLayers = nullptr;
 
     // cwCavingRegion& copy(const cwCavingRegion& object);
