@@ -32,6 +32,16 @@ namespace {
 constexpr int    AlphaOpaqueThreshold = cwCaptureLabelPlacer::DefaultAlphaThreshold;
 constexpr double DegenerateRectEpsilon = 1e-3;
 
+// Tolerance for the leader-anchors-on-label-edge "touch". The placer sizes
+// labels with QPainterPath::addText().boundingRect() and anchors leaders at
+// that rect's edge, but the painter positions text via
+// QFontMetricsF::tightBoundingRect(); the two measurements disagree by a
+// fraction of a pixel (observed ~0.7 px on Linux/freetype). The leader's
+// own anchor would then read as a sub-pixel "overlap" with its label. The
+// placer enforces a 3.0 px clearance from any *other* leader, so a value
+// well under that still catches real collisions.
+constexpr double LeaderBoundaryEpsilon = 1.5;
+
 struct ParsedText {
     QString text;
     QRectF  rect;
@@ -381,12 +391,14 @@ QList<SvgTextLeaderCollision> SvgOverlapAnalyzer::textLeaderCollisions(const QUr
         if(t.rect.isEmpty()) {
             continue;
         }
-        // A leader anchors at one corner of its own label; that boundary
-        // contact is not an overlap. Shrink the rect so the intersect check
-        // ignores that touch point.
+        // A leader anchors on its own label's rect edge; that boundary
+        // contact is not an overlap. Shrink by LeaderBoundaryEpsilon (not
+        // the tiny DegenerateRectEpsilon) so font-metric drift between the
+        // placer's sizing and the painter's positioning doesn't read as a
+        // collision.
         const QRectF shrunk = t.rect.adjusted(
-            DegenerateRectEpsilon,  DegenerateRectEpsilon,
-            -DegenerateRectEpsilon, -DegenerateRectEpsilon);
+            LeaderBoundaryEpsilon,  LeaderBoundaryEpsilon,
+            -LeaderBoundaryEpsilon, -LeaderBoundaryEpsilon);
         if(shrunk.width() <= 0.0 || shrunk.height() <= 0.0) {
             continue;
         }
