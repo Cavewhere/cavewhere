@@ -107,10 +107,11 @@ Item {
 
         // ── Format detection via fileType ─────────────────────────────────────
 
-        // Loading a legacy SQLite .cw file converts to GitFileType (directory).
+        // Loading a legacy SQLite .cw file converts to a bundle anchored at
+        // the original .cw path (issue #515), so fileType is BundledGitFileType.
         function test_bundledFirst_forLegacyProject() {
             loadLegacyFixture();
-            compare(RootData.project.fileType, Project.GitFileType);
+            compare(RootData.project.fileType, Project.BundledGitFileType);
         }
 
         function test_bundledFirst_defaultsToDirectory_forDirectoryProject() {
