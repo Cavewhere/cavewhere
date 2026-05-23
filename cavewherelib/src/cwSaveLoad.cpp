@@ -2529,7 +2529,6 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
     return AsyncFuture::observe(d->m_pendingJobsDeferred.future())
             .context(this, [this, newProjectFilename]() {
-        // qDebug() << "Finished" << this;
         return ResultString(newProjectFilename);
     })
             .future();
