@@ -15,7 +15,8 @@
 cwQuickSceneView::cwQuickSceneView(QQuickItem *parent) :
     QQuickPaintedItem(parent)
 {
-    setRenderTarget(FramebufferObject);
+    // FBO target crashes inside QSGDefaultPainterNode at size 0; Image path no-ops.
+    setRenderTarget(Image);
 
     QBindable<double> widthBinding(this, "width");
     QBindable<double> heightBinding(this, "height");
@@ -74,7 +75,11 @@ void cwQuickSceneView::setScene(QGraphicsScene* scene) {
             connect(Scene.data(), &QGraphicsScene::changed, this, [this](const QList<QRectF>& region) {
                 Q_UNUSED(region);
                 auto size = boundingRect().size();
-                // qDebug() << "size:" << size << boundingRect() << Scene->sceneRect();
+                // QPainter on a null QImage has no paint engine.
+                if(size.isEmpty()) {
+                    return;
+                }
+
                 if(m_image.size() != size) {
                     m_image = QImage(size.toSize(), QImage::Format_ARGB32);
                 }
