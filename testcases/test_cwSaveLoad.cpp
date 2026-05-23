@@ -922,7 +922,10 @@ TEST_CASE("cwSaveLoad should save and load old projects correctly", "[cwSaveLoad
 
     auto root2 = std::make_unique<cwRootData>();
 
-    CHECK(root->project()->fileType() == cwProject::GitFileType);
+    // SQLite .cw files convert to a bundle pointing at the original .cw
+    // path (issue #515). The working tree still lives in a temp dir, which
+    // we reach via dataRootDir() to verify the converted layout.
+    CHECK(root->project()->fileType() == cwProject::BundledGitFileType);
 
     const QDir workingDataRoot = root->project()->dataRootDir();
     const QDir workingProjectRoot = QFileInfo(workingDataRoot.absolutePath()).absoluteDir();
