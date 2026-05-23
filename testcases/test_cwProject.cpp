@@ -905,11 +905,11 @@ TEST_CASE("discardChangesAndReload reloads in-memory model from committed state"
 
 TEST_CASE("discardChanges after v6 sqlite conversion does not produce HEAD error (issue #418)",
           "[cwProject][discardChanges][conversion]") {
-    // Reproduces GitHub issue #418: after converting a v6 SQLite .cw bundle to
-    // GitFileType via loadOrConvert(), the git repository has no commits (HEAD
-    // does not exist). A subsequent discardChanges() calls git reset --hard HEAD
-    // which fails with "revspec 'HEAD' not found", posting a warning to the
-    // error model.
+    // Reproduces GitHub issue #418: after converting a v6 SQLite .cw to a
+    // bundled git project via loadOrConvert(), the git repository has no
+    // commits (HEAD does not exist). A subsequent discardChanges() calls
+    // git reset --hard HEAD which fails with "revspec 'HEAD' not found",
+    // posting a warning to the error model.
 
     QQuickGit::Account account;
     account.setName(QStringLiteral("V6 Discard Tester"));
@@ -935,7 +935,7 @@ TEST_CASE("discardChanges after v6 sqlite conversion does not produce HEAD error
                       << project->errorModel()->at(i).message().toStdString());
     }
     REQUIRE(project->errorModel()->count() == 0);
-    REQUIRE(project->fileType() == cwProject::GitFileType);
+    REQUIRE(project->fileType() == cwProject::BundledGitFileType);
     REQUIRE(project->cavingRegion()->caveCount() > 0);
 
     // Step 2: Discard changes on the freshly converted project.
@@ -9298,8 +9298,9 @@ TEST_CASE("cwProject should detect the correct file type", "[cwProject]") {
         return p->errorModel()->size() > 0;
     };
 
-    //Older sqlite project: detection triggers conversion, resulting in GitFileType
-    CHECK(detectType(copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"))) == cwProject::GitFileType);
+    //Older sqlite project: detection triggers conversion to a bundle pointing
+    //at the original .cw path (issue #515).
+    CHECK(detectType(copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"))) == cwProject::BundledGitFileType);
 
     //A file based file
     CHECK(detectType(copyToTempFolder(testcasesDatasetPath("test_cwProject/v8.cwproj"))) == cwProject::GitFileType);
@@ -9350,7 +9351,9 @@ TEST_CASE("cwProject fileType should reflect the current loaded project format",
     rootData->futureManagerModel()->waitForFinished();
     project->waitLoadToFinish();
     project->waitSaveToFinish();
-    CHECK(project->fileType() == cwProject::GitFileType);
+    // Legacy SQLite .cw files convert to a bundle pointing at the original
+    // .cw path so save() re-zips over it in place (issue #515).
+    CHECK(project->fileType() == cwProject::BundledGitFileType);
 
     const QString gitSource = copyToTempFolder(testcasesDatasetPath("test_cwProject/v8.cwproj"));
     project->loadOrConvert(gitSource);
@@ -11375,10 +11378,11 @@ TEST_CASE("cwProject should overwrite or touch loaded project", "[cwProject]") {
         root->project()->waitLoadToFinish();
         root->project()->waitSaveToFinish();
 
-        // SQLite .cw files now convert to a temporary git directory (GitFileType),
-        // so filename() points to the git dir, not the original .cw path.
-        REQUIRE(root->project()->filename() != filename);
-        REQUIRE(root->project()->fileType() == cwProject::GitFileType);
+        // SQLite .cw files convert to a bundle pointing at the original
+        // .cw path (issue #515), so filename() equals the original .cw file
+        // even though the working tree lives in a temp dir.
+        REQUIRE(root->project()->filename() == filename);
+        REQUIRE(root->project()->fileType() == cwProject::BundledGitFileType);
 
         // Save to a permanent location so it survives destruction of the temp project
         const QString permanentPath = QDir(permanentConvertedDir.path()).filePath(QStringLiteral("Converted.cwproj"));
@@ -11459,8 +11463,10 @@ TEST_CASE("V6 conversion writes note image paths relative to note file",
     root->project()->waitLoadToFinish();
     root->project()->waitSaveToFinish();
 
-    // SQLite .cw files convert to a temporary git directory; filename() is now the git dir path.
-    REQUIRE(root->project()->filename() != sourceFilename);
+    // SQLite .cw files convert to a bundle pointing at the original .cw path
+    // (issue #515); the working tree lives in a temp dir we can locate via
+    // dataRootDir().
+    REQUIRE(root->project()->filename() == sourceFilename);
     const QDir workingProjectRoot = QFileInfo(root->project()->dataRootDir().absolutePath()).absoluteDir();
     const QString convertedProjectFile = firstCwprojInDirectory(workingProjectRoot.absolutePath());
     REQUIRE_FALSE(convertedProjectFile.isEmpty());
@@ -11487,11 +11493,20 @@ TEST_CASE("V6 conversion writes note image paths relative to note file",
     }
 }
 
-TEST_CASE("loadOrConvert sqlite converts to a temporary git directory", "[cwProject][conversion]") {
-    // SQLite .cw files now convert to a temporary git directory (GitFileType).
-    // The original .cw file is not modified; saves go to the temp git dir.
+TEST_CASE("loadOrConvert sqlite converts in place to a .cw bundle (issue #515)",
+          "[cwProject][conversion][bundled]") {
+    // Issue #515: opening a legacy SQLite .cw file used to convert it to a
+    // loose git directory inside a QTemporaryDir. filename() pointed at the
+    // temp dir, so the title bar showed the temp path and save() wrote into
+    // the temp dir rather than back to the original .cw file. The fix makes
+    // SQLite .cw files convert to a BundledGitFileType pointing at the
+    // original .cw path, so save() re-zips the bundle over the original file
+    // in place — the user-visible filename, title bar, and on-disk file all
+    // stay anchored at the original .cw path.
     const QString sqliteSource = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     REQUIRE(QFileInfo::exists(sqliteSource));
+    const qint64 originalSqliteSize = QFileInfo(sqliteSource).size();
+    REQUIRE(originalSqliteSize > 0);
 
     auto project = std::make_unique<cwProject>();
     addTokenManager(project.get());
@@ -11503,10 +11518,13 @@ TEST_CASE("loadOrConvert sqlite converts to a temporary git directory", "[cwProj
     project->waitLoadToFinish();
     REQUIRE(project->errorModel()->size() == 0);
 
-    // filename() now points to the converted git directory, not the original .cw
-    REQUIRE(project->filename() != sqliteSource);
-    CHECK(project->fileType() == cwProject::GitFileType);
-    REQUIRE(project->canSaveDirectly());
+    // Post-conversion: the project is anchored at the original .cw path,
+    // reports the bundle file type, is not flagged temporary, and can save
+    // directly. This is the user-visible contract issue #515 broke.
+    CHECK(project->filename() == sqliteSource);
+    CHECK(project->fileType() == cwProject::BundledGitFileType);
+    CHECK_FALSE(project->isTemporaryProject());
+    CHECK(project->canSaveDirectly());
 
     REQUIRE(project->cavingRegion()->caveCount() > 0);
     cwCave* const cave = project->cavingRegion()->cave(0);
@@ -11515,19 +11533,28 @@ TEST_CASE("loadOrConvert sqlite converts to a temporary git directory", "[cwProj
     cave->setName(renamedCave);
     project->waitSaveToFinish();
 
-    // Save and reload from the git directory path
+    // Save should re-zip the bundle back over the original .cw path, not into
+    // a temp dir.
     REQUIRE(project->save());
     project->waitSaveToFinish();
-    const QString gitPath = project->filename();
-    REQUIRE(QFileInfo::exists(gitPath));
+    CHECK(project->filename() == sqliteSource);
+    REQUIRE(QFileInfo::exists(sqliteSource));
 
-    auto reloaded = std::make_unique<cwProject>();
-    addTokenManager(reloaded.get());
-    reloaded->loadFile(gitPath);
-    reloaded->waitLoadToFinish();
-    REQUIRE(reloaded->errorModel()->size() == 0);
-    REQUIRE(reloaded->cavingRegion()->caveCount() > 0);
-    cwCave* const reloadedCave = reloaded->cavingRegion()->cave(0);
+    // The original SQLite bytes have been replaced with a zip bundle, so the
+    // file is now detectable as a bundled archive (not a SQLite database).
+    auto detectProject = std::make_unique<cwProject>();
+    addTokenManager(detectProject.get());
+    QQuickGit::Account detectAccount;
+    detectAccount.setName(QStringLiteral("SQLite Detect Tester"));
+    detectAccount.setEmail(QStringLiteral("sqlite.detect.tester@example.com"));
+    detectProject->setGitAccount(&detectAccount);
+    detectProject->loadOrConvert(sqliteSource);
+    detectProject->waitLoadToFinish();
+    REQUIRE(detectProject->errorModel()->size() == 0);
+    CHECK(detectProject->fileType() == cwProject::BundledGitFileType);
+    CHECK(detectProject->filename() == sqliteSource);
+    REQUIRE(detectProject->cavingRegion()->caveCount() > 0);
+    cwCave* const reloadedCave = detectProject->cavingRegion()->cave(0);
     REQUIRE(reloadedCave != nullptr);
     CHECK(reloadedCave->name() == renamedCave);
 }
