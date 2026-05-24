@@ -31,11 +31,6 @@
 #include "cwProject.h"
 
 namespace {
-// Lower bound on |ray.direction.z| for a usable ground-plane intersection.
-// Below this the ray is essentially parallel to z = 0 (e.g. a perspective
-// camera looking exactly at the horizon) and t = -origin.z / direction.z
-// blows up — reject instead of placing a vertex at +/-infinity.
-constexpr float kMinDirectionZ = 1.0e-4f;
 constexpr int kClipNameDigits = 3;
 } // namespace
 
@@ -84,8 +79,8 @@ void cwLazClipInteraction::setLazLayersSceneNode(cwLazLayersSceneNode* node)
 QVariantList cwLazClipInteraction::polygonPointsWorld() const
 {
     QVariantList result;
-    result.reserve(m_polygonLocalXY.size());
-    for (const QPointF& p : m_polygonLocalXY) {
+    result.reserve(m_polygonWorldXYZ.size());
+    for (const QVector3D& p : m_polygonWorldXYZ) {
         result.append(QVariant::fromValue(p));
     }
     return result;
@@ -103,22 +98,20 @@ void cwLazClipInteraction::addPoint(QPointF screenPos)
         return;
     }
 
-    QPointF worldXY;
-    if (!screenToWorldXY(screenPos, worldXY)) {
-        setErrorMessage(QStringLiteral(
-            "Camera is looking parallel to the ground — tilt the view "
-            "so the cursor ray hits the ground plane."));
+    QVector3D worldXYZ;
+    if (!screenToWorldXYZ(screenPos, worldXYZ)) {
+        setErrorMessage(QStringLiteral("No camera available to unproject the click."));
         return;
     }
-    addWorldPoint(worldXY);
+    addWorldPoint(worldXYZ);
 }
 
-void cwLazClipInteraction::addWorldPoint(QPointF worldXY)
+void cwLazClipInteraction::addWorldPoint(QVector3D worldXYZ)
 {
     if (m_state == State::Processing || m_state == State::Closed) {
         return;
     }
-    m_polygonLocalXY.append(worldXY);
+    m_polygonWorldXYZ.append(worldXYZ);
     setErrorMessage(QString());
     if (m_state == State::Idle) {
         setState(State::Drawing);
@@ -131,7 +124,7 @@ void cwLazClipInteraction::closePolygon()
     if (m_state != State::Drawing) {
         return;
     }
-    if (m_polygonLocalXY.size() < 3) {
+    if (m_polygonWorldXYZ.size() < 3) {
         setErrorMessage(QStringLiteral("Polygon needs at least 3 vertices to close."));
         return;
     }
@@ -141,23 +134,23 @@ void cwLazClipInteraction::closePolygon()
 
 bool cwLazClipInteraction::isNearFirstPoint(QPointF screenPos, double pixelRadius) const
 {
-    if (m_polygonLocalXY.size() < 3) {
+    if (m_polygonWorldXYZ.size() < 3) {
         return false;
     }
     if (m_state != State::Drawing) {
         return false;
     }
-    const QPointF firstScreen = worldToScreen(m_polygonLocalXY.first());
+    const QPointF firstScreen = worldToScreen(m_polygonWorldXYZ.first());
     const QPointF d = firstScreen - screenPos;
     return (d.x() * d.x() + d.y() * d.y()) <= (pixelRadius * pixelRadius);
 }
 
-QPointF cwLazClipInteraction::worldToScreen(QPointF worldXY) const
+QPointF cwLazClipInteraction::worldToScreen(QVector3D worldXYZ) const
 {
     if (m_camera.isNull()) {
         return QPointF();
     }
-    return m_camera->project(QVector3D(float(worldXY.x()), float(worldXY.y()), 0.0f));
+    return m_camera->project(worldXYZ);
 }
 
 void cwLazClipInteraction::commit(Mode mode)
@@ -201,7 +194,12 @@ void cwLazClipInteraction::commit(Mode mode)
         // after this point would detach into a new buffer.
         req.sources.append(layer->geometry());
     }
-    req.polygonLocalXY = m_polygonLocalXY;
+    req.polygonWorldXYZ = m_polygonWorldXYZ;
+    // Freeze the view at commit time — pan between commit and worker run
+    // shifts polygon and points by the same amount in the eye-XY test.
+    if (!m_camera.isNull()) {
+        req.viewMatrix = m_camera->viewMatrix();
+    }
     req.worldOrigin = m_region->worldOrigin();
     req.outputWktCS = m_region->globalCoordinateSystem();
     // Two parallel Mode enums (QML-facing + operation-facing). Switch with
@@ -280,7 +278,7 @@ void cwLazClipInteraction::onDeactivated()
 
 void cwLazClipInteraction::resetPolygonToIdle()
 {
-    m_polygonLocalXY.clear();
+    m_polygonWorldXYZ.clear();
     emit polygonChanged();
     setErrorMessage(QString());
     setState(State::Idle);
@@ -326,21 +324,15 @@ void cwLazClipInteraction::setErrorMessage(const QString& message)
     emit errorMessageChanged();
 }
 
-bool cwLazClipInteraction::screenToWorldXY(QPointF screenPos, QPointF& outWorldXY) const
+bool cwLazClipInteraction::screenToWorldXYZ(QPointF screenPos, QVector3D& outWorldXYZ) const
 {
     if (m_camera.isNull()) {
         return false;
     }
+    // Near-plane unprojection: vertices land on a single plane
+    // perpendicular to the view direction, so the polygon is coplanar.
     const QRay3D ray = m_camera->rayFromQtViewport(screenPos);
-    const QVector3D origin = ray.origin();
-    const QVector3D direction = ray.direction();
-
-    if (std::abs(direction.z()) < kMinDirectionZ) {
-        return false;
-    }
-    const float t = -origin.z() / direction.z();
-    const QVector3D hit = origin + t * direction;
-    outWorldXY = QPointF(double(hit.x()), double(hit.y()));
+    outWorldXYZ = ray.origin();
     return true;
 }
 

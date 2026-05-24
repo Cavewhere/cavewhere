@@ -38,13 +38,13 @@ TestCase {
     }
 
     function test_drawAndCloseStateMachine() {
-        clipperId.addWorldPoint(Qt.point(0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(0, 0, 0))
         compare(clipperId.state, LazClipInteraction.Drawing)
         compare(clipperId.pointCount, 1)
         compare(clipperId.canCommit, false)
 
-        clipperId.addWorldPoint(Qt.point(10, 0))
-        clipperId.addWorldPoint(Qt.point(10, 10))
+        clipperId.addWorldPoint(Qt.vector3d(10, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 10, 0))
         compare(clipperId.pointCount, 3)
 
         clipperId.closePolygon()
@@ -53,8 +53,8 @@ TestCase {
     }
 
     function test_closeRejectsFewerThanThreeVertices() {
-        clipperId.addWorldPoint(Qt.point(0, 0))
-        clipperId.addWorldPoint(Qt.point(10, 0))
+        clipperId.addWorldPoint(Qt.vector3d(0, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 0, 0))
         compare(clipperId.pointCount, 2)
 
         clipperId.closePolygon()
@@ -64,9 +64,9 @@ TestCase {
     }
 
     function test_cancelResetsState() {
-        clipperId.addWorldPoint(Qt.point(0, 0))
-        clipperId.addWorldPoint(Qt.point(10, 0))
-        clipperId.addWorldPoint(Qt.point(10, 10))
+        clipperId.addWorldPoint(Qt.vector3d(0, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 10, 0))
         clipperId.closePolygon()
         compare(clipperId.state, LazClipInteraction.Closed)
 
@@ -77,15 +77,15 @@ TestCase {
     }
 
     function test_addPointBlockedAfterClose() {
-        clipperId.addWorldPoint(Qt.point(0, 0))
-        clipperId.addWorldPoint(Qt.point(10, 0))
-        clipperId.addWorldPoint(Qt.point(10, 10))
+        clipperId.addWorldPoint(Qt.vector3d(0, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 10, 0))
         clipperId.closePolygon()
         compare(clipperId.state, LazClipInteraction.Closed)
 
         // Trying to add another vertex after close is a no-op — state and
         // count both unchanged.
-        clipperId.addWorldPoint(Qt.point(5, 5))
+        clipperId.addWorldPoint(Qt.vector3d(5, 5, 0))
         compare(clipperId.state, LazClipInteraction.Closed)
         compare(clipperId.pointCount, 3)
     }
@@ -96,8 +96,8 @@ TestCase {
     // calls cancel() — so an in-progress polygon and any error must be
     // cleared as a side-effect of deactivation alone.
     function test_deactivateResetsStateAndEmitsSignal() {
-        clipperId.addWorldPoint(Qt.point(0, 0))
-        clipperId.addWorldPoint(Qt.point(10, 0))
+        clipperId.addWorldPoint(Qt.vector3d(0, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 0, 0))
         compare(clipperId.state, LazClipInteraction.Drawing)
         compare(clipperId.pointCount, 2)
 
@@ -110,9 +110,9 @@ TestCase {
     }
 
     function test_deactivateClearsClosedPolygon() {
-        clipperId.addWorldPoint(Qt.point(0, 0))
-        clipperId.addWorldPoint(Qt.point(10, 0))
-        clipperId.addWorldPoint(Qt.point(10, 10))
+        clipperId.addWorldPoint(Qt.vector3d(0, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 10, 0))
         clipperId.closePolygon()
         compare(clipperId.state, LazClipInteraction.Closed)
 
@@ -123,9 +123,9 @@ TestCase {
     }
 
     function test_commitFailsWithNoSceneNode() {
-        clipperId.addWorldPoint(Qt.point(0, 0))
-        clipperId.addWorldPoint(Qt.point(10, 0))
-        clipperId.addWorldPoint(Qt.point(10, 10))
+        clipperId.addWorldPoint(Qt.vector3d(0, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 10, 0))
         clipperId.closePolygon()
         compare(clipperId.state, LazClipInteraction.Closed)
 
@@ -142,9 +142,9 @@ TestCase {
     // re-introduce a hidden deactivate() inside commit() and double-fire
     // the signal once the QML also deactivates.
     function test_commitDoesNotDeactivateOnItsOwn() {
-        clipperId.addWorldPoint(Qt.point(0, 0))
-        clipperId.addWorldPoint(Qt.point(10, 0))
-        clipperId.addWorldPoint(Qt.point(10, 10))
+        clipperId.addWorldPoint(Qt.vector3d(0, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 0, 0))
+        clipperId.addWorldPoint(Qt.vector3d(10, 10, 0))
         clipperId.closePolygon()
 
         clipperId.commit(LazClipInteraction.Keep)

@@ -71,8 +71,8 @@ Item {
             clipViewId.activate()
             tryVerify(() => clipViewId.activeFocus, 2000)
 
-            clipViewId.addWorldPoint(Qt.point(0, 0))
-            clipViewId.addWorldPoint(Qt.point(10, 0))
+            clipViewId.addWorldPoint(Qt.vector3d(0, 0, 0))
+            clipViewId.addWorldPoint(Qt.vector3d(10, 0, 0))
             compare(clipViewId.state, LazClipInteraction.Drawing)
             compare(clipViewId.pointCount, 2)
 
@@ -90,9 +90,9 @@ Item {
             clipViewId.activate()
             tryVerify(() => clipViewId.activeFocus, 2000)
 
-            clipViewId.addWorldPoint(Qt.point(0, 0))
-            clipViewId.addWorldPoint(Qt.point(10, 0))
-            clipViewId.addWorldPoint(Qt.point(10, 10))
+            clipViewId.addWorldPoint(Qt.vector3d(0, 0, 0))
+            clipViewId.addWorldPoint(Qt.vector3d(10, 0, 0))
+            clipViewId.addWorldPoint(Qt.vector3d(10, 10, 0))
             clipViewId.closePolygon()
             compare(clipViewId.state, LazClipInteraction.Closed)
 
@@ -114,9 +114,9 @@ Item {
             clipViewId.activate()
             tryVerify(() => clipViewId.activeFocus, 2000)
 
-            clipViewId.addWorldPoint(Qt.point(0, 0))
-            clipViewId.addWorldPoint(Qt.point(10, 0))
-            clipViewId.addWorldPoint(Qt.point(10, 10))
+            clipViewId.addWorldPoint(Qt.vector3d(0, 0, 0))
+            clipViewId.addWorldPoint(Qt.vector3d(10, 0, 0))
+            clipViewId.addWorldPoint(Qt.vector3d(10, 10, 0))
             clipViewId.closePolygon()
             compare(clipViewId.state, LazClipInteraction.Closed)
 

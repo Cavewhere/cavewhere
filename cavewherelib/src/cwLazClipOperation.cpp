@@ -12,6 +12,8 @@
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
+#include <QPointF>
+#include <QPolygonF>
 #include <QPromise>
 #include <QRectF>
 #include <QVector3D>
@@ -63,18 +65,42 @@ bool isFinite(const cwGeoPoint& p)
     return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
 }
 
-bool isFinite(const QPolygonF& poly)
+bool isFinite(const QList<QVector3D>& poly)
 {
-    for (const QPointF& p : poly) {
-        if (!std::isfinite(p.x()) || !std::isfinite(p.y())) {
+    for (const QVector3D& p : poly) {
+        if (!std::isfinite(p.x()) || !std::isfinite(p.y()) || !std::isfinite(p.z())) {
             return false;
         }
     }
     return true;
 }
 
+bool isFinite(const QMatrix4x4& m)
+{
+    const float* data = m.constData();
+    for (int i = 0; i < 16; ++i) {
+        if (!std::isfinite(data[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+QPolygonF projectPolygonToEyeXY(const QList<QVector3D>& worldXYZ,
+                                const QMatrix4x4& view)
+{
+    QPolygonF result;
+    result.reserve(worldXYZ.size());
+    for (const QVector3D& v : worldXYZ) {
+        const QVector3D eye = view.map(v);
+        result.append(QPointF(double(eye.x()), double(eye.y())));
+    }
+    return result;
+}
+
 Monad::Result<qint64> clipOneSlice(const PositionSlice& slice,
                                    const cwLazClipOperation::Request& request,
+                                   const QPolygonF& polygonEyeXY,
                                    const QRectF& polygonBBox,
                                    LASwriter* writer,
                                    LASpoint& point,
@@ -85,7 +111,7 @@ Monad::Result<qint64> clipOneSlice(const PositionSlice& slice,
     const double ox = request.worldOrigin.x;
     const double oy = request.worldOrigin.y;
     const double oz = request.worldOrigin.z;
-    const QPolygonF& polygon = request.polygonLocalXY;
+    const QMatrix4x4& view = request.viewMatrix;
     const bool keep = (request.mode == cwLazClipOperation::Mode::Keep);
 
     qint64 written = 0;
@@ -114,12 +140,12 @@ Monad::Result<qint64> clipOneSlice(const PositionSlice& slice,
         const double vx = double(v.x());
         const double vy = double(v.y());
         const double vz = double(v.z());
-        const QPointF local(vx, vy);
-        // BBox prefilter: containsPoint is O(V); a polygon-bbox reject is
-        // 4 comparisons. Big win when the polygon covers a small fraction
-        // of the point cloud extent (the common UI case).
-        const bool inside = polygonBBox.contains(local)
-                            && polygon.containsPoint(local, Qt::OddEvenFill);
+        const QVector3D eye = view.map(v);
+        const QPointF eyeXY(double(eye.x()), double(eye.y()));
+        // BBox prefilter — 4 comparisons vs O(V) containsPoint. Big win
+        // when the polygon covers a small fraction of the cloud extent.
+        const bool inside = polygonBBox.contains(eyeXY)
+                            && polygonEyeXY.containsPoint(eyeXY, Qt::OddEvenFill);
         if (keep ? inside : !inside) {
             // Geometry vertices are worldOrigin-relative; the LAS writer
             // wants absolute coords so downstream tools see geographic
@@ -164,7 +190,7 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
                     NoSources));
                 return;
             }
-            if (request.polygonLocalXY.size() < 3) {
+            if (request.polygonWorldXYZ.size() < 3) {
                 promise.addResult(Result(
                     QStringLiteral("Clip polygon needs at least 3 vertices."),
                     BadPolygon));
@@ -176,9 +202,11 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
                     EmptyOutputPath));
                 return;
             }
-            if (!isFinite(request.worldOrigin) || !isFinite(request.polygonLocalXY)) {
+            if (!isFinite(request.worldOrigin)
+                || !isFinite(request.polygonWorldXYZ)
+                || !isFinite(request.viewMatrix)) {
                 promise.addResult(Result(
-                    QStringLiteral("Polygon or worldOrigin contains non-finite values."),
+                    QStringLiteral("Polygon, worldOrigin, or viewMatrix contains non-finite values."),
                     NonFiniteInput));
                 return;
             }
@@ -251,7 +279,9 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
                 return;
             }
 
-            const QRectF polygonBBox = request.polygonLocalXY.boundingRect();
+            const QPolygonF polygonEyeXY = projectPolygonToEyeXY(
+                request.polygonWorldXYZ, request.viewMatrix);
+            const QRectF polygonBBox = polygonEyeXY.boundingRect();
             std::atomic<qint64> pointsDone{0};
             SuccessValue success;
             success.outputPath = request.outputPath;
@@ -264,8 +294,8 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
                     break;
                 }
                 Monad::Result<qint64> sliceResult =
-                    clipOneSlice(slice, request, polygonBBox, writer, pointTemplate,
-                                 pointsDone, promise, progressMax);
+                    clipOneSlice(slice, request, polygonEyeXY, polygonBBox, writer,
+                                 pointTemplate, pointsDone, promise, progressMax);
                 if (sliceResult.hasError()) {
                     failureMessage = sliceResult.errorMessage();
                     failureCode = sliceResult.errorCode();

@@ -10,11 +10,12 @@
 
 //Qt includes
 #include <QFuture>
+#include <QList>
 #include <QPointF>
 #include <QPointer>
-#include <QPolygonF>
 #include <QString>
 #include <QVariantList>
+#include <QVector3D>
 
 //AsyncFuture
 #include <asyncfuture.h>
@@ -31,19 +32,15 @@ class cwLazLayer;
 class cwLazLayerModel;
 
 /**
- * Interaction for screen-space polygon clipping of LAZ point clouds.
+ * Polygon clipping for LAZ point clouds. Vertices live in
+ * worldOrigin-relative XYZ; on commit, visible layers are unioned and
+ * clipped into one clip_NNN.laz under the project's GIS Layers dir.
  *
- * Vertices live in worldOrigin-relative world XY — the same space the
- * loaded LAZ geometry sits in. On commit, every currently-visible LAZ
- * layer is unioned and clipped by the polygon, producing one clip_NNN.laz
- * in the project's GIS Layers directory.
- *
- * Screen → world unprojection casts each click as a ray through the
- * camera and intersects it with the ground plane at z = 0. The polygon
- * is therefore the camera-projection of the user's screen-drawn shape
- * onto z = 0, and works at any camera angle — only a ray exactly
- * parallel to the ground plane (e.g. perspective view on the horizon)
- * is rejected.
+ * Clicks unproject to the camera's near plane so vertices stay
+ * coplanar. Worker projects both polygon and points through the
+ * frozen view matrix to eye XY — pan and ortho zoom cancel out, since
+ * translation shifts both sides equally and projection isn't consulted.
+ * Rotation is locked QML-side while the tool is active.
  */
 class CAVEWHERE_LIB_EXPORT cwLazClipInteraction : public cwInteraction
 {
@@ -91,26 +88,21 @@ public:
     State state() const { return m_state; }
     bool canCommit() const { return m_state == State::Closed; }
     QString errorMessage() const { return m_errorMessage; }
-    int pointCount() const { return m_polygonLocalXY.size(); }
+    int pointCount() const { return m_polygonWorldXYZ.size(); }
     QVariantList polygonPointsWorld() const;
 
-    /// C++-only accessor for the polygon vertices in worldOrigin-relative
-    /// XY. Used by cwLazClipPolygonRenderer on every frame sync — avoids
-    /// the per-frame QVariantList allocation that the Q_PROPERTY accessor
-    /// above incurs.
-    const QPolygonF& polygonLocalXY() const { return m_polygonLocalXY; }
+    /// Const-ref accessor for the renderer's per-frame sync — skips the
+    /// per-frame QVariantList allocation the Q_PROPERTY accessor incurs.
+    const QList<QVector3D>& polygonWorldXYZ() const { return m_polygonWorldXYZ; }
 
-    /// Adds a polygon vertex by unprojecting @a screenPos to world XY at
-    /// z = 0 (worldOrigin-relative). If the click is within snap range of
-    /// the first vertex and the polygon already has >=3 points, closes it
-    /// instead. No-op while Processing.
+    /// Unproject @a screenPos to a world vertex on the camera's near
+    /// plane and append it. Auto-closes if near the first vertex with
+    /// >=3 points already. No-op while Processing.
     Q_INVOKABLE void addPoint(QPointF screenPos);
 
-    /// Adds a polygon vertex directly in world XY (worldOrigin-relative).
-    /// Used by tests so the state machine can be exercised without
-    /// standing up a real camera + viewport; production callers go
-    /// through addPoint(QPointF) instead.
-    Q_INVOKABLE void addWorldPoint(QPointF worldXY);
+    /// Test entry — appends a world vertex without unprojection so the
+    /// state machine can be driven without a camera.
+    Q_INVOKABLE void addWorldPoint(QVector3D worldXYZ);
 
     /// Closes the polygon explicitly (requires >=3 vertices). Used by the
     /// "double-click to close" affordance in QML.
@@ -121,9 +113,9 @@ public:
     /// indicator in the canvas.
     Q_INVOKABLE bool isNearFirstPoint(QPointF screenPos, double pixelRadius = 12.0) const;
 
-    /// Project a world XY (worldOrigin-relative, z = 0) point through the
+    /// Project a world XYZ (worldOrigin-relative) point through the
     /// camera to screen pixels. Used by the canvas to render the polygon.
-    QPointF worldToScreen(QPointF worldXY) const;
+    QPointF worldToScreen(QVector3D worldXYZ) const;
 
     /// Runs the clip with @a mode (Crop / Erase). Requires state == Closed
     /// and at least one visible LAZ layer. On success, the output file is
@@ -150,11 +142,8 @@ private:
     void setState(State newState);
     void setErrorMessage(const QString& message);
 
-    /// World XY at z = 0 (worldOrigin-relative) for the screen point.
-    /// Returns false only when the camera ray is parallel to (or
-    /// vanishingly close to parallel with) the ground plane — at any
-    /// other angle the ray-plane intersection gives a valid hit.
-    bool screenToWorldXY(QPointF screenPos, QPointF& outWorldXY) const;
+    /// Near-plane unprojection. Returns false only when the camera is null.
+    bool screenToWorldXYZ(QPointF screenPos, QVector3D& outWorldXYZ) const;
 
     cwLazLayerModel* lazLayerModel() const;
     QString nextOutputPath() const;
@@ -174,7 +163,7 @@ private:
     QPointer<cwCavingRegion> m_region;
     QPointer<cwLazLayersSceneNode> m_sceneNode;
 
-    QPolygonF m_polygonLocalXY;
+    QList<QVector3D> m_polygonWorldXYZ;
     State m_state = State::Idle;
     QString m_errorMessage;
 

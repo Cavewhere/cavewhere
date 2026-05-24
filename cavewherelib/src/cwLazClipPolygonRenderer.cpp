@@ -11,7 +11,9 @@
 
 //Qt includes
 #include <QCanvasPainter>
+#include <QList>
 #include <QPointF>
+#include <QVector3D>
 
 namespace {
 constexpr float kClosedOutlineWidth = 2.0f;
@@ -66,12 +68,12 @@ void cwLazClipPolygonRenderer::synchronize(QCanvasPainterItem* item)
     }
     m_state = interaction->state();
 
-    // GUI thread is blocked during synchronize — safe to call back into the
-    // interaction to project each world-XY vertex through the camera.
-    const QPolygonF& worldPoints = interaction->polygonLocalXY();
+    // GUI thread is blocked during synchronize — safe to project each
+    // world vertex through the camera here.
+    const QList<QVector3D>& worldPoints = interaction->polygonWorldXYZ();
     m_polygonScreen.reserve(worldPoints.size());
-    for (const QPointF& wxy : worldPoints) {
-        m_polygonScreen.append(interaction->worldToScreen(wxy));
+    for (const QVector3D& w : worldPoints) {
+        m_polygonScreen.append(interaction->worldToScreen(w));
     }
 }
 
