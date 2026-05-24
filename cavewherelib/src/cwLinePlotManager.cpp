@@ -323,6 +323,17 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
 
     if(Region == nullptr) { return; }
 
+    //Surface (or clear) the region-level solve error so QML / CavernOutputPage
+    //sees the latest cavernlib output for every solve.
+    const bool hadSolveError = m_lastSolveError.has_value();
+    if (results.hasSolveError()) {
+        m_lastSolveError = results.solveError();
+        emit solveErrorChanged();
+    } else if (hadSolveError) {
+        m_lastSolveError.reset();
+        emit solveErrorChanged();
+    }
+
     //Clear all the unconnected chunk errors from the previous run
     clearUnconnectedChunkErrors();
 

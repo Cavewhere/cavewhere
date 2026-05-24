@@ -9,7 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Our includes
-#include "cwFindUnconnectedSurveyChunksTask.h"
+#include "cwFindUnconnectedSurveyChunks.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwStation.h"
@@ -44,7 +44,11 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
     shot.setClino(cwClinoReading("0"));
     shot.setBackClino(cwClinoReading("0"));
 
-    auto task = std::make_unique<cwFindUnconnectedSurveyChunksTask>();
+    auto runUnconnected = [&]() {
+        auto r = cwFindUnconnectedSurveyChunks::find(cave->data());
+        REQUIRE_FALSE(r.hasError());
+        return r.value();
+    };
 
     SECTION("Single a single chunk should be connected to the cave") {
 
@@ -55,11 +59,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
             chunk->appendShot(stations.at(i), stations.at(i+1), shot);
         }
 
-        task->setCave(cave->data());
-        task->start();
-        task->waitToFinish();
-
-        CHECK(task->results().isEmpty() == true);
+        CHECK(runUnconnected().isEmpty() == true);
     }
 
     SECTION("The connection should be made, even if the station name case are different") {
@@ -93,21 +93,14 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
             chunk2->appendShot(withoutCapitals.at(i), withoutCapitals.at(i+1), shot);
         }
 
-        task->setCave(cave->data());
-        task->start();
-        task->waitToFinish();
-
-        CHECK(task->results().size() == 1);
+        CHECK(runUnconnected().size() == 1);
 
         cwStation newCaptical = withoutCapitals.first();
         newCaptical.setName(newCaptical.name().toUpper());
 
         chunk1->appendShot(chunk1->stations().last(), newCaptical, shot);
 
-        task->setCave(cave->data());
-        task->start();
-        task->waitToFinish();
-        CHECK(task->results().size() == 0);
+        CHECK(runUnconnected().size() == 0);
     }
 
     SECTION("Two chunk's that aren't connected") {
@@ -126,14 +119,13 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
             chunk2->appendShot(stations.at(i), stations.at(i+1), shot);
         }
 
-        task->setCave(cave->data());
-        task->start();
-        task->waitToFinish();
-
-        REQUIRE(task->results().size() == 1);
-        CHECK(task->results().first().TripIndex == 0);
-        CHECK(task->results().first().SurveyChunkIndex == 1);
-        CHECK(task->results().first().Error.message() == "Survey leg isn't connect to the cave");
+        {
+            const auto results = runUnconnected();
+            REQUIRE(results.size() == 1);
+            CHECK(results.first().TripIndex == 0);
+            CHECK(results.first().SurveyChunkIndex == 1);
+            CHECK(results.first().Error.message() == "Survey leg isn't connect to the cave");
+        }
 
         SECTION("Add another chunk that isn't connected") {
             cwSurveyChunk* chunk3 = new cwSurveyChunk();
@@ -144,15 +136,14 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                 chunk3->appendShot(stations.at(i), stations.at(i+1), shot);
             }
 
-            task->setCave(cave->data());
-            task->start();
-            task->waitToFinish();
-
-            REQUIRE(task->results().size() == 2);
-            CHECK(task->results().at(0).TripIndex == 0);
-            CHECK(task->results().at(0).SurveyChunkIndex == 1);
-            CHECK(task->results().at(1).TripIndex == 0);
-            CHECK(task->results().at(1).SurveyChunkIndex == 2);
+            {
+                const auto results = runUnconnected();
+                REQUIRE(results.size() == 2);
+                CHECK(results.at(0).TripIndex == 0);
+                CHECK(results.at(0).SurveyChunkIndex == 1);
+                CHECK(results.at(1).TripIndex == 0);
+                CHECK(results.at(1).SurveyChunkIndex == 2);
+            }
 
             SECTION("Add another chunk that connects all them together") {
                 cwSurveyChunk* chunk4 = new cwSurveyChunk();
@@ -162,11 +153,7 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                     chunk4->appendShot(stations.at(i), stations.at(i+1), shot);
                 }
 
-                task->setCave(cave->data());
-                task->start();
-                task->waitToFinish();
-
-                REQUIRE(task->results().size() == 0);
+                REQUIRE(runUnconnected().size() == 0);
 
 
                 SECTION("Add two trips, first not corrected, second is connected") {
@@ -183,15 +170,14 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                         chunk5->appendShot(stations.at(i), stations.at(i+1), shot);
                     }
 
-                    task->setCave(cave->data());
-                    task->start();
-                    task->waitToFinish();
-
                     //Prove that it isn't connected
-                    REQUIRE(task->results().size() == 1);
-                    CHECK(task->results().first().TripIndex == 1);
-                    CHECK(task->results().first().SurveyChunkIndex == 0);
-                    CHECK(task->results().first().Error.message() == "Survey leg isn't connect to the cave");
+                    {
+                        const auto results = runUnconnected();
+                        REQUIRE(results.size() == 1);
+                        CHECK(results.first().TripIndex == 1);
+                        CHECK(results.first().SurveyChunkIndex == 0);
+                        CHECK(results.first().Error.message() == "Survey leg isn't connect to the cave");
+                    }
 
                     //Now connect trip2 to the cave with trip3
                     cwSurveyChunk* chunk6 = new cwSurveyChunk();
@@ -201,12 +187,8 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
                         chunk6->appendShot(stations.at(i), stations.at(i+1), shot);
                     }
 
-                    task->setCave(cave->data());
-                    task->start();
-                    task->waitToFinish();
-
                     //All connected should have no errors
-                    REQUIRE(task->results().size() == 0);
+                    REQUIRE(runUnconnected().size() == 0);
                 }
 
                 SECTION("Add a trip with empty chunk") {
@@ -218,12 +200,8 @@ TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChun
 
                     chunk5->appendNewShot(); //Black shot
 
-                    task->setCave(cave->data());
-                    task->start();
-                    task->waitToFinish();
-
                     //All connected should have no errors
-                    REQUIRE(task->results().size() == 0);
+                    REQUIRE(runUnconnected().size() == 0);
                 }
             }
         }

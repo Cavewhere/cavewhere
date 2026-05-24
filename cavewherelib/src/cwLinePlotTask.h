@@ -10,20 +10,16 @@
 
 //Our includes
 class cwCavingRegion;
-class cwLinePlotGeometryTask;
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
-#include "cwFindUnconnectedSurveyChunksTask.h"
+#include "cwFindUnconnectedSurveyChunks.h"
 #include "cwCavingRegionData.h"
-class cwSurvexExporterRegionTask;
-class cwCavernTask;
 class cwScrap;
 class cwTrip;
 class cwCave;
 
 
 //Qt includes
-#include <QTemporaryFile>
 #include <QVector3D>
 #include <QElapsedTimer>
 #include <QVector>
@@ -35,10 +31,29 @@ class cwCave;
 #include <QPair>
 #include <QMultiHash>
 
+//Std includes
+#include <optional>
+
 class cwLinePlotTask
 {
 public:
     struct LinePlotWorker;
+
+    /**
+     * \brief Region-level error from the line-plot pipeline.
+     *
+     * Populated on the worker side when a step fails; consumed on the
+     * UI side by cwLinePlotManager which surfaces it as Q_PROPERTYs the
+     * CavernOutputPage binds to.
+     */
+    struct SolveError {
+        enum class Step { Export, Cavern, Parse, Geometry, Validation };
+        Step step = Step::Cavern;
+        int exitCode = 0;          // populated for Step::Cavern
+        QString message;           // human-readable summary
+        QString cavernLog;         // cavern's .log contents (Step::Cavern)
+        QString loopClosureStats;  // netskel .err contents (Step::Cavern)
+    };
     /**
      * TripDataPtrs, CaveDataPtrs, and RegionDataPtrs, store pointers to original
      * data in this task.  This will allow the task to return the pointer of each object
@@ -88,13 +103,13 @@ public:
         void setDepth(double depth);
         void setLength(double length);
         void setStationPositions(cwStationPositionLookup positionLookup);
-        void setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunksTask::Result> results);
+        void setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunks::Result> results);
         void setNetwork(cwSurveyNetwork network);
 
         double depth() const;
         double length() const;
         cwStationPositionLookup stationPositions() const;
-        QList<cwFindUnconnectedSurveyChunksTask::Result> unconnectedChunkError() const;
+        QList<cwFindUnconnectedSurveyChunks::Result> unconnectedChunkError() const;
         cwSurveyNetwork network() const;
 
         bool hasDepthLengthChanged() const;
@@ -105,7 +120,7 @@ public:
         bool DepthLengthChanged;
         double Depth;
         double Length;
-        QList<cwFindUnconnectedSurveyChunksTask::Result> UnconnectedChunksErrors;
+        QList<cwFindUnconnectedSurveyChunks::Result> UnconnectedChunksErrors;
 
         bool StationPostionsChanged;
         bool NetworkChanged;
@@ -152,6 +167,12 @@ public:
         QVector<unsigned int> LinePlotIndexData;
         cwSurveyNetwork RegionNetwork;
         bool RegionNetworkChanged = false;
+
+        void setSolveError(SolveError error) { LastSolveError = std::move(error); }
+        bool hasSolveError() const { return LastSolveError.has_value(); }
+        const SolveError& solveError() const { return *LastSolveError; }
+
+        std::optional<SolveError> LastSolveError;
 
         friend class cwLinePlotTask;
         friend struct LinePlotWorker;
@@ -322,7 +343,7 @@ inline void cwLinePlotTask::LinePlotCaveData::setStationPositions(cwStationPosit
     StationPostionsChanged = true;
 }
 
-inline void cwLinePlotTask::LinePlotCaveData::setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunksTask::Result> results)
+inline void cwLinePlotTask::LinePlotCaveData::setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunks::Result> results)
 {
     UnconnectedChunksErrors = results;
 }
@@ -348,7 +369,7 @@ inline cwStationPositionLookup cwLinePlotTask::LinePlotCaveData::stationPosition
     return Lookup;
 }
 
-inline QList<cwFindUnconnectedSurveyChunksTask::Result> cwLinePlotTask::LinePlotCaveData::unconnectedChunkError() const
+inline QList<cwFindUnconnectedSurveyChunks::Result> cwLinePlotTask::LinePlotCaveData::unconnectedChunkError() const
 {
     return UnconnectedChunksErrors;
 }

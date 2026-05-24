@@ -8,10 +8,11 @@
 // Our includes
 #include "cwLinePlotTask.h"
 #include "cwConcurrent.h"
-#include "cwSurvexExporterRegionTask.h"
-#include "cwCavernTask.h"
+#include "cwSurvexExporterRegion.h"
+#include "cwCavernRunner.h"
 #include "cwSurvex3DFileReader.h"
-#include "cwLinePlotGeometryTask.h"
+#include "cwLinePlotGeometry.h"
+#include "cwFindUnconnectedSurveyChunks.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
@@ -23,40 +24,15 @@
 #include "cwLength.h"
 #include "cwStationValidator.h"
 #include "cwErrorModel.h"
-#include "cwTask.h"
 
 // Qt includes
-#include <QTemporaryFile>
+#include <QTemporaryDir>
 #include <QRegularExpression>
 #include <QFileInfo>
 #include <QFile>
 #include <QDir>
-#include <QEventLoop>
-#include <QFileSystemWatcher>
-#include <QTimer>
 #include <QtGlobal>
 #include <cmath>
-
-using GeometryLengths = QVector<cwLinePlotGeometryTask::LengthAndDepth>;
-
-namespace {
-
-struct GeometryResult {
-    QVector<QVector3D> points;
-    QVector<unsigned int> indices;
-    GeometryLengths lengths;
-};
-
-// Synchronous helpers that reuse cwTask-based implementations without spinning up new threads
-template <typename Task>
-void runTaskInPlace(Task& task)
-{
-    task.setUsingThreadPool(false);
-    task.start();
-    task.waitToFinish(cwTask::IgnoreRestart);
-}
-
-} // namespace
 
 cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
     DepthLengthChanged(false),
@@ -149,30 +125,47 @@ struct cwLinePlotTask::LinePlotWorker {
             return result;
         }
 
-        QString survexFilename = exportSurvex();
-        if (survexFilename.isEmpty()) {
+        // QTemporaryDir owns the lifecycle of the .svx input, the .3d output,
+        // and cavern's .log/.err sidecars. Auto-removed on scope exit, so
+        // failure on any step below leaves /tmp clean.
+        QTemporaryDir workDir;
+        if (!workDir.isValid()) {
+            cwLinePlotTask::SolveError error;
+            error.step = cwLinePlotTask::SolveError::Step::Export;
+            error.message = QStringLiteral("Failed to create temporary directory for solve");
+            result.setSolveError(error);
             return result;
         }
 
-        QString threeDFile = runCavern(survexFilename);
-        if (threeDFile.isEmpty()) {
+        const QString svxPath      = workDir.filePath(QStringLiteral("region.svx"));
+        const QString output3dPath = workDir.filePath(QStringLiteral("region.3d"));
+
+        if (!exportSurvex(svxPath, result)) {
+            return result;
+        }
+
+        if (!runCavern(svxPath, output3dPath, result)) {
             return result;
         }
 
         cwSurvex3DFileReader reader;
-        cwSurvex3DFileReader::NetworkAndLookup parsed = reader.readNetworkAndLookup(threeDFile);
+        cwSurvex3DFileReader::NetworkAndLookup parsed = reader.readNetworkAndLookup(output3dPath);
         if (parsed.lookup.isEmpty()) {
+            cwLinePlotTask::SolveError error;
+            error.step = cwLinePlotTask::SolveError::Step::Parse;
+            error.message = QStringLiteral("Cavern produced no station positions in %1").arg(output3dPath);
+            result.setSolveError(error);
             return result;
         }
         applyWorldOriginOffset(parsed.lookup, InputData.regionData.worldOrigin);
         updateStationPositionForCaves(parsed.lookup, result);
         result.setRegionNetwork(std::move(parsed.network));
 
-        GeometryResult geometry = generateGeometry();
+        cwLinePlotGeometry::Result geometry = generateGeometry();
         result.setPositions(geometry.points);
         result.setPlotIndexData(geometry.indices);
 
-        updateDepthLength(geometry.lengths, result);
+        updateDepthLength(geometry.cavesLengthAndDepths, result);
         updateCaveNetworks(result);
 
         return result;
@@ -203,46 +196,57 @@ private:
         }
     }
 
-    QString exportSurvex()
+    bool exportSurvex(const QString& svxPath, cwLinePlotTask::LinePlotResultData& result)
     {
-        QTemporaryFile survexFile;
-        survexFile.setAutoRemove(false);
-        if (!survexFile.open()) {
-            return QString();
+        const Monad::ResultBase r =
+            cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath);
+        if (r.hasError()) {
+            cwLinePlotTask::SolveError error;
+            error.step = cwLinePlotTask::SolveError::Step::Export;
+            error.message = r.errorMessage();
+            result.setSolveError(error);
+            return false;
         }
-        QString filename = survexFile.fileName();
-        survexFile.close();
-
-        cwSurvexExporterRegionTask exporter;
-        exporter.setUsingThreadPool(false);
-        exporter.setData(InputData.regionData);
-        exporter.setOutputFile(filename);
-        runTaskInPlace(exporter);
-
-        return QFileInfo::exists(filename) ? filename : QString();
+        return true;
     }
 
-    QString runCavern(const QString& survexFilename)
+    bool runCavern(const QString& svxPath,
+                   const QString& output3dPath,
+                   cwLinePlotTask::LinePlotResultData& result)
     {
-        cwCavernTask cavernTask;
-        cavernTask.setUsingThreadPool(false);
-        cavernTask.setSurvexFile(survexFilename);
-        runTaskInPlace(cavernTask);
-        return QFileInfo::exists(cavernTask.output3dFileName()) ? cavernTask.output3dFileName() : QString();
+        const Monad::Result<cwCavernRunner::Result> r =
+            cwCavernRunner::run(svxPath, output3dPath);
+        if (r.hasError()) {
+            cwLinePlotTask::SolveError error;
+            error.step = cwLinePlotTask::SolveError::Step::Cavern;
+            error.exitCode = 1;        // non-zero; cwCavernRunner doesn't expose the precise rc on error
+            error.message = r.errorMessage();
+            error.cavernLog = r.errorMessage();   // for Cavern step, message == log text
+            result.setSolveError(error);
+            return false;
+        }
+        const cwCavernRunner::Result cavern = r.value();
+        if (!QFileInfo::exists(cavern.output3dPath)) {
+            cwLinePlotTask::SolveError error;
+            error.step = cwLinePlotTask::SolveError::Step::Cavern;
+            error.exitCode = cavern.exitCode;
+            error.message = QStringLiteral("Cavern reported success but produced no .3d output");
+            error.cavernLog = cavern.logText;
+            error.loopClosureStats = cavern.loopClosureStats;
+            result.setSolveError(error);
+            return false;
+        }
+        return true;
     }
 
-    GeometryResult generateGeometry()
+    cwLinePlotGeometry::Result generateGeometry()
     {
-        GeometryResult geometry;
-        cwLinePlotGeometryTask geometryTask;
-        geometryTask.setUsingThreadPool(false);
-        geometryTask.setRegion(Region.data());
-        runTaskInPlace(geometryTask);
-
-        geometry.points = geometryTask.pointData();
-        geometry.indices = geometryTask.indexData();
-        geometry.lengths = geometryTask.cavesLengthAndDepths();
-        return geometry;
+        const Monad::Result<cwLinePlotGeometry::Result> result =
+            cwLinePlotGeometry::generate(Region.data());
+        if (result.hasError()) {
+            return cwLinePlotGeometry::Result();
+        }
+        return result.value();
     }
 
     bool checkForErrors(cwLinePlotTask::LinePlotResultData& result)
@@ -252,11 +256,12 @@ private:
         for(int i = 0; i < Region.caveCount(); i++) {
             cwCave* cave = Region.cave(i);
 
-            cwFindUnconnectedSurveyChunksTask unconnectedTask;
-            unconnectedTask.setUsingThreadPool(false);
-            unconnectedTask.setCave(cave->data());
-            runTaskInPlace(unconnectedTask);
-            auto errorResults = unconnectedTask.results();
+            const Monad::Result<QList<cwFindUnconnectedSurveyChunks::Result>> unconnectedResult =
+                cwFindUnconnectedSurveyChunks::find(cave->data());
+            if (unconnectedResult.hasError()) {
+                continue;
+            }
+            const QList<cwFindUnconnectedSurveyChunks::Result> errorResults = unconnectedResult.value();
             if(!errorResults.isEmpty()) {
                 cwLinePlotTask::LinePlotCaveData& caveData = createLinePlotCaveDataAt(i, result);
                 caveData.setUnconnectedChunkError(errorResults);
@@ -460,7 +465,8 @@ private:
         updateExteralCaveStationLookups(result);
     }
 
-    void updateDepthLength(const GeometryLengths& lengths, cwLinePlotTask::LinePlotResultData& result)
+    void updateDepthLength(const QVector<cwLinePlotGeometry::CaveLengthAndDepth>& lengths,
+                           cwLinePlotTask::LinePlotResultData& result)
     {
         Q_ASSERT(Region.caveCount() == lengths.size());
 

@@ -4,7 +4,7 @@
 
 //Our includes
 #include "cwSurvex3DFileReader.h"
-#include "cwCavernTask.h"
+#include "cwCavernRunner.h"
 #include "LoadProjectHelper.h"
 
 //Qt includes
@@ -21,17 +21,15 @@ TEST_CASE("cwSurvex3DFileReader should read station positions from .3d file", "[
     QString survexDataFile = testcasesDatasetPath("test_cwSurvexport/data.svx");
     REQUIRE(QFile::exists(survexDataFile));
 
-    cwCavernTask cavern;
-    cavern.setSurvexFile(survexDataFile);
-    cavern.start();
-    cavern.waitToFinish();
+    const QString output3dPath = survexDataFile + QStringLiteral(".3d");
+    auto cavernResult = cwCavernRunner::run(survexDataFile, output3dPath);
 
-    REQUIRE(!cavern.output3dFileName().isEmpty());
-    REQUIRE(QFileInfo(cavern.output3dFileName()).exists());
+    REQUIRE_FALSE(cavernResult.hasError());
+    REQUIRE(QFileInfo(cavernResult.value().output3dPath).exists());
 
     // Read station positions directly from the .3d file
     cwSurvex3DFileReader reader;
-    cwStationPositionLookup lookup = reader.readStationPositions(cavern.output3dFileName());
+    cwStationPositionLookup lookup = reader.readStationPositions(cavernResult.value().output3dPath);
 
     CHECK(!lookup.isEmpty());
 
@@ -59,16 +57,14 @@ TEST_CASE("cwSurvex3DFileReader should build a survey network from .3d file", "[
     QString survexDataFile = testcasesDatasetPath("test_cwSurvexport/data.svx");
     REQUIRE(QFile::exists(survexDataFile));
 
-    cwCavernTask cavern;
-    cavern.setSurvexFile(survexDataFile);
-    cavern.start();
-    cavern.waitToFinish();
+    const QString output3dPath = survexDataFile + QStringLiteral(".3d");
+    auto cavernResult = cwCavernRunner::run(survexDataFile, output3dPath);
 
-    REQUIRE(!cavern.output3dFileName().isEmpty());
-    REQUIRE(QFileInfo(cavern.output3dFileName()).exists());
+    REQUIRE_FALSE(cavernResult.hasError());
+    REQUIRE(QFileInfo(cavernResult.value().output3dPath).exists());
 
     cwSurvex3DFileReader reader;
-    auto parsed = reader.readNetworkAndLookup(cavern.output3dFileName());
+    auto parsed = reader.readNetworkAndLookup(cavernResult.value().output3dPath);
 
     // Lookup and network positions must agree for every station in the file.
     CHECK(parsed.lookup.positions().size() == 6);

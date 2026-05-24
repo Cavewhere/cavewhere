@@ -9,14 +9,16 @@
 #include "cwSurveyExportManager.h"
 #include "cwSurvexExporterTripTask.h"
 #include "cwSurvexExporterCaveTask.h"
-#include "cwSurvexExporterRegionTask.h"
+#include "cwSurvexExporterRegion.h"
 #include "cwCompassExporterCaveTask.h"
 #include "cwChipdataExporterCaveTask.h"
+#include "cwConcurrent.h"
 #include "cwDebug.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwGlobals.h"
+#include "asyncfuture.h"
 
 
 //Qt includes
@@ -50,12 +52,17 @@ void cwSurveyExportManager::exportSurvexRegion(QString filename) {
     filename = cwGlobals::convertFromURL(filename);
     filename = cwGlobals::addExtension(filename, "svx");
 
-    cwSurvexExporterRegionTask* exportTask = new cwSurvexExporterRegionTask();
-    exportTask->setOutputFile(filename);
-    exportTask->setData(cavingRegion()->data());
-    connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-    connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-    exportTask->start();
+    const cwCavingRegionData regionData = cavingRegion()->data();
+    auto future = cwConcurrent::run([regionData, filename]() {
+        return cwSurvexExporterRegion::exportRegion(regionData, filename);
+    });
+
+    AsyncFuture::observe(future).context(this, [filename](Monad::ResultBase result) {
+        if (result.hasError()) {
+            qDebug() << "Survex region export failed for" << filename
+                     << ":" << result.errorMessage();
+        }
+    });
 }
 
 /**

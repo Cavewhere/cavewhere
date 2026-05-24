@@ -105,6 +105,37 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 - **Use `.at(i)` (or a `const` reference) for read-only access to `QList` / `QVector`, never `operator[]`.** Non-const `operator[]` calls `data()` → `detach()`, which reallocates the buffer when refcount > 1. From a worker thread that's a data race: multiple threads detaching the same shared container free each other's buffers and read freed memory. `at()` always uses the const overload and never detaches. `const QList<T>& foo = bar; foo[i]` is also fine because the const overload is selected. Same rule applies when reading through a smart pointer — `(*ptr)[i]` picks the non-const overload; write `ptr->at(i)` instead.
 - **Do not wrap `QList` / `QVector` in `std::shared_ptr`.** They are already implicitly shared value types — copying is a header copy with refcount bump, exactly what `shared_ptr` provides, minus the extra heap allocation and indirection. To snapshot a container for a worker thread, just `auto snap = m_container;` and capture `snap` by value (or by reference if the worker's lifetime is bounded by the caller's scope). The shared buffer keeps subsequent UI-side mutations from disturbing the worker's view as long as workers stick to const access.
 - **Do not use Qt bindable properties** (`Q_OBJECT_BINDABLE_PROPERTY`, `Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS`, `QBindable`, `QProperty`, `setBinding(...)`) in new code. Use plain member variables with explicit `set*()` setters that follow the `if (m_x == x) return; m_x = x; emit xChanged(); /* side effects */;` pattern, and declare the `Q_PROPERTY` with `NOTIFY` (no `BINDABLE`). Some older classes (e.g. `cwInfiniteGridModel`, `cwFixedGridModel`) still use the bindable macros; don't add more, and don't refactor unless touching the file for other reasons.
+- **Never use `goto`.** No exceptions. The codebase has zero `goto` usage today and we keep it that way. To escape nested loops, prefer a **lambda** (capturing by reference) that uses `return` to exit. Two flavors, picked by body size:
+
+  **Named lambda** — preferred when the body is more than ~10 lines, when you'd otherwise write a comment above it to explain the intent, or when you want to call it more than once. The name *is* the comment:
+  ```cpp
+  const auto seedConnected = [&]() {
+      for (cwTrip* trip : cave->trips()) {
+          for (cwSurveyChunk* chunk : trip->chunks()) {
+              for (int i = 0; i < chunk->stationCount(); ++i) {
+                  if (isValid(chunk->station(i))) {
+                      insertChunkToConnected(chunk, connected, edges);
+                      return;                  // escapes all three loops
+                  }
+              }
+          }
+      }
+  };
+  seedConnected();
+  ```
+
+  **Inline IIFE** (Immediately Invoked Function Expression) — fine when the body is short (a few lines) and self-documenting, or when the surrounding code already labels the work:
+  ```cpp
+  [&]() {
+      for (auto* a : outer) {
+          for (auto* b : middle) {
+              if (condition(b)) { doWork(b); return; }
+          }
+      }
+  }();
+  ```
+
+  Both generate the same machine code as `goto done;` after inlining (zero runtime overhead in Release; single-digit nanoseconds in `-O0` Debug) and read top-down without a state flag. The named form costs one extra stack slot in Debug and nothing in Release; the choice is purely about readability. Avoid the `bool flag = false; if (flag) break;` pattern — it adds branch checks at every outer loop level and spreads the exit condition across three sites. Even if a single `goto done;` looks like the most compact fix, do not introduce it.
 
 ### QML
 - Strict typed properties (no `property var`); lowerCamelCase property names
@@ -167,6 +198,6 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 
 Managed via Conan: Qt 6.10+, Protobuf 6.32.1, libgit2 1.9.1, OpenSSL 3.5.0.
 
-Key submodules: `QMath3d` (3D math), `dewalls` (survey parser), `QQuickGit` (libgit2 bindings), `asyncfuture`, `monad` (Result<T>), `qtkeychain`, `SignalSpyChecker`, `survex` (desktop only).
+Key submodules: `QMath3d` (3D math), `dewalls` (survey parser), `QQuickGit` (libgit2 bindings), `asyncfuture`, `monad` (Result<T>), `qtkeychain`, `SignalSpyChecker`, `survex` (ported to a C library, runs on desktop and mobile).
 
 System Qt installations require Qt 6.10+. CMake must be pinned below 4.0 in the Conan profile (wxWidgets compatibility).

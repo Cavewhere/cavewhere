@@ -51,6 +51,7 @@ using namespace Catch;
 #include <QFileInfo>
 #include <QSet>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QEventLoop>
 #include <QTimer>
 #include <QSignalSpy>

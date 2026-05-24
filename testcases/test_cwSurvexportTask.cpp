@@ -5,7 +5,7 @@
 #include "cwSurvexportTask.h"
 #include "cwGlobals.h"
 #include "LoadProjectHelper.h"
-#include "cwCavernTask.h"
+#include "cwCavernRunner.h"
 #include "cwSurvexExporterTripTask.h"
 #include "cwSurveyChunk.h"
 #include "cwTrip.h"
@@ -41,15 +41,14 @@ TEST_CASE("cwSurvexportTask should produce a CSV file from a .3d file", "[cwSurv
 
     REQUIRE(QFile::exists(cavernDataFile));
 
-    cwCavernTask cavern;
-    cavern.setSurvexFile(cavernDataFile);
-    cavern.start();
-    cavern.waitToFinish();
+    const QString output3dPath = cavernDataFile + QStringLiteral(".3d");
+    auto cavernResult = cwCavernRunner::run(cavernDataFile, output3dPath);
 
-    REQUIRE(QFileInfo(cavern.output3dFileName()).exists() == true);
+    REQUIRE_FALSE(cavernResult.hasError());
+    REQUIRE(QFileInfo(cavernResult.value().output3dPath).exists() == true);
 
     cwSurvexportTask task;
-    task.setSurvex3DFile(cavern.output3dFileName());
+    task.setSurvex3DFile(cavernResult.value().output3dPath);
     task.start();
     task.waitToFinish();
 
