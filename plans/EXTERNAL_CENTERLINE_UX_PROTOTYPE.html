@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External Centerline UX Prototype</title>
+<style>
+  :root {
+    --fg: #1c1c1c;
+    --muted: #5a5a5a;
+    --accent: #2451a4;
+    --accent-light: #e9f0fc;
+    --rule: #d8d8d8;
+    --bg: #ffffff;
+    --code-bg: #f4f4f6;
+    --warn-bg: #fff7d6;
+    --warn-border: #e0c346;
+    --ok-bg: #e9f5ec;
+    --ok-border: #6aab7a;
+  }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.5;
+    max-width: 960px;
+    margin: 2rem auto;
+    padding: 0 1.5rem 4rem;
+  }
+  h1 { font-size: 1.85rem; border-bottom: 2px solid var(--accent); padding-bottom: 0.35rem; }
+  h2 { font-size: 1.4rem; margin-top: 2.4rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.25rem; color: var(--accent); }
+  h3 { font-size: 1.15rem; margin-top: 1.8rem; }
+  h4 { font-size: 1.0rem; margin-top: 1.3rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  code { background: var(--code-bg); padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
+  pre { background: var(--code-bg); padding: 0.9rem 1.1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85em; line-height: 1.45; }
+  .wireframe pre { background: #fafbff; border: 1px solid #d8e0f4; }
+  table { border-collapse: collapse; margin: 0.6rem 0 1.1rem; font-size: 0.94em; }
+  th, td { border: 1px solid var(--rule); padding: 0.4rem 0.7rem; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  blockquote { margin: 0.6rem 0; padding: 0.4rem 0.9rem; border-left: 3px solid var(--accent); color: var(--muted); background: var(--code-bg); }
+  .case {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 0.6rem 1.2rem;
+    margin: 1rem 0 2rem;
+    background: #fbfbfd;
+  }
+  .case h3 { margin-top: 0.6rem; color: var(--accent); }
+  .meta { color: var(--muted); font-size: 0.92em; }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-border); padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  .principle { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 0.5rem 0.9rem; margin: 0.6rem 0; }
+  ul, ol { margin-top: 0.3rem; }
+  li { margin: 0.18rem 0; }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
+  .toc { background: var(--code-bg); padding: 0.7rem 1.2rem; border-radius: 4px; }
+  .toc ol { margin: 0.2rem 0 0.2rem 1.2rem; padding: 0; }
+  .anchor { color: var(--accent); text-decoration: none; }
+  .anchor:hover { text-decoration: underline; }
+  .step { background: #fff; border: 1px solid var(--rule); border-left: 3px solid var(--accent); padding: 0.5rem 0.9rem; margin: 0.5rem 0; }
+  .step .stepNum { font-weight: bold; color: var(--accent); font-size: 0.85em; }
+</style>
+</head>
+<body>
+
+<h1>External Centerline &mdash; UX Prototype</h1>
+<p class="meta">
+  Companion to <code>plans/EXTERNAL_FILE_INTEGRATION_PLAN.html</code>.
+  Purpose: pressure-test the UX against three real user scenarios
+  before locking the implementation plan.
+</p>
+
+<h2 id="principles">1. Goal &amp; guiding principles</h2>
+
+<div class="principle">
+  External centerlines are a <strong>power-user</strong> feature.
+  Native CaveWhere has to stay simple &mdash; every new affordance is
+  hidden, disabled, or absent until the user signals they want
+  external data.
+</div>
+
+<p>Concretely:</p>
+
+<ul>
+  <li>
+    Native users see no new buttons on TripPage or CavePage. The
+    "Attach external centerline" affordances are tucked under existing
+    menus (Add Trip dropdown, cave actions menu) and the
+    region-level entry point on DataMainPage is collapsed by default.
+  </li>
+  <li>
+    External-data screens are opt-in &mdash; reached by navigating into
+    an attached scope, not pushed at users who don't have one.
+  </li>
+  <li>
+    The user's "Native CaveWhere only" workflow gets zero regressions:
+    SurveyEditor, Add Trip, Fix Stations, etc. behave exactly as
+    today.
+  </li>
+</ul>
+
+<h3 class="toc">Table of contents</h3>
+<div class="toc">
+  <ol>
+    <li><a class="anchor" href="#principles">Goal &amp; guiding principles</a></li>
+    <li><a class="anchor" href="#cases">The three use cases</a></li>
+    <li><a class="anchor" href="#model">Conceptual model (three cwCave / cwTrip states)</a></li>
+    <li><a class="anchor" href="#case3">Walkthrough: Case 3 &mdash; TopoDroid trip-as-source</a></li>
+    <li><a class="anchor" href="#case2">Walkthrough: Case 2 &mdash; Single external cave</a></li>
+    <li><a class="anchor" href="#case1">Walkthrough: Case 1 &mdash; Region-level external dataset</a></li>
+    <li><a class="anchor" href="#structure">The Structure view (the load-bearing new UI)</a></li>
+    <li><a class="anchor" href="#notes-bulk">Bulk note-folder import</a></li>
+    <li><a class="anchor" href="#cross">Cross-case concerns</a></li>
+    <li><a class="anchor" href="#questions">Open questions surfaced by the prototype</a></li>
+  </ol>
+</div>
+
+<h2 id="cases">2. The three use cases</h2>
+
+<div class="case">
+  <h3>Case 3 (most common) &mdash; TopoDroid trip as source</h3>
+  <p>
+    <strong>User:</strong> "My cave is already in CaveWhere. I went on a
+    survey trip, recorded shots in TopoDroid, exported the trip as
+    <code>trip-2025-06-01.svx</code>. I want CaveWhere to use that file
+    as the centerline for one new trip in this cave."
+  </p>
+  <p>
+    <strong>Mental model:</strong> very close to "Import Survex as a
+    trip" (already exists), except the import is <em>live</em> &mdash;
+    if I edit the file in TopoDroid and re-export, CaveWhere updates.
+  </p>
+  <p>
+    <strong>Scope of change:</strong> one new cwTrip with
+    <code>externalCenterline</code> set; sibling native trips
+    unaffected.
+  </p>
+</div>
+
+<div class="case">
+  <h3>Case 2 &mdash; Single cave in external format</h3>
+  <p>
+    <strong>User:</strong> "I survey a friend's cave that they maintain
+    in Compass. They send me the <code>.dat</code>/<code>.mak</code>.
+    I want to add my own notes and scraps in CaveWhere without
+    duplicating the centerline."
+  </p>
+  <p>
+    <strong>Mental model:</strong> the file is the cave; CaveWhere is
+    a notes-and-maps layer on top.
+  </p>
+  <p>
+    <strong>Scope of change:</strong> one cwCave with
+    <code>externalCenterline</code> set. The file's internal
+    <code>*begin</code> structure may give multiple trips; the user
+    declares cwTrip-scope records under the cave to do per-survey
+    carpet mode.
+  </p>
+</div>
+
+<div class="case">
+  <h3>Case 1 &mdash; Region-level external dataset</h3>
+  <p>
+    <strong>User:</strong> "My survey group's entire region lives in
+    Survex. Multiple caves, some connected. I want CaveWhere to read
+    the region as-is and let me add notes/scraps per survey trip. I'll
+    also create new caves in CaveWhere as we explore new entrances."
+  </p>
+  <p>
+    <strong>Mental model:</strong> CaveWhere is a viewer + annotation
+    layer on top of the canonical Survex world.
+  </p>
+  <p>
+    <strong>Scope of change:</strong> region-level attachment plus
+    <em>many</em> cwCave/cwTrip scope declarations mapped onto subtrees
+    of the resolved network. Some caves coexist as fully-native
+    CaveWhere caves (user adds new ones, then merges into the external
+    via equates later).
+  </p>
+</div>
+
+<h2 id="model">3. Conceptual model</h2>
+
+<p>
+  To make all three cases work cleanly with the same plumbing, a
+  cwCave or cwTrip exists in <strong>one of three states</strong>:
+</p>
+
+<table>
+  <tr>
+    <th>State</th>
+    <th>cwCave/cwTrip carries</th>
+    <th>Driver emission</th>
+    <th>Notes/scraps anchor on</th>
+  </tr>
+  <tr>
+    <td><strong>Native</strong> (today's default)</td>
+    <td>Survey chunks (shot data) + metadata</td>
+    <td>Native <code>*data normal&hellip;</code> lines inside <code>*begin cave_&lt;uuid&gt;</code> / anonymous <code>*begin</code></td>
+    <td>Stations defined by own chunks</td>
+  </tr>
+  <tr>
+    <td><strong>Attached</strong> (centerline source)</td>
+    <td><code>externalCenterline</code> pointing at a file</td>
+    <td><code>*include "&hellip;"</code> inside <code>*begin cave_&lt;uuid&gt;</code> / <code>*begin trip_&lt;uuid&gt;</code></td>
+    <td>Stations resolved under this scope's wrapper prefix</td>
+  </tr>
+  <tr>
+    <td><strong>Scope</strong> (NEW &mdash; needed for cases 1 &amp; 2)</td>
+    <td><code>stationPrefix</code> (a string like <code>"bigpassage.east"</code>)</td>
+    <td><em>None</em> &mdash; purely a consumer-side filter into the resolved network</td>
+    <td>Stations whose resolved name matches the prefix</td>
+  </tr>
+</table>
+
+<p>
+  The Scope state is what makes cases 1 and 2 work: a cwCave/cwTrip
+  can exist purely to <em>own notes/scraps anchored to a subtree</em>
+  of someone else's centerline. It doesn't contribute shots, doesn't
+  get a <code>*begin</code> in the driver, doesn't appear in the
+  exporter at all &mdash; it's just an addressing convention into a
+  larger network.
+</p>
+
+<div class="note">
+  <strong>Data model implication:</strong> add an optional
+  <code>stationPrefix</code> string to cwCave and cwTrip. State
+  resolution is mutually exclusive: a single cave/trip is either
+  Native (has chunks) or Attached (has <code>externalCenterline</code>)
+  or Scope (has <code>stationPrefix</code>). Three flags / a small enum
+  on the protobuf.
+</div>
+
+<hr>
+
+<h2 id="case3">4. Walkthrough &mdash; Case 3 (TopoDroid trip)</h2>
+
+<p>The familiar shape: just a trip-level attach. Two clicks total.</p>
+
+<h4>Starting state</h4>
+<p>User is on CavePage for "My Cave" with two existing native trips.</p>
+
+<div class="wireframe">
+<pre>┌─ CavePage  "My Cave" ───────────────────────────────────────────┐
+│  Length: 250m · Depth: 30m · Leads: 1 · Fix stations: 1         │
+│                                                                 │
+│  [Add Trip ▾]  [Import Survex]  [Export]                        │
+│         ├ Native trip                                           │
+│         └ External centerline…                                  │
+│                                                                 │
+│  ┌──────────────┬──────┬───────┬───────┬────────┐               │
+│  │ Name         │ Date │ Stns  │ Length│ Decl   │               │
+│  ├──────────────┼──────┼───────┼───────┼────────┤               │
+│  │ Day 1        │ 5/1  │ 6/6   │ 47m   │ 6.83°  │               │
+│  │ Day 2        │ 5/15 │ 8/8   │ 89m   │ 6.83°  │               │
+│  └──────────────┴──────┴───────┴───────┴────────┘               │
+└─────────────────────────────────────────────────────────────────┘</pre>
+</div>
+
+<div class="step"><span class="stepNum">STEP 1</span> &mdash; User clicks <strong>Add Trip ▾ &rarr; External centerline&hellip;</strong></div>
+
+<div class="wireframe">
+<pre>┌─ Attach external centerline ────────────────────────────────────┐
+│                                                                 │
+│  Pick the entry file:                                           │
+│  [/Users/me/topodroid/2025-06-01/trip.svx]   [Browse…]          │
+│                                                                 │
+│  Format: Survex (auto-detected)                                 │
+│  ✓ Found 1 file, 14 stations, 13 shots                          │
+│                                                                 │
+│  Trip name:  [Day 3 (TopoDroid)]                                │
+│                                                                 │
+│  How should CaveWhere handle this file?                         │
+│  ● Watch for changes (recommended)                              │
+│    Copies into your project. Edits in your original location    │
+│    or the project copy both trigger a re-solve.                 │
+│  ○ Copy once (import mode)                                      │
+│    Copies into your project. Only the project copy is used      │
+│    after that — your original is forgotten.                     │
+│                                                                 │
+│  ┌─ Why we copy ──────────────────────────────────────────┐    │
+│  │  📋 Copies into:                                       │    │
+│  │     ↳ My Cave.cwproj/External Centerlines/             │    │
+│  │     The centerline travels with your project — git     │    │
+│  │     sync, backups, and sharing all work.               │    │
+│  │  🚫 CaveWhere never writes to these files. Edit them   │    │
+│  │     in your survey tool.                               │    │
+│  └────────────────────────────────────────────────────────┘    │
+│                                                                 │
+│                              [Cancel]  [Attach]                 │
+└─────────────────────────────────────────────────────────────────┘</pre>
+</div>
+
+<div class="step"><span class="stepNum">STEP 2</span> &mdash; Click Attach. Scanner runs, files copied, cavern solves, TripPage opens with the new trip.</div>
+
+<h4>After attach: CavePage</h4>
+
+<div class="wireframe">
+<pre>┌─ CavePage  "My Cave" ───────────────────────────────────────────┐
+│  Length: 386m · Depth: 42m · Leads: 1 · Fix stations: 1         │
+│                                                                 │
+│  [Add Trip ▾]  [Import Survex]  [Export]                        │
+│                                                                 │
+│  ┌──────────────────┬──────┬───────┬───────┬────────┐           │
+│  │ Name             │ Date │ Stns  │ Length│ Decl   │           │
+│  ├──────────────────┼──────┼───────┼───────┼────────┤           │
+│  │ Day 1            │ 5/1  │ 6/6   │ 47m   │ 6.83°  │           │
+│  │ Day 2            │ 5/15 │ 8/8   │ 89m   │ 6.83°  │           │
+│  │ 📎 Day 3         │ 6/1  │ 14/14 │ 136m  │ —      │  ← new   │
+│  └──────────────────┴──────┴───────┴───────┴────────┘           │
+└─────────────────────────────────────────────────────────────────┘</pre>
+</div>
+
+<p>
+  The 📎 marker is the only new affordance from the user's
+  perspective. Clicking the row opens TripPage in attached mode
+  (covered in the main plan, &sect;8.5).
+</p>
+
+<p class="meta">
+  <strong>UX confidence:</strong> high. This is the case the existing
+  plan handles cleanly. The Add Trip dropdown is the only new visual
+  element on CavePage when the user has no external data yet.
+</p>
+
+<hr>
+
+<h2 id="case2">5. Walkthrough &mdash; Case 2 (Single external cave)</h2>
+
+<p>
+  Cave-level attach. Includes the optional follow-up of declaring
+  trip-scopes for per-survey carpet.
+</p>
+
+<h4>Starting state</h4>
+<p>User is on DataMainPage and wants to add a cave whose centerline lives in an external file.</p>
+
+<p>
+  Entry point: click <em>Add Cave &#x25BE; &rarr; External cave&hellip;</em>.
+  The attach dialog opens; on Attach a cwCave is created (named from
+  the file) and the attachment lands on it in one step.
+</p>
+
+<div class="step"><span class="stepNum">STEP 1</span> &mdash; Attach dialog (same shape as Case 3 dialog, with cave-level note text):</div>
+
+<div class="wireframe">
+<pre>┌─ Attach external centerline (cave-level) ───────────────────────┐
+│                                                                 │
+│  Pick the entry file:                                           │
+│  [/Users/friend/compass/big-cave.mak]   [Browse…]               │
+│                                                                 │
+│  Format: Compass (auto-detected)                                │
+│  ✓ Found 4 files, 247 stations across 8 survey blocks           │
+│  ! 2 stations couldn't be resolved (will show in Cavern Output) │
+│                                                                 │
+│  Cave name:  [Big Cave]                                         │
+│                                                                 │
+│  How should CaveWhere handle this file?                         │
+│  ● Watch for changes (recommended)                              │
+│  ○ Copy once (import mode)                                      │
+│                                                                 │
+│  After attach: one trip will be created automatically for each  │
+│  survey block in the file (8 trips). Rename or delete any you   │
+│  don't want on CavePage.                                        │
+│                                                                 │
+│  ┌─ Why we copy ──────────────────────────────────────────┐    │
+│  │  📋 ↳ Region.cwproj/External Centerlines/             │    │
+│  │     For git sync, backups, and sharing.                │    │
+│  │  🚫 CaveWhere never writes to these files.             │    │
+│  └────────────────────────────────────────────────────────┘    │
+│                                                                 │
+│                              [Cancel]  [Attach]                 │
+└─────────────────────────────────────────────────────────────────┘</pre>
+</div>
+
+<div class="step"><span class="stepNum">STEP 2</span> &mdash; Click Attach. Scanner runs, copy reconciles, cavern solves, and one cwTrip is auto-created per resolved <code>*begin</code> block with &ge;1 station &mdash; no intermediate dialog. CavePage shows the result:</div>
+
+<div class="wireframe">
+<pre>┌─ CavePage  "Big Cave"  📎 ──────────────────────────────────────┐
+│  247 stations · 89 shots · 3 loops · 1 connected component      │
+│                                                                 │
+│  ┌─ External Centerline ─────────────────────────────────────┐  │
+│  │  📄 big-cave.mak · Compass · 4 files                      │  │
+│  │  Source: ~/friend/compass/  (live-linked)                 │  │
+│  │  Last solved: 0.3s ago · 2 warnings                       │  │
+│  │  [Reload]  [Detach…]  → View cavern output                │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  Trips (auto-created from file structure):                      │
+│  ┌──────────────────┬───────┬──────────────────────┐            │
+│  │ Name             │ Stns  │ Prefix in file       │            │
+│  ├──────────────────┼───────┼──────────────────────┤            │
+│  │ 📎 entrance      │  47   │ entrance             │            │
+│  │ 📎 big-passage   │  89   │ big-passage          │            │
+│  │ 📎 east          │  34   │ big-passage.east     │            │
+│  │ 📎 west          │  28   │ big-passage.west     │            │
+│  │ 📎 side-cave     │  12   │ side-cave            │            │
+│  │ 📎 tight         │   3   │ side-cave.tight      │            │
+│  │ 📎 surface       │   8   │ surface              │            │
+│  │ 📎 stream        │  26   │ stream               │            │
+│  └──────────────────┴───────┴──────────────────────┘            │
+│                                                                 │
+│  [+ Add Trip ▾]   ← still allowed: native trip / external file  │
+│                     to extend the cave with new data            │
+└─────────────────────────────────────────────────────────────────┘</pre>
+</div>
+
+<p>
+  Each row links to TripPage in Scope mode (per the main plan
+  &sect;8.5). User can rename a trip (CaveWhere display name only;
+  the prefix-in-file is what binds to the data), delete a trip they
+  don't want, or add new trips that scope to deeper subtrees.
+</p>
+
+<p class="meta">
+  <strong>UX confidence:</strong> high. No new modal dialog &mdash;
+  trips appear, user manages them like any other trip. The
+  per-trip-prefix is shown as a small read-only field in the row;
+  changing it requires opening the trip and using
+  <em>Change prefix&hellip;</em>.
+</p>
+
+<hr>
+
+<h2 id="case1">6. Walkthrough &mdash; Case 1 (Region-level external) <span style="color:#c66; font-weight:600">[DEFERRED to post-v1]</span></h2>
+
+<div class="note">
+  <strong>Status:</strong> Case 1 is deferred to a post-v1 phase. The
+  walkthrough below stays as design reference. Cases 2 + 3 + equates
+  cover the realistic v1 audience; the Structure view is the
+  highest-UX-risk piece of the whole feature, better designed once we
+  have feedback from earlier phases. The Phase 1 infra and the Scope
+  state introduced in Phase 3 already prepare for Case 1 &mdash; only
+  the UI work remains.
+</div>
+
+<p>The biggest UX change. New region-level entry point and Structure view.</p>
+
+<h4>Starting state &mdash; DataMainPage with no external attached</h4>
+
+<div class="wireframe">
+<pre>┌─ DataMainPage ──────────────────────────────────────────────────┐
+│                                                                 │
+│  Caves (3):                                                     │
+│   · Big Cave                                                    │
+│   · Side Cave                                                   │
+│   · Surface Survey                                              │
+│                                                                 │
+│  [Add Cave]  [Import…]                                          │
+│                                                                 │
+│  Cavern output: last run clean (0.1s, 156 stations)             │
+│  [More options ▾]                                               │
+│           ├ Attach region-level external centerline…  ← case 1  │
+│           └ Project settings                                    │
+└─────────────────────────────────────────────────────────────────┘</pre>
+</div>
+
+<div class="step"><span class="stepNum">STEP 1</span> &mdash; <strong>More options &rarr; Attach region-level external centerline&hellip;</strong></div>
+
+<div class="wireframe">
+<pre>┌─ Attach region-level centerline ────────────────────────────────┐
+│                                                                 │
+│  ⚠ This makes the external file the source of truth for the    │
+│    region's centerline. Your existing CaveWhere caves           │
+│    (3 caves, 156 stations) will be preserved as native, but    │
+│    you'll need to declare equates if you want them to connect  │
+│    to the external network.                                     │
+│                                                                 │
+│  Pick the entry file:                                           │
+│  [/Users/me/survex/big-system/big-system.svx]   [Browse…]       │
+│                                                                 │
+│  Format: Survex (auto-detected)                                 │
+│                                                                 │
+│  ✓ Found 47 files, 3247 stations across 28 survey blocks        │
+│                                                                 │
+│  Files will be copied into:                                     │
+│   ↳ Region.cwproj/External Centerlines/big-system/              │
+│                                                                 │
+│                              [Cancel]  [Attach]                 │
+└─────────────────────────────────────────────────────────────────┘</pre>
+</div>
+
+<div class="step"><span class="stepNum">STEP 2</span> &mdash; After attach, DataMainPage shows the new region external panel and the Structure view becomes accessible.</div>
+
+<div class="wireframe">
+<pre>┌─ DataMainPage  📄 region external ──────────────────────────────┐
+│                                                                 │
+│  ┌─ Region External Centerline ──────────────────────────────┐  │
+│  │  📄 big-system/big-system.svx · Survex · 47 files         │  │
+│  │  3247 stations · 1389 shots · 87 loops · 0.8s             │  │
+│  │  [Reload]  [Detach…]  → View cavern output                │  │
+│  │  → View Structure                                         │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  Caves:                                                         │
+│   Native CaveWhere caves (3, anchored to fix stations):         │
+│    · Big Cave (existing)                                        │
+│    · Side Cave (existing)                                       │
+│    · Surface Survey (existing)                                  │
+│                                                                 │
+│   External-scoped caves (0):                                    │
+│    No caves declared from the external network yet.             │
+│    [+ Create caves from Structure…]                             │
+│                                                                 │
+│  [Add Cave ▾]                                                   │
+│        ├ Native cave                                            │
+│        └ Cave scoped to external prefix…                        │
+└─────────────────────────────────────────────────────────────────┘</pre>
+</div>
+
+<h4>The user's next step depends on what they want</h4>
+
+<p>Two paths:</p>
+
+<ol>
+  <li>
+    Click <strong>Create caves from Structure&hellip;</strong> to bulk-create
+    cwCave-scopes from the file's top-level <code>*begin</code> blocks
+    (the auto-mapping flow described in &sect;7).
+  </li>
+  <li>
+    Click <strong>View Structure</strong> to manually pick which
+    subtrees become caves or trips (the freeform Structure view in
+    &sect;7).
+  </li>
+</ol>
+
+<p class="meta">
+  <strong>UX confidence:</strong> low without the Structure view
+  design. That's the load-bearing new screen for case 1 &mdash; the
+  rest of the flow depends on it being usable.
+</p>
+
+<hr>
+
+<h2 id="structure">7. The Structure view <span style="color:#c66; font-weight:600">[DEFERRED with Case 1]</span></h2>
+
+<p>
+  When a region-level (or cave-level) external centerline is attached,
+  the Structure view exposes the resolved network's <code>*begin</code>
+  hierarchy as a tree the user can map into cwCave/cwTrip scopes.
+</p>
+
+<h4>Wireframe</h4>
+
+<div class="wireframe">
+<pre>┌─ Structure  &mdash;  big-system.svx ────────────────────────────────┐
+│  3247 stations · 1389 shots · 87 loops                          │
+│  ────────────────────────────────────────────────────────────── │
+│  Tree                                       Scopes                   │
+│  ▼ big-system                             (root)                     │
+│    ▼ main-cave                  712 stns   ⚓ "Main Cave" (cave)     │
+│      ▶ entrance                 47 stns    ⚓ "Entrance" (trip)      │
+│      ▼ big-passage              634 stns   ⚓ "Big Passage" (trip)   │
+│        ▶ main                   189 stns                             │
+│        ▼ east                   267 stns                             │
+│          ▶ east-2025-06-01      89 stns                              │
+│          ▶ east-2025-07-15      178 stns                             │
+│        ▶ west                   178 stns                             │
+│      ▶ deep                     31 stns                              │
+│    ▶ side-cave                  248 stns   ⚓ "Side Cave" (cave)     │
+│    ▼ surface                    87 stns    (no scope)                │
+│      ▶ ridge-traverse           54 stns                              │
+│      ▶ sinkholes                33 stns                              │
+│    ▼ ‹unattached fixes›         12 stns                              │
+│                                                                       │
+│  ────────────────────────────────────────────────────────────── │
+│  Selected: big-system.main-cave.big-passage.east                │
+│  Stations: 267                                                  │
+│  [Make this a cave]  [Make this a trip]  [Auto-fill children…] │
+└─────────────────────────────────────────────────────────────────┘</pre>
+</div>
+
+<p>Interaction model:</p>
+
+<ul>
+  <li>
+    Tree expands/collapses by clicking the &#9656; chevron. Each node
+    shows station count.
+  </li>
+  <li>
+    Nodes with an &#9883; (anchor) icon already have a scope mapped to
+    them &mdash; the label shows the cwCave/cwTrip display name and
+    whether it's a cave or trip scope.
+  </li>
+  <li>
+    Selecting a node shows a footer with mapping actions:
+    <ul>
+      <li><strong>Make this a cave</strong> &mdash; creates a cwCave-scope at this node. Only enabled when no ancestor is already a cave or trip scope.</li>
+      <li><strong>Make this a trip</strong> &mdash; creates a cwTrip-scope under the nearest cave-scope ancestor. The ancestor cave must exist first.</li>
+      <li><strong>Auto-fill children</strong> &mdash; opens the auto-create dialog scoped to this subtree.</li>
+    </ul>
+  </li>
+  <li>
+    The "‹unattached fixes›" pseudo-node groups stations from
+    <code>*fix</code> directives that aren't inside any
+    <code>*begin</code> block &mdash; common in real Survex projects.
+    Read-only.
+  </li>
+</ul>
+
+<h4>Why a tree view and not a list</h4>
+
+<p>
+  The unstructured-into-cwTrip problem (the user's case-1 question)
+  has no single right answer &mdash; only the user knows how their
+  data should be carved. A tree puts the file's own structure in
+  front of them and lets them decide:
+</p>
+
+<ul>
+  <li>Some users will map at depth 1 (broad caves, no trips).</li>
+  <li>Some will map at depth 2 (caves + major sections).</li>
+  <li>Some will map at depth 3+ (individual survey days as trips).</li>
+  <li>Most will use Auto-fill at the top level and adjust.</li>
+</ul>
+
+<h4>Auto-fill heuristic</h4>
+
+<p>
+  The defaults the Auto-fill dialog suggests (per case 2 above):
+</p>
+
+<ul>
+  <li>Top-level <code>*begin</code> children of the root &rarr; cave scopes (depth 1)</li>
+  <li>Inside each cave, leaf <code>*begin</code> blocks (no further sub-<code>*begin</code>) &rarr; trip scopes</li>
+  <li>Skip blocks with fewer than 5 stations by default (user toggle)</li>
+</ul>
+
+<p>
+  This isn't perfect &mdash; real projects often have intermediate
+  organizational <code>*begin</code> blocks that aren't either a cave
+  or a trip. The Structure view lets the user fix those individually.
+</p>
+
+<hr>
+
+<h2 id="notes-bulk">8. Bulk note-folder import <span style="color:#c66; font-weight:600">[DEFERRED with Case 1]</span></h2>
+
+<p>
+  Case 1 users often have a folder per survey day with photos of
+  field notes. Adding them one at a time through the existing Notes
+  Gallery flow is tedious. A bulk-import affordance lives on each
+  externally-scoped TripPage.
+</p>
+
+<div class="wireframe">
+<pre>┌─ Import notes folder ───────────────────────────────────────────┐
+│                                                                 │
+│  Trip scope: big-system.main-cave.big-passage.east              │
+│                                                                 │
+│  Pick a folder containing scanned notes:                        │
+│  [/Users/me/notes/big-passage-east/]   [Browse…]                │
+│                                                                 │
+│  Found:                                                         │
+│  · 12 image files (jpg, png)                                    │
+│  · No PDFs                                                      │
+│                                                                 │
+│  ☑ Copy images into the project                                 │
+│  ☐ Reference in place (not recommended &mdash; breaks portability) │
+│                                                                 │
+│  After import you can drag images in the Notes Gallery to       │
+│  reorder, group, and assign LRUD anchors via carpet mode.       │
+│                                                                 │
+│                            [Cancel]  [Import 12 notes]          │
+└─────────────────────────────────────────────────────────────────┘</pre>
+</div>
+
+<p>
+  v1 scope: folder-of-images only. Auto-mapping folder names to trip
+  scopes (e.g. <code>big-passage-east/</code> &rarr;
+  <code>big-passage.east</code> trip) is a follow-up.
+</p>
+
+<hr>
+
+<h2 id="cross">9. Cross-case concerns</h2>
+
+<h3>9.1 Adding native CaveWhere data into an externally-attached region</h3>
+
+<p>
+  The user wants to add a new cave in CaveWhere that extends into the
+  external dataset (e.g., they found a new entrance and want to add
+  the first survey to it natively before exporting back to Survex).
+</p>
+
+<p>
+  Path: on DataMainPage with region attached, click
+  <strong>Add Cave &rarr; Native cave</strong>. This creates a normal
+  cwCave with native trips and chunks. To connect it to the external
+  network, the user adds an equate (Phase 5) at the region level:
+  <code>equate native-cave.A1 = big-system.main-cave.entrance.E1</code>.
+</p>
+
+<h3>9.2 Mixed states inside one cave</h3>
+
+<p>
+  A cave can hold:
+</p>
+<ul>
+  <li>Native trips (own shots)</li>
+  <li>Attached trips (each with its own external file)</li>
+  <li>Scope trips (declare a prefix from a parent attachment)</li>
+</ul>
+<p>
+  Native + attached coexist as in &sect;8.6 of the main plan. Scope
+  trips only make sense when an ancestor (cave or region) is
+  attached &mdash; without that, there's no resolved network to
+  declare a prefix into. The Structure view should refuse to make a
+  scope when there's no attachment in scope.
+</p>
+
+<h3>9.3 What appears in the 3D view</h3>
+
+<p>
+  Everything resolved &mdash; native shots, attached centerlines,
+  scope-declared subtrees &mdash; flows through the same
+  <code>cwStationPositionLookup</code> and the same 3D scene renderer.
+  Scopes don't add stations; they're just consumer-side filters for
+  notes/scraps.
+</p>
+
+<h3>9.4 The "what's this trip's stations?" question</h3>
+
+<p>
+  Native trip &rarr; the chunks own them, easy. Attached trip &rarr;
+  resolved stations under <code>cave_X.trip_Y.*</code>. Scope trip
+  &rarr; resolved stations matching the declared prefix.
+</p>
+
+<p>
+  One unified <code>cwTripStationListModel</code> with three backends.
+  This is the shared model already called out in the main plan
+  &sect;7.2; the addition is the third backend for the scope case.
+</p>
+
+<hr>
+
+<h2 id="questions">10. Open questions surfaced by this prototype</h2>
+
+<h4>Resolved</h4>
+<ol>
+  <li>
+    <strong>Terminology.</strong> <em>Resolved:</em> drop "scope" from
+    the user-facing vocabulary. One word, "trip"; one badge, 📎; the
+    Attached/Scope distinction is internal data-model only.
+  </li>
+  <li>
+    <strong>Auto-create threshold and dialog.</strong> <em>Resolved:</em>
+    no dialog. After cave-level attach, auto-create a cwTrip for every
+    <code>*begin</code> block with &ge;1 station, silently. User
+    manages the resulting list (rename, delete, add more) like any
+    other trip.
+  </li>
+  <li>
+    <strong>Live-link vs. import mode.</strong> <em>Resolved:</em>
+    radio in the attach dialog. Default to live-link (watch source +
+    project copy). Import mode skips source-watching; source path is
+    forgotten after the copy.
+  </li>
+  <li>
+    <strong>Case 1 / Structure view in v1.</strong> <em>Resolved:</em>
+    deferred to post-v1. The data-model prep (Scope state on cwTrip)
+    still lands in Phase 3 for case 2.
+  </li>
+  <li>
+    <strong>Detaching a scope trip.</strong> <em>Resolved:</em> there
+    is no "detach" for a scope trip &mdash; it doesn't own anything.
+    The buttons are <em>Change prefix&hellip;</em> and
+    <em>Remove trip&hellip;</em>. Detach only applies to Attached
+    caves/trips.
+  </li>
+</ol>
+
+<h4>Newly resolved</h4>
+<ol start="6">
+  <li>
+    <strong>Renaming a Scope trip.</strong> <em>Resolved:</em>
+    display name and <code>stationPrefix</code> are independent.
+    Renaming "east" to "East 2025-06-01" changes the label only; the
+    prefix-in-file binding (<code>big-passage.east</code>) is
+    untouched. Changing the binding requires opening the trip and
+    using <em>Change prefix&hellip;</em>.
+  </li>
+  <li>
+    <strong>Cave-level Detach with auto-created Scope trips.</strong>
+    <em>Resolved:</em> deletes them, and deletes the copied files in
+    <code>External Centerlines/</code> too. Scope trips were created
+    <em>from</em> the attachment; without the parent's centerline they
+    have no meaning. Notes anchored to them go with them. Git history
+    in the <code>.cwproj</code> is the recovery path if the user wants
+    the closure back. Use the existing <code>RemoveAskBox.qml</code>
+    pattern (the same lightweight inline confirm used by trip / cave /
+    fix-station removal):
+    <pre style="font-size:0.85em; margin-top:0.4rem">┌─ Detach external centerline from "Big Cave"? ─────────────────┐
+│  Removes 8 auto-created trips and their notes/scraps,         │
+│  and deletes the copied files in External Centerlines/.       │
+│                              [Cancel]  [Detach]               │
+└───────────────────────────────────────────────────────────────┘</pre>
+    For trip-level detach, the wording is shorter (no Scope-trip
+    count; just "Detach external centerline from &lt;trip name&gt;? Deletes
+    the copied files in External Centerlines/."). The "Convert Scope
+    trip to native" escape hatch is a v1.x follow-up for the user
+    who wants to preserve specific notes/scraps before detaching.
+  </li>
+</ol>
+
+<h4>Resolved (this revision)</h4>
+<ol start="8">
+  <li>
+    <strong>Trip "Date" and "Decl" fields are kept and remain editable
+    for both Attached and Scope trips.</strong>
+    Date is <em>not</em> purely informational: CaveWhere computes
+    auto-declination from date via the IGRF model
+    (<code>cwTripCalibration::autoDeclination</code>), and many
+    TopoDroid-exported <code>.svx</code>/<code>.dat</code> files don't
+    set <code>*calibrate declination</code> at all. So we need:
+    <ul>
+      <li><strong>Date</strong> &mdash; editable. Default: parsed from the
+          external file's <code>*date</code> directive (Survex) or
+          equivalent (Compass: <code>SURVEY DATE</code>; Walls:
+          <code>#DATE</code>) when present. If absent, blank (user
+          enters). Driving cavern uses this date by feeding it into the
+          driver block before <code>*include</code>.</li>
+      <li><strong>Decl</strong> &mdash; same model as native trips:
+          <code>autoDeclination</code> on by default (uses Date + cave
+          location for IGRF), with a manual override field
+          (<code>declinationManual</code>) when the user wants to pin it.
+          If the external file carries an explicit declination (Survex
+          <code>*calibrate declination</code>, Compass header
+          <code>CORRECTIONS</code>, Walls <code>#UNITS DECL</code>),
+          import it as the initial manual value with
+          <code>autoDeclination = false</code>.</li>
+    </ul>
+    Net effect: external trips look the same in the trip header as native
+    trips. The 📎 badge tells the user where the centerline came from;
+    Date/Decl are still CaveWhere-managed.
+  </li>
+  <li>
+    <strong>Replace / re-link an attachment.</strong> Promoted from
+    deferred to v1.x. Two scenarios the user hits in practice:
+    <ul>
+      <li><em>Re-link</em>: source file moved on disk (laptop reshuffle,
+          new TopoDroid export folder). Same content, new path. UI:
+          if the watcher reports the source as missing, the panel shows a
+          "Source not found" banner with a <em>Re-link&hellip;</em>
+          button. Picker selects the new path, scanner confirms the file
+          has the same prefixes/station set as the cached copy in
+          <code>External Centerlines/&hellip;/</code>, and we just
+          update the source path in <code>local_settings.json</code>. No
+          data change.</li>
+      <li><em>Replace</em>: user picks a different file (newer export,
+          revised survey). Same scope (trip or cave), different content.
+          UI: <em>Replace centerline&hellip;</em> on the
+          ExternalCenterlinePanel opens a picker, then a diff dialog:
+<pre>┌─ Replace centerline ────────────────────────────────────────────┐
+│  Old:  big-cave.mak  (4 files · 247 stations · 8 blocks)        │
+│  New:  big-cave-v2.mak  (5 files · 261 stations · 9 blocks)     │
+│                                                                 │
+│  What will happen to your trips:                                │
+│  ┌──────────────────┬──────────────────────┬─────────────────┐  │
+│  │ Scope trip       │ Prefix in file       │ Fate            │  │
+│  ├──────────────────┼──────────────────────┼─────────────────┤  │
+│  │ 📎 entrance      │ entrance             │ ✓ Kept (47→48)  │  │
+│  │ 📎 big-passage   │ big-passage          │ ✓ Kept          │  │
+│  │ 📎 east          │ big-passage.east     │ ✓ Kept          │  │
+│  │ 📎 west          │ big-passage.west     │ ✓ Kept          │  │
+│  │ 📎 side-cave     │ side-cave            │ ⚠ Renamed?      │  │
+│  │ 📎 surface       │ surface              │ ✗ Orphaned (0)  │  │
+│  └──────────────────┴──────────────────────┴─────────────────┘  │
+│  New blocks not yet covered: aven (12 stations)                 │
+│  ☑ Auto-create trip for new blocks                              │
+│  ☑ Keep orphaned trips (notes preserved, no stations resolved)  │
+│  ☐ Delete orphaned trips                                        │
+│                          [Cancel]  [Replace]                    │
+└─────────────────────────────────────────────────────────────────┘</pre>
+          Match key is the trip's <code>stationPrefix</code>. "Kept"
+          means the prefix still resolves in the new file. "Orphaned"
+          means it no longer resolves &mdash; by default we keep the
+          trip with its notes/scraps, mark it with an error badge, and
+          the user can either rebind it via <em>Change prefix&hellip;</em>
+          or delete it later. Notes/scraps survive because they belong
+          to the trip, not the file.</li>
+    </ul>
+    Both flows share the diff-and-confirm pattern; re-link skips the
+    diff when scanner shows zero changes.
+  </li>
+</ol>
+
+<p class="meta">
+  Item #10 (mid-solve UI state) is removed &mdash; the existing
+  <code>cwLinePlotManager</code> pipeline already handles
+  in-progress/last-good-network rendering, so we inherit the same
+  behavior for free.
+</p>
+
+<hr>
+
+<h2 id="summary">11. Summary &amp; phase plan</h2>
+
+<p>v1 scope &mdash; Cases 2 and 3 ship; Case 1 deferred.</p>
+
+<table>
+  <tr><th>Phase</th><th>Ships</th><th>Use case</th><th>Status</th></tr>
+  <tr><td>1</td><td>Pipeline + scanner + copy + watcher + <code>local_settings.json</code> (no UI)</td><td>infra only</td><td>v1</td></tr>
+  <tr><td>2</td><td>Trip-level attach + CavernOutputPage + live-link/import toggle</td><td><strong>Case 3</strong> &mdash; TopoDroid</td><td>v1</td></tr>
+  <tr><td>3</td><td>Cave-level attach + auto-create trips (Scope state) + nav badging</td><td><strong>Case 2</strong> &mdash; one external cave</td><td>v1</td></tr>
+  <tr><td>4</td><td>Equates editor</td><td>connect native + external</td><td>v1</td></tr>
+  <tr><td>5</td><td>Orphan detection</td><td>cleanup</td><td>v1</td></tr>
+  <tr><td>5b</td><td>Replace / re-link attachment (diff dialog + Re-link banner)</td><td>moved/revised source files</td><td><strong>v1.x</strong></td></tr>
+  <tr><td>6</td><td>Region-level attach + Structure view + bulk note import + cwCave <code>stationPrefix</code></td><td><strong>Case 1</strong> &mdash; region external</td><td><strong>post-v1</strong></td></tr>
+</table>
+
+<p>
+  This stages the work so the smallest, highest-value case ships
+  first. The Scope state lands in Phase 3 for Case 2's auto-created
+  trips &mdash; when Case 1 picks up later, the data model is already
+  there, only the Structure-view UI and the cwCave-level
+  <code>stationPrefix</code> remain.
+</p>
+
+</body>
+</html>

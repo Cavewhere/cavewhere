@@ -1,0 +1,1848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External Centerline Integration Plan</title>
+<style>
+  :root {
+    --fg: #1c1c1c;
+    --muted: #5a5a5a;
+    --accent: #2451a4;
+    --rule: #d8d8d8;
+    --bg: #ffffff;
+    --code-bg: #f4f4f6;
+    --warn-bg: #fff7d6;
+    --warn-border: #e0c346;
+    --ok-bg: #e9f5ec;
+    --ok-border: #6aab7a;
+  }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.5;
+    max-width: 920px;
+    margin: 2.5rem auto;
+    padding: 0 1.5rem 4rem;
+  }
+  h1 { font-size: 1.85rem; border-bottom: 2px solid var(--accent); padding-bottom: 0.35rem; }
+  h2 { font-size: 1.4rem; margin-top: 2.4rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.25rem; color: var(--accent); }
+  h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+  h4 { font-size: 1.0rem; margin-top: 1.2rem; color: var(--muted); }
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  code { background: var(--code-bg); padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
+  pre { background: var(--code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.88em; line-height: 1.4; }
+  pre code { background: transparent; padding: 0; }
+  table { border-collapse: collapse; margin: 0.6rem 0 1.1rem; font-size: 0.95em; }
+  th, td { border: 1px solid var(--rule); padding: 0.4rem 0.7rem; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  blockquote { margin: 0.6rem 0; padding: 0.4rem 0.9rem; border-left: 3px solid var(--accent); color: var(--muted); background: var(--code-bg); }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-border); padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  .answered { background: var(--ok-bg); border: 1px solid var(--ok-border); padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  .phase {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 0.8rem 1.2rem;
+    margin: 1rem 0 2rem;
+    background: #fbfbfd;
+  }
+  .phase h3 { margin-top: 0.4rem; color: var(--accent); }
+  .meta { color: var(--muted); font-size: 0.92em; }
+  ul, ol { margin-top: 0.3rem; }
+  li { margin: 0.15rem 0; }
+  .anchor { color: var(--accent); text-decoration: none; }
+  .anchor:hover { text-decoration: underline; }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
+  .toc { background: var(--code-bg); padding: 0.7rem 1.2rem; border-radius: 4px; }
+  .toc ol { margin: 0.2rem 0 0.2rem 1.2rem; padding: 0; }
+  .toc li { margin: 0.1rem 0; }
+  .ref { color: var(--muted); font-size: 0.88em; }
+</style>
+</head>
+<body>
+
+<h1>External Centerline Integration Plan</h1>
+<p class="meta">
+  Umbrella issue: <a class="anchor" href="https://github.com/Cavewhere/cavewhere/issues/511">#511</a>
+  &middot; Children:
+  <a class="anchor" href="https://github.com/Cavewhere/cavewhere/issues/508">#508 Compass</a>,
+  <a class="anchor" href="https://github.com/Cavewhere/cavewhere/issues/509">#509 Walls</a>,
+  <a class="anchor" href="https://github.com/Cavewhere/cavewhere/issues/510">#510 Survex</a>
+  &middot; Companion doc: <code>plans/EXTERNAL_FILE_PREFIXING_RESEARCH.md</code>
+</p>
+
+<h2 id="overview">1. Overview</h2>
+
+<p>
+  Let CaveWhere reference Compass (<code>.dat</code> / <code>.mak</code>),
+  Walls (<code>.wpj</code> / <code>.srv</code>), and Survex (<code>.svx</code>)
+  centerline data directly instead of importing it. The external centerline
+  files are user-owned in their tool of choice, but on attach we
+  <strong>copy them into the project</strong> under an
+  <code>External Centerlines/</code> directory, so the
+  <code>.cwproj</code> stays self-contained and git sync works without
+  surprises.
+</p>
+
+<p>
+  Inside CaveWhere these files are <strong>read-only</strong>: the user
+  edits them with their native tool (or any text editor with the project
+  open); a <code>QFileSystemWatcher</code> notices the change and triggers
+  a re-solve. CaveWhere never writes back to <code>.svx</code> /
+  <code>.dat</code> / <code>.wpj</code> / <code>.srv</code> &mdash; that
+  drops the format-preserving-writer problem entirely.
+</p>
+
+<p>
+  The cavern solve, the <code>.3d</code> read, and the station-network
+  pipeline are unchanged. Two new ingredients:
+</p>
+
+<ol>
+  <li>
+    <code>cwCave</code> and <code>cwTrip</code> can carry an
+    <code>cwExternalCenterline</code> &mdash; a relative path into
+    <code>External Centerlines/</code> plus a format hint &mdash; that
+    the exporter translates to <code>*include "&hellip;"</code> instead
+    of native shot data.
+  </li>
+  <li>
+    A <code>cwExternalCenterlineScanner</code> module finds the
+    transitive dependency closure of an attached entry file (e.g. a
+    <code>.svx</code> that <code>*include</code>s siblings, a
+    <code>.wpj</code>'s book tree), drives the initial copy into the
+    project, and feeds the watcher set on subsequent runs.
+  </li>
+</ol>
+
+<div class="answered">
+  <strong>Phase 0 is already complete</strong> &mdash; see
+  <code>plans/EXTERNAL_FILE_PREFIXING_RESEARCH.md</code> for the prefix
+  model investigation across CaveWhere, Survex, Compass, and Walls, plus
+  the empirical cavern runs that answer the case-mode question (do not
+  set <code>*case preserve</code> at the driver root) and the
+  <code>*export</code>-for-equates question (not required).
+</div>
+
+<div class="answered">
+  <strong>Companion plan: line-plot async port.</strong>
+  <code>plans/LINEPLOT_ASYNC_PORT_RESEARCH.html</code> covers the
+  port of <code>cwLinePlotTask</code> + sub-tasks to a fully
+  <code>AsyncFuture</code> chain on a worker thread, and surveys the
+  existing <code>cwSaveLoad</code> job queue that the external-centerline
+  filesystem mutations need to go through. Read it alongside this plan
+  &mdash; the worker-thread chain and the <code>cwSaveLoad::Custom</code>
+  job hook are prerequisites for Phase 1 here.
+</div>
+
+<h3 class="toc">Table of contents</h3>
+<div class="toc">
+  <ol>
+    <li><a class="anchor" href="#overview">Overview</a></li>
+    <li><a class="anchor" href="#arch">Architecture</a></li>
+    <li><a class="anchor" href="#data-model">Data model changes</a></li>
+    <li><a class="anchor" href="#scanner">Scanner &amp; dependency discovery</a></li>
+    <li><a class="anchor" href="#copy">In-project copy workflow</a></li>
+    <li><a class="anchor" href="#driver">Driver-file shape</a></li>
+    <li><a class="anchor" href="#consumer">Consumer-side pipeline changes</a></li>
+    <li><a class="anchor" href="#ux">UX model</a>
+      <ol>
+        <li><a class="anchor" href="#ux-trip">TripPage walkthrough</a></li>
+        <li><a class="anchor" href="#ux-cave">CavePage walkthrough</a></li>
+        <li><a class="anchor" href="#ux-transitions">Mode transitions</a></li>
+        <li><a class="anchor" href="#ux-questions">Open UX questions</a></li>
+      </ol>
+    </li>
+    <li><a class="anchor" href="#phases">Phases</a>
+      <ol>
+        <li><a class="anchor" href="#p1">Phase 1 &mdash; Data model, scanner, copy, driver, runner, watcher</a></li>
+        <li><a class="anchor" href="#p2">Phase 2 &mdash; Trip-level attach + CavernOutputPage v1 (Case 3)</a></li>
+        <li><a class="anchor" href="#p3">Phase 3 &mdash; Cave-level attach + auto-create trips + nav badging (Case 2)</a></li>
+        <li><a class="anchor" href="#p4">Phase 4 &mdash; Equates editor</a></li>
+        <li><a class="anchor" href="#p5">Phase 5 &mdash; Orphan detection</a></li>
+        <li><a class="anchor" href="#p5b">Phase 5b &mdash; Replace / re-link attachment</a></li>
+        <li><a class="anchor" href="#p6">Phase 6 &mdash; Region-level attach (post-v1)</a></li>
+      </ol>
+    </li>
+    <li><a class="anchor" href="#testing">Testing strategy</a></li>
+    <li><a class="anchor" href="#risks">Risks and open items</a></li>
+    <li><a class="anchor" href="#deferred">Deferred (post-v1)</a></li>
+  </ol>
+</div>
+
+<h2 id="arch">2. Architecture</h2>
+
+<p>Existing pipeline (today, all native data):</p>
+
+<pre><code>cwCavingRegion
+  &rarr; cwLinePlotManager::runSurvex
+  &rarr; cwLinePlotTask::buildInput      (snapshot region, rename caves to int index)
+  &rarr; cwSurvexExporterRegionTask      (write driver .svx)
+  &rarr; cwCavernTask                    (cavern_run on driver)
+  &rarr; cwSurvex3DFileReader            (read .3d via img.h)
+  &rarr; splitLookupByCave + station/scrap update
+</code></pre>
+
+<p>After this plan:</p>
+
+<pre><code>cwCavingRegion (with cwExternalCenterline attachments)
+  &rarr; cwLinePlotManager::runSurvex                   [drives the AsyncFuture::Restarter chain]
+  &rarr; cwExternalCenterlineScanner::scan(entry)       [NEW] per attachment (worker thread)
+  &rarr; cwExternalCenterlineSync::reconcile()          [NEW] copy / GC, queued through cwSaveLoad
+  &rarr; cwLinePlotTask::buildInput                     (uses cwCave::id() / cwTrip::id() as *begin label)
+  &rarr; cwSurvexExporterRegionTask                     (NameStyle::InternalUuid; emits *include for attached scopes)
+  &rarr; cwCavernTask                                   (unchanged)
+  &rarr; cwSurvex3DFileReader                           (unchanged)
+  &rarr; splitLookupByCave                              [REGEX UPDATED] UUID prefix + verbatim tail
+</code></pre>
+
+<p>
+  Concurrency contract: the whole chain runs on a single worker thread
+  via <code>AsyncFuture</code>; results land back on the UI thread via
+  <code>.context(this, &hellip;)</code>. Every filesystem mutation
+  inside <code>External Centerlines/</code> is submitted as a
+  <code>cwSaveLoad</code> job so it serialises against the other
+  project-tree mutators (autosave, sync-on-close, etc.). See
+  <code>plans/LINEPLOT_ASYNC_PORT_RESEARCH.html</code> for the
+  current-state survey, the existing <code>cwSaveLoad</code> job API,
+  and the staged port.
+</p>
+
+<p>
+  Cave identifiers move from "integer index into the region snapshot"
+  to the existing persisted <code>cwCave::id()</code> /
+  <code>cwTrip::id()</code> UUIDs. Forced by the external-centerline work
+  (external files contain their own nested <code>*begin</code> structure,
+  and the current single-integer-prefix regex in
+  <code>splitLookupByCave</code> doesn't survive it). No new identity
+  field &mdash; reuse what's already persisted.
+</p>
+
+<h2 id="data-model">3. Data model changes</h2>
+
+<h3>3.1 cwTrip / cwCave gain two new states</h3>
+
+<p>
+  A cwCave or cwTrip exists in one of three states:
+</p>
+
+<table>
+  <tr><th>State</th><th>Carries</th><th>Driver emission</th><th>UI badge</th></tr>
+  <tr>
+    <td><strong>Native</strong> (today)</td>
+    <td>Survey chunks</td>
+    <td><code>*begin&hellip;</code> + native shots</td>
+    <td>none</td>
+  </tr>
+  <tr>
+    <td><strong>Attached</strong> (new)</td>
+    <td><code>externalCenterline</code> pointing at a file</td>
+    <td><code>*begin&hellip;*include "&hellip;"&hellip;*end</code></td>
+    <td>📎</td>
+  </tr>
+  <tr>
+    <td><strong>Scope</strong> (new, for case 2 internal trips and case 1 region scopes)</td>
+    <td><code>stationPrefix</code> string</td>
+    <td><em>none</em> &mdash; purely a consumer-side filter into another scope's resolved network</td>
+    <td>📎</td>
+  </tr>
+</table>
+
+<p>
+  The states are mutually exclusive on a single entity. From the user's
+  perspective there's only "trip" with one optional 📎 badge; the
+  Attached / Scope distinction is internal data-model only.
+</p>
+
+<h3>3.2 <code>cwExternalCenterline</code> (Attached state's payload)</h3>
+
+<p>
+  Lives alongside <code>cwSurveyChunk</code> in the cave/trip data, owned
+  by the <code>cwCave</code> or <code>cwTrip</code> in the Attached state.
+  Deliberately tiny &mdash; just enough to find the entry file in the
+  project tree.
+</p>
+
+<table>
+  <tr><th>Field</th><th>Type</th><th>Purpose</th></tr>
+  <tr>
+    <td><code>entryFile</code></td>
+    <td><code>QString</code></td>
+    <td>
+      Path relative to <code>External Centerlines/</code> inside the project.
+      e.g. <code>"trip_aabbccdd&hellip;/trip.svx"</code>. Always a project-internal
+      path; the original source location lives in
+      <code>local_settings.json</code> per &sect;5.3.
+    </td>
+  </tr>
+</table>
+
+<p class="meta">
+  Things deliberately <em>not</em> on this class:
+</p>
+<ul>
+  <li>
+    <strong>Format</strong> &mdash; derived from the entry file's
+    extension (<code>.svx</code> &rarr; Survex, <code>.dat</code>/<code>.mak</code>
+    &rarr; Compass, <code>.wpj</code>/<code>.srv</code> &rarr; Walls).
+    A free function <code>cwExternalCenterlineScanner::formatFor(entryFile)</code>
+    dispatches the scanner. Cavern itself auto-detects, so we don't need
+    to persist it.
+  </li>
+  <li>
+    <strong>Last-solved timestamp</strong> &mdash; pure runtime UI state.
+    Lives on the runtime cavern-output model (populated when the solve
+    completes, cleared when a re-solve is queued). Not persisted, never
+    dirties the project.
+  </li>
+</ul>
+
+<h3>3.3 <code>stationPrefix</code> (Scope state's payload)</h3>
+
+<p>
+  A simple <code>QString</code> on cwTrip (Phase 3) and later cwCave
+  (Phase 6). Examples: <code>"big-passage.east"</code>,
+  <code>"entrance"</code>. The consumer
+  (<code>cwLinePlotTask::splitLookupByCave</code> et al.) filters the
+  resolved station network into per-scope subsets using this string.
+</p>
+
+<h3>3.4 Stable identifiers (already present)</h3>
+
+<p>
+  <code>cwCave</code> and <code>cwTrip</code> already expose
+  <code>QUuid id() const</code> (<code>cwCave.h:65</code>,
+  <code>cwTrip.h:74</code>), persisted on the existing <code>Id</code>
+  member. Use these directly as the <code>*begin</code> label in the
+  driver and as the lookup key in <code>splitLookupByCave</code>.
+  No new field, no migration, no protobuf addition for identity.
+</p>
+
+<h3>3.5 Protobuf additions (<code>cavewhere.proto</code>)</h3>
+
+<pre><code>message ExternalCenterline {
+  string entry_file = 1;        // relative to "External Centerlines/" inside .cwproj
+}
+
+// Inside Cave message (Phase 3):
+//   ExternalCenterline external_centerline = ...;
+// Inside Trip message (Phase 2 for Attached, Phase 3 for Scope):
+//   ExternalCenterline external_centerline = ...;
+//   string station_prefix = ...;        // populated iff Scope state
+// Inside CavingRegion message (Phase 6, post-v1):
+//   ExternalCenterline region_external_centerline = ...;
+</code></pre>
+
+<p>
+  Source paths (per-user, per-machine) live in
+  <code>.cwproj/local_settings.json</code>, gitignored. See &sect;5.3.
+</p>
+
+<h2 id="scanner">4. Scanner &amp; dependency discovery</h2>
+
+<p>
+  Every external-centerline operation &mdash; initial copy, watcher set
+  refresh, garbage-collecting stranded copies &mdash; needs the same
+  answer: <em>which files does this attach actually depend on?</em>
+  The scanner is the single source of that truth.
+</p>
+
+<h3>4.1 API shape</h3>
+
+<pre><code>namespace cwExternalCenterlineScanner {
+
+struct ScanResult {
+    QList&lt;QString&gt; dependencies;   // absolute paths, includes the entry file
+    QList&lt;QString&gt; warnings;       // per-file non-fatal issues
+};
+
+// Synchronous. Fast for typical project sizes (regex over text + dewalls
+// WPJ parse). Fatal errors (entry file unreadable, total parse failure)
+// come out as Err. Soft errors (an *include points at a missing file)
+// become warnings INSIDE ScanResult &mdash; the rest of the dependency
+// list is still returned.
+Monad::Result&lt;ScanResult&gt; scan(const QString&amp; entryFile);
+
+// Per-format scanners exposed for tests
+Monad::Result&lt;ScanResult&gt; scanSurvex(const QString&amp; entryFile);
+Monad::Result&lt;ScanResult&gt; scanCompass(const QString&amp; entryFile);  // .mak or .dat
+Monad::Result&lt;ScanResult&gt; scanWalls(const QString&amp; entryFile);    // .wpj
+
+}
+</code></pre>
+
+<p>
+  Why <code>Monad::Result</code>: its built-in <code>Warning</code> state
+  (<code>Result&lt;T&gt;(value, warningMessage)</code>) returns
+  <code>hasError() == false</code>, which gives clean
+  partial-success semantics. The wrapper is reserved for "scan totally
+  failed" (e.g. entry file doesn't exist on disk); soft per-file
+  issues live in <code>ScanResult.warnings</code> since the
+  <code>Result&lt;T&gt;</code> warning slot only holds one message.
+</p>
+
+<h3>4.2 Per-format implementations</h3>
+
+<table>
+  <tr><th>Format</th><th>Approach</th><th>LoC est.</th></tr>
+  <tr>
+    <td>Survex <code>.svx</code></td>
+    <td>
+      Line-by-line regex for <code>*include "&lt;path&gt;"</code> and
+      <code>*include &lt;path&gt;</code>. Strip <code>;</code> comments
+      first. Auto-append <code>.svx</code> when the include path has no
+      extension (matches cavern's resolution rule). Resolve relative to
+      current file's directory. Recurse with cycle detection
+      (<code>QSet</code> of already-visited absolute paths). Follows
+      cross-format includes (a <code>.svx</code> can
+      <code>*include</code> a <code>.dat</code>).
+    </td>
+    <td>~80</td>
+  </tr>
+  <tr>
+    <td>Compass <code>.mak</code></td>
+    <td>
+      Regex for <code>#filename.dat;</code> references; resolve relative
+      to the <code>.mak</code>'s directory. <code>.dat</code> files have
+      no inter-file dependencies (form-feed-separated surveys within a
+      single file), so a bare <code>.dat</code> entry returns just
+      itself.
+    </td>
+    <td>~40</td>
+  </tr>
+  <tr>
+    <td>Walls <code>.wpj</code></td>
+    <td>
+      Use <code>dewalls::WallsProjectParser::parseFile()</code>. Walk
+      the resulting <code>WpjBook</code> tree, collect every entry where
+      <code>isSurvey()</code>, resolve each entry's <code>Name</code>
+      relative to its parent book's accumulated <code>Path</code>.
+      dewalls handles the Borland-syntax weirdness for us.
+    </td>
+    <td>~60</td>
+  </tr>
+</table>
+
+<p>
+  Bare <code>.srv</code> attaches (without a parent <code>.wpj</code>)
+  also dispatch to <code>scanWalls</code> which simply returns the
+  single file &mdash; <code>.srv</code> has no inter-file include
+  directive of its own (multi-file structure lives in WPJ).
+</p>
+
+<h3>4.3 Why not reuse cavern for Survex scanning</h3>
+
+<p>
+  Cavern is built to solve a network, not enumerate dependencies. Its
+  diagnostic output mentions included files in <code>"In file included
+  from X:N:"</code> form, but that text is not a stable API &mdash; it
+  changes between Survex versions. The <code>*include</code> directive
+  itself <em>is</em> stable; a 50-line regex is more durable over time
+  than scraping cavern stderr and far cheaper than running cavern just
+  to learn what files exist.
+</p>
+
+<h3>4.4 Async boundary</h3>
+
+<p>
+  Scanners are pure-sync (matches <code>cwSurvex3DFileReader</code>'s
+  pattern: static, sync, fast). The async wrap happens at the call site.
+</p>
+
+<p>From the UI (main thread, e.g. attach button):</p>
+<pre><code>using cwExternalCenterlineScanner::ScanResult;
+
+QFuture&lt;Monad::Result&lt;ScanResult&gt;&gt; future =
+    QtConcurrent::run([entryFile]() {
+        return cwExternalCenterlineScanner::scan(entryFile);
+    });
+
+AsyncFuture::observe(future)
+    .context(this, [this](Monad::Result&lt;ScanResult&gt; result) {
+        if (result.hasError()) {
+            showAttachError(result.errorMessage());
+            return;
+        }
+        // copyDependenciesIntoProject is the first call to
+        // cwExternalCenterlineSync::reconcile (see &sect;5.2) against
+        // a fresh empty attachment folder.
+        m_sync-&gt;reconcile(result.value(), attachmentDirFor(ownerId));
+        surfaceWarnings(result.value().warnings);
+    });
+</code></pre>
+
+<p>
+  Inside the line-plot pipeline (already off the main thread), the
+  scanner is called directly &mdash; no extra wrapping needed.
+</p>
+
+<div class="note">
+  Per CLAUDE.md, <code>AsyncFuture::waitForFinished</code> is test-only
+  (it spins a nested event loop and causes re-entrancy bugs). All
+  production uses go through <code>observe().context(this, &hellip;)</code>
+  for Qt's auto-disconnect on destruction.
+</div>
+
+<h2 id="copy">5. In-project copy workflow</h2>
+
+<h3>5.1 Layout</h3>
+
+<pre><code>my-project.cwproj/
+  &lt;existing .cwproj contents&gt;
+  External Centerlines/
+    cave_6ba7b8109dad11d180b400c04fd430c8/    &mdash; one folder per attachment
+      system.svx                              &mdash; entry file (original name)
+      entrance.svx
+      mainPassage.svx
+      ...
+    cave_6ba7b8119dad11d180b400c04fd430c8/
+      walls.wpj
+      survey1.srv
+      survey2.srv
+    trip_aabbccddeeff00112233445566778899/    &mdash; trip-level attachment
+      trip.svx
+</code></pre>
+
+<p>
+  <strong>Folder name = owner's UUID</strong>
+  (<code>cave_&lt;uuid&gt;</code> or <code>trip_&lt;uuid&gt;</code>,
+  matching the <code>*begin</code> label in the driver). The owner's
+  <code>QUuid id()</code> is already persisted on <code>cwCave</code> /
+  <code>cwTrip</code> (&sect;3.4) and is unique by construction, so:
+</p>
+<ul>
+  <li>Two trips named "trip 1" in different caves &mdash; no collision (each has its own folder name).</li>
+  <li>Two attachments of the same entry-file <em>name</em> &mdash; no collision (different owner UUIDs).</li>
+  <li>The folder name is independent of the entry file name, so the user can rename or replace the entry file without renaming the folder.</li>
+</ul>
+
+<p>
+  Inside the attachment folder, the entry file <strong>keeps its
+  original name</strong>; <code>*include</code> directives inside the
+  entry resolve relative to it the same way they would on the user's
+  disk, so the in-project copy is byte-for-byte indistinguishable from
+  the source for Survex's purposes.
+  <code>cwExternalCenterline.entryFile</code> is the path relative to
+  <code>External Centerlines/</code> &mdash; e.g.
+  <code>"cave_6ba7b810&hellip;/system.svx"</code> &mdash; so the protobuf
+  doesn't bake any per-machine assumptions.
+</p>
+
+<h3>5.2 Reconcile operation</h3>
+
+<p>
+  A new helper <code>cwExternalCenterlineSync</code> drives the copy +
+  GC. It runs on a worker thread as part of the line-plot async chain
+  (&sect;7.4), and <strong>all of its filesystem mutations are submitted
+  through the existing <code>cwProject</code> / <code>cwSaveLoad</code>
+  job queue</strong> &mdash; the same serialised queue that load and save
+  go through. This is the only safe way to mutate the project tree:
+  multiple unrelated jobs (autosave, sync-on-close, the line-plot
+  reconcile) can otherwise race on the same files. See
+  <code>plans/LINEPLOT_ASYNC_PORT_RESEARCH.html</code> for the full pipeline
+  port and a survey of the existing job types in
+  <code>cwSaveLoad</code>.
+</p>
+
+<pre><code>// Sketch: the actual implementation submits each FS operation as a
+// cwSaveLoad job and returns an AsyncFuture that completes when the
+// last job in the batch finishes.
+QFuture&lt;Monad::Result&lt;void&gt;&gt;
+cwExternalCenterlineSync::reconcile(const ScanResult&amp; scan,
+                                    const QString&amp; attachmentDir)
+{
+    QSet&lt;QString&gt; expected;
+    for (const QString&amp; absSourcePath : scan.dependencies) {
+        const QString rel  = relativeToEntry(absSourcePath);
+        const QString dest = attachmentDir + "/" + rel;
+        enqueueCopyIfNewer(absSourcePath, dest);   // -&gt; cwSaveLoad job
+        expected.insert(dest);
+    }
+    // GC: anything in attachmentDir not in expected was dropped from
+    // the include closure (e.g. user removed an *include line).
+    for (const QString&amp; existing : enumerateFiles(attachmentDir)) {
+        if (!expected.contains(existing)) {
+            enqueueRemove(existing);                // -&gt; cwSaveLoad job
+        }
+    }
+    return chainOnLastJob();
+}
+</code></pre>
+
+<p>
+  <strong><code>copyIfNewer</code> definition.</strong> Compares
+  <code>(mtime, size)</code> on the source and destination; copies if
+  the source is newer or the size differs. We deliberately
+  <em>do not</em> SHA the file contents:
+</p>
+<ul>
+  <li>Survey files are small (most under 100&nbsp;KB; biggest projects in the wild are a few MB), but the scanner runs after every file change, so even a cheap hash adds up.</li>
+  <li>The dependency closure may include dozens of files; hashing them all on every reconcile would dominate the scan cost.</li>
+  <li>The downside of mtime/size is a false-negative on identical-size touch-without-edit, which just causes an unnecessary cavern re-solve &mdash; not a correctness bug.</li>
+</ul>
+<p class="meta">
+  If the mtime heuristic turns out to be flaky in practice (e.g. some
+  text editors don't update mtime predictably), we can add an
+  <em>opt-in</em> SHA-256 verify for "live-link" mode behind a setting.
+  Not in v1.
+</p>
+
+<p>Reconcile is called in two contexts:</p>
+<ol>
+  <li>
+    <strong>Initial attach.</strong> User picks an entry file from
+    outside the project. We scan the source, copy the closure into a
+    fresh attachment folder, persist the relative entry path.
+    Subsequent scans run against the in-project copy. (This is the
+    <code>copyDependenciesIntoProject</code> step referenced from &sect;4.4
+    &mdash; it's just the first call to <code>reconcile</code> with an
+    empty destination directory.)
+  </li>
+  <li>
+    <strong>Edit-in-place.</strong> Once the closure is in the project,
+    the user edits any file inside
+    <code>External Centerlines/cave_&lt;uuid&gt;/</code> directly
+    &mdash; with their text editor, Survex's editor, Compass, whatever
+    &mdash; pointed at the project tree. The watcher fires, we re-scan
+    the entry, reconcile (no copy needed because source == dest), and
+    re-solve.
+  </li>
+</ol>
+
+<h4>Garbage collection</h4>
+
+<p>
+  Two kinds of stranded copies need cleaning up:
+</p>
+<ul>
+  <li>
+    <strong>Per-attachment GC</strong> (above): files inside an
+    attachment folder that aren't in the current dependency closure.
+    Runs on every reconcile.
+  </li>
+  <li>
+    <strong>Per-owner GC</strong>: attachment folders for trips/caves
+    that no longer exist (the user deleted the trip, or undo brought a
+    deletion forward). After every region-data save, walk
+    <code>External Centerlines/</code> and remove any
+    <code>cave_&lt;uuid&gt;</code> / <code>trip_&lt;uuid&gt;</code>
+    folder whose owner UUID isn't in the current region. Submitted as a
+    single <code>cwSaveLoad</code> "remove tree" job.
+  </li>
+</ul>
+
+<p>
+  Watcher ownership: a single <code>QFileSystemWatcher</code> lives on
+  <code>cwLinePlotManager</code> (the same object that owns the
+  AsyncFuture chain). Reconcile reports the new watched set back; the
+  manager diffs against its current set and adds/removes watches. The
+  watcher is never touched from worker threads &mdash; only from
+  <code>updateWatchedSet()</code> on the UI thread.
+</p>
+
+<h3>5.3 Live-link vs. import mode</h3>
+
+<p>
+  At attach time the user picks one of two modes:
+</p>
+
+<ul>
+  <li>
+    <strong>Watch for changes</strong> (default, "live link"). CaveWhere
+    records the original source path on this machine and watches both
+    the source and the in-project copy. Edits to the source auto-copy
+    into the project on next solve.
+  </li>
+  <li>
+    <strong>Copy once</strong> ("import mode"). CaveWhere copies the
+    file into the project once and forgets the source path. Only the
+    in-project copy is watched from then on. To refresh, the user
+    re-attaches.
+  </li>
+</ul>
+
+<p>
+  Source path is <strong>per-user, per-machine</strong>: stored in
+  <code>.cwproj/local_settings.json</code> (gitignored), not in the
+  region protobuf. Collaborators who pull the project never see the
+  original attacher's path; they get the in-project copy and watch
+  that. If they later attach their own files, they choose modes
+  independently.
+</p>
+
+<p>
+  <strong>Schema:</strong> defined as a protobuf message in
+  <code>cavewhere.proto</code> and serialised with protobuf's JSON
+  codec (<code>google::protobuf::util::MessageToJsonString</code>) so
+  we get the same versioning / forward-compat story as the rest of the
+  project format. The file isn't checked in, but the schema is.
+</p>
+
+<pre><code>// In cavewhere.proto
+message LocalSettings {
+  message Attachment {
+    string owner_id = 1;        // cwCave or cwTrip QUuid (no braces, no hyphens)
+    string source_path = 2;     // absolute path on this machine; empty == import mode
+  }
+  repeated Attachment attachments = 1;
+}
+</code></pre>
+
+<p>
+  Serialised to <code>.cwproj/local_settings.json</code> as e.g.:
+</p>
+
+<pre><code>{
+  "attachments": [
+    {
+      "ownerId": "6ba7b8109dad11d180b400c04fd430c8",
+      "sourcePath": "/Users/alice/topodroid/2025-06-01/trip.svx"
+    }
+  ]
+}
+</code></pre>
+
+<p>
+  Absent entry for an owner &rArr; import mode for that attachment on
+  this machine. Present entry with a path that no longer exists &rArr;
+  surface a one-time warning ("Original source moved or deleted;
+  switched to import mode"), clear the entry, continue with just the
+  in-project copy.
+</p>
+
+<h2 id="driver">6. Driver-file shape</h2>
+
+<p>
+  Generated per cavern run by <code>cwSurvexExporterRegionTask</code>
+  into the existing scratch location (handled by
+  <code>cwLinePlotTask</code>). Native and external-centerline caves
+  coexist; <code>*include</code> paths point into the project's
+  <code>External Centerlines/</code> directory.
+</p>
+
+<pre><code>; Driver root. NO *case directive &mdash; cavern's default *case tolower
+; is what existing native projects rely on (see prefix research, Q3).
+*begin
+*cs out &lt;region-output-cs&gt;
+
+; ---- Cave with native shots only (today's path, but with UUID prefix) ----
+*begin cave_550e8400e29b41d4a716446655440000
+  *fix &lt;...&gt;
+  *begin
+    *title "Entrance Trip"
+    *date 2025.06.01
+    *data normal from to tape compass clino
+    A1 A2 10 0 0
+    A2 A3 8 90 0
+  *end
+*end cave_550e8400e29b41d4a716446655440000
+
+; ---- Cave backed by an external Survex file ----
+;      attachment folder == cave's own UUID
+*begin cave_6ba7b8109dad11d180b400c04fd430c8
+  *include "../External Centerlines/cave_6ba7b8109dad11d180b400c04fd430c8/system.svx"
+*end cave_6ba7b8109dad11d180b400c04fd430c8
+
+; ---- Cave backed by an external Compass project ----
+*begin cave_6ba7b8119dad11d180b400c04fd430c8
+  *include "../External Centerlines/cave_6ba7b8119dad11d180b400c04fd430c8/system.mak"
+*end cave_6ba7b8119dad11d180b400c04fd430c8
+
+; ---- Cave with one native trip AND one external-centerline trip ----
+;      trip-level attachment folder == trip's own UUID
+*begin cave_6ba7b8129dad11d180b400c04fd430c8
+  *begin trip_aabbccdd00000000000000000000native
+    *data normal from to tape compass clino
+    B1 B2 5 45 0
+  *end trip_aabbccdd00000000000000000000native
+
+  *begin trip_eeff001100000000000000000000ext
+    *include "../External Centerlines/trip_eeff001100000000000000000000ext/sidepassage.svx"
+  *end trip_eeff001100000000000000000000ext
+*end cave_6ba7b8129dad11d180b400c04fd430c8
+
+*end
+</code></pre>
+
+<div class="note">
+  <strong>UUIDs in <code>*begin</code> labels are
+  internal-driver-only.</strong> Survex requires identifiers to start
+  with a letter, so the label is
+  <code>cave_&lt;uuid-without-hyphens&gt;</code> /
+  <code>trip_&lt;uuid-without-hyphens&gt;</code>. The path inside
+  <code>*include</code> uses the relative path from the driver scratch
+  location to the project's <code>External Centerlines/</code>; Survex
+  accepts spaces in paths when the path is quoted.
+</div>
+
+<div class="note">
+  <strong>The user-facing SVX exporter must use friendly names, not
+  UUIDs.</strong> The driver file above is the internal one consumed by
+  cavern on every solve &mdash; it never leaves the scratch directory
+  and is never seen by the user. When the user picks
+  <em>Export &rarr; Survex</em>, a separate code path emits friendly
+  identifiers derived from cave/trip display names (sanitised to valid
+  Survex identifiers: spaces &rarr; underscores, illegal characters
+  stripped, prefix with <code>cave_</code> only if the name starts
+  with a digit, suffix with a short hash if two siblings collide).
+  Implementation: <code>cwSurvexExporterRegionTask</code> grows a
+  <code>NameStyle</code> enum (<code>InternalUuid</code> /
+  <code>FriendlyDisplayName</code>) and the user-facing exporter
+  passes <code>FriendlyDisplayName</code>. The internal line-plot
+  pipeline always passes <code>InternalUuid</code> so name changes
+  don't dirty the driver or risk collisions across sessions.
+</div>
+
+<div class="note">
+  <strong>Native vs. external trip wrapping is asymmetric &mdash; on
+  purpose.</strong> Native trips stay in an anonymous
+  <code>*begin</code> (today's behavior, preserved); their stations
+  resolve at <code>cave_&lt;X&gt;.&lt;name&gt;</code>. External trips get
+  a named <code>*begin trip_&lt;uuid&gt;</code> wrapper so the file's
+  internal <code>*begin</code> structure stays isolated; their stations
+  resolve at <code>cave_&lt;X&gt;.trip_&lt;Y&gt;.&lt;tail&gt;</code>.
+  Consequence: in a mixed cave, a native <code>A1</code> and an
+  external <code>A1</code> are <em>two distinct stations</em> in
+  cavern's network. They don't fuse on a name collision. Phase 5
+  equates bridge them when intended.
+</div>
+
+<p class="meta">
+  Region-level driver shape is deferred with Phase 6 (post-v1) &mdash;
+  see &sect;9. v1 only needs the cave-level and trip-level wrappers
+  shown above.
+</p>
+
+<h2 id="consumer">7. Consumer-side pipeline changes</h2>
+
+<h3>7.1 <code>cwLinePlotTask::splitLookupByCave</code></h3>
+
+<p>Today (<code>cwLinePlotTask.cpp:298&ndash;360</code>):</p>
+
+<pre><code>QRegularExpression regex(QString("(\\d+)\\.(%1)").arg(stationPattern));
+//                        ^integer^   ^single station-name token, no dots^
+</code></pre>
+
+<p>After:</p>
+
+<pre><code>// id is cwCave::id().toString(QUuid::WithoutBraces).remove('-').
+// The tail is kept verbatim: it may contain dots (external *begin
+// nesting) or spaces (Walls empty-name quirk emits "name " with a
+// trailing space).
+QRegularExpression caveRegex("cave_([0-9a-f]{32})\\.(.+)");
+</code></pre>
+
+<p>
+  Lookup table goes from
+  <code>QVector&lt;cwStationPositionLookup&gt;</code> (indexed by cave
+  integer) to <code>QHash&lt;QUuid, cwStationPositionLookup&gt;</code>.
+  The same UUID is the key in <code>RegionDataPtrs::Caves</code> so we
+  can still emit <code>stationPositionInCavesChanged</code> with the
+  right <code>cwCave*</code>.
+</p>
+
+<h3>7.2 Station-name validator</h3>
+
+<p>
+  <code>cwStationValidator::validCharactersRegex()</code> is used for
+  user input fields and should NOT be broadened &mdash; native-only
+  projects shouldn't suddenly allow dots in station names users type.
+</p>
+
+<p>
+  Introduce <code>cwStationValidator::externalStationCharactersRegex()</code>
+  that accepts <code>[a-zA-Z0-9_.\- ]+</code> and use it only when the
+  context is a station reference inside an externally-backed cave or
+  trip (scrap station-reference fields, note station-reference fields).
+  <code>cwStation::canonicalKey</code> remains the matching function
+  and continues to lowercase.
+</p>
+
+<p>
+  <strong>Carpet-mode station picker.</strong> The carpet sub-page
+  (<code>TripPage.qml:32&ndash;44</code>) currently autocompletes from
+  <code>cwTrip::stations()</code>. For externally-backed scopes that
+  list is empty &mdash; the stations live in the post-solve
+  <code>cwStationPositionLookup</code> keyed by their qualified names.
+  The picker model needs a branch: native trip &rarr;
+  <code>currentTrip.stations</code>; external trip &rarr; lookup
+  entries whose qualified prefix matches
+  <code>cave_&lt;X&gt;.trip_&lt;Y&gt;.*</code>. Same data source as
+  the per-trip station list in &sect;8.5's <em>External Centerline</em>
+  panel, so a small shared model is appropriate.
+</p>
+
+<h3>7.3 Exporter</h3>
+
+<p>
+  <code>cwSurvexExporterRegionTask::writeRegion</code> and
+  <code>cwSurvexExporterCaveTask::writeCave</code> branch on whether
+  the cave/trip has an <code>externalCenterline</code>:
+</p>
+
+<ul>
+  <li>No centerline &rarr; <code>*begin cave_&lt;uuid&gt;</code>, native shots, <code>*end</code> (existing path with UUID label).</li>
+  <li>Cave centerline &rarr; <code>*begin cave_&lt;uuid&gt;</code>, then <code>*include "&lt;rel-path-to-external-centerlines&gt;"</code>, then <code>*end</code>. Skip trip iteration.</li>
+  <li>Trip centerline (cave has both native and external trips) &rarr; emit each trip in its own <code>*begin trip_&lt;uuid&gt;</code> block; trips with centerlines emit <code>*include</code>.</li>
+</ul>
+
+<p>
+  All <code>*include</code> paths are written relative to the driver
+  file's location via <code>QDir::relativeFilePath</code>. The
+  destination is always inside the project's
+  <code>External Centerlines/</code> tree.
+</p>
+
+<h3>7.4 File watching, scanner re-run, and re-solving</h3>
+
+<p>
+  <code>cwLinePlotManager</code> already drives re-runs via
+  <code>AsyncFuture::Restarter</code> for native data changes. Extend it
+  to also re-run when files inside <code>External Centerlines/</code>
+  change. See <code>plans/LINEPLOT_ASYNC_PORT_RESEARCH.html</code> for
+  the full port plan (current pipeline survey, the
+  <code>cwSaveLoad</code> job-queue API, and the staged migration to a
+  fully AsyncFuture chain on a worker thread).
+</p>
+
+<ul>
+  <li>
+    One <code>QFileSystemWatcher</code> owned by
+    <code>cwLinePlotManager</code>. Watch set = union of:
+    <ul>
+      <li>All <code>ScanResult.dependencies</code> across attached centerlines (the in-project copies).</li>
+      <li>All <em>source paths</em> from <code>local_settings.json</code> for attachments in live-link mode, plus their scanner-discovered dependencies on the source side.</li>
+    </ul>
+  </li>
+  <li>
+    On region change or attachment add/remove, recompute the watched
+    set by re-running the scanner over each attachment's entry file
+    (twice for live-link attachments &mdash; once on source, once on
+    project copy). Source-side scan informs the next reconcile.
+  </li>
+  <li>
+    On <code>fileChanged</code>, hand the work to the existing
+    <code>AsyncFuture::Restarter</code> on
+    <code>cwLinePlotManager</code> &mdash; no manual debounce. The
+    restarter already coalesces rapid edits by cancelling the in-flight
+    chain when a new edit arrives. (Native-side edits and
+    external-file changes converge on the same restarter so they
+    coalesce against each other, not just within their own stream.)
+    The chain itself:
+    <pre><code>using cwExternalCenterlineScanner::ScanResult;
+
+AsyncFuture::observe(sourceScanFuture)            // QFuture&lt;Monad::Result&lt;ScanResult&gt;&gt;
+    .context(this, [this](Monad::Result&lt;ScanResult&gt; sourceScan) {
+        return m_sync-&gt;copyFromSource(sourceScan);
+    })
+    .context(this, [this](Monad::Result&lt;void&gt;) {
+        return scanProjectCopy();                 // QFuture&lt;Monad::Result&lt;ScanResult&gt;&gt;
+    })
+    .context(this, [this](Monad::Result&lt;ScanResult&gt; projectScan) {
+        return m_sync-&gt;reconcile(projectScan);
+    })
+    .context(this, [this](Monad::Result&lt;void&gt;) {
+        return runCavern();                       // QFuture&lt;Monad::Result&lt;CavernResult&gt;&gt;
+    })
+    .context(this, [this](Monad::Result&lt;CavernResult&gt; cavern) {
+        updateNetwork(cavern);
+    });</code></pre>
+    Notes on this chain:
+    <ul>
+      <li>Every lambda parameter is fully typed (no <code>auto r</code>) so the chain's types are checked by the compiler, not by trial-and-error at runtime.</li>
+      <li>Captures are <code>[this]</code>, never <code>[&amp;]</code>. <code>&amp;</code> would dangle if <code>cwLinePlotManager</code> stack frames unwind before the future fires.</li>
+      <li><code>.context(this, &hellip;)</code> uses AsyncFuture's auto-disconnect on <code>this</code> destruction, so we don't need to manually cancel from the destructor.</li>
+      <li>For import-mode attachments the first two steps are skipped &mdash; the in-project copy is the source of truth.</li>
+      <li>Each step propagates <code>Monad::Result</code> &mdash; first fatal failure short-circuits the rest and lands in <code>CavernOutputPage</code>.</li>
+    </ul>
+  </li>
+  <li>
+    If a live-link source path disappears (user moved/deleted the
+    original file outside CaveWhere), record the change in
+    <code>CavernOutputPage</code>, switch that attachment to
+    import-mode silently (clear its entry in
+    <code>local_settings.json</code>), and proceed with the in-project
+    copy. No crash.
+  </li>
+  <li>
+    If a path inside the in-project copy disappears (user deleted from
+    the project tree), the next scan reports it as a warning, reconcile
+    GC's it, and cavern proceeds without it &mdash; possibly with
+    errors that surface in <code>CavernOutputPage</code>.
+  </li>
+</ul>
+
+<h2 id="ux">8. UX model</h2>
+
+<h3>8.1 Attach flow</h3>
+
+<p>
+  Entry points (region-level is post-v1 &mdash; see &sect;9):
+</p>
+
+<ul>
+  <li><strong>Trip-level:</strong> "Add Trip &#x25BE; &rarr; External centerline&hellip;" on CavePage (case 3, TopoDroid).</li>
+  <li><strong>Cave-level:</strong> "Add Cave &#x25BE; &rarr; External cave&hellip;" on DataMainPage. Creates the cave and opens the attach dialog in one step (case 2).</li>
+</ul>
+
+<p>Both paths terminate at the same attach dialog:</p>
+
+<pre><code>┌─ Attach external centerline ────────────────────────────────────┐
+│  Pick the entry file:                                           │
+│  [/Users/me/topodroid/2025-06-01/trip.svx]   [Browse…]          │
+│                                                                 │
+│  Format: Survex (auto-detected)                                 │
+│  ✓ Found 1 file, 14 stations, 13 shots                          │
+│                                                                 │
+│  Trip name:  [Day 3 (TopoDroid)]                                │
+│                                                                 │
+│  How should CaveWhere handle this file?                         │
+│  ● Watch for changes (recommended)                              │
+│    Copies into your project. Edits in your original location    │
+│    or the project copy both trigger a re-solve.                 │
+│  ○ Copy once (import mode)                                      │
+│    Copies into your project. Only the project copy is used      │
+│    after that — your original is forgotten.                     │
+│                                                                 │
+│  ┌─ Why we copy ──────────────────────────────────────────┐    │
+│  │  📋 Copies into:                                       │    │
+│  │     ↳ My Cave.cwproj/External Centerlines/             │    │
+│  │     The centerline travels with your project — git     │    │
+│  │     sync, backups, and sharing all work.               │    │
+│  │  🚫 CaveWhere never writes to these files. Edit them   │    │
+│  │     in your survey tool.                               │    │
+│  └────────────────────────────────────────────────────────┘    │
+│                                                                 │
+│                              [Cancel]  [Attach]                 │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+
+<p>After the user clicks Attach:</p>
+
+<ol>
+  <li>Scanner runs (async) on the source file.</li>
+  <li>If scanner errors, show inline; do not persist anything.</li>
+  <li>If scanner returns warnings, surface them but proceed.</li>
+  <li>Copy the dependency closure into <code>External Centerlines/&lt;name&gt;/</code>.</li>
+  <li>Persist the <code>cwExternalCenterline</code> with the project-relative entry path.</li>
+  <li>If live-link selected: write the source path to <code>local_settings.json</code>.</li>
+  <li>Trigger a re-solve via the existing pipeline.</li>
+  <li>
+    For cave-level attach: silently auto-create one cwTrip per
+    <code>*begin</code> block in the resolved network with &ge; 1
+    station, each declaring the matching <code>stationPrefix</code>.
+    No dialog, no confirmation &mdash; the user can rename or delete
+    trips on CavePage afterward, like any other trip.
+  </li>
+</ol>
+
+<p>Drag-and-drop attach is deferred (see <a class="anchor" href="#deferred">&sect;12</a>).</p>
+
+<h3>8.2 Read-only indication</h3>
+
+<p>
+  When a cave/trip has an external centerline, its shot editor is
+  disabled with the hint <em>"Edit in your text editor / Survex /
+  Compass. CaveWhere will reload automatically."</em> LRUDs, notes,
+  scraps, team, calibrations remain editable (those live in the
+  <code>.cwproj</code>, not the centerline file).
+</p>
+
+<h3>8.3 CavernOutputPage</h3>
+
+<p>
+  A new <code>StandardPage</code>-based QML page,
+  <code>CavernOutputPage.qml</code>, registered with the existing
+  page-selection model. Single instance for the whole region. Contents (v1):
+</p>
+
+<ul>
+  <li><strong>Cavern stderr / stdout</strong> &mdash; verbatim output of the most recent run, file:line links where cavern produced them.</li>
+  <li><strong>Attached centerlines</strong> &mdash; list of attachments with last-solved timestamp, dependency file count, and any scanner warnings.</li>
+  <li><strong>Driver source</strong> &mdash; collapsible disclosure showing the generated <code>.svx</code> for debugging.</li>
+</ul>
+
+<p>
+  Phase 3 adds: a status badge on cave/trip nodes in the nav tree (red
+  when cavern errored, yellow when warnings) linking to the relevant
+  section of CavernOutputPage.
+</p>
+
+<h3>8.4 DataMainPage entry point</h3>
+
+<p>
+  A persistent <code>LinkText</code> on <code>DataMainPage.qml</code>:
+  <em>"Cavern output (last run: 0.4&nbsp;s, 1247 stations, 2 warnings)"</em>
+  &mdash; updates after each solve. Click navigates to
+  CavernOutputPage.
+</p>
+
+<h3 id="ux-trip">8.5 TripPage walkthrough</h3>
+
+<p>
+  Today (<code>TripPage.qml</code>) the page is split: <code>SurveyEditor</code>
+  on the left (shot data), <code>NotesGallery</code> on the right (notes +
+  carpet sub-page). Three view modes: <em>DEFAULT</em> (both visible),
+  <em>COLLAPSE</em> (editor hidden), <em>CARPET</em> (editor hidden,
+  notes in carpet mode).
+</p>
+
+<p>
+  When the trip's <code>externalCenterline</code> is set, the left side
+  swaps from <code>SurveyEditor</code> to a new
+  <code>ExternalCenterlinePanel</code>. The right side
+  (<code>NotesGallery</code>) is unchanged structurally; only the carpet
+  station picker behaves differently per &sect;7.2.
+</p>
+
+<h4>Native trip (today)</h4>
+<pre><code>┌─ TripPage  "Entrance Trip" ─────────────────────────────────────┐
+│ ┌─ SurveyEditor ─────────┬─ NotesGallery ─────────────────────┐ │
+│ │  Date: 2025-06-01      │  ┌──────┐ ┌──────┐ ┌──────┐        │ │
+│ │  Team: Alice, Bob      │  │ note │ │ note │ │ note │ …      │ │
+│ │  Decl: 6.83° (auto)    │  └──────┘ └──────┘ └──────┘        │ │
+│ │                        │                                    │ │
+│ │  From  To  Tape Comp.  │  carpet sub-page available         │ │
+│ │  A1    A2  10   0      │                                    │ │
+│ │  A2    A3   8   90     │                                    │ │
+│ │  …                     │                                    │ │
+│ └────────────────────────┴────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘</code></pre>
+
+<h4>Attached trip (Case 3 &mdash; this trip owns the file)</h4>
+<pre><code>┌─ TripPage  "Day 3 (TopoDroid)"  📎 ────────────────────────────┐
+│ ┌─ ExternalCenterlinePanel ──┬─ NotesGallery ───────────────┐  │
+│ │  📄 trip.svx · Survex       │  (unchanged)                 │  │
+│ │  Source: ~/topodroid/…/    │                              │  │
+│ │     (live-linked)          │  carpet mode: station picker │  │
+│ │  Last solved: 0.2s ago     │  draws from this trip's      │  │
+│ │  14 stations · 13 shots    │  scope in the resolved       │  │
+│ │  0 warnings · 0 errors     │  network (§7.2)              │  │
+│ │  → View cavern output      │                              │  │
+│ │                            │                              │  │
+│ │  Stations:                 │                              │  │
+│ │   A1   A2   A3   A4        │                              │  │
+│ │   A5   …                   │                              │  │
+│ │                            │                              │  │
+│ │  [Reload now]  [Detach…]   │                              │  │
+│ │                            │                              │  │
+│ │  ─── trip metadata ───     │                              │  │
+│ │  Date: 2025-06-01 (edit)   │                              │  │
+│ │  Team: Alice, Bob (edit)   │                              │  │
+│ └────────────────────────────┴──────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────┘</code></pre>
+
+<h4>Scope trip (Case 2 &mdash; this trip is a window into a parent cave's file)</h4>
+<pre><code>┌─ TripPage  "East 2025-06-01"  📎 ──────────────────────────────┐
+│ ┌─ ExternalCenterlinePanel ──┬─ NotesGallery ───────────────┐  │
+│ │  Part of:                  │  (unchanged)                 │  │
+│ │   📄 Big Cave              │                              │  │
+│ │   big-cave.mak · Compass   │  carpet station picker       │  │
+│ │  → Cave's cavern output    │  filtered to this scope      │  │
+│ │                            │                              │  │
+│ │  Prefix:                   │                              │  │
+│ │   big-passage.east         │                              │  │
+│ │                            │                              │  │
+│ │  Stations in this trip:    │                              │  │
+│ │   E1   E2   E3             │                              │  │
+│ │   E4   E5   …              │                              │  │
+│ │   (34 stations)            │                              │  │
+│ │                            │                              │  │
+│ │  [Change prefix…]          │                              │  │
+│ │  [Remove trip…]            │                              │  │
+│ │                            │                              │  │
+│ │  ─── trip metadata ───     │                              │  │
+│ │  Date: 2025-06-01 (edit)   │                              │  │
+│ │  Team: Alice, Bob (edit)   │                              │  │
+│ └────────────────────────────┴──────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────┘</code></pre>
+
+<p>
+  Key differences from Attached:
+</p>
+
+<ul>
+  <li>No <code>[Reload]</code> &mdash; the parent's reload covers it.</li>
+  <li>No own file path.</li>
+  <li>
+    <code>[Change prefix&hellip;]</code> in place of
+    <code>[Detach&hellip;]</code>. "Detaching" a Scope trip is
+    meaningless since it doesn't own anything; <code>[Remove trip&hellip;]</code>
+    just deletes the cwTrip record.
+  </li>
+  <li>
+    <strong>Trip name and prefix are independent.</strong> Renaming
+    "east" to "East 2025-06-01" changes the display label only; the
+    prefix-in-file (<code>big-passage.east</code>) is what binds to
+    the resolved network. The prefix is exposed as a small read-only
+    line in the panel; <code>[Change prefix&hellip;]</code> is how the
+    user rebinds it.
+  </li>
+  <li>
+    <strong>Date and declination are kept and remain editable</strong>
+    for Attached and Scope trips alike. Date drives auto-declination
+    via the IGRF model (<code>cwTripCalibration::autoDeclination</code>)
+    so it is not purely informational; many TopoDroid exports omit
+    declination entirely and rely on CaveWhere to compute it. On scan,
+    the date is seeded from the external file's <code>*date</code>
+    (Survex), <code>SURVEY DATE</code> (Compass), or <code>#DATE</code>
+    (Walls) directive when present. If the file carries an explicit
+    declination (<code>*calibrate declination</code> /
+    <code>CORRECTIONS</code> / <code>#UNITS DECL</code>), import it as
+    <code>declinationManual</code> with <code>autoDeclination = false</code>;
+    otherwise default to <code>autoDeclination = true</code>. The chosen
+    declination is then injected into the driver block before
+    <code>*include</code> so cavern uses it.
+  </li>
+</ul>
+
+<div class="note">
+  <strong>Scope trip lifetime.</strong> Auto-created Scope trips are
+  tied to the parent attachment. Detaching the parent deletes them
+  (per &sect;8.7). A user who wants to preserve a Scope trip's
+  notes/scraps must convert it to a native trip first (v1.x escape
+  hatch &mdash; not in initial v1).
+</div>
+
+<p>
+  Notes about the panel:
+</p>
+
+<ul>
+  <li>
+    <strong>Stations list</strong> is the entries in
+    <code>cwStationPositionLookup</code> whose qualified name starts with
+    <code>cave_&lt;X&gt;.trip_&lt;uuid&gt;.</code>; the displayed name
+    strips that wrapper prefix but keeps any deeper nesting from the
+    file (e.g. <code>sidepassage.B1</code>).
+  </li>
+  <li>
+    <strong>Trip metadata.</strong> Date and declination are
+    CaveWhere-owned and editable (see &sect;8.5 bullet above); team is
+    CaveWhere-side informational. The scanner seeds these from the
+    external file on first attach (Survex <code>*date</code> /
+    <code>*team</code> / <code>*calibrate declination</code>, equivalents
+    for Compass/Walls); subsequent edits are user-controlled. Trip name
+    remains a CaveWhere display label.
+  </li>
+  <li>
+    <strong>Other calibrations</strong> (tape/compass/clino corrections,
+    units) are hidden for externally-backed trips &mdash; cavern handles
+    them from the file directly. Only the declination is surfaced
+    because CaveWhere can compute it from date+location.
+  </li>
+  <li>
+    <strong>Status colours.</strong> Green dot when last solve was
+    clean; yellow on warnings; red on errors. The line below the icon
+    shows count + a link to the relevant CavernOutputPage section.
+  </li>
+</ul>
+
+<h3 id="ux-cave">8.6 CavePage walkthrough</h3>
+
+<p>
+  A cave can be in one of three states:
+  <strong>native-only</strong> (today, default),
+  <strong>cave-level external</strong> (the whole cave's centerline
+  lives in one file), and <strong>mixed</strong> (some native trips,
+  some external-attached trips).
+</p>
+
+<h4>Native-only (today)</h4>
+<pre><code>┌─ CavePage  "Main Cave System" ──────────────────────────────────┐
+│  Length: 1.2km · Depth: 89m                                     │
+│  Leads: 3 · Fix stations: 1 · Grid convergence: 1.55°           │
+│                                                                 │
+│  [Add Trip]  [Import Survex]  [Export]                          │
+│                                                                 │
+│  ┌──────────────────┬──────┬───────┬────────┬────────┐          │
+│  │ Name             │ Date │ Stns  │ Length │ Decl   │          │
+│  ├──────────────────┼──────┼───────┼────────┼────────┤          │
+│  │ Entrance Trip    │ 6/1  │  3/3  │  18m   │ 6.83°  │          │
+│  │ Big Passage      │ 6/2  │ 12/12 │ 187m   │ 6.83°  │          │
+│  │ …                │      │       │        │        │          │
+│  └──────────────────┴──────┴───────┴────────┴────────┘          │
+└─────────────────────────────────────────────────────────────────┘</code></pre>
+
+<h4>Cave-level external attach</h4>
+<pre><code>┌─ CavePage  "Main Cave System"  📄 external ────────────────────┐
+│  Length: 1.2km · Depth: 89m                                     │
+│  Leads: 3 · Grid convergence: 1.55°                             │
+│                                                                 │
+│  ┌─ ExternalCenterlinePanel ──────────────────────────────────┐ │
+│  │  📄 main-system/main.wpj · Walls                           │ │
+│  │  Last solved: 0.4s ago · 247 stations · 89 shots · 3 loops│ │
+│  │  [Reload now]  [Detach…]  → View cavern output            │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│  [Export]                                                       │
+│   ‹Add Trip and Import Survex are hidden — trips come from file› │
+│                                                                 │
+│  Notes & scraps (anchored to resolved stations):                │
+│   · entrance overview            (A1, A2)                       │
+│   · big passage section          (B.B1 .. B.B7)                 │
+│   · stream crawl                 (S1, S2, S3)                   │
+│   …                                                             │
+└─────────────────────────────────────────────────────────────────┘</code></pre>
+
+<p>
+  In cave-level state, the trip table is replaced by a notes/scraps
+  list anchored to resolved stations. Existing <code>cwTrip</code>
+  records are kept in storage (so detach restores them) but hidden
+  from the UI; a small disclosure <em>"3 hidden native trips
+  (detach to restore)"</em> hints at their presence.
+</p>
+
+<h4>Mixed mode</h4>
+<pre><code>┌─ CavePage  "Main Cave System" ──────────────────────────────────┐
+│  Length: 1.2km · Depth: 89m                                     │
+│  Leads: 3 · Fix stations: 1 · Grid convergence: 1.55°           │
+│                                                                 │
+│  [Add Trip ▾]  [Import Survex]  [Export]                        │
+│        ├ Native trip                                            │
+│        └ External centerline…  (.svx, .dat, .mak, .wpj, .srv)   │
+│                                                                 │
+│  ┌──────────────────┬──────┬───────┬────────┬────────┐          │
+│  │ Name             │ Date │ Stns  │ Length │ Decl   │          │
+│  ├──────────────────┼──────┼───────┼────────┼────────┤          │
+│  │   Entrance Trip  │ 6/1  │  3/3  │  18m   │ 6.83°  │          │
+│  │ 📎 side passage  │ 6/2  │ 23/23 │  67m   │ 6.83° │ ←ext      │
+│  │   Big Passage    │ 6/3  │ 12/12 │ 187m   │ 6.83°  │          │
+│  └──────────────────┴──────┴───────┴────────┴────────┘          │
+└─────────────────────────────────────────────────────────────────┘</code></pre>
+
+<p>
+  External trips show a 📎 (paperclip) prefix in the Name column.
+  Date and Decl are still CaveWhere-owned and editable &mdash; date
+  drives auto-declination via IGRF, same as native trips. Clicking the
+  row opens TripPage in externally-backed mode (&sect;8.5).
+</p>
+
+<h3 id="ux-transitions">8.7 Mode transitions</h3>
+
+<table>
+  <tr><th>From</th><th>To</th><th>Trigger</th><th>Behavior</th></tr>
+  <tr>
+    <td>Native cave</td>
+    <td>Mixed</td>
+    <td>"Add Trip &rarr; External centerline&hellip;" on CavePage</td>
+    <td>Picker &rarr; scan &rarr; copy &rarr; new <code>cwTrip</code> with <code>externalCenterline</code> set, name pre-filled from filename. Existing native trips untouched.</td>
+  </tr>
+  <tr>
+    <td>(no prior cave)</td>
+    <td>Cave-level external</td>
+    <td>"Add Cave &#x25BE; &rarr; External cave&hellip;" on DataMainPage</td>
+    <td>Creates a new <code>cwCave</code> from the picked file in one step. After scan + cavern solve, auto-create one Scope cwTrip per <code>*begin</code> block with &ge;1 station. (v1 has no affordance to convert an existing Native cave into Cave-level external; users add a fresh external cave instead.)</td>
+  </tr>
+  <tr>
+    <td>Cave-level external</td>
+    <td>Native or Mixed</td>
+    <td>"Detach&hellip;" on cave's ExternalCenterlinePanel</td>
+    <td>
+      <code>RemoveAskBox</code>-style inline confirm: <em>"Detach
+      external centerline? N Scope trips and their notes/scraps will be
+      removed."</em> [Detach] [Cancel]. On Detach:
+      <ul>
+        <li><strong>Auto-created Scope trips and their notes/scraps are deleted</strong> &mdash; they have no meaning without the parent attachment.</li>
+        <li>The <code>External Centerlines/cave_&lt;uuid&gt;/</code> folder is deleted. Git history in the <code>.cwproj</code> is the backup if the user needs to roll back.</li>
+      </ul>
+      "Convert Scope trip to native first" is a v1.x escape hatch for the user who wants to preserve specific notes/scraps before detaching.
+    </td>
+  </tr>
+  <tr>
+    <td>External-attached trip</td>
+    <td>Removed</td>
+    <td>Right-click trip row &rarr; Remove (existing flow)</td>
+    <td>RemoveAskBox confirm; deletes the <code>cwTrip</code> record and triggers reconcile-GC, which removes the now-orphaned subfolder in <code>External Centerlines/</code>.</td>
+  </tr>
+  <tr>
+    <td>Any externally-backed scope</td>
+    <td>Same scope, refreshed</td>
+    <td>"Reload now" button</td>
+    <td>Forces re-scan + re-solve even if no file change was detected (e.g. recovering from a missed watcher event).</td>
+  </tr>
+</table>
+
+<h3 id="ux-questions">8.8 Open UX questions (holes surfaced by the walkthroughs)</h3>
+
+<p>
+  These came out of writing the wireframes. Most are small but they
+  need answers before Phase 2 ships.
+</p>
+
+<ol>
+  <li>
+    <strong>Detach default for copies.</strong> Resolved &mdash; Detach
+    deletes the copied files. No "keep" toggle. Rationale: git history
+    in the <code>.cwproj</code> is the backup; if the user wants to
+    recover the closure they roll back the commit. Keeping stale
+    copies around just clutters <code>External Centerlines/</code>
+    and accumulates over time. Use <code>RemoveAskBox.qml</code>
+    (or a very small variant) as the confirm: the same lightweight
+    inline pattern already used by trip / cave / fix-station removal.
+    For cave-level detach, the confirm text also lists the count of
+    auto-created Scope trips that will be removed (per &sect;8.7).
+  </li>
+  <li>
+    <strong>Cave-level attach with existing native trips.</strong>
+    Not a real issue. Users who want to add external survey data to a
+    Native cave use trip-level attach &mdash; "Add Trip &#x25BE;
+    &rarr; External centerline&hellip;" &mdash; which produces a Mixed
+    cave with both native and external trips. Cave-level external is
+    reserved for the fresh-cave entry point on DataMainPage. No
+    convert-in-place flow is needed in v1.
+  </li>
+  <li>
+    <strong>Add Trip dropdown.</strong> Use a <code>QQ.Menu</code>
+    attached to the existing Add Trip button (popup on click) with two
+    items: <em>Native trip</em> and <em>External centerline&hellip;</em>.
+    Don't introduce a new split-button widget; the menu is enough.
+  </li>
+  <li>
+    <strong>Trip metadata for external trips</strong> (date, decl, team).
+    Resolved: Date and Decl are CaveWhere-owned and editable; the
+    scanner seeds them from the file's <code>*date</code> /
+    <code>*calibrate declination</code> (Survex equivalents in
+    Compass/Walls) on first attach. Date drives auto-declination via
+    IGRF the same way it does for native trips. The driver block
+    re-emits the chosen date/decl before <code>*include</code> so
+    cavern uses the CaveWhere-managed values. Team stays editable as
+    informational.
+  </li>
+  <li>
+    <strong>Mid-solve UI state.</strong> Resolved &mdash; inherited
+    from <code>cwLinePlotManager</code>'s existing pipeline (last-good
+    network stays visible while a re-solve is in flight). No new UI.
+  </li>
+  <li>
+    <strong>Fix stations interaction.</strong> Fix Stations sub-page
+    stays visible for native, external, and mixed caves. CaveWhere fix
+    stations always get emitted as <code>*fix</code> in the driver,
+    inside the cave-level <code>*begin cave_&lt;uuid&gt;</code> wrapper,
+    so they apply to whichever station names the user references
+    &mdash; native or external.
+    <strong>Caveat:</strong> if the external file already pins the
+    same station with its own <code>*fix</code>, cavern errors on the
+    duplicate. We surface that as a CavernOutputPage error referencing
+    both the CaveWhere fix entry and the source-file line; the user
+    decides which one wins (delete the CaveWhere fix, or remove the
+    one in the source file). Same caveat already exists for native
+    surveys imported with fixes, so no new UX is needed.
+  </li>
+  <li>
+    <strong>Auto-declination.</strong> Resolved &mdash; applies to
+    external trips too.
+    <code>cwSurvexExporterUtils::makeDeclinationContext</code> uses
+    cave fixes + per-trip date today; the same path runs for external
+    trips. The driver block emits the resolved value as
+    <code>*calibrate declination</code> before <code>*include</code>,
+    overriding any value the external file carries. On first scan, if
+    the file has its own <code>*calibrate declination</code> /
+    <code>CORRECTIONS</code> / <code>#UNITS DECL</code>, it seeds
+    <code>declinationManual</code> with <code>autoDeclination = false</code>;
+    otherwise <code>autoDeclination</code> stays on.
+  </li>
+  <li>
+    <strong>CavePage stats when cave-level attached.</strong>
+    Keep the existing CavePage stats line unchanged in v1 &mdash; no
+    extra cavern-derived numbers (station count, shot count, loop
+    count, connected-component count). The wireframes in &sect;8 that
+    show "247 stations · 89 shots · 3 loops · 1 connected component"
+    are aspirational; they get added when there's a clear demand for
+    them, not as part of the initial implementation.
+  </li>
+  <li>
+    <strong>What stations does the TripPage panel show for trip-level
+    attach?</strong> Proposed: the file's resolved stations under this
+    trip's <code>*begin trip_&lt;uuid&gt;</code> scope, displayed with
+    the wrapper prefix stripped (so <code>cave_X.trip_Y.A1</code>
+    shows as <code>A1</code>) but any deeper nesting from the file
+    kept (<code>cave_X.trip_Y.sidepassage.B1</code> shows as
+    <code>sidepassage.B1</code>).
+  </li>
+  <li>
+    <strong>Naming collisions in mixed mode.</strong> Native and
+    external trips can have the same CaveWhere display name (it's
+    just a label). Their internal UUIDs differ. No real collision
+    in cavern (see &sect;6 note). UI-wise, append " (external)" to
+    the display when both exist? Recommendation: don't, the 📎
+    icon is sufficient.
+  </li>
+  <li>
+    <strong>Trip-level attach when the file defines no
+    <code>*begin</code></strong> (a flat <code>.svx</code> with just
+    shot data). Stations come back as
+    <code>cave_X.trip_Y.&lt;name&gt;</code> &mdash; no inner prefix.
+    Trip station list shows names verbatim. No special case.
+  </li>
+  <li>
+    <strong>Sub-pages on externally-backed scopes.</strong> The
+    Carpet sub-page still makes sense (it's about notes, not shots).
+    Fix Stations sub-page is gated per question 6. Leads sub-page
+    stays. New sub-page: <em>CavernOutputPage</em>, but per
+    &sect;8.3 it's a global page linked from
+    <code>DataMainPage</code>, not a cave/trip sub-page.
+  </li>
+</ol>
+
+<hr>
+
+<h2 id="phases">9. Phases</h2>
+
+<div class="phase" id="p1">
+  <h3>Phase 1 &mdash; Data model, scanner, copy, driver, runner, watcher</h3>
+  <p class="meta">Goal: end-to-end plumbing works for at least one attach level. Nothing user-visible yet; verified by integration tests.</p>
+
+  <h4>Prerequisite</h4>
+  <p>
+    The line-plot pipeline needs to be a proper AsyncFuture chain on a
+    worker thread, and the in-project filesystem mutations must go
+    through the <code>cwSaveLoad</code> job queue. See
+    <code>plans/LINEPLOT_ASYNC_PORT_RESEARCH.html</code> for the
+    current-state survey and the staged port plan. Some of the work in
+    that doc can land alongside Phase 1; some of it gates Phase 1
+    (specifically: the worker-thread chain, and the
+    <code>cwSaveLoad::Custom</code> hook for queued copy/remove jobs).
+  </p>
+
+  <h4>Files touched</h4>
+  <ul>
+    <li><code>cavewhere.proto</code> &mdash; new <code>ExternalCenterline</code> message (entryFile only); <code>external_centerline</code> field on <code>Cave</code> and <code>Trip</code>; new <code>LocalSettings</code> message for source paths.</li>
+    <li><code>cwCave.h/.cpp</code>, <code>cwTrip.h/.cpp</code> &mdash; <code>externalCenterline()</code> getter/setter. Existing <code>QUuid id()</code> reused as cavern-side identifier; no new id field.</li>
+    <li><strong>New:</strong> <code>cwExternalCenterline.h/.cpp</code> (value type, equality, hash; <em>only</em> the entry-file path).</li>
+    <li><strong>New:</strong> <code>cwExternalCenterlineScanner.h/.cpp</code> (namespace with <code>scan</code>, <code>scanSurvex</code>, <code>scanCompass</code>, <code>scanWalls</code>, plus the <code>formatFor(entryFile)</code> extension-based dispatcher).</li>
+    <li><strong>New:</strong> <code>cwExternalCenterlineSync.h/.cpp</code> (<code>reconcile</code> &mdash; copy + GC; submits each FS op as a <code>cwSaveLoad</code> job).</li>
+    <li><strong>New:</strong> <code>cwLocalSettings.h/.cpp</code> (loads / saves <code>.cwproj/local_settings.json</code> via protobuf JSON codec).</li>
+    <li><code>cwLinePlotTask.cpp</code> &mdash; <code>buildInput</code> uses UUID-named caves; <code>splitLookupByCave</code> regex + <code>QHash&lt;QUuid, &hellip;&gt;</code> lookup.</li>
+    <li><code>cwSurvexExporterRegionTask.h/.cpp</code>, <code>cwSurvexExporterCaveTask.cpp</code>, <code>cwSurvexExporterTripTask.cpp</code> &mdash; add <code>NameStyle</code> enum (<code>InternalUuid</code> / <code>FriendlyDisplayName</code>); branch on external-centerline; emit <code>*include</code>.</li>
+    <li><code>cwLinePlotManager.h/.cpp</code> &mdash; <code>QFileSystemWatcher</code> wiring; scanner re-run + reconcile spliced into the existing <code>AsyncFuture::Restarter</code> chain (no extra debounce &mdash; the restarter coalesces); recompute watched set on region change.</li>
+    <li><code>cwStationValidator.h/.cpp</code> &mdash; add <code>externalStationCharactersRegex</code>.</li>
+    <li><code>cwSaveLoad.h/.cpp</code> &mdash; any new <code>Custom</code>-job helpers needed for queued <code>copyIfNewer</code> / <code>removeFile</code> / <code>removeTree</code> ops (only if the existing API doesn't already cover them &mdash; see research doc).</li>
+    <li>New tests in <code>testcases/</code>: see <a class="anchor" href="#testing">&sect;10</a>.</li>
+  </ul>
+
+  <h4>Acceptance criteria</h4>
+  <ul>
+    <li>All existing native-project tests pass with the UUID-based pipeline.</li>
+    <li>Scanner unit tests pass for fixture <code>.svx</code> (with nested <code>*include</code>), <code>.mak</code>, and <code>.wpj</code> inputs.</li>
+    <li>Integration test: attach a synthetic <code>.svx</code> at trip level, run pipeline, verify stations are present in the lookup keyed by the verbatim cavern names.</li>
+    <li>Integration test: same with synthetic <code>.dat</code> + <code>.mak</code>.</li>
+    <li>Integration test: file-watcher fires a re-solve when an attached file is edited; reconcile GC's a deleted include's stranded copy.</li>
+    <li>Integration test: missing dependency produces a cavern error captured on the cave/trip, no crash, no stale state.</li>
+    <li><strong>Walls acceptance gate</strong>: attach a real <code>.wpj</code> from a contributed test project and verify station names resolve. If unavailable, Walls attach moves to Phase 1.5 and Phase 1 ships with Survex + Compass only.</li>
+  </ul>
+
+  <h4>Not in this phase</h4>
+  <p>UI for attach. CavernOutputPage. Badges. Equates. Orphan detection. Drag and drop. Live-link to an external source path.</p>
+</div>
+
+<div class="phase" id="p2">
+  <h3>Phase 2 &mdash; Trip-level attach + CavernOutputPage v1</h3>
+  <p class="meta">Goal: a user can attach an external centerline to a trip, see the resolved stations, attach a note to one, and watch an edit in the project tree trigger a re-solve.</p>
+
+  <h4>UI (per &sect;8.5 wireframe)</h4>
+  <ul>
+    <li>"Attach external centerline&hellip;" button on the trip-detail page.</li>
+    <li>Replace <code>SurveyEditor</code> with the new
+        <code>ExternalCenterlinePanel</code> when the trip has a
+        centerline attached. Panel shows: file path + format, last-solved
+        status, solve stats, stations list (this trip's
+        <code>*begin trip_&lt;uuid&gt;</code> scope), reload/detach
+        buttons, trip metadata.</li>
+    <li>Carpet sub-page station picker reads from the per-scope station
+        list model (see &sect;7.2) instead of <code>cwTrip::stations</code>.</li>
+    <li>New <code>CavernOutputPage.qml</code> (StandardPage) registered with the page-selection model.</li>
+    <li>New <code>LinkText</code> entry on <code>DataMainPage.qml</code> with summary stats.</li>
+    <li>Notes/scraps on the externally-backed trip use <code>externalStationCharactersRegex</code> for station-reference validation.</li>
+  </ul>
+
+  <h4>Files touched</h4>
+  <ul>
+    <li><code>cavewherelib/qml/CavernOutputPage.qml</code> &mdash; new.</li>
+    <li><code>cavewherelib/qml/ExternalCenterlinePanel.qml</code> &mdash; new (the SurveyEditor replacement).</li>
+    <li><code>cavewherelib/qml/DataMainPage.qml</code> &mdash; add link entry.</li>
+    <li><code>cavewherelib/qml/TripPage.qml</code> &mdash; conditional left-pane swap.</li>
+    <li><code>cwPageSelectionModel</code> &mdash; register the new page.</li>
+    <li>New cavern-output-model C++ class exposing stderr/stdout, attached centerlines, driver source as QML properties. Updated by <code>cwLinePlotManager</code> after each run.</li>
+    <li>New per-scope station-list model (C++) backing both the panel's station list and the carpet picker autocomplete.</li>
+  </ul>
+
+  <h4>Acceptance criteria</h4>
+  <ul>
+    <li>QML test: attach a fixture <code>.svx</code>, verify shot editor is disabled, verify CavernOutputPage shows the attached centerline + resolved station count.</li>
+    <li>QML test: edit the in-project copy of the fixture <code>.svx</code>, <code>tryVerify</code> the re-solve completes and station positions change.</li>
+    <li>QML test: write a syntactically broken <code>.svx</code>, verify CavernOutputPage shows the cavern error text.</li>
+    <li>Manual: full round-trip on a real Survex project.</li>
+  </ul>
+</div>
+
+<div class="phase" id="p3">
+  <h3>Phase 3 &mdash; Cave-level attach + nav badging</h3>
+  <p class="meta">Goal: same as Phase 2 but at the cave level, plus badges in the nav tree to make errors discoverable from anywhere.</p>
+
+  <h4>UI (per &sect;8.6 wireframes)</h4>
+  <ul>
+    <li>Three CavePage states &mdash; native-only (today), cave-level external, mixed &mdash; selected by the presence of cave-level <code>externalCenterline</code> and/or any trip-level attachments. State transitions per &sect;8.7.</li>
+    <li>Single entry point to cave-level attach: DataMainPage &mdash; "Add Cave &#x25BE; &rarr; External cave&hellip;" creates the cave and opens the attach dialog in one step. (No CavePage affordance in v1 to convert an existing Native cave.)</li>
+    <li>"Add Trip" button becomes a split button with "Native trip" / "External centerline&hellip;" options.</li>
+    <li>After cave-level attach, auto-create one cwTrip (Scope state, <code>stationPrefix</code> set) per resolved <code>*begin</code> block with &ge; 1 station. No dialog &mdash; trips just appear, named after their block. User renames/deletes any they don't want.</li>
+    <li>External trips (Attached and Scope alike) get a 📎 prefix in the trip table and em-dash declination. Same badge for both &mdash; from the user's perspective, both are "trips whose data isn't owned by CaveWhere."</li>
+    <li>Badge on cave/trip nodes in the nav tree: red dot on cavern errors, yellow on warnings, none when clean. Click navigates to CavernOutputPage with that section anchored.</li>
+  </ul>
+
+  <h4>Acceptance criteria</h4>
+  <ul>
+    <li>QML test: attach a fixture <code>.svx</code> at cave level, verify the trip list reflects the resolved trips from the file (or a stand-in indicator) and is read-only.</li>
+    <li>QML test: introduce a cavern error, verify the badge appears on the affected cave node and clicking it navigates to the right section of CavernOutputPage.</li>
+  </ul>
+</div>
+
+<div class="phase" id="p4">
+  <h3>Phase 4 &mdash; Equates editor</h3>
+  <p class="meta">Goal: bridge namespaces when CaveWhere-native data needs to connect to external data, or two external files need to be glued.</p>
+
+  <h4>Design notes</h4>
+  <ul>
+    <li>From Phase 0 research: cavern accepts fully-qualified <code>*equate</code> at the driver root without requiring <code>*export</code> in the external file. The equate editor compiles to <code>*equate cave_&lt;A&gt;.x cave_&lt;B&gt;.y</code> lines emitted just before the driver's closing <code>*end</code>.</li>
+    <li>Equates live at the <em>cave</em> level (or <em>region</em> level once Phase 6 ships).</li>
+  </ul>
+
+  <h4>Acceptance criteria</h4>
+  <ul>
+    <li>Add an equate between a native-CaveWhere station and an external-Survex station, verify both end up at the same coordinate after solve.</li>
+    <li>Edit an equate, verify re-solve fires.</li>
+  </ul>
+</div>
+
+<div class="phase" id="p5">
+  <h3>Phase 5 &mdash; Orphan detection</h3>
+  <p class="meta">Goal: surface notes/scraps that reference station names no longer present in the resolved network. Quality-of-life feature that works for native-only projects too.</p>
+
+  <h4>Mechanism</h4>
+  <ul>
+    <li>After each solve, diff the set of station names referenced by notes/scraps against the resolved network (per cave).</li>
+    <li>Show orphans in a CavernOutputPage section with per-row actions: <em>"remap to&hellip;"</em> (autocomplete) or <em>"delete reference"</em>.</li>
+  </ul>
+
+  <h4>Acceptance criteria</h4>
+  <ul>
+    <li>Create a scrap referencing station <code>A1</code>, rename <code>A1</code> in the source file, re-solve, verify the orphan appears with remap target options.</li>
+  </ul>
+</div>
+
+<div class="phase" id="p5b">
+  <h3>Phase 5b &mdash; Replace / re-link attachment</h3>
+  <p class="meta">Goal: let the user point an existing attachment at a different file (replace) or a moved file (re-link) without losing the trips, notes, and scraps they've already built on top of the old attachment. v1.x &mdash; lands after Case 2/3 ship and we have real user data.</p>
+
+  <h4>Two flows, one dialog</h4>
+  <ul>
+    <li><strong>Re-link</strong> &mdash; source file moved on disk; content unchanged. UI: when the watcher reports the source path missing, the ExternalCenterlinePanel shows a yellow "Source not found" banner with a <em>Re-link&hellip;</em> button. Picker selects the new path; the scanner confirms prefix/station set matches the cached in-project copy; we update <code>local_settings.json</code>'s <code>sourcePath</code> and resume watching. No project-data change.</li>
+    <li><strong>Replace</strong> &mdash; user picks a different file for the same scope (e.g. newer TopoDroid export, revised cave survey). UI: <em>Replace centerline&hellip;</em> action on the panel opens a picker, then a diff-and-confirm dialog (see &sect;10 in the UX prototype).</li>
+  </ul>
+
+  <h4>Diff logic (replace flow)</h4>
+  <ul>
+    <li>Scan the new file. Build the resolved <code>*begin</code> tree and station set.</li>
+    <li>For each existing externally-backed cwTrip in this scope, look up its <code>stationPrefix</code> in the new tree:
+      <ul>
+        <li>Found &amp; stations &ge; 1 &rarr; <strong>Kept</strong>. Report new station count.</li>
+        <li>Found but station count fell (or rose) &rarr; <strong>Kept</strong> with a delta note.</li>
+        <li>Not found &rarr; <strong>Orphaned</strong>. Keep the trip + its notes/scraps; mark with error badge; user rebinds via <em>Change prefix&hellip;</em> or deletes later.</li>
+      </ul>
+    </li>
+    <li>For each new <code>*begin</code> block in the new file with &ge;1 station and no matching trip, offer auto-create (default on).</li>
+  </ul>
+
+  <h4>UI</h4>
+  <ul>
+    <li><em>Re-link&hellip;</em> banner button when watcher reports the source path missing.</li>
+    <li><em>Replace centerline&hellip;</em> action in the ExternalCenterlinePanel actions menu.</li>
+    <li>Diff dialog (per &sect;10 in the prototype): list of existing trips with Kept / Orphaned fate, list of new blocks with checkbox for auto-create, toggle to delete orphaned trips outright.</li>
+  </ul>
+
+  <h4>Files touched</h4>
+  <ul>
+    <li><code>cwExternalCenterlineSync</code> &mdash; new <code>replaceSource()</code> / <code>relinkSource()</code> APIs.</li>
+    <li><code>cwExternalCenterlineScanner</code> &mdash; add a "diff against existing scan" helper that emits the Kept/Orphaned/New classification.</li>
+    <li><code>ExternalCenterlinePanel.qml</code> &mdash; add Re-link banner + Replace menu action.</li>
+    <li><code>ReplaceCenterlineDialog.qml</code> &mdash; new.</li>
+  </ul>
+
+  <h4>Acceptance criteria</h4>
+  <ul>
+    <li>QML test: attach fixture A, manually rename the source on disk, verify Re-link banner appears; pick new path, verify watcher resumes.</li>
+    <li>QML test: attach fixture A with three Scope trips, run Replace targeting fixture B (one prefix removed, one added). Verify the orphaned trip keeps its notes/scraps with an error badge, the new block gets an auto-created trip, and untouched trips' notes/scraps are unchanged.</li>
+  </ul>
+</div>
+
+<div class="phase" id="p6">
+  <h3>Phase 6 &mdash; Region-level attach (post-v1)</h3>
+  <p class="meta">Status: <strong>deferred to post-v1</strong>. Cases 2 + 3 + equates cover the realistic v1 user base; region-level adds substantial UI surface (Structure view, scope mapping, bulk note import) that's better designed once we have real-user feedback from Phases 2&ndash;5.</p>
+
+  <h4>What's preserved from Phase 1&ndash;3</h4>
+  <ul>
+    <li>The Scope data-model state (<code>stationPrefix</code> on cwTrip) already exists from Phase 3 (it's how Case 2 carves a cave-level attach into trips). Region-level just adds a new entry point that uses the same machinery.</li>
+    <li>The pipeline + scanner + reconcile infrastructure is unchanged.</li>
+  </ul>
+
+  <h4>What Phase 6 adds when it ships</h4>
+  <ul>
+    <li>Region-level attach entry point on DataMainPage ("More options &rarr; Attach region-level centerline&hellip;").</li>
+    <li>Structure view &mdash; tree of the resolved <code>*begin</code> hierarchy with map-to-cave/trip actions per node.</li>
+    <li><code>stationPrefix</code> on cwCave (the Phase 3 state was only on cwTrip).</li>
+    <li>Bulk note-folder import for the "I have folders of survey-day notes" workflow.</li>
+    <li>Conflict UX: region-level attach disables per-cave attach controls.</li>
+  </ul>
+
+  <h4>UX prototype</h4>
+  <p>
+    See <code>plans/EXTERNAL_CENTERLINE_UX_PROTOTYPE.html</code> for the
+    case-1 walkthrough, Structure view wireframe, and bulk-import dialog.
+  </p>
+</div>
+
+
+<hr>
+
+<h2 id="testing">10. Testing strategy</h2>
+
+<h3>10.1 C++ tests (Catch2)</h3>
+
+<p>
+  Per-process safety: all tests use <code>QTemporaryDir</code> with PID
+  embedded in the name (CLAUDE.md convention). All cavern runs use
+  in-process <code>cavern_run</code> serialized through the existing
+  static mutex in <code>cwCavernTask</code>.
+</p>
+
+<ul>
+  <li><strong><code>[ExternalCenterline]</code></strong> &mdash; serialize/deserialize round-trip, equality, hash.</li>
+  <li><strong><code>[Scanner][Survex]</code></strong> &mdash; nested <code>*include</code> chain; cycle detection; missing-include warning; cross-format <code>.dat</code> include.</li>
+  <li><strong><code>[Scanner][Compass]</code></strong> &mdash; <code>.mak</code> with multiple <code>.dat</code> references; bare <code>.dat</code> returns just itself.</li>
+  <li><strong><code>[Scanner][Walls]</code></strong> &mdash; <code>.wpj</code> tree walk via dewalls; bare <code>.srv</code> returns just itself.</li>
+  <li><strong><code>[Sync][Reconcile]</code></strong> &mdash; copy on first run; no-op when source == dest with matching mtime; GC of stranded files.</li>
+  <li><strong><code>[Attach][Trip]</code></strong> &mdash; build a region with one cave + one trip with an attached <code>.svx</code>, run the full pipeline, assert resolved stations are present in the lookup.</li>
+  <li><strong><code>[Attach][Cave]</code></strong> &mdash; cave-level attach.</li>
+  <li><strong><code>[Attach][Region]</code></strong> &mdash; region-level attach with two cwCaves declaring prefix subtrees.</li>
+  <li><strong><code>[Attach][Watcher]</code></strong> &mdash; touch a file in <code>External Centerlines/</code>, assert <code>rerunSurvex</code> fires (signal spy).</li>
+  <li><strong><code>[Attach][Error]</code></strong> &mdash; broken external file produces an error captured on the cave/trip without crash.</li>
+  <li><strong><code>[Attach][Mixed]</code></strong> &mdash; cave with both native trips and external-centerline trips coexisting.</li>
+  <li><strong><code>[Equate]</code></strong> (Phase 5) &mdash; native + external equate produces matching coordinates.</li>
+  <li><strong><code>[Orphan]</code></strong> (Phase 6) &mdash; orphan diff is correct after rename in source.</li>
+</ul>
+
+<p>Run with narrow tag filters per the CLAUDE.md feedback (don't run the full suite during dev).</p>
+
+<h3>10.2 QML tests</h3>
+
+<ul>
+  <li><strong><code>tst_ExternalCenterlineAttachTrip.qml</code></strong> &mdash; attach via the UI, verify shot editor disabled, verify CavernOutputPage shows expected content.</li>
+  <li><strong><code>tst_CavernOutputPage.qml</code></strong> &mdash; renders error text, attached-centerlines list, driver disclosure.</li>
+  <li><strong><code>tst_NavBadge.qml</code></strong> (Phase 3) &mdash; badge appears on cave node when its cavern run errored.</li>
+</ul>
+
+<p>Use <code>tryVerify</code>/<code>tryCompare</code> for cavern-completion waits (per CLAUDE.md). The async re-solve makes fixed waits especially brittle.</p>
+
+<h3>10.3 Fixture files</h3>
+
+<p>Add to <code>test-qml/datasets/external-centerlines/</code>:</p>
+<ul>
+  <li><code>survex_simple.svx</code> &mdash; small, no <code>*begin</code> nesting.</li>
+  <li><code>survex_nested.svx</code> + sibling files &mdash; multi-file with <code>*include</code>.</li>
+  <li><code>compass_simple.dat</code> &mdash; one survey, properly form-feed-terminated.</li>
+  <li><code>compass_multi.mak</code> + <code>*.dat</code> &mdash; multi-file Compass project.</li>
+  <li><code>walls.wpj</code> + <code>*.srv</code> &mdash; minimum reproducible Walls project (sourced from a contributor or hand-crafted).</li>
+  <li><code>broken.svx</code> &mdash; intentional syntax error for the error path.</li>
+</ul>
+
+<h3>10.4 Manual test plan (each phase)</h3>
+
+<p>Beyond automated tests, before shipping each phase:</p>
+<ul>
+  <li>Attach a real-world Survex project from a willing user, verify station count and a few coordinates match <code>aven</code>'s view.</li>
+  <li>Edit a file in the project tree, save, watch CaveWhere re-solve and update the 3D view.</li>
+  <li>Verify no regressions on a native-only project of similar size.</li>
+</ul>
+
+<h2 id="risks">11. Risks and open items</h2>
+
+<table>
+  <tr><th>Risk</th><th>Mitigation</th></tr>
+  <tr>
+    <td>UUID change breaks consumers of <code>splitLookupByCave</code> outside <code>cwLinePlotTask</code>.</td>
+    <td>Grep for <code>caveIndex</code> / <code>splitLookupByCave</code> consumers in Phase 1; migrate to UUID lookup. Most are in the same file.</td>
+  </tr>
+  <tr>
+    <td><code>QFileSystemWatcher</code> misses changes (notably Windows network shares, macOS sandboxed environments).</td>
+    <td>Manual "Reload" button on CavernOutputPage as fallback. Document the limitation.</td>
+  </tr>
+  <tr>
+    <td>Walls <code>.wpj</code> via dewalls hasn't been exercised at scale by CaveWhere &mdash; behavior on edge-case projects is unknown.</td>
+    <td>Phase 1 acceptance gate. If dewalls misbehaves, fall back to "<code>.srv</code> direct attach only" for v1; full WPJ becomes a follow-up.</td>
+  </tr>
+  <tr>
+    <td>Large region attaches on mobile may make cavern runs slow at open time.</td>
+    <td>Survex submodule is mobile-capable now (per updated CLAUDE.md). Profile in Phase 4; if needed, persist a cached <code>.3d</code> in the project for read-only mobile viewing.</td>
+  </tr>
+  <tr>
+    <td>External file uses <code>*infer equates</code> or other settings that could leak past the <code>*include</code> boundary.</td>
+    <td>Phase 0 verified Survex pops <code>*begin</code> settings on <code>*end</code>, including via <code>*include</code> return. Driver discipline: wrap every <code>*include</code> in a dedicated <code>*begin&hellip;*end</code> block. Lint-test the generator does this.</td>
+  </tr>
+  <tr>
+    <td>User accidentally deletes a file from <code>External Centerlines/&lt;name&gt;/</code>.</td>
+    <td>Reconcile GC is based on the latest scan result &mdash; a missing file becomes a scan warning, not a silent GC. Cavern then errors on the missing <code>*include</code>, which surfaces in CavernOutputPage. Re-attaching restores.</td>
+  </tr>
+  <tr>
+    <td>Two attach levels conflict (e.g., region attach + per-cave attach pointing at the same data).</td>
+    <td>Phase 4: region-level attach disables per-cave attach controls; loading old projects with both warns and uses region.</td>
+  </tr>
+  <tr>
+    <td>Cavern error message text changes between Survex versions, breaking error-path UX.</td>
+    <td>Render verbatim; don't parse for content beyond "exit code &ne; 0". File:line links use the standard <code>path:line:</code> prefix.</td>
+  </tr>
+  <tr>
+    <td>Scanner re-runs on every file change could thrash on a project with many rapid saves.</td>
+    <td>Debounce ~200 ms in the watcher; <code>AsyncFuture::Restarter</code> collapses bursts to one run. Scanners are sub-millisecond per file, so this is a budget concern, not a correctness one.</td>
+  </tr>
+  <tr>
+    <td>
+      Native and external station names within the same cave live at
+      different prefix depths (<code>cave_X.A1</code> vs.
+      <code>cave_X.trip_Y.A1</code>). Users could be confused when
+      copying a station name from a native trip into an external trip's
+      scrap reference.
+    </td>
+    <td>
+      The per-trip station picker (carpet mode + ExternalCenterlinePanel
+      list) handles this implicitly &mdash; users don't type qualified
+      names, they pick from a filtered list. Document the asymmetry in
+      user-facing help text on the Trip page for externally-backed
+      trips ("station names here come from your survey file").
+    </td>
+  </tr>
+  <tr>
+    <td>
+      "Hide-not-delete" for native trips on cave-level attach leaves
+      stale data the user forgot about; project file grows.
+    </td>
+    <td>
+      Always-visible disclosure on CavePage ("3 hidden native trips
+      &mdash; detach to restore"). Detach restores them. Phase 6
+      orphan-detection bonus: surface hidden trips that haven't been
+      touched in N solves.
+    </td>
+  </tr>
+</table>
+
+<h2 id="deferred">12. Deferred (post-v1)</h2>
+
+<ul>
+  <li><strong>Region-level attach (Case 1)</strong> &mdash; Phase 6 above. Adds the Structure view, bulk note-folder import, region-level equates UI, "covers stations under prefix" on cwCave. Deferred because Cases 2 + 3 + equates cover the realistic v1 audience, and the Structure view is the highest-UX-risk piece of the whole feature &mdash; better designed once we have feedback from earlier phases.</li>
+  <li><strong>Drag-and-drop attach</strong> &mdash; nice polish, not load-bearing.</li>
+  <li><strong>External-file conflict resolution</strong> &mdash; if two users edit the project copy and the live-link source concurrently, no merge UX. Reload-on-change is the v1 answer.</li>
+  <li><strong>Per-tool deep linking</strong> &mdash; click a station in CaveWhere, jump to that line in Compass/Walls/Survex's editor. Future polish via OS file-handler integration.</li>
+  <li><strong>Bundled external snapshot for mobile</strong> &mdash; cached <code>.3d</code> shipped in the project for read-only mobile viewing without re-solving. Becomes relevant if Phase 4 mobile profiling reveals a need.</li>
+</ul>
+
+</body>
+</html>

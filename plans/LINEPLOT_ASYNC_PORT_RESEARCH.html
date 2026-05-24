@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>cwLinePlotTask AsyncFuture Port Research</title>
+<style>
+  :root {
+    --fg: #1c1c1c;
+    --muted: #5a5a5a;
+    --accent: #2451a4;
+    --rule: #d8d8d8;
+    --bg: #ffffff;
+    --code-bg: #f4f4f6;
+    --warn-bg: #fff7d6;
+    --warn-border: #e0c346;
+    --ok-bg: #e9f5ec;
+    --ok-border: #6aab7a;
+  }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.5;
+    max-width: 920px;
+    margin: 2.5rem auto;
+    padding: 0 1.5rem 4rem;
+  }
+  h1 { font-size: 1.85rem; border-bottom: 2px solid var(--accent); padding-bottom: 0.35rem; }
+  h2 { font-size: 1.4rem; margin-top: 2.4rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.25rem; color: var(--accent); }
+  h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+  h4 { font-size: 1.0rem; margin-top: 1.2rem; color: var(--muted); }
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  code { background: var(--code-bg); padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
+  pre { background: var(--code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.88em; line-height: 1.4; }
+  pre code { background: transparent; padding: 0; }
+  table { border-collapse: collapse; margin: 0.6rem 0 1.1rem; font-size: 0.95em; }
+  th, td { border: 1px solid var(--rule); padding: 0.4rem 0.7rem; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  blockquote { margin: 0.6rem 0; padding: 0.4rem 0.9rem; border-left: 3px solid var(--accent); color: var(--muted); background: var(--code-bg); }
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-border); padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  .answered { background: var(--ok-bg); border: 1px solid var(--ok-border); padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  .risk { background: #ffe6e6; border: 1px solid #cc6666; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  .risk.resolved { background: #e8f4ea; border-color: #6aab7a; }
+  .risk.resolved strong:first-of-type::before { content: "✓ "; color: #2a7a3a; }
+  .phase {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 0.8rem 1.2rem;
+    margin: 1rem 0 2rem;
+    background: #fbfbfd;
+  }
+  .phase h3 { margin-top: 0.4rem; color: var(--accent); }
+  .meta { color: var(--muted); font-size: 0.92em; }
+  ul, ol { margin-top: 0.3rem; }
+  li { margin: 0.15rem 0; }
+  .anchor { color: var(--accent); text-decoration: none; }
+  .anchor:hover { text-decoration: underline; }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
+  .toc { background: var(--code-bg); padding: 0.7rem 1.2rem; border-radius: 4px; }
+  .toc ol { margin: 0.2rem 0 0.2rem 1.2rem; padding: 0; }
+  .toc li { margin: 0.1rem 0; }
+  .ref { color: var(--muted); font-size: 0.88em; }
+  .diagram { background: var(--code-bg); padding: 1rem; border-radius: 4px; overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<h1>cwLinePlotTask AsyncFuture Port Research</h1>
+<p class="meta">
+  Goal: Document the current <code>cwLinePlotTask</code> pipeline architecture and propose a migration path to AsyncFuture-based async chains.
+</p>
+
+<div class="toc">
+<ol>
+  <li><a class="anchor" href="#current-pipeline">Current Pipeline Overview</a></li>
+  <li><a class="anchor" href="#cwtask-base">cwTask Base Class Behavior</a></li>
+  <li><a class="anchor" href="#state-ownership">State and Ownership</a></li>
+  <li><a class="anchor" href="#cancellation">Cancellation and Re-entrancy</a></li>
+  <li><a class="anchor" href="#external-centerline">External-Centerline Pipeline Integration Target</a></li>
+  <li><a class="anchor" href="#saveload-queue">cwProject / cwSaveLoad File Queue</a></li>
+  <li><a class="anchor" href="#port-strategy">Port Strategy Proposal</a>
+    <ul>
+      <li><a class="anchor" href="#temp-dir">7.4 Solve temp-file lifecycle</a></li>
+      <li><a class="anchor" href="#cavern-output-page">7.5 CavernOutputPage sketch</a></li>
+    </ul>
+  </li>
+  <li><a class="anchor" href="#open-questions">Open Questions / Risks</a></li>
+</ol>
+</div>
+
+<hr />
+
+<h2 id="current-pipeline">1. Current Pipeline Overview</h2>
+
+<h3>Classes and Responsibilities</h3>
+
+<table>
+<tr>
+  <th>Class</th>
+  <th>Location</th>
+  <th>Thread</th>
+  <th>Purpose</th>
+  <th>Input/Output</th>
+</tr>
+<tr>
+  <td><code>cwLinePlotManager</code></td>
+  <td><code>cwLinePlotManager.h/cpp</code></td>
+  <td>UI (main)</td>
+  <td>Orchestrates the line plot pipeline. Listens to region/trip/chunk changes, coalesces them with <code>AsyncFuture::Restarter</code>, and applies results back to the UI.</td>
+  <td><strong>In:</strong> Signals from caves, trips, survey chunks, fix stations. <strong>Out:</strong> Calls <code>cwLinePlotTask::run()</code>, subscribes to its future, calls <code>updateLinePlot()</code>.</td>
+</tr>
+<tr>
+  <td><code>cwLinePlotTask</code></td>
+  <td><code>cwLinePlotTask.h/cpp</code></td>
+  <td>Worker thread (QtConcurrent pool via <code>cwConcurrent::run</code>)</td>
+  <td>Non-thread-safe data container. Defines the pipeline chain via <code>LinePlotWorker::run()</code> (a synchronous function that runs all steps in sequence on a single worker thread).</td>
+  <td><strong>In:</strong> <code>cwLinePlotTask::Input</code> (snapshot of region data + region pointers). <strong>Out:</strong> <code>LinePlotResultData</code> (station positions, cave networks, geometry indices).</td>
+</tr>
+<tr>
+  <td><code>cwLinePlotTask::LinePlotWorker</code></td>
+  <td><code>cwLinePlotTask.cpp</code> (nested struct)</td>
+  <td>Worker thread</td>
+  <td>Holds the actual compute logic. The <code>run()</code> method is synchronous and coordinates all sub-tasks.</td>
+  <td>Internal work: calls <code>exportSurvex()</code>, <code>runCavern()</code>, <code>generateGeometry()</code>, and processes results.</td>
+</tr>
+<tr>
+  <td><code>cwSurvexExporterRegionTask</code></td>
+  <td><code>cwSurvexExporterRegionTask.h/cpp</code></td>
+  <td>Worker thread (spawned via <code>cwTask::start()</code> with <code>setUsingThreadPool(false)</code>, runs inline in caller's thread)</td>
+  <td>Exports the region data to a .svx (Survex) file. Part of the <code>cwTask</code> hierarchy.</td>
+  <td><strong>In:</strong> <code>cwCavingRegionData</code> region snapshot. <strong>Out:</strong> Temporary .svx file written to disk.</td>
+</tr>
+<tr>
+  <td><code>cwCavernTask</code></td>
+  <td><code>cwCavernTask.h/cpp</code></td>
+  <td>Worker thread (spawned inline, does not use thread pool)</td>
+  <td>Runs the cavern executable (Survex solver) on the exported .svx file, producing a .3d file.</td>
+  <td><strong>In:</strong> Path to .svx file. <strong>Out:</strong> Path to .3d file on disk.</td>
+</tr>
+<tr>
+  <td><code>cwLinePlotGeometryTask</code></td>
+  <td><code>cwLinePlotGeometryTask.h/cpp</code> (referenced, not shown in headers)</td>
+  <td>Worker thread</td>
+  <td>Processes the solved station positions and generates 3D line geometry (vertex/index buffers) for rendering.</td>
+  <td><strong>In:</strong> Region with station positions set. <strong>Out:</strong> <code>pointData</code> and <code>indexData</code> vectors.</td>
+</tr>
+<tr>
+  <td><code>cwFindUnconnectedSurveyChunksTask</code></td>
+  <td>(Referenced, not detailed here)</td>
+  <td>Worker thread</td>
+  <td>Validates survey network topology, detects unconnected chunks.</td>
+  <td><strong>In:</strong> Cave data. <strong>Out:</strong> List of error results.</td>
+</tr>
+<tr>
+  <td><code>cwSurvex3DFileReader</code></td>
+  <td>(Referenced, not detailed here)</td>
+  <td>Worker thread</td>
+  <td>Parses the binary .3d file output by cavern, extracts station positions and network topology.</td>
+  <td><strong>In:</strong> Path to .3d file. <strong>Out:</strong> <code>cwStationPositionLookup</code> and <code>cwSurveyNetwork</code>.</td>
+</tr>
+</table>
+
+<h3>Data Flow Diagram</h3>
+
+<p>This diagram shows the sequence from user edit to station-position update:</p>
+
+<div class="diagram"><pre>
+┌─ User edits station / adds trip / changes calibration
+│
+├─ cwLinePlotManager::runSurvex() called (via signal)
+│
+├─ m_restarter.restart( [=]() {
+│     • cwLinePlotTask::buildInput() snapshots region data
+│     • cwLinePlotTask::run() returns QFuture&lt;LinePlotResultData&gt;
+│     • AsyncFuture::observe(future).context(this, lambda)
+│       └─ When future completes: updateLinePlot(result)
+│   })
+│
+└─ On worker thread (QtConcurrent pool):
+   cwLinePlotTask::run()
+     └─ cwLinePlotWorker::run()
+          ├─ encodeCaveNames() — rename caves to "0", "1", etc.
+          ├─ initializeCaveStationLookups() — cache old positions
+          ├─ checkForErrors() — validate topology (runs cwFindUnconnectedSurveyChunksTask inline)
+          │
+          ├─ exportSurvex()
+          │   └─ cwSurvexExporterRegionTask::start() with setUsingThreadPool(false)
+          │       └─ Writes .svx to temp file
+          │
+          ├─ runCavern()
+          │   └─ cwCavernTask::start() with setUsingThreadPool(false)
+          │       └─ Runs cavern binary, produces .3d file
+          │
+          ├─ cwSurvex3DFileReader::readNetworkAndLookup()
+          │   └─ Parses .3d file → cwStationPositionLookup + cwSurveyNetwork
+          │
+          ├─ applyWorldOriginOffset() — translate positions by -worldOrigin
+          ├─ updateStationPositionForCaves() — split lookup by cave, detect changes
+          ├─ generateGeometry() — cwLinePlotGeometryTask (runs inline)
+          └─ updateDepthLength() + updateCaveNetworks() — populate result
+               └─ Return LinePlotResultData to cwLinePlotManager
+                    │
+                    └─ (Back on UI thread via AsyncFuture::observe)
+                         ├─ updateLinePlot() applies results
+                         │   ├─ cave->setStationPositionLookup(positions)
+                         │   ├─ cave->setSurveyNetwork(network)
+                         │   ├─ m_linePlot->setGeometry(positions, indices)
+                         │   └─ Emit stationPositionInCavesChanged, etc.
+                         │
+                         └─ Scraps and 2D views update on signal
+</pre></div>
+
+<h3>Key Observation</h3>
+
+<p>
+  <strong>The current pipeline is already largely async:</strong> <code>cwLinePlotManager</code> uses <code>AsyncFuture::Restarter&lt;LinePlotResultData&gt;</code> to coalesce rapid edits. The heavy lifting (export → cavern → parse → geometry) runs on <code>cwTask::threadPool()</code> as a single QtConcurrent operation. However, the internal structure nests <code>cwTask</code-based sub-tasks (exporter, cavern, geometry) that are run <strong>inline and synchronously</strong> on the worker thread via <code>runTaskInPlace()</code>, which calls <code>task.setUsingThreadPool(false)</code> and then <code>task.waitToFinish()</code>. This is safe because all the work stays on the same worker thread.
+</p>
+
+<hr />
+
+<h2 id="cwtask-base">2. cwTask Base Class Behavior</h2>
+
+<h3>Thread Management</h3>
+
+<ul>
+  <li><strong>Thread pool:</strong> Managed globally by <code>cwTask::threadPool()</code> (a static <code>QThreadPool*</code>). Initialized once per application.</li>
+  <li><strong>Start behavior:</strong>
+    <ul>
+      <li><code>start()</code> emits <code>preparingToStart()</code>, then either enqueues to the thread pool (if <code>isUsingThreadPool()</code> is true) or calls <code>run()</code> immediately on the current thread.</li>
+      <li><code>run()</code> is the entry point — it emits <code>started()</code> and calls the virtual <code>runTask()</code> implementation.</li>
+    </ul>
+  </li>
+  <li><strong>Restart behavior:</strong>
+    <ul>
+      <li><code>restart()</code> atomically stops the running task (if any) and sets <code>NeedsRestart = true</code>.</li>
+      <li>When the task finishes, it sees the restart flag and emits <code>shouldRerun()</code> instead of <code>finished()</code>.</li>
+      <li>The task transitions through <code>Running → Restart → Restarting</code> (which is equivalent to <code>Ready</code>).</li>
+    </ul>
+  </li>
+  <li><strong>Cancellation:</strong> <code>stop()</code> sets the status to <code>Stopped</code>. There is no in-flight cancellation mechanism; the <code>runTask()</code> implementation must check <code>isRunning()</code> or <code>needsRestart()</code> to cooperatively stop.</li>
+</ul>
+
+<h3>AsyncFuture::Restarter</h3>
+
+<p>
+  <code>cwLinePlotManager</code> does <strong>not</strong> use <code>cwTask</code> directly. Instead, it uses:
+</p>
+
+<pre><code>AsyncFuture::Restarter&lt;cwLinePlotTask::LinePlotResultData&gt; m_restarter;</code></pre>
+
+<p>The <code>Restarter</code> pattern (from the AsyncFuture library) works as follows:</p>
+
+<ul>
+  <li><code>m_restarter.restart([=]() { ... return QFuture&lt;Result&gt;; })</code> takes a lambda that returns a future.</li>
+  <li>If a previous future is in-flight, it is implicitly cancelled before the new one starts.</li>
+  <li>The new future replaces the old one in <code>m_restarter.future()</code>.</li>
+  <li>Consumers observe the result via <code>AsyncFuture::observe(m_restarter.future()).context(this, handler)</code>.</li>
+</ul>
+
+<p>
+  <strong>Key difference from cwTask:</strong> The <code>Restarter</code> is driven by user signals (rapid edit events) and automatically cancels and replaces in-flight work. <code>cwTask</code> requires explicit <code>restart()</code> calls and manages its own lifecycle through signals.
+</p>
+
+<hr />
+
+<h2 id="state-ownership">3. State and Ownership</h2>
+
+<h3>Input Snapshot</h3>
+
+<p>
+  When the user triggers a re-solve (by editing a station, adding a trip, etc.), <code>cwLinePlotManager::runSurvex()</code> is called:
+</p>
+
+<pre><code>auto input = cwLinePlotTask::buildInput(Region.data());
+auto future = cwLinePlotTask::run(std::move(input));
+</code></pre>
+
+<p><code>cwLinePlotTask::Input</code> contains:</p>
+
+<ul>
+  <li><code>cwCavingRegionData regionData</code> — a deep value-type copy of the entire region structure (caves, trips, chunks, stations, shots, etc.).</li>
+  <li><code>RegionDataPtrs regionPointers</code> — a parallel structure of <strong>raw pointers</strong> to the original UI objects (cave, trip, scrap pointers). Used only for <strong>bookkeeping</strong> to map results back to the correct UI object after the solve.</li>
+</ul>
+
+<p>
+  <strong>Thread safety achieved &mdash; with a caveat:</strong> The
+  snapshot is value-copied, but <code>cwCavingRegionData</code> is built
+  from Qt containers (<code>QVector</code>, <code>QList</code>,
+  <code>QString</code>, &hellip;) which are <em>implicitly shared</em>,
+  not deep-copied. The copy is a header copy + refcount bump; the
+  underlying buffers are shared with the UI-side originals until either
+  side mutates. That is safe <strong>only if the worker thread sticks
+  to const access</strong>. Any non-const <code>operator[]</code>,
+  <code>data()</code>, <code>begin()</code>, or
+  <code>QString::replace()</code>-style call on the snapshot will trigger
+  <code>detach()</code> and race the UI thread's mutations on the same
+  shared buffer (the exact failure mode CLAUDE.md's
+  <code>.at()</code>-vs-<code>operator[]</code> rule guards against).
+  <strong>Invariant for the port:</strong> the worker reads the
+  snapshot through <code>const</code> references and <code>at(i)</code>
+  only; if a transform needs to mutate, copy the relevant container into
+  a local first and mutate that. Reviewers of the ported worker should
+  audit for non-const access as the primary risk.
+  <p>
+  When the result comes back, the pointers in <code>RegionDataPtrs</code>
+  are validated against the current region state (in
+  <code>validateResultsData()</code>) to ensure no object has been
+  deleted between snapshot and apply.
+</p>
+
+<h3>Output Results</h3>
+
+<p>
+  <code>cwLinePlotTask::LinePlotResultData</code> contains:
+</p>
+
+<ul>
+  <li><code>QMap&lt;cwCave*, LinePlotCaveData&gt; Caves</code> — for each cave that changed, the new station positions, network, and depth/length.</li>
+  <li><code>QSet&lt;cwTrip*&gt; Trips</code> and <code>QSet&lt;cwScrap*&gt; Scraps</code> — which UI objects need to redraw.</li>
+  <li><code>QVector&lt;QVector3D&gt; StationPositions</code> and <code>QVector&lt;unsigned int&gt; LinePlotIndexData</code> — geometry for the 3D line plot.</li>
+  <li><code>cwSurveyNetwork RegionNetwork</code> — the solved network topology.</li>
+</ul>
+
+<p>
+  <strong>Consumption on UI thread:</strong> When the future completes, <code>AsyncFuture::observe().context(this, [this, future]())</code> captures the future and runs the handler on the main thread. Inside the handler:
+</p>
+
+<pre><code>cave->setStationPositionLookup(caveData.stationPositions());
+cave->setSurveyNetwork(caveData.network());
+m_linePlot->setGeometry(results.stationPositions(), results.linePlotIndexData());
+</code></pre>
+
+<p>
+  These calls must run on the UI thread because <code>cwCave</code>, station lookups, and <code>cwRenderLinePlot</code> are not thread-safe for writes.
+</p>
+
+<hr />
+
+<h2 id="cancellation">4. Cancellation and Re-entrancy</h2>
+
+<h3>Current Behavior</h3>
+
+<p>
+  When a user rapidly edits (e.g., moves a station, then immediately moves another), <code>runSurvex()</code> is called multiple times. The <code>Restarter</code> handles this:
+</p>
+
+<pre><code>m_restarter.restart([this]() {
+    auto input = cwLinePlotTask::buildInput(Region.data());
+    auto future = cwLinePlotTask::run(std::move(input));
+    // ...
+    return future;
+});
+</code></pre>
+
+<p>
+  If <code>future</code> from the first call is still in-flight when a second <code>restart()</code> is called:
+</p>
+
+<ol>
+  <li>The <code>Restarter</code> cancels the first future (via <code>QFuture::cancel()</code>).</li>
+  <li>The lambda is immediately re-executed, creating a new snapshot and launching a new solve.</li>
+  <li>The old future's result (if it was computed before cancellation took effect) is dropped and never observed.</li>
+</ol>
+
+<p>
+  <strong>What "cancellation" actually does today:</strong>
+  <code>Restarter::restart()</code> flips the bit on the old
+  <code>QFuture</code> &mdash; nothing more. The
+  <code>cwConcurrent::run</code> lambda inside
+  <code>cwLinePlotTask::run()</code> does <em>not</em> consult
+  <code>QFuture::isCanceled()</code> at any point, so the in-flight
+  solve runs to completion (export &rarr; cavernlib &rarr; parse
+  &rarr; geometry) and its result is dropped on return. Today's
+  "cancellation" is really "discard the result." This is safe but
+  burns CPU and, more importantly, holds the cavernlib mutex (Q1) in
+  front of the new solve. <strong>Cooperative cancellation is the
+  work proposed in Q4</strong> &mdash; see that section for the
+  concrete plan.
+</p>
+
+<h3>waitToFinish() &mdash; current uses</h3>
+
+<p>
+  <code>cwLinePlotManager::waitToFinish()</code> wraps
+  <code>AsyncFuture::waitForFinished(m_restarter.future())</code>,
+  which spins a nested <code>QEventLoop</code>. CLAUDE.md restricts
+  this to test code (the nested loop delivers queued signals
+  mid-destruction and causes use-after-free). However, the current
+  destructor at <code>cwLinePlotManager.cpp:67-70</code> calls
+  <code>waitToFinish()</code> in production:
+</p>
+
+<pre><code>cwLinePlotManager::~cwLinePlotManager() {
+    m_restarter.future().cancel();
+    waitToFinish();   // production path &mdash; violates the test-only rule
+}
+</code></pre>
+
+<p>
+  This is a latent UAF: if a <code>.context(this, &hellip;)</code>
+  callback is queued when destruction starts, the cancel sets a flag,
+  <code>waitForFinished</code> pumps the event loop, and the queued
+  lambda fires against a half-destructed <code>this</code>. <strong>The
+  port plan removes this in Phase 0</strong> (see &sect;7); the
+  destructor only needs <code>m_restarter.future().cancel()</code>
+  because every observer is bound through
+  <code>.context(this, &hellip;)</code> and Qt auto-disconnects the
+  observer when the context object is destroyed.
+</p>
+
+<hr />
+
+<h2 id="external-centerline">5. External-Centerline Pipeline Integration Target <span style="font-size: 0.75em; color: var(--muted);">(deferred &mdash; see note)</span></h2>
+
+<div class="note">
+  <strong>Scope note:</strong> This section is kept as background research
+  for the eventual Phase 3 work, but is <strong>not part of the
+  port being executed from this document</strong>. The implementation
+  plan in &sect;7 covers Phase 0 (destructor cleanup), Phase 1 (drop
+  <code>cwTask</code> inheritance from the lineplot sub-tasks), and
+  Phase 2 (consolidate <code>cwLinePlotManager</code> on an explicit
+  AsyncFuture chain and switch to <code>Monad::Result</code>). Once
+  Phases 0-2 land, we'll write a fresh plan for the external-centerline
+  pipeline that supersedes the chain sketched here &mdash; in
+  particular, the <code>reconcile</code> step's per-job aggregation
+  via <code>AsyncFuture::combine()</code> and its
+  partial-failure policy (fail-fast vs. drain-and-report) need
+  concrete answers before Phase 3 can start. Read the rest of this
+  section as "where we think we'll end up," not "what we're building
+  now."
+</div>
+
+<p>
+  The goal is to attach an external-centerline pipeline to the same async chain. The proposed structure is:
+</p>
+
+<pre><code>scanSource → copyFromSource → scanProjectCopy → reconcile → runCavern → updateNetwork
+</code></pre>
+
+<h3>Pipeline steps</h3>
+
+<table>
+<tr>
+  <th>Step</th>
+  <th>Purpose</th>
+  <th>Existing or new function</th>
+  <th>Thread / queueing</th>
+</tr>
+<tr>
+  <td><code>scan</code></td>
+  <td>Read the entry file and walk <code>*include</code> /
+      <code>.mak</code> / <code>.wpj</code> closure. Returns the
+      dependency list and any soft warnings.</td>
+  <td>New: <code>cwExternalCenterlineScanner::scan(entryFile)</code>
+      (free function, sync).</td>
+  <td>Worker thread via <code>QtConcurrent::run</code>. Pure read,
+      not project-tree mutation, so it does <em>not</em> go through
+      <code>cwSaveLoad</code>.</td>
+</tr>
+<tr>
+  <td><code>reconcile</code></td>
+  <td>Make the in-project copy match the dependency list: copy
+      anything newer, delete anything not in the closure. Same call
+      handles both initial-attach (empty destination) and
+      edit-in-place (source == destination, no copies needed).</td>
+  <td>New: <code>cwExternalCenterlineSync::reconcile(scan, attachmentDir)</code>.</td>
+  <td>Submits each FS mutation as a <code>cwSaveLoad</code> job
+      (<code>Action::Copy</code> for files, <code>Action::Remove</code>
+      for GC). Per-job futures are joined with
+      <code>AsyncFuture::combine()</code> to produce a single
+      <code>QFuture&lt;Monad::Result&lt;void&gt;&gt;</code> that
+      completes when every enqueued job has settled. The
+      <code>cwSaveLoad</code> pool is single-threaded
+      (<code>setMaxThreadCount(1)</code>), so jobs execute in submission
+      order. <strong>Open question for the Phase 3 plan:</strong>
+      partial-failure policy &mdash; if job #3 fails, do we cancel
+      #4..N and abort, or drain the rest and report an aggregate
+      error? <em>Defer to the Phase 3 plan; not specified here.</em></td>
+</tr>
+<tr>
+  <td><code>runCavern</code></td>
+  <td>Run cavern on the driver file (unchanged).</td>
+  <td>Existing: <code>cwCavernTask</code> wrapped as a future.</td>
+  <td>Worker thread. Writes only to the scratch temp dir, not the
+      project tree, so no queueing needed.</td>
+</tr>
+<tr>
+  <td><code>updateNetwork</code></td>
+  <td>Parse <code>.3d</code> and apply station positions to the
+      region (existing path).</td>
+  <td>Existing: <code>cwSurvex3DFileReader::readNetworkAndLookup</code>
+      followed by <code>splitLookupByCave</code>.</td>
+  <td>Worker thread for the parse; the apply step lands on the UI
+      thread via <code>.context(this, &hellip;)</code>.</td>
+</tr>
+</table>
+
+<p class="meta">
+  The earlier sketch had a separate <code>scanProjectCopy</code> step
+  for a "validate the copy is good" pass &mdash; cut, because the
+  copy is byte-identical to the source by construction and cavern is
+  the actual ground truth for whether the file parses. A redundant
+  scan would just slow every solve down.
+</p>
+
+<h3>AsyncFuture chain</h3>
+
+<p>
+  Flat. One <code>.context(this, &hellip;)</code> per step. No
+  <code>.subscribe()</code> &mdash; <code>subscribe()</code> uses the
+  calling thread as the context and doesn't auto-disconnect when
+  <code>this</code> is destroyed, so a result arriving after the
+  owning object is gone will run a lambda against freed memory.
+  <code>context(this, &hellip;)</code> binds both the thread (the
+  context object's thread) and the lifetime (auto-disconnect on
+  <code>this</code> destruction) &mdash; the only safe pattern.
+</p>
+
+<pre><code>using cwExternalCenterlineScanner::ScanResult;
+using Monad::Result;
+
+QFuture&lt;Result&lt;ScanResult&gt;&gt; scanFuture =
+    QtConcurrent::run([entryPath]() { return scan(entryPath); });
+
+AsyncFuture::observe(scanFuture)
+    .context(this, [this](Result&lt;ScanResult&gt; scan) -&gt; QFuture&lt;Result&lt;void&gt;&gt; {
+        if (scan.hasError()) return AsyncFuture::completed(scan.error());
+        return m_sync-&gt;reconcile(scan.value(), m_attachmentDir);    // -&gt; cwSaveLoad jobs
+    })
+    .context(this, [this](Result&lt;void&gt; reconciled) -&gt; QFuture&lt;Result&lt;CavernResult&gt;&gt; {
+        if (reconciled.hasError()) return AsyncFuture::completed(reconciled.error());
+        return runCavern(m_driverPath);
+    })
+    .context(this, [this](Result&lt;CavernResult&gt; cavern) {
+        updateNetwork(cavern);                                       // UI thread
+    });
+</code></pre>
+
+<p>What changed vs. the earlier sketch:</p>
+<ul>
+  <li><strong>Flat, not nested.</strong> Each <code>.context(this, &hellip;)</code> returns its own <code>QFuture&lt;T&gt;</code>; AsyncFuture chains them. No inner <code>AsyncFuture::observe()</code> calls inside lambdas.</li>
+  <li><strong><code>.context(this, &hellip;)</code> everywhere</strong>, never <code>.subscribe()</code>.</li>
+  <li><strong>Fully-typed lambda parameters</strong> &mdash; no <code>auto r</code>.</li>
+  <li><strong><code>[this]</code> captures</strong> &mdash; no <code>[&amp;]</code>.</li>
+  <li><strong>Three steps</strong>, not six. Dropped the separate <code>copyFromSource</code> (folded into <code>reconcile</code>) and <code>scanProjectCopy</code> (redundant &mdash; cavern is the ground truth). No <code>ReconcileResult</code> at all; the chain only needs success/failure to gate the cavern step.</li>
+  <li><strong>Uses the existing <code>Action::Copy</code></strong> job in <code>cwSaveLoad</code>, not <code>Custom</code> with a hand-rolled read+write.</li>
+  <li><strong>Error propagation</strong> via <code>Monad::Result</code>: each step short-circuits if the previous returned an error, surfacing it to <code>updateNetwork</code> for display in <code>CavernOutputPage</code>.</li>
+</ul>
+
+<hr />
+
+<h2 id="saveload-queue">6. cwProject / cwSaveLoad File Queue</h2>
+
+<h3>The Job Queue System</h3>
+
+<p>
+  <code>cwSaveLoadPrivate</code> (the implementation detail of <code>cwSaveLoad</code>) contains a <code>Job</code> system for serialized filesystem access:
+</p>
+
+<pre><code>struct Job {
+    enum class Kind { File, Directory, };
+    enum class Action { Move, Remove, EnsureDir, WriteFile, Copy, Custom };
+
+    const void* objectId;  // For tracking which object owns this job
+    Kind kind;
+    Action action;
+    std::function&lt;void(const Monad::ResultBase&)&gt; onDone;
+    Payload payload;  // WriteFilePayload, CopyFilePayload, CustomPayload, or EmptyPayload
+
+    QString oldPath;
+    QString path;
+    QString dataRoot;
+    QString projectRoot;
+    // ... constructors ...
+};
+</code></pre>
+
+<h3>Job Actions</h3>
+
+<ul>
+  <li><code>WriteFile</code> — serialize a protobuf message to disk.</li>
+  <li><code>Copy</code> — copy a file from source to destination.</li>
+  <li><code>Move</code> — move or rename a file/directory.</li>
+  <li><code>Remove</code> — delete a file/directory.</li>
+  <li><code>EnsureDir</code> — create a directory if it doesn't exist.</li>
+  <li><code>Custom</code> — run an arbitrary <code>std::function&lt;Monad::ResultBase()&gt;</code> in the job queue.</li>
+</ul>
+
+<h3>Enqueueing Mechanism</h3>
+
+<p>
+  From <code>cwSaveLoad.h</code>:
+</p>
+
+<pre><code>// Enqueues filesystem deletion jobs for a conflicting project descriptor file and its
+// accompanying data directory. Used to clean up the "loser" project directory left on
+// disk after a rename/rename merge conflict where ours-wins resolution was applied.
+void enqueueConflictingProjectCleanup(const QString& conflictingDescriptorRelPath);
+
+void enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath);
+void setOwnedTempDir(const QString& path);
+</code></pre>
+
+<p>
+  And from private methods (visible in the .cpp):
+</p>
+
+<pre><code>void addFileSystemJob(Job job, cwSaveLoad* context);
+void addExplicitFileSystemJob(Job job, cwSaveLoad* context);
+QFuture&lt;Monad::ResultBase&gt; enqueueOperation(cwSaveLoad* context,
+                                            std::function&lt;Monad::ResultBase()&gt; customAction);
+</code></pre>
+
+<h3>Why the Queue Is Necessary</h3>
+
+<p>
+  <strong>Filesystem race conditions:</strong> If multiple threads write to the project tree concurrently (e.g., one thread saves a cave proto while another thread copies an external centerline file into the project), the results are undefined. The queue ensures a total order of operations. Key points:
+</p>
+
+<ul>
+  <li>The project directory tree is the <strong>single source of truth</strong> for the on-disk state.</li>
+  <li>All mutations (writes, copies, moves, deletes) must be <strong>linearized</strong>.</li>
+  <li>The queue runs in its own thread (or is carefully synchronized) to prevent interleaving.</li>
+  <li>When <code>cwProject</code> saves a cave, it enqueues a <code>WriteFile</code> job rather than writing directly.</li>
+</ul>
+
+<h3>Example: Adding a Custom Job</h3>
+
+<p>
+  To enqueue an external-centerline copy operation, you would likely do something like:
+</p>
+
+<pre><code>std::function&lt;Monad::ResultBase()&gt; copyAction = [sourcePath, destPath]() {
+    return cwSaveLoadPrivate::Job::copyFileWithValidation(sourcePath, destPath);
+};
+auto future = d->enqueueOperation(this, copyAction);
+</code></pre>
+
+<p>
+  The returned future completes when the job is dequeued and executed, and captures any error that occurred during the copy.
+</p>
+
+<div class="answered">
+<strong>Status:</strong> The cwSaveLoad job queue exists and is actively used for serialized filesystem access. It can accommodate the external-centerline pipeline's filesystem operations via Custom actions.
+</div>
+
+<hr />
+
+<h2 id="port-strategy">7. Port Strategy Proposal</h2>
+
+<h3>Scope</h3>
+
+<p>
+  This document covers <strong>Phases 0, 1, and 2</strong> &mdash; the
+  lineplot pipeline port itself. Phases 3 (external-centerline pipeline)
+  and 4 (unified solve manager) are <strong>out of scope here</strong>
+  and will get their own plan after Phase 2 lands; the sketch in &sect;5
+  is background only.
+</p>
+
+<h4>Phase 0: Fix the destructor UAF</h4>
+
+<div class="phase">
+<h3>Default the destructor; <code>Restarter</code> + context auto-disconnect handle cleanup</h3>
+
+<p>
+  Today (<code>cwLinePlotManager.cpp:67-70</code>):
+</p>
+
+<pre><code>cwLinePlotManager::~cwLinePlotManager() {
+    m_restarter.future().cancel();
+    waitToFinish();   // spins a nested QEventLoop &mdash; latent UAF
+}
+</code></pre>
+
+<p>
+  <code>waitToFinish()</code> calls
+  <code>AsyncFuture::waitForFinished(m_restarter.future())</code>,
+  which runs a nested event loop. CLAUDE.md restricts this to test
+  code precisely because the nested loop delivers queued signals
+  mid-destruction. If a <code>.context(this, &hellip;)</code> handler
+  is queued when destruction starts, it can fire against a
+  half-destructed <code>this</code>.
+</p>
+
+<p>
+  <strong>Plan:</strong>
+</p>
+
+<ol>
+  <li>Default the destructor (remove the body entirely, or
+      <code>= default</code> in the header).
+      <strong>Both the explicit <code>cancel()</code> and the
+      <code>waitToFinish()</code> are unnecessary:</strong>
+    <ul>
+      <li><code>AsyncFuture::Restarter::~Restarter()</code>
+          (<code>asyncfuture.h:1861-1870</code>) already calls
+          <code>activeInner.cancel()</code> and cancels the outer
+          deferred when the member is destroyed.</li>
+      <li>Restarter also wires
+          <code>QObject::destroyed</code> on its context (which is
+          <code>this</code>) to the same cancel path
+          (<code>asyncfuture.h:1847-1858</code>), so cancellation
+          actually fires <em>before</em> Restarter's destructor runs
+          &mdash; right when the manager starts to die.</li>
+      <li>Every observer is bound through
+          <code>.context(this, &hellip;)</code>, so Qt
+          auto-disconnects them on destruction; no queued lambda
+          fires against the dead object.</li>
+    </ul>
+    The cancelled future may still complete on its worker thread, but
+    its result has no observer left and is dropped.</li>
+  <li>Add a destructor test (<code>cavewhere-test</code>) that
+      destroys a manager mid-solve under ASan and verifies no
+      use-after-free.</li>
+  <li><code>cwLinePlotManager::waitToFinish()</code> stays in the
+      header as test-only; the destructor just stops calling it.</li>
+</ol>
+
+<p class="meta">
+  Land this before Phase 1 so subsequent phases are protected by the
+  destructor test.
+</p>
+</div>
+
+<h4>Phase 1: Convert the lineplot sub-tasks to free functions</h4>
+
+<div class="phase">
+<h3>Rename and drop the <code>cwTask</code> base from four sub-tasks</h3>
+
+<p>
+  Today <code>LinePlotWorker::run()</code> uses four
+  <code>cwTask</code>-derived classes only for their compute logic;
+  the inheritance buys nothing because every call site runs them
+  synchronously via the local <code>runTaskInPlace</code> helper
+  (<code>cwLinePlotTask.cpp:52-57</code>) which just calls
+  <code>setUsingThreadPool(false); start(); waitToFinish(IgnoreRestart);</code>.
+  The <code>cwTask</code> machinery (Qt signals, restart state machine,
+  thread-pool toggle) is dead weight for these four.
+  (<code>cwSurvex3DFileReader</code> is not a <code>cwTask</code> &mdash;
+  no change needed for it.)
+</p>
+
+<p>
+  <strong>Plan:</strong>
+</p>
+
+<ol>
+  <li>Rename and convert each task to a plain free function. Use
+      <code>Monad::Result&lt;T&gt;</code> for value-returning steps
+      and <code>Monad::ResultBase</code> for void-returning steps
+      (<code>Monad/Result.h</code> has no <code>Result&lt;void&gt;</code>
+      specialization, and adding one is out of scope; <code>ResultBase</code>
+      carries the error code and message we need):
+    <ul>
+      <li><code>cwSurvexExporterRegionTask</code> &rarr; free function
+          <code>exportSurvexRegion(const cwCavingRegionData&amp;,
+          const QString&amp; outputPath) -&gt;
+          Monad::ResultBase</code> (in a new
+          <code>cwSurvexExporterRegion.h/.cpp</code>).</li>
+      <li><code>cwCavernTask</code> &rarr; free function
+          <code>runCavern(const QString&amp; svxPath,
+          const QString&amp; output3dPath) -&gt;
+          Monad::Result&lt;CavernRunResult&gt;</code> where
+          <code>CavernRunResult { QString output3dPath; QString logText; int exitCode; }</code>.
+          The implementation:
+          <ol>
+            <li>Builds argv as
+                <code>{"cavern", "--log", "--quiet", "--quiet",
+                "--output=&lt;output3dPath&gt;", &lt;svxPath&gt;}</code>
+                &mdash; <strong>note the new <code>--log</code></strong>
+                (today's code at <code>cwCavernTask.cpp:66-78</code>
+                does not pass it, which is why nothing is captured
+                today).</li>
+            <li>Calls <code>cavern_run</code> under the static
+                <code>QMutex</code> (kept inside the function).</li>
+            <li>Reads
+                <code>QFileInfo(output3dPath).path() + "/" +
+                QFileInfo(output3dPath).completeBaseName() + ".log"</code>
+                into <code>logText</code>. Cavern writes the log on
+                both success and failure, so the read happens
+                unconditionally.</li>
+            <li>Removes the empty <code>.err</code> sidecar cavern
+                creates next to the log.</li>
+            <li>If <code>cavern_run</code> returned non-zero, returns
+                <code>Result&lt;CavernRunResult&gt;(logText,
+                SolveErrorCode::CavernFailed)</code> &mdash; the log
+                text doubles as the error message so the
+                <code>CavernOutputPage</code> shows real diagnostics
+                rather than "exit code 1".</li>
+            <li>On success returns
+                <code>Result&lt;CavernRunResult&gt;({output3dPath,
+                logText, 0})</code>. The success path's log carries
+                info-level messages (e.g. "Survey has no control
+                points. Therefore I've fixed X at (0,0,0)") which the
+                page should still surface as warnings/info; don't
+                discard.</li>
+          </ol>
+          Verified against system cavern 1.4.15; see &sect;7.5 for the
+          reproduction.</li>
+      <li><code>cwLinePlotGeometryTask</code> &rarr; free function
+          <code>generateLinePlotGeometry(&hellip;) -&gt;
+          Monad::Result&lt;GeometryResult&gt;</code>.</li>
+      <li><code>cwFindUnconnectedSurveyChunksTask</code> &rarr; free
+          function
+          <code>findUnconnectedSurveyChunks(const cwCave&amp;) -&gt;
+          Monad::Result&lt;UnconnectedSurveyChunksResult&gt;</code>.
+          The nested <code>Result</code> type currently lives on the
+          task class and is referenced from
+          <code>cwLinePlotTask.h:91,97,108</code>; extract it to its
+          own header <code>cwUnconnectedSurveyChunksResult.h</code>
+          (struct holding the list of unconnected-chunk records) so
+          callers depend on the struct, not the old task class.
+          Update <code>cwLinePlotTask::LinePlotCaveData::UnconnectedChunksErrors</code>
+          to reference the extracted struct.</li>
+    </ul>
+  </li>
+  <li>Delete the four <code>cwTask</code>-derived classes and the local
+      <code>runTaskInPlace</code> helper. Update
+      <code>LinePlotWorker::run()</code> to call the free functions
+      sequentially, short-circuiting on the first
+      <code>Result</code>/<code>ResultBase</code> that
+      <code>hasError()</code>.</li>
+  <li><strong>Audit and update sibling call sites:</strong>
+    <ul>
+      <li><code>cwSurveyExportManager.cpp:53</code> &mdash;
+          <code>new cwSurvexExporterRegionTask()</code> wired through
+          <code>cwFutureManagerToken</code>. Replace with
+          <code>cwConcurrent::run([&hellip;]{ return exportSurvexRegion(&hellip;); })</code>
+          and publish the resulting future to the token.</li>
+      <li><code>testcases/test_cwSurvex3DFileReader.cpp:24,62</code> and
+          <code>testcases/test_cwSurvexportTask.cpp:44</code> &mdash;
+          both create a <code>cwCavernTask</code> directly. Update to
+          call <code>runCavern(&hellip;)</code> and read the returned
+          <code>Result&lt;CavernRunResult&gt;</code>.</li>
+      <li><code>testcases/FindUnconnectedSurveyChunksTaskTest.cpp:47</code>
+          &mdash; same pattern; update to call
+          <code>findUnconnectedSurveyChunks(&hellip;)</code> and read
+          the returned <code>Result</code>.</li>
+      <li><code>cwLinePlotGeometryTask</code> has no other call sites
+          (confirmed by grep); safe to delete after Phase 1.</li>
+    </ul>
+  </li>
+  <li>Threading is unchanged: the whole worker still runs on one
+      worker thread via <code>cwConcurrent::run</code>.</li>
+  <li>Update <code>cavewherelib/CMakeLists.txt</code> to add the new
+      source files and remove the deleted ones.</li>
+</ol>
+
+<p class="meta">
+  Outcome: four fewer <code>QObject</code> classes, four fewer
+  signal/slot surfaces, no behavior change. Sets up Phase 2 to thread
+  <code>Result</code> through the chain cleanly.
+</p>
+</div>
+
+<h4>Phase 2: Consolidate <code>cwLinePlotManager</code> on an explicit AsyncFuture chain</h4>
+
+<div class="phase">
+<h3>Flatten the nested observe, commit to <code>Monad::Result</code></h3>
+
+<p>
+  Today the restart lambda nests an
+  <code>AsyncFuture::observe(future).context(this, &hellip;)</code>
+  inside itself and captures the future by value to read
+  <code>future.result()</code>. Replace with a flat chain and switch
+  the return type to <code>Monad::Result&lt;LinePlotResultData&gt;</code>:
+</p>
+
+<pre><code>// cwLinePlotTask.h (new signature):
+static QFuture&lt;Monad::Result&lt;LinePlotResultData&gt;&gt; run(Input input);
+
+// cwLinePlotManager::runSurvex():
+m_restarter.restart([this]() {
+    if (Region.isNull()) {
+        return QFuture&lt;Monad::Result&lt;LinePlotResultData&gt;&gt;();
+    }
+
+    auto input = cwLinePlotTask::buildInput(Region.data());
+
+    auto computeFuture = cwConcurrent::run(
+        [input = std::move(input)]() mutable {
+            LinePlotWorker worker(std::move(input));
+            return worker.run();   // -&gt; Monad::Result&lt;LinePlotResultData&gt;
+        });
+
+    return AsyncFuture::observe(computeFuture)
+        .context(this, [this](const Monad::Result&lt;LinePlotResultData&gt;&amp; result) {
+            if (result.hasError()) {
+                handleSolveError(result);   // populates m_lastCavernOutput
+                return;
+            }
+            updateLinePlot(result.value());
+        })
+        .future();
+});
+</code></pre>
+
+<p>
+  <strong>Plan:</strong>
+</p>
+
+<ol>
+  <li>Keep <code>Restarter</code> for edit coalescing.</li>
+  <li>Use <code>cwConcurrent::run</code> (the project's wrapper around
+      QtConcurrent on <code>cwTask::threadPool()</code>), matching the
+      current convention. Do not introduce a raw
+      <code>QtConcurrent::run(threadPool(), &hellip;)</code> here.</li>
+  <li>Switch <code>cwLinePlotTask::run()</code> to return
+      <code>QFuture&lt;Monad::Result&lt;LinePlotResultData&gt;&gt;</code>.
+      The Result's <code>value()</code> carries
+      <code>LinePlotResultData</code> on success; on failure the Result
+      carries the error string from whichever step failed
+      (export / cavern / parse / geometry) plus, when cavern is the
+      source, the contents of cavern's <code>.log</code> file as
+      additional context (via a wider <code>SolveError</code> struct
+      &mdash; see &sect;7.5 below).
+      Update <code>m_restarter</code>,
+      <code>onFutureChanged</code>, the
+      <code>cwFutureManagerToken::addJob</code> call (which takes
+      <code>QFuture&lt;void&gt;</code> &mdash; that conversion still works
+      from the new <code>QFuture&lt;Result&lt;&hellip;&gt;&gt;</code>), and
+      <code>updateLinePlot</code> to consume the <code>Result</code>
+      branch.</li>
+  <li><strong>Wire <code>CavernOutputPage</code> as part of this
+      phase</strong> &mdash; see the sketch in &sect;7.5. Phase 2 adds
+      the manager-side state (last-solve error / cavern log property +
+      change signal) and the QML page; further polish (filtering,
+      navigation from the page tree) can be a follow-up.</li>
+  <li><strong>Test impact (real, not zero):</strong> tests that
+      observe <code>m_restarter.future()</code> directly will see the
+      type change. Tests that only consume
+      <code>stationPositionInCavesChanged()</code> are unaffected.
+      Audit and update each affected test in the same PR as the type
+      switch.</li>
+</ol>
+</div>
+
+<h4 id="temp-dir">7.4 Solve temp-file lifecycle (Phase 2 deliverable)</h4>
+
+<div class="phase">
+<p>
+  Each solve emits four sidecar files: the staged
+  <code>.svx</code> (input to cavern), the produced <code>.3d</code>
+  (input to the parser), the <code>.log</code> diagnostic, and the
+  <code>.err</code> netskel report. The pre-refactor code used a
+  <code>QTemporaryFile</code> with <code>setAutoRemove(false)</code>
+  for the <code>.svx</code> and let cavern drop the other three next
+  to it &mdash; <strong>nothing in
+  <code>cwLinePlotTask::LinePlotWorker::run()</code> ever deleted
+  any of them.</strong> Each successful solve leaked four files into
+  <code>/tmp</code>.
+</p>
+
+<p>
+  <strong>Plan:</strong> own a single <code>QTemporaryDir</code> at
+  the top of <code>LinePlotWorker::run()</code> and place all four
+  files inside it (deterministic basenames; the unique directory
+  guarantees no cross-solve collision):
+</p>
+
+<pre><code>cwLinePlotTask::LinePlotResultData run()
+{
+    cwLinePlotTask::LinePlotResultData result;
+    if (InputData.regionData.caves.isEmpty()) return result;
+
+    QTemporaryDir workDir;
+    if (!workDir.isValid()) {
+        // populate result.solveError() and return; see &sect;7.5
+        return result;
+    }
+    // autoRemove(true) is the default; dir + contents disappear at scope exit
+
+    const QString svxPath     = workDir.filePath(QStringLiteral("region.svx"));
+    const QString output3dPath = workDir.filePath(QStringLiteral("region.3d"));
+
+    // ... pass these to exportSurvex(svxPath) and runCavern(svxPath, output3dPath)
+}</code></pre>
+
+<p>
+  Knock-on effects:
+</p>
+
+<ul>
+  <li><code>exportSurvex()</code> drops its
+      <code>QTemporaryFile</code> machinery &mdash; it just opens
+      <code>svxPath</code> for writing.</li>
+  <li><code>runCavern()</code> takes both <code>svxPath</code> and
+      <code>output3dPath</code> as arguments; no
+      <code>survexFilename + ".3d"</code> string concatenation.</li>
+  <li><code>cwCavernRunner::run()</code> stops calling
+      <code>QFile::remove(... + ".err")</code> entirely &mdash; the
+      <code>QTemporaryDir</code> destructor handles cleanup, and the
+      <code>.err</code> contents have already been copied into
+      <code>CavernRunResult::loopClosureStats</code> in memory
+      before the dir goes away.</li>
+  <li>Per-solve directory isolation makes the function
+      reentrant-safe even if we ever drop the cavernlib mutex
+      (which we won't &mdash; see Q1 &mdash; but it's a free
+      property).</li>
+</ul>
+</div>
+
+<h4 id="cavern-output-page">7.5 CavernOutputPage sketch (Phase 2 deliverable)</h4>
+
+<div class="phase">
+<h3>Why now</h3>
+
+<p>
+  Today there is no UI surface for cavernlib output. When a solve
+  fails, the only signal is a <code>qDebug</code> in
+  <code>cwCavernTask.cpp:82</code>; the user sees an empty line plot
+  and no explanation. Phase 2 introduces structured error propagation
+  via <code>Monad::Result</code>, which is the natural moment to add
+  the page that surfaces it.
+</p>
+
+<h3>Where the text comes from</h3>
+
+<p>
+  <code>cavern_lib.h</code> exposes only
+  <code>cavern_run(argc, argv)</code> &mdash; no message callback.
+  Capture strategy: pass <code>--log</code> to cavern so it writes the
+  log to a sidecar file, then read that file after
+  <code>cavern_run</code> returns and pack it into
+  <code>CavernRunResult::logText</code>.
+</p>
+
+<p>
+  <strong>Smoke-tested against system cavern 1.4.15</strong> (the same
+  code path our vendored survex submodule runs):
+</p>
+
+<ul>
+  <li>The current invocation
+      (<code>cwCavernTask.cpp:66-78</code>) passes
+      <code>--quiet --quiet --output=out.3d</code> with
+      <strong>no</strong> <code>--log</code> flag, so cavern writes
+      nothing to disk besides the <code>.3d</code>. <strong>Add
+      <code>--log</code> to the argv.</strong></li>
+  <li>The log filename derives from the
+      <code>--output</code> value, not the input. With
+      <code>--output=out.3d</code> the log lands at
+      <code>out.log</code>. <code>runCavern</code> should build the
+      log path as <code>QFileInfo(output3dPath).completeBaseName() +
+      ".log"</code> in the same directory.</li>
+  <li>Cavern also writes an <code>out.err</code> sidecar.
+      <strong>This is netskel's loop-closure error report</strong>
+      (traverse / length-error <code>L</code> / bearing-error
+      <code>B</code> / gradient-error <code>G</code> per loop), populated
+      whenever the cave has loops &mdash; see
+      <code>survex/src/netskel.c:449-450</code>. The
+      <strong>initial smoke test used an unfixed-station input that
+      produced an empty <code>.err</code></strong>, which led an
+      earlier draft to recommend deleting the file. <strong>Don't
+      delete it.</strong> Capture its contents into
+      <code>CavernRunResult::loopClosureStats</code> alongside
+      <code>logText</code>. Disk cleanup is the worker's
+      <code>QTemporaryDir</code> (see &sect;7.4 below), not
+      <code>runCavern</code>.</li>
+  <li>On <strong>success</strong> the log contains info-level
+      messages such as "Survey has no control points. Therefore I've
+      fixed dakeng.1 at (0,0,0)". <strong>Keep this</strong> &mdash; it
+      surfaces silent assumptions cavern made that the user may want
+      to fix.</li>
+  <li>On <strong>failure</strong> the log contains the error text
+      (e.g. <code>"bad.svx:2: error: Station &ldquo;outer.inner.1&rdquo;
+      not exported from survey &ldquo;outer&rdquo;"</code>) followed
+      by <code>"There were N warning(s) and M error(s) - no output
+      files produced."</code> The <code>.3d</code> is not written;
+      <code>runCavern</code> detects failure via the
+      <code>cavern_run</code> exit code, not the file's existence.</li>
+  <li>Double <code>--quiet</code> suppresses stdout but does
+      <strong>not</strong> empty the log file. Keep the double-quiet
+      for the in-process call so cavernlib doesn't print to the
+      CaveWhere process's stdout; the log file captures everything we
+      need.</li>
+</ul>
+
+<p>
+  <strong>Reproduction:</strong>
+</p>
+
+<pre><code>cavern --log --quiet --quiet --output=out.3d data.svx
+# On clean input: exit 0, out.3d + out.log + out.err produced
+# On broken input: exit 1, out.log + out.err produced (no .3d)
+cat out.log   # full diagnostic text either way
+</code></pre>
+
+<h3>Manager-side state</h3>
+
+<p>
+  Add to <code>cwLinePlotManager</code>:
+</p>
+
+<pre><code>// cwLinePlotManager.h
+struct SolveError {
+    enum class Step { Export, Cavern, Parse, Geometry, Validation };
+    Step step;
+    int exitCode = 0;          // populated for Step::Cavern
+    QString message;           // human-readable, from Result error string
+    QString cavernLog;         // populated for Step::Cavern (may be empty)
+    QString loopClosureStats;  // populated for Step::Cavern (netskel .err contents)
+};
+
+Q_PROPERTY(bool hasSolveError READ hasSolveError NOTIFY solveErrorChanged FINAL)
+Q_PROPERTY(QString cavernLog  READ cavernLog     NOTIFY solveErrorChanged FINAL)
+Q_PROPERTY(QString loopClosureStats READ loopClosureStats NOTIFY solveErrorChanged FINAL)
+Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY solveErrorChanged FINAL)
+
+bool hasSolveError() const { return m_lastError.has_value(); }
+QString cavernLog() const { return m_lastError ? m_lastError-&gt;cavernLog : QString(); }
+QString loopClosureStats() const { return m_lastError ? m_lastError-&gt;loopClosureStats : QString(); }
+QString errorMessage() const { return m_lastError ? m_lastError-&gt;message : QString(); }
+
+signals:
+    void solveErrorChanged();
+
+private:
+    std::optional&lt;SolveError&gt; m_lastError;
+</code></pre>
+
+<p>
+  <code>handleSolveError</code> sets <code>m_lastError</code> and emits;
+  the success path clears it. (Plain member + setter + signal pattern,
+  per CLAUDE.md &mdash; no <code>Q_OBJECT_BINDABLE_PROPERTY</code>.)
+</p>
+
+<h3>QML page</h3>
+
+<p>
+  <code>cavewherelib/qml/CavernOutputPage.qml</code>:
+</p>
+
+<pre><code>import QtQuick
+import QtQuick.Controls as QC
+import QtQuick.Layouts
+import Cavewhere
+
+QQ.Item {
+    id: root
+
+    required property var linePlotManager   // cwLinePlotManager*
+
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: Theme.paddingMedium
+        spacing: Theme.paddingSmall
+
+        QC.Label {
+            text: root.linePlotManager.hasSolveError
+                  ? qsTr("Cavern reported an error during the last solve.")
+                  : qsTr("Last solve completed successfully.")
+            font.pixelSize: Theme.fontSizeMedium
+            color: root.linePlotManager.hasSolveError
+                   ? Theme.errorTextColor : Theme.defaultTextColor
+        }
+
+        QC.Label {
+            visible: root.linePlotManager.hasSolveError
+            text: root.linePlotManager.errorMessage
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+        }
+
+        QC.Frame {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+
+            QC.ScrollView {
+                anchors.fill: parent
+                clip: true
+
+                QC.TextArea {
+                    readOnly: true
+                    selectByMouse: true
+                    font.family: "Menlo, Consolas, monospace"
+                    font.pixelSize: Theme.fontSizeSmall
+                    text: root.linePlotManager.cavernLog
+                    placeholderText: qsTr("No cavern output to display.")
+                }
+            }
+        }
+
+        RowLayout {
+            Layout.alignment: Qt.AlignRight
+
+            QC.Button {
+                text: qsTr("Copy to clipboard")
+                enabled: root.linePlotManager.cavernLog.length &gt; 0
+                onClicked: ClipboardHelper.setText(root.linePlotManager.cavernLog)
+            }
+
+            QC.Button {
+                text: qsTr("Re-run solve")
+                onClicked: root.linePlotManager.rerunSurvex()
+            }
+        }
+    }
+}
+</code></pre>
+
+<p>
+  Page registration: add to <code>cwPageSelectionModel</code> the
+  same way other diagnostic pages are registered. Page visibility
+  hint: highlight (badge / red dot) when
+  <code>linePlotManager.hasSolveError</code> is true.
+</p>
+
+<h3>Out of scope for Phase 2</h3>
+
+<ul>
+  <li>Parsing cavern's log into structured warnings/errors. v1 shows
+      the raw text.</li>
+  <li>Pre-populating the page with prior-run output across app
+      restarts.</li>
+  <li>Jump-to-line-in-source navigation. Cavern reports source
+      locations into external <code>.svx</code> files that don't map
+      cleanly to CaveWhere's UI &mdash; later phase.</li>
+</ul>
+</div>
+
+<h4>Phases 3 and 4: deferred</h4>
+
+<div class="phase">
+<p>
+  Phase 3 (external-centerline pipeline) and Phase 4 (unified solve
+  manager) are <strong>not part of this port</strong>. Once Phases
+  0&ndash;2 land, write a fresh Phase 3 plan that re-examines:
+</p>
+<ul>
+  <li>The <code>scan &rarr; reconcile &rarr; runCavern &rarr; updateNetwork</code>
+      shape (sketched in &sect;5), in light of what Phases 0&ndash;2
+      actually shipped.</li>
+  <li>The <code>reconcile</code> step's per-job aggregation via
+      <code>AsyncFuture::combine()</code> over the cwSaveLoad job
+      futures, and its partial-failure policy (fail-fast vs.
+      drain-and-report).</li>
+  <li>Ownership when both pipelines could write the same cave's
+      station-position lookup or survey network &mdash; left open here.</li>
+  <li>Whether a unified <code>cwSurveyNetworkSolveManager</code> is
+      actually worth the abstraction once Phase 3 is real, or whether
+      two managers sharing free functions is enough.</li>
+</ul>
+<p class="meta">
+  Don't pre-design these here. The Phase 2 outcome will change the
+  cheapest shape for Phase 3.
+</p>
+</div>
+
+<hr />
+
+<h2 id="open-questions">8. Open Questions / Risks</h2>
+
+<div class="risk">
+<strong>Q1: Is <code>cavern_run</code> thread-safe?</strong>
+<p>
+  <strong>No, not by default.</strong> <code>cavern_run</code> does
+  <em>not</em> spawn the cavern binary as a subprocess &mdash; it
+  calls into <code>cavernlib</code> in-process (the C library we
+  ported survex to so it could run on mobile). Cavern's internal
+  state is a big pile of global statics (parser state, message
+  catalog, file handles, etc.), so the implementation guards entry
+  points with mutexes to serialise concurrent callers from the same
+  process.
+  <p>
+  <strong>Implication for the port:</strong> two solves cannot run
+  cavernlib concurrently. The line-plot pipeline already runs one
+  solve at a time via <code>AsyncFuture::Restarter</code> (a new
+  solve cancels the old before starting), so we're fine for the
+  internal pipeline. If we ever want to run solves from multiple
+  independent managers in parallel (e.g. background validation of an
+  external file while a user-triggered solve is in flight), they will
+  contend on the cavernlib mutex and execute serially &mdash; not a
+  correctness problem, but worth knowing before optimising for
+  throughput.
+</p>
+</div>
+
+<div class="risk resolved">
+<strong>Q2: Is <code>cwStationPositionLookup</code> thread-safe for concurrent reads?</strong>
+<p>
+  <strong>Not an issue.</strong> <code>cwStationPositionLookup</code>
+  is copied <em>by value</em> when crossing the worker /
+  UI-thread boundary (snapshot in, fresh value out), and all reads
+  through <code>cwCave</code> happen on the main thread. The worker
+  builds its own copy from the input snapshot, computes a new lookup
+  value, and the UI thread swaps it in via
+  <code>setStationPositionLookup</code>. No concurrent access path
+  exists. Keep the convention: only the main thread touches
+  <code>cwCave::stationPositionLookup()</code>.
+</p>
+</div>
+
+<div class="risk">
+<strong>Q3: What if cavern crashes?</strong>
+<p>
+  <strong>CaveWhere crashes.</strong> Because <code>cavern_run</code>
+  is an in-process library call (not a subprocess), a segfault, abort,
+  or uncaught exception inside cavernlib takes the whole CaveWhere
+  process down. Returning <code>Monad::Result&lt;&hellip;&gt;</code>
+  from the worker only helps for cleanly-detected errors; it does
+  nothing for hard crashes.
+  <p>
+  <strong>Mitigations to consider</strong> (none required for the
+  initial port, but worth tracking):
+  <ul>
+    <li>Treat any cavernlib crash bug as a release-blocker for that survex submodule bump (relevant to issue #519).</li>
+    <li>Long-term option: wrap cavernlib in a child <code>QProcess</code> for fault-isolation. Trades off the simplicity (and mobile-friendliness) we gained by porting to a C library. Not a v1 task.</li>
+  </ul>
+  <strong>Action for the port:</strong> still return
+  <code>Monad::Result&lt;LinePlotResultData&gt;</code> so cleanly-detected
+  errors land in <code>CavernOutputPage</code> &mdash; just don't claim
+  it makes the pipeline crash-proof.
+</p>
+</div>
+
+<div class="risk">
+<strong>Q4: Cooperative cancellation needs to reach inside each step.</strong>
+<p>
+  Today's behavior (see &sect;4): <code>Restarter::restart()</code>
+  only flips <code>QFuture::cancel()</code>. The worker doesn't check
+  it, so the old solve runs to completion (export &rarr; cavernlib
+  &rarr; parse &rarr; geometry), holds the cavernlib mutex (Q1) for
+  the duration, and the new solve waits behind it on every rapid edit.
+  The result is dropped on return, but the latency hit is real.
+  <p>
+  <strong>Plan (for Phase 2 of the port, or a fast follow-up):</strong>
+  use Qt 6's promise-aware <code>QtConcurrent::run</code> overload
+  &mdash; the promise is supplied <em>as the first parameter</em>, not
+  captured. The <code>QFuture</code> returned by the run owns the
+  cancel bit, and Qt 6 forwards <code>QFuture::cancel()</code> into
+  the promise so the worker observes it via
+  <code>promise.isCanceled()</code>:
+<pre><code>// inside cwLinePlotTask::run():
+return cwConcurrent::run(
+    [input = std::move(input)](QPromise&lt;Monad::Result&lt;LinePlotResultData&gt;&gt;&amp; promise) mutable {
+        LinePlotWorker worker(std::move(input), promise);
+        promise.addResult(worker.run());
+    });
+</code></pre>
+  Then thread the <code>QPromise&amp;</code> through each step and
+  bail at every progress point. Use <code>Monad::ResultBase</code>
+  for void-returning steps (no <code>Result&lt;void&gt;</code>
+  specialization exists in <code>monad/Monad/Result.h</code>), and
+  define a project-local error-code enum. <code>ResultBase</code>'s
+  built-in codes are <code>{NoError=0, Warning=1, Unknown=2,
+  CustomError=1024}</code> (<code>Monad/Result.h:24-29</code>); project
+  codes start at <code>CustomError</code>:
+<pre><code>// cwLinePlotErrorCodes.h
+namespace SolveErrorCode {
+    enum : int {
+        Cancelled       = Monad::ResultBase::CustomError,       // 1024
+        ExportFailed    = Monad::ResultBase::CustomError + 1,   // 1025
+        CavernFailed    = Monad::ResultBase::CustomError + 2,   // 1026
+        ParseFailed     = Monad::ResultBase::CustomError + 3,   // 1027
+        GeometryFailed  = Monad::ResultBase::CustomError + 4,   // 1028
+        ValidationFailed = Monad::ResultBase::CustomError + 5,  // 1029
+    };
+}
+
+// inside LinePlotWorker:
+Monad::ResultBase exportStep() {
+    if (m_promise.isCanceled()) {
+        return Monad::ResultBase(QStringLiteral("cancelled"),
+                                 SolveErrorCode::Cancelled);
+    }
+    return exportSurvexRegion(m_input.regionData, m_svxPath);
+}
+</code></pre>
+  The <code>SolveError::Step</code> enum on the manager
+  (&sect;7.5) maps 1:1 onto these codes, so
+  <code>handleSolveError</code> can route from
+  <code>result.errorCode()</code> to the right
+  <code>SolveError::Step</code> without parsing strings.
+  Bail points: before invoking cavernlib (this is the big one &mdash;
+  it relieves the mutex contention), between
+  <code>splitLookupByCave</code> iterations, between geometry
+  primitives.
+  <p>
+  <strong>Verification:</strong> <code>cwConcurrent::run</code> is
+  a thin variadic forward to
+  <code>QtConcurrent::run(cwTask::threadPool(), &hellip;)</code>
+  (<code>cwConcurrent.h:17-19</code>), so Qt's overload-resolution
+  picks the promise-aware path based on the lambda's first parameter
+  type. The pattern is in use elsewhere in CaveWhere; no extra
+  plumbing needed.
+</p>
+</div>
+
+<div class="risk resolved">
+<strong>Q5: External-centerline file ownership and watcher coordination.</strong>
+<p>
+  <strong>Out of scope here.</strong> Handled by the external-centerline
+  plan (<code>plans/EXTERNAL_FILE_INTEGRATION_PLAN.html</code>) &mdash;
+  copy layout (&sect;5.1), reconcile-with-<code>cwSaveLoad</code>
+  (&sect;5.2), watcher ownership (&sect;5.2), and live-link vs
+  import-mode (&sect;5.3). This research doc is just about porting
+  the line-plot pipeline; the file-ownership decisions are
+  already pinned down upstream of it.
+</p>
+</div>
+
+<div class="risk">
+<strong>Q6: What <code>Restarter</code> cancellation actually does.</strong>
+<p>
+  <code>Restarter::restart()</code> flips
+  <code>QFuture::cancel()</code> on the previous future and starts a
+  new one. That's the whole mechanism &mdash; it does <em>not</em>
+  interrupt the running worker. Today's <code>cwConcurrent::run</code>
+  lambda inside <code>cwLinePlotTask::run()</code> never consults
+  <code>isCanceled()</code>, so the old solve runs to completion and
+  the result is dropped on return. The "cancel" is really "discard."
+  <p>
+  This was previously flagged "resolved &mdash; well-tested," which
+  is misleading: the <em>result-discard</em> path is well-tested; true
+  in-flight cancellation is unimplemented and is the work tracked in
+  Q4. Don't rely on <code>Restarter</code> for latency-bounded
+  cancellation until Q4 is done.
+</p>
+</div>
+
+<hr />
+
+<h2 id="summary">Summary</h2>
+
+<h3>Scope of this port</h3>
+
+<p>
+  <strong>Phases 0, 1, and 2</strong> &mdash; the lineplot pipeline
+  itself. Phase 3 (external-centerline pipeline) and Phase 4 (unified
+  solve manager) are deferred; once Phases 0&ndash;2 land, write a
+  fresh plan for Phase 3 rather than executing the &sect;5 sketch as-is.
+</p>
+
+<h3>Most important findings</h3>
+
+<ul>
+  <li><strong>Latent UAF in the destructor.</strong> Today
+      <code>cwLinePlotManager::~cwLinePlotManager()</code> calls
+      <code>waitToFinish()</code>, which spins a nested
+      <code>QEventLoop</code> in violation of CLAUDE.md.
+      <strong>Phase 0</strong> defaults the destructor entirely
+      &mdash; <code>Restarter::~Restarter()</code> already cancels the
+      in-flight future, and Restarter also hooks
+      <code>QObject::destroyed</code> on its context so cancellation
+      fires before destruction completes.</li>
+  <li><strong>Four lineplot sub-tasks don't need
+      <code>cwTask</code>:</strong>
+      <code>cwSurvexExporterRegionTask</code>,
+      <code>cwCavernTask</code>,
+      <code>cwLinePlotGeometryTask</code>, and
+      <code>cwFindUnconnectedSurveyChunksTask</code>. Every call site
+      runs them synchronously via <code>runTaskInPlace</code>. Phase 1
+      renames them to plain free functions returning
+      <code>Monad::Result&lt;T&gt;</code> (or <code>ResultBase</code>
+      for void), extracts
+      <code>cwFindUnconnectedSurveyChunksTask::Result</code> to its
+      own struct, and updates the four sibling call sites
+      (<code>cwSurveyExportManager</code>,
+      <code>test_cwSurvex3DFileReader</code>,
+      <code>test_cwSurvexportTask</code>,
+      <code>FindUnconnectedSurveyChunksTaskTest</code>).</li>
+  <li><strong>Phase 2 is a refactor + a new UI page.</strong>
+      The pipeline already runs off the UI thread. Phase 2 flattens
+      the nested <code>AsyncFuture::observe()</code>, switches
+      <code>cwLinePlotTask::run()</code> to return
+      <code>QFuture&lt;Monad::Result&lt;LinePlotResultData&gt;&gt;</code>,
+      and wires the new <code>CavernOutputPage</code> (&sect;7.5).
+      The page's text comes from cavern's <code>.log</code> file,
+      captured by the new <code>runCavern</code> free function and
+      threaded through the Result.</li>
+  <li><strong>Worker-side const access is load-bearing.</strong> The
+      <code>Input</code> snapshot is built from implicitly-shared Qt
+      containers, not deep-copied. Any non-const access on the
+      snapshot will detach a shared buffer the UI thread is mutating.
+      Phase 1 reviewers should audit the worker for non-const access
+      (<code>at(i)</code> only; no <code>operator[]</code>).</li>
+</ul>
+
+<h3>Most Concerning Risk</h3>
+
+<p>
+  <strong>Cavern crashes take the whole CaveWhere process down</strong>
+  (Q3). <code>cavern_run</code> is an in-process library call into
+  cavernlib (not a subprocess &mdash; that's how survex runs on
+  mobile), so a segfault or abort inside cavernlib aborts CaveWhere.
+  No clean v1 mitigation: returning <code>Monad::Result</code> from
+  the worker only covers cleanly-detected errors. Treat any
+  reproducible cavernlib crash as a release-blocker for that submodule
+  bump (#519 in the issue tracker). A long-term option is to wrap
+  cavernlib in a child <code>QProcess</code> for fault-isolation, but
+  that trades off the simplicity and mobile-friendliness we gained
+  from the library port &mdash; not a v1 task.
+</p>
+
+<p>
+  Secondary risk: <strong>cancellation must propagate through every
+  step</strong> (Q4) or a stale solve can hold the cavernlib mutex
+  (Q1) in front of the user's next edit. Concrete fix lives in the
+  Q4 section: thread a <code>QPromise</code> through each worker step
+  and check <code>isCanceled()</code> at every progress point.
+</p>
+
+<h3>cwSaveLoad Job Queue Status</h3>
+
+<p>
+  <strong>Confirmed:</strong> The <code>cwSaveLoad</code> job queue
+  exists and is fully functional. The external-centerline pipeline
+  uses the built-in <code>Action::Copy</code> (file copy) and
+  <code>Action::Remove</code> (GC) actions directly &mdash; no
+  <code>Custom</code> wrapper needed for the common path. The queue
+  serialises filesystem mutations, preventing race conditions when
+  multiple async chains touch the project tree.
+</p>
+
+</body>
+</html>
