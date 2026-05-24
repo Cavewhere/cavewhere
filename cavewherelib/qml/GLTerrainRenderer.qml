@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick
+import QtQuick.Layouts
 import QtQuick.Window
 import cavewherelib
 
@@ -127,24 +128,58 @@ Item {
         }
     }
 
-    IconButton {
-        id: pickButtonId
-        objectName: "coordinatePickerButton"
+    // Floating background for the Pick/Clip toolbar. IconButton renders a
+    // transparent background until hovered/selected, so without this surface
+    // the icons disappear when the terrain underneath matches the icon color.
+    ShadowRectangle {
+        id: bottomToolbarId
         anchors {
             left: parent.left
             bottom: parent.bottom
             margins: 20
         }
-        iconSource: "qrc:/twbs-icons/icons/crosshair.svg"
-        sourceSize: Qt.size(21, 21)
-        text: qsTr("Pick")
-        toolTip: qsTr("Pick coordinates")
-        selected: interactionManagerId.activeInteraction === coordinatePickerId
-        onClicked: {
-            if (pickButtonId.selected) {
-                coordinatePickerId.deactivate()
-            } else {
-                coordinatePickerId.activate()
+        width: bottomToolbarRowId.implicitWidth + Theme.floatingToolbarPadding
+        height: bottomToolbarRowId.implicitHeight + Theme.floatingToolbarPadding
+        color: Theme.surface
+        radius: 5
+
+        RowLayout {
+            id: bottomToolbarRowId
+            anchors.centerIn: parent
+            spacing: 4
+
+            IconButton {
+                id: pickButtonId
+                objectName: "coordinatePickerButton"
+                iconSource: "qrc:/twbs-icons/icons/crosshair.svg"
+                sourceSize: Qt.size(21, 21)
+                text: qsTr("Pick")
+                toolTip: qsTr("Pick coordinates")
+                selected: interactionManagerId.activeInteraction === coordinatePickerId
+                onClicked: {
+                    if (pickButtonId.selected) {
+                        coordinatePickerId.deactivate()
+                    } else {
+                        coordinatePickerId.activate()
+                    }
+                }
+            }
+
+            IconButton {
+                id: lazClipButtonId
+                objectName: "lazClipButton"
+                iconSource: "qrc:/twbs-icons/icons/scissors.svg"
+                sourceSize: Qt.size(21, 21)
+                text: qsTr("Clip")
+                toolTip: qsTr("Clip point cloud")
+                selected: interactionManagerId.activeInteraction === lazClipInteractionId
+                onClicked: {
+                    if (lazClipButtonId.selected) {
+                        lazClipInteractionId.deactivate()
+                    } else {
+                        lazClipInteractionId.activate()
+                    }
+                }
             }
         }
     }
@@ -155,29 +190,6 @@ Item {
         parent: rendererId
         picker: coordinatePickerId
         visible: coordinatePickerId.hasPick && pickButtonId.selected
-    }
-
-    IconButton {
-        id: lazClipButtonId
-        objectName: "lazClipButton"
-        anchors {
-            left: pickButtonId.right
-            bottom: parent.bottom
-            leftMargin: 10
-            bottomMargin: 20
-        }
-        iconSource: "qrc:/twbs-icons/icons/scissors.svg"
-        sourceSize: Qt.size(21, 21)
-        text: qsTr("Clip")
-        toolTip: qsTr("Clip point cloud")
-        selected: interactionManagerId.activeInteraction === lazClipInteractionId
-        onClicked: {
-            if (lazClipButtonId.selected) {
-                lazClipInteractionId.deactivate()
-            } else {
-                lazClipInteractionId.activate()
-            }
-        }
     }
 }
 

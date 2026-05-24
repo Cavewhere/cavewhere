@@ -114,6 +114,7 @@ QtObject {
     readonly property int columnGap: 12
     readonly property int actionBarSpacing: 16
     readonly property int statsPadding: 10
+    readonly property int floatingToolbarPadding: 12
     readonly property int infoColumnMaxWidth: 200
 
     // Utility

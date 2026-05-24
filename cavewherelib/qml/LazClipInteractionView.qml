@@ -6,7 +6,7 @@
 **************************************************************************/
 
 import QtQuick as QQ
-import QtQuick.Controls as QC
+import QtQuick.Layouts
 import cavewherelib
 
 LazClipInteraction {
@@ -84,53 +84,67 @@ LazClipInteraction {
         polygonVertexBorderColor: Theme.text
     }
 
-    QQ.Row {
-        id: actionsRowId
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 64
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: 10
+    // Floating background for the Crop/Erase/Cancel toolbar. IconButton
+    // renders a transparent background until hovered/selected, so without
+    // this surface the icons disappear against same-colored terrain.
+    ShadowRectangle {
+        id: actionsContainerId
+        anchors {
+            bottom: parent.bottom
+            bottomMargin: 64
+            horizontalCenter: parent.horizontalCenter
+        }
+        width: actionsRowId.implicitWidth + Theme.floatingToolbarPadding
+        height: actionsRowId.implicitHeight + Theme.floatingToolbarPadding
+        color: Theme.surface
+        radius: 5
         visible: clipperId.state === LazClipInteraction.Closed
                   || clipperId.state === LazClipInteraction.Processing
 
-        // Crop/Erase are fire-and-forget: failures surface via
-        // cwProject::errorModel(), not an in-tool banner.
-        IconButton {
-            id: cropButtonId
-            objectName: "lazClipCropButton"
-            iconSource: "qrc:/twbs-icons/icons/crop.svg"
-            sourceSize: Qt.size(21, 21)
-            text: qsTr("Crop")
-            toolTip: qsTr("Crop — keep points inside the polygon")
-            enabled: clipperId.canCommit
-            onClicked: {
-                clipperId.commit(LazClipInteraction.Keep)
-                clipperId.deactivate()
-            }
-        }
+        RowLayout {
+            id: actionsRowId
+            anchors.centerIn: parent
+            spacing: 10
 
-        IconButton {
-            id: eraseButtonId
-            objectName: "lazClipEraseButton"
-            iconSource: "qrc:/twbs-icons/icons/eraser.svg"
-            sourceSize: Qt.size(21, 21)
-            text: qsTr("Erase")
-            toolTip: qsTr("Erase — remove points inside the polygon")
-            enabled: clipperId.canCommit
-            onClicked: {
-                clipperId.commit(LazClipInteraction.Remove)
-                clipperId.deactivate()
+            // Crop/Erase are fire-and-forget: failures surface via
+            // cwProject::errorModel(), not an in-tool banner.
+            IconButton {
+                id: cropButtonId
+                objectName: "lazClipCropButton"
+                iconSource: "qrc:/twbs-icons/icons/crop.svg"
+                sourceSize: Qt.size(21, 21)
+                text: qsTr("Crop")
+                toolTip: qsTr("Crop — keep points inside the polygon")
+                enabled: clipperId.canCommit
+                onClicked: {
+                    clipperId.commit(LazClipInteraction.Keep)
+                    clipperId.deactivate()
+                }
             }
-        }
 
-        IconButton {
-            id: cancelButtonId
-            objectName: "lazClipCancelButton"
-            iconSource: "qrc:/twbs-icons/icons/x-lg.svg"
-            sourceSize: Qt.size(21, 21)
-            text: qsTr("Cancel")
-            toolTip: qsTr("Cancel — discard the polygon and exit")
-            onClicked: clipperId.deactivate()
+            IconButton {
+                id: eraseButtonId
+                objectName: "lazClipEraseButton"
+                iconSource: "qrc:/twbs-icons/icons/eraser.svg"
+                sourceSize: Qt.size(21, 21)
+                text: qsTr("Erase")
+                toolTip: qsTr("Erase — remove points inside the polygon")
+                enabled: clipperId.canCommit
+                onClicked: {
+                    clipperId.commit(LazClipInteraction.Remove)
+                    clipperId.deactivate()
+                }
+            }
+
+            IconButton {
+                id: cancelButtonId
+                objectName: "lazClipCancelButton"
+                iconSource: "qrc:/twbs-icons/icons/x-lg.svg"
+                sourceSize: Qt.size(21, 21)
+                text: qsTr("Cancel")
+                toolTip: qsTr("Cancel — discard the polygon and exit")
+                onClicked: clipperId.deactivate()
+            }
         }
     }
 

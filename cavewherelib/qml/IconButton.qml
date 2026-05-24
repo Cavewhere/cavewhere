@@ -35,8 +35,8 @@ QQ.Rectangle {
 
     radius: 3
 
-    height: iconNormal.sourceSize.height + label.height
-    width:  Math.max(iconNormal.sourceSize.width, label.width) + 4
+    implicitHeight: iconNormal.sourceSize.height + (label.text === "" ? 0 : label.height)
+    implicitWidth:  Math.max(iconNormal.sourceSize.width, label.width) + 4
 
     color: {
         if (container.selected) {
