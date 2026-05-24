@@ -14,8 +14,8 @@ LazClipInteraction {
 
     required property BaseTurnTableInteraction turnTableInteraction
 
-    // Stash whether the user had the pitch locked already, so we can
-    // restore that state on deactivate instead of always unlocking.
+    // Remember the user's pitch-lock state so we can restore it on
+    // deactivate instead of always unlocking.
     property bool _previousPitchLocked: false
 
     anchors.fill: parent
@@ -24,35 +24,17 @@ LazClipInteraction {
     focus: visible
 
     onActivated: {
-        // The clip tool only works at top-down: cwLazClipInteraction
-        // refuses to add polygon points otherwise. Snap the camera to
-        // plan view and lock pitch so the user can't tilt off-axis via
-        // the plan/profile buttons or direct pitch input while drawing.
-        //
-        // setPitch() early-returns when pitchLocked, so the lock must
-        // stay off until the animation finishes — otherwise every
-        // animated frame is dropped. pitchSnapAnimation.onFinished
-        // re-engages the lock.
+        // Freeze the camera at whatever angle the user is currently at —
+        // the clip polygon is projected from screen to the z=0 plane on
+        // every click, so rotating mid-draw would silently move already-
+        // placed vertices relative to the ground. Lock pitch (and the
+        // forwarder below blocks right-drag rotate) for the duration.
         _previousPitchLocked = turnTableInteraction.pitchLocked
-        turnTableInteraction.pitchLocked = false
-        pitchSnapAnimation.to = 90.0
-        pitchSnapAnimation.restart()
+        turnTableInteraction.pitchLocked = true
     }
 
     onDeactivated: {
-        // Stop a mid-flight snap so it doesn't keep dragging pitch
-        // toward 90 after the tool is gone.
-        pitchSnapAnimation.stop()
         turnTableInteraction.pitchLocked = _previousPitchLocked
-    }
-
-    QQ.NumberAnimation {
-        id: pitchSnapAnimation
-        target: clipperId.turnTableInteraction
-        property: "pitch"
-        duration: 200
-        easing.type: QQ.Easing.InOutQuad
-        onFinished: clipperId.turnTableInteraction.pitchLocked = true
     }
 
     // acceptedButtons: NoButton lets clicks fall through to the TapHandler.
@@ -79,9 +61,11 @@ LazClipInteraction {
 
     TurnTableForwardingHandlers {
         turnTableInteraction: clipperId.turnTableInteraction
-        // Top-down ortho is a hard requirement for screen→world ray casting
-        // in cwLazClipInteraction (see header). Rotating away from top-down
-        // would silently break the clip; suppress right-drag rotation here.
+        // Polygon vertices are projected onto z=0 at the camera angle in
+        // effect when each vertex is placed — rotating mid-draw would
+        // re-project the existing vertices and silently move them. Block
+        // right-drag rotate (pitchLocked above blocks the plan/profile
+        // buttons) until the tool deactivates.
         rotationEnabled: false
     }
 

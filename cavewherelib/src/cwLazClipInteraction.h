@@ -38,8 +38,12 @@ class cwLazLayerModel;
  * layer is unioned and clipped by the polygon, producing one clip_NNN.laz
  * in the project's GIS Layers directory.
  *
- * Screen → world unprojection casts a ground-plane ray at z = 0. Expects
- * top-down ortho; the GLTerrainRenderer QML enforces that before activating.
+ * Screen → world unprojection casts each click as a ray through the
+ * camera and intersects it with the ground plane at z = 0. The polygon
+ * is therefore the camera-projection of the user's screen-drawn shape
+ * onto z = 0, and works at any camera angle — only a ray exactly
+ * parallel to the ground plane (e.g. perspective view on the horizon)
+ * is rejected.
  */
 class CAVEWHERE_LIB_EXPORT cwLazClipInteraction : public cwInteraction
 {
@@ -147,8 +151,9 @@ private:
     void setErrorMessage(const QString& message);
 
     /// World XY at z = 0 (worldOrigin-relative) for the screen point.
-    /// Returns false if the camera ray is parallel to the ground plane
-    /// (e.g. perspective view exactly on the horizon).
+    /// Returns false only when the camera ray is parallel to (or
+    /// vanishingly close to parallel with) the ground plane — at any
+    /// other angle the ray-plane intersection gives a valid hit.
     bool screenToWorldXY(QPointF screenPos, QPointF& outWorldXY) const;
 
     cwLazLayerModel* lazLayerModel() const;

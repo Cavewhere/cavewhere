@@ -6,7 +6,6 @@
 **************************************************************************/
 
 import QtQuick
-import QtQuick.Controls as QC
 import QtQuick.Window
 import cavewherelib
 
@@ -158,8 +157,6 @@ Item {
         visible: coordinatePickerId.hasPick && pickButtonId.selected
     }
 
-    // Toggling on while in perspective shows the ortho-prompt instead of
-    // activating immediately — the clipper is top-down XY only.
     IconButton {
         id: lazClipButtonId
         objectName: "lazClipButton"
@@ -177,58 +174,8 @@ Item {
         onClicked: {
             if (lazClipButtonId.selected) {
                 lazClipInteractionId.deactivate()
-            } else if (rendererId.orthoProjection.enabled) {
-                lazClipInteractionId.activate()
             } else {
-                orthoPromptId.visible = true
-            }
-        }
-    }
-
-    ShadowRectangle {
-        id: orthoPromptId
-        objectName: "lazClipOrthoPrompt"
-        visible: false
-        color: Theme.info
-        radius: 5
-        width: orthoPromptColumnId.width + 30
-        height: orthoPromptColumnId.height + 20
-        anchors.top: parent.top
-        anchors.topMargin: 80
-        anchors.horizontalCenter: parent.horizontalCenter
-
-        Column {
-            id: orthoPromptColumnId
-            anchors.centerIn: parent
-            spacing: 10
-
-            QC.Label {
-                anchors.horizontalCenter: parent.horizontalCenter
-                font.pixelSize: Theme.fontSizeUI
-                text: qsTr("Clipping needs an orthographic top-down view.\nSwitch to ortho now?")
-                horizontalAlignment: QC.Label.AlignHCenter
-            }
-
-            Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 10
-
-                QC.Button {
-                    objectName: "lazClipOrthoSwitchButton"
-                    text: qsTr("Switch to ortho")
-                    onClicked: {
-                        rendererId.orthoProjection.enabled = true
-                        orthoPromptId.visible = false
-                        lazClipInteractionId.activate()
-                    }
-                }
-                QC.Button {
-                    objectName: "lazClipOrthoCancelButton"
-                    text: qsTr("Cancel")
-                    onClicked: {
-                        orthoPromptId.visible = false
-                    }
-                }
+                lazClipInteractionId.activate()
             }
         }
     }
