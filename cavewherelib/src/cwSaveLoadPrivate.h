@@ -327,21 +327,21 @@ struct cwSaveLoadPrivate {
     // pcloud). On copy-fallback success but source-cleanup failure, returns a
     // ResultBase with errorCode == Warning carrying the cleanup message —
     // hasError() is false so callers don't treat it as a failed operation.
-    static Monad::ResultBase moveDirectoryRobust(const QString& sourcePath,
-                                                 const QString& destinationPath);
+    static CAVEWHERE_LIB_EXPORT Monad::ResultBase moveDirectoryRobust(const QString& sourcePath,
+                                                                       const QString& destinationPath);
 
     // Sanity-check that a path is safe to pass to fsRemoveDirRecursive.
     // Rejects empty, relative, root ("/", "C:\\"), or non-existent paths,
     // as well as paths containing '..'. Returns a ResultBase with an error
     // describing the rejection; hasError() is false on success.
     // Exposed for unit testing.
-    static Monad::ResultBase validatePathSafeForRecursiveRemoval(const QString& path);
+    static CAVEWHERE_LIB_EXPORT Monad::ResultBase validatePathSafeForRecursiveRemoval(const QString& path);
 
     // Test seam for moveDirectoryRobust. Defaults to a thin wrapper around
     // QDir::rename. Tests swap this to deterministically exercise the
     // copy-fallback branch without needing an actual cross-filesystem mount.
     using RenameDirectoryFn = bool (*)(const QString& src, const QString& dst);
-    static RenameDirectoryFn renameDirectoryFn;
+    static CAVEWHERE_LIB_EXPORT RenameDirectoryFn renameDirectoryFn;
 
     cwSaveLoadPrivate();
 

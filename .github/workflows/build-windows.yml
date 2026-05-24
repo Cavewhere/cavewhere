@@ -44,7 +44,7 @@ jobs:
       #     AQT_CONFIG: ${{ github.workspace }}/.github/aqt.ini
       #   with:
       #     aqtversion: '==3.3.*'
-      #     version: '6.11.0'
+      #     version: '6.11.1'
       #     host: 'windows'
       #     target: 'desktop'
       #     arch: 'win64_msvc2022_64'
@@ -52,20 +52,20 @@ jobs:
       - name: Install Qt
         shell: pwsh
         run: |
-          $ver = "6.11.0-0-202603180535"
-          $repoBase = "https://qt.mirror.constant.com/online/qtsdkrepository/windows_x86/desktop/qt6_6110/qt6_6110_msvc2022_64"
+          $ver = "6.11.1-0-202605090529"
+          $repoBase = "https://qt.mirror.constant.com/online/qtsdkrepository/windows_x86/desktop/qt6_6111/qt6_6111_msvc2022_64"
           $qtRoot = "${{ github.workspace }}\Qt"
           New-Item -ItemType Directory -Force -Path $qtRoot | Out-Null
 
           # Each entry is: subdir-in-repo, archive-filename
           $packages = @(
-            @("qt.qt6.6110.win64_msvc2022_64", "qtbase-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
-            @("qt.qt6.6110.win64_msvc2022_64", "qtsvg-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
-            @("qt.qt6.6110.win64_msvc2022_64", "qtdeclarative-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
-            @("qt.qt6.6110.win64_msvc2022_64", "qttools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
-            @("qt.qt6.6110.win64_msvc2022_64", "qttranslations-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
-            @("qt.qt6.6110.addons.qtshadertools.win64_msvc2022_64", "qtshadertools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
-            @("qt.qt6.6110.addons.qtcanvaspainter.win64_msvc2022_64", "qtcanvaspainter-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z")
+            @("qt.qt6.6111.win64_msvc2022_64", "qtbase-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
+            @("qt.qt6.6111.win64_msvc2022_64", "qtsvg-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
+            @("qt.qt6.6111.win64_msvc2022_64", "qtdeclarative-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
+            @("qt.qt6.6111.win64_msvc2022_64", "qttools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
+            @("qt.qt6.6111.win64_msvc2022_64", "qttranslations-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
+            @("qt.qt6.6111.addons.qtshadertools.win64_msvc2022_64", "qtshadertools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
+            @("qt.qt6.6111.addons.qtcanvaspainter.win64_msvc2022_64", "qtcanvaspainter-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z")
           )
 
           foreach ($pkg in $packages) {
@@ -80,9 +80,9 @@ jobs:
           }
 
           # Qt PDF is released separately under the extensions/ path
-          $pdfVer = "6.11.0-0-202603180532"
-          $pdfRepoBase = "https://qt.mirror.constant.com/online/qtsdkrepository/windows_x86/extensions/qtpdf/6110/msvc2022_64"
-          $pdfSubdir = "extensions.qtpdf.6110.win64_msvc2022_64"
+          $pdfVer = "6.11.1-0-202605090527"
+          $pdfRepoBase = "https://qt.mirror.constant.com/online/qtsdkrepository/windows_x86/extensions/qtpdf/6111/msvc2022_64"
+          $pdfSubdir = "extensions.qtpdf.6111.win64_msvc2022_64"
           $pdfArchive = "qtpdf-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
           $pdfUrl = "$pdfRepoBase/$pdfSubdir/$pdfVer$pdfArchive"
           $pdfOutFile = "$env:TEMP\$pdfArchive"

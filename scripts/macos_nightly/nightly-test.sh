@@ -6,7 +6,11 @@ REPO_URL="https://github.com/Cavewhere/cavewhere.git"
 BRANCH="origin/dev"
 CPP_RUNS="${CPP_RUNS:-16}"
 QML_RUNS="${QML_RUNS:-8}"
-QT_PATH="$HOME/Qt/6.11.0/macos"
+QT_PATH="$HOME/Qt/6.11.1/macos"
+# Ensure Qt 6.11.1 is picked up instead of any Homebrew Qt on PATH.
+export PATH="$QT_PATH/bin:$PATH"
+export Qt6_DIR="$QT_PATH/lib/cmake/Qt6"
+export CMAKE_PREFIX_PATH="$QT_PATH${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
 WORK_DIR="/var/tmp/cavewhere-nightly/$(date +%Y-%m-%d_%H%M%S)"
 KEEP_DAYS=90
 TEST_TIMEOUT=22m
@@ -67,6 +71,7 @@ echo ">>> Configuring CMake..."
 cmake --preset conan-release \
     -DCMAKE_TOOLCHAIN_FILE=conan_deps/conan_toolchain.cmake \
     -DCMAKE_PREFIX_PATH="$QT_PATH" \
+    -DQt6_DIR="$QT_PATH/lib/cmake/Qt6" \
     -DBUILD_TESTING=ON \
     2>&1 | tee "$LOG_DIR/cmake-configure.log"
 
