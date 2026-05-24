@@ -215,7 +215,7 @@ function(cw_prepend_conan_buildenv_path)
             list(PREPEND CMAKE_PREFIX_PATH "${_cw_conan_deps_dir}")
             message(STATUS "CaveWhere: Prepending Conan deps to CMAKE_MODULE_PATH and CMAKE_PREFIX_PATH: ${_cw_conan_deps_dir}")
 
-            # Android-specific: the NDK toolchain sets
+            # Cross-compilation toolchains (Android NDK, Qt-for-iOS) set
             # CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY, which blocks the
             # CMAKE_PREFIX_PATH fallback. Putting conan_deps on
             # CMAKE_FIND_ROOT_PATH makes find_package() discover configs
@@ -223,7 +223,7 @@ function(cw_prepend_conan_buildenv_path)
             # case-insensitive so `find_package(PROJ)` resolves
             # `proj-config.cmake` without needing a case-matched
             # <pkg>_DIR entry.
-            if(ANDROID)
+            if(ANDROID OR CW_MOBILE)
                 list(PREPEND CMAKE_FIND_ROOT_PATH "${_cw_conan_deps_dir}")
             endif()
 

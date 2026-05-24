@@ -14,6 +14,8 @@
 #include <QVector3D>
 #include <QRay3D>
 #include <QBox3D>
+#include <QHash>
+#include <QSet>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -34,6 +36,10 @@ public:
     struct Key {
         cwRenderObject* parentObject = nullptr;
         uint64_t id = 0;
+
+        bool operator==(const Key& other) const noexcept {
+            return parentObject == other.parentObject && id == other.id;
+        }
     };
 
     class Object {
@@ -88,6 +94,14 @@ public:
     double intersects(const QRay3D& ray) const;
     cwRayHit intersectsDetailed(const QRay3D& ray) const;
 
+    // Escape hatch for the BVH-tube fallback that snaps to a sphere-miss
+    // within kTubeFactor * pickRadius of the ray. Disabling reverts to
+    // strict sphere intersection — picks return no-hit when the cursor
+    // sits in a sub-pixel gap, and the AABB box tests stop being
+    // inflated, recovering the pre-tube traversal cost on huge clouds.
+    void setTubePickEnabled(bool enabled) { m_tubePickEnabled = enabled; }
+    bool isTubePickEnabled() const { return m_tubePickEnabled; }
+
     // Debug-only snapshot of what the picker currently knows about. Reads
     // the built BVH's source-node snapshot if available (post-bvhReady);
     // falls back to the live Nodes list otherwise. Use from tests and the
@@ -135,13 +149,14 @@ private:
         static QBox3D lineToBoundingBox(const cwGeometryItersecter::Object & object, int indexInIndexes);
     };
 
-    // BVH primitive handles + node layout — internal build / traversal
-    // state.
+    // BVH primitive handle. One slot per triangle (primitiveIndex is
+    // the first index into indices()) or per point (primitiveIndex is
+    // the vertex index). The owning SubBvh's `object` field provides the
+    // geometry context.
     struct Primitive {
         enum class Kind : uint8_t { Triangle, Point };
         Kind kind = Kind::Triangle;
-        uint32_t nodeIndex = 0;       // index into the build-time Nodes snapshot
-        uint32_t primitiveIndex = 0;  // triangle: first index into indices(); point: vertex index
+        uint32_t primitiveIndex = 0;
     };
 
     struct BvhNode {
@@ -161,14 +176,12 @@ private:
         qsizetype end;
     };
 
-    // Phase A work-item: a contiguous range of primitives belonging to
-    // one source Node, planned by launchBuildJob and consumed by parallel
-    // workers. Splitting a single huge Node into multiple chunks is what
-    // gives us parallelism for monolithic point clouds.
+    // Phase A work-item: a contiguous range of primitives. Splitting one
+    // big Object into multiple chunks is what gives us parallelism for
+    // monolithic point clouds.
     struct EnumChunk {
-        uint32_t nodeIndex = 0;
-        // For Triangles: index of the first triangle (always a multiple
-        // of 3 when multiplied by 3 in geometry().indices()).
+        // For Triangles: index of the first triangle (multiplied by 3
+        // when indexing into geometry().indices()).
         // For Points: starting vertex index.
         uint32_t inputBegin = 0;
         uint32_t count = 0;       // primitives, not indices/floats
@@ -184,15 +197,57 @@ private:
 
     QList<Node> Nodes;
 
+    // Per-Object acceleration structure built once in **model space** and
+    // cached across rebuilds. Defined in the .cpp because callers only need
+    // shared_ptr<const SubBvh> here.
+    //
+    // Model-space layout lets setModelMatrix() avoid invalidating the
+    // sub-BVH entirely: a model-matrix change refreshes only the top-level
+    // bbox (the snapshot of modelMatrices in BvhData). A geometry replace
+    // for one Object invalidates only that one entry.
+    struct SubBvh;
+
     // Snapshot of Nodes captured at build-job launch and consumed by the
     // worker thread. QList is implicitly shared, so this is a header copy
     // that keeps the buffer alive for traversal even after a later rebuild
     // swaps in a different snapshot via m_bvh.
+    //
+    // Two-level layout: topLevel is a small world-space BVH whose leaves
+    // index into subBvhs / modelMatrices (parallel arrays). Each sub-BVH
+    // is model-space; traversal transforms the world ray to model space
+    // once per Object root.
+    //
+    // Single-owner invariant: m_bvh is the only shared_ptr<BvhData> that
+    // exists at steady state — invalidatePublishedSlot mutates subBvhs
+    // via non-const operator[] and relies on refcount==1 to avoid a
+    // QVector detach (deep copy of the whole parallel-arrays buffer).
+    // Don't snapshot a BvhData; snapshot individual SubBvhs by their
+    // shared_ptr instead.
     struct BvhData {
         QList<Node> nodesSnapshot;
-        QVector<BvhNode> bvhNodes;
-        QVector<Primitive> primitives;
+        QVector<BvhNode> topLevel;
+        // Parallel arrays — one slot per source Node that contributed to
+        // the BVH. topLevel leaves store indices into these.
+        QVector<std::shared_ptr<const SubBvh>> subBvhs;
+        QVector<QMatrix4x4> modelMatrices;
+        // Precomputed inverse of each modelMatrices entry — avoids paying
+        // QMatrix4x4::inverted() per top-level-leaf pick in the hot path.
+        QVector<QMatrix4x4> inverseModelMatrices;
+        // Max pickRadius across nodesSnapshot — cached once at build time
+        // so the per-pick tube-box test doesn't have to rescan. Triangles
+        // and zero-radius Points contribute 0; harmless for those paths
+        // since they don't take the tube fallback.
+        float maxPickRadius = 0.0f;
+        // Reverse index: Key → slot in the parallel arrays above. Lets a
+        // mutator null out the dirty Key's sub-BVH in the published BVH so
+        // it stops contributing to picks the instant its cache entry is
+        // invalidated — without dropping the rest of the BVH while a
+        // rebuild is in flight. A null entry in subBvhs is the in-flight
+        // marker; traversal skips it. See invalidatePublishedSlot().
+        QHash<Key, int> keyToSlot;
     };
+
+    bool m_tubePickEnabled = true;
 
     // Live BVH. nullptr until the first async build completes. Only
     // accessed from the main thread: pick queries (intersects/
@@ -203,6 +258,18 @@ private:
     // into a side channel (resultSlot, see launchBuildJob) that the
     // .context() callback drains on the main thread.
     std::shared_ptr<BvhData> m_bvh;
+
+    // Cache of per-Object sub-BVHs, keyed by source Node identity. Kept
+    // alive across rebuilds — only entries whose geometry actually changed
+    // are evicted via m_dirtyKeys. Worker threads read from a shallow QHash
+    // copy snapshot; UI-thread mutators are the only writers.
+    QHash<Key, std::shared_ptr<const SubBvh>> m_subBvhs;
+
+    // Keys whose cached sub-BVH was invalidated since the last snapshot —
+    // any rebuild job must produce fresh sub-BVHs for these even if the
+    // QHash entry happened to still exist (e.g. add → schedule → add again
+    // for the same Key before the first build observed it).
+    QSet<Key> m_dirtyKeys;
 
     // Coalesces rapid mutations into a single rebuild and cancels the
     // in-flight build when a new mutation arrives.
@@ -220,15 +287,97 @@ private:
     struct PickStats;
     friend QDebug operator<<(QDebug d, const cwGeometryItersecter::PickStats& s);
 
-    void scheduleBuild();
+    // Tube-pick fallback: tracks the closest sphere-miss seen during a
+    // traversal so intersectsDetailed can snap to a point the user almost
+    // clicked. Defined in the .cpp because it's an internal traversal
+    // detail.
+    struct NearMissResult;
+
+    // Invalidate the cached sub-BVH for one Object and schedule a rebuild.
+    // Use for addObject (which always replaces) and any mutation that
+    // changed the Object's geometry. The schedule call is coalesced via
+    // m_bvhRestarter so back-to-back invalidations don't queue extra work.
+    void scheduleObjectRebuild(const Key& key);
+
+    // Schedule a rebuild that touches only the top-level BVH; cached
+    // sub-BVHs are reused unchanged. Use for setModelMatrix (which leaves
+    // model-space geometry intact) and removeObject (which only shrinks
+    // the set of objects).
+    void scheduleTopLevelRebuild();
+
+    // Release the published sub-BVH for one Key while a rebuild is in
+    // flight. Leaves the rest of m_bvh intact so unrelated Objects keep
+    // serving picks — without holding a second copy of the dirty Key's
+    // sub-BVH alongside the worker's new one (critical when that sub-BVH
+    // is a multi-GB point cloud). No-op if m_bvh is null or doesn't
+    // contain key. Safe to call from the main thread alongside picks.
+    void invalidatePublishedSlot(const Key& key);
+
     QFuture<void> launchBuildJob();
 
-    static QBox3D primitiveWorldBox(const QList<Node>& nodes, const Primitive& prim);
-    static void testPrimitive(const QList<Node>& nodes,
+    // Build a model-space sub-BVH for one Object using the existing
+    // serialSplitToFanout + parallel buildBvhSubtree pipeline. Returns
+    // nullptr for Objects that contribute no primitives.
+    static std::shared_ptr<SubBvh> buildSubBvh(const Object& object,
+                                               QPromise<void>& promise);
+
+    // Build the world-space top-level BVH over the per-Object root boxes.
+    // Sequenced after all sub-BVHs are present.
+    static QVector<BvhNode> buildTopLevel(const QVector<QBox3D>& worldBoxes);
+
+    // Release this thread's pool slot, block on the inner future, then
+    // re-acquire. Prevents nested cwConcurrent::map from deadlocking on
+    // small machines where the outer worker holds the only thread.
+    template <typename Future>
+    static void waitOnPool(Future& future);
+
+    // Per-primitive bounding box in the Object's **model space**. Used
+    // when constructing leaf bboxes for a sub-BVH.
+    static QBox3D primitiveModelBox(const Object& object, const Primitive& prim);
+    // Per-primitive ray test. rayModel/worldFromModel/modelToWorld are
+    // computed once per top-level leaf by intersectsDetailed and passed
+    // through so this hot-path function never re-inverts the matrix.
+    // `object` comes from the SubBvh — decoupling from BvhData::
+    // nodesSnapshot ordering, which is not stable across rebuilds.
+    static void testPrimitive(const Object& object,
                               const Primitive& prim,
                               const QRay3D& ray,
+                              const QRay3D& rayModel,
+                              const QMatrix4x4& worldFromModel,
+                              const QMatrix4x4& modelToWorld,
                               cwRayHit& best,
+                              NearMissResult* nearMiss,
                               PickStats* stats);
+
+    // Shared cwRayHit field fill for any Point primitive — used by the
+    // sphere-hit path in testPrimitive and the tube-pick promote in
+    // tryPromoteNearMiss. Pre-computed by the caller because the two
+    // paths source tModel and the world point differently.
+    static void fillPointHit(cwRayHit& best,
+                             const Object& object,
+                             const Primitive& prim,
+                             const QRay3D& ray,
+                             const QRay3D& rayModel,
+                             const QVector3D& centerModel,
+                             const QVector3D& centerWorld,
+                             double tModel,
+                             double tWorld);
+
+    // Post-traversal tube-pick promote. Snaps best to the closest tracked
+    // sphere-miss whose perpendicular distance is within kTubeFactor *
+    // pickRadius. No-op when best already hit, nearMiss is empty, or the
+    // miss is beyond the tube.
+    static void tryPromoteNearMiss(cwRayHit& best,
+                                   const NearMissResult& nearMiss,
+                                   const QRay3D& ray,
+                                   bool debug);
+
+    // Debug-only per-primitive diagnostic; gated on lcPick debug.
+    static void dumpLeafPrimitive(const Object& object,
+                                  const Primitive& prim,
+                                  const QRay3D& ray,
+                                  uint32_t leafIdx,
+                                  uint32_t localIdx);
 
     // Phase A: how many BVH primitives a single Node contributes. Lines
     // stay out of the BVH and contribute zero. Points contribute zero
@@ -296,7 +445,11 @@ private:
     void addLines(const cwGeometryItersecter::Object& object);
     void addPoints(const cwGeometryItersecter::Object& object);
 
-    double nearestNeighbor(const QRay3D& ray) const;
+    // Erase the Node matching `key` from Nodes plus its cached sub-BVH and
+    // dirty mark, without scheduling. Returns true if a Node was erased.
+    // Used by add* (which then re-appends and schedules an object rebuild)
+    // and removeObject (which schedules a top-level rebuild).
+    bool eraseNodeIfPresent(const Key& key);
 
     // Helpers: transform point (w=1) and direction (w=0)
     static inline QVector3D mapPoint(const QMatrix4x4& m, const QVector3D& p) {
@@ -313,6 +466,14 @@ private:
                                              const QRay3D& rayWorld)
     {
         const QMatrix4x4 modelToWorld = modelMatrix.inverted();
+        return transformRayWithInverse(modelToWorld, rayWorld);
+    }
+
+    // Same as transformRayToModel but takes the already-inverted matrix.
+    // Used in the pick hot path where BvhData caches inverses up front.
+    static inline QRay3D transformRayWithInverse(const QMatrix4x4& modelToWorld,
+                                                 const QRay3D& rayWorld)
+    {
         const QVector3D originModel    = mapPoint(modelToWorld,    rayWorld.origin());
         const QVector3D directionModel = mapDirection(modelToWorld, rayWorld.direction());
         return QRay3D(originModel, directionModel);
@@ -322,6 +483,14 @@ private:
                                                    const QVector3D& nModel)
     {
         const QMatrix4x4 modelFromWorld = worldFromModel.inverted();
+        return transformNormalWithInverse(modelFromWorld, nModel);
+    }
+
+    // Variant that takes the pre-inverted matrix — avoids the QMatrix4x4::inverted()
+    // call inside the pick hot path when BvhData has it cached.
+    static inline QVector3D transformNormalWithInverse(const QMatrix4x4& modelFromWorld,
+                                                       const QVector3D& nModel)
+    {
         const QMatrix4x4 normalXform = modelFromWorld.transposed();
         const QVector4D hn = normalXform * QVector4D(nModel, 0.0f);
         return hn.toVector3D().normalized();
@@ -336,6 +505,12 @@ private:
 
 inline uint32_t qHash(const cwGeometryItersecter::Object& object) {
     return object.id();
+}
+
+inline size_t qHash(const cwGeometryItersecter::Key& key, size_t seed = 0) noexcept {
+    return qHashMulti(seed,
+                      reinterpret_cast<quintptr>(key.parentObject),
+                      key.id);
 }
 
 #endif // CWGEOMETRYITERSECTER_H

@@ -39,7 +39,9 @@ class CAVEWHERE_LIB_EXPORT cwLazLayersSceneNode : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(LazLayersSceneNode)
-    QML_UNCREATABLE("Owned by cwRegionSceneManager")
+    QML_UNCREATABLE("Access via RegionSceneManager.lazLayersSceneNode")
+
+    Q_PROPERTY(float gapFudge READ gapFudge WRITE setGapFudge NOTIFY gapFudgeChanged)
 
 public:
     explicit cwLazLayersSceneNode(QObject* parent = nullptr);
@@ -61,6 +63,14 @@ public:
     /// same order they appear in the model.
     QList<cwLazLayer*> visibleLayers() const;
 
+    float gapFudge() const { return m_gapFudge; }
+
+public slots:
+    void setGapFudge(float gapFudge);
+
+signals:
+    void gapFudgeChanged(float gapFudge);
+
 private:
     void connectModel();
     void disconnectModel();
@@ -78,6 +88,8 @@ private:
 
     QHash<QUuid, QPointer<cwRenderPointCloud>> m_pointClouds;
     QHash<QUuid, QPointer<cwKeywordItem>> m_keywordItems;
+
+    float m_gapFudge = 2.0f;
 };
 
 #endif // CWLAZLAYERSSCENENODE_H

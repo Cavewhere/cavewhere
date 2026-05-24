@@ -380,13 +380,19 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     emit stationPositionInTripsChanged(cw::toList(results.trips()));
     emit stationPositionInScrapsChanged(cw::toList(results.scraps()));
 
-    // First-time auto-compute of worldOrigin: when it's still the (0,0,0)
-    // sentinel and we now have at least one valid fix, recenter the scene.
-    // recomputeWorldOrigin() is a no-op when no candidates exist, and the
-    // resulting setWorldOrigin() emits worldOriginChanged → re-runs survex
-    // so the lookup positions land in offset-relative coords. Sticky after:
-    // once worldOrigin is non-zero, this branch never fires again.
-    if (Region->worldOrigin() == cwGeoPoint{}) {
+    // First-time auto-compute of worldOrigin: when nobody has explicitly
+    // picked one yet and we now have at least one valid fix, recenter the
+    // scene. recomputeWorldOrigin() is a no-op when no candidates exist,
+    // and the resulting setWorldOrigin() emits worldOriginChanged → re-runs
+    // survex so the lookup positions land in offset-relative coords. Sticky
+    // after: once anyone has set worldOrigin explicitly (user, load, this
+    // recompute, or LAZ auto-adopt), this branch never fires again.
+    //
+    // Uses hasExplicitWorldOrigin() rather than `worldOrigin() == {}`
+    // because an explicit pin to (0,0,0) — e.g. sink-training tests that
+    // align render-space with LAZ-source XY — is a valid origin that must
+    // not be silently overwritten by the fix-station centroid.
+    if (!Region->hasExplicitWorldOrigin()) {
         Region->recomputeWorldOrigin();
     }
 }

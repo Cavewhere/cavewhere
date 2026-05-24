@@ -9,6 +9,7 @@
 #include "cwBaseTurnTableInteraction.h"
 #include "cwCamera.h"
 #include "cwDebug.h"
+#include "cwInteractionLog.h"
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
 #include "cwMatrix4x4Animation.h"
@@ -20,6 +21,8 @@
 //Qt includes
 #include <QStyleHints>
 #include <QGuiApplication>
+
+Q_LOGGING_CATEGORY(lcInteract, "cw.interaction", QtWarningMsg)
 
 cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
     cwInteraction(parent),
@@ -94,16 +97,28 @@ QVector3D cwBaseTurnTableInteraction::unProject(QPoint point) {
 
     //See if it hits any of the scraps or objects
     double t = scene()->geometryItersecter()->intersects(ray);
+    const bool geometryHit = !std::isnan(t);
 
     if(std::isnan(t)) {
         //See where it intersects ground plane geometry
         t = m_gridPlane.value().intersection(ray);
         if(std::isnan(t)) {
+            qCDebug(lcInteract).nospace()
+                << "unProject(" << point << "): no geometry hit, no grid hit -> (0,0,0)"
+                << " rayOrigin=" << ray.origin()
+                << " rayDir=" << ray.direction();
             return QVector3D();
         }
     }
 
-    return ray.point(t);
+    const QVector3D world = ray.point(t);
+    qCDebug(lcInteract).nospace()
+        << "unProject(" << point << "): "
+        << (geometryHit ? "geometry" : "gridPlane")
+        << " t=" << t
+        << " world=" << world
+        << " rayOrigin=" << ray.origin();
+    return world;
 }
 
 /**
@@ -161,6 +176,12 @@ void cwBaseTurnTableInteraction::startPanning(QPoint position) {
     //Create the plane
     PanPlane = QPlane3D(LastMouseGlobalPosition, direction);
 
+    qCDebug(lcInteract).nospace()
+        << "startPanning raw=" << position
+        << " mapped=" << mappedPosition
+        << " pivot=" << LastMouseGlobalPosition
+        << " planeNormal=" << direction;
+
     TranslatePosition = position;
     translateLastPosition();
 
@@ -180,9 +201,14 @@ void cwBaseTurnTableInteraction::pan(QPoint position) {
   Called when the rotation is about to begin
   */
 void cwBaseTurnTableInteraction::startRotating(QPoint position) {
+    const QPoint rawPosition = position;
     position = Camera->mapToGLViewport(position);
     LastMouseGlobalPosition = unProject(position);
     LastMousePosition = position;
+    qCDebug(lcInteract).nospace()
+        << "startRotating raw=" << rawPosition
+        << " mapped=" << position
+        << " pivot=" << LastMouseGlobalPosition;
 }
 
 /**
@@ -201,6 +227,8 @@ void cwBaseTurnTableInteraction::rotate(QPoint position) {
 void cwBaseTurnTableInteraction::zoom(QPoint position, double delta) {
     ZoomPosition = position;
     ZoomDelta = delta;
+    qCDebug(lcInteract).nospace()
+        << "zoom() pos=" << position << " delta=" << delta;
     zoomLastPosition();
 }
 
@@ -259,6 +287,13 @@ void cwBaseTurnTableInteraction::rotateLastPosition()
         Azimuth = clampAzimuth(Azimuth - delta.x());
         emit azimuthChanged();
     }
+
+    qCDebug(lcInteract).nospace()
+        << "rotateLastPosition mapped=" << position
+        << " delta=" << delta
+        << " pitch=" << Pitch
+        << " azimuth=" << Azimuth
+        << " pivot=" << LastMouseGlobalPosition;
 
     updateRotationMatrix();
 }
@@ -450,6 +485,14 @@ void cwBaseTurnTableInteraction::zoomPerspective()
     t = rayLength * t;
 
     QVector3D newPositionDelta = ray * t;
+
+    qCDebug(lcInteract).nospace()
+        << "zoomPerspective mapped=" << mappedPos
+        << " front=" << front
+        << " intersection=" << intersection
+        << " rayLength=" << rayLength
+        << " delta=" << delta
+        << " translate=" << newPositionDelta;
 
     QMatrix4x4 viewMatrix = Camera->viewMatrix();
     viewMatrix.translate(newPositionDelta);

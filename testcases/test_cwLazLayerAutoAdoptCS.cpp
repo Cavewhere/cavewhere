@@ -114,6 +114,70 @@ TEST_CASE("Auto-adopt: project with existing globalCoordinateSystem is left unto
     REQUIRE(region->worldOrigin() == existingOrigin);
 }
 
+TEST_CASE("Auto-adopt: explicit setWorldOrigin(0,0,0) is honored, not overwritten",
+          "[cwLazAutoAdoptCS]") {
+    // Regression: cwGeoPoint{} == cwGeoPoint(0,0,0) by value, so a
+    // value-equality check in maybeAdoptRegionDefaultsFromLaz can't tell an
+    // explicit pin-to-origin from "never set." cwCavingRegion now tracks an
+    // explicit-set flag; this test guards that the flag actually blocks the
+    // auto-adopt path. Caller chose (0,0,0) on purpose (the
+    // sink-training tests do this so render-XY == LAZ-source-XY), and the
+    // origin must not be silently moved to the LAZ bbox center.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto root = std::make_unique<cwRootData>();
+    auto* region = root->project()->cavingRegion();
+
+    const QString explicitCS = QStringLiteral("EPSG:32611");
+    region->setGlobalCoordinateSystem(explicitCS);
+    region->setWorldOrigin(cwGeoPoint{0.0, 0.0, 0.0});
+    REQUIRE(region->hasExplicitWorldOrigin());
+
+    const QString path = writeMinimalLaz(
+        tempLazPath(tempDir, QStringLiteral("zero-pin")),
+        kUtmZone10N);
+    REQUIRE(!path.isEmpty());
+
+    addLazAndWait(root.get(), QStringList{path});
+
+    REQUIRE(region->globalCoordinateSystem() == explicitCS);
+    REQUIRE(region->worldOrigin() == cwGeoPoint{0.0, 0.0, 0.0});
+    REQUIRE(region->hasExplicitWorldOrigin());
+}
+
+TEST_CASE("Auto-adopt: setGlobalCoordinateSystem clears the explicit-set flag",
+          "[cwLazAutoAdoptCS]") {
+    // setGlobalCoordinateSystem internally resets worldOrigin because the
+    // stored value was in the old CS. That reset is not a user choice, so
+    // the flag must drop back to false — otherwise the convenient
+    // bbox-center auto-adopt would be permanently disabled after the very
+    // first CS change.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto root = std::make_unique<cwRootData>();
+    auto* region = root->project()->cavingRegion();
+
+    region->setGlobalCoordinateSystem(QStringLiteral("EPSG:32611"));
+    region->setWorldOrigin(cwGeoPoint{500000.0, 4000000.0, 100.0});
+    REQUIRE(region->hasExplicitWorldOrigin());
+
+    // Change CS → both the value and the flag are reset.
+    region->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+    REQUIRE(region->worldOrigin() == cwGeoPoint{});
+    REQUIRE_FALSE(region->hasExplicitWorldOrigin());
+
+    // A LAZ added afterwards may seed the origin from its bbox center.
+    const QString path = writeMinimalLaz(
+        tempLazPath(tempDir, QStringLiteral("post-cs-reset")));
+    REQUIRE(!path.isEmpty());
+    addLazAndWait(root.get(), QStringList{path});
+
+    REQUIRE(region->worldOrigin() == cwGeoPoint{2.0, 2.0, 2.0});
+    REQUIRE(region->hasExplicitWorldOrigin());
+}
+
 TEST_CASE("Auto-adopt: second add to fresh project leaves CS unchanged",
           "[cwLazAutoAdoptCS]") {
     QTemporaryDir tempDir;

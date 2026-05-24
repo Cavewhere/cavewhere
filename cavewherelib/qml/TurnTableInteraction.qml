@@ -4,6 +4,24 @@ import cavewherelib
 BaseTurnTableInteraction {
     id: interactionId
 
+    // Target whose gapFudge property the hold-P + wheel gesture writes to.
+    // Externally bound so the interaction doesn't depend on scene structure.
+    property LazLayersSceneNode pointCloudGapFudgeTarget: null
+
+    // Set true by GLTerrainRenderer while the P key is held. When true, the
+    // wheel re-routes from camera zoom to point-cloud gapFudge tuning.
+    property bool pKeyHeld: false
+
+    // Per-wheel-tick delta applied to gapFudge while P is held. ~0.2 covers the
+    // full [1.0, 10.0] range in about a dozen ticks at the existing wheel scale.
+    readonly property real gapFudgeStep: 0.2
+
+    QQ.LoggingCategory {
+        id: interactLog
+        name: "cw.interaction.qml"
+        defaultLogLevel: QQ.LoggingCategory.Warning
+    }
+
     QQ.DragHandler {
         id: dragHandlerLeftId
         target: null
@@ -12,12 +30,14 @@ BaseTurnTableInteraction {
 
         onActiveChanged: {
             if(active) {
+                console.debug(interactLog, "left-drag startPanning", centroid.position)
                 interactionId.startPanning(centroid.position)
             }
         }
 
         onCentroidChanged: {
             if(active) {
+                console.debug(interactLog, "left-drag pan", centroid.position)
                 interactionId.pan(centroid.position)
             }
         }
@@ -36,12 +56,14 @@ BaseTurnTableInteraction {
 
         onActiveChanged: {
             if(active) {
+                console.debug(interactLog, "touch-drag startRotating", centroid.position)
                 interactionId.startRotating(centroid.position)
             }
         }
 
         onCentroidChanged: {
             if(active) {
+                console.debug(interactLog, "touch-drag rotate", centroid.position)
                 interactionId.rotate(centroid.position)
             }
         }
@@ -55,12 +77,14 @@ BaseTurnTableInteraction {
 
         onActiveChanged: {
             if(active) {
+                console.debug(interactLog, "right-drag startRotating", centroid.position)
                 interactionId.startRotating(centroid.position)
             }
         }
 
         onCentroidChanged: {
             if(active) {
+                console.debug(interactLog, "right-drag rotate", centroid.position)
                 interactionId.rotate(centroid.position)
             }
         }
@@ -72,6 +96,7 @@ BaseTurnTableInteraction {
 
         onActiveChanged: {
             if(active) {
+                console.debug(interactLog, "pinch startPanning", centroid.position)
                 interactionId.startPanning(centroid.position)
             } else {
                 pinchCooldownTimer.restart()
@@ -80,11 +105,13 @@ BaseTurnTableInteraction {
 
         onScaleChanged: (delta) => {
                           let zoomDelta = 1.0 - delta;
+                          console.debug(interactLog, "pinch zoom", centroid.position, "delta=", zoomDelta)
                           interactionId.zoom(centroid.position, zoomDelta)
                       }
 
         onTranslationChanged: (delta) => {
                                 if(active) {
+                                    console.debug(interactLog, "pinch pan", centroid.position)
                                     interactionId.pan(centroid.position)
                                 }
                             }
@@ -99,10 +126,21 @@ BaseTurnTableInteraction {
         rotationScale: 0.1
         onRotationChanged: {
             let deltaRotation = rotationScale * (rotation - lastRotation);
-            if(deltaRotation !== 0.0) {
-                interactionId.zoom(point.position, -deltaRotation)
-                lastRotation = rotation
+            if(deltaRotation === 0.0) {
+                return
             }
+
+            if(interactionId.pKeyHeld && interactionId.pointCloudGapFudgeTarget) {
+                // Wheel up (positive delta) grows points; wheel down shrinks.
+                interactionId.pointCloudGapFudgeTarget.gapFudge
+                    += deltaRotation * interactionId.gapFudgeStep
+                lastRotation = rotation
+                return
+            }
+
+            console.debug(interactLog, "wheel zoom", point.position, "delta=", -deltaRotation)
+            interactionId.zoom(point.position, -deltaRotation)
+            lastRotation = rotation
         }
     }
 }

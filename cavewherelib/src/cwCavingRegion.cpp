@@ -277,17 +277,30 @@ void cwCavingRegion::setGlobalCoordinateSystem(const QString& cs)
     m_globalCoordinateSystem = cs;
     // The stored worldOrigin was computed in the old CS, so reset it.
     // The next line-plot completion will auto-recompute against the new CS.
-    setWorldOrigin(cwGeoPoint{});
+    // Reset both value and explicitlySet directly (not via setWorldOrigin),
+    // since a CS-driven reset is not a user choice — leaving the flag false
+    // lets a freshly added LAZ seed the origin from its bbox center again.
+    if (m_worldOrigin.value != cwGeoPoint{} || m_worldOrigin.explicitlySet) {
+        m_worldOrigin = WorldOriginState{};
+        m_lazLayers->setRegionWorldOrigin(m_worldOrigin.value);
+        emit worldOriginChanged();
+    }
     m_lazLayers->setRegionGlobalCS(cs);
     emit globalCoordinateSystemChanged();
 }
 
 void cwCavingRegion::setWorldOrigin(const cwGeoPoint& origin)
 {
-    if (m_worldOrigin == origin) {
+    // Short-circuit only when both the value AND the explicit-set flag are
+    // already what we'd produce. An explicit setWorldOrigin(0,0,0) on a
+    // freshly-constructed region must still flip the flag — otherwise the
+    // user's intent is indistinguishable from "never set" and LAZ auto-adopt
+    // will silently overwrite it (see [cwSinkTrainingModel] failures).
+    if (m_worldOrigin.value == origin && m_worldOrigin.explicitlySet) {
         return;
     }
-    m_worldOrigin = origin;
+    m_worldOrigin.value = origin;
+    m_worldOrigin.explicitlySet = true;
     m_lazLayers->setRegionWorldOrigin(origin);
     emit worldOriginChanged();
 }
@@ -343,7 +356,18 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
 {
     setName(data.name);
     setGlobalCoordinateSystem(data.globalCoordinateSystem);
-    setWorldOrigin(data.worldOrigin);
+    // worldOrigin is intentionally not persisted (see cavewhere.proto:
+    // "reserved 5; // Removed: worldOrigin ... recomputed on load"). On
+    // disk-load, data.worldOrigin is always default-constructed cwGeoPoint{},
+    // and setGlobalCoordinateSystem above already reset our state to match.
+    // Only call setWorldOrigin when the data carries a non-default value —
+    // otherwise we'd flip the explicit-set flag for a value the user never
+    // actually chose, and the next LAZ add would skip its bbox-center
+    // auto-adopt. (In-process data → setData round-trips still work because
+    // a non-default value will be present.)
+    if (data.worldOrigin != cwGeoPoint{}) {
+        setWorldOrigin(data.worldOrigin);
+    }
 
     clearCaves();
 
@@ -363,7 +387,7 @@ cwCavingRegionData cwCavingRegion::data() const
         m_name.value(),
         cwData::toDataList<cwCaveData>(m_caves),
         m_globalCoordinateSystem,
-        m_worldOrigin
+        m_worldOrigin.value
     };
 }
 

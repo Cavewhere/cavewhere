@@ -117,9 +117,11 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
 
     // Per-cloud uniform — world-space point radius derived from the cloud's
     // measured mean spacing. * 0.5 because the spacing is *between* points, and
-    // a radius of half that just covers the gap to a neighbor. The shader
-    // applies a further `gapFudge` constant on top to compensate for clustering.
+    // a radius of half that just covers the gap to a neighbor. gapFudge is a
+    // user-tunable multiplier (hold P + wheel in the 3D view) that lets the
+    // operator tune overdraw / EDL darkness at runtime.
     const float worldRadius = value.meanSpacingXY * 0.5f;
+    const float gapFudge = value.gapFudge;
 
     if (!m_perCloudUBO) {
         const quint32 size = rhi->ubufAligned(sizeof(PerCloudUniform));
@@ -129,10 +131,11 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
         m_perCloudUBO->create();
     }
 
-    if (m_lastUploadedWorldRadius != worldRadius) {
-        const PerCloudUniform uniform{ worldRadius, {0.0f, 0.0f, 0.0f} };
+    if (m_lastUploadedWorldRadius != worldRadius || m_lastUploadedGapFudge != gapFudge) {
+        const PerCloudUniform uniform{ worldRadius, gapFudge, {0.0f, 0.0f} };
         batch->updateDynamicBuffer(m_perCloudUBO, 0, sizeof(PerCloudUniform), &uniform);
         m_lastUploadedWorldRadius = worldRadius;
+        m_lastUploadedGapFudge = gapFudge;
     }
 
     m_data.resetChanged();

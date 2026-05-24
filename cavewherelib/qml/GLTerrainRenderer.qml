@@ -12,6 +12,8 @@ import cavewherelib
 
 
 Item {
+    id: rootId
+
     property alias turnTableInteraction: turnTableInteractionId
     property alias coordinatePickerInteraction: coordinatePickerId
     property alias interactionManager: interactionManagerId
@@ -20,6 +22,32 @@ Item {
     property alias scene: rendererId.scene
 
     clip: true
+
+    // Keys handlers fire only when this item has active focus.
+    focus: true
+
+    Keys.onPressed: (event) => {
+        if (event.key === Qt.Key_P && !event.isAutoRepeat) {
+            turnTableInteractionId.pKeyHeld = true
+            event.accepted = true
+        }
+    }
+
+    Keys.onReleased: (event) => {
+        if (event.key === Qt.Key_P && !event.isAutoRepeat) {
+            turnTableInteractionId.pKeyHeld = false
+            event.accepted = true
+        }
+    }
+
+    // Pull focus on hover so hold-P + wheel works without an explicit click.
+    HoverHandler {
+        onHoveredChanged: {
+            if (hovered) {
+                rootId.forceActiveFocus()
+            }
+        }
+    }
 
     RegionViewer {
         id: rendererId
@@ -53,6 +81,7 @@ Item {
         camera: rendererId.camera
         scene: rendererId.scene
         gridPlane: RootData.regionSceneManager.gridPlane.plane
+        pointCloudGapFudgeTarget: RootData.regionSceneManager.lazLayersSceneNode
     }
 
     // While the picker is the active Interaction, the turn-table is disabled.

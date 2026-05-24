@@ -62,8 +62,6 @@ signals:
     void cameraChanged();
     void needsRendering();
 
-public slots:
-
 private:
     //Items to render
     QList<cwRenderObject*> m_renderingObjects;

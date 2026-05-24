@@ -85,9 +85,13 @@ TEST_CASE("Ray straight through a point hits and reports correct fields", "[cwGe
     REQUIRE(hit.firstIndex() == 0);
     REQUIRE(hit.pointWorld().z() == Approx(0.0f).margin(1e-4));
     // pointWorld is the vertex center (so callers can identify which point
-    // was clicked), and tWorld is the distance from ray origin to that
-    // center — 10.0 along a unit -Z ray from z=10 to z=0.
-    REQUIRE(hit.tWorld() == Approx(10.0).margin(1e-4));
+    // was clicked). tWorld is the sphere-entry depth — distance from the
+    // ray origin to where the ray first touches the point's pickRadius
+    // sphere — which matches the triangle path's "tWorld is the surface
+    // intersection distance" semantics and ensures consistent ranking when
+    // points and triangles compete for the same hit. For a head-on ray
+    // from z=10 to a point at z=0 with pickRadius=0.1, tWorld = 9.9.
+    REQUIRE(hit.tWorld() == Approx(10.0 - kPickRadius).margin(1e-4));
 }
 
 TEST_CASE("Ray within pickRadius of a point still hits", "[cwGeometryItersecter][points]")
@@ -105,10 +109,13 @@ TEST_CASE("Ray within pickRadius of a point still hits", "[cwGeometryItersecter]
     REQUIRE(hit.hit());
 }
 
-TEST_CASE("Ray beyond pickRadius does not hit the point", "[cwGeometryItersecter][points]")
+TEST_CASE("Ray well beyond the tube range does not hit the point", "[cwGeometryItersecter][points]")
 {
-    // Offset > pickRadius — ray misses the sphere entirely.
-    const float offset = kPickRadius * 2.0f;
+    // Offset well past the tube-pick range (kTubeFactor=5 * pickRadius)
+    // so neither the sphere intersection nor the near-miss fallback
+    // fires. Rays in the (1x, 5x) band are expected to snap to the
+    // point via the tube fallback (see test_cwGeometryItersecter_tubePick).
+    const float offset = kPickRadius * 10.0f;
     const QVector3D origin(offset, 0.0f, 10.0f);
     const QRay3D ray(origin, QVector3D(0.0f, 0.0f, -1.0f));
 
