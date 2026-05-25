@@ -9,11 +9,13 @@
 #define CWLAZLAYER_H
 
 //Qt includes
+#include <QDateTime>
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
 #include <QUuid>
 #include <QVector3D>
+#include <QtTypes>
 
 //AsyncFuture
 #include <asyncfuture.h>
@@ -72,6 +74,12 @@ public:
     QString sourcePath() const { return m_sourcePath; }
     void setSourcePath(const QString& path);
 
+    /// File size and last-modified timestamp captured the last time
+    /// setSourcePath ran. cwLazLayerModel::rescan uses the pair to detect
+    /// in-place file overwrites and force a reload.
+    qint64 sourceSize() const { return m_sourceSize; }
+    QDateTime sourceMtime() const { return m_sourceMtime; }
+
     double pointSize() const { return m_pointSize; }
     void setPointSize(double pointSize);
 
@@ -121,6 +129,8 @@ private:
     void applyResult(cwLazLoadResult&& result);
 
     QString m_sourcePath;
+    qint64 m_sourceSize = -1;
+    QDateTime m_sourceMtime;
     double m_pointSize = 2.0;
 
     QString m_name;

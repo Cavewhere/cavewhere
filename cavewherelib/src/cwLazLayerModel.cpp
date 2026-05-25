@@ -8,8 +8,10 @@
 #include "cwLazLayerModel.h"
 
 //Qt includes
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QVariant>
@@ -180,61 +182,125 @@ void cwLazLayerModel::rescan()
 {
     qCDebug(lcLazModel) << "rescan: BEGIN dir=" << m_gisLayersDir.absolutePath()
                         << "currentLayers=" << m_layers.size();
-    clear();
+    const int initialCount = m_layers.size();
 
-    if (m_gisLayersDir.absolutePath().isEmpty() || !m_gisLayersDir.exists()) {
-        qCDebug(lcLazModel) << "rescan: END (no dir)";
-        return;
+    QFileInfoList entries;
+    if (!m_gisLayersDir.absolutePath().isEmpty() && m_gisLayersDir.exists()) {
+        // Linux's filesystem is case-sensitive, so the upper-case patterns
+        // matter; on macOS/Windows the filter is case-insensitive and the
+        // duplication is harmless (entryInfoList dedupes by absolute path).
+        const QStringList nameFilters{
+            QStringLiteral("*.laz"),
+            QStringLiteral("*.las"),
+            QStringLiteral("*.LAZ"),
+            QStringLiteral("*.LAS")
+        };
+        entries = m_gisLayersDir.entryInfoList(
+                    nameFilters,
+                    QDir::Files | QDir::NoDotAndDotDot,
+                    QDir::Name);
     }
 
-    // Linux's filesystem is case-sensitive, so the upper-case patterns matter;
-    // on macOS/Windows the filter is case-insensitive and the duplication is
-    // harmless (matches dedupe by absolute path inside entryInfoList).
-    const QStringList nameFilters{
-        QStringLiteral("*.laz"),
-        QStringLiteral("*.las"),
-        QStringLiteral("*.LAZ"),
-        QStringLiteral("*.LAS")
+    // worldOrigin isn't persisted in the proto, so on every load we'd start
+    // at (0,0,0) and the geometry would sit at raw UTM coords offscreen.
+    // Seeding from the first LAZ's header fills the gap on projects that
+    // have LAZ files but no fix stations. The probe is self-guarded — once
+    // the region has both a CS and an explicit origin it's a no-op.
+    if (!entries.isEmpty()) {
+        maybeAdoptRegionDefaultsFromLaz(entries.first().absoluteFilePath());
+    }
+
+    // Diff existing layers against the directory listing instead of doing a
+    // wholesale clear-and-rebuild. Preserves cwLazLayer objects whose
+    // underlying file is still present *and* unchanged so their
+    // already-loaded point data doesn't have to be re-streamed from disk
+    // after each clip / add.
+
+    struct FileFingerprint {
+        qint64 size;
+        QDateTime mtime;
     };
-    const QFileInfoList entries = m_gisLayersDir.entryInfoList(
-                nameFilters,
-                QDir::Files | QDir::NoDotAndDotDot,
-                QDir::Name);
-
-    if (entries.isEmpty()) {
-        return;
+    QHash<QString, FileFingerprint> wantedFiles;
+    wantedFiles.reserve(entries.size());
+    for (const QFileInfo& entry : entries) {
+        wantedFiles.insert(entry.absoluteFilePath(), {entry.size(), entry.lastModified()});
     }
 
-    // worldOrigin isn't persisted in the proto, so on every load we'd start at
-    // (0,0,0) and the geometry would sit at raw UTM coords offscreen. Seeding
-    // from the first LAZ's header fills the gap on projects that have LAZ
-    // files but no fix stations.
-    maybeAdoptRegionDefaultsFromLaz(entries.first().absoluteFilePath());
-
-    QList<cwLazLayer*> newLayers;
-    newLayers.reserve(entries.size());
-    for (int i = 0; i < entries.size(); ++i) {
-        newLayers.append(createLayer());
+    // Phase 1: remove layers whose file disappeared *or* whose (size, mtime)
+    // pair no longer matches — that's an in-place overwrite, so the
+    // in-memory point data is stale and the layer must be reloaded. Reverse
+    // iteration keeps take-at indices stable across the in-place erase.
+    for (int row = m_layers.size() - 1; row >= 0; --row) {
+        cwLazLayer* layer = m_layers.at(row);
+        const auto it = wantedFiles.constFind(layer->sourcePath());
+        const bool missing = (it == wantedFiles.constEnd());
+        const bool stale = !missing
+                && (it.value().size != layer->sourceSize()
+                    || it.value().mtime != layer->sourceMtime());
+        if (missing || stale) {
+            qCDebug(lcLazModel) << "rescan: remove" << shortId(layer)
+                                << "file=" << QFileInfo(layer->sourcePath()).fileName()
+                                << (stale ? "(stale fingerprint)" : "(file gone)");
+            beginRemoveRows(QModelIndex(), row, row);
+            m_layers.removeAt(row);
+            endRemoveRows();
+            layer->deleteLater();
+        }
     }
 
-    // Seed source paths before announcing the rows. setSourcePath triggers
-    // updateNameKeyword/updateFileNameKeyword on the layer's keyword model;
-    // running it after beginInsertRows lets the scene node register a keyword
-    // item carrying only Type+ObjectId, then the late keyword changes shuttle
-    // the same item through both accepted and rejected filter pipelines,
-    // thrashing cwKeywordVisibility (last-inserted wins).
-    for (int i = 0; i < entries.size(); ++i) {
-        newLayers.at(i)->setSourcePath(entries.at(i).absoluteFilePath());
-        qCDebug(lcLazModel) << "rescan: new layer" << shortId(newLayers.at(i))
-                            << "file=" << entries.at(i).fileName();
-    }
+    // Phase 2: walk the directory listing in order. For each entry, either
+    // the matching existing layer is already at the current row (advance),
+    // or it sits at a later row (move into place), or it's a new file
+    // (create + insert).
+    int row = 0;
+    for (const QFileInfo& entry : entries) {
+        const QString path = entry.absoluteFilePath();
 
-    beginInsertRows(QModelIndex(), 0, newLayers.size() - 1);
-    m_layers = newLayers;
-    endInsertRows();
+        if (row < m_layers.size() && m_layers.at(row)->sourcePath() == path) {
+            ++row;
+            continue;
+        }
+
+        // Existing layer at a later row — only happens when the directory
+        // sort order disagrees with the current model order (e.g. one file
+        // removed and another inserted whose name sorts in between).
+        int srcRow = -1;
+        for (int k = row + 1; k < m_layers.size(); ++k) {
+            if (m_layers.at(k)->sourcePath() == path) {
+                srcRow = k;
+                break;
+            }
+        }
+        if (srcRow > row) {
+            beginMoveRows(QModelIndex(), srcRow, srcRow, QModelIndex(), row);
+            m_layers.move(srcRow, row);
+            endMoveRows();
+            ++row;
+            continue;
+        }
+
+        // New file — create a layer and insert at the current row.
+        cwLazLayer* layer = createLayer();
+        // setSourcePath before announcing the row: setSourcePath triggers
+        // updateNameKeyword/updateFileNameKeyword on the layer's keyword
+        // model. Running it after beginInsertRows lets the scene node
+        // register a keyword item carrying only Type+ObjectId, then the
+        // late keyword changes shuttle the same item through both accepted
+        // and rejected filter pipelines, thrashing cwKeywordVisibility
+        // (last-inserted wins).
+        layer->setSourcePath(path);
+        qCDebug(lcLazModel) << "rescan: insert" << shortId(layer)
+                            << "file=" << entry.fileName();
+        beginInsertRows(QModelIndex(), row, row);
+        m_layers.insert(row, layer);
+        endInsertRows();
+        ++row;
+    }
 
     qCDebug(lcLazModel) << "rescan: END layers=" << m_layers.size();
-    emit countChanged();
+    if (m_layers.size() != initialCount) {
+        emit countChanged();
+    }
 }
 
 void cwLazLayerModel::clear()
@@ -243,10 +309,6 @@ void cwLazLayerModel::clear()
         return;
     }
     qCDebug(lcLazModel) << "clear: destroying" << m_layers.size() << "layers";
-    for (const cwLazLayer* layer : std::as_const(m_layers)) {
-        qCDebug(lcLazModel) << "  → deleting layer" << shortId(layer)
-                            << "file=" << QFileInfo(layer->sourcePath()).fileName();
-    }
     beginResetModel();
     qDeleteAll(m_layers);
     m_layers.clear();

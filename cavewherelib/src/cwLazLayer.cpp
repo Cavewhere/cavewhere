@@ -66,19 +66,37 @@ cwLazLayer::~cwLazLayer() = default;
 
 void cwLazLayer::setSourcePath(const QString& path)
 {
-    if (m_sourcePath == path) {
+    // Snapshot the file's size+mtime before the path-change short-circuit:
+    // a same-path reset (the same caller pointing at the same file after an
+    // in-place overwrite) still needs to refresh the cached fingerprint so
+    // cwLazLayerModel::rescan can detect the change. QFileInfo::size() and
+    // lastModified() already sentinel to -1 / invalid for missing files.
+    const QFileInfo info(path);
+    const qint64 newSize = info.size();
+    const QDateTime newMtime = info.lastModified();
+
+    const bool pathChanged = (m_sourcePath != path);
+    const bool fingerprintChanged =
+            (m_sourceSize != newSize || m_sourceMtime != newMtime);
+    if (!pathChanged && !fingerprintChanged) {
         return;
     }
-    m_sourcePath = path;
-    emit sourcePathChanged();
 
-    const QString basename = QFileInfo(path).baseName();
-    if (m_name != basename) {
-        m_name = basename;
-        emit nameChanged();
-        updateNameKeyword();
+    m_sourcePath = path;
+    m_sourceSize = newSize;
+    m_sourceMtime = newMtime;
+
+    if (pathChanged) {
+        emit sourcePathChanged();
+
+        const QString basename = info.baseName();
+        if (m_name != basename) {
+            m_name = basename;
+            emit nameChanged();
+            updateNameKeyword();
+        }
+        updateFileNameKeyword();
     }
-    updateFileNameKeyword();
 
     reload();
 }
