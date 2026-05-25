@@ -15,7 +15,11 @@ RoundButton {
     // required property QC.Menu menu
     required property Component menu
 
-    icon.source: "qrc:/twbs-icons/icons/caret-down-fill.svg"
+    // Per-callsite override so page-level menus can use a hamburger glyph
+    // while field-level dropdowns keep the caret default.
+    property url iconSource: "qrc:/twbs-icons/icons/caret-down-fill.svg"
+
+    icon.source: iconSource
     implicitWidth: 20
     implicitHeight: 20
     radius: 0

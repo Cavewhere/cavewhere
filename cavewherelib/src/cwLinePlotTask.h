@@ -47,12 +47,13 @@ public:
      * CavernOutputPage binds to.
      */
     struct SolveError {
-        enum class Step { Export, Cavern, Parse, Geometry, Validation };
+        // Steps mirror the worker's pipeline phases that can actually fail.
+        // (Geometry has no failure path today — cwLinePlotGeometry::generate
+        // currently never returns an error — so it is intentionally omitted.)
+        enum class Step { Export, Cavern, Parse, Validation };
         Step step = Step::Cavern;
         int exitCode = 0;          // populated for Step::Cavern
         QString message;           // human-readable summary
-        QString cavernLog;         // cavern's .log contents (Step::Cavern)
-        QString loopClosureStats;  // netskel .err contents (Step::Cavern)
     };
     /**
      * TripDataPtrs, CaveDataPtrs, and RegionDataPtrs, store pointers to original
@@ -173,6 +174,14 @@ public:
         const SolveError& solveError() const { return *LastSolveError; }
 
         std::optional<SolveError> LastSolveError;
+
+        // Cavern's .log (info + error messages) and netskel's .err
+        // (loop-closure stats) — populated whenever cavern ran, regardless of
+        // success or failure. CavernOutputPage surfaces them as Q_PROPERTYs on
+        // cwLinePlotManager so the user can see implicit-fix notices and loop
+        // error stats even on a clean solve.
+        QString CavernLog;
+        QString LoopClosureStats;
 
         friend class cwLinePlotTask;
         friend struct LinePlotWorker;

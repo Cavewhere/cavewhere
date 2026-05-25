@@ -217,22 +217,30 @@ private:
         const Monad::Result<cwCavernRunner::Result> r =
             cwCavernRunner::run(svxPath, output3dPath);
         if (r.hasError()) {
+            // cavern_run reported failure before the log file could be parsed
+            // back into a separate field; for this step the error message IS
+            // the captured log text (cwCavernRunner sets them equal).
+            result.CavernLog = r.errorMessage();
+
             cwLinePlotTask::SolveError error;
             error.step = cwLinePlotTask::SolveError::Step::Cavern;
             error.exitCode = 1;        // non-zero; cwCavernRunner doesn't expose the precise rc on error
             error.message = r.errorMessage();
-            error.cavernLog = r.errorMessage();   // for Cavern step, message == log text
             result.setSolveError(error);
             return false;
         }
         const cwCavernRunner::Result cavern = r.value();
+        // Always publish cavern's diagnostic output — even on a clean solve
+        // the log carries info-level messages (e.g. "I've fixed X at 0,0,0")
+        // that CavernOutputPage exposes to the user.
+        result.CavernLog = cavern.logText;
+        result.LoopClosureStats = cavern.loopClosureStats;
+
         if (!QFileInfo::exists(cavern.output3dPath)) {
             cwLinePlotTask::SolveError error;
             error.step = cwLinePlotTask::SolveError::Step::Cavern;
             error.exitCode = cavern.exitCode;
             error.message = QStringLiteral("Cavern reported success but produced no .3d output");
-            error.cavernLog = cavern.logText;
-            error.loopClosureStats = cavern.loopClosureStats;
             result.setSolveError(error);
             return false;
         }
@@ -251,7 +259,8 @@ private:
 
     bool checkForErrors(cwLinePlotTask::LinePlotResultData& result)
     {
-        bool hasUnconnectedChunks = false;
+        int unconnectedChunkCount = 0;
+        QStringList offendingCaveNames;
 
         for(int i = 0; i < Region.caveCount(); i++) {
             cwCave* cave = Region.cave(i);
@@ -265,11 +274,26 @@ private:
             if(!errorResults.isEmpty()) {
                 cwLinePlotTask::LinePlotCaveData& caveData = createLinePlotCaveDataAt(i, result);
                 caveData.setUnconnectedChunkError(errorResults);
-                hasUnconnectedChunks = true;
+                unconnectedChunkCount += errorResults.size();
+                offendingCaveNames.append(cave->name());
             }
         }
 
-        return !hasUnconnectedChunks;
+        if (unconnectedChunkCount > 0) {
+            // Cavern was never run; surface a SolveError so CavernOutputPage
+            // tells the user *why* and which caves need attention, instead of
+            // showing "Last solve completed successfully" with an empty log.
+            cwLinePlotTask::SolveError error;
+            error.step = cwLinePlotTask::SolveError::Step::Validation;
+            error.message = QStringLiteral(
+                "Cannot solve: %1 survey leg(s) are not connected to the cave network (%2). "
+                "Open the affected chunks and fix the disconnected station names.")
+                .arg(unconnectedChunkCount)
+                .arg(offendingCaveNames.join(QStringLiteral(", ")));
+            result.setSolveError(error);
+            return false;
+        }
+        return true;
     }
 
     cwLinePlotTask::LinePlotCaveData& createLinePlotCaveDataAt(int index, cwLinePlotTask::LinePlotResultData& result)

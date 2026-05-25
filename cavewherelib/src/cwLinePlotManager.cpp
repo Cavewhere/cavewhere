@@ -74,6 +74,13 @@ cwLinePlotManager::~cwLinePlotManager() {
   */
 void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     Region = region;
+
+    // Clear any cached cavern output / solve error from a previous region —
+    // CavernOutputPage should start blank for the new project (D-2). Empty
+    // results also clear per-chunk error markers. Safe even when region is
+    // nullptr (publishPerCaveErrors no-ops without a Region).
+    publishResults(cwLinePlotTask::LinePlotResultData());
+
     if(Region == nullptr) { return; }
 
     //Connect all signal from the region
@@ -291,6 +298,10 @@ void cwLinePlotManager::runSurvex() {
             if(hasShots) break;
         }
         if(!hasShots) {
+            // No-shots path must also clear the cached cavern output / solve
+            // error so CavernOutputPage doesn't keep showing the previous
+            // run's text (D-1).
+            publishResults(cwLinePlotTask::LinePlotResultData());
             updateLinePlot(cwLinePlotTask::LinePlotResultData());
             return;
         }
@@ -304,9 +315,19 @@ void cwLinePlotManager::runSurvex() {
             auto input = cwLinePlotTask::buildInput(Region.data());
             auto future = cwLinePlotTask::run(std::move(input));
 
+            // Receive the worker's result by parameter rather than capturing
+            // the future and calling future.result() — the parameter form
+            // lets AsyncFuture deliver the value directly, no captured-future
+            // ping-pong. publishResults updates CavernOutputPage state
+            // (log/stats/error + per-chunk markers) on every path; updateLinePlot
+            // only runs on the success path so an error doesn't wipe the last
+            // good line plot.
             AsyncFuture::observe(future)
-                .context(this, [this, future]() {
-                    updateLinePlot(future.result());
+                .context(this, [this](cwLinePlotTask::LinePlotResultData result) {
+                    publishResults(result);
+                    if (!result.hasSolveError()) {
+                        updateLinePlot(std::move(result));
+                    }
                 });
 
             return future;
@@ -319,23 +340,74 @@ void cwLinePlotManager::runSurvex() {
   \brief Updates the line plot, and all the station positions for the
   line region
   */
+void cwLinePlotManager::publishResults(const cwLinePlotTask::LinePlotResultData& results)
+{
+    // Single funnel for all manager-side state derived from a pipeline result:
+    // cavern log / loop-closure stats / solve-error state (cavernOutputChanged
+    // Q_PROPERTYs) and per-chunk error markers. Called from both the async
+    // solve callback and the synchronous no-shots / setRegion paths.
+    publishCavernOutput(results.CavernLog,
+                        results.LoopClosureStats,
+                        results.hasSolveError()
+                            ? std::optional<cwLinePlotTask::SolveError>(results.solveError())
+                            : std::nullopt);
+    publishPerCaveErrors(results);
+}
+
+void cwLinePlotManager::publishCavernOutput(QString cavernLog,
+                                            QString loopClosureStats,
+                                            std::optional<cwLinePlotTask::SolveError> solveError)
+{
+    bool changed = false;
+    if (cavernLog != m_lastCavernLog || loopClosureStats != m_lastLoopClosureStats) {
+        m_lastCavernLog = std::move(cavernLog);
+        m_lastLoopClosureStats = std::move(loopClosureStats);
+        changed = true;
+    }
+    // SolveError has no operator==; compare by presence + message+step+exitCode.
+    const bool errorChanged =
+        solveError.has_value() != m_lastSolveError.has_value()
+        || (solveError.has_value()
+            && (solveError->message != m_lastSolveError->message
+                || solveError->step != m_lastSolveError->step
+                || solveError->exitCode != m_lastSolveError->exitCode));
+    if (errorChanged) {
+        m_lastSolveError = std::move(solveError);
+        changed = true;
+    }
+    if (changed) {
+        emit cavernOutputChanged();
+    }
+}
+
+void cwLinePlotManager::publishPerCaveErrors(const cwLinePlotTask::LinePlotResultData& results)
+{
+    if (Region == nullptr) {
+        return;
+    }
+    // Clear stale entries from the previous run before re-publishing the
+    // current set; the unconnected-chunk error list is per-pipeline-run.
+    clearUnconnectedChunkErrors();
+    // Snapshot the live cave list once: cwCavingRegion::caves() returns by
+    // value, so calling it inside the loop would deep-copy per iteration.
+    const QList<cwCave*> liveCaves = Region->caves();
+    for (auto it = results.Caves.constBegin(); it != results.Caves.constEnd(); ++it) {
+        cwCave* cave = it.key();
+        if (!liveCaves.contains(cave)) {
+            continue;
+        }
+        updateUnconnectedChunkErrors(cave, it.value());
+    }
+}
+
 void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData results) {
 
     if(Region == nullptr) { return; }
 
-    //Surface (or clear) the region-level solve error so QML / CavernOutputPage
-    //sees the latest cavernlib output for every solve.
-    const bool hadSolveError = m_lastSolveError.has_value();
-    if (results.hasSolveError()) {
-        m_lastSolveError = results.solveError();
-        emit solveErrorChanged();
-    } else if (hadSolveError) {
-        m_lastSolveError.reset();
-        emit solveErrorChanged();
-    }
-
-    //Clear all the unconnected chunk errors from the previous run
-    clearUnconnectedChunkErrors();
+    // (m_lastSolveError, m_lastCavernLog, m_lastLoopClosureStats, and
+    // per-chunk error markers are all published by publishResults() before
+    // we get here. This function is only responsible for applying the
+    // computed geometry / station positions / depth-length to the live caves.)
 
     //Validate all the objects in resultData, remove any that were delete before the task was over
     validateResultsData(results); //Modifies resultData inplace
@@ -346,10 +418,8 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     while(iter.hasNext()) {
         iter.next();
 
-        cwCave* cave = const_cast<cwCave*>(iter.key());
+        cwCave* cave = iter.key();
         cwLinePlotTask::LinePlotCaveData caveData = iter.value();
-
-        updateUnconnectedChunkErrors(cave, caveData);
 
         if(caveData.hasStationPositionsChanged()) {
             cave->setStationPositionLookup(caveData.stationPositions());

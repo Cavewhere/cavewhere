@@ -185,6 +185,13 @@ QQ.Item {
         }
     }
 
+    QQ.Component {
+        id: cavernOutputPageComponent
+        CavernOutputPage {
+            anchors.fill: parent
+        }
+    }
+
     QQ.Component.onCompleted: {
         GlobalShadowTextInput.parent = overlay;
         RootPopupItem.parent = overlay
@@ -202,6 +209,7 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "Pipeline", pipelinePageComponent)
         RootData.pageSelectionModel.registerPage(null, "Remote Settings", remoteManagementPageComponent)
         RootData.pageSelectionModel.registerPage(null, "History", gitHistoryPageComponent)
+        RootData.pageSelectionModel.registerPage(null, "Cavern", cavernOutputPageComponent)
 
         mainSideBar.viewPage = viewPage;
         mainSideBar.dataPage = dataPage;

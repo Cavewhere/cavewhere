@@ -1132,3 +1132,188 @@ TEST_CASE("cwLinePlotManager handles chunks with empty shots (bug #435)", "[Line
         CHECK(cave->length()->value() == Catch::Approx(15.0).epsilon(0.01));
     }
 }
+
+TEST_CASE("cwLinePlotManager surfaces cavern output to QML",
+          "[LinePlotManager][CavernOutput]")
+{
+    // Phase 2 / plan §7.5: the cavern log is the only source of cavernlib's
+    // info-level messages ("Survey has no control points. Therefore I've fixed
+    // X at (0,0,0)") and netskel's loop-closure stats. CavernOutputPage binds
+    // to manager.cavernLog and manager.loopClosureStats Q_PROPERTYs, so a
+    // successful solve must publish the log content even when nothing failed.
+
+    cwCavingRegion region;
+    auto* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave 1"));
+    region.addCave(cave);
+
+    auto* trip = new cwTrip();
+    cave->addTrip(trip);
+    trip->calibrations()->setAutoDeclination(false);
+    auto* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+
+    SECTION("Successful solve publishes the cavern log (info messages)") {
+        cwShot shot;
+        shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+        shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+        shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+        chunk->appendShot(cwStation(QStringLiteral("a1")),
+                          cwStation(QStringLiteral("a2")),
+                          shot);
+
+        auto plotManager = std::make_unique<cwLinePlotManager>();
+        cwSignalSpy outputSpy(plotManager.get(),
+                              &cwLinePlotManager::cavernOutputChanged);
+        outputSpy.setObjectName(QStringLiteral("outputSpy"));
+
+        plotManager->setRegion(&region);
+        plotManager->waitToFinish();
+
+        // The signal must have fired so QML bindings (CavernOutputPage)
+        // pick up the published log without a manual refresh.
+        CHECK(outputSpy.count() >= 1);
+
+        // No SolveError on a clean run.
+        CHECK_FALSE(plotManager->hasSolveError());
+        CHECK(plotManager->solveErrorMessage().isEmpty());
+
+        // cavernlib always emits a stats summary on the success path
+        // ("Survey contains N survey stations, joined by M shots." etc.).
+        // Surfacing it is the whole point of CavernOutputPage on success.
+        CHECK_FALSE(plotManager->cavernLog().isEmpty());
+        CHECK(plotManager->cavernLog().contains(QStringLiteral("Survey contains"),
+                                                Qt::CaseSensitive));
+        CHECK(plotManager->cavernLog().contains(QStringLiteral("Total length"),
+                                                Qt::CaseSensitive));
+    }
+
+    SECTION("Removing all caves clears stale cavernLog (D-1)") {
+        // Pre-populate cavern log via a successful solve, then trigger the
+        // no-shots early-return path in runSurvex() by removing every cave.
+        // The cached log/stats must clear so CavernOutputPage doesn't keep
+        // showing the previous run's text.
+        cwShot shot;
+        shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+        shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+        shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+        chunk->appendShot(cwStation(QStringLiteral("a1")),
+                          cwStation(QStringLiteral("a2")),
+                          shot);
+
+        auto plotManager = std::make_unique<cwLinePlotManager>();
+        plotManager->setRegion(&region);
+        plotManager->waitToFinish();
+        REQUIRE_FALSE(plotManager->cavernLog().isEmpty());
+
+        region.clearCaves();
+        plotManager->waitToFinish();
+
+        CHECK(plotManager->cavernLog().isEmpty());
+        CHECK(plotManager->loopClosureStats().isEmpty());
+        CHECK_FALSE(plotManager->hasSolveError());
+    }
+
+    SECTION("setRegion clears stale cavernLog from a prior region (D-2)") {
+        cwShot shot;
+        shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+        shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+        shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+        chunk->appendShot(cwStation(QStringLiteral("a1")),
+                          cwStation(QStringLiteral("a2")),
+                          shot);
+
+        auto plotManager = std::make_unique<cwLinePlotManager>();
+        plotManager->setRegion(&region);
+        plotManager->waitToFinish();
+        REQUIRE_FALSE(plotManager->cavernLog().isEmpty());
+
+        // Switch to a fresh empty region — the previous region's cavern log
+        // and solve error must clear so the new project's CavernOutputPage
+        // starts blank instead of carrying over stale text.
+        cwCavingRegion freshRegion;
+        plotManager->setRegion(&freshRegion);
+        plotManager->waitToFinish();
+
+        CHECK(plotManager->cavernLog().isEmpty());
+        CHECK(plotManager->loopClosureStats().isEmpty());
+        CHECK_FALSE(plotManager->hasSolveError());
+    }
+
+    SECTION("Unconnected chunks surface as a solve error") {
+        // Build two disconnected survey chunks. With nothing tying chunk2 back
+        // to chunk1's network, the line-plot pipeline can't compute a sane
+        // geometry — the user needs to know via CavernOutputPage rather than
+        // seeing "Last solve completed successfully" with an empty log.
+        cwShot shot;
+        shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+        shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+        shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+        chunk->appendShot(cwStation(QStringLiteral("a1")),
+                          cwStation(QStringLiteral("a2")),
+                          shot);
+
+        cwSurveyChunk* chunk2 = new cwSurveyChunk();
+        trip->addChunk(chunk2);
+
+        cwShot shot2;
+        shot2.setDistance(cwDistanceReading(QStringLiteral("20.0")));
+        shot2.setCompass(cwCompassReading(QStringLiteral("90.0")));
+        shot2.setClino(cwClinoReading(QStringLiteral("0.0")));
+        chunk2->appendShot(cwStation(QStringLiteral("b1")),
+                           cwStation(QStringLiteral("b2")),
+                           shot2);
+
+        auto plotManager = std::make_unique<cwLinePlotManager>();
+        plotManager->setRegion(&region);
+        plotManager->waitToFinish();
+
+        // The disconnected chunk is a solve failure, not a clean run.
+        CHECK(plotManager->hasSolveError());
+        CHECK_FALSE(plotManager->solveErrorMessage().isEmpty());
+
+        // The message must point the user at the actual problem so the
+        // CavernOutputPage status line is actionable.
+        CHECK(plotManager->solveErrorMessage().contains(QStringLiteral("connect"),
+                                                        Qt::CaseInsensitive));
+    }
+
+    SECTION("Solve with a loop publishes netskel loop-closure stats") {
+        // Triangle a1→a2, a2→a3, a3→a1. Netskel writes one entry per loop
+        // (a length/bearing/gradient line) to the .err sidecar.
+        cwShot shot;
+        shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+        shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+        shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+        chunk->appendShot(cwStation(QStringLiteral("a1")),
+                          cwStation(QStringLiteral("a2")),
+                          shot);
+
+        cwShot shot2;
+        shot2.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+        shot2.setCompass(cwCompassReading(QStringLiteral("90.0")));
+        shot2.setClino(cwClinoReading(QStringLiteral("0.0")));
+        chunk->appendShot(cwStation(QStringLiteral("a2")),
+                          cwStation(QStringLiteral("a3")),
+                          shot2);
+
+        cwShot shot3;
+        shot3.setDistance(cwDistanceReading(QStringLiteral("14.14")));
+        shot3.setCompass(cwCompassReading(QStringLiteral("225.0")));
+        shot3.setClino(cwClinoReading(QStringLiteral("0.0")));
+        chunk->appendShot(cwStation(QStringLiteral("a3")),
+                          cwStation(QStringLiteral("a1")),
+                          shot3);
+
+        auto plotManager = std::make_unique<cwLinePlotManager>();
+        plotManager->setRegion(&region);
+        plotManager->waitToFinish();
+
+        CHECK_FALSE(plotManager->hasSolveError());
+        CHECK_FALSE(plotManager->cavernLog().isEmpty());
+
+        // netskel's loop report carries at least the traverse identifier and
+        // an error-class letter (L = length, B = bearing, G = gradient).
+        CHECK_FALSE(plotManager->loopClosureStats().isEmpty());
+    }
+}

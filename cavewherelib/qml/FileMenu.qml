@@ -203,6 +203,15 @@ QC.Menu {
         }
 
         QC.MenuItem {
+            text: RootData.linePlotManager.hasSolveError
+                  ? qsTr("Cavern Output… (solve error)")
+                  : qsTr("Cavern Output…")
+            onTriggered: {
+                RootData.pageSelectionModel.gotoPageByName(null, "Cavern");
+            }
+        }
+
+        QC.MenuItem {
             text: "Resize to 1080p"
             onTriggered: {
                 resizeTo(16, 9, 1920)

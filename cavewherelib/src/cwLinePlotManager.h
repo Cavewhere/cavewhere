@@ -43,10 +43,10 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
 
     Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
     Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact CONSTANT)
-    Q_PROPERTY(bool hasSolveError READ hasSolveError NOTIFY solveErrorChanged FINAL)
-    Q_PROPERTY(QString solveErrorMessage READ solveErrorMessage NOTIFY solveErrorChanged FINAL)
-    Q_PROPERTY(QString cavernLog READ cavernLog NOTIFY solveErrorChanged FINAL)
-    Q_PROPERTY(QString loopClosureStats READ loopClosureStats NOTIFY solveErrorChanged FINAL)
+    Q_PROPERTY(bool hasSolveError READ hasSolveError NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(QString solveErrorMessage READ solveErrorMessage NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(QString cavernLog READ cavernLog NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(QString loopClosureStats READ loopClosureStats NOTIFY cavernOutputChanged FINAL)
 
 public:
     explicit cwLinePlotManager(QObject *parent = 0);
@@ -54,8 +54,8 @@ public:
 
     bool hasSolveError() const { return m_lastSolveError.has_value(); }
     QString solveErrorMessage() const { return m_lastSolveError ? m_lastSolveError->message : QString(); }
-    QString cavernLog() const { return m_lastSolveError ? m_lastSolveError->cavernLog : QString(); }
-    QString loopClosureStats() const { return m_lastSolveError ? m_lastSolveError->loopClosureStats : QString(); }
+    QString cavernLog() const { return m_lastCavernLog; }
+    QString loopClosureStats() const { return m_lastLoopClosureStats; }
 
     void setRegion(cwCavingRegion* region);
     Q_INVOKABLE void setRenderLinePlot(cwRenderLinePlot* linePlot);
@@ -77,9 +77,10 @@ signals:
     void stationPositionInTripsChanged(QList<cwTrip*>);
     void stationPositionInScrapsChanged(QList<cwScrap*>);
     void automaticUpdateChanged();
-    void solveErrorChanged();
+    void cavernOutputChanged();
 
 public slots:
+    void rerunSurvex();
 
 private:
     QPointer<cwCavingRegion> Region; //The main
@@ -95,6 +96,8 @@ private:
     cwSurveyNetwork m_lastPublishedNetwork;
 
     std::optional<cwLinePlotTask::SolveError> m_lastSolveError;
+    QString m_lastCavernLog;
+    QString m_lastLoopClosureStats;
 
     bool AutomaticUpdate = true;
 
@@ -108,9 +111,13 @@ private:
     void clearUnconnectedChunkErrors();
 
     void updateLinePlot(cwLinePlotTask::LinePlotResultData results);
+    void publishResults(const cwLinePlotTask::LinePlotResultData& results);
+    void publishCavernOutput(QString cavernLog,
+                             QString loopClosureStats,
+                             std::optional<cwLinePlotTask::SolveError> solveError);
+    void publishPerCaveErrors(const cwLinePlotTask::LinePlotResultData& results);
 
 private slots:
-    void rerunSurvex();
     void runSurvex();
 };
 

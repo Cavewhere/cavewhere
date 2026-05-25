@@ -75,6 +75,14 @@ StandardPage {
 
             ContextMenuButton {
                 objectName: "regionContextMenu"
+                iconSource: "qrc:/twbs-icons/icons/list.svg"
+                // ContextMenuButton defaults to a 20×20 caret for field-level
+                // dropdowns; size up here so the page-level hamburger reads
+                // as a primary action.
+                implicitWidth: Theme.iconSizeMedium
+                implicitHeight: Theme.iconSizeMedium
+                icon.width: Theme.iconSizeSmall
+                icon.height: Theme.iconSizeSmall
                 menu: regionContextMenuComponent
             }
         }
@@ -138,6 +146,20 @@ StandardPage {
                     text: qsTr("Recenter world origin")
                     enabled: RootData.region.globalCoordinateSystem !== ""
                     onTriggered: RootData.region.recomputeWorldOrigin()
+                }
+
+                QC.MenuSeparator {}
+
+                QC.MenuItem {
+                    objectName: "cavernOutputMenuItem"
+                    text: RootData.linePlotManager.hasSolveError
+                          ? qsTr("Cavern Output (solve error)")
+                          : qsTr("Cavern Output")
+                    onTriggered: {
+                        // Cavern page is registered at top level — parent
+                        // must be null for the lookup to find it.
+                        RootData.pageSelectionModel.gotoPageByName(null, "Cavern");
+                    }
                 }
             }
         }

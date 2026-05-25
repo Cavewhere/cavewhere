@@ -934,6 +934,25 @@ m_restarter.restart([this]() {
       Audit and update each affected test in the same PR as the type
       switch.</li>
 </ol>
+
+<p class="meta">
+  <strong>Implementation deviation:</strong> the literal
+  <code>Monad::Result&lt;LinePlotResultData&gt;</code> return type was
+  abandoned during Phase 2 implementation. <code>Monad::ResultBase</code>
+  carries only an error string + integer code, which can't hold cavern's
+  <code>.log</code> text and netskel's <code>.err</code> loop-closure
+  stats &mdash; the two payloads that motivate
+  <code>CavernOutputPage</code>. Instead, <code>SolveError</code> lives
+  on <code>LinePlotResultData</code> itself (set by the worker when any
+  step fails), the future stays
+  <code>QFuture&lt;LinePlotResultData&gt;</code>, and the manager
+  branches on <code>result.hasSolveError()</code> in its flattened
+  context callback &mdash; calling <code>handleSolveError()</code> on
+  failure (which only updates Q_PROPERTYs, leaving the last good line
+  plot intact) and <code>updateLinePlot()</code> on success. This
+  preserves the plan's clean error-branching goal while keeping the
+  rich SolveError payload accessible to QML.
+</p>
 </div>
 
 <h4 id="temp-dir">7.4 Solve temp-file lifecycle (Phase 2 deliverable)</h4>
