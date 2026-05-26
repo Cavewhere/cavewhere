@@ -58,6 +58,11 @@ public:
     // animator pointer on the public API.
     static constexpr const char* stateAnimationObjectName = "stateAnimation";
 
+    // Margin multiplier applied by zoomTo() so the framed box doesn't sit
+    // flush against the viewport edges. Exposed so tests can use the same
+    // value without duplicating the literal.
+    static constexpr float FramingPad = 1.08f;
+
     explicit cwBaseTurnTableInteraction(QQuickItem *parent = 0);
 
     QQuaternion cameraRotation() const;

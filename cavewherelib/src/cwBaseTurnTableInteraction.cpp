@@ -646,6 +646,18 @@ constexpr double kMinViewDistance = 1.0e-3;
 // the ortho frustum (zero-width view volume or inverted projection).
 constexpr double kMinZoomScale = 1.0e-6;
 
+// Floor used by zoomTo's fit math when dividing by half-extents or
+// FOV-tangent values. Anything below this collapses to 1e-6 to avoid
+// divide-by-zero / NaN propagation into the view matrix. Same magnitude
+// as kMinZoomScale by coincidence; kept distinct because the meanings are
+// different (geometry epsilon vs ortho-zoom epsilon).
+constexpr float kFramingEpsilon = 1.0e-6f;
+
+// True iff all three components of v are finite (not NaN, not +/-inf).
+inline bool isFinite3(const QVector3D& v) {
+    return std::isfinite(v.x()) && std::isfinite(v.y()) && std::isfinite(v.z());
+}
+
 // Minimum animation duration in ms accepted by animateToViewState. Zero
 // would make QVariantAnimation skip straight to end (no interpolation);
 // negative values are documented as invalid. 1 ms is "effectively instant
@@ -994,90 +1006,89 @@ void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)
     if(box.isNull()) {
         return;
     }
+    // box.isNull() only catches the default-constructed case; an explicit
+    // finite check guards against NaN/inf min/max propagating into the
+    // fit math and poisoning the view matrix.
+    if (!isFinite3(box.minimum()) || !isFinite3(box.maximum())) {
+        return;
+    }
 
     // 1) Reset orientation/eye to your default
     resetView();
 
-    // 2) Re-center the target box at the origin so zoom occurs “from the origin”
     const QVector3D c = box.center();
-    QMatrix4x4 view = Camera->viewMatrix();
-    view.translate(-c);                    // shift world so that box center is at origin
-    Camera->setViewMatrix(view);
-
-    // Padding so the box isn’t touching the frame
-    constexpr float pad = 1.08f;          // ~8% margin
 
     switch(Camera->projection().type()) {
     case cwProjection::Ortho: {
         // -------- ORTHOGRAPHIC FIT --------
-        // We compute the current world-span visible in the viewport at the box’s depth by
-        // unprojecting the viewport corners, then scale zoom so min(viewSpan/boxSpan) fits.
+        // Re-center first: ortho's fit math reads the current world span
+        // via unProject, and the final positioning needs box.center() at
+        // view-space (0,0,-defaultDistance). The perspective branch builds
+        // its view matrix from scratch and does not want this intermediate
+        // write.
+        QMatrix4x4 view = Camera->viewMatrix();
+        view.translate(-c);
+        Camera->setViewMatrix(view);
 
-        // Current viewport size (replace with your accessors)
+        // Compute the current world-span visible in the viewport at the
+        // box's depth by unprojecting the viewport corners, then scale zoom
+        // so the larger box dimension fills the corresponding viewport span.
         const QSize viewportSize = Camera->viewport().size();
-
-        // Unproject top-left and bottom-right at w=1.0 (your code uses 1.0 for “far plane” in ortho path)
-        const QVector3D topLeft = Camera->unProject(QPoint(0, 0),   1.0);
-        const QVector3D bottomRight = Camera->unProject(QPoint(viewportSize.width(), viewportSize.height()), 1.0);
+        const QVector3D topLeft     = Camera->unProject(QPoint(0, 0), 1.0);
+        const QVector3D bottomRight = Camera->unProject(
+                    QPoint(viewportSize.width(), viewportSize.height()), 1.0);
 
         const float viewSpanX = std::abs(bottomRight.x() - topLeft.x());
         const float viewSpanY = std::abs(bottomRight.y() - topLeft.y());
 
         const QVector3D half = 0.5f * (box.maximum() - box.minimum());
-        const float boxSizeX = 2.0f * std::max(half.x(), 1e-6f);
-        const float boxSizeY = 2.0f * std::max(half.y(), 1e-6f);
+        const float boxSizeX = 2.0f * (std::max)(half.x(), kFramingEpsilon);
+        const float boxSizeY = 2.0f * (std::max)(half.y(), kFramingEpsilon);
 
-        // How much we can “grow” the box before it hits an edge
-        const float fitX = boxSizeX / viewSpanX;
-        const float fitY = boxSizeY / viewSpanY;
-        const float fit  = std::max(fitX, fitY) * pad;
+        const float fitX = boxSizeX / (std::max)(viewSpanX, kFramingEpsilon);
+        const float fitY = boxSizeY / (std::max)(viewSpanY, kFramingEpsilon);
+        const float fit  = (std::max)(fitX, fitY) * FramingPad;
+        if (!std::isfinite(fit) || fit <= 0.0f) {
+            return;
+        }
 
-        // In your ortho zoom, zoomScale scales linearly; keep the box centered at origin.
         Camera->setZoomScale(Camera->zoomScale() * fit);
-
-        // No extra translation: we already centered the box at the origin.
         return;
     }
     case cwProjection::Perspective:
     case cwProjection::PerspectiveFrustum: {
-        qDebug() << "Warning this hasn't been tested" << LOCATION;
-
         // -------- PERSPECTIVE FIT --------
-        // We compute the distance from the eye to the origin so that the box fits in both X and Y
-        // using the FOV and aspect. Then we move the camera along its forward vector.
-
-        // Replace with your getters if names differ.
+        // Required eye-to-box-center distance so the box's half-width
+        // subtends half of the appropriate FOV. Take the bigger of the X
+        // and Y fits (whichever axis is wider). Add half-depth so the near
+        // face of a box with Z-thickness doesn't clip. Multiply by pad.
         const float fovY = Camera->projection().fieldOfView() * cwGlobals::degreesToRadians();
         const float aspect = Camera->projection().aspectRatio();
-
-        // Convert to FOVx for width fit
         const float tanHalfFovY = std::tan(0.5f * fovY);
         const float tanHalfFovX = tanHalfFovY * aspect;
 
-        // Half extents in world after recentring (axis-aligned in your world frame)
         const QVector3D half = 0.5f * (box.maximum() - box.minimum());
-        const float hx = std::max(half.x(), 1e-6f);
-        const float hy = std::max(half.y(), 1e-6f);
-        const float hz = std::max(half.z(), 0.0f);
+        const float hx = (std::max)(half.x(), kFramingEpsilon);
+        const float hy = (std::max)(half.y(), kFramingEpsilon);
+        const float hz = (std::max)(half.z(), 0.0f);
 
-        // Minimum distances so that full width/height fits
-        const float dY = hy / tanHalfFovY;
-        const float dX = hx / std::max(tanHalfFovX, 1e-6f);
+        // Symmetric guards on both FOV-tangent divisors so a degenerate
+        // projection (fov == 0 → tan == 0) can't slip through.
+        const float dY = hy / (std::max)(tanHalfFovY, kFramingEpsilon);
+        const float dX = hx / (std::max)(tanHalfFovX, kFramingEpsilon);
+        const float dist = ((std::max)(dX, dY) + hz) * FramingPad;
+        if (!std::isfinite(dist) || dist <= 0.0f) {
+            return;
+        }
 
-        // Add half-depth so the near face doesn’t clip when the box has thickness toward the camera
-        float dist = std::max(dX, dY) + hz;
-        dist *= pad; // give it some breathing room
-
-        // Move the camera *back* along its forward axis by 'dist'.
-        // We derive the forward direction from the current view.
-        // In view space, forward is -Z. Pull that into world with the rotation part of inv(view).
-        bool canInvert;
-        QMatrix4x4 invView = Camera->viewMatrix().inverted(&canInvert);
-        if (canInvert) { /* extremely unlikely; just bail gracefully */ return; }
-
-        const QVector3D forwardWorld = (invView * QVector4D(0.f, 0.f, -1.0f, 0.f)).toVector3D().normalized();
-        QMatrix4x4 newView = Camera->viewMatrix();
-        newView.translate(-forwardWorld * dist);
+        // Build the view matrix from scratch: camera at view-space (0,0,0)
+        // with box.center() at view-space (0,0,-dist), looking down -Z
+        // (the orientation resetView left us in). Replaces the previous
+        // translate-the-existing-matrix path that had a sign error AND an
+        // inverted `canInvert` guard.
+        QMatrix4x4 newView;
+        newView.translate(0.0f, 0.0f, -dist);
+        newView.translate(-c);
         Camera->setViewMatrix(newView);
         return;
     }

@@ -58,6 +58,33 @@ constexpr int kAnimationQuietWindowMs = 100;
 const QVector3D kZoomToBoxMin(-10.0f, -10.0f, -1.0f);
 const QVector3D kZoomToBoxMax(10.0f, 10.0f, 1.0f);
 
+// Match cwCamera::perspectiveProjectionDefault (cwCamera.cpp:259-265).
+constexpr double kPerspectiveFovYDegrees = 55.0;
+constexpr double kPerspectiveAspect =
+        double(kViewportWidth) / double(kViewportHeight);
+
+// Replicates zoomTo's perspective fit math so tests can verify the
+// resulting eye-to-box-center distance independently. Translated 1:1 from
+// the production code so any divergence between this and the implementation
+// trips the test. Reads the framing pad from the production constant so a
+// future tune of FramingPad updates both sides together.
+inline double expectedZoomToDistPerspective(const QBox3D& box,
+                                            double fovYDegrees,
+                                            double aspect)
+{
+    constexpr double kEpsilon = 1.0e-6;
+    const QVector3D half = 0.5f * (box.maximum() - box.minimum());
+    const double hx = (std::max)(double(half.x()), kEpsilon);
+    const double hy = (std::max)(double(half.y()), kEpsilon);
+    const double hz = (std::max)(double(half.z()), 0.0);
+    const double tanHalfFovY = std::tan(0.5 * fovYDegrees * M_PI / 180.0);
+    const double tanHalfFovX = tanHalfFovY * aspect;
+    const double dY = hy / (std::max)(tanHalfFovY, kEpsilon);
+    const double dX = hx / (std::max)(tanHalfFovX, kEpsilon);
+    return ((std::max)(dX, dY) + hz)
+            * double(cwBaseTurnTableInteraction::FramingPad);
+}
+
 // Click positions used by orbit-around-pivot tests. Chosen off-center so
 // the pivot lands at a non-origin world point, exercising the
 // translate-rotate-translate path in updateRotationMatrix().
@@ -263,6 +290,165 @@ TEST_CASE("cwBaseTurnTableInteraction zoomTo resets orientation and frames the b
     QPointF expected = screenCenter();
     CHECK(projected.x() == Approx(expected.x()).margin(kPixelTolerance));
     CHECK(projected.y() == Approx(expected.y()).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction zoomTo (perspective) resets orientation and centers a non-origin box",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Regression: the perspective branch of zoomTo had a sign error
+    // (-forwardWorld * dist instead of forwardWorld * dist) AND an inverted
+    // canInvert guard (bailed on success, ran on failure), so the camera
+    // either stayed at the resetView default distance or moved toward the
+    // box instead of away. This test exercises perspective with an
+    // off-origin box to catch both the recenter step and the distance step.
+    Fixture f;
+    f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+
+    f.interaction.setAzimuth(75.0);
+    f.interaction.setPitch(45.0);
+
+    const QVector3D boxMin(40.0f, 60.0f, -1.0f);
+    const QVector3D boxMax(60.0f, 80.0f,  1.0f);
+    QBox3D box(boxMin, boxMax);
+    const QVector3D c = box.center();
+
+    f.interaction.zoomTo(box);
+
+    CHECK(f.interaction.azimuth() == Approx(0.0));
+    CHECK(f.interaction.pitch() == Approx(90.0));
+
+    // Box center projects to viewport center.
+    QPointF projected = f.camera.project(c);
+    QPointF expected = screenCenter();
+    CHECK(projected.x() == Approx(expected.x()).margin(kPixelTolerance));
+    CHECK(projected.y() == Approx(expected.y()).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction zoomTo (perspective) places eye at the computed fit distance",
+          "[cwBaseTurnTableInteraction]")
+{
+    // The view-space depth of box.center after zoomTo must equal the
+    // perspective fit distance the math prescribes — that's what makes the
+    // box fit the viewport without clipping or shrinking. The current
+    // buggy code leaves the box at the default distance (50) regardless
+    // of the computed dist, or — with the sign fixed — moves the camera
+    // toward the box. Either failure shows up here.
+    Fixture f;
+    f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+
+    QBox3D box(kZoomToBoxMin, kZoomToBoxMax);
+    f.interaction.zoomTo(box);
+
+    const QVector3D centerView = f.camera.viewMatrix().map(box.center());
+    const double expectedDist = expectedZoomToDistPerspective(
+                box, kPerspectiveFovYDegrees, kPerspectiveAspect);
+
+    CHECK(centerView.x() == Approx(0.0).margin(kMatrixEps));
+    CHECK(centerView.y() == Approx(0.0).margin(kMatrixEps));
+    CHECK(centerView.z() == Approx(-expectedDist).margin(kMatrixEps));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction zoomTo (perspective) fits the box within the viewport",
+          "[cwBaseTurnTableInteraction]")
+{
+    // After zoomTo, the box's bounding extent on the dominant axis must
+    // very nearly fill the viewport (1 / pad fraction). An asymmetric box
+    // pins which axis is dominant, so we can tell whether the fit math
+    // picked the right one.
+    Fixture f;
+    f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+
+    // Tall box: hy > hx, so vertical FOV is the limiting axis. hz kept
+    // near zero so that the +hz fudge in zoomTo's fit math doesn't push
+    // the camera measurably further back; the projected extent should
+    // sit at exactly (halfH / pad) within rounding.
+    const QBox3D tall(QVector3D(-5.0f, -20.0f, -1.0e-4f),
+                      QVector3D( 5.0f,  20.0f,  1.0e-4f));
+    f.interaction.zoomTo(tall);
+
+    // Project the four lateral box corners; the topmost/bottommost should
+    // sit just inside the viewport (the 1/pad band around the centre).
+    QPointF top    = f.camera.project(QVector3D(0.0f,  20.0f, 0.0f));
+    QPointF bottom = f.camera.project(QVector3D(0.0f, -20.0f, 0.0f));
+    QPointF left   = f.camera.project(QVector3D(-5.0f, 0.0f, 0.0f));
+    QPointF right  = f.camera.project(QVector3D( 5.0f, 0.0f, 0.0f));
+
+    const double centerY = screenCenter().y();
+    const double centerX = screenCenter().x();
+    const double halfH = double(kViewportHeight) / 2.0;
+    const double halfW = double(kViewportWidth)  / 2.0;
+
+    // Vertical extent fills 1/pad of the viewport height (within a few px).
+    const double topOffsetFromCenter    = centerY - top.y();        // top is above center → y < centerY
+    const double bottomOffsetFromCenter = bottom.y() - centerY;
+    CHECK(topOffsetFromCenter    == Approx(halfH / double(cwBaseTurnTableInteraction::FramingPad)).margin(2.0));
+    CHECK(bottomOffsetFromCenter == Approx(halfH / double(cwBaseTurnTableInteraction::FramingPad)).margin(2.0));
+
+    // Horizontal extent is narrower than the viewport (this box is taller
+    // than it is wide, so X should not be filling the screen).
+    const double leftOffsetFromCenter  = centerX - left.x();
+    const double rightOffsetFromCenter = right.x() - centerX;
+    CHECK(leftOffsetFromCenter  < halfW);
+    CHECK(rightOffsetFromCenter < halfW);
+    CHECK(leftOffsetFromCenter  > 0.0);
+    CHECK(rightOffsetFromCenter > 0.0);
+}
+
+TEST_CASE("cwBaseTurnTableInteraction zoomTo defends against NaN/inf box bounds and a degenerate FOV",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Two failure modes the rewrite has to defend against:
+    //   1. A non-null box with NaN/inf min or max (std::max(NaN, x) returns
+    //      NaN on libstdc++/libc++ — naive clamps don't help).
+    //   2. A perspective projection with fov so small tan(fov/2) underflows
+    //      to zero, which without the symmetric kFramingEpsilon guard
+    //      would divide by zero and write inf into the view matrix.
+    // In both cases the camera must end up with a finite view matrix
+    // (early-return is fine; poisoning the camera is not).
+
+    auto allFinite = [](const QMatrix4x4& m) {
+        for (int i = 0; i < 16; ++i) {
+            if (!std::isfinite(m.constData()[i])) return false;
+        }
+        return true;
+    };
+
+    SECTION("NaN box bounds (ortho)") {
+        Fixture f;
+        const QMatrix4x4 before = f.camera.viewMatrix();
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        QBox3D bad(QVector3D(nan, 0.0f, 0.0f), QVector3D(10.0f, 10.0f, 1.0f));
+        REQUIRE(!bad.isNull());
+        f.interaction.zoomTo(bad);
+        CHECK(allFinite(f.camera.viewMatrix()));
+        // Early-return contract: camera left untouched.
+        CHECK(matricesNearlyEqual(f.camera.viewMatrix(), before));
+    }
+
+    SECTION("inf box bounds (perspective)") {
+        Fixture f;
+        f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+        const QMatrix4x4 before = f.camera.viewMatrix();
+        const float inf = std::numeric_limits<float>::infinity();
+        QBox3D bad(QVector3D(-10.0f, -10.0f, -1.0f), QVector3D(10.0f, inf, 1.0f));
+        REQUIRE(!bad.isNull());
+        f.interaction.zoomTo(bad);
+        CHECK(allFinite(f.camera.viewMatrix()));
+        CHECK(matricesNearlyEqual(f.camera.viewMatrix(), before));
+    }
+
+    SECTION("near-zero perspective FOV") {
+        // The unguarded path would divide by tan(0) = 0 → inf. With the
+        // symmetric kFramingEpsilon guard the view matrix stays finite
+        // (dist is huge but bounded).
+        Fixture f;
+        cwProjection tiny;
+        tiny.setPerspective(1.0e-3, kPerspectiveAspect, 1.0, 10000.0);
+        f.camera.setProjection(tiny);
+        QBox3D box(kZoomToBoxMin, kZoomToBoxMax);
+        f.interaction.zoomTo(box);
+        CHECK(allFinite(f.camera.viewMatrix()));
+    }
 }
 
 TEST_CASE("cwBaseTurnTableInteraction startRotating + setAzimuth orbits around the click point",
