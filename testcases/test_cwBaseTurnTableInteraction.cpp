@@ -13,6 +13,7 @@
 #include <QPoint>
 #include <QSignalSpy>
 #include <QTest>
+#include <QVariantAnimation>
 #include <QVector3D>
 
 //QMath3d
@@ -22,6 +23,7 @@
 
 //Std
 #include <cmath>
+#include <limits>
 
 using namespace Catch;
 
@@ -48,6 +50,7 @@ constexpr float kPixelTolerance = 3.0f;
 // adapts to CI load instead of pinning a fixed wait.
 constexpr int kAnimationFirstTickTimeoutMs = 500;
 constexpr int kAnimationQuietWindowMs = 100;
+
 
 // Box used by the zoomTo test — a 20 × 20 × 2 axis-aligned box centered at
 // the origin. Z half-thickness is small so the box "lies flat" on the XY
@@ -525,10 +528,323 @@ TEST_CASE("cwBaseTurnTableInteraction setViewState produces canonical view matri
 
     f.interaction.setViewState(s);
 
-    // Canonical default view: identity rotation (pitch 90, az 0) translated -50 along Z.
+    // In the turntable convention, (Pitch=90, Azimuth=0) is the "default"
+    // and corresponds to identity rotation on the view matrix — matches
+    // exactly what resetView() leaves behind: a pure translation.
     QMatrix4x4 expected;
     expected.translate(QVector3D(0.0f, 0.0f, -50.0f));
-    expected.rotate(QQuaternion::fromAxisAndAngle(1.0f, 0.0f, 0.0f, 90.0f));
-    expected.rotate(QQuaternion::fromAxisAndAngle(0.0f, 0.0f, 1.0f, 0.0f));
     CHECK(matricesNearlyEqual(f.camera.viewMatrix(), expected));
+}
+
+// --- Commit 3 cases: animateToViewState ---
+
+TEST_CASE("cwBaseTurnTableInteraction animateToViewState end-state matches setViewState",
+          "[cwBaseTurnTableInteraction]")
+{
+    cwTurnTableViewState target;
+    target.center = QVector3D(4.0f, -2.0f, 1.5f);
+    target.azimuth = 75.0;
+    target.pitch = 30.0;
+    target.distance = 80.0;
+    target.zoomScale = 1.75;
+
+    // Reference: snap path.
+    QMatrix4x4 expectedView;
+    double expectedZoom = 0.0;
+    {
+        Fixture snap;
+        snap.interaction.setViewState(target);
+        expectedView = snap.camera.viewMatrix();
+        expectedZoom = snap.camera.zoomScale();
+    }
+
+    // Animated path: drive to completion via QSignalSpy quiet-window drain.
+    Fixture f;
+    QSignalSpy finishedSpy(&f.interaction,
+                           &cwBaseTurnTableInteraction::animationFinished);
+    QSignalSpy viewSpy(&f.camera, &cwCamera::viewMatrixChanged);
+    f.interaction.animateToViewState(target, 100);
+    REQUIRE(viewSpy.wait(kAnimationFirstTickTimeoutMs));
+    while(viewSpy.wait(kAnimationQuietWindowMs)) {
+        // drain remaining ticks
+    }
+
+    CHECK(matricesNearlyEqual(f.camera.viewMatrix(), expectedView));
+    CHECK(f.camera.zoomScale() == Approx(expectedZoom));
+    // animationFinished must have fired exactly once for the run.
+    CHECK(finishedSpy.size() == 1);
+}
+
+TEST_CASE("cwBaseTurnTableInteraction animateToViewState at t=0.5 is at the midpoint",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+
+    cwTurnTableViewState start;
+    start.center = QVector3D(0.0f, 0.0f, 0.0f);
+    start.azimuth = 0.0;
+    start.pitch = 90.0;
+    start.distance = 50.0;
+    start.zoomScale = 1.0;
+    f.interaction.setViewState(start);
+
+    cwTurnTableViewState target;
+    target.center = QVector3D(10.0f, 20.0f, 0.0f);
+    target.azimuth = 60.0;
+    target.pitch = 30.0;
+    target.distance = 100.0;
+    target.zoomScale = 2.0;
+
+    f.interaction.animateToViewState(target, 1000);
+
+    // Reach into the private animator by objectName, drive it to t=0.5
+    // via setCurrentTime. The InOutCubic easing maps duration/2 to t=0.5
+    // exactly (the curve is symmetric around the midpoint).
+    auto* anim = f.interaction.findChild<QVariantAnimation*>(
+                cwBaseTurnTableInteraction::stateAnimationObjectName);
+    REQUIRE(anim != nullptr);
+    anim->setCurrentTime(anim->duration() / 2);
+
+    cwTurnTableViewState mid = f.interaction.viewState();
+    CHECK(mid.center.x() == Approx(5.0).margin(kMatrixEps));
+    CHECK(mid.center.y() == Approx(10.0).margin(kMatrixEps));
+    CHECK(mid.center.z() == Approx(0.0).margin(kMatrixEps));
+    CHECK(mid.azimuth == Approx(30.0));
+    CHECK(mid.pitch == Approx(60.0));
+    // Ortho path: distance pinned to target (not lerped).
+    CHECK(mid.distance == Approx(target.distance).margin(kMatrixEps));
+    CHECK(mid.zoomScale == Approx(1.5));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction animateToViewState takes the short-arc on azimuth wrap",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+
+    cwTurnTableViewState start = f.interaction.viewState();
+    start.azimuth = 350.0;
+    f.interaction.setViewState(start);
+
+    cwTurnTableViewState target = start;
+    target.azimuth = 10.0;
+
+    f.interaction.animateToViewState(target, 1000);
+
+    auto* anim = f.interaction.findChild<QVariantAnimation*>(
+                cwBaseTurnTableInteraction::stateAnimationObjectName);
+    REQUIRE(anim != nullptr);
+    anim->setCurrentTime(anim->duration() / 2);
+
+    cwTurnTableViewState mid = f.interaction.viewState();
+    // The short arc from 350° to 10° passes through 0°. The long arc
+    // would pass through 180° — detect that explicitly so a regression
+    // to naive lerp fails loudly.
+    const double midAzimuth = mid.azimuth;
+    // Wrap-tolerant check: 0° is equivalent to 360°.
+    const double distanceFromZero = (std::min)(midAzimuth,
+                                               360.0 - midAzimuth);
+    CHECK(distanceFromZero == Approx(0.0).margin(0.5));
+    CHECK(std::abs(midAzimuth - 180.0) > 90.0); // not on the long arc
+}
+
+TEST_CASE("cwBaseTurnTableInteraction animateToViewState lerps distance in perspective",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+    f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+
+    cwTurnTableViewState start;
+    start.center = QVector3D(0.0f, 0.0f, 0.0f);
+    start.azimuth = 0.0;
+    start.pitch = 90.0;
+    start.distance = 50.0;
+    start.zoomScale = 1.0;
+    f.interaction.setViewState(start);
+
+    cwTurnTableViewState target = start;
+    target.distance = 150.0;
+
+    f.interaction.animateToViewState(target, 1000);
+
+    auto* anim = f.interaction.findChild<QVariantAnimation*>(
+                cwBaseTurnTableInteraction::stateAnimationObjectName);
+    REQUIRE(anim != nullptr);
+    anim->setCurrentTime(anim->duration() / 2);
+
+    cwTurnTableViewState mid = f.interaction.viewState();
+    // Under perspective the distance channel is lerped: midpoint of
+    // (50, 150) is 100.
+    CHECK(mid.distance == Approx(100.0).margin(kMatrixEps));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction centerOn(point, false) preserves orientation and zoom",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+
+    // Establish a non-default state so the test would notice if any
+    // channel other than center accidentally changed.
+    f.interaction.setAzimuth(35.0);
+    f.interaction.setPitch(60.0);
+    REQUIRE(f.interaction.azimuth() == Approx(35.0));
+    REQUIRE(f.interaction.pitch() == Approx(60.0));
+    const double zoomBefore = f.camera.zoomScale();
+
+    const QVector3D target(3.0f, 4.0f, 0.0f);
+    f.interaction.centerOn(target, false);
+
+    // Orientation and zoom unchanged.
+    CHECK(f.interaction.azimuth() == Approx(35.0));
+    CHECK(f.interaction.pitch() == Approx(60.0));
+    CHECK(f.camera.zoomScale() == Approx(zoomBefore));
+
+    // Target lands at screen center, same observable contract as the
+    // commit-1 baseline.
+    QPointF projected = f.camera.project(target);
+    QPointF expected = screenCenter();
+    CHECK(projected.x() == Approx(expected.x()).margin(kPixelTolerance));
+    CHECK(projected.y() == Approx(expected.y()).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction centerOn from plan view preserves plan view",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Regression: the first call to centerOn() in plan view (Pitch=90,
+    // Azimuth=0) used to rebuild the view matrix using an absolute
+    // R_x(Pitch)*R_z(Azimuth) rotation. That is wrong for this class —
+    // resetView() leaves the view matrix as a pure translation T(0,0,-50)
+    // and caches Pitch=90 / CurrentRotation = R_x(90)*R_z(0), so the
+    // "default" Pitch=90 must map to identity on the view matrix (not
+    // R_x(90), which tips the camera to profile view). The visible
+    // symptom was: after gotoLead from the lead page in plan view, the
+    // camera flipped to a profile-style horizontal view (Pitch reported
+    // 90 but the matrix said otherwise), and subsequent rotation drags
+    // could spin the cave upside down because the cached rotation no
+    // longer matched the actual view-matrix rotation.
+    Fixture f;
+
+    REQUIRE(f.interaction.pitch() == Approx(90.0));
+    REQUIRE(f.interaction.azimuth() == Approx(0.0));
+
+    // Snapshot what a true "plan view" should look like: a point above the
+    // target in world +Z must project to the SAME screen pixel as the
+    // target itself (ortho top-down view = zero parallax in Z).
+    const QVector3D target(5.0f, 5.0f, 0.0f);
+    const QVector3D above = target + QVector3D(0.0f, 0.0f, 10.0f);
+
+    // Snap centerOn (no animation) to isolate the buildViewMatrix bug.
+    f.interaction.centerOn(target, false);
+
+    // The cached angles must not have moved.
+    CHECK(f.interaction.pitch() == Approx(90.0));
+    CHECK(f.interaction.azimuth() == Approx(0.0));
+
+    // Basic centerOn contract: target projects to screen center.
+    QPointF projected = f.camera.project(target);
+    QPointF screenC = screenCenter();
+    CHECK(projected.x() == Approx(screenC.x()).margin(kPixelTolerance));
+    CHECK(projected.y() == Approx(screenC.y()).margin(kPixelTolerance));
+
+    // Plan-view orientation invariant: under the top-down ortho view,
+    // points stacked along world Z project to the SAME screen pixel. If
+    // the camera was wrongly rotated to profile, the +Z offset would
+    // shift the projection (almost certainly along screen Y).
+    QPointF projectedAbove = f.camera.project(above);
+    CHECK(projectedAbove.x() == Approx(screenC.x()).margin(kPixelTolerance));
+    CHECK(projectedAbove.y() == Approx(screenC.y()).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction setViewState defends against NaN/inf channels",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+
+    cwTurnTableViewState bad;
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const double dnan = std::numeric_limits<double>::quiet_NaN();
+    const double dinf = std::numeric_limits<double>::infinity();
+    bad.center = QVector3D(nan, nan, nan);
+    bad.azimuth = dnan;
+    bad.pitch = dinf;
+    bad.distance = dnan;
+    bad.zoomScale = -dinf;
+
+    f.interaction.setViewState(bad);
+
+    // The matrix must be entirely finite — a single NaN entry would
+    // permanently poison the camera.
+    const QMatrix4x4 view = f.camera.viewMatrix();
+    for(int i = 0; i < 16; ++i) {
+        CHECK(std::isfinite(view.constData()[i]));
+    }
+
+    // And the read-back state must be finite/clean.
+    cwTurnTableViewState got = f.interaction.viewState();
+    CHECK(std::isfinite(got.center.x()));
+    CHECK(std::isfinite(got.center.y()));
+    CHECK(std::isfinite(got.center.z()));
+    CHECK(std::isfinite(got.azimuth));
+    CHECK(std::isfinite(got.pitch));
+    CHECK(got.distance > 0.0);
+    CHECK(got.zoomScale > 0.0);
+}
+
+TEST_CASE("cwBaseTurnTableInteraction animationFinished is queued — slot re-entry is safe",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Regression: when animationFinished was a direct re-emit of
+    // QVariantAnimation::finished, a slot calling animateToViewState
+    // synchronously during stopAnimation()'s setCurrentTime(duration)
+    // would corrupt m_stateAnimStart/m_stateAnimTarget. Queueing the
+    // signal moves listener slots to the next event-loop turn, after
+    // the outer call has finished its bookkeeping.
+    Fixture f;
+
+    cwTurnTableViewState first;
+    first.center = QVector3D(1.0f, 0.0f, 0.0f);
+    first.azimuth = 10.0;
+    first.pitch = 80.0;
+    first.distance = 50.0;
+    first.zoomScale = 1.0;
+
+    cwTurnTableViewState second;
+    second.center = QVector3D(5.0f, 0.0f, 0.0f);
+    second.azimuth = 50.0;
+    second.pitch = 40.0;
+    second.distance = 80.0;
+    second.zoomScale = 1.5;
+
+    int reentryCount = 0;
+    QObject::connect(&f.interaction, &cwBaseTurnTableInteraction::animationFinished,
+                     [&]() {
+        if(reentryCount == 0) {
+            ++reentryCount;
+            // This is the case the fix is designed to handle: chaining
+            // another animateToViewState from the finished slot. With a
+            // direct connection this would have re-entered during
+            // stopAnimation and clobbered state; with a queued connection
+            // it runs cleanly on the next event-loop turn.
+            f.interaction.animateToViewState(second, 50);
+        }
+    });
+
+    QSignalSpy viewSpy(&f.camera, &cwCamera::viewMatrixChanged);
+    f.interaction.animateToViewState(first, 50);
+
+    // Drain both animations (first + chained second).
+    REQUIRE(viewSpy.wait(kAnimationFirstTickTimeoutMs));
+    while(viewSpy.wait(kAnimationQuietWindowMs)) {
+        // drain
+    }
+
+    // The chained animation must have run and landed at `second`'s
+    // end-state. If state was corrupted by re-entry during stopAnimation,
+    // the chained animation would have run with a stale target and the
+    // viewMatrix would not match.
+    CHECK(reentryCount == 1);
+
+    cwTurnTableViewState got = f.interaction.viewState();
+    CHECK(got.center.x() == Approx(second.center.x()).margin(kMatrixEps));
+    CHECK(got.azimuth == Approx(second.azimuth));
+    CHECK(got.pitch == Approx(second.pitch));
 }

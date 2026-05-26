@@ -12,7 +12,6 @@
 #include "cwInteractionLog.h"
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
-#include "cwMatrix4x4Animation.h"
 #include "cwMath.h"
 
 //Std includes
@@ -26,14 +25,27 @@ Q_LOGGING_CATEGORY(lcInteract, "cw.interaction", QtWarningMsg)
 
 cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
     cwInteraction(parent),
-    ViewMatrixAnimation(new cwMatrix4x4Animation(this))
+    m_stateAnimation(new QVariantAnimation(this))
 {
     ZoomLevel = 1.0; //1 pixel = 1 meter
 
-    ViewMatrixAnimation->setDuration(1000);
-    ViewMatrixAnimation->setEasingCurve(QEasingCurve(QEasingCurve::InOutCubic));
-    connect(ViewMatrixAnimation, &cwMatrix4x4Animation::valueChanged,
-            this, &cwBaseTurnTableInteraction::updateViewMatrixFromAnimation);
+    m_stateAnimation->setObjectName(QLatin1String(stateAnimationObjectName));
+    m_stateAnimation->setDuration(DefaultStateAnimationDurationMs);
+    m_stateAnimation->setEasingCurve(QEasingCurve(QEasingCurve::InOutCubic));
+    m_stateAnimation->setStartValue(0.0);
+    m_stateAnimation->setEndValue(1.0);
+    connect(m_stateAnimation, &QVariantAnimation::valueChanged,
+            this, &cwBaseTurnTableInteraction::onStateAnimTick);
+    // Queue the public animationFinished re-emit so that listener slots
+    // (e.g. QML chains that start a follow-on animateToViewState in
+    // response) run AFTER the current stop/finish bookkeeping has fully
+    // unwound. Direct connection here would let a listener re-enter
+    // animateToViewState mid-stop, corrupting m_stateAnimStart /
+    // m_stateAnimTarget (see D-002 in the commit-3 review).
+    connect(m_stateAnimation, &QVariantAnimation::finished, this, [this]() {
+        QMetaObject::invokeMethod(this, &cwBaseTurnTableInteraction::animationFinished,
+                                  Qt::QueuedConnection);
+    });
 
     resetView();
 
@@ -54,29 +66,26 @@ cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
  * @brief cwBaseTurnTableInteraction::centerOn
  * @param point - Should be in world coordinates
  *
- * This will center the camera on point. The point will be in the center of the screen.
+ * Centers the camera on point so it lands at the middle of the screen.
+ * Orientation (pitch, azimuth) and zoom (distance, zoomScale) are preserved
+ * via the 5-channel viewState — only the center channel moves. When animate
+ * is true the move is dispatched through animateToViewState() so it can
+ * compose with the rest of the state-based animation framework.
  */
 void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
 {
-    QVector3D projectPoint = (Camera->projectionMatrix() * Camera->viewMatrix()).map(point);
-    double depth = projectPoint.z();
+    if(Camera.isNull()) { return; }
 
-    QPoint screenCenter = Camera->viewport().center();
-    QVector3D worldScreenCenter = Camera->unProject(screenCenter, (depth + 1.0) / 2.0);
-
-    QVector3D translation = worldScreenCenter - point;
-
-    QMatrix4x4 viewMatrix = Camera->viewMatrix();
-    viewMatrix.translate(translation);
+    cwTurnTableViewState target = viewState();
+    target.center = point;
+    // distance, azimuth, pitch, zoomScale preserved -> the rebuilt view
+    // matrix puts `point` at view-space (0, 0, -distance), which is the
+    // screen center for both ortho and perspective.
 
     if(animate) {
-        stopAnimation();
-
-        ViewMatrixAnimation->setStartValue(Camera->viewMatrix());
-        ViewMatrixAnimation->setEndValue(viewMatrix);
-        ViewMatrixAnimation->start();
+        animateToViewState(target);
     } else {
-        Camera->setViewMatrix(viewMatrix);
+        setViewState(target);
     }
 }
 
@@ -124,13 +133,14 @@ QVector3D cwBaseTurnTableInteraction::unProject(QPoint point) {
 /**
  * @brief cwBaseTurnTableInteraction::stopAnimation
  *
- * Stops h
+ * Snaps the 5-channel state animator to its end value before stopping, so
+ * the camera ends up in a consistent committed state.
  */
 void cwBaseTurnTableInteraction::stopAnimation()
 {
-    if(ViewMatrixAnimation->state() == QAbstractAnimation::Running) {
-        ViewMatrixAnimation->setCurrentTime(ViewMatrixAnimation->duration());
-        ViewMatrixAnimation->stop();
+    if(m_stateAnimation->state() == QAbstractAnimation::Running) {
+        m_stateAnimation->setCurrentTime(m_stateAnimation->duration());
+        m_stateAnimation->stop();
     }
 }
 
@@ -143,16 +153,6 @@ void cwBaseTurnTableInteraction::bindPerspectiveIntersection()
     } else {
         m_perspectiveIntersection.setValue(QVector3D());
     }
-}
-
-/**
- * @brief cwBaseTurnTableInteraction::updateViewMatrixFromAnimation
- *
- * This updates the view matrix of the camera
- */
-void cwBaseTurnTableInteraction::updateViewMatrixFromAnimation(QVariant matrix)
-{
-    Camera->setViewMatrix(matrix.value<QMatrix4x4>());
 }
 
 /**
@@ -646,17 +646,127 @@ constexpr double kMinViewDistance = 1.0e-3;
 // the ortho frustum (zero-width view volume or inverted projection).
 constexpr double kMinZoomScale = 1.0e-6;
 
-// Build the canonical view matrix for a 5-channel turntable state. The recipe
-// is: translate eye back by `distance` along view-space -Z, then apply the
-// (pitch, azimuth) rotation, then translate world so `center` sits at the
-// origin. This matches the orbit semantics used by updateRotationMatrix()
-// (rotate around center) and the reset path (eye-to-center distance along
-// view-space -Z).
+// Minimum animation duration in ms accepted by animateToViewState. Zero
+// would make QVariantAnimation skip straight to end (no interpolation);
+// negative values are documented as invalid. 1 ms is "effectively instant
+// but still ticks once," which preserves the signal sequence.
+constexpr int kMinAnimationDurationMs = 1;
+
+// One full turn around the azimuth circle.
+constexpr double kFullCircleDegrees = 360.0;
+constexpr double kHalfCircleDegrees = 180.0;
+
+// Defaults used when a 5-channel state channel comes in as NaN/inf.
+constexpr double kDefaultPitchDegrees = 90.0;     // matches defaultPitch()
+
+// Pitch bounds. Mirror cwBaseTurnTableInteraction::clampPitch but exposed
+// here so the free-function clampViewState helper can do its own clamp
+// without requiring a member call.
+constexpr double kMaxPitchDegrees = 90.0;
+constexpr double kMinPitchDegrees = -90.0;
+
+// Replace NaN/inf scalar components with zero. std::isfinite returns false
+// for NaN and +/-inf; this is the cheapest finite-or-zero guard.
+inline float finiteOrZero(float v) {
+    return std::isfinite(v) ? v : 0.0f;
+}
+
+// Sanitize a 5-channel view state on intake: clamp ranges and replace
+// non-finite components with safe defaults. std::max(NaN, x) returns NaN
+// on libstdc++/libc++ (NaN comparisons are false), so a plain max is not
+// enough to defend against poisoned input — explicit isfinite is required.
+// Single source of truth used by viewState(), setViewState(), and
+// animateToViewState() so the clamping rules can't drift between writers.
+cwTurnTableViewState clampViewState(const cwTurnTableViewState& state) {
+    cwTurnTableViewState clean;
+
+    clean.center = QVector3D(finiteOrZero(state.center.x()),
+                             finiteOrZero(state.center.y()),
+                             finiteOrZero(state.center.z()));
+
+    // cwWrapDegrees360 already returns 0.0 on NaN/inf input; no extra guard
+    // needed here.
+    clean.azimuth = cwWrapDegrees360(state.azimuth);
+
+    clean.pitch = std::isfinite(state.pitch)
+            ? (std::min)(kMaxPitchDegrees, (std::max)(kMinPitchDegrees, state.pitch))
+            : kDefaultPitchDegrees;
+
+    clean.distance = std::isfinite(state.distance)
+            ? (std::max)(state.distance, kMinViewDistance)
+            : kMinViewDistance;
+
+    clean.zoomScale = std::isfinite(state.zoomScale)
+            ? (std::max)(state.zoomScale, kMinZoomScale)
+            : kMinZoomScale;
+
+    return clean;
+}
+
+// Scalar linear interpolation.
+inline double lerp(double a, double b, double t) {
+    return a + (b - a) * t;
+}
+
+// Component-wise linear interpolation for QVector3D.
+inline QVector3D lerp(const QVector3D& a, const QVector3D& b, double t) {
+    return a + (b - a) * static_cast<float>(t);
+}
+
+// Short-arc azimuth interpolation on a 0..360 circle. Going from 350° to
+// 10° at t=0.5 must produce 0° (a 20° forward sweep), not 180° (a 340°
+// backward sweep). The naive lerp would do the latter; this routes the
+// delta through the short way.
+inline double lerpAzimuth(double a, double b, double t) {
+    double delta = b - a;
+    if(delta > kHalfCircleDegrees) {
+        delta -= kFullCircleDegrees;
+    } else if(delta < -kHalfCircleDegrees) {
+        delta += kFullCircleDegrees;
+    }
+    return cwWrapDegrees360(a + delta * t);
+}
+
+// View-matrix rotation that matches cwBaseTurnTableInteraction's existing
+// (Pitch, Azimuth) convention.
+//
+// resetView() leaves the view matrix as a plain T(0,0,-50) — i.e. no
+// rotation — and caches CurrentRotation = R_x(90)*R_z(0) as "default."
+// updateRotationMatrix() then applies INCREMENTAL deltas
+// CurrentRotation^-1 * newQuat to the live view matrix. So the cached
+// Pitch=90 / Azimuth=0 state corresponds to identity on the view-matrix
+// rotation, NOT to a literal 90° X rotation.
+//
+// To reproduce that mapping in a canonical rebuild, the view-matrix
+// rotation must be the delta from defaultRotation:
+//   R_view = defaultRotation^-1 * (R_x(pitch) * R_z(azimuth))
+// which evaluates to identity for the default and to the right tilt for
+// any other (pitch, azimuth) pair. Without this, setViewState() /
+// animateToViewState() / centerOn() rebuild the view matrix with a 90°
+// X-rotation baked in, flipping the camera from plan view to profile and
+// leaving CurrentRotation out of sync with the live matrix (the bug
+// surfaced via gotoLead from the lead page in plan view).
+inline QQuaternion viewMatrixRotation(double pitch, double azimuth) {
+    const QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(
+                1.0f, 0.0f, 0.0f, static_cast<float>(pitch));
+    const QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(
+                0.0f, 0.0f, 1.0f, static_cast<float>(azimuth));
+    const QQuaternion defaultRot =
+            QQuaternion::fromAxisAndAngle(1.0f, 0.0f, 0.0f,
+                                          static_cast<float>(kDefaultPitchDegrees))
+            * QQuaternion::fromAxisAndAngle(0.0f, 0.0f, 1.0f, 0.0f);
+    return defaultRot.conjugated() * (pitchQuat * azimuthQuat);
+}
+
+// Build the canonical view matrix for a 5-channel turntable state. The
+// recipe is: translate the eye back by `distance` along view-space -Z,
+// apply the (pitch, azimuth) view-matrix rotation per viewMatrixRotation(),
+// then translate world so `center` sits at the origin. This matches the
+// orbit semantics used by updateRotationMatrix() and the reset path.
 QMatrix4x4 buildViewMatrix(const cwTurnTableViewState& s) {
     QMatrix4x4 m;
     m.translate(QVector3D(0.0f, 0.0f, -static_cast<float>(s.distance)));
-    m.rotate(QQuaternion::fromAxisAndAngle(1.0f, 0.0f, 0.0f, static_cast<float>(s.pitch)));
-    m.rotate(QQuaternion::fromAxisAndAngle(0.0f, 0.0f, 1.0f, static_cast<float>(s.azimuth)));
+    m.rotate(viewMatrixRotation(s.pitch, s.azimuth));
     m.translate(-s.center);
     return m;
 }
@@ -670,10 +780,10 @@ QMatrix4x4 buildViewMatrix(const cwTurnTableViewState& s) {
  * from the current view matrix as the view-space depth of m_center: that's
  * the natural eye-to-center distance the canonical recipe is built from.
  *
- * The returned distance is clamped to kMinViewDistance so that a
+ * The returned state is run through clampViewState() so that a
  * viewState() -> setViewState() round-trip never produces a degenerate
  * matrix even if the live camera was somehow set up with m_center in front
- * of the eye (pre-existing pan/zoom paths don't guarantee that invariant).
+ * of the eye, or if any channel is non-finite.
  */
 cwTurnTableViewState cwBaseTurnTableInteraction::viewState() const {
     cwTurnTableViewState s;
@@ -684,10 +794,10 @@ cwTurnTableViewState cwBaseTurnTableInteraction::viewState() const {
         // View-space position of the world-space center; canonical recipe
         // puts it at (0, 0, -distance), so distance = -z_view.
         const QVector3D centerView = Camera->viewMatrix().map(m_center);
-        s.distance = std::max(static_cast<double>(-centerView.z()), kMinViewDistance);
-        s.zoomScale = std::max(static_cast<double>(Camera->zoomScale()), kMinZoomScale);
+        s.distance = -centerView.z();
+        s.zoomScale = Camera->zoomScale();
     }
-    return s;
+    return clampViewState(s);
 }
 
 /**
@@ -704,17 +814,13 @@ cwTurnTableViewState cwBaseTurnTableInteraction::viewState() const {
  * must apply atomically. Callers that need lock-respecting updates should
  * route through setAzimuth / setPitch / setCenter instead.
  *
- * Validation: azimuth and pitch are clamped via clampAzimuth/clampPitch.
- * distance and zoomScale are clamped to small positive minima to avoid
- * producing a degenerate view matrix or ortho frustum from caller-supplied
- * (or deserialized) bad data.
+ * Validation: all five channels run through clampViewState (range clamps,
+ * NaN/inf rejection). std::max alone is not enough — std::max(NaN, x)
+ * returns NaN on libstdc++/libc++, so explicit isfinite checks live in
+ * clampViewState.
  */
 void cwBaseTurnTableInteraction::setViewState(const cwTurnTableViewState& state) {
-    cwTurnTableViewState clean = state;
-    clean.azimuth = clampAzimuth(state.azimuth);
-    clean.pitch = clampPitch(state.pitch);
-    clean.distance = std::max(state.distance, kMinViewDistance);
-    clean.zoomScale = std::max(state.zoomScale, kMinZoomScale);
+    cwTurnTableViewState clean = clampViewState(state);
 
     // Exact != to match setAzimuth/setPitch's contract — emit on every
     // observable change, including arbitrarily small ones. qFuzzyCompare
@@ -748,6 +854,75 @@ void cwBaseTurnTableInteraction::setViewState(const cwTurnTableViewState& state)
     if(azimuthDelta) { emit azimuthChanged(); }
     if(pitchDelta) { emit pitchChanged(); }
     if(centerDelta) { emit centerChanged(); }
+}
+
+/**
+ * @brief cwBaseTurnTableInteraction::animateToViewState
+ *
+ * Animates the camera from the current 5-channel state to `target` over
+ * `durationMs`. Each tick interpolates per-channel and applies the result
+ * via setViewState() — the same authoritative writer used for snap
+ * restores, so the animation end-state is bit-for-bit equal to a snap
+ * call with the same target.
+ *
+ * Channel rules:
+ *   - center, pitch, zoomScale: straight linear lerp.
+ *   - azimuth: short-arc lerp on a 0..360 circle (350° → 10° = +20°).
+ *   - distance: perspective only. Under ortho the projection is
+ *     decoupled from eye distance, so the start value is held until
+ *     the final tick where it snaps to target. (Lerping distance under
+ *     ortho would change the depth buffer but not the visible scene,
+ *     and risks confusing follow-on snapshots.)
+ *
+ * Calling animateToViewState while another animation is running stops
+ * the prior one cleanly (snaps to its end value).
+ */
+void cwBaseTurnTableInteraction::animateToViewState(
+        const cwTurnTableViewState& target, int durationMs)
+{
+    if(Camera.isNull()) { return; }
+
+    stopAnimation();
+
+    m_stateAnimStart = viewState();
+
+    // Clamp target on intake (single source of truth shared with
+    // setViewState) so a re-entrant setViewState mid-tick can't see an
+    // un-clamped channel.
+    m_stateAnimTarget = clampViewState(target);
+
+    // Clamp duration: 0 makes QVariantAnimation skip to end with no
+    // valueChanged ticks; negative is documented invalid.
+    m_stateAnimation->setDuration((std::max)(durationMs, kMinAnimationDurationMs));
+    m_stateAnimation->start();
+}
+
+/**
+ * @brief cwBaseTurnTableInteraction::onStateAnimTick
+ *
+ * QVariantAnimation::valueChanged handler. Builds the interpolated state
+ * from the captured start/target snapshots and pushes it through
+ * setViewState() so every tick goes through the same canonical recipe.
+ */
+void cwBaseTurnTableInteraction::onStateAnimTick(const QVariant& value)
+{
+    if(Camera.isNull()) { return; }
+
+    const double t = value.toReal();
+    const bool isPerspective =
+            Camera->projection().type() == cwProjection::Perspective
+            || Camera->projection().type() == cwProjection::PerspectiveFrustum;
+
+    cwTurnTableViewState s;
+    s.center = lerp(m_stateAnimStart.center, m_stateAnimTarget.center, t);
+    s.azimuth = lerpAzimuth(m_stateAnimStart.azimuth, m_stateAnimTarget.azimuth, t);
+    s.pitch = lerp(m_stateAnimStart.pitch, m_stateAnimTarget.pitch, t);
+    s.distance = isPerspective
+                 ? lerp(m_stateAnimStart.distance, m_stateAnimTarget.distance, t)
+                 : m_stateAnimTarget.distance;
+    s.zoomScale = lerp(m_stateAnimStart.zoomScale, m_stateAnimTarget.zoomScale, t);
+
+    setViewState(s);
 }
 
 /**

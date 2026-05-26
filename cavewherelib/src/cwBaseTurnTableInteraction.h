@@ -15,7 +15,6 @@
 #include "cwRayHit.h"
 #include "cwScene.h"
 #include "cwTurnTableViewState.h"
-class cwMatrix4x4Animation;
 
 //Qt 3D
 #include <QPlane3D>
@@ -26,6 +25,7 @@ class cwMatrix4x4Animation;
 #include <QPointer>
 #include <QQmlEngine>
 #include <QQuaternion>
+#include <QVariantAnimation>
 
 class cwBaseTurnTableInteraction : public cwInteraction
 {
@@ -48,6 +48,16 @@ class cwBaseTurnTableInteraction : public cwInteraction
     Q_PROPERTY(QPlane3D gridPlane READ gridPlane WRITE setGridPlane NOTIFY gridPlaneChanged)
 
 public:
+    // Default duration (ms) for animateToViewState() when no explicit
+    // duration is supplied. Used both as the header default-arg value and
+    // as the QVariantAnimation initial duration in the constructor.
+    static constexpr int DefaultStateAnimationDurationMs = 1000;
+
+    // objectName attached to the state-animation child QVariantAnimation,
+    // so tests can locate it via QObject::findChild without exposing the
+    // animator pointer on the public API.
+    static constexpr const char* stateAnimationObjectName = "stateAnimation";
+
     explicit cwBaseTurnTableInteraction(QQuickItem *parent = 0);
 
     QQuaternion cameraRotation() const;
@@ -81,6 +91,9 @@ public:
     Q_INVOKABLE cwTurnTableViewState viewState() const;
     Q_INVOKABLE void setViewState(const cwTurnTableViewState& state);
 
+    Q_INVOKABLE void animateToViewState(const cwTurnTableViewState& target,
+                                        int durationMs = DefaultStateAnimationDurationMs);
+
     int startDragDistance() const;
 
     QPlane3D gridPlane() const { return m_gridPlane; }
@@ -101,6 +114,7 @@ signals:
     void pitchLockedChanged();
     void centerChanged();
     void centerLockedChanged();
+    void animationFinished();
 
 public slots:
 
@@ -119,7 +133,7 @@ private slots:
     void zoomLastPosition();
     void translateLastPosition();
 
-    void updateViewMatrixFromAnimation(QVariant matrix);
+    void onStateAnimTick(const QVariant& value);
 
 private:
     bool m_azimuthLocked = false;
@@ -156,7 +170,13 @@ private:
     QPointer<cwCamera> Camera; //!<
     QPointer<cwScene> Scene; //!<
 
-    cwMatrix4x4Animation* ViewMatrixAnimation;
+    // State-based animator: drives setViewState() per tick from a captured
+    // start state to a target state, both stored as 5-channel snapshots.
+    // The animation itself is a scalar t in [0, 1]; per-tick interpolation
+    // happens in onStateAnimTick().
+    QVariantAnimation* m_stateAnimation;
+    cwTurnTableViewState m_stateAnimStart;
+    cwTurnTableViewState m_stateAnimTarget;
 
     void zoomPerspective();
     void zoomOrtho();
