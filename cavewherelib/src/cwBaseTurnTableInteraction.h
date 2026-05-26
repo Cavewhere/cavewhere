@@ -14,6 +14,7 @@
 #include "cwCamera.h"
 #include "cwRayHit.h"
 #include "cwScene.h"
+#include "cwTurnTableViewState.h"
 class cwMatrix4x4Animation;
 
 //Qt 3D
@@ -24,7 +25,6 @@ class cwMatrix4x4Animation;
 #include <QTimer>
 #include <QPointer>
 #include <QQmlEngine>
-#include <QObjectBindableProperty>
 #include <QQuaternion>
 
 class cwBaseTurnTableInteraction : public cwInteraction
@@ -39,10 +39,13 @@ class cwBaseTurnTableInteraction : public cwInteraction
     Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
     Q_PROPERTY(int startDragDistance READ startDragDistance CONSTANT)
 
-    Q_PROPERTY(bool azimuthLocked READ isAzimuthLocked WRITE setAzimuthLocked BINDABLE azimuthLockedBinding)
-    Q_PROPERTY(bool pitchLocked READ isPitchLocked WRITE setPitchLocked BINDABLE pitchLockedBinding)
+    Q_PROPERTY(bool azimuthLocked READ isAzimuthLocked WRITE setAzimuthLocked NOTIFY azimuthLockedChanged)
+    Q_PROPERTY(bool pitchLocked READ isPitchLocked WRITE setPitchLocked NOTIFY pitchLockedChanged)
 
-    Q_PROPERTY(QPlane3D gridPlane READ gridPlane WRITE setGridPlane NOTIFY gridPlaneChanged BINDABLE bindableGridPlane)
+    Q_PROPERTY(QVector3D center READ center WRITE setCenter NOTIFY centerChanged)
+    Q_PROPERTY(bool centerLocked READ isCenterLocked WRITE setCenterLocked NOTIFY centerLockedChanged)
+
+    Q_PROPERTY(QPlane3D gridPlane READ gridPlane WRITE setGridPlane NOTIFY gridPlaneChanged)
 
 public:
     explicit cwBaseTurnTableInteraction(QQuickItem *parent = 0);
@@ -53,12 +56,10 @@ public:
     void setAzimuth(double azimuth);
 
     bool isAzimuthLocked() const { return m_azimuthLocked; }
-    void setAzimuthLocked(bool locked) { m_azimuthLocked = locked; }
-    QBindable<bool> azimuthLockedBinding() { return &m_azimuthLocked; }
+    void setAzimuthLocked(bool locked);
 
     bool isPitchLocked() const { return m_pitchLocked; }
-    void setPitchLocked(bool locked) { m_pitchLocked = locked; }
-    QBindable<bool> pitchLockedBinding() { return &m_pitchLocked; }
+    void setPitchLocked(bool locked);
 
     double pitch() const;
     void setPitch(double pitch);
@@ -69,13 +70,21 @@ public:
     cwScene* scene() const;
     void setScene(cwScene* scene);
 
+    QVector3D center() const { return m_center; }
+    void setCenter(QVector3D center);
+
+    bool isCenterLocked() const { return m_centerLocked; }
+    void setCenterLocked(bool locked);
+
     Q_INVOKABLE void centerOn(QVector3D point, bool animate = false);
+
+    Q_INVOKABLE cwTurnTableViewState viewState() const;
+    Q_INVOKABLE void setViewState(const cwTurnTableViewState& state);
 
     int startDragDistance() const;
 
-    QPlane3D gridPlane() const { return m_gridPlane.value(); }
-    void setGridPlane(const QPlane3D& gridPlane) { m_gridPlane = gridPlane; }
-    QBindable<QPlane3D> bindableGridPlane() { return &m_gridPlane; }
+    QPlane3D gridPlane() const { return m_gridPlane; }
+    void setGridPlane(const QPlane3D& gridPlane);
 
     Q_INVOKABLE cwRayHit pick(QPointF qtViewPoint) const;
 
@@ -88,6 +97,10 @@ signals:
     void cameraChanged();
     void sceneChanged();
     void gridPlaneChanged();
+    void azimuthLockedChanged();
+    void pitchLockedChanged();
+    void centerChanged();
+    void centerLockedChanged();
 
 public slots:
 
@@ -109,14 +122,13 @@ private slots:
     void updateViewMatrixFromAnimation(QVariant matrix);
 
 private:
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwBaseTurnTableInteraction, bool, m_azimuthLocked, false);
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwBaseTurnTableInteraction, bool, m_pitchLocked, false);
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwBaseTurnTableInteraction,
-                                         QPlane3D, m_gridPlane,
-                                         QPlane3D(),
-                                         &cwBaseTurnTableInteraction::gridPlaneChanged);
+    bool m_azimuthLocked = false;
+    bool m_pitchLocked = false;
+    QPlane3D m_gridPlane;
 
-    QVector3D LastMouseGlobalPosition; //For panning
+    QVector3D m_center; //!< World-space orbit/look-at center, used as the pivot for rotation
+    bool m_centerLocked = false; //!< When true, startRotating/startPanning don't move m_center
+
     QPlane3D PanPlane;
     QPointF LastMousePosition; //For rotation
     QQuaternion CurrentRotation;

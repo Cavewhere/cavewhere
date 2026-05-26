@@ -6,6 +6,7 @@
 #include "cwBaseTurnTableInteraction.h"
 #include "cwCamera.h"
 #include "cwScene.h"
+#include "cwTurnTableViewState.h"
 
 //Qt includes
 #include <QMatrix4x4>
@@ -301,4 +302,233 @@ TEST_CASE("cwBaseTurnTableInteraction successive startRotating updates the orbit
 
     CHECK(screenAfter.x() == Approx(screenBefore.x()).margin(kPixelTolerance));
     CHECK(screenAfter.y() == Approx(screenBefore.y()).margin(kPixelTolerance));
+}
+
+// --- Commit 2 cases ---
+
+TEST_CASE("cwBaseTurnTableInteraction setCenter updates the orbit pivot and fires centerChanged",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+    QSignalSpy spy(&f.interaction, &cwBaseTurnTableInteraction::centerChanged);
+
+    const QVector3D pivot(5.0f, -3.0f, 0.0f);
+    f.interaction.setCenter(pivot);
+    CHECK(f.interaction.center() == pivot);
+    CHECK(spy.size() == 1);
+
+    // Idempotent: same value should not re-emit.
+    f.interaction.setCenter(pivot);
+    CHECK(spy.size() == 1);
+
+    // setAzimuth should now orbit around `pivot`, keeping its screen position fixed.
+    QPointF screenBefore = f.camera.project(pivot);
+    f.interaction.setAzimuth(45.0);
+    QPointF screenAfter = f.camera.project(pivot);
+    CHECK(screenAfter.x() == Approx(screenBefore.x()).margin(kPixelTolerance));
+    CHECK(screenAfter.y() == Approx(screenBefore.y()).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction setCenterLocked blocks startRotating from moving the pivot",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+    QSignalSpy spy(&f.interaction, &cwBaseTurnTableInteraction::centerLockedChanged);
+
+    const QVector3D pinned(2.0f, 7.0f, 0.0f);
+    f.interaction.setCenter(pinned);
+    f.interaction.setCenterLocked(true);
+    CHECK(f.interaction.isCenterLocked());
+    CHECK(spy.size() == 1);
+
+    // A startRotating elsewhere must not change m_center.
+    f.interaction.startRotating(kOffCenterClick);
+    CHECK(f.interaction.center() == pinned);
+
+    // And the orbit must still be around the pinned point.
+    QPointF screenBefore = f.camera.project(pinned);
+    f.interaction.setAzimuth(30.0);
+    QPointF screenAfter = f.camera.project(pinned);
+    CHECK(screenAfter.x() == Approx(screenBefore.x()).margin(kPixelTolerance));
+    CHECK(screenAfter.y() == Approx(screenBefore.y()).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction setCenterLocked blocks startPanning from moving the pivot",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+
+    const QVector3D pinned(0.0f, 0.0f, 0.0f);
+    f.interaction.setCenter(pinned);
+    f.interaction.setCenterLocked(true);
+
+    f.interaction.startPanning(kOffCenterClick);
+    CHECK(f.interaction.center() == pinned);
+}
+
+TEST_CASE("cwBaseTurnTableInteraction setCenterLocked(false) restores the default startRotating behavior",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+    f.interaction.setCenterLocked(true);
+    f.interaction.setCenterLocked(false);
+
+    // After unlocking, startRotating should reset the pivot to the unprojected click.
+    f.interaction.startRotating(kOffCenterClick);
+    QVector3D expected = unprojectClickOntoGrid(f.camera, kOffCenterClick);
+    CHECK(f.interaction.center().x() == Approx(expected.x()));
+    CHECK(f.interaction.center().y() == Approx(expected.y()));
+    CHECK(f.interaction.center().z() == Approx(expected.z()));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction azimuthLocked emits NOTIFY signal",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+    QSignalSpy spy(&f.interaction, &cwBaseTurnTableInteraction::azimuthLockedChanged);
+
+    f.interaction.setAzimuthLocked(true);
+    CHECK(spy.size() == 1);
+    f.interaction.setAzimuthLocked(true);    // idempotent
+    CHECK(spy.size() == 1);
+    f.interaction.setAzimuthLocked(false);
+    CHECK(spy.size() == 2);
+}
+
+TEST_CASE("cwBaseTurnTableInteraction pitchLocked emits NOTIFY signal",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+    QSignalSpy spy(&f.interaction, &cwBaseTurnTableInteraction::pitchLockedChanged);
+
+    f.interaction.setPitchLocked(true);
+    CHECK(spy.size() == 1);
+    f.interaction.setPitchLocked(true);
+    CHECK(spy.size() == 1);
+    f.interaction.setPitchLocked(false);
+    CHECK(spy.size() == 2);
+}
+
+TEST_CASE("cwBaseTurnTableInteraction gridPlane setter emits gridPlaneChanged",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+    QSignalSpy spy(&f.interaction, &cwBaseTurnTableInteraction::gridPlaneChanged);
+
+    QPlane3D p1(QVector3D(1, 0, 0), QVector3D(0, 1, 0));
+    f.interaction.setGridPlane(p1);
+    CHECK(spy.size() == 1);
+
+    // Idempotent on same plane.
+    f.interaction.setGridPlane(p1);
+    CHECK(spy.size() == 1);
+}
+
+TEST_CASE("cwBaseTurnTableInteraction viewState round-trips through setViewState (ortho)",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+
+    cwTurnTableViewState target;
+    target.center = QVector3D(3.0f, -2.0f, 1.0f);
+    target.azimuth = 37.0;
+    target.pitch = 42.0;
+    target.distance = 75.0;
+    target.zoomScale = 2.5;
+
+    f.interaction.setViewState(target);
+
+    cwTurnTableViewState got = f.interaction.viewState();
+    CHECK(got.center.x() == Approx(target.center.x()).margin(kMatrixEps));
+    CHECK(got.center.y() == Approx(target.center.y()).margin(kMatrixEps));
+    CHECK(got.center.z() == Approx(target.center.z()).margin(kMatrixEps));
+    CHECK(got.azimuth == Approx(target.azimuth));
+    CHECK(got.pitch == Approx(target.pitch));
+    CHECK(got.distance == Approx(target.distance).margin(kMatrixEps));
+    CHECK(got.zoomScale == Approx(target.zoomScale));
+
+    // After setViewState, setAzimuth orbits around the new center.
+    QPointF screenBefore = f.camera.project(target.center);
+    f.interaction.setAzimuth(target.azimuth + 15.0);
+    QPointF screenAfter = f.camera.project(target.center);
+    CHECK(screenAfter.x() == Approx(screenBefore.x()).margin(kPixelTolerance));
+    CHECK(screenAfter.y() == Approx(screenBefore.y()).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction viewState round-trips through setViewState (perspective)",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+    f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+
+    cwTurnTableViewState target;
+    target.center = QVector3D(1.0f, 1.0f, 0.0f);
+    target.azimuth = 60.0;
+    target.pitch = 30.0;
+    target.distance = 100.0;
+    target.zoomScale = 1.5; // zoomScale is stored even under perspective so the round-trip is faithful.
+
+    f.interaction.setViewState(target);
+
+    cwTurnTableViewState got = f.interaction.viewState();
+    CHECK(got.center.x() == Approx(target.center.x()).margin(kMatrixEps));
+    CHECK(got.center.y() == Approx(target.center.y()).margin(kMatrixEps));
+    CHECK(got.center.z() == Approx(target.center.z()).margin(kMatrixEps));
+    CHECK(got.azimuth == Approx(target.azimuth));
+    CHECK(got.pitch == Approx(target.pitch));
+    CHECK(got.distance == Approx(target.distance).margin(kMatrixEps));
+    CHECK(got.zoomScale == Approx(target.zoomScale));
+
+    // The center must project to view-space depth = -distance (the canonical recipe).
+    QVector3D centerView = f.camera.viewMatrix().map(target.center);
+    CHECK(centerView.z() == Approx(-target.distance).margin(kMatrixEps));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction setViewState clamps non-positive distance and zoomScale",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+
+    cwTurnTableViewState bad;
+    bad.center = QVector3D(0, 0, 0);
+    bad.azimuth = 0.0;
+    bad.pitch = 90.0;
+    bad.distance = 0.0;     // would put eye at center; degenerate matrix
+    bad.zoomScale = -1.0;   // would invert the ortho frustum
+
+    f.interaction.setViewState(bad);
+
+    cwTurnTableViewState got = f.interaction.viewState();
+    // Clamped to small positive minima — exact value is not load-bearing,
+    // just must be strictly positive.
+    CHECK(got.distance > 0.0);
+    CHECK(got.zoomScale > 0.0);
+
+    // The resulting view matrix must be non-degenerate (the center should
+    // still project to a finite point well behind the eye in view space).
+    QVector3D centerView = f.camera.viewMatrix().map(bad.center);
+    CHECK(std::isfinite(centerView.z()));
+    CHECK(centerView.z() < 0.0);
+}
+
+TEST_CASE("cwBaseTurnTableInteraction setViewState produces canonical view matrix",
+          "[cwBaseTurnTableInteraction]")
+{
+    Fixture f;
+
+    cwTurnTableViewState s;
+    s.center = QVector3D(0.0f, 0.0f, 0.0f);
+    s.azimuth = 0.0;
+    s.pitch = 90.0;
+    s.distance = 50.0;
+    s.zoomScale = f.camera.defaultZoomScale();
+
+    f.interaction.setViewState(s);
+
+    // Canonical default view: identity rotation (pitch 90, az 0) translated -50 along Z.
+    QMatrix4x4 expected;
+    expected.translate(QVector3D(0.0f, 0.0f, -50.0f));
+    expected.rotate(QQuaternion::fromAxisAndAngle(1.0f, 0.0f, 0.0f, 90.0f));
+    expected.rotate(QQuaternion::fromAxisAndAngle(0.0f, 0.0f, 1.0f, 0.0f));
+    CHECK(matricesNearlyEqual(f.camera.viewMatrix(), expected));
 }

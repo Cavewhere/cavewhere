@@ -225,16 +225,16 @@ QMatrix4x4 cwCamera::qtViewportMatrix() const
 * @param zoomScale
 */
  void cwCamera::setZoomScale(double zoomScale) {
-     if(projection().type() != cwProjection::Ortho) {
-         qWarning() << "Can't set zoom scale because the current projection isn't Ortho" << LOCATION;
-        return;
-     }
-
-     if(ZoomScale != zoomScale) {
-         ZoomScale = zoomScale;
+     if(ZoomScale == zoomScale) { return; }
+     ZoomScale = zoomScale;
+     // The projection itself only depends on ZoomScale under Ortho; for
+     // Perspective we still store the value so snapshot/restore round-trips
+     // (cwBaseTurnTableInteraction::viewState/setViewState) stay faithful
+     // across a projection swap.
+     if(projection().type() == cwProjection::Ortho) {
          setProjection(orthoProjectionDefault());
-         emit zoomScaleChanged();
      }
+     emit zoomScaleChanged();
  }
 
  /**

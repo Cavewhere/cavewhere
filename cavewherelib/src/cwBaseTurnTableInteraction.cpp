@@ -101,7 +101,7 @@ QVector3D cwBaseTurnTableInteraction::unProject(QPoint point) {
 
     if(std::isnan(t)) {
         //See where it intersects ground plane geometry
-        t = m_gridPlane.value().intersection(ray);
+        t = m_gridPlane.intersection(ray);
         if(std::isnan(t)) {
             qCDebug(lcInteract).nospace()
                 << "unProject(" << point << "): no geometry hit, no grid hit -> (0,0,0)"
@@ -160,8 +160,9 @@ void cwBaseTurnTableInteraction::updateViewMatrixFromAnimation(QVariant matrix)
   */
 void cwBaseTurnTableInteraction::startPanning(QPoint position) {
     QPoint mappedPosition = Camera->mapToGLViewport(position);
-    LastMouseGlobalPosition = unProject(mappedPosition);
-//    LastMouseGlobalPosition = QVector3D(mappedPosition);
+    if(!m_centerLocked) {
+        setCenter(unProject(mappedPosition));
+    }
 
     //Get the ray from the front of the screen to the back of the screen
     //Using the center of the screen
@@ -173,13 +174,14 @@ void cwBaseTurnTableInteraction::startPanning(QPoint position) {
 
     QVector3D direction = QVector3D(front - back).normalized();
 
-    //Create the plane
-    PanPlane = QPlane3D(LastMouseGlobalPosition, direction);
+    //Create the plane through the pan pivot. When centerLocked is on the
+    //pivot stays put — m_center is the authoritative pan/orbit pivot.
+    PanPlane = QPlane3D(m_center, direction);
 
     qCDebug(lcInteract).nospace()
         << "startPanning raw=" << position
         << " mapped=" << mappedPosition
-        << " pivot=" << LastMouseGlobalPosition
+        << " pivot=" << m_center
         << " planeNormal=" << direction;
 
     TranslatePosition = position;
@@ -203,12 +205,14 @@ void cwBaseTurnTableInteraction::pan(QPoint position) {
 void cwBaseTurnTableInteraction::startRotating(QPoint position) {
     const QPoint rawPosition = position;
     position = Camera->mapToGLViewport(position);
-    LastMouseGlobalPosition = unProject(position);
+    if(!m_centerLocked) {
+        setCenter(unProject(position));
+    }
     LastMousePosition = position;
     qCDebug(lcInteract).nospace()
         << "startRotating raw=" << rawPosition
         << " mapped=" << position
-        << " pivot=" << LastMouseGlobalPosition;
+        << " pivot=" << m_center;
 }
 
 /**
@@ -293,7 +297,7 @@ void cwBaseTurnTableInteraction::rotateLastPosition()
         << " delta=" << delta
         << " pitch=" << Pitch
         << " azimuth=" << Azimuth
-        << " pivot=" << LastMouseGlobalPosition;
+        << " pivot=" << m_center;
 
     updateRotationMatrix();
 }
@@ -353,7 +357,7 @@ void cwBaseTurnTableInteraction::translateLastPosition()
     if(qIsNaN(t)) { return; }
 
     QVector3D intersection = ray.point(t);
-    QVector3D translateAmount = intersection - LastMouseGlobalPosition;
+    QVector3D translateAmount = intersection - m_center;
 
     QMatrix4x4 viewMatrix = Camera->viewMatrix();
     viewMatrix.translate(translateAmount);
@@ -425,9 +429,9 @@ void cwBaseTurnTableInteraction::updateRotationMatrix()
     setCurrentRotation(newQuat);
 
     QMatrix4x4 viewMatrix = Camera->viewMatrix();
-    viewMatrix.translate(LastMouseGlobalPosition);
+    viewMatrix.translate(m_center);
     viewMatrix.rotate(rotationDifferance);
-    viewMatrix.translate(-LastMouseGlobalPosition);
+    viewMatrix.translate(-m_center);
 
     Camera->setViewMatrix(viewMatrix);
 }
@@ -564,6 +568,186 @@ void cwBaseTurnTableInteraction::setPitch(double pitch) {
 
         updateRotationMatrix();
     }
+}
+
+/**
+ * @brief cwBaseTurnTableInteraction::setAzimuthLocked
+ *
+ * When locked, both setAzimuth() and rotation drags ignore azimuth changes.
+ */
+void cwBaseTurnTableInteraction::setAzimuthLocked(bool locked) {
+    if(m_azimuthLocked == locked) { return; }
+    m_azimuthLocked = locked;
+    emit azimuthLockedChanged();
+}
+
+/**
+ * @brief cwBaseTurnTableInteraction::setPitchLocked
+ *
+ * When locked, both setPitch() and rotation drags ignore pitch changes.
+ */
+void cwBaseTurnTableInteraction::setPitchLocked(bool locked) {
+    if(m_pitchLocked == locked) { return; }
+    m_pitchLocked = locked;
+    emit pitchLockedChanged();
+}
+
+/**
+ * @brief cwBaseTurnTableInteraction::setGridPlane
+ *
+ * The grid plane is the fallback intersection target used by unProject()
+ * when the click ray doesn't hit any scene geometry.
+ */
+void cwBaseTurnTableInteraction::setGridPlane(const QPlane3D& gridPlane) {
+    // QPlane3D::operator== is non-const in QMath3d (cannot be fixed here —
+    // it's a submodule), but m_gridPlane is non-const so this still compiles.
+    if(m_gridPlane == gridPlane) { return; }
+    m_gridPlane = gridPlane;
+    emit gridPlaneChanged();
+}
+
+/**
+ * @brief cwBaseTurnTableInteraction::setCenter
+ *
+ * Sets the orbit/look-at center in world coordinates. updateRotationMatrix()
+ * uses this point as the pivot for rotation drags and for setAzimuth /
+ * setPitch.
+ */
+void cwBaseTurnTableInteraction::setCenter(QVector3D center) {
+    if(m_center == center) { return; }
+    m_center = center;
+    emit centerChanged();
+}
+
+/**
+ * @brief cwBaseTurnTableInteraction::setCenterLocked
+ *
+ * When true, startRotating() and startPanning() do not update m_center
+ * from the click point. setCenter() still works programmatically.
+ */
+void cwBaseTurnTableInteraction::setCenterLocked(bool locked) {
+    if(m_centerLocked == locked) { return; }
+    m_centerLocked = locked;
+    emit centerLockedChanged();
+}
+
+namespace {
+
+// Minimum eye-to-center distance allowed in the 5-channel state. Anything
+// smaller (or non-positive) puts the eye on the look-at point and produces
+// a degenerate view matrix (no parallax; subsequent projection of m_center
+// divides by w=0). The exact value is not load-bearing — it just has to be
+// strictly positive and small enough that no realistic survey scene will
+// hit it; 1e-3 world units (~1 mm in cave coordinates) is well below
+// anything users can manipulate to.
+constexpr double kMinViewDistance = 1.0e-3;
+
+// Minimum ortho zoomScale allowed. Zero or negative values would degenerate
+// the ortho frustum (zero-width view volume or inverted projection).
+constexpr double kMinZoomScale = 1.0e-6;
+
+// Build the canonical view matrix for a 5-channel turntable state. The recipe
+// is: translate eye back by `distance` along view-space -Z, then apply the
+// (pitch, azimuth) rotation, then translate world so `center` sits at the
+// origin. This matches the orbit semantics used by updateRotationMatrix()
+// (rotate around center) and the reset path (eye-to-center distance along
+// view-space -Z).
+QMatrix4x4 buildViewMatrix(const cwTurnTableViewState& s) {
+    QMatrix4x4 m;
+    m.translate(QVector3D(0.0f, 0.0f, -static_cast<float>(s.distance)));
+    m.rotate(QQuaternion::fromAxisAndAngle(1.0f, 0.0f, 0.0f, static_cast<float>(s.pitch)));
+    m.rotate(QQuaternion::fromAxisAndAngle(0.0f, 0.0f, 1.0f, static_cast<float>(s.azimuth)));
+    m.translate(-s.center);
+    return m;
+}
+
+} // namespace
+
+/**
+ * @brief cwBaseTurnTableInteraction::viewState
+ *
+ * Returns the current 5-channel view state. The distance channel is derived
+ * from the current view matrix as the view-space depth of m_center: that's
+ * the natural eye-to-center distance the canonical recipe is built from.
+ *
+ * The returned distance is clamped to kMinViewDistance so that a
+ * viewState() -> setViewState() round-trip never produces a degenerate
+ * matrix even if the live camera was somehow set up with m_center in front
+ * of the eye (pre-existing pan/zoom paths don't guarantee that invariant).
+ */
+cwTurnTableViewState cwBaseTurnTableInteraction::viewState() const {
+    cwTurnTableViewState s;
+    s.center = m_center;
+    s.azimuth = Azimuth;
+    s.pitch = Pitch;
+    if(!Camera.isNull()) {
+        // View-space position of the world-space center; canonical recipe
+        // puts it at (0, 0, -distance), so distance = -z_view.
+        const QVector3D centerView = Camera->viewMatrix().map(m_center);
+        s.distance = std::max(static_cast<double>(-centerView.z()), kMinViewDistance);
+        s.zoomScale = std::max(static_cast<double>(Camera->zoomScale()), kMinZoomScale);
+    }
+    return s;
+}
+
+/**
+ * @brief cwBaseTurnTableInteraction::setViewState
+ *
+ * Authoritative writer: rebuilds the view matrix from the 5-channel state
+ * using the canonical recipe, and updates the cached azimuth/pitch/center
+ * so subsequent orbit drags pick up the new pivot.
+ *
+ * Lock policy: setViewState intentionally bypasses azimuthLocked /
+ * pitchLocked. The locks gate interactive drag and the individual
+ * setAzimuth/setPitch entry points; setViewState is the snapshot/restore
+ * path (animations, bookmarks, preview enter/exit) where the whole 5-tuple
+ * must apply atomically. Callers that need lock-respecting updates should
+ * route through setAzimuth / setPitch / setCenter instead.
+ *
+ * Validation: azimuth and pitch are clamped via clampAzimuth/clampPitch.
+ * distance and zoomScale are clamped to small positive minima to avoid
+ * producing a degenerate view matrix or ortho frustum from caller-supplied
+ * (or deserialized) bad data.
+ */
+void cwBaseTurnTableInteraction::setViewState(const cwTurnTableViewState& state) {
+    cwTurnTableViewState clean = state;
+    clean.azimuth = clampAzimuth(state.azimuth);
+    clean.pitch = clampPitch(state.pitch);
+    clean.distance = std::max(state.distance, kMinViewDistance);
+    clean.zoomScale = std::max(state.zoomScale, kMinZoomScale);
+
+    // Exact != to match setAzimuth/setPitch's contract — emit on every
+    // observable change, including arbitrarily small ones. qFuzzyCompare
+    // is unreliable when either operand is zero (its relative epsilon
+    // collapses there).
+    const float newAzimuth = static_cast<float>(clean.azimuth);
+    const float newPitch = static_cast<float>(clean.pitch);
+    const bool azimuthDelta = Azimuth != newAzimuth;
+    const bool pitchDelta = Pitch != newPitch;
+    const bool centerDelta = m_center != clean.center;
+
+    Azimuth = newAzimuth;
+    Pitch = newPitch;
+    m_center = clean.center;
+
+    // Keep CurrentRotation aligned with the new (pitch, azimuth) so the next
+    // updateRotationMatrix() computes the right rotationDifferance.
+    QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0f, 0.0f, 0.0f, newPitch);
+    QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0f, 0.0f, 1.0f, newAzimuth);
+    setCurrentRotation(pitchQuat * azimuthQuat);
+
+    if(!Camera.isNull()) {
+        Camera->setViewMatrix(buildViewMatrix(clean));
+        // Apply zoomScale unconditionally. cwCamera retains the value even
+        // when the active projection is perspective; this keeps the round
+        // trip viewState() <-> setViewState() faithful across projection
+        // swaps.
+        Camera->setZoomScale(clean.zoomScale);
+    }
+
+    if(azimuthDelta) { emit azimuthChanged(); }
+    if(pitchDelta) { emit pitchChanged(); }
+    if(centerDelta) { emit centerChanged(); }
 }
 
 /**
