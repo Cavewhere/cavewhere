@@ -1097,3 +1097,112 @@ void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)
     }
 }
 
+/**
+ * @brief cwBaseTurnTableInteraction::framingViewState
+ *
+ * Returns the 5-channel viewState that frames @a box at the current
+ * orientation. Unlike zoomTo() this is const, does NOT call resetView(),
+ * and preserves the user's azimuth/pitch — the caller routes the result
+ * through animateToViewState() / setViewState().
+ *
+ * Fit math runs in VIEW space, not world space. zoomTo() can use raw
+ * box.x()/y() half-extents because it resetView()'s to identity-on-view
+ * first, so the box's world axes align with the view axes. Here the
+ * orientation is whatever the user picked, so we project the eight
+ * AABB corners through the current view rotation and read the view-space
+ * half-extents — anything less would under-fit at non-default tilts.
+ */
+cwTurnTableViewState cwBaseTurnTableInteraction::framingViewState(
+        const QBox3D& box) const
+{
+    cwTurnTableViewState target = viewState();
+
+    if (box.isNull() || Camera.isNull()) {
+        return target;
+    }
+    if (!isFinite3(box.minimum()) || !isFinite3(box.maximum())) {
+        return target;
+    }
+
+    target.center = box.center();
+
+    const QVector3D half = 0.5f * (box.maximum() - box.minimum());
+    const float hx = (std::max)(half.x(), kFramingEpsilon);
+    const float hy = (std::max)(half.y(), kFramingEpsilon);
+    const float hz = (std::max)(half.z(), 0.0f);
+
+    // Rotate the AABB corners into view space (no translation — the box is
+    // already considered relative to its centroid). The view-space half
+    // extents are the max-abs of each axis over the eight corners.
+    QMatrix4x4 viewRot;
+    viewRot.rotate(viewMatrixRotation(target.pitch, target.azimuth));
+
+    const QVector3D corners[8] = {
+        QVector3D(-hx, -hy, -hz), QVector3D( hx, -hy, -hz),
+        QVector3D(-hx,  hy, -hz), QVector3D( hx,  hy, -hz),
+        QVector3D(-hx, -hy,  hz), QVector3D( hx, -hy,  hz),
+        QVector3D(-hx,  hy,  hz), QVector3D( hx,  hy,  hz),
+    };
+    float vhx = 0.0f;
+    float vhy = 0.0f;
+    float vhz = 0.0f;
+    for (const QVector3D& c : corners) {
+        const QVector3D vc = viewRot.map(c);
+        vhx = (std::max)(vhx, std::abs(vc.x()));
+        vhy = (std::max)(vhy, std::abs(vc.y()));
+        vhz = (std::max)(vhz, std::abs(vc.z()));
+    }
+    vhx = (std::max)(vhx, kFramingEpsilon);
+    vhy = (std::max)(vhy, kFramingEpsilon);
+
+    switch (Camera->projection().type()) {
+    case cwProjection::Ortho: {
+        // Read the current ortho frustum's view-space half-extents by
+        // unprojecting the viewport corners and forward-transforming back
+        // into view space. For ortho, P^-1 maps NDC ±1 to ±frustum half;
+        // unProject + view.map cancels the view inverse and lands exactly
+        // there.
+        const QSize viewportSize = Camera->viewport().size();
+        const QVector3D worldTL = Camera->unProject(QPoint(0, 0), 1.0);
+        const QVector3D worldBR = Camera->unProject(
+                    QPoint(viewportSize.width(), viewportSize.height()), 1.0);
+        const QMatrix4x4 view = Camera->viewMatrix();
+        const QVector3D vTL = view.map(worldTL);
+        const QVector3D vBR = view.map(worldBR);
+        const float viewSpanX = std::abs(vBR.x() - vTL.x());
+        const float viewSpanY = std::abs(vBR.y() - vTL.y());
+
+        const float fitX = (2.0f * vhx) / (std::max)(viewSpanX, kFramingEpsilon);
+        const float fitY = (2.0f * vhy) / (std::max)(viewSpanY, kFramingEpsilon);
+        const float fit  = (std::max)(fitX, fitY) * FramingPad;
+        if (!std::isfinite(fit) || fit <= 0.0f) {
+            return viewState();
+        }
+        target.zoomScale = Camera->zoomScale() * fit;
+        // distance unchanged for ortho — scale comes from zoomScale.
+        break;
+    }
+    case cwProjection::Perspective:
+    case cwProjection::PerspectiveFrustum: {
+        const float fovY = Camera->projection().fieldOfView()
+                * cwGlobals::degreesToRadians();
+        const float aspect = Camera->projection().aspectRatio();
+        const float tanHalfFovY = std::tan(0.5f * fovY);
+        const float tanHalfFovX = tanHalfFovY * aspect;
+        const float dY = vhy / (std::max)(tanHalfFovY, kFramingEpsilon);
+        const float dX = vhx / (std::max)(tanHalfFovX, kFramingEpsilon);
+        const float dist = ((std::max)(dX, dY) + vhz) * FramingPad;
+        if (!std::isfinite(dist) || dist <= 0.0f) {
+            return viewState();
+        }
+        target.distance = dist;
+        // zoomScale carries no visible meaning for perspective — leave it
+        // untouched so the round-trip on exit is exact.
+        break;
+    }
+    default:
+        break;
+    }
+    return target;
+}
+
