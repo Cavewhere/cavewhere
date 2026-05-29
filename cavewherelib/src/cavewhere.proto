@@ -66,6 +66,32 @@ message ExternalCenterline {
     optional string entry_file = 1;
 }
 
+// LocalSettings is the umbrella container for *all* per-user,
+// per-machine state stored next to the project. Lives in
+// .cwproj/local_settings.json (gitignored). The v1 payload is just
+// external-centerline source paths, but the file already exists, so
+// future per-machine subsystems (recent-file state, per-machine
+// credentials cache pointers, last-opened sub-page, etc.) should land
+// here as new top-level fields rather than spinning up another sibling
+// file. Keep inner-message names domain-specific (NOT generic words
+// like "Attachment", "Setting", or "Entry") so two unrelated
+// subsystems can't collide and a reader can tell which feature a
+// field belongs to without looking up its parent.
+message LocalSettings {
+    // Per-machine source paths for live-link external-centerline
+    // attachments. Owner UUID identifies the cwCave or cwTrip in the
+    // Attached state.
+    message ExternalCenterlineSource {
+        string owner_id = 1;        // cwCave or cwTrip QUuid (WithoutBraces format)
+        string source_path = 2;     // absolute path on this machine; empty == import mode
+    }
+    repeated ExternalCenterlineSource external_centerline_sources = 1;
+
+    // Future per-machine fields go here, each as its own
+    // domain-named message + repeated/optional field.
+    // e.g. repeated RecentProjectEntry recent_projects = 2;
+}
+
 message Cave {
     optional FileVersion fileVersion = 9;
     optional string name = 8;
