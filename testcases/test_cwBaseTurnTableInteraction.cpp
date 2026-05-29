@@ -451,35 +451,6 @@ TEST_CASE("cwBaseTurnTableInteraction zoomTo defends against NaN/inf box bounds 
     }
 }
 
-TEST_CASE("cwBaseTurnTableInteraction framingViewState preserves azimuth and pitch",
-          "[cwBaseTurnTableInteraction]")
-{
-    // Contract: framingViewState is a const fit math that moves only the
-    // center / distance / zoomScale channels. The user-chosen orientation
-    // is sacred — this is the whole reason it exists as a separate API
-    // from zoomTo() (which resetView()'s to plan).
-    Fixture f;
-
-    constexpr double kAzimuth = 75.0;
-    constexpr double kPitch   = 45.0;
-    f.interaction.setAzimuth(kAzimuth);
-    f.interaction.setPitch(kPitch);
-    REQUIRE(f.interaction.azimuth() == Approx(kAzimuth));
-    REQUIRE(f.interaction.pitch() == Approx(kPitch));
-
-    const QBox3D box(QVector3D(40.0f, 60.0f, -1.0f),
-                     QVector3D(60.0f, 80.0f,  1.0f));
-    cwTurnTableViewState target = f.interaction.framingViewState(box);
-
-    CHECK(target.azimuth == Approx(kAzimuth));
-    CHECK(target.pitch == Approx(kPitch));
-
-    // And applying the result must leave orientation untouched.
-    f.interaction.setViewState(target);
-    CHECK(f.interaction.azimuth() == Approx(kAzimuth));
-    CHECK(f.interaction.pitch() == Approx(kPitch));
-}
-
 TEST_CASE("cwBaseTurnTableInteraction framingViewState centers box at viewport center (ortho)",
           "[cwBaseTurnTableInteraction]")
 {
@@ -487,10 +458,12 @@ TEST_CASE("cwBaseTurnTableInteraction framingViewState centers box at viewport c
     // viewport center — that's the contract animateToViewState relies on
     // for the sink-preview camera layer.
     Fixture f;
+    const cwTurnTableViewState current = f.interaction.viewState();
 
     const QBox3D box(QVector3D(40.0f, 60.0f, -1.0f),
                      QVector3D(60.0f, 80.0f,  1.0f));
-    cwTurnTableViewState target = f.interaction.framingViewState(box);
+    cwTurnTableViewState target = f.interaction.framingViewState(
+                box, current.azimuth, current.pitch);
     f.interaction.setViewState(target);
 
     const QPointF projected = f.camera.project(box.center());
@@ -504,10 +477,12 @@ TEST_CASE("cwBaseTurnTableInteraction framingViewState centers box at viewport c
 {
     Fixture f;
     f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+    const cwTurnTableViewState current = f.interaction.viewState();
 
     const QBox3D box(QVector3D(40.0f, 60.0f, -1.0f),
                      QVector3D(60.0f, 80.0f,  1.0f));
-    cwTurnTableViewState target = f.interaction.framingViewState(box);
+    cwTurnTableViewState target = f.interaction.framingViewState(
+                box, current.azimuth, current.pitch);
     f.interaction.setViewState(target);
 
     const QPointF projected = f.camera.project(box.center());
@@ -519,9 +494,7 @@ TEST_CASE("cwBaseTurnTableInteraction framingViewState centers box at viewport c
     // At default orientation (pitch=90, azimuth=0), the view-space half
     // extents equal the world half extents and the expected distance
     // matches the zoomTo helper.
-    f.interaction.setAzimuth(0.0);
-    f.interaction.setPitch(90.0);
-    target = f.interaction.framingViewState(box);
+    target = f.interaction.framingViewState(box, 0.0, 90.0);
     f.interaction.setViewState(target);
     const QVector3D centerView = f.camera.viewMatrix().map(box.center());
     const double expectedDist = expectedZoomToDistPerspective(
@@ -537,13 +510,11 @@ TEST_CASE("cwBaseTurnTableInteraction framingViewState fits the box within the v
     // aligns view axes with world axes (pitch=90, azimuth=0) so the test
     // can predict which axis dominates without modeling the rotated AABB.
     Fixture f;
-    REQUIRE(f.interaction.azimuth() == Approx(0.0));
-    REQUIRE(f.interaction.pitch() == Approx(90.0));
 
     // Wider in X than Y → X is the limiting axis.
     const QBox3D wide(QVector3D(-30.0f, -5.0f, -1.0e-4f),
                       QVector3D( 30.0f,  5.0f,  1.0e-4f));
-    cwTurnTableViewState target = f.interaction.framingViewState(wide);
+    cwTurnTableViewState target = f.interaction.framingViewState(wide, 0.0, 90.0);
     f.interaction.setViewState(target);
 
     const QPointF left  = f.camera.project(QVector3D(-30.0f, 0.0f, 0.0f));
@@ -572,27 +543,6 @@ TEST_CASE("cwBaseTurnTableInteraction framingViewState fits the box within the v
     CHECK(bottomFromCenter > 0.0);
 }
 
-TEST_CASE("cwBaseTurnTableInteraction framingViewState null box returns current viewState",
-          "[cwBaseTurnTableInteraction]")
-{
-    // Identity for a degenerate box: the saved-restore path can call this
-    // unconditionally without poking the camera.
-    Fixture f;
-    f.interaction.setAzimuth(35.0);
-    f.interaction.setPitch(70.0);
-
-    const cwTurnTableViewState before = f.interaction.viewState();
-    cwTurnTableViewState same = f.interaction.framingViewState(QBox3D());
-
-    CHECK(same.center.x() == Approx(before.center.x()).margin(kMatrixEps));
-    CHECK(same.center.y() == Approx(before.center.y()).margin(kMatrixEps));
-    CHECK(same.center.z() == Approx(before.center.z()).margin(kMatrixEps));
-    CHECK(same.azimuth == Approx(before.azimuth));
-    CHECK(same.pitch == Approx(before.pitch));
-    CHECK(same.distance == Approx(before.distance).margin(kMatrixEps));
-    CHECK(same.zoomScale == Approx(before.zoomScale));
-}
-
 TEST_CASE("cwBaseTurnTableInteraction framingViewState fits box in tilted orientation",
           "[cwBaseTurnTableInteraction]")
 {
@@ -602,14 +552,12 @@ TEST_CASE("cwBaseTurnTableInteraction framingViewState fits box in tilted orient
     // inside the viewport — otherwise the rotated-AABB math is wrong.
     Fixture f;
     f.camera.setProjection(f.camera.perspectiveProjectionDefault());
-    f.interaction.setAzimuth(45.0);
-    f.interaction.setPitch(60.0);
 
     // Cube box — its rotated projection is a hexagon, and the projected
     // extents grow vs. the world half-widths. The fit must compensate.
     const QBox3D cube(QVector3D(-10.0f, -10.0f, -10.0f),
                       QVector3D( 10.0f,  10.0f,  10.0f));
-    cwTurnTableViewState target = f.interaction.framingViewState(cube);
+    cwTurnTableViewState target = f.interaction.framingViewState(cube, 45.0, 60.0);
     f.interaction.setViewState(target);
 
     // All 8 corners must project inside the viewport. The unrotated
@@ -641,7 +589,8 @@ TEST_CASE("cwBaseTurnTableInteraction framingViewState defends against NaN/inf b
     QBox3D bad(QVector3D(nan, 0.0f, 0.0f), QVector3D(inf, 10.0f, 1.0f));
     REQUIRE(!bad.isNull());
 
-    cwTurnTableViewState got = f.interaction.framingViewState(bad);
+    cwTurnTableViewState got = f.interaction.framingViewState(
+                bad, before.azimuth, before.pitch);
 
     // Identity on poisoned input — no NaN/inf propagation into the
     // returned view state.
@@ -650,6 +599,91 @@ TEST_CASE("cwBaseTurnTableInteraction framingViewState defends against NaN/inf b
     CHECK(std::isfinite(got.center.x()));
     CHECK(std::isfinite(got.center.y()));
     CHECK(std::isfinite(got.center.z()));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction framingViewState(box, az, pitch) overrides orientation",
+          "[cwBaseTurnTableInteraction]")
+{
+    // The 3-arg overload writes the supplied az/pitch into the returned
+    // target — and the fit math uses them, not the current orientation.
+    // The sink-clip preview uses this to snap to a pitch=0 profile view.
+    Fixture f;
+    f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+    f.interaction.setAzimuth(45.0);
+    f.interaction.setPitch(70.0);
+
+    const QBox3D box(QVector3D(-5.0f, -5.0f, -5.0f),
+                     QVector3D( 5.0f,  5.0f,  5.0f));
+    const cwTurnTableViewState target =
+        f.interaction.framingViewState(box, 30.0, 0.0);
+
+    CHECK(target.azimuth == Approx(30.0));
+    CHECK(target.pitch == Approx(0.0));
+    CHECK(target.center.x() == Approx(box.center().x()).margin(kMatrixEps));
+    CHECK(target.center.y() == Approx(box.center().y()).margin(kMatrixEps));
+    CHECK(target.center.z() == Approx(box.center().z()).margin(kMatrixEps));
+
+    // And the framed view actually fits the box in the supplied
+    // orientation — apply, then project all corners and verify each
+    // lands inside the viewport.
+    f.interaction.setViewState(target);
+    const QVector3D corners[8] = {
+        QVector3D(-5.0f, -5.0f, -5.0f), QVector3D( 5.0f, -5.0f, -5.0f),
+        QVector3D(-5.0f,  5.0f, -5.0f), QVector3D( 5.0f,  5.0f, -5.0f),
+        QVector3D(-5.0f, -5.0f,  5.0f), QVector3D( 5.0f, -5.0f,  5.0f),
+        QVector3D(-5.0f,  5.0f,  5.0f), QVector3D( 5.0f,  5.0f,  5.0f),
+    };
+    for (const QVector3D& c : corners) {
+        const QPointF p = f.camera.project(c);
+        CHECK(p.x() >= 0.0);
+        CHECK(p.x() <= double(kViewportWidth));
+        CHECK(p.y() >= 0.0);
+        CHECK(p.y() <= double(kViewportHeight));
+    }
+}
+
+TEST_CASE("cwBaseTurnTableInteraction framingViewState(box, az, pitch) uses supplied pitch for fit",
+          "[cwBaseTurnTableInteraction]")
+{
+    // The whole point of the 3-arg overload is that the fit math runs
+    // against the post-rotation orientation. A tall-thin box (large Z,
+    // small XY) needs MORE camera distance at pitch=0 (profile, Z maps
+    // to view-Y) than at pitch=90 (top-down, Z maps to view-depth).
+    // If we used the current orientation for the fit, both calls would
+    // return the same distance.
+    Fixture f;
+    f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+    f.interaction.setAzimuth(0.0);
+    f.interaction.setPitch(45.0);
+
+    const QBox3D tall(QVector3D(-1.0f, -1.0f, -50.0f),
+                      QVector3D( 1.0f,  1.0f,  50.0f));
+
+    const cwTurnTableViewState profile =
+        f.interaction.framingViewState(tall, 0.0, 0.0);   // horizontal
+    const cwTurnTableViewState topDown =
+        f.interaction.framingViewState(tall, 0.0, 90.0);  // straight down
+
+    CHECK(profile.distance > topDown.distance);
+}
+
+TEST_CASE("cwBaseTurnTableInteraction framingViewState(box, az, pitch) null box returns current viewState",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Matching the 1-arg overload's contract: when the box is invalid,
+    // return the current viewState unchanged — the orientation override
+    // does not apply because there's nothing to fit.
+    Fixture f;
+    f.interaction.setAzimuth(10.0);
+    f.interaction.setPitch(80.0);
+    const cwTurnTableViewState before = f.interaction.viewState();
+
+    const cwTurnTableViewState got =
+        f.interaction.framingViewState(QBox3D(), 30.0, 0.0);
+
+    CHECK(got.azimuth == Approx(before.azimuth));
+    CHECK(got.pitch == Approx(before.pitch));
+    CHECK(got.distance == Approx(before.distance).margin(kMatrixEps));
 }
 
 TEST_CASE("cwBaseTurnTableInteraction startRotating + setAzimuth orbits around the click point",

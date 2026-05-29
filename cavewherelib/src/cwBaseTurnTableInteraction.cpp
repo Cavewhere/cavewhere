@@ -1131,20 +1131,23 @@ void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)
 /**
  * @brief cwBaseTurnTableInteraction::framingViewState
  *
- * Returns the 5-channel viewState that frames @a box at the current
- * orientation. Unlike zoomTo() this is const, does NOT call resetView(),
- * and preserves the user's azimuth/pitch — the caller routes the result
- * through animateToViewState() / setViewState().
+ * Returns the 5-channel viewState that frames @a box at the supplied
+ * @a azimuth / @a pitch (degrees). Unlike zoomTo() this is const, does
+ * NOT call resetView(), and uses the supplied orientation for BOTH the
+ * fit math AND the returned target — so the AABB is sized against the
+ * post-rotation view, not the current one. Box-null, camera-null, or
+ * non-finite box falls through to the current viewState() unchanged.
+ * Caller routes the result through animateToViewState() / setViewState().
  *
  * Fit math runs in VIEW space, not world space. zoomTo() can use raw
  * box.x()/y() half-extents because it resetView()'s to identity-on-view
  * first, so the box's world axes align with the view axes. Here the
- * orientation is whatever the user picked, so we project the eight
- * AABB corners through the current view rotation and read the view-space
+ * orientation is whatever was supplied, so we project the eight AABB
+ * corners through that view rotation and read the view-space
  * half-extents — anything less would under-fit at non-default tilts.
  */
 cwTurnTableViewState cwBaseTurnTableInteraction::framingViewState(
-        const QBox3D& box) const
+        const QBox3D& box, double azimuth, double pitch) const
 {
     cwTurnTableViewState target = viewState();
 
@@ -1155,6 +1158,8 @@ cwTurnTableViewState cwBaseTurnTableInteraction::framingViewState(
         return target;
     }
 
+    target.azimuth = azimuth;
+    target.pitch = pitch;
     target.center = box.center();
     // Framing always lands the box centered on screen — drop any pan
     // offset carried over from the current view. The animator interpolates

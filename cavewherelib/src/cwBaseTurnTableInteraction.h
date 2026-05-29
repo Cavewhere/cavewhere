@@ -108,14 +108,18 @@ public:
 
     Q_INVOKABLE void zoomTo(const QBox3D& box);
 
-    // Returns the 5-channel viewState that frames @a box in the current
-    // projection, preserving the user's azimuth and pitch. Unlike zoomTo(),
-    // this is a const computation that does NOT call resetView(), write to
-    // the camera, or change orientation — callers route the result through
-    // animateToViewState() / setViewState(). Used by the sink-clip preview
-    // camera layer to fit-without-snapping. A null or non-finite box yields
-    // the current viewState() unchanged.
-    Q_INVOKABLE cwTurnTableViewState framingViewState(const QBox3D& box) const;
+    // Returns the 5-channel viewState that frames @a box at the supplied
+    // @a azimuth / @a pitch (degrees). Unlike zoomTo() this is const, does
+    // NOT call resetView(), and uses the supplied orientation for BOTH the
+    // fit math AND the returned target — so the AABB is sized against the
+    // post-rotation view, not the current one. Lets callers snap to a
+    // canonical orientation (e.g. pitch=0 profile view for a sink) and
+    // still get a tight fit. Box-null, camera-null, or non-finite box
+    // falls through to the current viewState() unchanged. Caller routes
+    // the result through animateToViewState() / setViewState().
+    Q_INVOKABLE cwTurnTableViewState framingViewState(const QBox3D& box,
+                                                      double azimuth,
+                                                      double pitch) const;
 
 signals:
     void cameraRotationChanged();
