@@ -157,6 +157,12 @@ private:
     QVector3D m_center; //!< World-space orbit/look-at center, used as the pivot for rotation
     bool m_centerLocked = false; //!< When true, startRotating/startPanning don't move m_center
 
+    //! World-space anchor that the active pan drag tracks under the cursor.
+    //! Always set to the click's ray-plane intersection at startPanning,
+    //! independent of m_centerLocked — that's how pan stays smooth while
+    //! the rotation pivot (m_center) is pinned to e.g. the sink centroid.
+    QVector3D m_panAnchor;
+
     QPlane3D PanPlane;
     QPointF LastMousePosition; //For rotation
     QQuaternion CurrentRotation;

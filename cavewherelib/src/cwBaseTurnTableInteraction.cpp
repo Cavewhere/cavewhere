@@ -160,9 +160,16 @@ void cwBaseTurnTableInteraction::bindPerspectiveIntersection()
   */
 void cwBaseTurnTableInteraction::startPanning(QPoint position) {
     QPoint mappedPosition = Camera->mapToGLViewport(position);
+    const QVector3D clickWorld = unProject(mappedPosition);
     if(!m_centerLocked) {
-        setCenter(unProject(mappedPosition));
+        setCenter(clickWorld);
     }
+
+    // The pan anchor is always the click point — independent of the
+    // orbit-pivot lock. m_center stays where it is (locked: sink centroid;
+    // unlocked: just got set to clickWorld too), but the pan drag tracks
+    // the click position under the cursor so there's no initial jump.
+    m_panAnchor = clickWorld;
 
     //Get the ray from the front of the screen to the back of the screen
     //Using the center of the screen
@@ -174,14 +181,14 @@ void cwBaseTurnTableInteraction::startPanning(QPoint position) {
 
     QVector3D direction = QVector3D(front - back).normalized();
 
-    //Create the plane through the pan pivot. When centerLocked is on the
-    //pivot stays put — m_center is the authoritative pan/orbit pivot.
-    PanPlane = QPlane3D(m_center, direction);
+    //Create the plane through the pan anchor (the click point).
+    PanPlane = QPlane3D(m_panAnchor, direction);
 
     qCDebug(lcInteract).nospace()
         << "startPanning raw=" << position
         << " mapped=" << mappedPosition
         << " pivot=" << m_center
+        << " panAnchor=" << m_panAnchor
         << " planeNormal=" << direction;
 
     TranslatePosition = position;
@@ -357,7 +364,7 @@ void cwBaseTurnTableInteraction::translateLastPosition()
     if(qIsNaN(t)) { return; }
 
     QVector3D intersection = ray.point(t);
-    QVector3D translateAmount = intersection - m_center;
+    QVector3D translateAmount = intersection - m_panAnchor;
 
     QMatrix4x4 viewMatrix = Camera->viewMatrix();
     viewMatrix.translate(translateAmount);
@@ -712,6 +719,15 @@ cwTurnTableViewState clampViewState(const cwTurnTableViewState& state) {
             ? (std::max)(state.zoomScale, kMinZoomScale)
             : kMinZoomScale;
 
+    // eyeOffset is an eye-space XY shift; Z is reserved (always zero).
+    // No clamp on XY range — any finite pan is legal — just scrub
+    // non-finite components so a poisoned channel can't propagate into
+    // the view matrix. Z is forced to zero to keep the invariant
+    // symmetric with viewState()'s extractor.
+    clean.eyeOffset = QVector3D(finiteOrZero(state.eyeOffset.x()),
+                                finiteOrZero(state.eyeOffset.y()),
+                                0.0f);
+
     return clean;
 }
 
@@ -777,6 +793,12 @@ inline QQuaternion viewMatrixRotation(double pitch, double azimuth) {
 // orbit semantics used by updateRotationMatrix() and the reset path.
 QMatrix4x4 buildViewMatrix(const cwTurnTableViewState& s) {
     QMatrix4x4 m;
+    // eye-space pan offset is applied LAST in eye coords. Qt's
+    // QMatrix4x4::translate(v) does M = M * T(v), so the first call here
+    // becomes the outermost (leftmost) transform — i.e. T(eyeOffset) is
+    // applied to the eye-space output of the rest of the recipe. This
+    // preserves orbit-around-m_center while letting the pan show on screen.
+    m.translate(s.eyeOffset);
     m.translate(QVector3D(0.0f, 0.0f, -static_cast<float>(s.distance)));
     m.rotate(viewMatrixRotation(s.pitch, s.azimuth));
     m.translate(-s.center);
@@ -803,10 +825,18 @@ cwTurnTableViewState cwBaseTurnTableInteraction::viewState() const {
     s.azimuth = Azimuth;
     s.pitch = Pitch;
     if(!Camera.isNull()) {
-        // View-space position of the world-space center; canonical recipe
-        // puts it at (0, 0, -distance), so distance = -z_view.
+        // View-space position of the world-space center under the CURRENT
+        // view matrix. Without user pan this lands at (0, 0, -distance) —
+        // the canonical recipe target. With pan, the XY components capture
+        // the eye-space shift; that's what eyeOffset stores so the next
+        // setViewState() / animator tick can reproduce the panned view
+        // faithfully instead of snapping back to centred.
         const QVector3D centerView = Camera->viewMatrix().map(m_center);
         s.distance = -centerView.z();
+        // Z component is identically zero by construction
+        // (distance = -centerView.z()), so we only carry the eye-space XY
+        // shift that the pan introduced.
+        s.eyeOffset = QVector3D(centerView.x(), centerView.y(), 0.0f);
         s.zoomScale = Camera->zoomScale();
     }
     return clampViewState(s);
@@ -933,6 +963,7 @@ void cwBaseTurnTableInteraction::onStateAnimTick(const QVariant& value)
                  ? lerp(m_stateAnimStart.distance, m_stateAnimTarget.distance, t)
                  : m_stateAnimTarget.distance;
     s.zoomScale = lerp(m_stateAnimStart.zoomScale, m_stateAnimTarget.zoomScale, t);
+    s.eyeOffset = lerp(m_stateAnimStart.eyeOffset, m_stateAnimTarget.eyeOffset, t);
 
     setViewState(s);
 }
@@ -1125,6 +1156,11 @@ cwTurnTableViewState cwBaseTurnTableInteraction::framingViewState(
     }
 
     target.center = box.center();
+    // Framing always lands the box centered on screen — drop any pan
+    // offset carried over from the current view. The animator interpolates
+    // from current eyeOffset down to zero, so the pan smoothly resolves
+    // toward the centered frame instead of being preserved into preview.
+    target.eyeOffset = QVector3D();
 
     const QVector3D half = 0.5f * (box.maximum() - box.minimum());
     const float hx = (std::max)(half.x(), kFramingEpsilon);

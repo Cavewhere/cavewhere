@@ -874,6 +874,139 @@ TEST_CASE("cwBaseTurnTableInteraction viewState round-trips through setViewState
     CHECK(centerView.z() == Approx(-target.distance).margin(kMatrixEps));
 }
 
+TEST_CASE("cwBaseTurnTableInteraction viewState captures eyeOffset after pan",
+          "[cwBaseTurnTableInteraction]")
+{
+    // A user pan applies viewMatrix.translate() — m_center stays put, but
+    // the canonical recipe alone can no longer reproduce the resulting
+    // view. The eyeOffset channel exists exactly to carry that delta so a
+    // viewState() snapshot remains round-trippable.
+    Fixture f;
+
+    // Establish a known canonical state — setViewState rebuilds the view
+    // matrix so eyeOffset starts at zero.
+    cwTurnTableViewState canon;
+    canon.center = QVector3D(5.0f, 7.0f, 1.0f);
+    canon.azimuth = 0.0;
+    canon.pitch = 90.0;
+    canon.distance = 50.0;
+    canon.zoomScale = f.camera.defaultZoomScale();
+    f.interaction.setViewState(canon);
+
+    const cwTurnTableViewState before = f.interaction.viewState();
+    REQUIRE(before.eyeOffset.x() == Approx(0.0).margin(kMatrixEps));
+    REQUIRE(before.eyeOffset.y() == Approx(0.0).margin(kMatrixEps));
+
+    // Synthesize a pan: shift the view matrix sideways by a known
+    // world-space delta (no mouse-event plumbing in this fixture).
+    QMatrix4x4 view = f.camera.viewMatrix();
+    view.translate(QVector3D(2.0f, -1.0f, 0.0f));
+    f.camera.setViewMatrix(view);
+
+    const cwTurnTableViewState after = f.interaction.viewState();
+    // Pan moves m_center off the canonical screen-centre — eyeOffset
+    // captures the eye-space XY shift. The Z component stays at zero by
+    // construction (distance = -centerView.z() makes it cancel).
+    const QVector3D centerView = f.camera.viewMatrix().map(f.interaction.center());
+    CHECK(after.eyeOffset.x() == Approx(centerView.x()).margin(kMatrixEps));
+    CHECK(after.eyeOffset.y() == Approx(centerView.y()).margin(kMatrixEps));
+    CHECK(after.eyeOffset.z() == Approx(0.0).margin(kMatrixEps));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction setViewState reproduces a panned view",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Round-trip: read the panned state, snap it back, and the view
+    // matrix must agree to float epsilon. Without the eyeOffset channel
+    // setViewState would silently snap m_center back to screen-centre
+    // and the matrix would differ.
+    Fixture f;
+    f.interaction.setCenter(QVector3D(3.0f, -2.0f, 0.0f));
+
+    QMatrix4x4 view = f.camera.viewMatrix();
+    view.translate(QVector3D(1.5f, 0.75f, 0.0f));
+    f.camera.setViewMatrix(view);
+
+    const QMatrix4x4 expected = f.camera.viewMatrix();
+    const cwTurnTableViewState snap = f.interaction.viewState();
+
+    // Snap to a different state, then back, to prove the eyeOffset channel
+    // is what makes the second snap reproduce the first.
+    cwTurnTableViewState detour;
+    detour.center = QVector3D(0, 0, 0);
+    detour.azimuth = 0.0;
+    detour.pitch = 90.0;
+    detour.distance = 50.0;
+    detour.zoomScale = f.camera.defaultZoomScale();
+    f.interaction.setViewState(detour);
+
+    f.interaction.setViewState(snap);
+
+    CHECK(matricesNearlyEqual(f.camera.viewMatrix(), expected));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction eyeOffset preserves orbit around m_center",
+          "[cwBaseTurnTableInteraction]")
+{
+    // The whole point of eyeOffset (vs. re-anchoring m_center) is that the
+    // rotation pivot stays put. Set up a state with non-zero eyeOffset,
+    // rotate, and check m_center's screen position is invariant under
+    // rotation.
+    Fixture f;
+
+    cwTurnTableViewState s;
+    s.center = QVector3D(4.0f, 4.0f, 0.0f);
+    s.azimuth = 30.0;
+    s.pitch = 70.0;
+    s.distance = 60.0;
+    s.zoomScale = f.camera.defaultZoomScale();
+    s.eyeOffset = QVector3D(8.0f, -5.0f, 0.0f); // user has panned
+    f.interaction.setViewState(s);
+
+    const QPointF before = f.camera.project(s.center);
+
+    // Rotate via the public setter; orbit pivot must stay on m_center.
+    f.interaction.setAzimuth(75.0);
+
+    const QPointF after = f.camera.project(s.center);
+    CHECK(after.x() == Approx(before.x()).margin(kPixelTolerance));
+    CHECK(after.y() == Approx(before.y()).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction animateToViewState interpolates eyeOffset",
+          "[cwBaseTurnTableInteraction]")
+{
+    // The bug this channel fixes: when an enter animation starts after a
+    // user pan, the animator must interpolate FROM the panned view, not
+    // snap back to canonical at t=0. The eyeOffset channel carries the
+    // pan into m_stateAnimStart so the t=0 frame lands on the current
+    // view matrix.
+    Fixture f;
+
+    cwTurnTableViewState start;
+    start.center = QVector3D(0, 0, 0);
+    start.azimuth = 0.0;
+    start.pitch = 90.0;
+    start.distance = 50.0;
+    start.zoomScale = 1.0;
+    start.eyeOffset = QVector3D(10.0f, -4.0f, 0.0f);
+    f.interaction.setViewState(start);
+
+    cwTurnTableViewState target = start;
+    target.eyeOffset = QVector3D(0.0f, 0.0f, 0.0f);
+    f.interaction.animateToViewState(target, 1000);
+
+    auto* anim = f.interaction.findChild<QVariantAnimation*>(
+                cwBaseTurnTableInteraction::stateAnimationObjectName);
+    REQUIRE(anim != nullptr);
+    anim->setCurrentTime(anim->duration() / 2);
+
+    cwTurnTableViewState mid = f.interaction.viewState();
+    // Midpoint = (start + target) / 2 = (5, -2, 0).
+    CHECK(mid.eyeOffset.x() == Approx(5.0).margin(kMatrixEps));
+    CHECK(mid.eyeOffset.y() == Approx(-2.0).margin(kMatrixEps));
+}
+
 TEST_CASE("cwBaseTurnTableInteraction setViewState clamps non-positive distance and zoomScale",
           "[cwBaseTurnTableInteraction]")
 {
