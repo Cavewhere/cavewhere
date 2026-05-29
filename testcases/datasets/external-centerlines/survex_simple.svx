@@ -1,0 +1,8 @@
+; Simple Survex centerline used by the external-centerline scanner
+; tests. No *include directives; the scanner should resolve this to
+; a single-element dependency list.
+*begin Simple
+*data normal from to tape compass clino
+A1 A2 10.0 0 0
+A2 A3 8.5 90 0
+*end Simple

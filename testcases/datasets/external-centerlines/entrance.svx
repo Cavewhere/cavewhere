@@ -1,0 +1,9 @@
+; Entry passage; included by survex_nested.svx and pulls in
+; passage.svx to exercise the deeper *include chain. Phase 3
+; Scope-trip auto-creation will read the *begin / *end names from
+; this file.
+*begin Entrance
+*data normal from to tape compass clino
+E1 E2 12.0 0 0
+*include "passage.svx"
+*end Entrance

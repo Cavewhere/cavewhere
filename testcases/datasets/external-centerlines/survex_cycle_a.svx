@@ -1,0 +1,6 @@
+; Cycle fixture A. Includes survex_cycle_b.svx which includes us
+; back; the canonical-path visited set must catch this and emit a
+; warning rather than recursing forever.
+*begin CycleA
+*include "survex_cycle_b.svx"
+*end CycleA

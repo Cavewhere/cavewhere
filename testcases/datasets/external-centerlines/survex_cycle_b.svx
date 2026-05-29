@@ -1,0 +1,4 @@
+; Cycle fixture B.
+*begin CycleB
+*include "survex_cycle_a.svx"
+*end CycleB

@@ -1,0 +1,5 @@
+; Inner passage. Leaf node of the nested fixture chain.
+*begin Passage
+*data normal from to tape compass clino
+P1 P2 6.5 45 -5
+*end Passage

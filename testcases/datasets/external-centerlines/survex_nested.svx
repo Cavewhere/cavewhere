@@ -1,0 +1,8 @@
+; Nested Survex driver used by [Scanner][Survex] and [Attach][Cave]
+; tests. Pulls in entrance.svx which in turn pulls in passage.svx,
+; so the dependency closure has three files. The bareword + no-
+; extension *include rule is exercised by its own self-contained
+; test (avoids re-visit warnings tangling this fixture's contract).
+*begin Nested
+*include "entrance.svx"
+*end Nested
