@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LAZ Layer Metadata Files (.cwlaz)</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --muted: #555;
+    --accent: #1f6feb;
+    --warn: #b95900;
+    --code-bg: #f4f5f7;
+    --rule: #d8dbe0;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--fg);
+    max-width: 880px;
+    margin: 2.5rem auto;
+    padding: 0 1.5rem;
+    line-height: 1.55;
+  }
+  h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+  h2 {
+    font-size: 1.25rem;
+    margin-top: 2.2rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 { font-size: 1.05rem; margin-top: 1.5rem; }
+  .subtitle { color: var(--muted); margin-top: 0; }
+  code, pre {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    background: var(--code-bg);
+    border-radius: 4px;
+  }
+  code { padding: 1px 5px; font-size: 0.92em; }
+  pre {
+    padding: 0.75rem 1rem;
+    overflow-x: auto;
+    font-size: 0.88em;
+    border: 1px solid var(--rule);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.95em;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th { background: var(--code-bg); }
+  .callout {
+    border-left: 3px solid var(--accent);
+    padding: 0.6rem 0.9rem;
+    background: #eef4ff;
+    margin: 1rem 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .callout.warn { border-color: var(--warn); background: #fff8ee; }
+  ul { padding-left: 1.4rem; }
+  li { margin: 0.25rem 0; }
+  .path { color: var(--muted); font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.88em; }
+</style>
+</head>
+<body>
+
+<h1>LAZ Layer Metadata Files (<code>.cwlaz</code>)</h1>
+<p class="subtitle">One protobuf <code>.cwlaz</code> file per LAZ file in <code>GIS Layers/</code>,
+mirroring how <code>cwNote</code> stores its metadata. Replaces the
+<code>ProjectMetadata.lazLayerStates</code> overlay so two collaborators editing different layers
+don&rsquo;t conflict in <code>.cwproj</code>.</p>
+
+<h2>Context</h2>
+<p>
+The current <i>Disabling LAZ Layers</i> plan stores per-layer state as a repeated
+<code>LazLayerState</code> entry on <code>ProjectMetadata</code> inside the project&rsquo;s
+<code>.cwproj</code> file. Every layer&rsquo;s enabled bit lives in the same file. Two collaborators
+toggling different layers diff in the same place &mdash; <b>guaranteed merge conflict</b> as soon as
+the field has more than one entry.
+</p>
+<p>
+CaveWhere already has a cleaner pattern for this: notes. Each <code>cwNote</code> serializes to its
+own <code>.cwnote</code> protobuf next to its image; loads discover them by directory glob; saves
+write only the affected note. Two collaborators editing different notes don&rsquo;t conflict.
+</p>
+<p>
+This plan applies that pattern to LAZ. Each <code>GIS Layers/foo.laz</code> gets a paired
+<code>GIS Layers/foo.cwlaz</code> protobuf file carrying that layer&rsquo;s persistable state
+(today: <code>id</code> + <code>enabled</code>; tomorrow: <code>pointSize</code>,
+<code>sourceCSOverride</code>, &hellip;). The <code>lazLayerStates</code> field on
+<code>ProjectMetadata</code> is deleted outright in the same series &mdash; it&rsquo;s never been
+shipped, so there&rsquo;s nothing to migrate.
+</p>
+
+<h2>File layout</h2>
+<pre><code>&lt;project&gt;.cwproj/
+&nbsp;&nbsp;&lt;dataRoot&gt;/
+&nbsp;&nbsp;&nbsp;&nbsp;GIS Layers/
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;foo.laz        &larr; existing
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;foo.cwlaz      &larr; new: protobuf metadata, paired with foo.laz by basename
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bar.las
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bar.cwlaz
+&nbsp;&nbsp;&nbsp;&nbsp;Caves/&hellip;</code></pre>
+<p>
+Pairing is by basename. <code>foo.laz</code> and <code>bar.LAS</code> (case differences are preserved
+by <code>cwLazLayerModel::rescan</code>&rsquo;s case-aware glob) each get a <code>.cwlaz</code>
+metadata file whose stem matches the source file exactly.
+</p>
+
+<h2>Schema</h2>
+<p>New message in <span class="path">cavewherelib/src/cavewhere.proto</span>:</p>
+<pre><code>// Per-LAZ-layer persistent state. Stored as &lt;basename&gt;.cwlaz next to the
+// matching .laz/.las file in "GIS Layers/". Discovery is by folder scan;
+// the project's .cwproj file no longer references LAZ layers.
+message LazLayer {
+    optional string id = 1;       // UUID, stable across reopen
+    optional bool enabled = 2;    // default true; absence == true
+    // reserved for future per-layer settings:
+    //   optional double pointSize = 3;
+    //   optional string sourceCSOverride = 4;
+}</code></pre>
+<p>
+<code>repeated LazLayerState lazLayerStates = 7</code> on <code>ProjectMetadata</code> is removed in
+commit 3 and the slot becomes <code>reserved 7;</code>. The <code>message LazLayerState</code>
+definition is deleted at the same time. No on-disk project carries the field, so no compatibility
+shim is needed.
+</p>
+
+<h2>Identity</h2>
+<p>
+Every LAZ layer gets a persistent UUID. Today <code>cwLazLayer</code> generates a fresh
+<code>QUuid</code> in its constructor and the value is regenerated on every reopen; nothing outside the
+in-memory model knows or cares. With the per-layer <code>.cwlaz</code> file, the UUID becomes
+long-lived and survives reopen &mdash; useful for future sync/merge work, scene-graph hash keys, and
+any cross-system reference.
+</p>
+<p>
+<code>cwLazLayerData</code> gains <code>QUuid id;</code>. <code>cwLazLayer::data()</code> returns
+<code>m_id</code>; <code>cwLazLayer::setData(const cwLazLayerData&amp;)</code> overwrites
+<code>m_id</code> from the loaded <code>.cwlaz</code> before the layer is registered with the model
+(so the scene node and keyword model see the final UUID on their first observation).
+</p>
+<p>
+Wire encoding follows the pattern already used by <code>cwNote</code>, <code>cwTrip</code>,
+<code>cwCave</code>, &hellip; &mdash; <code>optional string id = N;</code>,
+<code>uuidToProtoString(layer-&gt;id())</code> for writes, <code>cwProtoUtils::toUuid(proto.id())</code>
+for reads.
+</p>
+
+<h2>Discovery + load</h2>
+<p>
+<code>cwLazLayerModel::rescan</code> already enumerates <code>*.laz</code> / <code>*.las</code> in
+<code>GIS Layers/</code>. Extended behavior: after constructing a layer and calling
+<code>setSourcePath(path)</code>, the model checks for a paired <code>&lt;basename&gt;.cwlaz</code>:
+</p>
+<ul>
+  <li><b>Metadata file present</b>: ask <code>cwSaveLoad::loadLazLayer(metadataPath)</code> to
+    deserialize. Call <code>layer-&gt;setData(...)</code>. This overwrites the auto-generated UUID
+    with the persisted one and applies any divergent state.</li>
+  <li><b>Metadata file absent</b>: leave the auto-generated UUID and default state. Schedule a
+    <code>cwSaveLoad::save(layer)</code> immediately so the first flush stamps the new layer&rsquo;s
+    <code>.cwlaz</code> to disk (the UUID has to land on disk so future loads see the same identity).</li>
+</ul>
+<p>
+Apply state <i>before</i> <code>beginInsertRows</code> &mdash; same invariant as the
+<code>applyPendingStateTo</code> hook this plan replaces. That keeps row-insertion observers
+(<code>cwLazLayersSceneNode::addLayer</code>, <code>cwKeywordItemModel</code> wiring,
+<code>cwSaveLoad</code>&rsquo;s <code>enabledChanged</code> connect) from seeing the transient
+default-state moment.
+</p>
+
+<h2>Save</h2>
+<p>
+Replace today&rsquo;s <code>enabledChanged &rarr; saveMetadata</code> (which flushes the whole
+<code>.cwproj</code> file) with <code>enabledChanged &rarr; cwSaveLoad::save(layer)</code> &mdash;
+writes just <code>&lt;basename&gt;.cwlaz</code>. One state change &rArr; one <code>.cwlaz</code> diff.
+Concurrency, ordering, and Git commit all go through the existing
+<code>cwSaveLoadPrivate::Job</code> queue exactly the way <code>cwNote</code> already does it. The
+LAZ branch of <code>saveObject&lt;T&gt;</code> resolves the target path through
+<code>absolutePathFor(this, layer)</code> &mdash; same machinery notes use, so renames are tracked
+in <code>m_objectStates</code> automatically.
+</p>
+<p>
+Every layer always has a <code>.cwlaz</code> on disk (eager writes). The lazy &ldquo;skip writing if
+state is default&rdquo; optimization that earlier drafts of this plan considered is dropped because
+UUIDs need to be stable across reopen &mdash; a layer with no <code>.cwlaz</code> would generate a
+new UUID every load.
+</p>
+
+<h3>Per-layer save flow</h3>
+<pre><code>cwLazLayer::setEnabled(false)
+&nbsp;&nbsp;-&gt; emit enabledChanged
+&nbsp;&nbsp;&nbsp;&nbsp;-&gt; cwSaveLoad::save(layer)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-&gt; build CavewhereProto::LazLayer from layer-&gt;data()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-&gt; enqueue cwSaveLoadPrivate::Job (Kind::File, Action::Write)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-&gt; flush -&gt; saveProtoMessage to GIS Layers/&lt;basename&gt;.cwlaz
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-&gt; Git commit (same path that already commits .laz adds)</code></pre>
+
+<h2>Removal</h2>
+<p>
+<code>cwLazLayerModel::removeAt</code> already triggers a queued delete of the <code>.laz</code> via
+<code>cwSaveLoad::connectTreeModel</code>&rsquo;s <code>rowsAboutToBeRemoved</code> handler. Extend
+that handler to enqueue a second delete job for the paired <code>.cwlaz</code>. Both deletes funnel
+through the same Git commit, so the working tree never sees a half-deleted pair.
+</p>
+<p>
+<b>No rescan-time orphan sweep.</b> Verified against notes: <code>cwSaveLoad</code> does not sweep
+stray <code>.cwnote</code> files at load time either. The policy is: <i>removal goes through the
+model</i>; files that show up on disk by other means (Git checkout, user deleting <code>.laz</code>
+in Finder, etc.) are left alone. If a <code>.laz</code> reappears later with a matching orphaned
+<code>.cwlaz</code>, pairing resumes &mdash; usefully preserving the layer&rsquo;s identity across
+moves outside CaveWhere.
+</p>
+
+<h2>Rename</h2>
+<p>
+Users will rename layers. Driving case: the LAZ clip tool currently writes
+<code>clip_001.laz</code>, which is not a name anyone wants to keep. The user gives it a friendly
+basename after the clip lands.
+</p>
+<p>
+Identity stays UUID-keyed inside the <code>.cwlaz</code>; the basename is a mutable display
+attribute. Renaming a layer atomically moves <i>both</i> sibling files
+(<code>&lt;old&gt;.laz</code> + <code>&lt;old&gt;.cwlaz</code> &rarr; <code>&lt;new&gt;.laz</code> +
+<code>&lt;new&gt;.cwlaz</code>) through the existing job queue. The UUID inside the
+<code>.cwlaz</code> is untouched, so reopen recovers the same layer identity.
+</p>
+<p>
+API surface on <code>cwLazLayerModel</code>:
+</p>
+<pre><code>Q_INVOKABLE bool rename(int row, const QString&amp; newBaseName);
+QString lastRenameError() const;  // populated when rename returns false
+Q_PROPERTY(QString lastRenameError READ lastRenameError NOTIFY lastRenameErrorChanged)
+
+// Validates: newBaseName is non-empty, has no path separators, doesn't collide
+// with another loaded layer or another file already in GIS Layers/, has no
+// extension (UI strips display extensions before calling).
+// On success: snapshots the old .laz path, then calls layer-&gt;setSourcePath
+// (newPath) which emits sourcePathChanged. cwSaveLoad's existing connect
+// routes that through enqueueRenameIfNeeded&lt;cwLazLayer&gt;, which enqueues
+// two real Action::Move jobs with distinct artifactTag values
+// ("" for .cwlaz, "source" for .laz). Both go through the standard Move
+// pipeline; the per-tag compression keeps them from colliding.
+// The QML-friendly bool return + property pair is chosen over Monad::ResultBase
+// so QML bindings can show the error directly.</code></pre>
+<p>
+Collision handling: if the user picks a name that collides with another loaded layer, return an
+error result (UI surfaces a warning). If the name collides with a stray file in
+<code>GIS Layers/</code> that isn&rsquo;t a loaded layer (orphaned <code>.cwlaz</code>, or a
+<code>.laz</code> that didn&rsquo;t load for some reason), also reject &mdash; the user has to
+resolve the conflict by hand.
+</p>
+<p>
+Wiring details and the underlying <code>Job::artifactTag</code> infrastructure change that makes
+the two-Move-job rename safe under compression live in &ldquo;Integration points &sect; 4&rdquo;.
+</p>
+
+<h2>Integration points with <code>cwSaveLoad</code></h2>
+<p>
+The LAZ I/O reuses the existing infrastructure rather than introducing a parallel pipeline. Each of
+the touchpoints below mirrors how <code>cwNote</code> is wired today.
+</p>
+
+<h3>1. <code>saveObject&lt;T&gt;</code> template dispatch</h3>
+<p>
+<code>cwSaveLoad::save(const cwLazLayer*)</code> is a one-line delegate to
+<code>d-&gt;saveObject(this, layer)</code> &mdash; the same shape as
+<code>save(const cwNote*)</code>, <code>save(const cwTrip*)</code>, etc. The dispatch lives in
+<span class="path">cwSaveLoadPrivate.h:452 saveObject&lt;T&gt;</span>: add a new
+<code>if constexpr (std::is_same_v&lt;T, cwLazLayer&gt;)</code> branch that calls
+<code>saveProtoMessage(context, cwSaveLoad::toProtoLazLayer(object), object)</code>. This is the
+single mechanism for routing all saves through the job queue; no LAZ-specific code lives outside
+the template.
+</p>
+
+<h3>2. Proto helpers</h3>
+<p>
+Two new static helpers on <code>cwSaveLoad</code>, named to match the convention
+(<code>toProtoNote</code> / <code>noteDataFromProtoNote</code>):
+</p>
+<pre><code>static std::unique_ptr&lt;CavewhereProto::LazLayer&gt; toProtoLazLayer(const cwLazLayer* layer);
+static cwLazLayerData lazLayerDataFromProtoLazLayer(const CavewhereProto::LazLayer&amp; proto,
+                                                    const QString&amp; filename);</code></pre>
+<p>
+<code>toProtoLazLayer</code> writes <code>uuidToProtoString(layer-&gt;id())</code> and
+<code>enabled</code>. <code>lazLayerDataFromProtoLazLayer</code> reads them via
+<code>cwProtoUtils::toUuid</code> and a defaulted <code>enabled</code>. The <code>filename</code>
+parameter is the source <code>.cwlaz</code> path &mdash; needed to set
+<code>cwLazLayerData::fileName</code> from <code>QFileInfo(path).completeBaseName() + ".laz"</code>
+(or matching <code>.las</code> extension), so the discovery pass can pair the loaded data back to
+the right LAZ source.
+</p>
+
+<h3>3. Path resolution + <code>m_objectStates</code></h3>
+<p>
+LAZ layers participate in <code>cwSaveLoadPrivate::m_objectStates</code> the same way
+<code>cwNote</code> / <code>cwTrip</code> / <code>cwCave</code> do. Each
+<code>cwLazLayer*</code> is registered in the state map on insertion (via discovery during
+<code>rescan</code> or via <code>seedStatePathFromLoaded</code> when a project loads) and
+deregistered on removal. <code>saveObject&lt;cwLazLayer&gt;</code> resolves the target through
+<code>absolutePathFor(context, layer)</code>, exactly like notes.
+</p>
+<p>
+Two overloads are added to support this:
+</p>
+<pre><code>// cwSaveLoad.cpp (or wherever dirPrivate overloads live)
+QDir cwSaveLoad::dirPrivate(const cwLazLayer* layer) const;
+// returns &lt;dataRoot&gt;/GIS Layers/ &mdash; constant across all LAZ layers (flat directory)
+
+// absolutePathFor builds: &lt;dirPrivate(layer)&gt;/&lt;basename&gt;.cwlaz</code></pre>
+<p>
+The private helper from earlier drafts &mdash; <code>lazLayerMetadataPath</code> &mdash; is replaced
+by routing through <code>dirPrivate</code> + the layer&rsquo;s current basename. Single source of
+truth, but routed through the shared state-tracking machinery.
+</p>
+
+<h3>4. <code>Job::artifactTag</code> &mdash; lifting the one-artifact assumption</h3>
+<p>
+The job-queue infrastructure currently assumes one on-disk artifact per object. That assumption is
+baked into <code>compressPendingJobs</code>: jobs are grouped by <code>(objectId, Kind)</code> and
+the three compression rules (<code>dropRedundantWrites</code>,
+<code>dropWritesSupersededByRemove</code>, <code>collapseSequentialMoves</code>) all assume any
+group of same-<code>(objectId, Kind)</code> jobs operates on the same file. For LAZ &mdash; one
+layer, two sibling files &mdash; that assumption breaks: two paired Move jobs would be
+incorrectly collapsed into one corrupted job (the first&rsquo;s <code>oldPath</code> and the
+last&rsquo;s <code>path</code>).
+</p>
+<p>
+The fix is to add a tag field that distinguishes artifacts within an object, and refine the three
+compression rules to subgroup by tag. The empty tag is the default and represents
+&ldquo;the primary artifact&rdquo; (matches every current caller bit-for-bit). LAZ uses
+<code>"source"</code> for the <code>.laz</code> file and the default empty for the
+<code>.cwlaz</code>.
+</p>
+
+<h4>Schema change in <span class="path">cwSaveLoadPrivate.h</span></h4>
+<pre><code>struct Job {
+    const void* objectId;
+    Kind kind;
+    Action action;
+    QString artifactTag;   // NEW: empty = primary artifact (default).
+                           //      Same-(objectId, kind, artifactTag) jobs may collapse.
+                           //      Different artifactTag jobs never collapse with each other.
+    QString oldPath;
+    QString path;
+    // ... existing fields ...
+};</code></pre>
+
+<h4>Compression refinement</h4>
+<p>
+<code>collapseSequentialMoves</code> subgroups the per-object indices by tag and applies its
+existing collapse rule independently to each subgroup:
+</p>
+<pre><code>void cwSaveLoadPrivate::collapseSequentialMoves(const QList&lt;int&gt;&amp; indices,
+                                                QSet&lt;int&gt;&amp; indicesToDrop)
+{
+    for (Job::Kind kind : {Job::Kind::File, Job::Kind::Directory}) {
+        QHash&lt;QString, QList&lt;int&gt;&gt; byTag;
+        for (int idx : indices) {
+            const Job&amp; j = m_pendingJobs[idx];
+            if (j.action == Job::Action::Move &amp;&amp; j.kind == kind) {
+                byTag[j.artifactTag].append(idx);
+            }
+        }
+        for (const QList&lt;int&gt;&amp; tagIndices : std::as_const(byTag)) {
+            if (tagIndices.size() &gt; 1) {
+                m_pendingJobs[tagIndices.last()].oldPath =
+                    m_pendingJobs[tagIndices.first()].oldPath;
+                for (int i = 0; i &lt; tagIndices.size() - 1; ++i) {
+                    indicesToDrop.insert(tagIndices[i]);
+                }
+            }
+        }
+    }
+}</code></pre>
+<p>
+<code>dropRedundantWrites</code> and <code>dropWritesSupersededByRemove</code> get the same
+subgrouping treatment for consistency &mdash; a Remove on one artifact must not supersede a Write
+on a different artifact of the same object. LAZ doesn&rsquo;t currently exercise these (the
+<code>.laz</code> source is user-supplied, we never <code>WriteFile</code> it), but the symmetry
+keeps the rules coherent.
+</p>
+
+<h4>Rename wiring &mdash; <code>enqueueRenameIfNeeded&lt;cwLazLayer&gt;</code></h4>
+<p>
+With the tagged-job infrastructure in place, rename is straightforward and uses real
+<code>Action::Move</code> jobs through the standard pipeline &mdash; no <code>Action::Custom</code>
+workaround. Users will rename layers (renaming <code>clip_001.laz</code> to
+<code>main_chamber.laz</code> is the driving use case). Identity stays in the UUID inside the
+<code>.cwlaz</code>; the basename becomes a mutable display attribute.
+</p>
+<ul>
+  <li><code>cwLazLayerModel::rename(int row, const QString&amp; newBaseName)</code> validates the new
+    name and snapshots the old <code>.laz</code> path before calling
+    <code>layer-&gt;setSourcePath(newPath)</code>.</li>
+  <li>The existing <code>cwLazLayer::sourcePathChanged</code> signal
+    (<span class="path">cwLazLayer.h:126</span> &mdash; verified present) is connected in
+    <code>cwSaveLoad::connectTreeModel</code> to
+    <code>d-&gt;enqueueRenameIfNeeded(this, layer)</code>.</li>
+  <li><code>enqueueRenameIfNeeded&lt;T&gt;</code> gets a
+    <code>if constexpr (std::is_same_v&lt;T, cwLazLayer&gt;)</code> branch that enqueues two real
+    Move jobs:
+    <pre><code>// Primary artifact: .cwlaz. Standard path derivation via addFileSystemJob,
+// tag = "" (default). absolutePathFor returns the .cwlaz path through
+// dirPrivate(layer); m_objectStates tracks its currentPath as today.
+addFileSystemJob(Job{object, Job::Kind::File, Job::Action::Move}, context);
+
+// Secondary artifact: the .laz source file. Paths derived directly from
+// the old/new sourcePath; tag = "source" so the compressor groups it
+// independently from the primary.
+Job lazMove;
+lazMove.objectId    = object;
+lazMove.kind        = Job::Kind::File;
+lazMove.action      = Job::Action::Move;
+lazMove.artifactTag = QStringLiteral("source");
+lazMove.oldPath     = oldLazPath;   // snapshot before setSourcePath
+lazMove.path        = newLazPath;
+addExplicitFileSystemJob(lazMove, context);
+
+return;</code></pre></li>
+</ul>
+
+<div class="callout warn">
+<b>Verified: phantom-rename guard is already free.</b>
+<code>enqueueRenameIfNeeded</code> at <span class="path">cwSaveLoadPrivate.h:393&ndash;396</span>
+short-circuits when <code>state.currentPath.isEmpty()</code> &mdash; it seeds the state and
+returns without enqueueing a job. So the first <code>setSourcePath</code> during rescan does not
+trigger a spurious Move. No special connect ordering needed.
+</div>
+
+<div class="callout warn">
+<b>Verified: pre-tag, two paired Move jobs corrupt under <code>collapseSequentialMoves</code>.</b>
+<span class="path">cwSaveLoadPrivate.cpp:1373&ndash;1391</span>: the current compressor groups by
+<code>(objectId, Kind)</code> only and collapses by taking the first job&rsquo;s
+<code>oldPath</code> and the last&rsquo;s <code>path</code>. For LAZ, that produces a single
+broken job (e.g. <code>old.laz &rarr; new.cwlaz</code>) and drops the other. The
+<code>artifactTag</code> change directly addresses this &mdash; not a workaround but a generalization
+that names what was always true: objects <i>can</i> have multiple distinct artifacts.
+</div>
+
+<div class="callout warn">
+<b>Verified: <code>addFileSystemJob</code> only resolves one path per layer.</b>
+<span class="path">cwSaveLoadPrivate.cpp:815&ndash;821</span>: it derives <code>oldPath</code> from
+<code>m_objectStates[objectId].currentPath</code> and <code>path</code> from
+<code>absolutePathFor(context, objectId)</code>. For LAZ that returns the
+<code>.cwlaz</code> path; the <code>.laz</code> source needs explicit paths and routes through
+<code>addExplicitFileSystemJob</code> instead.
+</div>
+
+<h4>Behavior under sequential renames</h4>
+<p>
+A&rarr;B then B&rarr;C in quick succession enqueues four Move jobs (two per rename, one per tag
+group):
+</p>
+<pre><code>Pre-collapse:
+  {layer, File, Move, tag="",       A.cwlaz -&gt; B.cwlaz}
+  {layer, File, Move, tag="source", A.laz   -&gt; B.laz}
+  {layer, File, Move, tag="",       B.cwlaz -&gt; C.cwlaz}
+  {layer, File, Move, tag="source", B.laz   -&gt; C.laz}
+
+Post-collapse (tag="" group and tag="source" group collapse independently):
+  {layer, File, Move, tag="",       A.cwlaz -&gt; C.cwlaz}
+  {layer, File, Move, tag="source", A.laz   -&gt; C.laz}</code></pre>
+<p>
+Single net move per artifact. Optimal I/O. Single-rename case is unaffected.
+</p>
+
+<h3>5. Discovery loop reuse</h3>
+<p>
+<code>cwLazLayerModel::rescan</code> does not call the <code>loadObjectsFromNotesDir</code> helper
+in <code>cwSaveLoad</code> directly &mdash; that lambda is scoped inside <code>loadRegion</code>
+and tailored to the trip&rsquo;s <code>notes/</code> directory. Instead, rescan keeps its existing
+<code>*.laz</code> / <code>*.las</code> glob and, per discovered LAZ, calls
+<code>cwSaveLoad::loadLazLayer(metadataPath)</code> to deserialize the paired
+<code>.cwlaz</code>. The discovery shape (folder glob &rarr; per-file proto load &rarr; convert
+&rarr; append) is identical; we just don&rsquo;t share the lambda body.
+</p>
+<p>
+After construction, rescan calls
+<code>d-&gt;seedStatePathFromLoaded(layer, absolutePathFor(this, layer))</code> so subsequent
+renames have a baseline to compare against in <code>enqueueRenameIfNeeded</code>.
+</p>
+
+<h3>6. Removal goes through the existing handler</h3>
+<p>
+No public <code>delete</code>/<code>removeLazLayer</code> method on <code>cwSaveLoad</code>. The
+<code>rowsAboutToBeRemoved</code> handler in
+<code>cwSaveLoad::connectTreeModel</code> is the single removal entry point &mdash; it already
+enqueues an <code>Action::Remove</code> job for the <code>.laz</code>; commit 2 extends it to
+enqueue a second job for the paired <code>.cwlaz</code> resolved through
+<code>absolutePathFor(this, layer)</code>. Same as how note deletion is wired today. The state
+entry in <code>m_objectStates</code> is dropped at the same time.
+</p>
+
+<div class="callout">
+<b>No migration path.</b> <code>ProjectMetadata.lazLayerStates</code> was added on the
+<code>lazClipping</code> branch and has never shipped &mdash; there are no on-disk projects carrying
+this field. The load path, save path, <code>ProjectMetadataData::lazLayerStates</code> field,
+<code>cwLazLayerModel::data(QList) / setData(QList) / m_pendingStates</code>, and the proto field +
+<code>LazLayerState</code> message are all deleted outright in commit 3. No compatibility shim,
+no <code>pendingLazLayerMigration</code> stash, no deterministic-UUID derivation.
+</div>
+
+<h2>Commit plan</h2>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Title</th><th>Scope</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Proto + I/O primitives</td>
+      <td>
+        Add <code>message LazLayer</code> to <span class="path">cavewhere.proto</span>. Add
+        <code>cwSaveLoad::save(const cwLazLayer*)</code> as a one-line delegate to
+        <code>d-&gt;saveObject(this, layer)</code>; add the matching
+        <code>if constexpr (std::is_same_v&lt;T, cwLazLayer&gt;)</code> branch to
+        <code>cwSaveLoadPrivate::saveObject&lt;T&gt;</code>. The template body is in the header,
+        so add <code>#include "cwLazLayer.h"</code> to
+        <span class="path">cwSaveLoadPrivate.h</span> (the existing
+        <code>cwNote.h</code> / <code>cwTrip.h</code> / etc. includes establish the convention).
+        Add static helpers <code>cwSaveLoad::toProtoLazLayer</code>,
+        <code>cwSaveLoad::lazLayerDataFromProtoLazLayer</code>, and
+        <code>cwSaveLoad::loadLazLayer(QString)</code>. Add the
+        <code>dirPrivate(const cwLazLayer*)</code> overload returning the project&rsquo;s
+        <code>GIS Layers/</code> directory. Add <code>QUuid id</code> to
+        <code>cwLazLayerData</code>; thread through <code>cwLazLayer::data()</code> /
+        <code>setData()</code> (drop <code>const</code> on <code>m_id</code>). <b>No model changes,
+        no removal wiring, no rename wiring.</b> Tests cover round-trip, missing fields, empty
+        file, sanitization.
+      </td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Discovery + per-layer save + state-map registration</td>
+      <td>
+        <code>cwLazLayerModel::rescan</code>: pair each discovered <code>.laz</code> with its
+        <code>.cwlaz</code>; deserialize and <code>setData()</code> before announcing the row. New
+        layers (no <code>.cwlaz</code>) immediately enqueue a save so the UUID lands on disk. Each
+        discovered layer registers in <code>cwSaveLoadPrivate::m_objectStates</code> via
+        <code>seedStatePathFromLoaded(layer, absolutePathFor(this, layer))</code>. Wire
+        <code>.cwlaz</code> deletion alongside <code>.laz</code> deletion in
+        <code>cwSaveLoad::connectTreeModel</code>&rsquo;s <code>rowsAboutToBeRemoved</code> handler;
+        drop the matching <code>m_objectStates</code> entry there too. Replace the
+        <code>enabledChanged &rarr; saveMetadata</code> connect with
+        <code>enabledChanged &rarr; cwSaveLoad::save(layer)</code>. Tests: pre-placed
+        <code>.cwlaz</code> applied on load; new layer eagerly saved and state-map populated;
+        <code>removeAt</code> removes both files and clears the state-map entry; per-layer flush
+        shows only <code>foo.cwlaz</code> in the Git diff.
+      </td>
+    </tr>
+    <tr>
+      <td>3</td>
+<td>Tagged-job infrastructure</td>
+      <td>
+        Pure infrastructure commit, no LAZ-specific code. Add
+        <code>QString artifactTag</code> to <code>cwSaveLoadPrivate::Job</code> (defaults to
+        empty). Refine all three compression rules
+        (<code>dropRedundantWrites</code>,
+        <code>dropWritesSupersededByRemove</code>,
+        <code>collapseSequentialMoves</code>) at
+        <span class="path">cwSaveLoadPrivate.cpp:1340&ndash;1391</span> to subgroup per-object
+        indices by <code>artifactTag</code> before applying the existing collapse logic. Empty
+        tag is the default and represents the primary artifact, so every current caller stays in
+        a single group with bit-for-bit-identical behavior. Tests cover the existing
+        single-artifact behavior end-to-end <i>plus</i> new multi-artifact scenarios driven by
+        hand-built Jobs with synthetic tags &mdash; no LAZ types involved.
+      </td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>LAZ rename wiring</td>
+      <td>
+        <code>cwLazLayer::sourcePathChanged</code> already exists
+        (<span class="path">cwLazLayer.h:126</span>) &mdash; verified, no signal to add. Add
+        <code>cwLazLayerModel::rename(int row, QString newBaseName)</code> (returns
+        <code>bool</code>; populates <code>lastRenameError</code> property on failure) with
+        collision and validation rules. Add <code>connectTreeModel</code> connect:
+        <code>sourcePathChanged &rarr; d-&gt;enqueueRenameIfNeeded(this, layer)</code>. Add the
+        <code>cwLazLayer</code> branch in <code>enqueueRenameIfNeeded&lt;T&gt;</code> at
+        <span class="path">cwSaveLoadPrivate.h:380</span>: enqueue the primary
+        <code>.cwlaz</code> Move via <code>addFileSystemJob</code> (default empty tag,
+        standard path derivation), then enqueue the secondary <code>.laz</code> Move via
+        <code>addExplicitFileSystemJob</code> with <code>artifactTag = "source"</code> and explicit
+        old/new paths captured from <code>layer-&gt;sourcePath()</code> before
+        <code>setSourcePath</code> ran. The QML rename affordance can land in a follow-up UX
+        commit; the model API and signal are the contract.
+      </td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Drop <code>lazLayerStates</code></td>
+      <td>
+        Remove <code>ProjectMetadataData::lazLayerStates</code>. Remove the load and save blocks in
+        <code>cwSaveLoad.cpp</code>. Remove the two
+        <code>lazLayers-&gt;setData(QList&lt;&hellip;&gt;)</code> calls (initial load + sync-reconcile
+        path). Remove
+        <code>cwLazLayerModel::setData(QList&lt;cwLazLayerData&gt;)</code> /
+        <code>data() const &rarr; QList</code> overloads and <code>m_pendingStates</code>. Per-layer
+        <code>cwLazLayer::data()</code> / <code>setData(cwLazLayerData)</code> stay. Mark
+        <code>repeated LazLayerState lazLayerStates = 7;</code> as <code>reserved 7;</code> in the
+        proto and delete <code>message LazLayerState</code>. Tests:
+        <code>grep -rn lazLayerStates cavewherelib/ testcases/</code> returns no hits; existing
+        <code>[cwLazLayer]</code> / <code>[cwSaveLoad]</code> tests still pass.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Tests</h2>
+<p>
+Each commit lands with both <b>new coverage</b> (the behavior introduced or removed in that commit)
+and an explicit <b>regression sweep</b> against the prior LAZ work. The regression sweep is just the
+existing <code>[cwLazLayer]</code>, <code>[cwLazLayerModel]</code>, and <code>[cwSaveLoad]</code>
+Catch2 tests &mdash; they must stay green at every commit boundary. The full QML suite runs at the
+series boundary.
+</p>
+
+<h3>Commit 1 &mdash; I/O primitives</h3>
+<p><b>New coverage</b> in <code>testcases/test_cwLazLayerIO.cpp</code> (new file):</p>
+<ul>
+  <li>Round-trip: build a <code>cwLazLayerData</code> with non-default values, write via
+    <code>cwSaveLoad::save</code>, read back via <code>loadLazLayer</code>, compare every field.</li>
+  <li>Missing optional fields: hand-build a minimal protobuf with only <code>id</code> set; load;
+    confirm <code>enabled</code> defaults to <code>true</code>.</li>
+  <li>Missing file: <code>loadLazLayer</code> on a path that doesn&rsquo;t exist returns an
+    error <code>Monad::Result</code>, no crash.</li>
+  <li>Empty file: zero-byte <code>.cwlaz</code> loads to defaults (no crash, no garbage UUID).</li>
+  <li>Filename sanitization: <code>save</code> on a layer whose source path has spaces /
+    parentheses produces a <code>.cwlaz</code> that paired-discovery can find on every platform.</li>
+  <li>UUID stability: <code>cwLazLayerData{id: X, ...}</code> &rarr; <code>save</code> &rarr;
+    <code>load</code> returns a <code>cwLazLayerData</code> with the same UUID byte-for-byte.</li>
+</ul>
+<p><b>Regression sweep</b> &mdash; no behavior change in this commit, so:</p>
+<ul>
+  <li>Full <code>cavewhere-test "[cwLazLayer],[cwLazLayerModel],[cwSaveLoad]"</code> passes
+    unchanged (no rescan, persistence, or save-load paths touched).</li>
+  <li>Proto generation succeeds &mdash; <code>cavewhere.pb.h</code> compiles standalone in CI.</li>
+  <li>Adding a <code>QUuid id</code> field to <code>cwLazLayerData</code> doesn&rsquo;t alter
+    behavior of existing <code>cwLazLayerModel::data()/setData(QList&lt;cwLazLayerData&gt;)</code>
+    round-trip in <code>test_cwLazLayerSaveLoad.cpp</code> (the new field is default-constructed
+    and the existing tests don&rsquo;t inspect it).</li>
+</ul>
+
+<h3>Commit 2 &mdash; Discovery + per-layer save</h3>
+<p><b>New coverage</b> in <code>testcases/test_cwLazLayerSaveLoad.cpp</code> (extend existing):</p>
+<ul>
+  <li>Pre-place <code>foo.laz</code> + <code>foo.cwlaz</code> (with <code>enabled=false</code>,
+    fixed UUID) in a project&rsquo;s GIS Layers; rescan; assert the resulting layer has the
+    persisted UUID and <code>enabled == false</code>.</li>
+  <li>Add a fresh <code>foo.laz</code> with no paired <code>.cwlaz</code>; rescan; assert a new
+    layer is created with a random UUID, and the next save flush produces <code>foo.cwlaz</code>
+    with that UUID + <code>enabled=true</code>.</li>
+  <li><code>removeAt</code> removes both <code>foo.laz</code> and <code>foo.cwlaz</code> &mdash;
+    verified after <code>waitSaveToFinish</code>.</li>
+  <li>Orphaned <code>foo.cwlaz</code> with no matching <code>.laz</code>: rescan leaves it alone,
+    no layer created, no spurious diff (no <code>git status</code> change).</li>
+  <li>Disable a layer &rarr; flush &rarr; only <code>foo.cwlaz</code> in the Git diff (not
+    <code>.cwproj</code>).</li>
+  <li>Two simulated collaborators (two <code>cwProject</code> instances), each toggling a different
+    layer, merge cleanly with no conflict.</li>
+  <li>UUID round-trip: load &rarr; close &rarr; reopen yields the same <code>id()</code> on every
+    layer.</li>
+</ul>
+<p><b>Regression sweep</b>:</p>
+<ul>
+  <li><b>Existing</b> <i>&ldquo;disabled state survives reopen&rdquo;</i> test (from the Phase 1
+    refactor) still passes &mdash; the persistence mechanism changed under it, but the observable
+    result is the same.</li>
+  <li><b>Existing</b> <i>&ldquo;user-removed layer does not silently disable its same-named
+    successor&rdquo;</i> test still passes &mdash; removal must drop both <code>.laz</code> and
+    <code>.cwlaz</code>, so re-adding a layer with the same basename starts fresh.</li>
+  <li><b>Existing</b> <code>saveAs</code> coverage in <code>test_cwLazLayerSaveLoad.cpp</code>:
+    state survives the 2&rarr;0&rarr;2 rescan transient. Verify <code>m_pendingStates</code> capture
+    in <code>rescan</code> still kicks in even though <code>setData(QList)</code> is no longer the
+    primary load path.</li>
+  <li>Full <code>[cwLazLayer]</code>/<code>[cwLazLayerModel]</code>/<code>[cwSaveLoad]</code>
+    sweep stays green.</li>
+  <li>QML smoke: <code>cavewhere-qml-test --platform offscreen tst_LazLayers.qml</code> (if it
+    exists) and any <code>tst_*Project*.qml</code> tests that open projects with LAZ layers still
+    pass &mdash; UI binds to <code>layer.enabled</code>, mechanism beneath is invisible.</li>
+</ul>
+
+<h3>Commit 3 &mdash; Tagged-job infrastructure</h3>
+<p><b>New coverage</b> in <code>testcases/test_cwSaveLoadJobCompression.cpp</code> (new file).
+These tests build <code>cwSaveLoadPrivate::Job</code> values by hand &mdash; no LAZ types involved,
+no filesystem, no model. They exercise the compression rules directly through a small test seam
+(either a friend-class accessor or a public test helper on <code>cwSaveLoadPrivate</code>) so the
+infrastructure is provable in isolation:</p>
+<ul>
+  <li><b>Default tag = single-group behavior (regression).</b> Two Move jobs for the same
+    <code>(objectId, Kind)</code> with empty tag and chaining paths (A&rarr;B + B&rarr;C) collapse
+    to A&rarr;C exactly as today. Asserts the baseline behavior every current caller depends on
+    is preserved bit-for-bit.</li>
+  <li><b>Two tag groups, independent collapse.</b> Two Move jobs with tag <code>""</code>
+    (A.foo&rarr;B.foo + B.foo&rarr;C.foo) and two with tag <code>"sibling"</code>
+    (A.bar&rarr;B.bar + B.bar&rarr;C.bar). Each tag group collapses to its own A&rarr;C; cross-tag
+    jobs are not touched.</li>
+  <li><b>Two tag groups, one collapses, one stays.</b> One tag group has two chained jobs; the
+    other has only one job. Verify the single-job group is left intact and the two-job group
+    collapses.</li>
+  <li><b>Cross-tag pair does not collapse (the LAZ-shaped case).</b> Two Move jobs with the same
+    <code>(objectId, Kind)</code> but different tags (one <code>""</code>, one
+    <code>"source"</code>) and non-chaining paths. Verify both jobs survive compression with
+    paths unchanged. This is the precise scenario that the pre-tag logic corrupted.</li>
+  <li><b><code>dropRedundantWrites</code> respects tag.</b> Two WriteFile jobs for the same object,
+    same Kind, different tags. Verify neither is dropped &mdash; they target different artifacts.
+    A third WriteFile in the empty-tag group drops the earlier empty-tag write but leaves the
+    other-tag write alone.</li>
+  <li><b><code>dropWritesSupersededByRemove</code> respects tag.</b> A Remove on tag
+    <code>""</code> and a WriteFile on tag <code>"source"</code>. Verify the Write survives &mdash;
+    removing the primary artifact must not delete a queued write to a secondary artifact.</li>
+  <li><b>Three-job chain within one tag.</b> Three Move jobs A&rarr;B + B&rarr;C + C&rarr;D in
+    one tag group collapse to A&rarr;D. Existing behavior, verified per-tag.</li>
+</ul>
+<p><b>Regression sweep</b>:</p>
+<ul>
+  <li>Full <code>cavewhere-test -d yes</code> &mdash; this commit changes infrastructure used by
+    every saveable entity, so the entire C++ suite is the regression sweep. Per CLAUDE.md, tee to
+    <code>/tmp/cavewhere-test.log</code>.</li>
+  <li>Full <code>cavewhere-qml-test --platform offscreen</code> &mdash; same reasoning.</li>
+  <li>Per-existing-entity rename tests (note rename, trip rename, cave rename if present) still
+    pass &mdash; the empty-tag default keeps their behavior unchanged.</li>
+  <li>Per-existing-entity save / save-then-Remove tests still pass &mdash; the
+    <code>dropRedundantWrites</code> and <code>dropWritesSupersededByRemove</code> refinements
+    must remain transparent to single-artifact callers.</li>
+</ul>
+
+<h3>Commit 4 &mdash; LAZ rename wiring</h3>
+<p><b>New coverage</b> in <code>testcases/test_cwLazLayerSaveLoad.cpp</code>:</p>
+<ul>
+  <li>Rename round-trip: load a layer with <code>enabled=false</code> and a known UUID;
+    <code>rename(row, "newname")</code>; flush; assert <code>newname.laz</code> +
+    <code>newname.cwlaz</code> on disk, old basename gone, UUID and <code>enabled</code> preserved
+    in the new <code>.cwlaz</code>.</li>
+  <li>Rename then reopen: after rename, close and reopen the project; assert the layer reappears
+    under the new basename with the original UUID (pairing-by-new-basename works end-to-end).</li>
+  <li>Rename collision (loaded layer): two layers <code>a.laz</code> and <code>b.laz</code>;
+    <code>rename(0, "b")</code> returns <code>false</code> and populates
+    <code>lastRenameError</code>; nothing changes on disk.</li>
+  <li>Rename collision (stray file): a <code>c.cwlaz</code> orphan sits in
+    <code>GIS Layers/</code>; <code>rename(0, "c")</code> returns <code>false</code>; nothing
+    changes.</li>
+  <li>Rename validation: empty string, string with path separators
+    (<code>"foo/bar"</code>, <code>"..\\baz"</code>), and string with an extension
+    (<code>"renamed.laz"</code>) all return <code>false</code> with a populated
+    <code>lastRenameError</code>.</li>
+  <li>Sequential renames coalesce per artifact: A&rarr;B then immediately B&rarr;C before
+    <code>waitSaveToFinish</code>; inspect the post-compression job queue. Assert exactly two
+    Move jobs survive &mdash; one tag <code>""</code> (<code>A.cwlaz &rarr; C.cwlaz</code>), one
+    tag <code>"source"</code> (<code>A.laz &rarr; C.laz</code>). Final disk state: layer at
+    basename <code>C</code>, original UUID + <code>enabled</code> preserved.</li>
+  <li><b>Anti-corruption guard</b>: a single rename enqueues exactly two Move jobs with distinct
+    <code>artifactTag</code> values (<code>""</code> and <code>"source"</code>). If a future
+    refactor accidentally lands both with empty tag, the corruption from
+    <code>collapseSequentialMoves</code> would silently produce <code>old.laz &rarr;
+    new.cwlaz</code>. This test fails at the queue level before any filesystem damage.</li>
+  <li>Git diff shape: after rename + flush, <code>git status</code> shows two renames inside
+    <code>GIS Layers/</code> (not delete + add), confirming both files moved through the same
+    commit.</li>
+  <li>Phantom-rename guard: load a project with a layer, do NOT rename it, flush; assert no Move
+    jobs (of either tag) were enqueued. Catches a regression where the rescan-time
+    <code>setSourcePath</code> would spuriously trigger rename machinery.</li>
+</ul>
+<p><b>Regression sweep</b>:</p>
+<ul>
+  <li>Existing rename tests for notes / trips / caves still pass &mdash; we&rsquo;re only adding a
+    new branch to the template, not changing existing ones.</li>
+  <li>Full <code>[cwLazLayer]</code>/<code>[cwLazLayerModel]</code>/<code>[cwSaveLoad]</code>
+    sweep stays green.</li>
+  <li>QML smoke: any LAZ-related QML test that opens a project still loads correctly &mdash;
+    rename is opt-in via a new API, so existing tests are unaffected.</li>
+</ul>
+
+<h3>Commit 5 &mdash; Drop <code>lazLayerStates</code></h3>
+<p><b>New coverage</b>:</p>
+<ul>
+  <li>Static check: <code>grep -rn 'lazLayerStates\|LazLayerState\b' cavewherelib/ testcases/</code>
+    returns no hits.</li>
+  <li>A project saved on a <code>.cwlaz</code>-aware build, then opened on a freshly-built copy,
+    has every layer&rsquo;s <code>enabled</code> state preserved &mdash; demonstrates the
+    <code>.cwproj</code> field is no longer load-bearing.</li>
+  <li><code>cwSaveLoad::toProtoProject</code> emits no <code>lazLayerStates</code> entry &mdash;
+    serialize, parse with <code>cavewhere.pb.h</code>, assert the field is absent (reserved).</li>
+</ul>
+<p><b>Regression sweep</b> &mdash; this is the load-bearing commit, since we&rsquo;re ripping out
+the previous mechanism:</p>
+<ul>
+  <li>Full <code>cavewhere-test -d yes</code> &mdash; entire C++ suite must stay green. Per
+    CLAUDE.md, always tee to <code>/tmp/cavewhere-test.log</code>.</li>
+  <li>Full <code>cavewhere-qml-test --platform offscreen</code> &mdash; entire QML suite must
+    stay green.</li>
+  <li><b>Existing</b> <i>&ldquo;disabled state survives reopen&rdquo;</i> test now exercises the
+    new path end-to-end; it passes <i>without</i> the <code>setData(QList)</code> load fallback
+    that&rsquo;s being deleted.</li>
+  <li>Open the existing <code>test-qml/datasets/</code> fixtures that include LAZ layers; verify
+    nothing in the load path references the removed field. (Tests fail loudly if the proto schema
+    no longer matches what the fixture was saved with.)</li>
+  <li>Manual smoke (release build, real project): open a multi-layer project, toggle a layer off,
+    save, reopen; layer stays off. Inspect <code>git diff</code>: only <code>foo.cwlaz</code>
+    changed, not <code>.cwproj</code>. Rename a layer: <code>git diff</code> shows two renames
+    inside <code>GIS Layers/</code>, no other changes.</li>
+</ul>
+
+<h2>Out of scope / follow-ups</h2>
+<ul>
+  <li><b>Additional <code>.cwlaz</code> fields</b> beyond <code>id</code> and <code>enabled</code>
+    (<code>pointSize</code>, <code>sourceCSOverride</code>). Schema leaves the slots open; the actual
+    persistence is a separate commit when the corresponding UI / interactions land.</li>
+  <li><b>UUID v5 audit across all <code>cw*</code> entity types.</b> Tracked separately at
+    <a href="https://github.com/Cavewhere/cavewhere/issues/522">#522</a>. Covers
+    <code>repairedTopLevelId</code>, <code>regenerateNoteSubtreeIds</code>,
+    <code>regenerateNoteLiDARSubtreeIds</code>, <code>regenerateSketchSubtreeIds</code>,
+    <code>regenerateTripSubtreeIds</code> &mdash; identity-repair paths that today mint random
+    UUIDs and would benefit from deterministic derivation. Out of scope here because there&rsquo;s
+    no on-disk LAZ data to repair.</li>
+  <li><b>Orphaned <code>.cwlaz</code> cleanup tool</b>. Today an orphaned <code>.cwlaz</code> sits
+    on disk indefinitely. Matches notes&rsquo; behavior. A future maintenance command
+    (&ldquo;Clean project&rdquo;) could sweep both kinds of orphans together.</li>
+  <li><b>Sync-merge handler for LAZ layers.</b> With per-layer <code>.cwlaz</code> files, a proper
+    handler can pair by UUID and surface real diffs to the merge UI. Out of scope here; the
+    <code>.cwlaz</code> shape is the prerequisite.</li>
+</ul>
+
+</body>
+</html>
