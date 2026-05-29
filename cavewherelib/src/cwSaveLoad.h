@@ -35,6 +35,7 @@ class cwNoteLiDAR;
 class cwNoteLiDARData;
 class cwSketch;
 class cwSketchData;
+class cwLazLayer;
 struct cwSaveLoadPrivate;
 #include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
@@ -77,6 +78,7 @@ class NoteLiDARTransformation;
 class Project;
 class ProjectMetadata;
 class Sketch;
+class LazLayer;
 };
 
 namespace QtProto {
@@ -215,6 +217,8 @@ public:
     static Monad::Result<cwTripData> loadTrip(const QByteArray& content);
     static Monad::Result<cwNoteData> loadNote(const QString& filename, const QDir& projectDir);
     static Monad::Result<cwNoteData> loadNote(const QByteArray& content, const QString& filename, const QDir& projectDir);
+    static Monad::Result<cwLazLayerData> loadLazLayer(const QString& filename);
+    static Monad::Result<cwLazLayerData> loadLazLayer(const QByteArray& content, const QString& filename);
 
     static QString sanitizeFileName(QString input);
 
@@ -239,6 +243,15 @@ public:
     static std::unique_ptr<CavewhereProto::Cave> toProtoCave(const cwCave* cave);
     static std::unique_ptr<CavewhereProto::Trip> toProtoTrip(const cwTrip* trip);
     static std::unique_ptr<CavewhereProto::Sketch> toProtoSketch(const cwSketch* sketch);
+    static std::unique_ptr<CavewhereProto::LazLayer> toProtoLazLayer(const cwLazLayer* layer);
+    static cwLazLayerData lazLayerDataFromProtoLazLayer(const CavewhereProto::LazLayer& proto,
+                                                        const QString& filename);
+
+    // Per-layer save. LAZ layers are discovered via folder scan rather than
+    // dispatched by cwRegionTreeModel, so unlike the cwCave/cwTrip/cwNote
+    // saves this is the public entry point that the model wiring (commit 2+)
+    // and tests both call directly.
+    void save(const cwLazLayer* layer);
 
     void addImages(QList<QUrl> noteImagePaths,
                    const QDir& dir,
@@ -416,6 +429,10 @@ private:
     QString absolutePathPrivate(const cwSketch* sketch) const;
     QString absolutePathPrivate(const cwSketch* sketch, const QString& sketchFilename) const;
     QDir dirPrivate(const cwSketch* sketch) const;
+
+    QString fileNamePrivate(const cwLazLayer* layer) const;
+    QString absolutePathPrivate(const cwLazLayer* layer) const;
+    QDir dirPrivate(const cwLazLayer* layer) const;
 
     void setSaveEnabled(bool enabled);
     static void removeTemporaryProjectDir(const QString& ownedTempDirPath);

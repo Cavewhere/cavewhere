@@ -19,6 +19,7 @@
 #include "cwFutureManagerModel.h"
 #include "cwTeam.h"
 #include "cwCavingRegion.h"
+#include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwProject.h"
 #include "cwSurveyNoteModel.h"
@@ -2468,6 +2469,31 @@ std::unique_ptr<CavewhereProto::Sketch> cwSaveLoad::toProtoSketch(const cwSketch
     return protoSketch;
 }
 
+void cwSaveLoad::save(const cwLazLayer* layer)
+{
+    // Without a project filename the job-queue path would resolve the .cwlaz
+    // to <cwd>/GIS Layers/... — silently writing into whatever directory the
+    // process happens to be running from. Reject early instead.
+    if (d->projectFileName.isEmpty()) {
+        qWarning() << "cwSaveLoad::save(cwLazLayer*) called before setFileName(); ignoring";
+        return;
+    }
+    d->saveObject(this, layer);
+}
+
+std::unique_ptr<CavewhereProto::LazLayer> cwSaveLoad::toProtoLazLayer(const cwLazLayer* layer)
+{
+    auto proto = std::make_unique<CavewhereProto::LazLayer>();
+    auto fileVersion = proto->mutable_fileversion();
+    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+    if (!layer->id().isNull()) {
+        *(proto->mutable_id()) = uuidToProtoString(layer->id()).toStdString();
+    }
+    proto->set_enabled(layer->enabled());
+    return proto;
+}
+
 
 /**
  * This saves all the data in region into directory
@@ -3038,6 +3064,67 @@ Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QByteArray& content, const 
     return Monad::mbind(noteResult, [filename, projectDir](const Result<CavewhereProto::Note>& result) -> Monad::Result<cwNoteData> {
         Q_UNUSED(projectDir)
         return cwSaveLoad::noteDataFromProtoNote(result.value(), filename);
+    });
+}
+
+cwLazLayerData cwSaveLoad::lazLayerDataFromProtoLazLayer(const CavewhereProto::LazLayer& proto,
+                                                         const QString& filename)
+{
+    cwLazLayerData data;
+
+    // The .cwlaz filename's basename pairs back to the .laz/.las source. The
+    // source extension isn't stored in the proto, so the discovery pass
+    // matches by basename and supplies the right extension when populating
+    // cwLazLayerData::fileName on the layer.
+    const QFileInfo info(filename);
+    if (!info.completeBaseName().isEmpty()) {
+        data.fileName = info.completeBaseName();
+    }
+
+    if (proto.has_id()) {
+        data.id = cwProtoUtils::toUuid(proto.id());
+    }
+    // Absence of `enabled` means default (true), matching the proto comment.
+    if (proto.has_enabled()) {
+        data.enabled = proto.enabled();
+    }
+
+    return data;
+}
+
+Monad::Result<cwLazLayerData> cwSaveLoad::loadLazLayer(const QString& filename)
+{
+    QFile file(filename);
+    if (!file.open(QFile::ReadOnly)) {
+        return Result<cwLazLayerData>(file.errorString());
+    }
+    return loadLazLayer(file.readAll(), filename);
+}
+
+Monad::Result<cwLazLayerData> cwSaveLoad::loadLazLayer(const QByteArray& content, const QString& filename)
+{
+    // An empty .cwlaz file is treated as "default state" rather than an error
+    // so partially-written or truncated metadata files load to safe defaults
+    // (no garbage UUID, enabled=true) and the rest of the layer continues
+    // working. The filename still drives basename pairing.
+    if (content.isEmpty()) {
+        CavewhereProto::LazLayer emptyProto;
+        return Result<cwLazLayerData>(lazLayerDataFromProtoLazLayer(emptyProto, filename));
+    }
+
+    auto protoResult = loadMessage<CavewhereProto::LazLayer>(content, filename);
+
+    return Monad::mbind(protoResult, [filename](const Result<CavewhereProto::LazLayer>& result) -> Monad::Result<cwLazLayerData> {
+        const auto& proto = result.value();
+        // Refuse to silently substitute a fresh UUID when the file claimed
+        // one but it failed to parse — overwriting on the next save would
+        // permanently lose the persisted identity.
+        if (proto.has_id() && cwProtoUtils::toUuid(proto.id()).isNull()) {
+            return Result<cwLazLayerData>(
+                        QStringLiteral("Malformed id in %1: %2")
+                        .arg(filename, QString::fromStdString(proto.id())));
+        }
+        return cwSaveLoad::lazLayerDataFromProtoLazLayer(proto, filename);
     });
 }
 
@@ -4359,6 +4446,38 @@ QString cwSaveLoad::absolutePathPrivate(const cwSketch* sketch, const QString& s
         return QString();
     }
     return dirPrivate(sketch).absoluteFilePath(sketchFilename);
+}
+
+QString cwSaveLoad::fileNamePrivate(const cwLazLayer* layer) const
+{
+    if (layer == nullptr) {
+        return QString();
+    }
+    // Pair the .cwlaz to its sibling .laz/.las by basename. completeBaseName
+    // is used (not baseName) so compound names like "alpha.beta.laz" pair
+    // with "alpha.beta.cwlaz" rather than collapsing onto "alpha.cwlaz".
+    const QString basename = QFileInfo(layer->sourcePath()).completeBaseName();
+    if (basename.isEmpty()) {
+        return QString();
+    }
+    return sanitizeFileName(basename + QStringLiteral(".cwlaz"));
+}
+
+QString cwSaveLoad::absolutePathPrivate(const cwLazLayer* layer) const
+{
+    const QString filename = fileNamePrivate(layer);
+    if (filename.isEmpty()) {
+        return QString();
+    }
+    return dirPrivate(layer).absoluteFilePath(filename);
+}
+
+QDir cwSaveLoad::dirPrivate(const cwLazLayer* /*layer*/) const
+{
+    // LAZ layers live in a flat "GIS Layers/" directory alongside the
+    // dataRoot inside the project root. The directory is the same for every
+    // layer; only the basename varies.
+    return QDir(projectRootDir().absoluteFilePath(cwLazLayerModel::folderName()));
 }
 
 QDir cwSaveLoad::dirPrivate(const cwSketch* sketch) const

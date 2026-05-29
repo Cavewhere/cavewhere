@@ -74,12 +74,19 @@ cwLazLayerData cwLazLayer::data() const
 {
     cwLazLayerData out;
     out.fileName = QFileInfo(m_sourcePath).fileName();
+    out.id = m_id;
     out.enabled = m_enabled;
     return out;
 }
 
 void cwLazLayer::setData(const cwLazLayerData& data)
 {
+    // Adopt the persisted UUID. Null means the .cwlaz had no id field, so
+    // keep the auto-generated one this layer was constructed with.
+    if (!data.id.isNull() && m_id != data.id) {
+        m_id = data.id;
+        updateIdKeyword();
+    }
     setEnabled(data.enabled);
 }
 

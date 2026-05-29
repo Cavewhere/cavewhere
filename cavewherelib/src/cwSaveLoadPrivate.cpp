@@ -972,6 +972,9 @@ QString cwSaveLoadPrivate::absolutePathFor(const cwSaveLoad* context, const QObj
     if (auto sketch = qobject_cast<const cwSketch*>(object)) {
         return context->absolutePathPrivate(sketch);
     }
+    if (auto laz = qobject_cast<const cwLazLayer*>(object)) {
+        return context->absolutePathPrivate(laz);
+    }
     if (auto trip = qobject_cast<const cwTrip*>(object)) {
         return context->absolutePathPrivate(trip);
     }

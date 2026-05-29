@@ -36,6 +36,15 @@ message LazLayerState {
     optional bool enabled = 2;        // absence == true (default)
 }
 
+// Per-LAZ-layer persistent state. Stored as <basename>.cwlaz next to the
+// matching .laz/.las file in "GIS Layers/". Discovery is by folder scan;
+// the project's .cwproj file no longer references individual LAZ layers.
+message LazLayer {
+    optional FileVersion fileVersion = 1;
+    optional string id = 2;       // UUID, stable across reopen
+    optional bool enabled = 3;    // default true; absence == true
+}
+
 message Project {
     optional FileVersion fileVersion = 1;
     optional string name = 2;

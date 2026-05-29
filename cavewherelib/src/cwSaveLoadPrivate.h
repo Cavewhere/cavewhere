@@ -5,6 +5,7 @@
 #include "cwSaveLoad.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwLazLayer.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
 #include "cwSketch.h"
@@ -475,6 +476,8 @@ struct cwSaveLoadPrivate {
                 saveProtoMessage(context, cwSaveLoad::toProtoNoteLiDAR(object), object);
             } else if constexpr (std::is_same_v<T, cwSketch>) {
                 saveProtoMessage(context, cwSaveLoad::toProtoSketch(object), object);
+            } else if constexpr (std::is_same_v<T, cwLazLayer>) {
+                saveProtoMessage(context, cwSaveLoad::toProtoLazLayer(object), object);
             } else {
                 static_assert(std::is_same_v<T, void>, "Unsupported saveObject type");
             }
