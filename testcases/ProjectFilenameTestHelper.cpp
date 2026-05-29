@@ -221,3 +221,32 @@ QDir ProjectFilenameTestHelper::noteDirHelper(const QDir& tripDir)
 {
     return QDir(tripDir.absoluteFilePath("notes"));
 }
+
+QDir ProjectFilenameTestHelper::externalCenterlineDirHelper(const QDir& ownerDir)
+{
+    return QDir(ownerDir.absoluteFilePath(QStringLiteral("external-centerline")));
+}
+
+QDir ProjectFilenameTestHelper::externalCenterlineDir(const cwCave* cave)
+{
+    if (cave == nullptr) {
+        return QDir();
+    }
+    const QDir caveDirectory = dir(cave);
+    if (caveDirectory.absolutePath().isEmpty()) {
+        return QDir();
+    }
+    return externalCenterlineDirHelper(caveDirectory);
+}
+
+QDir ProjectFilenameTestHelper::externalCenterlineDir(const cwTrip* trip)
+{
+    if (trip == nullptr) {
+        return QDir();
+    }
+    const QDir tripDirectory = dir(trip);
+    if (tripDirectory.absolutePath().isEmpty()) {
+        return QDir();
+    }
+    return externalCenterlineDirHelper(tripDirectory);
+}

@@ -284,6 +284,37 @@ public:
     QDir dir(cwSurveyNoteModel* notes) const;
     QDir dir(cwSurveyNoteLiDARModel* notes) const;
 
+    // External-centerline directory accessors. Returns the sibling
+    // "external-centerline/" directory under the owner cave or trip dir
+    // where attached survey files (Survex/Compass/Walls) live. The
+    // returned QDir is computed from the project's data-root and the
+    // owner's sanitized name; it may not exist on disk yet. Returns
+    // QDir() if the owner is not yet part of a project (no parent).
+    QDir externalCenterlineDir(const cwCave* cave) const;
+    QDir externalCenterlineDir(const cwTrip* trip) const;
+
+    // Public job-queue entry points used by the external-centerline
+    // reconcile pass. Paths must be absolute and inside the project
+    // root. No-ops on temporary (unsaved) projects.
+    //
+    // Path validation is the caller's responsibility — these helpers
+    // run as Action::Custom jobs, which intentionally bypass the
+    // built-in ensureInsideRoot check that move/remove/copy actions
+    // enforce. Reconcile always builds destination paths from
+    // externalCenterlineDir(owner), which is rooted under the project,
+    // so the constraint holds by construction.
+    //
+    // enqueueExternalCenterlineCopyIfNewer copies `sourcePath` to
+    // `destinationPath` only when the destination is missing, has a
+    // different size, or has an older mtime than the source. Wrapped
+    // as Action::Custom because Action::Copy fails when the destination
+    // already exists. Identical source and destination is treated as
+    // a no-op.
+    void enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
+                                              const QString& destinationPath);
+    void enqueueExternalCenterlineRemoveFile(const QString& path);
+    void enqueueExternalCenterlineRemoveTree(const QString& path);
+
     QString absolutePath(const cwNote* note, const QString& imageFilename) const;
     QString absolutePath(const cwNoteLiDAR* note, const QString& lidarFilename) const;
     cwImage absolutePathNoteImage(const cwNote* note) const;
@@ -452,6 +483,7 @@ private:
     static QDir caveDirHelper(const QDir& projectDir, const cwCave *cave);
     static QDir tripDirHelper(const QDir& caveDir, const cwTrip* trip);
     static QDir noteDirHelper(const QDir& tripDir);
+    static QDir externalCenterlineDirHelper(const QDir& ownerDir);
 
     Monad::ResultBase commitProjectChanges(const QString& subject = QString(),
                                            const QString& description = QString());

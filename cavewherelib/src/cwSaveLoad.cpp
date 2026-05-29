@@ -3553,6 +3553,91 @@ void cwSaveLoad::enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath)
                 this);
 }
 
+void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
+                                                      const QString& destinationPath)
+{
+    if (d->isTemporary || sourcePath.isEmpty() || destinationPath.isEmpty()) {
+        return;
+    }
+
+    cwSaveLoadPrivate::Job job(
+                nullptr,
+                cwSaveLoadPrivate::Job::Kind::File,
+                cwSaveLoadPrivate::Job::Action::Custom,
+                [sourcePath, destinationPath]() -> Monad::ResultBase {
+        if (sourcePath == destinationPath) {
+            // Identical paths is almost certainly a caller bug, but removing
+            // and re-copying the same file would silently delete it. Treat
+            // as no-op so reconcile can recover on the next pass.
+            return Monad::ResultBase();
+        }
+
+        const QFileInfo srcInfo(sourcePath);
+        if (!srcInfo.exists() || !srcInfo.isFile()) {
+            return Monad::ResultBase(
+                        QStringLiteral("copyIfNewer: missing source: %1")
+                        .arg(sourcePath));
+        }
+
+        const QFileInfo dstInfo(destinationPath);
+        if (dstInfo.exists()) {
+            const bool sameSize = srcInfo.size() == dstInfo.size();
+            const bool srcOlderOrEqual = srcInfo.lastModified() <= dstInfo.lastModified();
+            if (sameSize && srcOlderOrEqual) {
+                return Monad::ResultBase();
+            }
+            if (!QFile::remove(destinationPath)) {
+                return Monad::ResultBase(
+                            QStringLiteral("copyIfNewer: failed to remove stale destination: %1")
+                            .arg(destinationPath));
+            }
+        }
+
+        const auto ensureResult = cwSaveLoadPrivate::ensurePathForFile(destinationPath);
+        if (ensureResult.hasError()) {
+            return ensureResult;
+        }
+
+        if (!QFile::copy(sourcePath, destinationPath)) {
+            return Monad::ResultBase(
+                        QStringLiteral("copyIfNewer: failed to copy %1 -> %2")
+                        .arg(sourcePath, destinationPath));
+        }
+        return Monad::ResultBase();
+    });
+    // Set path for diagnostics + scheduling; ensureInsideRoot isn't enforced
+    // for Action::Custom, so this is informational rather than a precondition.
+    job.path = destinationPath;
+    job.oldPath = sourcePath;
+    d->addExplicitFileSystemJob(std::move(job), this);
+}
+
+void cwSaveLoad::enqueueExternalCenterlineRemoveFile(const QString& path)
+{
+    if (d->isTemporary || path.isEmpty()) {
+        return;
+    }
+
+    cwSaveLoadPrivate::Job job(nullptr,
+                               cwSaveLoadPrivate::Job::Kind::File,
+                               cwSaveLoadPrivate::Job::Action::Remove);
+    job.oldPath = path;
+    d->addExplicitFileSystemJob(std::move(job), this);
+}
+
+void cwSaveLoad::enqueueExternalCenterlineRemoveTree(const QString& path)
+{
+    if (d->isTemporary || path.isEmpty()) {
+        return;
+    }
+
+    cwSaveLoadPrivate::Job job(nullptr,
+                               cwSaveLoadPrivate::Job::Kind::Directory,
+                               cwSaveLoadPrivate::Job::Action::Remove);
+    job.oldPath = path;
+    d->addExplicitFileSystemJob(std::move(job), this);
+}
+
 void cwSaveLoad::disconnectObjects()
 {
     // Disconnect trip-owned objects that are not represented as region-tree objects.
@@ -4319,6 +4404,27 @@ QDir cwSaveLoad::tripDirHelper(const QDir &caveDir, const cwTrip *trip)
 QDir cwSaveLoad::noteDirHelper(const QDir &tripDir)
 {
     return QDir(tripDir.absoluteFilePath("notes"));
+}
+
+QDir cwSaveLoad::externalCenterlineDirHelper(const QDir &ownerDir)
+{
+    return QDir(ownerDir.absoluteFilePath(QStringLiteral("external-centerline")));
+}
+
+QDir cwSaveLoad::externalCenterlineDir(const cwCave *cave) const
+{
+    if (cave == nullptr || cave->parentRegion() == nullptr) {
+        return QDir();
+    }
+    return externalCenterlineDirHelper(dirPrivate(cave));
+}
+
+QDir cwSaveLoad::externalCenterlineDir(const cwTrip *trip) const
+{
+    if (trip == nullptr || trip->parentCave() == nullptr) {
+        return QDir();
+    }
+    return externalCenterlineDirHelper(dirPrivate(trip));
 }
 
 bool cwSaveLoad::isTemporaryProject() const

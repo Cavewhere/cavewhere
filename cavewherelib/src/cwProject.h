@@ -192,6 +192,11 @@ public:
     void setGitAccount(QQuickGit::Account* account);
     void setAuthProvider(cwRemoteAuthProvider* provider);
 
+    // Owned cwSaveLoad pipeline. Exposed so that external-centerline
+    // reconcile, the line-plot manager, and tests can resolve project-
+    // relative directories and enqueue job-queued filesystem ops.
+    cwSaveLoad* saveLoad() const { return m_saveLoad; }
+
 signals:
     void undoStackChanged();
     void regionChanged();

@@ -41,6 +41,9 @@ public:
     static QDir dir(cwSurveyNoteModel* notes);
     static QDir dir(cwSurveyNoteLiDARModel* notes);
 
+    static QDir externalCenterlineDir(const cwCave* cave);
+    static QDir externalCenterlineDir(const cwTrip* trip);
+
     static QString fileName(const cwNote* note);
     static QString absolutePath(const cwNote* note);
     static QString absolutePath(const cwNote* note, const QString& imageFilename);
@@ -60,6 +63,7 @@ private:
     static QDir caveDirHelper(const QDir& projectDir, const cwCave* cave);
     static QDir tripDirHelper(const QDir& caveDir, const cwTrip* trip);
     static QDir noteDirHelper(const QDir& tripDir);
+    static QDir externalCenterlineDirHelper(const QDir& ownerDir);
 };
 
 #endif // PROJECT_FILENAME_TEST_HELPER_H
