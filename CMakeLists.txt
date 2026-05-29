@@ -703,21 +703,8 @@ if(MOBILE_BUILD)
             QT_ANDROID_VERSION_NAME "${PROJECT_VERSION}"
         )
 
-        # Qt's TLS plugin dlopens libssl/libcrypto at runtime. Use KDAB's
-        # prebuilt Android OpenSSL (libssl_3.so / libcrypto_3.so with
-        # correct SONAMEs — unlike Conan's libssl.so.3 which Android can't
-        # load from the APK lib dir). Point ANDROID_OPENSSL_DIR at the
-        # `android_openssl` repo checkout; defaults to a common SDK path.
-        set(ANDROID_OPENSSL_DIR "$ENV{HOME}/Library/Android/sdk/android_openssl"
-            CACHE PATH "Path to KDAB android_openssl prebuilts (https://github.com/KDAB/android_openssl)")
-        if(NOT EXISTS "${ANDROID_OPENSSL_DIR}/android_openssl.cmake")
-            message(FATAL_ERROR
-                "ANDROID_OPENSSL_DIR (${ANDROID_OPENSSL_DIR}) does not contain "
-                "android_openssl.cmake. Clone https://github.com/KDAB/android_openssl "
-                "and set -DANDROID_OPENSSL_DIR=<path> (see docs/android-build.md).")
-        endif()
-        include("${ANDROID_OPENSSL_DIR}/android_openssl.cmake")
-        add_android_openssl_libraries(CaveWhere)
+        include(${CMAKE_SOURCE_DIR}/cmake/CavewhereAndroid.cmake)
+        cavewhere_setup_android_openssl(CaveWhere)
     endif()
 endif()
 
