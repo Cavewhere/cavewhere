@@ -45,6 +45,12 @@ cwLazLayer::cwLazLayer(QObject* parent) :
 
         AsyncFuture::observe(m_loadRestarter.future())
             .context(this, [this]() {
+                // The user may have disabled the layer between the load
+                // start and its delivery. Drop the result — setEnabled(false)
+                // already cleared geometry and reset status to Idle.
+                if (!m_enabled) {
+                    return;
+                }
                 QFuture<cwLazLoadResult> finished = m_loadRestarter.future();
                 if (finished.resultCount() == 0) {
                     setErrorMessage(QStringLiteral("Load failed: %1").arg(m_sourcePath));
@@ -63,6 +69,19 @@ cwLazLayer::cwLazLayer(QObject* parent) :
 }
 
 cwLazLayer::~cwLazLayer() = default;
+
+cwLazLayerData cwLazLayer::data() const
+{
+    cwLazLayerData out;
+    out.fileName = QFileInfo(m_sourcePath).fileName();
+    out.enabled = m_enabled;
+    return out;
+}
+
+void cwLazLayer::setData(const cwLazLayerData& data)
+{
+    setEnabled(data.enabled);
+}
 
 void cwLazLayer::setSourcePath(const QString& path)
 {
@@ -110,6 +129,38 @@ void cwLazLayer::setPointSize(double pointSize)
     emit pointSizeChanged();
 }
 
+void cwLazLayer::setEnabled(bool enabled)
+{
+    if (m_enabled == enabled) {
+        return;
+    }
+    m_enabled = enabled;
+    emit enabledChanged();
+
+    if (!m_enabled) {
+        // Cancel any in-flight load. asyncfuture's Restarter propagates the
+        // outer cancel down to the inner worker, where cwLazLoader's
+        // QPromise::isCanceled() check between point chunks short-circuits.
+        // The observer chain below still receives the canceled future; the
+        // m_enabled guard there drops the result.
+        m_loadRestarter.future().cancel();
+        const bool hadGeometry = (m_geometry.vertexCount() > 0);
+        m_geometry = cwGeometry{};
+        m_bboxMin = QVector3D{};
+        m_bboxMax = QVector3D{};
+        m_meanSpacingXY = 0.0f;
+        setErrorMessage(QString());
+        setLoadStatus(LoadStatus::Idle);
+        if (hadGeometry) {
+            emit pointCountChanged();
+            emit bboxChanged();
+            emit meanSpacingXYChanged();
+        }
+    } else {
+        reload();
+    }
+}
+
 void cwLazLayer::setSourceCSOverride(const QString& cs)
 {
     if (m_sourceCSOverride == cs) {
@@ -149,6 +200,13 @@ void cwLazLayer::setRegionWorldOrigin(const cwGeoPoint& origin)
 void cwLazLayer::reload()
 {
     if (m_sourcePath.isEmpty()) {
+        return;
+    }
+
+    if (!m_enabled) {
+        // Disabled layers don't spend an async read. setSourcePath still
+        // recorded path + fingerprint before calling us, so the layer stays
+        // identifiable in the model.
         return;
     }
 

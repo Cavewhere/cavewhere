@@ -128,6 +128,191 @@ TEST_CASE("cwLazLayer save/load: pointSize runtime override resets to default",
     REQUIRE(reloaded->pointSize() != 11.0);
 }
 
+TEST_CASE("cwLazLayer save/load: disabled state survives reopen",
+          "[cwLazLayer][cwLazLayerEnabled][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString lazA = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("enA")));
+    const QString lazB = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("enB")));
+
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    auto* region = project->cavingRegion();
+    REQUIRE(region != nullptr);
+
+    addLazAndWait(root.get(), {lazA, lazB});
+    REQUIRE(region->lazLayers()->count() == 2);
+
+    auto* layerA = region->lazLayers()->layerAt(0);
+    auto* layerB = region->lazLayers()->layerAt(1);
+    REQUIRE(waitForLazLayerLoaded(layerA));
+    REQUIRE(waitForLazLayerLoaded(layerB));
+
+    // Disable layer A; layer B stays enabled.
+    layerA->setEnabled(false);
+    REQUIRE(layerA->enabled() == false);
+    REQUIRE(layerB->enabled() == true);
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-disabled-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    const QString actualPath = project->filename();
+
+    auto root2 = std::make_unique<cwRootData>();
+    root2->project()->loadFile(actualPath);
+    root2->project()->waitLoadToFinish();
+    // Apply queued state after rescan.
+    QCoreApplication::processEvents();
+
+    auto* reloadedRegion = root2->project()->cavingRegion();
+    REQUIRE(reloadedRegion->lazLayers()->count() == 2);
+
+    auto* reloadedA = reloadedRegion->lazLayers()->layerAt(0);
+    auto* reloadedB = reloadedRegion->lazLayers()->layerAt(1);
+    REQUIRE(reloadedA != nullptr);
+    REQUIRE(reloadedB != nullptr);
+    REQUIRE(reloadedA->enabled() == false);
+    REQUIRE(reloadedB->enabled() == true);
+}
+
+TEST_CASE("cwLazLayer save/load: user-removed layer does not silently disable its same-named successor",
+          "[cwLazLayer][cwLazLayerEnabled][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString laz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("zombie")));
+
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    auto* region = project->cavingRegion();
+
+    addLazAndWait(root.get(), {laz});
+    REQUIRE(region->lazLayers()->count() == 1);
+    auto* layer = region->lazLayers()->layerAt(0);
+    REQUIRE(waitForLazLayerLoaded(layer));
+    const QString basename = QFileInfo(layer->sourcePath()).fileName();
+
+    // Disable, then remove via the user-facing removeAt path.
+    layer->setEnabled(false);
+    REQUIRE(layer->enabled() == false);
+    region->lazLayers()->removeAt(0);
+    REQUIRE(region->lazLayers()->count() == 0);
+
+    // Save now — the state for the removed layer should have been pruned, so
+    // no proto entry is written for the removed basename.
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-zombie-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    const QString actualPath = project->filename();
+
+    // Re-add a fresh file with the same basename — simulating a user adding
+    // a new dataset that happens to reuse the name.
+    const QString reAddedLaz = QDir(tempDir.path()).filePath(basename);
+    REQUIRE(writeSyntheticLazFile(reAddedLaz, {{1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}}));
+    addLazAndWait(root.get(), {reAddedLaz});
+    REQUIRE(region->lazLayers()->count() == 1);
+    auto* fresh = region->lazLayers()->layerAt(0);
+    REQUIRE(fresh != nullptr);
+    REQUIRE(QFileInfo(fresh->sourcePath()).fileName() == basename);
+    REQUIRE(fresh->enabled() == true); // would be false if zombie state had leaked
+
+    // Reload from disk — fresh add picks up enabled=true with no zombie state
+    // entry surviving in the proto.
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    auto root2 = std::make_unique<cwRootData>();
+    root2->project()->loadFile(actualPath);
+    root2->project()->waitLoadToFinish();
+    QCoreApplication::processEvents();
+
+    auto* reloadedRegion = root2->project()->cavingRegion();
+    REQUIRE(reloadedRegion->lazLayers()->count() == 1);
+    REQUIRE(reloadedRegion->lazLayers()->layerAt(0)->enabled() == true);
+}
+
+TEST_CASE("cwLazLayer save/load: all-enabled round-trip leaves all enabled",
+          "[cwLazLayer][cwLazLayerEnabled][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString lazA = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("allEnA")));
+    const QString lazB = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("allEnB")));
+
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    auto* region = project->cavingRegion();
+
+    addLazAndWait(root.get(), {lazA, lazB});
+    REQUIRE(region->lazLayers()->count() == 2);
+    REQUIRE(waitForLazLayerLoaded(region->lazLayers()->layerAt(0)));
+    REQUIRE(waitForLazLayerLoaded(region->lazLayers()->layerAt(1)));
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-allen-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    const QString actualPath = project->filename();
+
+    auto root2 = std::make_unique<cwRootData>();
+    root2->project()->loadFile(actualPath);
+    root2->project()->waitLoadToFinish();
+    QCoreApplication::processEvents();
+
+    auto* reloadedRegion = root2->project()->cavingRegion();
+    REQUIRE(reloadedRegion->lazLayers()->count() == 2);
+    REQUIRE(reloadedRegion->lazLayers()->layerAt(0)->enabled() == true);
+    REQUIRE(reloadedRegion->lazLayers()->layerAt(1)->enabled() == true);
+}
+
+TEST_CASE("cwLazLayer save/load: backward compat — projects without LazLayerState load all-enabled",
+          "[cwLazLayer][cwLazLayerEnabled][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString lazA = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("bcA")));
+
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    auto* region = project->cavingRegion();
+
+    addLazAndWait(root.get(), {lazA});
+    REQUIRE(region->lazLayers()->count() == 1);
+    REQUIRE(waitForLazLayerLoaded(region->lazLayers()->layerAt(0)));
+
+    // Save with all layers enabled — no LazLayerState entry is written for
+    // layers at the default. This is the on-disk shape a pre-feature project
+    // produces.
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-bc-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    const QString actualPath = project->filename();
+
+    auto root2 = std::make_unique<cwRootData>();
+    root2->project()->loadFile(actualPath);
+    root2->project()->waitLoadToFinish();
+    QCoreApplication::processEvents();
+
+    auto* reloadedRegion = root2->project()->cavingRegion();
+    REQUIRE(reloadedRegion->lazLayers()->count() == 1);
+    REQUIRE(reloadedRegion->lazLayers()->layerAt(0)->enabled() == true);
+}
+
 TEST_CASE("cwLazLayer save/load: missing source file → loadStatus == Error",
           "[cwLazLayer][cwSaveLoad]") {
     QTemporaryDir tempDir;

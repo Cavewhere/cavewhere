@@ -104,6 +104,9 @@ class Account;
 //Monad includes
 #include <Monad/Result.h>
 
+//Our includes
+#include "cwLazLayerData.h"
+
 //Qt includes
 #include <QByteArray>
 #include <QDir>
@@ -126,6 +129,7 @@ public:
         QString dataRoot;
         bool syncEnabled = true;
         QString projectId; // UUID stable across renames; empty on legacy projects
+        QList<cwLazLayerData> lazLayerStates;
     };
 
     struct IdentityRepairData {

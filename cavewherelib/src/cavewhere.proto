@@ -25,6 +25,15 @@ message ProjectMetadata {
     reserved 6; // Removed: lazLayers (now discovered via folder scan of "GIS Layers/")
     optional bool syncEnabled = 3;
     optional string globalCoordinateSystem = 4;
+    repeated LazLayerState lazLayerStates = 7;
+}
+
+// Per-LAZ-layer user state overlaid on top of the folder-scan discovery in
+// "GIS Layers/". Entries are written only for layers that diverge from
+// defaults (e.g. enabled = false), keeping the file lean.
+message LazLayerState {
+    optional string relativePath = 1; // path relative to "GIS Layers/"
+    optional bool enabled = 2;        // absence == true (default)
 }
 
 message Project {

@@ -25,6 +25,7 @@
 #include "cwFutureManagerToken.h"
 #include "cwGeometry.h"
 #include "cwGeoPoint.h"
+#include "cwLazLayerData.h"
 #include "cwLazLoader.h"
 
 class cwKeywordModel;
@@ -48,6 +49,7 @@ class CAVEWHERE_LIB_EXPORT cwLazLayer : public QObject
 
     Q_PROPERTY(QString sourcePath READ sourcePath WRITE setSourcePath NOTIFY sourcePathChanged)
     Q_PROPERTY(double pointSize READ pointSize WRITE setPointSize NOTIFY pointSizeChanged)
+    Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
 
     Q_PROPERTY(QString name READ name NOTIFY nameChanged)
     Q_PROPERTY(QString sourceCS READ sourceCS NOTIFY sourceCSChanged)
@@ -83,6 +85,9 @@ public:
     double pointSize() const { return m_pointSize; }
     void setPointSize(double pointSize);
 
+    bool enabled() const { return m_enabled; }
+    void setEnabled(bool enabled);
+
     QString name() const { return m_name; }
     QString sourceCS() const { return m_sourceCS; }
     QString sourceCSOverride() const { return m_sourceCSOverride; }
@@ -108,9 +113,19 @@ public:
     /// Re-entrant: rapid restarts coalesce into a single in-flight run.
     void reload();
 
+    /// Snapshot the persistable per-layer state. fileName is derived from
+    /// sourcePath (the LAZ file's basename) and is the key cwLazLayerModel
+    /// uses to match a state entry to a layer.
+    cwLazLayerData data() const;
+
+    /// Apply persisted per-layer state. Only the enabled bit is applied;
+    /// fileName is treated as identity and matching is the model's job.
+    void setData(const cwLazLayerData& data);
+
 signals:
     void sourcePathChanged();
     void pointSizeChanged();
+    void enabledChanged();
     void nameChanged();
     void sourceCSChanged();
     void loadStatusChanged();
@@ -132,6 +147,7 @@ private:
     qint64 m_sourceSize = -1;
     QDateTime m_sourceMtime;
     double m_pointSize = 2.0;
+    bool m_enabled = true;
 
     QString m_name;
     QString m_sourceCS; // CS used during the last load (override > LAZ-embedded > "")

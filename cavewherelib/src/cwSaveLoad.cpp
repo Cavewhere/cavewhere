@@ -1430,6 +1430,16 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                     d->saveBlockedWarningEmitted = false;
                     emit dataRootChanged();
 
+                    // Hand the persisted LAZ-layer overlay to the model
+                    // before the queued rescan fires, so newly-inserted
+                    // layers pick up disabled state inside rescan() and
+                    // observers see the final value on rowsInserted.
+                    if (auto* region = d->m_regionTreeModel->cavingRegion()) {
+                        if (auto* lazLayers = region->lazLayers()) {
+                            lazLayers->setData(d->projectMetadata.lazLayerStates);
+                        }
+                    }
+
                     d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
 
                     // Clear the undo stack so old objects from
@@ -1836,6 +1846,33 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
         if (!region->globalCoordinateSystem().isEmpty()) {
             cwProtoUtils::saveString(protoMetadata->mutable_globalcoordinatesystem(),
                                      region->globalCoordinateSystem());
+        }
+
+        // Persist per-LAZ-layer state (only divergences from defaults) so a
+        // user-disabled layer survives reopen and syncs through Git. The
+        // folder scan stays authoritative for discovery; this overlay only
+        // adds user intent. LAZ files live flat in "GIS Layers/" — keying by
+        // file basename keeps the entry stable across saveAs/move (the
+        // layer's sourcePath may still reference the pre-move location when
+        // metadata is written).
+        //
+        // cwLazLayerModel::data() returns the merged view of current layers'
+        // state plus any pending-overlay entries for layers not currently in
+        // the model (preserved across saveAs's transient empty-model window).
+        if (auto* lazLayers = region->lazLayers()) {
+            d->projectMetadata.lazLayerStates = lazLayers->data();
+        }
+        // Write only divergences from the default (absent == true).
+        for (const auto& state : std::as_const(d->projectMetadata.lazLayerStates)) {
+            if (state.enabled) {
+                continue;
+            }
+            if (state.fileName.isEmpty()) {
+                continue;
+            }
+            auto* stateProto = protoMetadata->add_lazlayerstates();
+            cwProtoUtils::saveString(stateProto->mutable_relativepath(), state.fileName);
+            stateProto->set_enabled(state.enabled);
         }
     }
 
@@ -2880,6 +2917,20 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                 loadData.region.globalCoordinateSystem =
                     QString::fromStdString(metadataProto.globalcoordinatesystem());
             }
+            loadData.metadata.lazLayerStates.reserve(metadataProto.lazlayerstates_size());
+            for (int i = 0; i < metadataProto.lazlayerstates_size(); ++i) {
+                const auto& stateProto = metadataProto.lazlayerstates(i);
+                cwLazLayerData state;
+                if (stateProto.has_relativepath()) {
+                    state.fileName = QString::fromStdString(stateProto.relativepath());
+                }
+                if (stateProto.has_enabled()) {
+                    state.enabled = stateProto.enabled();
+                }
+                if (!state.fileName.isEmpty()) {
+                    loadData.metadata.lazLayerStates.append(state);
+                }
+            }
         }
 
         if (loadData.metadata.dataRoot.isEmpty()) {
@@ -3410,6 +3461,29 @@ void cwSaveLoad::connectTreeModel()
                 }
             });
             connect(lazLayers, &QAbstractItemModel::rowsRemoved, this, saveMetadata);
+
+            // cwLazLayerModel applies the persisted overlay to layers as
+            // they are inserted by rescan(), and prunes the overlay when
+            // the user removes a layer via removeAt(). Here we only need
+            // to make sure subsequent edits to a layer's enabled bit
+            // trigger a metadata save: wire enabledChanged for existing
+            // layers and for any layer inserted later.
+            auto wireEnabled = [this, saveMetadata](cwLazLayer* layer) {
+                if (layer == nullptr) {
+                    return;
+                }
+                connect(layer, &cwLazLayer::enabledChanged, this, saveMetadata);
+            };
+            connect(lazLayers, &QAbstractItemModel::rowsInserted,
+                    this, [lazLayers, wireEnabled](const QModelIndex& parent, int first, int last) {
+                Q_UNUSED(parent);
+                for (int row = first; row <= last; ++row) {
+                    wireEnabled(lazLayers->layerAt(row));
+                }
+            });
+            for (cwLazLayer* layer : lazLayers->layers()) {
+                wireEnabled(layer);
+            }
         }
     }
 }
@@ -4919,6 +4993,12 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         const auto previousMetadata = d->projectMetadata;
         d->projectMetadata = loadData.metadata;
         d->pendingIdentityRepairSave = loadData.identityRepair.required;
+
+        // Hand the persisted LAZ-layer overlay to the model so the
+        // post-reconcile rescan applies disabled state on insert.
+        if (auto* lazLayers = region->lazLayers()) {
+            lazLayers->setData(d->projectMetadata.lazLayerStates);
+        }
 
         bool modelMutated = false;
         bool requiresPersistence = false;
