@@ -12,6 +12,7 @@
 class cwTrip;
 class cwCavingRegion;
 #include "cwErrorModel.h"
+#include "cwExternalCenterline.h"
 #include "cwLength.h"
 #include "cwStation.h"
 #include "cwUndoer.h"
@@ -47,6 +48,7 @@ class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
     Q_PROPERTY(cwFixStationModel* fixStations READ fixStations CONSTANT)
     Q_PROPERTY(QString gridConvergenceText READ gridConvergenceText NOTIFY gridConvergenceTextChanged)
     Q_PROPERTY(QString gridConvergenceDetailText READ gridConvergenceDetailText NOTIFY gridConvergenceTextChanged)
+    Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
 
 public:
     enum Roles {
@@ -64,6 +66,9 @@ public:
     Q_INVOKABLE QString validateName(const QString& proposedName) const;
     QUuid id() const;
     void setId(const QUuid& id);
+
+    cwExternalCenterline externalCenterline() const { return m_externalCenterline; }
+    void setExternalCenterline(const cwExternalCenterline& value);
 
     cwLength* length() const;
     cwLength* depth() const;
@@ -137,6 +142,8 @@ signals:
 
     void gridConvergenceTextChanged();
 
+    void externalCenterlineChanged();
+
 public slots:
     /// Recompute m_gridConvergenceText eagerly. CavePage's binding reads
     /// the cached string on each property read — letting it call
@@ -163,6 +170,8 @@ private:
 
     QString m_gridConvergenceText;
     QString m_gridConvergenceDetailText;
+
+    cwExternalCenterline m_externalCenterline;
 
     cwCave& Copy(const cwCave& object);
     void addTripNullHelper();

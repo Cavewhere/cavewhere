@@ -138,6 +138,15 @@ QString cwTrip::validateName(const QString& proposedName) const
                                            QStringLiteral("trip"));
 }
 
+void cwTrip::setExternalCenterline(const cwExternalCenterline& value)
+{
+    if (m_externalCenterline == value) {
+        return;
+    }
+    m_externalCenterline = value;
+    emit externalCenterlineChanged();
+}
+
 void cwTrip::setId(const QUuid& id)
 {
     if (!id.isNull()) {
@@ -413,7 +422,8 @@ cwTripData cwTrip::data() const
         Notes->data(),
         NotesLidar->data(),
         NotesSketch->data(),
-        Id
+        Id,
+        m_externalCenterline
     };
 }
 
@@ -422,6 +432,7 @@ void cwTrip::setData(const cwTripData &data)
     setName(data.name);
     setId(data.id);
     setDate(data.date);
+    setExternalCenterline(data.externalCenterline);
     Team->setData(data.team);
     Calibration->setData(data.calibrations);
     Notes->setData(data.noteModel);

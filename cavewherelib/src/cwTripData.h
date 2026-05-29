@@ -6,6 +6,7 @@
 #include <QUuid>
 
 //Our includes
+#include "cwExternalCenterline.h"
 #include "cwTeamData.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyChunkData.h"
@@ -23,6 +24,7 @@ struct cwTripData {
     cwSurveyNoteLiDARModelData noteLiDARModel;
     cwSurveyNoteSketchModelData sketchModel;
     QUuid id;
+    cwExternalCenterline externalCenterline;
 };
 
 

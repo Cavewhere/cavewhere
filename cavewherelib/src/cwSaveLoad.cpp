@@ -1900,6 +1900,12 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
         cwProtoUtils::saveFixStation(protoCave->add_fixstations(), fix);
     }
 
+    if (!cave->externalCenterline().isEmpty()) {
+        auto* protoExternal = protoCave->mutable_external_centerline();
+        *(protoExternal->mutable_entry_file()) =
+                cave->externalCenterline().entryFile().toStdString();
+    }
+
     return protoCave;
 }
 
@@ -1927,6 +1933,12 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
     foreach(cwSurveyChunk* chunk, trip->chunks()) {
         CavewhereProto::SurveyChunk* protoChunk = protoTrip->add_chunks();
         cwProtoUtils::saveSurveyChunk(protoChunk, chunk);
+    }
+
+    if (!trip->externalCenterline().isEmpty()) {
+        auto* protoExternal = protoTrip->mutable_external_centerline();
+        *(protoExternal->mutable_entry_file()) =
+                trip->externalCenterline().entryFile().toStdString();
     }
 
     return protoTrip;
@@ -2903,6 +2915,10 @@ Monad::Result<cwCaveData> cwSaveLoad::loadCave(const QString &filename)
         if (caveProto.has_id()) {
             caveData.id = cwProtoUtils::toUuid(caveProto.id());
         }
+        if (caveProto.has_external_centerline()) {
+            caveData.externalCenterline = cwExternalCenterline(
+                        QString::fromStdString(caveProto.external_centerline().entry_file()));
+        }
         return Result(caveData);
     });
 }
@@ -2947,6 +2963,12 @@ cwTripData cwSaveLoad::tripDataFromProtoTrip(const CavewhereProto::Trip& tripPro
     }
 
     tripData.chunks = cwSaveLoadPrivate::fromProtoSurveyChunks(tripProto.chunks());
+
+    if (tripProto.has_external_centerline()) {
+        tripData.externalCenterline = cwExternalCenterline(
+                    QString::fromStdString(tripProto.external_centerline().entry_file()));
+    }
+
     return tripData;
 }
 

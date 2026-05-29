@@ -60,6 +60,12 @@ message FixStation {
     optional double verticalVariance = 8;
 }
 
+message ExternalCenterline {
+    // Project-relative path to the entry centerline file (.svx / .dat /
+    // .mak / .wpj / .srv). Empty when the owner has no attachment.
+    optional string entry_file = 1;
+}
+
 message Cave {
     optional FileVersion fileVersion = 9;
     optional string name = 8;
@@ -79,6 +85,10 @@ message Cave {
     optional QtProto.QString legacy_name = 1;
 
     repeated FixStation fixStations = 11;
+
+    // Attached external centerline (Survex/Compass/Walls). Absent for
+    // Native caves; present (and entry_file set) for Attached/Scope.
+    optional ExternalCenterline external_centerline = 12;
 }
 
 message Trip {
@@ -93,6 +103,10 @@ message Trip {
     //Deprecated types, don't use
     optional SurveyNoteModel legacy_noteModel = 3; // Legacy v6 only, not written in v9+ (notes loaded from .cwnote files)
     optional QtProto.QString legacy_name = 1;
+
+    // Attached external centerline (Survex/Compass/Walls). Absent for
+    // Native trips; present (and entry_file set) for Attached.
+    optional ExternalCenterline external_centerline = 10;
 }
 
 //This is a legacy message, do not use, use StationShot instead

@@ -160,6 +160,15 @@ void cwCave::setId(const QUuid& id)
     }
 }
 
+void cwCave::setExternalCenterline(const cwExternalCenterline& value)
+{
+    if (m_externalCenterline == value) {
+        return;
+    }
+    m_externalCenterline = value;
+    emit externalCenterlineChanged();
+}
+
 
 
 /**
@@ -536,7 +545,8 @@ cwCaveData cwCave::data() const
         Id,
         static_cast<cwUnits::LengthUnit>(length()->unit()),
         static_cast<cwUnits::LengthUnit>(depth()->unit()),
-        FixStations->fixStations()
+        FixStations->fixStations(),
+        m_externalCenterline
     };
 }
 
@@ -546,6 +556,7 @@ void cwCave::setData(const cwCaveData &data)
     setId(data.id);
     length()->setUnit(data.lengthUnit);
     depth()->setUnit(data.depthUnit);
+    setExternalCenterline(data.externalCenterline);
 
     clearTrips();
 

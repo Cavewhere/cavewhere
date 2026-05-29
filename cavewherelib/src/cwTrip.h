@@ -13,6 +13,7 @@
 //Our includes
 #include "cwStation.h"
 #include "cwGlobals.h"
+#include "cwExternalCenterline.h"
 #include "cwTripData.h"
 // #include "cwTripCalibration.h"
 class cwTripCalibration;
@@ -57,6 +58,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(cwCave* parentCave READ parentCave WRITE setParentCave NOTIFY parentCaveChanged)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
+    Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
 
 public:
     explicit cwTrip(QObject *parent = 0);
@@ -73,6 +75,9 @@ public:
     Q_INVOKABLE QString validateName(const QString& proposedName) const;
     QUuid id() const;
     void setId(const QUuid& id);
+
+    cwExternalCenterline externalCenterline() const { return m_externalCenterline; }
+    void setExternalCenterline(const cwExternalCenterline& value);
 
     QDateTime date() const;
     void setDate(QDateTime date);
@@ -128,6 +133,7 @@ signals:
     // void notesChanged();
     void numberOfChunksChanged();
     void parentCaveChanged();
+    void externalCenterlineChanged();
 
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);
@@ -146,6 +152,7 @@ protected:
     cwErrorModel* ErrorModel; //!<
     cwKeywordModel* KeywordModel;
     QUuid Id;
+    cwExternalCenterline m_externalCenterline;
 
     //Units
 
