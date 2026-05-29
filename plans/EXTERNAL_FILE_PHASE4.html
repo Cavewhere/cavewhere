@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External File Integration — Phase 4</title>
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1c1c1c; background: #fff; line-height: 1.5; max-width: 920px; margin: 2.5rem auto; padding: 0 1.5rem 4rem; }
+  h1 { font-size: 1.85rem; border-bottom: 2px solid #2451a4; padding-bottom: 0.35rem; }
+  h2 { font-size: 1.4rem; margin-top: 2rem; border-bottom: 1px solid #d8d8d8; padding-bottom: 0.25rem; color: #2451a4; }
+  code { background: #f4f4f6; padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
+  .meta { color: #5a5a5a; font-size: 0.92em; }
+  .note { background: #fff7d6; border: 1px solid #e0c346; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  a { color: #2451a4; }
+</style>
+</head>
+<body>
+
+<h1>External File Integration — Phase 4: Equates editor</h1>
+
+<p class="meta">
+  Part of the External File Integration plan. Read
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">the master plan</a>
+  first &mdash; this file assumes its architecture, data model, scanner,
+  copy workflow, driver shape, consumer-side pipeline, and UX model are
+  the source of truth for cross-cutting decisions.
+</p>
+
+<div class="note">
+  <strong>Status: stub (concept-level).</strong> Phase 4 is
+  <em>not</em> implementation-ready. The concept seed and design-pass
+  punch list currently live in
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p4">&sect;9 Phase 4 of the
+  master plan</a> as a placeholder; the master also notes that the
+  design pass should wait until after Phase 3 ships so Scope-trip UI is
+  real when picker decisions get made. When the design pass happens,
+  its output moves here.
+</div>
+
+<h2>What this file will contain (after the design pass)</h2>
+
+<ul>
+  <li>Data model &mdash; new <code>cwEquate</code> protobuf message with two fully-qualified station references; persistence on <code>cwCave</code> (Phase 4) and on <code>cwCavingRegion</code> (Phase 6); equality / hash for change detection.</li>
+  <li>Editor UI &mdash; where the editor lives (CavePage sub-page? new top-level page? dialog?), row layout, station picker behavior (autocomplete against the resolved network, including across Scope trips), delete affordance.</li>
+  <li>Re-solve plumbing &mdash; signal flow from equate edits into <code>cwLinePlotManager::Restarter</code>; equate set as part of the worker input snapshot for deterministic driver emission.</li>
+  <li>Scope-trip interaction &mdash; equating two stations inside the same cave-level attach but in different Scope trips; picker UI exposing stations from sibling Scope trips.</li>
+  <li>Conflict UX &mdash; what happens when an equate contradicts cavern's loop closure (large traverse error after solve), and how the user sees it on CavernOutputPage.</li>
+  <li>Station rename / disappearance &mdash; orphaned equates after the external file's station naming changes; coordination with Phase 5 orphan detection.</li>
+  <li>Per-commit test gates and fixture files.</li>
+</ul>
+
+<h2>Key cross-references to the master plan</h2>
+
+<ul>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p4">&sect;9 Phase 4</a> &mdash; the current concept-level summary + design-pass punch list.</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#overview">&sect;1 Overview</a> &mdash; the <code>*export</code>-for-equates question Phase 0 verified (cavern accepts fully-qualified <code>*equate</code> without requiring <code>*export</code> in the external file).</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#driver">&sect;6 Driver-file shape</a> &mdash; <code>*equate cave_&lt;A&gt;.x cave_&lt;B&gt;.y</code> lines land just before the driver's closing <code>*end</code>.</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#data-model">&sect;3.1.1 / 3.1.2 &mdash; Attached vs. Scope</a> &mdash; equates need to work across both kinds of windows into the same cave's resolved network.</li>
+</ul>
+
+</body>
+</html>

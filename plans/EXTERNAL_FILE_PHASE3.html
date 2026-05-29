@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External File Integration — Phase 3</title>
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1c1c1c; background: #fff; line-height: 1.5; max-width: 920px; margin: 2.5rem auto; padding: 0 1.5rem 4rem; }
+  h1 { font-size: 1.85rem; border-bottom: 2px solid #2451a4; padding-bottom: 0.35rem; }
+  h2 { font-size: 1.4rem; margin-top: 2rem; border-bottom: 1px solid #d8d8d8; padding-bottom: 0.25rem; color: #2451a4; }
+  code { background: #f4f4f6; padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
+  .meta { color: #5a5a5a; font-size: 0.92em; }
+  .note { background: #fff7d6; border: 1px solid #e0c346; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  a { color: #2451a4; }
+</style>
+</head>
+<body>
+
+<h1>External File Integration — Phase 3: Cave-level attach + nav badging</h1>
+
+<p class="meta">
+  Part of the External File Integration plan. Read
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">the master plan</a>
+  first &mdash; this file assumes its architecture, data model, scanner,
+  copy workflow, driver shape, consumer-side pipeline, and UX model are
+  the source of truth for cross-cutting decisions.
+</p>
+
+<div class="note">
+  <strong>Status: stub.</strong> Phase 3's plan currently lives in
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p3">&sect;9 Phase 3 of the
+  master plan</a>. When Phase 3 gets a full planning pass, the contents
+  move here and the master gets a one-paragraph pointer back.
+</div>
+
+<h2>What this file will contain</h2>
+
+<ul>
+  <li>Phase 3 goal and acceptance criteria (currently in master &sect;9 Phase 3).</li>
+  <li>Files-touched list specific to Phase 3 &mdash; cave-level attach entry on DataMainPage, Scope-trip auto-creation from <code>*begin</code> blocks, nav-tree badge wiring, Add Trip dropdown (Native / External).</li>
+  <li>Per-commit test gates &mdash; probably 8&ndash;10 commits covering: ExternalCenterlineScopeHeader sub-component, ExternalCenterlineCaveSummary sub-component on CavePage, Scope-trip auto-creation worker step (after cavern resolves the cave-level attach), cave-level detach with auto-trip removal cascade, cwSurveyExportManager cave-level disable check, nav badge model + rendering, Add Trip menu rework.</li>
+  <li>Phase 3 fixture files &mdash; multi-<code>*begin</code> Survex / Walls projects for Scope-trip generation tests.</li>
+  <li>QML tests &mdash; <code>tst_ExternalCenterlineAttachCave.qml</code>, <code>tst_NavBadge.qml</code>, Scope-trip auto-creation visibility.</li>
+  <li>Phase 3 open UX questions (subset of master &sect;8.8: questions 2, 3, 5, 8, 10 are particularly Phase-3-relevant).</li>
+</ul>
+
+<h2>Key cross-references to the master plan</h2>
+
+<ul>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-cave">&sect;8.6 &mdash; CavePage walkthrough</a> (Native-only / Cave-level external / Mixed wireframes).</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-transitions">&sect;8.7 &mdash; Mode transitions</a> (auto-trip-removal cascade on cave-level detach).</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-trip-panel">&sect;8.5.1 &mdash; ExternalCenterlineTripPanel structure</a> (ScopeHeader sub-component lights up here).</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#data-model">&sect;3.1 &mdash; Native / Attached / Scope state model</a>; &sect;3.1.1 / 3.1.2 walk through the cave-level attach case specifically.</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#driver">&sect;6 &mdash; Driver-file shape</a> (cave-level attach emits <code>*begin cave_&lt;uuid&gt; *include &hellip; *end</code> without trip iteration).</li>
+</ul>
+
+</body>
+</html>

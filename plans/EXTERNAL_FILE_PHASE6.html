@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External File Integration — Phase 6</title>
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1c1c1c; background: #fff; line-height: 1.5; max-width: 920px; margin: 2.5rem auto; padding: 0 1.5rem 4rem; }
+  h1 { font-size: 1.85rem; border-bottom: 2px solid #2451a4; padding-bottom: 0.35rem; }
+  h2 { font-size: 1.4rem; margin-top: 2rem; border-bottom: 1px solid #d8d8d8; padding-bottom: 0.25rem; color: #2451a4; }
+  code { background: #f4f4f6; padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
+  .meta { color: #5a5a5a; font-size: 0.92em; }
+  .note { background: #fff7d6; border: 1px solid #e0c346; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  a { color: #2451a4; }
+</style>
+</head>
+<body>
+
+<h1>External File Integration — Phase 6: Region-level attach (post-v1)</h1>
+
+<p class="meta">
+  Part of the External File Integration plan. Read
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">the master plan</a>
+  first &mdash; this file assumes its architecture, data model, scanner,
+  copy workflow, driver shape, consumer-side pipeline, and UX model are
+  the source of truth for cross-cutting decisions.
+</p>
+
+<div class="note">
+  <strong>Status: stub (deferred post-v1).</strong> Phase 6's
+  preserved-from-earlier-phases summary and what-it-adds list currently
+  live in
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p6">&sect;9 Phase 6 of the
+  master plan</a>. Phase 6 is intentionally not detailed beyond that
+  &mdash; the high-UX-risk pieces (Structure view, scope mapping, bulk
+  note import) need real-user feedback from Phases 2&ndash;5 before
+  they're worth designing.
+</div>
+
+<h2>What this file will contain (when Phase 6 gets planned)</h2>
+
+<ul>
+  <li>Region-level attach entry point on DataMainPage ("More options &rarr; Attach region-level centerline&hellip;").</li>
+  <li>Structure view &mdash; tree of the resolved <code>*begin</code> hierarchy with map-to-cave/trip actions per node. Currently the highest-UX-risk piece of the whole feature.</li>
+  <li><code>stationPrefix</code> on cwCave (Phase 3 only added it to cwTrip).</li>
+  <li>Bulk note-folder import for the "I have folders of survey-day notes" workflow.</li>
+  <li>Conflict UX &mdash; region-level attach disables per-cave attach controls; loading older projects with both warns and uses region-level as the source of truth.</li>
+  <li>Region-level equates UI (Phase 4's editor extended to region scope).</li>
+  <li>Per-commit test gates and fixture files.</li>
+</ul>
+
+<h2>Key cross-references to the master plan</h2>
+
+<ul>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p6">&sect;9 Phase 6</a> &mdash; preserved-from-earlier and what-it-adds lists.</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#data-model">&sect;3.1.2 &mdash; When to use which state</a> &mdash; the Case-1 row covers region-level attach.</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#deferred">&sect;12 &mdash; Deferred</a> &mdash; rationale for deferring region-level to post-v1.</li>
+  <li><code>plans/EXTERNAL_CENTERLINE_UX_PROTOTYPE.html</code> &mdash; the case-1 walkthrough, Structure view wireframe, and bulk-import dialog the master plan defers to.</li>
+</ul>
+
+</body>
+</html>

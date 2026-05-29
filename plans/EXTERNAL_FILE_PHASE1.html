@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External File Integration — Phase 1</title>
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1c1c1c; background: #fff; line-height: 1.5; max-width: 920px; margin: 2.5rem auto; padding: 0 1.5rem 4rem; }
+  h1 { font-size: 1.85rem; border-bottom: 2px solid #2451a4; padding-bottom: 0.35rem; }
+  h2 { font-size: 1.4rem; margin-top: 2.4rem; border-bottom: 1px solid #d8d8d8; padding-bottom: 0.25rem; color: #2451a4; }
+  h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+  h4 { font-size: 1.0rem; margin-top: 1.2rem; color: #5a5a5a; }
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  code { background: #f4f4f6; padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
+  pre { background: #f4f4f6; padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.88em; line-height: 1.4; }
+  pre code { background: transparent; padding: 0; }
+  table { border-collapse: collapse; margin: 0.6rem 0 1.1rem; font-size: 0.95em; }
+  th, td { border: 1px solid #d8d8d8; padding: 0.4rem 0.7rem; text-align: left; vertical-align: top; }
+  th { background: #f4f4f6; font-weight: 600; }
+  .note { background: #fff7d6; border: 1px solid #e0c346; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  .meta { color: #5a5a5a; font-size: 0.92em; }
+  a { color: #2451a4; }
+</style>
+</head>
+<body>
+
+<h1>External File Integration — Phase 1: Data model, scanner, copy, driver, runner, watcher</h1>
+
+<p class="meta">
+  Part of the External File Integration plan. Read
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">the master plan</a>
+  first &mdash; it owns architecture (&sect;2), data model (&sect;3),
+  scanner API shape (&sect;4), copy workflow (&sect;5), driver
+  shape (&sect;6), consumer-side pipeline (&sect;7), UX (&sect;8),
+  risks (&sect;11), and deferred items (&sect;12). This file owns
+  Phase 1's <em>implementation specifics</em>: prerequisite status,
+  files touched, scanner edges, cancellation, cwSaveLoad audit,
+  per-commit sequence, test gates, fixtures.
+</p>
+
+<p class="meta">
+  Cross-cutting test rules (per-process safety, cavern serialisation,
+  narrow tag filters, "existing tests always green") live in
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#testing">master &sect;10.1</a>
+  and apply to every commit here without restating.
+</p>
+
+<p>Phase 1 goal: end-to-end plumbing works for at least one attach level. Nothing user-visible yet; verified by integration tests.</p>
+
+<h2 id="prerequisite">1. Prerequisite</h2>
+
+<p>
+  The line-plot pipeline must be a proper AsyncFuture chain on a
+  worker thread, and the in-project filesystem mutations must go
+  through the <code>cwSaveLoad</code> job queue.
+  <strong>Status:</strong> Phases 0&ndash;2 of
+  <code>plans/LINEPLOT_ASYNC_PORT_RESEARCH.html</code> shipped in
+  commits <code>f71c1573</code> (free-function port of
+  <code>cwSurvexExporterRegion</code> /
+  <code>cwCavernRunner</code> /
+  <code>cwLinePlotGeometry</code> /
+  <code>cwFindUnconnectedSurveyChunks</code> &mdash; the four sub-task
+  classes the original prerequisite called out) and <code>29bcd026</code>
+  (CavernOutputPage + manager-side <code>SolveError</code> +
+  log/loop-stat plumbing). Workers now run off the UI thread via
+  <code>cwConcurrent::run</code>, error propagation flows through
+  <code>Monad::Result&lt;T&gt;</code> at the worker boundary, and the
+  final result reaches the manager as
+  <code>QFuture&lt;cwLinePlotTask::LinePlotResultData&gt;</code> with
+  <code>SolveError</code> on the result. <strong>Still owed by this
+  phase</strong> (carried over from the research doc's deferred Phase 3
+  scope): the <code>cwSaveLoad</code> job-queue helpers needed by
+  reconcile (<code>copyIfNewer</code> / <code>removeFile</code> /
+  <code>removeTree</code> &mdash; audit per
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#copy">master &sect;5.1</a>
+  to confirm which of these need new <code>Custom</code> wrappers vs.
+  existing actions).
+</p>
+
+<h2 id="files-touched">2. Files touched</h2>
+
+<ul>
+  <li><code>cavewhere.proto</code> &mdash; new <code>ExternalCenterline</code> message (entryFile only); <code>external_centerline</code> field on <code>Cave</code> and <code>Trip</code>; new <code>LocalSettings</code> message for source paths.</li>
+  <li><code>cwCave.h/.cpp</code>, <code>cwTrip.h/.cpp</code> &mdash; <code>externalCenterline()</code> getter/setter. Existing <code>QUuid id()</code> reused as cavern-side identifier; no new id field.</li>
+  <li><strong>New:</strong> <code>cwExternalCenterline.h/.cpp</code> (value type, equality, hash; <em>only</em> the entry-file path).</li>
+  <li><strong>New:</strong> <code>cwExternalCenterlineScanner.h/.cpp</code> (namespace with <code>scan</code>, <code>scanSurvex</code>, <code>scanCompass</code>, <code>scanWalls</code>, plus the <code>formatFor(entryFile)</code> extension-based dispatcher).</li>
+  <li><strong>New:</strong> <code>cwExternalCenterlineSync.h/.cpp</code> (<code>reconcile</code> &mdash; copy + GC; submits each FS op as a <code>cwSaveLoad</code> job).</li>
+  <li><strong>New:</strong> <code>cwLocalSettings.h/.cpp</code> (loads / saves <code>.cwproj/local_settings.json</code> via protobuf JSON codec).</li>
+  <li><code>cwLinePlotTask.cpp</code> &mdash; <code>buildInput</code> uses UUID-named caves; <code>splitLookupByCave</code> regex + <code>QHash&lt;QUuid, &hellip;&gt;</code> lookup. The worker (<code>LinePlotWorker::run</code>) gains a step that calls into the external-centerline scanner / reconcile before <code>cwSurvexExporterRegion::exportRegion</code> when any attachment is present.</li>
+  <li><code>cwSurvexExporterRegion.h/.cpp</code> (post-port free function, was <code>cwSurvexExporterRegionTask</code>), <code>cwSurvexExporterCaveTask.cpp</code>, <code>cwSurvexExporterTripTask.cpp</code> &mdash; add <code>NameStyle</code> enum (<code>InternalUuid</code> / <code>FriendlyDisplayName</code>); branch on external-centerline; emit <code>*include</code>. <em>Internal driver path only.</em></li>
+  <li><code>cwSurveyExportManager.h/.cpp</code> &mdash; add <code>canExport</code> / <code>exportDisabledReason</code> Q_PROPERTYs (per
+    <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#consumer">master &sect;7.5</a>);
+    user-facing Survex and Compass exports refuse when any cave or trip is Attached or Scope, with the same early-return guard inside the export functions for programmatic callers.</li>
+  <li>QML export menu entries (<code>FileMenu.qml</code> / equivalent) &mdash; bind <code>enabled</code> and tooltip to the new properties.</li>
+  <li><code>cwLinePlotManager.h/.cpp</code> &mdash; <code>QFileSystemWatcher</code> wiring; scanner re-run + reconcile spliced into the existing <code>AsyncFuture::Restarter</code> chain (no extra debounce &mdash; the restarter coalesces); recompute watched set on region change.</li>
+  <li><code>cwStationValidator.h/.cpp</code> &mdash; add <code>externalStationCharactersRegex</code>.</li>
+  <li>
+    <code>cwSaveLoad.h/.cpp</code> &mdash; add
+    <code>externalCenterlineDirHelper(const QDir&amp;)</code> next to
+    <code>caveDirHelper</code>/<code>tripDirHelper</code>/<code>noteDirHelper</code>
+    (<code>cwSaveLoad.cpp:4308-4322</code>), plus public
+    <code>externalCenterlineDir(cwCave*)</code> /
+    <code>externalCenterlineDir(cwTrip*)</code> accessors following the
+    existing <code>dirPrivate</code> pattern. Any new
+    <code>Custom</code>-job helpers needed for queued
+    <code>copyIfNewer</code> / <code>removeFile</code> / <code>removeTree</code>
+    ops (only if the existing API doesn't already cover them &mdash;
+    see audit at &sect;<a class="anchor" href="#saveload-audit">7</a>). The cave/trip remove and rename jobs already
+    cascade through the owner dir tree, so no per-owner GC pass is
+    added.
+  </li>
+  <li>New tests in <code>testcases/</code>: see &sect;<a class="anchor" href="#testing">12</a>.</li>
+</ul>
+
+<h2 id="acceptance">3. Acceptance criteria</h2>
+
+<ul>
+  <li>All existing native-project tests pass with the UUID-based pipeline.</li>
+  <li>Scanner unit tests pass for fixture <code>.svx</code> (with nested <code>*include</code>), <code>.mak</code>, and <code>.wpj</code> inputs.</li>
+  <li>Integration test: attach a synthetic <code>.svx</code> at trip level, run pipeline, verify stations are present in the lookup keyed by the verbatim cavern names.</li>
+  <li>Integration test: same with synthetic <code>.dat</code> + <code>.mak</code>.</li>
+  <li>Integration test: file-watcher fires a re-solve when an attached file is edited; reconcile GC's a deleted include's stranded copy.</li>
+  <li>Integration test: missing dependency produces a cavern error captured on the cave/trip, no crash, no stale state.</li>
+  <li><strong>Walls acceptance gate</strong>: attach a real <code>.wpj</code> from a contributed test project and verify station names resolve. If unavailable, Walls attach moves to Phase 1.5 and Phase 1 ships with Survex + Compass only.</li>
+</ul>
+
+<h2 id="not-in-phase">4. Not in this phase</h2>
+
+<p>UI for attach. CavernOutputPage extensions. Badges. Equates. Orphan detection. Drag and drop. Live-link to an external source path.</p>
+
+<h2 id="scanner-survex">5. Scanner edge cases (Survex)</h2>
+
+<ul>
+  <li>
+    <strong>Cycle detection.</strong> Walk the include closure with a
+    visited set keyed by canonical absolute path
+    (<code>QFileInfo::canonicalFilePath</code>). On a re-visit, append
+    a warning <em>"circular include: a.svx &rarr; b.svx &rarr; a.svx,
+    stopping"</em> to <code>ScanResult.warnings</code> and stop
+    expanding that branch. Don't fail the scan &mdash; the rest of
+    the closure is still useful. <strong>No depth cap</strong> &mdash;
+    the canonical-path visited set is the only thing that can
+    runaway-loop, and we already catch it. A legitimately deep tree
+    (50+ levels) is unusual but valid and should just go through.
+  </li>
+  <li>
+    <strong>Case-sensitivity.</strong> The scanner tries each
+    <code>*include</code> target as-written first. If the file
+    doesn't exist on a case-sensitive filesystem (Linux), it
+    retries with a case-insensitive directory listing
+    (<code>QDir::entryList</code>, lowercased compare). On success
+    via the fallback, emit a warning <em>"include 'Foo.svx' matched
+    'foo.svx' &mdash; consider renaming to match"</em>. This lets a
+    project authored on macOS open on Linux without surprise. Hard
+    miss after the fallback &rarr; warning, dependency not added.
+  </li>
+  <li>
+    <strong>Encoding.</strong> UTF-8 with BOM detection; fall back
+    to Latin-1 on UTF-8 decode failure (survex historically
+    tolerated this). Track which encoding the fallback selected so
+    the warning can name it.
+  </li>
+  <li>
+    <strong>Line continuations and comments.</strong> Standard
+    survex syntax: <code>;</code> begins a comment; directives that
+    span multiple lines use the same mechanism Survex itself does
+    (no special continuation char &mdash; <code>*include</code> is a
+    single line). The scanner only needs to find
+    <code>*include "path"</code> tokens; <code>*begin</code> /
+    <code>*end</code> nesting doesn't change include resolution.
+  </li>
+</ul>
+
+<h2 id="scanner-formats">6. Scanner edge cases (Compass &amp; Walls)</h2>
+
+<ul>
+  <li>
+    <strong>Compass <code>.mak</code> grammar.</strong> Reuse the
+    existing Compass importer's lexer
+    (<code>cwCompassImporter</code> &mdash; verify it tolerates
+    .mak-only parsing without pulling shot data). A bare
+    <code>.dat</code> returns just itself.
+  </li>
+  <li>
+    <strong>Walls <code>.wpj</code> coverage.</strong> dewalls
+    handles the WPJ format, but has not been exercised against
+    real-world projects at CaveWhere's scale &mdash; that's the
+    <strong>Walls acceptance gate</strong> in
+    &sect;<a class="anchor" href="#acceptance">3</a>. If a real
+    <code>.wpj</code> reveals dewalls gaps, push Walls to Phase 1.5
+    with Survex + Compass shipping first. Don't attempt to write a
+    WPJ parser from scratch.
+  </li>
+  <li>
+    <strong><code>formatFor(entryFile)</code></strong> dispatches by
+    extension (case-insensitive
+    <code>QString::endsWith</code>). Mapping:
+    <code>.svx</code> &rarr; Survex; <code>.dat</code>,
+    <code>.mak</code> &rarr; Compass; <code>.wpj</code>,
+    <code>.srv</code> &rarr; Walls. No extension &rarr;
+    <code>Monad::Result</code> error <em>"cannot determine format
+    from extension"</em>; the attach dialog surfaces this and
+    [Attach] stays disabled (per
+    <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-questions">master &sect;8.8 question 18</a>).
+  </li>
+</ul>
+
+<h2 id="cross-format">7. Cross-format includes (Survex only)</h2>
+
+<p>
+  Cavern itself supports including non-Survex files from a
+  <code>.svx</code> (<code>*include "compass.dat"</code> works at
+  solve time because cavern auto-detects format). Our scanner
+  mirrors that: <code>scanSurvex</code> dispatches each
+  <code>*include</code> target through <code>formatFor()</code>
+  on the included file's extension and recurses via the matching
+  per-format scanner.
+</p>
+<ul>
+  <li>
+    <code>*include "foo.svx"</code> (or no extension &rarr;
+    auto-append) &rarr; recursive <code>scanSurvex</code>.
+  </li>
+  <li>
+    <code>*include "foo.dat"</code> or
+    <code>"foo.mak"</code> &rarr; <code>scanCompass</code>; results
+    merged into the parent <code>ScanResult</code>
+    (dependencies appended, warnings appended).
+  </li>
+  <li>
+    <code>*include "foo.wpj"</code> or
+    <code>"foo.srv"</code> &rarr; <code>scanWalls</code>; same
+    merge semantics.
+  </li>
+  <li>
+    <strong>Cycle detection spans formats.</strong> The
+    canonical-path visited set is shared across the entire walk, so
+    a <code>.svx</code> &rarr; <code>.mak</code> &rarr;
+    <code>.svx</code> chain that loops back catches the same way
+    a pure-<code>.svx</code> cycle does.
+  </li>
+  <li>
+    <strong>Reverse direction is not supported by the file
+    formats themselves.</strong> Compass <code>.mak</code> only
+    references <code>.dat</code>; Walls <code>.wpj</code> only
+    references <code>.srv</code> and <code>.wpj</code>. Neither
+    Compass nor Walls has a directive that pulls in a Survex file,
+    so <code>scanCompass</code> and <code>scanWalls</code> stay
+    in-format. If a user wants to mix, they make a Survex driver
+    the entry file and <code>*include</code> outwards from there.
+  </li>
+  <li>
+    <strong>The pulled-in foreign files become first-class
+    project dependencies</strong> &mdash; the reconcile step
+    (<a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#copy">master &sect;5.2</a>)
+    copies them into the owner's
+    <code>external-centerline/</code> subdir alongside the entry
+    <code>.svx</code>, with their relative directory structure
+    preserved so the entry's <code>*include</code> paths still
+    resolve.
+  </li>
+</ul>
+
+<h2 id="cancellation">8. Cancellation semantics</h2>
+
+<ul>
+  <li>
+    <strong>Scan cancel</strong> (Cancel button in the attach
+    dialog,
+    <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-questions">master &sect;8.8 question 14</a>).
+    Scan runs via <code>QtConcurrent::run</code>; the scanner checks
+    <code>QFuture::isCanceled()</code> between each
+    <code>*include</code> resolution. Nothing has been persisted
+    yet, so cancel just discards the partial result.
+  </li>
+  <li>
+    <strong>Detach during an in-flight solve.</strong> Detach
+    mutates the data model + enqueues a <code>cwSaveLoad</code>
+    remove-tree job. The data-model change emits a signal that
+    hits the existing <code>cwLinePlotManager</code> trigger, which
+    starts a new solve via the <code>Restarter</code>. The
+    Restarter cancels the in-flight future (per
+    <code>plans/LINEPLOT_ASYNC_PORT_RESEARCH.html</code> Q6: the
+    cancel today is &ldquo;discard result&rdquo;, not in-flight
+    interrupt), so the old solve runs to completion and its result
+    is dropped on return. The new solve runs without the detached
+    attachment. Latency is bounded by the lineplot port's eventual
+    Q4 work (cooperative <code>QPromise</code>-based cancel), not
+    blocking for v1.
+  </li>
+  <li>
+    <strong>Reconcile job in flight at detach.</strong>
+    <code>cwSaveLoad</code> jobs run to completion regardless of UI
+    state. The reconcile batch's final
+    <code>.context(this, &hellip;)</code> guards against
+    &ldquo;attachment removed before reconcile finished&rdquo; by
+    re-checking the attachment exists in the data model before
+    applying any post-reconcile state (e.g. updating the watch
+    set). Half-written copies never happen because each copy is
+    atomic at the FS level (write-to-temp + rename via
+    <code>QSaveFile</code>).
+  </li>
+</ul>
+
+<h2 id="saveload-audit">9. cwSaveLoad job-queue audit (first commit)</h2>
+
+<p>
+  Before any reconcile code lands, audit the existing
+  <code>cwSaveLoad</code> API to confirm coverage for the three
+  operations reconcile needs. Output of the audit goes in the first
+  Phase 1 commit message:
+</p>
+<ul>
+  <li>
+    <code>copyIfNewer(src, dst)</code> &mdash; verify
+    <code>Action::Copy</code>'s contract: does it overwrite
+    unconditionally, or compare <code>(mtime, size)</code> first?
+    If unconditional, wrap as <code>Action::Custom</code> with the
+    mtime/size precondition.
+  </li>
+  <li>
+    <code>removeFile(path)</code> &mdash; <code>Action::Remove</code>
+    with <code>Kind::File</code>; verify single-file semantics.
+  </li>
+  <li>
+    <code>removeTree(path)</code> &mdash; <code>Action::Remove</code>
+    with <code>Kind::Directory</code>; <strong>verify recursive
+    behavior</strong>. If non-recursive, wrap as
+    <code>Action::Custom</code> calling
+    <code>QDir::removeRecursively</code>.
+  </li>
+  <li>
+    <strong>Rename + delete cascade through the owner dir.</strong>
+    The plan's "for free" claim
+    (<a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#copy">master &sect;5.1</a>)
+    needs verification on a synthetic fixture with an
+    <code>external-centerline/</code> subdir already in place.
+    Failing case &rarr; add the subdir to the rename/remove
+    child-list (one extra entry in the existing handler, not a new
+    code path).
+  </li>
+  <li>
+    <strong>Dir-helper signature.</strong> The two-overload sketch in
+    master &sect;5.1
+    (<code>externalCenterlineDirHelper(const QDir&amp;)</code>
+    both with the same arg type) won't compile. Consolidate to a
+    single <code>externalCenterlineDirHelper(const QDir&amp;
+    ownerDir)</code>; the public
+    <code>externalCenterlineDir(cwCave*)</code> /
+    <code>(cwTrip*)</code> entry points dispatch.
+  </li>
+</ul>
+
+<h2 id="driver-paths">10. Driver <code>*include</code> path generation</h2>
+
+<ul>
+  <li>
+    <strong>Use absolute paths with forward slashes.</strong>
+    Relative paths via <code>QDir::relativeFilePath</code> produce
+    long <code>../../../</code> chains since the driver scratch
+    dir is in <code>/tmp</code> (or Windows
+    <code>%TEMP%</code>) while the project tree lives elsewhere.
+    Absolute is simpler and just as portable for the driver's
+    one-solve lifetime.
+  </li>
+  <li>
+    <strong>Always emit forward slashes.</strong> Survex
+    <code>*include</code> accepts forward slashes on every
+    platform, including Windows
+    (<code>C:/Users/&hellip;</code>). Do <em>not</em> call
+    <code>QDir::toNativeSeparators</code>.
+  </li>
+  <li>
+    <strong>Always quote.</strong> Sanitised cave/trip dir names
+    may contain spaces; Survex requires quoting in that case and
+    tolerates quoting otherwise.
+  </li>
+</ul>
+
+<h2 id="watcher">11. Watcher per-platform notes</h2>
+
+<ul>
+  <li>
+    <strong>macOS:</strong> <code>QFileSystemWatcher</code> uses
+    FSEvents; reliable for ordinary writes. Atomic-rename saves
+    (some editors, e.g. vim with <code>:wq</code>) emit
+    removed-then-created. Our scanner re-runs on any change in the
+    watched set, so the rename pattern still drives a re-solve.
+  </li>
+  <li>
+    <strong>Linux:</strong> inotify. Default user watch limit is
+    8192 (<code>fs.inotify.max_user_watches</code>). v1: not
+    addressing &mdash; the typical attachment is well under that. v1.x
+    can fall back to polling on overflow.
+  </li>
+  <li>
+    <strong>Windows:</strong> ReadDirectoryChangesW; reliable for
+    local disks, unreliable for network shares. Already in
+    <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#risks">master &sect;11</a>
+    risk table; manual Reload covers the gap.
+  </li>
+  <li>
+    <strong>Symlinks:</strong> follow once at scan time
+    (<code>QFileInfo::symLinkTarget</code>); watch the canonical
+    target. Don't add symlink-loop detection separately &mdash; the
+    canonical-path visited set in cycle detection
+    (&sect;<a class="anchor" href="#scanner-survex">5</a>) catches it.
+  </li>
+</ul>
+
+<h2 id="failure-modes">12. Failure-mode taxonomy</h2>
+
+<table>
+  <tr><th>Failure point</th><th>User-visible surface</th></tr>
+  <tr>
+    <td>Scan failed (file missing, permission)</td>
+    <td>Attach dialog inline error; nothing persisted.</td>
+  </tr>
+  <tr>
+    <td>Scan warning (missing <code>*include</code>, fallback case match, cycle, encoding fallback)</td>
+    <td>Attach dialog inline yellow message; [Attach] still enabled.</td>
+  </tr>
+  <tr>
+    <td>Reconcile copy failed (disk full, permission)</td>
+    <td><code>CavernOutputPage</code> error with the failing path; attachment kept; Reload button retries.</td>
+  </tr>
+  <tr>
+    <td>Cavern failed</td>
+    <td><code>CavernOutputPage</code> error (already wired via the lineplot port; nothing new here).</td>
+  </tr>
+  <tr>
+    <td>Watcher missed change</td>
+    <td>Documented limitation; manual Reload button on <code>ExternalCenterlineTripPanel</code>.</td>
+  </tr>
+  <tr>
+    <td>Source path disappeared (live-link)</td>
+    <td>Persistent banner per
+      <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-questions">master &sect;8.8 question 16</a>,
+      with [Re-link&hellip;] and [Switch to import mode].</td>
+  </tr>
+</table>
+
+<h2 id="commit-sequence">13. Suggested commit sequence</h2>
+
+<p>
+  Each commit compiles, passes the existing test suite, and adds
+  tests for what it touches. See &sect;<a class="anchor" href="#testing">14</a> for the per-commit
+  test gates.
+</p>
+<ol>
+  <li><strong>cwSaveLoad audit + helpers.</strong> The audit at &sect;<a class="anchor" href="#saveload-audit">9</a>; add <code>externalCenterlineDirHelper</code>, any missing job-action wrappers, and the rename/remove cascade fix if needed. Tests: cave/trip rename and delete with a synthetic <code>external-centerline/</code> subdir present.</li>
+  <li><strong>Proto schema + <code>cwExternalCenterline</code> value class.</strong> Add the proto message, regenerate, add the value type with equality/hash, add Cave/Trip getter/setter. No behavior change. Tests: <code>[ExternalCenterline]</code>.</li>
+  <li><strong><code>cwLocalSettings</code> schema + IO.</strong> Proto + JSON codec + read/write to <code>.cwproj/local_settings.json</code>. Tests: round-trip + missing-entry fallback to import mode.</li>
+  <li><strong>Scanner (Survex).</strong> <code>cwExternalCenterlineScanner::scan</code> + <code>scanSurvex</code> + <code>formatFor</code> with all the edge cases above. Tests: <code>[Scanner][Survex]</code> covering cycles, missing-include warnings, case-fallback, encoding fallback.</li>
+  <li><strong>Scanner (Compass + Walls + cross-format).</strong> <code>scanCompass</code> using the existing importer's lexer; <code>scanWalls</code> via dewalls; cross-format Survex-includes-Compass/Walls dispatch. Tests: <code>[Scanner][Compass]</code>, <code>[Scanner][Walls]</code>, <code>[Scanner][CrossFormat]</code>. Walls acceptance gate triggers here.</li>
+  <li><strong>Reconcile.</strong> <code>cwExternalCenterlineSync::reconcile</code> via the cwSaveLoad jobs from commit 1. Tests: <code>[Sync][Reconcile]</code> for initial copy, no-op (source == dest with matching mtime), GC of stranded files.</li>
+  <li><strong>UUID prefix in driver + <code>splitLookupByCave</code>.</strong> Switch <code>cwSurvexExporterRegion</code> to emit <code>cave_&lt;uuid&gt;</code>; introduce the <code>NameStyle</code> enum (<code>InternalUuid</code> default for the line-plot driver, <code>FriendlyDisplayName</code> for the user-facing exporter); update <code>splitLookupByCave</code> regex and the lookup map to <code>QHash&lt;QUuid, &hellip;&gt;</code>. Tests: the entire existing native-project test suite must remain green &mdash; this is the biggest behavior change in Phase 1.</li>
+  <li><strong>Driver <code>*include</code> emission.</strong> Exporter branches on <code>externalCenterline</code>; <code>LinePlotWorker::run</code> calls reconcile before <code>exportRegion</code> when any attachment is present; absolute forward-slash quoted <code>*include</code> paths. Tests: <code>[Attach][Trip]</code>, <code>[Attach][Cave]</code> on synthetic Survex fixtures.</li>
+  <li><strong>Watcher + scanner re-run wiring.</strong> <code>cwLinePlotManager</code> owns the <code>QFileSystemWatcher</code>; reconcile reports the new watch set; <code>fileChanged</code> hands work to the existing <code>Restarter</code>. Tests: <code>[Attach][Watcher]</code> via signal spy on <code>rerunSurvex</code>.</li>
+  <li><strong><code>cwSurveyExportManager</code> disable.</strong> <code>canExport</code> / <code>exportDisabledReason</code> Q_PROPERTYs (per
+    <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#consumer">master &sect;7.5</a>);
+    refuse Survex / Compass export when non-Native entities present. Tests: native exports unchanged; export refused with reason when an attachment exists.</li>
+  <li><strong>Station validator regex.</strong> <code>externalStationCharactersRegex</code> on <code>cwStationValidator</code>; threaded through scrap / note station-reference validation. Tests: dots and spaces accepted in external context, still rejected in native.</li>
+</ol>
+
+<h2 id="testing">14. Per-commit test gates</h2>
+
+<p>
+  Each commit in &sect;<a class="anchor" href="#commit-sequence">13</a>
+  adds its own Catch2 tag (or extends an existing one) and ships
+  with the tests below. Fixtures referenced here are defined in
+  &sect;<a class="anchor" href="#fixtures">15</a>. Cross-cutting
+  rules (per-process safety, cavern serialisation, narrow tag
+  filters, "existing tests always green") live in
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#testing">master &sect;10.1</a>
+  and apply to every commit without restating.
+</p>
+
+<h3>Commit 1 &mdash; cwSaveLoad audit + helpers</h3>
+<p><strong>New tag:</strong> <code>[SaveLoad][External]</code></p>
+<ul>
+  <li>Synthetic cave with an <code>external-centerline/</code> subdir of two files; rename the cave; assert subdir + contents are at the new path.</li>
+  <li>Same setup, delete the cave; assert the subdir is gone.</li>
+  <li>Trip-level variants of both.</li>
+  <li>copyIfNewer: newer src &rarr; copied; older src &rarr; no-op; missing src &rarr; error.</li>
+  <li>removeFile / removeTree: file gone / dir gone recursively.</li>
+  <li>If the audit finds the existing rename/remove cascade <em>doesn't</em> recurse into the subdir, the fix lands in this commit and the test exercises both directions.</li>
+</ul>
+
+<h3>Commit 2 &mdash; proto schema + cwExternalCenterline value class</h3>
+<p><strong>New tag:</strong> <code>[ExternalCenterline]</code></p>
+<ul>
+  <li>Construct a value with <code>entryFile = "mycave.svx"</code>; serialize via the proto JSON codec; deserialize; assert equal.</li>
+  <li>Equality / inequality on <code>entryFile</code> values.</li>
+  <li>Hash consistency: equal values have equal <code>qHash</code> output.</li>
+  <li>Cave / Trip getter and setter wired but no behavior change yet; assert that setting and clearing the attachment fires the change signal exactly once each.</li>
+</ul>
+
+<h3>Commit 3 &mdash; cwLocalSettings schema + IO</h3>
+<p><strong>New tag:</strong> <code>[LocalSettings]</code></p>
+<ul>
+  <li>Write a <code>LocalSettings</code> with one <code>ExternalCenterlineSource</code> entry; reload; assert equal.</li>
+  <li>Missing <code>local_settings.json</code> &rarr; empty <code>LocalSettings</code> (every owner falls back to import mode).</li>
+  <li>Present file with no entry for an owner UUID &rarr; same fallback.</li>
+  <li>Entry with a <code>sourcePath</code> that no longer exists on disk &rarr; entry is returned as-is; the live-link banner
+    (<a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-questions">master &sect;8.8 question 16</a>)
+    is the consumer's responsibility, not the loader's.</li>
+  <li>The serialised JSON is hand-editable (no required fields the user can't see).</li>
+</ul>
+
+<h3>Commit 4 &mdash; scanner (Survex)</h3>
+<p><strong>New tag:</strong> <code>[Scanner][Survex]</code></p>
+<ul>
+  <li>Bare <code>.svx</code>, no includes &rarr; returns just itself.</li>
+  <li>Single <code>*include "foo.svx"</code> &rarr; both files in deps.</li>
+  <li>3-deep nested include chain &rarr; all four files in deps.</li>
+  <li><code>a.svx</code> &rarr; <code>b.svx</code> &rarr; <code>a.svx</code> cycle &rarr; warning emitted, deps still contain a + b once each.</li>
+  <li>Missing include target &rarr; warning emitted; the rest of the closure resolves.</li>
+  <li>Case-sensitivity fallback: include written as <code>Foo.svx</code>, file on disk is <code>foo.svx</code> &rarr; matched, warning emitted. Skip on case-insensitive FS; gate with a runtime check.</li>
+  <li>UTF-8 BOM input &rarr; reads cleanly.</li>
+  <li>Latin-1 fallback &rarr; reads, warning emitted naming the encoding.</li>
+  <li>Comments don't trigger the regex: <code>; *include foo.svx</code> is not followed.</li>
+  <li>Auto-append <code>.svx</code> when the include path has no extension.</li>
+</ul>
+
+<h3>Commit 5 &mdash; scanner (Compass + Walls + cross-format)</h3>
+<p><strong>New tags:</strong> <code>[Scanner][Compass]</code>, <code>[Scanner][Walls]</code>, <code>[Scanner][CrossFormat]</code></p>
+<ul>
+  <li><code>[Compass]</code>: bare <code>.dat</code> &rarr; just itself; <code>.mak</code> with two <code>.dat</code> references &rarr; all three; relative <code>.dat</code> paths resolved against the <code>.mak</code>'s dir.</li>
+  <li><code>[Compass]</code>: missing referenced <code>.dat</code> &rarr; warning.</li>
+  <li><code>[Walls]</code>: bare <code>.srv</code> &rarr; just itself.</li>
+  <li><code>[Walls]</code>: hand-crafted <code>.wpj</code> with two <code>.srv</code> entries &rarr; all three.</li>
+  <li><code>[Walls]</code> <strong>acceptance gate</strong>: real fixture <code>.wpj</code> from a contributor (see &sect;<a class="anchor" href="#fixtures">15</a>); test is <code>SKIP</code>'d with a clear message if the fixture file isn't present.</li>
+  <li><code>[CrossFormat]</code>: Survex entry <code>.svx</code> with <code>*include "compass.dat"</code> &rarr; merged deps contain the .svx and the .dat.</li>
+  <li><code>[CrossFormat]</code>: cycle via <code>.svx</code> &rarr; <code>.mak</code> &rarr; <code>.svx</code> &rarr; caught by the shared canonical-path visited set.</li>
+</ul>
+
+<h3>Commit 6 &mdash; reconcile</h3>
+<p><strong>New tag:</strong> <code>[Sync][Reconcile]</code></p>
+<ul>
+  <li>Initial attach (empty dest): every dep ends up at the right relative path under the attachment dir; resulting future completes with no error.</li>
+  <li>No-op: source and dest already match in mtime + size &rarr; zero copy jobs enqueued.</li>
+  <li>Newer source mtime &rarr; that one file copied; siblings untouched.</li>
+  <li>GC: dest has a file not in the new scan &rarr; remove job enqueued.</li>
+  <li>Reconcile-in-flight + second call: older one runs to completion (per &sect;<a class="anchor" href="#cancellation">8</a>), no half-state visible after both settle.</li>
+  <li>Future's <code>.context()</code> guard fires the "attachment still exists" check before applying watch-set updates.</li>
+</ul>
+
+<h3>Commit 7 &mdash; UUID prefix + splitLookupByCave</h3>
+<p><strong>New tag:</strong> <code>[LinePlot][UuidPrefix]</code></p>
+<ul>
+  <li><strong>The whole existing native test suite</strong> (<code>[LinePlot]</code> tag and adjacent integration tests) must remain green &mdash; this is the load-bearing gate for this commit.</li>
+  <li>Build a region with two caves, run the pipeline, assert station lookup is keyed by <code>QUuid</code> matching <code>cwCave::id()</code>.</li>
+  <li><code>splitLookupByCave</code> regex matches <code>cave_&lt;32hex&gt;.tail</code> and rejects the old <code>&lt;integer&gt;.tail</code> form (which is no longer emitted).</li>
+  <li>Lookup table is <code>QHash&lt;QUuid, cwStationPositionLookup&gt;</code>; integer indexing is gone.</li>
+  <li>No external-centerline behavior in this commit yet &mdash; it's the pre-flight for commit 8.</li>
+</ul>
+
+<h3>Commit 8 &mdash; driver <code>*include</code> emission</h3>
+<p><strong>New tags:</strong> <code>[Attach][Trip]</code>, <code>[Attach][Cave]</code>, <code>[Attach][Mixed]</code>, <code>[Attach][Error]</code></p>
+<ul>
+  <li><code>[Trip]</code>: region with one cave + one trip whose <code>externalCenterline</code> points at <code>survex_simple.svx</code>; run pipeline; lookup contains the fixture's stations under <code>cave_&lt;uuid&gt;.trip_&lt;uuid&gt;.</code>.</li>
+  <li><code>[Cave]</code>: cave-level attach with <code>survex_nested.svx</code>; lookup contains every resolved station under <code>cave_&lt;uuid&gt;.</code>; Scope-trip auto-creation lands in Phase 3, so this test only asserts the lookup, not the trip set.</li>
+  <li><code>[Mixed]</code>: cave with one native trip and one external-attached trip; both sets of stations resolve.</li>
+  <li>Driver content assertion: written <code>.svx</code> in the worker's <code>QTemporaryDir</code> contains <code>*include "&lt;abs-path&gt;"</code> with forward slashes and double-quoting.</li>
+  <li><code>[Error]</code>: attached <code>broken.svx</code> &rarr; <code>SolveError</code> with <code>Step::Cavern</code>; no crash; lookup is empty; <code>cavernLog</code> on <code>cwLinePlotManager</code> carries the cavern error text.</li>
+</ul>
+
+<h3>Commit 9 &mdash; watcher + scanner re-run wiring</h3>
+<p><strong>New tags:</strong> <code>[Attach][Watcher]</code>, <code>[Attach][Watcher][LiveLink]</code></p>
+<ul>
+  <li>Attach a fixture; <code>tryVerify</code> the watch set contains the in-project copy paths.</li>
+  <li>Edit the in-project copy (append a shot); <code>tryVerify</code> via signal spy that <code>rerunSurvex</code> fires; <code>tryVerify</code> the new station is in the lookup.</li>
+  <li><code>[LiveLink]</code>: attach with a <code>sourcePath</code> populated in <code>local_settings.json</code>; edit the source (not the project copy); <code>tryVerify</code> rerun + reconcile-from-source.</li>
+  <li>Detach mid-solve: no crash; watch set is empty post-detach (signal spy on the watcher's signal).</li>
+  <li>Source-path-disappeared probe at startup: build a region with a live-link attachment whose source has been deleted before <code>cwLinePlotManager::load</code>; assert the missing-source state is detected without needing a watcher event (per
+    <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-questions">master &sect;8.8 question 16</a>).</li>
+</ul>
+
+<h3>Commit 10 &mdash; cwSurveyExportManager disable</h3>
+<p><strong>New tag:</strong> <code>[Export][Disable]</code></p>
+<ul>
+  <li>Pure-native region: <code>canExport == true</code>; <code>exportDisabledReason</code> empty; existing Survex / Compass export tests remain green.</li>
+  <li>Region with one Attached trip: <code>canExport == false</code>; reason mentions externals.</li>
+  <li>Region with one Scope trip: same.</li>
+  <li><code>exportToSurvex</code> / <code>exportToCompass</code> called when <code>canExport</code> is false &rarr; early-return with a clear error (programmatic-caller guard).</li>
+  <li><code>canExportChanged</code> fires on attach and detach (signal spy).</li>
+</ul>
+
+<h3>Commit 11 &mdash; station validator regex</h3>
+<p><strong>New tag:</strong> <code>[Validator][External]</code></p>
+<ul>
+  <li>Native context: <code>"A1"</code> accepted, <code>"A.1"</code> rejected, <code>"a b"</code> rejected.</li>
+  <li>External context: <code>"A.1"</code> accepted, <code>"big-passage.east"</code> accepted, <code>"a b"</code> accepted.</li>
+  <li>Scrap and note station-reference fields use the right regex based on owner state (Native vs Attached vs Scope).</li>
+</ul>
+
+<h2 id="fixtures">15. Fixture files</h2>
+
+<p>Add to <code>testcases/datasets/external-centerlines/</code> (C++ tests) and mirror in <code>test-qml/datasets/external-centerlines/</code> when QML tests need them (Phase 2+):</p>
+
+<table>
+  <tr><th>Fixture</th><th>Used by</th><th>Notes</th></tr>
+  <tr>
+    <td><code>survex_simple.svx</code></td>
+    <td>Commit 4, 8 (<code>[Attach][Trip]</code>)</td>
+    <td>Few shots, no <code>*begin</code> nesting, no includes.</td>
+  </tr>
+  <tr>
+    <td><code>survex_nested.svx</code> + siblings (<code>entrance.svx</code>, <code>passage.svx</code>)</td>
+    <td>Commit 4, 8 (<code>[Attach][Cave]</code>)</td>
+    <td>Nested <code>*include</code>; multiple <code>*begin</code> blocks for Phase 3's Scope-trip auto-creation.</td>
+  </tr>
+  <tr>
+    <td><code>survex_cycle_a.svx</code> + <code>survex_cycle_b.svx</code></td>
+    <td>Commit 4</td>
+    <td>Mutual <code>*include</code> to drive the cycle-detection warning.</td>
+  </tr>
+  <tr>
+    <td><code>survex_latin1.svx</code></td>
+    <td>Commit 4</td>
+    <td>Latin-1 encoded with a non-ASCII comment, to exercise the encoding fallback.</td>
+  </tr>
+  <tr>
+    <td><code>compass_simple.dat</code></td>
+    <td>Commit 5</td>
+    <td>One survey, form-feed-terminated per Compass spec.</td>
+  </tr>
+  <tr>
+    <td><code>compass_multi.mak</code> + <code>*.dat</code></td>
+    <td>Commit 5, 8</td>
+    <td>Multi-file Compass project.</td>
+  </tr>
+  <tr>
+    <td><code>cross_format.svx</code> + <code>compass.dat</code></td>
+    <td>Commit 5 (<code>[Scanner][CrossFormat]</code>)</td>
+    <td>Survex driver that <code>*include</code>s a Compass <code>.dat</code>.</td>
+  </tr>
+  <tr>
+    <td><code>walls.wpj</code> + <code>*.srv</code></td>
+    <td>Commit 5</td>
+    <td><strong>Walls acceptance gate</strong>: real <code>.wpj</code> from a contributor preferred; hand-crafted minimal as fallback. Test <code>SKIP</code>s if absent.</td>
+  </tr>
+  <tr>
+    <td><code>broken.svx</code></td>
+    <td>Commit 8 (<code>[Attach][Error]</code>)</td>
+    <td>Intentional syntax error to drive the cavern-error path.</td>
+  </tr>
+</table>
+
+<h2 id="spec-update">16. Format-spec update is the <em>last</em> step of v1, not Phase 1's prerequisite</h2>
+
+<p>
+  <code>docs/cavewhere-format-spec.md</code> gets one update at the
+  end of v1 covering: the new <code>external-centerline/</code>
+  directory beside <code>notes/</code>, the
+  <code>ExternalCenterline</code> protobuf message,
+  <code>LocalSettings</code> + its
+  <code>ExternalCenterlineSource</code> sub-message, the UUID
+  prefix change to <code>cave_</code> / <code>trip_</code> labels in
+  the exported driver, and a format-version bump. Deferring this to
+  the end means the spec describes shipped behavior, not the plan's
+  intent &mdash; saving us from rewriting the spec mid-implementation
+  if the audit (commit 1) or the UUID switch (commit 7) shake out
+  differently from the plan's assumptions.
+</p>
+
+</body>
+</html>

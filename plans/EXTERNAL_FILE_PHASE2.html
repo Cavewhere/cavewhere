@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External File Integration — Phase 2</title>
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1c1c1c; background: #fff; line-height: 1.5; max-width: 920px; margin: 2.5rem auto; padding: 0 1.5rem 4rem; }
+  h1 { font-size: 1.85rem; border-bottom: 2px solid #2451a4; padding-bottom: 0.35rem; }
+  h2 { font-size: 1.4rem; margin-top: 2rem; border-bottom: 1px solid #d8d8d8; padding-bottom: 0.25rem; color: #2451a4; }
+  code { background: #f4f4f6; padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
+  .meta { color: #5a5a5a; font-size: 0.92em; }
+  .note { background: #fff7d6; border: 1px solid #e0c346; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  a { color: #2451a4; }
+</style>
+</head>
+<body>
+
+<h1>External File Integration — Phase 2: Trip-level attach + CavernOutputPage v1</h1>
+
+<p class="meta">
+  Part of the External File Integration plan. Read
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">the master plan</a>
+  first &mdash; this file assumes its architecture, data model, scanner,
+  copy workflow, driver shape, consumer-side pipeline, and UX model are
+  the source of truth for cross-cutting decisions.
+</p>
+
+<div class="note">
+  <strong>Status: stub.</strong> Phase 2's plan currently lives in
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p2">&sect;9 Phase 2 of the
+  master plan</a>. When Phase 2 gets a full planning pass (same fidelity
+  as Phase 1's &sect;9 readiness subsections + &sect;10.2 per-commit
+  gates), the contents move here and the master gets a one-paragraph
+  pointer back.
+</div>
+
+<h2>What this file will contain</h2>
+
+<ul>
+  <li>Phase 2 goal and acceptance criteria (currently in master &sect;9 Phase 2).</li>
+  <li>Files-touched list specific to Phase 2.</li>
+  <li>Per-commit test gates &mdash; one block per commit, same fidelity as the master's &sect;10.2 Phase 1 entries. Probably 6&ndash;8 commits covering: ExternalCenterlineTripPanel scaffold, sub-components (AttachedHeader / SolveStatus / StationsList / MissingSourceBanner / TripMetadata), CavernOutputPage extension (attached-centerlines list + driver-source disclosure), DataMainPage entry, attach-dialog flow, file-watcher UI feedback.</li>
+  <li>Phase 2 fixture files (mostly mirror master &sect;10.3 into <code>test-qml/datasets/external-centerlines/</code>).</li>
+  <li>QML tests &mdash; <code>tst_ExternalCenterlineAttachTrip.qml</code>, <code>tst_CavernOutputPage.qml</code>, and per-commit smoke tests.</li>
+  <li>Phase 2 open UX questions (subset of master &sect;8.8 that drive Phase 2 specifically).</li>
+</ul>
+
+<h2>Key cross-references to the master plan</h2>
+
+<ul>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-trip-panel">&sect;8.5.1 &mdash; ExternalCenterlineTripPanel.qml structure</a> (modes table, required bindings, component skeleton, sub-components, lifecycle).</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-trip">&sect;8.5 &mdash; TripPage walkthrough</a> (Native / Attached / Scope wireframes).</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#consumer">&sect;7.5 &mdash; User-facing export disable</a> (the <code>canExport</code> wiring lands in Phase 1; Phase 2 binds the export menu items to it).</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux">&sect;8.3 &mdash; CavernOutputPage</a> (base page shipped via the lineplot port; Phase 2 adds the attached-centerlines list + driver-source disclosure).</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-questions">&sect;8.8 &mdash; UX questions resolved before Phase 2 ships</a> (questions 1, 13, 14, 16, 18 are particularly Phase-2-relevant).</li>
+</ul>
+
+</body>
+</html>

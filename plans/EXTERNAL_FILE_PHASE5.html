@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External File Integration — Phase 5 + 5b</title>
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1c1c1c; background: #fff; line-height: 1.5; max-width: 920px; margin: 2.5rem auto; padding: 0 1.5rem 4rem; }
+  h1 { font-size: 1.85rem; border-bottom: 2px solid #2451a4; padding-bottom: 0.35rem; }
+  h2 { font-size: 1.4rem; margin-top: 2rem; border-bottom: 1px solid #d8d8d8; padding-bottom: 0.25rem; color: #2451a4; }
+  h3 { font-size: 1.1rem; margin-top: 1.4rem; }
+  code { background: #f4f4f6; padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
+  .meta { color: #5a5a5a; font-size: 0.92em; }
+  .note { background: #fff7d6; border: 1px solid #e0c346; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  a { color: #2451a4; }
+</style>
+</head>
+<body>
+
+<h1>External File Integration — Phase 5 (Orphan detection) + 5b (Replace / Re-link)</h1>
+
+<p class="meta">
+  Part of the External File Integration plan. Read
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html">the master plan</a>
+  first &mdash; this file assumes its architecture, data model, scanner,
+  copy workflow, driver shape, consumer-side pipeline, and UX model are
+  the source of truth for cross-cutting decisions.
+</p>
+
+<div class="note">
+  <strong>Status: stub.</strong> Phase 5's mechanism (one paragraph) and
+  Phase 5b's flows (two paragraphs + diff logic) currently live in
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p5">&sect;9 Phase 5</a>
+  and
+  <a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p5b">&sect;9 Phase 5b</a>
+  of the master plan. When each gets a full planning pass, the contents
+  move here.
+</div>
+
+<h2>Phase 5 &mdash; Orphan detection</h2>
+
+<h3>What this section will contain</h3>
+<ul>
+  <li>Diff mechanism &mdash; after each solve, build the set of station names referenced by notes/scraps per cave and intersect against the resolved network's station name set; non-intersecting names are orphans.</li>
+  <li>UI surface &mdash; orphan list in a new CavernOutputPage section (or its own page?), per-row actions (<em>"remap to&hellip;"</em> autocomplete vs <em>"delete reference"</em>), how bulk orphans are presented (a 200-orphan list shouldn't drown the page).</li>
+  <li>Data model &mdash; do orphans persist between solves or rebuild from scratch each time? My current guess: rebuild per solve, but cache the last user dismissal so the same orphan doesn't re-surface after a no-op re-solve.</li>
+  <li>Native-only project applicability &mdash; the same mechanism works on native-only projects (a renamed-station case); document the v1 behavior for that audience.</li>
+  <li>Per-commit test gates and fixture files.</li>
+</ul>
+
+<h2>Phase 5b &mdash; Replace / Re-link attachment</h2>
+
+<h3>What this section will contain</h3>
+<ul>
+  <li>Re-link flow &mdash; banner trigger (watcher + startup-probe per &sect;8.8 question 16); picker dialog; prefix/station-set validation against the cached in-project copy; <code>local_settings.json</code> update.</li>
+  <li>Replace flow &mdash; picker dialog; diff dialog (currently sketched in the master); Kept / Orphaned / New classification; auto-create-on-new toggle; orphaned-trip handling (kept with error badge, or deleted outright).</li>
+  <li>Both flows wire into the <code>ExternalCenterlineTripPanel</code>'s <code>MissingSourceBanner</code> sub-component (Phase 2 ships the banner stub; Phase 5b wires its Re-link button to <code>ReplaceCenterlineDialog</code>).</li>
+  <li>New <code>cwExternalCenterlineSync::replaceSource()</code> / <code>relinkSource()</code> APIs.</li>
+  <li>New <code>cwExternalCenterlineScanner::diff()</code> helper that emits the Kept/Orphaned/New classification.</li>
+  <li>Per-commit test gates and fixture files.</li>
+</ul>
+
+<h2>Key cross-references to the master plan</h2>
+
+<ul>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p5">&sect;9 Phase 5 &mdash; Orphan detection</a> (current concept).</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#p5b">&sect;9 Phase 5b &mdash; Replace / Re-link</a> (current flows).</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-trip-panel">&sect;8.5.1 &mdash; ExternalCenterlineTripPanel structure</a> (where the MissingSourceBanner sub-component lives).</li>
+  <li><a href="EXTERNAL_FILE_INTEGRATION_PLAN.html#ux-questions">&sect;8.8 question 16 &mdash; Re-link discoverability across app restarts</a> (the startup-probe rule).</li>
+</ul>
+
+</body>
+</html>
