@@ -1,47 +1,13 @@
 cmake_minimum_required(VERSION 3.23)
 
-# Derive the marketing version (CFBundleShortVersionString) from the most recent
-# git tag reachable from HEAD. Real releases tag as e.g. 2026.4.2, which is the
-# value Apple expects in CFBundleShortVersionString. Fallback "0.0.0" for source
-# tarballs / checkouts with no tags — the iOS configure-time check rejects this
-# fallback so archive builds fail loudly instead of shipping with a bogus version.
-set(_cw_marketing_version "0.0.0")
-set(_cw_default_build_number "1")
-set(_cw_latest_tag "")
-# CFBundleShortVersionString: 1–3 dot-separated non-negative integers.
-# CMake regex doesn't support {n,m}, so spell the form out.
-set(_cw_marketing_version_regex "^[0-9]+(\\.[0-9]+)?(\\.[0-9]+)?$")
-
-find_package(Git QUIET)
-if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
-    execute_process(
-        COMMAND ${GIT_EXECUTABLE} describe --tags --abbrev=0
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        OUTPUT_VARIABLE _cw_latest_tag
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        RESULT_VARIABLE _cw_tag_rc
-        ERROR_QUIET)
-    if(_cw_tag_rc EQUAL 0 AND _cw_latest_tag)
-        string(REGEX REPLACE "^v" "" _cw_stripped_tag "${_cw_latest_tag}")
-        if(_cw_stripped_tag MATCHES "${_cw_marketing_version_regex}")
-            set(_cw_marketing_version "${_cw_stripped_tag}")
-            execute_process(
-                COMMAND ${GIT_EXECUTABLE} rev-list ${_cw_latest_tag}..HEAD --count
-                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                OUTPUT_VARIABLE _cw_commits_since_tag
-                OUTPUT_STRIP_TRAILING_WHITESPACE
-                RESULT_VARIABLE _cw_count_rc
-                ERROR_QUIET)
-            if(_cw_count_rc EQUAL 0 AND _cw_commits_since_tag)
-                math(EXPR _cw_default_build_number "${_cw_commits_since_tag} + 1")
-            endif()
-        else()
-            message(STATUS
-                "CaveWhere: latest git tag '${_cw_latest_tag}' is not a valid "
-                "Apple marketing version; falling back to ${_cw_marketing_version}.")
-        endif()
-    endif()
-endif()
+# Pre-project: derive marketing version + default build number from git.
+# Module file must define functions only (no top-level side effects) because
+# we're calling before project().
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/CavewhereVersion.cmake)
+cavewhere_compute_marketing_version(
+    _cw_marketing_version
+    _cw_default_build_number
+    _cw_marketing_version_regex)
 
 project(CaveWhere VERSION ${_cw_marketing_version} LANGUAGES CXX)
 
