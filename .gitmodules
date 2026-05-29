@@ -12,7 +12,7 @@
         url = https://github.com/Cavewhere/create-dmg.git
 [submodule "asyncfuture"]
 	path = asyncfuture
-        url = https://github.com/vpicaver/asyncfuture.git
+	url = git@github.com:vpicaver/asyncfuture.git
 [submodule "cavewherelib/twbs-icons"]
 	path = cavewherelib/twbs-icons
 	url = https://github.com/twbs/icons.git
