@@ -12,10 +12,14 @@
 #include "cwTrip.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
+#include "cwExternalCenterline.h"
+#include "cwExternalCenterlineScanner.h"
+#include "cwExternalCenterlineSync.h"
 #include "cwLinePlotTask.h"
 #include "cwRenderLinePlot.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyNoteModel.h"
+#include "cwSaveLoad.h"
 #include "cwScrap.h"
 #include "cwNote.h"
 #include "cwDebug.h"
@@ -27,7 +31,11 @@
 #include "cwFixStationModel.h"
 #include "asyncfuture.h"
 
+#include <QDir>
+#include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QFuture>
+#include <QSet>
 
 
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
@@ -39,6 +47,14 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
 
     m_surveyNetworkArtifact = new cwSurveyNetworkArtifact(this);
     m_surveyNetworkArtifact->setName(QStringLiteral("LinePlotManager Survey Network"));
+
+    // Single watcher for both in-project attachment-dir dependencies and
+    // live-link source-side dependencies. fileChanged hands the event off
+    // to onWatchedFileChanged which decides between a plain rerun and a
+    // reconcile-from-source flow.
+    m_watcher = new QFileSystemWatcher(this);
+    connect(m_watcher, &QFileSystemWatcher::fileChanged,
+            this, &cwLinePlotManager::onWatchedFileChanged);
 
     SurveySignaler = new cwSurveyChunkSignaler(this);
 
@@ -72,11 +88,32 @@ cwLinePlotManager::~cwLinePlotManager() {
 void cwLinePlotManager::setCaveAttachmentDirs(QHash<QUuid, QString> dirs)
 {
     m_caveAttachmentDirs = std::move(dirs);
+    recomputeWatchSetAndProbeSources();
 }
 
 void cwLinePlotManager::setTripAttachmentDirs(QHash<QUuid, QString> dirs)
 {
     m_tripAttachmentDirs = std::move(dirs);
+    recomputeWatchSetAndProbeSources();
+}
+
+void cwLinePlotManager::setLocalSettings(cwLocalSettings settings)
+{
+    if (m_localSettings == settings) {
+        return;
+    }
+    m_localSettings = std::move(settings);
+    recomputeWatchSetAndProbeSources();
+}
+
+void cwLinePlotManager::setSaveLoad(cwSaveLoad* saveLoad)
+{
+    m_saveLoad = saveLoad;
+}
+
+QStringList cwLinePlotManager::watchedFiles() const
+{
+    return m_watchedFiles;
 }
 
 /**
@@ -120,6 +157,11 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
 
     //Connect all sub data
     connectCaves(Region);
+
+    // Recompute the external-centerline watch set + missing-source probe.
+    // Done after the per-cave/trip connects so any subsequent attach/detach
+    // signal recompute lands on a populated region.
+    recomputeWatchSetAndProbeSources();
 
     if(Region->hasCaves()) {
         runSurvex();
@@ -508,4 +550,169 @@ void cwLinePlotManager::setAutomaticUpdate(bool automaticUpdate) {
         emit automaticUpdateChanged();
         runSurvex();
     }
+}
+
+void cwLinePlotManager::recomputeWatchSetAndProbeSources()
+{
+    QStringList newWatchedFiles;
+    QHash<QString, QUuid> newSourceOwnerForPath;
+    QList<QUuid> newMissingSourceOwners;
+
+    if (Region != nullptr) {
+        // Per-owner scan: project-side (in-project copy) and source-side
+        // (live-link). Both feed the same watch set; the source-side
+        // mapping survives separately so onWatchedFileChanged can route
+        // to reconcile. Empty entry file means "no attachment" - skipped.
+        const auto handleOwner = [&](const QUuid& ownerId,
+                                     const QString& attachmentDir,
+                                     const QString& entryFile) {
+            if (entryFile.isEmpty()) {
+                return;
+            }
+            if (!attachmentDir.isEmpty()) {
+                const QString projectEntry = QDir(attachmentDir).filePath(entryFile);
+                if (QFileInfo::exists(projectEntry)) {
+                    const auto scan = cwExternalCenterlineScanner::scan(projectEntry);
+                    if (!scan.hasError()) {
+                        for (const QString& dep : scan.value().dependencies) {
+                            newWatchedFiles.append(dep);
+                        }
+                    }
+                }
+            }
+            const QString sourcePath = m_localSettings.sourcePathFor(ownerId);
+            if (!sourcePath.isEmpty()) {
+                if (!QFileInfo::exists(sourcePath)) {
+                    newMissingSourceOwners.append(ownerId);
+                } else {
+                    const auto scan = cwExternalCenterlineScanner::scan(sourcePath);
+                    if (!scan.hasError()) {
+                        for (const QString& dep : scan.value().dependencies) {
+                            newWatchedFiles.append(dep);
+                            // First owner wins; collisions between two
+                            // live-link owners pointing at the same source
+                            // tree are not a v1 use case.
+                            if (!newSourceOwnerForPath.contains(dep)) {
+                                newSourceOwnerForPath.insert(dep, ownerId);
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        for (cwCave* cave : Region->caves()) {
+            if (!cave->externalCenterline().isEmpty()) {
+                handleOwner(cave->id(),
+                            m_caveAttachmentDirs.value(cave->id()),
+                            cave->externalCenterline().entryFile());
+            }
+            for (cwTrip* trip : cave->trips()) {
+                if (!trip->externalCenterline().isEmpty()) {
+                    handleOwner(trip->id(),
+                                m_tripAttachmentDirs.value(trip->id()),
+                                trip->externalCenterline().entryFile());
+                }
+            }
+        }
+    }
+
+    // Stable order so equality comparisons against m_watchedFiles are
+    // deterministic, and the StringList tests can compare by index.
+    const QSet<QString> dedup(newWatchedFiles.cbegin(), newWatchedFiles.cend());
+    newWatchedFiles = QStringList(dedup.cbegin(), dedup.cend());
+    std::sort(newWatchedFiles.begin(), newWatchedFiles.end());
+    std::sort(newMissingSourceOwners.begin(), newMissingSourceOwners.end());
+
+    if (newWatchedFiles != m_watchedFiles) {
+        // Wholesale-replace the watcher's table from our intent set. Files
+        // that don't exist on disk are kept in m_watchedFiles (so a later
+        // recompute can pick them up if they appear) but skipped on the
+        // addPaths call - QFileSystemWatcher emits a warning otherwise.
+        const QStringList currentlyWatched = m_watcher->files();
+        if (!currentlyWatched.isEmpty()) {
+            m_watcher->removePaths(currentlyWatched);
+        }
+        QStringList toAdd;
+        toAdd.reserve(newWatchedFiles.size());
+        for (const QString& p : newWatchedFiles) {
+            if (QFileInfo::exists(p)) {
+                toAdd.append(p);
+            }
+        }
+        if (!toAdd.isEmpty()) {
+            m_watcher->addPaths(toAdd);
+        }
+        m_watchedFiles = std::move(newWatchedFiles);
+        m_sourceOwnerForPath = std::move(newSourceOwnerForPath);
+        emit watchedFilesChanged();
+    } else {
+        // Union unchanged but per-owner source mapping may have shifted.
+        m_sourceOwnerForPath = std::move(newSourceOwnerForPath);
+    }
+
+    if (newMissingSourceOwners != m_missingSourceOwners) {
+        m_missingSourceOwners = std::move(newMissingSourceOwners);
+        emit missingSourceOwnersChanged();
+    }
+}
+
+void cwLinePlotManager::rearmWatcher(const QString& path)
+{
+    // macOS atomic-replace (write-to-temp, rename-over) drops the path from
+    // the watcher's internal table after the fileChanged event; Linux
+    // inotify behaves similarly when the inode is replaced. Re-add so the
+    // next edit still notifies us. No-op when the path is already armed.
+    if (!m_watcher->files().contains(path) && QFileInfo::exists(path)) {
+        m_watcher->addPath(path);
+    }
+}
+
+void cwLinePlotManager::onWatchedFileChanged(const QString& path)
+{
+    rearmWatcher(path);
+
+    const auto sourceIt = m_sourceOwnerForPath.constFind(path);
+    if (sourceIt != m_sourceOwnerForPath.constEnd() && !m_saveLoad.isNull()) {
+        const QUuid ownerId = sourceIt.value();
+        const QString sourcePath = m_localSettings.sourcePathFor(ownerId);
+        QString attachmentDir = m_caveAttachmentDirs.value(ownerId);
+        if (attachmentDir.isEmpty()) {
+            attachmentDir = m_tripAttachmentDirs.value(ownerId);
+        }
+        if (sourcePath.isEmpty()
+            || !QFileInfo::exists(sourcePath)
+            || attachmentDir.isEmpty()) {
+            // Source went missing or we don't know where to reconcile to.
+            // Recompute (will surface the missing-source state) and run
+            // the solve against the in-project copy as-is.
+            recomputeWatchSetAndProbeSources();
+            runSurvex();
+            return;
+        }
+        const auto scan = cwExternalCenterlineScanner::scan(sourcePath);
+        if (scan.hasError()) {
+            runSurvex();
+            return;
+        }
+        auto future = cwExternalCenterlineSync::reconcile(
+            m_saveLoad.data(), scan.value(), attachmentDir);
+        // Reconcile drains through the cwSaveLoad job queue; the
+        // returned future completes after every copy/remove has hit
+        // disk, which is the moment runSurvex can see the fresh bytes
+        // in the in-project copy. Recompute first so any newly-added
+        // *include target is in the watch set before the next solve.
+        AsyncFuture::observe(future).context(this,
+                [this](Monad::ResultBase) {
+            recomputeWatchSetAndProbeSources();
+            runSurvex();
+        });
+        return;
+    }
+
+    // Project-side change (or no saveLoad wired): straight rerun. Also
+    // recompute the dep set in case the edit added or removed an
+    // *include that needs to enter/leave the watch set.
+    recomputeWatchSetAndProbeSources();
+    runSurvex();
 }
