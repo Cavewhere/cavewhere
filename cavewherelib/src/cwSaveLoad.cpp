@@ -3278,8 +3278,13 @@ void cwSaveLoad::disconnectTreeModel()
         // lazLayers is a child of region and its connections survive
         // disconnectObjects(); each reconnect cycle would otherwise
         // accumulate duplicate rowsAboutToBeRemoved / rowsRemoved handlers.
+        // Tear down both directions: lazLayers→this for the model-change
+        // observers, and this→lazLayers for the discardCompleted→rescan
+        // hookup added in connectTreeModel.
         if (auto* lazLayers = region->lazLayers()) {
             disconnect(lazLayers, nullptr, this, nullptr);
+            disconnect(this, &cwSaveLoad::discardCompleted,
+                       lazLayers, &cwLazLayerModel::rescan);
         }
     }
 
@@ -3563,6 +3568,14 @@ void cwSaveLoad::connectTreeModel()
             // file-vanished removal). File-kind Remove jobs don't clean it
             // up themselves (only Directory-kind Remove does), and the
             // layer pointer becomes dangling once deleteLater fires.
+            //
+            // Either cause is a user-visible mutation of the project's
+            // on-disk shape, so emit localMutationOccurred — this is what
+            // flips cwProject::modified() to true so the save / discard
+            // affordances become available. Rescan-driven removal (a .laz
+            // vanished from GIS Layers/ outside the app) has no other path
+            // to dirty the project, and without this the user has no
+            // signal that the working tree has diverged from HEAD.
             connect(lazLayers, &QAbstractItemModel::rowsAboutToBeRemoved,
                     this, [this, lazLayers](const QModelIndex& parent, int first, int last) {
                 Q_UNUSED(parent);
@@ -3570,6 +3583,9 @@ void cwSaveLoad::connectTreeModel()
                     if (cwLazLayer* layer = lazLayers->layerAt(row)) {
                         d->m_objectStates.remove(layer);
                     }
+                }
+                if (!d->suppressLocalMutationTracking) {
+                    emit localMutationOccurred();
                 }
             });
             connect(lazLayers, &QAbstractItemModel::rowsRemoved, this, saveMetadata);
@@ -3605,6 +3621,17 @@ void cwSaveLoad::connectTreeModel()
             for (cwLazLayer* layer : lazLayers->layers()) {
                 wireLayer(layer);
             }
+
+            // Re-rescan after a Git-driven on-disk mutation. discardChanges
+            // restores deleted .laz files via `git reset --hard HEAD`; the
+            // model needs a kick to re-discover them and re-pair with any
+            // orphan .cwlaz sibling so the original UUID + enabled bit are
+            // adopted. Queued so the rescan runs after discardCompleted's
+            // observers have settled (the project's modified bit clears
+            // first, then we repopulate).
+            connect(this, &cwSaveLoad::discardCompleted,
+                    lazLayers, &cwLazLayerModel::rescan,
+                    Qt::QueuedConnection);
         }
     }
 }

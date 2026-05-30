@@ -2,10 +2,12 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QThread>
 #include <QUrl>
 
 #include "cwCavingRegion.h"
@@ -362,6 +364,12 @@ TEST_CASE("cwLazLayer save/load: missing source file → loadStatus == Error",
 
 namespace {
 
+// Upper bound on how long the discard→rescan test waits for the queued
+// rescan to repopulate the model. Qt::QueuedConnection needs one event
+// loop tick to fire the slot; the bound is generous to absorb CI jitter.
+constexpr int kDiscardRescanMaxWaitMs = 5000;
+constexpr int kDiscardRescanPollSleepMs = 10;
+
 // Locate the GIS Layers/ directory inside a saved project, given the .cwproj
 // path returned by project->filename() after a saveAs.
 QDir gisLayersDirForProject(const QString& cwprojPath)
@@ -663,4 +671,130 @@ TEST_CASE("cwLazLayer .cwlaz: malformed sibling skips layer + reports to errorMo
 
     // The malformed .cwlaz must still be on disk — no silent overwrite.
     REQUIRE(QFile::exists(cwlazPath));
+}
+
+TEST_CASE("cwLazLayer .cwlaz: external .laz delete dirties the project",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("extdel")));
+
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-extdel-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    // After a clean save, the project is at HEAD and not modified.
+    REQUIRE_FALSE(project->modified());
+
+    const QString savedPath = project->filename();
+    const QDir gisDir = gisLayersDirForProject(savedPath);
+    const QString lazBase = QFileInfo(externalLaz).completeBaseName();
+    const QString lazInProject = gisDir.absoluteFilePath(lazBase + QStringLiteral(".laz"));
+    REQUIRE(QFile::exists(lazInProject));
+
+    // Simulate a user (or external tool) deleting the .laz from GIS Layers/
+    // outside of CaveWhere. The model only learns about it on the next rescan,
+    // which is the path under test.
+    REQUIRE(QFile::remove(lazInProject));
+    project->cavingRegion()->lazLayers()->rescan();
+
+    REQUIRE(project->cavingRegion()->lazLayers()->count() == 0);
+    REQUIRE(project->modified());
+}
+
+TEST_CASE("cwLazLayer .cwlaz: discardChanges re-surfaces .laz with original UUID",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("disc")));
+
+    auto root = std::make_unique<cwRootData>();
+    // git commitAll requires a valid account; without it the initial saveAs
+    // never creates a HEAD commit and discardChanges fails with
+    // "revspec 'HEAD' not found". Configure the account before saveAs.
+    root->account()->setName(QStringLiteral("Discard Tester"));
+    root->account()->setEmail(QStringLiteral("discard.tester@example.com"));
+
+    auto* project = root->project();
+    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-disc-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    REQUIRE_FALSE(project->modified());
+
+    // Snapshot the layer's UUID so we can verify identity survives the
+    // delete → discard → re-discover round trip.
+    auto* lazLayers = project->cavingRegion()->lazLayers();
+    const QUuid originalId = lazLayers->layerAt(0)->id();
+    REQUIRE_FALSE(originalId.isNull());
+
+    const QString savedPath = project->filename();
+    const QDir gisDir = gisLayersDirForProject(savedPath);
+    const QString lazBase = QFileInfo(externalLaz).completeBaseName();
+    const QString lazInProject = gisDir.absoluteFilePath(lazBase + QStringLiteral(".laz"));
+    const QString cwlazInProject = gisDir.absoluteFilePath(lazBase + QStringLiteral(".cwlaz"));
+    REQUIRE(QFile::exists(lazInProject));
+    REQUIRE(QFile::exists(cwlazInProject));
+
+    // External delete of the .laz; rescan picks it up and dirties the
+    // project (Bug A path). The orphan .cwlaz remains untouched on disk.
+    REQUIRE(QFile::remove(lazInProject));
+    lazLayers->rescan();
+    REQUIRE(lazLayers->count() == 0);
+    REQUIRE(project->modified());
+    REQUIRE(QFile::exists(cwlazInProject));
+
+    // Drain the project-metadata WriteFile that rescan→rowsRemoved
+    // enqueued so its deferred completes before discardChanges replaces
+    // m_pendingJobsDeferred. Without this the OLD deferred is orphaned
+    // mid-flight and the AsyncFuture chain to git reset never fires.
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    // Discard: git reset --hard HEAD restores the deleted .laz. The new
+    // discardCompleted → rescan hookup must re-discover it and re-pair
+    // with the orphan .cwlaz so the original UUID is preserved.
+    REQUIRE(project->fileType() == cwProject::GitFileType);
+    QSignalSpy discardSpy(project, &cwProject::discardCompleted);
+    project->discardChanges();
+    project->waitForDiscardToFinish();
+    QCoreApplication::processEvents();
+    REQUIRE(discardSpy.count() >= 1);
+
+    // The queued rescan fires on the next event loop tick after
+    // discardCompleted. Pump events until the layer reappears or the
+    // bound elapses; bounding by wall-clock surfaces the actual cause
+    // ("rescan never fired") in CI logs rather than masking it as the
+    // downstream count assertion.
+    QElapsedTimer rescanTimer;
+    rescanTimer.start();
+    while (lazLayers->count() == 0
+           && rescanTimer.elapsed() < kDiscardRescanMaxWaitMs) {
+        QCoreApplication::processEvents();
+        QThread::msleep(kDiscardRescanPollSleepMs);
+    }
+    INFO("Waited " << rescanTimer.elapsed()
+         << "ms for discardCompleted→rescan to repopulate the model");
+
+    REQUIRE(QFile::exists(lazInProject));
+    REQUIRE(lazLayers->count() == 1);
+    REQUIRE(lazLayers->layerAt(0)->id() == originalId);
+    REQUIRE_FALSE(project->modified());
 }

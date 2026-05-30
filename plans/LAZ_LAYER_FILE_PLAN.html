@@ -557,6 +557,26 @@ no <code>pendingLazLayerMigration</code> stash, no deterministic-UUID derivation
     </tr>
     <tr>
       <td>3</td>
+      <td>Rescan dirty bit + post-Git re-discovery</td>
+      <td>
+        Two small bug fixes surfaced by commit&nbsp;2 end-to-end testing. (a) When
+        <code>cwLazLayerModel::rescan</code> Phase&nbsp;1 removes a layer because the
+        <code>.laz</code> vanished from disk (Finder delete, external rename, etc.), the project
+        must be marked dirty so the user sees the save/discard affordances. Fix: emit
+        <code>localMutationOccurred</code> (or whichever signal <code>cwSaveLoad</code> already
+        uses to flip the modified bit) from the Phase&nbsp;1 removal branch. (b) When the user
+        discards changes, Git restores the deleted <code>.laz</code> on disk, but
+        <code>cwLazLayerModel</code> does not re-discover it &mdash; no rescan fires. Fix:
+        subscribe <code>cwLazLayerModel::rescan</code> to whichever post-Git-mutation signal
+        <code>cwSaveLoad</code> emits after discard / reconcile / sync pull, so reappearing
+        <code>.laz</code> files re-pair with their orphan <code>.cwlaz</code> siblings. Tests:
+        in-Finder delete &rarr; rescan &rarr; <code>cwProject::modified()</code> is true; discard
+        &rarr; <code>.laz</code> reappears &rarr; layer re-enters model with the original UUID
+        from its <code>.cwlaz</code>.
+      </td>
+    </tr>
+    <tr>
+      <td>4</td>
 <td>Tagged-job infrastructure</td>
       <td>
         Pure infrastructure commit, no LAZ-specific code. Add
@@ -574,7 +594,7 @@ no <code>pendingLazLayerMigration</code> stash, no deterministic-UUID derivation
       </td>
     </tr>
     <tr>
-      <td>4</td>
+      <td>5</td>
       <td>LAZ rename wiring</td>
       <td>
         <code>cwLazLayer::sourcePathChanged</code> already exists
@@ -594,7 +614,7 @@ no <code>pendingLazLayerMigration</code> stash, no deterministic-UUID derivation
       </td>
     </tr>
     <tr>
-      <td>5</td>
+      <td>6</td>
       <td>Drop <code>lazLayerStates</code></td>
       <td>
         Remove <code>ProjectMetadataData::lazLayerStates</code>. Remove the load and save blocks in
@@ -687,7 +707,56 @@ series boundary.
     pass &mdash; UI binds to <code>layer.enabled</code>, mechanism beneath is invisible.</li>
 </ul>
 
-<h3>Commit 3 &mdash; Tagged-job infrastructure</h3>
+<h3>Commit 3 &mdash; Rescan dirty bit + post-Git re-discovery</h3>
+<p>Two small bug fixes surfaced by commit&nbsp;2 end-to-end testing. Both close the loop between
+on-disk state changes and the model / project dirty bit, so save / discard affordances behave
+predictably for external edits to <code>GIS Layers/</code>.</p>
+
+<p><b>Bug A &mdash; rescan-driven removal does not dirty the project.</b> Reproduce: add a LAZ
+layer, save (initial commit), close, reopen, delete the <code>.laz</code> from inside
+<code>GIS Layers/</code> via Finder / CLI, reopen the project. <code>cwLazLayerModel::rescan</code>
+Phase&nbsp;1 correctly removes the layer from the model, but <code>cwProject::modified()</code>
+stays <code>false</code> &mdash; the user has no signal that the working tree has diverged from
+the last commit. Fix: from the Phase&nbsp;1 removal branch, emit
+<code>cwSaveLoad::localMutationOccurred</code> (or whichever path
+<code>cwSaveLoad</code> already uses to flip the modified bit on note / trip mutations) so the
+save and discard buttons become available.</p>
+
+<p><b>Bug B &mdash; discard does not re-surface the restored <code>.laz</code>.</b> Continuing
+from Bug A: when the user clicks <code>Discard changes</code>, Git restores the deleted
+<code>.laz</code> on disk, but <code>cwLazLayerModel</code> does not re-discover it &mdash; no
+rescan is triggered post-restore. Fix: connect <code>cwLazLayerModel::rescan</code> to whichever
+signal <code>cwSaveLoad</code> already emits after a Git-driven on-disk mutation (discard
+complete, reconcile complete, sync pull complete). The hookup is edge-triggered on the Git
+operation, not on initial project load, so it composes cleanly with the existing
+<code>setGisLayersDir</code> &rarr; queued-rescan path. Once rescan re-runs, the restored
+<code>.laz</code> re-pairs with its orphan <code>.cwlaz</code> sibling, the original UUID is
+adopted from the metadata file (commit&nbsp;2 machinery), and the layer reappears with its
+prior <code>enabled</code> bit.</p>
+
+<p><b>New coverage</b> in <code>testcases/test_cwLazLayerSaveLoad.cpp</code>:</p>
+<ul>
+  <li>External-delete dirties the project: open a saved project with one layer; delete the
+    <code>.laz</code> from inside <code>GIS Layers/</code> via <code>QFile::remove</code>;
+    trigger rescan; assert <code>cwLazLayerModel::count() == 0</code> AND
+    <code>cwProject::modified() == true</code>.</li>
+  <li>Discard re-surfaces the layer: from the state above, call
+    <code>cwProject::discardChanges()</code>; wait for completion; assert the <code>.laz</code>
+    is back on disk, rescan has run, the layer is in the model again, and its
+    <code>id()</code> matches the original UUID (proves the orphan <code>.cwlaz</code> was
+    correctly re-paired).</li>
+  <li>Branch checkout / reconcile re-rescan: if a clean hook exists, also cover the sync-pull
+    path with the same shape. (May land in a follow-up if the sync seam is awkward.)</li>
+</ul>
+<p><b>Regression sweep</b>:</p>
+<ul>
+  <li>Full <code>[cwLazLayer]</code>/<code>[cwLazLayerModel]</code>/<code>[cwSaveLoad]</code>
+    sweep stays green &mdash; the dirty-bit emit and the post-Git rescan connect are additive,
+    not behavior-changing for the existing tests.</li>
+  <li>QML smoke: existing project-open / discard tests still pass.</li>
+</ul>
+
+<h3>Commit 4 &mdash; Tagged-job infrastructure</h3>
 <p><b>New coverage</b> in <code>testcases/test_cwSaveLoadJobCompression.cpp</code> (new file).
 These tests build <code>cwSaveLoadPrivate::Job</code> values by hand &mdash; no LAZ types involved,
 no filesystem, no model. They exercise the compression rules directly through a small test seam
@@ -732,7 +801,7 @@ infrastructure is provable in isolation:</p>
     must remain transparent to single-artifact callers.</li>
 </ul>
 
-<h3>Commit 4 &mdash; LAZ rename wiring</h3>
+<h3>Commit 5 &mdash; LAZ rename wiring</h3>
 <p><b>New coverage</b> in <code>testcases/test_cwLazLayerSaveLoad.cpp</code>:</p>
 <ul>
   <li>Rename round-trip: load a layer with <code>enabled=false</code> and a known UUID;
@@ -778,7 +847,7 @@ infrastructure is provable in isolation:</p>
     rename is opt-in via a new API, so existing tests are unaffected.</li>
 </ul>
 
-<h3>Commit 5 &mdash; Drop <code>lazLayerStates</code></h3>
+<h3>Commit 6 &mdash; Drop <code>lazLayerStates</code></h3>
 <p><b>New coverage</b>:</p>
 <ul>
   <li>Static check: <code>grep -rn 'lazLayerStates\|LazLayerState\b' cavewherelib/ testcases/</code>
