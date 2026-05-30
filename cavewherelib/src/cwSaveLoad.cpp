@@ -4184,6 +4184,11 @@ QFuture<void> cwSaveLoad::completeSaveJobs()
     return d->m_pendingJobsDeferred.future();
 }
 
+QFuture<void> cwSaveLoad::pendingJobsFinished()
+{
+    return completeSaveJobs();
+}
+
 QString cwSaveLoad::sanitizeFileName(QString input) {
     return cwNameUtils::sanitizeFileName(std::move(input));
 }

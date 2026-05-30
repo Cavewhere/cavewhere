@@ -321,6 +321,15 @@ public:
 
     void discardChanges();
 
+    // Future that completes when the project's pending filesystem-job
+    // queue has drained. Useful as a chain point for async pipelines
+    // (e.g. external-centerline reconcile) that need to know when the
+    // jobs they enqueued, and any jobs queued before them, have all
+    // executed. Errors from individual jobs surface through the
+    // existing save-flush error channel; this future itself reports
+    // only completion.
+    QFuture<void> pendingJobsFinished();
+
     //For testing
     void waitForFinished();
 
