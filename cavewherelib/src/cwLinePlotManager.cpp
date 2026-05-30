@@ -69,6 +69,16 @@ cwLinePlotManager::~cwLinePlotManager() {
     waitToFinish();
 }
 
+void cwLinePlotManager::setCaveAttachmentDirs(QHash<QUuid, QString> dirs)
+{
+    m_caveAttachmentDirs = std::move(dirs);
+}
+
+void cwLinePlotManager::setTripAttachmentDirs(QHash<QUuid, QString> dirs)
+{
+    m_tripAttachmentDirs = std::move(dirs);
+}
+
 /**
   \brief Sets the region that this manager will listen to
   */
@@ -282,22 +292,33 @@ void cwLinePlotManager::runSurvex() {
     }
 
     if(Region != nullptr) {
-        // Skip the pipeline when no shots exist — cavern warns about empty surveys
-        // and there is nothing useful to compute.
-        bool hasShots = false;
-        for(cwCave* cave : Region->caves()) {
-            for(cwTrip* trip : cave->trips()) {
-                for(cwSurveyChunk* chunk : trip->chunks()) {
-                    if(chunk->shotCount() > 0) {
-                        hasShots = true;
-                        break;
+        // Skip the pipeline only when nothing solvable exists. Native
+        // chunks contribute shots; cave/trip-level external attachments
+        // contribute *include data that we cannot see without running
+        // cavern, so an empty native-chunk set with any external
+        // attachment still needs a solve to surface stations or errors.
+        // Named lambda returns on the first hit so the three nested
+        // loops escape together without a flag-per-level check (per
+        // CLAUDE.md "Never use goto").
+        const auto hasAnySolvableInput = [this]() {
+            for (cwCave* cave : Region->caves()) {
+                if (!cave->externalCenterline().isEmpty()) {
+                    return true;
+                }
+                for (cwTrip* trip : cave->trips()) {
+                    if (!trip->externalCenterline().isEmpty()) {
+                        return true;
+                    }
+                    for (cwSurveyChunk* chunk : trip->chunks()) {
+                        if (chunk->shotCount() > 0) {
+                            return true;
+                        }
                     }
                 }
-                if(hasShots) break;
             }
-            if(hasShots) break;
-        }
-        if(!hasShots) {
+            return false;
+        };
+        if(!hasAnySolvableInput()) {
             // No-shots path must also clear the cached cavern output / solve
             // error so CavernOutputPage doesn't keep showing the previous
             // run's text (D-1).
@@ -312,7 +333,9 @@ void cwLinePlotManager::runSurvex() {
                 return QFuture<cwLinePlotTask::LinePlotResultData>();
             }
 
-            auto input = cwLinePlotTask::buildInput(Region.data());
+            auto input = cwLinePlotTask::buildInput(Region.data(),
+                                                    m_caveAttachmentDirs,
+                                                    m_tripAttachmentDirs);
             auto future = cwLinePlotTask::run(std::move(input));
 
             // Receive the worker's result by parameter rather than capturing

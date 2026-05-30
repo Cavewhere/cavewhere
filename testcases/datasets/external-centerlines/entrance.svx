@@ -1,9 +1,13 @@
 ; Entry passage; included by survex_nested.svx and pulls in
 ; passage.svx to exercise the deeper *include chain. Phase 3
 ; Scope-trip auto-creation will read the *begin / *end names from
-; this file.
+; this file. *fix on E1 keeps the chain solvable when the parent
+; driver has no shared *fix; the E2-Passage.P1 shot bridges the
+; included file's scope into a single connected component.
 *begin Entrance
+*fix E1 0 0 0
 *data normal from to tape compass clino
 E1 E2 12.0 0 0
 *include "passage.svx"
+E2 Passage.P1 2.0 0 0
 *end Entrance

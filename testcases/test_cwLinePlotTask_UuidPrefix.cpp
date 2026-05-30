@@ -148,6 +148,19 @@ TEST_CASE("cavernStationRegex matches new prefixed names and rejects the old int
         CHECK_FALSE(regex.match(prefixOnly).hasMatch());
         CHECK_FALSE(regex.match(prefixOnly + QStringLiteral("a1")).hasMatch());
     }
+
+    SECTION("rejects an empty or whitespace-only tail") {
+        // The tail must start with a non-whitespace character so that
+        // a malformed external file cannot fold "cave_<uuid>." or
+        // "cave_<uuid>. " (single space) into the lookup with an empty
+        // or whitespace key. Trailing spaces are still tolerated for
+        // Walls' empty-name quirk.
+        const QString prefix = cwLinePlotTask::cavernCaveNameFor(QUuid::createUuid());
+        CHECK_FALSE(regex.match(prefix + QStringLiteral(".")).hasMatch());
+        CHECK_FALSE(regex.match(prefix + QStringLiteral(". ")).hasMatch());
+        CHECK_FALSE(regex.match(prefix + QStringLiteral(".\t")).hasMatch());
+        CHECK(regex.match(prefix + QStringLiteral(".a1 ")).hasMatch());
+    }
 }
 
 TEST_CASE("Two-cave pipeline keeps each cave's positions keyed by its own UUID",

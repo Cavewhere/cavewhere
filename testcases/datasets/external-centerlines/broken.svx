@@ -1,0 +1,8 @@
+; Driver fixture used by Commit 8 [Attach][Error] to drive a cavern
+; failure. The unterminated *begin (no matching *end) and the bogus
+; *data directive both make cavern bail out before solving, so the
+; line-plot worker should surface a SolveError with Step::Cavern and
+; the cavern log should carry the parse error text.
+*begin Broken
+*data normal from to tape compass clino
+A1 A2 not-a-number 0 0

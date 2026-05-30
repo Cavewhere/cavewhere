@@ -97,6 +97,16 @@ public:
     struct Input {
         cwCavingRegionData regionData;
         class RegionDataPtrs regionPointers;
+
+        // Absolute on-disk attachment directories for caves and trips whose
+        // externalCenterline is set. Keyed by cwCave::id() / cwTrip::id() so
+        // the exporter can join them with the project-relative entryFile
+        // value to write absolute *include paths. Maps are empty when no
+        // attachments exist; entries are required when the matching
+        // entity's externalCenterline is set or the export step fails fast
+        // (see cwSurvexExporterCaveTask::writeExternalInclude).
+        QHash<QUuid, QString> caveAttachmentDirs;
+        QHash<QUuid, QString> tripAttachmentDirs;
     };
 
     class LinePlotCaveData {
@@ -190,6 +200,9 @@ public:
     };
 
     static Input buildInput(const cwCavingRegion* region);
+    static Input buildInput(const cwCavingRegion* region,
+                            const QHash<QUuid, QString>& caveAttachmentDirs,
+                            const QHash<QUuid, QString>& tripAttachmentDirs);
     static QFuture<LinePlotResultData> run(Input input);
 
     /**

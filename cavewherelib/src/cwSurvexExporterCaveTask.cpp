@@ -12,7 +12,34 @@
 #include "cwTrip.h"
 
 //Qt includes
+#include <QDir>
+#include <QFileInfo>
 #include <QSet>
+
+namespace {
+
+// trip_<uuid> wrapper used around an externally-attached trip's
+// *include. Mirrors cwLinePlotTask::cavernCaveNameFor's "cave_<uuid>"
+// shape, with QUuid::Id128 producing the 32-hex-no-hyphens body so the
+// label survives cavern's [a-zA-Z0-9_] identifier rules.
+constexpr QLatin1String kTripNamePrefix("trip_");
+
+QString cavernTripNameFor(const QUuid& tripId)
+{
+    return kTripNamePrefix + tripId.toString(QUuid::Id128);
+}
+
+// All driver-emitted *include paths are absolute with forward slashes
+// (Survex accepts forward slashes on every platform) and double-quoted
+// so sanitised cave/trip dir names with spaces survive. See
+// plans/EXTERNAL_FILE_PHASE1.html §10.
+QString driverIncludePathFor(const QString& attachmentDir, const QString& entryFile)
+{
+    const QString joined = QDir(attachmentDir).filePath(entryFile);
+    return QFileInfo(joined).absoluteFilePath();
+}
+
+} // namespace
 
 cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
     cwCaveExporterTask(parent)
@@ -23,12 +50,22 @@ cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
 //    connect(TripExporter, SIGNAL(progressed(int)), SIGNAL(progressed(int)));
 }
 
+void cwSurvexExporterCaveTask::setExportOptions(const cwSurvexExporterRegion::Options& options)
+{
+    ExportOptions = options;
+}
+
 /**
   \brief Writes the cave data to the stream
   */
 bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& cave, const QString& globalCS) {
 
-    if(!checkData(cave)) {
+    // checkData rejects caves with zero trips; a cave-level external
+    // attachment is *defined* by having zero native trips, so the
+    // externalCenterline branch runs before the gate. Trip-level
+    // attachments still go through the gate because their cave has at
+    // least one trip (the attached one).
+    if (cave.externalCenterline.isEmpty() && !checkData(cave)) {
         if(isRunning()) {
             stop();
         }
@@ -38,6 +75,23 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
     QString caveName = QString(cave.name).remove(" ");
 
     stream << "*begin " << caveName << " ;" << cave.name << Qt::endl << Qt::endl;
+
+    // Cave-level external attachment: skip fix stations, calibrations,
+    // and the trip loop. The included file carries its own *cs, *fix,
+    // and *begin/*end structure; emitting our own would either silently
+    // shadow theirs (no-op) or fight them (cavern error). Per master
+    // plan §6, native + external are not mixed inside the same cave
+    // body.
+    if (!cave.externalCenterline.isEmpty()) {
+        if (!writeExternalInclude(stream, cave.id,
+                                  ExportOptions.caveAttachmentDirs,
+                                  cave.externalCenterline.entryFile(),
+                                  cave.name)) {
+            return false;
+        }
+        stream << "*end " << caveName << " ; End of " << cave.name << Qt::endl;
+        return true;
+    }
 
     writeFixStations(stream, cave, globalCS);
 
@@ -50,6 +104,26 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
     //Go throug all the trips and save them
     for(int i = 0; i < cave.trips.size(); i++) {
         const cwTripData& tripData = cave.trips.at(i);
+
+        // Trip-level external attachment: wrap the *include in
+        // *begin trip_<uuid> / *end trip_<uuid> so the included file's
+        // own *begin / *end stay isolated from this cave's namespace
+        // (master plan §6, "Native vs. external trip wrapping is
+        // asymmetric — on purpose"). Stations from the included file
+        // resolve to cave_<uuid>.trip_<uuid>.<file-tail>.
+        if (!tripData.externalCenterline.isEmpty()) {
+            const QString tripLabel = cavernTripNameFor(tripData.id);
+            stream << "*begin " << tripLabel << " ; " << tripData.name << Qt::endl;
+            if (!writeExternalInclude(stream, tripData.id,
+                                      ExportOptions.tripAttachmentDirs,
+                                      tripData.externalCenterline.entryFile(),
+                                      tripData.name)) {
+                return false;
+            }
+            stream << "*end " << tripLabel << Qt::endl << Qt::endl;
+            continue;
+        }
+
         auto trip = std::make_unique<cwTrip>();
         trip->setData(tripData);
         TripExporter->writeTrip(stream, trip.get(), declinationContext);
@@ -97,4 +171,40 @@ void cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCav
     cwSurvexExporterUtils::writeFixStations(stream, validFixes, firstValidStation, globalCS);
 }
 
+bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,
+                                                    const QUuid& ownerId,
+                                                    const QHash<QUuid, QString>& attachmentDirs,
+                                                    const QString& entryFile,
+                                                    const QString& ownerLabel)
+{
+    const auto it = attachmentDirs.constFind(ownerId);
+    if (it == attachmentDirs.constEnd()) {
+        Errors.append(QStringLiteral(
+            "External centerline for '%1' has no resolved attachment directory "
+            "(reconcile did not run before the driver export).").arg(ownerLabel));
+        return false;
+    }
+    if (entryFile.isEmpty()) {
+        Errors.append(QStringLiteral(
+            "External centerline for '%1' has an empty entry file.").arg(ownerLabel));
+        return false;
+    }
 
+    const QString absolutePath = driverIncludePathFor(it.value(), entryFile);
+
+    // Survex *include syntax has no escape for an embedded double-quote
+    // or newline, so a hostile entry file / attachment dir name would
+    // either produce a syntactically broken driver or sneak in a second
+    // *include token. Refuse before we emit; the user surfaces this as
+    // an export error, not a confusing cavern parse failure.
+    if (absolutePath.contains(QLatin1Char('"')) || absolutePath.contains(QLatin1Char('\n'))) {
+        Errors.append(QStringLiteral(
+            "External centerline path for '%1' contains characters that "
+            "Survex *include cannot quote (\" or newline): %2")
+            .arg(ownerLabel, absolutePath));
+        return false;
+    }
+
+    stream << "*include \"" << absolutePath << "\"" << Qt::endl;
+    return true;
+}

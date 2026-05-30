@@ -15,7 +15,8 @@
 
 Monad::ResultBase
 cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
-                                     const QString& outputPath)
+                                     const QString& outputPath,
+                                     const Options& options)
 {
     if (region.caves.isEmpty()) {
         return Monad::ResultBase(QStringLiteral("No caves to do loop closure"),
@@ -38,6 +39,7 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
     }
 
     cwSurvexExporterCaveTask caveExporter;
+    caveExporter.setExportOptions(options);
 
     for (int i = 0; i < region.caves.size(); i++) {
         const cwCaveData& cave = region.caves.at(i);

@@ -22,7 +22,6 @@
 #include "cwSurveyChunk.h"
 #include "cwDebug.h"
 #include "cwLength.h"
-#include "cwStationValidator.h"
 #include "cwErrorModel.h"
 
 // Qt includes
@@ -78,22 +77,28 @@ QString cwLinePlotTask::cavernCaveNameFor(const QUuid& caveId)
 
 QRegularExpression cwLinePlotTask::cavernStationRegex()
 {
-    // ^cave_<32 hex>\.<station>$ — the trailing pattern matches the same
-    // character class as the native station validator, and the prefix
-    // mirrors cavernCaveNameFor()'s emission. The integer-keyed form used
-    // by earlier builds ("<digits>.station") deliberately stops matching
-    // here.
+    // ^cave_<32 hex>\.(\S.*)$ — the tail is intentionally permissive
+    // (must start with a non-whitespace, then any trailing text) so it
+    // covers:
+    //   - native shots:    cave_<uuid>.<station>
+    //   - trip-attached:   cave_<uuid>.trip_<uuid>.<file-begin>.<station>
+    //   - cave-attached:   cave_<uuid>.<file-begin>.<station>
+    // External Survex files can introduce nested *begin scopes that
+    // surface as dotted segments inside the tail, and Walls' empty-name
+    // quirk can emit trailing spaces; tightening the tail to the native
+    // station validator would drop both. The leading \\S guard rejects
+    // pure-whitespace tails (e.g. cave_<uuid>. ) so a malformed external
+    // file can't pollute the lookup with whitespace keys. The cave UUID
+    // prefix is still strictly bounded so the integer-keyed legacy form
+    // ("<digit>.station") remains rejected.
     //
     // CaseInsensitiveOption: cwStationPositionLookup keys via
     // cwStation::canonicalKey() which folds station names to lower case
     // (cwStation.h:66). cavernCaveNameFor() already emits lowercase via
-    // QUuid::Id128, so the hex digits and "cave_" both already arrive in
-    // lower case under the current contract — but the flag keeps the
-    // matcher robust if QUuid::Id128 ever changes its case or if a future
-    // caller hands us a different canonicalisation.
-    const QString stationPattern = cwStationValidator::validCharactersRegex().pattern();
+    // QUuid::Id128 — but the flag keeps the matcher robust if QUuid::Id128
+    // ever changes its case.
     return QRegularExpression(
-        QStringLiteral("^cave_([0-9a-fA-F]{32})\\.(%1)$").arg(stationPattern),
+        QStringLiteral("^cave_([0-9a-fA-F]{32})\\.(\\S.*)$"),
         QRegularExpression::CaseInsensitiveOption);
 }
 
@@ -293,8 +298,15 @@ private:
 
     bool exportSurvex(const QString& svxPath, cwLinePlotTask::LinePlotResultData& result)
     {
+        // The line-plot driver always emits InternalUuid-style cave names
+        // (encodeCaveNames already rewrote cave.name); the attachment-dir
+        // maps come straight from the Input the caller built.
+        cwSurvexExporterRegion::Options exportOptions;
+        exportOptions.caveAttachmentDirs = InputData.caveAttachmentDirs;
+        exportOptions.tripAttachmentDirs = InputData.tripAttachmentDirs;
+
         const Monad::ResultBase r =
-            cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath);
+            cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath, exportOptions);
         if (r.hasError()) {
             cwLinePlotTask::SolveError error;
             error.step = cwLinePlotTask::SolveError::Step::Export;
@@ -678,6 +690,16 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion *region)
         input.regionData = region->data();
         input.regionPointers = RegionDataPtrs(region);
     }
+    return input;
+}
+
+cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
+                                                 const QHash<QUuid, QString>& caveAttachmentDirs,
+                                                 const QHash<QUuid, QString>& tripAttachmentDirs)
+{
+    Input input = buildInput(region);
+    input.caveAttachmentDirs = caveAttachmentDirs;
+    input.tripAttachmentDirs = tripAttachmentDirs;
     return input;
 }
 

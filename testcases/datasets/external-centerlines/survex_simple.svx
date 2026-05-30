@@ -1,7 +1,10 @@
 ; Simple Survex centerline used by the external-centerline scanner
-; tests. No *include directives; the scanner should resolve this to
-; a single-element dependency list.
+; tests and the [Attach][Trip]/[Attach][Mixed] driver-emission tests.
+; Self-fixing (*fix A1 at origin) so the attached scope cavern emits
+; positions for even when the parent driver has no shared station to
+; connect against.
 *begin Simple
+*fix A1 0 0 0
 *data normal from to tape compass clino
 A1 A2 10.0 0 0
 A2 A3 8.5 90 0

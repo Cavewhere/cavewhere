@@ -61,6 +61,17 @@ public:
     Q_INVOKABLE void setRenderLinePlot(cwRenderLinePlot* linePlot);
     void setFutureManagerToken(cwFutureManagerToken token);
 
+    // Per-owner attachment directories (abs paths on disk) consumed by
+    // the line-plot driver's *include emission. Populated by the project
+    // wiring (commit 9) from cwSaveLoad::externalCenterlineDir(owner); the
+    // [Attach][...] tests call these setters directly. The maps are read
+    // by every subsequent runSurvex() call and baked into the cwLinePlotTask
+    // Input — change them while a solve is in flight and the in-flight
+    // solve still sees the old map (the Input copy is already made), and
+    // the next solve picks up the new one.
+    void setCaveAttachmentDirs(QHash<QUuid, QString> dirs);
+    void setTripAttachmentDirs(QHash<QUuid, QString> dirs);
+
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);
 
@@ -98,6 +109,9 @@ private:
     std::optional<cwLinePlotTask::SolveError> m_lastSolveError;
     QString m_lastCavernLog;
     QString m_lastLoopClosureStats;
+
+    QHash<QUuid, QString> m_caveAttachmentDirs;
+    QHash<QUuid, QString> m_tripAttachmentDirs;
 
     bool AutomaticUpdate = true;
 

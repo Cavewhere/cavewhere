@@ -1,5 +1,9 @@
-; Inner passage. Leaf node of the nested fixture chain.
+; Inner passage. Leaf node of the nested fixture chain. Connects to
+; the parent Entrance scope through a shot E2 -> Passage.P1 emitted
+; from entrance.svx after the *include, so cavern can solve the entire
+; closure as one connected component without a *fix here.
 *begin Passage
 *data normal from to tape compass clino
 P1 P2 6.5 45 -5
+P2 P3 4.0 90 0
 *end Passage
