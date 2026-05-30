@@ -18,8 +18,11 @@
 
 //Our includes
 #include "cwCavingRegion.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
 #include "cwLazLoader.h"
 #include "cwProject.h"
+#include "cwSaveLoad.h"
 
 Q_LOGGING_CATEGORY(lcLazModel, "cw.laz.model")
 
@@ -117,9 +120,16 @@ void cwLazLayerModel::removeAt(int index)
     if (index < 0 || index >= m_layers.size()) {
         return;
     }
-    const QString fileName = QFileInfo(m_layers.at(index)->sourcePath()).fileName();
+    cwLazLayer* layer = m_layers.at(index);
+    const QString fileName = QFileInfo(layer->sourcePath()).fileName();
+    // Emit before beginRemoveRows so cwSaveLoad's slot resolves the .cwlaz
+    // path through m_objectStates while the entry is still live; the
+    // rowsAboutToBeRemoved handler drops the entry immediately after.
+    // Rescan-driven removals deliberately skip this signal so an
+    // externally-moved .laz doesn't take its paired .cwlaz with it.
+    emit aboutToRemoveLayerByUser(layer);
     beginRemoveRows(QModelIndex(), index, index);
-    cwLazLayer* layer = m_layers.takeAt(index);
+    m_layers.takeAt(index);
     endRemoveRows();
     layer->deleteLater();
     emit countChanged();
@@ -329,12 +339,41 @@ void cwLazLayerModel::rescan()
         // and rejected filter pipelines, thrashing cwKeywordVisibility
         // (last-inserted wins).
         layer->setSourcePath(path);
-        // Apply any pending overlay state BEFORE announcing the row, so
-        // observers that wire into rowsInserted (e.g. cwSaveLoad's
-        // enabledChanged → saveMetadata) don't see a default-enabled
-        // layer first and a disabled one a moment later, which would
-        // trigger a redundant save of the metadata we just loaded.
-        applyPendingStateTo(layer);
+
+        // Apply persisted state from the paired <basename>.cwlaz before
+        // announcing the row, so observers wired into rowsInserted (the
+        // scene node, keyword filter pipeline, cwSaveLoad's enabledChanged
+        // hookup) see the final UUID + enabled bit on their first
+        // observation.
+        const QString metadataPath = m_gisLayersDir.absoluteFilePath(
+                    QFileInfo(path).completeBaseName() + QStringLiteral(".cwlaz"));
+        if (QFileInfo::exists(metadataPath)) {
+            auto result = cwSaveLoad::loadLazLayer(metadataPath);
+            if (result.hasError()) {
+                // A corrupt .cwlaz cannot be silently replaced — the next
+                // save would mint a fresh UUID and permanently lose the
+                // persisted identity. Skip the layer; surface the failure
+                // through cwErrorModel so the user can investigate.
+                qCWarning(lcLazModel) << "rescan: skipping" << entry.fileName()
+                                      << "— failed to load" << metadataPath
+                                      << ":" << result.errorMessage();
+                if (auto* p = project()) {
+                    p->errorModel()->append(cwError(
+                        tr("Cannot load LAZ layer %1: %2")
+                            .arg(entry.fileName(), result.errorMessage()),
+                        cwError::Warning));
+                }
+                delete layer;
+                continue;
+            }
+            layer->setData(result.value());
+        } else {
+            // Fall back to the legacy proto-driven overlay for the saveAs
+            // transient case. The .cwlaz is the new primary source of
+            // truth; this branch only runs when none exists on disk yet
+            // (commit 3 retires the proto field).
+            applyPendingStateTo(layer);
+        }
         qCDebug(lcLazModel) << "rescan: insert" << shortId(layer)
                             << "file=" << entry.fileName();
         beginInsertRows(QModelIndex(), row, row);

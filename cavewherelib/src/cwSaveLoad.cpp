@@ -3528,48 +3528,82 @@ void cwSaveLoad::connectTreeModel()
         // (which already flushes + commits after copy). Watch removal here so
         // the queued delete + metadata flush + commit all fire together.
         if (auto* lazLayers = region->lazLayers()) {
-            connect(lazLayers, &QAbstractItemModel::rowsAboutToBeRemoved,
-                    this, [this, lazLayers](const QModelIndex& parent, int first, int last) {
-                Q_UNUSED(parent);
-                for (int row = first; row <= last; ++row) {
-                    cwLazLayer* layer = lazLayers->layerAt(row);
-                    if (layer == nullptr) {
-                        continue;
-                    }
-                    const QString sourcePath = layer->sourcePath();
-                    if (sourcePath.isEmpty()) {
-                        continue;
-                    }
+            // User-initiated removal: enqueue file deletions before
+            // beginRemoveRows fires, so addFileSystemJob can still resolve
+            // the .cwlaz path through the live m_objectStates entry. The
+            // rowsAboutToBeRemoved handler below then drops the entry.
+            connect(lazLayers, &cwLazLayerModel::aboutToRemoveLayerByUser,
+                    this, [this](cwLazLayer* layer) {
+                if (layer == nullptr) {
+                    return;
+                }
+                // .laz source file: path comes from the layer directly
+                // (not tracked by m_objectStates — the LAZ is the
+                // user-supplied sibling artifact, not the metadata file
+                // owned by cwSaveLoad).
+                const QString sourcePath = layer->sourcePath();
+                if (!sourcePath.isEmpty()) {
                     cwSaveLoadPrivate::Job job;
                     job.action = cwSaveLoadPrivate::Job::Action::Remove;
                     job.kind = cwSaveLoadPrivate::Job::Kind::File;
                     job.oldPath = sourcePath;
                     d->addExplicitFileSystemJob(job, this);
                 }
+                // .cwlaz: path resolved through m_objectStates by
+                // addFileSystemJob so a prior in-flight rename is honored.
+                d->addFileSystemJob(cwSaveLoadPrivate::Job{
+                    layer,
+                    cwSaveLoadPrivate::Job::Kind::File,
+                    cwSaveLoadPrivate::Job::Action::Remove
+                }, this);
+            });
+
+            // Bookkeeping: drop the m_objectStates entry for every removed
+            // layer regardless of cause (user remove OR rescan-driven
+            // file-vanished removal). File-kind Remove jobs don't clean it
+            // up themselves (only Directory-kind Remove does), and the
+            // layer pointer becomes dangling once deleteLater fires.
+            connect(lazLayers, &QAbstractItemModel::rowsAboutToBeRemoved,
+                    this, [this, lazLayers](const QModelIndex& parent, int first, int last) {
+                Q_UNUSED(parent);
+                for (int row = first; row <= last; ++row) {
+                    if (cwLazLayer* layer = lazLayers->layerAt(row)) {
+                        d->m_objectStates.remove(layer);
+                    }
+                }
             });
             connect(lazLayers, &QAbstractItemModel::rowsRemoved, this, saveMetadata);
 
-            // cwLazLayerModel applies the persisted overlay to layers as
-            // they are inserted by rescan(), and prunes the overlay when
-            // the user removes a layer via removeAt(). Here we only need
-            // to make sure subsequent edits to a layer's enabled bit
-            // trigger a metadata save: wire enabledChanged for existing
-            // layers and for any layer inserted later.
-            auto wireEnabled = [this, saveMetadata](cwLazLayer* layer) {
+            // For each new layer: register its expected .cwlaz path in
+            // m_objectStates so saves/renames resolve through the standard
+            // pipeline, eagerly write the .cwlaz when one isn't on disk
+            // (so the auto-generated UUID is persisted on first sight), and
+            // wire enabledChanged → save(layer) so toggling visibility
+            // writes only the .cwlaz, not the whole project metadata.
+            auto wireLayer = [this](cwLazLayer* layer) {
                 if (layer == nullptr) {
                     return;
                 }
-                connect(layer, &cwLazLayer::enabledChanged, this, saveMetadata);
+                const QString metadataPath = absolutePathPrivate(layer);
+                if (!metadataPath.isEmpty()) {
+                    d->seedStatePathFromLoaded(layer, metadataPath);
+                    if (!QFileInfo::exists(metadataPath)) {
+                        save(layer);
+                    }
+                }
+                connect(layer, &cwLazLayer::enabledChanged, this, [this, layer]() {
+                    save(layer);
+                });
             };
             connect(lazLayers, &QAbstractItemModel::rowsInserted,
-                    this, [lazLayers, wireEnabled](const QModelIndex& parent, int first, int last) {
+                    this, [lazLayers, wireLayer](const QModelIndex& parent, int first, int last) {
                 Q_UNUSED(parent);
                 for (int row = first; row <= last; ++row) {
-                    wireEnabled(lazLayers->layerAt(row));
+                    wireLayer(lazLayers->layerAt(row));
                 }
             });
             for (cwLazLayer* layer : lazLayers->layers()) {
-                wireEnabled(layer);
+                wireLayer(layer);
             }
         }
     }

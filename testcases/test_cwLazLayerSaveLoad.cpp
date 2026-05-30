@@ -9,11 +9,18 @@
 #include <QUrl>
 
 #include "cwCavingRegion.h"
+#include "cwErrorListModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwLazLayer.h"
+#include "cwLazLayerData.h"
 #include "cwLazLayerModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
+#include "cwSaveLoad.h"
+
+#include "cavewhere.pb.h"
+#include "cwRegionIOTask.h"
+#include <google/protobuf/util/json_util.h>
 
 #include "LazFixtureHelper.h"
 
@@ -351,4 +358,309 @@ TEST_CASE("cwLazLayer save/load: missing source file → loadStatus == Error",
 
     // With the file removed, rescan() finds nothing — model is empty.
     REQUIRE(root2->project()->cavingRegion()->lazLayers()->count() == 0);
+}
+
+namespace {
+
+// Locate the GIS Layers/ directory inside a saved project, given the .cwproj
+// path returned by project->filename() after a saveAs.
+QDir gisLayersDirForProject(const QString& cwprojPath)
+{
+    return QDir(QFileInfo(cwprojPath).absoluteDir()
+                .absoluteFilePath(cwLazLayerModel::folderName()));
+}
+
+// Hand-write a .cwlaz proto with a fixed UUID + chosen enabled bit so a
+// subsequent rescan() can adopt the persisted identity. Mirrors the bytes
+// cwSaveLoad::toProtoLazLayer + saveProtoMessage would produce, without
+// requiring a live cwSaveLoad in the test.
+bool writeCwlazFile(const QString& path, const QUuid& id, bool enabled)
+{
+    CavewhereProto::LazLayer proto;
+    auto* fv = proto.mutable_fileversion();
+    fv->set_version(cwRegionIOTask::protoVersion());
+    *(fv->mutable_cavewhereversion()) = "test";
+    *(proto.mutable_id()) = id.toString(QUuid::WithoutBraces).toStdString();
+    proto.set_enabled(enabled);
+
+    std::string json;
+    google::protobuf::util::JsonPrintOptions options;
+    options.add_whitespace = true;
+    auto status = google::protobuf::util::MessageToJsonString(proto, &json, options);
+    if (!status.ok()) {
+        return false;
+    }
+    QFile file(path);
+    if (!file.open(QFile::WriteOnly)) {
+        return false;
+    }
+    const qint64 expected = static_cast<qint64>(json.size());
+    return file.write(json.data(), expected) == expected;
+}
+
+} // namespace
+
+TEST_CASE("cwLazLayer .cwlaz: pre-placed sibling sets UUID + enabled on rescan",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // Stand up a project, drop one LAZ into GIS Layers/, then save so the
+    // project root + GIS Layers folder exist on disk.
+    const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("prepl")));
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-preplaced-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    const QString savedPath = project->filename();
+
+    // Find the .laz inside GIS Layers/, and overwrite its sibling .cwlaz with
+    // a fixed UUID + enabled=false. This is the on-disk shape a previous
+    // session (or a collaborator) would have left behind.
+    const QDir gisDir = gisLayersDirForProject(savedPath);
+    const QString lazBase = QFileInfo(externalLaz).completeBaseName();
+    const QString lazInProject = gisDir.absoluteFilePath(lazBase + QStringLiteral(".laz"));
+    REQUIRE(QFile::exists(lazInProject));
+
+    const QUuid fixedId = QUuid::fromString(QStringLiteral("12345678-1234-1234-1234-1234567890ab"));
+    REQUIRE(!fixedId.isNull());
+    const QString cwlazPath = gisDir.absoluteFilePath(lazBase + QStringLiteral(".cwlaz"));
+    REQUIRE(writeCwlazFile(cwlazPath, fixedId, /*enabled=*/false));
+
+    // Reload the project: rescan() pairs the .cwlaz to its .laz and applies
+    // the persisted UUID + enabled bit before announcing the row.
+    auto root2 = std::make_unique<cwRootData>();
+    root2->project()->loadFile(savedPath);
+    root2->project()->waitLoadToFinish();
+    QCoreApplication::processEvents();
+
+    auto* layers = root2->project()->cavingRegion()->lazLayers();
+    REQUIRE(layers->count() == 1);
+    auto* reloaded = layers->layerAt(0);
+    REQUIRE(reloaded != nullptr);
+    REQUIRE(reloaded->id() == fixedId);
+    REQUIRE(reloaded->enabled() == false);
+}
+
+TEST_CASE("cwLazLayer .cwlaz: fresh layer with no sibling is eagerly persisted",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("eager")));
+
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
+
+    // Save the project to settle GIS Layers/ on disk.
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-eager-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    // The .cwlaz must exist next to the .laz with the layer's UUID inside it.
+    const QString savedPath = project->filename();
+    const QDir gisDir = gisLayersDirForProject(savedPath);
+    const QString lazBase = QFileInfo(externalLaz).completeBaseName();
+    const QString cwlazPath = gisDir.absoluteFilePath(lazBase + QStringLiteral(".cwlaz"));
+    REQUIRE(QFileInfo::exists(cwlazPath));
+
+    auto* layer = project->cavingRegion()->lazLayers()->layerAt(0);
+    REQUIRE(layer != nullptr);
+    const QUuid liveId = layer->id();
+    REQUIRE(!liveId.isNull());
+
+    // Loading the .cwlaz must surface the same UUID + default enabled=true.
+    auto loaded = cwSaveLoad::loadLazLayer(cwlazPath);
+    REQUIRE_FALSE(loaded.hasError());
+    REQUIRE(loaded.value().id == liveId);
+    REQUIRE(loaded.value().enabled == true);
+}
+
+TEST_CASE("cwLazLayer .cwlaz: removeAt drops both .laz and .cwlaz",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("rem")));
+
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-rem-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    const QString savedPath = project->filename();
+    const QDir gisDir = gisLayersDirForProject(savedPath);
+    const QString lazBase = QFileInfo(externalLaz).completeBaseName();
+    const QString lazInProject = gisDir.absoluteFilePath(lazBase + QStringLiteral(".laz"));
+    const QString cwlazInProject = gisDir.absoluteFilePath(lazBase + QStringLiteral(".cwlaz"));
+    REQUIRE(QFile::exists(lazInProject));
+    REQUIRE(QFile::exists(cwlazInProject));
+
+    // User-initiated removal: both sibling files must come off disk.
+    project->cavingRegion()->lazLayers()->removeAt(0);
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    REQUIRE_FALSE(QFile::exists(lazInProject));
+    REQUIRE_FALSE(QFile::exists(cwlazInProject));
+}
+
+TEST_CASE("cwLazLayer .cwlaz: orphaned sibling without matching .laz is left untouched",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // Build a project with one LAZ layer, save, then delete the .laz from
+    // disk to simulate the .cwlaz being orphaned (e.g. user moved the .laz
+    // in Finder, or a partial sync).
+    const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("orphan")));
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-orphan-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    const QString savedPath = project->filename();
+    const QDir gisDir = gisLayersDirForProject(savedPath);
+    const QString lazBase = QFileInfo(externalLaz).completeBaseName();
+    const QString lazInProject = gisDir.absoluteFilePath(lazBase + QStringLiteral(".laz"));
+    const QString cwlazInProject = gisDir.absoluteFilePath(lazBase + QStringLiteral(".cwlaz"));
+    REQUIRE(QFile::exists(lazInProject));
+    REQUIRE(QFile::exists(cwlazInProject));
+
+    // Delete the .laz externally; .cwlaz now stands alone.
+    REQUIRE(QFile::remove(lazInProject));
+    REQUIRE_FALSE(QFile::exists(lazInProject));
+    REQUIRE(QFile::exists(cwlazInProject));
+
+    // Reload: rescan sees no .laz, creates no layer, but must not touch the
+    // orphan .cwlaz — preserving identity for a possible reappearance.
+    auto root2 = std::make_unique<cwRootData>();
+    root2->project()->loadFile(savedPath);
+    root2->project()->waitLoadToFinish();
+    root2->project()->waitSaveToFinish();
+    root2->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    REQUIRE(root2->project()->cavingRegion()->lazLayers()->count() == 0);
+    REQUIRE(QFile::exists(cwlazInProject));
+}
+
+TEST_CASE("cwLazLayer .cwlaz: UUID survives close/reopen",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString lazA = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("uuidA")));
+    const QString lazB = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("uuidB")));
+
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    addLazAndWait(root.get(), {lazA, lazB});
+    REQUIRE(project->cavingRegion()->lazLayers()->count() == 2);
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-uuid-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    const QString savedPath = project->filename();
+
+    // Snapshot the live UUIDs by basename (rescan may reorder by name).
+    auto* live = project->cavingRegion()->lazLayers();
+    QHash<QString, QUuid> liveById;
+    for (int i = 0; i < live->count(); ++i) {
+        auto* layer = live->layerAt(i);
+        liveById.insert(QFileInfo(layer->sourcePath()).fileName(), layer->id());
+    }
+
+    auto root2 = std::make_unique<cwRootData>();
+    root2->project()->loadFile(savedPath);
+    root2->project()->waitLoadToFinish();
+    QCoreApplication::processEvents();
+
+    auto* reloaded = root2->project()->cavingRegion()->lazLayers();
+    REQUIRE(reloaded->count() == 2);
+    for (int i = 0; i < reloaded->count(); ++i) {
+        auto* layer = reloaded->layerAt(i);
+        const QString fname = QFileInfo(layer->sourcePath()).fileName();
+        REQUIRE(liveById.contains(fname));
+        REQUIRE(layer->id() == liveById.value(fname));
+    }
+}
+
+TEST_CASE("cwLazLayer .cwlaz: malformed sibling skips layer + reports to errorModel",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // Stand up a project with a LAZ layer + a known-good sibling first.
+    const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("bad")));
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    addLazAndWait(root.get(), {externalLaz});
+    REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-malformed-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    const QString savedPath = project->filename();
+    const QDir gisDir = gisLayersDirForProject(savedPath);
+    const QString lazBase = QFileInfo(externalLaz).completeBaseName();
+    const QString cwlazPath = gisDir.absoluteFilePath(lazBase + QStringLiteral(".cwlaz"));
+    REQUIRE(QFile::exists(cwlazPath));
+
+    // Corrupt the .cwlaz: not valid JSON, not valid proto, but the id field
+    // tag is present so loadLazLayer's malformed-id branch fires.
+    {
+        QFile bad(cwlazPath);
+        REQUIRE(bad.open(QFile::WriteOnly | QFile::Truncate));
+        const QByteArray garbage = "{\"id\":\"NOT-A-UUID\"}";
+        REQUIRE(bad.write(garbage) == garbage.size());
+    }
+
+    // Reload: rescan must skip the bad row entirely and surface a warning
+    // through cwErrorModel rather than silently minting a new UUID over it.
+    auto root2 = std::make_unique<cwRootData>();
+    root2->project()->loadFile(savedPath);
+    root2->project()->waitLoadToFinish();
+    QCoreApplication::processEvents();
+
+    REQUIRE(root2->project()->cavingRegion()->lazLayers()->count() == 0);
+    REQUIRE(root2->project()->errorModel()->count() >= 1);
+    REQUIRE(root2->project()->errorModel()->allMessagesAsText().contains(
+                QFileInfo(externalLaz).fileName()));
+
+    // The malformed .cwlaz must still be on disk — no silent overwrite.
+    REQUIRE(QFile::exists(cwlazPath));
 }

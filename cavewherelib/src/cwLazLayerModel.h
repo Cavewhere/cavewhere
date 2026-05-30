@@ -89,6 +89,14 @@ public:
 signals:
     void countChanged();
 
+    /// Emitted only from removeAt() — i.e. when the user explicitly removes
+    /// a layer through the UI. cwSaveLoad listens for this to enqueue the
+    /// paired .laz + .cwlaz deletions. Rescan-driven removals (file
+    /// vanished from disk by other means) deliberately do NOT emit this,
+    /// so the paired .cwlaz survives the in-memory removal and identity
+    /// can resume if the .laz reappears later.
+    void aboutToRemoveLayerByUser(cwLazLayer* layer);
+
 private:
     void connectLayer(cwLazLayer* layer);
     int indexOf(cwLazLayer* layer) const;
