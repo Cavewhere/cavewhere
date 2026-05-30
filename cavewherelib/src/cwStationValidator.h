@@ -34,8 +34,8 @@ class cwStationValidator : public cwValidator
 public:
     explicit cwStationValidator(QObject *parent = 0);
 
-    State validate( QString & input, int & pos ) const;
-    Q_INVOKABLE int validate( QString input ) const;
+    State validate( QString & input, int & pos ) const override;
+    Q_INVOKABLE int validate( QString input ) const override;
 
     bool external() const { return m_external; }
     void setExternal(bool external);
@@ -45,14 +45,12 @@ public:
     // cave or trip - we do not want users typing dotted or whitespace
     // names into native data and silently breaking export round-trips.
     static QRegularExpression validCharactersRegex();
-    static QRegularExpression invalidCharactersRegex();
 
     // Relaxed station-name regex used inside externally-backed entities.
     // Accepts everything in validCharactersRegex() plus dots (Survex /
     // Compass nested namespaces, "block.station") and a literal space
     // (Walls feet-and-inches quirk). Master plan section 7.2.
     static QRegularExpression externalStationCharactersRegex();
-    static QRegularExpression externalInvalidCharactersRegex();
 
 signals:
     void externalChanged();

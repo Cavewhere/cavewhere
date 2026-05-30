@@ -132,19 +132,11 @@ TEST_CASE("Static regex accessors compile and accept the documented characters",
     // Pin the static accessors so downstream consumers (sketch input
     // highlighting, scrap station-reference popovers) that hold the
     // regex directly see the same character set as validate() does.
-    // The invalid-character regex variants are documented inverses but
-    // use a zero-or-more pattern that trivially matches an empty span,
-    // so we only assert isValid() on them here and let the
-    // validate() tests above lock the behavioural contract.
     const QRegularExpression nativeValid = cwStationValidator::validCharactersRegex();
     const QRegularExpression externalValid = cwStationValidator::externalStationCharactersRegex();
-    const QRegularExpression nativeInvalid = cwStationValidator::invalidCharactersRegex();
-    const QRegularExpression externalInvalid = cwStationValidator::externalInvalidCharactersRegex();
 
     REQUIRE(nativeValid.isValid());
     REQUIRE(externalValid.isValid());
-    REQUIRE(nativeInvalid.isValid());
-    REQUIRE(externalInvalid.isValid());
 
     CHECK(nativeValid.match(QStringLiteral("A1")).hasMatch());
     CHECK_FALSE(nativeValid.match(QStringLiteral(".")).hasMatch());
