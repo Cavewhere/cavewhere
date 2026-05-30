@@ -127,6 +127,33 @@ void cwLazLayer::setSourcePath(const QString& path)
     reload();
 }
 
+void cwLazLayer::renameSourcePath(const QString& newPath)
+{
+    if (m_sourcePath == newPath) {
+        return;
+    }
+
+    const QFileInfo info(newPath);
+    m_sourcePath = newPath;
+    // Capture the fingerprint of the new path so the next rescan doesn't see
+    // a size/mtime mismatch and force a reload of unchanged bytes. Use
+    // QFileInfo::exists() to keep -1/invalid sentinels intact for files
+    // that don't exist on disk yet (the Move job hasn't run when this is
+    // called during rename).
+    m_sourceSize = info.exists() ? info.size() : qint64{-1};
+    m_sourceMtime = info.exists() ? info.lastModified() : QDateTime{};
+
+    emit sourcePathChanged();
+
+    const QString basename = info.baseName();
+    if (m_name != basename) {
+        m_name = basename;
+        emit nameChanged();
+        updateNameKeyword();
+    }
+    updateFileNameKeyword();
+}
+
 void cwLazLayer::setPointSize(double pointSize)
 {
     if (qFuzzyCompare(m_pointSize, pointSize)) {

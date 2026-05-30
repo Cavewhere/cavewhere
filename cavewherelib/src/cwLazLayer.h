@@ -76,6 +76,16 @@ public:
     QString sourcePath() const { return m_sourcePath; }
     void setSourcePath(const QString& path);
 
+    /// Update the source path WITHOUT re-running the async loader. Used by
+    /// cwLazLayerModel::rename when the file is being moved on disk to a
+    /// sibling basename inside the same directory — the bytes are unchanged,
+    /// so the already-loaded geometry stays valid. setSourcePath would
+    /// trigger a reload that races against the queued Move job (the new path
+    /// doesn't exist on disk yet when the rename is enqueued). Updates
+    /// m_sourcePath, the cached fingerprint (size/mtime), m_name, and fires
+    /// sourcePathChanged + nameChanged accordingly.
+    void renameSourcePath(const QString& newPath);
+
     /// File size and last-modified timestamp captured the last time
     /// setSourcePath ran. cwLazLayerModel::rescan uses the pair to detect
     /// in-place file overwrites and force a reload.

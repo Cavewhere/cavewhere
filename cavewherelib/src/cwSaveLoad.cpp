@@ -3563,6 +3563,47 @@ void cwSaveLoad::connectTreeModel()
                 }, this);
             });
 
+            // User-initiated rename: the model has already updated the
+            // layer's in-memory sourcePath to newSourcePath and emitted
+            // this signal carrying the old path. Enqueue two tagged Move
+            // jobs so the .laz and .cwlaz move together but never collapse
+            // into each other under compression:
+            //   * tag "source" — explicit .laz move (not m_objectStates-
+            //     tracked, since the user-supplied source file is not the
+            //     metadata file cwSaveLoad owns; addExplicitFileSystemJob
+            //     carries both paths verbatim).
+            //   * tag ""       — .cwlaz move via the standard tracked path
+            //     (m_objectStates holds the old .cwlaz path; addFileSystemJob
+            //     reads absolutePathPrivate(layer) for the new one — that
+            //     resolves to the new basename because renameSourcePath
+            //     ran before this signal fired).
+            connect(lazLayers, &cwLazLayerModel::layerRenamed,
+                    this, [this](cwLazLayer* layer,
+                                 const QString& oldSourcePath,
+                                 const QString& newSourcePath) {
+                if (layer == nullptr) {
+                    return;
+                }
+
+                if (!oldSourcePath.isEmpty() && !newSourcePath.isEmpty()
+                        && oldSourcePath != newSourcePath) {
+                    cwSaveLoadPrivate::Job sourceMove;
+                    sourceMove.objectId = layer;
+                    sourceMove.kind = cwSaveLoadPrivate::Job::Kind::File;
+                    sourceMove.action = cwSaveLoadPrivate::Job::Action::Move;
+                    sourceMove.tag = QStringLiteral("source");
+                    sourceMove.oldPath = oldSourcePath;
+                    sourceMove.path = newSourcePath;
+                    d->addExplicitFileSystemJob(sourceMove, this);
+                }
+
+                d->addFileSystemJob(cwSaveLoadPrivate::Job{
+                    layer,
+                    cwSaveLoadPrivate::Job::Kind::File,
+                    cwSaveLoadPrivate::Job::Action::Move
+                }, this);
+            });
+
             // Bookkeeping: drop the m_objectStates entry for every removed
             // layer regardless of cause (user remove OR rescan-driven
             // file-vanished removal). File-kind Remove jobs don't clean it

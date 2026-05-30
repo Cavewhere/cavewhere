@@ -147,6 +147,139 @@ void cwLazLayerModel::removeAt(int index)
     }
 }
 
+bool cwLazLayerModel::rename(int row, const QString& newBasename)
+{
+    // Route user-visible failures through the project's errorModel —
+    // the same surface rescan() uses to report failed metadata loads.
+    // Returns false so callers can branch on the result; the cwError is
+    // already queued for UI display by the time we return.
+    auto failWith = [this](const QString& message) {
+        if (auto* p = project()) {
+            p->errorModel()->append(cwError(message, cwError::Warning));
+        }
+        return false;
+    };
+
+    if (row < 0 || row >= m_layers.size()) {
+        return failWith(tr("Row %1 is out of range.").arg(row));
+    }
+
+    // Validation: the new basename must be a bare filename (no path
+    // separators, no extension), and non-empty after trimming. Rejecting
+    // a dot anywhere is stricter than "no extension" but matches user
+    // intent — renaming "alpha" to "alpha.v2" would silently change the
+    // suffix the rescan pairs on.
+    const QString trimmed = newBasename.trimmed();
+    if (trimmed.isEmpty()) {
+        return failWith(tr("New name must not be empty."));
+    }
+    if (trimmed.contains(QLatin1Char('/')) || trimmed.contains(QLatin1Char('\\'))) {
+        return failWith(tr("New name must not contain path separators."));
+    }
+    if (trimmed.contains(QLatin1Char('.'))) {
+        return failWith(tr("New name must not contain a file extension."));
+    }
+
+    cwLazLayer* layer = m_layers.at(row);
+    const QString oldSourcePath = layer->sourcePath();
+    const QFileInfo oldInfo(oldSourcePath);
+    const QString suffix = oldInfo.suffix();
+    if (suffix.isEmpty()) {
+        // Without a real extension the new path would end in a trailing
+        // dot, which Win32 silently strips at the filesystem layer and
+        // which breaks rescan's basename pairing on every platform.
+        // .laz / .las are the only extensions the loader accepts, so an
+        // empty suffix means the input layer is already in a broken
+        // state — refuse the rename rather than worsen it.
+        return failWith(tr("Source file has no extension; cannot rename."));
+    }
+    const QDir layerDir = oldInfo.absoluteDir();
+    const QString newSourcePath = layerDir.absoluteFilePath(trimmed + QLatin1Char('.') + suffix);
+    const QString newCwlazPath = layerDir.absoluteFilePath(trimmed + QStringLiteral(".cwlaz"));
+
+    // Exact-equality early-out: identical paths mean nothing to do. Note
+    // the comparison is case-sensitive — case-only renames ("Foo" ->
+    // "foo") are legitimate user operations that need to flow through
+    // the rename pipeline so the on-disk basename matches the user's
+    // intent, even on filesystems where the two names refer to the same
+    // inode.
+    if (oldSourcePath == newSourcePath) {
+        return true;
+    }
+
+    // Collision check against other loaded layers (any extension match on
+    // the new basename) — we cannot tolerate two layers with the same
+    // basename in the same directory since cwLazLayerModel keys identity
+    // on basename.
+    for (int i = 0; i < m_layers.size(); ++i) {
+        if (i == row) {
+            continue;
+        }
+        const cwLazLayer* other = m_layers.at(i);
+        const QFileInfo otherInfo(other->sourcePath());
+        if (otherInfo.absoluteDir().absolutePath() != layerDir.absolutePath()) {
+            continue;
+        }
+        if (otherInfo.completeBaseName().compare(trimmed, Qt::CaseInsensitive) == 0) {
+            return failWith(tr("A layer named \"%1\" already exists.").arg(trimmed));
+        }
+    }
+
+    // Collision check against stray files on disk: a .laz / .las / .cwlaz
+    // sibling at the target basename would be overwritten / orphaned by
+    // the Move job. Reject early; the user can delete the stray and try
+    // again.
+    //
+    // The candidate-vs-oldSourcePath bypass MUST compare case-
+    // insensitively: on macOS HFS+/APFS-CI and Windows NTFS,
+    // QFileInfo::exists matches case-insensitively, so a layer at
+    // "Foo.laz" being renamed to "foo" would find "foo.laz" existing on
+    // disk (it's the same file as "Foo.laz"). Without the case-
+    // insensitive compare, every case-only rename would be rejected.
+    const QStringList strayCandidates = {
+        layerDir.absoluteFilePath(trimmed + QStringLiteral(".laz")),
+        layerDir.absoluteFilePath(trimmed + QStringLiteral(".las")),
+        newCwlazPath
+    };
+    const QString oldCwlazPath = layerDir.absoluteFilePath(
+                oldInfo.completeBaseName() + QStringLiteral(".cwlaz"));
+    for (const QString& candidate : strayCandidates) {
+        if (QString::compare(candidate, oldSourcePath, Qt::CaseInsensitive) == 0) {
+            continue;
+        }
+        if (QString::compare(candidate, oldCwlazPath, Qt::CaseInsensitive) == 0) {
+            continue;
+        }
+        if (QFileInfo::exists(candidate)) {
+            return failWith(tr("A file named \"%1\" already exists in the GIS Layers directory.")
+                            .arg(QFileInfo(candidate).fileName()));
+        }
+    }
+
+    // Rescan-side bookkeeping: the m_pendingStates overlay is keyed by
+    // basename. Re-key BEFORE the signal so any listener that walks
+    // m_pendingStates sees a consistent post-rename view.
+    const QString oldFileName = oldInfo.fileName();
+    const QString newFileName = QFileInfo(newSourcePath).fileName();
+    for (cwLazLayerData& state : m_pendingStates) {
+        if (state.fileName == oldFileName) {
+            state.fileName = newFileName;
+        }
+    }
+
+    // Update the layer's in-memory path so signal listeners (cwSaveLoad)
+    // see the new path when they compute the queued .cwlaz destination
+    // via absolutePathPrivate(layer). renameSourcePath emits
+    // sourcePathChanged + nameChanged synchronously; connectLayer's
+    // per-property handlers already forward those to dataChanged for
+    // SourcePathRole + NameRole, so no manual dataChanged emission is
+    // needed here.
+    layer->renameSourcePath(newSourcePath);
+
+    emit layerRenamed(layer, oldSourcePath, newSourcePath);
+    return true;
+}
+
 cwLazLayer* cwLazLayerModel::layerAt(int index) const
 {
     if (index < 0 || index >= m_layers.size()) {

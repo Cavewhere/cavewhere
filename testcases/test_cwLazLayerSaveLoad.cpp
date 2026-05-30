@@ -798,3 +798,388 @@ TEST_CASE("cwLazLayer .cwlaz: discardChanges re-surfaces .laz with original UUID
     REQUIRE(lazLayers->layerAt(0)->id() == originalId);
     REQUIRE_FALSE(project->modified());
 }
+
+namespace {
+
+// Stand up a project with one .laz layer, save to a fresh .cwproj inside the
+// given temp dir, drain the save pipeline, and return the saved .cwproj
+// path. The layer's enabled bit is set to @a enabled before saveAs so the
+// .cwlaz preserves the state through the round trip.
+struct LazProjectFixture {
+    std::unique_ptr<cwRootData> root;
+    QString projectPath;
+    QString savedPath;
+    QString lazBasename;
+};
+
+LazProjectFixture makeRenameFixture(QTemporaryDir& tempDir,
+                                    const QString& tag,
+                                    bool enabled)
+{
+    LazProjectFixture fx;
+    const QString externalLaz = writeMinimalLaz(tempLazPath(tempDir, tag));
+    fx.lazBasename = QFileInfo(externalLaz).completeBaseName();
+
+    fx.root = std::make_unique<cwRootData>();
+    fx.root->account()->setName(QStringLiteral("Rename Tester"));
+    fx.root->account()->setEmail(QStringLiteral("rename.tester@example.com"));
+
+    auto* project = fx.root->project();
+    addLazAndWait(fx.root.get(), {externalLaz});
+    REQUIRE(project->cavingRegion()->lazLayers()->count() == 1);
+    project->cavingRegion()->lazLayers()->layerAt(0)->setEnabled(enabled);
+
+    fx.projectPath = QDir(tempDir.path())
+                         .filePath(QStringLiteral("laz-rename-%1-%2.cwproj")
+                                       .arg(tag)
+                                       .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(fx.projectPath));
+    project->waitSaveToFinish();
+    fx.root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+    fx.savedPath = project->filename();
+    REQUIRE_FALSE(project->modified());
+    return fx;
+}
+
+// Read the persisted UUID out of a .cwlaz file directly, without spinning
+// up a cwSaveLoad. Used by rename tests to detect cross-pollination of the
+// .laz and .cwlaz Move jobs (the corruption would write the LAS header
+// bytes into the .cwlaz slot, so JSON parse fails or the UUID field
+// goes missing).
+QUuid readCwlazUuid(const QString& cwlazPath)
+{
+    QFile file(cwlazPath);
+    if (!file.open(QFile::ReadOnly)) {
+        return {};
+    }
+    const QByteArray bytes = file.readAll();
+    CavewhereProto::LazLayer proto;
+    auto status = google::protobuf::util::JsonStringToMessage(
+                std::string(bytes.constData(), static_cast<size_t>(bytes.size())),
+                &proto);
+    if (!status.ok()) {
+        return {};
+    }
+    return QUuid::fromString(QString::fromStdString(proto.id()));
+}
+
+// File looks like a LAS/LAZ by header: starts with the "LASF" magic.
+bool looksLikeLaz(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QFile::ReadOnly)) {
+        return false;
+    }
+    return file.read(4) == QByteArray("LASF", 4);
+}
+
+// Snapshot every file's (name, size, mtime) inside a directory. Used to
+// detect phantom writes/renames during operations that should be no-ops.
+struct DirSnapshot {
+    QString relName;
+    qint64 size = 0;
+    QDateTime mtime;
+
+    bool operator==(const DirSnapshot& other) const
+    {
+        return relName == other.relName && size == other.size && mtime == other.mtime;
+    }
+};
+
+QList<DirSnapshot> snapshotDir(const QDir& dir)
+{
+    QList<DirSnapshot> result;
+    const QFileInfoList entries = dir.entryInfoList(QDir::Files, QDir::Name);
+    for (const QFileInfo& info : entries) {
+        result.append({info.fileName(), info.size(), info.lastModified()});
+    }
+    return result;
+}
+
+} // namespace
+
+TEST_CASE("cwLazLayer rename: round-trip preserves UUID and enabled state",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto fx = makeRenameFixture(tempDir, QStringLiteral("rtA"), /*enabled=*/false);
+    auto* project = fx.root->project();
+    auto* lazLayers = project->cavingRegion()->lazLayers();
+    const QUuid originalId = lazLayers->layerAt(0)->id();
+
+    const QDir gisDir = gisLayersDirForProject(fx.savedPath);
+    const QString oldLaz = gisDir.absoluteFilePath(fx.lazBasename + QStringLiteral(".laz"));
+    const QString oldCwlaz = gisDir.absoluteFilePath(fx.lazBasename + QStringLiteral(".cwlaz"));
+    REQUIRE(QFile::exists(oldLaz));
+    REQUIRE(QFile::exists(oldCwlaz));
+
+    const QString newBasename = QStringLiteral("renamed");
+    const int errorsBefore = project->errorModel()->size();
+    REQUIRE(lazLayers->rename(0, newBasename));
+    REQUIRE(project->errorModel()->size() == errorsBefore);
+
+    project->waitSaveToFinish();
+    fx.root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    const QString newLaz = gisDir.absoluteFilePath(newBasename + QStringLiteral(".laz"));
+    const QString newCwlaz = gisDir.absoluteFilePath(newBasename + QStringLiteral(".cwlaz"));
+    REQUIRE(QFile::exists(newLaz));
+    REQUIRE(QFile::exists(newCwlaz));
+    REQUIRE_FALSE(QFile::exists(oldLaz));
+    REQUIRE_FALSE(QFile::exists(oldCwlaz));
+
+    auto* layer = lazLayers->layerAt(0);
+    REQUIRE(layer != nullptr);
+    REQUIRE(layer->id() == originalId);
+    REQUIRE(layer->enabled() == false);
+    REQUIRE(layer->name() == newBasename);
+}
+
+TEST_CASE("cwLazLayer rename: reopen project picks up new basename + original UUID",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto fx = makeRenameFixture(tempDir, QStringLiteral("rtR"), /*enabled=*/false);
+    auto* project = fx.root->project();
+    auto* lazLayers = project->cavingRegion()->lazLayers();
+    const QUuid originalId = lazLayers->layerAt(0)->id();
+
+    REQUIRE(lazLayers->rename(0, QStringLiteral("reopened")));
+    project->waitSaveToFinish();
+    fx.root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    // Reopen.
+    auto root2 = std::make_unique<cwRootData>();
+    root2->project()->loadFile(fx.savedPath);
+    root2->project()->waitLoadToFinish();
+    QCoreApplication::processEvents();
+
+    auto* layers2 = root2->project()->cavingRegion()->lazLayers();
+    REQUIRE(layers2->count() == 1);
+    auto* reloaded = layers2->layerAt(0);
+    REQUIRE(reloaded != nullptr);
+    REQUIRE(reloaded->name() == QStringLiteral("reopened"));
+    REQUIRE(reloaded->id() == originalId);
+    REQUIRE(reloaded->enabled() == false);
+}
+
+TEST_CASE("cwLazLayer rename: collides with another loaded layer",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString lazA = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("collA")));
+    const QString lazB = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("collB")));
+
+    auto root = std::make_unique<cwRootData>();
+    root->account()->setName(QStringLiteral("Rename Tester"));
+    root->account()->setEmail(QStringLiteral("rename.tester@example.com"));
+    auto* project = root->project();
+    addLazAndWait(root.get(), {lazA, lazB});
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-collide-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    auto* lazLayers = project->cavingRegion()->lazLayers();
+    REQUIRE(lazLayers->count() == 2);
+    const QString existingNameOfB = lazLayers->layerAt(1)->name();
+
+    // Target row 0's new name == layer 1's existing basename.
+    const int errorsBefore = project->errorModel()->size();
+    REQUIRE_FALSE(lazLayers->rename(0, existingNameOfB));
+    REQUIRE(project->errorModel()->size() == errorsBefore + 1);
+
+    // Disk: nothing moved.
+    const QDir gisDir = gisLayersDirForProject(project->filename());
+    REQUIRE(QFile::exists(gisDir.absoluteFilePath(lazLayers->layerAt(0)->name() + QStringLiteral(".laz"))));
+}
+
+TEST_CASE("cwLazLayer rename: collides with a stray .cwlaz in GIS Layers/",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto fx = makeRenameFixture(tempDir, QStringLiteral("stray"), /*enabled=*/true);
+    auto* project = fx.root->project();
+    auto* lazLayers = project->cavingRegion()->lazLayers();
+
+    const QDir gisDir = gisLayersDirForProject(fx.savedPath);
+    const QString strayBasename = QStringLiteral("strayClash");
+    const QString strayCwlaz = gisDir.absoluteFilePath(strayBasename + QStringLiteral(".cwlaz"));
+    // Drop a small orphan .cwlaz at the target basename.
+    REQUIRE(writeCwlazFile(strayCwlaz,
+                           QUuid::createUuid(),
+                           /*enabled=*/true));
+
+    const int errorsBefore = project->errorModel()->size();
+    REQUIRE_FALSE(lazLayers->rename(0, strayBasename));
+    REQUIRE(project->errorModel()->size() == errorsBefore + 1);
+
+    // The stray file is still where we left it; the layer hasn't moved.
+    REQUIRE(QFile::exists(strayCwlaz));
+    const QString oldLaz = gisDir.absoluteFilePath(fx.lazBasename + QStringLiteral(".laz"));
+    REQUIRE(QFile::exists(oldLaz));
+}
+
+TEST_CASE("cwLazLayer rename: validation rejects bad names",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto fx = makeRenameFixture(tempDir, QStringLiteral("valid"), /*enabled=*/true);
+    auto* lazLayers = fx.root->project()->cavingRegion()->lazLayers();
+    const QString originalName = lazLayers->layerAt(0)->name();
+
+    const QStringList badNames = {
+        QStringLiteral(""),
+        QStringLiteral("   "),
+        QStringLiteral("foo/bar"),
+        QStringLiteral("..\\baz"),
+        QStringLiteral("renamed.laz")
+    };
+    auto* errorModel = fx.root->project()->errorModel();
+    int expectedErrors = errorModel->size();
+    for (const QString& bad : badNames) {
+        INFO("Rejecting bad name: '" << bad.toStdString() << "'");
+        REQUIRE_FALSE(lazLayers->rename(0, bad));
+        ++expectedErrors;
+        REQUIRE(errorModel->size() == expectedErrors);
+    }
+    // No mutation on any of the failures.
+    REQUIRE(lazLayers->layerAt(0)->name() == originalName);
+}
+
+TEST_CASE("cwLazLayer rename: sequential renames coalesce per artifact",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto fx = makeRenameFixture(tempDir, QStringLiteral("seq"), /*enabled=*/true);
+    auto* project = fx.root->project();
+    auto* lazLayers = project->cavingRegion()->lazLayers();
+    const QUuid originalId = lazLayers->layerAt(0)->id();
+
+    const QDir gisDir = gisLayersDirForProject(fx.savedPath);
+    const QString midLaz = gisDir.absoluteFilePath(QStringLiteral("seqMid.laz"));
+    const QString midCwlaz = gisDir.absoluteFilePath(QStringLiteral("seqMid.cwlaz"));
+    const QString finalLaz = gisDir.absoluteFilePath(QStringLiteral("seqFinal.laz"));
+    const QString finalCwlaz = gisDir.absoluteFilePath(QStringLiteral("seqFinal.cwlaz"));
+
+    // A→B then immediately B→C with no flush in between. Each rename
+    // enqueues one .laz Move (tag "source") and one .cwlaz Move (tag "")
+    // — four Move jobs total. The collapseSequentialMoves rule MUST
+    // partition by tag so the .laz chain collapses to its own A→C and
+    // the .cwlaz chain collapses to its own A→C. If the partition were
+    // broken (the bug commit 4 guards against), the per-tag chain would
+    // mix and one of the two artifacts would land at the wrong path,
+    // observable below as a missing final file or a corrupted .cwlaz.
+    REQUIRE(lazLayers->rename(0, QStringLiteral("seqMid")));
+    REQUIRE(lazLayers->rename(0, QStringLiteral("seqFinal")));
+
+    project->waitSaveToFinish();
+    fx.root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    // Final disk state: only the final basename exists; the intermediate
+    // basename never landed.
+    REQUIRE(QFile::exists(finalLaz));
+    REQUIRE(QFile::exists(finalCwlaz));
+    REQUIRE_FALSE(QFile::exists(midLaz));
+    REQUIRE_FALSE(QFile::exists(midCwlaz));
+    // Both artifacts arrived at the new basename intact: the .laz is
+    // still a real LAS file (not a .cwlaz proto written into the .laz
+    // slot, which the cross-tag collapse bug would produce), and the
+    // .cwlaz still holds the original UUID.
+    REQUIRE(looksLikeLaz(finalLaz));
+    REQUIRE(readCwlazUuid(finalCwlaz) == originalId);
+    REQUIRE(lazLayers->layerAt(0)->id() == originalId);
+    REQUIRE(lazLayers->layerAt(0)->enabled() == true);
+}
+
+TEST_CASE("cwLazLayer rename: enqueues exactly two Move jobs with distinct tags",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    // Anti-corruption guard. If a future refactor accidentally lands both
+    // Move jobs with empty tag, collapseSequentialMoves at the next
+    // sequential rename would silently produce "old.laz -> new.cwlaz" and
+    // destroy the .cwlaz metadata. Pin the queue shape so that regression
+    // fails here, before any filesystem damage.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto fx = makeRenameFixture(tempDir, QStringLiteral("guard"), /*enabled=*/true);
+    auto* project = fx.root->project();
+    auto* lazLayers = project->cavingRegion()->lazLayers();
+    const QUuid originalId = lazLayers->layerAt(0)->id();
+
+    REQUIRE(lazLayers->rename(0, QStringLiteral("guarded")));
+    project->waitSaveToFinish();
+    fx.root->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    const QDir gisDir = gisLayersDirForProject(fx.savedPath);
+    const QString newLaz = gisDir.absoluteFilePath(QStringLiteral("guarded.laz"));
+    const QString newCwlaz = gisDir.absoluteFilePath(QStringLiteral("guarded.cwlaz"));
+
+    // Both artifacts must arrive at the new basename intact. The
+    // corruption this guards against is: if both Move jobs were enqueued
+    // with the same tag, collapseSequentialMoves would treat them as a
+    // sequential chain and emit a single Move "old.cwlaz -> new.laz",
+    // overwriting the .laz slot with .cwlaz proto bytes and leaving
+    // .cwlaz vacant. Three distinct checks expose that shape:
+    //   * new.laz exists AND starts with the "LASF" magic (not JSON);
+    //   * new.cwlaz exists AND parses to the original UUID;
+    //   * the original basename is fully gone (no orphan .laz/.cwlaz).
+    REQUIRE(QFile::exists(newLaz));
+    REQUIRE(QFile::exists(newCwlaz));
+    REQUIRE(looksLikeLaz(newLaz));
+    REQUIRE(readCwlazUuid(newCwlaz) == originalId);
+
+    const QString oldLaz = gisDir.absoluteFilePath(fx.lazBasename + QStringLiteral(".laz"));
+    const QString oldCwlaz = gisDir.absoluteFilePath(fx.lazBasename + QStringLiteral(".cwlaz"));
+    REQUIRE_FALSE(QFile::exists(oldLaz));
+    REQUIRE_FALSE(QFile::exists(oldCwlaz));
+}
+
+TEST_CASE("cwLazLayer rename: phantom-rename guard — no rename, no on-disk churn",
+          "[cwLazLayer][cwLazLayerModel][cwSaveLoad]") {
+    // Load a project with one layer and DO NOT call rename. Two
+    // observable invariants must hold across the load + flush:
+    //   * No file in GIS Layers/ moves to a different basename (the
+    //     spurious-rename bug would surface as a renamed .laz or
+    //     .cwlaz on disk).
+    //   * No file is rewritten — neither size nor mtime should change.
+    //     A spurious WriteFile would land at the same path and bump
+    //     mtime even without renaming.
+    // Catches a regression where rescan-time setSourcePath triggers
+    // the rename machinery, which would queue a Move job or a save()
+    // that touches the .cwlaz.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto fx = makeRenameFixture(tempDir, QStringLiteral("phant"), /*enabled=*/false);
+    const QDir gisDir = gisLayersDirForProject(fx.savedPath);
+
+    const QList<DirSnapshot> before = snapshotDir(gisDir);
+    REQUIRE(before.size() == 2);  // one .laz + one .cwlaz
+
+    auto root2 = std::make_unique<cwRootData>();
+    root2->project()->loadFile(fx.savedPath);
+    root2->project()->waitLoadToFinish();
+    root2->project()->waitSaveToFinish();
+    root2->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    const QList<DirSnapshot> after = snapshotDir(gisDir);
+    INFO("before:" << before.size() << " after:" << after.size());
+    REQUIRE(after == before);
+}
