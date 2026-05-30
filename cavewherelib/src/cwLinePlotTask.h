@@ -30,6 +30,8 @@ class cwCave;
 #include <QList>
 #include <QPair>
 #include <QMultiHash>
+#include <QRegularExpression>
+#include <QUuid>
 
 //Std includes
 #include <optional>
@@ -189,6 +191,31 @@ public:
 
     static Input buildInput(const cwCavingRegion* region);
     static QFuture<LinePlotResultData> run(Input input);
+
+    /**
+     * Cave-name encoding contract used by the line-plot driver.
+     *
+     * cavernCaveNameFor(id) produces the synthetic *begin name written to
+     * the worker's intermediate .svx ("cave_<32 hex of QUuid::Id128>"). The
+     * matching regex (cavernStationRegex) parses cavern's emitted lines of
+     * the form "cave_<32 hex>.<station>" back into a (QUuid, station) pair.
+     *
+     * Exposed as public statics so the [LinePlot][UuidPrefix] tests can pin
+     * the contract: cwSurvexExporterRegion stamps this name into the .svx,
+     * cavern echoes it back as a station prefix, and splitLookupByCave
+     * recovers the cwCave::id() it came from. The names are never visible to
+     * the user - the user-facing exporter (cwSurveyExportManager) operates
+     * on the original snapshot before the rewrite and keeps friendly cave
+     * names intact.
+     *
+     * The regex deliberately rejects the previous "<integer>.<station>"
+     * form: the integer was a position-in-list with no meaning outside the
+     * driver's snapshot, so if cavern ever surfaces such a line in a UUID
+     * build it indicates the encoding bypass we want surfaced as a parse
+     * miss, not silently folded into cave 0.
+     */
+    static QString cavernCaveNameFor(const QUuid& caveId);
+    static QRegularExpression cavernStationRegex();
 
 
 

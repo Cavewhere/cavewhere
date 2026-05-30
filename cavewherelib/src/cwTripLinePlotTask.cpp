@@ -23,6 +23,7 @@
 #include <QHash>
 #include <QQueue>
 #include <QSet>
+#include <QUuid>
 #include <algorithm>
 
 namespace {
@@ -193,6 +194,13 @@ cwLinePlotTask::Input buildLinePlotInput(const QString &tripName,
 
     cwCaveData caveData;
     caveData.name = QStringLiteral("sketch-trip"); // worker will re-encode
+    // cwLinePlotTask hashes per-cave bookkeeping by cwCaveData::id (the
+    // same UUID surfaces in the cavern station prefix). Synthetic input
+    // built here doesn't have a stable cave identity, but the id needs to
+    // be non-null so encodeCaveNames and the regionPointers cave (built
+    // from the same `caveData` below) end up on the same UUID. Generate
+    // once here and let the throwaway region adopt it via setData.
+    caveData.id = QUuid::createUuid();
     caveData.trips.append(tripData);
 
     cwLinePlotTask::Input input;

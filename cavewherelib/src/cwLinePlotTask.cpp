@@ -26,13 +26,76 @@
 #include "cwErrorModel.h"
 
 // Qt includes
+#include <QHash>
 #include <QTemporaryDir>
 #include <QRegularExpression>
 #include <QFileInfo>
 #include <QFile>
 #include <QDir>
+#include <QUuid>
 #include <QtGlobal>
 #include <cmath>
+
+namespace {
+
+// Cave name encoding used by the line-plot driver. Cave names emitted by
+// cwSurvexExporterRegion become survex *begin / *end identifiers, and cavern
+// prefixes every station in a cave with that identifier. We pick a synthetic
+// "cave_<32 hex>" form (the cave UUID in QUuid::Id128 layout) so:
+//   - the prefix round-trips: splitLookupByCave can recover the QUuid from a
+//     cavern-emitted "cave_<32hex>.<station>" line with no name-collision risk
+//     across caves;
+//   - the survex syntax is satisfied: cave_<hex> only uses [a-zA-Z0-9_], which
+//     matches cwStationValidator::validCharactersRegex();
+//   - the user-facing survex exporter (cwSurveyExportManager) is unaffected -
+//     this rewrite happens on a worker-local copy of the region snapshot, so
+//     human-readable cave names persist in any user-driven export.
+constexpr QLatin1String kCaveNamePrefix("cave_");
+
+// QUuid::fromString refuses the 32-hex-no-hyphens form even when wrapped in
+// braces; it requires either the dashed RFC-4122 layout (36 chars) or the
+// dashed-and-braced layout (38 chars). We emit the no-hyphen form via
+// QUuid::Id128 because it is what cavern's name syntax allows (cavern's
+// validCharactersRegex permits hex + underscore but not hyphens inside an
+// identifier prefix), so on the way back we re-insert hyphens at the
+// 8/4/4/4/12 boundaries before handing the string to QUuid.
+QString reinsertUuidHyphens(const QString& hex32)
+{
+    Q_ASSERT(hex32.size() == 32);
+    return hex32.mid(0, 8) + QLatin1Char('-')
+         + hex32.mid(8, 4) + QLatin1Char('-')
+         + hex32.mid(12, 4) + QLatin1Char('-')
+         + hex32.mid(16, 4) + QLatin1Char('-')
+         + hex32.mid(20, 12);
+}
+
+} // namespace
+
+QString cwLinePlotTask::cavernCaveNameFor(const QUuid& caveId)
+{
+    return kCaveNamePrefix + caveId.toString(QUuid::Id128);
+}
+
+QRegularExpression cwLinePlotTask::cavernStationRegex()
+{
+    // ^cave_<32 hex>\.<station>$ — the trailing pattern matches the same
+    // character class as the native station validator, and the prefix
+    // mirrors cavernCaveNameFor()'s emission. The integer-keyed form used
+    // by earlier builds ("<digits>.station") deliberately stops matching
+    // here.
+    //
+    // CaseInsensitiveOption: cwStationPositionLookup keys via
+    // cwStation::canonicalKey() which folds station names to lower case
+    // (cwStation.h:66). cavernCaveNameFor() already emits lowercase via
+    // QUuid::Id128, so the hex digits and "cave_" both already arrive in
+    // lower case under the current contract — but the flag keeps the
+    // matcher robust if QUuid::Id128 ever changes its case or if a future
+    // caller hands us a different canonicalisation.
+    const QString stationPattern = cwStationValidator::validCharactersRegex().pattern();
+    return QRegularExpression(
+        QStringLiteral("^cave_([0-9a-fA-F]{32})\\.(%1)$").arg(stationPattern),
+        QRegularExpression::CaseInsensitiveOption);
+}
 
 cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
     DepthLengthChanged(false),
@@ -174,25 +237,57 @@ struct cwLinePlotTask::LinePlotWorker {
 private:
     cwLinePlotTask::Input InputData;
     cwCavingRegion Region;
-    QVector<cwStationPositionLookup> CaveStationLookups;
-    QVector<cwLinePlotTask::StationTripScrapLookup> TripLookups;
+    // All cave-keyed bookkeeping uses cwCave::id() rather than the integer
+    // position in InputData.regionPointers.Caves. The previous int-keyed
+    // tables broke down as soon as the driver emitted "cave_<uuid>" prefixes
+    // (commit 7) because integer cave indexes no longer have a representation
+    // in the cavern output; UUIDs do.
+    QHash<QUuid, cwStationPositionLookup> CaveStationLookups;
+    QHash<QUuid, cwLinePlotTask::StationTripScrapLookup> TripLookups;
+    // Index from cave UUID to the worker-internal cwCave* (owned by Region)
+    // and to the original-thread cwCave + scrap/trip pointers carried by
+    // InputData.regionPointers. Built once in initializeCaveLookups() so the
+    // rest of the worker can stay UUID-keyed.
+    QHash<QUuid, cwCave*> InternalCaveByUuid;
+    QHash<QUuid, cwLinePlotTask::CaveDataPtrs> ExternalCaveByUuid;
 
     void encodeCaveNames(cwCavingRegionData& regionData)
     {
-        for(int i = 0; i < regionData.caves.size(); i++) {
-            cwCaveData& cave = regionData.caves[i];
-            cave.name = QString("%1").arg(i);
+        // Cave names are rewritten to cavernCaveNameFor(cave.id) so the
+        // exporter emits "*begin cave_<uuid>" and splitLookupByCave can
+        // recover cwCave::id() from the cavern station prefix. Caller
+        // contract: cave.id must be non-null and must equal the id of the
+        // corresponding entry in InputData.regionPointers.Caves[i].Cave -
+        // cwLinePlotManager naturally satisfies this via cwCavingRegion::data();
+        // synthetic callers (cwTripLinePlotTask) generate a UUID before
+        // building Input so the two sides stay aligned.
+        for (cwCaveData& cave : regionData.caves) {
+            Q_ASSERT(!cave.id.isNull());
+            cave.name = cwLinePlotTask::cavernCaveNameFor(cave.id);
         }
     }
 
     void initializeCaveStationLookups()
     {
         const int numCaves = Region.caveCount();
-        CaveStationLookups.resize(numCaves);
+        CaveStationLookups.reserve(numCaves);
+        InternalCaveByUuid.reserve(numCaves);
 
-        for(int i = 0; i < numCaves; i++) {
+        for (int i = 0; i < numCaves; i++) {
             cwCave* cave = Region.cave(i);
-            CaveStationLookups[i] = cave->stationPositionLookup();
+            const QUuid id = cave->id();
+            InternalCaveByUuid.insert(id, cave);
+            CaveStationLookups.insert(id, cave->stationPositionLookup());
+        }
+
+        // RegionDataPtrs is index-aligned with Region by construction, but the
+        // worker drops that coupling: every consumer keys by cwCave::id().
+        const QList<cwLinePlotTask::CaveDataPtrs>& external = InputData.regionPointers.Caves;
+        ExternalCaveByUuid.reserve(external.size());
+        for (const cwLinePlotTask::CaveDataPtrs& cavePtrs : external) {
+            if (cavePtrs.Cave != nullptr) {
+                ExternalCaveByUuid.insert(cavePtrs.Cave->id(), cavePtrs);
+            }
         }
     }
 
@@ -262,7 +357,7 @@ private:
         int unconnectedChunkCount = 0;
         QStringList offendingCaveNames;
 
-        for(int i = 0; i < Region.caveCount(); i++) {
+        for (int i = 0; i < Region.caveCount(); i++) {
             cwCave* cave = Region.cave(i);
 
             const Monad::Result<QList<cwFindUnconnectedSurveyChunks::Result>> unconnectedResult =
@@ -271,9 +366,12 @@ private:
                 continue;
             }
             const QList<cwFindUnconnectedSurveyChunks::Result> errorResults = unconnectedResult.value();
-            if(!errorResults.isEmpty()) {
-                cwLinePlotTask::LinePlotCaveData& caveData = createLinePlotCaveDataAt(i, result);
-                caveData.setUnconnectedChunkError(errorResults);
+            if (!errorResults.isEmpty()) {
+                cwLinePlotTask::LinePlotCaveData* caveData = createLinePlotCaveDataFor(cave->id(), result);
+                if (caveData == nullptr) {
+                    continue;
+                }
+                caveData->setUnconnectedChunkError(errorResults);
                 unconnectedChunkCount += errorResults.size();
                 offendingCaveNames.append(cave->name());
             }
@@ -296,50 +394,76 @@ private:
         return true;
     }
 
-    cwLinePlotTask::LinePlotCaveData& createLinePlotCaveDataAt(int index, cwLinePlotTask::LinePlotResultData& result)
+    // Returns a pointer so callers iterating Region.cave(i) can skip caves
+    // that have no original-thread counterpart in regionPointers without
+    // accidentally seeding result.Caves[nullptr]. Under the documented
+    // contract every Region cave maps to an external cave; the null path
+    // exists as Release-build defence against a malformed snapshot
+    // (Q_ASSERT alone would silently corrupt the result in Release).
+    cwLinePlotTask::LinePlotCaveData* createLinePlotCaveDataFor(const QUuid& caveId,
+                                                                cwLinePlotTask::LinePlotResultData& result)
     {
-        cwCave* externalCave = InputData.regionPointers.Caves.at(index).Cave;
+        cwCave* externalCave = ExternalCaveByUuid.value(caveId).Cave;
+        if (externalCave == nullptr) {
+            Q_ASSERT(false);
+            return nullptr;
+        }
 
-        if(!result.Caves.contains(externalCave)) {
+        if (!result.Caves.contains(externalCave)) {
             result.Caves[externalCave] = cwLinePlotTask::LinePlotCaveData();
         }
 
-        return result.Caves[externalCave];
+        return &result.Caves[externalCave];
     }
 
-    void addEmptyStationLookup(int caveIndex, cwLinePlotTask::LinePlotResultData& result)
+    void addEmptyStationLookup(const QUuid& caveId, cwLinePlotTask::LinePlotResultData& result)
     {
-        cwCave* externalCave = InputData.regionPointers.Caves.at(caveIndex).Cave;
-        if(!result.Caves.contains(externalCave)) {
+        cwCave* externalCave = ExternalCaveByUuid.value(caveId).Cave;
+        if (externalCave == nullptr) {
+            return;
+        }
+        if (!result.Caves.contains(externalCave)) {
             result.Caves.insert(externalCave, cwLinePlotTask::LinePlotCaveData());
         }
     }
 
     void indexStations()
     {
-        TripLookups.resize(Region.caveCount());
+        TripLookups.clear();
+        TripLookups.reserve(Region.caveCount());
 
-        for(int i = 0; i < Region.caveCount(); i++) {
-            TripLookups[i] = cwLinePlotTask::StationTripScrapLookup(Region.cave(i));
+        for (int i = 0; i < Region.caveCount(); i++) {
+            cwCave* cave = Region.cave(i);
+            TripLookups.insert(cave->id(), cwLinePlotTask::StationTripScrapLookup(cave));
         }
     }
 
-    QVector<cwStationPositionLookup> splitLookupByCave(const cwStationPositionLookup &stationPostions) const
+    // Parses cavern-emitted prefixed station names of the form
+    //   "cave_<32-hex-uuid>.<station-name>"
+    // back into a per-cave position lookup keyed by cwCave::id(). Stations
+    // whose prefix UUID is not present in the worker's known cave set are
+    // dropped (they would not match any cave in the region; this keeps
+    // splitLookupByCave robust against accidental orphan prefixes without
+    // poisoning the whole result).
+    QHash<QUuid, cwStationPositionLookup> splitLookupByCave(
+        const cwStationPositionLookup& stationPostions) const
     {
-        double positionPrecision = 3; //position to 3 digits
-        double positionFactor = pow(10.0, positionPrecision);
+        // Round positions to millimetre precision to absorb cavern's
+        // double-to-text rounding when comparing against the previous run.
+        constexpr int kPositionPrecisionDigits = 3;
+        const double positionFactor = std::pow(10.0, kPositionPrecisionDigits);
 
-        QString stationPattern = cwStationValidator::validCharactersRegex().pattern();
-        QRegularExpression regex(QString("(\\d+)\\.(%1)").arg(stationPattern));
+        // Compiled once per splitLookupByCave call. cavernStationRegex()
+        // documents the contract (see cwLinePlotTask.h) and is what the
+        // [LinePlot][UuidPrefix] tests bind against.
+        const QRegularExpression regex = cwLinePlotTask::cavernStationRegex();
 
-        QVector<cwStationPositionLookup> caveStations;
-        caveStations.resize(CaveStationLookups.size());
+        QHash<QUuid, cwStationPositionLookup> caveStations;
+        caveStations.reserve(InternalCaveByUuid.size());
 
-        QMapIterator<QString, QVector3D> iter(stationPostions.positions());
-        while( iter.hasNext() ) {
-            iter.next();
-
-            QString name = iter.key();
+        const QMap<QString, QVector3D> positions = stationPostions.positions();
+        for (auto iter = positions.constBegin(); iter != positions.constEnd(); ++iter) {
+            const QString& name = iter.key();
             QVector3D position = iter.value();
 
             // std::round keeps the intermediate value in double; qRound returns
@@ -350,112 +474,116 @@ private:
             position.setY(float(std::round(double(position.y()) * positionFactor) / positionFactor));
             position.setZ(float(std::round(double(position.z()) * positionFactor) / positionFactor));
 
-            QRegularExpressionMatch match = regex.match(name);
-            if(match.hasMatch()) {
-
-                QString caveIndexString = match.captured(1); //Extract the index
-                QString stationName = match.captured(2);//Extract the station
-                QString caveName = caveIndexString;
-
-                bool okay;
-                int caveIndex = caveIndexString.toInt(&okay);
-
-                if(!okay) {
-                    qDebug() << "Can't convert caveIndex is not an int:" << caveIndexString << LOCATION;
-                    return QVector<cwStationPositionLookup>();
-                }
-
-                if(caveIndex < 0 || caveIndex >= Region.caveCount()) {
-                    qDebug() << "CaveIndex is bad:" << caveIndex << LOCATION;
-                    return QVector<cwStationPositionLookup>();
-                }
-
-                cwCave* cave = Region.cave(caveIndex);
-
-                if(caveName.compare(cave->name(), Qt::CaseInsensitive) != 0) {
-                    qDebug() << "CaveName is invalid:" << caveName << "looking for" << cave->name() << LOCATION;
-                    return QVector<cwStationPositionLookup>();
-                }
-
-                cwStationPositionLookup& lookup = caveStations[caveIndex];
-                lookup.setPosition(stationName, position);
-
-            } else {
-                qDebug() << "Couldn't match: " << name << "This is a bug!" << LOCATION;
+            const QRegularExpressionMatch match = regex.match(name);
+            if (!match.hasMatch()) {
+                qDebug() << "Couldn't match cavern station name:" << name << "This is a bug!" << LOCATION;
+                continue;
             }
+
+            // QUuid::fromString requires hyphens; reinsertUuidHyphens turns
+            // the 32-hex capture back into the RFC-4122 dashed layout that
+            // QUuid::fromString accepts. The regex already restricted the
+            // capture to 32 hex chars so the parse never returns null for a
+            // matched name.
+            const QUuid caveId = QUuid::fromString(reinsertUuidHyphens(match.captured(1)));
+            if (caveId.isNull()) {
+                qDebug() << "Failed to parse cave UUID from cavern prefix:" << match.captured(1) << LOCATION;
+                return {};
+            }
+            if (!InternalCaveByUuid.contains(caveId)) {
+                qDebug() << "Cavern emitted station with unknown cave UUID:" << caveId << LOCATION;
+                continue;
+            }
+
+            cwStationPositionLookup& lookup = caveStations[caveId];
+            lookup.setPosition(match.captured(2), position);
         }
 
         return caveStations;
     }
 
-    void setStationAsChanged(int caveIndex, QString stationName, cwLinePlotTask::LinePlotResultData& result)
+    void setStationAsChanged(const QUuid& caveId, const QString& stationName,
+                             cwLinePlotTask::LinePlotResultData& result)
     {
-        addEmptyStationLookup(caveIndex, result);
+        addEmptyStationLookup(caveId, result);
 
-        const cwLinePlotTask::StationTripScrapLookup& lookup = TripLookups[caveIndex];
-        QList<int> tripIndexes = lookup.trips(stationName.toUpper());
-        QList<QPair<int, int> > scrapIndexes = lookup.scraps(stationName.toUpper());
+        const cwLinePlotTask::StationTripScrapLookup lookup = TripLookups.value(caveId);
+        const QList<int> tripIndexes = lookup.trips(stationName.toUpper());
+        const QList<QPair<int, int>> scrapIndexes = lookup.scraps(stationName.toUpper());
 
-        foreach(int tripIndex, tripIndexes) {
-            cwTrip* externalTrip = InputData.regionPointers.Caves.at(caveIndex).Trips.at(tripIndex).Trip;
+        const cwLinePlotTask::CaveDataPtrs cavePtrs = ExternalCaveByUuid.value(caveId);
+        if (cavePtrs.Cave == nullptr) {
+            // No matching original-side cave (defensive: ExternalCaveByUuid
+            // is built from the same snapshot as the worker's Region, so this
+            // path is only reachable if regionPointers is out of sync).
+            return;
+        }
+
+        for (int tripIndex : tripIndexes) {
+            cwTrip* externalTrip = cavePtrs.Trips.at(tripIndex).Trip;
             result.Trips.insert(externalTrip);
         }
 
-        for(int i = 0; i < scrapIndexes.size(); i++) {
-            QPair<int, int> index = scrapIndexes.at(i);
-            int tripIndex = index.first;
-            int scrapIndex = index.second;
+        for (const QPair<int, int>& index : scrapIndexes) {
+            const int tripIndex = index.first;
+            const int scrapIndex = index.second;
 
-            cwScrap* externalScrap = InputData.regionPointers.Caves.at(caveIndex).Trips.at(tripIndex).Scraps.at(scrapIndex);
-            cwTrip* externalTrip = InputData.regionPointers.Caves.at(caveIndex).Trips.at(tripIndex).Trip;
-
-            result.Scraps.insert(externalScrap);
-            result.Trips.insert(externalTrip);
+            const cwLinePlotTask::TripDataPtrs& tripPtrs = cavePtrs.Trips.at(tripIndex);
+            result.Scraps.insert(tripPtrs.Scraps.at(scrapIndex));
+            result.Trips.insert(tripPtrs.Trip);
         }
     }
 
-    void updateInteralCaveStationLookups(QVector<cwStationPositionLookup> caveStations,
+    void updateInteralCaveStationLookups(const QHash<QUuid, cwStationPositionLookup>& caveStations,
                                          cwLinePlotTask::LinePlotResultData& result)
     {
-        for(int i = 0; i < caveStations.size(); i++) {
-            cwStationPositionLookup& newLookup = caveStations[i];
-            cwStationPositionLookup& oldLookup = CaveStationLookups[i];
+        // Iterate Region by index so caves with no positions in `caveStations`
+        // (e.g. a cave whose entire centerline failed to solve) still get
+        // their stale lookup cleared and the result populated.
+        for (int i = 0; i < Region.caveCount(); i++) {
+            cwCave* cave = Region.cave(i);
+            const QUuid caveId = cave->id();
 
-            if(newLookup.positions().size() != oldLookup.positions().size()) {
-                addEmptyStationLookup(i, result);
+            const cwStationPositionLookup newLookup = caveStations.value(caveId);
+            const cwStationPositionLookup oldLookup = CaveStationLookups.value(caveId);
+
+            if (newLookup.positions().size() != oldLookup.positions().size()) {
+                addEmptyStationLookup(caveId, result);
             }
 
-            QMap<QString, QVector3D> newPositions = newLookup.positions();
-            QMap<QString, QVector3D> oldPositions = oldLookup.positions();
+            const QMap<QString, QVector3D> newPositions = newLookup.positions();
+            const QMap<QString, QVector3D> oldPositions = oldLookup.positions();
 
-            foreach(QString stationName, newPositions.keys()) {
-                if(oldPositions.contains(stationName)) {
-                    QVector3D newPoint = newPositions.value(stationName);
-                    QVector3D oldPoint = oldPositions.value(stationName);
-                    if(newPoint != oldPoint) {
-                        setStationAsChanged(i, stationName, result);
+            for (auto it = newPositions.constBegin(); it != newPositions.constEnd(); ++it) {
+                const QString& stationName = it.key();
+                const QVector3D newPoint = it.value();
+                if (oldPositions.contains(stationName)) {
+                    if (oldPositions.value(stationName) != newPoint) {
+                        setStationAsChanged(caveId, stationName, result);
                     }
                 } else {
-                    setStationAsChanged(i, stationName, result);
+                    setStationAsChanged(caveId, stationName, result);
                 }
             }
 
-            CaveStationLookups[i] = caveStations[i];
+            CaveStationLookups[caveId] = newLookup;
         }
     }
 
     void updateExteralCaveStationLookups(cwLinePlotTask::LinePlotResultData& result)
     {
-        for(int i = 0; i < Region.caveCount(); i++) {
-            cwCave* externalCave = InputData.regionPointers.Caves.at(i).Cave;
-            if(result.Caves.contains(externalCave)) {
-
-                cwLinePlotTask::LinePlotCaveData& caveData = result.Caves[externalCave];
-                caveData.setStationPositions(CaveStationLookups[i]);
-
-                cwCave* cave = Region.cave(i);
-                cave->setStationPositionLookup(CaveStationLookups[i]);
+        for (int i = 0; i < Region.caveCount(); i++) {
+            cwCave* internalCave = Region.cave(i);
+            const QUuid caveId = internalCave->id();
+            cwCave* externalCave = ExternalCaveByUuid.value(caveId).Cave;
+            if (externalCave == nullptr || !result.Caves.contains(externalCave)) {
+                continue;
             }
+
+            const cwStationPositionLookup updatedLookup = CaveStationLookups.value(caveId);
+            cwLinePlotTask::LinePlotCaveData& caveData = result.Caves[externalCave];
+            caveData.setStationPositions(updatedLookup);
+            internalCave->setStationPositionLookup(updatedLookup);
         }
     }
 
@@ -483,7 +611,7 @@ private:
     {
         indexStations();
 
-        QVector<cwStationPositionLookup> caveStationLookups = splitLookupByCave(stationPostions);
+        const QHash<QUuid, cwStationPositionLookup> caveStationLookups = splitLookupByCave(stationPostions);
 
         updateInteralCaveStationLookups(caveStationLookups, result);
         updateExteralCaveStationLookups(result);
@@ -494,10 +622,14 @@ private:
     {
         Q_ASSERT(Region.caveCount() == lengths.size());
 
-        for(int i = 0; i < Region.caveCount(); i++) {
-            cwLinePlotTask::LinePlotCaveData& caveData = createLinePlotCaveDataAt(i, result);
-            caveData.setLength(lengths.at(i).length());
-            caveData.setDepth(lengths.at(i).depth());
+        for (int i = 0; i < Region.caveCount(); i++) {
+            cwCave* cave = Region.cave(i);
+            cwLinePlotTask::LinePlotCaveData* caveData = createLinePlotCaveDataFor(cave->id(), result);
+            if (caveData == nullptr) {
+                continue;
+            }
+            caveData->setLength(lengths.at(i).length());
+            caveData->setDepth(lengths.at(i).depth());
         }
     }
 
@@ -506,13 +638,11 @@ private:
         auto createNetwork = [](cwCave* cave) {
             cwSurveyNetwork network;
 
-            foreach(cwTrip* trip, cave->trips()) {
-                foreach(cwSurveyChunk* chunk, trip->chunks()) {
-                    QList<cwStation> stations = chunk->stations();
-                    for(int i = 0; i < stations.size() - 1; i++) {
-                        cwStation from = stations.at(i);
-                        cwStation to = stations.at(i + 1);
-                        network.addShot(from.name(), to.name());
+            for (cwTrip* trip : cave->trips()) {
+                for (cwSurveyChunk* chunk : trip->chunks()) {
+                    const QList<cwStation> stations = chunk->stations();
+                    for (int i = 0; i < stations.size() - 1; i++) {
+                        network.addShot(stations.at(i).name(), stations.at(i + 1).name());
                     }
                 }
             }
@@ -520,23 +650,22 @@ private:
             return network;
         };
 
-        QList<cwCave*> caves = Region.caves();
-        for(int i = 0; i < caves.size(); i++) {
-            cwCave* cave = caves.at(i);
-            cwSurveyNetwork network = createNetwork(cave);
-            cwCave* externalCave = InputData.regionPointers.Caves.at(i).Cave;
+        const QList<cwCave*> caves = Region.caves();
+        for (cwCave* cave : caves) {
+            const cwSurveyNetwork network = createNetwork(cave);
+            if (network == cave->network()) {
+                continue;
+            }
+            const QUuid caveId = cave->id();
+            cwCave* externalCave = ExternalCaveByUuid.value(caveId).Cave;
+            if (externalCave == nullptr) {
+                continue;
+            }
+            result.Caves[externalCave].setNetwork(network);
 
-            if(network != cave->network()) {
-                result.Caves[externalCave].setNetwork(network);
-
-                auto changedStations = cwSurveyNetwork::changedStations(cave->network(), network);
-                if(changedStations.isEmpty()) {
-                    continue;
-                }
-
-                for(const auto& station : changedStations) {
-                    setStationAsChanged(i, station, result);
-                }
+            const auto changedStations = cwSurveyNetwork::changedStations(cave->network(), network);
+            for (const auto& station : changedStations) {
+                setStationAsChanged(caveId, station, result);
             }
         }
     }
