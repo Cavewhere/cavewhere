@@ -1329,12 +1329,13 @@ Monad::ResultBase cwSaveLoadPrivate::ensurePathForFile(const QString& filePath) 
     return Monad::ResultBase();
 }
 
-QHash<const void*, QList<int>> cwSaveLoadPrivate::jobIndicesByObjectId() const
+QHash<cwSaveLoadPrivate::GroupKey, QList<int>> cwSaveLoadPrivate::jobIndicesByGroup() const
 {
-    QHash<const void*, QList<int>> result;
+    QHash<GroupKey, QList<int>> result;
     for (int i = 0; i < m_pendingJobs.size(); ++i) {
-        if (m_pendingJobs[i].objectId != nullptr) {
-            result[m_pendingJobs[i].objectId].append(i);
+        const Job& job = m_pendingJobs.at(i);
+        if (job.objectId != nullptr) {
+            result[GroupKey{job.objectId, job.tag}].append(i);
         }
     }
     return result;
@@ -1401,7 +1402,7 @@ void cwSaveLoadPrivate::compressPendingJobs()
 
     QSet<int> indicesToDrop;
 
-    const auto indexMap = jobIndicesByObjectId();
+    const auto indexMap = jobIndicesByGroup();
     for (auto it = indexMap.cbegin(); it != indexMap.cend(); ++it) {
         const QList<int>& indices = it.value();
         if (indices.size() <= 1) {
