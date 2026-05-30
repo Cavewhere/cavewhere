@@ -7,6 +7,9 @@
 
 #include "cwExternalCenterlineScanner.h"
 
+//Walls
+#include "wallsprojectparser.h"
+
 //Qt includes
 #include <QByteArray>
 #include <QDir>
@@ -14,6 +17,7 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QSet>
+#include <QSharedPointer>
 #include <QStringConverter>
 #include <QStringDecoder>
 
@@ -167,6 +171,9 @@ struct ScanState {
 };
 
 void scanSurvexFile(const QString& filePath, ScanState& state);
+void scanCompassFile(const QString& filePath, ScanState& state);
+void scanWallsFile(const QString& filePath, ScanState& state);
+void scanByFormat(const QString& filePath, ScanState& state);
 
 void recordWarning(ScanState& state, const QString& message)
 {
@@ -258,11 +265,229 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
                               .arg(QFileInfo(target).fileName(), resolution.matchedAs));
         }
 
-        scanSurvexFile(resolution.resolved, state);
+        // Cross-format dispatch: Survex's *include can pull in .dat /
+        // .mak / .wpj / .srv files. Per the plan, cavern auto-detects
+        // format at solve time, so the scanner mirrors that.
+        scanByFormat(resolution.resolved, state);
     }
 
     state.inProgress.remove(canonical);
     state.visited.insert(canonical);
+}
+
+// Compass .mak references look like:
+//   #filename.dat,A,B;          // bareword form
+//   #"name with spaces.dat",A;  // quoted form (Windows projects use this)
+//   /comment                    // single-line comment
+//   "Cave Name";                // misc directive
+// We only care about '#'-prefixed lines. Group 1 captures the
+// double-quoted filename, group 2 the bareword.
+const QRegularExpression& compassMakReferenceRegex()
+{
+    static const QRegularExpression regex(
+        QString::fromLatin1(R"RX(^\s*#\s*(?:"([^"]+)"|([^,;\s]+)))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+QString stripCompassComment(const QString& line)
+{
+    const int slashStart = line.indexOf(QLatin1Char('/'));
+    if (slashStart < 0) {
+        return line;
+    }
+    return line.left(slashStart);
+}
+
+void scanCompassFile(const QString& filePath, ScanState& state)
+{
+    const QString canonical = canonicalize(filePath);
+    if (canonical.isEmpty()) {
+        recordWarning(state,
+                      QStringLiteral("Compass entry not found: %1").arg(filePath));
+        return;
+    }
+
+    if (state.inProgress.contains(canonical)) {
+        recordWarning(state,
+                      QStringLiteral("circular include skipped: %1").arg(filePath));
+        return;
+    }
+    if (state.visited.contains(canonical)) {
+        return;
+    }
+
+    const bool isMak = hasExtension(canonical, kCompassMakExtension);
+
+    state.inProgress.insert(canonical);
+    state.dependencies.append(canonical);
+
+    if (isMak) {
+        QFile file(canonical);
+        if (!file.open(QFile::ReadOnly)) {
+            recordWarning(state,
+                          QStringLiteral("cannot read %1: %2")
+                              .arg(canonical, file.errorString()));
+        } else {
+            const QByteArray bytes = file.readAll();
+            file.close();
+
+            const DecodedFile decoded = decodeBytes(bytes);
+            if (decoded.usedLatin1Fallback) {
+                recordWarning(state,
+                              QStringLiteral("encoding fallback (UTF-8 invalid, decoded as Latin-1): %1")
+                                  .arg(canonical));
+            }
+
+            const QDir baseDir = QFileInfo(canonical).absoluteDir();
+            const QRegularExpression& regex = compassMakReferenceRegex();
+            const QStringList lines = decoded.text.split(QLatin1Char('\n'));
+            for (const QString& rawLine : lines) {
+                const QString line = stripCompassComment(rawLine).trimmed();
+                if (line.isEmpty() || !line.startsWith(QLatin1Char('#'))) {
+                    continue;
+                }
+                const auto match = regex.match(line);
+                if (!match.hasMatch()) {
+                    continue;
+                }
+                QString target = match.captured(1);  // quoted form
+                if (target.isEmpty()) {
+                    target = match.captured(2);      // bareword form
+                }
+                if (target.isEmpty()) {
+                    continue;
+                }
+                const IncludeResolveResult resolution =
+                    resolveIncludeTarget(target, baseDir);
+                if (resolution.resolved.isEmpty()) {
+                    recordWarning(state,
+                                  QStringLiteral("missing Compass reference: %1").arg(target));
+                    continue;
+                }
+                if (!resolution.matchedAs.isEmpty()
+                    && resolution.matchedAs != QFileInfo(target).fileName()) {
+                    recordWarning(state,
+                                  QStringLiteral("case-fallback match: include '%1' resolved to '%2'")
+                                      .arg(QFileInfo(target).fileName(), resolution.matchedAs));
+                }
+                // .mak entries point at .dat files, which never include
+                // anything else - but go through scanByFormat anyway so
+                // a .mak that nests another .mak still walks correctly.
+                scanByFormat(resolution.resolved, state);
+            }
+        }
+    }
+
+    state.inProgress.remove(canonical);
+    state.visited.insert(canonical);
+}
+
+void collectWallsSurveys(const dewalls::WpjBookPtr& book,
+                        const QDir& baseDir,
+                        ScanState& state)
+{
+    if (book.isNull()) {
+        return;
+    }
+    for (const auto& child : book->Children) {
+        if (child.isNull()) {
+            continue;
+        }
+        if (child->isBook()) {
+            collectWallsSurveys(child.dynamicCast<dewalls::WpjBook>(), baseDir, state);
+            continue;
+        }
+        // .SURVEY / .OTHER both reference an external file by Name.
+        if (child->Name.isEmpty()) {
+            continue;
+        }
+        QString absolutePath = child->absolutePath();
+        if (absolutePath.isEmpty()) {
+            absolutePath = baseDir.absoluteFilePath(child->Name.value());
+        }
+        // dewalls' absolutePath() returns just the file stem if the
+        // entry doesn't carry an extension; .SURVEY entries default
+        // to .srv on disk per Walls semantics.
+        if (QFileInfo(absolutePath).suffix().isEmpty()) {
+            absolutePath += QLatin1String(kWallsSrvExtension);
+        }
+        if (!QFileInfo::exists(absolutePath)) {
+            recordWarning(state,
+                          QStringLiteral("missing Walls reference: %1").arg(absolutePath));
+            continue;
+        }
+        scanByFormat(absolutePath, state);
+    }
+}
+
+void scanWallsFile(const QString& filePath, ScanState& state)
+{
+    const QString canonical = canonicalize(filePath);
+    if (canonical.isEmpty()) {
+        recordWarning(state,
+                      QStringLiteral("Walls entry not found: %1").arg(filePath));
+        return;
+    }
+
+    if (state.inProgress.contains(canonical)) {
+        recordWarning(state,
+                      QStringLiteral("circular include skipped: %1").arg(filePath));
+        return;
+    }
+    if (state.visited.contains(canonical)) {
+        return;
+    }
+
+    const bool isWpj = hasExtension(canonical, kWallsWpjExtension);
+
+    if (isWpj) {
+        // .wpj: parse first; if dewalls returns a null root the file
+        // exists on disk but isn't usable to cavern, so drop it from
+        // the dependency list with a warning rather than carrying a
+        // broken project file into reconcile.
+        dewalls::WallsProjectParser parser;
+        dewalls::WpjBookPtr root = parser.parseFile(canonical);
+        if (root.isNull()) {
+            recordWarning(state,
+                          QStringLiteral("could not parse Walls project: %1").arg(canonical));
+            return;
+        }
+
+        state.inProgress.insert(canonical);
+        state.dependencies.append(canonical);
+
+        const QDir baseDir = QFileInfo(canonical).absoluteDir();
+        collectWallsSurveys(root, baseDir, state);
+    } else {
+        // Bare .srv: trust the file as-is, no parsing needed.
+        state.inProgress.insert(canonical);
+        state.dependencies.append(canonical);
+    }
+
+    state.inProgress.remove(canonical);
+    state.visited.insert(canonical);
+}
+
+void scanByFormat(const QString& filePath, ScanState& state)
+{
+    using namespace cwExternalCenterlineScanner;
+    const Format fmt = formatFor(filePath);
+    switch (fmt) {
+    case Format::Survex:
+        scanSurvexFile(filePath, state);
+        return;
+    case Format::Compass:
+        scanCompassFile(filePath, state);
+        return;
+    case Format::Walls:
+        scanWallsFile(filePath, state);
+        return;
+    case Format::Unknown:
+        recordWarning(state,
+                      QStringLiteral("include target has unknown format: %1").arg(filePath));
+        return;
+    }
 }
 
 } // namespace
@@ -292,10 +517,9 @@ Monad::Result<ScanResult> scan(const QString& entryFile)
     case Format::Survex:
         return scanSurvex(entryFile);
     case Format::Compass:
+        return scanCompass(entryFile);
     case Format::Walls:
-        return Monad::Result<ScanResult>(
-            QStringLiteral("scanner: Compass / Walls support arrives in Phase 1 / commit 5: %1")
-                .arg(entryFile));
+        return scanWalls(entryFile);
     case Format::Unknown:
         return Monad::Result<ScanResult>(
             QStringLiteral("scanner: cannot determine format from extension: %1")
@@ -305,35 +529,52 @@ Monad::Result<ScanResult> scan(const QString& entryFile)
         QStringLiteral("scanner: unhandled format for %1").arg(entryFile));
 }
 
-Monad::Result<ScanResult> scanSurvex(const QString& entryFile)
+namespace {
+
+Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
+                                        void (*scanFn)(const QString&, ScanState&),
+                                        const char* contextName)
 {
     if (entryFile.isEmpty()) {
         return Monad::Result<ScanResult>(
-            QStringLiteral("scanSurvex: empty entry file"));
+            QStringLiteral("%1: empty entry file").arg(QLatin1String(contextName)));
     }
     if (!QFileInfo::exists(entryFile)) {
         return Monad::Result<ScanResult>(
-            QStringLiteral("scanSurvex: entry file does not exist: %1")
-                .arg(entryFile));
+            QStringLiteral("%1: entry file does not exist: %2")
+                .arg(QLatin1String(contextName), entryFile));
     }
 
     ScanState state;
-    scanSurvexFile(entryFile, state);
+    scanFn(entryFile, state);
 
     if (state.dependencies.isEmpty()) {
-        // The entry file existed at the isExists check above but
-        // failed to open / canonicalise inside the recursion. Bubble
-        // that up as a hard error rather than returning an empty-but-
-        // successful result.
         return Monad::Result<ScanResult>(
-            QStringLiteral("scanSurvex: entry file could not be read: %1")
-                .arg(entryFile));
+            QStringLiteral("%1: entry file could not be read: %2")
+                .arg(QLatin1String(contextName), entryFile));
     }
 
     ScanResult result;
     result.dependencies = state.dependencies;
     result.warnings = state.warnings;
     return Monad::Result<ScanResult>(result);
+}
+
+} // namespace
+
+Monad::Result<ScanResult> scanSurvex(const QString& entryFile)
+{
+    return scanWithEntry(entryFile, &scanSurvexFile, "scanSurvex");
+}
+
+Monad::Result<ScanResult> scanCompass(const QString& entryFile)
+{
+    return scanWithEntry(entryFile, &scanCompassFile, "scanCompass");
+}
+
+Monad::Result<ScanResult> scanWalls(const QString& entryFile)
+{
+    return scanWithEntry(entryFile, &scanWallsFile, "scanWalls");
 }
 
 } // namespace cwExternalCenterlineScanner

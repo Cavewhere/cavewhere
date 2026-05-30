@@ -99,6 +99,26 @@ CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scan(const QString& entryFile);
  */
 CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanSurvex(const QString& entryFile);
 
+/**
+ * Walks a Compass entry file's dependency closure.
+ *  - .dat -> just the file itself (data files don't include others)
+ *  - .mak -> the .mak plus every '#'-line .dat referenced in it
+ * Missing referenced .dat files emit warnings; only an unreadable
+ * entry file returns Monad::Result error.
+ */
+CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanCompass(const QString& entryFile);
+
+/**
+ * Walks a Walls entry file's dependency closure.
+ *  - .srv -> just the file itself
+ *  - .wpj -> the .wpj plus every leaf .srv reachable through the
+ *           WpjBook tree (dewalls' WallsProjectParser is the
+ *           authoritative parser here)
+ * Missing referenced .srv files emit warnings; only an unreadable
+ * entry file or a parser failure returns Monad::Result error.
+ */
+CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanWalls(const QString& entryFile);
+
 } // namespace cwExternalCenterlineScanner
 
 #endif // CWEXTERNALCENTERLINESCANNER_H

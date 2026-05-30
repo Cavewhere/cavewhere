@@ -1,0 +1,6 @@
+; Cross-format fixture: a Survex driver that *includes a Compass
+; .dat file. Per the plan, cavern auto-detects format at solve
+; time, so the scanner mirrors that.
+*begin CrossFormat
+*include "compass_simple.dat"
+*end CrossFormat

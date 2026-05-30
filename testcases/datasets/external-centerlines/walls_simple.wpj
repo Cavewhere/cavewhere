@@ -1,0 +1,8 @@
+;WALLS Project file
+.BOOK	Test Cave
+.NAME	TEST-CAVE
+.STATUS	8
+.SURVEY	Main Passage
+.NAME	MAIN
+.STATUS	8
+.ENDBOOK

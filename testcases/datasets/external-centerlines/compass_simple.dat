@@ -1,0 +1,12 @@
+; minimal Compass .dat survey file used by the [Scanner][Compass]
+; tests. The scanner only treats .dat files as leaf nodes, so the
+; file contents don't need to be valid Compass shot data - just
+; readable.
+TestCave
+SURVEY NAME: A
+SURVEY DATE: 1 1 2025
+SURVEY TEAM: Tester
+DECLINATION: 0.00  FORMAT: DDDDLRUDLADN  CORRECTIONS: 0.00 0.00 0.00
+
+FROM         TO        LENGTH  BEARING     INC     LEFT    UP    DOWN   RIGHT
+A1           A2        10.00   0.00        0.00    1.0     1.0   1.0    1.0

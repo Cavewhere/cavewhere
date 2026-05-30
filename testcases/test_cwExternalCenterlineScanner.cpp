@@ -307,3 +307,181 @@ TEST_CASE("scan dispatches Survex entry files through scanSurvex",
     REQUIRE_FALSE(result.hasError());
     CHECK(result.value().dependencies.size() == 1);
 }
+
+TEST_CASE("scanCompass on a bare .dat returns just itself", "[Scanner][Compass]")
+{
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("compass_simple.dat"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanCompass(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.dependencies.size() == 1);
+    CHECK(QFileInfo(scan.dependencies.first()).fileName()
+          == QStringLiteral("compass_simple.dat"));
+    CHECK(scan.warnings.isEmpty());
+}
+
+TEST_CASE("scanCompass on a .mak resolves every '#' reference", "[Scanner][Compass]")
+{
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("compass_multi.mak"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanCompass(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.dependencies.size() == 3);
+    CHECK(hasFileNameInDeps(scan, QStringLiteral("compass_multi.mak")));
+    CHECK(hasFileNameInDeps(scan, QStringLiteral("compass_simple.dat")));
+    CHECK(hasFileNameInDeps(scan, QStringLiteral("compass_other.dat")));
+    CHECK(scan.warnings.isEmpty());
+}
+
+TEST_CASE("scanCompass warns on a missing '#' reference without failing the scan",
+          "[Scanner][Compass]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString makPath = tempPath(tempDir, QStringLiteral("driver.mak"));
+    writeUtf8File(makPath,
+                  QByteArrayLiteral("/ project\n"
+                                    "&UTM;\n"
+                                    "#missing.dat;\n"));
+
+    auto result = cwExternalCenterlineScanner::scanCompass(makPath);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.dependencies.size() == 1);
+    CHECK(anyWarningContains(scan, QStringLiteral("missing Compass reference")));
+}
+
+TEST_CASE("scanCompass accepts quoted .mak references", "[Scanner][Compass]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString datPath = tempPath(tempDir, QStringLiteral("spaced name.dat"));
+    writeUtf8File(datPath, QByteArrayLiteral("anything\n"));
+    const QString makPath = tempPath(tempDir, QStringLiteral("quoted.mak"));
+    writeUtf8File(makPath,
+                  QByteArrayLiteral("/ Compass project with a quoted reference\n"
+                                    "#\"spaced name.dat\",A1,A2;\n"));
+
+    auto result = cwExternalCenterlineScanner::scanCompass(makPath);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.dependencies.size() == 2);
+    CHECK(hasFileNameInDeps(scan, QStringLiteral("quoted.mak")));
+    CHECK(hasFileNameInDeps(scan, QStringLiteral("spaced name.dat")));
+    CHECK(scan.warnings.isEmpty());
+}
+
+TEST_CASE("scanCompass ignores '/'-prefixed comment lines", "[Scanner][Compass]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString makPath = tempPath(tempDir, QStringLiteral("comments.mak"));
+    writeUtf8File(makPath,
+                  QByteArrayLiteral("/#commented.dat,A,B;\n"
+                                    "/ also a comment;\n"));
+
+    auto result = cwExternalCenterlineScanner::scanCompass(makPath);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.dependencies.size() == 1);
+    CHECK(scan.warnings.isEmpty());
+}
+
+TEST_CASE("scanWalls on a bare .srv returns just itself", "[Scanner][Walls]")
+{
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("MAIN.SRV"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanWalls(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.dependencies.size() == 1);
+    CHECK(QFileInfo(scan.dependencies.first()).fileName().toUpper()
+          == QStringLiteral("MAIN.SRV"));
+    CHECK(scan.warnings.isEmpty());
+}
+
+TEST_CASE("scanWalls on a .wpj resolves its .SURVEY entries", "[Scanner][Walls]")
+{
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("walls_simple.wpj"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanWalls(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    // The .wpj entry plus its single MAIN.SRV survey -> two files.
+    CHECK(scan.dependencies.size() == 2);
+    CHECK(hasFileNameInDeps(scan, QStringLiteral("walls_simple.wpj")));
+    bool sawSurvey = false;
+    for (const QString& dep : scan.dependencies) {
+        if (QFileInfo(dep).fileName().toUpper() == QStringLiteral("MAIN.SRV")) {
+            sawSurvey = true;
+            break;
+        }
+    }
+    CHECK(sawSurvey);
+    CHECK(scan.warnings.isEmpty());
+}
+
+TEST_CASE("scan dispatches each format through its matching scanner",
+          "[Scanner][CrossFormat]")
+{
+    using namespace cwExternalCenterlineScanner;
+    {
+        auto result = scan(datasetExternalCenterlinePath(QStringLiteral("compass_simple.dat")));
+        REQUIRE_FALSE(result.hasError());
+        CHECK(result.value().dependencies.size() == 1);
+    }
+    {
+        auto result = scan(datasetExternalCenterlinePath(QStringLiteral("walls_simple.wpj")));
+        REQUIRE_FALSE(result.hasError());
+        CHECK(result.value().dependencies.size() == 2);
+    }
+}
+
+TEST_CASE("scanSurvex pulls in a Compass .dat via *include", "[Scanner][CrossFormat]")
+{
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("cross_format.svx"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.dependencies.size() == 2);
+    CHECK(hasFileNameInDeps(scan, QStringLiteral("cross_format.svx")));
+    CHECK(hasFileNameInDeps(scan, QStringLiteral("compass_simple.dat")));
+    CHECK(scan.warnings.isEmpty());
+}
+
+TEST_CASE("scanSurvex's cycle detection spans format boundaries",
+          "[Scanner][CrossFormat]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // svx -> mak -> svx forms a cycle that must be caught by the
+    // shared canonical-path visited set even though we hop formats
+    // mid-walk.
+    const QString svxPath = tempPath(tempDir, QStringLiteral("cycle.svx"));
+    writeUtf8File(svxPath,
+                  QByteArrayLiteral("*begin Cycle\n*include \"cycle.mak\"\n*end Cycle\n"));
+    const QString makPath = tempPath(tempDir, QStringLiteral("cycle.mak"));
+    writeUtf8File(makPath,
+                  QByteArrayLiteral("/ deliberate cycle back to cycle.svx\n"
+                                    "#cycle.svx;\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(svxPath);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.dependencies.size() == 2);
+    CHECK(hasFileNameInDeps(scan, QStringLiteral("cycle.svx")));
+    CHECK(hasFileNameInDeps(scan, QStringLiteral("cycle.mak")));
+    CHECK(anyWarningContains(scan, QStringLiteral("circular include")));
+}
