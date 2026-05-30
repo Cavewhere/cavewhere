@@ -17,6 +17,7 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwExternalCenterline.h"
 #include "cwGlobals.h"
 #include "asyncfuture.h"
 
@@ -28,6 +29,19 @@
 #include <QMenu>
 #include <QItemSelectionModel>
 #include <QDebug>
+
+namespace {
+
+// User-facing reason surfaced via exportDisabledReason and qWarning()ed by the
+// programmatic-caller guard inside each export function. Wording locked by
+// the master plan §7.5: it must point the user at the project tree where the
+// real .svx / .dat / .mak / .wpj / .srv files live.
+const QString kExportDisabledReason = QStringLiteral(
+    "Cannot export — this project contains external centerline attachments. "
+    "Use your original .svx / .dat / .mak / .wpj / .srv files (in each cave "
+    "or trip's external-centerline/ subdir inside the project) to share.");
+
+} // namespace
 
 cwSurveyExportManager::cwSurveyExportManager(QObject *parent) :
     QObject(parent)
@@ -47,6 +61,10 @@ void cwSurveyExportManager::exportSurvexRegion(QString filename) {
     if(filename.isEmpty()) { return; }
     if(cavingRegion() == nullptr) {
         qDebug() << "Caving region is null! this is a bug" << LOCATION;
+        return;
+    }
+    if(!m_canExport) {
+        qWarning() << m_exportDisabledReason;
         return;
     }
     filename = cwGlobals::convertFromURL(filename);
@@ -70,6 +88,10 @@ void cwSurveyExportManager::exportSurvexRegion(QString filename) {
   */
 void cwSurveyExportManager::exportSurvexCave(QString filename) {
     if(filename.isEmpty()) { return; }
+    if(!m_canExport) {
+        qWarning() << m_exportDisabledReason;
+        return;
+    }
     filename = cwGlobals::convertFromURL(filename);
     filename = cwGlobals::addExtension(filename, "svx");
 
@@ -90,6 +112,10 @@ void cwSurveyExportManager::exportSurvexCave(QString filename) {
   */
 void cwSurveyExportManager::exportSurvexTrip(QString filename) {
     if(filename.isEmpty()) { return; }
+    if(!m_canExport) {
+        qWarning() << m_exportDisabledReason;
+        return;
+    }
     filename = cwGlobals::convertFromURL(filename);
     filename = cwGlobals::addExtension(filename, "svx");
 
@@ -110,6 +136,10 @@ void cwSurveyExportManager::exportSurvexTrip(QString filename) {
 void cwSurveyExportManager::exportCaveToCompass(QString filename) {
     Q_UNUSED(filename);
     if(filename.isEmpty()) { return; }
+    if(!m_canExport) {
+        qWarning() << m_exportDisabledReason;
+        return;
+    }
     filename = cwGlobals::convertFromURL(filename);
     filename = cwGlobals::addExtension(filename, "dat");
 
@@ -131,6 +161,10 @@ void cwSurveyExportManager::exportCaveToCompass(QString filename) {
 void cwSurveyExportManager::exportCaveToChipdata(QString filename) {
     Q_UNUSED(filename);
     if(filename.isEmpty()) { return; }
+    if(!m_canExport) {
+        qWarning() << m_exportDisabledReason;
+        return;
+    }
     filename = cwGlobals::convertFromURL(filename);
 
     cwCave* cave = currentCave();
@@ -256,7 +290,101 @@ cwCavingRegion* cwSurveyExportManager::cavingRegion() const {
 void cwSurveyExportManager::setCavingRegion(cwCavingRegion* cavingRegion) {
     if(CavingRegion != cavingRegion) {
         CavingRegion = cavingRegion;
+        rewireExternalCenterlineTracking();
         updateActions();
         emit cavingRegionChanged();
     }
+}
+
+/**
+  \brief Tears down every signal connection that drives the canExport gate
+  and re-wires against the current region, its caves, and each cave's trips.
+  Called whenever the region pointer changes or any structural mutation
+  (cave or trip insert/remove) fires. Always finishes with a recomputeCanExport()
+  so the gate state stays consistent with the freshly-wired set.
+  */
+void cwSurveyExportManager::rewireExternalCenterlineTracking() {
+    for (const auto& connection : m_externalCenterlineConnections) {
+        QObject::disconnect(connection);
+    }
+    m_externalCenterlineConnections.clear();
+
+    if (!CavingRegion.isNull()) {
+        cwCavingRegion* region = CavingRegion.data();
+        m_externalCenterlineConnections.append(connect(
+            region, &cwCavingRegion::insertedCaves,
+            this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
+        m_externalCenterlineConnections.append(connect(
+            region, &cwCavingRegion::removedCaves,
+            this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
+
+        const QList<cwCave*> caves = region->caves();
+        for (cwCave* cave : caves) {
+            m_externalCenterlineConnections.append(connect(
+                cave, &cwCave::externalCenterlineChanged,
+                this, &cwSurveyExportManager::recomputeCanExport));
+            m_externalCenterlineConnections.append(connect(
+                cave, &cwCave::insertedTrips,
+                this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
+            m_externalCenterlineConnections.append(connect(
+                cave, &cwCave::removedTrips,
+                this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
+            // Belt-and-braces: if a cave is destroyed by a path that does
+            // not first emit removedCaves (e.g. region torn down via parent
+            // QObject deletion), the destroyed signal re-runs the rewire so
+            // recomputeCanExport never walks a dangling pointer.
+            m_externalCenterlineConnections.append(connect(
+                cave, &QObject::destroyed,
+                this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
+
+            const QList<cwTrip*> trips = cave->trips();
+            for (cwTrip* trip : trips) {
+                m_externalCenterlineConnections.append(connect(
+                    trip, &cwTrip::externalCenterlineChanged,
+                    this, &cwSurveyExportManager::recomputeCanExport));
+                m_externalCenterlineConnections.append(connect(
+                    trip, &QObject::destroyed,
+                    this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
+            }
+        }
+    }
+
+    recomputeCanExport();
+}
+
+/**
+  \brief Walks every cave and trip in the current region looking for an
+  attachment. Updates m_canExport / m_exportDisabledReason and emits
+  canExportChanged() only when the gate flips. Scope-state detection
+  (non-empty stationPrefix on cwTrip) lands in Phase 3; until then the
+  externalCenterline check covers every entity that can break round-trip
+  through Survex / Compass exports.
+  */
+void cwSurveyExportManager::recomputeCanExport() {
+    const auto anyAttachment = [this]() {
+        if (CavingRegion.isNull()) {
+            return false;
+        }
+        const QList<cwCave*> caves = CavingRegion->caves();
+        for (cwCave* cave : caves) {
+            if (!cave->externalCenterline().isEmpty()) {
+                return true;
+            }
+            const QList<cwTrip*> trips = cave->trips();
+            for (cwTrip* trip : trips) {
+                if (!trip->externalCenterline().isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    const bool newCanExport = !anyAttachment();
+    if (newCanExport == m_canExport) {
+        return;
+    }
+    m_canExport = newCanExport;
+    m_exportDisabledReason = newCanExport ? QString() : kExportDisabledReason;
+    emit canExportChanged();
 }
