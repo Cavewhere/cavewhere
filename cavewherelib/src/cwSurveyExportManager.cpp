@@ -60,7 +60,7 @@ cwSurveyExportManager::~cwSurveyExportManager() {
 void cwSurveyExportManager::exportSurvexRegion(QString filename) {
     if(filename.isEmpty()) { return; }
     if(cavingRegion() == nullptr) {
-        qDebug() << "Caving region is null! this is a bug" << LOCATION;
+        qWarning() << "Caving region is null! this is a bug" << LOCATION;
         return;
     }
     if(!m_canExport) {
@@ -329,22 +329,12 @@ void cwSurveyExportManager::rewireExternalCenterlineTracking() {
             m_externalCenterlineConnections.append(connect(
                 cave, &cwCave::removedTrips,
                 this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
-            // Belt-and-braces: if a cave is destroyed by a path that does
-            // not first emit removedCaves (e.g. region torn down via parent
-            // QObject deletion), the destroyed signal re-runs the rewire so
-            // recomputeCanExport never walks a dangling pointer.
-            m_externalCenterlineConnections.append(connect(
-                cave, &QObject::destroyed,
-                this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
 
             const QList<cwTrip*> trips = cave->trips();
             for (cwTrip* trip : trips) {
                 m_externalCenterlineConnections.append(connect(
                     trip, &cwTrip::externalCenterlineChanged,
                     this, &cwSurveyExportManager::recomputeCanExport));
-                m_externalCenterlineConnections.append(connect(
-                    trip, &QObject::destroyed,
-                    this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
             }
         }
     }

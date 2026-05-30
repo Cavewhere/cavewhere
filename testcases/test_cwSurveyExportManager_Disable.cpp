@@ -157,18 +157,18 @@ TEST_CASE("canExportChanged fires on attach and again on detach",
 
     // Attach an entry: gate flips true -> false, one emission.
     cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("cave.svx")));
-    CHECK(gateSpy.count() == 1);
+    CHECK(gateSpy.size() == 1);
     CHECK(manager.canExport() == false);
 
     // Detach the entry: gate flips false -> true, another emission.
     cave->setExternalCenterline(cwExternalCenterline());
-    CHECK(gateSpy.count() == 2);
+    CHECK(gateSpy.size() == 2);
     CHECK(manager.canExport() == true);
 
     // No-op set (assigning the same value) must not emit because the
     // gate state didn't flip - prevents UI thrash on benign re-saves.
     cave->setExternalCenterline(cwExternalCenterline());
-    CHECK(gateSpy.count() == 2);
+    CHECK(gateSpy.size() == 2);
 }
 
 TEST_CASE("Attaching a trip added after region setup is still tracked",
