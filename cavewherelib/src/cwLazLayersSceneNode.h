@@ -71,6 +71,13 @@ public slots:
 signals:
     void gapFudgeChanged(float gapFudge);
 
+private slots:
+    /// Resolves the originating cwLazLayer through QObject::sender() so the
+    /// connect site can use the 4-arg member-function form. That form supports
+    /// Qt::UniqueConnection (lambdas do not), which makes a re-addLayer() on
+    /// an already-tracked layer idempotent.
+    void onEnabledChanged();
+
 private:
     void connectModel();
     void disconnectModel();
@@ -78,6 +85,8 @@ private:
     void clear();
     void addLayer(cwLazLayer* layer);
     void removeLayer(cwLazLayer* layer);
+    void materialize(cwLazLayer* layer);
+    void dematerialize(cwLazLayer* layer);
     void syncLayerGeometry(cwLazLayer* layer);
     void addKeywordItemForLayer(cwLazLayer* layer);
     void removeKeywordItemForLayer(cwLazLayer* layer);

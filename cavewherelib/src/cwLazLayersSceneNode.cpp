@@ -144,9 +144,20 @@ void cwLazLayersSceneNode::connectModel()
 
 void cwLazLayersSceneNode::disconnectModel()
 {
-    if (m_model) {
-        disconnect(m_model, nullptr, this, nullptr);
+    if (!m_model) {
+        return;
     }
+    // Sever per-layer connections BEFORE the model swap so a subsequent
+    // setEnabled() on a layer that belonged to the previous model cannot
+    // reach onEnabledChanged() and materialize an orphan render object into
+    // m_pointClouds. clear()/rebuild() don't walk layers, so the layer-side
+    // connect installed by addLayer() would otherwise outlive the swap.
+    for (cwLazLayer* layer : m_model->layers()) {
+        if (layer) {
+            disconnect(layer, nullptr, this, nullptr);
+        }
+    }
+    disconnect(m_model, nullptr, this, nullptr);
 }
 
 void cwLazLayersSceneNode::rebuild()
@@ -204,7 +215,46 @@ void cwLazLayersSceneNode::addLayer(cwLazLayer* layer)
                                 << shortId(layer) << fileName(layer);
         return;
     }
-    qCDebug(lcLazSceneNode) << "addLayer:" << shortId(layer) << fileName(layer);
+    qCDebug(lcLazSceneNode) << "addLayer:" << shortId(layer) << fileName(layer)
+                            << "enabled=" << layer->enabled();
+
+    // The enabled hook-up lives on the layer regardless of materialization
+    // state so that flipping enabled later can dispatch through this node.
+    // Member-function connect (not a lambda) so Qt::UniqueConnection works —
+    // a re-addLayer() on the same layer is then idempotent rather than
+    // accumulating duplicate slots.
+    connect(layer, &cwLazLayer::enabledChanged,
+            this, &cwLazLayersSceneNode::onEnabledChanged,
+            Qt::UniqueConnection);
+
+    if (layer->enabled()) {
+        materialize(layer);
+    }
+}
+
+void cwLazLayersSceneNode::removeLayer(cwLazLayer* layer)
+{
+    if (!layer) {
+        return;
+    }
+    qCDebug(lcLazSceneNode) << "removeLayer:" << shortId(layer) << fileName(layer);
+    if (m_pointClouds.contains(layer->id())) {
+        dematerialize(layer);
+    }
+    disconnect(layer, nullptr, this, nullptr);
+}
+
+void cwLazLayersSceneNode::materialize(cwLazLayer* layer)
+{
+    if (!layer) {
+        return;
+    }
+    if (m_pointClouds.contains(layer->id())) {
+        qCDebug(lcLazSceneNode) << "materialize: skip (already present)"
+                                << shortId(layer) << fileName(layer);
+        return;
+    }
+    qCDebug(lcLazSceneNode) << "materialize:" << shortId(layer) << fileName(layer);
 
     auto* renderObject = new cwRenderPointCloud();
     renderObject->setGapFudge(m_gapFudge);
@@ -212,7 +262,7 @@ void cwLazLayersSceneNode::addLayer(cwLazLayer* layer)
     m_pointClouds.insert(layer->id(), renderObject);
 
     if (m_scene.isNull()) {
-        qCWarning(lcLazSceneNode) << "addLayer: scene is null — render object has no scene"
+        qCWarning(lcLazSceneNode) << "materialize: scene is null — render object has no scene"
                                   << "layer=" << QFileInfo(layer->sourcePath()).fileName();
     }
 
@@ -226,22 +276,41 @@ void cwLazLayersSceneNode::addLayer(cwLazLayer* layer)
     addKeywordItemForLayer(layer);
 }
 
-void cwLazLayersSceneNode::removeLayer(cwLazLayer* layer)
+void cwLazLayersSceneNode::dematerialize(cwLazLayer* layer)
 {
     if (!layer) {
         return;
     }
-    qCDebug(lcLazSceneNode) << "removeLayer:" << shortId(layer) << fileName(layer);
+    qCDebug(lcLazSceneNode) << "dematerialize:" << shortId(layer) << fileName(layer);
     removeKeywordItemForLayer(layer);
     auto it = m_pointClouds.find(layer->id());
     if (it == m_pointClouds.end()) {
         return;
     }
+    // Drop the loadStatusChanged hook-up before tearing down the render object
+    // so a late-arriving signal can't look up a destroyed pointer. The
+    // enabledChanged hook-up must survive — disconnecting per-signal preserves
+    // it while clearing the geometry sync.
+    disconnect(layer, &cwLazLayer::loadStatusChanged, this, nullptr);
     cwRenderPointCloud* renderObject = it.value();
     renderObject->setScene(nullptr);
     delete renderObject;
     m_pointClouds.erase(it);
-    disconnect(layer, nullptr, this, nullptr);
+}
+
+void cwLazLayersSceneNode::onEnabledChanged()
+{
+    auto* layer = qobject_cast<cwLazLayer*>(sender());
+    if (!layer) {
+        return;
+    }
+    qCDebug(lcLazSceneNode) << "onEnabledChanged:" << shortId(layer) << fileName(layer)
+                            << "enabled=" << layer->enabled();
+    if (layer->enabled()) {
+        materialize(layer);
+    } else {
+        dematerialize(layer);
+    }
 }
 
 void cwLazLayersSceneNode::syncLayerGeometry(cwLazLayer* layer)
