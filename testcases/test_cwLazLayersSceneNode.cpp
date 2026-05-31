@@ -218,6 +218,50 @@ TEST_CASE("scene node disconnects enabledChanged on removeLayer",
     REQUIRE(layerGuard.isNull());
 }
 
+TEST_CASE("scene node does not transiently materialize about-to-die layers during model reset",
+          "[cwLazLayersSceneNode][cwLazLayerEnabled][!shouldfail]")
+{
+    // Regression scaffold for D-003 (DISABLE_LAZ_LAYERS_PLAN.html).
+    // connectModel() wires both modelAboutToBeReset and modelReset to the
+    // same materializing rebuild() lambda. During modelAboutToBeReset the
+    // model still holds the about-to-be-qDeleteAll'd layers, so rebuild()
+    // → addLayer() materializes a render object for each, only for the
+    // trailing modelReset rebuild() to tear them all back down. The probe
+    // below connects to modelAboutToBeReset AFTER setLazLayerModel, so it
+    // fires after the scene node's handler and observes the transient
+    // materialization. Tagged [!shouldfail] until D-003's fix splits the
+    // two handlers (lightweight invalidator on aboutToBeReset, materializing
+    // rebuild reserved for modelReset).
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwScene scene;
+    cwKeywordItemModel keywordItems;
+    cwLazLayerModel model;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+    node.setKeywordItemModel(&keywordItems);
+    node.setLazLayerModel(&model);
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    cwLazLayer* layer = addLazViaRescan(model, gisLayersDir, QStringLiteral("reset-churn"));
+    REQUIRE(layer != nullptr);
+    REQUIRE(node.pointCloudForLayer(layer) != nullptr);
+
+    bool stillMaterializedAtAboutToReset = false;
+    QObject::connect(&model, &cwLazLayerModel::modelAboutToBeReset, &node,
+                     [&]() {
+                         stillMaterializedAtAboutToReset =
+                             (node.pointCloudForLayer(layer) != nullptr);
+                     });
+
+    model.clear();
+
+    REQUIRE_FALSE(stillMaterializedAtAboutToReset);
+    REQUIRE(node.visibleLayers().isEmpty());
+}
+
 TEST_CASE("setLazLayerModel disconnects prior-model layers from onEnabledChanged",
           "[cwLazLayersSceneNode][cwLazLayerEnabled]")
 {
