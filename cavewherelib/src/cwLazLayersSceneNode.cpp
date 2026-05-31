@@ -136,8 +136,14 @@ void cwLazLayersSceneNode::connectModel()
                     removeLayer(m_model->layerAt(i));
                 }
             });
+    // modelAboutToBeReset gets the lightweight teardown only — at that point
+    // the model still holds the about-to-be-qDeleteAll'd layers, so calling
+    // rebuild() (which iterates m_model->layers()) would materialize render
+    // objects for layers the model is about to destroy, only to tear them
+    // down again on the trailing modelReset. clear() drops current state
+    // without touching the layer list.
     connect(m_model, &cwLazLayerModel::modelAboutToBeReset,
-            this, [this]() { rebuild(); });
+            this, [this]() { clear(); });
     connect(m_model, &cwLazLayerModel::modelReset,
             this, [this]() { rebuild(); });
 }

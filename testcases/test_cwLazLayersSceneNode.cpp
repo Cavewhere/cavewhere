@@ -219,19 +219,14 @@ TEST_CASE("scene node disconnects enabledChanged on removeLayer",
 }
 
 TEST_CASE("scene node does not transiently materialize about-to-die layers during model reset",
-          "[cwLazLayersSceneNode][cwLazLayerEnabled][!shouldfail]")
+          "[cwLazLayersSceneNode][cwLazLayerEnabled]")
 {
-    // Regression scaffold for D-003 (DISABLE_LAZ_LAYERS_PLAN.html).
-    // connectModel() wires both modelAboutToBeReset and modelReset to the
-    // same materializing rebuild() lambda. During modelAboutToBeReset the
-    // model still holds the about-to-be-qDeleteAll'd layers, so rebuild()
-    // → addLayer() materializes a render object for each, only for the
-    // trailing modelReset rebuild() to tear them all back down. The probe
-    // below connects to modelAboutToBeReset AFTER setLazLayerModel, so it
-    // fires after the scene node's handler and observes the transient
-    // materialization. Tagged [!shouldfail] until D-003's fix splits the
-    // two handlers (lightweight invalidator on aboutToBeReset, materializing
-    // rebuild reserved for modelReset).
+    // Regression for D-003 (DISABLE_LAZ_LAYERS_PLAN.html): if modelAboutToBeReset
+    // routed through the materializing rebuild() (which iterates m_model->layers()),
+    // it would create render objects for the about-to-be-qDeleteAll'd layers, only
+    // for the trailing modelReset rebuild() to tear them down again. The probe
+    // below connects to modelAboutToBeReset AFTER setLazLayerModel so it fires
+    // after the scene node's handler — must observe pointCloudForLayer == nullptr.
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
