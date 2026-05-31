@@ -121,7 +121,6 @@ void cwLazLayerModel::removeAt(int index)
         return;
     }
     cwLazLayer* layer = m_layers.at(index);
-    const QString fileName = QFileInfo(layer->sourcePath()).fileName();
     // Emit before beginRemoveRows so cwSaveLoad's slot resolves the .cwlaz
     // path through m_objectStates while the entry is still live; the
     // rowsAboutToBeRemoved handler drops the entry immediately after.
@@ -133,18 +132,6 @@ void cwLazLayerModel::removeAt(int index)
     endRemoveRows();
     layer->deleteLater();
     emit countChanged();
-
-    // User-initiated removal: prune any pending overlay entry for this
-    // basename so a future file with the same name doesn't silently
-    // inherit disabled state. Rescan-driven removals (Phase 1 of
-    // rescan(), file missing / stale fingerprint) deliberately do NOT
-    // touch m_pendingStates — those entries must survive the saveAs
-    // transient and any in-place file replacement.
-    for (int i = m_pendingStates.size() - 1; i >= 0; --i) {
-        if (m_pendingStates.at(i).fileName == fileName) {
-            m_pendingStates.removeAt(i);
-        }
-    }
 }
 
 bool cwLazLayerModel::rename(int row, const QString& newBasename)
@@ -253,17 +240,6 @@ bool cwLazLayerModel::rename(int row, const QString& newBasename)
         if (QFileInfo::exists(candidate)) {
             return failWith(tr("A file named \"%1\" already exists in the GIS Layers directory.")
                             .arg(QFileInfo(candidate).fileName()));
-        }
-    }
-
-    // Rescan-side bookkeeping: the m_pendingStates overlay is keyed by
-    // basename. Re-key BEFORE the signal so any listener that walks
-    // m_pendingStates sees a consistent post-rename view.
-    const QString oldFileName = oldInfo.fileName();
-    const QString newFileName = QFileInfo(newSourcePath).fileName();
-    for (cwLazLayerData& state : m_pendingStates) {
-        if (state.fileName == oldFileName) {
-            state.fileName = newFileName;
         }
     }
 
@@ -385,20 +361,9 @@ void cwLazLayerModel::rescan()
     // Phase 1: remove layers whose file disappeared *or* whose (size, mtime)
     // pair no longer matches — that's an in-place overwrite, so the
     // in-memory point data is stale and the layer must be reloaded. Reverse
-    // iteration keeps take-at indices stable across the in-place erase.
-    //
-    // Before announcing the row removal, mirror the layer's current state
-    // into m_pendingStates so:
-    //   1. data() called during the transient (saveAs rescans the model
-    //      down to zero rows before re-populating from the new location)
-    //      still returns the disabled bit — otherwise toProtoProject would
-    //      write an empty divergence list and the bit would be lost on
-    //      disk.
-    //   2. When the same basename reappears in Phase 2 (file moved /
-    //      re-copied), applyPendingStateTo restores the prior state.
-    // User-initiated removal goes through removeAt() instead, which
-    // deliberately prunes m_pendingStates to prevent a same-named
-    // successor from silently inheriting disabled state.
+    // iteration keeps take-at indices stable across the in-place erase. The
+    // paired .cwlaz is the source of truth for enabled/UUID, so a same-named
+    // file reappearing in Phase 2 re-adopts the prior state from disk.
     for (int row = m_layers.size() - 1; row >= 0; --row) {
         cwLazLayer* layer = m_layers.at(row);
         const auto it = wantedFiles.constFind(layer->sourcePath());
@@ -410,20 +375,6 @@ void cwLazLayerModel::rescan()
             qCDebug(lcLazModel) << "rescan: remove" << shortId(layer)
                                 << "file=" << QFileInfo(layer->sourcePath()).fileName()
                                 << (stale ? "(stale fingerprint)" : "(file gone)");
-            const cwLazLayerData snapshot = layer->data();
-            if (!snapshot.fileName.isEmpty()) {
-                bool found = false;
-                for (auto& state : m_pendingStates) {
-                    if (state.fileName == snapshot.fileName) {
-                        state.enabled = snapshot.enabled;
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    m_pendingStates.append(snapshot);
-                }
-            }
             beginRemoveRows(QModelIndex(), row, row);
             m_layers.removeAt(row);
             endRemoveRows();
@@ -500,13 +451,11 @@ void cwLazLayerModel::rescan()
                 continue;
             }
             layer->setData(result.value());
-        } else {
-            // Fall back to the legacy proto-driven overlay for the saveAs
-            // transient case. The .cwlaz is the new primary source of
-            // truth; this branch only runs when none exists on disk yet
-            // (commit 3 retires the proto field).
-            applyPendingStateTo(layer);
         }
+        // No paired .cwlaz: the layer takes its defaults (enabled = true,
+        // a freshly-minted UUID). The next save flush writes the .cwlaz
+        // alongside, making the on-disk pair the source of truth from
+        // then on.
         qCDebug(lcLazModel) << "rescan: insert" << shortId(layer)
                             << "file=" << entry.fileName();
         beginInsertRows(QModelIndex(), row, row);
@@ -620,63 +569,3 @@ QString cwLazLayerModel::folderName()
     return QStringLiteral("GIS Layers");
 }
 
-QList<cwLazLayerData> cwLazLayerModel::data() const
-{
-    // Snapshot current layers, then append any pending entries whose
-    // fileName isn't already covered by a live layer. The pending overlay
-    // carries state for layers that aren't currently in the model — most
-    // commonly during a saveAs transient (clear() + rescan), but also for
-    // entries persisted in a previous session whose file has since gone
-    // missing on disk; preserving them keeps the disabled bit intact if
-    // the file ever reappears.
-    QList<cwLazLayerData> out;
-    out.reserve(m_layers.size() + m_pendingStates.size());
-    for (cwLazLayer* layer : m_layers) {
-        if (layer == nullptr) {
-            continue;
-        }
-        cwLazLayerData entry = layer->data();
-        if (entry.fileName.isEmpty()) {
-            continue;
-        }
-        out.append(entry);
-    }
-    for (const auto& pending : m_pendingStates) {
-        bool covered = false;
-        for (const auto& live : std::as_const(out)) {
-            if (live.fileName == pending.fileName) {
-                covered = true;
-                break;
-            }
-        }
-        if (!covered) {
-            out.append(pending);
-        }
-    }
-    return out;
-}
-
-void cwLazLayerModel::setData(const QList<cwLazLayerData>& data)
-{
-    m_pendingStates = data;
-    for (cwLazLayer* layer : std::as_const(m_layers)) {
-        applyPendingStateTo(layer);
-    }
-}
-
-void cwLazLayerModel::applyPendingStateTo(cwLazLayer* layer)
-{
-    if (layer == nullptr) {
-        return;
-    }
-    const QString fileName = QFileInfo(layer->sourcePath()).fileName();
-    if (fileName.isEmpty()) {
-        return;
-    }
-    for (const auto& state : std::as_const(m_pendingStates)) {
-        if (state.fileName == fileName) {
-            layer->setData(state);
-            return;
-        }
-    }
-}

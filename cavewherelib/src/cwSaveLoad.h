@@ -131,7 +131,6 @@ public:
         QString dataRoot;
         bool syncEnabled = true;
         QString projectId; // UUID stable across renames; empty on legacy projects
-        QList<cwLazLayerData> lazLayerStates;
     };
 
     struct IdentityRepairData {

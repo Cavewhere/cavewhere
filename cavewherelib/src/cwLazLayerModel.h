@@ -81,20 +81,6 @@ public:
 
     void clear();
 
-    /// Snapshot persistable state for every layer the model knows about,
-    /// merged with carried-over entries for layers that were persisted in a
-    /// previous session but aren't currently present (e.g. during a saveAs
-    /// transient when the model has been cleared and is being re-populated).
-    QList<cwLazLayerData> data() const;
-
-    /// Apply persisted state. Entries that match an existing layer (keyed by
-    /// fileName basename) are applied immediately; entries that don't match
-    /// are stored as a pending overlay and applied as matching layers are
-    /// later inserted by rescan(). Pending entries survive clear(), so a
-    /// saveAs transient doesn't lose state; they're pruned only when the
-    /// user removes a layer via removeAt().
-    void setData(const QList<cwLazLayerData>& data);
-
     static QString folderName();
 
 signals:
@@ -127,20 +113,12 @@ private:
     void maybeAdoptRegionDefaultsFromLaz(const QString& sourcePath);
     cwProject* project() const;
     cwLazLayer* createLayer();
-    void applyPendingStateTo(cwLazLayer* layer);
 
     QList<cwLazLayer*> m_layers;
     cwFutureManagerToken m_futureManagerToken;
     QString m_regionGlobalCS;
     cwGeoPoint m_regionWorldOrigin;
     QDir m_gisLayersDir;
-
-    // Per-layer state that has been handed to setData() but hasn't yet been
-    // applied to a matching layer — usually because the layer hasn't been
-    // discovered by rescan() yet. Survives clear() so saveAs transients
-    // don't drop state. Pruned by removeAt() so a user-removed layer
-    // doesn't silently re-disable its same-named successor.
-    QList<cwLazLayerData> m_pendingStates;
 };
 
 #endif // CWLAZLAYERMODEL_H

@@ -189,6 +189,52 @@ TEST_CASE("cwLazLayer save/load: disabled state survives reopen",
     REQUIRE(reloadedB->enabled() == true);
 }
 
+TEST_CASE("cwLazLayer save/load: .cwproj has no reserved-7 (lazLayerStates) field",
+          "[cwLazLayer][cwSaveLoad]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString laz = writeMinimalLaz(tempLazPath(tempDir, QStringLiteral("noState")));
+
+    auto root = std::make_unique<cwRootData>();
+    auto* project = root->project();
+    auto* region = project->cavingRegion();
+    addLazAndWait(root.get(), {laz});
+    REQUIRE(region->lazLayers()->count() == 1);
+    auto* layer = region->lazLayers()->layerAt(0);
+    REQUIRE(waitForLazLayerLoaded(layer));
+
+    // A disabled layer used to flush a LazLayerState divergence into the
+    // .cwproj at field number 7. Verify the new code path writes no such
+    // entry — the only proof is parsing the on-disk file and inspecting
+    // ProjectMetadata.unknown_fields() for field 7.
+    layer->setEnabled(false);
+
+    const QString projectPath = QDir(tempDir.path())
+                                    .filePath(QStringLiteral("laz-noState-%1.cwproj")
+                                                  .arg(QCoreApplication::applicationPid()));
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    root->futureManagerModel()->waitForFinished();
+
+    const QString actualPath = project->filename();
+    QFile cwprojFile(actualPath);
+    REQUIRE(cwprojFile.open(QIODevice::ReadOnly));
+    const QByteArray bytes = cwprojFile.readAll();
+    cwprojFile.close();
+
+    // .cwproj is JSON on disk, not binary protobuf. The proto field is
+    // `reserved 7`, so the generated type has no accessor and the writer
+    // literally cannot emit it. This is a regression alarm — if a future
+    // commit re-introduces a `lazLayerStates`-named field on ProjectMetadata,
+    // the JSON would contain it under one of the two casing policies and the
+    // test fires. JsonPrintOptions in cwSaveLoadPrivate is default-constructed
+    // (preserve_proto_field_names = false), so the writer emits lowerCamelCase
+    // keys, but cover both spellings for resilience against config changes.
+    REQUIRE_FALSE(bytes.contains("lazLayerStates"));
+    REQUIRE_FALSE(bytes.contains("lazlayerstates"));
+}
+
 TEST_CASE("cwLazLayer save/load: user-removed layer does not silently disable its same-named successor",
           "[cwLazLayer][cwLazLayerEnabled][cwSaveLoad]") {
     QTemporaryDir tempDir;
@@ -285,7 +331,7 @@ TEST_CASE("cwLazLayer save/load: all-enabled round-trip leaves all enabled",
     REQUIRE(reloadedRegion->lazLayers()->layerAt(1)->enabled() == true);
 }
 
-TEST_CASE("cwLazLayer save/load: backward compat — projects without LazLayerState load all-enabled",
+TEST_CASE("cwLazLayer save/load: all-defaults project round-trips with every layer enabled",
           "[cwLazLayer][cwLazLayerEnabled][cwSaveLoad]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -300,9 +346,6 @@ TEST_CASE("cwLazLayer save/load: backward compat — projects without LazLayerSt
     REQUIRE(region->lazLayers()->count() == 1);
     REQUIRE(waitForLazLayerLoaded(region->lazLayers()->layerAt(0)));
 
-    // Save with all layers enabled — no LazLayerState entry is written for
-    // layers at the default. This is the on-disk shape a pre-feature project
-    // produces.
     const QString projectPath = QDir(tempDir.path())
                                     .filePath(QStringLiteral("laz-bc-%1.cwproj")
                                                   .arg(QCoreApplication::applicationPid()));
