@@ -283,3 +283,90 @@ TEST_CASE("cwLazLayerModel: missing file → loadStatus == Error",
     REQUIRE(layer->sourcePath() == missingPath);
     delete layer;
 }
+
+TEST_CASE("cwLazLayerModel: roleNames() exposes \"enabled\" mapped to EnabledRole",
+          "[cwLazLayerModel]") {
+    cwLazLayerModel model;
+    const auto roles = model.roleNames();
+    REQUIRE(roles.value(cwLazLayerModel::EnabledRole) == QByteArray("enabled"));
+}
+
+TEST_CASE("cwLazLayerModel: data(EnabledRole) returns layer->enabled()",
+          "[cwLazLayerModel]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QDir gisLayers = makeGisLayersDir(tempDir);
+    cwLazLayerModel model;
+    model.setGisLayersDir(gisLayers);
+
+    REQUIRE(!dropLazIntoDir(gisLayers, QStringLiteral("enabledread")).isEmpty());
+    model.rescan();
+    auto* layer = model.layerAt(0);
+    REQUIRE(layer != nullptr);
+
+    const QModelIndex idx = model.index(0, 0);
+    REQUIRE(model.data(idx, cwLazLayerModel::EnabledRole).toBool() == layer->enabled());
+
+    layer->setEnabled(false);
+    REQUIRE(model.data(idx, cwLazLayerModel::EnabledRole).toBool() == false);
+
+    layer->setEnabled(true);
+    REQUIRE(model.data(idx, cwLazLayerModel::EnabledRole).toBool() == true);
+}
+
+TEST_CASE("cwLazLayerModel: setData(EnabledRole) drives layer->enabled()",
+          "[cwLazLayerModel]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QDir gisLayers = makeGisLayersDir(tempDir);
+    cwLazLayerModel model;
+    model.setGisLayersDir(gisLayers);
+
+    REQUIRE(!dropLazIntoDir(gisLayers, QStringLiteral("enabledwrite")).isEmpty());
+    model.rescan();
+    auto* layer = model.layerAt(0);
+    REQUIRE(layer != nullptr);
+    REQUIRE(layer->enabled() == true);
+
+    const QModelIndex idx = model.index(0, 0);
+    REQUIRE(model.setData(idx, false, cwLazLayerModel::EnabledRole) == true);
+    REQUIRE(layer->enabled() == false);
+
+    REQUIRE(model.setData(idx, true, cwLazLayerModel::EnabledRole) == true);
+    REQUIRE(layer->enabled() == true);
+
+    // Out-of-range row returns false without crashing.
+    const QModelIndex badIdx = model.index(99, 0);
+    REQUIRE(model.setData(badIdx, false, cwLazLayerModel::EnabledRole) == false);
+}
+
+TEST_CASE("cwLazLayerModel: external setEnabled emits dataChanged with EnabledRole",
+          "[cwLazLayerModel]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QDir gisLayers = makeGisLayersDir(tempDir);
+    cwLazLayerModel model;
+    model.setGisLayersDir(gisLayers);
+
+    REQUIRE(!dropLazIntoDir(gisLayers, QStringLiteral("enabledspy")).isEmpty());
+    model.rescan();
+    auto* layer = model.layerAt(0);
+    REQUIRE(layer != nullptr);
+
+    QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+    layer->setEnabled(false);
+
+    bool sawEnabledRole = false;
+    for (int i = 0; i < dataChangedSpy.size(); ++i) {
+        const auto& args = dataChangedSpy.at(i);
+        const QVector<int> roles = args.at(2).value<QVector<int>>();
+        if (roles.contains(int(cwLazLayerModel::EnabledRole))) {
+            sawEnabledRole = true;
+            break;
+        }
+    }
+    REQUIRE(sawEnabledRole);
+}

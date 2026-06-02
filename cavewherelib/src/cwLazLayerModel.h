@@ -41,7 +41,8 @@ public:
         SourceCSRole,
         PointSizeRole,
         LoadStatusRole,
-        PointCountRole
+        PointCountRole,
+        EnabledRole
     };
     Q_ENUM(Roles)
 
@@ -50,6 +51,7 @@ public:
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role) const override;
+    bool setData(const QModelIndex& index, const QVariant& value, int role) override;
     QHash<int, QByteArray> roleNames() const override;
 
     Q_INVOKABLE void addFromFiles(QList<QUrl> urls);

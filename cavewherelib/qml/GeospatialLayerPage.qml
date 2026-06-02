@@ -100,6 +100,7 @@ StandardPage {
             required property string name
             required property string sourceCS
             required property int pointCount
+            required property LazLayer lazLayer
 
             implicitHeight: rowLayoutId.implicitHeight + Theme.tightSpacing * 2
             width: QQ.ListView.view ? QQ.ListView.view.width : 0
@@ -124,21 +125,38 @@ StandardPage {
                 anchors.rightMargin: Theme.delegatePadding
                 spacing: Theme.columnGap
 
+                QC.CheckBox {
+                    objectName: "enabledToggle"
+                    checked: wideDelegateId.lazLayer.enabled
+                    onToggled: wideDelegateId.lazLayer.enabled = checked
+                }
+
                 QC.Label {
                     Layout.preferredWidth: 220
                     text: wideDelegateId.name
                     elide: QQ.Text.ElideMiddle
+                    opacity: wideDelegateId.lazLayer.enabled ? 1.0 : 0.5
                 }
 
                 QC.Label {
                     Layout.preferredWidth: 140
                     text: wideDelegateId.sourceCS
                     color: Theme.textSubtle
+                    opacity: wideDelegateId.lazLayer.enabled ? 1.0 : 0.5
                 }
 
                 QC.Label {
                     Layout.preferredWidth: 120
                     text: wideDelegateId.pointCount.toLocaleString() + " pts"
+                    opacity: wideDelegateId.lazLayer.enabled ? 1.0 : 0.5
+                }
+
+                QC.Label {
+                    objectName: "disabledChip"
+                    text: "Disabled"
+                    color: Theme.textSubtle
+                    font.pixelSize: Theme.fontSizeCaption
+                    visible: !wideDelegateId.lazLayer.enabled
                 }
 
                 QQ.Item { Layout.fillWidth: true }
@@ -163,9 +181,10 @@ StandardPage {
             required property string name
             required property string sourceCS
             required property int pointCount
+            required property LazLayer lazLayer
 
             width: QQ.ListView.view ? QQ.ListView.view.width : 0
-            implicitHeight: narrowFlow.implicitHeight + Theme.delegatePadding * 2
+            implicitHeight: narrowRow.implicitHeight + Theme.delegatePadding * 2
 
             TableRowBackground {
                 isSelected: layerListView.currentIndex === narrowDelegateId.index
@@ -178,31 +197,52 @@ StandardPage {
                 onTapped: layerListView.currentIndex = narrowDelegateId.index
             }
 
-            QQ.Flow {
-                id: narrowFlow
+            RowLayout {
+                id: narrowRow
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.leftMargin: Theme.delegatePadding
                 anchors.rightMargin: Theme.delegatePadding
-                spacing: Theme.flowSpacing
+                spacing: Theme.columnGap
 
-                QC.Label {
-                    text: narrowDelegateId.name
-                    font.bold: true
+                QC.CheckBox {
+                    objectName: "enabledToggle"
+                    checked: narrowDelegateId.lazLayer.enabled
+                    onToggled: narrowDelegateId.lazLayer.enabled = checked
                 }
 
-                QC.Label { text: "·"; color: Theme.textSubtle }
+                QQ.Flow {
+                    id: narrowFlow
+                    Layout.fillWidth: true
+                    spacing: Theme.flowSpacing
+                    opacity: narrowDelegateId.lazLayer.enabled ? 1.0 : 0.5
+
+                    QC.Label {
+                        text: narrowDelegateId.name
+                        font.bold: true
+                    }
+
+                    QC.Label { text: "·"; color: Theme.textSubtle }
+
+                    QC.Label {
+                        text: narrowDelegateId.sourceCS
+                        color: Theme.textSubtle
+                    }
+
+                    QC.Label { text: "·"; color: Theme.textSubtle }
+
+                    QC.Label {
+                        text: narrowDelegateId.pointCount.toLocaleString() + " pts"
+                    }
+                }
 
                 QC.Label {
-                    text: narrowDelegateId.sourceCS
+                    objectName: "disabledChip"
+                    text: "Disabled"
                     color: Theme.textSubtle
-                }
-
-                QC.Label { text: "·"; color: Theme.textSubtle }
-
-                QC.Label {
-                    text: narrowDelegateId.pointCount.toLocaleString() + " pts"
+                    font.pixelSize: Theme.fontSizeCaption
+                    visible: !narrowDelegateId.lazLayer.enabled
                 }
             }
 

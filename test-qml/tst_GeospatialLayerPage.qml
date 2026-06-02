@@ -179,6 +179,59 @@ MainWindowTest {
                       "no-CS hint should appear once a no-CS layer is present")
         }
 
+        function test_toggleEnabledViaCheckBox() {
+            gotoGeospatialLayers()
+
+            const lazPath = TestHelper.writeMinimalLazInTempDir("toggleenabled")
+            RootData.region.lazLayers.addFromFiles([Qt.url("file://" + lazPath)])
+            tryCompare(RootData.region.lazLayers, "count", 1)
+            waitForLazLoadsToFinish()
+
+            const layer = RootData.region.lazLayers.layerAt(0)
+            verify(layer !== null)
+            tryCompare(layer, "enabled", true)
+
+            const page = RootData.pageView.currentPageItem
+            const tableView = findChild(page, "geospatialLayerTableView")
+            tryCompare(tableView, "count", 1)
+
+            const toggle = findChild(tableView, "enabledToggle")
+            verify(toggle !== null, "enabledToggle must exist on the delegate")
+            tryCompare(toggle, "checked", true)
+
+            mouseClick(toggle)
+            tryCompare(layer, "enabled", false)
+            tryCompare(toggle, "checked", false)
+
+            mouseClick(toggle)
+            tryCompare(layer, "enabled", true)
+            tryCompare(toggle, "checked", true)
+        }
+
+        function test_disabledRowDimsAndShowsChip() {
+            gotoGeospatialLayers()
+
+            const lazPath = TestHelper.writeMinimalLazInTempDir("disabledchip")
+            RootData.region.lazLayers.addFromFiles([Qt.url("file://" + lazPath)])
+            tryCompare(RootData.region.lazLayers, "count", 1)
+            waitForLazLoadsToFinish()
+
+            const layer = RootData.region.lazLayers.layerAt(0)
+            const page = RootData.pageView.currentPageItem
+            const tableView = findChild(page, "geospatialLayerTableView")
+            tryCompare(tableView, "count", 1)
+
+            const chip = findChild(tableView, "disabledChip")
+            verify(chip !== null, "disabledChip must exist on the delegate")
+            tryCompare(chip, "visible", false)
+
+            layer.enabled = false
+            tryCompare(chip, "visible", true)
+
+            layer.enabled = true
+            tryCompare(chip, "visible", false)
+        }
+
         function test_geospatialLayersLinkCount() {
             RootData.pageSelectionModel.currentPageAddress = "Source/Data"
             tryVerify(() => RootData.pageView.currentPageItem !== null

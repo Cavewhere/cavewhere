@@ -61,20 +61,37 @@ QVariant cwLazLayerModel::data(const QModelIndex& index, int role) const
     case PointSizeRole:    return layer->pointSize();
     case LoadStatusRole:   return QVariant::fromValue(layer->loadStatus());
     case PointCountRole:   return layer->pointCount();
+    case EnabledRole:      return layer->enabled();
     default:               return QVariant();
+    }
+}
+
+bool cwLazLayerModel::setData(const QModelIndex& index, const QVariant& value, int role)
+{
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_layers.size()) {
+        return false;
+    }
+    cwLazLayer* layer = m_layers.at(index.row());
+    switch (role) {
+    case EnabledRole:
+        layer->setEnabled(value.toBool());
+        return true;
+    default:
+        return false;
     }
 }
 
 QHash<int, QByteArray> cwLazLayerModel::roleNames() const
 {
     static const QHash<int, QByteArray> roles = {
-        {LayerRole,        "layer"},
+        {LayerRole,        "lazLayer"},
         {NameRole,         "name"},
         {SourcePathRole,   "sourcePath"},
         {SourceCSRole,     "sourceCS"},
         {PointSizeRole,    "pointSize"},
         {LoadStatusRole,   "loadStatus"},
-        {PointCountRole,   "pointCount"}
+        {PointCountRole,   "pointCount"},
+        {EnabledRole,      "enabled"}
     };
     return roles;
 }
@@ -498,6 +515,7 @@ void cwLazLayerModel::connectLayer(cwLazLayer* layer)
     connect(layer, &cwLazLayer::pointSizeChanged, this, [emitForRole]() { emitForRole(PointSizeRole); });
     connect(layer, &cwLazLayer::loadStatusChanged, this, [emitForRole]() { emitForRole(LoadStatusRole); });
     connect(layer, &cwLazLayer::pointCountChanged, this, [emitForRole]() { emitForRole(PointCountRole); });
+    connect(layer, &cwLazLayer::enabledChanged, this, [emitForRole]() { emitForRole(EnabledRole); });
 }
 
 cwLazLayer* cwLazLayerModel::createLayer()
