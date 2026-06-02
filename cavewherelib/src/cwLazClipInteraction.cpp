@@ -177,6 +177,20 @@ void cwLazClipInteraction::commit(Mode mode)
         return;
     }
 
+    // Snapshot the participating layers as QPointers so the success callback
+    // can flip enabled=false after the rescan. cwLazLayerModel::rescan() is a
+    // diff against (size, mtime), and the clip writes only a new clip_NNN.laz
+    // — the sources are untouched on disk, so their cwLazLayer instances
+    // survive the rescan. QPointer is belt-and-braces in case some other path
+    // does delete one before the callback runs.
+    QList<QPointer<cwLazLayer>> sourceLayers;
+    sourceLayers.reserve(visible.size());
+    for (cwLazLayer* layer : visible) {
+        if (layer != nullptr) {
+            sourceLayers.append(QPointer<cwLazLayer>(layer));
+        }
+    }
+
     const QString outPath = nextOutputPath();
     if (outPath.isEmpty()) {
         reportFailure(QStringLiteral("Could not determine output path in GIS Layers."));
@@ -231,10 +245,20 @@ void cwLazClipInteraction::commit(Mode mode)
     }
 
     AsyncFuture::observe(m_currentClip).context(this,
-        [this, modelGuard](cwLazClipOperation::Result result) {
+        [this, modelGuard, sourceLayers](cwLazClipOperation::Result result) {
             if (!result.hasError()) {
                 if (modelGuard) {
                     modelGuard->rescan();
+                }
+                // Disable each contributing source layer so only the newly
+                // written clip stays drawn. setEnabled(false) flips the
+                // persisted bit through the paired .cwlaz on the next save,
+                // so the disable survives a project reopen — symmetric with
+                // the user explicitly toggling the row off in the UI.
+                for (const QPointer<cwLazLayer>& layer : sourceLayers) {
+                    if (!layer.isNull()) {
+                        layer->setEnabled(false);
+                    }
                 }
                 resetPolygonToIdle();
                 emit clipSucceeded(result.value().outputPath);

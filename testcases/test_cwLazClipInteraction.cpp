@@ -11,14 +11,25 @@
 
 //Our includes
 #include "cwCamera.h"
+#include "cwCavingRegion.h"
+#include "cwKeywordItemModel.h"
 #include "cwLazClipInteraction.h"
+#include "cwLazLayer.h"
+#include "cwLazLayerModel.h"
+#include "cwLazLayersSceneNode.h"
 #include "cwProjection.h"
+#include "cwScene.h"
+
+#include "LazFixtureHelper.h"
 
 //Qt includes
+#include <QDir>
 #include <QList>
 #include <QMatrix4x4>
 #include <QPointF>
 #include <QRect>
+#include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QVector3D>
 
 namespace {
@@ -268,4 +279,103 @@ TEST_CASE("cwLazClipInteraction: addWorldPoint stores the vertex unchanged",
     CHECK(poly.at(0) == QVector3D(1.5f, -2.25f, 0.0f));
     CHECK(poly.at(1) == QVector3D(3.0f, 4.0f, 0.5f));
     CHECK(poly.at(2) == QVector3D(-1.0f, 0.0f, -0.25f));
+}
+
+namespace {
+
+QDir prepareGisLayersDir(const QTemporaryDir& tempDir)
+{
+    const QString path = QDir(tempDir.path()).filePath(cwLazLayerModel::folderName());
+    QDir().mkpath(path);
+    return QDir(path);
+}
+
+cwLazLayer* writeAndRescanLazLayer(cwLazLayerModel& model,
+                                   const QDir& gisLayersDir,
+                                   const QString& tag,
+                                   int previousCount)
+{
+    const QString filePath = gisLayersDir.filePath(tag + QStringLiteral(".laz"));
+    if (writeMinimalLaz(filePath).isEmpty()) {
+        return nullptr;
+    }
+    model.setGisLayersDir(gisLayersDir);
+    model.rescan();
+    if (model.count() != previousCount + 1) {
+        return nullptr;
+    }
+    return model.layerAt(model.count() - 1);
+}
+
+} // namespace
+
+TEST_CASE("cwLazClipInteraction: successful clip disables every contributing source layer",
+          "[cwLazClipInteraction][autoDisable]")
+{
+    // End-to-end probe of commit 3 of DISABLE_LAZ_LAYERS_PLAN: after a real
+    // clip operation succeeds, every cwLazLayer that participated must have
+    // enabled flipped to false. The negative case (cancel/failure leaves the
+    // sources enabled) is covered by the early-return branches of commit()
+    // and the worker's own cancel test in [cwLazLoader][cancel].
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwCavingRegion region;
+    cwLazLayerModel* model = region.lazLayers();
+    REQUIRE(model != nullptr);
+
+    cwScene scene;
+    cwKeywordItemModel keywordItems;
+    cwLazLayersSceneNode sceneNode;
+    sceneNode.setScene(&scene);
+    sceneNode.setKeywordItemModel(&keywordItems);
+    sceneNode.setLazLayerModel(model);
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    cwLazLayer* layerA = writeAndRescanLazLayer(*model, gisLayersDir,
+                                                QStringLiteral("clip-src-A"), 0);
+    REQUIRE(layerA != nullptr);
+    REQUIRE(waitForLazLayerLoaded(layerA));
+    cwLazLayer* layerB = writeAndRescanLazLayer(*model, gisLayersDir,
+                                                QStringLiteral("clip-src-B"), 1);
+    REQUIRE(layerB != nullptr);
+    REQUIRE(waitForLazLayerLoaded(layerB));
+
+    REQUIRE(layerA->enabled());
+    REQUIRE(layerB->enabled());
+    REQUIRE(sceneNode.visibleLayers().size() == 2);
+
+    cwCamera camera;
+    configureCamera(&camera,
+                    lookAt(QVector3D(0, 0, 10),
+                           QVector3D(0, 0, 0),
+                           QVector3D(0, 1, 0)),
+                    20.0);
+
+    cwLazClipInteraction interaction;
+    interaction.setCamera(&camera);
+    interaction.setRegion(&region);
+    interaction.setLazLayersSceneNode(&sceneNode);
+
+    // Square at (±10) in world XY — comfortably encloses writeMinimalLaz's
+    // five points which live at (0,0,0)..(4,4,4).
+    interaction.addWorldPoint(QVector3D(-10.0f, -10.0f, 0.0f));
+    interaction.addWorldPoint(QVector3D( 10.0f, -10.0f, 0.0f));
+    interaction.addWorldPoint(QVector3D( 10.0f,  10.0f, 0.0f));
+    interaction.addWorldPoint(QVector3D(-10.0f,  10.0f, 0.0f));
+    interaction.closePolygon();
+    REQUIRE(interaction.state() == cwLazClipInteraction::State::Closed);
+
+    QSignalSpy succeededSpy(&interaction, &cwLazClipInteraction::clipSucceeded);
+    QSignalSpy failedSpy(&interaction, &cwLazClipInteraction::clipFailed);
+
+    interaction.commit(cwLazClipInteraction::Mode::Keep);
+
+    REQUIRE(succeededSpy.wait(10000));
+    REQUIRE(failedSpy.count() == 0);
+
+    // The whole point of the enable/disable hook-up: after clip the sources
+    // are off, the rescan-added clip layer (if any) is on by default.
+    REQUIRE_FALSE(layerA->enabled());
+    REQUIRE_FALSE(layerB->enabled());
 }
