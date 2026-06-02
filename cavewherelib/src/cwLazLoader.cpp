@@ -372,6 +372,16 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
                 workerResults = mapFuture.results();
             }
 
+            // QtConcurrent::mapped().cancel() stops pending tasks from
+            // starting, so on cancellation workerResults can be strictly
+            // shorter than ranges (results stay in input order, the tail
+            // is just missing). The consumer drops the result anyway when
+            // m_enabled is false — short-circuit before trying to index
+            // past the end of workerResults.
+            if (workerResults.size() != ranges.size()) {
+                return;
+            }
+
             // Fold per-worker bboxes and counts. If any worker stopped short
             // (cancel or seek failure), compact the buffer so the prefix
             // contains exactly the points that were actually written.
@@ -385,7 +395,7 @@ QFuture<cwLazLoadResult> cwLazLoader::load(const Request& request)
 
             for (int i = 0; i < ranges.size(); ++i) {
                 const WorkerRange& rng = ranges[i];
-                const WorkerResult& wr = workerResults[i];
+                const WorkerResult& wr = workerResults.at(i);
 
                 if (wr.written > 0) {
                     if (wr.bboxMin.x() < minX) { minX = wr.bboxMin.x(); }
