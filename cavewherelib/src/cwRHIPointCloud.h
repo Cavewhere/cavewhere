@@ -71,7 +71,11 @@ private:
     cwRhiPipelineKey m_pipelineKey;
     bool m_hasPipelineKey = false;
 
-    cwTracked<cwRenderPointCloud::Data> m_data;
+    // Geometry and render-state tracked independently so a uniform-only
+    // change (gapFudge / point size) never re-stages the vertex buffer —
+    // the expensive vertex upload is gated on m_geometry.isChanged().
+    cwTracked<cwRenderPointCloud::GeometryState> m_geometry;
+    cwTracked<cwRenderPointCloud::RenderState> m_renderState;
 };
 
 #endif // CWRHIPOINTCLOUD_H
