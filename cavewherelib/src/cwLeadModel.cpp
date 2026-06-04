@@ -235,7 +235,7 @@ void cwLeadModel::addScrap(cwScrap *scrap)
             leadDataUpdated(scrap, 0, scrap->leads().size(), {cwScrap::LeadPosition});
         }
     });
-    connect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
+    connect(scrap, &cwScrap::destroyed, this, &cwLeadModel::scrapDeleted);
 }
 
 /**
@@ -376,13 +376,17 @@ void cwLeadModel::leadDataUpdated(cwScrap* scrap, int begin, int end, const QLis
  * @brief cwLeadModel::scrapDeleted
  * @param scrapObj
  *
- * Called when a scrap is deleted
+ * Called when a scrap is deleted.
+ *
+ * Note: this is connected to QObject::destroyed(QObject*), which fires from
+ * inside ~QObject() after the cwScrap-derived vtable has been reset. That
+ * means qobject_cast<cwScrap*>(scrapObj) returns nullptr here even though
+ * the pointer is genuinely a cwScrap* — only static_cast is valid, and only
+ * for use as a hash key (no member access).
  */
 void cwLeadModel::scrapDeleted(QObject *scrapObj)
 {
-    Q_ASSERT(qobject_cast<cwScrap*>(scrapObj) != nullptr);
     cwScrap* scrap = static_cast<cwScrap*>(scrapObj);
-
     removeScrap(scrap);
 }
 
