@@ -179,7 +179,7 @@ MainWindowTest {
                       "no-CS hint should appear once a no-CS layer is present")
         }
 
-        function test_toggleEnabledViaCheckBox() {
+        function test_toggleEnabledViaContextMenu() {
             gotoGeospatialLayers()
 
             const lazPath = TestHelper.writeMinimalLazInTempDir("toggleenabled")
@@ -195,17 +195,105 @@ MainWindowTest {
             const tableView = findChild(page, "geospatialLayerTableView")
             tryCompare(tableView, "count", 1)
 
-            const toggle = findChild(tableView, "enabledToggle")
-            verify(toggle !== null, "enabledToggle must exist on the delegate")
-            tryCompare(toggle, "checked", true)
+            // QC.Menu's child MenuItems live in `contentData`, which isn't
+            // reachable through findChild before the popup is materialized.
+            // Reach the LazLayerContextMenu wrapper (a QQ.Item) by objectName
+            // and grab the first menu item (the Enable/Disable toggle)
+            // through its `menu` alias.
+            const ctxMenu = findChild(tableView, "lazLayerContextMenu")
+            verify(ctxMenu !== null, "lazLayerContextMenu must exist")
+            verify(ctxMenu.menu.count >= 1, "context menu must have at least one item")
+            const toggleItem = ctxMenu.menu.itemAt(0)
+            verify(toggleItem !== null, "first menu item must exist")
+            compare(toggleItem.objectName, "enabledToggleMenuItem",
+                    "first item must be the enable/disable toggle")
+            tryCompare(toggleItem, "text", "Disable")
 
-            mouseClick(toggle)
+            toggleItem.triggered()
             tryCompare(layer, "enabled", false)
-            tryCompare(toggle, "checked", false)
+            tryCompare(toggleItem, "text", "Enable")
 
-            mouseClick(toggle)
+            toggleItem.triggered()
             tryCompare(layer, "enabled", true)
-            tryCompare(toggle, "checked", true)
+            tryCompare(toggleItem, "text", "Disable")
+        }
+
+        function test_removeLayerViaContextMenu() {
+            gotoGeospatialLayers()
+
+            const lazPath = TestHelper.writeMinimalLazInTempDir("removeviactxmenu")
+            RootData.region.lazLayers.addFromFiles([Qt.url("file://" + lazPath)])
+            tryCompare(RootData.region.lazLayers, "count", 1)
+            waitForLazLoadsToFinish()
+
+            const page = RootData.pageView.currentPageItem
+            const tableView = findChild(page, "geospatialLayerTableView")
+            tryCompare(tableView, "count", 1)
+
+            // QC.Menu's child MenuItems live in `contentData`; reach them
+            // through the LazLayerContextMenu wrapper's `menu` alias. Item 0
+            // is the Enable/Disable toggle; item 1 is "Remove <name>".
+            const ctxMenu = findChild(tableView, "lazLayerContextMenu")
+            verify(ctxMenu !== null, "lazLayerContextMenu must exist")
+            verify(ctxMenu.menu.count >= 2, "context menu must have at least two items")
+            const removeItem = ctxMenu.menu.itemAt(1)
+            verify(removeItem !== null, "remove menu item must exist")
+            verify(removeItem.text.indexOf("Remove") === 0,
+                   "second item should be 'Remove ...'")
+
+            // Trigger the MenuItem directly — popup() on --platform offscreen
+            // is unreliable, but triggered() executes the handler that wires
+            // RemoveAskBox.
+            removeItem.triggered()
+
+            const removeAskBox = findChild(page, "removeChallange")
+            verify(removeAskBox !== null, "RemoveAskBox must exist")
+            tryVerify(() => removeAskBox.visible, 2000,
+                      "RemoveAskBox should open after context-menu Remove")
+            compare(removeAskBox.indexToRemove, 0,
+                    "indexToRemove should match the delegate row")
+
+            const removeButton = findChild(removeAskBox, "removeButton")
+            mouseClick(removeButton)
+            tryVerify(() => !removeAskBox.visible)
+
+            tryCompare(RootData.region.lazLayers, "count", 0)
+        }
+
+        function test_rightClickOpensContextMenu() {
+            gotoGeospatialLayers()
+
+            const lazPath = TestHelper.writeMinimalLazInTempDir("rightclickopen")
+            RootData.region.lazLayers.addFromFiles([Qt.url("file://" + lazPath)])
+            tryCompare(RootData.region.lazLayers, "count", 1)
+            waitForLazLoadsToFinish()
+
+            const page = RootData.pageView.currentPageItem
+            const tableView = findChild(page, "geospatialLayerTableView")
+            tryCompare(tableView, "count", 1)
+
+            // Wait for the row delegate to materialize before clicking it.
+            let delegate = null
+            tryVerify(() => {
+                delegate = tableView.itemAtIndex(0)
+                return delegate !== null && delegate.width > 0 && delegate.height > 0
+            }, 2000, "row delegate at index 0 should materialize")
+
+            const ctxMenu = findChild(tableView, "lazLayerContextMenu")
+            verify(ctxMenu !== null, "lazLayerContextMenu must exist")
+            verify(!ctxMenu.menu.opened, "context menu should start closed")
+
+            // Right-button TapHandler in LazLayerContextMenu listens for
+            // Mouse | TouchPad. mouseClick with Qt.RightButton drives it.
+            mouseClick(delegate, delegate.width / 2, delegate.height / 2,
+                       Qt.RightButton)
+
+            tryVerify(() => ctxMenu.menu.opened, 2000,
+                      "context menu should open after right-click")
+
+            ctxMenu.menu.close()
+            tryVerify(() => !ctxMenu.menu.opened, 2000,
+                      "context menu should close cleanly")
         }
 
         function test_disabledRowDimsAndShowsChip() {

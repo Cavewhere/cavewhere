@@ -39,6 +39,7 @@ public:
         NameRole,
         SourcePathRole,
         SourceCSRole,
+        SourceCSDisplayNameRole,
         PointSizeRole,
         LoadStatusRole,
         PointCountRole,

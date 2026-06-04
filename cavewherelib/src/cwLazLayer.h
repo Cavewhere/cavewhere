@@ -53,6 +53,7 @@ class CAVEWHERE_LIB_EXPORT cwLazLayer : public QObject
 
     Q_PROPERTY(QString name READ name NOTIFY nameChanged)
     Q_PROPERTY(QString sourceCS READ sourceCS NOTIFY sourceCSChanged)
+    Q_PROPERTY(QString sourceCSDisplayName READ sourceCSDisplayName NOTIFY sourceCSChanged)
     Q_PROPERTY(LoadStatus loadStatus READ loadStatus NOTIFY loadStatusChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
     Q_PROPERTY(int pointCount READ pointCount NOTIFY pointCountChanged)
@@ -100,6 +101,7 @@ public:
 
     QString name() const { return m_name; }
     QString sourceCS() const { return m_sourceCS; }
+    QString sourceCSDisplayName() const;
     QString sourceCSOverride() const { return m_sourceCSOverride; }
     void setSourceCSOverride(const QString& cs);
 

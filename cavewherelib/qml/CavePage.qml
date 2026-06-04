@@ -530,7 +530,7 @@ StandardPage {
                         implicitWidth: layoutId.width
                         implicitHeight: layoutId.height
 
-                        DataRightClickMouseMenu {
+                        CaveTripContextMenu {
                             anchors.fill: parent
                             removeChallenge: removeChallengeId
                             row: rowDelegateId.index
@@ -873,7 +873,7 @@ StandardPage {
                     }
                 }
 
-                DataRightClickMouseMenu {
+                CaveTripContextMenu {
                     anchors.fill: parent
                     removeChallenge: removeChallengeId
                     row: flowDelegateId.index

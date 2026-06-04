@@ -13,6 +13,7 @@
 #include <QLoggingCategory>
 
 //Our includes
+#include "cwCoordinateTransform.h"
 #include "cwFuture.h"
 #include "cwKeyword.h"
 #include "cwKeywordModel.h"
@@ -193,6 +194,15 @@ void cwLazLayer::setEnabled(bool enabled)
     } else {
         reload();
     }
+}
+
+QString cwLazLayer::sourceCSDisplayName() const
+{
+    // PROJ resolves WKT, PROJ-strings, and authority codes uniformly, so the
+    // same nameFor() call handles every flavor of sourceCS the loader can
+    // produce. nameFor() has a thread_local cache keyed on the input string,
+    // so binding re-evaluation in QML doesn't replay proj_create per row.
+    return cwCoordinateTransform::nameFor(m_sourceCS);
 }
 
 void cwLazLayer::setSourceCSOverride(const QString& cs)
