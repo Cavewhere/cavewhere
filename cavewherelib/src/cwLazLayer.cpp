@@ -13,6 +13,7 @@
 #include <QLoggingCategory>
 
 //Our includes
+#include "cwCoordinateTransform.h"
 #include "cwFuture.h"
 #include "cwKeyword.h"
 #include "cwKeywordModel.h"
@@ -45,6 +46,12 @@ cwLazLayer::cwLazLayer(QObject* parent) :
 
         AsyncFuture::observe(m_loadRestarter.future())
             .context(this, [this]() {
+                // The user may have disabled the layer between the load
+                // start and its delivery. Drop the result — setEnabled(false)
+                // already cleared geometry and reset status to Idle.
+                if (!m_enabled) {
+                    return;
+                }
                 QFuture<cwLazLoadResult> finished = m_loadRestarter.future();
                 if (finished.resultCount() == 0) {
                     setErrorMessage(QStringLiteral("Load failed: %1").arg(m_sourcePath));
@@ -64,23 +71,88 @@ cwLazLayer::cwLazLayer(QObject* parent) :
 
 cwLazLayer::~cwLazLayer() = default;
 
+cwLazLayerData cwLazLayer::data() const
+{
+    cwLazLayerData out;
+    out.fileName = QFileInfo(m_sourcePath).fileName();
+    out.id = m_id;
+    out.enabled = m_enabled;
+    return out;
+}
+
+void cwLazLayer::setData(const cwLazLayerData& data)
+{
+    // Adopt the persisted UUID. Null means the .cwlaz had no id field, so
+    // keep the auto-generated one this layer was constructed with.
+    if (!data.id.isNull() && m_id != data.id) {
+        m_id = data.id;
+        updateIdKeyword();
+    }
+    setEnabled(data.enabled);
+}
+
 void cwLazLayer::setSourcePath(const QString& path)
 {
-    if (m_sourcePath == path) {
+    // Snapshot the file's size+mtime before the path-change short-circuit:
+    // a same-path reset (the same caller pointing at the same file after an
+    // in-place overwrite) still needs to refresh the cached fingerprint so
+    // cwLazLayerModel::rescan can detect the change. QFileInfo::size() and
+    // lastModified() already sentinel to -1 / invalid for missing files.
+    const QFileInfo info(path);
+    const qint64 newSize = info.size();
+    const QDateTime newMtime = info.lastModified();
+
+    const bool pathChanged = (m_sourcePath != path);
+    const bool fingerprintChanged =
+            (m_sourceSize != newSize || m_sourceMtime != newMtime);
+    if (!pathChanged && !fingerprintChanged) {
         return;
     }
+
     m_sourcePath = path;
+    m_sourceSize = newSize;
+    m_sourceMtime = newMtime;
+
+    if (pathChanged) {
+        emit sourcePathChanged();
+
+        const QString basename = info.baseName();
+        if (m_name != basename) {
+            m_name = basename;
+            emit nameChanged();
+            updateNameKeyword();
+        }
+        updateFileNameKeyword();
+    }
+
+    reload();
+}
+
+void cwLazLayer::renameSourcePath(const QString& newPath)
+{
+    if (m_sourcePath == newPath) {
+        return;
+    }
+
+    const QFileInfo info(newPath);
+    m_sourcePath = newPath;
+    // Capture the fingerprint of the new path so the next rescan doesn't see
+    // a size/mtime mismatch and force a reload of unchanged bytes. Use
+    // QFileInfo::exists() to keep -1/invalid sentinels intact for files
+    // that don't exist on disk yet (the Move job hasn't run when this is
+    // called during rename).
+    m_sourceSize = info.exists() ? info.size() : qint64{-1};
+    m_sourceMtime = info.exists() ? info.lastModified() : QDateTime{};
+
     emit sourcePathChanged();
 
-    const QString basename = QFileInfo(path).baseName();
+    const QString basename = info.baseName();
     if (m_name != basename) {
         m_name = basename;
         emit nameChanged();
         updateNameKeyword();
     }
     updateFileNameKeyword();
-
-    reload();
 }
 
 void cwLazLayer::setPointSize(double pointSize)
@@ -90,6 +162,47 @@ void cwLazLayer::setPointSize(double pointSize)
     }
     m_pointSize = pointSize;
     emit pointSizeChanged();
+}
+
+void cwLazLayer::setEnabled(bool enabled)
+{
+    if (m_enabled == enabled) {
+        return;
+    }
+    m_enabled = enabled;
+    emit enabledChanged();
+
+    if (!m_enabled) {
+        // Cancel any in-flight load. asyncfuture's Restarter propagates the
+        // outer cancel down to the inner worker, where cwLazLoader's
+        // QPromise::isCanceled() check between point chunks short-circuits.
+        // The observer chain below still receives the canceled future; the
+        // m_enabled guard there drops the result.
+        m_loadRestarter.future().cancel();
+        const bool hadGeometry = (m_geometry.vertexCount() > 0);
+        m_geometry = cwGeometry{};
+        m_bboxMin = QVector3D{};
+        m_bboxMax = QVector3D{};
+        m_meanSpacingXY = 0.0f;
+        setErrorMessage(QString());
+        setLoadStatus(LoadStatus::Idle);
+        if (hadGeometry) {
+            emit pointCountChanged();
+            emit bboxChanged();
+            emit meanSpacingXYChanged();
+        }
+    } else {
+        reload();
+    }
+}
+
+QString cwLazLayer::sourceCSDisplayName() const
+{
+    // PROJ resolves WKT, PROJ-strings, and authority codes uniformly, so the
+    // same nameFor() call handles every flavor of sourceCS the loader can
+    // produce. nameFor() has a thread_local cache keyed on the input string,
+    // so binding re-evaluation in QML doesn't replay proj_create per row.
+    return cwCoordinateTransform::nameFor(m_sourceCS);
 }
 
 void cwLazLayer::setSourceCSOverride(const QString& cs)
@@ -131,6 +244,13 @@ void cwLazLayer::setRegionWorldOrigin(const cwGeoPoint& origin)
 void cwLazLayer::reload()
 {
     if (m_sourcePath.isEmpty()) {
+        return;
+    }
+
+    if (!m_enabled) {
+        // Disabled layers don't spend an async read. setSourcePath still
+        // recorded path + fingerprint before calling us, so the layer stays
+        // identifiable in the model.
         return;
     }
 

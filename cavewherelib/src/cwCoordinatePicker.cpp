@@ -91,10 +91,7 @@ void cwCoordinatePicker::pick(QPointF screenPoint)
         return;
     }
 
-    // Mirror cwBaseTurnTableInteraction::pick — frustrumRay expects
-    // GL-viewport coordinates, not Qt-viewport coordinates.
-    const QPoint mappedPos = m_camera->mapToGLViewport(screenPoint.toPoint());
-    const QRay3D ray = m_camera->frustrumRay(mappedPos);
+    const QRay3D ray = m_camera->rayFromQtViewport(screenPoint);
 
     const cwRayHit hit = intersecter->intersectsDetailed(ray);
     if (!hit.hit()) {

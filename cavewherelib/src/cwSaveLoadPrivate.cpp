@@ -277,9 +277,10 @@ QString cwSaveLoadPrivate::Job::toString() const {
     const auto* copyPayload = std::get_if<CopyFilePayload>(&payload);
     const auto* customPayload = std::get_if<CustomPayload>(&payload);
     const QString sourcePath = copyPayload ? copyPayload->sourcePath : QString();
-    return QStringLiteral("Job{action=%1 kind=%2 objectId=0x%3 oldPath='%4' newPath='%5' sourcePath='%6' dataRoot='%7' hasMessage=%8 hasCustom=%9}")
+    return QStringLiteral("Job{action=%1 kind=%2 tag='%3' objectId=0x%4 oldPath='%5' newPath='%6' sourcePath='%7' dataRoot='%8' hasMessage=%9 hasCustom=%10}")
             .arg(QString::fromLatin1(actionName(action)),
                  QString::fromLatin1(kindName(kind)),
+                 tag,
                  objectHex,
                  oldPath,
                  path,
@@ -935,9 +936,16 @@ void cwSaveLoadPrivate::addExplicitFileSystemJob(Job job, cwSaveLoad* context) {
         return;
     }
 
-    // Explicit jobs are already path-resolved and don't track object state; move jobs here
-    // can race with path updates and break path-ready notifications. Use addFileSystemJob for moves.
-    Q_ASSERT(job.action != Job::Action::Move);
+    // Explicit jobs are already path-resolved and don't track m_objectStates.
+    // Move jobs here must therefore carry both oldPath and path set by the
+    // caller (no per-object path lookup will fill them in), and they will
+    // not emit objectPathReady — the destination must be a sibling artifact
+    // for which no path-ready signal is meaningful (e.g. cwLazLayer's .laz
+    // source file, which is not the canonical metadata file cwSaveLoad
+    // tracks). For metadata-file moves, use addFileSystemJob instead so
+    // path-ready emission is wired correctly.
+    Q_ASSERT(job.action != Job::Action::Move
+             || (!job.oldPath.isEmpty() && !job.path.isEmpty()));
 
     const QString dataRootName = context->dataRoot();
     const QString projectRootPath = context->projectRootDir().absolutePath();
@@ -971,6 +979,9 @@ QString cwSaveLoadPrivate::absolutePathFor(const cwSaveLoad* context, const QObj
     }
     if (auto sketch = qobject_cast<const cwSketch*>(object)) {
         return context->absolutePathPrivate(sketch);
+    }
+    if (auto laz = qobject_cast<const cwLazLayer*>(object)) {
+        return context->absolutePathPrivate(laz);
     }
     if (auto trip = qobject_cast<const cwTrip*>(object)) {
         return context->absolutePathPrivate(trip);
@@ -1326,12 +1337,13 @@ Monad::ResultBase cwSaveLoadPrivate::ensurePathForFile(const QString& filePath) 
     return Monad::ResultBase();
 }
 
-QHash<const void*, QList<int>> cwSaveLoadPrivate::jobIndicesByObjectId() const
+QHash<cwSaveLoadPrivate::GroupKey, QList<int>> cwSaveLoadPrivate::jobIndicesByGroup() const
 {
-    QHash<const void*, QList<int>> result;
+    QHash<GroupKey, QList<int>> result;
     for (int i = 0; i < m_pendingJobs.size(); ++i) {
-        if (m_pendingJobs[i].objectId != nullptr) {
-            result[m_pendingJobs[i].objectId].append(i);
+        const Job& job = m_pendingJobs.at(i);
+        if (job.objectId != nullptr) {
+            result[GroupKey{job.objectId, job.tag}].append(i);
         }
     }
     return result;
@@ -1398,7 +1410,7 @@ void cwSaveLoadPrivate::compressPendingJobs()
 
     QSet<int> indicesToDrop;
 
-    const auto indexMap = jobIndicesByObjectId();
+    const auto indexMap = jobIndicesByGroup();
     for (auto it = indexMap.cbegin(); it != indexMap.cend(); ++it) {
         const QList<int>& indices = it.value();
         if (indices.size() <= 1) {

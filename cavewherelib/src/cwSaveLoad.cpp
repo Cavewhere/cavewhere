@@ -19,6 +19,7 @@
 #include "cwFutureManagerModel.h"
 #include "cwTeam.h"
 #include "cwCavingRegion.h"
+#include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwProject.h"
 #include "cwSurveyNoteModel.h"
@@ -1837,6 +1838,7 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
             cwProtoUtils::saveString(protoMetadata->mutable_globalcoordinatesystem(),
                                      region->globalCoordinateSystem());
         }
+
     }
 
     return protoProject;
@@ -2443,6 +2445,31 @@ std::unique_ptr<CavewhereProto::Sketch> cwSaveLoad::toProtoSketch(const cwSketch
     return protoSketch;
 }
 
+void cwSaveLoad::save(const cwLazLayer* layer)
+{
+    // Without a project filename the job-queue path would resolve the .cwlaz
+    // to <cwd>/GIS Layers/... — silently writing into whatever directory the
+    // process happens to be running from. Reject early instead.
+    if (d->projectFileName.isEmpty()) {
+        qWarning() << "cwSaveLoad::save(cwLazLayer*) called before setFileName(); ignoring";
+        return;
+    }
+    d->saveObject(this, layer);
+}
+
+std::unique_ptr<CavewhereProto::LazLayer> cwSaveLoad::toProtoLazLayer(const cwLazLayer* layer)
+{
+    auto proto = std::make_unique<CavewhereProto::LazLayer>();
+    auto fileVersion = proto->mutable_fileversion();
+    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
+    if (!layer->id().isNull()) {
+        *(proto->mutable_id()) = uuidToProtoString(layer->id()).toStdString();
+    }
+    proto->set_enabled(layer->enabled());
+    return proto;
+}
+
 
 /**
  * This saves all the data in region into directory
@@ -3012,6 +3039,67 @@ Monad::Result<cwNoteData> cwSaveLoad::loadNote(const QByteArray& content, const 
     });
 }
 
+cwLazLayerData cwSaveLoad::lazLayerDataFromProtoLazLayer(const CavewhereProto::LazLayer& proto,
+                                                         const QString& filename)
+{
+    cwLazLayerData data;
+
+    // The .cwlaz filename's basename pairs back to the .laz/.las source. The
+    // source extension isn't stored in the proto, so the discovery pass
+    // matches by basename and supplies the right extension when populating
+    // cwLazLayerData::fileName on the layer.
+    const QFileInfo info(filename);
+    if (!info.completeBaseName().isEmpty()) {
+        data.fileName = info.completeBaseName();
+    }
+
+    if (proto.has_id()) {
+        data.id = cwProtoUtils::toUuid(proto.id());
+    }
+    // Absence of `enabled` means default (true), matching the proto comment.
+    if (proto.has_enabled()) {
+        data.enabled = proto.enabled();
+    }
+
+    return data;
+}
+
+Monad::Result<cwLazLayerData> cwSaveLoad::loadLazLayer(const QString& filename)
+{
+    QFile file(filename);
+    if (!file.open(QFile::ReadOnly)) {
+        return Result<cwLazLayerData>(file.errorString());
+    }
+    return loadLazLayer(file.readAll(), filename);
+}
+
+Monad::Result<cwLazLayerData> cwSaveLoad::loadLazLayer(const QByteArray& content, const QString& filename)
+{
+    // An empty .cwlaz file is treated as "default state" rather than an error
+    // so partially-written or truncated metadata files load to safe defaults
+    // (no garbage UUID, enabled=true) and the rest of the layer continues
+    // working. The filename still drives basename pairing.
+    if (content.isEmpty()) {
+        CavewhereProto::LazLayer emptyProto;
+        return Result<cwLazLayerData>(lazLayerDataFromProtoLazLayer(emptyProto, filename));
+    }
+
+    auto protoResult = loadMessage<CavewhereProto::LazLayer>(content, filename);
+
+    return Monad::mbind(protoResult, [filename](const Result<CavewhereProto::LazLayer>& result) -> Monad::Result<cwLazLayerData> {
+        const auto& proto = result.value();
+        // Refuse to silently substitute a fresh UUID when the file claimed
+        // one but it failed to parse — overwriting on the next save would
+        // permanently lose the persisted identity.
+        if (proto.has_id() && cwProtoUtils::toUuid(proto.id()).isNull()) {
+            return Result<cwLazLayerData>(
+                        QStringLiteral("Malformed id in %1: %2")
+                        .arg(filename, QString::fromStdString(proto.id())));
+        }
+        return cwSaveLoad::lazLayerDataFromProtoLazLayer(proto, filename);
+    });
+}
+
 Monad::Result<cwNoteLiDARData> cwSaveLoad::loadNoteLiDAR(const QString& filename, const QDir &projectDir) {
     auto noteResult = loadMessage<CavewhereProto::NoteLiDAR>(filename);
 
@@ -3162,8 +3250,13 @@ void cwSaveLoad::disconnectTreeModel()
         // lazLayers is a child of region and its connections survive
         // disconnectObjects(); each reconnect cycle would otherwise
         // accumulate duplicate rowsAboutToBeRemoved / rowsRemoved handlers.
+        // Tear down both directions: lazLayers→this for the model-change
+        // observers, and this→lazLayers for the discardCompleted→rescan
+        // hookup added in connectTreeModel.
         if (auto* lazLayers = region->lazLayers()) {
             disconnect(lazLayers, nullptr, this, nullptr);
+            disconnect(this, &cwSaveLoad::discardCompleted,
+                       lazLayers, &cwLazLayerModel::rescan);
         }
     }
 
@@ -3412,26 +3505,146 @@ void cwSaveLoad::connectTreeModel()
         // (which already flushes + commits after copy). Watch removal here so
         // the queued delete + metadata flush + commit all fire together.
         if (auto* lazLayers = region->lazLayers()) {
-            connect(lazLayers, &QAbstractItemModel::rowsAboutToBeRemoved,
-                    this, [this, lazLayers](const QModelIndex& parent, int first, int last) {
-                Q_UNUSED(parent);
-                for (int row = first; row <= last; ++row) {
-                    cwLazLayer* layer = lazLayers->layerAt(row);
-                    if (layer == nullptr) {
-                        continue;
-                    }
-                    const QString sourcePath = layer->sourcePath();
-                    if (sourcePath.isEmpty()) {
-                        continue;
-                    }
+            // User-initiated removal: enqueue file deletions before
+            // beginRemoveRows fires, so addFileSystemJob can still resolve
+            // the .cwlaz path through the live m_objectStates entry. The
+            // rowsAboutToBeRemoved handler below then drops the entry.
+            connect(lazLayers, &cwLazLayerModel::aboutToRemoveLayerByUser,
+                    this, [this](cwLazLayer* layer) {
+                if (layer == nullptr) {
+                    return;
+                }
+                // .laz source file: path comes from the layer directly
+                // (not tracked by m_objectStates — the LAZ is the
+                // user-supplied sibling artifact, not the metadata file
+                // owned by cwSaveLoad).
+                const QString sourcePath = layer->sourcePath();
+                if (!sourcePath.isEmpty()) {
                     cwSaveLoadPrivate::Job job;
                     job.action = cwSaveLoadPrivate::Job::Action::Remove;
                     job.kind = cwSaveLoadPrivate::Job::Kind::File;
                     job.oldPath = sourcePath;
                     d->addExplicitFileSystemJob(job, this);
                 }
+                // .cwlaz: path resolved through m_objectStates by
+                // addFileSystemJob so a prior in-flight rename is honored.
+                d->addFileSystemJob(cwSaveLoadPrivate::Job{
+                    layer,
+                    cwSaveLoadPrivate::Job::Kind::File,
+                    cwSaveLoadPrivate::Job::Action::Remove
+                }, this);
+            });
+
+            // User-initiated rename: the model has already updated the
+            // layer's in-memory sourcePath to newSourcePath and emitted
+            // this signal carrying the old path. Enqueue two tagged Move
+            // jobs so the .laz and .cwlaz move together but never collapse
+            // into each other under compression:
+            //   * tag "source" — explicit .laz move (not m_objectStates-
+            //     tracked, since the user-supplied source file is not the
+            //     metadata file cwSaveLoad owns; addExplicitFileSystemJob
+            //     carries both paths verbatim).
+            //   * tag ""       — .cwlaz move via the standard tracked path
+            //     (m_objectStates holds the old .cwlaz path; addFileSystemJob
+            //     reads absolutePathPrivate(layer) for the new one — that
+            //     resolves to the new basename because renameSourcePath
+            //     ran before this signal fired).
+            connect(lazLayers, &cwLazLayerModel::layerRenamed,
+                    this, [this](cwLazLayer* layer,
+                                 const QString& oldSourcePath,
+                                 const QString& newSourcePath) {
+                if (layer == nullptr) {
+                    return;
+                }
+
+                if (!oldSourcePath.isEmpty() && !newSourcePath.isEmpty()
+                        && oldSourcePath != newSourcePath) {
+                    cwSaveLoadPrivate::Job sourceMove;
+                    sourceMove.objectId = layer;
+                    sourceMove.kind = cwSaveLoadPrivate::Job::Kind::File;
+                    sourceMove.action = cwSaveLoadPrivate::Job::Action::Move;
+                    sourceMove.tag = QStringLiteral("source");
+                    sourceMove.oldPath = oldSourcePath;
+                    sourceMove.path = newSourcePath;
+                    d->addExplicitFileSystemJob(sourceMove, this);
+                }
+
+                d->addFileSystemJob(cwSaveLoadPrivate::Job{
+                    layer,
+                    cwSaveLoadPrivate::Job::Kind::File,
+                    cwSaveLoadPrivate::Job::Action::Move
+                }, this);
+            });
+
+            // Bookkeeping: drop the m_objectStates entry for every removed
+            // layer regardless of cause (user remove OR rescan-driven
+            // file-vanished removal). File-kind Remove jobs don't clean it
+            // up themselves (only Directory-kind Remove does), and the
+            // layer pointer becomes dangling once deleteLater fires.
+            //
+            // Either cause is a user-visible mutation of the project's
+            // on-disk shape, so emit localMutationOccurred — this is what
+            // flips cwProject::modified() to true so the save / discard
+            // affordances become available. Rescan-driven removal (a .laz
+            // vanished from GIS Layers/ outside the app) has no other path
+            // to dirty the project, and without this the user has no
+            // signal that the working tree has diverged from HEAD.
+            connect(lazLayers, &QAbstractItemModel::rowsAboutToBeRemoved,
+                    this, [this, lazLayers](const QModelIndex& parent, int first, int last) {
+                Q_UNUSED(parent);
+                for (int row = first; row <= last; ++row) {
+                    if (cwLazLayer* layer = lazLayers->layerAt(row)) {
+                        d->m_objectStates.remove(layer);
+                    }
+                }
+                if (!d->suppressLocalMutationTracking) {
+                    emit localMutationOccurred();
+                }
             });
             connect(lazLayers, &QAbstractItemModel::rowsRemoved, this, saveMetadata);
+
+            // For each new layer: register its expected .cwlaz path in
+            // m_objectStates so saves/renames resolve through the standard
+            // pipeline, eagerly write the .cwlaz when one isn't on disk
+            // (so the auto-generated UUID is persisted on first sight), and
+            // wire enabledChanged → save(layer) so toggling visibility
+            // writes only the .cwlaz, not the whole project metadata.
+            auto wireLayer = [this](cwLazLayer* layer) {
+                if (layer == nullptr) {
+                    return;
+                }
+                const QString metadataPath = absolutePathPrivate(layer);
+                if (!metadataPath.isEmpty()) {
+                    d->seedStatePathFromLoaded(layer, metadataPath);
+                    if (!QFileInfo::exists(metadataPath)) {
+                        save(layer);
+                    }
+                }
+                connect(layer, &cwLazLayer::enabledChanged, this, [this, layer]() {
+                    save(layer);
+                });
+            };
+            connect(lazLayers, &QAbstractItemModel::rowsInserted,
+                    this, [lazLayers, wireLayer](const QModelIndex& parent, int first, int last) {
+                Q_UNUSED(parent);
+                for (int row = first; row <= last; ++row) {
+                    wireLayer(lazLayers->layerAt(row));
+                }
+            });
+            for (cwLazLayer* layer : lazLayers->layers()) {
+                wireLayer(layer);
+            }
+
+            // Re-rescan after a Git-driven on-disk mutation. discardChanges
+            // restores deleted .laz files via `git reset --hard HEAD`; the
+            // model needs a kick to re-discover them and re-pair with any
+            // orphan .cwlaz sibling so the original UUID + enabled bit are
+            // adopted. Queued so the rescan runs after discardCompleted's
+            // observers have settled (the project's modified bit clears
+            // first, then we repopulate).
+            connect(this, &cwSaveLoad::discardCompleted,
+                    lazLayers, &cwLazLayerModel::rescan,
+                    Qt::QueuedConnection);
         }
     }
 }
@@ -4397,6 +4610,38 @@ QString cwSaveLoad::absolutePathPrivate(const cwSketch* sketch, const QString& s
         return QString();
     }
     return dirPrivate(sketch).absoluteFilePath(sketchFilename);
+}
+
+QString cwSaveLoad::fileNamePrivate(const cwLazLayer* layer) const
+{
+    if (layer == nullptr) {
+        return QString();
+    }
+    // Pair the .cwlaz to its sibling .laz/.las by basename. completeBaseName
+    // is used (not baseName) so compound names like "alpha.beta.laz" pair
+    // with "alpha.beta.cwlaz" rather than collapsing onto "alpha.cwlaz".
+    const QString basename = QFileInfo(layer->sourcePath()).completeBaseName();
+    if (basename.isEmpty()) {
+        return QString();
+    }
+    return sanitizeFileName(basename + QStringLiteral(".cwlaz"));
+}
+
+QString cwSaveLoad::absolutePathPrivate(const cwLazLayer* layer) const
+{
+    const QString filename = fileNamePrivate(layer);
+    if (filename.isEmpty()) {
+        return QString();
+    }
+    return dirPrivate(layer).absoluteFilePath(filename);
+}
+
+QDir cwSaveLoad::dirPrivate(const cwLazLayer* /*layer*/) const
+{
+    // LAZ layers live in a flat "GIS Layers/" directory alongside the
+    // dataRoot inside the project root. The directory is the same for every
+    // layer; only the basename varies.
+    return QDir(projectRootDir().absoluteFilePath(cwLazLayerModel::folderName()));
 }
 
 QDir cwSaveLoad::dirPrivate(const cwSketch* sketch) const

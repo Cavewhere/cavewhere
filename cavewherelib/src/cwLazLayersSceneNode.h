@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QHash>
+#include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
@@ -57,6 +58,11 @@ public:
     /// Test accessor: render object backing @a layer, or nullptr.
     cwRenderPointCloud* pointCloudForLayer(cwLazLayer* layer) const;
 
+    /// Subset of the bound model's layers whose render object is currently
+    /// visible (keyword-filter pipeline gates this). Returns layers in the
+    /// same order they appear in the model.
+    QList<cwLazLayer*> visibleLayers() const;
+
     float gapFudge() const { return m_gapFudge; }
 
 public slots:
@@ -65,6 +71,13 @@ public slots:
 signals:
     void gapFudgeChanged(float gapFudge);
 
+private slots:
+    /// Resolves the originating cwLazLayer through QObject::sender() so the
+    /// connect site can use the 4-arg member-function form. That form supports
+    /// Qt::UniqueConnection (lambdas do not), which makes a re-addLayer() on
+    /// an already-tracked layer idempotent.
+    void onEnabledChanged();
+
 private:
     void connectModel();
     void disconnectModel();
@@ -72,6 +85,8 @@ private:
     void clear();
     void addLayer(cwLazLayer* layer);
     void removeLayer(cwLazLayer* layer);
+    void materialize(cwLazLayer* layer);
+    void dematerialize(cwLazLayer* layer);
     void syncLayerGeometry(cwLazLayer* layer);
     void addKeywordItemForLayer(cwLazLayer* layer);
     void removeKeywordItemForLayer(cwLazLayer* layer);

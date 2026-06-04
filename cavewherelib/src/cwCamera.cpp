@@ -204,6 +204,11 @@ QMatrix4x4 cwCamera::qtViewportMatrix() const
      return QRay3D(frontPoint, direction);
  }
 
+ QRay3D cwCamera::rayFromQtViewport(QPointF qtViewportPoint) const
+ {
+     return frustrumRay(mapToGLViewport(qtViewportPoint.toPoint()));
+ }
+
  /**
   * @brief cwCamera::pixelsPerMeter
   * @return double - pixels per meter

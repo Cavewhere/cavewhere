@@ -33,6 +33,7 @@ QtObject {
     readonly property color danger: dark ? "#6f312e" : "#FF6736"
     readonly property color info: dark ? "#1f3f61" : "#85c1f4"
     readonly property color highlight: dark ? "#314f78" : "#a5cdff"
+    readonly property color hover: Qt.lighter(highlight, dark ? 1.4 : 1.15)
     readonly property color icon: palette.buttonText
     readonly property color tag: dark ? "#656565" : border
 
@@ -113,6 +114,7 @@ QtObject {
     readonly property int columnGap: 12
     readonly property int actionBarSpacing: 16
     readonly property int statsPadding: 10
+    readonly property int floatingToolbarPadding: 12
     readonly property int infoColumnMaxWidth: 200
 
     // Utility

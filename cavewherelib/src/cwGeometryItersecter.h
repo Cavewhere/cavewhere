@@ -285,6 +285,7 @@ private:
     // Per-pick rejection counters used by the cw.picking logging category.
     // Defined in the .cpp because it's purely a debug aid.
     struct PickStats;
+    friend QDebug operator<<(QDebug d, const cwGeometryItersecter::PickStats& s);
 
     // Tube-pick fallback: tracks the closest sphere-miss seen during a
     // traversal so intersectsDetailed can snap to a point the user almost

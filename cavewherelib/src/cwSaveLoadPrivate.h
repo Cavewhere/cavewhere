@@ -5,6 +5,7 @@
 #include "cwSaveLoad.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwLazLayer.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
 #include "cwSketch.h"
@@ -75,6 +76,13 @@ struct cwSaveLoadPrivate {
         // dataRoot otherwise). Used by ensureInsideRoot so jobs may target
         // siblings of dataRoot inside the project (e.g. "GIS Layers/").
         QString projectRoot;
+        // Sub-identity within (objectId, kind) for entities that own more than
+        // one artifact (e.g. cwLazLayer owns both a .laz and a .cwlaz). Jobs
+        // with different tags are never merged or cancelled against each other
+        // by the compression rules, so two artifacts of the same logical
+        // object can be queued and executed independently. Empty string is the
+        // default and preserves single-artifact behavior bit-for-bit.
+        QString tag;
 
         Job() = default;
         Job(const void* objectId, Kind kind, Action action)
@@ -432,8 +440,24 @@ struct cwSaveLoadPrivate {
             const void* objectId
             );
 
-    // Returns a map of objectId -> ordered job indices for all non-null objectIds.
-    QHash<const void*, QList<int>> jobIndicesByObjectId() const;
+    // Group key for compression: jobs that share (objectId, tag) are
+    // considered the same artifact-stream and may be merged or cancelled
+    // against each other. Jobs that differ in either field are independent.
+    struct GroupKey {
+        const void* objectId = nullptr;
+        QString tag;
+
+        bool operator==(const GroupKey& other) const noexcept {
+            return objectId == other.objectId && tag == other.tag;
+        }
+
+        friend size_t qHash(const GroupKey& key, size_t seed = 0) noexcept {
+            return qHashMulti(seed, reinterpret_cast<quintptr>(key.objectId), key.tag);
+        }
+    };
+
+    // Returns a map of (objectId, tag) -> ordered job indices for all non-null objectIds.
+    QHash<GroupKey, QList<int>> jobIndicesByGroup() const;
 
     // Rule 1: For each object with multiple WriteFile jobs, drop all but the last.
     void dropRedundantWrites(const QList<int>& indices, QSet<int>& indicesToDrop) const;
@@ -475,6 +499,8 @@ struct cwSaveLoadPrivate {
                 saveProtoMessage(context, cwSaveLoad::toProtoNoteLiDAR(object), object);
             } else if constexpr (std::is_same_v<T, cwSketch>) {
                 saveProtoMessage(context, cwSaveLoad::toProtoSketch(object), object);
+            } else if constexpr (std::is_same_v<T, cwLazLayer>) {
+                saveProtoMessage(context, cwSaveLoad::toProtoLazLayer(object), object);
             } else {
                 static_assert(std::is_same_v<T, void>, "Unsupported saveObject type");
             }

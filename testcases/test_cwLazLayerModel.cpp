@@ -2,9 +2,13 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QEvent>
 #include <QFile>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QVector>
+#include <QVector3D>
 
 #include "cwFutureManagerModel.h"
 #include "cwFutureManagerToken.h"
@@ -154,6 +158,119 @@ TEST_CASE("cwLazLayerModel: empty / nonexistent GIS Layers dir → empty model",
     REQUIRE(model.count() == 0);
 }
 
+// Clipping writes a new .laz into the GIS Layers folder, then calls
+// rescan(). The expected behavior is purely additive: the existing layer
+// object stays alive and the model emits rowsInserted for the new file
+// only. Today rescan() does a full clear-and-rebuild, which destroys the
+// original cwLazLayer and forces its LAZ data to reload from disk — the
+// wasteful behavior this test guards against.
+TEST_CASE("cwLazLayerModel: rescan preserves existing layers when a file is added",
+          "[cwLazLayerModel]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QDir gisLayers = makeGisLayersDir(tempDir);
+
+    cwLazLayerModel model;
+    model.setGisLayersDir(gisLayers);
+
+    REQUIRE(!dropLazIntoDir(gisLayers, QStringLiteral("original")).isEmpty());
+    model.rescan();
+    REQUIRE(model.count() == 1);
+
+    cwLazLayer* originalLayer = model.layerAt(0);
+    REQUIRE(originalLayer != nullptr);
+    const QString originalPath = originalLayer->sourcePath();
+    // QPointer auto-nulls if originalLayer is destroyed — the signal that
+    // rescan tore down and rebuilt the layer instead of preserving it.
+    QPointer<cwLazLayer> originalGuard(originalLayer);
+
+    QSignalSpy insertSpy(&model, &QAbstractItemModel::rowsInserted);
+    QSignalSpy removeSpy(&model, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+
+    REQUIRE(!dropLazIntoDir(gisLayers, QStringLiteral("clip_001")).isEmpty());
+    model.rescan();
+
+    REQUIRE(model.count() == 2);
+
+    // Existing layer object must still be alive — anything else means its
+    // already-loaded LAZ data has to be re-streamed from disk.
+    REQUIRE(!originalGuard.isNull());
+    REQUIRE(originalGuard.data() == originalLayer);
+    REQUIRE(originalLayer->sourcePath() == originalPath);
+
+    // Original must still occupy one of the rows and the model must surface
+    // both layers.
+    bool originalStillPresent = false;
+    for (int i = 0; i < model.count(); ++i) {
+        if (model.layerAt(i) == originalLayer) {
+            originalStillPresent = true;
+            break;
+        }
+    }
+    REQUIRE(originalStillPresent);
+
+    // Purely additive: one inserted row, nothing removed, no reset.
+    REQUIRE(removeSpy.size() == 0);
+    REQUIRE(resetSpy.size() == 0);
+    REQUIRE(insertSpy.size() == 1);
+    const QList<QVariant> args = insertSpy.takeFirst();
+    const int first = args.at(1).toInt();
+    const int last = args.at(2).toInt();
+    REQUIRE(first == last); // exactly one row inserted
+}
+
+// An in-place overwrite of an existing GIS Layers file (same path, new
+// content) must invalidate the cached layer so the new bytes get loaded.
+// The diff-merge rescan keys on path alone for the additive case; this
+// test guards the (size, mtime) fingerprint check that catches overwrites.
+TEST_CASE("cwLazLayerModel: rescan invalidates a layer when its file is overwritten",
+          "[cwLazLayerModel]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QDir gisLayers = makeGisLayersDir(tempDir);
+    const QString path = gisLayers.filePath(QStringLiteral("overwrite.laz"));
+
+    // Initial write: 5 points (the default writeMinimalLaz size).
+    REQUIRE(!writeMinimalLaz(path).isEmpty());
+
+    cwLazLayerModel model;
+    model.setGisLayersDir(gisLayers);
+    model.rescan();
+    REQUIRE(model.count() == 1);
+
+    cwLazLayer* originalLayer = model.layerAt(0);
+    REQUIRE(originalLayer != nullptr);
+    QPointer<cwLazLayer> originalGuard(originalLayer);
+
+    // Overwrite the file with a clearly larger payload so the (size, mtime)
+    // fingerprint must differ even if the filesystem's mtime resolution
+    // collapses the two writes to the same second.
+    QVector<QVector3D> manyPoints;
+    manyPoints.reserve(1000);
+    for (int i = 0; i < 1000; ++i) {
+        manyPoints.append(QVector3D(float(i), float(i) * 2.0f, float(i) * 3.0f));
+    }
+    REQUIRE(writeSyntheticLazFile(path, manyPoints));
+
+    model.rescan();
+
+    // rescan() routes the old layer through deleteLater(); flush the
+    // pending DeferredDelete events so the QPointer can observe the
+    // destruction.
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    // Same path is still present, but the layer object backing it must
+    // have been torn down — otherwise the layer's cached point data still
+    // reflects the pre-overwrite 5 points.
+    REQUIRE(model.count() == 1);
+    REQUIRE(originalGuard.isNull());
+    REQUIRE(model.layerAt(0) != nullptr);
+    REQUIRE(model.layerAt(0)->sourcePath() == path);
+}
+
 TEST_CASE("cwLazLayerModel: missing file → loadStatus == Error",
           "[cwLazLayerModel]") {
     cwLazLayerModel model;
@@ -165,4 +282,91 @@ TEST_CASE("cwLazLayerModel: missing file → loadStatus == Error",
     REQUIRE(layer->loadStatus() == cwLazLayer::LoadStatus::Error);
     REQUIRE(layer->sourcePath() == missingPath);
     delete layer;
+}
+
+TEST_CASE("cwLazLayerModel: roleNames() exposes \"enabled\" mapped to EnabledRole",
+          "[cwLazLayerModel]") {
+    cwLazLayerModel model;
+    const auto roles = model.roleNames();
+    REQUIRE(roles.value(cwLazLayerModel::EnabledRole) == QByteArray("enabled"));
+}
+
+TEST_CASE("cwLazLayerModel: data(EnabledRole) returns layer->enabled()",
+          "[cwLazLayerModel]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QDir gisLayers = makeGisLayersDir(tempDir);
+    cwLazLayerModel model;
+    model.setGisLayersDir(gisLayers);
+
+    REQUIRE(!dropLazIntoDir(gisLayers, QStringLiteral("enabledread")).isEmpty());
+    model.rescan();
+    auto* layer = model.layerAt(0);
+    REQUIRE(layer != nullptr);
+
+    const QModelIndex idx = model.index(0, 0);
+    REQUIRE(model.data(idx, cwLazLayerModel::EnabledRole).toBool() == layer->enabled());
+
+    layer->setEnabled(false);
+    REQUIRE(model.data(idx, cwLazLayerModel::EnabledRole).toBool() == false);
+
+    layer->setEnabled(true);
+    REQUIRE(model.data(idx, cwLazLayerModel::EnabledRole).toBool() == true);
+}
+
+TEST_CASE("cwLazLayerModel: setData(EnabledRole) drives layer->enabled()",
+          "[cwLazLayerModel]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QDir gisLayers = makeGisLayersDir(tempDir);
+    cwLazLayerModel model;
+    model.setGisLayersDir(gisLayers);
+
+    REQUIRE(!dropLazIntoDir(gisLayers, QStringLiteral("enabledwrite")).isEmpty());
+    model.rescan();
+    auto* layer = model.layerAt(0);
+    REQUIRE(layer != nullptr);
+    REQUIRE(layer->enabled() == true);
+
+    const QModelIndex idx = model.index(0, 0);
+    REQUIRE(model.setData(idx, false, cwLazLayerModel::EnabledRole) == true);
+    REQUIRE(layer->enabled() == false);
+
+    REQUIRE(model.setData(idx, true, cwLazLayerModel::EnabledRole) == true);
+    REQUIRE(layer->enabled() == true);
+
+    // Out-of-range row returns false without crashing.
+    const QModelIndex badIdx = model.index(99, 0);
+    REQUIRE(model.setData(badIdx, false, cwLazLayerModel::EnabledRole) == false);
+}
+
+TEST_CASE("cwLazLayerModel: external setEnabled emits dataChanged with EnabledRole",
+          "[cwLazLayerModel]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QDir gisLayers = makeGisLayersDir(tempDir);
+    cwLazLayerModel model;
+    model.setGisLayersDir(gisLayers);
+
+    REQUIRE(!dropLazIntoDir(gisLayers, QStringLiteral("enabledspy")).isEmpty());
+    model.rescan();
+    auto* layer = model.layerAt(0);
+    REQUIRE(layer != nullptr);
+
+    QSignalSpy dataChangedSpy(&model, &QAbstractItemModel::dataChanged);
+    layer->setEnabled(false);
+
+    bool sawEnabledRole = false;
+    for (int i = 0; i < dataChangedSpy.size(); ++i) {
+        const auto& args = dataChangedSpy.at(i);
+        const QVector<int> roles = args.at(2).value<QVector<int>>();
+        if (roles.contains(int(cwLazLayerModel::EnabledRole))) {
+            sawEnabledRole = true;
+            break;
+        }
+    }
+    REQUIRE(sawEnabledRole);
 }

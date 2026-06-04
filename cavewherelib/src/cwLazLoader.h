@@ -18,6 +18,8 @@
 #include "cwGeometry.h"
 #include "cwGeoPoint.h"
 
+class LASheader;
+
 /**
  * Result of a single LAZ load. Geometry holds Type::Points with one
  * Position(Vec3) attribute, in worldOrigin-relative coordinates.
@@ -78,6 +80,13 @@ public:
     };
 
     static ProbeResult probeHeader(const QString& path);
+
+    /**
+     * Resolves the source CRS for a LAZ file using the same precedence the
+     * loader applies: explicit @a override wins; otherwise the LAZ's
+     * embedded OGC WKT VLR (if present); otherwise empty (identity).
+     */
+    static QString resolveSourceCS(const QString& override, const LASheader& header);
 };
 
 #endif // CWLAZLOADER_H

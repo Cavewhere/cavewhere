@@ -20,6 +20,7 @@
 #include "cwFutureManagerToken.h"
 #include "cwGeoPoint.h"
 #include "cwLazLayer.h"
+#include "cwLazLayerData.h"
 
 class cwCavingRegion;
 class cwProject;
@@ -38,9 +39,11 @@ public:
         NameRole,
         SourcePathRole,
         SourceCSRole,
+        SourceCSDisplayNameRole,
         PointSizeRole,
         LoadStatusRole,
-        PointCountRole
+        PointCountRole,
+        EnabledRole
     };
     Q_ENUM(Roles)
 
@@ -49,6 +52,7 @@ public:
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role) const override;
+    bool setData(const QModelIndex& index, const QVariant& value, int role) override;
     QHash<int, QByteArray> roleNames() const override;
 
     Q_INVOKABLE void addFromFiles(QList<QUrl> urls);
@@ -56,10 +60,22 @@ public:
     Q_INVOKABLE cwLazLayer* layerAt(int index) const;
     Q_INVOKABLE void rescan();
 
+    /// Rename the layer at `row` to `newBasename`. The new basename is
+    /// the bare filename without extension (validation rejects empty
+    /// strings, path separators, and strings containing a dot). On
+    /// success, the layer's source path is updated in-memory
+    /// immediately, the layerRenamed signal fires so cwSaveLoad can
+    /// queue the paired .laz + .cwlaz Move jobs, and dataChanged is
+    /// emitted for the row. On failure the model is untouched and a
+    /// user-visible cwError is appended to the project's errorModel
+    /// (same surface rescan() uses to report failed metadata loads).
+    Q_INVOKABLE bool rename(int row, const QString& newBasename);
+
     int count() const { return m_layers.size(); }
     const QList<cwLazLayer*>& layers() const { return m_layers; }
 
     void setFutureManagerToken(const cwFutureManagerToken& token);
+    cwFutureManagerToken futureManagerToken() const { return m_futureManagerToken; }
     void setRegionGlobalCS(const QString& cs);
     void setRegionWorldOrigin(const cwGeoPoint& origin);
 
@@ -72,6 +88,27 @@ public:
 
 signals:
     void countChanged();
+
+    /// Emitted only from removeAt() — i.e. when the user explicitly removes
+    /// a layer through the UI. cwSaveLoad listens for this to enqueue the
+    /// paired .laz + .cwlaz deletions. Rescan-driven removals (file
+    /// vanished from disk by other means) deliberately do NOT emit this,
+    /// so the paired .cwlaz survives the in-memory removal and identity
+    /// can resume if the .laz reappears later.
+    void aboutToRemoveLayerByUser(cwLazLayer* layer);
+
+    /// Emitted from rename() after the layer's in-memory source path has
+    /// been updated but before any filesystem work has been queued. Past
+    /// tense matches the actual emit ordering — at signal-emit time
+    /// `layer->sourcePath()` already returns the new path. cwSaveLoad
+    /// listens to enqueue the .laz Move (explicit-path, tag "source")
+    /// and the .cwlaz Move (via the m_objectStates-tracked path, empty
+    /// tag). The two paths are passed in the signal because oldSourcePath
+    /// is otherwise unrecoverable from a synchronous handler — without
+    /// it the .laz Move can't be constructed.
+    void layerRenamed(cwLazLayer* layer,
+                      const QString& oldSourcePath,
+                      const QString& newSourcePath);
 
 private:
     void connectLayer(cwLazLayer* layer);

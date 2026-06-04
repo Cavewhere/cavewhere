@@ -18,15 +18,39 @@ QQ.Rectangle {
     property alias text: label.text
     property bool selected: false
     property bool adjustColor: Theme.dark
+    property string toolTip: ""
 
     signal clicked();
 
+    activeFocusOnTab: true
+    QQ.Accessible.role: QQ.Accessible.Button
+    QQ.Accessible.name: container.toolTip !== "" ? container.toolTip : container.text
+    QQ.Accessible.onPressAction: container.clicked()
+
+    QC.ToolTip {
+        visible: container.toolTip !== "" && mouseArea.containsMouse
+        text: container.toolTip
+        delay: 500
+    }
+
     radius: 3
 
-    height: iconNormal.sourceSize.height + label.height
-    width:  Math.max(iconNormal.sourceSize.width, label.width) + 4
+    implicitHeight: iconNormal.sourceSize.height + (label.text === "" ? 0 : label.height)
+    implicitWidth:  Math.max(iconNormal.sourceSize.width, label.width) + 4
 
-    color: selected ? Theme.highlight : Theme.transparent
+    color: {
+        if (container.selected) {
+            return Theme.highlight
+        }
+        if (mouseArea.containsMouse) {
+            return Theme.hover
+        }
+        return Theme.transparent
+    }
+
+    QQ.Keys.onReturnPressed: container.clicked()
+    QQ.Keys.onEnterPressed: container.clicked()
+    QQ.Keys.onSpacePressed: container.clicked()
 
 
     QQ.Image {

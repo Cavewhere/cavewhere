@@ -38,40 +38,8 @@ CoordinatePicker {
         onTapped: (eventPoint) => pickerId.pick(eventPoint.position)
     }
 
-    // Right-drag rotate — mirrors TurnTableInteraction's right-drag binding so
-    // the gesture works identically while the picker is active.
-    QQ.DragHandler {
-        target: null
-        acceptedButtons: Qt.RightButton
-        acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
-
-        onActiveChanged: {
-            if (active) {
-                pickerId.turnTableInteraction.startRotating(centroid.position)
-            }
-        }
-
-        onCentroidChanged: {
-            if (active) {
-                pickerId.turnTableInteraction.rotate(centroid.position)
-            }
-        }
-    }
-
-    // Wheel zoom — mirrors TurnTableInteraction's WheelHandler.
-    QQ.WheelHandler {
-        property double lastRotation: 0.0
-
-        target: pickerId
-        acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
-        rotationScale: 0.1
-        onRotationChanged: {
-            const deltaRotation = rotationScale * (rotation - lastRotation)
-            if (deltaRotation !== 0.0) {
-                pickerId.turnTableInteraction.zoom(point.position, -deltaRotation)
-                lastRotation = rotation
-            }
-        }
+    TurnTableForwardingHandlers {
+        turnTableInteraction: pickerId.turnTableInteraction
     }
 
     // Re-project the picked 3D scene point through the camera on every camera

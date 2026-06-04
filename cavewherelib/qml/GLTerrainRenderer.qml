@@ -6,7 +6,7 @@
 **************************************************************************/
 
 import QtQuick
-import QtQuick.Controls as QC
+import QtQuick.Layouts
 import QtQuick.Window
 import cavewherelib
 
@@ -94,15 +94,23 @@ Item {
         scene: rendererId.scene
         region: RootData.region
         turnTableInteraction: turnTableInteractionId
+    }
 
-        onDeactivated: pickButtonId.checked = false
+    LazClipInteractionView {
+        id: lazClipInteractionId
+        objectName: "lazClipInteraction"
+        camera: rendererId.camera
+        region: RootData.region
+        lazLayersSceneNode: RootData.regionSceneManager.lazLayersSceneNode
+        turnTableInteraction: turnTableInteractionId
     }
 
     InteractionManager {
         id: interactionManagerId
         interactions: [
             turnTableInteractionId,
-            coordinatePickerId
+            coordinatePickerId,
+            lazClipInteractionId
         ]
         defaultInteraction: turnTableInteractionId
     }
@@ -149,27 +157,58 @@ Item {
         }
     }
 
-    QC.RoundButton {
-        id: pickButtonId
-        objectName: "coordinatePickerButton"
+    // Floating background for the Pick/Clip toolbar. IconButton renders a
+    // transparent background until hovered/selected, so without this surface
+    // the icons disappear when the terrain underneath matches the icon color.
+    ShadowRectangle {
+        id: bottomToolbarId
         anchors {
             left: parent.left
             bottom: parent.bottom
             margins: 20
         }
-        checkable: true
-        text: "⌖"
-        font.pixelSize: Theme.fontSizeTitle
-        QC.ToolTip.visible: hovered
-        QC.ToolTip.text: qsTr("Pick coordinates")
-        // Guard: when deactivate() runs externally (e.g. another interaction
-        // takes over), onDeactivated below sets checked = false; this guard
-        // prevents the toggle from calling deactivate() again and re-emitting.
-        onCheckedChanged: {
-            if (checked && interactionManagerId.activeInteraction !== coordinatePickerId) {
-                coordinatePickerId.activate()
-            } else if (!checked && interactionManagerId.activeInteraction === coordinatePickerId) {
-                coordinatePickerId.deactivate()
+        width: bottomToolbarRowId.implicitWidth + Theme.floatingToolbarPadding
+        height: bottomToolbarRowId.implicitHeight + Theme.floatingToolbarPadding
+        color: Theme.surface
+        radius: 5
+
+        RowLayout {
+            id: bottomToolbarRowId
+            anchors.centerIn: parent
+            spacing: 4
+
+            IconButton {
+                id: pickButtonId
+                objectName: "coordinatePickerButton"
+                iconSource: "qrc:/twbs-icons/icons/crosshair.svg"
+                sourceSize: Qt.size(21, 21)
+                text: qsTr("Pick")
+                toolTip: qsTr("Pick coordinates")
+                selected: interactionManagerId.activeInteraction === coordinatePickerId
+                onClicked: {
+                    if (pickButtonId.selected) {
+                        coordinatePickerId.deactivate()
+                    } else {
+                        coordinatePickerId.activate()
+                    }
+                }
+            }
+
+            IconButton {
+                id: lazClipButtonId
+                objectName: "lazClipButton"
+                iconSource: "qrc:/twbs-icons/icons/scissors.svg"
+                sourceSize: Qt.size(21, 21)
+                text: qsTr("Clip")
+                toolTip: qsTr("Clip point cloud")
+                selected: interactionManagerId.activeInteraction === lazClipInteractionId
+                onClicked: {
+                    if (lazClipButtonId.selected) {
+                        lazClipInteractionId.deactivate()
+                    } else {
+                        lazClipInteractionId.activate()
+                    }
+                }
             }
         }
     }
@@ -179,7 +218,7 @@ Item {
         objectName: "coordinatePickerPopup"
         parent: rendererId
         picker: coordinatePickerId
-        visible: coordinatePickerId.hasPick && pickButtonId.checked
+        visible: coordinatePickerId.hasPick && pickButtonId.selected
     }
 }
 

@@ -6,23 +6,13 @@ import cw.TestLib
 MainWindowTest {
     id: rootId
 
-    // Standalone instance — drives DataRightClickMouseMenu's list-based
+    // Standalone instance — drives DeclinationSubmenu's list-based
     // multi-calibration path without depending on findChild order across the
     // cave-page row delegates.
     property list<TripCalibration> standaloneCalibrations: []
 
-    RemoveAskBox {
-        id: removeChallengeId
-    }
-
-    DataRightClickMouseMenu {
+    DeclinationSubmenu {
         id: menuId
-        objectName: "declinationContextMenu"
-        width: 100
-        height: 100
-        removeChallenge: removeChallengeId
-        row: 0
-        name: "Trip-0"
         tripCalibrations: rootId.standaloneCalibrations
     }
 
@@ -30,7 +20,6 @@ MainWindowTest {
         name: "CavePageDeclination"
         when: windowShown
 
-        readonly property string submenuName: "declinationSubmenu"
         readonly property string autoItemName: "declinationAutoMenuItem"
         readonly property string manualItemName: "declinationManualMenuItem"
 
@@ -89,8 +78,9 @@ MainWindowTest {
         function test_submenuDisabledWithoutCalibrations() {
             rootId.standaloneCalibrations = []
 
-            const submenu = findChild(menuId, submenuName)
-            tryVerify(() => !submenu.enabled, 500,
+            // The DeclinationSubmenu IS the submenu now (no DataRightClickMouseMenu
+            // wrapper), so check its enabled bit directly.
+            tryVerify(() => !menuId.enabled, 500,
                       "submenu must be disabled when the list is empty")
         }
 
