@@ -111,7 +111,7 @@ MainWindowTest {
         function test_navigateCavePageThenLeads() {
             // Regression: LayoutItemProxy reparenting on wide/narrow flip
             // crashed in QQuickWindowPrivate::polishItems on native macOS.
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
 
             let cave = RootData.region.cave(0)
@@ -139,7 +139,7 @@ MainWindowTest {
         function test_leadTable() {
             // Focused CaveLeadPage check that doesn't depend on the 3D
             // renderer (which is not functional under offscreen platform).
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
 
             let cave = RootData.region.cave(0)

@@ -21,7 +21,7 @@ MainWindowTest {
             rootId.width = 400
             waitForRendering(rootId)
 
-            TestHelper.loadProjectFromZip(RootData.project, "://datasets/lidarProjects/jaws of the beast.zip")
+            TestHelper.loadProjectFromZip(RootData.project, TestHelper.testcasesDatasetPath("lidarProjects/jaws of the beast.zip"))
             RootData.pageSelectionModel.currentPageAddress = tripAddress
             tryVerify(() => {
                 return RootData.pageView.currentPageItem !== null
@@ -33,8 +33,8 @@ MainWindowTest {
             tempNotesModel.trip = tripPageItem.currentTrip
             verify(tempNotesModel.trip !== null)
 
-            let image1 = TestHelper.copyToTempDirUrl("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")
-            let image2 = TestHelper.copyToTempDirUrl("://datasets/lidarProjects/9_15_2025 3.glb")
+            let image1 = TestHelper.toLocalUrl(TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"))
+            let image2 = TestHelper.toLocalUrl(TestHelper.testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"))
             tempNotesModel.addFiles([image1, image2])
 
             RootData.futureManagerModel.waitForFinished()

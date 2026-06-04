@@ -18,7 +18,7 @@ MainWindowTest {
 
         function init() {
             rootId.width = 1024
-            TestHelper.loadProjectFromFile(RootData.project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw")
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"))
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1"
             tryVerify(function() { return RootData.pageView.currentPageItem.objectName === "cavePage" })
             waitForRendering(rootId)

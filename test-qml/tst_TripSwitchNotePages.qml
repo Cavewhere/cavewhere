@@ -23,7 +23,7 @@ MainWindowTest {
             rootId.width = 400
 
             TestHelper.loadProjectFromZip(RootData.project,
-                "://datasets/lidarProjects/jaws of the beast.zip")
+                TestHelper.testcasesDatasetPath("lidarProjects/jaws of the beast.zip"))
 
             // Navigate to cave page and add a second trip
             RootData.pageSelectionModel.currentPageAddress = caveAddress
@@ -53,7 +53,7 @@ MainWindowTest {
             verify(trip1 !== null, "Trip1 should not be null")
             tempNotesModel.trip = trip1
             tempNotesModel.addFiles([
-                TestHelper.copyToTempDirUrl("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")
+                TestHelper.toLocalUrl(TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"))
             ])
             RootData.futureManagerModel.waitForFinished()
             waitForRendering(rootId)
@@ -74,7 +74,7 @@ MainWindowTest {
             verify(trip2Obj !== null, "Trip2 should not be null")
             tempNotesModel.trip = trip2Obj
             tempNotesModel.addFiles([
-                TestHelper.copyToTempDirUrl("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")
+                TestHelper.toLocalUrl(TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"))
             ])
             RootData.futureManagerModel.waitForFinished()
             waitForRendering(rootId)
