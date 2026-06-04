@@ -24,6 +24,16 @@
 #include <QDir>
 #include <cmath>
 
+namespace {
+    //Safety net for cwTriangulateTask::createPointGrid. The grid is
+    //width*height cells and createQuads() is O(cells), so a degenerate note
+    //transform (e.g. a scale wrong by the 39.37 DotsPerInch<->DotsPerMeter
+    //factor) can ask for hundreds of millions of cells and pin every core for
+    //minutes. A real scrap never needs anywhere near this many points, so we
+    //clamp the per-axis point count and log when the clamp trips.
+    constexpr int kMaxGridPointsPerAxis = 2048;
+}
+
 void cwTriangulateTask::setScrapData(QList<cwTriangulateInData> scraps) {
     Scraps = scraps;
 }
@@ -205,6 +215,25 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
 
     double numberOfPointsX = inCave.width() / gridResolutionMeters;
     double numberOfPointsY = inCave.height() / gridResolutionMeters;
+
+    //Safety net: a degenerate note transform (bad scale) makes inCave enormous
+    //and asks for an unbounded grid that pins every core for minutes in
+    //createQuads(). Clamp the per-axis point count (and treat non-finite counts
+    //as the clamp limit) so we still span bounds, just coarsely. Deltas are
+    //derived from the clamped counts below, so the grid keeps covering bounds.
+    if(!std::isfinite(numberOfPointsX) || numberOfPointsX > kMaxGridPointsPerAxis
+       || !std::isfinite(numberOfPointsY) || numberOfPointsY > kMaxGridPointsPerAxis) {
+        qWarning() << "cwTriangulateTask: clamping pathological point grid"
+                   << QSizeF(numberOfPointsX, numberOfPointsY)
+                   << "to" << kMaxGridPointsPerAxis << "per axis (degenerate note scale?)"
+                   << "scale=" << scale << "inCave=" << inCave;
+        numberOfPointsX = std::isfinite(numberOfPointsX)
+                              ? qMin(numberOfPointsX, double(kMaxGridPointsPerAxis))
+                              : double(kMaxGridPointsPerAxis);
+        numberOfPointsY = std::isfinite(numberOfPointsY)
+                              ? qMin(numberOfPointsY, double(kMaxGridPointsPerAxis))
+                              : double(kMaxGridPointsPerAxis);
+    }
 
     double xDelta = bounds.width() / numberOfPointsX;
     double yDelta = bounds.height() / numberOfPointsY;

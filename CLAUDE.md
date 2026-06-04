@@ -96,7 +96,7 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 
 ### C++
 - 4-space indentation, opening braces on the next line
-- `UpperCamelCase` for classes, `m_` prefix for members, `lowerCamelCase` for functions
+- `UpperCamelCase` for classes, `m_` prefix for members, `lowerCamelCase` for functions, `k` prefix for file-scope/`constexpr` constants (e.g. `kMaxGridPointsPerAxis`)
 - Full `const` correctness; use Qt signal/slot patterns with `Q_OBJECT`
 - Use function pointer syntax for `connect`/`disconnect` (e.g. `connect(obj, &Class::signal, this, &Class::slot)`), not the `SIGNAL()`/`SLOT()` string macros
 - Address Sanitizer is enabled in macOS Debug builds

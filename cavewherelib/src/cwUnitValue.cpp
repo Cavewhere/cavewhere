@@ -41,10 +41,23 @@ void cwUnitValue::setUpdateValue(bool updateAutomatically)
 
 void cwUnitValue::setData(const Data &data)
 {
-    setUpdateValue(false);
-    setUnit(data.unit);
-    setValue(data.value);
-    setUpdateValue(data.updateValueWhenUnitChanged);
+    //Apply all of data atomically before emitting any signal. Setting unit and
+    //value in separate steps (the old setUnit() then setValue()) briefly exposed
+    //a (new unit, old value) pair to anything connected to unitChanged() — e.g.
+    //cwNote recomputes every scrap's note transform on unitChanged(), and during
+    //that window cwNote::dotPerMeter() was wrong by the unit-conversion factor
+    //(39.37 for DotsPerInch<->DotsPerMeter), poisoning the scrap scale and
+    //blowing up cwTriangulateTask::createPointGrid. The value is taken verbatim
+    //(no conversion), matching the previous updateValue==false behavior.
+    const bool unitDidChange = (d.unit != data.unit);
+    const bool valueDidChange = (d.value != data.value);
+
+    d.unit = data.unit;
+    d.value = data.value;
+    d.updateValueWhenUnitChanged = data.updateValueWhenUnitChanged;
+
+    if(unitDidChange) { emit unitChanged(); }
+    if(valueDidChange) { emit valueChanged(); }
 }
 
 /**
