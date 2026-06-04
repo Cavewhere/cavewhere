@@ -54,7 +54,7 @@ MainWindowTest {
         }
 
         function test_lidarCarpeting() {
-            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpetButton)
 
             // wait() needed — the "" → "SELECT" transition includes PropertyAnimations

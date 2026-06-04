@@ -84,7 +84,7 @@ MainWindowTest {
         }
 
         function carpetButton() {
-            let button = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let button = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             verify(button !== null)
             return button
         }

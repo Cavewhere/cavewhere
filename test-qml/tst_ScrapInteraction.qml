@@ -45,7 +45,7 @@ MainWindowTest {
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select carpet
-            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(_obj1);
 
             // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
@@ -327,7 +327,7 @@ MainWindowTest {
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select the carpet button
-            let carpet = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let carpet = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpet);
 
             //Select the select button
@@ -367,7 +367,7 @@ MainWindowTest {
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select carpet
-            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(_obj1);
 
             // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
@@ -406,7 +406,7 @@ MainWindowTest {
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Re-enter the carpet tool — page navigation exits it (#342)
-            let carpet_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let carpet_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpet_obj1)
             wait(500)
 

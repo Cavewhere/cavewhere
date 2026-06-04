@@ -59,7 +59,7 @@ MainWindowTest {
             }, 10000, "should navigate to trip page")
 
             let carpetButton = ObjectFinder.findObjectByChain(
-                mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+                mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpetButton)
             // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
             // that reposition the toolbar; clicks miss during the animation
@@ -143,7 +143,7 @@ MainWindowTest {
 
             // Enter carpet mode again
             carpetButton = ObjectFinder.findObjectByChain(
-                mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+                mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpetButton)
             // wait() needed — carpet animation settle
             wait(300)

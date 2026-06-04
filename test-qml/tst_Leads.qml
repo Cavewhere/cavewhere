@@ -193,7 +193,7 @@ MainWindowTest {
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name;
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "tripPage");
 
-            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId");
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId");
             mouseClick(carpetButton);
 
             // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
@@ -373,7 +373,7 @@ MainWindowTest {
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "tripPage");
 
             // Enter carpet mode
-            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId");
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId");
             mouseClick(carpetButton);
 
             // wait() needed — the "" → "SELECT" transition includes PropertyAnimations

@@ -26,7 +26,7 @@ MainWindowTest {
             tryVerify(() => { return galleryView.count === 2 });
             tryCompare(galleryView, "currentIndex", 1);
 
-            let carpetButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let carpetButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpetButton);
             // The "" → "SELECT" transition includes PropertyAnimations that
             // reposition the toolbar; without this wait, clicks on the add-mode
