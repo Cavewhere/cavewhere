@@ -94,6 +94,8 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 
 ## Coding Conventions
 
+- **Comment sparingly.** Generally don't comment the code — let clear names and structure carry it. Add a comment only when it explains complex or non-obvious behavior (a subtle invariant, a workaround, a "why" that isn't visible from the code). When you do comment, keep it brief.
+
 ### C++
 - 4-space indentation, opening braces on the next line
 - `UpperCamelCase` for classes, `m_` prefix for members, `lowerCamelCase` for functions, `k` prefix for file-scope/`constexpr` constants (e.g. `kMaxGridPointsPerAxis`)

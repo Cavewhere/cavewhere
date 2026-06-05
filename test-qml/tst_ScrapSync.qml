@@ -757,7 +757,11 @@ MainWindowTest {
             if (scrap.type === Scrap.ProjectedProfile) {
                 verify(scrap.viewMatrix !== null)
                 state.direction = scrap.viewMatrix.direction
-                state.azimuth = roundToDigits(scrap.viewMatrix.azimuth, 1)
+                //Under auto-calc the azimuth is minimizer-derived and recomputed
+                //on load, so it isn't stable to assert across a sync round trip.
+                if (!scrap.calculateNoteTransform) {
+                    state.azimuth = roundToDigits(scrap.viewMatrix.azimuth, 1)
+                }
             }
 
             return state
@@ -892,7 +896,11 @@ MainWindowTest {
                 nextState.direction = state.direction !== null
                                       ? state.direction
                                       : ProjectedProfileScrapViewMatrix.LookingAt
-                nextState.azimuth = state.azimuth !== null ? state.azimuth : 0.0
+                //Mirror snapshotSelectedScrapTransformTypeState: the derived
+                //azimuth is only authoritative in manual mode.
+                if (!nextState.calculateNoteTransform) {
+                    nextState.azimuth = state.azimuth !== null ? state.azimuth : 0.0
+                }
             }
 
             return nextState

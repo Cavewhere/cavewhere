@@ -559,3 +559,52 @@ TEST_CASE("cwScrap merge applier keeps local projected profile settings when aut
     CHECK(mergedView->azimuth() == Catch::Approx(75.0));
     CHECK(mergedView->direction() == cwProjectedProfileScrapViewMatrix::RightToLeft);
 }
+
+TEST_CASE("cwScrap merge applier applies remote Plan switch despite auto-calc projected azimuth drift", "[cwScrapMerge][sync]")
+{
+    // Regression: under auto-calc the azimuth is minimizer-derived and recomputed
+    // on load, so a stored-vs-recomputed diff must not turn a remote Plan switch
+    // into a false conflict that keeps the local ProjectedProfile.
+    auto note = std::make_unique<cwNote>();
+    auto* scrap = new cwScrap();
+    note->addScrap(scrap);
+
+    scrap->setType(cwScrap::ProjectedProfile);
+    scrap->setCalculateNoteTransform(true);
+    auto* currentView = qobject_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
+    REQUIRE(currentView != nullptr);
+    currentView->setDirection(cwProjectedProfileScrapViewMatrix::LookingAt);
+    currentView->setAzimuth(108.4); // freshly recomputed by the minimizer on load
+
+    // Remote switched the scrap to Plan.
+    cwNoteData loadedNoteData = note->data();
+    REQUIRE(loadedNoteData.scraps.size() == 1);
+    auto& loadedScrap = loadedNoteData.scraps[0];
+    cwScrap planScrap; // default-constructed scraps are Plan
+    loadedScrap.viewMatrix =
+        std::unique_ptr<cwAbstractScrapViewMatrix::Data>(planScrap.data().viewMatrix->clone());
+    loadedScrap.calculateNoteTransform = true;
+
+    // Base: same direction as ours, but a different stored azimuth.
+    cwScrapBaseIdentityData baseIdentity;
+    baseIdentity.hasGeometryData = true;
+    baseIdentity.geometry.transform.calculateNoteTransform = true;
+    baseIdentity.geometry.transform.viewType = cwScrapType::ProjectedProfile;
+    baseIdentity.geometry.transform.hasProjectedProfileView = true;
+    baseIdentity.geometry.transform.projectedAzimuth = 0.0;
+    baseIdentity.geometry.transform.projectedDirection = cwProjectedProfileScrapViewMatrix::LookingAt;
+
+    cwNoteStructuralMergePlan plan;
+    plan.note = note.get();
+    plan.loadedNoteData = &loadedNoteData;
+    plan.mergedScrapOrder = {loadedScrap.id};
+    plan.baseScrapIdentityByScrapId.insert(loadedScrap.id, baseIdentity);
+    plan.applyMode = cwReconcileApplyMode::Merge;
+
+    const auto applyResult = cwScrapMergeApplier::applyNoteStructuralMergePlan(plan);
+    REQUIRE_FALSE(applyResult.hasError());
+
+    // Remote-only Plan switch wins; no false conflict.
+    CHECK_FALSE(applyResult.value().geometryConflictKeptOurs);
+    CHECK(note->scrap(0)->type() == cwScrap::Plan);
+}
