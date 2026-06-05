@@ -42,12 +42,12 @@ private:
     cwRhiPipelineKey buildPipelineKey(QRhiRenderTarget* target,
                                       QRhiRenderPassDescriptor* renderPassDescriptor) const;
 
-    // std140 layout: two floats padded to a 16-byte vec4 slot. Mirrors the
-    // PerCloudBlock declaration in PointCloud.vert.
+    // std140 rounds a uniform block to a multiple of 16 bytes; pad three
+    // floats so the C++ struct matches the shader-side block size. Mirrors
+    // the PerCloudBlock declaration in PointCloud.vert.
     struct PerCloudUniform {
         float worldRadius = 0.0f;
-        float gapFudge = 2.0f;
-        float pad[2] = {0.0f, 0.0f};
+        float pad[3] = {0.0f, 0.0f, 0.0f};
     };
 
     bool m_resourcesInitialized = false;
@@ -59,19 +59,21 @@ private:
     QRhiVertexInputLayout m_inputLayout;
     QVector<QRhiBuffer*> m_vertexBuffers;
     QVector<qsizetype> m_vertexBufferCapacities;
-    // Per-cloud uniform block (binding 1): world-space point radius derived
-    // from the cloud's mean point spacing, plus a user-tunable gapFudge.
-    // NaN sentinels force the first upload since NaN != anything.
+    // Per-cloud uniform block (binding 1): world-space sprite radius in
+    // meters. NaN sentinel forces the first upload since NaN != anything.
     QRhiBuffer* m_perCloudUBO = nullptr;
     float m_lastUploadedWorldRadius = std::numeric_limits<float>::quiet_NaN();
-    float m_lastUploadedGapFudge = std::numeric_limits<float>::quiet_NaN();
     QRhiShaderResourceBindings* m_srb = nullptr;
     cwRhiScene* m_scene = nullptr;
     cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;
     cwRhiPipelineKey m_pipelineKey;
     bool m_hasPipelineKey = false;
 
-    cwTracked<cwRenderPointCloud::Data> m_data;
+    // Geometry and render-state tracked independently so a uniform-only
+    // change (world radius / point size) never re-stages the vertex buffer —
+    // the expensive vertex upload is gated on m_geometry.isChanged().
+    cwTracked<cwRenderPointCloud::GeometryState> m_geometry;
+    cwTracked<cwRenderPointCloud::RenderState> m_renderState;
 };
 
 #endif // CWRHIPOINTCLOUD_H

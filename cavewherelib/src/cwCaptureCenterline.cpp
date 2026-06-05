@@ -269,8 +269,6 @@ void cwCaptureCenterline::placeStationLabels()
     // cwCaptureViewport before the placer is finalized, so this method does
     // NOT call addObstacleRect or finalize.
 
-    int placed = 0;
-    int dropped = 0;
     for(StationDrawData& station : m_stationData) {
         if(station.name.isEmpty()) {
             continue;
@@ -296,13 +294,6 @@ void cwCaptureCenterline::placeStationLabels()
             // ascent). Specifically: placer returned a rect tightly sized to
             // glyph ink; that already matches what the painter renders.
             station.labelRect = p.labelRect;
-            placed++;
-        } else {
-            dropped++;
         }
     }
-
-    qDebug() << "[centerline-labels] stations=" << m_stationData.size()
-             << "placed=" << placed
-             << "dropped=" << dropped;
 }

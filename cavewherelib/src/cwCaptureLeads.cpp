@@ -307,8 +307,6 @@ void cwCaptureLeads::placeLeadLabels()
     // placer's reserved rect matches the painter's rendered glyph rect.
     const QFont placementLabelFont = scaledLabelFont();
 
-    int placed = 0;
-    int dropped = 0;
     for(LeadDrawData& entry : m_leads) {
         if(entry.text.isEmpty()) {
             entry.labelRect = QRectF();
@@ -348,15 +346,9 @@ void cwCaptureLeads::placeLeadLabels()
                     QLineF(entry.leaderStart, entry.leaderEnd),
                     cwCaptureLeadLines::LeaderPenWidthPaperPx * m_paperPxToLocal);
             }
-            placed++;
         } else {
             entry.labelRect = QRectF();
             entry.hasLeader = false;
-            dropped++;
         }
     }
-
-    qDebug() << "[leads-labels] leads=" << m_leads.size()
-             << "placed=" << placed
-             << "dropped=" << dropped;
 }

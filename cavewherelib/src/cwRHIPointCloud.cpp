@@ -59,69 +59,85 @@ void cwRHIPointCloud::synchronize(const SynchronizeData& data)
     Q_ASSERT(dynamic_cast<cwRenderPointCloud*>(data.object) != nullptr);
     auto* pointCloud = static_cast<cwRenderPointCloud*>(data.object);
 
-    m_data = pointCloud->m_data;
-    pointCloud->m_data.resetChanged();
+    m_geometry = pointCloud->m_geometry;
+    m_renderState = pointCloud->m_renderState;
+    pointCloud->m_geometry.resetChanged();
+    pointCloud->m_renderState.resetChanged();
 }
 
 void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
 {
-    if (!m_data.isChanged()) {
+    const bool geometryChanged = m_geometry.isChanged();
+    const bool renderStateChanged = m_renderState.isChanged();
+    if (!geometryChanged && !renderStateChanged) {
         return;
     }
 
-    const auto& value = m_data.value();
-    const cwGeometry& geometry = value.geometry;
+    const auto& geometryState = m_geometry.value();
+    const cwGeometry& geometry = geometryState.geometry;
     const auto bufferViews = geometry.vertexBuffers();
 
     if (geometry.vertexCount() == 0 || bufferViews.isEmpty()) {
-        m_data.resetChanged();
+        m_geometry.resetChanged();
+        m_renderState.resetChanged();
         return;
     }
 
     auto* rhi = data.renderData.cb->rhi();
     QRhiResourceUpdateBatch* batch = data.resourceUpdateBatch;
 
-    // Build the input layout from the geometry the first time we see a
-    // non-empty geometry. The geometry's attribute set is treated as
-    // immutable for the lifetime of this RHI object.
-    if (!m_layoutBuilt) {
-        m_inputLayout = buildRhiInputLayout(geometry);
-        m_layoutBuilt = true;
-    }
-
-    // Allocate one QRhiBuffer per cwGeometry vertex buffer. Interleaved
-    // geometry has 1 buffer (current LAZ case); Separated would have N.
-    if (m_vertexBuffers.size() != bufferViews.size()) {
-        for (QRhiBuffer* buffer : m_vertexBuffers) {
-            delete buffer;
+    // Vertex buffers are (re)built and uploaded only when the geometry
+    // tracker changed — i.e. setGeometry()/clear() ran. A uniform-only
+    // change (world radius / point size) dirties m_renderState alone, so the
+    // multi-GB vertex buffer is never re-staged for it. That separation is
+    // the whole point of tracking geometry apart from render state: re-
+    // staging on every uniform tweak was an unbounded leak across an
+    // offline render sweep.
+    if (geometryChanged) {
+        // Build the input layout from the geometry the first time we see a
+        // non-empty geometry. The geometry's attribute set is treated as
+        // immutable for the lifetime of this RHI object.
+        if (!m_layoutBuilt) {
+            m_inputLayout = buildRhiInputLayout(geometry);
+            m_layoutBuilt = true;
         }
-        m_vertexBuffers.assign(bufferViews.size(), nullptr);
-        m_vertexBufferCapacities.assign(bufferViews.size(), 0);
-    }
 
-    // Immutable buffers must be recreated on size change; uploads are batched
-    // once per geometry change (not per frame), so the rebuild cost is fine.
-    for (qsizetype i = 0; i < bufferViews.size(); ++i) {
-        const QByteArray* data = bufferViews[i].data;
-        const qsizetype byteSize = data->size();
-        if (!m_vertexBuffers[i] || m_vertexBufferCapacities[i] != byteSize) {
-            delete m_vertexBuffers[i];
-            m_vertexBuffers[i] = rhi->newBuffer(QRhiBuffer::Immutable,
-                                                QRhiBuffer::VertexBuffer,
-                                                quint32(byteSize));
-            m_vertexBuffers[i]->create();
-            m_vertexBufferCapacities[i] = byteSize;
+        // Allocate one QRhiBuffer per cwGeometry vertex buffer. Interleaved
+        // geometry has 1 buffer (current LAZ case); Separated would have N.
+        if (m_vertexBuffers.size() != bufferViews.size()) {
+            for (QRhiBuffer* buffer : m_vertexBuffers) {
+                delete buffer;
+            }
+            m_vertexBuffers.assign(bufferViews.size(), nullptr);
+            m_vertexBufferCapacities.assign(bufferViews.size(), 0);
         }
-        batch->uploadStaticBuffer(m_vertexBuffers[i], data->constData());
+
+        // Immutable buffers must be recreated on size change. We're here
+        // only because the geometry changed, so the upload is unconditional.
+        for (qsizetype i = 0; i < bufferViews.size(); ++i) {
+            const QByteArray* bufferData = bufferViews[i].data;
+            const qsizetype byteSize = bufferData->size();
+            if (!m_vertexBuffers[i] || m_vertexBufferCapacities[i] != byteSize) {
+                delete m_vertexBuffers[i];
+                m_vertexBuffers[i] = rhi->newBuffer(QRhiBuffer::Immutable,
+                                                    QRhiBuffer::VertexBuffer,
+                                                    quint32(byteSize));
+                m_vertexBuffers[i]->create();
+                m_vertexBufferCapacities[i] = byteSize;
+            }
+            batch->uploadStaticBuffer(m_vertexBuffers[i], bufferData->constData());
+        }
     }
 
-    // Per-cloud uniform — world-space point radius derived from the cloud's
-    // measured mean spacing. * 0.5 because the spacing is *between* points, and
-    // a radius of half that just covers the gap to a neighbor. gapFudge is a
-    // user-tunable multiplier (hold P + wheel in the 3D view) that lets the
-    // operator tune overdraw / EDL darkness at runtime.
-    const float worldRadius = value.meanSpacingXY * 0.5f;
-    const float gapFudge = value.gapFudge;
+    // Per-cloud uniform — world-space sprite radius in meters. A fixed
+    // default (set on cwRenderPointCloud::RenderState) produces consistent
+    // sprite sizes across every loaded cloud; the earlier meanSpacingXY * 0.5
+    // auto-derivation was unreliable because mean-spacing estimates vary with
+    // LAZ density / sampling. Overridden via cwLazLayersSceneNode::
+    // setWorldRadius (P+wheel gesture in the 3D view, and sink_repatcher
+    // --point-radius for offline renders). Tracked in render state, so a
+    // change re-uploads only this small UBO — never the vertex buffer.
+    const float worldRadius = m_renderState.value().worldRadius;
 
     if (!m_perCloudUBO) {
         const quint32 size = rhi->ubufAligned(sizeof(PerCloudUniform));
@@ -131,19 +147,19 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
         m_perCloudUBO->create();
     }
 
-    if (m_lastUploadedWorldRadius != worldRadius || m_lastUploadedGapFudge != gapFudge) {
-        const PerCloudUniform uniform{ worldRadius, gapFudge, {0.0f, 0.0f} };
+    if (m_lastUploadedWorldRadius != worldRadius) {
+        const PerCloudUniform uniform{ worldRadius, {0.0f, 0.0f, 0.0f} };
         batch->updateDynamicBuffer(m_perCloudUBO, 0, sizeof(PerCloudUniform), &uniform);
         m_lastUploadedWorldRadius = worldRadius;
-        m_lastUploadedGapFudge = gapFudge;
     }
 
-    m_data.resetChanged();
+    m_geometry.resetChanged();
+    m_renderState.resetChanged();
 }
 
 void cwRHIPointCloud::render(const RenderData& data)
 {
-    if (m_data.value().geometry.vertexCount() == 0) {
+    if (m_geometry.value().geometry.vertexCount() == 0) {
         return;
     }
 
@@ -164,7 +180,7 @@ void cwRHIPointCloud::render(const RenderData& data)
         inputs.append(QRhiCommandBuffer::VertexInput(buffer, 0));
     }
     data.cb->setVertexInput(0, inputs.size(), inputs.constData());
-    data.cb->draw(quint32(m_data.value().geometry.vertexCount()));
+    data.cb->draw(quint32(m_geometry.value().geometry.vertexCount()));
 }
 
 bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
@@ -177,7 +193,7 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
         return false;
     }
 
-    const auto& value = m_data.value();
+    const auto& value = m_geometry.value();
     const qsizetype vertexCount = value.geometry.vertexCount();
     if (vertexCount == 0) {
         return false;

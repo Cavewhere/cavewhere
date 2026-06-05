@@ -9,7 +9,7 @@
         <string>/bin/zsh</string>
         <string>-l</string>
         <string>-c</string>
-        <string>/Users/cave/Documents/projects/cavewhere/scripts/macos_nightly/nightly-test.sh</string>
+        <string>/Users/cave/.local/bin/nightly-launcher.sh</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>

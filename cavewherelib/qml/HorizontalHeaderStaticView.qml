@@ -1,39 +1,33 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
-import QtQuick.Controls as QC
 import cavewherelib
-QC.HorizontalHeaderView {
+
+// Qt 6.11.1 broke QC.HorizontalHeaderView when wrapping a list-shaped model:
+// only the first column's role data reached the delegate (issue #502). The
+// table header is a fixed handful of columns with no resize gesture and no
+// syncView, so a Row+Repeater renders the same layout without HeaderView's
+// proxy-model indirection.
+Item {
     id: horizontalHeader
-    // Layout.fillWidth: true
 
     required property TableStaticView view
+    property alias delegate: repeaterId.delegate
+    property alias count: repeaterId.count
 
-    model: view.columnModel
-    textRole: "text"
+    implicitWidth: rowId.implicitWidth
+    implicitHeight: rowId.implicitHeight
 
-    columnWidthProvider: function (column) {
-        let columnWidth = explicitColumnWidth(column);
-        if(columnWidth === -1) {
-            //column width hasn't been set.
-            let index = view.columnModel.index(column, 0);
-            return view.columnModel.data(index, TableStaticColumnModel.ColumnWidthRole);
-        }
-
-        return Math.min(300, Math.max(50, columnWidth));
+    function itemAtIndex(index) {
+        return repeaterId.itemAt(index)
     }
 
-    clip: true
+    Row {
+        id: rowId
 
-    onLayoutChanged: {
-        // Update each ListElement's columnWidth with the current header
-        for(let i = 0; i < view.columnModel.count; i++) {
-            let columnWidth = horizontalHeader.columnWidth(i);
-            if(columnWidth !== -1) {
-                let index = view.columnModel.index(i, 0);
-                let currentWidth = view.columnModel.data(index, TableStaticColumnModel.ColumnWidthRole);
-                if(currentWidth !== columnWidth) {
-                    view.columnModel.setData(index, columnWidth, TableStaticColumnModel.ColumnWidthRole);
-                }
-            }
+        Repeater {
+            id: repeaterId
+            model: horizontalHeader.view.columnModel
         }
     }
 }

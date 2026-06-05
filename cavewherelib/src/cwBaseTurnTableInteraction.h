@@ -14,7 +14,7 @@
 #include "cwCamera.h"
 #include "cwRayHit.h"
 #include "cwScene.h"
-class cwMatrix4x4Animation;
+#include "cwTurnTableViewState.h"
 
 //Qt 3D
 #include <QPlane3D>
@@ -24,8 +24,8 @@ class cwMatrix4x4Animation;
 #include <QTimer>
 #include <QPointer>
 #include <QQmlEngine>
-#include <QObjectBindableProperty>
 #include <QQuaternion>
+#include <QVariantAnimation>
 
 class cwBaseTurnTableInteraction : public cwInteraction
 {
@@ -39,12 +39,30 @@ class cwBaseTurnTableInteraction : public cwInteraction
     Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
     Q_PROPERTY(int startDragDistance READ startDragDistance CONSTANT)
 
-    Q_PROPERTY(bool azimuthLocked READ isAzimuthLocked WRITE setAzimuthLocked BINDABLE azimuthLockedBinding)
-    Q_PROPERTY(bool pitchLocked READ isPitchLocked WRITE setPitchLocked BINDABLE pitchLockedBinding)
+    Q_PROPERTY(bool azimuthLocked READ isAzimuthLocked WRITE setAzimuthLocked NOTIFY azimuthLockedChanged)
+    Q_PROPERTY(bool pitchLocked READ isPitchLocked WRITE setPitchLocked NOTIFY pitchLockedChanged)
 
-    Q_PROPERTY(QPlane3D gridPlane READ gridPlane WRITE setGridPlane NOTIFY gridPlaneChanged BINDABLE bindableGridPlane)
+    Q_PROPERTY(QVector3D center READ center WRITE setCenter NOTIFY centerChanged)
+    Q_PROPERTY(bool centerLocked READ isCenterLocked WRITE setCenterLocked NOTIFY centerLockedChanged)
+
+    Q_PROPERTY(QPlane3D gridPlane READ gridPlane WRITE setGridPlane NOTIFY gridPlaneChanged)
 
 public:
+    // Default duration (ms) for animateToViewState() when no explicit
+    // duration is supplied. Used both as the header default-arg value and
+    // as the QVariantAnimation initial duration in the constructor.
+    static constexpr int DefaultStateAnimationDurationMs = 1000;
+
+    // objectName attached to the state-animation child QVariantAnimation,
+    // so tests can locate it via QObject::findChild without exposing the
+    // animator pointer on the public API.
+    static constexpr const char* stateAnimationObjectName = "stateAnimation";
+
+    // Margin multiplier applied by zoomTo() so the framed box doesn't sit
+    // flush against the viewport edges. Exposed so tests can use the same
+    // value without duplicating the literal.
+    static constexpr float FramingPad = 1.08f;
+
     explicit cwBaseTurnTableInteraction(QQuickItem *parent = 0);
 
     QQuaternion cameraRotation() const;
@@ -53,12 +71,10 @@ public:
     void setAzimuth(double azimuth);
 
     bool isAzimuthLocked() const { return m_azimuthLocked; }
-    void setAzimuthLocked(bool locked) { m_azimuthLocked = locked; }
-    QBindable<bool> azimuthLockedBinding() { return &m_azimuthLocked; }
+    void setAzimuthLocked(bool locked);
 
     bool isPitchLocked() const { return m_pitchLocked; }
-    void setPitchLocked(bool locked) { m_pitchLocked = locked; }
-    QBindable<bool> pitchLockedBinding() { return &m_pitchLocked; }
+    void setPitchLocked(bool locked);
 
     double pitch() const;
     void setPitch(double pitch);
@@ -69,17 +85,41 @@ public:
     cwScene* scene() const;
     void setScene(cwScene* scene);
 
+    QVector3D center() const { return m_center; }
+    void setCenter(QVector3D center);
+
+    bool isCenterLocked() const { return m_centerLocked; }
+    void setCenterLocked(bool locked);
+
     Q_INVOKABLE void centerOn(QVector3D point, bool animate = false);
+
+    Q_INVOKABLE cwTurnTableViewState viewState() const;
+    Q_INVOKABLE void setViewState(const cwTurnTableViewState& state);
+
+    Q_INVOKABLE void animateToViewState(const cwTurnTableViewState& target,
+                                        int durationMs = DefaultStateAnimationDurationMs);
 
     int startDragDistance() const;
 
-    QPlane3D gridPlane() const { return m_gridPlane.value(); }
-    void setGridPlane(const QPlane3D& gridPlane) { m_gridPlane = gridPlane; }
-    QBindable<QPlane3D> bindableGridPlane() { return &m_gridPlane; }
+    QPlane3D gridPlane() const { return m_gridPlane; }
+    void setGridPlane(const QPlane3D& gridPlane);
 
     Q_INVOKABLE cwRayHit pick(QPointF qtViewPoint) const;
 
     Q_INVOKABLE void zoomTo(const QBox3D& box);
+
+    // Returns the 5-channel viewState that frames @a box at the supplied
+    // @a azimuth / @a pitch (degrees). Unlike zoomTo() this is const, does
+    // NOT call resetView(), and uses the supplied orientation for BOTH the
+    // fit math AND the returned target — so the AABB is sized against the
+    // post-rotation view, not the current one. Lets callers snap to a
+    // canonical orientation (e.g. pitch=0 profile view for a sink) and
+    // still get a tight fit. Box-null, camera-null, or non-finite box
+    // falls through to the current viewState() unchanged. Caller routes
+    // the result through animateToViewState() / setViewState().
+    Q_INVOKABLE cwTurnTableViewState framingViewState(const QBox3D& box,
+                                                      double azimuth,
+                                                      double pitch) const;
 
 signals:
     void cameraRotationChanged();
@@ -88,6 +128,11 @@ signals:
     void cameraChanged();
     void sceneChanged();
     void gridPlaneChanged();
+    void azimuthLockedChanged();
+    void pitchLockedChanged();
+    void centerChanged();
+    void centerLockedChanged();
+    void animationFinished();
 
 public slots:
 
@@ -106,17 +151,22 @@ private slots:
     void zoomLastPosition();
     void translateLastPosition();
 
-    void updateViewMatrixFromAnimation(QVariant matrix);
+    void onStateAnimTick(const QVariant& value);
 
 private:
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwBaseTurnTableInteraction, bool, m_azimuthLocked, false);
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwBaseTurnTableInteraction, bool, m_pitchLocked, false);
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwBaseTurnTableInteraction,
-                                         QPlane3D, m_gridPlane,
-                                         QPlane3D(),
-                                         &cwBaseTurnTableInteraction::gridPlaneChanged);
+    bool m_azimuthLocked = false;
+    bool m_pitchLocked = false;
+    QPlane3D m_gridPlane;
 
-    QVector3D LastMouseGlobalPosition; //For panning
+    QVector3D m_center; //!< World-space orbit/look-at center, used as the pivot for rotation
+    bool m_centerLocked = false; //!< When true, startRotating/startPanning don't move m_center
+
+    //! World-space anchor that the active pan drag tracks under the cursor.
+    //! Always set to the click's ray-plane intersection at startPanning,
+    //! independent of m_centerLocked — that's how pan stays smooth while
+    //! the rotation pivot (m_center) is pinned to e.g. the sink centroid.
+    QVector3D m_panAnchor;
+
     QPlane3D PanPlane;
     QPointF LastMousePosition; //For rotation
     QQuaternion CurrentRotation;
@@ -144,7 +194,13 @@ private:
     QPointer<cwCamera> Camera; //!<
     QPointer<cwScene> Scene; //!<
 
-    cwMatrix4x4Animation* ViewMatrixAnimation;
+    // State-based animator: drives setViewState() per tick from a captured
+    // start state to a target state, both stored as 5-channel snapshots.
+    // The animation itself is a scalar t in [0, 1]; per-tick interpolation
+    // happens in onStateAnimTick().
+    QVariantAnimation* m_stateAnimation;
+    cwTurnTableViewState m_stateAnimStart;
+    cwTurnTableViewState m_stateAnimTarget;
 
     void zoomPerspective();
     void zoomOrtho();

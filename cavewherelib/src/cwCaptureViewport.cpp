@@ -631,15 +631,11 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
     placer.setLabelMarginPaperPx(PlacerLabelMarginPaperPx * paperPxToLocal);
     placer.setAlphaThreshold(cwCaptureLabelPlacer::DefaultAlphaThreshold);
 
-    int tilesSeen = 0;
-    int tilesSampled = 0;
     for(cwGraphicsImageItem* tile : std::as_const(tiles)) {
-        tilesSeen++;
         const QImage img = tile->image();
         if(img.isNull()) {
             continue;
         }
-        tilesSampled++;
         placer.addTileAlpha(img, tile->pos(), tile->scale());
     }
 
@@ -688,10 +684,6 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
             placer.addSoftLineObstacle(seg, centerlineThickness);
         }
     }
-
-    qDebug() << "[placer] tilesSampled=" << tilesSampled << "/" << tilesSeen
-             << "bounds=" << parentBounds
-             << "exportDpi=" << exportDpi;
 
     // Place leads first so each placement registers its leader line into
     // the placer; stations placed afterwards then avoid those leaders.

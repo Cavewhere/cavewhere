@@ -159,9 +159,77 @@ cmake --build build/Qt_6_11_0_for_Android_arm64_v8a --target apk
 ```
 
 Deploying to a physical device requires USB debugging enabled and the device
-authorised. Signing an APK/AAB for Play Store upload requires an Android
-keystore — configure signing in Qt Creator's **Projects → Build → Build
-Android APK → Sign package**, or via Gradle properties.
+authorised.
+
+Debug builds produce an APK signed with the Android SDK's auto-generated debug
+key — installable on any device with USB debugging or "Install unknown apps"
+enabled. Release builds produce an **unsigned** APK that needs an extra signing
+step before it can install. See [Signing the release APK](#signing-the-release-apk).
+
+## Signing the release APK
+
+Qt Creator signs release APKs and AABs natively via `androiddeployqt --sign`.
+There is no CaveWhere-specific signing infrastructure — use the IDE's
+built-in **Sign package** controls.
+
+### One-time setup
+
+If you don't already have a keystore, generate one with `keytool`:
+
+```bash
+keytool -genkeypair -v -keystore ~/.keystores/cavewhere-play.jks \
+    -alias cavewhere -keyalg RSA -keysize 2048 -validity 36500
+```
+
+Back it up — losing the keystore means future Play Store updates have to be
+published as a new app (different signing identity).
+
+### Configure in Qt Creator
+
+**Projects → Build → Build Steps → Build Android APK** has a **Sign package**
+section. Fill in:
+
+- **Keystore**: path to your `.jks` file (e.g. `~/.keystores/cavewhere-play.jks`)
+- **Certificate alias**: dropdown populates from the keystore once Qt Creator
+  reads it
+- Passwords: prompted on first use; Qt Creator can remember them for the
+  session (per the checkbox)
+
+Tick **Sign package** to enable signing for the active build configuration.
+
+To list the aliases in an existing keystore:
+```bash
+keytool -list -keystore ~/.keystores/cavewhere-play.jks
+```
+
+### Build
+
+Build normally — **Build → Build Project** in Qt Creator, or:
+
+```bash
+cmake --build build/Qt_6_11_0_for_Android_arm64_v8a-Release --target apk
+```
+
+(CLI builds use `androiddeployqt`'s own `--sign` flag; pass keystore + alias
+via the standard `androiddeployqt.json` settings if you want CLI signing.)
+
+### Output
+
+The signed APK replaces the unsigned one at:
+
+```
+build/<preset>/android-build-CaveWhere/build/outputs/apk/release/android-build-CaveWhere-release-signed.apk
+```
+
+### Sharing the signed APK with a tester
+
+Send the signed APK directly (Drive link, AirDrop, etc.). On the tester's
+Android device, enable "Install unknown apps" for the browser or file manager
+they open it from, then tap the APK to install.
+
+For repeat distribution to the same testers, consider **Firebase App
+Distribution** (free, no Play Console account required) instead of emailing
+APKs each time.
 
 ## How It Works
 
@@ -299,12 +367,20 @@ Single-ABI builds are simpler; do multi-ABI only when you need it.
    ```bash
    cmake -B build/Qt_6_11_0_for_Android_arm64_v8a -DCAVEWHERE_BUILD_NUMBER=<N>
    ```
-4. Build the AAB target in Qt Creator (**Build → Build Android App Bundle**)
-   or from CLI:
-   ```bash
-   cmake --build build/Qt_6_11_0_for_Android_arm64_v8a --target aab
-   ```
-5. Sign with your release keystore and upload via the Play Console.
+4. Enable **Sign package** in Qt Creator (**Projects → Build → Build Steps →
+   Build Android APK**) and point it at your release keystore. See
+   [Signing the release APK](#signing-the-release-apk) for details.
+5. Build the target you need:
+   - **Direct APK distribution** (testers, sideloading) — **Build → Build
+     Project** in Qt Creator, or:
+     ```bash
+     cmake --build build/Qt_6_11_0_for_Android_arm64_v8a-Release --target apk
+     ```
+   - **Play Store upload** (AAB) — **Build → Build Android App Bundle**, or:
+     ```bash
+     cmake --build build/Qt_6_11_0_for_Android_arm64_v8a-Release --target aab
+     ```
+6. Upload via the Play Console (AAB) or distribute the signed APK directly.
 
 ### Re-uploading to Play Store
 

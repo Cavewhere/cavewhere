@@ -25,6 +25,13 @@
 Q_LOGGING_CATEGORY(lcLazSceneNode, "cw.laz.scenenode")
 
 namespace {
+    // World-space sprite radius bounds in meters. Lower bound covers
+    // sub-decimeter sprites for high-density scans; upper bound prevents
+    // a runaway multiplicative P+wheel from turning the render into one
+    // fat blob. sink_repatcher --point-radius clamps to the same range.
+    constexpr float kMinWorldRadius = 0.01f;
+    constexpr float kMaxWorldRadius = 50.0f;
+
 QString shortId(const cwLazLayer* layer) {
     return layer == nullptr
         ? QStringLiteral("(null)")
@@ -263,7 +270,7 @@ void cwLazLayersSceneNode::materialize(cwLazLayer* layer)
     qCDebug(lcLazSceneNode) << "materialize:" << shortId(layer) << fileName(layer);
 
     auto* renderObject = new cwRenderPointCloud();
-    renderObject->setGapFudge(m_gapFudge);
+    renderObject->setWorldRadius(m_worldRadius);
     renderObject->setScene(m_scene);
     m_pointClouds.insert(layer->id(), renderObject);
 
@@ -399,19 +406,19 @@ void cwLazLayersSceneNode::removeKeywordItemForLayer(cwLazLayer* layer)
     m_keywordItems.erase(it);
 }
 
-void cwLazLayersSceneNode::setGapFudge(float gapFudge)
+void cwLazLayersSceneNode::setWorldRadius(float worldRadius)
 {
-    const float clamped = std::clamp(gapFudge, kMinGapFudge, kMaxGapFudge);
-    if (qFuzzyCompare(m_gapFudge, clamped)) {
+    const float clamped = std::clamp(worldRadius, kMinWorldRadius, kMaxWorldRadius);
+    if (qFuzzyCompare(m_worldRadius, clamped)) {
         return;
     }
-    m_gapFudge = clamped;
+    m_worldRadius = clamped;
 
     for (const auto& renderObject : std::as_const(m_pointClouds)) {
         if (renderObject) {
-            renderObject->setGapFudge(clamped);
+            renderObject->setWorldRadius(clamped);
         }
     }
 
-    emit gapFudgeChanged(clamped);
+    emit worldRadiusChanged(clamped);
 }

@@ -41,7 +41,7 @@ class CAVEWHERE_LIB_EXPORT cwLazLayersSceneNode : public QObject
     QML_NAMED_ELEMENT(LazLayersSceneNode)
     QML_UNCREATABLE("Access via RegionSceneManager.lazLayersSceneNode")
 
-    Q_PROPERTY(float gapFudge READ gapFudge WRITE setGapFudge NOTIFY gapFudgeChanged)
+    Q_PROPERTY(float worldRadius READ worldRadius WRITE setWorldRadius NOTIFY worldRadiusChanged)
 
 public:
     explicit cwLazLayersSceneNode(QObject* parent = nullptr);
@@ -58,18 +58,18 @@ public:
     /// Test accessor: render object backing @a layer, or nullptr.
     cwRenderPointCloud* pointCloudForLayer(cwLazLayer* layer) const;
 
+    float worldRadius() const { return m_worldRadius; }
+
     /// Subset of the bound model's layers whose render object is currently
     /// visible (keyword-filter pipeline gates this). Returns layers in the
     /// same order they appear in the model.
     QList<cwLazLayer*> visibleLayers() const;
 
-    float gapFudge() const { return m_gapFudge; }
-
 public slots:
-    void setGapFudge(float gapFudge);
+    void setWorldRadius(float worldRadius);
 
 signals:
-    void gapFudgeChanged(float gapFudge);
+    void worldRadiusChanged(float worldRadius);
 
 private slots:
     /// Resolves the originating cwLazLayer through QObject::sender() so the
@@ -98,7 +98,13 @@ private:
     QHash<QUuid, QPointer<cwRenderPointCloud>> m_pointClouds;
     QHash<QUuid, QPointer<cwKeywordItem>> m_keywordItems;
 
-    float m_gapFudge = 2.0f;
+    // Mirrors cwRenderPointCloud::RenderState::worldRadius default.
+    // setWorldRadius fans out to every owned cwRenderPointCloud, is bound to
+    // the P+wheel gesture in the 3D view, and is the entry point used by
+    // sink_repatcher --point-radius. Kept here (rather than only on
+    // cwRenderPointCloud) so the value survives layers added later in the
+    // session.
+    float m_worldRadius = 1.29f;
 };
 
 #endif // CWLAZLAYERSSCENENODE_H

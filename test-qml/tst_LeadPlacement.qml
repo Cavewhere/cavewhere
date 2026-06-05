@@ -6,8 +6,8 @@ import QmlTestRecorder
 
 // Visual test for station-label and lead-label collision-based placement.
 // Loads Phake Cave 3000, sets up an export region, enables the Leads layer
-// option, and writes an SVG to /tmp/cavewhere_lead_placement.svg, then opens
-// it in the system default viewer for manual inspection.
+// option, and writes an SVG to the per-test temp directory, then opens it
+// in the system default viewer for manual inspection.
 MainWindowTest {
     id: rootId
 
@@ -78,10 +78,10 @@ MainWindowTest {
             captureItem0.captureItem.leadsVisible = true
             verify(captureItem0.captureItem.leadsVisible === true)
 
-            // Export SVG to /tmp so it's easy to find. Open it after for visual
-            // inspection.
-            let outPath = "/tmp/cavewhere_lead_placement.svg"
-            let outUrl  = Qt.resolvedUrl("file://" + outPath)
+            // Export SVG to the per-test temp directory. Open it after for
+            // visual inspection.
+            let outPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl()) + "/cavewhere_lead_placement.svg"
+            let outUrl  = TestHelper.toLocalUrl(outPath)
             TestHelper.removeFile(outUrl)
             verify(!TestHelper.fileExists(outUrl))
 
