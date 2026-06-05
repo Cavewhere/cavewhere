@@ -52,7 +52,7 @@ void cwRenderPointCloud::setGeometry(GeometryData geometry)
 
 void cwRenderPointCloud::clear()
 {
-    // Render knobs (pointSize / gapFudge) live in m_renderState and are
+    // Render knobs (pointSize / worldRadius) live in m_renderState and are
     // intentionally left untouched — clearing only drops the geometry.
     m_geometry.setValue(GeometryState{});
 
@@ -74,13 +74,13 @@ void cwRenderPointCloud::setPointSize(float pointSize)
     update();
 }
 
-void cwRenderPointCloud::setGapFudge(float gapFudge)
+void cwRenderPointCloud::setWorldRadius(float worldRadius)
 {
     RenderState state = m_renderState.value();
-    if (qFuzzyCompare(state.gapFudge, gapFudge)) {
+    if (qFuzzyCompare(state.worldRadius, worldRadius)) {
         return;
     }
-    state.gapFudge = gapFudge;
+    state.worldRadius = worldRadius;
     m_renderState.setValue(state);
     update();
 }

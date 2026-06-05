@@ -48,8 +48,8 @@ public:
     float pointSize() const;
     void setPointSize(float pointSize);
     float meanSpacingXY() const;
-    float gapFudge() const;
-    void setGapFudge(float gapFudge);
+    float worldRadius() const;
+    void setWorldRadius(float worldRadius);
 
 protected:
     cwRHIObject* createRHIObject() override;
@@ -58,7 +58,7 @@ private:
     // Geometry and its derived bounds, tracked separately from the cheap
     // render knobs below. Re-staging the (potentially multi-GB) vertex
     // buffer is gated on THIS tracker changing, so tuning a uniform —
-    // gapFudge, point size — never re-uploads geometry. setGeometry() and
+    // world radius, point size — never re-uploads geometry. setGeometry() and
     // clear() are the only callers that touch it.
     struct GeometryState {
         cwGeometry geometry;
@@ -80,10 +80,15 @@ private:
     // untouched. Real field compare so a no-op set is a no-op.
     struct RenderState {
         float pointSize = 2.0f;
-        float gapFudge = 2.0f;
+
+        // World-space sprite radius in meters. A fixed default produces
+        // consistent sprite sizes across clouds; tuned at runtime by P+wheel
+        // in the 3D view (clamped on the scene-node) and by sink_repatcher
+        // --point-radius for offline renders.
+        float worldRadius = 1.29f;
 
         bool operator!=(const RenderState& other) const {
-            return pointSize != other.pointSize || gapFudge != other.gapFudge;
+            return pointSize != other.pointSize || worldRadius != other.worldRadius;
         }
     };
 
@@ -116,9 +121,9 @@ inline float cwRenderPointCloud::meanSpacingXY() const
     return m_geometry.value().meanSpacingXY;
 }
 
-inline float cwRenderPointCloud::gapFudge() const
+inline float cwRenderPointCloud::worldRadius() const
 {
-    return m_renderState.value().gapFudge;
+    return m_renderState.value().worldRadius;
 }
 
 #endif // CWRENDERPOINTCLOUD_H

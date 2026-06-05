@@ -110,7 +110,7 @@ TEST_CASE("cwRenderPointCloud: a uniform-only change does not dirty the geometry
     //
     // The RHI back-end (cwRHIPointCloud::updateResources) re-stages the
     // potentially multi-GB vertex buffer only when the geometry tracker
-    // reports a change. Geometry and the cheap render knobs (gapFudge,
+    // reports a change. Geometry and the cheap render knobs (world radius,
     // point size) are tracked separately for exactly this reason: a
     // uniform-only setter must NOT mark geometry dirty, or every P+wheel
     // tick / offline render view would re-upload the whole cloud (an
@@ -139,7 +139,7 @@ TEST_CASE("cwRenderPointCloud: a uniform-only change does not dirty the geometry
 
     // A uniform-only change must leave the geometry tracker clean (no
     // re-upload) while marking render state dirty (cheap UBO update).
-    cloud.setGapFudge(cloud.gapFudge() + 1.0f);
+    cloud.setWorldRadius(cloud.worldRadius() + 1.0f);
     REQUIRE_FALSE(Access::geometryChanged(cloud));
     REQUIRE(Access::renderStateChanged(cloud));
 

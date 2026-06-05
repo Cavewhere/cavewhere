@@ -88,7 +88,7 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
 
     // Vertex buffers are (re)built and uploaded only when the geometry
     // tracker changed — i.e. setGeometry()/clear() ran. A uniform-only
-    // change (gapFudge / point size) dirties m_renderState alone, so the
+    // change (world radius / point size) dirties m_renderState alone, so the
     // multi-GB vertex buffer is never re-staged for it. That separation is
     // the whole point of tracking geometry apart from render state: re-
     // staging on every uniform tweak was an unbounded leak across an
@@ -129,15 +129,15 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
         }
     }
 
-    // Per-cloud uniform — world-space point radius derived from the cloud's
-    // measured mean spacing. * 0.5 because the spacing is *between* points, and
-    // a radius of half that just covers the gap to a neighbor. gapFudge is a
-    // user-tunable multiplier (hold P + wheel in the 3D view) that lets the
-    // operator tune overdraw / EDL darkness at runtime. Depends on both
-    // trackers (meanSpacingXY from geometry, gapFudge from render state), so
-    // the value-compare gate below covers a change in either.
-    const float worldRadius = geometryState.meanSpacingXY * 0.5f;
-    const float gapFudge = m_renderState.value().gapFudge;
+    // Per-cloud uniform — world-space sprite radius in meters. A fixed
+    // default (set on cwRenderPointCloud::RenderState) produces consistent
+    // sprite sizes across every loaded cloud; the earlier meanSpacingXY * 0.5
+    // auto-derivation was unreliable because mean-spacing estimates vary with
+    // LAZ density / sampling. Overridden via cwLazLayersSceneNode::
+    // setWorldRadius (P+wheel gesture in the 3D view, and sink_repatcher
+    // --point-radius for offline renders). Tracked in render state, so a
+    // change re-uploads only this small UBO — never the vertex buffer.
+    const float worldRadius = m_renderState.value().worldRadius;
 
     if (!m_perCloudUBO) {
         const quint32 size = rhi->ubufAligned(sizeof(PerCloudUniform));
@@ -147,11 +147,10 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
         m_perCloudUBO->create();
     }
 
-    if (m_lastUploadedWorldRadius != worldRadius || m_lastUploadedGapFudge != gapFudge) {
-        const PerCloudUniform uniform{ worldRadius, gapFudge, {0.0f, 0.0f} };
+    if (m_lastUploadedWorldRadius != worldRadius) {
+        const PerCloudUniform uniform{ worldRadius, {0.0f, 0.0f, 0.0f} };
         batch->updateDynamicBuffer(m_perCloudUBO, 0, sizeof(PerCloudUniform), &uniform);
         m_lastUploadedWorldRadius = worldRadius;
-        m_lastUploadedGapFudge = gapFudge;
     }
 
     m_geometry.resetChanged();
