@@ -387,9 +387,6 @@ target_link_libraries(CaveWhere
 if(TARGET cavern)
     add_dependencies(CaveWhere cavern)
 endif()
-if(TARGET survexport)
-    add_dependencies(CaveWhere survexport)
-endif()
 
 # Must be set before qt_finalize_executable — Qt processes the launch screen
 # and Android manifest values during finalization.

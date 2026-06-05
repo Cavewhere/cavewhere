@@ -42,14 +42,8 @@ class CaveWhereConan(ConanFile):
         self.requires("proj/[=9.3.1]")
 
         if not self.options.mobile:
-            #We handle survex dependancies here for now, since we're using conan
-            self.requires("wxwidgets/[>=3.2.6]")
-            self.requires("glew/[>=2.2.0]")
+            # libtiff is pulled in by PROJ (with_tiff); pin it here for the desktop build.
             self.requires("libtiff/[>=4.5.1]")
-            self.requires("gdal/[>=3.5.3]")
-            self.requires("expat/[>=2.6.2]", override=True)
-            self.requires("libpng/[>=1.6.44]", override=True)
-            self.requires("nlohmann_json/[>=3.12.0]", override=True)
 
         if self.settings.os == "Linux":
             self.requires("xorg-proto/[=2024.1]", override=True)
@@ -125,15 +119,6 @@ class CaveWhereConan(ConanFile):
             # clashes with Qt's libjpeg-turbo (version 80) in the static iOS link.
             self.options["proj"].with_tiff = False
         else:
-            #Arrow fails on github linux build, disable
-            self.options["gdal"].with_arrow = False
-
-            #These options allow on crosscompiling on arm64 -> x86_64 on windows
-            #conan doesn't support strawberryperl or msys
-            self.options["gdal"].with_curl = False
-            self.options["gdal"].with_libiconv = False
-
-
             #This prevents xcode build from failing
             self.options["libtiff"].zstd=False
 

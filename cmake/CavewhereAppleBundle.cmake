@@ -146,7 +146,6 @@ function(cavewhere_setup_apple_bundle target)
 
         add_custom_command(TARGET CaveWhere POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:cavern> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/MacOS/cavern
-            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:survexport> $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/MacOS/survexport
             COMMENT "Copying survex module to application bundle."
         )
 
