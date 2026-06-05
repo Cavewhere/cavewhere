@@ -57,7 +57,7 @@ MainWindowTest {
             //Click on the lead
             let leadPoint0 = null;
             tryVerify(() => {
-                leadPoint0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_1");
+                leadPoint0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
                 return leadPoint0 !== null;
             });
             mouseClick(leadPoint0)
@@ -70,17 +70,17 @@ MainWindowTest {
 
             let quoteBox = null;
                     tryVerify(() => {
-                                    quoteBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_1->leadQuoteBox")
+                                    quoteBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox")
                                     return quoteBox !== null;
                         })
 
             let description_obj1 = findChild(quoteBox, "description")
             tryVerify(() => {return description_obj1.text === "Walking"})
 
-            let width = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_1->leadQuoteBox->widthText")
+            let width = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox->widthText")
             tryCompare(width, "text", "2.5")
 
-            let height = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_1->leadQuoteBox->heightText")
+            let height = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox->heightText")
             tryCompare(height, "text", "2")
 
             //Make sure there's leads in the lead table
@@ -94,6 +94,10 @@ MainWindowTest {
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "cavePage" });
 
+            // Wait for the wide-layout LayoutItemProxy to position leadsLink before
+            // clicking; otherwise the click lands on a stale (0,0) position over the
+            // trip table and navigates to the trip page instead of the lead page.
+            waitForRendering(rootId)
             let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsLink")
             mouseClick(leadsButton)
 
@@ -162,7 +166,7 @@ MainWindowTest {
 
             RootData.project.newProject();
 
-            let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
+            let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             mouseDrag(_obj1, 495.773, 291.668, 20, 20, Qt.LeftButton, Qt.NoModifier, 50)
         }
 
@@ -338,7 +342,7 @@ MainWindowTest {
 
             let leadObj = null
             tryVerify(() => {
-                          leadObj = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint1_2")
+                          leadObj = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint1_2")
                           return leadObj !== null
                       })
             mouseClick(leadObj)

@@ -12,6 +12,10 @@ MainWindowTest {
         when: windowShown
 
         function init() {
+                    // Wide enough that the trip page shows the inline note gallery
+                    // (showGallery is gated on reaching breakpointFullGallery); the
+                    // tests click note thumbnails and their remove buttons.
+                    rootId.width = 1600
                     RootData.pageSelectionModel.currentPageAddress = "View"
         }
 
@@ -60,7 +64,7 @@ MainWindowTest {
             compare(noteGalleryView.currentIndex, 0);
 
             let phakeCavePath = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
-            noteGallery.imagesAdded([phakeCavePath]);
+            noteGallery.addFiles([phakeCavePath]);
 
             tryVerify(() => { return noteGalleryView.count === 2 });
             tryCompare(noteGalleryView, "currentIndex", 1);

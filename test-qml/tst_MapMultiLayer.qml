@@ -20,8 +20,8 @@ MainWindowTest {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
             //Zoom into the data, in the 3d view
-            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer");
-            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
+            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
+            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.2;
 
             let mapButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->mapButton")
@@ -38,16 +38,16 @@ MainWindowTest {
 
             let selectionButton = null
             tryVerify(() => {
-                          selectionButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton")
+                          selectionButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectionToolButton")
                           return selectionButton !== null && selectionButton.visible
                       })
             mouseClick(selectionButton)
 
-            let interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectAreaInteraction")
+            let interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectAreaInteraction")
             mouseDrag(interaction, 389.645, 137.965, 340, 349)
 
             tryVerify(() => { return selectionButton.enabled === true })
-            let done = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton->label")
+            let done = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectionToolButton->label")
             mouseClick(done)
 
             // wait() needed — capture viewport geometry is computed asynchronously
@@ -56,24 +56,24 @@ MainWindowTest {
 
             mouseClick(addLayerButton)
 
-            let profileButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->cameraOptions->GroupBox->profileButton")
+            let profileButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->cameraOptions->GroupBox->profileButton")
             mouseClick(profileButton)
             tryVerify(() => { return turnTableInteraction.pitch === 0.0})
 
-            // let selectionButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton")
+            // let selectionButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectionToolButton")
             mouseClick(selectionButton)
 
             //Make sure the selection rectangle is cleared
             let selectionRectangle = null
             tryVerify(() => {
-                          selectionRectangle = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionRectangle")
+                          selectionRectangle = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectionRectangle")
                           return selectionRectangle !== null && selectionRectangle.visible === true
                       })
             verify(selectionRectangle.width === 0)
             verify(selectionRectangle.height === 0)
 
             //Select in profile north
-            interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectAreaInteraction")
+            interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectAreaInteraction")
             mouseDrag(interaction, 387, 274, 337, 269)
             verify(selectionRectangle.width > 0)
             verify(selectionRectangle.height > 0)
@@ -86,13 +86,13 @@ MainWindowTest {
             mouseClick(addLayerButton)
 
             //Look east
-            let eastButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->cameraOptions->GroupBox->eastButton")
+            let eastButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->cameraOptions->GroupBox->eastButton")
             mouseClick(eastButton)
             tryVerify(() => { return turnTableInteraction.azimuth === 90.0})
 
             //Select in profile east
             mouseClick(selectionButton)
-            interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectAreaInteraction")
+            interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectAreaInteraction")
             mouseDrag(interaction, 275, 305, 279, 267)
             mouseClick(done);
 

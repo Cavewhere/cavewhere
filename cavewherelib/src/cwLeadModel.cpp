@@ -246,30 +246,24 @@ void cwLeadModel::addScrap(cwScrap *scrap)
  */
 void cwLeadModel::updateOffsets(cwScrap *startScrap)
 {
-    int offset = ScrapToOffset.value(startScrap);
-    int nextOffset = offset + startScrap->numberOfLeads();
+    Q_UNUSED(startScrap);
 
-    auto iter = OffsetToScrap.lowerBound(offset);
-    Q_ASSERT(iter != OffsetToScrap.end());
+    // Recompute every scrap's offset as the running sum of the preceding scraps'
+    // lead counts, preserving the current scrap order (OffsetToScrap is sorted by
+    // offset). This is correct whether startScrap's lead count merely changed or
+    // the scrap was already removed from the database (its last lead deleted) —
+    // the previous lowerBound(startScrap) lookup asserted in the latter case.
+    const QList<cwScrap*> ordered = OffsetToScrap.values();
 
-    iter++;
+    OffsetToScrap.clear();
+    ScrapToOffset.clear();
 
-    bool updateOffset = false;
-    for(; iter != OffsetToScrap.end(); iter++) {
-        cwScrap* currentScrap = iter.value();
-        ScrapToOffset.insert(currentScrap, nextOffset);
-        nextOffset = nextOffset + currentScrap->numberOfLeads();
-        updateOffset = true;
+    int offset = 0;
+    for(cwScrap* scrap : ordered) {
+        OffsetToScrap.insert(offset, scrap);
+        ScrapToOffset.insert(scrap, offset);
+        offset += scrap->numberOfLeads();
     }
-
-    if(updateOffset) {
-        QMap<int, cwScrap*> offsetToScrap;
-        for(auto iter = ScrapToOffset.begin(); iter != ScrapToOffset.end(); iter++) {
-            offsetToScrap.insert(iter.value(), iter.key());
-        }
-        OffsetToScrap = offsetToScrap;
-    }
-
 }
 
 /**

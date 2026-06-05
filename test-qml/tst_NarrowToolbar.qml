@@ -61,6 +61,7 @@ MainWindowTest {
                 let tb = ObjectFinder.findObjectByChain(mainWindow, "rootId->notePage->noteGallery->narrowToolbar")
                 return tb !== null && tb.visible && tb.height > 0
             }, 5000, "narrowToolbar should be ready after init")
+
         }
 
         function cleanup() {

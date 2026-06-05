@@ -32,8 +32,8 @@ MainWindowTest {
             // Zoom into the data, in the 3d view (keep default plan view; do
             // not click the profile button — we want labels exported against
             // the plan-view rendering).
-            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer");
-            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
+            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
+            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.2;
 
             let mapButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->mapButton")
@@ -47,17 +47,17 @@ MainWindowTest {
 
             let selectionButton = null
             tryVerify(() => {
-                          selectionButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton")
+                          selectionButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectionToolButton")
                           return selectionButton !== null && selectionButton.visible
                       })
             mouseClick(selectionButton)
 
-            let interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectAreaInteraction")
+            let interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectAreaInteraction")
             // Drag a generous rectangle around the cave so most scraps land in it
             mouseDrag(interaction, 389.645, 137.965, 340, 349)
 
             tryVerify(() => { return selectionButton.enabled === true })
-            let done = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton->label")
+            let done = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectionToolButton->label")
             mouseClick(done)
 
             // wait() needed — capture viewport geometry is computed asynchronously

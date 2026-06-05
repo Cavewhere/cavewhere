@@ -14,6 +14,10 @@ MainWindowTest {
         when: windowShown
 
         function init() {
+            // Wide enough that the trip page shows the inline note gallery
+            // (showGallery is gated on the page reaching breakpointFullGallery);
+            // the note-selection helpers click gallery thumbnails.
+            rootId.width = 1600
             RootData.account.name = "LiDAR Sync Test"
             RootData.account.email = "lidar.sync.test@example.com"
         }

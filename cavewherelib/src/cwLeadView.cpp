@@ -81,7 +81,14 @@ void cwLeadView::setRegionModel(cwRegionTreeModel* regionModel) {
 void cwLeadView::addScrap(cwScrap *scrap)
 {
     Q_ASSERT(scrap != nullptr);
-    Q_ASSERT(!m_leadItems.contains(scrap));
+
+    // A region-model reset (project load/checkout) emits beginResetModel/
+    // endResetModel rather than per-row removals, so a scrap can still be tracked
+    // here when its slot is reused or the scrap is re-added. Rebuild cleanly
+    // instead of double-inserting (which previously hit an assert).
+    if(m_leadItems.contains(scrap)) {
+        removeScrap(scrap);
+    }
 
     auto itemAt = [scrap](const auto& items, int i) {
         Q_ASSERT(dynamic_cast<QQuickItem*>(items[i]));
@@ -213,6 +220,10 @@ void cwLeadView::addScrap(cwScrap *scrap)
 void cwLeadView::removeScrap(cwScrap *scrap)
 {
     Q_ASSERT(scrap != nullptr);
+
+    // Drop the per-scrap lambda connections set up in addScrap; otherwise a
+    // re-add of the same live scrap would stack a second set of handlers.
+    disconnect(scrap, nullptr, this, nullptr);
 
     const auto& entry = m_leadItems.value(scrap);
     for(auto item : entry.items) {

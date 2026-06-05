@@ -188,7 +188,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let findTripDateInput = function() {
-                let dateInput = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->tripDate")
+                let dateInput = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->tripDate")
                 verify(dateInput !== null)
                 return dateInput
             }
@@ -242,7 +242,7 @@ MainWindowTest {
             }
 
             let tripNameInput = function() {
-                let input = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->tripNameText")
+                let input = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->tripNameText")
                 verify(input !== null)
                 return input
             }
@@ -408,7 +408,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let findCalibrationControls = function() {
-                let rootChain = "rootId->tripPage->view"
+                let rootChain = "rootId->tripPage->surveyEditor->view"
                 let declinationEdit = ObjectFinder.findObjectByChain(mainWindow, rootChain + "->declinationEdit")
                 let frontEditor = ObjectFinder.findObjectByChain(mainWindow, rootChain + "->frontSightCalibrationEditor")
                 let backEditor = ObjectFinder.findObjectByChain(mainWindow, rootChain + "->backSightCalibrationEditor")
@@ -530,7 +530,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let findFrontSightState = function() {
-                let rootChain = "rootId->tripPage->view"
+                let rootChain = "rootId->tripPage->surveyEditor->view"
                 let frontEditor = ObjectFinder.findObjectByChain(mainWindow, rootChain + "->frontSightCalibrationEditor")
                 verify(frontEditor !== null)
                 verify(frontEditor.calibration !== null)
@@ -838,11 +838,11 @@ MainWindowTest {
             }
 
             let surveyDataCell = function(row, role) {
-                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
                 verify(view !== null)
                 view.positionViewAtIndex(row, ListView.Contain)
                 // waitForRendering(rootId)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role)
                 verify(cell !== null)
                 return cell
             }
@@ -868,7 +868,7 @@ MainWindowTest {
             }
 
             let snapshotChunkUiState = function() {
-                let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+                let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->backSightCalibrationEditor->checkBox")
                 verify(backSightsCheck !== null)
                 let uiState = JSON.stringify({
                     backSightsEnabled: backSightsCheck.checked === true,
@@ -936,10 +936,10 @@ MainWindowTest {
             }
 
             let surveyDataCell = function(row, role) {
-                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
                 verify(view !== null)
                 view.positionViewAtIndex(row, ListView.Contain)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role)
                 verify(cell !== null)
                 return cell
             }
@@ -1039,7 +1039,7 @@ MainWindowTest {
                 let chunk = currentChunk()
                 let tailShotIndex = chunk.shotCount - 1
                 let tailStationIndex = chunk.stationCount - 1
-                let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+                let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->backSightCalibrationEditor->checkBox")
                 verify(backSightsCheck !== null)
                 return JSON.stringify({
                     backSightsEnabled: backSightsCheck.checked === true,
@@ -1117,10 +1117,10 @@ MainWindowTest {
             }
 
             let surveyDataCell = function(row, role) {
-                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
                 verify(view !== null)
                 view.positionViewAtIndex(row, ListView.Contain)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role)
                 verify(cell !== null)
                 return cell
             }
@@ -1204,7 +1204,7 @@ MainWindowTest {
             }, 3000, "verify removal after local setter")
             console.log("[TripSyncQmlDebug] remove-shot after local remove summary=", modelChunkSummary(currentChunk()))
 
-            let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+            let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->backSightCalibrationEditor->checkBox")
             verify(backSightsCheck !== null)
             compare(backSightsCheck.checked, true)
             verifyTailUiMatchesModel(currentChunk())
@@ -1262,7 +1262,7 @@ MainWindowTest {
 
         function test_tripChunkRemoveAboveSelectedTailStationSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -1299,10 +1299,10 @@ MainWindowTest {
             }
 
             let surveyDataCell = function(row, role) {
-                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
                 verify(view !== null)
                 view.positionViewAtIndex(row, ListView.Contain)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role)
                 verify(cell !== null)
                 return cell
             }
@@ -1534,7 +1534,7 @@ MainWindowTest {
 
         function test_tripRemoveChunkFromStationContextMenuSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -1550,7 +1550,7 @@ MainWindowTest {
 
             let surveyDataCell = function(row, role) {
                 view.positionViewAtIndex(row, ListView.Contain)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role)
                 verify(cell !== null)
                 return cell
             }
@@ -1562,7 +1562,7 @@ MainWindowTest {
             }
 
             let triggerMenuItemFromLoader = function(row, role, loaderObjectName, itemObjectName) {
-                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + role + "->" + loaderObjectName
+                let loaderPath = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role + "->" + loaderObjectName
                 let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
                 verify(loader !== null)
                 verify(loader.item !== null)
@@ -1690,7 +1690,7 @@ MainWindowTest {
                     return snapshotTripState()
                 },
                 function(expectedStateJson) {
-                    let addDataBlockButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->spaceAddBar")
+                    let addDataBlockButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->spaceAddBar")
                     verify(addDataBlockButton !== null)
                     addDataBlockButton.clicked()
                     waitForRendering(rootId)
@@ -1713,7 +1713,7 @@ MainWindowTest {
 
         function test_tripAddFilledChunkFromSpacebarSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -1755,7 +1755,7 @@ MainWindowTest {
 
             let surveyDataCell = function(row, role) {
                 view.positionViewAtIndex(row, ListView.Contain)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role)
                 verify(cell !== null)
                 return cell
             }

@@ -64,6 +64,9 @@ MainWindowTest {
                       5000)
 
             const addButton = findChild(findChild(RootData.pageView.currentPageItem, "addFixBar"), "addButton")
+            // addFixBar is positioned by a LayoutItemProxy; wait for layout so the
+            // clicks land on the button rather than its stale (0,0) position.
+            waitForRendering(rootId)
             mouseClick(addButton)
             mouseClick(addButton)
             tryCompare(cave.fixStations, "count", 2)

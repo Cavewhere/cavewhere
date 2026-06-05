@@ -22,11 +22,11 @@ MainWindowTest {
             wait(100);
 
             // After new project, keyword filter should be at defaults: 1 group, 1 row
-            let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
+            let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView");
             verify(groupListView);
             tryVerify(() => groupListView.count === 1);
 
-            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0");
             verify(andListView0);
             console.log("Count:" + andListView0.count)
             tryVerify(() => andListView0.count === 1);
@@ -52,7 +52,7 @@ MainWindowTest {
 
             let addButton0_0_obj1;
             tryVerify(function() {
-                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
                 return addButton0_0_obj1 !== null;
             });
             mouseClick(addButton0_0_obj1)
@@ -63,7 +63,7 @@ MainWindowTest {
 
             let removeButton0_0_obj1;
             tryVerify(function() {
-                removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->removeButton");
+                removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->removeButton");
                 return removeButton0_0_obj1 !== null;
             });
             mouseClick(removeButton0_0_obj1)
@@ -74,7 +74,7 @@ MainWindowTest {
 
             //Add it back again
             tryVerify(function() {
-                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
                 return addButton0_0_obj1 !== null;
             });
             mouseClick(addButton0_0_obj1)
@@ -96,12 +96,12 @@ MainWindowTest {
 
             let addButton0_0_obj1;
             tryVerify(function() {
-                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
                 return addButton0_0_obj1 !== null;
             });
             mouseClick(addButton0_0_obj1)
 
-                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
+                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
                     verify(scrollbar)
                     let scrollbarAtEnd = (scrollbar) => {
                         return Math.abs(scrollbar.position - (1.0 - scrollbar.size)) < 0.0001
@@ -109,11 +109,11 @@ MainWindowTest {
 
             tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
 
-            let removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->removeButton")
+            let removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->removeButton")
             mouseClick(removeButton0_0_obj1)
 
-                    let listViewRow0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0")
-                    let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView")
+                    let listViewRow0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0")
+                    let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView")
                     tryVerify( () => { return listViewRow0.count === 1; })
                     tryVerify( () => { return groupListView.count === 1; })
         }
@@ -133,7 +133,7 @@ MainWindowTest {
 
             let addButton0_0_obj1;
             tryVerify(function() {
-                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
                 return addButton0_0_obj1 !== null;
             });
             mouseClick(addButton0_0_obj1)
@@ -144,7 +144,7 @@ MainWindowTest {
 
             let removeButton0_0_obj1;
             tryVerify(function() {
-                removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->removeButton");
+                removeButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->removeButton");
                 return removeButton0_0_obj1 !== null;
             });
             mouseClick(removeButton0_0_obj1)
@@ -155,7 +155,7 @@ MainWindowTest {
 
             //Add it back again
             tryVerify(function() {
-                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+                addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
                 return addButton0_0_obj1 !== null;
             });
             mouseClick(addButton0_0_obj1)
@@ -176,19 +176,19 @@ MainWindowTest {
                     // Delegate recycling: see cleanup() comment
                     wait(100);
 
-                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
+                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
                     let scrollbarAtEnd = (scrollbar) => {
                         return Math.abs(scrollbar.position - (1.0 - scrollbar.size)) < 0.0001
                     }
 
-                    let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
+                    let addButton0_0_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton")
                     mouseClick(addButton0_0_obj1)
 
                     tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
 
                     let addButton0_1_obj1;
                     tryVerify(function() {
-                        addButton0_1_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->addButton");
+                        addButton0_1_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->addButton");
                         return addButton0_1_obj1 !== null;
                     });
                     mouseClick(addButton0_1_obj1)
@@ -197,7 +197,7 @@ MainWindowTest {
 
                     let removeButton0_2_obj1;
                     tryVerify(function() {
-                        removeButton0_2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_2->removeButton");
+                        removeButton0_2_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_2->removeButton");
                         return removeButton0_2_obj1 !== null;
                     });
                     mouseClick(removeButton0_2_obj1)
@@ -216,13 +216,13 @@ MainWindowTest {
             // Delegate recycling: see cleanup() comment
             wait(150);
 
-                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->vScrollBar")
+                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->vScrollBar")
                     let scrollbarAtEnd = (scrollbar) => {
                         return Math.abs(scrollbar.position - (1.0 - scrollbar.size)) < 0.0001
                     }
 
             // Click "also" twice to create two OR boundaries
-            let alsoButton0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->alsoButton");
+            let alsoButton0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->alsoButton");
             verify(alsoButton0);
             mouseClick(alsoButton0);
             mouseClick(alsoButton0);
@@ -230,7 +230,7 @@ MainWindowTest {
             tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
 
             // Remove last row
-            let removeButtonLast = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_2->delegate_0->removeButton");
+            let removeButtonLast = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_2->delegate_0->removeButton");
             verify(removeButtonLast);
             mouseClick(removeButtonLast);
 
@@ -239,17 +239,17 @@ MainWindowTest {
             wait(300);
 
             // Remove last row again
-            removeButtonLast = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1->delegate_0->removeButton");
+            removeButtonLast = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_1->delegate_0->removeButton");
             verify(removeButtonLast);
             mouseClick(removeButtonLast);
 
             // tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
 
-            let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
+            let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView");
             verify(groupListView);
             tryVerify(() => groupListView.count === 1);
 
-            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0");
             verify(andListView0);
             tryVerify(() => andListView0.count === 1);
 
@@ -257,7 +257,7 @@ MainWindowTest {
             wait(300)
 
             // Press add button to append another row
-            let addButton0_0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+            let addButton0_0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
             verify(addButton0_0);
             mouseClick(addButton0_0);
 
@@ -275,34 +275,34 @@ MainWindowTest {
             // Delegate recycling: see cleanup() comment
             wait(150);
 
-                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->vScrollBar")
+                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->vScrollBar")
                     let scrollbarAtEnd = (scrollbar) => {
                         return Math.abs(scrollbar.position - (1.0 - scrollbar.size)) < 0.0001
                     }
 
             // Click "also" twice to create two OR boundaries
-            let alsoButton0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->alsoButton");
+            let alsoButton0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->alsoButton");
             verify(alsoButton0);
             mouseClick(alsoButton0);
             mouseClick(alsoButton0);
 
                     tryVerify( ()=> { return scrollbarAtEnd(scrollbar); });
 
-                    let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
+                    let groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView");
                     groupListView.positionViewAtIndex(1, ListView.Beginning) //Jump to the first index
 
 
             // Remove the middle OR row via its remove button
-            let removeMiddle = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1->delegate_0->removeButton");
+            let removeMiddle = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_1->delegate_0->removeButton");
             verify(removeMiddle);
             mouseClick(removeMiddle);
 
-            groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
+            groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView");
             verify(groupListView);
             tryVerify(() => groupListView.count === 2);
 
-            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
-            let andListView1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1");
+            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0");
+            let andListView1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_1");
             verify(andListView0);
             verify(andListView1);
             tryVerify(() => andListView0.count === 1);
@@ -320,22 +320,22 @@ MainWindowTest {
             // Set key combo to "orientation" on the first AND row
             let keyCombo;
             tryVerify(function() {
-                keyCombo = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keyCombo");
+                keyCombo = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keyCombo");
                 return keyCombo !== null;
             });
             keyCombo.currentIndex = keyCombo.model.indexOf("Orientation");
             verify(keyCombo.currentIndex > 0)
 
-            let delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
+            let delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
             verify(delegate);
             delegate.filterModelObjectRole.key = keyCombo.currentText
 
             // Add another AND row
-            let addButton0_0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
+            let addButton0_0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->addButton");
             verify(addButton0_0);
             mouseClick(addButton0_0);
 
-                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
+                    let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
                     verify(scrollbar);
                     let scrollbarAtEnd = (scrollbar) => {
                         return Math.abs(scrollbar.position - (1.0 - scrollbar.size)) < 0.0001
@@ -344,11 +344,11 @@ MainWindowTest {
                     tryVerify(() => { return scrollbarAtEnd(scrollbar); } )
 
             // Grab the first value row in the first list view
-            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+            let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0");
             verify(andListView0);
             tryVerify(() => andListView0.count > 0);
 
-                    // let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
+                    // let scrollbar = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->groupScrollBar")
                     let scrollbarAtBeginning = (scrollbar) => {
                         return scrollbar.position < 0.01
                     }
@@ -358,11 +358,11 @@ MainWindowTest {
                     tryVerify(() => { return scrollbarAtBeginning(scrollbar); } )
 
 
-            let firstCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row1->checkbox");
+            let firstCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row1->checkbox");
             verify(firstCheckbox);
 
             // Capture objectCountRole from the second list view (row0)
-            let row0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->keywordList->row0");
+            let row0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->keywordList->row0");
             verify(row0);
 
             for(let i = 0; i < 5; i++) {
@@ -379,7 +379,7 @@ MainWindowTest {
                         // The objectCountRole should be unchanged
                         let row0SecondAfter;
                         tryVerify(function() {
-                            row0SecondAfter = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->keywordList->row0");
+                            row0SecondAfter = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_1->keywordList->row0");
                             return row0SecondAfter !== null;
                         });
                         verify(row0SecondAfter === row0);
@@ -398,12 +398,12 @@ MainWindowTest {
 
             let groupListView;
             tryVerify(function() {
-                groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView");
+                groupListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView");
                 return groupListView !== null;
             });
 
             // Create two OR boundaries
-            let alsoButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->alsoButton");
+            let alsoButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->alsoButton");
             verify(alsoButton);
             mouseClick(alsoButton);
             mouseClick(alsoButton);
@@ -411,12 +411,12 @@ MainWindowTest {
             tryVerify(() => groupListView.count === 3);
 
             // Add another row in the second group (not the last)
-            let addButtonSecond = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1->delegate_0->addButton");
+            let addButtonSecond = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_1->delegate_0->addButton");
             verify(addButtonSecond);
             mouseClick(addButtonSecond);
 
             // Remove the first row in the second group
-            let removeButtonSecond = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1->delegate_0->removeButton");
+            let removeButtonSecond = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_1->delegate_0->removeButton");
             verify(removeButtonSecond);
             mouseClick(removeButtonSecond);
 
@@ -424,19 +424,19 @@ MainWindowTest {
 
 
                     tryVerify(() => {
-                                          let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+                                          let andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0");
                                           if(andListView0) {
                                                       return andListView0.count >= 1
                                           }
                               });
                     tryVerify(() => {
-                                          let andListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_1");
+                                          let andListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_1");
                                           if(andListView) {
                                                       return andListView.count >= 1
                                           }
                               });
                     tryVerify(() => {
-                                          let andListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_2");
+                                          let andListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_2");
                                           if(andListView) {
                                                       return andListView.count >= 1
                                           }
@@ -455,7 +455,7 @@ MainWindowTest {
 
             let delegate;
             tryVerify(function() {
-                delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
+                delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
                 return delegate !== null;
             });
 
@@ -486,7 +486,7 @@ MainWindowTest {
             let planObjects = filterModel.data(planModelIndex, KeywordGroupByKeyModel.ObjectsRole);
             verify(planObjects && planObjects.length > 0);
 
-            let planCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row" + planRowIndex + "->checkbox");
+            let planCheckbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row" + planRowIndex + "->checkbox");
             verify(planCheckbox);
 
             let allPlanVisible = (expected) => {
@@ -519,12 +519,12 @@ MainWindowTest {
 
             let andListView0;
             tryVerify(function() {
-                andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0");
+                andListView0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0");
                 return andListView0 !== null;
             });
             tryVerify(() => andListView0.count > 0);
 
-                    let delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
+                    let delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
                     verify(delegate);
 
             let keyCombo = findChild(delegate, "keyCombo");
@@ -533,13 +533,13 @@ MainWindowTest {
             delegate.filterModelObjectRole.key = keyCombo.currentText;
             verify(delegate.filterModelObjectRole.key === "Orientation");
 
-            let keywordListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList");
+            let keywordListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList");
             verify(keywordListView);
             tryVerify(() => keywordListView.count >= 3);
 
-            let row0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row0");
-            let row1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row1");
-            let row2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row2");
+            let row0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row0");
+            let row1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row1");
+            let row2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row2");
             verify(row0 && row1 && row2);
 
             let checkbox0 = findChild(row0, "checkbox");

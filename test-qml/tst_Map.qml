@@ -29,12 +29,22 @@ MainWindowTest {
         function setupExport() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_ScrapInteraction/projectedProfile.cw"));
 
+            // Ensure we are on the View page so the wide side panel is attached
+            // to the SplitView (at narrow widths it moves into the Drawer and the
+            // renderingSidePanel chain no longer resolves).
+            RootData.pageSelectionModel.gotoPageByName(null, "View");
+            tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "viewPage" });
+
             //Zoom into the data, in the 3d view
-            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer");
-            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
+            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
+            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.05;
 
-            let profileButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderingSidePanel->cameraOptions->GroupBox->profileButton")
+            let profileButton
+            tryVerify(() => {
+                profileButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->cameraOptions->GroupBox->profileButton")
+                return profileButton !== null
+            })
             mouseClick(profileButton)
 
             tryVerify(() => { return turnTableInteraction.pitch === 0.0})
@@ -78,11 +88,11 @@ MainWindowTest {
             //Make sure we're on the view page
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
 
-            let selectButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton")
+            let selectButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectionToolButton")
             //Make sure the select button is visible, and help is shown correctly
             tryVerify(() => { return selectButton.visible });
 
-            let quoteBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->quoteBox")
+            let quoteBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->quoteBox")
             tryVerify(() => { return quoteBox.visible });
 
             mouseClick(selectButton)
@@ -90,12 +100,12 @@ MainWindowTest {
             verify(selectButton.visible === true);
             verify(selectButton.enabled === false);
 
-            let helpBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->clickAndDragHelpBox")
+            let helpBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->clickAndDragHelpBox")
             tryVerify(() => {return !quoteBox.visible })
             tryVerify(() => {return helpBox.visible})
 
             //Select an area
-            let interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectAreaInteraction")
+            let interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectAreaInteraction")
             mouseDrag(interaction, 358, 251, 164, 322)
             verify(!quoteBox.visible)
             tryVerify(() => {return !helpBox.visible})
@@ -110,7 +120,7 @@ MainWindowTest {
             // after the Done button is clicked; without it the capture item has wrong dimensions
             wait(100);
 
-            let areaTool = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool");
+            let areaTool = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool");
             tryVerify(() => { return !areaTool.visible })
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "mapPage" });
         }

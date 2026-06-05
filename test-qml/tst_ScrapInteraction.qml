@@ -37,8 +37,8 @@ MainWindowTest {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_ScrapInteraction/projectedProfile.cw"));
 
             //Zoom into the data, in the 3d view
-            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer");
-            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
+            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
+            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.05;
 
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
@@ -125,7 +125,7 @@ MainWindowTest {
             mouseClick(viewButton)
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
-            // let renderingView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer")
+            // let renderingView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer")
             // let renderingViewCenterX = renderingView.width / 2.0;
             // let renderingViewCenterY = renderingView.height / 2.0;
 
@@ -280,9 +280,9 @@ MainWindowTest {
             //Switch to rendering view
             zoomIntoRenderingView();
 
-            let render = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer")
+            let render = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer")
 
-            let leadPoint = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0")
+            let leadPoint = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0")
             verify(leadPoint.x >= 0);
             verify(leadPoint.y >= 0);
             verify(leadPoint.x <= render.width)
@@ -305,25 +305,27 @@ MainWindowTest {
             let leadPointSizeWidth = null
             let leadPointSizeHeight = null
             tryVerify(() => {
-                          leadPointSizeWidth = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->widthText")
-                          leadPointSizeHeight = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->heightText")
+                          leadPointSizeWidth = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0->leadQuoteBox->widthText")
+                          leadPointSizeHeight = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0->leadQuoteBox->heightText")
                           return leadPointSizeWidth !== null && leadPointSizeHeight !== null
                       })
 
             verify(leadPointSizeWidth.text === "5")
             verify(leadPointSizeHeight.text === "4")
 
-            let description2 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->description")
+            let description2 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0->leadQuoteBox->description")
             verify(description2.text === "Sauce")
 
             //Use the goto notes button to go to the notes
-            let notesButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->gotoNotes")
+            let notesButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0->leadQuoteBox->gotoNotes")
             mouseClick(notesButton)
 
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "notePage" });
 
-            // Navigate back to the trip page to continue lead interactions
-            RootData.pageSelectionModel.back()
+            // Navigate to the trip page to continue lead interactions. back() is
+            // history-based and returns to the rendering view (where gotoNotes was
+            // clicked), so address the trip page directly like addScrapOutline does.
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select the carpet button
@@ -359,8 +361,8 @@ MainWindowTest {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_ScrapInteraction/projectedProfile.cw"));
 
             //Zoom into the data, in the 3d view
-            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer");
-            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
+            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
+            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.05;
 
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"

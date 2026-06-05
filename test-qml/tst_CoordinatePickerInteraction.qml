@@ -48,7 +48,7 @@ MainWindowTest {
 
             // Toggle the picker on — the button calls picker.activate(), which
             // routes through InteractionManager and disables the turn table.
-            pickButton.checked = true
+            mouseClick(pickButton)
             tryVerify(() => picker.enabled === true, 1000, "Picker enabled after toggle on")
             tryVerify(() => turnTable.enabled === false, 1000, "Turn-table disabled while picker active")
 
@@ -57,7 +57,7 @@ MainWindowTest {
             tryCompare(picker, "hasPick", false, 500)
 
             // Toggle off — should restore the turn-table as default interaction.
-            pickButton.checked = false
+            mouseClick(pickButton)
             tryVerify(() => turnTable.enabled === true, 1000, "Turn-table restored when picker toggled off")
             tryVerify(() => picker.enabled === false, 1000, "Picker disabled after toggle off")
             tryVerify(() => picker.hasPick === false, 1000, "Pick cleared when picker deactivated")

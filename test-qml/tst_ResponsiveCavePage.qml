@@ -55,7 +55,7 @@ MainWindowTest {
             rootId.width = 800
             waitForRendering(rootId)
 
-            let table = ObjectFinder.findObjectByName(rootId, "tripTableView")
+            let table = findChild(rootId, "tripTableView")
             verify(table !== null, "tripTableView should exist at wide width")
             verify(table.visible, "tripTableView should be visible at wide width")
         }
@@ -64,7 +64,7 @@ MainWindowTest {
             rootId.width = 400
             waitForRendering(rootId)
 
-            let table = ObjectFinder.findObjectByName(rootId, "tripTableView")
+            let table = findChild(rootId, "tripTableView")
             verify(table === null, "tripTableView should not exist at narrow width (Loader inactive)")
         }
 
@@ -72,7 +72,7 @@ MainWindowTest {
             rootId.width = 800
             waitForRendering(rootId)
 
-            let table = ObjectFinder.findObjectByName(rootId, "tripTableView")
+            let table = findChild(rootId, "tripTableView")
             verify(table !== null, "tripTableView should exist at wide")
 
             rootId.width = 400
@@ -81,18 +81,18 @@ MainWindowTest {
             let page = findCavePage()
             verify(page.isNarrow, "Should be narrow at 400")
 
-            table = ObjectFinder.findObjectByName(rootId, "tripTableView")
+            table = findChild(rootId, "tripTableView")
             verify(table === null, "tripTableView should be gone at narrow")
         }
 
         function test_leadsLinkVisible() {
-            let leadsLink = ObjectFinder.findObjectByName(rootId, "leadsLink")
+            let leadsLink = findChild(rootId, "leadsLink")
             verify(leadsLink !== null, "leadsLink not found")
             verify(leadsLink.visible, "leadsLink should be visible")
         }
 
         function test_addTripBarVisible() {
-            let addBar = ObjectFinder.findObjectByName(rootId, "addTrip")
+            let addBar = findChild(rootId, "addTrip")
             verify(addBar !== null, "addTrip bar not found")
             verify(addBar.visible, "addTrip bar should be visible")
         }

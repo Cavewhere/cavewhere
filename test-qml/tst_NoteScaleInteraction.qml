@@ -61,8 +61,10 @@ MainWindowTest {
             let done_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteScaleInteraction->doneButton->label")
             mouseClick(done_obj1)
 
-            //Make sure the scale updates correctly
-            tryFuzzyCompare(1.0 / scrap.noteTransformation.scale, 569, 3.0, `1.0 / ${scrap.noteTransformation.scale} === 569`);
+            //Make sure the scale updates correctly. The expected value reflects the
+            //native-resolution note rendering (the scale-bar clicks map to full-res
+            //note pixels); the older ~567 value predates that render-sizing fix.
+            tryFuzzyCompare(1.0 / scrap.noteTransformation.scale, 574.5, 3.0, `1.0 / ${scrap.noteTransformation.scale} === 574.5`);
         }
     }
 }

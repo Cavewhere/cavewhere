@@ -118,7 +118,7 @@ MainWindowTest {
             let northValue = Number(northText.text)
             fuzzyCompare(northValue, 0.0, 0.03, `${northValue} === 0.0`);
 
-            let declinationEdit = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->declinationEdit")
+            let declinationEdit = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->declinationEdit")
             mouseClick(declinationEdit)
 
             keyClick(52, 0) //4

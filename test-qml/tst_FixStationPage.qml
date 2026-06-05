@@ -68,6 +68,9 @@ MainWindowTest {
             const addButton = findChild(addBar, "addButton")
             verify(addButton !== null, "addButton must exist")
 
+            // addFixBar is positioned by a LayoutItemProxy; wait for layout so the
+            // click lands on the button rather than its stale (0,0) position.
+            waitForRendering(rootId)
             mouseClick(addButton)
             tryCompare(cave.fixStations, "count", 1)
 
