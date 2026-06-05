@@ -77,17 +77,7 @@ mkdir cavewhere-build-release && cd cavewhere-build-release
 conan profile detect --force
 ```
 
-4. **Modify the default Conan profile** due to this issue: https://github.com/conan-io/conan-center-index/issues/26878.
-   Without this modification, wxWidgets will fail to build with CMake 4.0.
-
-```
-PROFILE_PATH="$(conan config home)/profiles/default"
-echo >> "$PROFILE_PATH"          # ensure a blank line
-echo "[tool_requires]" >> "$PROFILE_PATH"
-echo '!cmake/*: cmake/[>=3 <4]' >> "$PROFILE_PATH"
-```
-
-5. **Install CaveWhere dependencies through Conan**
+4. **Install CaveWhere dependencies through Conan**
 
 ```
 conan install ../cavewhere -o "&:system_qt=False" --build=missing -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True -of conan_deps
@@ -103,13 +93,13 @@ conan install ../cavewhere -o "&:system_qt=False" --build=missing -c tools.syste
 sudo apt install -y qt6-base-dev qt6-declarative-dev qt6-svg-dev qt6-shadertools-dev
  ```
     
-6. **Configure the Project with CMake**
+5. **Configure the Project with CMake**
 
 ```bash
 cmake -G Ninja --preset conan-release -DCMAKE_TOOLCHAIN_FILE=conan_deps/conan_toolchain.cmake -S ../cavewhere -B .
 ```
 
-7. **Build the Project**
+6. **Build the Project**
 
    Now, build the project using CMake:
 
