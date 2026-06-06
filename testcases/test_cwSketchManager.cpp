@@ -22,10 +22,10 @@
 
 namespace {
 
-void addStroke(cwSketch& sketch, cwPenStroke::Kind kind,
+void addStroke(cwSketch& sketch, const QString& brushName,
                std::initializer_list<QPointF> points)
 {
-    const int row = sketch.beginStroke(kind, 3.0);
+    const int row = sketch.beginStroke(brushName);
     for (const auto& p : points) {
         sketch.appendPoint(row, p, 1.0, 0);
     }
@@ -51,7 +51,7 @@ TEST_CASE("cwSketchManager::renderIcon returns a non-empty QImage for sketches w
           "[cwSketchManager]")
 {
     cwSketch sketch;
-    addStroke(sketch, cwPenStroke::Wall, { {0, 0}, {10, 10}, {20, 0} });
+    addStroke(sketch, QStringLiteral("wall"), { {0, 0}, {10, 10}, {20, 0} });
 
     const QImage image = cwSketchManager::renderIcon(&sketch, 64);
     REQUIRE(!image.isNull());
@@ -71,7 +71,7 @@ TEST_CASE("cwSketchManager::renderIcon produces non-white pixels for a drawn mul
           "[cwSketchManager]")
 {
     cwSketch sketch;
-    addStroke(sketch, cwPenStroke::Wall,
+    addStroke(sketch, QStringLiteral("wall"),
               { {0.0, 0.0}, {20.0, 5.0}, {40.0, 0.0}, {60.0, 10.0} });
 
     const QImage image = cwSketchManager::renderIcon(&sketch, 128);
@@ -92,7 +92,7 @@ TEST_CASE("cwSketchManager::renderIcon keeps all points in view (regression: bbo
     // point was rendered far off-frame. If the fix is correct, both ends
     // of the stroke produce visible pixels near opposite sides of the image.
     cwSketch sketch;
-    addStroke(sketch, cwPenStroke::Wall, { {0.0, 0.0}, {100.0, 0.0} });
+    addStroke(sketch, QStringLiteral("wall"), { {0.0, 0.0}, {100.0, 0.0} });
 
     const QImage image = cwSketchManager::renderIcon(&sketch, 128);
     REQUIRE_FALSE(image.isNull());
@@ -129,7 +129,7 @@ TEST_CASE("cwSketchManager::rasteriseNow writes a PNG containing drawn pixels",
     manager.setProject(&project);
 
     cwSketch sketch;
-    addStroke(sketch, cwPenStroke::Wall,
+    addStroke(sketch, QStringLiteral("wall"),
               { {0.0, 0.0}, {50.0, 50.0}, {0.0, 50.0} });
 
     manager.rasteriseNow(&sketch);
@@ -163,7 +163,7 @@ TEST_CASE("cwSketchManager writes an icon to the disk cache on rasteriseNow",
     cwSketch sketch;
     QSignalSpy spy(&sketch, &cwSketch::iconImagePathChanged);
 
-    addStroke(sketch, cwPenStroke::Wall, { {0, 0}, {5, 5} });
+    addStroke(sketch, QStringLiteral("wall"), { {0, 0}, {5, 5} });
 
     CHECK(sketch.iconImagePath().isEmpty());
 
@@ -187,7 +187,7 @@ TEST_CASE("cwSketchManager URL resolves through the cwCacheImageProvider",
     manager.setProject(&project);
 
     cwSketch sketch;
-    addStroke(sketch, cwPenStroke::Feature, { {0, 0}, {10, 0}, {10, 10} });
+    addStroke(sketch, QStringLiteral("feature"), { {0, 0}, {10, 0}, {10, 10} });
     manager.rasteriseNow(&sketch);
 
     cwCacheImageProvider provider;
@@ -212,7 +212,7 @@ TEST_CASE("cwSketchManager cache entry survives a manager restart",
     cwProject project;
 
     cwSketch sketch;
-    addStroke(sketch, cwPenStroke::Wall, { {0, 0}, {3, 4} });
+    addStroke(sketch, QStringLiteral("wall"), { {0, 0}, {3, 4} });
 
     const auto key = cwSketchManager::cacheKey(&sketch);
 
@@ -227,7 +227,7 @@ TEST_CASE("cwSketchManager cache entry survives a manager restart",
     sketch.setIconImagePath(QString());
     cwSketch sameIdSketch;
     sameIdSketch.setId(sketch.id());
-    addStroke(sameIdSketch, cwPenStroke::Wall, { {0, 0}, {3, 4} });
+    addStroke(sameIdSketch, QStringLiteral("wall"), { {0, 0}, {3, 4} });
 
     cwDiskCacher cacher(project.dataRootDir());
     CHECK(cacher.hasEntry(key));
@@ -271,7 +271,7 @@ TEST_CASE("cwSketchManager: async render fires after idle window",
 
     manager.attachSketch(&sketch);
 
-    addStroke(sketch, cwPenStroke::Wall, { {0, 0}, {10, 10}, {20, 0} });
+    addStroke(sketch, QStringLiteral("wall"), { {0, 0}, {10, 10}, {20, 0} });
 
     const bool updated = spinUntil([&]() { return iconSpy.count() > 0; }, 3000);
     REQUIRE(updated);
@@ -295,7 +295,7 @@ TEST_CASE("cwSketchManager: autoIconUpdates=false suppresses auto render",
     QSignalSpy iconSpy(&sketch, &cwSketch::iconImagePathChanged);
 
     manager.attachSketch(&sketch);
-    addStroke(sketch, cwPenStroke::Wall, { {0, 0}, {10, 10} });
+    addStroke(sketch, QStringLiteral("wall"), { {0, 0}, {10, 10} });
 
     QTest::qWait(500);
     CHECK(iconSpy.count() == 0);
@@ -321,7 +321,7 @@ TEST_CASE("cwSketchManager: flushIconIfDirty is a no-op when not dirty",
 
     cwSketch sketch;
     manager.attachSketch(&sketch);
-    addStroke(sketch, cwPenStroke::Wall, { {0, 0}, {5, 5} });
+    addStroke(sketch, QStringLiteral("wall"), { {0, 0}, {5, 5} });
 
     // Keep flushing until the sketch quiesces. cwSketch::appendPoint posts a
     // queued dataChanged that can bump dirtyEpoch after the initial flush
@@ -352,7 +352,7 @@ TEST_CASE("cwSketchManager: rapid edits coalesce into one write",
     manager.attachSketch(&sketch);
 
     for (int i = 0; i < 5; ++i) {
-        addStroke(sketch, cwPenStroke::Wall,
+        addStroke(sketch, QStringLiteral("wall"),
                   { QPointF(i, 0), QPointF(i + 1, 1) });
     }
 
@@ -373,7 +373,7 @@ TEST_CASE("cwSketchManager: flushIconIfDirty is gated while actively drawing",
     QSignalSpy iconSpy(&sketch, &cwSketch::iconImagePathChanged);
     manager.attachSketch(&sketch);
 
-    const int row = sketch.beginStroke(cwPenStroke::Wall, 3.0);
+    const int row = sketch.beginStroke(QStringLiteral("wall"));
     sketch.appendPoint(row, QPointF(0, 0), 1.0, 0);
     sketch.appendPoint(row, QPointF(5, 5), 1.0, 0);
 
@@ -400,7 +400,7 @@ TEST_CASE("cwSketchManager: teardown during in-flight render does not crash",
     for (int i = 0; i < 20; ++i) {
         auto sketch = std::make_unique<cwSketch>();
         manager.attachSketch(sketch.get());
-        addStroke(*sketch, cwPenStroke::Wall,
+        addStroke(*sketch, QStringLiteral("wall"),
                   { {0, 0}, {double(i), double(i) + 1} });
         QTest::qWait(5); // may or may not have submitted yet
     }

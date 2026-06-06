@@ -10,21 +10,52 @@
 #include <cmath>
 
 //Our includes
+#include "cwPaletteSnapshot.h"
 #include "cwPenPoint.h"
 #include "cwPenStroke.h"
 #include "cwSketchScrapOutline.h"
 #include "cwSketchScrapOutlineDetector.h"
+#include "cwSymbologyPaletteData.h"
+#include "cwSymbologyPaletteSeed.h"
 
 namespace {
 
 constexpr double kSimplifyTolerance = 0.005; // 5 mm — fine enough to keep corners
 
-cwPenStroke makeStroke(cwPenStroke::Kind kind, const QVector<QPointF> &pts)
+// Seed brushes: wall and scrap-outline carry scrapOutline == true, feature does not.
+const QString kWallBrush         = QStringLiteral("wall");
+const QString kScrapOutlineBrush = QStringLiteral("scrap-outline");
+const QString kFeatureBrush      = QStringLiteral("feature");
+
+// The detector resolves each stroke's scrapOutline flag against a palette. All
+// tests use the built-in seed.
+const cwPaletteSnapshot &seedSnapshot()
+{
+    static const cwPaletteSnapshot snapshot = cwSymbologyPaletteSeed::create().snapshot();
+    return snapshot;
+}
+
+QVector<cwSketchScrapOutline> detectOutlines(const QVector<cwPenStroke> &strokes,
+                                             double simplifyToleranceMeters,
+                                             double outsetMeters = 0.0)
+{
+    return cwSketchScrapOutlineDetector::detect(
+        strokes, seedSnapshot(), simplifyToleranceMeters, outsetMeters);
+}
+
+cwSketchScrapDetectResult detectOutlinesWithDiagnostics(const QVector<cwPenStroke> &strokes,
+                                                        double simplifyToleranceMeters,
+                                                        double outsetMeters = 0.0)
+{
+    return cwSketchScrapOutlineDetector::detectWithDiagnostics(
+        strokes, seedSnapshot(), simplifyToleranceMeters, outsetMeters);
+}
+
+cwPenStroke makeStroke(const QString &brushName, const QVector<QPointF> &pts)
 {
     cwPenStroke s;
-    s.kind  = kind;
-    s.width = 2.0;
-    s.id    = QUuid::createUuid();
+    s.brushName = brushName;
+    s.id        = QUuid::createUuid();
     s.points.reserve(pts.size());
     for (const auto &p : pts) {
         s.points.append(cwPenPoint(p, 1.0, 0));
@@ -53,11 +84,11 @@ QVector<QUuid> sorted(QVector<QUuid> ids)
 } // namespace
 
 TEST_CASE("Closed Wall stroke produces one CCW outline", "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wall = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect({wall}, kSimplifyTolerance);
+    const auto out = detectOutlines({wall}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
     CHECK(out.first().memberStrokeIds == QVector<QUuid>{wall.id});
@@ -72,22 +103,22 @@ TEST_CASE("Closed Wall stroke produces one CCW outline", "[cwSketchScrapOutlineD
 }
 
 TEST_CASE("Closed ScrapOutline stroke produces one outline", "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke outline = makeStroke(cwPenStroke::ScrapOutline, {
+    const cwPenStroke outline = makeStroke(kScrapOutlineBrush, {
         {0.0, 0.0}, {2.0, 0.0}, {2.0, 2.0}, {0.0, 2.0}, {0.0, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect({outline}, kSimplifyTolerance);
+    const auto out = detectOutlines({outline}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
     CHECK(out.first().memberStrokeIds == QVector<QUuid>{outline.id});
 }
 
 TEST_CASE("Closed Feature stroke is ignored", "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke feature = makeStroke(cwPenStroke::Feature, {
+    const cwPenStroke feature = makeStroke(kFeatureBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect({feature}, kSimplifyTolerance);
+    const auto out = detectOutlines({feature}, kSimplifyTolerance);
 
     CHECK(out.isEmpty());
 }
@@ -96,11 +127,11 @@ TEST_CASE("Single open stroke self-caps into a closed ring", "[cwSketchScrapOutl
     // Last point ends 3 cm short of the first. With nearest-endpoint
     // matching the stroke self-pairs and the two endpoints collapse to
     // their midpoint (0.015, 0).
-    const cwPenStroke stroke = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke stroke = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.03, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect({stroke}, kSimplifyTolerance);
+    const auto out = detectOutlines({stroke}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
     CHECK(out.first().memberStrokeIds == QVector<QUuid>{stroke.id});
@@ -116,11 +147,11 @@ TEST_CASE("Self-intersecting bowtie salvages into one outer lobe",
     // the two lobes are congruent). The user's drawing intent for a bowtie
     // is ambiguous — this tests that Patch 1 emits one outline rather than
     // silently dropping the input.
-    const cwPenStroke bowtie = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke bowtie = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 1.0}, {1.0, 0.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect({bowtie}, kSimplifyTolerance);
+    const auto out = detectOutlines({bowtie}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
     const QPolygonF &ring = out.first().tripLocalPolygon;
@@ -134,7 +165,7 @@ TEST_CASE("Tiny hook at seam is salvaged instead of dropping the outline",
     // the start edge and overshot by 3 cm past the origin before releasing.
     // The last segment crosses the first edge, producing a self-intersecting
     // ring with a tiny hook lobe. Patch 1 must salvage the main square.
-    const cwPenStroke hooked = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke hooked = makeStroke(kWallBrush, {
         {0.0, 0.0},
         {1.0, 0.0},
         {1.0, 1.0},
@@ -143,7 +174,7 @@ TEST_CASE("Tiny hook at seam is salvaged instead of dropping the outline",
         {0.03, 0.0}   // tiny hook re-entering the square
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect({hooked}, kSimplifyTolerance);
+    const auto out = detectOutlines({hooked}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
     const QPolygonF &ring = out.first().tripLocalPolygon;
@@ -158,23 +189,23 @@ TEST_CASE("Tiny hook at seam is salvaged instead of dropping the outline",
 }
 
 TEST_CASE("Degenerate strokes (< 2 points) are rejected", "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke empty = makeStroke(cwPenStroke::Wall, {});
-    const cwPenStroke one   = makeStroke(cwPenStroke::Wall, {{0.0, 0.0}});
+    const cwPenStroke empty = makeStroke(kWallBrush, {});
+    const cwPenStroke one   = makeStroke(kWallBrush, {{0.0, 0.0}});
 
-    const auto out = cwSketchScrapOutlineDetector::detect({empty, one}, kSimplifyTolerance);
+    const auto out = detectOutlines({empty, one}, kSimplifyTolerance);
 
     CHECK(out.isEmpty());
 }
 
 TEST_CASE("detectWithDiagnostics reports too-few-points rejections",
           "[cwSketchScrapOutlineDetector][diagnostics]") {
-    const cwPenStroke empty = makeStroke(cwPenStroke::Wall, {});
-    const cwPenStroke one   = makeStroke(cwPenStroke::Wall, {{0.0, 0.0}});
-    const cwPenStroke valid = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke empty = makeStroke(kWallBrush, {});
+    const cwPenStroke one   = makeStroke(kWallBrush, {{0.0, 0.0}});
+    const cwPenStroke valid = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
-    const auto result = cwSketchScrapOutlineDetector::detectWithDiagnostics(
+    const auto result = detectOutlinesWithDiagnostics(
         {empty, one, valid}, kSimplifyTolerance);
 
     REQUIRE(result.outlines.size() == 1);
@@ -196,11 +227,11 @@ TEST_CASE("detectWithDiagnostics flags kept-but-rejected feature strokes as sile
           "[cwSketchScrapOutlineDetector][diagnostics]") {
     // Feature strokes are intentionally ignored — no rejection record
     // (they're not failing outlines, they're a different stroke kind).
-    const cwPenStroke feature = makeStroke(cwPenStroke::Feature, {
+    const cwPenStroke feature = makeStroke(kFeatureBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
-    const auto result = cwSketchScrapOutlineDetector::detectWithDiagnostics(
+    const auto result = detectOutlinesWithDiagnostics(
         {feature}, kSimplifyTolerance);
 
     CHECK(result.outlines.isEmpty());
@@ -209,12 +240,12 @@ TEST_CASE("detectWithDiagnostics flags kept-but-rejected feature strokes as sile
 
 TEST_CASE("detect wrapper returns the same outlines as detectWithDiagnostics",
           "[cwSketchScrapOutlineDetector][diagnostics]") {
-    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wall = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
-    const auto wrapped = cwSketchScrapOutlineDetector::detect({wall}, kSimplifyTolerance);
-    const auto full    = cwSketchScrapOutlineDetector::detectWithDiagnostics({wall}, kSimplifyTolerance);
+    const auto wrapped = detectOutlines({wall}, kSimplifyTolerance);
+    const auto full    = detectOutlinesWithDiagnostics({wall}, kSimplifyTolerance);
 
     REQUIRE(wrapped.size() == full.outlines.size());
     CHECK(wrapped == full.outlines);
@@ -225,26 +256,26 @@ TEST_CASE("Lone straight two-point stroke collapses below ring threshold",
     // Self-pair merges the two endpoints into a single midpoint vertex.
     // The resulting ring has only one point — well below the ≥3-vertex
     // ring guard, so no outline is emitted.
-    const cwPenStroke line = makeStroke(cwPenStroke::Wall, {{0.0, 0.0}, {0.001, 0.0}});
+    const cwPenStroke line = makeStroke(kWallBrush, {{0.0, 0.0}, {0.001, 0.0}});
 
-    const auto out = cwSketchScrapOutlineDetector::detect({line}, kSimplifyTolerance);
+    const auto out = detectOutlines({line}, kSimplifyTolerance);
 
     CHECK(out.isEmpty());
 }
 
 TEST_CASE("Clockwise input is normalized to CCW", "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke cw = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke cw = makeStroke(kWallBrush, {
         {0.0, 0.0}, {0.0, 1.0}, {1.0, 1.0}, {1.0, 0.0}, {0.0, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect({cw}, kSimplifyTolerance);
+    const auto out = detectOutlines({cw}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
     CHECK(signedArea(out.first().tripLocalPolygon) > 0.0);
 }
 
 TEST_CASE("Douglas–Peucker drops collinear interior points", "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke dense = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke dense = makeStroke(kWallBrush, {
         {0.0, 0.0},
         {0.25, 0.0}, {0.50, 0.0}, {0.75, 0.0},
         {1.0, 0.0},
@@ -253,19 +284,19 @@ TEST_CASE("Douglas–Peucker drops collinear interior points", "[cwSketchScrapOu
         {0.0, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect({dense}, kSimplifyTolerance);
+    const auto out = detectOutlines({dense}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
     CHECK(out.first().tripLocalPolygon.size() == 4);
 }
 
 TEST_CASE("Zero outset leaves polygon unchanged", "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wall = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
-    const auto baseline = cwSketchScrapOutlineDetector::detect({wall}, kSimplifyTolerance);
-    const auto zero     = cwSketchScrapOutlineDetector::detect({wall}, kSimplifyTolerance, 0.0);
+    const auto baseline = detectOutlines({wall}, kSimplifyTolerance);
+    const auto zero     = detectOutlines({wall}, kSimplifyTolerance, 0.0);
 
     REQUIRE(baseline.size() == 1);
     REQUIRE(zero.size() == 1);
@@ -277,12 +308,12 @@ TEST_CASE("Zero outset leaves polygon unchanged", "[cwSketchScrapOutlineDetector
 
 TEST_CASE("Positive outset enlarges a square polygon by the offset distance",
           "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wall = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
     constexpr double offset = 0.1;
-    const auto out = cwSketchScrapOutlineDetector::detect({wall}, kSimplifyTolerance, offset);
+    const auto out = detectOutlines({wall}, kSimplifyTolerance, offset);
 
     REQUIRE(out.size() == 1);
     const QPolygonF &ring = out.first().tripLocalPolygon;
@@ -299,12 +330,12 @@ TEST_CASE("Positive outset enlarges a square polygon by the offset distance",
 
 TEST_CASE("Positive outset enlarges a triangle and keeps it a triangle",
           "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wall = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
     constexpr double offset = 0.05;
-    const auto out = cwSketchScrapOutlineDetector::detect({wall}, kSimplifyTolerance, offset);
+    const auto out = detectOutlines({wall}, kSimplifyTolerance, offset);
 
     REQUIRE(out.size() == 1);
     const QPolygonF &ring = out.first().tripLocalPolygon;
@@ -320,11 +351,11 @@ TEST_CASE("Positive outset enlarges a triangle and keeps it a triangle",
 
 TEST_CASE("Outset preserves CCW orientation regardless of input winding",
           "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke cw = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke cw = makeStroke(kWallBrush, {
         {0.0, 0.0}, {0.0, 1.0}, {1.0, 1.0}, {1.0, 0.0}, {0.0, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect({cw}, kSimplifyTolerance, 0.05);
+    const auto out = detectOutlines({cw}, kSimplifyTolerance, 0.05);
 
     REQUIRE(out.size() == 1);
     CHECK(signedArea(out.first().tripLocalPolygon) > 0.0);
@@ -332,14 +363,14 @@ TEST_CASE("Outset preserves CCW orientation regardless of input winding",
 
 TEST_CASE("Outset on a non-convex polygon moves every vertex outside the input",
           "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke lshape = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke lshape = makeStroke(kWallBrush, {
         {0.0, 0.0}, {2.0, 0.0}, {2.0, 1.0}, {1.0, 1.0},
         {1.0, 2.0}, {0.0, 2.0}, {0.0, 0.0}
     });
 
     constexpr double offset = 0.05;
-    const auto baseline = cwSketchScrapOutlineDetector::detect({lshape}, kSimplifyTolerance);
-    const auto out      = cwSketchScrapOutlineDetector::detect({lshape}, kSimplifyTolerance, offset);
+    const auto baseline = detectOutlines({lshape}, kSimplifyTolerance);
+    const auto out      = detectOutlines({lshape}, kSimplifyTolerance, offset);
 
     REQUIRE(baseline.size() == 1);
     REQUIRE(out.size() == 1);
@@ -356,14 +387,14 @@ TEST_CASE("Outset on a non-convex polygon moves every vertex outside the input",
 
 TEST_CASE("Miter cap prevents spikes on sharp acute corners",
           "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke dart = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke dart = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {0.0, 0.05}, {0.0, 0.0}
     });
 
     constexpr double offset        = 0.02;
     constexpr double kMiterCapFact = 4.0;
-    const auto baseline = cwSketchScrapOutlineDetector::detect({dart}, kSimplifyTolerance);
-    const auto out      = cwSketchScrapOutlineDetector::detect({dart}, kSimplifyTolerance, offset);
+    const auto baseline = detectOutlines({dart}, kSimplifyTolerance);
+    const auto out      = detectOutlines({dart}, kSimplifyTolerance, offset);
 
     REQUIRE(baseline.size() == 1);
     REQUIRE(out.size() == 1);
@@ -386,13 +417,13 @@ TEST_CASE("Miter cap prevents spikes on sharp acute corners",
 
 TEST_CASE("Outset larger than notch half-width falls back to un-offset ring",
           "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke cshape = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke cshape = makeStroke(kWallBrush, {
         {0.0, 0.0}, {2.0, 0.0}, {2.0, 1.0}, {1.0, 1.0},
         {1.0, 3.0}, {2.0, 3.0}, {2.0, 4.0}, {0.0, 4.0}, {0.0, 0.0}
     });
 
-    const auto baseline = cwSketchScrapOutlineDetector::detect({cshape}, kSimplifyTolerance);
-    const auto out      = cwSketchScrapOutlineDetector::detect({cshape}, kSimplifyTolerance, 1.0);
+    const auto baseline = detectOutlines({cshape}, kSimplifyTolerance);
+    const auto out      = detectOutlines({cshape}, kSimplifyTolerance, 1.0);
 
     REQUIRE(baseline.size() == 1);
     REQUIRE(out.size() == 1);
@@ -406,12 +437,12 @@ TEST_CASE("Outset larger than notch half-width falls back to un-offset ring",
 
 TEST_CASE("Outset applies to ScrapOutline strokes as well as Wall strokes",
           "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke outline = makeStroke(cwPenStroke::ScrapOutline, {
+    const cwPenStroke outline = makeStroke(kScrapOutlineBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
     constexpr double offset = 0.1;
-    const auto out = cwSketchScrapOutlineDetector::detect({outline}, kSimplifyTolerance, offset);
+    const auto out = detectOutlines({outline}, kSimplifyTolerance, offset);
 
     REQUIRE(out.size() == 1);
     const QRectF bbox = out.first().tripLocalPolygon.boundingRect();
@@ -424,15 +455,15 @@ TEST_CASE("Outset applies to ScrapOutline strokes as well as Wall strokes",
 
 TEST_CASE("Mixed list: outset applied independently per outline",
           "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wall = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
-    const cwPenStroke outline = makeStroke(cwPenStroke::ScrapOutline, {
+    const cwPenStroke outline = makeStroke(kScrapOutlineBrush, {
         {20.0, 0.0}, {21.0, 0.0}, {21.0, 1.0}, {20.0, 1.0}, {20.0, 0.0}
     });
 
     constexpr double offset = 0.05;
-    const auto out = cwSketchScrapOutlineDetector::detect(
+    const auto out = detectOutlines(
         {wall, outline}, kSimplifyTolerance, offset);
 
     REQUIRE(out.size() == 2);
@@ -467,14 +498,14 @@ TEST_CASE("Feature strokes are ignored by chaining",
     // One closed Wall plus one Feature stroke with endpoints touching the
     // wall's corners. The Feature must be invisible to the matcher — the
     // outline contains only the Wall id (self-paired).
-    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wall = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
-    const cwPenStroke feature = makeStroke(cwPenStroke::Feature, {
+    const cwPenStroke feature = makeStroke(kFeatureBrush, {
         {0.0, 0.0}, {0.5, 0.5}, {1.0, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect(
+    const auto out = detectOutlines(
         {wall, feature}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
@@ -485,14 +516,14 @@ TEST_CASE("Two open walls forming a closed square chain",
           "[cwSketchScrapOutlineDetector]") {
     // Two L-shaped Wall strokes whose free endpoints meet at opposite
     // corners of a unit square.
-    const cwPenStroke wall1 = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wall1 = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}
     });
-    const cwPenStroke wall2 = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wall2 = makeStroke(kWallBrush, {
         {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect(
+    const auto out = detectOutlines(
         {wall1, wall2}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
@@ -504,17 +535,17 @@ TEST_CASE("Two open walls forming a closed square chain",
 
 TEST_CASE("Three strokes mixing Wall and ScrapOutline chain into a triangle",
           "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke edgeA = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke edgeA = makeStroke(kWallBrush, {
         {0.0, 0.0}, {2.0, 0.0}
     });
-    const cwPenStroke edgeB = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke edgeB = makeStroke(kWallBrush, {
         {2.0, 0.0}, {1.0, 2.0}
     });
-    const cwPenStroke edgeC = makeStroke(cwPenStroke::ScrapOutline, {
+    const cwPenStroke edgeC = makeStroke(kScrapOutlineBrush, {
         {1.0, 2.0}, {0.0, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect(
+    const auto out = detectOutlines(
         {edgeA, edgeB, edgeC}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
@@ -528,14 +559,14 @@ TEST_CASE("Auto-cap: two parallel walls with wide leads close into one outline",
     // Parallel walls 5 m apart. With no distance cutoff, each wall's
     // endpoints pair with the nearest endpoints of the other wall, auto-
     // capping into a closed passage.
-    const cwPenStroke wallLeft = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wallLeft = makeStroke(kWallBrush, {
         {0.0, 0.0}, {0.0, 10.0}
     });
-    const cwPenStroke wallRight = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wallRight = makeStroke(kWallBrush, {
         {5.0, 0.0}, {5.0, 10.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect(
+    const auto out = detectOutlines(
         {wallLeft, wallRight}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
@@ -555,17 +586,17 @@ TEST_CASE("Explicit ScrapOutline stroke overrides the auto-cap",
     // the opposite wall's ends, so greedy matching picks the cap first.
     // The outline must walk through the cap on that side instead of
     // bridging the full passage.
-    const cwPenStroke wallLeft = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wallLeft = makeStroke(kWallBrush, {
         {0.0, 0.0}, {0.0, 10.0}
     });
-    const cwPenStroke wallRight = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wallRight = makeStroke(kWallBrush, {
         {5.0, 0.0}, {5.0, 10.0}
     });
-    const cwPenStroke cap = makeStroke(cwPenStroke::ScrapOutline, {
+    const cwPenStroke cap = makeStroke(kScrapOutlineBrush, {
         {0.0, 0.0}, {5.0, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect(
+    const auto out = detectOutlines(
         {wallLeft, wallRight, cap}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
@@ -578,12 +609,12 @@ TEST_CASE("Explicit ScrapOutline stroke overrides the auto-cap",
 
 TEST_CASE("Two separated passages yield two outlines with disjoint members",
           "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke pA_left  = makeStroke(cwPenStroke::Wall, {{0.0, 0.0},  {0.0, 4.0}});
-    const cwPenStroke pA_right = makeStroke(cwPenStroke::Wall, {{2.0, 0.0},  {2.0, 4.0}});
-    const cwPenStroke pB_left  = makeStroke(cwPenStroke::Wall, {{50.0, 0.0}, {50.0, 4.0}});
-    const cwPenStroke pB_right = makeStroke(cwPenStroke::Wall, {{52.0, 0.0}, {52.0, 4.0}});
+    const cwPenStroke pA_left  = makeStroke(kWallBrush, {{0.0, 0.0},  {0.0, 4.0}});
+    const cwPenStroke pA_right = makeStroke(kWallBrush, {{2.0, 0.0},  {2.0, 4.0}});
+    const cwPenStroke pB_left  = makeStroke(kWallBrush, {{50.0, 0.0}, {50.0, 4.0}});
+    const cwPenStroke pB_right = makeStroke(kWallBrush, {{52.0, 0.0}, {52.0, 4.0}});
 
-    const auto out = cwSketchScrapOutlineDetector::detect(
+    const auto out = detectOutlines(
         {pA_left, pA_right, pB_left, pB_right}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 2);
@@ -612,14 +643,14 @@ TEST_CASE("Chain memberStrokeIds are sorted ascending",
     if (high < low) {
         std::swap(high, low);
     }
-    cwPenStroke wall1 = makeStroke(cwPenStroke::Wall,
+    cwPenStroke wall1 = makeStroke(kWallBrush,
                                    {{0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}});
     wall1.id = high;
-    cwPenStroke wall2 = makeStroke(cwPenStroke::Wall,
+    cwPenStroke wall2 = makeStroke(kWallBrush,
                                    {{1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}});
     wall2.id = low;
 
-    const auto out = cwSketchScrapOutlineDetector::detect(
+    const auto out = detectOutlines(
         {wall1, wall2}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 1);
@@ -633,15 +664,15 @@ TEST_CASE("Chained ring honors outsetMeters",
     // Two-stroke chain that closes a unit square. Regression guard for
     // seams producing near-duplicate points that would otherwise break
     // offset-normal math.
-    const cwPenStroke wall1 = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wall1 = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}
     });
-    const cwPenStroke wall2 = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wall2 = makeStroke(kWallBrush, {
         {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
 
     constexpr double offset = 0.05;
-    const auto out = cwSketchScrapOutlineDetector::detect(
+    const auto out = detectOutlines(
         {wall1, wall2}, kSimplifyTolerance, offset);
 
     REQUIRE(out.size() == 1);
@@ -655,17 +686,17 @@ TEST_CASE("Chained ring honors outsetMeters",
 
 TEST_CASE("Mixed stroke list produces one outline per chain",
           "[cwSketchScrapOutlineDetector]") {
-    const cwPenStroke wall = makeStroke(cwPenStroke::Wall, {
+    const cwPenStroke wall = makeStroke(kWallBrush, {
         {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}, {0.0, 0.0}
     });
-    const cwPenStroke feature = makeStroke(cwPenStroke::Feature, {
+    const cwPenStroke feature = makeStroke(kFeatureBrush, {
         {5.0, 5.0}, {6.0, 5.0}, {6.0, 6.0}, {5.0, 6.0}, {5.0, 5.0}
     });
-    const cwPenStroke outline = makeStroke(cwPenStroke::ScrapOutline, {
+    const cwPenStroke outline = makeStroke(kScrapOutlineBrush, {
         {20.0, 0.0}, {21.0, 0.0}, {21.0, 1.0}, {20.0, 1.0}, {20.0, 0.0}
     });
 
-    const auto out = cwSketchScrapOutlineDetector::detect(
+    const auto out = detectOutlines(
         {wall, feature, outline}, kSimplifyTolerance);
 
     REQUIRE(out.size() == 2);

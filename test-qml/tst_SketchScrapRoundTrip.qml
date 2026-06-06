@@ -70,7 +70,7 @@ MainWindowTest {
             // (compass=0) so at (0, 10). The box spans well past both in X/Y
             // meters regardless of survey handedness, so stationsForOutline()
             // always picks up at least one station.
-            const strokeIdx = sketch.beginStroke(PenStroke.Wall, 4.0)
+            const strokeIdx = sketch.beginStroke("wall")
             const ring = [
                 Qt.point(-10, -10),
                 Qt.point( 10, -10),

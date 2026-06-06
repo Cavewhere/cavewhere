@@ -30,6 +30,8 @@
 #include "cwSurvey2DGeometryRule.h"
 #include "cwSurvey2DGeometryArtifact.h"
 #include "cwSurveyNetworkArtifact.h"
+#include "cwSymbologyPaletteData.h"
+#include "cwSymbologyPaletteSeed.h"
 
 namespace {
 
@@ -210,11 +212,9 @@ ErasedStrokes computeErasedStrokes(const QVector<cwPenStroke> &strokes,
         auto flushRun = [&](bool preserveId) {
             if (run.size() >= 2) {
                 cwPenStroke fragment;
-                fragment.kind   = src.kind;
-                fragment.width  = src.width;
-                fragment.color  = src.color;
-                fragment.id     = preserveId ? src.id : QUuid::createUuid();
-                fragment.points = run;
+                fragment.brushName = src.brushName;
+                fragment.id        = preserveId ? src.id : QUuid::createUuid();
+                fragment.points    = run;
                 subStrokes.append(fragment);
             } else if (!run.isEmpty()) {
                 // A single surviving point cannot render a line; dropping
@@ -266,6 +266,8 @@ cwSketch::cwSketch(QObject *parent)
       m_geometryRule(new cwSurvey2DGeometryRule(this))
 {
     m_undoStack->setUndoLimit(32);
+
+    m_paletteSnapshot = cwSymbologyPaletteSeed::create().snapshot();
 
     // Default paper scale 1:250 — matches SketchItem.qml's view-matrix default.
     m_mapScale->scaleDenominator()->setValue(250.0);
@@ -371,15 +373,13 @@ void cwSketch::setStrokes(const QVector<cwPenStroke> &strokes)
     applyStrokes(strokes);
 }
 
-int cwSketch::beginStroke(cwPenStroke::Kind kind, double width, const QColor &color)
+int cwSketch::beginStroke(const QString &brushName)
 {
     m_startStrokes = m_strokes;
 
     cwPenStroke stroke;
-    stroke.kind  = kind;
-    stroke.width = width;
-    stroke.color = color;
-    stroke.id    = QUuid::createUuid();
+    stroke.brushName = brushName;
+    stroke.id        = QUuid::createUuid();
 
     const int row = m_strokes.size();
     m_strokeModel->beginInsertRows(QModelIndex(), row, row);
@@ -732,14 +732,11 @@ void cwSketch::endStroke()
 }
 
 cwSketchContinuationTarget cwSketch::findContinuationTarget(
-    cwPenStroke::Kind kind,
+    const QString &brushName,
     QPointF worldPoint,
     double probationWindowScreenPx) const
 {
     cwSketchContinuationTarget result;
-    if (kind == cwPenStroke::Eraser) {
-        return result;
-    }
     if (!m_viewState) {
         return result;
     }
@@ -761,9 +758,9 @@ cwSketchContinuationTarget cwSketch::findContinuationTarget(
         return result;
     }
     qCInfo(lcContinuation,
-           "findContinuationTarget: kind=%d pen=(%.4f, %.4f) "
+           "findContinuationTarget: brush=%s pen=(%.4f, %.4f) "
            "paperPpm=%.4f pxPerMeter=%.4f zoom=%.4f strokes=%d",
-           static_cast<int>(kind), worldPoint.x(), worldPoint.y(),
+           qUtf8Printable(brushName), worldPoint.x(), worldPoint.y(),
            paperPpm, pxPerMeter,
            m_viewState->zoom(),
            static_cast<int>(m_strokes.size()));
@@ -775,17 +772,17 @@ cwSketchContinuationTarget cwSketch::findContinuationTarget(
 
     for (int sIdx = 0; sIdx < m_strokes.size(); ++sIdx) {
         const cwPenStroke &stroke = m_strokes[sIdx];
-        if (stroke.kind != kind) {
+        if (stroke.brushName != brushName) {
             continue;
         }
         if (stroke.points.size() < 2) {
             continue;
         }
 
-        // Threshold = half the *rendered* world width = 0.5 × stroke.width
-        // / paperPpm. Matches the outer edge of the visible stroke. Use
-        // 0.25 for inner-half only if edge-grazes feel wrong.
-        const double thresholdMeters = 0.5 * stroke.width / paperPpm;
+        // Threshold = half the *rendered* world width = 0.5 ×
+        // kSketchStrokeRenderWidth / paperPpm. Matches the outer edge of the
+        // visible stroke. Use 0.25 for inner-half only if edge-grazes feel wrong.
+        const double thresholdMeters = 0.5 * kSketchStrokeRenderWidth / paperPpm;
         // Equivalent in paper/screen pixels, for logs only.
         const double thresholdPaperPx = thresholdMeters * paperPpm;
         const double thresholdSq = thresholdMeters * thresholdMeters;
@@ -809,7 +806,7 @@ cwSketchContinuationTarget cwSketch::findContinuationTarget(
             }
             bestDistSq = dSq;
             result.strokeIndex = sIdx;
-            result.strokeWidth = stroke.width;
+            result.strokeWidth = kSketchStrokeRenderWidth;
             bestSegIdx = i;
             // Re-project to compute proj + tangent for this winning segment.
             const QPointF ab = b - a;
@@ -828,10 +825,10 @@ cwSketchContinuationTarget cwSketch::findContinuationTarget(
         }
         const double minDist = std::sqrt(strokeBestDistSq);
         qCInfo(lcContinuation,
-               "  stroke[%d] kind=%d width=%.4f thresholdWorld=%.5f "
+               "  stroke[%d] brush=%s width=%.4f thresholdWorld=%.5f "
                "thresholdPaperPx=%.4f thresholdScreenPx=%.4f "
                "minDistWorld=%.5f minDistPaperPx=%.4f minDistScreenPx=%.4f %s",
-               sIdx, static_cast<int>(stroke.kind), stroke.width,
+               sIdx, qUtf8Printable(stroke.brushName), kSketchStrokeRenderWidth,
                thresholdMeters, thresholdPaperPx, thresholdMeters * pxPerMeter,
                minDist, minDist * paperPpm, minDist * pxPerMeter,
                (strokeBestDistSq <= thresholdSq ? "HIT" : "miss"));

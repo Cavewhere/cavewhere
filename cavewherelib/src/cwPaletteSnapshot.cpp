@@ -21,3 +21,9 @@ std::optional<cwLineBrush> cwPaletteSnapshot::findBrush(const QString &name) con
     }
     return *it;
 }
+
+bool cwPaletteSnapshot::producesScrapOutline(const QString &name) const
+{
+    const auto it = m_brushes.constFind(name);
+    return it != m_brushes.constEnd() && it->scrapOutline;
+}

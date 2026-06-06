@@ -27,9 +27,7 @@ public:
     enum Role {
         StrokeRole = Qt::UserRole + 1,
         PointsRole,
-        KindRole,
-        WidthRole,
-        ColorRole,
+        BrushNameRole,
         IdRole
     };
     Q_ENUM(Role)

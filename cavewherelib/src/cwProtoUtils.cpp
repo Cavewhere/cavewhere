@@ -703,11 +703,7 @@ void savePenPoint(CavewhereProto::PenPoint* protoPoint, const cwPenPoint& point)
 
 void savePenStroke(CavewhereProto::PenStroke* protoStroke, const cwPenStroke& stroke)
 {
-    protoStroke->set_kind(static_cast<CavewhereProto::PenStroke_Kind>(stroke.kind));
-    protoStroke->set_width(stroke.width);
-    if (stroke.color.isValid()) {
-        saveString(protoStroke->mutable_colorhex(), stroke.color.name(QColor::HexArgb));
-    }
+    saveString(protoStroke->mutable_brushname(), stroke.brushName);
     for (const auto& point : stroke.points) {
         savePenPoint(protoStroke->add_points(), point);
     }
@@ -750,11 +746,7 @@ cwPenPoint fromProtoPenPoint(const CavewhereProto::PenPoint& protoPoint)
 cwPenStroke fromProtoPenStroke(const CavewhereProto::PenStroke& protoStroke)
 {
     cwPenStroke stroke;
-    stroke.kind  = static_cast<cwPenStroke::Kind>(protoStroke.kind());
-    stroke.width = protoStroke.width();
-    if (protoStroke.has_colorhex()) {
-        stroke.color = QColor(QString::fromStdString(protoStroke.colorhex()));
-    }
+    stroke.brushName = QString::fromStdString(protoStroke.brushname());
     stroke.points.reserve(protoStroke.points_size());
     for (const auto& protoPoint : protoStroke.points()) {
         stroke.points.append(fromProtoPenPoint(protoPoint));

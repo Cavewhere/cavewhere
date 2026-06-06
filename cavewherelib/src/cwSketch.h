@@ -20,6 +20,7 @@
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwPaletteSnapshot.h"
 #include "cwPenStroke.h"
 #include "cwSketchData.h"
 #include "cwSketchViewState.h"
@@ -132,6 +133,12 @@ public:
     QUndoStack       *undoStack() const { return m_undoStack; }
     cwKeywordModel   *keywordModel() const { return m_keywordModel; }
 
+    // The palette every render/topology consumer resolves stroke brushNames
+    // against. Currently the built-in seed; commit 6 wires this to the
+    // per-sketch activePaletteId. Returned by value — it is an implicitly
+    // shared snapshot, cheap to copy.
+    cwPaletteSnapshot paletteSnapshot() const { return m_paletteSnapshot; }
+
     // Region-wide network input; typically pointed at
     // cwLinePlotManager::surveyNetworkArtifact(). When it or the view matrix
     // changes, survey2DGeometry() regenerates.
@@ -143,13 +150,13 @@ public:
     void setParentTrip(cwTrip *trip);
     Q_INVOKABLE cwTrip *parentTrip() const { return m_parentTrip; }
 
-    Q_INVOKABLE int  beginStroke(cwPenStroke::Kind kind, double width, const QColor &color = QColor());
+    Q_INVOKABLE int  beginStroke(const QString &brushName);
 
-    // Scans same-`kind` strokes (Eraser is always skipped) for one whose
-    // centerline is within 0.5×stroke.width *screen pixels* (converted to
-    // world meters via viewState->pixelsPerMeter()) of `worldPoint`. Returns
-    // the nearest qualifying stroke. When the matrix is unset the scan is
-    // skipped and strokeIndex=-1 is returned.
+    // Scans strokes sharing `brushName` for one whose centerline is within
+    // 0.5×kSketchStrokeRenderWidth *screen pixels* (converted to world meters
+    // via viewState->pixelsPerMeter()) of `worldPoint`. Returns the nearest
+    // qualifying stroke. When the matrix is unset the scan is skipped and
+    // strokeIndex=-1 is returned.
     //
     // When `probationWindowScreenPx > 0`, additionally measures centerline
     // arclength from the landing projection to each endpoint (with
@@ -158,7 +165,7 @@ public:
     // and populates `hitSegment`/`hitWorld`/`hitTangent` so QML can dispatch
     // to commitAtEndpoint instead of armProbation.
     Q_INVOKABLE cwSketchContinuationTarget findContinuationTarget(
-        cwPenStroke::Kind kind,
+        const QString &brushName,
         QPointF worldPoint,
         double probationWindowScreenPx) const;
 
@@ -205,8 +212,8 @@ public:
 
     // Splits any stored stroke whose points fall within radiusWorld of the
     // eraser polyline. Surviving point runs become new strokes (fresh id,
-    // same kind/width/color). Per-pointer-move calls within one drag merge
-    // into a single undo step; endEraseSession() closes that window.
+    // same brushName). Per-pointer-move calls within one drag merge into a
+    // single undo step; endEraseSession() closes that window.
     Q_INVOKABLE void eraseAlongPath(const QVector<QPointF> &pathPointsWorld,
                                     double radiusWorld);
 
@@ -254,6 +261,10 @@ private:
     QUndoStack        *m_undoStack   = nullptr;
     cwKeywordModel    *m_keywordModel = nullptr;
     cwSketchViewState *m_viewState   = nullptr;
+
+    // Seeded in the constructor; commit 6 replaces this with the active
+    // palette resolved from activePaletteId.
+    cwPaletteSnapshot m_paletteSnapshot;
 
     cwAbstractScrapViewMatrix *m_viewMatrix      = nullptr;
     cwMatrix4x4Artifact       *m_matrixArtifact  = nullptr;

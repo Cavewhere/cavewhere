@@ -16,7 +16,14 @@ QC.Frame {
     id: toolbarId
 
     property Sketch sketch
-    property int strokeKind: PenStroke.Wall
+
+    // Name of the brush new strokes are drawn with (resolved via the active
+    // palette). A temporary fixed set until the brush picker lands in commit 7.
+    property string brushName: "wall"
+
+    // Eraser is a tool mode, not a brush (Decision 2). When true, pen input
+    // erases instead of drawing. Pending the eraser redesign.
+    property bool eraseActive: false
 
     // World-space eraser radius in meters. The canvas uses worldToScreenId to
     // convert this to the on-screen cursor size, so the visible disk matches
@@ -36,11 +43,12 @@ QC.Frame {
             id: wallButtonId
             objectName: "wallButton"
             text: "Wall"
-            checked: toolbarId.strokeKind === PenStroke.Wall
+            checked: !toolbarId.eraseActive && toolbarId.brushName === "wall"
             QC.ButtonGroup.group: kindGroupId
             onToggled: {
                 if (checked) {
-                    toolbarId.strokeKind = PenStroke.Wall
+                    toolbarId.brushName = "wall"
+                    toolbarId.eraseActive = false
                 }
             }
         }
@@ -49,11 +57,12 @@ QC.Frame {
             id: featureButtonId
             objectName: "featureButton"
             text: "Feature"
-            checked: toolbarId.strokeKind === PenStroke.Feature
+            checked: !toolbarId.eraseActive && toolbarId.brushName === "feature"
             QC.ButtonGroup.group: kindGroupId
             onToggled: {
                 if (checked) {
-                    toolbarId.strokeKind = PenStroke.Feature
+                    toolbarId.brushName = "feature"
+                    toolbarId.eraseActive = false
                 }
             }
         }
@@ -62,11 +71,12 @@ QC.Frame {
             id: scrapOutlineButtonId
             objectName: "scrapOutlineButton"
             text: "Scrap Outline"
-            checked: toolbarId.strokeKind === PenStroke.ScrapOutline
+            checked: !toolbarId.eraseActive && toolbarId.brushName === "scrap-outline"
             QC.ButtonGroup.group: kindGroupId
             onToggled: {
                 if (checked) {
-                    toolbarId.strokeKind = PenStroke.ScrapOutline
+                    toolbarId.brushName = "scrap-outline"
+                    toolbarId.eraseActive = false
                 }
             }
         }
@@ -75,17 +85,17 @@ QC.Frame {
             id: eraserButtonId
             objectName: "eraserButton"
             text: "Eraser"
-            checked: toolbarId.strokeKind === PenStroke.Eraser
+            checked: toolbarId.eraseActive
             QC.ButtonGroup.group: kindGroupId
             onToggled: {
                 if (checked) {
-                    toolbarId.strokeKind = PenStroke.Eraser
+                    toolbarId.eraseActive = true
                 }
             }
         }
 
         RowLayout {
-            visible: toolbarId.strokeKind === PenStroke.Eraser
+            visible: toolbarId.eraseActive
             spacing: Theme.tightSpacing
 
             QC.Label { text: "Size" }

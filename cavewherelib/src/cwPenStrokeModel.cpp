@@ -38,24 +38,20 @@ QVariant cwPenStrokeModel::data(const QModelIndex &index, int role) const
     const cwPenStroke &stroke = strokes.at(index.row());
 
     switch (role) {
-    case StrokeRole: return QVariant::fromValue(stroke);
-    case PointsRole: return QVariant::fromValue(stroke.points);
-    case KindRole:   return static_cast<int>(stroke.kind);
-    case WidthRole:  return stroke.width;
-    case ColorRole:  return stroke.color;
-    case IdRole:     return stroke.id;
-    default:         return {};
+    case StrokeRole:    return QVariant::fromValue(stroke);
+    case PointsRole:    return QVariant::fromValue(stroke.points);
+    case BrushNameRole: return stroke.brushName;
+    case IdRole:        return stroke.id;
+    default:            return {};
     }
 }
 
 QHash<int, QByteArray> cwPenStrokeModel::roleNames() const
 {
     return {
-        { StrokeRole, "stroke" },
-        { PointsRole, "points" },
-        { KindRole,   "kind" },
-        { WidthRole,  "strokeWidth" },
-        { ColorRole,  "color" },
-        { IdRole,     "strokeId" }
+        { StrokeRole,    "stroke" },
+        { PointsRole,    "points" },
+        { BrushNameRole, "brushName" },
+        { IdRole,        "strokeId" }
     };
 }

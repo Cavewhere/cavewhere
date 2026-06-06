@@ -499,16 +499,10 @@ message PenPoint {
 }
 
 message PenStroke {
-    enum Kind {
-        Wall = 0;
-        Feature = 1;
-        ScrapOutline = 2;
-    }
-    optional Kind kind = 1;
-    optional double width = 2;
-    optional string colorHex = 3;       // QColor::name(QColor::HexArgb)
+    reserved 1, 2, 3;                   // was kind, width, colorHex (prototype, no longer loaded)
     repeated PenPoint points = 4;
     optional string id = 5;             // UUID
+    optional string brushName = 6;      // resolves to a cwLineBrush via the active palette
 }
 
 message Scale {

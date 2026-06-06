@@ -71,11 +71,11 @@ void populateTripWithChain(cwTrip* trip)
 }
 
 void drawClosedSquare(cwSketch* sketch,
-                      cwPenStroke::Kind kind,
+                      const QString &brushName,
                       double cx, double cy,
                       double halfSize)
 {
-    const int row = sketch->beginStroke(kind, 0.01);
+    const int row = sketch->beginStroke(brushName);
     sketch->appendPoint(row, QPointF(cx - halfSize, cy - halfSize), 1.0, 0);
     sketch->appendPoint(row, QPointF(cx + halfSize, cy - halfSize), 1.0, 0);
     sketch->appendPoint(row, QPointF(cx + halfSize, cy + halfSize), 1.0, 0);
@@ -228,8 +228,8 @@ TEST_CASE("Sketch-derived scraps round trip through a full project save/load",
         // half-size 7 (y range 13..27). Each must produce one scrap.
         // Stations on the polygon edge are excluded by containsPoint, so
         // half-size must strictly exceed the station-to-center distance.
-        drawClosedSquare(sketch, cwPenStroke::ScrapOutline, 0.0, 5.0, 7.0);
-        drawClosedSquare(sketch, cwPenStroke::Wall,         0.0, 20.0, 7.0);
+        drawClosedSquare(sketch, QStringLiteral("scrap-outline"), 0.0, 5.0, 7.0);
+        drawClosedSquare(sketch, QStringLiteral("wall"),         0.0, 20.0, 7.0);
 
         REQUIRE(waitForDerivedScraps(root->scrapManager(), sketch, 2));
 

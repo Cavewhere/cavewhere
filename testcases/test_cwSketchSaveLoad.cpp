@@ -42,10 +42,8 @@ void checkRoundTripEqual(const cwSketchData& in, const cwSketchData& out)
     for (int i = 0; i < in.strokes.size(); ++i) {
         const auto& a = in.strokes.at(i);
         const auto& b = out.strokes.at(i);
-        CHECK(b.kind  == a.kind);
-        CHECK(b.width == a.width);
-        CHECK(b.color.name(QColor::HexArgb) == a.color.name(QColor::HexArgb));
-        CHECK(b.id    == a.id);
+        CHECK(b.brushName == a.brushName);
+        CHECK(b.id        == a.id);
 
         REQUIRE(b.points.size() == a.points.size());
         for (int j = 0; j < a.points.size(); ++j) {

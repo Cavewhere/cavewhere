@@ -13,13 +13,15 @@
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwPaletteSnapshot.h"
 #include "cwPenStroke.h"
 #include "cwSketchScrapOutline.h"
 
 // Pure, stateless conversion of pen strokes into closed scrap outlines.
 //
-// Only Kind::Wall and Kind::ScrapOutline strokes are considered; Feature
-// strokes are dropped (no cwScrap will ever be derived from them).
+// Only strokes whose brush has scrapOutline == true (resolved against the
+// supplied palette snapshot) are considered; the rest are dropped (no cwScrap
+// will ever be derived from them).
 //
 // Every eligible stroke contributes two endpoints to a greedy nearest-neighbor
 // matcher; pairs of endpoints chain strokes head-to-tail into closed rings.
@@ -37,6 +39,7 @@ public:
     // only when a debug overlay or test actually reads the diagnostics.
     static cwSketchScrapDetectResult
     detectWithDiagnostics(const QVector<cwPenStroke> &strokes,
+                          const cwPaletteSnapshot &palette,
                           double simplifyToleranceMeters,
                           double outsetMeters = 0.0);
 
@@ -44,12 +47,14 @@ public:
     // Production callers that don't need rejection tags should use this.
     static QVector<cwSketchScrapOutline>
     detect(const QVector<cwPenStroke> &strokes,
+           const cwPaletteSnapshot &palette,
            double simplifyToleranceMeters,
            double outsetMeters = 0.0);
 
 private:
     static cwSketchScrapDetectResult
     detectImpl(const QVector<cwPenStroke> &strokes,
+               const cwPaletteSnapshot &palette,
                double simplifyToleranceMeters,
                double outsetMeters,
                bool   collectDiagnostics);

@@ -49,17 +49,18 @@ TEST_CASE("cwSketchPainterPathModel defaults", "[cwSketchPainterPathModel]") {
     CHECK(pathAt(model, 0).isEmpty());
 }
 
-TEST_CASE("cwSketchPainterPathModel active fixed-width stroke renders centerline",
+TEST_CASE("cwSketchPainterPathModel active stroke renders centerline at the uniform width",
           "[cwSketchPainterPathModel]") {
     cwSketch sketch;
     cwSketchPainterPathModel model;
+    model.setNonWallStrokeColor(Qt::blue);
     model.setStrokeModel(sketch.strokeModel());
 
     // Set the predicted next row index before beginStroke so the incoming
     // rowsInserted signal sees it as the active row and skips finished-batch
     // routing.
     model.setActiveStrokeIndex(sketch.strokeModel()->rowCount());
-    const int row = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
+    const int row = sketch.beginStroke(QStringLiteral("feature"));
     REQUIRE(row == model.activeStrokeIndex());
 
     sketch.appendPoint(row, cwPenPoint(QPointF(0, 0), 0.5));
@@ -73,32 +74,27 @@ TEST_CASE("cwSketchPainterPathModel active fixed-width stroke renders centerline
     CHECK(path.elementAt(0).type == QPainterPath::MoveToElement);
     CHECK(path.elementAt(1).type == QPainterPath::LineToElement);
     CHECK(path.elementAt(2).type == QPainterPath::LineToElement);
-    CHECK(widthAt(model, 0) == 2.5);
-    CHECK(colorAt(model, 0) == QColor(Qt::black));
+    CHECK(widthAt(model, 0) == kSketchStrokeRenderWidth);
+    // feature is not a scrapOutline brush → non-wall colour.
+    CHECK(colorAt(model, 0) == QColor(Qt::blue));
 }
 
-TEST_CASE("cwSketchPainterPathModel active variable-width stroke tessellates polygon",
+TEST_CASE("cwSketchPainterPathModel colours strokes by brush class",
           "[cwSketchPainterPathModel]") {
     cwSketch sketch;
     cwSketchPainterPathModel model;
+    model.setWallStrokeColor(Qt::black);
+    model.setNonWallStrokeColor(Qt::blue);
     model.setStrokeModel(sketch.strokeModel());
 
     model.setActiveStrokeIndex(sketch.strokeModel()->rowCount());
-    // width <= 0 triggers the variable-width polygon tessellation path.
-    const int row = sketch.beginStroke(cwPenStroke::Feature, -1.0, Qt::red);
-    REQUIRE(row == model.activeStrokeIndex());
-
-    sketch.appendPoint(row, cwPenPoint(QPointF(0, 0),  0.5));
-    sketch.appendPoint(row, cwPenPoint(QPointF(10, 0), 0.7));
-    sketch.appendPoint(row, cwPenPoint(QPointF(20, 0), 0.5));
+    const int row = sketch.beginStroke(QStringLiteral("wall"));
+    sketch.appendPoint(row, cwPenPoint(QPointF(0, 0), 0.5));
+    sketch.appendPoint(row, cwPenPoint(QPointF(10, 10), 0.5));
     flush();
 
-    REQUIRE(model.rowCount() == 1);
-    const QPainterPath path = pathAt(model, 0);
-    CHECK_FALSE(path.isEmpty());
-    CHECK(path.elementCount() > 3);
-    CHECK(widthAt(model, 0) == -1.0);
-    CHECK(colorAt(model, 0) == QColor(Qt::red));
+    // wall is a scrapOutline brush → wall colour.
+    CHECK(colorAt(model, 0) == QColor(Qt::black));
 }
 
 TEST_CASE("cwSketchPainterPathModel finalizes stroke when active index moves on",
@@ -109,14 +105,14 @@ TEST_CASE("cwSketchPainterPathModel finalizes stroke when active index moves on"
 
     // Stroke A: active, then finalized.
     model.setActiveStrokeIndex(sketch.strokeModel()->rowCount());
-    const int a = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
+    const int a = sketch.beginStroke(QStringLiteral("feature"));
     sketch.appendPoint(a, cwPenPoint(QPointF(0, 0), 0.5));
     sketch.appendPoint(a, cwPenPoint(QPointF(10, 10), 0.5));
     flush();
 
     // New stroke B becomes active, which should push A into a finished batch.
     model.setActiveStrokeIndex(sketch.strokeModel()->rowCount());
-    const int b = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
+    const int b = sketch.beginStroke(QStringLiteral("feature"));
     sketch.appendPoint(b, cwPenPoint(QPointF(100, 100), 0.5));
     sketch.appendPoint(b, cwPenPoint(QPointF(110, 110), 0.5));
     flush();
@@ -126,15 +122,17 @@ TEST_CASE("cwSketchPainterPathModel finalizes stroke when active index moves on"
     CHECK_FALSE(pathAt(model, 1).isEmpty()); // finished batch containing A
 }
 
-TEST_CASE("cwSketchPainterPathModel batches finished strokes by width+color",
+TEST_CASE("cwSketchPainterPathModel batches finished strokes by colour",
           "[cwSketchPainterPathModel]") {
     cwSketch sketch;
     cwSketchPainterPathModel model;
+    model.setWallStrokeColor(Qt::black);
+    model.setNonWallStrokeColor(Qt::blue);
     model.setStrokeModel(sketch.strokeModel());
 
-    // Three finished strokes: same kind, same width, same color → one batch.
+    // Three finished feature strokes: same brush class → same colour → one batch.
     for (int i = 0; i < 3; ++i) {
-        const int r = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
+        const int r = sketch.beginStroke(QStringLiteral("feature"));
         sketch.appendPoint(r, cwPenPoint(QPointF(i * 50.0,  0.0), 0.5));
         sketch.appendPoint(r, cwPenPoint(QPointF(i * 50.0, 10.0), 0.5));
     }
@@ -142,29 +140,20 @@ TEST_CASE("cwSketchPainterPathModel batches finished strokes by width+color",
 
     // Active row 0 (empty, no active stroke set) + 1 finished batch = 2 rows.
     REQUIRE(model.rowCount() == 2);
-    CHECK(widthAt(model, 1) == 2.5);
-    CHECK(colorAt(model, 1) == QColor(Qt::black));
+    CHECK(colorAt(model, 1) == QColor(Qt::blue));
 
-    // Add a stroke with a distinct color → new batch.
-    const int r = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::red);
+    // Add a wall stroke (different brush class → different colour) → new batch.
+    const int r = sketch.beginStroke(QStringLiteral("wall"));
     sketch.appendPoint(r, cwPenPoint(QPointF(0, 100), 0.5));
     sketch.appendPoint(r, cwPenPoint(QPointF(10, 110), 0.5));
     flush();
 
     REQUIRE(model.rowCount() == 3);
-    // Either batch can be at row 1 or row 2; check both colors are present.
+    // Either batch can be at row 1 or row 2; check both colours are present.
     const QColor c1 = colorAt(model, 1);
     const QColor c2 = colorAt(model, 2);
+    CHECK((c1 == QColor(Qt::blue)  || c2 == QColor(Qt::blue)));
     CHECK((c1 == QColor(Qt::black) || c2 == QColor(Qt::black)));
-    CHECK((c1 == QColor(Qt::red)   || c2 == QColor(Qt::red)));
-
-    // Add a stroke with a distinct width → new batch.
-    const int r2 = sketch.beginStroke(cwPenStroke::Feature, 5.0, Qt::black);
-    sketch.appendPoint(r2, cwPenPoint(QPointF(0, 200), 0.5));
-    sketch.appendPoint(r2, cwPenPoint(QPointF(10, 210), 0.5));
-    flush();
-
-    REQUIRE(model.rowCount() == 4);
 }
 
 TEST_CASE("cwSketchPainterPathModel setStrokeModel(nullptr) clears state",
@@ -173,7 +162,7 @@ TEST_CASE("cwSketchPainterPathModel setStrokeModel(nullptr) clears state",
     cwSketchPainterPathModel model;
     model.setStrokeModel(sketch.strokeModel());
 
-    const int r = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
+    const int r = sketch.beginStroke(QStringLiteral("feature"));
     sketch.appendPoint(r, cwPenPoint(QPointF(0, 0), 0.5));
     sketch.appendPoint(r, cwPenPoint(QPointF(10, 10), 0.5));
     flush();
@@ -191,7 +180,7 @@ TEST_CASE("cwSketchPainterPathModel modelReset rebuilds from source",
     cwSketchPainterPathModel model;
     model.setStrokeModel(sketch.strokeModel());
 
-    const int r = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
+    const int r = sketch.beginStroke(QStringLiteral("feature"));
     sketch.appendPoint(r, cwPenPoint(QPointF(0, 0), 0.5));
     sketch.appendPoint(r, cwPenPoint(QPointF(10, 10), 0.5));
     flush();
@@ -211,7 +200,7 @@ TEST_CASE("cwSketchPainterPathModel dataChanged coalescing updates active path",
     model.setStrokeModel(sketch.strokeModel());
 
     model.setActiveStrokeIndex(sketch.strokeModel()->rowCount());
-    const int r = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
+    const int r = sketch.beginStroke(QStringLiteral("feature"));
 
     QSignalSpy dataSpy(&model, &QAbstractItemModel::dataChanged);
 

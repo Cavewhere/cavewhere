@@ -9,20 +9,21 @@
 #include "cwSketchPainterPathModel.h"
 #include "cwSketchStrokeGeometry.h"
 #include "cwPenStroke.h"
+#include "cwSymbologyPaletteData.h"
+#include "cwSymbologyPaletteSeed.h"
 
 //Qt includes
 #include <QPolygonF>
 #include <cmath>
 
 namespace {
-constexpr char kPointsRoleName[] = "points";
-constexpr char kWidthRoleName[]  = "strokeWidth";
-constexpr char kColorRoleName[]  = "color";
-constexpr char kKindRoleName[]   = "kind";
+constexpr char kPointsRoleName[]    = "points";
+constexpr char kBrushNameRoleName[] = "brushName";
 } // namespace
 
 cwSketchPainterPathModel::cwSketchPainterPathModel(QObject *parent)
-    : cwAbstractSketchPainterPathModel(parent)
+    : cwAbstractSketchPainterPathModel(parent),
+      m_snapshot(cwSymbologyPaletteSeed::create().snapshot())
 {
     connect(this, &cwSketchPainterPathModel::activeStrokeIndexChanged,
             this, &cwSketchPainterPathModel::onActiveStrokeIndexChanged);
@@ -120,13 +121,11 @@ void cwSketchPainterPathModel::setStrokeModel(QAbstractItemModel *model)
 void cwSketchPainterPathModel::resolveRoles()
 {
     const auto names = m_strokeModel->roleNames();
-    m_pointsRole = names.key(kPointsRoleName, -1);
-    m_widthRole  = names.key(kWidthRoleName,  -1);
-    m_colorRole  = names.key(kColorRoleName,  -1);
-    m_kindRole   = names.key(kKindRoleName,   -1);
-    if (m_pointsRole < 0 || m_widthRole < 0 || m_colorRole < 0) {
+    m_pointsRole    = names.key(kPointsRoleName,    -1);
+    m_brushNameRole = names.key(kBrushNameRoleName, -1);
+    if (m_pointsRole < 0 || m_brushNameRole < 0) {
         qWarning("cwSketchPainterPathModel: source model is missing required "
-                 "role names (points/strokeWidth/color)");
+                 "role names (points/brushName)");
     }
 }
 
@@ -141,29 +140,18 @@ QVector<cwPenPoint> cwSketchPainterPathModel::strokePoints(int row) const
 
 double cwSketchPainterPathModel::strokeWidth(int row) const
 {
-    if (!m_strokeModel || m_widthRole < 0) {
-        return 0.0;
-    }
-    return m_strokeModel->index(row, 0).data(m_widthRole).toDouble();
+    Q_UNUSED(row);
+    return kSketchStrokeRenderWidth;
 }
 
 QColor cwSketchPainterPathModel::strokeColor(int row) const
 {
-    if (!m_strokeModel || m_colorRole < 0) {
+    if (!m_strokeModel || m_brushNameRole < 0) {
         return m_wallStrokeColor;
     }
-    QColor c = m_strokeModel->index(row, 0).data(m_colorRole).value<QColor>();
-    return c.isValid() ? c : defaultColorForKind(row);
-}
-
-QColor cwSketchPainterPathModel::defaultColorForKind(int row) const
-{
-    const int kind = (m_strokeModel && m_kindRole >= 0)
-        ? m_strokeModel->index(row, 0).data(m_kindRole).toInt()
-        : static_cast<int>(cwPenStroke::Wall);
-    return (kind == cwPenStroke::Wall)
-        ? m_wallStrokeColor
-        : m_nonWallStrokeColor;
+    const QString name = m_strokeModel->index(row, 0).data(m_brushNameRole).toString();
+    const bool wallClass = m_snapshot.producesScrapOutline(name);
+    return wallClass ? m_wallStrokeColor : m_nonWallStrokeColor;
 }
 
 cwAbstractSketchPainterPathModel::Path

@@ -21,6 +21,7 @@
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwAbstractSketchPainterPathModel.h"
+#include "cwPaletteSnapshot.h"
 #include "cwPenPoint.h"
 
 class CAVEWHERE_LIB_EXPORT cwSketchPainterPathModel : public cwAbstractSketchPainterPathModel
@@ -45,7 +46,9 @@ public:
     void setActiveStrokeIndex(int index) { m_activeStrokeIndex = index; }
     QBindable<int> bindableActiveStrokeIndex() { return &m_activeStrokeIndex; }
 
-    // Fallback colors when a stroke's `color` role is invalid, keyed by `kind`.
+    // Theme colors for the two stroke classes. A stroke's brush picks between
+    // them via its scrapOutline flag (wall-class brushes use wallStrokeColor).
+    // Per-brush ink colours replace this in commit 5.
     QColor wallStrokeColor() const { return m_wallStrokeColor; }
     void setWallStrokeColor(const QColor &color);
 
@@ -81,16 +84,17 @@ private:
 
     // Roles are resolved by name so a proxy model inserted between cwPenStrokeModel
     // and this model still works (matches the planned cwMovingAveragePenStrokeProxy).
-    int m_pointsRole = -1;
-    int m_widthRole  = -1;
-    int m_colorRole  = -1;
-    int m_kindRole   = -1;
+    int m_pointsRole    = -1;
+    int m_brushNameRole = -1;
     void resolveRoles();
+
+    // Resolves stroke brushNames to brushes. Seeded with the built-in palette;
+    // commit 5 threads in the sketch's active-palette snapshot.
+    cwPaletteSnapshot m_snapshot;
 
     QVector<cwPenPoint> strokePoints(int row) const;
     double              strokeWidth(int row) const;
     QColor              strokeColor(int row) const;
-    QColor              defaultColorForKind(int row) const;
     void                scheduleColorRebuild();
 
     QColor m_wallStrokeColor    = Qt::black;

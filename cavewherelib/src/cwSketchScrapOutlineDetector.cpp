@@ -28,9 +28,9 @@ Q_LOGGING_CATEGORY(lcSketchDetector, "cw.sketch.detector", QtInfoMsg)
 
 namespace {
 
-bool kindProducesOutline(cwPenStroke::Kind kind)
+bool brushProducesOutline(const cwPenStroke &stroke, const cwPaletteSnapshot &palette)
 {
-    return kind == cwPenStroke::Wall || kind == cwPenStroke::ScrapOutline;
+    return palette.producesScrapOutline(stroke.brushName);
 }
 
 QPolygonF strokeToPolygon(const cwPenStroke &stroke)
@@ -274,23 +274,27 @@ constexpr double kSeamMergeEps = 0.05;
 
 cwSketchScrapDetectResult
 cwSketchScrapOutlineDetector::detectWithDiagnostics(const QVector<cwPenStroke> &strokes,
+                                                    const cwPaletteSnapshot &palette,
                                                     double simplifyToleranceMeters,
                                                     double outsetMeters)
 {
-    return detectImpl(strokes, simplifyToleranceMeters, outsetMeters, /*collectDiagnostics=*/true);
+    return detectImpl(strokes, palette, simplifyToleranceMeters, outsetMeters,
+                      /*collectDiagnostics=*/true);
 }
 
 QVector<cwSketchScrapOutline>
 cwSketchScrapOutlineDetector::detect(const QVector<cwPenStroke> &strokes,
+                                     const cwPaletteSnapshot &palette,
                                      double simplifyToleranceMeters,
                                      double outsetMeters)
 {
-    return detectImpl(strokes, simplifyToleranceMeters, outsetMeters,
+    return detectImpl(strokes, palette, simplifyToleranceMeters, outsetMeters,
                       /*collectDiagnostics=*/false).outlines;
 }
 
 cwSketchScrapDetectResult
 cwSketchScrapOutlineDetector::detectImpl(const QVector<cwPenStroke> &strokes,
+                                         const cwPaletteSnapshot &palette,
                                          double simplifyToleranceMeters,
                                          double outsetMeters,
                                          bool   collectDiagnostics)
@@ -305,7 +309,7 @@ cwSketchScrapOutlineDetector::detectImpl(const QVector<cwPenStroke> &strokes,
         result.rawStrokesById.reserve(strokes.size());
     }
     for (const auto &s : strokes) {
-        if (!kindProducesOutline(s.kind)) {
+        if (!brushProducesOutline(s, palette)) {
             continue;
         }
         QPolygonF poly = strokeToPolygon(s);
@@ -321,7 +325,7 @@ cwSketchScrapOutlineDetector::detectImpl(const QVector<cwPenStroke> &strokes,
             result.rawStrokesById.insert(s.id, poly);
         }
         qCDebug(lcSketchDetector) << "intake stroke" << s.id
-                                  << "kind" << s.kind
+                                  << "brush" << s.brushName
                                   << "points" << poly.size()
                                   << "first" << poly.first()
                                   << "last" << poly.last();

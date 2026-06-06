@@ -35,6 +35,8 @@
 #include "cwSaveLoad.h"
 #include "cwSketch.h"
 #include "cwPenStrokeModel.h"
+#include "cwPaletteSnapshot.h"
+#include "cwLineBrush.h"
 #include "cwSurveyNoteSketchModel.h"
 #include "cwSketchScrapOutlineDetector.h"
 #include "cwSketchScrapOutline.h"
@@ -823,14 +825,16 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
         return;
     }
 
-    // Outset the detected outline by half the widest wall / scrap-outline
-    // stroke so the rasterized texture and triangulated mesh include the
-    // full pen thickness instead of clipping at the stroke centerline.
+    // Outset the detected outline by half the rendered stroke width so the
+    // rasterized texture and triangulated mesh include the full pen thickness
+    // instead of clipping at the stroke centerline. Commit 5's palette-resolved
+    // widths will replace the uniform kSketchStrokeRenderWidth here.
+    const cwPaletteSnapshot palette = sketch->paletteSnapshot();
     const double paperScale = sketch->mapScale() ? sketch->mapScale()->scale() : 0.0;
     double maxWidthPixels = 0.0;
     for (const auto &s : sketch->strokes()) {
-        if (s.kind == cwPenStroke::Wall || s.kind == cwPenStroke::ScrapOutline) {
-            maxWidthPixels = std::max(maxWidthPixels, s.width);
+        if (palette.producesScrapOutline(s.brushName)) {
+            maxWidthPixels = std::max(maxWidthPixels, kSketchStrokeRenderWidth);
         }
     }
     const double ppm = cwSketchPainter::pixelsPerMeterFromPaperScale(
@@ -848,6 +852,7 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
     if (diagnosticsEnabled) {
         auto detectResult = cwSketchScrapOutlineDetector::detectWithDiagnostics(
             sketch->strokes(),
+            palette,
             kSketchSimplifyToleranceMeters,
             outsetMeters);
         detectorOutlines = std::move(detectResult.outlines);
@@ -856,6 +861,7 @@ void cwScrapManager::updateDerivedScrapsForSketch(cwSketch* sketch)
     } else {
         detectorOutlines = cwSketchScrapOutlineDetector::detect(
             sketch->strokes(),
+            palette,
             kSketchSimplifyToleranceMeters,
             outsetMeters);
     }

@@ -140,24 +140,19 @@ QImage cwSketchManager::renderIconFromSnapshot(const QVector<cwPenStroke>& strok
     // render at their intended thickness.
     const double penScale = zoom > 0.0 ? 1.0 / zoom : 1.0;
 
+    // Thumbnails ink every stroke black at a uniform width. Per-brush colour
+    // and width arrive with commit 5's palette-resolved render pipeline.
     for (const auto& stroke : strokes) {
         QPainterPath path;
-        cwSketchStrokeGeometry::buildPath(path, stroke.points, stroke.width);
+        cwSketchStrokeGeometry::buildPath(path, stroke.points, kSketchStrokeRenderWidth);
         if (path.isEmpty()) {
             continue;
         }
-        const QColor color = stroke.color.isValid() ? stroke.color : QColor(Qt::black);
-        if (stroke.width > 0.0) {
-            QPen pen(color, stroke.width * penScale, Qt::SolidLine,
-                     Qt::RoundCap, Qt::RoundJoin);
-            painter.setPen(pen);
-            painter.setBrush(Qt::NoBrush);
-            painter.drawPath(path);
-        } else {
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(color);
-            painter.drawPath(path);
-        }
+        QPen pen(QColor(Qt::black), kSketchStrokeRenderWidth * penScale, Qt::SolidLine,
+                 Qt::RoundCap, Qt::RoundJoin);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(path);
     }
 
     painter.end();

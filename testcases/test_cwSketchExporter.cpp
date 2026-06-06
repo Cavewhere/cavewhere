@@ -17,12 +17,12 @@
 
 namespace {
 void seedSketch(cwSketch &sketch) {
-    const int a = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
+    const int a = sketch.beginStroke(QStringLiteral("feature"));
     sketch.appendPoint(a, cwPenPoint(QPointF(0, 0),   0.5));
     sketch.appendPoint(a, cwPenPoint(QPointF(50, 0),  0.5));
     sketch.appendPoint(a, cwPenPoint(QPointF(50, 50), 0.5));
 
-    const int b = sketch.beginStroke(cwPenStroke::Wall, 5.0, Qt::red);
+    const int b = sketch.beginStroke(QStringLiteral("wall"));
     sketch.appendPoint(b, cwPenPoint(QPointF(0, 50),   0.5));
     sketch.appendPoint(b, cwPenPoint(QPointF(0, 0),    0.5));
 }
@@ -93,7 +93,7 @@ TEST_CASE("cwSketchExporter handles an empty sketch without crashing",
 TEST_CASE("cwSketchExporter Y-flips world-up strokes into paper coordinates",
           "[cwSketchExporter]") {
     cwSketch sketch;
-    const int stroke = sketch.beginStroke(cwPenStroke::Feature, 2.5, Qt::black);
+    const int stroke = sketch.beginStroke(QStringLiteral("feature"));
     sketch.appendPoint(stroke, cwPenPoint(QPointF(0.0, 10.0), 0.5));
     sketch.appendPoint(stroke, cwPenPoint(QPointF(1.0, 10.0), 0.5));
     sketch.endStroke();

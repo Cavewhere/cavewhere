@@ -66,7 +66,7 @@ Item {
         function selectEraser() {
             const toolbar = findChild(rootId, "sketchToolbar")
             verify(toolbar !== null)
-            toolbar.strokeKind = PenStroke.Eraser
+            toolbar.eraseActive = true
             // Widen the eraser so a handful of mouse samples reliably cover
             // a stroke's sample points regardless of pixelDensity.
             toolbar.eraserRadius = 5.0
@@ -75,7 +75,8 @@ Item {
 
         function resetToolbarToPen() {
             const toolbar = findChild(rootId, "sketchToolbar")
-            toolbar.strokeKind = PenStroke.Wall
+            toolbar.eraseActive = false
+            toolbar.brushName = "wall"
         }
 
         function test_eraserDragMergesIntoOneUndoStep() {

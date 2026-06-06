@@ -134,9 +134,9 @@ struct Fixture {
     }
 
     // Draws a small closed square around (cx, cy) in trip-local meters.
-    void drawClosedSquareAt(cwPenStroke::Kind kind, double cx, double cy, double halfSize = 2.0)
+    void drawClosedSquareAt(const QString &brushName, double cx, double cy, double halfSize = 2.0)
     {
-        const int row = sketch->beginStroke(kind, 0.01);
+        const int row = sketch->beginStroke(brushName);
         sketch->appendPoint(row, QPointF(cx - halfSize, cy - halfSize), 1.0, 0);
         sketch->appendPoint(row, QPointF(cx + halfSize, cy - halfSize), 1.0, 0);
         sketch->appendPoint(row, QPointF(cx + halfSize, cy + halfSize), 1.0, 0);
@@ -146,9 +146,9 @@ struct Fixture {
     }
 
     // Draws an open polyline from a list of points.
-    void drawPolyline(cwPenStroke::Kind kind, const QVector<QPointF>& points)
+    void drawPolyline(const QString &brushName, const QVector<QPointF>& points)
     {
-        const int row = sketch->beginStroke(kind, 0.01);
+        const int row = sketch->beginStroke(brushName);
         for (const auto& p : points) {
             sketch->appendPoint(row, p, 1.0, 0);
         }
@@ -167,7 +167,7 @@ TEST_CASE("Sketch-derived scrap anchors to trip-local stations inside its polygo
     // Square around (0, 5) — half-size 7 m, so y-range is -2..12 which
     // contains a1 (y=0) and a2 (y=10). a3 at y=20 and a4 at y=30 are
     // outside the polygon and must not be anchored.
-    f.drawClosedSquareAt(cwPenStroke::ScrapOutline, 0.0, 5.0, 7.0);
+    f.drawClosedSquareAt(QStringLiteral("scrap-outline"), 0.0, 5.0, 7.0);
 
     REQUIRE(f.sketchDerivedScrapCount() == 1);
     auto* scrap = f.firstSketchScrap();
@@ -205,7 +205,7 @@ TEST_CASE("Outline with no nearby stations produces no derived scrap",
 
     // Far from every station (stations live on the y-axis between 0
     // and 30).
-    f.drawClosedSquareAt(cwPenStroke::ScrapOutline, 500.0, 500.0, 1.0);
+    f.drawClosedSquareAt(QStringLiteral("scrap-outline"), 500.0, 500.0, 1.0);
 
     CHECK(f.sketchDerivedScrapCount() == 0);
 
@@ -225,7 +225,7 @@ TEST_CASE("Closed Wall stroke around stations produces an anchored scrap",
     Fixture f;
     REQUIRE(f.waitForLinePlot());
 
-    f.drawClosedSquareAt(cwPenStroke::Wall, 0.0, 15.0, 6.0);
+    f.drawClosedSquareAt(QStringLiteral("wall"), 0.0, 15.0, 6.0);
 
     REQUIRE(f.sketchDerivedScrapCount() == 1);
     auto* scrap = f.firstSketchScrap();
@@ -243,7 +243,7 @@ TEST_CASE("Sketch-derived scrap rejects stations that lie outside its polygon "
     // Square around (0, 5) half-size 3 m → polygon covers y = 2..8.
     // No station lives in that range (a1=0, a2=10, a3=20, a4=30), so the
     // outline drops to the empty-station guard.
-    f.drawClosedSquareAt(cwPenStroke::ScrapOutline, 0.0, 5.0, 3.0);
+    f.drawClosedSquareAt(QStringLiteral("scrap-outline"), 0.0, 5.0, 3.0);
 
     CHECK(f.sketchDerivedScrapCount() == 0);
 }
@@ -256,7 +256,7 @@ TEST_CASE("Sketch-derived scrap keeps only stations inside the polygon",
 
     // Square around (0, 15) with half-size 6 m → polygon covers y = 9..21.
     // a2 (y=10) and a3 (y=20) are inside; a1 (y=0) and a4 (y=30) are out.
-    f.drawClosedSquareAt(cwPenStroke::ScrapOutline, 0.0, 15.0, 6.0);
+    f.drawClosedSquareAt(QStringLiteral("scrap-outline"), 0.0, 15.0, 6.0);
 
     REQUIRE(f.sketchDerivedScrapCount() == 1);
     auto* scrap = f.firstSketchScrap();
@@ -281,9 +281,9 @@ TEST_CASE("Two-stroke chain around stations produces one anchored scrap",
     // Two open L-shaped walls whose endpoints meet at opposite corners
     // of a rectangle covering y = -3..13, containing a1 (y=0) and a2
     // (y=10). The nearest-endpoint matcher chains them into one outline.
-    f.drawPolyline(cwPenStroke::Wall,
+    f.drawPolyline(QStringLiteral("wall"),
                    {{-3.0, -3.0}, {3.0, -3.0}, {3.0, 13.0}});
-    f.drawPolyline(cwPenStroke::Wall,
+    f.drawPolyline(QStringLiteral("wall"),
                    {{3.0, 13.0}, {-3.0, 13.0}, {-3.0, -3.0}});
 
     // Drain deleteLater for the single-stroke scrap retired when stroke 2
@@ -311,9 +311,9 @@ TEST_CASE("Chain scrap identity is preserved across unrelated stroke edits",
     Fixture f;
     REQUIRE(f.waitForLinePlot());
 
-    f.drawPolyline(cwPenStroke::Wall,
+    f.drawPolyline(QStringLiteral("wall"),
                    {{-3.0, -3.0}, {3.0, -3.0}, {3.0, 13.0}});
-    f.drawPolyline(cwPenStroke::Wall,
+    f.drawPolyline(QStringLiteral("wall"),
                    {{3.0, 13.0}, {-3.0, 13.0}, {-3.0, -3.0}});
 
     QCoreApplication::processEvents();
@@ -326,7 +326,7 @@ TEST_CASE("Chain scrap identity is preserved across unrelated stroke edits",
     // A Feature stroke triggers a rebuild but never contributes to the
     // outline — the chain's memberStrokeIds is unchanged, so the tracked
     // scrap pointer must survive.
-    f.drawPolyline(cwPenStroke::Feature,
+    f.drawPolyline(QStringLiteral("feature"),
                    {{100.0, 100.0}, {101.0, 100.0}, {101.0, 101.0}});
 
     QCoreApplication::processEvents();

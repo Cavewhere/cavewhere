@@ -20,24 +20,20 @@ TEST_CASE("cwPenStrokeModel exposes stroke rows with expected roles", "[cwPenStr
     const auto roles = model->roleNames();
     CHECK(roles.contains(cwPenStrokeModel::StrokeRole));
     CHECK(roles.contains(cwPenStrokeModel::PointsRole));
-    CHECK(roles.contains(cwPenStrokeModel::KindRole));
-    CHECK(roles.contains(cwPenStrokeModel::WidthRole));
-    CHECK(roles.contains(cwPenStrokeModel::ColorRole));
+    CHECK(roles.contains(cwPenStrokeModel::BrushNameRole));
     CHECK(roles.contains(cwPenStrokeModel::IdRole));
 
     CHECK(model->rowCount() == 0);
 
     QSignalSpy inserted(model, &QAbstractItemModel::rowsInserted);
-    const int row = sketch.beginStroke(cwPenStroke::Wall, 5.0, QColor("#ff0000"));
+    const int row = sketch.beginStroke(QStringLiteral("wall"));
     CHECK(row == 0);
     CHECK(inserted.count() == 1);
     CHECK(model->rowCount() == 1);
 
     const QModelIndex idx = model->index(0);
-    CHECK(model->data(idx, cwPenStrokeModel::WidthRole).toDouble() == 5.0);
-    CHECK(model->data(idx, cwPenStrokeModel::KindRole).toInt() ==
-          static_cast<int>(cwPenStroke::Wall));
-    CHECK(model->data(idx, cwPenStrokeModel::ColorRole).value<QColor>() == QColor("#ff0000"));
+    CHECK(model->data(idx, cwPenStrokeModel::BrushNameRole).toString()
+          == QStringLiteral("wall"));
 }
 
 TEST_CASE("cwPenStrokeModel coalesces dataChanged across appendPoint calls",
@@ -45,7 +41,7 @@ TEST_CASE("cwPenStrokeModel coalesces dataChanged across appendPoint calls",
     cwSketch sketch;
     auto *model = sketch.strokeModel();
 
-    const int row = sketch.beginStroke(cwPenStroke::Feature, 2.0);
+    const int row = sketch.beginStroke(QStringLiteral("feature"));
 
     QSignalSpy changed(model, &QAbstractItemModel::dataChanged);
 
@@ -76,7 +72,7 @@ TEST_CASE("cwMovingAveragePenStrokeProxy returns raw for short strokes and "
     cwMovingAveragePenStrokeProxy proxy;
     proxy.setSourceModel(sketch.strokeModel());
 
-    const int row = sketch.beginStroke(cwPenStroke::Feature, 1.0);
+    const int row = sketch.beginStroke(QStringLiteral("feature"));
     sketch.appendPoint(row, cwPenPoint(QPointF(0, 0), 0.5));
     sketch.appendPoint(row, cwPenPoint(QPointF(10, 0), 0.5));
     QCoreApplication::processEvents();
@@ -97,7 +93,7 @@ TEST_CASE("cwMovingAveragePenStrokeProxy smooths a 5-point stroke",
     proxy.setSourceModel(sketch.strokeModel());
     proxy.setWindowSize(1);
 
-    const int row = sketch.beginStroke(cwPenStroke::Feature, 1.0);
+    const int row = sketch.beginStroke(QStringLiteral("feature"));
     for (int i = 0; i < 5; ++i) {
         sketch.appendPoint(row, cwPenPoint(QPointF(i, 0), 0.5));
     }

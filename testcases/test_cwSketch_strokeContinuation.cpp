@@ -46,10 +46,10 @@ void attach(cwSketch &sketch, UnitScale &unit)
 }
 
 // Draws a horizontal stroke along y=`y` at x=0,1,2,... Returns its row index.
-int drawHorizontalStroke(cwSketch &sketch, cwPenStroke::Kind kind,
-                         double width, double y, int pointCount)
+int drawHorizontalStroke(cwSketch &sketch, const QString &brushName,
+                         double y, int pointCount)
 {
-    const int row = sketch.beginStroke(kind, width, QColor("#abcdef"));
+    const int row = sketch.beginStroke(brushName);
     for (int i = 0; i < pointCount; ++i) {
         sketch.appendPoint(row, cwPenPoint(QPointF(i, y), 0.5));
     }
@@ -66,13 +66,13 @@ TEST_CASE("findContinuationTarget returns -1 when no stroke is in proximity",
     attach(sketch, unit);
 
     // No strokes at all.
-    auto empty = sketch.findContinuationTarget(cwPenStroke::Wall, QPointF(0, 0), 0.0);
+    auto empty = sketch.findContinuationTarget(QStringLiteral("wall"), QPointF(0, 0), 0.0);
     CHECK(empty.strokeIndex == -1);
 
-    // Stroke width 1.0 → threshold 0.5m. Pen 5m away misses.
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 1.0, 0.0, 5);
+    // Uniform render width 2.5 → threshold 1.25m. Pen 5m away misses.
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 5);
     auto farAway = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(2.0, 5.0), 0.0);
+        QStringLiteral("wall"), QPointF(2.0, 5.0), 0.0);
     CHECK(farAway.strokeIndex == -1);
 }
 
@@ -82,18 +82,18 @@ TEST_CASE("findContinuationTarget picks the nearest qualifying segment",
     UnitScale unit;
     attach(sketch, unit);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 5);   // index 0, threshold 1.0m
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.5, 5);   // index 1 (closer)
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 5);   // index 0, threshold 1.25m
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.5, 5);   // index 1 (closer)
 
     auto hit = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(2.0, 0.3), 0.0);
+        QStringLiteral("wall"), QPointF(2.0, 0.3), 0.0);
     REQUIRE(hit.strokeIndex == 1);
-    CHECK(hit.strokeWidth == Catch::Approx(2.0));
+    CHECK(hit.strokeWidth == Catch::Approx(kSketchStrokeRenderWidth));
 }
 
 TEST_CASE("findContinuationTarget hit threshold is zoom-invariant in world meters",
           "[cwSketch][continuation]") {
-    // stroke.width is a paper-pixel quantity, and its rendered on-screen
+    // The render width is a paper-pixel quantity, and its rendered on-screen
     // thickness grows with user zoom. The world-meter hit threshold must
     // therefore stay constant (= rendered-inner-half on screen) — if we
     // had divided by the zoom-aware pxPerMeter, the world threshold would
@@ -103,72 +103,59 @@ TEST_CASE("findContinuationTarget hit threshold is zoom-invariant in world meter
     UnitScale unit;
     attach(sketch, unit);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 4.0, 0.0, 5);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 5);
 
-    // World threshold = 0.5 × 4.0 / paperPpm(1.0) = 2.0 m at *any* zoom.
+    // World threshold = 0.5 × 2.5 / paperPpm(1.0) = 1.25 m at *any* zoom.
     // Pen 0.5 m off centerline must hit at both zoom 1 and zoom 4.
     sketch.viewState()->setZoom(1.0);
     auto hitAtOne = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(2.0, 0.5), 0.0);
+        QStringLiteral("wall"), QPointF(2.0, 0.5), 0.0);
     CHECK(hitAtOne.strokeIndex == 0);
 
     sketch.viewState()->setZoom(4.0);
     auto hitAtFour = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(2.0, 0.5), 0.0);
+        QStringLiteral("wall"), QPointF(2.0, 0.5), 0.0);
     CHECK(hitAtFour.strokeIndex == 0);
     // (With the old zoom-aware formula the threshold at zoom=4 would have
     // collapsed to 0.25 m and this same pen position would have missed.)
 }
 
-TEST_CASE("findContinuationTarget proximity is exactly 0.5 × strokeWidth / paperPpm",
+TEST_CASE("findContinuationTarget proximity is exactly 0.5 × renderWidth / paperPpm",
           "[cwSketch][continuation]") {
     cwSketch sketch;
     UnitScale unit;
     attach(sketch, unit);
 
-    // paperPpm is tuned to 1 in UnitScale; stroke width 4.0 → threshold
-    // 2.0 m (= the outer edge of the rendered stroke).
-    //  - 1.99m off → hit
-    //  - 2.01m off → miss
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 4.0, 0.0, 5);
+    // paperPpm is tuned to 1 in UnitScale; uniform render width 2.5 →
+    // threshold 1.25 m (= the outer edge of the rendered stroke).
+    //  - 1.24m off → hit
+    //  - 1.26m off → miss
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 5);
 
     auto inside = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(2.0, 1.99), 0.0);
+        QStringLiteral("wall"), QPointF(2.0, 1.24), 0.0);
     CHECK(inside.strokeIndex == 0);
 
     auto outside = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(2.0, 2.01), 0.0);
+        QStringLiteral("wall"), QPointF(2.0, 1.26), 0.0);
     CHECK(outside.strokeIndex == -1);
 }
 
-TEST_CASE("findContinuationTarget ignores Eraser strokes",
+TEST_CASE("findContinuationTarget requires same brush",
           "[cwSketch][continuation]") {
     cwSketch sketch;
     UnitScale unit;
     attach(sketch, unit);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Eraser, 4.0, 0.0, 5);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 5);
 
-    auto result = sketch.findContinuationTarget(
-        cwPenStroke::Eraser, QPointF(2.0, 0.0), 0.0);
-    CHECK(result.strokeIndex == -1);
-}
+    auto wrongBrush = sketch.findContinuationTarget(
+        QStringLiteral("scrap-outline"), QPointF(2.0, 0.0), 0.0);
+    CHECK(wrongBrush.strokeIndex == -1);
 
-TEST_CASE("findContinuationTarget requires same kind",
-          "[cwSketch][continuation]") {
-    cwSketch sketch;
-    UnitScale unit;
-    attach(sketch, unit);
-
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 4.0, 0.0, 5);
-
-    auto wrongKind = sketch.findContinuationTarget(
-        cwPenStroke::ScrapOutline, QPointF(2.0, 0.0), 0.0);
-    CHECK(wrongKind.strokeIndex == -1);
-
-    auto sameKind = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(2.0, 0.0), 0.0);
-    CHECK(sameKind.strokeIndex == 0);
+    auto sameBrush = sketch.findContinuationTarget(
+        QStringLiteral("wall"), QPointF(2.0, 0.0), 0.0);
+    CHECK(sameBrush.strokeIndex == 0);
 }
 
 TEST_CASE("armProbation commits when hit rate exceeds threshold",
@@ -179,7 +166,7 @@ TEST_CASE("armProbation commits when hit rate exceeds threshold",
 
     // Candidate stroke: width 2.0 → hit threshold 1.0m.
     const int candidateRow =
-        drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+        drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
     REQUIRE(candidateRow == 0);
     const int candidateOriginalSize = sketch.strokes()[candidateRow].points.size();
 
@@ -191,7 +178,7 @@ TEST_CASE("armProbation commits when hit rate exceeds threshold",
     target.strokeWidth = 2.0;
 
     // Probation row.
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
     REQUIRE(probationRow == 1);
 
     // Probation window 5m.
@@ -235,7 +222,7 @@ TEST_CASE("armProbation rejects when hit rate is below threshold",
     attach(sketch, unit);
 
     const int candidateRow =
-        drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+        drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
     const auto candidateBefore = sketch.strokes()[candidateRow];
 
     QSignalSpy committedSpy(&sketch, &cwSketch::continuationCommitted);
@@ -245,7 +232,7 @@ TEST_CASE("armProbation rejects when hit rate is below threshold",
     target.strokeIndex = candidateRow;
     target.strokeWidth = 2.0;
 
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
     sketch.armProbation(probationRow, target, 5.0);
 
     // First sample lands on the candidate; subsequent samples fly off into
@@ -280,13 +267,13 @@ TEST_CASE("probation-region blend lerps old centerline with raw pen samples",
     attach(sketch, unit);
 
     // Wide horizontal stroke so the hit threshold is generous.
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 4.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
 
     cwSketchContinuationTarget target;
     target.strokeIndex = 0;
     target.strokeWidth = 4.0;   // hit threshold 2.0m
 
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 4.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
 
     // Probation window 2m (= blend zone).
     sketch.armProbation(probationRow, target, 2.0);
@@ -343,7 +330,7 @@ TEST_CASE("committed continuation produces a single 'Continue Stroke' undo entry
     UnitScale unit;
     attach(sketch, unit);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
     const auto snapshot = sketch.strokes();
     const int undoBefore = sketch.undoStack()->count();
 
@@ -351,7 +338,7 @@ TEST_CASE("committed continuation produces a single 'Continue Stroke' undo entry
     target.strokeIndex = 0;
     target.strokeWidth = 2.0;
 
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
     sketch.armProbation(probationRow, target, 3.0);
 
     // Stay on the line.
@@ -381,7 +368,7 @@ TEST_CASE("rejected continuation produces a single 'Draw Stroke' undo entry",
     UnitScale unit;
     attach(sketch, unit);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
     const auto snapshot = sketch.strokes();
     const int undoBefore = sketch.undoStack()->count();
 
@@ -389,7 +376,7 @@ TEST_CASE("rejected continuation produces a single 'Draw Stroke' undo entry",
     target.strokeIndex = 0;
     target.strokeWidth = 2.0;
 
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
     sketch.armProbation(probationRow, target, 3.0);
 
     // Diverge immediately → reject.
@@ -415,7 +402,7 @@ TEST_CASE("armProbation extends from the head when pen motion is backward",
 
     // Horizontal candidate from (0,0) to (5,0): 6 points, 5 segments, width 2
     // → hit threshold 1.0m.
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
     const auto candidateBefore = sketch.strokes()[0];
     REQUIRE(candidateBefore.points.size() == 6);
 
@@ -423,7 +410,7 @@ TEST_CASE("armProbation extends from the head when pen motion is backward",
     target.strokeIndex = 0;
     target.strokeWidth = 2.0;
 
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
     // Probation window 2.5m (also the blend zone on commit).
     sketch.armProbation(probationRow, target, 2.5);
 
@@ -474,7 +461,7 @@ TEST_CASE("pen-up before probation closes leaves a normal short stroke",
     UnitScale unit;
     attach(sketch, unit);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
 
     QSignalSpy committedSpy(&sketch, &cwSketch::continuationCommitted);
     QSignalSpy rejectedSpy(&sketch, &cwSketch::continuationRejected);
@@ -483,7 +470,7 @@ TEST_CASE("pen-up before probation closes leaves a normal short stroke",
     target.strokeIndex = 0;
     target.strokeWidth = 2.0;
 
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
     sketch.armProbation(probationRow, target, 100.0);  // huge window
 
     sketch.appendPoint(probationRow, cwPenPoint(QPointF(1.0, 0.0), 0.5));
@@ -501,10 +488,10 @@ TEST_CASE("pen-up before probation closes leaves a normal short stroke",
 TEST_CASE("findContinuationTarget returns -1 when the matrix is unset",
           "[cwSketch][continuation]") {
     cwSketch sketch;
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 1.0, 0.0, 5);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 5);
 
     auto result = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(2.0, 0.0), 0.0);
+        QStringLiteral("wall"), QPointF(2.0, 0.0), 0.0);
     CHECK(result.strokeIndex == -1);
 }
 
@@ -516,10 +503,10 @@ TEST_CASE("findContinuationTarget endpoint=None when hit is mid-stroke",
 
     // Long stroke from x=0..20 so both arclengths from the middle exceed any
     // reasonable probation window.
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 21);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 21);
 
     auto mid = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(10.0, 0.0), /* probationWindow */ 2.0);
+        QStringLiteral("wall"), QPointF(10.0, 0.0), /* probationWindow */ 2.0);
     REQUIRE(mid.strokeIndex == 0);
     CHECK(mid.endpoint == cwSketchContinuationTarget::Endpoint::None);
 }
@@ -532,10 +519,10 @@ TEST_CASE("findContinuationTarget endpoint=Tail when hit is near the last point"
 
     // Stroke 0..5, probation window 2m. Pen landing at x=4.5 is 0.5m
     // from the tail — well within the 2m window.
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
 
     auto hit = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(4.5, 0.0), 2.0);
+        QStringLiteral("wall"), QPointF(4.5, 0.0), 2.0);
     REQUIRE(hit.strokeIndex == 0);
     CHECK(hit.endpoint == cwSketchContinuationTarget::Endpoint::Tail);
     CHECK(hit.hitSegment == 5);
@@ -551,10 +538,10 @@ TEST_CASE("findContinuationTarget endpoint=Head when hit is near the first point
     UnitScale unit;
     attach(sketch, unit);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
 
     auto hit = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(0.5, 0.0), 2.0);
+        QStringLiteral("wall"), QPointF(0.5, 0.0), 2.0);
     REQUIRE(hit.strokeIndex == 0);
     CHECK(hit.endpoint == cwSketchContinuationTarget::Endpoint::Head);
     CHECK(hit.hitSegment == 1);
@@ -570,7 +557,7 @@ TEST_CASE("findContinuationTarget picks nearer endpoint on a short stroke",
     // Two-point stroke with a single segment of length 3m. With a 5m
     // probation window, both endpoints are reachable — but the landing x=0.8
     // is much closer to the head.
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 2);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 2);
     // Replace points: draw a 0..3 single segment.
     {
         auto pts = sketch.strokes();
@@ -581,7 +568,7 @@ TEST_CASE("findContinuationTarget picks nearer endpoint on a short stroke",
     }
 
     auto hit = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(0.8, 0.0), 5.0);
+        QStringLiteral("wall"), QPointF(0.8, 0.0), 5.0);
     REQUIRE(hit.strokeIndex == 0);
     CHECK(hit.endpoint == cwSketchContinuationTarget::Endpoint::Head);
 }
@@ -592,14 +579,14 @@ TEST_CASE("commitAtEndpoint extends the tail with the graft point",
     UnitScale unit;
     attach(sketch, unit);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
     QSignalSpy committedSpy(&sketch, &cwSketch::continuationCommitted);
 
     auto target = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(4.5, 0.0), 2.0);
+        QStringLiteral("wall"), QPointF(4.5, 0.0), 2.0);
     REQUIRE(target.endpoint == cwSketchContinuationTarget::Endpoint::Tail);
 
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
     sketch.commitAtEndpoint(probationRow, target);
 
     REQUIRE(committedSpy.count() == 1);
@@ -627,13 +614,13 @@ TEST_CASE("commitAtEndpoint blends overdraw into the remaining tail",
 
     // Stroke 0..5 on y=0, width 2.0 (→ hit threshold 1.0m). Pen lands at
     // (4.5, 0): endpoint=Tail, blend window = arclength(4.5 → 5.0) = 0.5m.
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
 
     auto target = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(4.5, 0.0), 2.0);
+        QStringLiteral("wall"), QPointF(4.5, 0.0), 2.0);
     REQUIRE(target.endpoint == cwSketchContinuationTarget::Endpoint::Tail);
 
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
     sketch.commitAtEndpoint(probationRow, target);
 
     // Drive samples that drift off the old line to exercise the blend.
@@ -679,13 +666,13 @@ TEST_CASE("commitAtEndpoint Head-side blend uses the original head as blendEnd",
     UnitScale unit;
     attach(sketch, unit);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
 
     auto target = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(0.5, 0.0), 2.0);
+        QStringLiteral("wall"), QPointF(0.5, 0.0), 2.0);
     REQUIRE(target.endpoint == cwSketchContinuationTarget::Endpoint::Head);
 
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
     sketch.commitAtEndpoint(probationRow, target);
 
     // After the Head commit: reversed candidate + graft at (0.5, 0). Blend
@@ -728,13 +715,13 @@ TEST_CASE("commitAtEndpoint extends the head by reversing the candidate",
     UnitScale unit;
     attach(sketch, unit);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
 
     auto target = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(0.5, 0.0), 2.0);
+        QStringLiteral("wall"), QPointF(0.5, 0.0), 2.0);
     REQUIRE(target.endpoint == cwSketchContinuationTarget::Endpoint::Head);
 
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
     sketch.commitAtEndpoint(probationRow, target);
 
     // N=6, hitSegment=1 → prefixCount = 6 - 1 = 5. After reverse the kept
@@ -774,13 +761,13 @@ TEST_CASE("commitAtEndpoint preserves the old tail until the pen passes it",
     UnitScale unit;
     attach(sketch, unit);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
 
     auto target = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(4.5, 0.0), 2.0);
+        QStringLiteral("wall"), QPointF(4.5, 0.0), 2.0);
     REQUIRE(target.endpoint == cwSketchContinuationTarget::Endpoint::Tail);
 
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
     sketch.commitAtEndpoint(probationRow, target);
 
     // One sample at arc=0. Old tail (5, 0) must still be the last point.
@@ -799,15 +786,15 @@ TEST_CASE("endpoint commit produces a single 'Continue Stroke' undo entry",
     UnitScale unit;
     attach(sketch, unit);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, 0.0, 6);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 6);
     const auto snapshot = sketch.strokes();
     const int undoBefore = sketch.undoStack()->count();
 
     auto target = sketch.findContinuationTarget(
-        cwPenStroke::Wall, QPointF(4.5, 0.0), 2.0);
+        QStringLiteral("wall"), QPointF(4.5, 0.0), 2.0);
     REQUIRE(target.endpoint == cwSketchContinuationTarget::Endpoint::Tail);
 
-    const int probationRow = sketch.beginStroke(cwPenStroke::Wall, 2.0);
+    const int probationRow = sketch.beginStroke(QStringLiteral("wall"));
     sketch.commitAtEndpoint(probationRow, target);
     sketch.appendPoint(0, cwPenPoint(QPointF(5.5, 0.0), 0.5));
     sketch.endStroke();

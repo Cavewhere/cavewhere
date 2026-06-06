@@ -29,14 +29,8 @@ QQ.Item {
         ? sketch.viewState.pan
         : _centeredPan
 
-    readonly property int strokeKind: toolbarId.strokeKind
-    readonly property double strokeWidth: {
-        switch (strokeKind) {
-        case PenStroke.Wall: return 4.0
-        case PenStroke.ScrapOutline: return 3.0
-        default: return 2.5
-        }
-    }
+    readonly property string brushName: toolbarId.brushName
+    readonly property bool eraseActive: toolbarId.eraseActive
     readonly property bool zoomAllowed: sketch !== null && !sketch.viewState.zoomLocked
 
     // World-meters to screen-pixels for the current zoom. Wheel/pinch handlers
@@ -322,7 +316,7 @@ QQ.Item {
             if (!sketchItemId.sketch) {
                 return
             }
-            if (sketchItemId.strokeKind === PenStroke.Eraser) {
+            if (sketchItemId.eraseActive) {
                 if (active) {
                     sketchItemId._eraserHasLastPoint = false
                 } else {
@@ -339,10 +333,10 @@ QQ.Item {
                 // enough line to retrace for the hit-rate check to work.
                 const worldStart = sketchItemId._worldPoint(point.position)
                 const target = sketchItemId.sketch.findContinuationTarget(
-                    sketchItemId.strokeKind, worldStart,
+                    sketchItemId.brushName, worldStart,
                     sketchItemId._probationWindowScreenPx)
                 sketchItemId._activeStrokeIndex = sketchItemId.sketch.beginStroke(
-                    sketchItemId.strokeKind, sketchItemId.strokeWidth)
+                    sketchItemId.brushName)
                 if (target.strokeIndex >= 0) {
                     if (target.endpoint !== 0) { // Endpoint.None
                         sketchItemId.sketch.commitAtEndpoint(
@@ -366,7 +360,7 @@ QQ.Item {
             if (!sketchItemId.sketch) {
                 return
             }
-            if (sketchItemId.strokeKind === PenStroke.Eraser) {
+            if (sketchItemId.eraseActive) {
                 sketchItemId._eraserCursor = point.position
                 if (!active) {
                     return
@@ -404,7 +398,7 @@ QQ.Item {
         readonly property double radiusPx:
             toolbarId.eraserRadius * sketchItemId._pxPerMeter
 
-        visible: sketchItemId.strokeKind === PenStroke.Eraser
+        visible: sketchItemId.eraseActive
                  && sketchItemId._eraserCursor.x !== 0
         width: radiusPx * 2
         height: radiusPx * 2

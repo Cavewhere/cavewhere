@@ -41,6 +41,12 @@ public:
     // heterogeneous lookup, so a view would force a per-call QString allocation.
     std::optional<cwLineBrush> findBrush(const QString &name) const; // nullopt if missing
 
+    // True when `name` resolves to a brush whose strokes contribute to scrap
+    // outline detection (the "wall-class" test shared by the detector, scrap
+    // manager and live painter). Reads the flag in place — no brush copy, unlike
+    // findBrush(name) && findBrush(name)->scrapOutline.
+    bool producesScrapOutline(const QString &name) const;
+
     bool isEmpty() const { return m_brushes.isEmpty(); }
     int  brushCount() const { return m_brushes.size(); }
 

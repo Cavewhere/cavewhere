@@ -9,10 +9,9 @@
 #define CWPENSTROKE_H
 
 //Qt includes
-#include <QColor>
 #include <QMetaType>
-#include <QQmlEngine>
 #include <QRectF>
+#include <QString>
 #include <QUuid>
 #include <QVector>
 
@@ -49,40 +48,30 @@ inline QRectF cwBoundingBoxOf(const Range &range, Project project)
     return QRectF(QPointF(minX, minY), QPointF(maxX, maxY));
 }
 
+// Uniform on-screen stroke width, in paper pixels at cwSketchScrapRasterizer's
+// target DPI. A stopgap until commit 5 (offset-curve batching) resolves real
+// per-brush paper-millimetre widths from the active palette; see the symbology
+// palette plan. Every render path (live painter, scrap rasterizer, icon
+// thumbnails, continuation hit-test) keys off this single value so they stay
+// consistent in the meantime.
+inline constexpr double kSketchStrokeRenderWidth = 2.5;
+
 class CAVEWHERE_LIB_EXPORT cwPenStroke {
     Q_GADGET
 
 public:
-    enum Kind {
-        Wall = 0,
-        Feature = 1,
-        ScrapOutline = 2,
-        Eraser = 3
-    };
-    Q_ENUM(Kind)
-
     cwPenStroke() = default;
 
-    Kind              kind  = Feature;
-    double            width = 2.5;
-    QColor            color;
+    // Resolves to a cwLineBrush via the active palette; the brush defines the
+    // stroke's entire look (Decision 2). A stable kebab-case name, not a UUID,
+    // so swapping palettes re-skins the sketch by matching brush names.
+    QString             brushName;
     QVector<cwPenPoint> points;
-    QUuid             id;
+    QUuid               id;
 
     QRectF boundingBox() const;
 };
 
 Q_DECLARE_METATYPE(cwPenStroke)
-
-// Re-export cwPenStroke as a QML namespace so its Kind enum is reachable as
-// `PenStroke.Wall` / `PenStroke.Feature`. QML_FOREIGN_NAMESPACE avoids the
-// "value type names should begin with a lowercase letter" warning emitted
-// when a Q_GADGET is registered directly with QML_NAMED_ELEMENT.
-struct cwPenStrokeForeign
-{
-    Q_GADGET
-    QML_FOREIGN_NAMESPACE(cwPenStroke)
-    QML_NAMED_ELEMENT(PenStroke)
-};
 
 #endif // CWPENSTROKE_H

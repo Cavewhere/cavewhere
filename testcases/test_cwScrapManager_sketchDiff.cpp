@@ -41,9 +41,9 @@ struct Fixture {
 
     // Drives a full stroke through the public pen API so the test exercises
     // the real strokeEnded path that triggers the diff.
-    QUuid drawClosedSquare(cwPenStroke::Kind kind)
+    QUuid drawClosedSquare(const QString &brushName)
     {
-        const int row = sketch->beginStroke(kind, 0.01);
+        const int row = sketch->beginStroke(brushName);
         sketch->appendPoint(row, QPointF(0.0, 0.0), 1.0, 0);
         sketch->appendPoint(row, QPointF(1.0, 0.0), 1.0, 0);
         sketch->appendPoint(row, QPointF(1.0, 1.0), 1.0, 0);
@@ -53,9 +53,9 @@ struct Fixture {
         return sketch->strokes().at(row).id;
     }
 
-    QUuid drawOpenLine(cwPenStroke::Kind kind)
+    QUuid drawOpenLine(const QString &brushName)
     {
-        const int row = sketch->beginStroke(kind, 0.01);
+        const int row = sketch->beginStroke(brushName);
         sketch->appendPoint(row, QPointF(0.0, 0.0), 1.0, 0);
         sketch->appendPoint(row, QPointF(1.0, 0.0), 1.0, 0);
         sketch->appendPoint(row, QPointF(1.0, 1.0), 1.0, 0);
@@ -63,9 +63,9 @@ struct Fixture {
         return sketch->strokes().at(row).id;
     }
 
-    QUuid drawBowtie(cwPenStroke::Kind kind)
+    QUuid drawBowtie(const QString &brushName)
     {
-        const int row = sketch->beginStroke(kind, 0.01);
+        const int row = sketch->beginStroke(brushName);
         sketch->appendPoint(row, QPointF(0.0, 0.0), 1.0, 0);
         sketch->appendPoint(row, QPointF(1.0, 1.0), 1.0, 0);
         sketch->appendPoint(row, QPointF(1.0, 0.0), 1.0, 0);
@@ -106,7 +106,7 @@ TEST_CASE("Closed Wall stroke produces a sketch-parented scrap",
     Fixture f;
     QSignalSpy updatedSpy(&f.manager, &cwScrapManager::sketchDerivedScrapsUpdated);
 
-    f.drawClosedSquare(cwPenStroke::Wall);
+    f.drawClosedSquare(QStringLiteral("wall"));
 
     REQUIRE(updatedSpy.count() >= 1);
     REQUIRE(sketchDerivedScrapCount(f.sketch) == 1);
@@ -122,7 +122,7 @@ TEST_CASE("Closed ScrapOutline stroke produces a sketch-parented scrap",
           "[cwScrapManager][sketchDiff]")
 {
     Fixture f;
-    f.drawClosedSquare(cwPenStroke::ScrapOutline);
+    f.drawClosedSquare(QStringLiteral("scrap-outline"));
     CHECK(sketchDerivedScrapCount(f.sketch) == 1);
 }
 
@@ -133,7 +133,7 @@ TEST_CASE("Open Wall stroke self-caps into a scrap",
     // self-pairs at its two endpoints, the close-back seam becomes an
     // auto-cap edge, and the resulting triangle is a valid outline.
     Fixture f;
-    f.drawOpenLine(cwPenStroke::Wall);
+    f.drawOpenLine(QStringLiteral("wall"));
     CHECK(sketchDerivedScrapCount(f.sketch) == 1);
 }
 
@@ -141,7 +141,7 @@ TEST_CASE("Closed Feature stroke is ignored",
           "[cwScrapManager][sketchDiff]")
 {
     Fixture f;
-    f.drawClosedSquare(cwPenStroke::Feature);
+    f.drawClosedSquare(QStringLiteral("feature"));
     CHECK(sketchDerivedScrapCount(f.sketch) == 0);
 }
 
@@ -153,7 +153,7 @@ TEST_CASE("Self-intersecting closed stroke salvages into one scrap",
     // lobe. A bowtie drawn as a Wall stroke now produces exactly one
     // sketch-derived scrap.
     Fixture f;
-    f.drawBowtie(cwPenStroke::Wall);
+    f.drawBowtie(QStringLiteral("wall"));
     CHECK(sketchDerivedScrapCount(f.sketch) == 1);
 }
 
@@ -161,7 +161,7 @@ TEST_CASE("Unrelated stroke changes preserve existing scrap identity",
           "[cwScrapManager][sketchDiff]")
 {
     Fixture f;
-    f.drawClosedSquare(cwPenStroke::Wall);
+    f.drawClosedSquare(QStringLiteral("wall"));
     REQUIRE(sketchDerivedScrapCount(f.sketch) == 1);
 
     QPointer<cwScrap> firstScrap = firstSketchScrap(f.sketch);
@@ -169,7 +169,7 @@ TEST_CASE("Unrelated stroke changes preserve existing scrap identity",
 
     // An extra stroke rerun should not destroy-and-recreate the existing scrap:
     // identity is by source-stroke UUID, so the QPointer must survive.
-    f.drawOpenLine(cwPenStroke::Feature); // unrelated change, triggers re-detect
+    f.drawOpenLine(QStringLiteral("feature")); // unrelated change, triggers re-detect
     REQUIRE_FALSE(firstScrap.isNull());
     CHECK(sketchDerivedScrapCount(f.sketch) == 1);
 }
@@ -178,7 +178,7 @@ TEST_CASE("Deleting the source stroke removes the derived scrap",
           "[cwScrapManager][sketchDiff]")
 {
     Fixture f;
-    f.drawClosedSquare(cwPenStroke::Wall);
+    f.drawClosedSquare(QStringLiteral("wall"));
     REQUIRE(sketchDerivedScrapCount(f.sketch) == 1);
 
     QPointer<cwScrap> scrap = firstSketchScrap(f.sketch);
@@ -198,7 +198,7 @@ TEST_CASE("Destroying the sketch drops derived scraps and tracking entry",
           "[cwScrapManager][sketchDiff]")
 {
     Fixture f;
-    f.drawClosedSquare(cwPenStroke::Wall);
+    f.drawClosedSquare(QStringLiteral("wall"));
     REQUIRE(sketchDerivedScrapCount(f.sketch) == 1);
 
     QPointer<cwSketch> sketchPtr = f.sketch;
@@ -222,7 +222,7 @@ TEST_CASE("Degenerate stroke shows up in sketchRejectedStrokes with reason tag",
     // the reason tag.
     Fixture f;
     f.sketch->viewState()->setDebugOverlayVisible(true);
-    const int row = f.sketch->beginStroke(cwPenStroke::Wall, 0.01);
+    const int row = f.sketch->beginStroke(QStringLiteral("wall"));
     f.sketch->appendPoint(row, QPointF(0.0, 0.0), 1.0, 0);
     f.sketch->endStroke();
     const QUuid strokeId = f.sketch->strokes().at(row).id;

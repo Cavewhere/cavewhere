@@ -43,12 +43,10 @@ bool pixelPainted(const QImage &img, int x, int y)
 // Horizontal stroke at world y = cy that runs from (x0, cy) to (x1, cy),
 // finalised so the painter path model picks it up.
 void drawHorizontalStroke(cwSketch &sketch,
-                          cwPenStroke::Kind kind,
-                          double width,
-                          const QColor &color,
+                          const QString &brushName,
                           double x0, double x1, double cy)
 {
-    const int row = sketch.beginStroke(kind, width, color);
+    const int row = sketch.beginStroke(brushName);
     sketch.appendPoint(row, cwPenPoint(QPointF(x0, cy), 0.5));
     sketch.appendPoint(row, cwPenPoint(QPointF(x1, cy), 0.5));
     sketch.endStroke();
@@ -63,8 +61,7 @@ TEST_CASE("cwSketchScrapRasterizer image size matches paperScale × DPI × bbox"
     // Default mapScale is 1:250 (see cwSketch ctor).
     REQUIRE(sketch.mapScale()->scale() == kDefault1to250);
 
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, Qt::red,
-                         0.0, 10.0, 5.0);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 10.0, 5.0);
 
     const QRectF bbox(0.0, 0.0, 10.0, 10.0);
     const QImage image = cwSketchScrapRasterizer::rasterize(&sketch, bbox);
@@ -82,8 +79,7 @@ TEST_CASE("cwSketchScrapRasterizer clamps to maxPixelDimension for huge bboxes",
           "[cwSketchScrapRasterizer]")
 {
     cwSketch sketch;
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 2.0, Qt::black,
-                         0.0, 500.0, 250.0);
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 0.0, 500.0, 250.0);
 
     // At 1:250 + 200 DPI (~31 px/m), a 400 m axis would want ~12.6k pixels —
     // well above the default 4096 cap.
@@ -108,20 +104,18 @@ TEST_CASE("cwSketchScrapRasterizer paints strokes inside the bbox and skips stro
 {
     cwSketch sketch;
 
-    // Inside stroke: horizontal red bar at world y = 5, from x = 2 to 8.
-    drawHorizontalStroke(sketch, cwPenStroke::Wall, 6.0, Qt::red,
-                         2.0, 8.0, 5.0);
+    // Inside stroke: a wall bar at world y = 5, from x = 2 to 8.
+    drawHorizontalStroke(sketch, QStringLiteral("wall"), 2.0, 8.0, 5.0);
 
     // Outside stroke: far east, well clear of the bbox we'll rasterize.
-    drawHorizontalStroke(sketch, cwPenStroke::Feature, 6.0, Qt::blue,
-                         100.0, 110.0, 105.0);
+    drawHorizontalStroke(sketch, QStringLiteral("feature"), 100.0, 110.0, 105.0);
 
     const QRectF bbox(0.0, 0.0, 10.0, 10.0);
     const QImage image = cwSketchScrapRasterizer::rasterize(&sketch, bbox);
     REQUIRE(!image.isNull());
 
     // A pixel near the middle of the image (world (~5, ~5)) should land on
-    // the red stroke — any painted alpha there is enough to confirm the
+    // the wall stroke — any painted alpha there is enough to confirm the
     // stroke made it through.
     const int midX = image.width()  / 2;
     const int midY = image.height() / 2;

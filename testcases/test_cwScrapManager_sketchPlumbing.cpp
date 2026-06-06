@@ -102,12 +102,12 @@ TEST_CASE("cwScrapManager wires each sketch exactly once across insert paths",
 
     QSignalSpy updatedSpy(&manager, &cwScrapManager::sketchDerivedScrapsUpdated);
 
-    preAttached->beginStroke(cwPenStroke::Wall, 2.0);
+    preAttached->beginStroke(QStringLiteral("wall"));
     preAttached->endStroke();
     CHECK(updatedSpy.count() == 1);
     updatedSpy.clear();
 
-    postAttached->beginStroke(cwPenStroke::Wall, 2.0);
+    postAttached->beginStroke(QStringLiteral("wall"));
     postAttached->endStroke();
     CHECK(updatedSpy.count() == 1);
 }
@@ -122,7 +122,7 @@ TEST_CASE("cwScrapManager re-evaluates derived scraps on stroke signals",
 
     // Drive a full stroke through the public API so the test exercises the
     // real signal path rather than faking strokeEnded directly.
-    sketch->beginStroke(cwPenStroke::Wall, 2.0);
+    sketch->beginStroke(QStringLiteral("wall"));
     sketch->endStroke();
     REQUIRE(updatedSpy.count() == 1);
     CHECK(updatedSpy.takeFirst().at(0).value<cwSketch*>() == sketch);
@@ -145,7 +145,7 @@ TEST_CASE("cwScrapManager stops re-evaluating once a sketch leaves the tree",
     REQUIRE_FALSE(f.manager.isTrackingSketch(removed));
 
     QSignalSpy updatedSpy(&f.manager, &cwScrapManager::sketchDerivedScrapsUpdated);
-    kept->beginStroke(cwPenStroke::Wall, 2.0);
+    kept->beginStroke(QStringLiteral("wall"));
     kept->endStroke();
     CHECK(updatedSpy.count() == 1);
 }
