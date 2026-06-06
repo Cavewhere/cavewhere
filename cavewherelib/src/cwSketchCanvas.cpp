@@ -12,7 +12,6 @@
 #include "cwSketchManager.h"
 #include "cwScrapManager.h"
 #include "cwSketchPainterPathModel.h"
-#include "cwPenStrokeModel.h"
 #include "cwInfiniteGridModel.h"
 #include "cwFixedGridModel.h"
 #include "cwGridTextModel.h"
@@ -72,7 +71,7 @@ void cwSketchCanvas::setSketch(cwSketch *sketch)
     m_sketch = sketch;
 
     if (m_sketch != nullptr) {
-        m_pathModel->setStrokeModel(m_sketch->strokeModel());
+        m_pathModel->setSketch(m_sketch);
         m_linePlotModel->setMapScale(m_sketch->mapScale());
         connect(m_sketch, &cwSketch::strokesReset,
                 this, [this]() { update(); });
@@ -98,7 +97,7 @@ void cwSketchCanvas::setSketch(cwSketch *sketch)
             connect(m_sketch, &cwSketch::anchorStationChanged,
                     this, [this]() { refreshLinePlotFromManager(); });
     } else {
-        m_pathModel->setStrokeModel(nullptr);
+        m_pathModel->setSketch(nullptr);
         m_linePlotModel->setMapScale(nullptr);
     }
 
@@ -184,7 +183,8 @@ void cwSketchCanvas::geometryChange(const QRectF &newGeometry, const QRectF &old
 
 void cwSketchCanvas::connectPathModelSignals()
 {
-    connectModelForUpdate(m_pathModel);
+    connect(m_pathModel, &cwSketchPainterPathModel::pathsChanged,
+            this, [this]() { update(); });
 }
 
 void cwSketchCanvas::connectModelForUpdate(QAbstractItemModel *model)

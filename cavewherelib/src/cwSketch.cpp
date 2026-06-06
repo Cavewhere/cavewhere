@@ -19,7 +19,6 @@
 #include "cwSketch.h"
 #include "cwSketchData.h"
 #include "cwSketchViewState.h"
-#include "cwPenStrokeModel.h"
 #include "cwScale.h"
 #include "cwKeywordModel.h"
 #include "cwAbstractScrapViewMatrix.h"
@@ -258,7 +257,6 @@ cwSketch::cwSketch(QObject *parent)
     : QObject(parent),
       m_id(QUuid::createUuid()),
       m_mapScale(new cwScale(this)),
-      m_strokeModel(new cwPenStrokeModel(this)),
       m_undoStack(new QUndoStack(this)),
       m_keywordModel(new cwKeywordModel(this)),
       m_viewState(new cwSketchViewState(this)),
@@ -382,9 +380,8 @@ int cwSketch::beginStroke(const QString &brushName)
     stroke.id        = QUuid::createUuid();
 
     const int row = m_strokes.size();
-    m_strokeModel->beginInsertRows(QModelIndex(), row, row);
     m_strokes.append(stroke);
-    m_strokeModel->endInsertRows();
+    emit strokeInserted(row);
     emit activeDrawingChanged(true);
     return row;
 }
@@ -632,9 +629,8 @@ void cwSketch::commitContinuation()
            overlapEnd.x(), overlapEnd.y(),
            static_cast<int>(probSamples.size()));
 
-    m_strokeModel->beginRemoveRows(QModelIndex(), probationIdx, probationIdx);
     m_strokes.removeAt(probationIdx);
-    m_strokeModel->endRemoveRows();
+    emit strokeRemoved(probationIdx);
     // m_pendingDirtyRow may have referenced the now-gone row.
     m_pendingDirtyRow = -1;
 
@@ -707,9 +703,7 @@ void cwSketch::scheduleDirtyEmit(int row)
         if (r < 0 || r >= m_strokes.size()) {
             return;
         }
-        const QModelIndex idx = m_strokeModel->index(r);
-        emit m_strokeModel->dataChanged(idx, idx,
-            { cwPenStrokeModel::PointsRole, cwPenStrokeModel::StrokeRole });
+        emit strokeChanged(r);
     }, Qt::QueuedConnection);
 }
 
@@ -1026,9 +1020,8 @@ void cwSketch::commitAtEndpoint(int probationStrokeIndex,
            endpointBlendWindowMeters,
            Norig);
 
-    m_strokeModel->beginRemoveRows(QModelIndex(), probationIdx, probationIdx);
     m_strokes.removeAt(probationIdx);
-    m_strokeModel->endRemoveRows();
+    emit strokeRemoved(probationIdx);
     m_pendingDirtyRow = -1;
 
     if (probationIdx < candidateIdx) {
@@ -1132,9 +1125,7 @@ void cwSketch::clearStrokes()
 
 void cwSketch::applyStrokes(const QVector<cwPenStroke> &strokes)
 {
-    m_strokeModel->beginResetModel();
     m_strokes = strokes;
-    m_strokeModel->endResetModel();
     emit strokesReset();
 }
 

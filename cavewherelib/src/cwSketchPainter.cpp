@@ -8,10 +8,9 @@
 //Our includes
 #include "cwSketchPainter.h"
 #include "cwSketchDraw.h"
-#include "cwAbstractSketchPainterPathModel.h"
+#include "cwSketchPathSource.h"
 
 //Qt includes
-#include <QAbstractItemModel>
 #include <QFontMetricsF>
 #include <QPainterPath>
 
@@ -20,34 +19,24 @@
 namespace {
 
 void drawPaths(cwSketchDraw *draw,
-               const cwAbstractSketchPainterPathModel *model,
+               const cwSketchPathSource *source,
                double penScale)
 {
-    if (model == nullptr) {
+    if (source == nullptr) {
         return;
     }
-    const int rows = model->rowCount();
-    for (int row = 0; row < rows; ++row) {
-        const QModelIndex idx = model->index(row);
-        const QPainterPath path =
-            idx.data(cwAbstractSketchPainterPathModel::PainterPathRole)
-                .value<QPainterPath>();
-        if (path.isEmpty()) {
+    const QList<cwSketchPathSource::Path> paths = source->paths();
+    for (const auto &path : paths) {
+        if (path.painterPath.isEmpty()) {
             continue;
         }
-        const QColor color =
-            idx.data(cwAbstractSketchPainterPathModel::StrokeColorRole)
-                .value<QColor>();
-        const double width =
-            idx.data(cwAbstractSketchPainterPathModel::StrokeWidthRole)
-                .toDouble();
-
-        if (width > 0.0) {
-            draw->setStrokePen(color, width * penScale, Qt::RoundCap, Qt::RoundJoin);
-            draw->strokePath(path);
+        if (path.strokeWidth > 0.0) {
+            draw->setStrokePen(path.strokeColor, path.strokeWidth * penScale,
+                               Qt::RoundCap, Qt::RoundJoin);
+            draw->strokePath(path.painterPath);
         } else {
-            draw->setFillBrush(color);
-            draw->fillPath(path);
+            draw->setFillBrush(path.strokeColor);
+            draw->fillPath(path.painterPath);
         }
     }
 }

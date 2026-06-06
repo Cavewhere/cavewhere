@@ -18,7 +18,7 @@
 #include "cwGridTextModel.h"
 
 class cwSketchDraw;
-class cwAbstractSketchPainterPathModel;
+class cwSketchPathSource;
 
 class CAVEWHERE_LIB_EXPORT cwSketchPainter
 {
@@ -29,7 +29,7 @@ public:
     static constexpr double LinePlotReferenceMapScaleRatio = 1.0 / 250.0;
 
     struct GridLayer {
-        const cwAbstractSketchPainterPathModel *paths = nullptr;
+        const cwSketchPathSource *paths = nullptr;
         const QVector<cwGridTextModel::TextRow> *text = nullptr;
     };
 
@@ -42,7 +42,7 @@ public:
         // specified in screen pixels and want compensation for mapScale but
         // not for userZoom (so zooming still thickens strokes).
         double mapScale = 1.0;
-        const cwAbstractSketchPainterPathModel *strokes = nullptr;
+        const cwSketchPathSource *strokes = nullptr;
 
         // Optional grid layer. Drawn before strokes; major on top of minor.
         GridLayer gridMinor;

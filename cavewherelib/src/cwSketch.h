@@ -29,7 +29,6 @@
 
 class cwScale;
 class cwKeywordModel;
-class cwPenStrokeModel;
 class cwAbstractScrapViewMatrix;
 class cwMatrix4x4Artifact;
 class cwSurvey2DGeometryRule;
@@ -81,7 +80,6 @@ class CAVEWHERE_LIB_EXPORT cwSketch : public QObject
     Q_PROPERTY(ViewType viewType READ viewType WRITE setViewType NOTIFY viewTypeChanged)
     Q_PROPERTY(cwScale* mapScale READ mapScale CONSTANT)
     Q_PROPERTY(QString iconImagePath READ iconImagePath WRITE setIconImagePath NOTIFY iconImagePathChanged)
-    Q_PROPERTY(cwPenStrokeModel* strokeModel READ strokeModel CONSTANT)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
     Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact WRITE setSurveyNetworkArtifact NOTIFY surveyNetworkArtifactChanged)
@@ -129,7 +127,9 @@ public:
     const QVector<cwPenStroke> &strokes() const { return m_strokes; }
     void setStrokes(const QVector<cwPenStroke> &strokes);
 
-    cwPenStrokeModel *strokeModel() const { return m_strokeModel; }
+    // Stroke-count accessor for QML (replaces the former strokeModel rowCount).
+    Q_INVOKABLE int strokeCount() const { return static_cast<int>(m_strokes.size()); }
+
     QUndoStack       *undoStack() const { return m_undoStack; }
     cwKeywordModel   *keywordModel() const { return m_keywordModel; }
 
@@ -228,6 +228,13 @@ signals:
     void nameChanged();
     void viewTypeChanged();
     void iconImagePathChanged();
+
+    // Granular stroke-list change notifications (replace the former
+    // cwPenStrokeModel QAbstractItemModel signals). strokesReset() covers a
+    // full replacement; the others mirror the single-row mutation sites.
+    void strokeInserted(int row);
+    void strokeRemoved(int row);
+    void strokeChanged(int row);
     void strokesReset();
     void strokeEnded();
     // Toggles around the live drawing window (begin/endStroke). cwSketchManager
@@ -257,7 +264,6 @@ private:
     QString  m_iconImagePath;
     QString  m_anchorStation;
 
-    cwPenStrokeModel  *m_strokeModel = nullptr;
     QUndoStack        *m_undoStack   = nullptr;
     cwKeywordModel    *m_keywordModel = nullptr;
     cwSketchViewState *m_viewState   = nullptr;

@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
+#include <QCoreApplication>
 #include <QSignalSpy>
 
 //Our includes
@@ -9,15 +10,13 @@
 #include "cwSketchData.h"
 #include "cwPenStroke.h"
 #include "cwPenPoint.h"
-#include "cwPenStrokeModel.h"
 #include "cwScale.h"
 
 TEST_CASE("cwSketch defaults are sane", "[cwSketch]") {
     cwSketch sketch;
     CHECK(sketch.strokes().isEmpty());
     CHECK(sketch.viewType() == cwSketch::Plan);
-    CHECK(sketch.strokeModel() != nullptr);
-    CHECK(sketch.strokeModel()->rowCount() == 0);
+    CHECK(sketch.strokeCount() == 0);
     CHECK(sketch.undoStack() != nullptr);
     CHECK(sketch.undoStack()->canUndo() == false);
     CHECK(sketch.mapScale() != nullptr);
@@ -30,7 +29,7 @@ TEST_CASE("cwSketch beginStroke/endStroke cycles the undo stack", "[cwSketch]") 
     REQUIRE(row == 0);
     REQUIRE(sketch.strokes().size() == 1);
     CHECK(sketch.strokes().first().brushName == QStringLiteral("wall"));
-    CHECK(sketch.strokeModel()->rowCount() == 1);
+    CHECK(sketch.strokeCount() == 1);
 
     sketch.appendPoint(row, cwPenPoint(QPointF(1, 2), 0.5));
     sketch.appendPoint(row, cwPenPoint(QPointF(3, 4), 0.6));
@@ -41,11 +40,47 @@ TEST_CASE("cwSketch beginStroke/endStroke cycles the undo stack", "[cwSketch]") 
 
     sketch.undoStack()->undo();
     CHECK(sketch.strokes().isEmpty());
-    CHECK(sketch.strokeModel()->rowCount() == 0);
+    CHECK(sketch.strokeCount() == 0);
 
     sketch.undoStack()->redo();
     REQUIRE(sketch.strokes().size() == 1);
     CHECK(sketch.strokes().first().points.size() == 2);
+}
+
+TEST_CASE("cwSketch emits strokeInserted on beginStroke", "[cwSketch]") {
+    cwSketch sketch;
+    QSignalSpy inserted(&sketch, &cwSketch::strokeInserted);
+
+    const int row = sketch.beginStroke(QStringLiteral("wall"));
+    CHECK(row == 0);
+    REQUIRE(inserted.count() == 1);
+    CHECK(inserted.first().first().toInt() == 0);
+    CHECK(sketch.strokeCount() == 1);
+    CHECK(sketch.strokes().first().brushName == QStringLiteral("wall"));
+}
+
+TEST_CASE("cwSketch coalesces strokeChanged across appendPoint calls", "[cwSketch]") {
+    cwSketch sketch;
+    const int row = sketch.beginStroke(QStringLiteral("feature"));
+
+    QSignalSpy changed(&sketch, &cwSketch::strokeChanged);
+
+    for (int i = 0; i < 10; ++i) {
+        sketch.appendPoint(row, cwPenPoint(QPointF(i, i), 0.5));
+    }
+    CHECK(changed.count() == 0); // queued; not yet flushed
+
+    QCoreApplication::processEvents();
+    CHECK(changed.count() == 1);
+    CHECK(sketch.strokes().at(row).points.size() == 10);
+
+    // Another burst in the next event-loop turn — again a single emit.
+    for (int i = 0; i < 5; ++i) {
+        sketch.appendPoint(row, cwPenPoint(QPointF(i, -i), 0.5));
+    }
+    QCoreApplication::processEvents();
+    CHECK(changed.count() == 2);
+    CHECK(sketch.strokes().at(row).points.size() == 15);
 }
 
 TEST_CASE("cwSketch zero-point stroke is still undoable", "[cwSketch]") {

@@ -30,7 +30,6 @@ Q_LOGGING_CATEGORY(lcSketchManager, "cw.sketch.manager")
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwConcurrent.h"
-#include "cwPenStrokeModel.h"
 #include "cwProject.h"
 #include "cwRegionTreeModel.h"
 #include "cwSketch.h"
@@ -678,16 +677,12 @@ void cwSketchManager::connectSketch(cwSketch* sketch)
     connect(sketch, &cwSketch::activeDrawingChanged, this,
             [this, sketch](bool active) { onActiveDrawingChanged(sketch, active); });
 
-    if (auto* model = sketch->strokeModel()) {
-        connect(model, &QAbstractItemModel::dataChanged, this,
-                [this, sketch]() { markDirty(sketch); });
-        connect(model, &QAbstractItemModel::rowsInserted, this,
-                [this, sketch]() { markDirty(sketch); });
-        connect(model, &QAbstractItemModel::rowsRemoved, this,
-                [this, sketch]() { markDirty(sketch); });
-    } else {
-        qCWarning(lcSketchManager) << "connectSketch: sketch has no strokeModel" << sketch;
-    }
+    connect(sketch, &cwSketch::strokeChanged, this,
+            [this, sketch]() { markDirty(sketch); });
+    connect(sketch, &cwSketch::strokeInserted, this,
+            [this, sketch]() { markDirty(sketch); });
+    connect(sketch, &cwSketch::strokeRemoved, this,
+            [this, sketch]() { markDirty(sketch); });
 
     updateIconFromCache(sketch);
 }
@@ -699,9 +694,6 @@ void cwSketchManager::disconnectSketch(cwSketch* sketch)
     }
     m_connectionChecker.remove(sketch);
     disconnect(sketch, nullptr, this, nullptr);
-    if (auto* model = sketch->strokeModel()) {
-        disconnect(model, nullptr, this, nullptr);
-    }
     m_sketchPipelines.erase(sketch); // restarter cancels in-flight in its dtor
 }
 

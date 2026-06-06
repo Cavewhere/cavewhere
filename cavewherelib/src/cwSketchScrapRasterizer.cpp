@@ -7,7 +7,6 @@
 
 //Our includes
 #include "cwSketchScrapRasterizer.h"
-#include "cwPenStrokeModel.h"
 #include "cwScale.h"
 #include "cwSketch.h"
 #include "cwSketchDrawQPainter.h"
@@ -68,7 +67,7 @@ QImage cwSketchScrapRasterizer::rasterize(const cwSketch *sketch,
     worldToItem.scale(ppm, -ppm);
 
     cwSketchPainterPathModel pathModel;
-    pathModel.setStrokeModel(sketch->strokeModel());
+    pathModel.setSketch(sketch);
 
     cwSketchDrawQPainter draw(&painter);
 

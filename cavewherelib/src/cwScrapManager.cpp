@@ -34,7 +34,6 @@
 #include "cwTriangulateWarpingSettings.h"
 #include "cwSaveLoad.h"
 #include "cwSketch.h"
-#include "cwPenStrokeModel.h"
 #include "cwPaletteSnapshot.h"
 #include "cwLineBrush.h"
 #include "cwSurveyNoteSketchModel.h"
@@ -644,10 +643,8 @@ void cwScrapManager::connectSketch(cwSketch* sketch)
         releaseSketchLinePlot(sk);
     });
 
-    if(auto* model = sketch->strokeModel()) {
-        connect(model, &QAbstractItemModel::rowsRemoved,
-                this, [this, sketch]() { updateDerivedScrapsForSketch(sketch); });
-    }
+    connect(sketch, &cwSketch::strokeRemoved,
+            this, [this, sketch]() { updateDerivedScrapsForSketch(sketch); });
 
     if(!m_sketchManager.isNull()) {
         if(cwTrip* trip = sketch->parentTrip()) {
@@ -663,9 +660,6 @@ void cwScrapManager::disconnectSketch(cwSketch* sketch)
         return;
     }
     disconnect(sketch, nullptr, this, nullptr);
-    if(auto* model = sketch->strokeModel()) {
-        disconnect(model, nullptr, this, nullptr);
-    }
 }
 
 void cwScrapManager::sketchInsertedHelper(cwSketch* sketch)

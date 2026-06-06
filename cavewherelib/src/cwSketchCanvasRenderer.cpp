@@ -12,7 +12,7 @@
 #include "cwScale.h"
 #include "cwSketchDrawCanvas.h"
 #include "cwSketchPainter.h"
-#include "cwAbstractSketchPainterPathModel.h"
+#include "cwSketchPathSource.h"
 #include "cwCenterlineSketchPainterModel.h"
 #include "cwInfiniteGridModel.h"
 #include "cwFixedGridModel.h"
@@ -26,50 +26,35 @@
 #include <QFont>
 #include <QPainterPath>
 
-// Render-thread-owned model backing cwSketchPainter::paint. Populated in
+// Render-thread-owned path list backing cwSketchPainter::paint. Populated in
 // synchronize() while the GUI thread is blocked; read in paint() without
-// touching the live cwSketchPainterPathModel.
-class cwSketchCanvasRendererSnapshotModel final : public cwAbstractSketchPainterPathModel
+// touching the live GUI-thread path sources.
+class cwSketchCanvasRendererSnapshotModel final : public cwSketchPathSource
 {
 public:
-    using cwAbstractSketchPainterPathModel::Path;
-
     QList<Path> entries;
 
-    int rowCount(const QModelIndex & = QModelIndex()) const override {
-        return static_cast<int>(entries.size());
-    }
-
-protected:
-    Path path(const QModelIndex &index) const override {
-        return entries.at(index.row());
+    QList<Path> paths() const override {
+        return entries;
     }
 };
 
 namespace {
 
-void snapshotPaths(const cwAbstractSketchPainterPathModel *source,
+void snapshotPaths(const cwSketchPathSource *source,
                    cwSketchCanvasRendererSnapshotModel *target)
 {
     target->entries.clear();
     if (source == nullptr) {
         return;
     }
-    const int rows = source->rowCount();
-    target->entries.reserve(rows);
-    for (int row = 0; row < rows; ++row) {
-        const QModelIndex idx = source->index(row, 0);
-        const QPainterPath painterPath =
-            idx.data(cwAbstractSketchPainterPathModel::PainterPathRole).value<QPainterPath>();
-        if (painterPath.isEmpty()) {
+    const QList<cwSketchPathSource::Path> paths = source->paths();
+    target->entries.reserve(paths.size());
+    for (const auto &path : paths) {
+        if (path.painterPath.isEmpty()) {
             continue;
         }
-        target->entries.append({
-            painterPath,
-            idx.data(cwAbstractSketchPainterPathModel::StrokeColorRole).value<QColor>(),
-            idx.data(cwAbstractSketchPainterPathModel::StrokeWidthRole).toDouble(),
-            0.0
-        });
+        target->entries.append(path);
     }
 }
 

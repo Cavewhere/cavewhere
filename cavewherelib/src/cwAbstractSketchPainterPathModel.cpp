@@ -30,3 +30,13 @@ QVariant cwAbstractSketchPainterPathModel::data(const QModelIndex &index, int ro
 
     return {};
 }
+
+QList<cwSketchPathSource::Path> cwAbstractSketchPainterPathModel::paths() const {
+    const int count = rowCount();
+    QList<Path> result;
+    result.reserve(count);
+    for (int row = 0; row < count; ++row) {
+        result.append(path(index(row)));
+    }
+    return result;
+}

@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwSketchPainterPathModel.h"
+#include "cwSketch.h"
 #include "cwSketchStrokeGeometry.h"
 #include "cwPenStroke.h"
 #include "cwSymbologyPaletteData.h"
@@ -16,13 +17,8 @@
 #include <QPolygonF>
 #include <cmath>
 
-namespace {
-constexpr char kPointsRoleName[]    = "points";
-constexpr char kBrushNameRoleName[] = "brushName";
-} // namespace
-
 cwSketchPainterPathModel::cwSketchPainterPathModel(QObject *parent)
-    : cwAbstractSketchPainterPathModel(parent),
+    : QObject(parent),
       m_snapshot(cwSymbologyPaletteSeed::create().snapshot())
 {
     connect(this, &cwSketchPainterPathModel::activeStrokeIndexChanged,
@@ -66,76 +62,59 @@ void cwSketchPainterPathModel::scheduleColorRebuild()
     }, Qt::QueuedConnection);
 }
 
-int cwSketchPainterPathModel::rowCount(const QModelIndex &parent) const
+const cwSketch *cwSketchPainterPathModel::sketch() const
 {
-    Q_UNUSED(parent);
-    return m_finishedPaths.size() + m_finishLineIndexOffset;
+    return m_sketch;
 }
 
-QAbstractItemModel *cwSketchPainterPathModel::strokeModel() const
+void cwSketchPainterPathModel::setSketch(const cwSketch *sketch)
 {
-    return m_strokeModel;
-}
-
-void cwSketchPainterPathModel::setStrokeModel(QAbstractItemModel *model)
-{
-    if (m_strokeModel == model) {
+    if (m_sketch == sketch) {
         return;
     }
 
-    beginResetModel();
-    if (m_strokeModel) {
-        disconnect(m_strokeModel, nullptr, this, nullptr);
+    if (m_sketch) {
+        disconnect(m_sketch, nullptr, this, nullptr);
     }
 
-    m_strokeModel = model;
+    m_sketch = sketch;
     m_activePath = Path{};
     m_finishedPaths.clear();
     m_previousActiveStroke = -1;
 
-    if (m_strokeModel) {
-        resolveRoles();
+    if (m_sketch) {
+        connect(m_sketch, &cwSketch::strokeInserted, this,
+                &cwSketchPainterPathModel::onStrokeInserted);
+        connect(m_sketch, &cwSketch::strokeRemoved, this,
+                &cwSketchPainterPathModel::onStrokeRemoved);
+        connect(m_sketch, &cwSketch::strokeChanged, this,
+                &cwSketchPainterPathModel::onStrokeChanged);
+        connect(m_sketch, &cwSketch::strokesReset, this,
+                &cwSketchPainterPathModel::onStrokesReset);
 
-        connect(m_strokeModel, &QAbstractItemModel::rowsInserted, this,
-                &cwSketchPainterPathModel::onSourceRowsInserted);
-        connect(m_strokeModel, &QAbstractItemModel::rowsAboutToBeRemoved, this,
-                &cwSketchPainterPathModel::onSourceRowsAboutToBeRemoved);
-        connect(m_strokeModel, &QAbstractItemModel::dataChanged, this,
-                &cwSketchPainterPathModel::onSourceDataChanged);
-        connect(m_strokeModel, &QAbstractItemModel::modelReset, this,
-                &cwSketchPainterPathModel::onSourceModelReset);
-
-        for (int row = 0; row < m_strokeModel->rowCount(); ++row) {
+        for (int row = 0; row < strokeCount(); ++row) {
             if (row == m_activeStrokeIndex) {
                 continue;
             }
-            addOrUpdateFinishPath(row);
+            mergeFinishPath(row);
         }
         updateActivePath();
     }
 
-    endResetModel();
-    emit strokeModelChanged();
+    emit pathsChanged();
 }
 
-void cwSketchPainterPathModel::resolveRoles()
+int cwSketchPainterPathModel::strokeCount() const
 {
-    const auto names = m_strokeModel->roleNames();
-    m_pointsRole    = names.key(kPointsRoleName,    -1);
-    m_brushNameRole = names.key(kBrushNameRoleName, -1);
-    if (m_pointsRole < 0 || m_brushNameRole < 0) {
-        qWarning("cwSketchPainterPathModel: source model is missing required "
-                 "role names (points/brushName)");
-    }
+    return m_sketch ? static_cast<int>(m_sketch->strokes().size()) : 0;
 }
 
 QVector<cwPenPoint> cwSketchPainterPathModel::strokePoints(int row) const
 {
-    if (!m_strokeModel || m_pointsRole < 0) {
+    if (!m_sketch || row < 0 || row >= m_sketch->strokes().size()) {
         return {};
     }
-    const QModelIndex idx = m_strokeModel->index(row, 0);
-    return idx.data(m_pointsRole).value<QVector<cwPenPoint>>();
+    return m_sketch->strokes().at(row).points;
 }
 
 double cwSketchPainterPathModel::strokeWidth(int row) const
@@ -146,67 +125,52 @@ double cwSketchPainterPathModel::strokeWidth(int row) const
 
 QColor cwSketchPainterPathModel::strokeColor(int row) const
 {
-    if (!m_strokeModel || m_brushNameRole < 0) {
+    if (!m_sketch || row < 0 || row >= m_sketch->strokes().size()) {
         return m_wallStrokeColor;
     }
-    const QString name = m_strokeModel->index(row, 0).data(m_brushNameRole).toString();
+    const QString name = m_sketch->strokes().at(row).brushName;
     const bool wallClass = m_snapshot.producesScrapOutline(name);
     return wallClass ? m_wallStrokeColor : m_nonWallStrokeColor;
 }
 
-cwAbstractSketchPainterPathModel::Path
-cwSketchPainterPathModel::path(const QModelIndex &index) const
+QList<cwSketchPathSource::Path> cwSketchPainterPathModel::paths() const
 {
-    if (index.row() == 0) {
-        return m_activePath;
-    }
-    return m_finishedPaths.at(index.row() - m_finishLineIndexOffset);
+    QList<Path> result;
+    result.reserve(m_finishedPaths.size() + 1);
+    result.append(m_activePath);
+    result.append(m_finishedPaths);
+    return result;
 }
 
-void cwSketchPainterPathModel::onSourceRowsInserted(const QModelIndex &parent,
-                                                    int first, int last)
+void cwSketchPainterPathModel::onStrokeInserted(int row)
 {
-    if (parent.isValid()) {
-        return;
-    }
-    for (int row = first; row <= last; ++row) {
-        if (row == m_activeStrokeIndex) {
-            updateActivePath();
-        } else {
-            addOrUpdateFinishPath(row);
-        }
+    if (row == m_activeStrokeIndex) {
+        updateActivePath();
+    } else {
+        addOrUpdateFinishPath(row);
     }
 }
 
-void cwSketchPainterPathModel::onSourceRowsAboutToBeRemoved(const QModelIndex &parent,
-                                                            int first, int last)
+void cwSketchPainterPathModel::onStrokeRemoved(int row)
 {
-    Q_UNUSED(parent);
-    Q_UNUSED(first);
-    Q_UNUSED(last);
-    // Defer the rebuild: batches don't track which source rows contributed to
-    // them, so the rebuild has to re-read the source model *after* the remove
-    // lands. Iteration 3 will introduce per-batch row tracking for live edits.
-    QMetaObject::invokeMethod(this, [this]{ rebuildAllFinished(); }, Qt::QueuedConnection);
+    Q_UNUSED(row);
+    // Batches don't track which source strokes contributed to them, so rebuild
+    // from the (already-updated) stroke list. Synchronous: strokeRemoved fires
+    // after the removal lands, unlike the old rowsAboutToBeRemoved signal.
+    rebuildAllFinished();
 }
 
-void cwSketchPainterPathModel::onSourceDataChanged(const QModelIndex &tl,
-                                                    const QModelIndex &br,
-                                                    const QList<int> &roles)
+void cwSketchPainterPathModel::onStrokeChanged(int row)
 {
-    // Iteration 1 contract: only the active stroke mutates via dataChanged;
+    // Only the active stroke mutates via strokeChanged (live pen input);
     // finished strokes are immutable. Updating a finished batch in-place would
     // re-append geometry and double-count.
-    const bool touchesPoints = roles.isEmpty() || roles.contains(m_pointsRole);
-    if (!touchesPoints) {
-        return;
-    }
-    if (m_activeStrokeIndex >= tl.row() && m_activeStrokeIndex <= br.row()) {
+    if (row == m_activeStrokeIndex) {
         updateActivePath();
     }
 }
 
-void cwSketchPainterPathModel::onSourceModelReset()
+void cwSketchPainterPathModel::onStrokesReset()
 {
     rebuildAllFinished();
     updateActivePath();
@@ -215,8 +179,8 @@ void cwSketchPainterPathModel::onSourceModelReset()
 void cwSketchPainterPathModel::onActiveStrokeIndexChanged()
 {
     updateActivePath();
-    if (m_previousActiveStroke >= 0 && m_strokeModel
-        && m_previousActiveStroke < m_strokeModel->rowCount()) {
+    if (m_previousActiveStroke >= 0
+        && m_previousActiveStroke < strokeCount()) {
         addOrUpdateFinishPath(m_previousActiveStroke);
     }
     m_previousActiveStroke = m_activeStrokeIndex;
@@ -226,13 +190,11 @@ void cwSketchPainterPathModel::updateActivePath()
 {
     m_activePath.painterPath.clear();
 
-    if (m_activeStrokeIndex < 0 || !m_strokeModel
-        || m_activeStrokeIndex >= m_strokeModel->rowCount()) {
+    if (m_activeStrokeIndex < 0 || !m_sketch
+        || m_activeStrokeIndex >= strokeCount()) {
         m_activePath.strokeWidth = 0.0;
         m_activePath.strokeColor = m_wallStrokeColor;
-        const QModelIndex rowIdx = index(0);
-        emit dataChanged(rowIdx, rowIdx,
-                         { PainterPathRole, StrokeWidthRole, StrokeColorRole });
+        emit pathsChanged();
         return;
     }
 
@@ -242,41 +204,37 @@ void cwSketchPainterPathModel::updateActivePath()
     m_activePath.strokeColor = c;
     buildStrokeGeometry(m_activePath.painterPath, m_activeStrokeIndex);
 
-    const QModelIndex rowIdx = index(0);
-    emit dataChanged(rowIdx, rowIdx,
-                     { PainterPathRole, StrokeWidthRole, StrokeColorRole });
+    emit pathsChanged();
 }
 
 void cwSketchPainterPathModel::rebuildAllFinished()
 {
-    clearFinished();
-    if (!m_strokeModel) {
-        return;
-    }
-    for (int row = 0; row < m_strokeModel->rowCount(); ++row) {
-        if (row == m_activeStrokeIndex) {
-            continue;
-        }
-        addOrUpdateFinishPath(row);
-    }
-}
-
-void cwSketchPainterPathModel::clearFinished()
-{
-    if (m_finishedPaths.isEmpty()) {
-        return;
-    }
-    const int first = m_finishLineIndexOffset;
-    const int last  = m_finishedPaths.size() - 1 + m_finishLineIndexOffset;
-    beginRemoveRows(QModelIndex(), first, last);
     m_finishedPaths.clear();
-    endRemoveRows();
+    if (m_sketch) {
+        for (int row = 0; row < strokeCount(); ++row) {
+            if (row == m_activeStrokeIndex) {
+                continue;
+            }
+            mergeFinishPath(row);
+        }
+    }
+    emit pathsChanged();
 }
 
 void cwSketchPainterPathModel::addOrUpdateFinishPath(int sourceRow)
 {
-    if (!m_strokeModel || sourceRow < 0 || sourceRow >= m_strokeModel->rowCount()) {
-        return;
+    if (mergeFinishPath(sourceRow)) {
+        emit pathsChanged();
+    }
+}
+
+// Folds the stroke into its (width, rgba) batch without emitting, so loop
+// callers (rebuildAllFinished, setSketch) can emit pathsChanged() once for the
+// whole pass. Returns true when the finished set changed.
+bool cwSketchPainterPathModel::mergeFinishPath(int sourceRow)
+{
+    if (!m_sketch || sourceRow < 0 || sourceRow >= strokeCount()) {
+        return false;
     }
 
     const double width = strokeWidth(sourceRow);
@@ -290,22 +248,15 @@ void cwSketchPainterPathModel::addOrUpdateFinishPath(int sourceRow)
                            });
     if (it != m_finishedPaths.end()) {
         buildStrokeGeometry(it->painterPath, sourceRow);
-        const int rowIdx = std::distance(m_finishedPaths.begin(), it)
-                           + m_finishLineIndexOffset;
-        const QModelIndex modelIdx = index(rowIdx);
-        emit dataChanged(modelIdx, modelIdx,
-                         { PainterPathRole, StrokeWidthRole, StrokeColorRole });
-        return;
+        return true;
     }
 
-    const int newRow = m_finishedPaths.size() + m_finishLineIndexOffset;
-    beginInsertRows(QModelIndex(), newRow, newRow);
     Path fresh;
     fresh.strokeWidth = width;
     fresh.strokeColor = color;
     buildStrokeGeometry(fresh.painterPath, sourceRow);
     m_finishedPaths.append(fresh);
-    endInsertRows();
+    return true;
 }
 
 void cwSketchPainterPathModel::buildStrokeGeometry(QPainterPath &out, int sourceRow) const

@@ -15,8 +15,10 @@
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwSketchPathSource.h"
 
-class CAVEWHERE_LIB_EXPORT cwAbstractSketchPainterPathModel : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwAbstractSketchPainterPathModel
+    : public QAbstractListModel, public cwSketchPathSource
 {
     Q_OBJECT
 
@@ -35,25 +37,12 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
+    // cwSketchPathSource: adapts the row/role surface to a flat path list so
+    // cwSketchPainter has a single code path. Dropped in commit 2.2 once grid
+    // and line-plot implement cwSketchPathSource directly.
+    QList<Path> paths() const override;
+
 protected:
-    struct Path {
-        Path() = default;
-        Path(const QPainterPath &path,
-             QColor strokeColor,
-             double strokeWidth,
-             double z = 0.0)
-            : painterPath(path),
-              strokeColor(strokeColor),
-              strokeWidth(strokeWidth),
-              z(z)
-        {}
-
-        QPainterPath painterPath;
-        QColor strokeColor;
-        double strokeWidth = 1.0;
-        double z = 0.0;
-    };
-
     virtual Path path(const QModelIndex &index) const = 0;
 };
 

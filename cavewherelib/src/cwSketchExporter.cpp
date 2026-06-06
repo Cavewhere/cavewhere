@@ -9,7 +9,7 @@
 #include "cwSketchExporter.h"
 #include "cwSketchPainter.h"
 #include "cwSketchDrawQPainter.h"
-#include "cwAbstractSketchPainterPathModel.h"
+#include "cwSketchPathSource.h"
 #include "cwScale.h"
 #include "cwSketch.h"
 

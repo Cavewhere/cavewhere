@@ -15,7 +15,6 @@ using Catch::Approx;
 #include "cwSketch.h"
 #include "cwSketchViewState.h"
 #include "cwPenStroke.h"
-#include "cwPenStrokeModel.h"
 #include "cwPenPoint.h"
 #include "cwScale.h"
 #include "cwWorldToScreenMatrix.h"
