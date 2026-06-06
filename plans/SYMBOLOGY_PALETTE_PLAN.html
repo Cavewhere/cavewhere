@@ -242,6 +242,69 @@ no raster step.
 
 <p class="small">Iterations 1–3 are the meaningful unit — until 3 lands, the foundation isn't useful for actual cave-map authoring. 4+ can interleave with other CaveWhere work. This document specifies <strong>iteration 1 in depth</strong> (formerly two iterations, now merged so the first mergeable milestone produces a real cartography artifact instead of a centerline-only regression of the prototype) and sketches 2–3 enough to lock in data-model decisions.</p>
 
+<h2>Commit plan (iteration 1)</h2>
+
+<p>Iteration 1 is too large for one commit. It lands as the eight focused,
+independently-reviewable commits below, in dependency order. Each commit builds
+and passes its own tests before the next begins. Commit&nbsp;2 is the only
+breaking change: it changes <code>cavewhere.proto</code> and drops the
+prototype's per-stroke <code>Kind</code>/<code>width</code>/<code>color</code>,
+so prototype-era sketches no longer load (no legacy loader — Decision&nbsp;2).</p>
+
+<table>
+  <thead><tr><th>#</th><th>Title</th><th>Scope</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>Palette data-model foundation</td>
+      <td>Value types (<code>cwLineBrush</code>, <code>cwDecorationLayer</code>, <code>cwPlacementRuleData</code>), <code>cwSymbologyPaletteData</code> + <code>cwSymbologyPalette</code> wrapper, <code>cwSymbologyPaletteManager</code>, JSON IO (<code>palette.json</code>), seed (<code>wall</code> / <code>scrap-outline</code> / <code>feature</code>), <code>cwPaletteSnapshot</code> (brushes only), <code>cavewhere_symbology.proto</code>. Glyphs deliberately deferred to commit 3.</td>
+      <td><span class="badge i1">done · 0e2d3950</span></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><code>cwPenStroke</code> → <code>brushName</code> <span class="small">(breaking)</span></td>
+      <td>Remove <code>Kind</code>/<code>width</code>/<code>color</code> from <code>cwPenStroke</code>, add <code>QString brushName</code> (Decision&nbsp;2). <code>cavewhere.proto</code>: add <code>PenStroke.brushName</code>, drop <code>kind</code>/<code>width</code>/<code>colorHex</code>. <code>cwSaveLoad</code> round-trips the new field (no legacy loader). <code>cwPenStrokeModel</code> re-keyed by brush name. Scrap detection (<code>cwScrapManager</code>, <code>cwSketchScrapOutlineDetector</code>) branches on <code>snapshot.findBrush(name)…scrapOutline</code> instead of <code>Kind</code>. Toolbar kind buttons swapped for a temporary brush-name selector to keep drawing working until commit&nbsp;7.</td>
+      <td><span class="badge i2">next</span></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Glyphs + tessellation cache</td>
+      <td><code>cwSymbologyGlyph</code> value type (drawn <code>cwPenStroke</code>s in glyph-local paper-mm), glyphs added to palette / snapshot / seed / proto, per-glyph <code>.cwglyph</code> IO, recursive glyph→brush→glyph DAG cycle check at load, <code>cwGlyphTessellationCache</code> keyed by <code>(glyphName, mapScale)</code>. Seed gains <code>floor-step</code> brush + <code>floor-step-tick</code> glyph. Depends on commit&nbsp;2 (<code>brushName</code>).</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Placement rules + decoration layout</td>
+      <td><code>cwPlacementRule</code> abstract base + registry, concrete rules under <code>cwPlacementRules/</code> (Generate / MutatePerLayer / Stamp stages — Decision&nbsp;11), <code>cwSketchDecorationLayout</code> running the pipeline against a <code>cwPaletteSnapshot</code>. The four modes (RigidStamp / BendingStamp / PointStamp / OffsetCurve at offset=0). No <code>MutateScene</code> rules yet.</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Offset-curve batching + painter</td>
+      <td><code>cwSketchPainterPathModel</code> → <code>cwOffsetCurveBatches</code>, batched by <code>(brushName, offset, width, color, dash, cap, join)</code>, reads <code>cwPaletteSnapshot</code> (offset=0 only). <code>cwSketchPainter</code> threads the snapshot through <code>PaintContext</code>, picks light/dark at draw time from <code>QStyleHints::colorScheme()</code>, and applies <code>zOrder</code> paint sort. <strong>Palette snapshot source of truth:</strong> the batcher stops self-seeding its own <code>cwSymbologyPaletteSeed::create().snapshot()</code> (the commit-2 stopgap) and instead <em>takes</em> the snapshot from the sketch — a <code>setSnapshot()</code> setter fed from <code>cwSketch::paletteSnapshot()</code> at the existing <code>cwSketchCanvas::setStrokeModel</code> call site. This collapses the two independent seed copies (one in <code>cwSketch</code>, one in the path model) into a single source so the painter and scrap detection resolve against the <em>same</em> palette once commit&nbsp;6 makes it vary by <code>activePaletteId</code>; also drops the temporary uniform <code>kSketchStrokeRenderWidth</code> and the wall/non-wall two-color split in favor of per-brush <code>OffsetCurve</code> width/color.</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Sketch / region / settings wiring</td>
+      <td><code>cwSketch.activePaletteId</code> (Q_PROPERTY + resolver chain, Decision&nbsp;6), <code>cwCavingRegion.defaultPaletteId</code>, <code>cwSettings.defaultPaletteId</code> + <code>colorSchemeOverride</code> (FollowSystem / Light / Dark driving <code>QStyleHints::setColorScheme</code>). <code>cavewhere.proto</code>: <code>Sketch.activePaletteId</code>, <code>CavingRegion.defaultPaletteId</code>.</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Palette + brush pickers</td>
+      <td><code>PalettePicker.qml</code>, <code>BrushPicker.qml</code>, <code>GlyphPicker.qml</code>; <code>SketchToolbar.qml</code> pickers replace the temporary selector from commit&nbsp;2; <code>SketchItem.qml</code> current-brush wiring; <code>tst_BrushPicker.qml</code>. Missing-palette warning banner.</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Glyph editor</td>
+      <td><code>cwSketchGlyphCanvas</code> (origin marker, tangent indicator, paper-mm extent overlay), <code>GlyphEditorPage.qml</code> host with save / cancel / rename, draw-and-save into a writable palette fork; <code>tst_GlyphEditor.qml</code>.</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
 <h2>Key design decisions</h2>
 
 <h3>1. Brushes are data, not classes</h3>
@@ -1877,7 +1940,8 @@ re-points the sketch to the seed palette and re-renders.
   <li><code>cavewherelib/src/cwPenStroke.{h,cpp}</code> — remove <code>Kind</code>, <code>width</code>, <code>color</code>; add <code>QString brushName</code>. No cached pointer.</li>
   <li><code>cavewherelib/src/cwPenStrokeModel.{h,cpp}</code> — re-keyed roles</li>
   <li><code>cavewherelib/src/cwSketch.{h,cpp}</code> — <code>activePaletteId</code> property, change signals (no per-sketch light/dark flag)</li>
-  <li><code>cavewherelib/src/cwSketchPainterPathModel.{h,cpp}</code> → renamed <code>cwOffsetCurveBatches</code>; OffsetCurve-layer batching by <code>(brushName, offset, width, color, dash, cap, join)</code>; reads <code>cwPaletteSnapshot</code>; iter 1 handles <code>offset = 0</code> only</li>
+  <li><code>cavewherelib/src/cwSketchPainterPathModel.{h,cpp}</code> → renamed <code>cwOffsetCurveBatches</code>; OffsetCurve-layer batching by <code>(brushName, offset, width, color, dash, cap, join)</code>; reads <code>cwPaletteSnapshot</code>; iter 1 handles <code>offset = 0</code> only. Adds <code>setSnapshot(cwPaletteSnapshot)</code> and <em>stops</em> self-seeding <code>cwSymbologyPaletteSeed::create().snapshot()</code> in its ctor (commit-2 stopgap) — the snapshot now comes from the sketch (single source of truth). Drops the temporary uniform <code>kSketchStrokeRenderWidth</code> + wall/non-wall two-color split.</li>
+  <li><code>cavewherelib/src/cwSketchCanvas.{h,cpp}</code> — feeds <code>m_pathModel-&gt;setSnapshot(m_sketch-&gt;paletteSnapshot())</code> at the existing <code>setStrokeModel</code> call site (and re-feeds when the sketch's snapshot changes), so the painter and scrap detection share one palette snapshot</li>
   <li><code>cavewherelib/src/cwSketchPainter.{h,cpp}</code> — threads <code>cwPaletteSnapshot</code> through <code>PaintContext</code>; picks light/dark color at draw time from <code>QStyleHints::colorScheme()</code></li>
   <li><code>cavewherelib/src/cwCavingRegion.{h,cpp}</code> — <code>defaultPaletteId</code></li>
   <li><code>cavewherelib/src/cwSettings.{h,cpp}</code> — <code>defaultPaletteId</code>, <code>colorSchemeOverride</code> (FollowSystem / Light / Dark, drives <code>QStyleHints::setColorScheme</code>)</li>
