@@ -56,7 +56,7 @@ class CAVEWHERE_LIB_EXPORT cwLazLayer : public QObject
     Q_PROPERTY(QString sourceCSDisplayName READ sourceCSDisplayName NOTIFY sourceCSChanged)
     Q_PROPERTY(LoadStatus loadStatus READ loadStatus NOTIFY loadStatusChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
-    Q_PROPERTY(int pointCount READ pointCount NOTIFY pointCountChanged)
+    Q_PROPERTY(qint64 pointCount READ pointCount NOTIFY pointCountChanged)
     Q_PROPERTY(QVector3D bboxMin READ bboxMin NOTIFY bboxChanged)
     Q_PROPERTY(QVector3D bboxMax READ bboxMax NOTIFY bboxChanged)
     Q_PROPERTY(float meanSpacingXY READ meanSpacingXY NOTIFY meanSpacingXYChanged)
@@ -107,7 +107,7 @@ public:
 
     LoadStatus loadStatus() const { return m_loadStatus; }
     QString errorMessage() const { return m_errorMessage; }
-    int pointCount() const { return m_geometry.vertexCount(); }
+    qint64 pointCount() const { return m_geometry.vertexCount(); }
     QVector3D bboxMin() const { return m_bboxMin; }
     QVector3D bboxMax() const { return m_bboxMax; }
     float meanSpacingXY() const { return m_meanSpacingXY; }

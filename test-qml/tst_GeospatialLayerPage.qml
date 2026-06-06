@@ -320,6 +320,65 @@ MainWindowTest {
             tryCompare(chip, "visible", false)
         }
 
+        function test_formatPointCount_data() {
+            return [
+                { tag: "zero",          value: 0,          expected: "0" },
+                { tag: "under-thousand", value: 999,        expected: "999" },
+                { tag: "thousand",      value: 1000,       expected: "1,000" },
+                { tag: "ten-thousand",  value: 12847,      expected: "12,847" },
+                { tag: "hundreds-k",    value: 530200,     expected: "530,200" },
+                { tag: "millions",      value: 1423000,    expected: "1,423,000" },
+                { tag: "max-int",       value: 2147483647, expected: "2,147,483,647" },
+                // Beyond signed 32-bit — pointCount is qint64, so large LAZ
+                // clouds must not overflow or render in scientific notation.
+                { tag: "over-int32",    value: 3000000000, expected: "3,000,000,000" },
+                { tag: "ten-billion",   value: 10000000000, expected: "10,000,000,000" },
+            ]
+        }
+
+        function test_formatPointCount(data) {
+            gotoGeospatialLayers()
+            const page = RootData.pageView.currentPageItem
+            compare(page.formatPointCount(data.value), data.expected,
+                    "point count must be comma-grouped")
+        }
+
+        function test_pointCountCellIsCommaGrouped() {
+            gotoGeospatialLayers()
+
+            const lazPath = TestHelper.writeMinimalLazInTempDir("pointcountcell")
+            RootData.region.lazLayers.addFromFiles([Qt.url("file://" + lazPath)])
+            tryCompare(RootData.region.lazLayers, "count", 1)
+            waitForLazLoadsToFinish()
+
+            const layer = RootData.region.lazLayers.layerAt(0)
+            tryCompare(layer, "loadStatus", LazLayer.Loaded)
+            verify(layer.pointCount > 0, "minimal LAZ should have points")
+
+            const page = RootData.pageView.currentPageItem
+            const tableView = findChild(page, "geospatialLayerTableView")
+            tryCompare(tableView, "count", 1)
+
+            // count == 1 only means the model has a row; the delegate's child
+            // tree is created lazily. Wait for it before the one-shot findChild.
+            tryVerify(() => {
+                const d = tableView.itemAtIndex(0)
+                return d !== null && d.width > 0 && d.height > 0
+            }, 2000, "row delegate at index 0 should materialize")
+
+            // Assert the actual rendered cell, not a re-derivation: the binding
+            // must route the layer's point count through formatPointCount (the
+            // narrow delegate appends " pts"). This proves the wiring, not just
+            // the helper.
+            const cell = findChild(tableView, "pointCountCell")
+            verify(cell !== null, "point count cell must exist")
+            const formatted = page.formatPointCount(layer.pointCount)
+            const expectedText = page.isNarrow ? formatted + " pts" : formatted
+            tryCompare(cell, "text", expectedText)
+            verify(formatted.indexOf("e") === -1 && formatted.indexOf("E") === -1,
+                   "formatted count must not use scientific notation")
+        }
+
         function test_geospatialLayersLinkCount() {
             RootData.pageSelectionModel.currentPageAddress = "Source/Data"
             tryVerify(() => RootData.pageView.currentPageItem !== null

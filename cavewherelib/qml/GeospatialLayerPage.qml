@@ -26,6 +26,12 @@ StandardPage {
     readonly property real csColumnWidth: 180
     readonly property real pointCountColumnWidth: 120
 
+    // The app forces the C locale (cwSettings) for stable serialization, so
+    // Number.toLocaleString won't group digits — insert commas manually.
+    function formatPointCount(count) {
+        return count.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+    }
+
     function addLazFiles(urls) {
         if (urls.length === 0) {
             return
@@ -156,7 +162,7 @@ StandardPage {
             required property string name
             required property string sourceCS
             required property string sourceCSDisplayName
-            required property int pointCount
+            required property real pointCount
             required property LazLayer lazLayer
 
             implicitHeight: rowLayoutId.implicitHeight + Theme.tightSpacing * 2
@@ -215,8 +221,9 @@ StandardPage {
                 }
 
                 QC.Label {
+                    objectName: "pointCountCell"
                     Layout.preferredWidth: geospatialLayerPage.pointCountColumnWidth
-                    text: wideDelegateId.pointCount.toLocaleString() + " pts"
+                    text: geospatialLayerPage.formatPointCount(wideDelegateId.pointCount)
                     opacity: wideDelegateId.lazLayer.enabled ? 1.0 : 0.5
                 }
 
@@ -251,7 +258,7 @@ StandardPage {
             required property string name
             required property string sourceCS
             required property string sourceCSDisplayName
-            required property int pointCount
+            required property real pointCount
             required property LazLayer lazLayer
 
             width: QQ.ListView.view ? QQ.ListView.view.width : 0
@@ -309,7 +316,8 @@ StandardPage {
                     QC.Label { text: "·"; color: Theme.textSubtle }
 
                     QC.Label {
-                        text: narrowDelegateId.pointCount.toLocaleString() + " pts"
+                        objectName: "pointCountCell"
+                        text: geospatialLayerPage.formatPointCount(narrowDelegateId.pointCount) + " pts"
                     }
                 }
 
