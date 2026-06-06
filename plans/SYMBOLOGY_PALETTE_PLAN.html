@@ -1,0 +1,2666 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Symbology Palette: Custom Lines, Areas, and Points</title>
+<style>
+  :root {
+    --fg: #1d1d1f;
+    --muted: #555;
+    --line: #e6e6e6;
+    --soft: #fafafa;
+    --code-bg: #f4f4f5;
+    --accent: #3949ab;
+    --paper: #fbfaf6;
+    --ink: #2a2a2e;
+    --halo: #fbfaf6;
+  }
+  body {
+    font: 15px/1.55 -apple-system, "SF Pro Text", system-ui, sans-serif;
+    color: var(--fg);
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 24px 96px;
+    background: #fff;
+  }
+  h1 { font-size: 2em; margin-top: 0; }
+  h2 { margin-top: 2.4em; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { margin-top: 1.8em; }
+  h4 { margin-top: 1.4em; margin-bottom: 0.4em; }
+  p, ul, ol { margin: 0.6em 0 0.8em; }
+  ul, ol { padding-left: 1.4em; }
+  code {
+    font: 0.92em/1.4 "SF Mono", Menlo, Consolas, monospace;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 14px 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font: 0.86em/1.5 "SF Mono", Menlo, Consolas, monospace;
+  }
+  table { border-collapse: collapse; margin: 14px 0; font-size: 0.93em; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  blockquote { border-left: 3px solid #c8c8cc; margin: 14px 0; padding: 4px 16px; color: #4a4a52; background: var(--soft); }
+  figure {
+    margin: 22px 0;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--soft);
+  }
+  figure canvas { display: block; width: 100%; background: #fff; border: 1px solid #ececec; border-radius: 4px; }
+  figcaption { font-size: 0.88em; color: var(--muted); margin-top: 10px; line-height: 1.45; }
+  .grid { display: grid; gap: 16px; margin: 22px 0; }
+  .grid.c2 { grid-template-columns: 1fr 1fr; }
+  .grid.c3 { grid-template-columns: 1fr 1fr 1fr; }
+  .panel { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); }
+  .panel-label { font-size: 0.74em; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 8px; }
+  .panel canvas { display: block; width: 100%; background: var(--paper); border-radius: 3px; }
+  .badge {
+    display: inline-block;
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    padding: 1px 7px;
+    border-radius: 999px;
+    margin-left: 6px;
+    vertical-align: middle;
+    border: 1px solid #d2dcfb;
+    background: #eef2ff;
+    color: var(--accent);
+  }
+  .badge.i1 { background: #eafaf1; color: #1b7a3a; border-color: #b6e5c8; }
+  .badge.i2 { background: #fff4e0; color: #8a5a00; border-color: #f0d9a3; }
+  .badge.i3 { background: #fdecec; color: #a02a2a; border-color: #f3c3c3; }
+  .badge.i4 { background: #ecf3fd; color: #1f4e9b; border-color: #c3d6f1; }
+  .small { font-size: 0.88em; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Symbology Palette: Custom Lines, Areas, and Points</h1>
+
+<h2>Context</h2>
+
+<p>
+CaveWhere's sketch system today carries a prototyping
+<code>cwPenStroke::Kind</code> enum (<code>Wall</code>, <code>Feature</code>,
+<code>ScrapOutline</code>, <code>Eraser</code>) with per-kind defaults and
+special-case behaviour baked into C++. <code>Kind</code> was scaffolding to
+get sketching working end-to-end; this plan replaces it.
+</p>
+
+<p>
+The central design principle is <strong>declarative symbology</strong>:
+every line, area, and point is an instance of a <strong>brush</strong>
+whose look <em>and behaviour</em> are described in data. Anything the
+renderer or the rest of the application currently special-cases on
+<code>Kind</code> becomes a flag or a capability declared on the brush.
+Whether a stroke contributes to a scrap outline, whether it accepts
+pressure variation, what its decorations are, what scale it shows at —
+all data, all editable, all shippable in a palette.
+</p>
+
+<p>
+Brushes can be edited, shared, and synced from a public git repository.
+</p>
+
+<p>Reference standards:</p>
+<ul>
+  <li>UIS signatures: <code>/Users/cave/Downloads/uis_signatures_english.pdf</code></li>
+  <li>NSS symbols: <code>https://sacs.caves.org/resources/symbols-one-page.pdf</code></li>
+</ul>
+
+<h3>Every line is a centerline plus decorations</h3>
+
+<p>
+A line on a cave map is rarely a single stroke — it is a composite of a
+<em>centerline</em> and a series of <em>decoration layers</em> placed
+along the centerline at authored spacing. The centerline carries the
+geometry; decorations carry the symbology.
+</p>
+
+<figure>
+  <canvas id="cv-anatomy" width="860" height="240"></canvas>
+  <figcaption>
+    <strong>Floor-step anatomy.</strong> The centerline is one element
+    (color, width, dash). The hatches are a decoration layer with their
+    own <em>spacing</em>, <em>size</em>, <em>side</em>, and (later)
+    <em>halo</em>. A brush is the composition of these — never just one
+    primitive.
+  </figcaption>
+</figure>
+
+<h3>What "custom line" means in cave cartography</h3>
+
+<p>
+Every cave-map symbol below is built from the same vocabulary: a
+centerline + zero or more decoration layers. The brushes differ only in
+their decoration layers' parameters.
+</p>
+
+<div class="grid c3">
+  <div class="panel"><div class="panel-label">Wall (solid)</div><canvas id="cv-sym-wall" width="280" height="120"></canvas></div>
+  <div class="panel"><div class="panel-label">Drip line (dashed)</div><canvas id="cv-sym-drip" width="280" height="120"></canvas></div>
+  <div class="panel"><div class="panel-label">Floor step</div><canvas id="cv-sym-floor" width="280" height="120"></canvas></div>
+  <div class="panel"><div class="panel-label">Ceiling step (halo'd T's)</div><canvas id="cv-sym-ceiling" width="280" height="120"></canvas></div>
+  <div class="panel"><div class="panel-label">Pit edge</div><canvas id="cv-sym-pit" width="280" height="120"></canvas></div>
+  <div class="panel"><div class="panel-label">Sand floor</div><canvas id="cv-sym-sand" width="280" height="120"></canvas></div>
+</div>
+
+<h3>Symbol non-overlap is the central constraint</h3>
+
+<p>
+Centerlines <em>may</em> intersect each other (a floor step crossing a pit
+edge is legitimate). Decorations <em>may not</em> overlap each other or
+step on unrelated centerlines/decorations. Resolutions, in preference order:
+</p>
+
+<ol>
+  <li><strong>Shift</strong> along arclength up to ±½ spacing (snap to a free slot).</li>
+  <li><strong>Shorten</strong> the decoration (e.g. 10 px → 4 px).</li>
+  <li><strong>Halo</strong> with a background-coloured buffer so a near-miss reads cleanly.</li>
+  <li><strong>Hide</strong> the offending instance entirely.</li>
+</ol>
+
+<p>
+Each decoration declares its own policy. A floor-step hatch can be
+shortened or hidden; a ceiling-step T must stay full-size but allows a
+halo.
+</p>
+
+<div class="grid c2">
+  <div class="panel">
+    <div class="panel-label">Naive — overlapping decorations</div>
+    <canvas id="cv-collide-naive" width="420" height="220"></canvas>
+  </div>
+  <div class="panel">
+    <div class="panel-label">After placement pass</div>
+    <canvas id="cv-collide-fixed" width="420" height="220"></canvas>
+  </div>
+</div>
+
+<h3>Scale is part of the symbol</h3>
+
+<p>
+A symbol that reads clearly at 1:250 may be illegibly dense at 1:1000
+and a black smear at 1:5000. Every brush <em>and</em> every decoration
+layer inside a brush carries a <strong>scale visibility window</strong>.
+At export the active <code>cwSketch::mapScale</code> resolves visibility.
+On screen, the cartographer flips <code>cwSketch::mapScale</code>
+directly from the toolbar and everything downstream re-renders (see
+Decision 7's dynamic-scale-switching discussion). This is the "vector
+mipmap" — different decoration layers light up at different scales,
+no raster step.
+</p>
+
+<div class="grid c3">
+  <div class="panel"><div class="panel-label">1:250 — full hatches</div><canvas id="cv-scale-250" width="280" height="140"></canvas></div>
+  <div class="panel"><div class="panel-label">1:1000 — sparser hatches</div><canvas id="cv-scale-1000" width="280" height="140"></canvas></div>
+  <div class="panel"><div class="panel-label">1:5000 — centerline only</div><canvas id="cv-scale-5000" width="280" height="140"></canvas></div>
+</div>
+
+<h2>Scope</h2>
+
+<h3>In scope (this plan)</h3>
+<ul>
+  <li>A data-driven brush definition (<code>cwLineBrush</code>) covering centerline style + ordered decoration layers + collision policy + scale windows.</li>
+  <li>A <strong>palette</strong> model (<code>cwSymbologyPalette</code>) — a versioned collection of brushes with its own proto schema, identity, and optional git remote.</li>
+  <li>An on-disk palette directory plus a built-in seed palette mirroring today's symbols so nothing regresses.</li>
+  <li>Replacement of <code>cwPenStroke::Kind</code> with a <code>brushName</code> reference; capabilities like "this is a scrap outline" become brush flags.</li>
+  <li>Rendering: <code>cwOffsetCurveBatches</code> (the renamed <code>cwSketchPainterPathModel</code>) batches OffsetCurve layers by <code>(brushName, offset, width, color, dash, cap, join)</code> and emits per-decoration draw work; <code>cwSketchPainter</code> orchestrates a placement pass that resolves collisions.</li>
+  <li>A minimal in-app palette picker and per-stroke brush picker.</li>
+</ul>
+
+<h3>Explicit non-goals</h3>
+<ul>
+  <li><strong>Areas and points are deferred</strong> to a later iteration; the data model is shaped so they can be added later as <code>cwAreaBrush</code> / <code>cwPointBrush</code> peer types sharing the decoration-layer vocabulary.</li>
+  <li><strong>In-app brush editor UI</strong> is deferred — iteration 1 ships a palette <em>picker</em>; authoring new brushes happens by editing palette files directly.</li>
+  <li><strong>Therion <code>.th2</code> import/export</strong> is out of scope. The brush vocabulary is chosen with <code>.th2</code>'s <code>linetype</code>/<code>pointtype</code> taxonomy in mind so a mapping can be added later without restructuring.</li>
+  <li><strong>Cross-sketch / region-wide collision</strong> is out of scope. The placement pass operates within a single <code>cwSketch</code>.</li>
+</ul>
+
+<h2>Iteration roadmap</h2>
+
+<table>
+  <thead><tr><th>Iter</th><th>Title</th><th>Lands</th></tr></thead>
+  <tbody>
+    <tr><td>1 <span class="badge i1">foundation</span></td><td>Brushes + glyphs + decoration stamping + centerline-as-OffsetCurve</td><td><code>cwLineBrush</code> (name-keyed, no built-in centerline — Decision 1), <code>cwSymbologyGlyph</code>, palette model + proto schema, seed palette (<code>wall</code> / <code>scrap-outline</code> / <code>feature</code> / <code>floor-step</code> + <code>floor-step-tick</code> glyph), <code>brushName</code> on <code>cwPenStroke</code>, <code>cwPaletteSnapshot</code> resolver, glyph tessellation cache + draw-and-save editor, palette/brush picker UI, <code>zOrder</code> paint sort, four modes (RigidStamp / BendingStamp / PointStamp / OffsetCurve <em>at offset=0 only</em>), per-layer rule registry (Generate / MutatePerLayer / Stamp). End-to-end target: seed <code>floor-step</code> renders from a clean install (OffsetCurve(offset=0) edge line + tick RigidStamp). No <code>MutateScene</code> rules yet — decorations overlap freely at this iter.</td></tr>
+    <tr><td>2 <span class="badge i3">scene rules + parallel offsets</span></td><td>Scene-rule chain + non-zero OffsetCurve</td><td><code>MutateScene</code> stage in the same registry: <code>cwSceneContext</code> with R-tree, ship <code>Try shift</code> / <code>Try shorten</code> / <code>Hide if colliding</code> / <code>Sort by priority</code>, default chain wired into each mode. Plus non-zero <code>OffsetCurve</code> offsets — parallel filled lines that curve with the cartographer's polyline, for overhang lines, double walls, tube-passage ceiling shadows, N-line symbology (Decision 10). Includes miter handling at sharp corners and offset-curve self-intersection detection. Halo is intentionally <em>not</em> part of this — see Decision 10.</td></tr>
+    <tr><td>3 <span class="badge i4">scale</span></td><td>Scale visibility</td><td>Per-brush + per-layer scale windows evaluated against <code>cwSketch::mapScale</code>; dynamic scale switching (via <code>cwScale::scaleChanged</code>) invalidates decoration cache + placement</td></tr>
+    <tr><td>4</td><td>Palette git sync</td><td>Clone/pull/push palettes via <code>QQuickGit</code>; palette manager UI; account reuse</td></tr>
+    <tr><td>5</td><td>Area + point brushes</td><td><code>cwAreaBrush</code>, <code>cwPointBrush</code>, shared glyph + rule vocabulary</td></tr>
+    <tr><td>6</td><td>Per-stamp overrides</td><td>Hand-edit individual stamp positions on top of brush-generated layout; overrides stored on the sketch, applied as a final mutator pass</td></tr>
+    <tr><td>7</td><td><code>.th2</code> interop</td><td>Brush + glyph ↔ Therion linetype/pointtype mapping</td></tr>
+  </tbody>
+</table>
+
+<p class="small">Iterations 1–3 are the meaningful unit — until 3 lands, the foundation isn't useful for actual cave-map authoring. 4+ can interleave with other CaveWhere work. This document specifies <strong>iteration 1 in depth</strong> (formerly two iterations, now merged so the first mergeable milestone produces a real cartography artifact instead of a centerline-only regression of the prototype) and sketches 2–3 enough to lock in data-model decisions.</p>
+
+<h2>Key design decisions</h2>
+
+<h3>1. Brushes are data, not classes</h3>
+
+<p>
+A brush is a value type serialised to proto/JSON. There is no
+per-brush C++ subclass. Adding a new brush means appending a row to a
+palette file — no rebuild required.
+</p>
+
+<pre><code>struct cwLineBrush {
+    // Identity — see Decision 2 for the name vs displayName split.
+    QString name;                 // machine identifier — kebab-case, unique within palette,
+                                  //   ASCII only, immutable once published. Renaming `name`
+                                  //   is a breaking change for every sketch that references it.
+    QString displayName;          // human-readable, localizable — shown in pickers and logs.
+    QString category;             // display-only grouping in pickers — "Walls", "Floor features", …
+
+    // Paint order. Higher z paints later (on top). Wall ships at z=100,
+    // feature at z=10, etc. See Decision 12 for the full sort key.
+    int zOrder = 0;
+
+    // Topology flag — closed loops of this brush feed the chain-based
+    // scrap-outline detector and become cwScrap outlines. Independent
+    // of rendering: a `scrap-outline` brush has `scrapOutline = true`
+    // and zero decoration layers (the user-drawn polyline is the
+    // topological boundary but no ink hits the page).
+    bool scrapOutline = false;
+
+    // Decoration layers, drawn in order. The brush has no built-in
+    // "centerline" — the visible line on a normal wall is just an
+    // OffsetCurve layer with offset = 0 (Decision 10). N parallel
+    // visible lines = N OffsetCurve layers at the offsets the
+    // cartographer wants. Floor step = one OffsetCurve(offset=0) layer
+    // + one RigidStamp tick layer. Empty = no ink (scrap-outline).
+    QVector&lt;cwDecorationLayer&gt; decorations;
+
+    // Scale window (iteration 3). 0 = unbounded.
+    double minPaperScale = 0.0;   // e.g. 1.0/1000 (smaller = zoomed out)
+    double maxPaperScale = 0.0;
+};</code></pre>
+
+<p>
+<strong>Centerline is not a special concept on the brush.</strong> An
+earlier draft of this plan carried six fields on <code>cwLineBrush</code>
+for "the centerline" (<code>centerlineColorLight/Dark</code>,
+<code>centerlineWidthMm</code>, <code>cap</code>, <code>join</code>,
+<code>centerlineEnabled</code>). They duplicated what an
+<code>OffsetCurve</code> decoration layer with <code>offset = 0</code>
+already does. Removed. Consequences:
+</p>
+<ul>
+  <li>A brush is a list of rendering layers, full stop. No
+  centerline-vs-decoration split.</li>
+  <li>Multiple parallel "primary" lines fall out for free — a
+  triple-line symbol is three <code>OffsetCurve</code> layers at
+  <code>{-2, 0, +2}</code> mm, none privileged.</li>
+  <li>The <code>centerlineEnabled = false</code> case (scrap-outline)
+  collapses to "zero decoration layers" — the brush draws no ink, but
+  the cartographer's drawn polyline still feeds scrap detection
+  because <code>scrapOutline = true</code> is a topology flag
+  operating on <code>cwPenStroke::points</code> (Decision 8).</li>
+  <li><code>cap</code> / <code>join</code> / <code>acceptsPressure</code>
+  move to <code>cwDecorationLayer</code> — per-layer, so a brush's
+  shadow lines can square-cap while the main line round-caps if a
+  cartographer wants. See Decision 10.</li>
+</ul>
+
+<p>
+<strong>No per-stroke overrides.</strong> A stroke's look is defined
+entirely by the brush its <code>brushName</code> resolves to. To vary a
+stroke, the cartographer clones the brush in the palette UI
+(<code>wall</code> → <code>wall-emphasized</code>) and edits the clone.
+Every variation is named, lives in the palette, and is bulk-editable.
+This is the considered alternative to a per-stroke
+<code>QHash&lt;QString, QVariant&gt;</code> override bag, which would
+produce a proliferation of unnamed, untyped, non-bulk-editable variants.
+If real iter 1 usage shows palette bloat from clone-and-tweak, brush
+inheritance (a <code>parentBrushName</code> field with sparse field
+overrides) lands as a non-breaking schema addition in a later iteration.
+</p>
+
+<h3>2. <code>brushName</code> replaces <code>Kind</code> on <code>cwPenStroke</code></h3>
+
+<pre><code>struct cwPenStroke {
+    QString brushName;           // resolves via active palette; defines look entirely
+    QVector&lt;cwPenPoint&gt; points;  // points stay in world metres (no change)
+    QUuid id;
+};</code></pre>
+
+<p>
+<strong>Why name, not UUID.</strong> The whole point of the palette
+system is that swapping palettes <em>re-skins</em> the sketch:
+UIS-Standard's <code>wall</code> → MyPersonal's <code>wall</code>
+substitutes cleanly because both palettes call the brush
+<code>"wall"</code>. A UUID can't do this — the two palettes' wall
+brushes would have different UUIDs, so swapping palettes would orphan
+every stroke. Identifying by stable string name is the only way
+cross-palette substitution works, and it matches Therion's
+<code>linetype</code> / <code>pointtype</code> taxonomy. See Decision 1
+for the name vs displayName split: <code>name</code> is the machine
+identifier (kebab-case, immutable, unique within palette);
+<code>displayName</code> is the localizable label shown in UI.
+</p>
+
+<p>
+<strong>Flat namespace.</strong> Brush names live in a single flat
+namespace per palette — no <code>"floors/sand"</code> path syntax.
+Category is a display-only field for grouping in pickers. Therion is
+flat; the seed palette is small; community palettes converging on
+the same names (<code>"wall"</code>, <code>"floor-step"</code>,
+<code>"sand-floor"</code>) is the point of cross-palette
+re-skinning.
+</p>
+
+<p>
+<code>Kind</code> was prototyping; the existing sketches are also
+prototyping data. There is <strong>no backward-compatible load
+path</strong> — the field is removed from the proto schema in the same
+commit that adds <code>brushName</code>, and any pre-existing
+<code>.cw</code> sketches authored before that commit simply fail to
+load (or load with empty stroke lists). This trades a one-shot
+migration loader for a clean schema and zero deferred cleanup; the
+benefit dwarfs the cost since none of the prototype sketches are
+load-bearing.
+</p>
+
+<p>
+<strong>No per-stroke overrides — clone the brush instead.</strong>
+The prototype's <code>cwPenStroke::width</code> and
+<code>cwPenStroke::color</code> fields go away. A stroke's look is
+defined entirely by its <code>brushName</code>; if a cartographer
+wants a thicker wall in one passage, they clone the <code>wall</code>
+brush in the palette UI to <code>wall-emphasized</code>, edit the
+clone, and reassign the affected strokes' <code>brushName</code>.
+Every variation is a first-class palette entity — named, discoverable,
+bulk-editable. Three reasons this is preferable to a per-stroke
+override bag (<code>QHash&lt;QString, QVariant&gt;</code> or
+<code>std::optional&lt;T&gt;</code> per field):
+</p>
+<ol>
+  <li><strong>Bulk editing is trivial.</strong> "Make all emphasized
+  walls darker" is one edit on <code>wall-emphasized</code>.
+  Override-bag variants don't have a name, can't be searched, and
+  silently diverge from any base.</li>
+  <li><strong>Collision rules stay tractable.</strong> The
+  <code>MutateScene</code> stage (Decision 11) reasons about glyph
+  buffer sizes and centerline widths from brush data. Per-stroke
+  overrides would force the placement pipeline to re-read every
+  stroke's local override before answering "does this glyph fit?",
+  which the brush-only contract sidesteps entirely.</li>
+  <li><strong>Palettes stay portable.</strong> Sharing a sketch via git
+  sync (Decision 15) sends the brushes the sketch references. With
+  overrides, two sketches using the same brush wouldn't necessarily
+  render the same way.</li>
+</ol>
+
+<p>
+If iter 1 usage shows clone-and-tweak producing palette bloat, brush
+inheritance lands later as a non-breaking schema addition
+(<code>parentBrushName</code> + per-field "overridden" flags) — but
+it's explicitly deferred so we ship the simpler design first.
+</p>
+
+<p>
+<strong>Eraser is not a brush.</strong> Eraser becomes a tool mode
+(sketch state machine), not a stroke type. The prototype's
+<code>Kind::Eraser</code> row falls away with the rest of the enum.
+</p>
+
+<p>
+<strong>Capabilities, not subclasses.</strong> Anything that read
+<code>stroke.kind == Wall</code> becomes
+<code>brush(stroke).scrapOutline</code>. Anything that read
+<code>stroke.kind == Feature</code> becomes default behaviour
+(<code>!scrapOutline</code>). When a new capability is needed, a new
+boolean (or enum field, if mutually exclusive states ever arise) is
+added to <code>cwLineBrush</code> and to the palette schema. The whole
+point: no central switch on a kind taxonomy.
+</p>
+
+<h3>3. Palette is a versioned bag of brushes with its own schema</h3>
+
+<p>
+<code>cwSymbologyPalette</code> is a free-standing entity with its own
+proto file (<code>cavewhere_symbology.proto</code>), not embedded in
+<code>cavewhere.proto</code>. Two reasons:
+</p>
+<ol>
+  <li><strong>Independent versioning.</strong> A new brush field shouldn't bump the <code>.cw</code> project file version. Palette versions evolve on their own clock.</li>
+  <li><strong>Distribution.</strong> A palette is a repository. Bundling its schema with the project schema would force third-party consumers to pull in all of <code>cavewhere.proto</code> to read a palette.</li>
+</ol>
+
+<pre><code>// cavewhere_symbology.proto
+syntax = "proto3";
+package CavewhereSymbologyProto;
+import "QtProto.proto";
+
+message Palette {
+    string id          = 1;       // UUID — see Decision 6 for why palettes keep UUIDs
+    string name        = 2;       // human-readable display name
+    string description = 3;
+    string author      = 4;
+    string version     = 5;       // semver-ish, author's choice
+    repeated LineBrush lineBrushes = 6;
+    repeated Glyph     glyphs      = 7;     // see Decision 9
+    // repeated AreaBrush  areaBrushes  = 8;  // reserved (iter 5)
+    // repeated PointBrush pointBrushes = 9;  // reserved (iter 5)
+}
+
+message LineBrush {
+    // Identity — Decision 2.
+    string name        = 1;                // machine identifier, kebab-case, unique within palette
+    string displayName = 2;                // localizable, mutable
+    string category    = 3;                // display-only grouping in pickers
+    bool   scrapOutline = 4;               // topology flag — feeds chain-based scrap detector
+    int32  zOrder       = 5;               // paint order (Decision 12)
+    repeated DecorationLayer decorations = 6;  // empty = no ink (scrap-outline case)
+    double minPaperScale = 7;
+    double maxPaperScale = 8;
+    // No centerline fields. The visible line on a normal wall is an
+    // OffsetCurve decoration layer with offset = 0. See Decision 1.
+}
+
+message DecorationLayer {
+    // Mode + glyph (glyph modes only).
+    string glyphName = 1;                  // ref into Palette.glyphs by name (Decision 9);
+                                           //   empty when mode == OffsetCurve
+    int32  mode      = 2;                  // 0=rigid, 1=bending, 2=point, 3=offsetCurve (Decision 10)
+    // Ordered rule pipeline: Generate / MutatePerLayer / Stamp / MutateScene
+    // rules, sorted by stage at execution time. Empty = use the mode's
+    // default rule stack (Decision 11). The default stack does NOT include
+    // MutateScene rules in iter 1 — those land in iter 2.
+    repeated PlacementRule rules = 3;
+    double bufferMm           = 4;         // collision keep-clear, default 1.0 mm.
+                                           //   Serialized from iter 1 for forward-compat
+                                           //   but DORMANT until iter 2 (only MutateScene
+                                           //   rules read it). The project-wide default
+                                           //   (cwSketchSettings.defaultBufferMm) also
+                                           //   lands in iter 2.
+    int32  collisionPriority  = 5;         // see Decision 11 (MutateScene rules, iter 2)
+    double minPaperScale      = 6;
+    double maxPaperScale      = 7;
+
+    // OffsetCurve fields. Iter 1 ships these with offsetCurveOffsetMm
+    // = 0 only (the centerline-replacement path); iter 2 generalizes
+    // to non-zero offsets (parallel filled lines). Colors are hex
+    // strings ("#RRGGBB" / "#RRGGBBAA") matching cavewhere.proto's
+    // existing convention. Ignored when mode != OffsetCurve.
+    string offsetCurveColorLight = 8;
+    string offsetCurveColorDark  = 9;
+    double offsetCurveWidthMm    = 10;
+    double offsetCurveOffsetMm   = 11;     // sign = side; 0 = on the centerline
+    int32  offsetCurveDash       = 12;     // Qt::PenStyle
+    int32  offsetCurveCap        = 13;     // Qt::PenCapStyle  — per-layer (Decision 1)
+    int32  offsetCurveJoin       = 14;     // Qt::PenJoinStyle — per-layer (Decision 1)
+    bool   offsetCurveAcceptsPressure = 15; // width modulates with stylus pressure
+
+    // NOTE: no halo fields. See Decision 10 — halo is intentionally
+    // dropped from iter 1+2 schema; if a real use case shows up later,
+    // halo lands as additive fields without breaking existing palettes.
+}
+
+message PlacementRule {
+    // Rule kind keyed by `name` ("uniform-spacing", "skip-sharp-bends",
+    // …). The rule's own params live in `params` so the registry stays
+    // forward-compatible: a palette referencing an unknown rule name
+    // round-trips intact and is ignored at render time with a one-shot
+    // warning. Renaming a registered rule is a breaking change for
+    // existing palette files — treat rule names as part of the
+    // palette schema's stable surface.
+    string name   = 1;
+    bytes  params = 2;                     // proto-encoded per-rule struct
+}
+
+message Glyph {
+    string name        = 1;                // machine identifier, kebab-case, unique within palette
+    string displayName = 2;                // localizable label
+    // Strokes drawn in glyph-local paper-mm coordinates. Origin (0,0)
+    // is the anchor point; +X is along the centerline tangent at stamp
+    // time. Each stroke is a regular PenStroke — same schema, same
+    // brushName-based rendering. Glyphs can recursively reference brushes
+    // whose decorations reference other glyphs (Decision 9).
+    repeated PenStroke strokes = 3;
+    QtProto.QRectF authoredBounds = 4;     // paper-mm extent, cached
+}</code></pre>
+
+<p class="small">
+<code>QtProto.QColor</code> is intentionally not used — it doesn't
+exist in <code>qt.proto</code> today and adding it would force every
+field to choose between binary <code>QColor</code> and the existing
+<code>colorHex</code> string convention in <code>cavewhere.proto</code>.
+The string form (<code>"#RRGGBB"</code> or <code>"#RRGGBBAA"</code>)
+diffs cleanly in JSON, parses via <code>QColor::fromString</code>, and
+matches what's already on disk.
+</p>
+
+<p>
+JSON projection is handled by <code>protobuf</code>'s
+<code>JsonPrintOptions</code> — same codegen, same fidelity, useful for
+palette authoring in a text editor.
+</p>
+
+<h3>4. On-disk layout, single source of truth</h3>
+
+<pre><code>~/Library/Application Support/CaveWhere/palettes/    (macOS)
+~/.local/share/CaveWhere/palettes/                   (Linux)
+%LOCALAPPDATA%\CaveWhere\palettes\                   (Windows)
+
+   ├── cavewhere-seed/                  ← shipped, read-only
+   │   ├── palette.cwpalette            ← proto-binary (brush + glyph metadata)
+   │   ├── palette.json                 ← JSON projection, optional but useful
+   │   ├── glyphs/                      ← one file per glyph (Decision 9)
+   │   │   ├── &lt;glyph-id&gt;.cwglyph       ← proto-binary
+   │   │   └── &lt;glyph-id&gt;.json          ← JSON projection
+   │   ├── icons/&lt;brush-id&gt;.svg         ← optional preview thumbnails
+   │   └── .git/                        ← present once iteration 4 lands
+   ├── uis-standard/
+   │   └── …
+   └── my-personal/
+       └── …</code></pre>
+
+<p>
+A palette is a directory; its identity is the <code>Palette.id</code>
+inside, not the directory name (so a clone retains identity regardless
+of path). <code>.cwpalette</code> holds brushes plus glyph <em>metadata</em>
+(id, displayName, authoredBounds); each glyph's strokes live in
+its own <code>glyphs/&lt;glyph-id&gt;.cwglyph</code> file. One file per glyph
+gives clean git diffs when a single hatch is edited (instead of churning
+a multi-MB <code>palette.json</code>), and lets the glyph editor save
+each glyph independently. <code>palette.json</code> and per-glyph
+<code>.json</code> projections are written alongside the binaries for
+human-readable diffs.
+</p>
+
+<p>
+<strong>No palette inside <code>.cw</code> projects.</strong> Projects
+reference brushes by <code>brushName</code> only, resolved through the
+sketch's active palette. A project that references a brush from an
+uninstalled palette renders with a fallback brush. In the unified model
+there is no separate "centerline" to fall back to — the cartographer's
+polyline still exists, only its brush is missing — so the fallback is a
+synthetic in-memory brush with a single <code>OffsetCurve(offset=0)</code>
+layer in a flagged debug colour (no glyph layers), <code>scrapOutline =
+false</code> (a missing brush must not silently inject or remove scrap
+topology), and <code>zOrder = 0</code>. <code>findBrush</code> returning
+<code>nullopt</code> is the trigger; consumers substitute this fallback
+rather than skipping the stroke. The UI surfaces a warning prompting the
+user to install the missing palette. Same coupling strategy as fonts in
+a word processor.
+</p>
+
+<h3>5. Seed palette is shipped, immutable, and minimal-but-complete</h3>
+
+<p>
+The <code>cavewhere-seed</code> palette ships in the install bundle. It
+contains the brushes the prototype was using plus one composite brush
+that exercises glyph stamping, expressed declaratively, each with a
+stable machine name (the cross-palette identifier — Decision 2):
+</p>
+
+<table>
+  <thead><tr><th>Brush <code>name</code></th><th>Flags</th><th>zOrder</th><th>Decoration layers</th></tr></thead>
+  <tbody>
+    <tr><td><code>wall</code></td><td><code>scrapOutline = true</code></td><td>100</td><td>one <code>OffsetCurve</code>: offset 0, width 0.6 mm, light <code>#000</code> / dark <code>#fff</code>, solid, round cap/join</td></tr>
+    <tr><td><code>scrap-outline</code></td><td><code>scrapOutline = true</code></td><td>100</td><td><em>none</em> — no ink hits the page; only the cartographer's drawn polyline contributes to topology</td></tr>
+    <tr><td><code>feature</code></td><td>—</td><td>10</td><td>one <code>OffsetCurve</code>: offset 0, width 0.3 mm, light <code>#000</code> / dark <code>#fff</code>, solid, round cap/join</td></tr>
+    <tr><td><code>floor-step</code></td><td><code>scrapOutline = false</code></td><td>50</td><td>two layers — (1) <code>OffsetCurve</code>: offset 0, width 0.3 mm (the step's edge line); (2) <code>RigidStamp</code> of glyph <code>floor-step-tick</code> on the <code>+normal</code> side at 2 mm spacing. The shipped demonstration of glyph stamping.</td></tr>
+  </tbody>
+</table>
+
+<p>
+The seed also ships one glyph — <code>floor-step-tick</code>: a single
+1.5 mm tick stroke (a <code>feature</code>-brushed line from the origin
+along <code>+normal</code>), authored in glyph-local paper-mm. It exists
+so <code>floor-step</code> has something to stamp and so the iter-1
+end-to-end target renders from a clean install with no hand-authoring.
+</p>
+
+<p>
+The prototype's <code>Kind::Wall</code> and <code>Kind::ScrapOutline</code>
+both fed the chain-based scrap detector but differed in whether ink
+was drawn. In the unified model that distinction is expressed as
+"does the brush have any decoration layers?" — <code>wall</code> has
+one <code>OffsetCurve(offset=0)</code> layer, <code>scrap-outline</code>
+has none. Both carry <code>scrapOutline = true</code> so their
+cartographer-drawn polylines feed scrap detection.
+<code>Kind::Feature</code> becomes the default-flagless
+<code>feature</code> brush. <code>Kind::Eraser</code> isn't a brush —
+it's a tool mode (Decision 2).
+</p>
+
+<p>
+The seed palette's brush names (<code>"wall"</code>,
+<code>"scrap-outline"</code>, <code>"feature"</code>,
+<code>"floor-step"</code>) and glyph name
+(<code>"floor-step-tick"</code>) are stable ASCII strings hard-coded in
+<code>cwSymbologyPaletteSeed.cpp</code> — no UUIDs to manage. brushNames
+embedded in any project file stay stable across rebuilds because they're
+just strings. The seed palette is read-only in the UI
+(<code>isWritable = false</code>); users who want to modify it fork it.
+<code>floor-step</code> earns its place in the seed because it's the one
+brush that proves the headline feature (glyph stamping) ships
+demonstrated rather than as an empty capability; everything past it
+— the full UIS / NSS standard symbol set — ships as a separate
+installable palette so it can version on its own clock.
+</p>
+
+<h3>6. Active palette is per-sketch, with a project default</h3>
+
+<p>Resolution order, first hit wins:</p>
+<ol>
+  <li><code>cwSketch::activePaletteId</code> (per-sketch override)</li>
+  <li><code>cwCavingRegion::defaultPaletteId</code> (project default)</li>
+  <li><code>cwSettings::defaultPaletteId</code> (app-wide)</li>
+  <li>Built-in <code>cavewhere-seed</code></li>
+</ol>
+
+<p>
+Per-sketch granularity matters because a cartographer authoring a
+1:250 area map and a 1:1000 overview map of the same region wants
+different decoration densities. Per-region is the practical day-to-day
+choice for most cavers; per-app catches the "I always use the UIS
+palette" preference.
+</p>
+
+<p>
+The glyph editor (Decision 9) saves into one writable palette at a
+time, picked from the same palette list — the seed and any
+read-only palettes are excluded from the destination dropdown. A
+brush whose decoration layer references a glyph is constrained to
+glyphs in the same palette (Decision 9's same-palette rule); the
+brush editor's glyph picker filters accordingly.
+</p>
+
+<h3>7. Coordinate systems and brush units</h3>
+
+<p>
+CaveWhere has three coordinate systems today, all wired through
+<code>cwWorldToScreenMatrix</code> and <code>cwSketchViewState</code>:
+</p>
+
+<table>
+  <thead><tr><th>System</th><th>Unit</th><th>Where it lives</th><th>Conversion</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>World</strong></td>
+      <td>cave metres, Y-up</td>
+      <td><code>cwPenStroke::points</code>, <code>cwSurvey2DGeometryArtifact</code>, anything fed to <code>cwSketchPainter::paint</code> under <code>worldToItem</code>.</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td><strong>Map / paper</strong></td>
+      <td>paper millimetres</td>
+      <td>The <code>cwScale</code> ratio inside <code>cwWorldToScreenMatrix</code>; the matrix is literally <code>mapScale × 1000 (m→mm) × pixelDensity (mm→px)</code>.</td>
+      <td><code>paperMm = mapScale × 1000 × caveMeters</code></td>
+    </tr>
+    <tr>
+      <td><strong>Screen / item</strong></td>
+      <td>QML logical pixels</td>
+      <td><code>cwSketchViewState::pixelsPerMeter()</code> = <code>m11 × zoom</code>; <code>pixelsPerMeterPaper()</code> strips zoom.</td>
+      <td><code>screenPx = paperMm × pixelDensity × zoom</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+<strong>The prototype's renderer already produces paper-fixed
+thickness.</strong> <code>cwSketchPainter.cpp:140–142</code> cancels
+<code>mapScale</code> out of the transform
+(<code>penScale = 1.0 / mapScale</code>), and screen-pixels-per-paper-mm
+= <code>pixelDensity</code> is a constant of the display independent of
+map scale. So a stroke with <code>width = 2</code> renders at ≈0.5 mm
+on paper at 1:250 <em>and</em> 1:1000 — exactly the paper-fixed
+contract symbology needs. The proposed change is about the
+<em>authoring unit</em>, not the contract:
+</p>
+
+<table>
+  <thead><tr><th>What</th><th>Prototype</th><th>Symbology brush</th></tr></thead>
+  <tbody>
+    <tr><td>On-paper thickness across map scales</td><td>constant</td><td>constant (unchanged)</td></tr>
+    <tr><td>C++ unit on disk</td><td>"screen pixels at zoom 1"</td><td>paper millimetres</td></tr>
+    <tr><td>Author workflow</td><td>0.4 mm → mentally translate to ~1.5 px</td><td>0.4 mm → write <code>offsetCurveWidthMm = 0.4</code> on the brush's <code>OffsetCurve</code> decoration layer</td></tr>
+  </tbody>
+</table>
+
+<p>
+<strong>Decision: every dimensional field on a brush and on a
+decoration layer is in paper millimetres.</strong> Stroke geometry stays
+in world metres. Conversion to world units happens once per (brush, map
+scale) pair at decoration-generation time:
+</p>
+
+<pre><code>// Inside cwSketchDecorationLayout:
+const double mapScale = sketch->mapScale()->scale();    // e.g. 1.0/250
+const double mmPerWorldMeter   = mapScale * 1000.0;
+const double worldMetersPerMm  = 1.0 / mmPerWorldMeter; // paper-mm → cave-m
+
+const double hatchLengthWorld  = layer.sizeMm    * worldMetersPerMm;
+const double hatchSpacingWorld = layer.spacingMm * worldMetersPerMm;
+// Decoration polygons are emitted in world metres, ride the same
+// worldToItem transform as the centerline, render correctly at all
+// zooms and on every backend.</code></pre>
+
+<p>
+What this buys: a single authored brush renders identically (in paper
+dimensions) at 1:250 and 1:1000; on screen at any zoom; and on PDF
+export. The "vector mipmap" of Decision 14 reduces to "did the active
+paper scale fall inside this layer's <code>[minPaperScale,
+maxPaperScale]</code> window?" — no other scale arithmetic needed.
+</p>
+
+<p>
+<strong>Field renames.</strong> Everywhere a previous draft of this
+plan said <code>...Px</code>, the field becomes <code>...Mm</code>
+(paper millimetres). The prototype's <code>cwPenStroke::width</code>
+override is removed entirely (Decision 2) — width lives on the
+<code>OffsetCurve</code> decoration layer's
+<code>offsetCurveWidthMm</code>, full stop. The
+<code>strokePenScale</code> field on
+<code>cwSketchPainter::PaintContext</code> still exists for the
+prototype path-batching code, but the new symbology pipeline does not
+use it — it bakes paper-mm → world-m once and draws via the standard
+<code>worldToItem</code> transform with no per-element scale juggling.
+</p>
+
+<p>
+<strong>No legibility floor at low zoom.</strong> An earlier draft of
+this plan introduced a <code>minScreenWidthPx</code> per-brush floor so
+thin centerlines wouldn't vanish when zoomed out. Dropped — the
+paper-fixed contract is honest: zooming out is supposed to make the
+map small, and a 0.3 mm line genuinely is too thin to read at a
+quarter of its authored scale. Users who want the line back zoom in or
+edit the brush. A silent "minimum thickness" floor would just lie about
+what they're looking at.
+</p>
+
+<p>
+<strong>Dynamic scale switching is a first-class workflow.</strong>
+Cartographers routinely flip the same sketch between scales (e.g.
+1:500 ↔ 1:1000) — strokes are cave-fixed but symbology should
+re-render for the new scale. When <code>cwSketch::mapScale</code>
+changes:
+</p>
+<ol>
+  <li>Stroke geometry doesn't move (it's in world metres).</li>
+  <li>The paper-mm → world-m conversion in the decoration generators
+  re-runs against the new scale, so hatch spacing, glyph size, halo,
+  and buffer all change in world coordinates.</li>
+  <li>Decoration-layer scale-visibility windows (Decision 14) re-evaluate
+  — some layers drop out entirely at smaller scales.</li>
+  <li>The placement pass re-runs against the new world-coordinate
+  glyph geometry, so decorations that no longer fit get shortened or
+  hidden by their per-layer collision policy. At 1:1000 you naturally
+  see less of the same cave: fewer hatches, less detail, some symbols
+  gone — exactly what cartographers want.</li>
+</ol>
+
+<p>
+The cost of a scale switch is one decoration-regeneration pass plus
+one placement pass — both already invalidation-aware (Decision 8),
+both already part of every dirty-region repaint. Switching scales is
+"as expensive as moving the active stroke around"; no special
+optimisation needed.
+</p>
+
+<h3>8. Rendering pipeline — split offset-curves from glyphs</h3>
+
+<p>
+The prototype's <code>cwSketchPainterPathModel</code> does one job:
+batches strokes by <code>(kind, width, color)</code> into
+<code>QPainterPath</code>s. The decoration + placement work is much
+heavier and has different invalidation rules (OffsetCurves invalidate
+per-stroke; glyph stamp placements invalidate by spatial region).
+Piling both into one class is the kind of thing that turns into a
+maintenance millstone two iterations later.
+</p>
+
+<p>
+Splitting now while the responsibilities are still small:
+</p>
+
+<table>
+  <thead><tr><th>Class</th><th>Responsibility</th><th>Cache key</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>cwOffsetCurveBatches</code> <span class="badge i1">iter 1</span></td>
+      <td>For every stroke, walk its brush's <code>OffsetCurve</code> decoration layers and batch them by <code>(brushName, offsetMm, widthMm, color, dash, cap, join)</code>. Iter 1 only batches <code>offsetMm == 0</code> (the centerline-replacement path); iter 2 extends to non-zero offsets. Strokes whose brush has zero <code>OffsetCurve</code> layers (e.g. <code>scrap-outline</code>) emit nothing.</td>
+      <td>Per stroke, per OffsetCurve layer.</td>
+    </tr>
+    <tr>
+      <td><code>cwGlyphTessellationCache</code> <span class="badge i1">iter 1</span></td>
+      <td>For each <code>(glyphName, mapScale)</code> key, materialise the glyph's strokes into a single cached <code>QPainterPath</code> in world metres. Recursion through glyph→brush→decorations→glyph happens here once, not per stamp. Per-stamp scale (the <em>Taper scale</em> rule) is applied as a draw-time transform on this cached path, so it is <em>not</em> part of the key.</td>
+      <td><code>(glyphName, mapScale)</code>.</td>
+    </tr>
+    <tr>
+      <td><code>cwSketchDecorationLayout</code> <span class="badge i1">iter 1</span></td>
+      <td>For each stroke, run each decoration layer's placement-rule pipeline (Decision 11) to produce a list of stamp positions or, for OffsetCurve layers, a traced polyline; resolve glyph paths via the tessellation cache.</td>
+      <td>Per stroke, per layer (regenerated when stroke geometry, brush, glyph, or mapScale changes).</td>
+    </tr>
+    <tr>
+      <td><code>cwSceneContext</code> <span class="badge i3">iter 2</span></td>
+      <td>Owns the R-tree + cartographer-drawn-polyline keep-clear bands; <code>MutateScene</code> rules (Decision 11) query and mutate the unified stamp set through it.</td>
+      <td>Spatial — invalidate by dirty rect.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+All four feed <code>cwSketchPainter</code>'s <code>PaintContext</code>.
+<code>cwSketchPainterPathModel</code> (the prototype class) is renamed
+to <code>cwOffsetCurveBatches</code> in iteration 1 — same batching
+code as the prototype's centerline batcher, but parametric in offset /
+width / color / dash so it covers both the offset=0 centerline-replacement
+case (iter 1) and the general parallel-line case (iter 2). The
+decoration siblings land alongside it in iter 1.
+</p>
+
+<p>
+<strong>Brush resolution via <code>cwPaletteSnapshot</code>, not a
+pointer cache.</strong> Decoration generation, the placement pass, and
+centerline batching all need <code>brushName → cwLineBrush</code>
+lookups dozens of times per repaint. Earlier drafts of this plan
+cached a <code>cwLineBrush const*</code> on <code>cwPenStroke</code>;
+that's a dangling-pointer hazard the moment the palette mutates while
+a worker is using the stroke (CLAUDE.md's "don't pull pointers out of
+QList/QVector" rule generalises here). Instead:
+</p>
+
+<pre><code>class cwPaletteSnapshot {
+public:
+    // Value type. Internal containers (QHash / QList / cwLineBrush
+    // itself) are implicitly shared — constructing this is a refcount
+    // bump, not a deep copy.
+    std::optional&lt;cwLineBrush&gt;      findBrush(QStringView name) const;  // nullopt if missing
+    std::optional&lt;cwSymbologyGlyph&gt; findGlyph(QStringView name) const;  // nullopt if missing
+
+private:
+    QHash&lt;QString, cwLineBrush&gt;       m_brushes;
+    QHash&lt;QString, cwSymbologyGlyph&gt;  m_glyphs;
+};</code></pre>
+
+<p>
+<code>cwSketchPainter::paint</code> grabs a snapshot from the active
+palette at the start of each repaint and threads it through
+<code>PaintContext</code> to every downstream consumer. The snapshot
+is cheap (refcount bumps), and <code>findBrush</code> returns a
+<code>cwLineBrush</code> <em>by value</em> rather than a pointer:
+<code>cwLineBrush</code> is an implicitly-shared value type (its
+<code>QString</code> fields and <code>QVector&lt;cwDecorationLayer&gt;</code>
+are all COW), so the copy is a handful of atomic refcount bumps — no
+deep copy, no heap allocation. Returning by value costs essentially the
+same as a pointer but eliminates the lifetime hazard entirely: the
+caller holds a self-contained brush that stays valid no matter what
+happens to the snapshot or the live palette afterward. (An earlier draft
+returned <code>cwLineBrush const*</code> into the snapshot's
+<code>QHash</code>; that invited
+<code>auto b = snap.findBrush(x); snap = other; use(b);</code>
+use-after-free. By-value dissolves the trap.) The <code>nullopt</code>
+result carries the "brush missing" signal that <code>nullptr</code> used
+to. This is also the abstraction we want when decoration generation
+moves to an <code>AsyncFuture</code> job later — the worker gets a
+snapshot by value with no lifetime entanglement to the live palette.
+</p>
+
+<p class="small">
+Iter 1 generates decorations synchronously on the UI thread. Async
+generation via <code>cwConcurrent::run</code> is a follow-up once
+real-sketch perf measurements identify a need. Don't pre-optimise the
+threading model; do design the data flow so it can move later (which
+the snapshot already does).
+</p>
+
+<p>
+<strong>No built-in decoration types.</strong> The closed
+<code>Kind</code> enum is gone — there is no
+<code>TickHatches</code>/<code>TBars</code>/<code>Dots</code> taxonomy
+in code. Decorations are <em>glyphs</em> (Decision 9) stamped along a
+centerline by a registry-driven pipeline of <em>placement rules</em>
+(Decision 11). Adding a new symbol type is a palette change, not a
+C++ change. Adding a new positioning behaviour is one new
+<code>cwPlacementRule</code> + one registration line.
+</p>
+
+<p>
+Iteration 1 ships <code>cwOffsetCurveBatches</code> (offset=0 only),
+<code>cwGlyphTessellationCache</code>, <code>cwSketchDecorationLayout</code>,
+<code>cwPaletteSnapshot</code>, the three glyph stampers + the
+offset=0 OffsetCurve mode, the Generate/MutatePerLayer/Stamp
+placement-rule registry, the glyph editor, and the palette/brush
+pickers. Non-zero <code>OffsetCurve</code> offsets (parallel filled
+lines that curve with the centerline), <code>MutateScene</code> rules,
+and <code>cwSceneContext</code> land in iter 2; scale visibility
+windows in iter 3.
+</p>
+
+<h3>9. Glyphs are user-drawn primitives in the palette <span class="badge i1">iter 1</span></h3>
+
+<p>
+A <strong>glyph</strong> is a small vector drawing, authored by the
+cartographer in a glyph editor and stored in the palette. Glyphs are
+the only decoration primitive. There is no built-in
+<code>TickHatches</code>/<code>TBars</code>/<code>Dots</code>/etc.
+taxonomy — the cartographer draws those, registers them in the palette,
+and the brush references them by id.
+</p>
+
+<pre><code>struct cwSymbologyGlyph {
+    QString name;                  // machine identifier — kebab-case, unique within palette
+    QString displayName;           // localizable label shown in pickers and logs
+
+    // Glyph drawn in glyph-local paper-mm coordinates.
+    // Origin (0,0) = anchor point on the centerline at stamp time.
+    // +X axis = along the local centerline tangent at the stamp point.
+    // Each stroke is a regular cwPenStroke — same brushName-based
+    // resolution as any sketch stroke, which is what enables the
+    // recursive composition described below.
+    QVector&lt;cwPenStroke&gt; strokes;
+    QRectF authoredBounds;         // paper-mm extent, cached
+};</code></pre>
+
+<p>
+<strong>The glyph editor.</strong> A small mode of
+<code>cwSketchCanvas</code> with editor chrome: a fixed paper-mm
+authoring canvas (default 10 × 10 mm, zoomable), an origin marker (where
+the centerline will attach), and a tangent indicator (the +X direction).
+The cartographer draws strokes using the active palette's brushes — the
+glyph is literally a tiny sketch. Save into the palette as a new
+<code>.cwglyph</code> file. Iter 1 (the iter-1+iter-2 merge) ships
+the editor with stamping wired up — saved glyphs are immediately
+usable in brush decoration layers.
+</p>
+
+<p>
+<strong>Recursive composition (DAG).</strong> Glyph strokes carry a
+<code>brushName</code>; that brush has decoration layers; those layers
+reference glyphs. So a "tick-with-crossbar" glyph doesn't need a
+hand-drawn crossbar — it can be a one-stroke tick whose brush has a
+decoration layer stamping a small crossbar glyph at the tick's tip.
+Composition out of simpler primitives.
+</p>
+
+<p>The recursion has three constraints:</p>
+<ol>
+  <li><strong>Same-palette references only.</strong> Glyph A in palette P can only reference glyphs in P (transitively). Cross-palette references would introduce versioning headaches; if you want to compose across palettes, copy the glyph you need.</li>
+  <li><strong>No cycles.</strong> At palette load, DFS the glyph → brush → glyph dependency graph keyed by name. Any back-edge fails the load with a clear error pointing at the cycle (e.g., <code>tick → tick-brush → tick</code>).</li>
+  <li><strong>Soft depth cap.</strong> Tessellation cap at depth 4. Beyond that the inner glyph renders as a single bbox marker and a one-shot warning logs. Catches pathological palettes without breaking them.</li>
+</ol>
+
+<p>
+<strong>Sub-stroke brush flags are ignored during tessellation.</strong>
+A glyph's strokes carry a <code>brushName</code> only so that the
+brush's <code>OffsetCurve</code> decoration layers (color, width, dash,
+cap/join) define the glyph's ink. The brush's <em>topology</em> and
+<em>ordering</em> flags do <strong>not</strong> apply: when a glyph is
+tessellated, sub-stroke <code>scrapOutline</code> and <code>zOrder</code>
+are ignored — only the sub-stroke brush's <code>OffsetCurve</code>
+decoration layers contribute ink. A glyph is a flattened drawing
+primitive, not topology, so it never feeds scrap-outline detection, and
+it never sorts against its parent stroke's z (the whole glyph paints
+within the parent layer's slot). Glyph-mode decoration layers
+(<code>RigidStamp</code> / <code>BendingStamp</code> /
+<code>PointStamp</code>) nested inside a glyph's brushes still drive
+recursive composition; it's purely the <code>scrapOutline</code> /
+<code>zOrder</code> fields that drop out.
+</p>
+
+<p>
+<strong>Glyph tessellation cache.</strong>
+<code>cwGlyphTessellationCache</code> (Decision 8) materialises each
+glyph into a single <code>QPainterPath</code> in world metres, keyed by
+<code>(glyphName, mapScale)</code>. Recursion through
+glyph → brush → decorations → glyph runs once per cache entry, not
+once per stamp. A glyph stamped 200 times along a stroke costs 200
+transform-and-emit operations, not 200 tessellations — and a per-stamp
+<code>scale</code> (from the <em>Taper scale</em> rule) is just part of
+that draw-time transform, so it never multiplies the cache. Cache entries
+invalidate when their glyph definition changes, when any brush in the
+palette changes (since the cache is computed against a
+<code>cwPaletteSnapshot</code>), or when <code>cwScale::scaleChanged</code>
+fires on the sketch's map scale.
+</p>
+
+<h3>10. Decoration layers run in one of four modes <span class="badge i1">iter 1</span> <span class="badge i3">iter 2</span></h3>
+
+<pre><code>struct cwDecorationLayer {
+    QString glyphName;            // glyph reference, used by all modes EXCEPT OffsetCurve
+
+    enum Mode {
+        RigidStamp,    // glyph drawn straight at anchor + tangent rotation
+        BendingStamp,  // glyph re-parameterised along centerline arclength
+        PointStamp,    // single glyph placement at an explicit anchor; no centerline
+        OffsetCurve,   // continuous polyline traced at perpendicular offset from
+                       // the centerline — no glyph, no tiling. Iter 2.
+    };
+    Mode mode = RigidStamp;
+
+    // Ordered placement-rule pipeline (Decision 11). Empty = use the
+    // mode's default rule stack at render time.
+    QVector&lt;cwPlacementRulePtr&gt; rules;
+
+    // -------- OffsetCurve params. Iter 1 ships these with
+    // offsetCurveOffsetMm = 0 (the centerline-replacement path); iter 2
+    // generalizes to non-zero offsets (parallel filled lines that
+    // curve with the centerline). Ignored for the three glyph-based
+    // modes; they read width/color from the referenced glyph's own
+    // strokes. Colors per Decision 1's light/dark pair.
+    QColor           offsetCurveColorLight;
+    QColor           offsetCurveColorDark;
+    double           offsetCurveWidthMm   = 0.4;
+    double           offsetCurveOffsetMm  = 0.0;   // perpendicular distance; sign = side; 0 = centerline
+    Qt::PenStyle     offsetCurveDash      = Qt::SolidLine;
+    Qt::PenCapStyle  offsetCurveCap       = Qt::RoundCap;
+    Qt::PenJoinStyle offsetCurveJoin      = Qt::RoundJoin;
+    bool             offsetCurveAcceptsPressure = true;  // width modulates with stylus pressure
+
+    // Collision buffer (iter 2) — keep-clear margin used by MutateScene
+    // rule queries. For glyph modes, inflates the glyph's ink bbox. For
+    // OffsetCurve, inflates the swept rectangle around the offset
+    // polyline. 1 mm gives visible breathing room on the printed page.
+    // DORMANT in iter 1: the field is serialized for forward-compat, but
+    // nothing reads it until the iter-2 scene rules exist. The project-wide
+    // default (cwSketchSettings.defaultBufferMm) also arrives in iter 2.
+    double bufferMm = 1.0;
+
+    // Tiebreak hint for MutateScene rules — copied into each stamp at
+    // Stamp time so scene rules can sort by priority. Distinct from the
+    // brush's zOrder paint-order key (Decision 12). Higher wins.
+    int collisionPriority = 0;
+
+    // Scale window (iter 3)
+    double minPaperScale = 0.0;
+    double maxPaperScale = 0.0;
+};</code></pre>
+
+<p>
+<strong>Why <code>OffsetCurve</code> is a peer of the stamping modes,
+not a stamping mode.</strong> Stamping repeats a glyph along arclength;
+<code>OffsetCurve</code> traces the cartographer-drawn polyline once
+at perpendicular offset and emits a single continuous polyline. The
+two operations share <em>nothing</em> mechanically — no glyph
+reference, no spacing, no per-stamp position. They share the decoration
+<em>layer</em> envelope (z-order, buffer, scale window, collision
+priority, placement-rule pipeline, cap/join, color, width) because
+that's the unit of cartographer control. The enum is named
+<code>Mode</code> rather than <code>Stamper</code> for that reason.
+</p>
+
+<p>
+<strong>OffsetCurve covers two cases under one mechanism.</strong>
+</p>
+<ol>
+  <li><strong>offset = 0 (iter 1)</strong> — traces directly along
+  the cartographer's polyline. This is what the prototype called
+  "centerline rendering"; in the unified model there's no separate
+  centerline concept, just an OffsetCurve layer with offset 0. Every
+  seed brush that draws a visible line (<code>wall</code>,
+  <code>feature</code>) uses exactly this.</li>
+  <li><strong>offset ≠ 0 (iter 2)</strong> — traces parallel to the
+  polyline at signed perpendicular distance. This is what unlocks
+  overhang lines (a thin parallel line above a wall), double walls
+  in wide passages, tube-passage ceiling-height shadows, offset
+  pit-edge runs, and triple- or N-line symbology. N parallel filled
+  lines = N OffsetCurve decoration layers on the same brush, each
+  with its own color / width / dash / cap-join / offset.</li>
+</ol>
+
+<p>
+<strong>Generation.</strong> Sample the polyline at fine resolution,
+compute the perpendicular at each sample, emit a polyline at signed
+perpendicular distance <code>offsetCurveOffsetMm</code>. For
+<code>offset = 0</code> the output equals the input (no perpendicular
+math needed — fast path). For non-zero offsets, iter 2 also handles
+miter behavior at sharp corners and detects offset-curve
+self-intersection at tight bends (clip or split as needed). Paper-mm
+→ world-m baking happens the same way stamp positions do. The
+generator runs at the <code>Generate</code> + <code>Stamp</code> stages
+of the rule pipeline just like the stamping modes (emits one "stamp"
+representing the whole traced polyline), so scene rules in iter 2 can
+hide it as a single unit. Cartographers who want overlap permitted
+drop the scene rules from the layer.
+</p>
+
+<p>
+<strong>No halo fields.</strong> An earlier draft of this plan carried
+<code>haloRadiusMm</code> + <code>HaloColorSource</code> (paper / scrap
+fill) on every decoration layer, plus a <code>Halo if still colliding</code>
+scene rule. Dropped. Reasons:
+</p>
+<ul>
+  <li>None of the seed brushes need it. Iter 1's first end-to-end
+  target (floor step) doesn't need halo. Iter 1's second target
+  (ceiling step) can rely on <code>zOrder</code> alone — the
+  ceiling-step T paints over whatever is under it.</li>
+  <li>The "halo color when a glyph straddles two scraps" question
+  doesn't have a clean answer. Dropping the feature dodges it.</li>
+  <li>If a cartographer eventually needs a halo'd glyph, they can
+  achieve it by composing brushes (a paper-colored underlay stroke
+  + an ink stroke on top, or a decoration layer drawn in the paper
+  color below the inked layer). Workable; just heavier to author
+  than a flag.</li>
+  <li>If real iter 1+2 use shows halo is genuinely needed (most
+  likely for text/label backings in a later iteration), halo lands
+  as additive fields without breaking existing palettes.</li>
+</ul>
+
+<p>
+<code>bufferMm</code> stays — that's <em>geometry</em>, not visuals.
+It controls the keep-clear region scene rules arbitrate against, and
+is independent of any drawn buffer.
+</p>
+
+<p>
+<strong>The three stamping modes</strong> cover dashes, ticks, and
+points with one mechanism;
+<strong><code>OffsetCurve</code></strong> covers the continuous
+parallel case:
+</p>
+
+<table>
+  <thead><tr><th>Mode</th><th>Geometry</th><th>Use cases</th></tr></thead>
+  <tbody>
+    <tr><td><code>RigidStamp</code></td><td>glyph <code>(x, y)</code> → <code>anchor + R(tangent) × (x, y)</code></td><td>Ticks, T-bars, dots — short glyphs that don't need to bend</td></tr>
+    <tr><td><code>BendingStamp</code></td><td>glyph <code>(x, y)</code> → <code>centerline(S + x) + y × normal(S + x)</code></td><td>Dash segments, repeating waves — anything whose arclength span is long enough for curvature to matter</td></tr>
+    <tr><td><code>PointStamp</code></td><td>glyph at <code>anchor</code> (rotation from a rule)</td><td>Standalone point symbols placed by the cartographer, not stamped along a line</td></tr>
+    <tr><td><code>OffsetCurve</code></td><td>polyline tracing <code>polyline(s) + offsetCurveOffsetMm × normal(s)</code> continuously for <code>s ∈ [0, arclength]</code>. Iter 1 supports <code>offsetCurveOffsetMm = 0</code> only (the centerline-replacement path); iter 2 generalizes to non-zero offsets.</td><td>Every visible line on a brush — wall, feature, drip-line centerlines, plus iter-2 parallel symbology (overhang lines, double walls, tube-passage ceiling shadows, offset pit-edge runs, N-line composites)</td></tr>
+  </tbody>
+</table>
+
+<p>
+<strong>Bending stamps use a simple perpendicular offset</strong> — glyph
+<code>(x, y)</code> sits at centerline arclength <code>S + x</code> with
+constant perpendicular distance <code>y</code> from the centerline. Tall
+glyphs (significant <code>y</code> extent) will shear slightly through
+curves because the top edge covers different arclength than the bottom.
+Invisible at typical dash dimensions; visible for tall bending stamps,
+which aren't a realistic use case. If real palette authoring shows tall
+bending stamps mattering, we can add a strip-tessellation mode later as
+a per-glyph flag without disturbing the data model.
+</p>
+
+<div class="grid c3">
+  <div class="panel"><div class="panel-label">RigidStamp — tick along curve</div><canvas id="cv-stamp-rigid" width="280" height="160"></canvas></div>
+  <div class="panel"><div class="panel-label">BendingStamp — dash along curve</div><canvas id="cv-stamp-bending" width="280" height="160"></canvas></div>
+  <div class="panel"><div class="panel-label">PointStamp — single anchor</div><canvas id="cv-stamp-point" width="280" height="160"></canvas></div>
+</div>
+
+<p>
+<strong>Dashed centerlines are bending-stamped dash glyphs.</strong>
+There's no separate "dashed line" mode on the brush. To draw a
+ceiling step: skip the <code>OffsetCurve(offset=0)</code> layer
+entirely, just attach one decoration layer with a 3 mm horizontal
+dash glyph at <code>BendingStamp</code>, plus one with a T-bar glyph
+at <code>RigidStamp</code>. Both layers run through their own
+placement-rule pipelines, and <code>zOrder</code> ensures ceiling-step
+ink paints over anything beneath. No special-case code anywhere.
+</p>
+
+<h3>11. Placement rules — a four-stage registry <span class="badge i1">iter 1</span> <span class="badge i3">iter 2</span></h3>
+
+<p>
+A decoration layer's <code>rules</code> field is one ordered pipeline
+spanning four stages. The first three run <em>per-layer</em>; the
+fourth runs <em>globally</em>, against the union of every layer's
+emitted stamps plus every stroke's centerline keep-clear band:
+</p>
+
+<table>
+  <thead><tr><th>Stage</th><th>Scope</th><th>Sees</th><th>Lands</th></tr></thead>
+  <tbody>
+    <tr><td><code>Generate</code></td><td>per-layer</td><td>This stroke's centerline + this layer's params</td><td>iter 1</td></tr>
+    <tr><td><code>MutatePerLayer</code></td><td>per-layer</td><td>Same + the candidate stamp list from <code>Generate</code></td><td>iter 1</td></tr>
+    <tr><td><code>Stamp</code></td><td>per-layer</td><td>Same + finalises stamps into drawn geometry; terminates the per-layer pipeline</td><td>iter 1</td></tr>
+    <tr><td><code>MutateScene</code></td><td><strong>global</strong></td><td>Every layer's stamps + every centerline's keep-clear band via <code>cwSceneContext</code></td><td>iter 2</td></tr>
+  </tbody>
+</table>
+
+<p>
+All four stages register through the same
+<code>cwPlacementRule</code> registry, keyed by <code>displayName</code>
+— adding a new behaviour at any stage is one new class + one
+registration line. Treat rule names as part of the palette schema's
+stable surface: renaming a registered rule breaks every palette file
+that references it. UI translation happens via the regular Qt
+<code>tr()</code> lookup, not by changing the registered name.
+</p>
+
+<pre><code>struct cwStampPosition {
+    QPointF anchorWorld;          // where glyph (0,0) sits
+    double  rotationRad = 0.0;    // 0 = +X along world +X
+    double  scale       = 1.0;    // 1.0 = glyph's authored size; the Taper
+                                  //   scale rule may vary it. Applied as a
+                                  //   draw-time transform on the cached path,
+                                  //   NOT part of the tessellation cache key.
+    int     side        = +1;     // +1 / -1 (for mirror-aware rules)
+    QString glyphName;            // usually layer.glyphName; rules may swap it
+    int     priority    = 0;      // copied from layer.collisionPriority at Stamp time
+    QRectF  bufferedBboxWorld;    // ink bbox inflated by layer.bufferMm; populated at Stamp time
+    bool    visible     = true;
+};
+
+class cwPlacementRule {
+public:
+    virtual ~cwPlacementRule() = default;
+    virtual QString displayName() const = 0;  // also the registry key
+    enum Stage { Generate, MutatePerLayer, Stamp, MutateScene };
+    virtual Stage stage() const = 0;
+
+    // Which decoration modes this rule is valid against. Checked at
+    // palette-load time (Decision 3's validation pass). Generate /
+    // MutatePerLayer / Stamp rules declare the modes they support;
+    // MutateScene rules are mode-agnostic (they operate on the unified
+    // stamp set) and return every mode.
+    virtual QFlags&lt;cwDecorationLayer::Mode&gt; compatibleModes() const = 0;
+
+    // Per-layer rules use this signature; scene-stage rules ignore the
+    // arguments and pull from `scene` instead. cwSketchDecorationLayout
+    // selects the right invocation by stage.
+    virtual void apply(QVector&lt;cwStampPosition&gt; &amp;positions,
+                       const QVector&lt;QPointF&gt; &amp;centerline,    // world m
+                       const cwDecorationLayer &amp;layer,
+                       cwSceneContext *scene) const = 0;
+};</code></pre>
+
+<p>
+<strong>cwSceneContext.</strong> The shared object that
+<code>MutateScene</code> rules use to inspect and modify the unified
+stamp set. Owns the R-tree internally (lazily built on first query)
+and a read-only list of every stroke's keep-clear band (inflated by
+the widest <code>offsetCurveWidthMm/2</code> across the stroke's
+brush's <code>OffsetCurve</code> layers plus <code>max(layers.bufferMm)</code>,
+so glyphs colliding with another brush's traced line count as
+collisions). Method shape:
+</p>
+
+<pre><code>class cwSceneContext {
+public:
+    // Spatial queries
+    QVector&lt;StampHandle&gt; queryStampsInBbox(const QRectF &amp;worldBbox) const;
+    bool                 collidesWithCenterline(const QRectF &amp;worldBbox) const;
+
+    // Per-stamp inspection / mutation
+    const cwStampPosition&amp; stamp(StampHandle h) const;
+    void mutateStamp(StampHandle h, std::function&lt;void(cwStampPosition&amp;)&gt; m);
+    void hideStamp(StampHandle h);
+
+    // Centerline keep-clear bands (read only)
+    const QVector&lt;QPolygonF&gt;&amp; keepClearBands() const;
+};</code></pre>
+
+<p>
+Scene rules can shift, scale, or hide individual stamps; they cannot
+add new stamps (that's a per-layer concern) and they cannot move stamps
+across layers. Mutations rebuild the affected R-tree entries lazily
+between rules in the chain, so a subsequent rule sees the previous
+rule's effects.
+</p>
+
+<p>Iter 1 + iter 2 ship these rules as code. Until the in-app brush editor lands (iter 4+), cartographers compose them by editing palette files directly; the editor then offers them through a mode-filtered rule picker (see the validation note above):</p>
+
+<table>
+  <thead><tr><th>Stage</th><th>Name</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Generate</td><td>Uniform spacing</td><td>Seeds positions at every <code>spacingMm</code> along the centerline arclength.</td></tr>
+    <tr><td>Generate</td><td>Explicit point</td><td>Seeds a single position from a world-coord anchor (point-stamp default).</td></tr>
+    <tr><td>Generate</td><td>Distribute by count</td><td>Evenly spaces N stamps between two arclength bounds.</td></tr>
+    <tr><td>MutatePerLayer</td><td>Rotate by tangent</td><td>Sets each position's <code>rotationRad</code> to the local centerline tangent.</td></tr>
+    <tr><td>MutatePerLayer</td><td>Rotate fixed</td><td>Sets a constant rotation for axis-aligned glyphs.</td></tr>
+    <tr><td>MutatePerLayer</td><td>Skip sharp bends</td><td>Marks <code>visible = false</code> when local centerline angle &gt; threshold.</td></tr>
+    <tr><td>MutatePerLayer</td><td>Skip near endpoints</td><td>Hides positions within <code>marginMm</code> of stroke ends.</td></tr>
+    <tr><td>MutatePerLayer</td><td>Mirror on side</td><td>Duplicates positions to the opposite side with mirrored rotation.</td></tr>
+    <tr><td>MutatePerLayer</td><td>Phase offset</td><td>Shifts all positions by N arclength.</td></tr>
+    <tr><td>MutatePerLayer</td><td>Taper scale</td><td>Varies <code>scale</code> as a function of arclength (tapered fault, waterfall).</td></tr>
+    <tr><td>MutatePerLayer</td><td>Swap glyph cycle</td><td>Rotates <code>glyphId</code> among a list every N stamps.</td></tr>
+    <tr><td>Stamp</td><td>Rigid stamp</td><td>Materialises each visible position via <code>RigidStamp</code> semantics; populates <code>bufferedBboxWorld</code> and <code>priority</code>.</td></tr>
+    <tr><td>Stamp</td><td>Bending stamp</td><td>Materialises via <code>BendingStamp</code>.</td></tr>
+    <tr><td>Stamp</td><td>Point stamp</td><td>Materialises a single position.</td></tr>
+    <tr><td>Stamp</td><td>Trace offset polyline</td><td>For an <code>OffsetCurve</code>-mode layer, samples the cartographer's polyline at fine resolution and emits one polyline at signed perpendicular distance <code>offsetCurveOffsetMm</code>. No iteration over stamps — the layer produces a single piece of geometry covering the whole stroke. Iter 1 ships the fast path (offset = 0, output equals input); iter 2 adds non-zero offset handling.</td></tr>
+    <tr><td>MutateScene</td><td>Try shift to fit</td><td>For each stamp whose <code>bufferedBboxWorld</code> collides with another stamp or centerline band, try shifts of ±¼ spacing, ±½ spacing along the arclength; accept the first non-colliding shift.</td></tr>
+    <tr><td>MutateScene</td><td>Try shorten to fit</td><td>For each still-colliding stamp, scale geometry to 0.5×; accept if the smaller bbox clears.</td></tr>
+    <tr><td>MutateScene</td><td>Hide if still colliding</td><td>For each still-colliding stamp, set <code>visible = false</code>. Last resort.</td></tr>
+    <tr><td>MutateScene</td><td>Sort by priority desc</td><td>Reorders subsequent scene rules' iteration so high-<code>priority</code> stamps get first dibs on staying put.</td></tr>
+  </tbody>
+</table>
+
+<p>
+<strong>Default rule stacks per mode</strong> (used when
+<code>layer.rules</code> is empty — collision avoidance is opt-out, not
+opt-in, since it's what cartographers expect):
+</p>
+
+<table>
+  <thead><tr><th>Mode</th><th>Default rules (iter 1)</th><th>Default rules (iter 2, scene rules added)</th></tr></thead>
+  <tbody>
+    <tr><td><code>RigidStamp</code></td><td>Uniform spacing → Rotate by tangent → Rigid stamp</td><td>… → Sort by priority desc → Try shift to fit → Try shorten to fit → Hide if still colliding</td></tr>
+    <tr><td><code>BendingStamp</code></td><td>Uniform spacing → Bending stamp</td><td>… → Sort by priority desc → Try shift to fit → Hide if still colliding</td></tr>
+    <tr><td><code>PointStamp</code></td><td>Explicit point → Point stamp</td><td>… → Sort by priority desc → Hide if still colliding</td></tr>
+    <tr><td><code>OffsetCurve</code></td><td>Trace offset polyline (offset=0 only in iter 1 — fast path equals the input polyline)</td><td>… → Sort by priority desc → Hide if still colliding (no shift / shorten — a continuous parallel line can't shift along arclength without breaking the "parallel to the whole stroke" contract). Iter 2 also extends Trace to non-zero offsets.</td></tr>
+  </tbody>
+</table>
+
+<p>
+In iter 1 decorations are drawn at their candidate positions with no
+collision resolution — overlap is allowed. Iter 2's scene-rule chain is
+opt-out (extending the defaults above). A cartographer who wants "let
+it overlap permanently" removes the scene rules from the layer; a
+cartographer who wants different arbitration reorders or substitutes
+rules. No enum, no hard-coded policy — composition all the way down.
+</p>
+
+<p>
+<strong>Execution model.</strong>
+<code>cwSketchDecorationLayout</code> sorts every layer's rule list
+into stage order: <code>Generate</code> → <code>MutatePerLayer</code>
+→ <code>Stamp</code> → (barrier) → <code>MutateScene</code>. Per-layer
+stages can run concurrently across layers and strokes; scene rules run
+serially after the barrier against the unified stamp set. The
+cartographer can drag rules around in the UI without worrying about
+stage order — the framework sorts them. Exactly one
+<code>Stamp</code>-stage rule must terminate the per-layer portion of
+each layer's pipeline.
+</p>
+
+<p>
+<strong>Mode is the source of truth; rules are validated against it
+at load time.</strong> A layer's <code>mode</code> (one of
+<code>RigidStamp</code> / <code>BendingStamp</code> /
+<code>PointStamp</code> / <code>OffsetCurve</code>) is authoritative. Each
+per-layer rule declares which modes it supports via
+<code>compatibleModes()</code> — e.g. <code>Trace offset polyline</code>
+→ <code>{OffsetCurve}</code>, <code>Rigid stamp</code> →
+<code>{RigidStamp}</code>, <code>Bend stamp to tangent</code> →
+<code>{BendingStamp}</code>, <code>Scatter</code> →
+<code>{PointStamp}</code>.
+</p>
+
+<p>
+<strong>The primary defense is the UX: invalid rules can't be authored
+in-app.</strong> When the in-app brush editor lands (iter 4+), its
+per-layer rule picker is filtered by the layer's <code>mode</code> —
+only rules whose <code>compatibleModes()</code> include the current mode
+are offered, and changing a layer's mode prunes (or disables, with a
+tooltip) any rule that no longer applies. A cartographer working through
+the UI therefore can't compose an invalid stack in the first place,
+which heads off essentially all of these errors at the source. The same
+<code>compatibleModes()</code> declaration drives both the picker filter
+and the load-time check below — one source of truth.
+</p>
+
+<p>
+<strong>Load-time validation is the backstop</strong> for palette files
+edited outside the app or authored against a different CaveWhere version.
+<code>cwSymbologyPaletteIO</code> validates every layer's resolved rule
+stack against the layer's mode on load: any <code>Generate</code> /
+<code>MutatePerLayer</code> / <code>Stamp</code> rule whose
+<code>compatibleModes()</code> excludes the layer's mode is
+<strong>dropped from that layer's pipeline</strong> and a one-shot
+warning logs a specific message (<code>brush "floor-step" layer 2: rule
+"Rigid stamp" not valid for mode OffsetCurve — skipping</code>). The rest
+of the palette loads normally — same skip-and-warn philosophy as unknown
+rule names (below): a malformed rule stack degrades that one layer rather
+than taking down the whole palette. If dropping rules leaves a layer with
+no terminating <code>Stamp</code> rule, the layer falls back to its
+mode's default rule stack (also warned). The per-mode default stacks
+(below) always pass validation; this only bites hand-edited or
+version-skewed files. <code>MutateScene</code> rules are exempt — they're
+mode-agnostic and operate on the unified stamp set after the barrier.
+</p>
+
+<p>
+<strong>Forward compatibility.</strong> Unknown rule names in the
+palette round-trip via the <code>params</code> bytes field and log a
+one-shot warning at render time. Renaming an existing rule is a
+breaking change for palette files; adding new rule names is not.
+</p>
+
+<h3>12. Z order and paint order <span class="badge i1">iter 1</span></h3>
+
+<p>
+The prototype paints strokes in creation order — fine for one-off
+sketching, wrong for symbology. A wall stroke drawn before a feature
+stroke gets covered by the feature, even though cave maps universally
+want the wall on top. We need explicit paint-order control.
+</p>
+
+<p>
+<strong><code>cwLineBrush::zOrder</code> (integer, default 0).</strong>
+Strokes paint in <code>(brush.zOrder ascending, strokeCreationOrder
+ascending)</code> order — higher z paints last, i.e. on top. The seed
+palette ships with:
+</p>
+
+<table>
+  <thead><tr><th>Seed brush</th><th>zOrder</th></tr></thead>
+  <tbody>
+    <tr><td><code>feature</code></td><td>10</td></tr>
+    <tr><td><code>wall</code></td><td>100</td></tr>
+  </tbody>
+</table>
+
+<p>
+Wall always paints over feature regardless of who was drawn when. The
+cartographer can edit z per brush; the brush picker shows z so it's
+discoverable. Large gaps between defaults (10 vs 100) leave room for
+community palettes to slot in without renumbering.
+</p>
+
+<p>
+<strong>Within a single brush, decoration layers paint in declared
+order.</strong> The brush has no special "centerline first" rule —
+the visible line on a normal wall is just an <code>OffsetCurve(offset=0)</code>
+decoration layer, paint-order-equal to any tick or T-bar layer on the
+same brush. To put a tick layer <em>above</em> the brush's main line,
+list it after the OffsetCurve in the brush's decoration array. To
+sandwich something between two parallel lines, list the layers in
+that order: outer offset, glyph layer, inner offset.
+</p>
+
+<p>
+If a brush needs weirder internal layering than "layers top-to-bottom
+in declared order," that's a sign the symbology should be two
+separate brushes at different <code>zOrder</code>s — keeps the data
+model simple and the editor UI obvious.
+</p>
+
+<p>
+<strong>Halos within a single stamp</strong> aren't z-controlled — the
+stamp operation always draws halo first, then ink, as a single atomic
+unit (Decision 10). The halo z question is "halo of which glyph,
+relative to other glyphs," which is the decoration-layer-ordering
+question above.
+</p>
+
+<p>
+<strong>Distinct from <code>collisionPriority</code>.</strong> Z is paint
+order; <code>collisionPriority</code> on a decoration layer (Decision 10)
+is placement-pass arbitration — who wins a contested spot. A low-z
+brush can have a layer with high <code>collisionPriority</code>: it gets
+placed first and other brushes' decorations route around it, but when
+the placement is settled, paint order is still z-driven so the low-z
+brush draws under the higher-z ones. The two knobs are orthogonal.
+</p>
+
+<p>
+<strong>Implementation.</strong>
+<code>cwOffsetCurveBatches</code> groups by brush; iter 1 sorts batches
+by <code>brush.zOrder</code> before emission. The scene-rule chain
+(iter 2) produces a flat list of resolved stamps via
+<code>cwSceneContext</code>; <code>cwSketchPainter::paint</code> sorts
+that list by <code>(brush.zOrder, decorationLayerIndex)</code> before
+stamping. No per-glyph z field needed; brush z + declaration order
+covers every case the seed and UIS palettes have come up against.
+</p>
+
+<h3>13. Collision avoidance is the default scene-rule chain <span class="badge i3">iter 2</span></h3>
+
+<p>
+"Non-overlap" in symbology is stronger than "bboxes don't intersect."
+A hatch tick whose tip sits one pixel away from another tick reads as
+a cluttered blob even though they technically don't touch. The
+<code>MutateScene</code> rules in Decision 11 arbitrate against
+<em>buffered</em> bounding boxes — the ink stays its real size, but
+the keep-clear region around each stamp is inflated by
+<code>layer.bufferMm</code> (converted to world metres) and stored on
+the stamp as <code>bufferedBboxWorld</code>. Centerlines are seeded
+into <code>cwSceneContext</code> as keep-clear bands the same way,
+so a glyph that collides with another brush's centerline counts as a
+collision even though no other stamp is involved.
+</p>
+
+<figure>
+  <canvas id="cv-buffer" width="860" height="180"></canvas>
+  <figcaption>
+    <strong>Collision buffer.</strong> Solid: the glyph as drawn. Dashed:
+    the buffered bbox used for scene-rule queries. The middle pair has
+    non-overlapping ink but overlapping buffers — the scene rules treat
+    it as a collision and apply the layer's chain. (All values paper-mm
+    per Decision 7.)
+  </figcaption>
+</figure>
+
+<figure>
+  <canvas id="cv-placement" width="860" height="280"></canvas>
+  <figcaption>
+    <strong>Scene-rule chain in action.</strong> Two centerlines (the
+    two floor steps) always draw. Each layer's stamps enter
+    <code>cwSceneContext</code>; the default
+    <code>RigidStamp</code> chain (sort by priority → try shift → try
+    shorten → hide if still colliding) resolves overlaps in order.
+    Shown: one glyph shifted along arclength, one shortened, one hidden
+    entirely (rendered greyed-out here; in production it would not
+    draw). The original figure also showed a halo'd glyph — halo has
+    been dropped from the iter 1+2 scope (Decision 10), so that
+    glyph is now in the hidden category in practice.
+  </figcaption>
+</figure>
+
+<p>
+<strong>Implementation sketch</strong> for the iter-2 rules (each is a
+~50-line <code>cwPlacementRule</code> subclass at Stage =
+<code>MutateScene</code>):
+</p>
+
+<pre><code>// All values in world metres at this point.
+// cwSceneContext owns an R-tree of cwStampPosition handles plus a
+// list of centerline keep-clear bands.
+
+// Try shift to fit (one scene rule, called for each visible stamp):
+for each stamp s in scene.stampsSortedByPriorityDesc():
+    if scene.collidesWith(s.bufferedBboxWorld):
+        for delta in {+¼ spacing, -¼ spacing, +½ spacing, -½ spacing}:
+            shifted = s.shiftAlongArclength(delta)
+            if !scene.collidesWith(shifted.bufferedBboxWorld):
+                scene.mutateStamp(s, shifted)
+                break
+
+// Try shorten to fit:                                  (next rule in chain)
+// Hide if still colliding:                             (last rule)</code></pre>
+
+<p>
+<strong>Incremental invalidation.</strong> When a stroke is added or
+modified, <code>cwSketchDecorationLayout</code> tracks a dirty-rect.
+<code>cwSceneContext</code> rebuilds the affected R-tree region and
+re-runs the scene-rule chain over stamps inside (plus a small skirt
+covering the buffered bbox of any stamp whose keep-clear region might
+extend into the dirty area). Untouched regions keep their cached
+resolutions.
+</p>
+
+<p>
+<strong>Performance target.</strong> The scene-rule pass is the most
+likely place to lose interactivity. Iter 2 lands single-threaded; the
+target is "under 16 ms for a 5 000-stroke sketch after a single-stroke
+edit." If we miss it, the AsyncFuture lift (via <code>cwConcurrent::run</code>
+per CLAUDE.md) is the next move — the <code>cwPaletteSnapshot</code>
+flow from Decision 8 already supports that without lifetime fixes.
+</p>
+
+<p>
+<strong>Iter 1 has its own target, separate from the scene pass.</strong>
+Even before <code>MutateScene</code> exists, iter 1 runs decoration
+generation, glyph tessellation, and OffsetCurve batching synchronously
+on the UI thread. So that a later scene-pass regression isn't blamed on
+work that was already slow: <em>iter 1 must repaint a 1 000-stroke
+sketch in under 16 ms after a single-stroke edit</em>, measured with the
+seed palette plus the floor-step demo brush. Glyph tessellation is
+cached per <code>(glyphName, mapScale)</code> (Decision
+8), so steady-state edits should pay only stamp transform-and-emit cost,
+not re-tessellation. Establish this number as a benchmark in iter 1 so
+iter 2's 5 000-stroke scene-pass target is measured against a known
+baseline rather than a moving one.
+</p>
+
+<h3>14. Scale visibility — driven by <code>cwSketch::mapScale</code> directly <span class="badge i4">iter 3</span></h3>
+
+<p>
+With dynamic scale switching as a first-class workflow (Decision 7),
+the active paper scale is just <code>cwSketch::mapScale</code> — the
+cartographer flips it from the sketch toolbar and everything
+downstream re-renders. No separate "preview at scale" view-state
+override is needed; the scale itself is the dial.
+</p>
+
+<p class="small">
+Implementation note: <code>cwSketch::mapScale</code> is a
+<code>Q_PROPERTY(... CONSTANT)</code> — the pointer to the
+<code>cwScale</code> object is constant for the sketch's lifetime, but
+the <em>value</em> inside emits <code>cwScale::scaleChanged</code>.
+Decoration-cache and placement invalidation must listen on that signal,
+not on a (non-existent) <code>cwSketch::mapScaleChanged</code> notify.
+</p>
+
+<p>
+Per-layer scale-visibility windows
+(<code>cwDecorationLayer::minPaperScale</code>,
+<code>maxPaperScale</code>) and per-brush windows on
+<code>cwLineBrush</code> are evaluated against <code>cwSketch::mapScale</code>
+during decoration generation:
+</p>
+
+<ul>
+  <li>If the layer's window excludes the current scale, the generator
+  returns no candidates → the layer drops out entirely. This is how
+  hatches disappear at 1:5000 while the centerline survives.</li>
+  <li>If the brush's window excludes the current scale, every decoration
+  on that brush plus the centerline drop out — the brush is invisible
+  at this scale. Useful for "drip line only at 1:250 or coarser
+  detail."</li>
+</ul>
+
+<p>
+Combined with the scene-rule chain's shorten / hide rules (Decision 13),
+this gives the cartographer two coarse controls (brush-level + layer-level
+visibility windows) and one fine control (the layer's collision policy,
+which decides what to do with marginal layouts at scales the layer
+nominally supports). At small scales they compose into the
+"some symbols don't draw, others get shortened" behaviour cave maps
+need.
+</p>
+
+<p>
+<strong>Export and screen render the same way.</strong>
+<code>cwSketchExporter</code> reads <code>cwSketch::mapScale</code>; the
+canvas reads <code>cwSketch::mapScale</code>; the only difference is
+whether user zoom is composed in (canvas yes, export no). Scale
+visibility is therefore identical on screen and on paper — no
+separate "preview" plumbing to keep in sync.
+</p>
+
+<h3>15. Git sync reuses <code>QQuickGit</code> <span class="badge">iter 4</span></h3>
+
+<p>A palette directory becomes a clone:</p>
+<ul>
+  <li><code>~/.../palettes/uis-standard/.git</code> points at a public remote (HTTPS by default; SSH for authoring).</li>
+  <li>"Add palette from URL" triggers <code>QQuickGit::clone(url, paletteDir)</code>.</li>
+  <li>"Update palettes" runs <code>pull</code> against each non-seed palette.</li>
+  <li>Authoring palettes is a separate writable repo; pushing reuses the GitHub OAuth credentials already wired for project sync (<code>cwGitHubDeviceAuth</code>).</li>
+  <li>A palette's identity is <code>Palette.id</code> inside the file, not the remote URL — so a fork retains identity until the author bumps it.</li>
+</ul>
+
+<p>
+No palette-registry server. Discovery is "share the git URL" until we
+have a reason to centralise. Until iteration 4 ships, palettes can be
+installed by dropping a directory into the palette location.
+</p>
+
+<h2>Data model (iteration 1)</h2>
+
+<h3>New C++ files</h3>
+<table>
+  <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>cwLineBrush.h</code></td><td><code>cwLineBrush</code> value type + <code>cwDecorationLayer</code></td></tr>
+    <tr><td><code>cwSymbologyGlyph.h</code></td><td><code>cwSymbologyGlyph</code> value type — drawn strokes in glyph-local paper-mm, authored bounds, name + displayName</td></tr>
+    <tr><td><code>cwSymbologyPalette.h/.cpp</code></td><td>QObject wrapping the palette's brushes and glyphs, identity (UUID), uniqueness checks on brush/glyph names, change signals, DAG cycle check at load</td></tr>
+    <tr><td><code>cwPaletteSnapshot.h/.cpp</code></td><td>Value-type snapshot (<code>QHash&lt;QString, cwLineBrush&gt;</code> + glyphs); cheap copy via implicit sharing; the lookup surface decoration generation + scene rules + centerline batching all use (Decision 8)</td></tr>
+    <tr><td><code>cwSymbologyPaletteIO.h/.cpp</code></td><td>Proto/JSON load + save for <code>palette.cwpalette</code> + per-glyph <code>.cwglyph</code> files</td></tr>
+    <tr><td><code>cwSymbologyPaletteSeed.h/.cpp</code></td><td>Hard-coded built-in palette with stable string names for <code>wall</code> / <code>scrap-outline</code> / <code>feature</code></td></tr>
+    <tr><td><code>cwSymbologyPaletteManager.h/.cpp</code></td><td>QML singleton; scans palette directory, exposes installed palettes; first-scanned-wins resolution on duplicate <code>Palette.id</code> with one-shot warning</td></tr>
+    <tr><td><code>cwGlyphTessellationCache.h/.cpp</code></td><td>Per-<code>(glyphName, mapScale)</code> cached <code>QPainterPath</code>; resolves recursive glyph→brush→glyph composition once per key. Per-stamp scale is a draw-time transform, not a key component</td></tr>
+    <tr><td><code>cwSketchDecorationLayout.h/.cpp</code></td><td>Per-stroke / per-layer stamp-position generation; runs the Generate / MutatePerLayer / Stamp pipeline against a <code>cwPaletteSnapshot</code></td></tr>
+    <tr><td><code>cwPlacementRule.h/.cpp</code></td><td>Abstract base + registry. Concrete rule subclasses live in <code>cwPlacementRules/</code> subdirectory (one file per rule)</td></tr>
+    <tr><td><code>cwSketchGlyphCanvas.h/.cpp</code></td><td>Glyph-editor canvas — variant of <code>cwSketchCanvas</code> with origin marker, tangent indicator, paper-mm extent overlay</td></tr>
+    <tr><td><code>cavewhere_symbology.proto</code></td><td>Standalone proto schema (Palette, LineBrush, DecorationLayer, PlacementRule, Glyph)</td></tr>
+  </tbody>
+</table>
+
+<h3>Changes to existing files</h3>
+<ul>
+  <li><code>cwPenStroke.{h,cpp}</code> — remove <code>Kind kind</code>, <code>width</code>, and <code>color</code> (Decision 2 — look is brush-defined); add <code>QString brushName</code>. <em>No</em> cached <code>cwLineBrush const*</code> on the stroke — resolution goes through a <code>cwPaletteSnapshot</code> passed into each consumer (Decision 8).</li>
+  <li><code>cwPenStrokeModel</code> — re-key by <code>brushName</code>; update role enum.</li>
+  <li><code>cwSketchPainterPathModel</code> → renamed to <code>cwOffsetCurveBatches</code>; iterates each stroke's brush's <code>OffsetCurve</code> layers; batches by <code>(brushName, offset, width, color, dash, cap, join)</code>; takes <code>cwPaletteSnapshot</code> as input. Iter 1 handles <code>offset = 0</code> only.</li>
+  <li><code>cwSketch.{h,cpp}</code> — add <code>Q_PROPERTY(QUuid activePaletteId ...)</code> with the resolver chain from Decision 6. <em>No</em> per-sketch light/dark flag — color-scheme selection is app-level (see <code>cwSettings</code> below).</li>
+  <li><code>cwCavingRegion.{h,cpp}</code> — add <code>defaultPaletteId</code>.</li>
+  <li><code>cwSettings.{h,cpp}</code> — add <code>defaultPaletteId</code>, and a <code>colorSchemeOverride</code> setting (enum <code>FollowSystem</code> / <code>Light</code> / <code>Dark</code>, default <code>FollowSystem</code>). On change it calls <code>QGuiApplication::styleHints()-&gt;setColorScheme(...)</code> (or clears the override to follow the OS), so <code>QStyleHints::colorScheme()</code> stays the single source of truth that both <code>Theme.qml</code> (already reads <code>Qt.application.styleHints.colorScheme</code>) and the painter consult. No new per-sketch state.</li>
+  <li><code>cavewhere.proto</code> — <code>PenStroke.brushName</code> (new); remove <code>kind</code>, <code>width</code>, <code>colorHex</code> from <code>PenStroke</code>; <code>Sketch.activePaletteId</code> (new); <code>CavingRegion.defaultPaletteId</code> (new).</li>
+  <li><code>cwScrapManager.cpp</code> + <code>cwSketchScrapOutlineDetector.cpp</code> — replace the <code>Kind::Wall || Kind::ScrapOutline</code> branch with <code>snapshot.findBrush(stroke.brushName).value_or(fallback).scrapOutline</code> (the <code>nullopt</code>/missing-brush fallback from Decision 4 has <code>scrapOutline = false</code>). (<code>cwSketchManager</code> does <em>not</em> branch on <code>Kind</code> today; the earlier draft listed it incorrectly.)</li>
+  <li><code>cwSaveLoad.cpp</code> — round-trip the new fields; <strong>no legacy loader</strong> — prototype-era sketches are not preserved.</li>
+</ul>
+
+<h2>UI integration (iteration 1)</h2>
+
+<h3>Palette and brush picker</h3>
+
+<p>
+In the existing sketch toolbar (where the prototype's Wall / Feature
+buttons live today), replace the per-kind toggle row with:
+</p>
+
+<pre><code>[Palette: UIS Standard ▾]   [Brush: Wall ▾]   [Width: 2.0]   [Colour: ■]</code></pre>
+
+<ul>
+  <li><strong>Palette picker</strong> — populated from <code>cwSymbologyPaletteManager</code>. Selecting a palette sets <code>cwSketch::activePaletteId</code>. Switching the active palette re-skins every stroke whose <code>brushName</code> resolves in the new palette; strokes whose name doesn't resolve trigger the missing-brush banner (below).</li>
+  <li><strong>Brush picker</strong> — shows brushes' <code>displayName</code> grouped by <code>category</code>; selecting a brush sets the <em>current drawing brush</em> on the canvas, which is what subsequent <code>beginStroke()</code> calls use as <code>brushName</code>. Categories sort by the brush <code>zOrder</code> of their lowest-z member (so wall-ish categories group near the top), and within a category brushes sort alphabetically by <code>displayName</code> (locale-aware). This keeps ordering stable across palette reloads regardless of file order; a future "author-declared order" field can override it if cartographers ask for it.</li>
+</ul>
+
+<p class="small">
+The width / colour fields from earlier drafts are gone — Decision 2's
+"no per-stroke overrides" makes them dead controls. The way to get a
+thicker red wall is to clone the <code>wall</code> brush in the palette
+editor and assign the clone.
+</p>
+
+<p>
+Prototype seed-brush buttons (Wall / Feature) collapse into "Brush ▾"
+but stay as keyboard shortcuts (W, F) for muscle-memory.
+</p>
+
+<h3>Glyph editor entry point</h3>
+
+<p>
+The glyph editor is a separate page reachable from the palette picker
+(an "Edit glyphs…" item next to each writable palette) and from the
+brush editor (an "Add glyph…" button on a decoration layer's glyph
+picker). Inside, the editor is a stripped-down sketch canvas:
+</p>
+
+<ul>
+  <li>Paper-mm authoring extent overlay (default 10 × 10 mm; zoomable to detail).</li>
+  <li>Origin marker (the centerline-attachment anchor).</li>
+  <li>Tangent indicator (the +X direction; tells the cartographer how the glyph will be oriented at stamp time).</li>
+  <li>The active palette's brush picker, identical to the sketch canvas's.</li>
+  <li>Save / cancel / rename chrome at the bottom; save writes one
+  <code>.cwglyph</code> file and updates the palette's index.</li>
+</ul>
+
+<p>
+Stamping <em>is</em> wired up in iter 1 (the iter-1+iter-2 merge — see
+the roadmap table). A saved glyph can be referenced from a brush's
+decoration layer and stamped along centerlines the same day it's
+authored. The end-to-end iter-1 target — the <code>floor-step</code>
+brush (OffsetCurve edge line + 1.5 mm <code>floor-step-tick</code> glyph
+stamped rigidly at 2 mm spacing on the <code>+normal</code> side) —
+exercises stamping, paper-mm → world-m conversion, and the
+placement-rule registry in one demo. Critically, <code>floor-step</code>
+and <code>floor-step-tick</code> ship <em>in the seed palette</em>
+(Decision 5), so the demo renders from a clean install with no
+hand-authored JSON; the glyph editor then lets the cartographer modify
+or extend it by forking the seed.
+</p>
+
+<h3>Missing-palette warning</h3>
+
+<p>
+If a sketch references brushes from a palette that isn't installed, the
+sketch canvas shows a one-line banner:
+</p>
+
+<blockquote>This sketch uses the "UIS Standard" palette. [Install] [Use default]</blockquote>
+
+<p>
+"Install" launches an "Add palette from URL" sheet once iteration 4
+lands; until then it shows installation instructions. "Use default"
+re-points the sketch to the seed palette and re-renders.
+</p>
+
+<h2>Resolved questions</h2>
+
+<table>
+  <thead><tr><th>Question</th><th>Resolution</th><th>Lives in</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Active palette scope</td>
+      <td>Per-sketch, with fallback chain sketch → region → app → seed. Exactly one palette is active per sketch at a time.</td>
+      <td>Decision 6</td>
+    </tr>
+    <tr>
+      <td>Brush identity</td>
+      <td><strong>Stable string <code>name</code> within the palette, not a UUID.</strong> Cross-palette substitution depends on it — UIS-Standard's <code>wall</code> ↔ MyPersonal's <code>wall</code>. <code>displayName</code> is the localizable label shown in UI. Flat namespace; no <code>"floors/sand"</code> paths.</td>
+      <td>Decisions 1 + 2</td>
+    </tr>
+    <tr>
+      <td>Palette identity</td>
+      <td>UUID on the palette itself stays — two installed palettes can share a display name; the UUID disambiguates. Duplicate <code>Palette.id</code> across installed palettes resolves first-scanned-wins with a one-shot warning naming both directories.</td>
+      <td>Decisions 4 + 6</td>
+    </tr>
+    <tr>
+      <td>Per-stroke width / colour overrides</td>
+      <td><strong>No overrides.</strong> Brush defines the look entirely. To vary a stroke, the cartographer clones the brush in the palette UI and edits the clone; the original strokes referencing the unchanged brush stay put. A typed override bag was considered and rejected — variants would be unnamed and un-bulk-editable. Brush inheritance is a future non-breaking addition if clone-and-tweak produces palette bloat.</td>
+      <td>Decision 2</td>
+    </tr>
+    <tr>
+      <td>Dark mode colors</td>
+      <td>Light/dark color pairs live on each decoration layer that draws ink — <code>offsetCurveColorLight</code> / <code>offsetCurveColorDark</code> on every <code>OffsetCurve</code> layer; glyph layers inherit colors from the glyph's own strokes' brushes (which carry the same pair). The app-level color scheme selects at draw time: the painter reads <code>QStyleHints::colorScheme()</code>, which follows the OS by default and is overridable via <code>cwSettings.colorSchemeOverride</code> (<code>FollowSystem</code> / <code>Light</code> / <code>Dark</code>). Not per-sketch. Palette ships both colors authored; cartographer doesn't repaint when switching modes.</td>
+      <td>Decision 1</td>
+    </tr>
+    <tr>
+      <td>Halo</td>
+      <td><strong>Dropped from iter 1+2 schema.</strong> No seed brush needs it; ceiling step relies on <code>zOrder</code>. If real cartography use shows halo is required (likely for label backings later), it lands as additive fields without breaking existing palettes.</td>
+      <td>Decision 10</td>
+    </tr>
+    <tr>
+      <td>Seed palette growth</td>
+      <td>Stay minimal — <code>wall</code> + <code>scrap-outline</code> + <code>feature</code>. A curated default palette (UIS-ish symbols) is a separate user-authored deliverable, shipped as an installable palette later.</td>
+      <td>Decision 5</td>
+    </tr>
+    <tr>
+      <td>"Wall" vs "ScrapOutline"</td>
+      <td>Two separate seed brushes — both with <code>scrapOutline = true</code>. <code>wall</code> has one <code>OffsetCurve(offset=0)</code> decoration layer (visible line); <code>scrap-outline</code> has zero decoration layers (no ink). Preserves the prototype's invisible-boundary semantic without a dedicated <code>centerlineEnabled</code> flag.</td>
+      <td>Decision 5</td>
+    </tr>
+    <tr>
+      <td>Default <code>bufferMm</code></td>
+      <td><code>1.0 mm</code> on new decoration layers. The field is serialized from iter 1 for forward-compat but stays <strong>dormant until iter 2</strong> (only <code>MutateScene</code> rules read it). The project-wide default — <code>cwSketchSettings.defaultBufferMm</code>, so cartographers can dial it in per project without editing brush files — also lands in iter 2 alongside the scene rules, not iter 1.</td>
+      <td>Decision 10</td>
+    </tr>
+    <tr>
+      <td>Brush resolution lifetime</td>
+      <td><strong><code>cwPaletteSnapshot</code> by value</strong>, not a cached pointer on the stroke. Every render-path consumer takes a snapshot as input. Implicit sharing keeps copies cheap; UI-side palette mutations during a paint pass leave the snapshot intact. Sets the stage for the eventual async-generation lift without a lifetime refactor.</td>
+      <td>Decision 8</td>
+    </tr>
+    <tr>
+      <td>Color encoding in proto</td>
+      <td><code>colorHex</code> string (<code>"#RRGGBB"</code> or <code>"#RRGGBBAA"</code>) matching the existing <code>cavewhere.proto</code> idiom. No <code>QtProto.QColor</code> message — doesn't exist today and the string form diffs cleanly in JSON.</td>
+      <td>Decision 3</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Files (iteration 1)</h2>
+
+<h3>New</h3>
+<ul>
+  <li><code>cavewherelib/src/cwLineBrush.h</code></li>
+  <li><code>cavewherelib/src/cwSymbologyGlyph.h</code></li>
+  <li><code>cavewherelib/src/cwSymbologyPalette.{h,cpp}</code></li>
+  <li><code>cavewherelib/src/cwPaletteSnapshot.{h,cpp}</code> — value-type snapshot used by every render-path consumer</li>
+  <li><code>cavewherelib/src/cwSymbologyPaletteIO.{h,cpp}</code></li>
+  <li><code>cavewherelib/src/cwSymbologyPaletteSeed.{h,cpp}</code></li>
+  <li><code>cavewherelib/src/cwSymbologyPaletteManager.{h,cpp}</code></li>
+  <li><code>cavewherelib/src/cwGlyphTessellationCache.{h,cpp}</code></li>
+  <li><code>cavewherelib/src/cwSketchDecorationLayout.{h,cpp}</code></li>
+  <li><code>cavewherelib/src/cwPlacementRule.{h,cpp}</code> + per-rule files under <code>cwPlacementRules/</code></li>
+  <li><code>cavewherelib/src/cwSketchGlyphCanvas.{h,cpp}</code></li>
+  <li><code>cavewhere_symbology.proto</code></li>
+  <li><code>cavewherelib/qml/BrushPicker.qml</code></li>
+  <li><code>cavewherelib/qml/PalettePicker.qml</code></li>
+  <li><code>cavewherelib/qml/GlyphPicker.qml</code></li>
+  <li><code>cavewherelib/qml/GlyphEditorPage.qml</code> — host for <code>cwSketchGlyphCanvas</code> plus save / cancel / rename chrome</li>
+  <li><code>testcases/test_cwSymbologyPalette.cpp</code></li>
+  <li><code>testcases/test_cwSymbologyPaletteIO.cpp</code></li>
+  <li><code>testcases/test_cwSymbologyGlyph_dagCycle.cpp</code></li>
+  <li><code>testcases/test_cwGlyphTessellationCache.cpp</code></li>
+  <li><code>testcases/test_cwSketchDecorationLayout.cpp</code></li>
+  <li><code>testcases/test_cwPaletteSnapshot.cpp</code></li>
+  <li><code>test-qml/tst_BrushPicker.qml</code></li>
+  <li><code>test-qml/tst_GlyphEditor.qml</code></li>
+</ul>
+
+<h3>Modified</h3>
+<ul>
+  <li><code>cavewherelib/src/cwPenStroke.{h,cpp}</code> — remove <code>Kind</code>, <code>width</code>, <code>color</code>; add <code>QString brushName</code>. No cached pointer.</li>
+  <li><code>cavewherelib/src/cwPenStrokeModel.{h,cpp}</code> — re-keyed roles</li>
+  <li><code>cavewherelib/src/cwSketch.{h,cpp}</code> — <code>activePaletteId</code> property, change signals (no per-sketch light/dark flag)</li>
+  <li><code>cavewherelib/src/cwSketchPainterPathModel.{h,cpp}</code> → renamed <code>cwOffsetCurveBatches</code>; OffsetCurve-layer batching by <code>(brushName, offset, width, color, dash, cap, join)</code>; reads <code>cwPaletteSnapshot</code>; iter 1 handles <code>offset = 0</code> only</li>
+  <li><code>cavewherelib/src/cwSketchPainter.{h,cpp}</code> — threads <code>cwPaletteSnapshot</code> through <code>PaintContext</code>; picks light/dark color at draw time from <code>QStyleHints::colorScheme()</code></li>
+  <li><code>cavewherelib/src/cwCavingRegion.{h,cpp}</code> — <code>defaultPaletteId</code></li>
+  <li><code>cavewherelib/src/cwSettings.{h,cpp}</code> — <code>defaultPaletteId</code>, <code>colorSchemeOverride</code> (FollowSystem / Light / Dark, drives <code>QStyleHints::setColorScheme</code>)</li>
+  <li><code>cavewherelib/src/cwSaveLoad.cpp</code> — proto round-trip (no legacy loader)</li>
+  <li><code>cavewherelib/src/cwScrapManager.cpp</code> + <code>cwSketchScrapOutlineDetector.cpp</code> — branch on brush flag</li>
+  <li><code>cavewhere.proto</code> — <code>PenStroke.brushName</code> (string), remove <code>kind</code> / <code>width</code> / <code>colorHex</code>, <code>Sketch.activePaletteId</code>, <code>CavingRegion.defaultPaletteId</code></li>
+  <li><code>cavewherelib/qml/SketchToolbar.qml</code> — pickers replace prototype kind buttons</li>
+  <li><code>cavewherelib/qml/SketchItem.qml</code> — current-brush wiring</li>
+  <li><code>cavewherelib/CMakeLists.txt</code> — register new files + proto target; rename the path-model translation unit to <code>cwOffsetCurveBatches</code></li>
+</ul>
+
+<h2>Verification (iteration 1)</h2>
+
+<h3>Unit tests</h3>
+<ul>
+  <li><code>cwSymbologyPalette</code> round-trips through proto and JSON; equality of in-memory model before vs. after, with brushes (including light/dark color pairs) and glyphs present. Color round-trip preserves <code>"#RRGGBB"</code> and <code>"#RRGGBBAA"</code> exactly (case-folded if applicable).</li>
+  <li>Per-glyph <code>.cwglyph</code> files round-trip independently — editing one glyph rewrites one file, the other glyphs' files are untouched.</li>
+  <li>Seed palette resolves <code>wall</code>, <code>scrap-outline</code>, <code>feature</code>, and <code>floor-step</code> by name; <code>scrapOutline</code> ∈ {true, true, false, false}; <code>wall</code> and <code>feature</code> each carry exactly one <code>OffsetCurve(offset=0)</code> decoration layer, <code>scrap-outline</code> carries zero, <code>floor-step</code> carries two (one <code>OffsetCurve(offset=0)</code> + one <code>RigidStamp</code> referencing glyph <code>floor-step-tick</code>). The seed glyph <code>floor-step-tick</code> resolves by name.</li>
+  <li><strong>Name uniqueness</strong>: loading a palette with two brushes named <code>"wall"</code> (or two glyphs sharing a name) fails with a clear error naming the duplicate.</li>
+  <li><strong>Duplicate palette UUID</strong>: a temp palette directory with two palettes sharing the same <code>Palette.id</code> loads with first-scanned-wins and a one-shot warning naming both directories.</li>
+  <li><code>cwPenStroke</code> proto round-trip: write <code>brushName</code>, read back; the name string survives unchanged. Old <code>kind</code>/<code>width</code>/<code>colorHex</code> fields are not in the new schema.</li>
+  <li><code>cwPaletteSnapshot</code>: constructing a snapshot from a palette, then mutating the palette (add/remove/edit brush), leaves the snapshot's view unchanged. <code>findBrush</code> returns a <code>cwLineBrush</code> by value (self-contained, valid independent of the snapshot's lifetime — destroy the snapshot, the returned brush is still usable). Looking up a missing name returns <code>nullopt</code>.</li>
+  <li><code>cwOffsetCurveBatches</code> produces one batch per resolved <code>(brushName, offset, width, color, dash, cap, join)</code> tuple using a fixed <code>cwPaletteSnapshot</code>; switching a stroke's <code>brushName</code> re-batches. Strokes whose brush has zero <code>OffsetCurve</code> layers (e.g. <code>scrap-outline</code>) contribute no batch — verifies the brush draws nothing on its own.</li>
+  <li><code>cwSymbologyPaletteManager</code> enumerates palettes from a temp dir containing two synthetic palettes plus the seed; identity is <code>Palette.id</code>, not directory name.</li>
+  <li><code>cwScrapManager</code> / <code>cwSketchScrapOutlineDetector</code> emit scrap outlines for closed loops of brushes with <code>scrapOutline = true</code> (both <code>wall</code> and <code>scrap-outline</code>); do not for closed loops of <code>feature</code>.</li>
+  <li><strong>Z-order paint sort</strong>: draw a <code>feature</code> stroke that crosses a <code>wall</code> stroke; assert the wall is on top regardless of which was drawn first. Reverse stroke creation order; wall still on top. Edit the wall brush's <code>zOrder</code> to 5 (below feature); now feature paints on top of wall.</li>
+  <li><strong>Glyph DAG cycle check by name.</strong> Synthetic palette where glyph <code>tick</code>'s stroke uses brush <code>tick-brush</code>, brush <code>tick-brush</code> has a decoration layer referencing glyph <code>crossbar</code>, and <code>crossbar</code>'s stroke uses <code>tick-brush</code> (cycle) — palette load fails with a clear error naming the path <code>tick → tick-brush → crossbar → tick-brush</code>.</li>
+  <li><strong>Glyph tessellation cache.</strong> A glyph with one stroke tessellates once per <code>(glyphName, mapScale)</code>; second request with the same key hits the cache. Changing <code>cwScale::scaleChanged</code> on the sketch's map scale invalidates entries keyed at the old scale; changing the glyph invalidates only entries for that <code>glyphName</code>. Stamping the same glyph at two different per-stamp <code>scale</code> values (Taper scale rule) produces <em>one</em> cache entry, not two — the scale is applied as a post-lookup transform.</li>
+  <li><strong>Paper-mm contract</strong>: rendering <code>wall</code> (0.6 mm) at <code>mapScale = 1/250</code> and at <code>1/1000</code> produces centerlines whose <em>paper</em> width matches. On-screen, the same brush at zoom 1.0 produces <code>widthMm × pixelDensity</code> screen pixels of stroke width to within rasterisation tolerance.</li>
+  <li><strong>Decoration stamping (floor step)</strong>: the seed <code>floor-step</code> brush (OffsetCurve edge line + 1.5 mm <code>floor-step-tick</code> glyph at 2 mm rigid-stamp spacing on <code>+normal</code>), drawn along a 50 mm straight centerline at 1:500. Assert the number of stamps (≈ 25), the tangent rotation (perpendicular to centerline), and the side (all on +normal). Then bend the centerline and assert ticks rotate to local tangent. This is the iter-1 end-to-end target and uses only seeded assets — no synthetic palette.</li>
+  <li><strong>Light/dark color selection</strong>: render a wall stroke with the app color scheme set to light, then dark (via <code>QStyleHints::setColorScheme</code>); the painter's resolved pen color matches the <code>OffsetCurve</code> layer's <code>offsetCurveColorLight</code> vs <code>offsetCurveColorDark</code> respectively. Also assert <code>FollowSystem</code> tracks <code>QStyleHints::colorScheme()</code>.</li>
+  <li><strong>Cross-palette substitution</strong>: build sketch S with one stroke of <code>brushName = "wall"</code> against palette A (wall 0.6 mm black). Switch sketch's <code>activePaletteId</code> to palette B (wall 0.4 mm grey, same name). Assert the resolved brush is from palette B and the centerline batch reflects the new width/color. Switch to palette C with no <code>wall</code> brush; assert the missing-brush fallback fires.</li>
+  <li><strong>Dynamic scale switching</strong> (scaffolded in iter 1 to lock the data model): construct a sketch at 1:500, draw one stroke of a brush with a 4 mm rigid-stamp at 4 mm spacing, fire <code>cwScale::scaleChanged</code> to 1:1000, and assert (a) the stroke's world-metre geometry is unchanged, (b) the decoration's <em>paper</em> spacing is still 4 mm in the re-rendered output, (c) the number of stamps along the stroke halved.</li>
+</ul>
+
+<h3>QML tests</h3>
+<ul>
+  <li><code>tst_BrushPicker.qml</code> — picker shows brushes grouped by category; selecting a brush emits a signal carrying the brush <em>name</em>; switching the active palette repopulates the picker.</li>
+  <li><code>tst_GlyphEditor.qml</code> — open the glyph editor, draw a stroke, set the origin marker, save; reopen the same glyph and verify the strokes + bounds match.</li>
+</ul>
+
+<h3>Manual</h3>
+<ul>
+  <li>Create a fresh sketch, draw a few <code>wall</code> and <code>feature</code> strokes, save, reopen — strokes round-trip and render correctly.</li>
+  <li>Toggle the app color scheme (light ↔ dark); assert wall/feature colors flip without other state changes, and that switching <code>colorSchemeOverride</code> back to <code>FollowSystem</code> restores the OS-driven scheme.</li>
+  <li>Drop a synthetic third palette into the palette directory, restart; it appears in the picker.</li>
+  <li>Switch a sketch's palette to one missing a referenced brush; the fallback banner appears and strokes render as flagged-colour centerlines.</li>
+  <li>The seeded <code>floor-step</code> brush renders its ticks on a fresh sketch with no authoring (clean-install end-to-end check). Then, separately: fork the seed, open the glyph editor, draw a new small tick glyph, save into the writable fork; the glyph appears in the palette's glyph list and a new <code>.cwglyph</code> file appears under <code>glyphs/</code>. Reference it from a brush decoration layer; the custom glyph stamps along a centerline.</li>
+</ul>
+
+<pre><code>./build/&lt;preset&gt;/cavewhere-test "[cwSymbologyPalette],[cwSketch],[cwPenStroke]" \
+    -d yes 2&gt;&amp;1 | tee /tmp/cavewhere-test.log
+./build/&lt;preset&gt;/cavewhere-qml-test --platform offscreen \
+    -input test-qml/tst_BrushPicker.qml 2&gt;&amp;1 | tee /tmp/cavewhere-qml-test.log</code></pre>
+
+<h2>Iteration sketches</h2>
+
+<h3>Iteration 2 — scene-rule chain + non-zero OffsetCurve</h3>
+<ul>
+  <li><code>cwSceneContext</code> — owns the R-tree of buffered stamp bboxes plus the read-only list of every stroke's cartographer-drawn-polyline keep-clear band. Built lazily on first query, invalidated by dirty rect.</li>
+  <li>Ship the four <code>MutateScene</code> rules listed in Decision 11: <em>Try shift to fit</em>, <em>Try shorten to fit</em>, <em>Hide if still colliding</em>, <em>Sort by priority desc</em>. Each is a small <code>cwPlacementRule</code> subclass registered the same way as iter-1 rules.</li>
+  <li>Wire the default scene-rule chain into each mode's default rule stack (Decision 11 table). Existing iter-1 brushes inherit the chain transparently; cartographers who want overlap drop the scene rules from a layer.</li>
+  <li><strong>Non-zero <code>OffsetCurve</code> offsets (Decision 10).</strong> Iter 1 shipped OffsetCurve with offset=0 (the centerline-replacement path). Iter 2 generalises to arbitrary offsets, including miter handling at sharp corners and self-intersection detection at tight bends (clip or split as needed). End-to-end targets: overhang line on a wall = one <code>OffsetCurve</code> decoration layer with offset 1 mm, width 0.3 mm; double-wall passage = two <code>OffsetCurve</code> layers at offsets ±2 mm; triple line = three layers at <code>{-2, 0, +2}</code>.</li>
+  <li><strong>New file <code>cwSketchSettings.{h,cpp}</code></strong> — project-wide <code>defaultBufferMm</code> (the dormant <code>cwDecorationLayer::bufferMm</code> from iter 1 becomes live here). Created in iter 2 because nothing reads buffer values until the scene rules exist.</li>
+  <li>Debug overlay (toggleable in <code>cwSketchSettings</code>) showing which stamps each scene rule shifted, shortened, or hid — important for tuning. Performance target: under 16 ms per scene pass on a 5 000-stroke sketch after a single-stroke edit; if missed, lift to <code>cwConcurrent::run</code> (the <code>cwPaletteSnapshot</code> flow already supports this).</li>
+  <li>UIS / NSS starter palette shipped as a separate installable palette (not added to the seed); ceiling step + drip line + pit edge + overhang line land as concrete validations of the rule set across all four modes.</li>
+</ul>
+
+<h3>Iteration 3 — scale visibility</h3>
+<ul>
+  <li><code>minPaperScale</code> / <code>maxPaperScale</code> honoured in <code>cwSketchDecorationLayout</code> (layer-level skip) and <code>cwOffsetCurveBatches</code> (skips layers whose scale window excludes the current scale).</li>
+  <li><code>MapScaleInput</code> in the sketch toolbar already lets the cartographer switch scales — iteration 3 just makes sure changing the underlying <code>cwScale::scaleChanged</code> invalidates the decoration cache and triggers a placement re-run. The plumbing is signal wiring, not new UI.</li>
+  <li>The "vector mipmap" behaviour shown in the scale figure falls out of this naturally — at smaller scales, layers drop out and the placement pass shortens or hides what remains.</li>
+</ul>
+
+<h3>Iteration 4+ sketches</h3>
+<ul>
+  <li><strong>Git sync</strong> via <code>QQuickGit</code> clone/pull; palette manager UI with "add from URL", "update all", "remove" rows; reuse of <code>cwGitHubDeviceAuth</code> for push credentials when authoring.</li>
+  <li><strong>Area + point brushes.</strong> Point brushes are a degenerate case of the existing model — a brush with a single <code>PointStamp</code> decoration layer (and no <code>OffsetCurve</code> layer); the cartographer places one anchor and the glyph stamps there. Area brushes add a fill component (a glyph stamped in a grid inside a closed polygon) plus a perimeter stroking with a line brush. No new schema concepts — same glyphs, same placement rules.</li>
+  <li><strong>Brush inheritance</strong> (if iter 1 use shows palette bloat from clone-and-tweak). <code>cwLineBrush::parentBrushName</code> with per-field overridden flags. Resolution walks the parent chain; cycle detection at palette load (same machinery as glyphs). Non-breaking addition.</li>
+  <li><strong>Per-stamp overrides.</strong> The sketch carries an optional <code>QVector&lt;cwStampOverride&gt;</code> alongside its strokes. Each override targets <code>(strokeId, decorationLayerIndex, stampIndex)</code> and supplies a parametric mutation ("move forward 1 mm", "hide", "swap to glyph G2"). Applied as a final mutator pass after the brush's rule pipeline. Hand-edits survive brush edits because they're parametric, not absolute.</li>
+  <li><strong>In-app brush editor</strong>: pick a base brush, add / remove decoration layers, reorder placement rules, tweak rule params with live preview. The per-layer rule picker is filtered by the layer's <code>mode</code> (via <code>compatibleModes()</code>) so invalid rule/mode combinations can't be authored — this is the primary defense behind the load-time skip-and-warn backstop (Decision 11).</li>
+  <li><strong>Halo (if needed)</strong>: revisited when label/text symbology or genuine ceiling-step legibility issues prove z-order isn't enough. Lands as additive fields on <code>cwDecorationLayer</code>; existing palettes are unaffected.</li>
+  <li><strong><code>.th2</code> interop</strong>: brushes get a <code>therionLinetype</code> field and glyphs get a <code>therionPointtype</code> field; importer consults palette lookup tables to translate. The placement-rule pipeline maps Therion's "auto-place along line" + style modifiers cleanly.</li>
+</ul>
+
+<script>
+"use strict";
+
+// ---------- shared helpers ----------
+const PAPER = "#fbfaf6";
+const INK = "#2a2a2e";
+const ACCENT = "#3949ab";
+const RED = "#a02a2a";
+
+function fitDpr(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || canvas.width;
+  const cssH = canvas.height * (cssW / canvas.width);
+  canvas.style.height = cssH + "px";
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  return { ctx, w: cssW, h: cssH };
+}
+
+function buildPolyline(fn, n) {
+  n = n || 240;
+  const pts = [];
+  for (let i = 0; i <= n; i++) pts.push(fn(i / n));
+  return pts;
+}
+
+function arclengths(pts) {
+  const arcs = [0];
+  for (let i = 1; i < pts.length; i++) {
+    arcs.push(arcs[i-1] + Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y));
+  }
+  return arcs;
+}
+
+function sampleAt(pts, arcs, s) {
+  let lo = 0, hi = arcs.length - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (arcs[mid] < s) lo = mid; else hi = mid;
+  }
+  const seg = arcs[hi] - arcs[lo];
+  const t = seg > 0 ? (s - arcs[lo]) / seg : 0;
+  const x = pts[lo].x + (pts[hi].x - pts[lo].x) * t;
+  const y = pts[lo].y + (pts[hi].y - pts[lo].y) * t;
+  let tx = pts[hi].x - pts[lo].x;
+  let ty = pts[hi].y - pts[lo].y;
+  const len = Math.hypot(tx, ty) || 1;
+  tx /= len; ty /= len;
+  return { x, y, tx, ty };
+}
+
+function strokePolyline(ctx, pts) {
+  ctx.beginPath();
+  pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+  ctx.stroke();
+}
+
+function paperBg(ctx, w, h) {
+  ctx.fillStyle = PAPER;
+  ctx.fillRect(0, 0, w, h);
+}
+
+// ---------- figure: brush anatomy ----------
+(function () {
+  const { ctx, w, h } = fitDpr(document.getElementById("cv-anatomy"));
+  paperBg(ctx, w, h);
+
+  const pts = buildPolyline(t => ({
+    x: 60 + (w - 120) * t,
+    y: h * 0.55 + Math.sin(t * Math.PI * 2.4) * 22
+  }), 300);
+  const arcs = arclengths(pts);
+
+  // hatches on right side
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.6;
+  const total = arcs[arcs.length - 1];
+  for (let s = 28; s < total; s += 22) {
+    const p = sampleAt(pts, arcs, s);
+    const nx = -p.ty, ny = p.tx;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x + nx * 14, p.y + ny * 14);
+    ctx.stroke();
+  }
+
+  // centerline on top
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 3.2;
+  strokePolyline(ctx, pts);
+
+  // labels
+  ctx.fillStyle = ACCENT;
+  ctx.font = "12px -apple-system, system-ui, sans-serif";
+
+  // label: centerline
+  ctx.fillText("centerline", 70, 40);
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(106, 44);
+  ctx.lineTo(180, sampleAt(pts, arcs, 130).y - 6);
+  ctx.stroke();
+
+  // label: decoration layer
+  ctx.fillText("decoration layer: tick hatches", w - 220, 36);
+  ctx.beginPath();
+  const lbl = sampleAt(pts, arcs, total - 90);
+  ctx.moveTo(w - 86, 40);
+  ctx.lineTo(lbl.x + 4, lbl.y + 12);
+  ctx.stroke();
+
+  // label: spacing
+  const sA = sampleAt(pts, arcs, 80);
+  const sB = sampleAt(pts, arcs, 102);
+  ctx.fillStyle = "#666";
+  ctx.fillText("spacing", sA.x + 4, sA.y + 36);
+  ctx.beginPath();
+  ctx.moveTo(sA.x, sA.y + 24);
+  ctx.lineTo(sB.x, sB.y + 24);
+  ctx.stroke();
+
+  // label: size
+  const sC = sampleAt(pts, arcs, 50);
+  ctx.fillText("size", sC.x + 18, sC.y + 14);
+
+  // label: side
+  ctx.fillText("side = right", 16, h - 14);
+})();
+
+// ---------- figure: symbol gallery ----------
+function symbolCanvas(id, draw) {
+  const cv = document.getElementById(id);
+  if (!cv) return;
+  const { ctx, w, h } = fitDpr(cv);
+  paperBg(ctx, w, h);
+  const pts = buildPolyline(t => ({
+    x: 24 + (w - 48) * t,
+    y: h * 0.55 + Math.sin(t * Math.PI * 1.9) * 12
+  }), 220);
+  const arcs = arclengths(pts);
+  draw(ctx, pts, arcs, w, h);
+}
+
+symbolCanvas("cv-sym-wall", (ctx, pts) => {
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 3.2;
+  strokePolyline(ctx, pts);
+});
+
+symbolCanvas("cv-sym-drip", (ctx, pts) => {
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 6]);
+  strokePolyline(ctx, pts);
+  ctx.setLineDash([]);
+});
+
+symbolCanvas("cv-sym-floor", (ctx, pts, arcs) => {
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.4;
+  const total = arcs[arcs.length - 1];
+  for (let s = 14; s < total; s += 16) {
+    const p = sampleAt(pts, arcs, s);
+    const nx = -p.ty, ny = p.tx;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x + nx * 10, p.y + ny * 10);
+    ctx.stroke();
+  }
+  ctx.lineWidth = 2.6;
+  strokePolyline(ctx, pts);
+});
+
+symbolCanvas("cv-sym-ceiling", (ctx, pts, arcs) => {
+  // centerline dashed
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.6;
+  ctx.setLineDash([6, 5]);
+  strokePolyline(ctx, pts);
+  ctx.setLineDash([]);
+
+  // T's with halo
+  const total = arcs[arcs.length - 1];
+  for (let s = 20; s < total; s += 24) {
+    const p = sampleAt(pts, arcs, s);
+    const nx = -p.ty, ny = p.tx;
+    const tipX = p.x + nx * 9, tipY = p.y + ny * 9;
+    const barAx = tipX - p.tx * 5, barAy = tipY - p.ty * 5;
+    const barBx = tipX + p.tx * 5, barBy = tipY + p.ty * 5;
+
+    // halo: thick paper-colored stroke under the T
+    ctx.strokeStyle = PAPER;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(tipX, tipY);
+    ctx.moveTo(barAx, barAy);
+    ctx.lineTo(barBx, barBy);
+    ctx.stroke();
+
+    // ink T
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(tipX, tipY);
+    ctx.moveTo(barAx, barAy);
+    ctx.lineTo(barBx, barBy);
+    ctx.stroke();
+  }
+});
+
+symbolCanvas("cv-sym-pit", (ctx, pts, arcs) => {
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.4;
+  const total = arcs[arcs.length - 1];
+  for (let s = 14; s < total; s += 14) {
+    const p = sampleAt(pts, arcs, s);
+    // angled tick: tangent + normal blend
+    const ang = 0.6; // radians off the normal
+    const ax = -p.ty * Math.cos(ang) + p.tx * Math.sin(ang);
+    const ay = p.tx * Math.cos(ang) + p.ty * Math.sin(ang);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x + ax * 11, p.y + ay * 11);
+    ctx.stroke();
+  }
+  ctx.lineWidth = 2.6;
+  strokePolyline(ctx, pts);
+});
+
+symbolCanvas("cv-sym-sand", (ctx, pts, arcs) => {
+  ctx.fillStyle = INK;
+  const total = arcs[arcs.length - 1];
+  for (let s = 8; s < total; s += 10) {
+    const p = sampleAt(pts, arcs, s);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+});
+
+// ---------- figure: collide naive vs fixed ----------
+function collideSetup(canvas) {
+  const { ctx, w, h } = fitDpr(canvas);
+  paperBg(ctx, w, h);
+
+  // two crossing centerlines (floor steps)
+  const A = buildPolyline(t => ({
+    x: 30 + (w - 60) * t,
+    y: 60 + 80 * t + Math.sin(t * Math.PI * 1.6) * 8
+  }), 200);
+  const B = buildPolyline(t => ({
+    x: 30 + (w - 60) * t,
+    y: 180 - 70 * t + Math.cos(t * Math.PI * 1.6) * 8
+  }), 200);
+  return { ctx, w, h, A, arcsA: arclengths(A), B, arcsB: arclengths(B) };
+}
+
+function drawCenterlines(ctx, A, B) {
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.6;
+  strokePolyline(ctx, A);
+  strokePolyline(ctx, B);
+}
+
+function placeHatches(pts, arcs, spacing, size, side) {
+  const total = arcs[arcs.length - 1];
+  const glyphs = [];
+  for (let s = spacing; s < total; s += spacing) {
+    const p = sampleAt(pts, arcs, s);
+    const nx = -p.ty * side, ny = p.tx * side;
+    glyphs.push({
+      x0: p.x, y0: p.y,
+      x1: p.x + nx * size, y1: p.y + ny * size,
+      size
+    });
+  }
+  return glyphs;
+}
+
+function drawGlyph(ctx, g, color, width) {
+  ctx.strokeStyle = color || INK;
+  ctx.lineWidth = width || 1.4;
+  ctx.beginPath();
+  ctx.moveTo(g.x0, g.y0);
+  ctx.lineTo(g.x1, g.y1);
+  ctx.stroke();
+}
+
+function glyphBbox(g, pad) {
+  pad = pad || 2;
+  return {
+    x: Math.min(g.x0, g.x1) - pad,
+    y: Math.min(g.y0, g.y1) - pad,
+    w: Math.abs(g.x1 - g.x0) + pad * 2,
+    h: Math.abs(g.y1 - g.y0) + pad * 2,
+  };
+}
+
+function bboxOverlap(a, b) {
+  return !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
+}
+
+// naive
+(function () {
+  const cv = document.getElementById("cv-collide-naive");
+  if (!cv) return;
+  const { ctx, A, arcsA, B, arcsB } = collideSetup(cv);
+  drawCenterlines(ctx, A, B);
+  const gA = placeHatches(A, arcsA, 20, 12, 1);
+  const gB = placeHatches(B, arcsB, 20, 12, -1);
+  // draw all naively
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.4;
+  [...gA, ...gB].forEach(g => drawGlyph(ctx, g));
+})();
+
+// fixed: shift, shorten, halo, hide
+(function () {
+  const cv = document.getElementById("cv-collide-fixed");
+  if (!cv) return;
+  const { ctx, A, arcsA, B, arcsB } = collideSetup(cv);
+  drawCenterlines(ctx, A, B);
+
+  const gA = placeHatches(A, arcsA, 20, 12, 1);
+  const gB = placeHatches(B, arcsB, 20, 12, -1);
+
+  // sort: A first (higher priority), then B
+  const placed = [];
+  const ordered = [
+    ...gA.map(g => ({ g, layer: "A" })),
+    ...gB.map(g => ({ g, layer: "B" })),
+  ];
+
+  ordered.forEach((entry, i) => {
+    let g = { ...entry.g };
+    let bb = glyphBbox(g);
+    const collides = placed.some(p => bboxOverlap(bb, p.bb));
+    if (!collides) {
+      placed.push({ ...entry, bb, action: "place" });
+      return;
+    }
+    // try shorten 0.5x
+    const sx = (g.x1 - g.x0) * 0.5, sy = (g.y1 - g.y0) * 0.5;
+    const gs = { x0: g.x0, y0: g.y0, x1: g.x0 + sx, y1: g.y0 + sy };
+    const bbS = glyphBbox(gs);
+    if (!placed.some(p => bboxOverlap(bbS, p.bb))) {
+      placed.push({ g: gs, layer: entry.layer, bb: bbS, action: "shorten" });
+      return;
+    }
+    // try halo (only if very close to a neighbor and otherwise overlapping by ≤ small)
+    const tinyOverlap = placed.some(p => bboxOverlap(bb, p.bb) &&
+      Math.max(0, Math.min(bb.x + bb.w, p.bb.x + p.bb.w) - Math.max(bb.x, p.bb.x)) < 4);
+    if (tinyOverlap) {
+      placed.push({ g, layer: entry.layer, bb, action: "halo" });
+      return;
+    }
+    // give up: hide
+    placed.push({ g, layer: entry.layer, bb, action: "hide" });
+  });
+
+  // draw halos first
+  placed.forEach(p => {
+    if (p.action === "halo") {
+      ctx.strokeStyle = PAPER;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(p.g.x0, p.g.y0);
+      ctx.lineTo(p.g.x1, p.g.y1);
+      ctx.stroke();
+    }
+  });
+
+  // ink glyphs
+  placed.forEach(p => {
+    if (p.action === "hide") return;
+    drawGlyph(ctx, p.g, INK, 1.4);
+  });
+
+  // legend
+  ctx.fillStyle = "#666";
+  ctx.font = "11px -apple-system, system-ui, sans-serif";
+  ctx.fillText("shift / shorten / halo / hide applied per layer policy", 12, cv.height ? 18 : 18);
+})();
+
+// ---------- figure: scale mip ----------
+function scaleCanvas(id, scale) {
+  const cv = document.getElementById(id);
+  if (!cv) return;
+  const { ctx, w, h } = fitDpr(cv);
+  paperBg(ctx, w, h);
+  const pts = buildPolyline(t => ({
+    x: 24 + (w - 48) * t,
+    y: h * 0.55 + Math.sin(t * Math.PI * 1.8) * 12
+  }), 220);
+  const arcs = arclengths(pts);
+
+  // hatches by scale
+  if (scale === 250 || scale === 1000) {
+    const spacing = scale === 250 ? 12 : 28;
+    const size = scale === 250 ? 9 : 7;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.2;
+    const total = arcs[arcs.length - 1];
+    for (let s = spacing; s < total; s += spacing) {
+      const p = sampleAt(pts, arcs, s);
+      const nx = -p.ty, ny = p.tx;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x + nx * size, p.y + ny * size);
+      ctx.stroke();
+    }
+  }
+
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = scale === 5000 ? 1.6 : 2.4;
+  strokePolyline(ctx, pts);
+}
+
+scaleCanvas("cv-scale-250", 250);
+scaleCanvas("cv-scale-1000", 1000);
+scaleCanvas("cv-scale-5000", 5000);
+
+// ---------- figure: three stamping modes ----------
+//
+// Each canvas shows a wavy centerline (faded) plus the result of stamping a
+// glyph along it under one of the three stamper modes. The same conceptual
+// glyph is used across rigid and bending so the difference is visible:
+//   - rigid: a small "L" shape (anchor → up + right) — short enough that a
+//     straight stamp reads correctly even on a curve.
+//   - bending: a 3 mm-equivalent horizontal segment — long enough that
+//     bending matters visibly on a curve.
+//   - point: a single small ring at one explicit anchor — no centerline.
+
+function stampCanvas(id, draw) {
+  const cv = document.getElementById(id);
+  if (!cv) return;
+  const { ctx, w, h } = fitDpr(cv);
+  paperBg(ctx, w, h);
+  draw(ctx, w, h);
+}
+
+stampCanvas("cv-stamp-rigid", (ctx, w, h) => {
+  // Centerline: a gentle S-curve so we can see tangent rotation.
+  const pts = buildPolyline(t => ({
+    x: 22 + (w - 44) * t,
+    y: h * 0.55 + Math.sin(t * Math.PI * 1.7) * 16
+  }), 240);
+  const arcs = arclengths(pts);
+
+  // Faded centerline for context.
+  ctx.strokeStyle = "#bcbcc2";
+  ctx.lineWidth = 1.2;
+  strokePolyline(ctx, pts);
+
+  // Rigid tick stamps at regular spacing.
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.5;
+  const total = arcs[arcs.length - 1];
+  for (let s = 22; s < total; s += 22) {
+    const p = sampleAt(pts, arcs, s);
+    // tick = perpendicular line on the right side, length 12
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x - p.ty * 12, p.y + p.tx * 12);
+    ctx.stroke();
+  }
+});
+
+stampCanvas("cv-stamp-bending", (ctx, w, h) => {
+  // Same centerline shape as rigid.
+  const pts = buildPolyline(t => ({
+    x: 22 + (w - 44) * t,
+    y: h * 0.55 + Math.sin(t * Math.PI * 1.7) * 16
+  }), 240);
+  const arcs = arclengths(pts);
+
+  // Faded centerline.
+  ctx.strokeStyle = "#bcbcc2";
+  ctx.lineWidth = 1.2;
+  strokePolyline(ctx, pts);
+
+  // Bending-stamped dash: each dash is a glyph point sweep
+  // (x: 0..dashLen, y: 0) mapped to arclength S + x along the centerline.
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.4;
+  const total = arcs[arcs.length - 1];
+  const dashLen = 18;     // glyph extent in +X
+  const spacing = 30;     // arclength between dash starts
+  for (let s = 8; s + dashLen < total; s += spacing) {
+    ctx.beginPath();
+    const samples = 16;
+    for (let i = 0; i <= samples; i++) {
+      const sx = s + (dashLen * i) / samples;
+      const p = sampleAt(pts, arcs, sx);
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  }
+});
+
+stampCanvas("cv-stamp-point", (ctx, w, h) => {
+  // No centerline. One anchor in the middle, one stamped glyph.
+  const cx = w / 2;
+  const cy = h * 0.6;
+
+  // Anchor cross.
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(cx - 6, cy);
+  ctx.lineTo(cx + 6, cy);
+  ctx.moveTo(cx, cy - 6);
+  ctx.lineTo(cx, cy + 6);
+  ctx.stroke();
+  ctx.fillStyle = ACCENT;
+  ctx.font = "11px -apple-system, system-ui, sans-serif";
+  ctx.fillText("anchor", cx + 10, cy - 4);
+
+  // Glyph: a small ring with a vertical mark — a generic "point symbol".
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(cx, cy - 14, 6, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 14);
+  ctx.lineTo(cx, cy);
+  ctx.stroke();
+});
+
+// ---------- figure: collision buffer ----------
+(function () {
+  const cv = document.getElementById("cv-buffer");
+  if (!cv) return;
+  const { ctx, w, h } = fitDpr(cv);
+  paperBg(ctx, w, h);
+
+  // Three pairs of glyphs along a horizontal baseline.
+  //   pair 1: well separated (placed normally)
+  //   pair 2: ink clear, buffers overlap → flagged as collision
+  //   pair 3: ink overlapping → collision regardless of buffer
+  const baselineY = h * 0.62;
+  const pairs = [
+    { x: 110, dx: 60, label: "clear" },
+    { x: 360, dx: 22, label: "buffer collision" },
+    { x: 620, dx: 8,  label: "ink collision" },
+  ];
+  const tickSize = 22;
+  const bufferPx = 6;
+
+  pairs.forEach(p => {
+    // baseline tick (paper-colour anchor dot)
+    ctx.fillStyle = "#d0d0d4";
+    ctx.beginPath();
+    ctx.arc(p.x - p.dx / 2, baselineY, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(p.x + p.dx / 2, baselineY, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // each glyph: vertical tick + ink + buffered bbox
+    const drawTickAt = (cx) => {
+      // buffered bbox (dashed)
+      ctx.strokeStyle = ACCENT;
+      ctx.lineWidth = 0.9;
+      ctx.setLineDash([3, 3]);
+      ctx.strokeRect(
+        cx - 4 - bufferPx,
+        baselineY - tickSize - bufferPx,
+        8 + bufferPx * 2,
+        tickSize + bufferPx * 2,
+      );
+      ctx.setLineDash([]);
+      // ink tick
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(cx, baselineY);
+      ctx.lineTo(cx, baselineY - tickSize);
+      ctx.stroke();
+    };
+    drawTickAt(p.x - p.dx / 2);
+    drawTickAt(p.x + p.dx / 2);
+
+    // label
+    ctx.fillStyle = p.label === "clear" ? "#1b7a3a" : RED;
+    ctx.font = "11px -apple-system, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(p.label, p.x, baselineY + 24);
+  });
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#666";
+  ctx.font = "11px -apple-system, system-ui, sans-serif";
+  ctx.fillText("ink (solid)   |   buffered bbox (dashed)   bufferMm authored, shown at this view scale", 16, 22);
+})();
+
+// ---------- figure: placement pass ----------
+(function () {
+  const cv = document.getElementById("cv-placement");
+  if (!cv) return;
+  const { ctx, w, h } = fitDpr(cv);
+  paperBg(ctx, w, h);
+
+  // two crossing centerlines
+  const A = buildPolyline(t => ({
+    x: 40 + (w - 80) * t,
+    y: 80 + 100 * t
+  }), 200);
+  const B = buildPolyline(t => ({
+    x: 40 + (w - 80) * t,
+    y: 220 - 100 * t
+  }), 200);
+
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.4;
+  strokePolyline(ctx, A);
+  strokePolyline(ctx, B);
+
+  const arcsA = arclengths(A);
+  const arcsB = arclengths(B);
+
+  // mark four kinds of resolutions along A
+  const drawTick = (p, size, color, dashed) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.6;
+    if (dashed) ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x - p.ty * size, p.y + p.tx * size);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+
+  // placed normally
+  drawTick(sampleAt(A, arcsA, 80), 14, INK, false);
+  // shifted (label)
+  const pShift = sampleAt(A, arcsA, 180);
+  drawTick(pShift, 14, INK, false);
+  // shortened
+  const pShort = sampleAt(A, arcsA, 250);
+  drawTick(pShort, 7, INK, false);
+  // hidden (greyed)
+  const pHide = sampleAt(A, arcsA, 320);
+  drawTick(pHide, 14, "#c8c8c8", true);
+  // halo'd (paper buffer beneath)
+  const pHalo = sampleAt(A, arcsA, 410);
+  ctx.strokeStyle = PAPER;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(pHalo.x, pHalo.y);
+  ctx.lineTo(pHalo.x - pHalo.ty * 14, pHalo.y + pHalo.tx * 14);
+  ctx.stroke();
+  drawTick(pHalo, 14, INK, false);
+
+  // labels with leader lines
+  ctx.fillStyle = ACCENT;
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = 0.8;
+  ctx.font = "12px -apple-system, system-ui, sans-serif";
+
+  const annot = (x, y, p, text) => {
+    ctx.beginPath();
+    ctx.moveTo(x, y + 3);
+    ctx.lineTo(p.x, p.y - 4);
+    ctx.stroke();
+    ctx.fillText(text, x, y);
+  };
+
+  annot(60, 30, sampleAt(A, arcsA, 80), "placed");
+  annot(180, 30, pShift, "shifted ±¼ spacing");
+  annot(320, 30, pShort, "shortened 0.5×");
+  annot(440, 30, pHide, "hidden");
+  annot(560, 30, pHalo, "halo");
+
+  // ghost the shifted position
+  ctx.strokeStyle = "#d0d0d4";
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([3, 3]);
+  const ghost = sampleAt(A, arcsA, 200);
+  ctx.beginPath();
+  ctx.moveTo(ghost.x, ghost.y);
+  ctx.lineTo(ghost.x - ghost.ty * 14, ghost.y + ghost.tx * 14);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // legend
+  ctx.fillStyle = "#666";
+  ctx.font = "11px -apple-system, system-ui, sans-serif";
+  ctx.fillText("centerlines: always drawn. decorations: arbitrated by R-tree + per-layer policy.", 40, h - 18);
+})();
+</script>
+
+</body>
+</html>
