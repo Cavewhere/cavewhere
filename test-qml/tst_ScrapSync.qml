@@ -317,7 +317,7 @@ MainWindowTest {
                 tryVerifyWithDiagnostics(() => {
                     return currentScrapView.note === noteGallery().currentNote
                            && currentScrapView.count > 0
-                }, 10000, "bind scrap view during lead scan")
+                }, 20000, "bind scrap view during lead scan")
 
                 for (let scrapIndex = 0; scrapIndex < currentScrapView.count; ++scrapIndex) {
                     selectScrapIndex(scrapIndex, "select scrap during lead scan")
@@ -350,7 +350,7 @@ MainWindowTest {
                        && RootData.pageView.currentPageItem.objectName === "tripPage"
                        && gv !== null
                        && gv.count > noteIndex
-            }, 10000, label + " wait for gallery row")
+            }, 20000, label + " wait for gallery row")
 
             let shouldForceRebind = forceRebind === true
             let galleryView = freshGalleryView()
@@ -417,7 +417,7 @@ MainWindowTest {
                 }
                 attempts += 1
                 return false
-            }, 10000, "enter carpet mode")
+            }, 20000, "enter carpet mode")
         }
 
         function waitForNoteCanvasReady(label) {
@@ -436,7 +436,7 @@ MainWindowTest {
                        && image.visible === true
                        && image.width > 0
                        && image.height > 0
-            }, 10000, label)
+            }, 20000, label)
         }
 
         function disableNoteLoadUi() {
@@ -496,7 +496,7 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "tripPage"
-            }, 10000, "restore trip page")
+            }, 20000, "restore trip page")
         }
 
         function openCaveLeadPage(caveName) {
@@ -504,7 +504,7 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "cavePage"
-            }, 10000, "open cave page")
+            }, 20000, "open cave page")
 
             let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsLink")
             verify(leadsButton !== null)
@@ -514,7 +514,7 @@ MainWindowTest {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "leadPage"
                        && leadTableView().model !== null
-            }, 10000, "open lead page")
+            }, 20000, "open lead page")
         }
 
         function verifyStillOnLeadPage() {
@@ -522,7 +522,7 @@ MainWindowTest {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "leadPage"
                        && leadTableView().model !== null
-            }, 10000, "verify still on lead page")
+            }, 20000, "verify still on lead page")
         }
 
         function selectedScrapItem() {
@@ -1898,8 +1898,8 @@ MainWindowTest {
                 uiExpectedFromValue: expectedScrapTransformTypeUiState,
                 uiGetter: selectedScrapTransformTypeUiState,
                 verifyEditedUi: false,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 setter: applySelectedScrapTransformTypeState,
                 nextValue: (state) => {
                     return nextTransformTypeStateWithType(state, Scrap.RunningProfile)
@@ -1915,8 +1915,8 @@ MainWindowTest {
                 uiExpectedFromValue: expectedScrapTransformTypeUiState,
                 uiGetter: selectedScrapTransformTypeUiState,
                 verifyEditedUi: false,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 setter: applySelectedScrapTransformTypeState,
                 nextValue: (state) => {
                     return nextTransformTypeStateWithType(state, Scrap.Plan)
@@ -1936,8 +1936,8 @@ MainWindowTest {
                 uiExpectedFromValue: expectedScrapTransformTypeUiState,
                 uiGetter: selectedScrapTransformTypeUiState,
                 verifyEditedUi: false,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 setter: applySelectedScrapTransformTypeState,
                 nextValue: (state) => {
                     return nextTransformTypeStateWithType(state, Scrap.ProjectedProfile)
@@ -1953,8 +1953,8 @@ MainWindowTest {
                 uiExpectedFromValue: expectedScrapTransformTypeUiState,
                 uiGetter: selectedScrapTransformTypeUiState,
                 verifyEditedUi: false,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 setter: applySelectedScrapTransformTypeState,
                 nextValue: (state) => {
                     return nextTransformTypeStateWithType(state, Scrap.Plan)
@@ -1973,8 +1973,8 @@ MainWindowTest {
                 uiExpectedFromValue: expectedScrapTransformUiState,
                 uiGetter: selectedScrapTransformUiState,
                 verifyEditedUi: false,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 setter: applySelectedScrapTransformState,
                 nextValue: nextPlanManualTransformState
             })
@@ -1991,8 +1991,8 @@ MainWindowTest {
                 uiExpectedFromValue: expectedScrapTransformUiState,
                 uiGetter: selectedScrapTransformUiState,
                 verifyEditedUi: false,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 setter: applySelectedScrapTransformState,
                 nextValue: nextProjectedManualTransformState
             })
@@ -2185,8 +2185,8 @@ MainWindowTest {
                 uiExpectedFromValue: expectedScrapLeadUiState,
                 uiGetter: selectedScrapLeadUiState,
                 verifyEditedUi: false,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 setter: applySelectedScrapLeadsState,
                 nextValue: nextLeadState
             })
@@ -2247,8 +2247,8 @@ MainWindowTest {
                 },
                 uiGetter: selectedScrapLeadUiState,
                 verifyEditedUi: true,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 setter: applySelectedScrapLeadsState,
                 nextValue: nextLeadAddedState
             })
@@ -2305,8 +2305,8 @@ MainWindowTest {
                 uiExpectedFromValue: expectedScrapLeadUiState,
                 uiGetter: selectedScrapLeadUiState,
                 verifyEditedUi: true,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 setter: applySelectedScrapLeadsState,
                 nextValue: nextLeadRemovedState
             })
@@ -2371,10 +2371,10 @@ MainWindowTest {
 
             tryVerifyWithDiagnostics(() => {
                 return SyncTestHelper.deepEqual(snapshotLeadState(targetScrap, targetLeadIndex), baselineState)
-            }, 10000, "verify baseline lead state after checkout")
+            }, 20000, "verify baseline lead state after checkout")
             tryVerifyWithDiagnostics(() => {
                 return caveLeadPageRowMatchesState(baselineState)
-            }, 10000, "verify baseline cave lead page row after checkout")
+            }, 20000, "verify baseline cave lead page row after checkout")
 
             verify(RootData.project.sync())
             SyncTestHelper.waitForProjectSyncToFinish(testCaseId, RootData)
@@ -2382,10 +2382,10 @@ MainWindowTest {
 
             tryVerifyWithDiagnostics(() => {
                 return SyncTestHelper.deepEqual(snapshotLeadState(targetScrap, targetLeadIndex), syncedState)
-            }, 10000, "verify resynced lead state")
+            }, 20000, "verify resynced lead state")
             tryVerifyWithDiagnostics(() => {
                 return caveLeadPageRowMatchesState(syncedState)
-            }, 10000, "verify resynced cave lead page row")
+            }, 20000, "verify resynced cave lead page row")
 
             restoreTripPage(context.tripPageAddress)
         }

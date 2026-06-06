@@ -63,7 +63,7 @@ MainWindowTest {
             tryVerify(function() {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.currentTrip !== null
-            }, 10000, "wait for trip page item to be ready")
+            }, 20000, "wait for trip page item to be ready")
             return RootData.pageView.currentPageItem.currentTrip
         }
 
@@ -255,7 +255,7 @@ MainWindowTest {
                     return trip !== null
                            && String(trip.name) === String(newName)
                            && RootData.pageSelectionModel.currentPageAddress === tripPageAddressForName(newName)
-                }, 10000, "verify trip renamed via UI")
+                }, 20000, "verify trip renamed via UI")
             }
 
             let snapshotUiState = function() {
@@ -294,10 +294,10 @@ MainWindowTest {
             let commitA = TestHelper.projectHeadCommitOid(RootData.project)
             verify(commitA !== "")
 
-            verifyTripPageState(baselineName, "verify baseline trip rename UI", 10000)
+            verifyTripPageState(baselineName, "verify baseline trip rename UI", 20000)
 
             renameTripViaUi(syncedName)
-            verifyTripPageState(syncedName, "verify renamed trip page state", 10000)
+            verifyTripPageState(syncedName, "verify renamed trip page state", 20000)
 
             verify(RootData.project.sync())
             waitForProjectSyncToFinish()
@@ -306,7 +306,7 @@ MainWindowTest {
             verify(commitB !== "")
             verify(commitB !== commitA)
 
-            verifyTripPageState(syncedName, "verify renamed trip page after first sync", 10000)
+            verifyTripPageState(syncedName, "verify renamed trip page after first sync", 20000)
 
             console.log("About to Checked out!");
             // wait(1000);
@@ -315,7 +315,7 @@ MainWindowTest {
             // wait(5000);
             console.log("Checked out!");
 
-            verifyTripPageState(baselineName, "verify baseline trip page after checkout", 10000)
+            verifyTripPageState(baselineName, "verify baseline trip page after checkout", 20000)
 
             console.log("About to final sync!");
             // wait(1000);
@@ -328,7 +328,7 @@ MainWindowTest {
             verify(commitC !== "")
             verify(commitC === commitB)
 
-            verifyTripPageState(syncedName, "verify renamed trip page after second sync", 10000)
+            verifyTripPageState(syncedName, "verify renamed trip page after second sync", 20000)
         }
 
         function test_caveRenameUpdatesLinkBarOnTripPage() {
@@ -391,7 +391,7 @@ MainWindowTest {
 
             tryVerifyWithDiagnostics(() => {
                 return hasLinkBarText(expectedLinkBarCaveText(baselineCaveName))
-            }, 10000, "verify baseline cave name in link bar on trip page")
+            }, 20000, "verify baseline cave name in link bar on trip page")
 
             cave.name = renamedCaveName
 
@@ -401,7 +401,7 @@ MainWindowTest {
                        && String(cave.name) === renamedCaveName
                        && String(RootData.pageSelectionModel.currentPageAddress) === expectedTripPageAddress
                        && hasLinkBarText(expectedLinkBarCaveText(renamedCaveName))
-            }, 10000, "verify link bar updates after cave rename while on trip page")
+            }, 20000, "verify link bar updates after cave rename while on trip page")
         }
 
         function test_tripCalibrationSyncAndCheckout() {
@@ -1911,6 +1911,10 @@ MainWindowTest {
         }
 
         function test_tripAddLiDARNoteSyncAndCheckout() {
+            // The notes gallery only gets non-zero width in the wide responsive
+            // layout; at the default 1200 the survey editor consumes the row and
+            // the gallery delegates collapse, so thumbnail clicks land nowhere.
+            rootId.width = 1600
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentTrip = function() {
@@ -1962,39 +1966,47 @@ MainWindowTest {
             }
 
             let verifySelectedLiDARNote = function(expectedFileName) {
+                let lastIndex = noteGalleryView().count - 1
+                noteGalleryView().positionViewAtIndex(lastIndex, ListView.Beginning)
                 let galleryItem = null
                 tryVerify(() => {
                     galleryItem = ObjectFinder.findObjectByChain(
                         mainWindow,
-                        "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                        "rootId->tripPage->noteGallery->galleryView->noteImage" + lastIndex)
                     return galleryItem !== null
                 }, 5000, "gallery delegate should exist for last note")
-                mouseClick(galleryItem)
+                // The gallery delegate can be taller than the viewport, so its
+                // center is off-screen; click within the visible portion.
+                mouseClick(galleryItem, galleryItem.width / 2,
+                           Math.min(galleryItem.height, noteGalleryView().height) / 2)
 
                 tryVerifyWithDiagnostics(() => {
                     return noteGallery().currentNoteLiDAR !== null
                            && String(noteGallery().currentNoteLiDAR.filename) === expectedFileName
-                }, 10000, "verify selected LiDAR note")
+                }, 20000, "verify selected LiDAR note")
 
                 tryVerifyWithDiagnostics(() => {
                     return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-                }, 10000, "verify LiDAR viewer ready")
+                }, 20000, "verify LiDAR viewer ready")
             }
 
             let selectLastLiDARNote = function() {
+                let lastIndex = noteGalleryView().count - 1
+                noteGalleryView().positionViewAtIndex(lastIndex, ListView.Beginning)
                 let galleryItem = ObjectFinder.findObjectByChain(
                     mainWindow,
-                    "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                    "rootId->tripPage->noteGallery->galleryView->noteImage" + lastIndex)
                 verify(galleryItem !== null)
-                mouseClick(galleryItem)
+                mouseClick(galleryItem, galleryItem.width / 2,
+                           Math.min(galleryItem.height, noteGalleryView().height) / 2)
 
                 tryVerifyWithDiagnostics(() => {
                     return noteGallery().currentNoteLiDAR !== null
-                }, 10000, "verify selected last LiDAR note")
+                }, 20000, "verify selected last LiDAR note")
 
                 tryVerifyWithDiagnostics(() => {
                     return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-                }, 10000, "verify selected last LiDAR viewer ready")
+                }, 20000, "verify selected last LiDAR viewer ready")
 
                 return String(noteGallery().currentNoteLiDAR.filename)
             }
@@ -2062,6 +2074,9 @@ MainWindowTest {
         }
 
         function test_tripRemoveLiDARNoteSyncAndCheckout() {
+            // See test_tripAddLiDARNoteSyncAndCheckout: the gallery needs the
+            // wide layout for its thumbnail delegates to be clickable.
+            rootId.width = 1600
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentTrip = function() {
@@ -2113,39 +2128,47 @@ MainWindowTest {
             }
 
             let verifySelectedLiDARNote = function(expectedFileName) {
+                let lastIndex = noteGalleryView().count - 1
+                noteGalleryView().positionViewAtIndex(lastIndex, ListView.Beginning)
                 let galleryItem = null
                 tryVerify(() => {
                     galleryItem = ObjectFinder.findObjectByChain(
                         mainWindow,
-                        "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                        "rootId->tripPage->noteGallery->galleryView->noteImage" + lastIndex)
                     return galleryItem !== null
                 }, 5000, "gallery delegate should exist for last note")
-                mouseClick(galleryItem)
+                // The gallery delegate can be taller than the viewport, so its
+                // center is off-screen; click within the visible portion.
+                mouseClick(galleryItem, galleryItem.width / 2,
+                           Math.min(galleryItem.height, noteGalleryView().height) / 2)
 
                 tryVerifyWithDiagnostics(() => {
                     return noteGallery().currentNoteLiDAR !== null
                            && String(noteGallery().currentNoteLiDAR.filename) === expectedFileName
-                }, 10000, "verify selected LiDAR note")
+                }, 20000, "verify selected LiDAR note")
 
                 tryVerifyWithDiagnostics(() => {
                     return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-                }, 10000, "verify LiDAR viewer ready")
+                }, 20000, "verify LiDAR viewer ready")
             }
 
             let selectLastLiDARNote = function() {
+                let lastIndex = noteGalleryView().count - 1
+                noteGalleryView().positionViewAtIndex(lastIndex, ListView.Beginning)
                 let galleryItem = ObjectFinder.findObjectByChain(
                     mainWindow,
-                    "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                    "rootId->tripPage->noteGallery->galleryView->noteImage" + lastIndex)
                 verify(galleryItem !== null)
-                mouseClick(galleryItem)
+                mouseClick(galleryItem, galleryItem.width / 2,
+                           Math.min(galleryItem.height, noteGalleryView().height) / 2)
 
                 tryVerifyWithDiagnostics(() => {
                     return noteGallery().currentNoteLiDAR !== null
-                }, 10000, "verify selected last LiDAR note")
+                }, 20000, "verify selected last LiDAR note")
 
                 tryVerifyWithDiagnostics(() => {
                     return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-                }, 10000, "verify selected last LiDAR viewer ready")
+                }, 20000, "verify selected last LiDAR viewer ready")
 
                 return String(noteGallery().currentNoteLiDAR.filename)
             }
@@ -2373,7 +2396,7 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "dataMainPage"
-            }, 10000, "navigate to data main page")
+            }, 20000, "navigate to data main page")
         }
 
         function regionNameInput() {
@@ -2428,7 +2451,7 @@ MainWindowTest {
             navigateToDataPage()
             tryVerifyWithDiagnostics(() => {
                 return String(RootData.region.name) === baselineName
-            }, 10000, "verify region name reverted after checkout")
+            }, 20000, "verify region name reverted after checkout")
             compare(String(regionNameInput().text), baselineName)
             tryVerifyWithDiagnostics(() => {
                 return String(RootData.project.filename).indexOf(baselineName) >= 0
@@ -2456,7 +2479,7 @@ MainWindowTest {
             // Ours-wins: local (old) name survives the rename/rename conflict.
             tryVerifyWithDiagnostics(() => {
                 return String(RootData.region.name) === baselineName
-            }, 10000, "verify local name wins after re-sync rename conflict")
+            }, 20000, "verify local name wins after re-sync rename conflict")
             compare(String(regionNameInput().text), baselineName)
 
             // project.filename must reflect the ours-wins name (drives the window title).

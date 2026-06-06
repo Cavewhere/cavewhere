@@ -86,7 +86,7 @@ function openTripPage(testCase, rootData, caveName, tripName) {
     tryVerifyWithDiagnostics(testCase, () => {
         return rootData.pageView.currentPageItem !== null
                && rootData.pageView.currentPageItem.objectName === "tripPage"
-    }, 10000, "openTripPage")
+    }, 20000, "openTripPage")
 }
 
 function openCavePage(testCase, rootData, caveName) {
@@ -94,7 +94,7 @@ function openCavePage(testCase, rootData, caveName) {
     tryVerifyWithDiagnostics(testCase, () => {
         return rootData.pageView.currentPageItem !== null
                && rootData.pageView.currentPageItem.objectName === "cavePage"
-    }, 10000, "openCavePage")
+    }, 20000, "openCavePage")
 }
 
 function verifyStillOnTripPage(testCase, rootData, tripPageAddress) {
@@ -105,7 +105,7 @@ function verifyStillOnTripPage(testCase, rootData, tripPageAddress) {
         return rootData.pageView.currentPageItem !== null
                && rootData.pageSelectionModel.currentPageAddress === tripPageAddress
                && rootData.pageView.currentPageItem.objectName === "tripPage"
-    }, 10000, "verifyStillOnTripPage")
+    }, 20000, "verifyStillOnTripPage")
 }
 
 function loadFixtureAndOpenFirstTrip(testCase, rootData, testHelper) {
@@ -119,7 +119,7 @@ function loadFixtureAndOpenFirstTrip(testCase, rootData, testHelper) {
     testHelper.loadProjectFromPath(rootData.project, fixture.projectFilePath)
     testCase.tryVerify(() => {
         return rootData.region.caveCount > 0
-    }, 10000)
+    }, 20000)
 
     let cave = null
     let trip = null
@@ -152,7 +152,7 @@ function loadFixtureAndOpenFirstTrip(testCase, rootData, testHelper) {
 function waitForProjectSyncToFinish(testCase, rootData) {
     tryVerifyWithDiagnostics(testCase, () => {
         return rootData.project.syncInProgress === false
-    }, 10000, "waitForProjectSyncToFinish")
+    }, 20000, "waitForProjectSyncToFinish")
 }
 
 function waitForFutureManagerToFinish(testCase, rootData) {

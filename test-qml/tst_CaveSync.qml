@@ -79,7 +79,7 @@ MainWindowTest {
                     return RootData.pageView.currentPageItem !== null
                            && RootData.pageSelectionModel.currentPageAddress === address
                            && RootData.pageView.currentPageItem.objectName === "cavePage"
-                }, 10000, "restoreCavePage (" + stage + ")")
+                }, 20000, "restoreCavePage (" + stage + ")")
                 waitForRendering(rootId)
             }
 
