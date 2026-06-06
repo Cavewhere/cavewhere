@@ -1,0 +1,71 @@
+syntax = "proto3";
+import "qt.proto";
+
+// Standalone schema for the symbology palette system (see
+// plans/SYMBOLOGY_PALETTE_PLAN.html). Kept separate from cavewhere.proto so
+// palettes version on their own clock and third-party consumers can read a
+// palette without pulling in the whole project schema.
+//
+// Colors are hex strings ("#RRGGBB" / "#RRGGBBAA") matching cavewhere.proto's
+// existing convention — no QtProto.QColor message.
+//
+// Field-presence: fields whose value-type default is non-zero/true are marked
+// `optional` so an absent field can be distinguished from a zero value and the
+// C++ default applied on load.
+
+package CavewhereSymbologyProto;
+
+message Palette {
+    string id          = 1;       // UUID — palettes keep UUIDs
+    string name        = 2;       // human-readable display name
+    string description = 3;
+    string author      = 4;
+    string version     = 5;       // semver-ish, author's choice
+    repeated LineBrush lineBrushes = 6;
+    // 7 reserved for `repeated Glyph glyphs` (needs cwPenStroke.brushName)
+    // 8 reserved for `repeated AreaBrush  areaBrushes`
+    // 9 reserved for `repeated PointBrush pointBrushes`
+}
+
+message LineBrush {
+    string name        = 1;                // machine identifier, kebab-case, unique within palette
+    string displayName = 2;                // human-readable label, mutable (stored verbatim, not translated)
+    string category    = 3;                // display-only grouping in pickers
+    bool   scrapOutline = 4;               // topology flag — feeds chain-based scrap detector
+    int32  zOrder       = 5;               // paint order
+    repeated DecorationLayer decorations = 6;  // empty = no ink (scrap-outline case)
+    double minPaperScale = 7;
+    double maxPaperScale = 8;
+    // No centerline fields. A normal wall's visible line is an
+    // OffsetCurve decoration layer with offset = 0.
+}
+
+message DecorationLayer {
+    string glyphName = 1;                  // glyph ref by name; empty when mode == OffsetCurve
+    int32  mode      = 2;                  // 0=rigid, 1=bending, 2=point, 3=offsetCurve
+    repeated PlacementRule rules = 3;      // empty = use the mode's default rule stack
+
+    optional double bufferMm          = 4; // collision keep-clear, default 1.0 mm. Currently dormant.
+    int32  collisionPriority          = 5; // MutateScene tiebreak
+    double minPaperScale              = 6;
+    double maxPaperScale              = 7;
+
+    // OffsetCurve params. Ignored when mode != OffsetCurve. Currently only
+    // offsetCurveOffsetMm = 0 is supported (the centerline-replacement path).
+    string          offsetCurveColorLight = 8;
+    string          offsetCurveColorDark  = 9;
+    optional double offsetCurveWidthMm    = 10; // default 0.4 mm
+    double          offsetCurveOffsetMm   = 11; // sign = side; 0 = on the centerline
+    optional int32  offsetCurveDash       = 12; // Qt::PenStyle, default SolidLine
+    optional int32  offsetCurveCap        = 13; // Qt::PenCapStyle, default RoundCap
+    optional int32  offsetCurveJoin       = 14; // Qt::PenJoinStyle, default RoundJoin
+    optional bool   offsetCurveAcceptsPressure = 15; // default true
+}
+
+message PlacementRule {
+    // Rule kind keyed by `name` ("uniform-spacing", …). Params live in `params`
+    // so an unknown rule round-trips intact and is ignored at render time with a
+    // one-shot warning. Renaming a registered rule is a breaking change.
+    string name   = 1;
+    bytes  params = 2;                      // proto-encoded per-rule struct
+}
