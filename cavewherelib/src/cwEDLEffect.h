@@ -41,13 +41,16 @@ public:
                QSize outputSize) override;
 
 private:
-    // std140 layout: float, float, vec2 (8-byte aligned at offset 8) = 16 bytes.
-    // strength is the *effective* value already divided by the projection's
-    // log-depth-span normalizer, so the shader needs no further per-pixel scaling.
+    // std140 layout: float, float, vec2 (8-byte aligned at offset 8), then two
+    // floats (offsets 16, 20) = 24 bytes, block-padded to 32. strength is the
+    // *effective* value already divided by the projection's log-depth-span
+    // normalizer, so the shader needs no further per-pixel scaling.
     struct EdlUniform {
         float strength = 1.0f;
         float textureYFlip = 0.0f;
         float sampleOffset[2] = {0.0f, 0.0f};
+        float silhouetteStrength = 0.0f;
+        float silhouetteClamp = 0.0f;
     };
 
     bool createPipeline(QRhiRenderPassDescriptor* outputRPDesc);
@@ -62,6 +65,12 @@ private:
     // response is consistent between ortho and perspective.
     float m_strengthBaseline = 1500.0f;
     float m_radiusPx = 1.4f;
+
+    // Near-side silhouette knobs (see EdlUniform / EDL.frag). Independent of the
+    // shape-term strength: silhouetteResponse is clamped per neighbor, so a raw
+    // multiplier gives a predictable outline darkness.
+    float m_silhouetteStrength = 3.0f;
+    float m_silhouetteClamp = 1.0f;
 
     QMatrix4x4 m_lastProjectionMatrix;
     QSize m_lastViewportSize;

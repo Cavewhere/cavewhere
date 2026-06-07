@@ -42,6 +42,8 @@ void cwEDLEffect::initialize(QRhi* rhi,
     // Vulkan, and D3D store textures top-left (Y-down); OpenGL stores them
     // bottom-left (Y-up). The shader uses textureYFlip to compensate.
     m_uniformData.textureYFlip = rhi->isYUpInFramebuffer() ? 0.0f : 1.0f;
+    m_uniformData.silhouetteStrength = m_silhouetteStrength;
+    m_uniformData.silhouetteClamp = m_silhouetteClamp;
     m_uniformsDirty = true;
 
     if (!m_edlUBO) {

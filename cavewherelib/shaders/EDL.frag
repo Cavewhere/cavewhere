@@ -9,7 +9,14 @@
 
 // Eye-Dome Lighting (Boucheny 2009 / CloudCompare / Potree). For each pixel,
 // compare its depth to a ring of 8 neighbors. Pixels behind a silhouette
-// edge (neighbors closer) get darkened in proportion to the depth gap.
+// edge (cloud neighbors closer) get darkened in proportion to the depth gap.
+//
+// On top of that classic far-side shading we add a near-side silhouette term:
+// where a cloud edge borders a non-cloud neighbor (background here; opaque
+// scene geometry once the shared-depth pass lands) the cloud edge itself is
+// darkened, so the cloud keeps a visible outline instead of bleeding into the
+// background. Neighbors are classified cloud vs non-cloud by the color
+// texture's alpha (cloud is opaque, background is transparent).
 //
 // Operates in log2(linear view-space Z). The window-space depth buffer is
 // hyperbolic under perspective (d = A + B/z_view), so log2 of the raw
@@ -38,6 +45,12 @@ layout(std140, binding = 1) uniform EdlBlock {
     float textureYFlip;
     // radiusPx * devicePixelRatio / viewportSize, precomputed CPU-side.
     vec2 sampleOffset;
+    // Near-side silhouette darkening for cloud edges that border non-cloud
+    // pixels. silhouetteClamp caps each neighbor's log-depth gap so a far
+    // background neighbor saturates instead of driving the edge to pure black;
+    // silhouetteStrength scales the (clamped, averaged) result.
+    float silhouetteStrength;
+    float silhouetteClamp;
 };
 
 layout(binding = 2) uniform sampler2D uColor;
@@ -45,6 +58,11 @@ layout(binding = 3) uniform sampler2D uDepth;
 
 layout(location = 0) in vec2 vUV;
 layout(location = 0) out vec4 fragColor;
+
+// Cloud-vs-background cutoff on the color texture's alpha: cloud pixels are
+// opaque, background/non-cloud is transparent. Shared by the center-pixel
+// discard and the per-neighbor mask in the EDL loop so they can't drift apart.
+const float kCloudAlphaThreshold = 0.001;
 
 // Linear distance from the near plane to the fragment, in view-space units.
 // Always >= 0 (0 at near, far-near at far). Used instead of abs(view-space Z)
@@ -87,7 +105,7 @@ void main()
         discard;
     }
     vec4 src = texture(uColor, uv);
-    if (src.a < 0.001) {
+    if (src.a < kCloudAlphaThreshold) {
         discard;
     }
 
@@ -99,14 +117,27 @@ void main()
         vec2( 0.707,  0.707), vec2(-0.707,  0.707),
         vec2( 0.707, -0.707), vec2(-0.707, -0.707));
 
-    float response = 0.0;
+    // Classify each neighbor with the cloud mask (the color texture's alpha).
+    //  - cloud neighbor closer than the center -> far-side shape darkening,
+    //    the classic EDL look that gives interior depth cues.
+    //  - non-cloud neighbor (farther by construction; occluded cloud is
+    //    rejected before this pass) -> near-side silhouette darkening so the
+    //    cloud edge keeps an outline against the background.
+    float shapeResponse = 0.0;
+    float silhouetteResponse = 0.0;
     for (int i = 0; i < 8; ++i) {
-        float di = texture(uDepth, uv + dirs[i] * sampleOffset).r;
-        response += max(0.0, logZ0 - log2(linearDepthFromNear(di) + 1e-6));
+        vec2 nuv = uv + dirs[i] * sampleOffset;
+        float logZi = log2(linearDepthFromNear(texture(uDepth, nuv).r) + 1e-6);
+        if (texture(uColor, nuv).a > kCloudAlphaThreshold) {
+            shapeResponse += max(0.0, logZ0 - logZi);
+        } else {
+            silhouetteResponse += clamp(logZi - logZ0, 0.0, silhouetteClamp);
+        }
     }
-    response /= 8.0;
 
-    float shade = exp(-response * strength);
+    // Average over the 8 taps (the single /8 covers both terms).
+    float shade = exp(-(shapeResponse * strength
+                        + silhouetteResponse * silhouetteStrength) / 8.0);
 
     // Premultiplied alpha so the swap-chain composite (One, OneMinusSrcAlpha)
     // leaves the Scene-layer pixels intact wherever the cloud is transparent.
