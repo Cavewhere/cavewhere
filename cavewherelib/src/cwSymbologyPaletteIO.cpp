@@ -20,6 +20,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
+#include <QSet>
 #include <QUuid>
 
 //protobuf includes
@@ -230,6 +231,8 @@ cwSymbologyGlyph glyphFromProto(const CavewhereSymbologyProto::Glyph &proto)
     return glyph;
 }
 
+// palette.json carries palette-level identity only; brushes and glyphs are
+// per-file (the directory is their source of truth), so they never travel here.
 void paletteToProto(CavewhereSymbologyProto::Palette *proto, const cwSymbologyPaletteData &palette)
 {
     proto->set_id(toStd(palette.id.toString(QUuid::WithoutBraces)));
@@ -237,70 +240,13 @@ void paletteToProto(CavewhereSymbologyProto::Palette *proto, const cwSymbologyPa
     proto->set_description(toStd(palette.description));
     proto->set_author(toStd(palette.author));
     proto->set_version(toStd(palette.version));
-    for (const auto &brush : palette.lineBrushes) {
-        brushToProto(proto->add_linebrushes(), brush);
-    }
-    // Only glyph metadata lives in the palette file; the strokes round-trip
-    // through per-glyph files in load()/save().
-    for (const auto &glyph : palette.glyphs) {
-        auto *meta = proto->add_glyphs();
-        meta->set_name(toStd(glyph.name));
-        meta->set_displayname(toStd(glyph.displayName));
-    }
 }
 
-// Builds a palette from `proto`, enforcing the brush-name uniqueness invariant.
-// Returns an error naming the duplicate on failure.
+// Builds palette identity from `proto`. The directory layer fills lineBrushes
+// and glyphs from the per-file payloads, so they are empty here.
 Monad::Result<cwSymbologyPaletteData> paletteFromProto(const CavewhereSymbologyProto::Palette &proto)
 {
     cwSymbologyPaletteData palette;
-    palette.lineBrushes.reserve(proto.linebrushes_size());
-    for (const auto &protoBrush : proto.linebrushes()) {
-        cwLineBrush brush = brushFromProto(protoBrush);
-        // A brush name is the cross-palette substitution key and (after the
-        // directory-as-truth refactor) a path component; enforce the shared
-        // kebab-case rule so it stays a safe machine identifier.
-        if (!cwSymbology::isValidName(brush.name)) {
-            return Monad::Result<cwSymbologyPaletteData>(
-                QStringLiteral("%1invalid brush name \"%2\"; brush names must be kebab-case "
-                               "(lowercase letters, digits and hyphens)")
-                    .arg(kLoadErrorPrefix, brush.name));
-        }
-        palette.lineBrushes.append(std::move(brush));
-    }
-
-    const QString duplicate = cwSymbologyPaletteData::findDuplicateBrushName(palette.lineBrushes);
-    if (!duplicate.isEmpty()) {
-        return Monad::Result<cwSymbologyPaletteData>(
-            QStringLiteral("%1duplicate brush name \"%2\"")
-                .arg(kLoadErrorPrefix, duplicate));
-    }
-
-    // Glyph metadata only — strokes are filled in by load() from per-glyph files.
-    palette.glyphs.reserve(proto.glyphs_size());
-    for (const auto &meta : proto.glyphs()) {
-        cwSymbologyGlyph glyph;
-        glyph.name = fromStd(meta.name());
-        glyph.displayName = fromStd(meta.displayname());
-        // The name becomes a path component (glyphs/<name>.cwglyph) in load();
-        // reject anything that is not a plain kebab-case identifier so an
-        // untrusted palette cannot read outside the palette directory.
-        if (!cwSymbology::isValidName(glyph.name)) {
-            return Monad::Result<cwSymbologyPaletteData>(
-                QStringLiteral("%1invalid glyph name \"%2\"; glyph names must be kebab-case "
-                               "(lowercase letters, digits and hyphens)")
-                    .arg(kLoadErrorPrefix, glyph.name));
-        }
-        palette.glyphs.append(glyph);
-    }
-
-    const QString duplicateGlyph = cwSymbologyPaletteData::findDuplicateGlyphName(palette.glyphs);
-    if (!duplicateGlyph.isEmpty()) {
-        return Monad::Result<cwSymbologyPaletteData>(
-            QStringLiteral("%1duplicate glyph name \"%2\"")
-                .arg(kLoadErrorPrefix, duplicateGlyph));
-    }
-
     palette.id = QUuid::fromString(fromStd(proto.id()));
     if (palette.id.isNull()) {
         return Monad::Result<cwSymbologyPaletteData>(
@@ -328,24 +274,167 @@ Monad::Result<QByteArray> serializeJson(const google::protobuf::Message &proto)
     return Monad::Result<QByteArray>(QByteArray(json.data(), static_cast<int>(json.size())));
 }
 
-} // namespace
-
-namespace cwSymbologyPaletteIO {
-
-const QString kPaletteJsonFileName = QStringLiteral("palette.json");
-const QString kGlyphsSubdirName = QStringLiteral("glyphs");
-const QString kGlyphFileSuffix = QStringLiteral(".cwglyph");
-
-QByteArray glyphToJson(const cwSymbologyGlyph &glyph)
+// Serialize a proto message to JSON bytes, warning and returning empty on the
+// (serialization-config) failure path shared by every *ToJson entry point.
+template <typename Proto>
+QByteArray serializeProtoToJson(const Proto &proto)
 {
-    CavewhereSymbologyProto::Glyph proto;
-    glyphToProto(&proto, glyph);
     const auto result = serializeJson(proto);
     if (result.hasError()) {
         qWarning("%s", qPrintable(result.errorMessage()));
         return QByteArray();
     }
     return result.value();
+}
+
+QString invalidNameMessage(const QString &prefix, const QString &entityKind, const QString &name)
+{
+    return QStringLiteral("%1invalid %2 name \"%3\"; %2 names must be kebab-case "
+                          "(lowercase letters, digits and hyphens)")
+        .arg(prefix, entityKind, name);
+}
+
+// Validate the name (kebab-case == path-safe), ensure <directory>/<subdir>
+// exists, and atomically write <subdir>/<name><suffix>. Validation runs before
+// anything is opened, so a rejected name writes nothing.
+Monad::ResultBase writeNamedFile(const QString &name, const QString &entityKind,
+                                 const QString &directory, const QString &subdirName,
+                                 const QString &suffix, const QByteArray &contents)
+{
+    if (!cwSymbology::isValidName(name)) {
+        return Monad::ResultBase(invalidNameMessage(kSaveErrorPrefix, entityKind, name));
+    }
+    const QString subdir = QDir(directory).filePath(subdirName);
+    if (!QDir().mkpath(subdir)) {
+        return Monad::ResultBase(
+            QStringLiteral("%1cannot create directory: %2").arg(kSaveErrorPrefix, subdir));
+    }
+    QSaveFile file(QDir(subdir).filePath(name + suffix));
+    if (!file.open(QFile::WriteOnly)) {
+        return Monad::ResultBase(
+            QStringLiteral("%1cannot open %2 for write: %3")
+                .arg(kSaveErrorPrefix, file.fileName(), file.errorString()));
+    }
+    file.write(contents);
+    if (!file.commit()) {
+        return Monad::ResultBase(
+            QStringLiteral("%1cannot write %2: %3")
+                .arg(kSaveErrorPrefix, file.fileName(), file.errorString()));
+    }
+    return Monad::ResultBase();
+}
+
+Monad::Result<QByteArray> readNamedFile(const QString &directory, const QString &subdirName,
+                                        const QString &suffix, const QString &name,
+                                        const QString &entityKind)
+{
+    const QString path = QDir(QDir(directory).filePath(subdirName)).filePath(name + suffix);
+    QFile file(path);
+    if (!file.open(QFile::ReadOnly)) {
+        return Monad::Result<QByteArray>(
+            QStringLiteral("%1cannot open %2 file %3: %4")
+                .arg(kLoadErrorPrefix, entityKind, path, file.errorString()));
+    }
+    return Monad::Result<QByteArray>(file.readAll());
+}
+
+// Scans <directory>/<subdir> for *<suffix> files, sorted by name (deterministic
+// load order). Each filename stem is the authoritative entity name: it must be
+// kebab-case and must equal the payload's declared name. The directory is the
+// source of truth, so the files present *are* the entity set.
+template <typename T, typename LoadOne>
+Monad::Result<QVector<T>> scanEntities(const QString &directory, const QString &subdirName,
+                                       const QString &suffix, const QString &entityKind,
+                                       LoadOne loadOne)
+{
+    QVector<T> entities;
+    const QDir subdir(QDir(directory).filePath(subdirName));
+    if (!subdir.exists()) {
+        return Monad::Result<QVector<T>>(entities);
+    }
+
+    const QStringList files =
+        subdir.entryList({QStringLiteral("*") + suffix}, QDir::Files, QDir::Name);
+    entities.reserve(files.size());
+    for (const QString &fileName : files) {
+        const QString stem = fileName.chopped(suffix.size());
+        if (!cwSymbology::isValidName(stem)) {
+            return Monad::Result<QVector<T>>(invalidNameMessage(kLoadErrorPrefix, entityKind, stem));
+        }
+        auto loaded = loadOne(directory, stem);
+        if (loaded.hasError()) {
+            return Monad::Result<QVector<T>>(loaded.errorMessage());
+        }
+        T entity = loaded.value();
+        if (entity.name != stem) {
+            return Monad::Result<QVector<T>>(
+                QStringLiteral("%1%2 file for \"%3\" declares mismatched name \"%4\"")
+                    .arg(kLoadErrorPrefix, entityKind, stem, entity.name));
+        }
+        entities.append(std::move(entity));
+    }
+    return Monad::Result<QVector<T>>(entities);
+}
+
+// Deletes any <directory>/<subdir>/*<suffix> file whose stem is not in `keep`,
+// so disk matches memory after a save. Scoped strictly to that suffix in that
+// subdir — never touches anything else.
+Monad::ResultBase reconcileDir(const QString &directory, const QString &subdirName,
+                               const QString &suffix, const QSet<QString> &keep)
+{
+    QDir subdir(QDir(directory).filePath(subdirName));
+    if (!subdir.exists()) {
+        return Monad::ResultBase();
+    }
+    const QStringList files = subdir.entryList({QStringLiteral("*") + suffix}, QDir::Files);
+    for (const QString &fileName : files) {
+        if (keep.contains(fileName.chopped(suffix.size()))) {
+            continue;
+        }
+        if (!subdir.remove(fileName)) {
+            return Monad::ResultBase(
+                QStringLiteral("%1cannot remove stale file %2")
+                    .arg(kSaveErrorPrefix, subdir.filePath(fileName)));
+        }
+    }
+    return Monad::ResultBase();
+}
+
+} // namespace
+
+namespace cwSymbologyPaletteIO {
+
+const QString kPaletteJsonFileName = QStringLiteral("palette.json");
+const QString kBrushesSubdirName = QStringLiteral("brushes");
+const QString kBrushFileSuffix = QStringLiteral(".cwbrush");
+const QString kGlyphsSubdirName = QStringLiteral("glyphs");
+const QString kGlyphFileSuffix = QStringLiteral(".cwglyph");
+
+QByteArray brushToJson(const cwLineBrush &brush)
+{
+    CavewhereSymbologyProto::LineBrush proto;
+    brushToProto(&proto, brush);
+    return serializeProtoToJson(proto);
+}
+
+Monad::Result<cwLineBrush> brushFromJson(const QByteArray &json)
+{
+    CavewhereSymbologyProto::LineBrush proto;
+    const auto status = google::protobuf::util::JsonStringToMessage(
+        std::string(json.constData(), static_cast<size_t>(json.size())), &proto);
+    if (!status.ok()) {
+        return Monad::Result<cwLineBrush>(
+            QStringLiteral("%1brush JSON parse error: %2")
+                .arg(kLoadErrorPrefix, QString::fromUtf8(status.ToString().c_str())));
+    }
+    return Monad::Result<cwLineBrush>(brushFromProto(proto));
+}
+
+QByteArray glyphToJson(const cwSymbologyGlyph &glyph)
+{
+    CavewhereSymbologyProto::Glyph proto;
+    glyphToProto(&proto, glyph);
+    return serializeProtoToJson(proto);
 }
 
 Monad::Result<cwSymbologyGlyph> glyphFromJson(const QByteArray &json)
@@ -365,12 +454,7 @@ QByteArray toJson(const cwSymbologyPaletteData &palette)
 {
     CavewhereSymbologyProto::Palette proto;
     paletteToProto(&proto, palette);
-    const auto result = serializeJson(proto);
-    if (result.hasError()) {
-        qWarning("%s", qPrintable(result.errorMessage()));
-        return QByteArray();
-    }
-    return result.value();
+    return serializeProtoToJson(proto);
 }
 
 Monad::Result<cwSymbologyPaletteData> fromJson(const QByteArray &json)
@@ -419,68 +503,75 @@ Monad::ResultBase save(const cwSymbologyPaletteData &palette, const QString &dir
                 .arg(kSaveErrorPrefix, file.fileName(), file.errorString()));
     }
 
-    for (const auto &glyph : palette.glyphs) {
-        const auto glyphResult = saveGlyph(glyph, directory);
-        if (glyphResult.hasError()) {
-            return glyphResult;
+    QSet<QString> brushNames;
+    for (const auto &brush : palette.lineBrushes) {
+        const auto result = saveBrush(brush, directory);
+        if (result.hasError()) {
+            return result;
         }
+        brushNames.insert(brush.name);
     }
 
-    return Monad::ResultBase();
+    QSet<QString> glyphNames;
+    for (const auto &glyph : palette.glyphs) {
+        const auto result = saveGlyph(glyph, directory);
+        if (result.hasError()) {
+            return result;
+        }
+        glyphNames.insert(glyph.name);
+    }
+
+    // Disk must match memory after a save: drop files for brushes/glyphs that
+    // are no longer in the palette.
+    const auto brushReconcile = reconcileDir(directory, kBrushesSubdirName, kBrushFileSuffix, brushNames);
+    if (brushReconcile.hasError()) {
+        return brushReconcile;
+    }
+    return reconcileDir(directory, kGlyphsSubdirName, kGlyphFileSuffix, glyphNames);
+}
+
+Monad::ResultBase saveBrush(const cwLineBrush &brush, const QString &directory)
+{
+    CavewhereSymbologyProto::LineBrush proto;
+    brushToProto(&proto, brush);
+    const auto json = serializeJson(proto);
+    if (json.hasError()) {
+        return Monad::ResultBase(json.errorMessage());
+    }
+    return writeNamedFile(brush.name, QStringLiteral("brush"), directory,
+                          kBrushesSubdirName, kBrushFileSuffix, json.value());
+}
+
+Monad::Result<cwLineBrush> loadBrush(const QString &directory, const QString &brushName)
+{
+    const auto contents =
+        readNamedFile(directory, kBrushesSubdirName, kBrushFileSuffix, brushName, QStringLiteral("brush"));
+    if (contents.hasError()) {
+        return Monad::Result<cwLineBrush>(contents.errorMessage());
+    }
+    return brushFromJson(contents.value());
 }
 
 Monad::ResultBase saveGlyph(const cwSymbologyGlyph &glyph, const QString &directory)
 {
-    // The name becomes the file name (glyphs/<name>.cwglyph); reject anything
-    // that is not a plain kebab-case identifier so it cannot escape glyphs/.
-    if (!cwSymbology::isValidName(glyph.name)) {
-        return Monad::ResultBase(
-            QStringLiteral("%1invalid glyph name \"%2\"; glyph names must be kebab-case "
-                           "(lowercase letters, digits and hyphens)")
-                .arg(kSaveErrorPrefix, glyph.name));
-    }
-
-    const QString glyphsDir = QDir(directory).filePath(kGlyphsSubdirName);
-    if (!QDir().mkpath(glyphsDir)) {
-        return Monad::ResultBase(
-            QStringLiteral("%1cannot create directory: %2").arg(kSaveErrorPrefix, glyphsDir));
-    }
-
     CavewhereSymbologyProto::Glyph proto;
     glyphToProto(&proto, glyph);
     const auto json = serializeJson(proto);
     if (json.hasError()) {
         return Monad::ResultBase(json.errorMessage());
     }
-
-    QSaveFile file(QDir(glyphsDir).filePath(glyph.name + kGlyphFileSuffix));
-    if (!file.open(QFile::WriteOnly)) {
-        return Monad::ResultBase(
-            QStringLiteral("%1cannot open %2 for write: %3")
-                .arg(kSaveErrorPrefix, file.fileName(), file.errorString()));
-    }
-    file.write(json.value());
-    if (!file.commit()) {
-        return Monad::ResultBase(
-            QStringLiteral("%1cannot write %2: %3")
-                .arg(kSaveErrorPrefix, file.fileName(), file.errorString()));
-    }
-    return Monad::ResultBase();
+    return writeNamedFile(glyph.name, QStringLiteral("glyph"), directory,
+                          kGlyphsSubdirName, kGlyphFileSuffix, json.value());
 }
 
 Monad::Result<cwSymbologyGlyph> loadGlyph(const QString &directory, const QString &glyphName)
 {
-    const QString path = QDir(QDir(directory).filePath(kGlyphsSubdirName))
-                             .filePath(glyphName + kGlyphFileSuffix);
-    QFile file(path);
-    if (!file.open(QFile::ReadOnly)) {
-        return Monad::Result<cwSymbologyGlyph>(
-            QStringLiteral("%1cannot open glyph file %2: %3")
-                .arg(kLoadErrorPrefix, path, file.errorString()));
+    const auto contents =
+        readNamedFile(directory, kGlyphsSubdirName, kGlyphFileSuffix, glyphName, QStringLiteral("glyph"));
+    if (contents.hasError()) {
+        return Monad::Result<cwSymbologyGlyph>(contents.errorMessage());
     }
-    const QByteArray contents = file.readAll();
-    file.close();
-    return glyphFromJson(contents);
+    return glyphFromJson(contents.value());
 }
 
 Monad::Result<cwSymbologyPaletteData> load(const QString &directory)
@@ -505,26 +596,26 @@ Monad::Result<cwSymbologyPaletteData> load(const QString &directory)
     if (paletteResult.hasError()) {
         return paletteResult;
     }
-
-    // fromJson populates glyph metadata only; pull each glyph's strokes from its
-    // own file and assemble the full glyph (name from the metadata index).
     cwSymbologyPaletteData palette = paletteResult.value();
-    for (auto &glyph : palette.glyphs) {
-        auto glyphResult = loadGlyph(directory, glyph.name);
-        if (glyphResult.hasError()) {
-            return Monad::Result<cwSymbologyPaletteData>(glyphResult.errorMessage());
-        }
-        cwSymbologyGlyph loaded = glyphResult.value();
-        if (loaded.name != glyph.name) {
-            return Monad::Result<cwSymbologyPaletteData>(
-                QStringLiteral("%1glyph file for \"%2\" declares mismatched name \"%3\"")
-                    .arg(kLoadErrorPrefix, glyph.name, loaded.name));
-        }
-        glyph = std::move(loaded);
-    }
 
-    // Glyph strokes are now present, so the glyph → brush → glyph graph can be
-    // checked for cycles (Decision 9). A cycle would recurse forever at
+    // The directory is the source of truth: the brushes/ and glyphs/ files
+    // present *are* the palette's brushes and glyphs.
+    auto brushes = scanEntities<cwLineBrush>(directory, kBrushesSubdirName, kBrushFileSuffix,
+                                             QStringLiteral("brush"), loadBrush);
+    if (brushes.hasError()) {
+        return Monad::Result<cwSymbologyPaletteData>(brushes.errorMessage());
+    }
+    palette.lineBrushes = brushes.value();
+
+    auto glyphs = scanEntities<cwSymbologyGlyph>(directory, kGlyphsSubdirName, kGlyphFileSuffix,
+                                                 QStringLiteral("glyph"), loadGlyph);
+    if (glyphs.hasError()) {
+        return Monad::Result<cwSymbologyPaletteData>(glyphs.errorMessage());
+    }
+    palette.glyphs = glyphs.value();
+
+    // With brushes and glyph strokes present, the glyph → brush → glyph graph
+    // can be checked for cycles (Decision 9). A cycle would recurse forever at
     // tessellation time, so reject the palette here.
     const QString cycle = palette.findGlyphDependencyCycle();
     if (!cycle.isEmpty()) {

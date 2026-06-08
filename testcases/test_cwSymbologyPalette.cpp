@@ -120,3 +120,17 @@ TEST_CASE("Palette detects duplicate brush names", "[cwSymbologyPalette]")
     CHECK(cwSymbologyPaletteData::findDuplicateBrushName({a, b, duplicate})
               == QStringLiteral("wall"));
 }
+
+TEST_CASE("Palette detects duplicate glyph names", "[cwSymbologyPalette]")
+{
+    cwSymbologyGlyph a;
+    a.name = QStringLiteral("tick");
+    cwSymbologyGlyph b;
+    b.name = QStringLiteral("crossbar");
+    cwSymbologyGlyph duplicate;
+    duplicate.name = QStringLiteral("tick");
+
+    CHECK(cwSymbologyPaletteData::findDuplicateGlyphName({a, b}).isEmpty());
+    CHECK(cwSymbologyPaletteData::findDuplicateGlyphName({a, b, duplicate})
+              == QStringLiteral("tick"));
+}

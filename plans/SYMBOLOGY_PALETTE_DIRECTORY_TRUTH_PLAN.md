@@ -205,13 +205,23 @@ reading palettes at scale.
 
 ## Checklist
 
-- [ ] Proto: `Palette` identity-only (6/7 reserved); delete `GlyphMetadata`.
-- [ ] IO: `kBrushesSubdirName` / `kBrushFileSuffix`; `saveBrush` / `loadBrush` /
+- [x] Proto: `Palette` identity-only (6/7 reserved); delete `GlyphMetadata`.
+- [x] IO: `kBrushesSubdirName` / `kBrushFileSuffix`; `saveBrush` / `loadBrush` /
       `brushToJson` / `brushFromJson`.
-- [ ] IO: `paletteToProto`/`paletteFromProto`/`toJson`/`fromJson` identity-only.
-- [ ] IO: `save()` writes per-file + reconciles deletes; `load()` scans + sorts.
-- [ ] Call `cwSymbology::isValidName` from `saveBrush` (load-side + `saveGlyph`
-      already covered).
-- [ ] Tests updated + added (above).
-- [ ] `cavewhere-test` green for
+- [x] IO: `paletteToProto`/`paletteFromProto`/`toJson`/`fromJson` identity-only.
+- [x] IO: `save()` writes per-file + reconciles deletes; `load()` scans + sorts.
+- [x] Name validation (`cwSymbology::isValidName`) and filename↔payload-name
+      checks centralized in shared `writeNamedFile` / `scanEntities` helpers,
+      covering brushes and glyphs uniformly.
+- [x] Tests updated + added (above).
+- [x] `cavewhere-test` green for
       `[cwSymbologyPalette][cwSymbologyPaletteIO][cwSymbologyPaletteManager]`.
+
+> Implementation note: the per-entity name validation and filename/payload
+> name-mismatch check are now factored into two file-local helpers in
+> `cwSymbologyPaletteIO.cpp` — `writeNamedFile` (validate → mkpath → atomic
+> write) and the `scanEntities` template (sorted scan → validate stem → load →
+> check `stem == payload.name`) — shared by the brush and glyph paths, plus a
+> `reconcileDir` helper for the delete reconciliation. The seed
+> (`cwSymbologyPaletteSeed::create`) now appends brushes in name-sorted order so
+> it compares equal to its own reload (order is derived, not stored).

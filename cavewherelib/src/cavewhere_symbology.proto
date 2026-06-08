@@ -15,31 +15,24 @@ import "qt.proto";
 
 package CavewhereSymbologyProto;
 
+// Palette-level identity only (palette.json). Membership is the directory: the
+// set of brushes/<name>.cwbrush and glyphs/<name>.cwglyph files *is* the palette,
+// so independent adds merge with zero git conflict and palette.json changes only
+// when identity does. See plans/SYMBOLOGY_PALETTE_DIRECTORY_TRUTH_PLAN.md.
 message Palette {
     string id          = 1;       // UUID — palettes keep UUIDs
     string name        = 2;       // human-readable display name
     string description = 3;
     string author      = 4;
     string version     = 5;       // semver-ish, author's choice
-    repeated LineBrush lineBrushes = 6;
-    repeated GlyphMetadata glyphs  = 7;  // glyph index; each glyph's strokes live in its own file
-    // 8 reserved for `repeated AreaBrush  areaBrushes`
-    // 9 reserved for `repeated PointBrush pointBrushes`
-}
-
-// Glyph index entry stored in the palette file. The strokes — the bulk of a
-// glyph — live in a separate per-glyph file (glyphs/<name>.cwglyph) so editing
-// one glyph rewrites one file and gives clean git diffs. The glyph's paper-mm
-// bounds are computed on demand from the strokes, never stored.
-message GlyphMetadata {
-    string name        = 1;  // machine identifier, kebab-case, unique within palette
-    string displayName = 2;  // human-readable label (stored verbatim, not translated)
 }
 
 // The per-glyph file payload (glyphs/<name>.cwglyph). Self-contained so a glyph
 // round-trips independently of its palette. Strokes are glyph-local paper-mm.
+// The glyph's paper-mm bounds are computed on demand from the strokes, never
+// stored.
 message Glyph {
-    string name                  = 1;  // must match the palette's GlyphMetadata entry
+    string name                  = 1;  // must match the file stem (glyphs/<name>.cwglyph)
     string displayName           = 2;
     repeated GlyphStroke strokes = 3;
 }
@@ -58,8 +51,11 @@ message GlyphStrokePoint {
     int64           timestampMs = 3;
 }
 
+// The per-file payload for brushes/<name>.cwbrush, exactly as Glyph is for
+// glyphs/<name>.cwglyph. Self-contained so a brush round-trips independently of
+// its palette.
 message LineBrush {
-    string name        = 1;                // machine identifier, kebab-case, unique within palette
+    string name        = 1;                // machine identifier, kebab-case, must match the file stem
     string displayName = 2;                // human-readable label, mutable (stored verbatim, not translated)
     string category    = 3;                // display-only grouping in pickers
     bool   scrapOutline = 4;               // topology flag — feeds chain-based scrap detector

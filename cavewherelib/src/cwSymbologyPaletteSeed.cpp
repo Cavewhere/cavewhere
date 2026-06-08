@@ -82,29 +82,15 @@ cwSymbologyPaletteData create()
     palette.author = QStringLiteral("CaveWhere");
     palette.version = QStringLiteral("1.0");
 
+    // Brushes are appended in name-sorted order to match the canonical order a
+    // palette load derives from the directory (load sorts the per-file brushes
+    // by name). The QVector order is not semantic — paint order is zOrder and
+    // picker grouping is category — so this only keeps a seed equal to its own
+    // reload.
     QVector<cwLineBrush> brushes;
 
-    // wall — visible line + scrap topology. displayName/category are authored
+    // feature — visible line, no topology. displayName/category are authored
     // strings, same as any other palette on disk — not run through tr().
-    cwLineBrush wall;
-    wall.name = wallBrushName();
-    wall.displayName = QStringLiteral("Wall");
-    wall.category = QStringLiteral("Walls");
-    wall.zOrder = kWallZOrder;
-    wall.scrapOutline = true;
-    wall.decorations.append(centerlineLayer(kWallWidthMm));
-    brushes.append(wall);
-
-    // scrap-outline — no ink, only topology (zero decoration layers).
-    cwLineBrush scrapOutline;
-    scrapOutline.name = scrapOutlineBrushName();
-    scrapOutline.displayName = QStringLiteral("Scrap Outline");
-    scrapOutline.category = QStringLiteral("Walls");
-    scrapOutline.zOrder = kWallZOrder;
-    scrapOutline.scrapOutline = true;
-    brushes.append(scrapOutline);
-
-    // feature — visible line, no topology.
     cwLineBrush feature;
     feature.name = featureBrushName();
     feature.displayName = QStringLiteral("Feature");
@@ -130,6 +116,25 @@ cwSymbologyPaletteData create()
     tickLayer.glyphName = floorStepTickGlyphName();
     floorStep.decorations.append(tickLayer);
     brushes.append(floorStep);
+
+    // scrap-outline — no ink, only topology (zero decoration layers).
+    cwLineBrush scrapOutline;
+    scrapOutline.name = scrapOutlineBrushName();
+    scrapOutline.displayName = QStringLiteral("Scrap Outline");
+    scrapOutline.category = QStringLiteral("Walls");
+    scrapOutline.zOrder = kWallZOrder;
+    scrapOutline.scrapOutline = true;
+    brushes.append(scrapOutline);
+
+    // wall — visible line + scrap topology.
+    cwLineBrush wall;
+    wall.name = wallBrushName();
+    wall.displayName = QStringLiteral("Wall");
+    wall.category = QStringLiteral("Walls");
+    wall.zOrder = kWallZOrder;
+    wall.scrapOutline = true;
+    wall.decorations.append(centerlineLayer(kWallWidthMm));
+    brushes.append(wall);
 
     palette.lineBrushes = brushes;
 
