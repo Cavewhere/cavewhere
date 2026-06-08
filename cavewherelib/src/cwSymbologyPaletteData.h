@@ -22,6 +22,7 @@
 #include "CaveWhereLibExport.h"
 #include "cwLineBrush.h"
 #include "cwPaletteSnapshot.h"
+#include "cwSymbologyGlyph.h"
 
 // Serializable value payload of a palette (the cwTripData-style data half of
 // the cwSymbologyPalette QObject). cwSymbologyPaletteIO reads and writes this
@@ -39,8 +40,10 @@ struct CAVEWHERE_LIB_EXPORT cwSymbologyPaletteData {
     QString author;
     QString version;
     QVector<cwLineBrush> lineBrushes;
+    QVector<cwSymbologyGlyph> glyphs;
 
     std::optional<cwLineBrush> brush(QStringView name) const;
+    std::optional<cwSymbologyGlyph> glyph(QStringView name) const;
 
     // Cheap implicitly-shared lookup surface for the render path.
     cwPaletteSnapshot snapshot() const;
@@ -49,6 +52,16 @@ struct CAVEWHERE_LIB_EXPORT cwSymbologyPaletteData {
     // string if every name is unique. The uniqueness invariant the loader
     // enforces — names are the substitution key, so collisions are ambiguous.
     static QString findDuplicateBrushName(const QVector<cwLineBrush> &brushes);
+
+    // Glyph names are the in-palette decoration-layer reference key; same
+    // uniqueness invariant as brushes.
+    static QString findDuplicateGlyphName(const QVector<cwSymbologyGlyph> &glyphs);
+
+    // Walks the glyph → brush → glyph dependency graph (a glyph stroke names a
+    // brush, a brush's stamp layers name glyphs) and returns the first cycle as
+    // a " → "-joined path of node names, or an empty string if the graph is
+    // acyclic. The loader rejects any palette with a cycle (Decision 9).
+    QString findGlyphDependencyCycle() const;
 
     bool operator==(const cwSymbologyPaletteData &o) const = default;
 };

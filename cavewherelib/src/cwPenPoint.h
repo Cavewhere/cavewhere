@@ -31,6 +31,8 @@ public:
 
     bool isNull() const { return pressure < 0.0; }
 
+    bool operator==(const cwPenPoint &o) const = default;
+
     QPointF position;
     double  pressure = -1.0;
     qint64  timestampMs = 0;

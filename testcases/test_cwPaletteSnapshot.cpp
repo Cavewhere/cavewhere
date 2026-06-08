@@ -68,3 +68,18 @@ TEST_CASE("cwPaletteSnapshot is unaffected by later palette mutation",
     CHECK(snapshot.brushCount() == originalCount);
     CHECK(snapshot.findBrush(cwSymbologyPaletteSeed::wallBrushName()).has_value());
 }
+
+TEST_CASE("cwPaletteSnapshot resolves glyphs by name", "[cwPaletteSnapshot]")
+{
+    const cwSymbologyPaletteData palette = cwSymbologyPaletteSeed::create();
+    const cwPaletteSnapshot snapshot = palette.snapshot();
+
+    CHECK(snapshot.glyphCount() == palette.glyphs.size());
+
+    const auto tick = snapshot.findGlyph(cwSymbologyPaletteSeed::floorStepTickGlyphName());
+    REQUIRE(tick.has_value());
+    CHECK(tick->name == cwSymbologyPaletteSeed::floorStepTickGlyphName());
+    CHECK_FALSE(tick->strokes.isEmpty());
+
+    CHECK_FALSE(snapshot.findGlyph(QStringLiteral("does-not-exist")).has_value());
+}

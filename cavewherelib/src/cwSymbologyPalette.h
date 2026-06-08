@@ -22,6 +22,7 @@
 #include "CaveWhereLibExport.h"
 #include "cwLineBrush.h"
 #include "cwPaletteSnapshot.h"
+#include "cwSymbologyGlyph.h"
 #include "cwSymbologyPaletteData.h"
 
 // QObject wrapper around a cwSymbologyPaletteData (the cwTrip/cwTripData
@@ -57,8 +58,10 @@ public:
     void setWritable(bool writable);
 
     QVector<cwLineBrush> lineBrushes() const { return m_data.lineBrushes; }
+    QVector<cwSymbologyGlyph> glyphs() const { return m_data.glyphs; }
 
     std::optional<cwLineBrush> brush(QStringView name) const { return m_data.brush(name); }
+    std::optional<cwSymbologyGlyph> glyph(QStringView name) const { return m_data.glyph(name); }
 
     // Cheap implicitly-shared lookup surface for the render path.
     cwPaletteSnapshot snapshot() const { return m_data.snapshot(); }

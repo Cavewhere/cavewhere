@@ -70,6 +70,8 @@ public:
     QUuid               id;
 
     QRectF boundingBox() const;
+
+    bool operator==(const cwPenStroke &o) const = default;
 };
 
 Q_DECLARE_METATYPE(cwPenStroke)

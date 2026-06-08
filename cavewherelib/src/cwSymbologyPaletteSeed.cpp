@@ -8,10 +8,13 @@
 //Our includes
 #include "cwSymbologyPaletteSeed.h"
 #include "cwSymbologyPaletteData.h"
+#include "cwSymbologyGlyph.h"
 #include "cwLineBrush.h"
+#include "cwPenStroke.h"
 
 //Qt includes
 #include <QColor>
+#include <QPointF>
 
 namespace {
 
@@ -19,9 +22,15 @@ namespace {
 constexpr double kWallWidthMm    = 0.6;
 constexpr double kFeatureWidthMm = 0.3;
 
-// Paint order: wall over feature, regardless of draw order.
-constexpr int kWallZOrder    = 100;
-constexpr int kFeatureZOrder = 10;
+// floor-step: an edge line plus a tick glyph stamped along the +normal side.
+constexpr double kFloorStepEdgeWidthMm = 0.3;
+constexpr double kFloorStepTickLengthMm = 1.5;
+
+// Paint order: wall over feature, regardless of draw order. floor-step sits
+// between the two.
+constexpr int kWallZOrder      = 100;
+constexpr int kFloorStepZOrder = 50;
+constexpr int kFeatureZOrder   = 10;
 
 const QColor kInkLight = QColor(QStringLiteral("#000000"));
 const QColor kInkDark  = QColor(QStringLiteral("#ffffff"));
@@ -60,6 +69,9 @@ QString name()
 QString wallBrushName()         { return QStringLiteral("wall"); }
 QString scrapOutlineBrushName() { return QStringLiteral("scrap-outline"); }
 QString featureBrushName()      { return QStringLiteral("feature"); }
+QString floorStepBrushName()    { return QStringLiteral("floor-step"); }
+
+QString floorStepTickGlyphName() { return QStringLiteral("floor-step-tick"); }
 
 cwSymbologyPaletteData create()
 {
@@ -102,7 +114,37 @@ cwSymbologyPaletteData create()
     feature.decorations.append(centerlineLayer(kFeatureWidthMm));
     brushes.append(feature);
 
+    // floor-step — the shipped glyph-stamping demo: an edge line plus a tick
+    // glyph repeated along the +normal side. The stamp spacing/side live in the
+    // RigidStamp layer's placement rules, which the rule registry (a later
+    // phase) fills in; the layer here only references the glyph.
+    cwLineBrush floorStep;
+    floorStep.name = floorStepBrushName();
+    floorStep.displayName = QStringLiteral("Floor Step");
+    floorStep.category = QStringLiteral("Features");
+    floorStep.zOrder = kFloorStepZOrder;
+    floorStep.scrapOutline = false;
+    floorStep.decorations.append(centerlineLayer(kFloorStepEdgeWidthMm));
+    cwDecorationLayer tickLayer;
+    tickLayer.mode = cwDecorationLayer::RigidStamp;
+    tickLayer.glyphName = floorStepTickGlyphName();
+    floorStep.decorations.append(tickLayer);
+    brushes.append(floorStep);
+
     palette.lineBrushes = brushes;
+
+    // floor-step-tick — one feature-brushed tick from the glyph origin along
+    // +normal (glyph-local +Y), authored in paper-mm.
+    cwSymbologyGlyph tick;
+    tick.name = floorStepTickGlyphName();
+    tick.displayName = QStringLiteral("Floor Step Tick");
+    cwPenStroke tickStroke;
+    tickStroke.brushName = featureBrushName();
+    tickStroke.points.append(cwPenPoint(QPointF(0.0, 0.0), 1.0));
+    tickStroke.points.append(cwPenPoint(QPointF(0.0, kFloorStepTickLengthMm), 1.0));
+    tick.strokes.append(tickStroke);
+    palette.glyphs.append(tick);
+
     return palette;
 }
 

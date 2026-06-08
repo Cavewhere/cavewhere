@@ -18,6 +18,7 @@
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwLineBrush.h"
+#include "cwSymbologyGlyph.h"
 
 // Value-type, implicitly-shared lookup surface that every render-path consumer
 // (decoration generation, scene rules, offset-curve batching) takes by value.
@@ -35,11 +36,16 @@
 class CAVEWHERE_LIB_EXPORT cwPaletteSnapshot {
 public:
     cwPaletteSnapshot() = default;
-    explicit cwPaletteSnapshot(QHash<QString, cwLineBrush> brushes);
+    cwPaletteSnapshot(QHash<QString, cwLineBrush> brushes,
+                      QHash<QString, cwSymbologyGlyph> glyphs);
 
     // const QString& (not QStringView): the backing QHash<QString, ...> has no
     // heterogeneous lookup, so a view would force a per-call QString allocation.
     std::optional<cwLineBrush> findBrush(const QString &name) const; // nullopt if missing
+
+    // Glyph lookup used by decoration layout and the tessellation cache; same
+    // by-value, lifetime-safe contract as findBrush.
+    std::optional<cwSymbologyGlyph> findGlyph(const QString &name) const; // nullopt if missing
 
     // True when `name` resolves to a brush whose strokes contribute to scrap
     // outline detection (the "wall-class" test shared by the detector, scrap
@@ -47,11 +53,13 @@ public:
     // findBrush(name) && findBrush(name)->scrapOutline.
     bool producesScrapOutline(const QString &name) const;
 
-    bool isEmpty() const { return m_brushes.isEmpty(); }
+    bool isEmpty() const { return m_brushes.isEmpty() && m_glyphs.isEmpty(); }
     int  brushCount() const { return m_brushes.size(); }
+    int  glyphCount() const { return m_glyphs.size(); }
 
 private:
     QHash<QString, cwLineBrush> m_brushes;
+    QHash<QString, cwSymbologyGlyph> m_glyphs;
 };
 
 #endif // CWPALETTESNAPSHOT_H

@@ -22,9 +22,40 @@ message Palette {
     string author      = 4;
     string version     = 5;       // semver-ish, author's choice
     repeated LineBrush lineBrushes = 6;
-    // 7 reserved for `repeated Glyph glyphs` (needs cwPenStroke.brushName)
+    repeated GlyphMetadata glyphs  = 7;  // glyph index; each glyph's strokes live in its own file
     // 8 reserved for `repeated AreaBrush  areaBrushes`
     // 9 reserved for `repeated PointBrush pointBrushes`
+}
+
+// Glyph index entry stored in the palette file. The strokes — the bulk of a
+// glyph — live in a separate per-glyph file (glyphs/<name>.cwglyph) so editing
+// one glyph rewrites one file and gives clean git diffs. The glyph's paper-mm
+// bounds are computed on demand from the strokes, never stored.
+message GlyphMetadata {
+    string name        = 1;  // machine identifier, kebab-case, unique within palette
+    string displayName = 2;  // human-readable label (stored verbatim, not translated)
+}
+
+// The per-glyph file payload (glyphs/<name>.cwglyph). Self-contained so a glyph
+// round-trips independently of its palette. Strokes are glyph-local paper-mm.
+message Glyph {
+    string name                  = 1;  // must match the palette's GlyphMetadata entry
+    string displayName           = 2;
+    repeated GlyphStroke strokes = 3;
+}
+
+// Glyph strokes mirror cavewhere.proto's PenStroke/PenPoint but are redeclared
+// here so the palette schema stays standalone (no cavewhere.proto import).
+message GlyphStroke {
+    string brushName                 = 1;  // resolves to a cwLineBrush in this palette
+    repeated GlyphStrokePoint points = 2;
+    string id                        = 3;  // UUID
+}
+
+message GlyphStrokePoint {
+    QtProto.QPointF position = 1;
+    optional double pressure = 2;  // -1 == unknown
+    int64           timestampMs = 3;
 }
 
 message LineBrush {

@@ -14,6 +14,7 @@
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwSymbologyGlyph.h"
 #include "cwSymbologyPaletteData.h"
 #include "Monad/Result.h"
 
@@ -29,16 +30,29 @@
 namespace cwSymbologyPaletteIO {
 
 CAVEWHERE_LIB_EXPORT extern const QString kPaletteJsonFileName; // "palette.json"
+CAVEWHERE_LIB_EXPORT extern const QString kGlyphsSubdirName;    // "glyphs"
+CAVEWHERE_LIB_EXPORT extern const QString kGlyphFileSuffix;     // ".cwglyph"
 
-// File I/O against a palette directory.
+// File I/O against a palette directory. save/load round-trip the palette file
+// plus one glyphs/<name>.cwglyph file per glyph; load assembles full glyphs
+// (metadata from the palette file, strokes from the per-glyph files).
 CAVEWHERE_LIB_EXPORT Monad::ResultBase save(const cwSymbologyPaletteData &palette, const QString &directory);
 CAVEWHERE_LIB_EXPORT Monad::Result<cwSymbologyPaletteData> load(const QString &directory);
 
+// Single-glyph file I/O against the palette directory's glyphs/ subdir. The
+// glyph editor and palette save() use saveGlyph; rewriting one glyph leaves the
+// other glyphs' files untouched.
+CAVEWHERE_LIB_EXPORT Monad::ResultBase saveGlyph(const cwSymbologyGlyph &glyph, const QString &directory);
+CAVEWHERE_LIB_EXPORT Monad::Result<cwSymbologyGlyph> loadGlyph(const QString &directory, const QString &glyphName);
+
 // In-memory (de)serialization, used by the file layer above and directly by
 // tests. Proto types stay out of this header so consumers don't pull in the
-// generated schema.
+// generated schema. The palette form carries glyph *metadata* only (no strokes);
+// the glyph form is the self-contained per-glyph payload.
 CAVEWHERE_LIB_EXPORT QByteArray toJson(const cwSymbologyPaletteData &palette);
 CAVEWHERE_LIB_EXPORT Monad::Result<cwSymbologyPaletteData> fromJson(const QByteArray &json);
+CAVEWHERE_LIB_EXPORT QByteArray glyphToJson(const cwSymbologyGlyph &glyph);
+CAVEWHERE_LIB_EXPORT Monad::Result<cwSymbologyGlyph> glyphFromJson(const QByteArray &json);
 
 }
 

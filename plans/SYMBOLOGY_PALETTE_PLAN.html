@@ -264,13 +264,13 @@ so prototype-era sketches no longer load (no legacy loader — Decision&nbsp;2).
       <td>2</td>
       <td><code>cwPenStroke</code> → <code>brushName</code> <span class="small">(breaking)</span></td>
       <td>Remove <code>Kind</code>/<code>width</code>/<code>color</code> from <code>cwPenStroke</code>, add <code>QString brushName</code> (Decision&nbsp;2). <code>cavewhere.proto</code>: add <code>PenStroke.brushName</code>, drop <code>kind</code>/<code>width</code>/<code>colorHex</code>. <code>cwSaveLoad</code> round-trips the new field (no legacy loader). <code>cwPenStrokeModel</code> re-keyed by brush name. Scrap detection (<code>cwScrapManager</code>, <code>cwSketchScrapOutlineDetector</code>) branches on <code>snapshot.findBrush(name)…scrapOutline</code> instead of <code>Kind</code>. Toolbar kind buttons swapped for a temporary brush-name selector to keep drawing working until commit&nbsp;7.</td>
-      <td><span class="badge i2">next</span></td>
+      <td><span class="badge i1">done · d1ddc69e</span></td>
     </tr>
     <tr>
       <td>3</td>
       <td>Glyphs + tessellation cache</td>
       <td><code>cwSymbologyGlyph</code> value type (drawn <code>cwPenStroke</code>s in glyph-local paper-mm), glyphs added to palette / snapshot / seed / proto, per-glyph <code>.cwglyph</code> IO, recursive glyph→brush→glyph DAG cycle check at load, <code>cwGlyphTessellationCache</code> keyed by <code>(glyphName, mapScale)</code>. Seed gains <code>floor-step</code> brush + <code>floor-step-tick</code> glyph. Depends on commit&nbsp;2 (<code>brushName</code>).</td>
-      <td></td>
+      <td><span class="badge i2">next</span></td>
     </tr>
     <tr>
       <td>4</td>

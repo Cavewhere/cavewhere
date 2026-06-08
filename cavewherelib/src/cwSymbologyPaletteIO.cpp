@@ -8,7 +8,10 @@
 //Our includes
 #include "cwSymbologyPaletteIO.h"
 #include "cwSymbologyPaletteData.h"
+#include "cwSymbologyGlyph.h"
+#include "cwSymbologyName.h"
 #include "cwLineBrush.h"
+#include "cwPenStroke.h"
 #include "cavewhere_symbology.pb.h"
 
 //Qt includes
@@ -17,6 +20,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
+#include <QUuid>
 
 //protobuf includes
 #include <google/protobuf/util/json_util.h>
@@ -171,6 +175,61 @@ cwLineBrush brushFromProto(const CavewhereSymbologyProto::LineBrush &proto)
     return brush;
 }
 
+void glyphStrokeToProto(CavewhereSymbologyProto::GlyphStroke *proto, const cwPenStroke &stroke)
+{
+    proto->set_brushname(toStd(stroke.brushName));
+    for (const auto &point : stroke.points) {
+        auto *protoPoint = proto->add_points();
+        protoPoint->mutable_position()->set_x(point.position.x());
+        protoPoint->mutable_position()->set_y(point.position.y());
+        protoPoint->set_pressure(point.pressure);
+        protoPoint->set_timestampms(point.timestampMs);
+    }
+    if (!stroke.id.isNull()) {
+        proto->set_id(toStd(stroke.id.toString(QUuid::WithoutBraces)));
+    }
+}
+
+cwPenStroke glyphStrokeFromProto(const CavewhereSymbologyProto::GlyphStroke &proto)
+{
+    cwPenStroke stroke;
+    stroke.brushName = fromStd(proto.brushname());
+    stroke.points.reserve(proto.points_size());
+    for (const auto &protoPoint : proto.points()) {
+        cwPenPoint point;
+        point.position = QPointF(protoPoint.position().x(), protoPoint.position().y());
+        point.pressure = protoPoint.has_pressure() ? protoPoint.pressure() : -1.0;
+        point.timestampMs = protoPoint.timestampms();
+        stroke.points.append(point);
+    }
+    const QString id = fromStd(proto.id());
+    if (!id.isEmpty()) {
+        stroke.id = QUuid::fromString(id);
+    }
+    return stroke;
+}
+
+void glyphToProto(CavewhereSymbologyProto::Glyph *proto, const cwSymbologyGlyph &glyph)
+{
+    proto->set_name(toStd(glyph.name));
+    proto->set_displayname(toStd(glyph.displayName));
+    for (const auto &stroke : glyph.strokes) {
+        glyphStrokeToProto(proto->add_strokes(), stroke);
+    }
+}
+
+cwSymbologyGlyph glyphFromProto(const CavewhereSymbologyProto::Glyph &proto)
+{
+    cwSymbologyGlyph glyph;
+    glyph.name = fromStd(proto.name());
+    glyph.displayName = fromStd(proto.displayname());
+    glyph.strokes.reserve(proto.strokes_size());
+    for (const auto &protoStroke : proto.strokes()) {
+        glyph.strokes.append(glyphStrokeFromProto(protoStroke));
+    }
+    return glyph;
+}
+
 void paletteToProto(CavewhereSymbologyProto::Palette *proto, const cwSymbologyPaletteData &palette)
 {
     proto->set_id(toStd(palette.id.toString(QUuid::WithoutBraces)));
@@ -181,6 +240,13 @@ void paletteToProto(CavewhereSymbologyProto::Palette *proto, const cwSymbologyPa
     for (const auto &brush : palette.lineBrushes) {
         brushToProto(proto->add_linebrushes(), brush);
     }
+    // Only glyph metadata lives in the palette file; the strokes round-trip
+    // through per-glyph files in load()/save().
+    for (const auto &glyph : palette.glyphs) {
+        auto *meta = proto->add_glyphs();
+        meta->set_name(toStd(glyph.name));
+        meta->set_displayname(toStd(glyph.displayName));
+    }
 }
 
 // Builds a palette from `proto`, enforcing the brush-name uniqueness invariant.
@@ -190,7 +256,17 @@ Monad::Result<cwSymbologyPaletteData> paletteFromProto(const CavewhereSymbologyP
     cwSymbologyPaletteData palette;
     palette.lineBrushes.reserve(proto.linebrushes_size());
     for (const auto &protoBrush : proto.linebrushes()) {
-        palette.lineBrushes.append(brushFromProto(protoBrush));
+        cwLineBrush brush = brushFromProto(protoBrush);
+        // A brush name is the cross-palette substitution key and (after the
+        // directory-as-truth refactor) a path component; enforce the shared
+        // kebab-case rule so it stays a safe machine identifier.
+        if (!cwSymbology::isValidName(brush.name)) {
+            return Monad::Result<cwSymbologyPaletteData>(
+                QStringLiteral("%1invalid brush name \"%2\"; brush names must be kebab-case "
+                               "(lowercase letters, digits and hyphens)")
+                    .arg(kLoadErrorPrefix, brush.name));
+        }
+        palette.lineBrushes.append(std::move(brush));
     }
 
     const QString duplicate = cwSymbologyPaletteData::findDuplicateBrushName(palette.lineBrushes);
@@ -198,6 +274,31 @@ Monad::Result<cwSymbologyPaletteData> paletteFromProto(const CavewhereSymbologyP
         return Monad::Result<cwSymbologyPaletteData>(
             QStringLiteral("%1duplicate brush name \"%2\"")
                 .arg(kLoadErrorPrefix, duplicate));
+    }
+
+    // Glyph metadata only — strokes are filled in by load() from per-glyph files.
+    palette.glyphs.reserve(proto.glyphs_size());
+    for (const auto &meta : proto.glyphs()) {
+        cwSymbologyGlyph glyph;
+        glyph.name = fromStd(meta.name());
+        glyph.displayName = fromStd(meta.displayname());
+        // The name becomes a path component (glyphs/<name>.cwglyph) in load();
+        // reject anything that is not a plain kebab-case identifier so an
+        // untrusted palette cannot read outside the palette directory.
+        if (!cwSymbology::isValidName(glyph.name)) {
+            return Monad::Result<cwSymbologyPaletteData>(
+                QStringLiteral("%1invalid glyph name \"%2\"; glyph names must be kebab-case "
+                               "(lowercase letters, digits and hyphens)")
+                    .arg(kLoadErrorPrefix, glyph.name));
+        }
+        palette.glyphs.append(glyph);
+    }
+
+    const QString duplicateGlyph = cwSymbologyPaletteData::findDuplicateGlyphName(palette.glyphs);
+    if (!duplicateGlyph.isEmpty()) {
+        return Monad::Result<cwSymbologyPaletteData>(
+            QStringLiteral("%1duplicate glyph name \"%2\"")
+                .arg(kLoadErrorPrefix, duplicateGlyph));
     }
 
     palette.id = QUuid::fromString(fromStd(proto.id()));
@@ -212,7 +313,7 @@ Monad::Result<cwSymbologyPaletteData> paletteFromProto(const CavewhereSymbologyP
     return Monad::Result<cwSymbologyPaletteData>(palette);
 }
 
-Monad::Result<QByteArray> serializeJson(const CavewhereSymbologyProto::Palette &proto)
+Monad::Result<QByteArray> serializeJson(const google::protobuf::Message &proto)
 {
     std::string json;
     google::protobuf::util::JsonPrintOptions options;
@@ -232,6 +333,33 @@ Monad::Result<QByteArray> serializeJson(const CavewhereSymbologyProto::Palette &
 namespace cwSymbologyPaletteIO {
 
 const QString kPaletteJsonFileName = QStringLiteral("palette.json");
+const QString kGlyphsSubdirName = QStringLiteral("glyphs");
+const QString kGlyphFileSuffix = QStringLiteral(".cwglyph");
+
+QByteArray glyphToJson(const cwSymbologyGlyph &glyph)
+{
+    CavewhereSymbologyProto::Glyph proto;
+    glyphToProto(&proto, glyph);
+    const auto result = serializeJson(proto);
+    if (result.hasError()) {
+        qWarning("%s", qPrintable(result.errorMessage()));
+        return QByteArray();
+    }
+    return result.value();
+}
+
+Monad::Result<cwSymbologyGlyph> glyphFromJson(const QByteArray &json)
+{
+    CavewhereSymbologyProto::Glyph proto;
+    const auto status = google::protobuf::util::JsonStringToMessage(
+        std::string(json.constData(), static_cast<size_t>(json.size())), &proto);
+    if (!status.ok()) {
+        return Monad::Result<cwSymbologyGlyph>(
+            QStringLiteral("%1glyph JSON parse error: %2")
+                .arg(kLoadErrorPrefix, QString::fromUtf8(status.ToString().c_str())));
+    }
+    return Monad::Result<cwSymbologyGlyph>(glyphFromProto(proto));
+}
 
 QByteArray toJson(const cwSymbologyPaletteData &palette)
 {
@@ -290,7 +418,69 @@ Monad::ResultBase save(const cwSymbologyPaletteData &palette, const QString &dir
             QStringLiteral("%1cannot write %2: %3")
                 .arg(kSaveErrorPrefix, file.fileName(), file.errorString()));
     }
+
+    for (const auto &glyph : palette.glyphs) {
+        const auto glyphResult = saveGlyph(glyph, directory);
+        if (glyphResult.hasError()) {
+            return glyphResult;
+        }
+    }
+
     return Monad::ResultBase();
+}
+
+Monad::ResultBase saveGlyph(const cwSymbologyGlyph &glyph, const QString &directory)
+{
+    // The name becomes the file name (glyphs/<name>.cwglyph); reject anything
+    // that is not a plain kebab-case identifier so it cannot escape glyphs/.
+    if (!cwSymbology::isValidName(glyph.name)) {
+        return Monad::ResultBase(
+            QStringLiteral("%1invalid glyph name \"%2\"; glyph names must be kebab-case "
+                           "(lowercase letters, digits and hyphens)")
+                .arg(kSaveErrorPrefix, glyph.name));
+    }
+
+    const QString glyphsDir = QDir(directory).filePath(kGlyphsSubdirName);
+    if (!QDir().mkpath(glyphsDir)) {
+        return Monad::ResultBase(
+            QStringLiteral("%1cannot create directory: %2").arg(kSaveErrorPrefix, glyphsDir));
+    }
+
+    CavewhereSymbologyProto::Glyph proto;
+    glyphToProto(&proto, glyph);
+    const auto json = serializeJson(proto);
+    if (json.hasError()) {
+        return Monad::ResultBase(json.errorMessage());
+    }
+
+    QSaveFile file(QDir(glyphsDir).filePath(glyph.name + kGlyphFileSuffix));
+    if (!file.open(QFile::WriteOnly)) {
+        return Monad::ResultBase(
+            QStringLiteral("%1cannot open %2 for write: %3")
+                .arg(kSaveErrorPrefix, file.fileName(), file.errorString()));
+    }
+    file.write(json.value());
+    if (!file.commit()) {
+        return Monad::ResultBase(
+            QStringLiteral("%1cannot write %2: %3")
+                .arg(kSaveErrorPrefix, file.fileName(), file.errorString()));
+    }
+    return Monad::ResultBase();
+}
+
+Monad::Result<cwSymbologyGlyph> loadGlyph(const QString &directory, const QString &glyphName)
+{
+    const QString path = QDir(QDir(directory).filePath(kGlyphsSubdirName))
+                             .filePath(glyphName + kGlyphFileSuffix);
+    QFile file(path);
+    if (!file.open(QFile::ReadOnly)) {
+        return Monad::Result<cwSymbologyGlyph>(
+            QStringLiteral("%1cannot open glyph file %2: %3")
+                .arg(kLoadErrorPrefix, path, file.errorString()));
+    }
+    const QByteArray contents = file.readAll();
+    file.close();
+    return glyphFromJson(contents);
 }
 
 Monad::Result<cwSymbologyPaletteData> load(const QString &directory)
@@ -311,7 +501,38 @@ Monad::Result<cwSymbologyPaletteData> load(const QString &directory)
     const QByteArray contents = file.readAll();
     file.close();
 
-    return fromJson(contents);
+    auto paletteResult = fromJson(contents);
+    if (paletteResult.hasError()) {
+        return paletteResult;
+    }
+
+    // fromJson populates glyph metadata only; pull each glyph's strokes from its
+    // own file and assemble the full glyph (name from the metadata index).
+    cwSymbologyPaletteData palette = paletteResult.value();
+    for (auto &glyph : palette.glyphs) {
+        auto glyphResult = loadGlyph(directory, glyph.name);
+        if (glyphResult.hasError()) {
+            return Monad::Result<cwSymbologyPaletteData>(glyphResult.errorMessage());
+        }
+        cwSymbologyGlyph loaded = glyphResult.value();
+        if (loaded.name != glyph.name) {
+            return Monad::Result<cwSymbologyPaletteData>(
+                QStringLiteral("%1glyph file for \"%2\" declares mismatched name \"%3\"")
+                    .arg(kLoadErrorPrefix, glyph.name, loaded.name));
+        }
+        glyph = std::move(loaded);
+    }
+
+    // Glyph strokes are now present, so the glyph → brush → glyph graph can be
+    // checked for cycles (Decision 9). A cycle would recurse forever at
+    // tessellation time, so reject the palette here.
+    const QString cycle = palette.findGlyphDependencyCycle();
+    if (!cycle.isEmpty()) {
+        return Monad::Result<cwSymbologyPaletteData>(
+            QStringLiteral("%1glyph dependency cycle: %2").arg(kLoadErrorPrefix, cycle));
+    }
+
+    return Monad::Result<cwSymbologyPaletteData>(palette);
 }
 
 } // namespace cwSymbologyPaletteIO

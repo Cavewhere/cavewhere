@@ -74,6 +74,39 @@ TEST_CASE("Seed brushes carry the expected decoration layers", "[cwSymbologyPale
     CHECK(wall->zOrder > feature->zOrder);
 }
 
+TEST_CASE("Seed ships the floor-step brush and floor-step-tick glyph",
+          "[cwSymbologyPalette]")
+{
+    const cwSymbologyPaletteData palette = cwSymbologyPaletteSeed::create();
+
+    const auto floorStep = palette.brush(cwSymbologyPaletteSeed::floorStepBrushName());
+    REQUIRE(floorStep.has_value());
+    CHECK_FALSE(floorStep->scrapOutline);
+
+    // floor-step has two layers: an OffsetCurve edge line + a RigidStamp of the
+    // tick glyph.
+    CHECK(offsetCurveLayerCount(*floorStep) == 1);
+    REQUIRE(floorStep->decorations.size() == 2);
+    const auto &stamp = floorStep->decorations.at(1);
+    CHECK(stamp.mode == cwDecorationLayer::RigidStamp);
+    CHECK(stamp.glyphName == cwSymbologyPaletteSeed::floorStepTickGlyphName());
+
+    // floor-step paints between feature and wall.
+    const auto feature = palette.brush(cwSymbologyPaletteSeed::featureBrushName());
+    const auto wall = palette.brush(cwSymbologyPaletteSeed::wallBrushName());
+    REQUIRE(feature.has_value());
+    REQUIRE(wall.has_value());
+    CHECK(floorStep->zOrder > feature->zOrder);
+    CHECK(floorStep->zOrder < wall->zOrder);
+
+    // The referenced glyph resolves and carries its tick stroke.
+    const auto tick = palette.glyph(cwSymbologyPaletteSeed::floorStepTickGlyphName());
+    REQUIRE(tick.has_value());
+    REQUIRE(tick->strokes.size() == 1);
+    CHECK(tick->strokes.first().brushName == cwSymbologyPaletteSeed::featureBrushName());
+    CHECK(tick->boundingBox() == tick->strokes.first().boundingBox());
+}
+
 TEST_CASE("Palette detects duplicate brush names", "[cwSymbologyPalette]")
 {
     cwLineBrush a;
