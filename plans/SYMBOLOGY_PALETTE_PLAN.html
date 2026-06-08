@@ -273,6 +273,12 @@ so prototype-era sketches no longer load (no legacy loader — Decision&nbsp;2).
       <td><span class="badge i1">done · d0e5ba4b</span></td>
     </tr>
     <tr>
+      <td>3.1</td>
+      <td>Palette directory-as-truth</td>
+      <td>Make the palette directory the source of truth: <code>palette.json</code> holds palette-level identity only, and membership is the set of files present — <code>brushes/&lt;name&gt;.cwbrush</code> and <code>glyphs/&lt;name&gt;.cwglyph</code>, one file per editable thing, so independent adds merge with zero git conflict. Proto <code>Palette</code> becomes identity-only (drop inline <code>lineBrushes</code> + <code>GlyphMetadata</code> index); <code>LineBrush</code> becomes a per-file payload mirroring <code>Glyph</code>. <code>cwSymbologyPaletteIO</code> gains per-file <code>saveBrush</code>/<code>loadBrush</code>; <code>save()</code> reconciles deletes, <code>load()</code> scans both subdirs sorted by name (filename stem authoritative, validated via <code>cwSymbology::isValidName</code>). Behavior-preserving: in-memory model / snapshot / render path untouched. See <code>SYMBOLOGY_PALETTE_DIRECTORY_TRUTH_PLAN.md</code>.</td>
+      <td><span class="badge i1">done · eac7216d</span></td>
+    </tr>
+    <tr>
       <td>4</td>
       <td>Placement rules + decoration layout</td>
       <td><code>cwPlacementRule</code> abstract base + registry, concrete rules under <code>cwPlacementRules/</code> (Generate / MutatePerLayer / Stamp stages — Decision&nbsp;11), <code>cwSketchDecorationLayout</code> running the pipeline against a <code>cwPaletteSnapshot</code>. The four modes (RigidStamp / BendingStamp / PointStamp / OffsetCurve at offset=0). No <code>MutateScene</code> rules yet.</td>
