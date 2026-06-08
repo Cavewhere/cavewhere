@@ -10,7 +10,7 @@
 #include <QQuickItem>
 #include <memory>
 
-Q_LOGGING_CATEGORY(lcKeywordVisibility, "cw.keyword.visibility")
+Q_LOGGING_CATEGORY(lcKeywordVisibility, "cw.keyword.visibility", QtInfoMsg)
 
 namespace {
 
