@@ -13,6 +13,7 @@
 #include "cwRHIObject.h"
 #include "cwCamera.h"
 #include "cwGeometryItersecter.h"
+#include "cwEDLSettings.h"
 
 
 //Qt includes
@@ -21,8 +22,12 @@
 cwScene::cwScene(QObject *parent) :
     QObject(parent),
     GeometryItersecter(new cwGeometryItersecter(this)),
-    Camera(nullptr)
+    Camera(nullptr),
+    m_edl(new cwEDLSettings(this))
 {
+    // An EDL tuning change marks the scene dirty and schedules a repaint;
+    // cwRhiScene::synchroize() then pulls the new values across to the effect.
+    connect(m_edl, &cwEDLSettings::changed, this, &cwScene::update);
 }
 
 cwScene::~cwScene() = default;

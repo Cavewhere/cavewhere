@@ -25,6 +25,7 @@ class cwShaderDebugger;
 class cwSceneCommand;
 class cwGeometryItersecter;
 class cwRhiItemRenderer;
+class cwEDLSettings;
 
 
 /**
@@ -37,9 +38,15 @@ class CAVEWHERE_LIB_EXPORT cwScene : public QObject
     Q_OBJECT
     QML_NAMED_ELEMENT(Scene)
 
+    // Live Eye-Dome Lighting tuning. Pulled by cwRhiScene::synchroize() and
+    // pushed to the render-thread EDL effect (see cwEDLSettings / EDL.frag).
+    Q_PROPERTY(cwEDLSettings* edl READ edl CONSTANT)
+
 public:
     explicit cwScene(QObject *parent = 0);
     virtual ~cwScene();
+
+    cwEDLSettings* edl() const { return m_edl; }
 
     void addItem(cwRenderObject* item);
     void removeItem(cwRenderObject* item);
@@ -77,6 +84,9 @@ private:
 
     //cwSceneUpdate::Flag flags
     cwSceneUpdate::Flag m_updateFlags = cwSceneUpdate::Flag::None;
+
+    // Live EDL tuning; owned here, read by cwRhiScene::synchroize().
+    cwEDLSettings* m_edl;
 
 };
 

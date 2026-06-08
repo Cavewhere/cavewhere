@@ -10,6 +10,8 @@
 
 // Our includes
 #include "cwRHIObject.h"
+#include "cwEdlParametersData.h"
+#include "cwTracked.h"
 
 // Qt includes
 #include <rhi/qrhi.h>
@@ -22,8 +24,10 @@
  * the scene color (Background + Opaque), the point-cloud color, and the depth
  * buffer they share (combined cloud+scene depth). Outputs the scene where there
  * is no cloud and the depth-shaded cloud where there is, with a CloudCompare /
- * Potree log-space 8-tap response plus a near-side silhouette term that darkens
- * cloud edges against more-distant scene geometry and the background.
+ * Potree log-space 8-tap response: a far-side shape term for the interior depth
+ * cue plus a near-side silhouette term that darkens cloud edges against anything
+ * more distant behind them — scene geometry, the background, or another cloud
+ * surface — so every edge outlines consistently.
  */
 class cwEDLEffect : public cwRhiPostProcessEffect {
 public:
@@ -47,42 +51,53 @@ public:
                QRhiTexture* depth,
                QSize outputSize) override;
 
+    // Live tuning, fed each synchroize() from cwScene::edl(). Staged on a
+    // cwTracked; the derived UBO values are recomputed in updateFrameUniforms()
+    // only when it reports a change, mirroring how cwRHIPointCloud consumes its
+    // tracked inputs.
+    void setParameters(const EdlParametersData& parameters);
+
 private:
-    // std140 layout: float, float, vec2 (8-byte aligned at offset 8), then two
-    // floats (offsets 16, 20) = 24 bytes, block-padded to 32. strength is the
-    // *effective* value already divided by the projection's log-depth-span
-    // normalizer, so the shader needs no further per-pixel scaling.
+    // std140 layout: float, float, vec2 (8-byte aligned at offset 8), float
+    // (offset 16) = 20 bytes, block-padded to 32. strength is the slope of the
+    // shared darkening transfer function; maxDarken is its ceiling.
     struct EdlUniform {
         float strength = 1.0f;
         float textureYFlip = 0.0f;
         float sampleOffset[2] = {0.0f, 0.0f};
-        float silhouetteStrength = 0.0f;
-        float silhouetteClamp = 0.0f;
+        float maxDarken = 0.0f;
     };
 
     bool createPipeline(QRhiRenderPassDescriptor* outputRPDesc);
     bool ensureBindings(QRhiTexture* sceneColor, QRhiTexture* cloudColor, QRhiTexture* depth);
 
+    // Recompute sampleOffset from m_radiusPx and the last-seen viewport/DPR.
+    // No-op until a valid frame state has been seen.
+    void recomputeSampleOffset();
+
     QRhi* m_rhi = nullptr;
     QRhiBuffer* m_globalUBO = nullptr;       // owned by cwRhiScene
     int m_outputSampleCount = 1;
 
-    // CPU-side knobs. m_strengthBaseline is the user-tunable value (when
-    // sliders land); UBO strength = baseline / max(log-span, 1.0) so silhouette
-    // response is consistent between ortho and perspective.
-    float m_strengthBaseline = 1500.0f;
-    float m_radiusPx = 1.4f;
-
-    // Near-side silhouette knobs (see EdlUniform / EDL.frag). Independent of the
-    // shape-term strength: silhouetteResponse is clamped per neighbor, so a raw
-    // multiplier gives a predictable outline darkness.
-    float m_silhouetteStrength = 3.0f;
-    float m_silhouetteClamp = 1.0f;
+    // CPU-side knobs (see EdlUniform / EDL.frag). m_parameters.strength is the
+    // *baseline* slope of the shared darkening transfer function; the effective
+    // slope sent to the shader is strength / m_logDepthNormalizer, dividing out the
+    // projection's log-depth span so ortho and perspective produce a matching EDL
+    // response from the same baseline (perspective's neighbor depth-ratios are
+    // inherently larger, so it needs less gain). maxDarken is the darkening
+    // ceiling; radiusPx is the neighbor sample spread. Fed via setParameters();
+    // updateFrameUniforms() re-derives the UBO values when it reports a change.
+    cwTracked<EdlParametersData> m_parameters;
 
     QMatrix4x4 m_lastProjectionMatrix;
     QSize m_lastViewportSize;
     float m_lastDevicePixelRatio = 0.0f;
     bool m_frameStateSeen = false;
+
+    // log2 depth-span normalizer from the last projection, cached so a live
+    // strength change recomputes the effective slope without waiting for the next
+    // projection change. 1.0 for orthographic; larger for perspective.
+    float m_logDepthNormalizer = 1.0f;
 
     QRhiBuffer* m_edlUBO = nullptr;
     QRhiSampler* m_sampler = nullptr;        // Nearest+Clamp — depth must not bilinear-blend

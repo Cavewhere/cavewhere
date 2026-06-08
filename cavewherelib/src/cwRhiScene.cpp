@@ -4,6 +4,7 @@
 #include "cwRenderObject.h"
 #include "cwRhiItemRenderer.h"
 #include "cwScene.h"
+#include "cwEDLSettings.h"
 #include "cwCamera.h"
 #include "cwEDLEffect.h"
 
@@ -102,6 +103,16 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
         if(needsUpdate(cwSceneUpdate::Flag::ProjectionMatrix)) {
             m_projectionMatrix = scene->camera()->projectionMatrix();
         }
+    }
+
+    // Hand the latest tuning to the effect, which stages it on its own cwTracked
+    // and re-derives the UBO values next render only if it changed. The effect is
+    // created lazily in render() and then persists, so feeding it here (the only
+    // place we hold the cwScene) covers it from the second frame onward. The cast
+    // is safe — ensureEdlOffscreen only ever creates a cwEDLEffect; the unique_ptr
+    // is base-typed solely so cwRhiScene.h need not pull in the heavy header.
+    if (m_edlOffscreen.effect) {
+        static_cast<cwEDLEffect*>(m_edlOffscreen.effect.get())->setParameters(scene->edl()->parameters());
     }
 
     //Add new rendering object

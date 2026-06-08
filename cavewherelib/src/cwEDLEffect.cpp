@@ -52,8 +52,8 @@ void cwEDLEffect::initialize(QRhi* rhi,
     // Vulkan, and D3D store textures top-left (Y-down); OpenGL stores them
     // bottom-left (Y-up). The shader uses textureYFlip to compensate.
     m_uniformData.textureYFlip = rhi->isYUpInFramebuffer() ? 0.0f : 1.0f;
-    m_uniformData.silhouetteStrength = m_silhouetteStrength;
-    m_uniformData.silhouetteClamp = m_silhouetteClamp;
+    m_uniformData.strength = m_parameters.value().strength / m_logDepthNormalizer;
+    m_uniformData.maxDarken = m_parameters.value().maxDarken;
     m_uniformsDirty = true;
 
     if (!m_edlUBO) {
@@ -198,14 +198,17 @@ void cwEDLEffect::resize(QSize outputSize)
 
 void cwEDLEffect::updateFrameUniforms(const FrameUniformContext& ctx)
 {
-    // Skip the recompute when nothing relevant changed — the UBO retains the
-    // last value, so we only pay the upload on projection/viewport/DPR edits.
+    // Recompute only the terms whose inputs changed: the normalizer on a
+    // projection change, the effective slope on a projection or parameter change,
+    // the sample offset on a viewport/DPR or parameter change, the ceiling on a
+    // parameter change.
     const bool projectionChanged = !m_frameStateSeen
                                    || ctx.projectionMatrix != m_lastProjectionMatrix;
     const bool viewportChanged = !m_frameStateSeen
                                  || ctx.viewportSize != m_lastViewportSize
                                  || ctx.devicePixelRatio != m_lastDevicePixelRatio;
-    if (!projectionChanged && !viewportChanged) {
+    const bool parametersChanged = m_parameters.isChanged();
+    if (!projectionChanged && !viewportChanged && !parametersChanged) {
         return;
     }
     m_frameStateSeen = true;
@@ -216,7 +219,9 @@ void cwEDLEffect::updateFrameUniforms(const FrameUniformContext& ctx)
     if (projectionChanged) {
         // Mirrors linearDepthFromNear() in EDL.frag — see the shader for the
         // derivation. QMatrix4x4::operator()(row, col) maps to GLSL's
-        // projectionMatrix[col][row].
+        // projectionMatrix[col][row]. The log2 span of the far half of the depth
+        // range normalizes the baseline so ortho and perspective match: it is 1
+        // for orthographic (linear depth) and large for perspective.
         const float a = ctx.projectionMatrix(2, 2);
         const float b = ctx.projectionMatrix(2, 3);
         const bool isPerspective = ctx.projectionMatrix(3, 2) < -0.5f;
@@ -231,16 +236,35 @@ void cwEDLEffect::updateFrameUniforms(const FrameUniformContext& ctx)
         const float midZ = depthFromNear(0.5f);
         const float farZ = depthFromNear(1.0f);
         const float normalizer = std::log2(farZ / std::max(midZ, 1e-6f));
-        m_uniformData.strength = m_strengthBaseline / std::max(normalizer, 1.0f);
+        m_logDepthNormalizer = std::max(normalizer, 1.0f);
     }
 
-    if (viewportChanged && ctx.viewportSize.isValid()) {
-        const float scale = m_radiusPx * ctx.devicePixelRatio;
-        m_uniformData.sampleOffset[0] = scale / float(ctx.viewportSize.width());
-        m_uniformData.sampleOffset[1] = scale / float(ctx.viewportSize.height());
+    // Effective slope is the baseline divided by the per-projection normalizer,
+    // so it tracks both projection and parameter changes.
+    if (projectionChanged || parametersChanged) {
+        m_uniformData.strength = m_parameters.value().strength / m_logDepthNormalizer;
     }
 
+    if (viewportChanged || parametersChanged) {
+        recomputeSampleOffset();
+    }
+
+    if (parametersChanged) {
+        m_uniformData.maxDarken = m_parameters.value().maxDarken;
+    }
+
+    m_parameters.resetChanged();
     m_uniformsDirty = true;
+}
+
+void cwEDLEffect::recomputeSampleOffset()
+{
+    if (!m_lastViewportSize.isValid()) {
+        return;
+    }
+    const float scale = m_parameters.value().radiusPx * m_lastDevicePixelRatio;
+    m_uniformData.sampleOffset[0] = scale / float(m_lastViewportSize.width());
+    m_uniformData.sampleOffset[1] = scale / float(m_lastViewportSize.height());
 }
 
 void cwEDLEffect::apply(QRhiCommandBuffer* cb,
@@ -268,4 +292,11 @@ void cwEDLEffect::apply(QRhiCommandBuffer* cb,
     cb->setShaderResources(m_srb);
     cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
     cb->draw(3);
+}
+
+void cwEDLEffect::setParameters(const EdlParametersData& parameters)
+{
+    // Stage only — cwTracked flags the change; updateFrameUniforms() re-derives
+    // the UBO values (which also depend on the projection/viewport) next frame.
+    m_parameters.setValue(parameters);
 }

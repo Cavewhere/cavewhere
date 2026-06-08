@@ -14,14 +14,25 @@
 // combined cloud+scene depth. This pass writes the final swap-chain pixel:
 // scene where there is no cloud, shaded cloud where there is.
 //
-// For each cloud pixel we compare its depth to a ring of 8 neighbors. Cloud
-// neighbors closer than the center give the classic far-side shape darkening
-// (interior depth cues). Non-cloud neighbors (scene geometry or background,
-// always farther where they border a cloud edge) give a near-side silhouette
-// term that darkens the cloud edge in proportion to the real depth gap — strong
-// against a distant background, fading to nothing where the cloud sits flush
-// against same-depth geometry. Neighbors are classified cloud vs non-cloud by
-// the cloud texture's alpha (cloud is opaque, everything else is transparent).
+// For each cloud pixel we look at a ring of 8 neighbors. Each neighbor darkens
+// the center by ONE shared transfer function of the log-depth gap g:
+//
+//     darkening = min(max(0, g) * strength, maxDarken)
+//
+// keyed only on which pixel is the near side of the edge:
+//  - cloud neighbor closer than the center (g = logZ0 - logZi): far-side shape
+//    darkening — the depth cue within a continuous cloud surface and the far lip
+//    of a cloud↔cloud cliff.
+//  - non-cloud neighbor farther than the center (g = logZi - logZ0): the cloud
+//    ends here, so its near edge is outlined against the scene/background.
+// Both use the same strength and maxDarken, so a cloud↔cloud edge and a
+// cloud↔opaque edge of the same depth gap darken identically — the silhouette
+// reads the same regardless of what the cloud borders. strength is the slope
+// (depth sensitivity); maxDarken is the ceiling; an edge reaches full dark once
+// the gap exceeds maxDarken/strength.
+//
+// Neighbors are classified cloud vs non-cloud by the cloud texture's alpha
+// (cloud is opaque, everything else is transparent).
 //
 // Operates in log2(linear view-space Z). The window-space depth buffer is
 // hyperbolic under perspective (d = A + B/z_view), so log2 of the raw
@@ -40,9 +51,10 @@ layout(std140, binding = 0) uniform GlobalBlock {
 };
 
 layout(std140, binding = 1) uniform EdlBlock {
-    // Effective darkening exponent. Computed CPU-side as
-    //   baseline_strength / max(log2(linearDepthFromNear(1)/linearDepthFromNear(0.5)), 1)
-    // so silhouette response stays consistent across ortho and perspective.
+    // Effective slope of the shared darkening transfer function. Computed CPU-side
+    // as baseline / max(log2(linearDepthFromNear(1)/linearDepthFromNear(0.5)), 1)
+    // so the same baseline gives a matching EDL response in ortho and perspective.
+    // An edge reaches maxDarken once the log-depth gap exceeds maxDarken/strength.
     float strength;
     // 1.0 when the backend's framebuffer is Y-down (Metal/Vulkan/D3D) so the
     // offscreen texture's V axis follows native top-left convention and we
@@ -50,12 +62,9 @@ layout(std140, binding = 1) uniform EdlBlock {
     float textureYFlip;
     // radiusPx * devicePixelRatio / viewportSize, precomputed CPU-side.
     vec2 sampleOffset;
-    // Near-side silhouette darkening for cloud edges that border non-cloud
-    // pixels. silhouetteClamp caps each neighbor's log-depth gap so a far
-    // background neighbor saturates instead of driving the edge to pure black;
-    // silhouetteStrength scales the (clamped, averaged) result.
-    float silhouetteStrength;
-    float silhouetteClamp;
+    // Ceiling on per-neighbor darkening — the darkness an edge reaches at a large
+    // depth gap, shared by the far-side and border cases.
+    float maxDarken;
 };
 
 layout(binding = 2) uniform sampler2D uCloudColor;   // point cloud (opaque where present)
@@ -128,27 +137,20 @@ void main()
         vec2( 0.707,  0.707), vec2(-0.707,  0.707),
         vec2( 0.707, -0.707), vec2(-0.707, -0.707));
 
-    // Classify each neighbor with the cloud mask (the cloud texture's alpha).
-    //  - cloud neighbor closer than the center -> far-side shape darkening,
-    //    the classic EDL look that gives interior depth cues.
-    //  - non-cloud neighbor (scene geometry or background, farther where it
-    //    borders a cloud edge) -> near-side silhouette darkening modulated by
-    //    the real depth gap, so the cloud keeps an outline against the scene.
-    float shapeResponse = 0.0;
-    float silhouetteResponse = 0.0;
+    float response = 0.0;
     for (int i = 0; i < 8; ++i) {
         vec2 nuv = uv + dirs[i] * sampleOffset;
         float logZi = log2(linearDepthFromNear(texture(uDepth, nuv).r) + 1e-6);
-        if (texture(uCloudColor, nuv).a > kCloudAlphaThreshold) {
-            shapeResponse += max(0.0, logZ0 - logZi);
-        } else {
-            silhouetteResponse += clamp(logZi - logZ0, 0.0, silhouetteClamp);
-        }
+        // Far side for a closer cloud neighbor, near side for a farther non-cloud
+        // neighbor — one shared transfer function either way.
+        float g = (texture(uCloudColor, nuv).a > kCloudAlphaThreshold)
+                  ? (logZ0 - logZi)
+                  : (logZi - logZ0);
+        response += min(max(0.0, g) * strength, maxDarken);
     }
 
-    // Average over the 8 taps (the single /8 covers both terms).
-    float shade = exp(-(shapeResponse * strength
-                        + silhouetteResponse * silhouetteStrength) / 8.0);
+    // Average over the 8 taps.
+    float shade = exp(-response / 8.0);
 
     // The cloud is opaque where present, so it fully covers the scene here.
     fragColor = vec4(cloud.rgb * shade, 1.0);

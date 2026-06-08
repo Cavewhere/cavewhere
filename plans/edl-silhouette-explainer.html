@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EDL silhouette: near-side vs far-side darkening</title>
+<style>
+  :root {
+    --bg: #1d1f23;
+    --panel: #26292e;
+    --ink: #e6e8eb;
+    --muted: #9aa0a8;
+    --accent: #5db0ff;
+    --cloud: #7fc6ff;
+    --opaque: #c98b5a;
+    --bgcol: #3a3f47;
+    --dark: #111316;
+    --line: #3a3f47;
+    --good: #6ed08a;
+    --warn: #e3b341;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    padding: 0 0 80px;
+  }
+  header {
+    padding: 40px 24px 28px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #23262b, var(--bg));
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px; }
+  h1 { font-size: 30px; margin: 0 0 8px; letter-spacing: -0.4px; }
+  h2 { font-size: 23px; margin: 48px 0 12px; letter-spacing: -0.3px; }
+  h3 { font-size: 18px; margin: 28px 0 6px; }
+  p { margin: 12px 0; }
+  .lede { color: var(--muted); font-size: 18px; max-width: 70ch; }
+  .muted { color: var(--muted); }
+  code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    background: #15171a;
+    padding: 1px 6px;
+    border-radius: 5px;
+    color: #d7e3f0;
+  }
+  pre {
+    background: #15171a;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: #d7e3f0;
+  }
+  pre .cm { color: #6f7681; }
+  pre .kw { color: #c98bdb; }
+  pre .fn { color: #5db0ff; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin: 22px 0;
+  }
+  figure { margin: 22px 0; text-align: center; }
+  figure svg { max-width: 100%; height: auto; background: #15171a; border-radius: 12px; border: 1px solid var(--line); }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 10px; max-width: 75ch; margin-left: auto; margin-right: auto; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 15px; }
+  th, td { border: 1px solid var(--line); padding: 10px 12px; text-align: left; vertical-align: top; }
+  th { background: #2c3036; }
+  tr:nth-child(even) td { background: #23262b; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; vertical-align: middle; }
+  .tag.near { background: #14324a; color: #8fd0ff; border: 1px solid #2b6a96; }
+  .tag.far { background: #3a2a14; color: #e3b341; border: 1px solid #6a521f; }
+  .callout { border-left: 3px solid var(--accent); background: #1a2430; padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 18px 0; }
+  .callout.good { border-color: var(--good); background: #16261b; }
+  .callout.warn { border-color: var(--warn); background: #2a2413; }
+  ul { margin: 10px 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .swatch { display: inline-block; width: 13px; height: 13px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; }
+  .key { font-weight: 600; color: var(--ink); }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap" style="padding:0">
+    <h1>EDL silhouettes: near-side vs far-side darkening</h1>
+    <p class="lede">A picture-first walkthrough of the choice in <code>EDL.frag</code> &mdash; what each option does, why the point&#8209;cloud&nbsp;&harr;&nbsp;point&#8209;cloud and point&#8209;cloud&nbsp;&harr;&nbsp;opaque edges currently disagree, and the trade&#8209;offs of each fix.</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+<h2>1. What EDL is actually doing</h2>
+<p>
+Eye-Dome Lighting darkens a pixel based on how its depth compares to its 8 screen-space
+neighbors. For every neighbor it accumulates a depth gap into a <em>response</em>, then:
+</p>
+<pre><span class="cm">// bigger response  →  darker pixel</span>
+shade = exp(-response * strength);
+fragColor.rgb = cloud.rgb * shade;</pre>
+<p>
+The only real decision is: <span class="key">at a depth cliff, which of the two pixels do we darken</span> &mdash; the one
+in front (nearer the camera) or the one behind (farther)? That single choice is the whole topic.
+</p>
+
+<h2>2. Anatomy of a depth cliff</h2>
+<p>
+These figures are a side-on slice. <span class="key">Up = closer to the camera, down = farther away.</span>
+Left-to-right is position across your screen. Two screen-adjacent pixels straddle the edge:
+the <span class="tag near">near pixel</span> sits on the front surface, the
+<span class="tag far">far pixel</span> on the surface behind it.
+</p>
+
+<figure>
+<svg viewBox="0 0 620 300" role="img" aria-label="A depth cliff seen from the side">
+  <!-- camera -->
+  <g transform="translate(310,18)">
+    <path d="M-14,0 L14,0 L8,16 L-8,16 Z" fill="#5db0ff" opacity="0.9"/>
+    <circle cx="0" cy="26" r="3" fill="#5db0ff"/>
+    <text x="0" y="-6" fill="#9aa0a8" font-size="12" text-anchor="middle">camera (eye)</text>
+  </g>
+  <!-- depth axis -->
+  <line x1="34" y1="70" x2="34" y2="270" stroke="#3a3f47" stroke-width="1.5"/>
+  <text x="24" y="80" fill="#9aa0a8" font-size="12" text-anchor="start">near</text>
+  <text x="24" y="266" fill="#9aa0a8" font-size="12" text-anchor="start">far</text>
+  <text x="14" y="175" fill="#9aa0a8" font-size="12" transform="rotate(-90,14,175)" text-anchor="middle">depth</text>
+  <!-- surface profile -->
+  <polyline points="80,110 300,110 300,230 540,230" fill="none" stroke="#7fc6ff" stroke-width="4" stroke-linejoin="round"/>
+  <!-- pixels -->
+  <circle cx="282" cy="110" r="8" fill="#8fd0ff" stroke="#15171a" stroke-width="2"/>
+  <circle cx="318" cy="230" r="8" fill="#e3b341" stroke="#15171a" stroke-width="2"/>
+  <text x="282" y="98" fill="#8fd0ff" font-size="12" text-anchor="middle">near pixel</text>
+  <text x="318" y="252" fill="#e3b341" font-size="12" text-anchor="middle">far pixel</text>
+  <!-- adjacency bracket -->
+  <line x1="282" y1="128" x2="282" y2="150" stroke="#5a626c" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="318" y1="210" x2="318" y2="150" stroke="#5a626c" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="282" y1="150" x2="318" y2="150" stroke="#5a626c" stroke-width="1"/>
+  <text x="300" y="168" fill="#9aa0a8" font-size="11" text-anchor="middle">adjacent on screen</text>
+  <!-- depth gap -->
+  <line x1="560" y1="110" x2="560" y2="230" stroke="#6ed08a" stroke-width="1.5"/>
+  <line x1="555" y1="110" x2="565" y2="110" stroke="#6ed08a" stroke-width="1.5"/>
+  <line x1="555" y1="230" x2="565" y2="230" stroke="#6ed08a" stroke-width="1.5"/>
+  <text x="575" y="174" fill="#6ed08a" font-size="11" text-anchor="start">depth<tspan x="575" dy="14">gap</tspan></text>
+</svg>
+<figcaption>One depth cliff. The two terms in the shader differ only in <em>which</em> of these two dots they paint dark.</figcaption>
+</figure>
+
+<h2>3. The two choices, side by side</h2>
+<div class="two">
+  <figure>
+    <svg viewBox="0 0 320 260" role="img" aria-label="Far-side darkening">
+      <text x="160" y="24" fill="#e3b341" font-size="15" text-anchor="middle" font-weight="700">FAR-side darkening</text>
+      <text x="160" y="42" fill="#9aa0a8" font-size="11" text-anchor="middle">classic EDL / interior shape</text>
+      <polyline points="40,95 165,95 165,185 290,185" fill="none" stroke="#7fc6ff" stroke-width="4" stroke-linejoin="round"/>
+      <!-- dark halo on far pixel -->
+      <circle cx="183" cy="185" r="20" fill="#111316" opacity="0.85"/>
+      <circle cx="183" cy="185" r="20" fill="none" stroke="#000" opacity="0.4"/>
+      <circle cx="183" cy="185" r="7" fill="#2a2f36" stroke="#15171a" stroke-width="2"/>
+      <circle cx="150" cy="95" r="7" fill="#8fd0ff" stroke="#15171a" stroke-width="2"/>
+      <text x="160" y="232" fill="#9aa0a8" font-size="11" text-anchor="middle">darkens the surface that</text>
+      <text x="160" y="247" fill="#9aa0a8" font-size="11" text-anchor="middle">recedes <tspan fill="#e3b341">behind</tspan> the edge</text>
+    </svg>
+    <figcaption><code>response += max(0, logZ&#8320; &minus; logZ&#7522;)</code> &mdash; fires when the <em>center</em> is farther than its neighbor.</figcaption>
+  </figure>
+  <figure>
+    <svg viewBox="0 0 320 260" role="img" aria-label="Near-side darkening">
+      <text x="160" y="24" fill="#8fd0ff" font-size="15" text-anchor="middle" font-weight="700">NEAR-side darkening</text>
+      <text x="160" y="42" fill="#9aa0a8" font-size="11" text-anchor="middle">silhouette / outline</text>
+      <polyline points="40,95 165,95 165,185 290,185" fill="none" stroke="#7fc6ff" stroke-width="4" stroke-linejoin="round"/>
+      <!-- dark halo on near pixel -->
+      <circle cx="147" cy="95" r="20" fill="#111316" opacity="0.85"/>
+      <circle cx="147" cy="95" r="7" fill="#2a2f36" stroke="#15171a" stroke-width="2"/>
+      <circle cx="183" cy="185" r="7" fill="#e3b341" stroke="#15171a" stroke-width="2"/>
+      <text x="160" y="232" fill="#9aa0a8" font-size="11" text-anchor="middle">darkens the surface that</text>
+      <text x="160" y="247" fill="#9aa0a8" font-size="11" text-anchor="middle">juts <tspan fill="#8fd0ff">in front of</tspan> the edge</text>
+    </svg>
+    <figcaption><code>response += max(0, logZ&#7522; &minus; logZ&#8320;)</code> &mdash; fires when the <em>center</em> is nearer than its neighbor.</figcaption>
+  </figure>
+</div>
+
+<div class="callout">
+<p style="margin:0">
+<span class="key">The intuition:</span> far-side darkening sinks shadow into the <em>recesses</em> of a surface
+(like ambient occlusion in a crevice) &mdash; it makes a single continuous cloud read as a 3D shape.
+Near-side darkening draws an <em>ink outline</em> around whatever is poking toward you &mdash; it makes an
+object pop against what's behind it.
+</p>
+</div>
+
+<h2>4. How they look on screen</h2>
+<p>
+Front view now (what you'd actually see). Picture a blob of cloud in front of something farther away.
+</p>
+
+<div class="two">
+  <figure>
+    <svg viewBox="0 0 320 240" role="img" aria-label="Far-side on screen">
+      <rect x="20" y="40" width="280" height="180" rx="8" fill="#3a3f47"/>
+      <text x="160" y="32" fill="#9aa0a8" font-size="12" text-anchor="middle">FAR-side result</text>
+      <!-- dark ring OUTSIDE the blob -->
+      <circle cx="160" cy="130" r="64" fill="none" stroke="#111316" stroke-width="16" opacity="0.85"/>
+      <circle cx="160" cy="130" r="56" fill="#7fc6ff"/>
+      <text x="160" y="200" fill="#cdd3da" font-size="11" text-anchor="middle">outline lands on the surface BEHIND</text>
+    </svg>
+    <figcaption>The dark fringe falls on the farther surface, ringing the blob from outside.</figcaption>
+  </figure>
+  <figure>
+    <svg viewBox="0 0 320 240" role="img" aria-label="Near-side on screen">
+      <rect x="20" y="40" width="280" height="180" rx="8" fill="#3a3f47"/>
+      <text x="160" y="32" fill="#9aa0a8" font-size="12" text-anchor="middle">NEAR-side result</text>
+      <circle cx="160" cy="130" r="56" fill="#7fc6ff"/>
+      <!-- dark ring INSIDE the blob edge -->
+      <circle cx="160" cy="130" r="50" fill="none" stroke="#111316" stroke-width="13" opacity="0.85"/>
+      <circle cx="160" cy="130" r="40" fill="#7fc6ff"/>
+      <text x="160" y="200" fill="#cdd3da" font-size="11" text-anchor="middle">outline lands on the blob's OWN edge</text>
+    </svg>
+    <figcaption>The dark fringe falls on the cloud itself, hugging its own border.</figcaption>
+  </figure>
+</div>
+
+<h2>5. Why your two cases disagree today</h2>
+<p>
+Here's the crux. The current shader doesn't choose near vs far by <em>geometry</em> &mdash; it chooses by
+<em>what kind of neighbor</em> sits across the cliff:
+</p>
+<pre><span class="kw">if</span> (neighbor is cloud)   shapeResponse      += max(0, logZ&#8320; &minus; logZ&#7522;);   <span class="cm">// FAR-side</span>
+<span class="kw">else</span> <span class="cm">/* opaque/bg */</span>     silhouetteResponse += clamp(logZ&#7522; &minus; logZ&#8320;, 0, c); <span class="cm">// NEAR-side</span></pre>
+
+<div class="two">
+  <figure>
+    <svg viewBox="0 0 320 270" role="img" aria-label="Cloud to cloud edge today">
+      <text x="160" y="22" fill="#e6e8eb" font-size="14" text-anchor="middle" font-weight="700">cloud &harr; cloud</text>
+      <!-- front cloud blob over a far cloud patch -->
+      <rect x="30" y="40" width="260" height="200" rx="8" fill="#26292e"/>
+      <circle cx="160" cy="150" r="92" fill="#3d6f93"/>
+      <text x="160" y="70" fill="#9fc8e6" font-size="11" text-anchor="middle">far cloud surface</text>
+      <!-- far-side dark ring OUTSIDE the near blob -->
+      <circle cx="160" cy="150" r="60" fill="none" stroke="#111316" stroke-width="14" opacity="0.85"/>
+      <circle cx="160" cy="150" r="52" fill="#7fc6ff"/>
+      <text x="160" y="153" fill="#0d2233" font-size="11" text-anchor="middle">near cloud</text>
+      <text x="160" y="258" fill="#e3b341" font-size="11" text-anchor="middle">dark ring is OUTSIDE (far-side)</text>
+    </svg>
+    <figcaption>Both sides are cloud, so the <code>if</code> branch runs: only the <strong>far</strong> lip darkens. The near blob's own edge gets nothing.</figcaption>
+  </figure>
+  <figure>
+    <svg viewBox="0 0 320 270" role="img" aria-label="Cloud to opaque edge today">
+      <text x="160" y="22" fill="#e6e8eb" font-size="14" text-anchor="middle" font-weight="700">cloud &harr; opaque / background</text>
+      <rect x="30" y="40" width="260" height="200" rx="8" fill="#26292e"/>
+      <rect x="30" y="40" width="260" height="200" rx="8" fill="#c98b5a" opacity="0.55"/>
+      <text x="160" y="70" fill="#f0d3bd" font-size="11" text-anchor="middle">opaque geometry / background</text>
+      <circle cx="160" cy="150" r="60" fill="#7fc6ff"/>
+      <!-- near-side dark ring INSIDE blob edge -->
+      <circle cx="160" cy="150" r="53" fill="none" stroke="#111316" stroke-width="12" opacity="0.85"/>
+      <circle cx="160" cy="150" r="44" fill="#7fc6ff"/>
+      <text x="160" y="153" fill="#0d2233" font-size="11" text-anchor="middle">cloud</text>
+      <text x="160" y="258" fill="#8fd0ff" font-size="11" text-anchor="middle">dark ring is INSIDE (near-side)</text>
+    </svg>
+    <figcaption>The far side is non-cloud &mdash; we can't paint it (it isn't a cloud pixel). So the <code>else</code> branch darkens the <strong>near</strong> cloud edge instead.</figcaption>
+  </figure>
+</div>
+
+<div class="callout warn">
+<p style="margin:0">
+Same physical situation &mdash; a cloud surface in front of something farther &mdash; but the outline jumps to the
+<em>opposite side of the cliff</em> depending on whether the thing behind is cloud or opaque. On top of that the
+two branches use different strengths and only one is clamped. <span class="key">That's the inconsistency you're seeing.</span>
+</p>
+</div>
+
+<h3>An important asymmetry you can't escape</h3>
+<p>
+At a cloud&nbsp;&harr;&nbsp;opaque edge the cloud is <em>always</em> the near side (if opaque were in front, the cloud
+would be occluded and wouldn't be drawn at all). And we can only ever shade <em>cloud</em> pixels in this pass. So
+against opaque geometry or the background, <span class="key">near-side is the only outline that's physically possible</span> &mdash;
+far-side would try to paint a non-cloud pixel and produce nothing. The realistic way to make the two cases match is
+therefore to bring the <em>near-side</em> outline to the cloud&nbsp;&harr;&nbsp;cloud case too.
+</p>
+
+<h2>6. The three options</h2>
+
+<h3>Option A &mdash; Near outline <em>plus</em> far shape <span class="tag near">near</span> <span class="tag far">far</span></h3>
+<p>
+Apply the near-side silhouette to <em>every</em> farther neighbor (cloud or not) <strong>and</strong> keep the far-side
+shape cue for closer cloud neighbors. An internal cloud cliff then gets a near-lip outline (matching the
+cloud&nbsp;&harr;&nbsp;opaque look) <em>and</em> retains its interior far-lip shading.
+</p>
+<figure>
+  <svg viewBox="0 0 360 150" role="img" aria-label="Option A double ring">
+    <rect x="20" y="15" width="320" height="120" rx="8" fill="#3d6f93"/>
+    <circle cx="180" cy="75" r="46" fill="none" stroke="#111316" stroke-width="11" opacity="0.85"/>
+    <circle cx="180" cy="75" r="40" fill="#7fc6ff"/>
+    <circle cx="180" cy="75" r="35" fill="none" stroke="#0a1a26" stroke-width="8" opacity="0.7"/>
+    <circle cx="180" cy="75" r="28" fill="#7fc6ff"/>
+    <text x="180" y="79" fill="#0d2233" font-size="10" text-anchor="middle">near cloud</text>
+  </svg>
+  <figcaption>At an internal cliff you'd see a thin outline on the near lip and shading on the far lip &mdash; a slightly heavier, "double" edge.</figcaption>
+</figure>
+<ul>
+  <li><span class="key">Pro:</span> silhouettes are consistent everywhere; you keep the classic EDL 3D-shape cue inside a cloud.</li>
+  <li><span class="key">Con:</span> internal cliffs get darkened on both lips, so busy clouds look a touch heavier / "outliney".</li>
+</ul>
+
+<h3>Option B &mdash; Near outline only <span class="tag near">near</span></h3>
+<p>
+Drop the far-side shape term entirely; darken purely by the near-side gap against any farther neighbor.
+</p>
+<ul>
+  <li><span class="key">Pro:</span> simplest, perfectly symmetric &mdash; one term, one strength, every edge treated identically.</li>
+  <li><span class="key">Con:</span> you lose the CloudCompare/Potree interior depth cue. A single smooth cloud surface flattens out; only its outer silhouette reads. For dense LiDAR this is usually a real downgrade.</li>
+</ul>
+
+<h3>Option C &mdash; Match strength/clamp only <span class="tag far">far</span> + <span class="tag near">near</span> (sides unchanged)</h3>
+<p>
+Keep the current near/far split by neighbor type, but make both terms share one strength and one clamp so at
+least the <em>darkness</em> matches.
+</p>
+<ul>
+  <li><span class="key">Pro:</span> smallest change; equalizes brightness.</li>
+  <li><span class="key">Con:</span> doesn't fix the real problem &mdash; the outline still sits on opposite sides of the cliff in the two cases. They'll be equally dark but still visibly different.</li>
+</ul>
+
+<h2>7. At a glance</h2>
+<table>
+  <tr>
+    <th>Option</th>
+    <th>Internal cloud cliff</th>
+    <th>Cloud vs opaque/bg</th>
+    <th>Interior 3D cue kept?</th>
+    <th>Consistent?</th>
+  </tr>
+  <tr>
+    <td><span class="key">A.</span> Near + far</td>
+    <td>near outline + far shading</td>
+    <td>near outline</td>
+    <td>Yes</td>
+    <td>Yes (outline matches; cliffs are heavier)</td>
+  </tr>
+  <tr>
+    <td><span class="key">B.</span> Near only</td>
+    <td>near outline</td>
+    <td>near outline</td>
+    <td>No</td>
+    <td>Yes (fully symmetric, flatter)</td>
+  </tr>
+  <tr>
+    <td><span class="key">C.</span> Match strength</td>
+    <td>far shading</td>
+    <td>near outline</td>
+    <td>Yes</td>
+    <td>No (same darkness, opposite sides)</td>
+  </tr>
+</table>
+
+<div class="callout good">
+<p style="margin:0">
+<span class="key">My recommendation: Option A.</span> It's the only one that makes the silhouette behave the same in both
+cases <em>without</em> throwing away the interior shape shading that makes a point cloud readable as 3D. The cost is
+purely that internal depth cliffs pick up an extra near-side outline &mdash; tunable down via <code>silhouetteStrength</code>
+if it reads too heavy. Option B is the move only if you decide you don't want interior EDL shading at all.
+</p>
+</div>
+
+<h2>8. The knobs, for reference</h2>
+<p class="muted">
+Both terms feed the same <code>shade = exp(-response * k)</code>. The CPU side
+(<code>cwEDLEffect</code>) exposes: <code>m_strengthBaseline</code> (1500, far-side shape, depth-normalized),
+<code>m_silhouetteStrength</code> (3.0, near-side outline, raw), and <code>m_silhouetteClamp</code> (1.0, caps how
+dark a single very-distant neighbor can drive an edge so a far background saturates instead of going pure black).
+Whichever option we pick, these stay the tuning surface.
+</p>
+
+</div>
+</body>
+</html>

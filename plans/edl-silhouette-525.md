@@ -202,6 +202,91 @@ has no offscreen-readback test and still needs visual verification.
 
 ---
 
+## Phase 3 — Unified silhouette, projection consistency, live-tuning API
+
+Phase 2 shipped two independently-tuned terms (a high-gain interior/far-side term
+and a separate near-side silhouette with its own strength, clamp, and floor).
+In practice they read inconsistently: a cloud↔cloud edge and a cloud↔opaque edge
+of the same depth gap darkened by very different amounts (the gains differed
+~50–100×), and the silhouette either washed out against draped-over opaque
+geometry (gap ≈ 0) or stopped responding to depth. Phase 3 collapses this to one
+model and makes it consistent across projections.
+
+### Single shared transfer function
+
+Both edge cases now use the **same** per-neighbor darkening, keyed only on which
+side of the edge the cloud pixel is on:
+
+```
+g = neighborIsCloud ? (logZ0 - logZi)   // far-side shape (closer cloud neighbor)
+                    : (logZi - logZ0)    // near-side border (farther non-cloud neighbor)
+darkening = min(max(0, g) * strength, maxDarken)
+shade     = exp(-Σ darkening / 8)
+```
+
+So a cloud↔cloud edge and a cloud↔opaque edge of equal depth gap darken
+identically. `strength` is the slope (depth sensitivity); `maxDarken` is the
+ceiling; an edge reaches full dark once the gap exceeds `maxDarken/strength`. The
+separate `silhouetteStrength` and `silhouetteBase`/floor knobs were removed (they
+were redundant once the two curves are made to coincide — with `base = 0` the old
+border term `mix(base, max, clamp(g·silhStrength,0,1))` equals `min(g·strength,
+max)` exactly when `strength = silhStrength·maxDarken`).
+
+### Projection consistency (the normalizer)
+
+`strength` reaching the shader is `baseline / max(log2(farZ/midZ), 1)`, computed
+per projection in `cwEDLEffect::updateFrameUniforms` (`farZ/midZ` from
+`linearDepthFromNear`). Perspective produces much larger neighbor depth-ratios
+(near plane sits close to the geometry), so its normalizer is large (~30–40) and
+the effective slope is divided down; orthographic depth is linear so its
+normalizer is ~1 and the baseline passes through. The upshot: the **same baseline
+knob gives a matching EDL look in ortho and perspective**. (An earlier Phase 3
+iteration dropped the normalizer for a "what-you-set-is-what-you-get" knob; that
+broke ortho/perspective parity — ortho then needed ~30× the strength — so the
+normalizer was restored.)
+
+### Live-tuning API (kept for future UX)
+
+A thread-safe path lets the three knobs be driven at runtime, intended for a
+future rendering-settings UI:
+
+`cwScene` Q_PROPERTYs (`edlStrength`, `edlMaxDarken`, `edlRadius`, each with a
+setter that sets `cwSceneUpdate::Flag::EdlParameters` and calls `update()`) →
+copied in `cwRhiScene::synchroize()` under that flag → pushed to the render-thread
+`cwEDLEffect` each frame in `render()` via `setStrength` / `setMaxDarken` /
+`setRadiusPx` (the effect is owned by the render thread, so it must not be touched
+from QML directly). The setters are cheap no-ops when unchanged.
+
+`EDLSettings.qml` is a ready-made slider panel for these properties. It is
+**kept in the module but not wired into any view** — Phase 3 removed it from
+`CameraOptionsTab.qml`. Re-add an `EDLSettings { scene: viewer.scene }` GroupBox
+there (or wherever the rendering settings live) to expose the controls.
+
+### Defaults (as shipped)
+
+`baseline strength = 1500`, `maxDarken = 3.0`, `radiusPx = 1.4` — set in
+`cwEDLEffect`, mirrored in `cwScene` / `cwRhiScene`. Tuned by eye against a LAZ
+cloud in both projections.
+
+### Debugging aids (not compiled in)
+
+- `plans/edl-silhouette-explainer.html` — near-side vs far-side darkening,
+  with figures.
+- `plans/edl-silhouette-graph.html` — interactive plot of the transfer
+  function(s) vs log-depth gap, with the depth ratio `2^g` annotated. Note its
+  Strength slider is the *effective* slope; the in-app knob is the *baseline*
+  (`effective = baseline / normalizer`).
+
+### Phase 3 verification
+
+- Both suites green offscreen (C++ 1278 cases; QML 635 passed / 0 failed).
+- Manual: confirmed in-app that cloud↔cloud and cloud↔opaque edges read the same,
+  and that ortho and perspective match at the same baseline.
+- The cloud-composite path still has no offscreen-readback test (carried over
+  from Phase 2).
+
+---
+
 ## Sequencing & risk
 
 1. **Phase 1** (low risk, isolated to EDL shader + small UBO change) -> review the
