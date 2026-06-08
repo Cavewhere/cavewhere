@@ -200,6 +200,22 @@ void cwSketchCanvas::connectModelForUpdate(QAbstractItemModel *model)
     connect(model, &QAbstractItemModel::layoutChanged, this, requestUpdate);
 }
 
+void cwSketchCanvas::connectModelForUpdate(cwFixedGridModel *model)
+{
+    if (model == nullptr) {
+        return;
+    }
+    connect(model, &cwFixedGridModel::pathsChanged, this, [this]() { update(); });
+}
+
+void cwSketchCanvas::connectModelForUpdate(cwCenterlineSketchPainterModel *model)
+{
+    if (model == nullptr) {
+        return;
+    }
+    connect(model, &cwCenterlineSketchPainterModel::pathsChanged, this, [this]() { update(); });
+}
+
 void cwSketchCanvas::disconnectGridModels(cwInfiniteGridModel *grid)
 {
     if (grid == nullptr) {

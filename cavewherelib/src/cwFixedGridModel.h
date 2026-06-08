@@ -12,18 +12,19 @@
 #include <QColor>
 #include <QFont>
 #include <QMatrix4x4>
+#include <QObject>
 #include <QObjectBindableProperty>
 #include <QQmlEngine>
 #include <QRectF>
 
 //Our includes
 #include "CaveWhereLibExport.h"
-#include "cwAbstractSketchPainterPathModel.h"
 #include "cwGridTextModel.h"
+#include "cwSketchPathSource.h"
 
 class cwLength;
 
-class CAVEWHERE_LIB_EXPORT cwFixedGridModel : public cwAbstractSketchPainterPathModel
+class CAVEWHERE_LIB_EXPORT cwFixedGridModel : public QObject, public cwSketchPathSource
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(FixedGridModel)
@@ -59,7 +60,9 @@ class CAVEWHERE_LIB_EXPORT cwFixedGridModel : public cwAbstractSketchPainterPath
 public:
     explicit cwFixedGridModel(QObject *parent = nullptr);
 
-    int rowCount(const QModelIndex &parent = QModelIndex()) const override;
+    // cwSketchPathSource: the grid line path followed by the label-background
+    // path. Either is omitted when its layer is hidden.
+    QList<Path> paths() const override;
 
     // Grid properties
     bool gridVisible() const { return m_gridVisible; }
@@ -164,15 +167,10 @@ signals:
     void labelZChanged();
     void labelMasksChanged();
 
-protected:
-    Path path(const QModelIndex &index) const override;
+    // Emitted whenever paths() would return a different result.
+    void pathsChanged();
 
 private:
-    enum Index {
-        GridLineIndex        = 0,
-        LabelBackgroundIndex = 1
-    };
-
     cwLength *m_gridInterval;
 
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwFixedGridModel, bool,   m_gridVisible, true, &cwFixedGridModel::gridVisibleChanged)
@@ -225,8 +223,6 @@ private:
 
     int gridIntervalUnit() const;
     Q_OBJECT_COMPUTED_PROPERTY(cwFixedGridModel, int, m_gridIntervalUnit, &cwFixedGridModel::gridIntervalUnit);
-
-    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwFixedGridModel, int, m_size, LabelBackgroundIndex + 1);
 
     Q_OBJECT_BINDABLE_PROPERTY(cwFixedGridModel, QVector<GridLine>, m_xGridLines);
     Q_OBJECT_BINDABLE_PROPERTY(cwFixedGridModel, QVector<GridLine>, m_yGridLines);

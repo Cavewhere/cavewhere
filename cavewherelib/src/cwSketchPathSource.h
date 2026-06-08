@@ -18,10 +18,9 @@
 
 // Read-only supply of renderable paths for cwSketchPainter. A plain interface,
 // not a QAbstractItemModel: sketch rendering moved from QML Shapes to C++, so
-// the model machinery the old cwAbstractSketchPainterPathModel carried is dead
-// weight on this surface. Consumed value-style (a snapshot copy per frame), so
-// change notification lives on the concrete QObject implementations (e.g. the
-// stroke model's pathsChanged()), not on this interface.
+// model machinery would be dead weight on this surface. Consumed value-style
+// (a snapshot copy per frame), so change notification lives on the concrete
+// QObject implementations (e.g. each model's pathsChanged()), not here.
 class CAVEWHERE_LIB_EXPORT cwSketchPathSource
 {
 public:

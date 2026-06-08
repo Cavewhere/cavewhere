@@ -25,7 +25,7 @@ using namespace AsyncFuture;
 using namespace Monad;
 
 cwCenterlineSketchPainterModel::cwCenterlineSketchPainterModel(QObject *parent)
-    : cwAbstractSketchPainterPathModel(parent)
+    : QObject(parent)
 {
 }
 
@@ -108,25 +108,11 @@ void cwCenterlineSketchPainterModel::scheduleColorUpdate()
     }, Qt::QueuedConnection);
 }
 
-int cwCenterlineSketchPainterModel::rowCount(const QModelIndex &parent) const
-{
-    if (parent.isValid()) {
-        return 0;
-    }
-    return m_paths.size();
-}
-
-cwAbstractSketchPainterPathModel::Path cwCenterlineSketchPainterModel::path(const QModelIndex &index) const
-{
-    return m_paths.at(index.row());
-}
-
 void cwCenterlineSketchPainterModel::updateModel()
 {
     if (!m_geometryArtifact) {
-        beginResetModel();
         m_paths.clear();
-        endResetModel();
+        emit pathsChanged();
         return;
     }
 
@@ -156,7 +142,7 @@ void cwCenterlineSketchPainterModel::updateModel()
         shotLineWidthPaperMm * paperMmToWorldM;
 
     struct Snapshot {
-        QVector<Path> paths;
+        QList<Path> paths;
         QVector<cwGridTextModel::TextRow> textRows;
     };
 
@@ -178,7 +164,7 @@ void cwCenterlineSketchPainterModel::updateModel()
                                   shotLineWidthWorld,
                                   stationColor,
                                   shotLineColor]() {
-            // strokeWidth == 0 flags a fill pass (see cwAbstractSketchPainterPathModel).
+            // strokeWidth == 0 flags a fill pass (see cwSketchPathSource).
             auto makePath = [](QPainterPath path, const QColor &color, double strokeWidth) {
                 Path p;
                 p.painterPath = std::move(path);
@@ -246,9 +232,8 @@ void cwCenterlineSketchPainterModel::updateModel()
             return;
         }
         auto snapshot = pathFuture.result().value();
-        beginResetModel();
         m_paths = std::move(snapshot.paths);
-        endResetModel();
+        emit pathsChanged();
         if (m_textRows != snapshot.textRows) {
             m_textRows = std::move(snapshot.textRows);
             emit textRowsChanged();

@@ -23,6 +23,7 @@
 
 class cwSketch;
 class cwInfiniteGridModel;
+class cwFixedGridModel;
 class cwCenterlineSketchPainterModel;
 class cwSurvey2DGeometryArtifact;
 class cwTrip;
@@ -122,6 +123,8 @@ private:
 
     void connectPathModelSignals();
     void connectModelForUpdate(QAbstractItemModel *model);
+    void connectModelForUpdate(cwFixedGridModel *model);
+    void connectModelForUpdate(cwCenterlineSketchPainterModel *model);
     void disconnectGridModels(cwInfiniteGridModel *grid);
     void connectGridModels(cwInfiniteGridModel *grid);
     void updateGridView();

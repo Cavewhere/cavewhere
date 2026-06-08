@@ -19,7 +19,7 @@ using Catch::Approx;
 TEST_CASE("cwFixedGridModel default property values", "[cwFixedGridModel]") {
     cwFixedGridModel model;
 
-    REQUIRE(model.rowCount() == 2);
+    REQUIRE(model.paths().size() == 2);
 
     QMatrix4x4 defaultMatrix;
     REQUIRE(model.mapMatrix() == defaultMatrix);
@@ -80,196 +80,116 @@ TEST_CASE("cwFixedGridModel setter methods emit notify signals", "[cwFixedGridMo
     REQUIRE(labelFontSpy.count() == 1);
 }
 
-TEST_CASE("cwFixedGridModel data() returns correct QVariant per role", "[cwFixedGridModel]") {
+TEST_CASE("cwFixedGridModel paths() carries geometry, width and color", "[cwFixedGridModel]") {
     cwFixedGridModel model;
     model.setViewport(QRectF(0, 0, 10, 10));
 
-    const QModelIndex gridIdx = model.index(0, 0);
+    const auto paths = model.paths();
+    REQUIRE(paths.size() == 2);
 
-    QVariant pathVar = model.data(gridIdx, cwAbstractSketchPainterPathModel::PainterPathRole);
-    REQUIRE(pathVar.canConvert<QPainterPath>());
-    const auto painterPath = pathVar.value<QPainterPath>();
-    CHECK(painterPath.elementCount() > 0);
+    // Element 0 is the grid line path, carrying lineWidth/lineColor.
+    CHECK(paths.at(0).painterPath.elementCount() > 0);
+    CHECK(paths.at(0).strokeWidth == Approx(model.lineWidth()));
+    CHECK(paths.at(0).strokeColor == model.lineColor());
 
-    QVariant widthVar = model.data(gridIdx, cwAbstractSketchPainterPathModel::StrokeWidthRole);
-    CHECK(widthVar.toDouble() == Approx(model.lineWidth()));
-
-    QVariant colorVar = model.data(gridIdx, cwAbstractSketchPainterPathModel::StrokeColorRole);
-    REQUIRE(colorVar.canConvert<QColor>());
-    CHECK(colorVar.value<QColor>() == model.lineColor());
-
-    // Invalid row returns null QVariant.
-    const QModelIndex invalidIdx = model.index(2, 0);
-    QVariant inv = model.data(invalidIdx, cwAbstractSketchPainterPathModel::PainterPathRole);
-    CHECK(!inv.isValid());
+    // Element 1 is the label-background fill (strokeWidth <= 0 flags a fill).
+    CHECK(paths.at(1).strokeColor == model.labelBackgroundColor());
+    CHECK(paths.at(1).strokeWidth <= 0.0);
 }
 
-TEST_CASE("cwFixedGridModel row availability toggles with gridVisible", "[cwFixedGridModel]") {
+TEST_CASE("cwFixedGridModel paths() availability toggles with gridVisible", "[cwFixedGridModel]") {
     cwFixedGridModel model;
     model.setViewport(QRectF(0, 0, 10, 10));
 
-    REQUIRE(model.rowCount() == 2);
-    const QModelIndex idx0 = model.index(0, 0);
-    auto p0 = model.data(idx0, cwAbstractSketchPainterPathModel::PainterPathRole).value<QPainterPath>();
-    REQUIRE(p0.elementCount() > 0);
-    const auto gridCount = p0.elementCount();
+    auto paths = model.paths();
+    REQUIRE(paths.size() == 2);
+    REQUIRE(paths.at(0).painterPath.elementCount() > 0);
+    const auto gridCount  = paths.at(0).painterPath.elementCount();
+    CHECK(paths.at(1).painterPath.elementCount() > 0);
+    const auto labelCount = paths.at(1).painterPath.elementCount();
 
-    QModelIndex idx1 = model.index(1, 0);
-    auto p1 = model.data(idx1, cwAbstractSketchPainterPathModel::PainterPathRole).value<QPainterPath>();
-    CHECK(p1.elementCount() > 0);
-    const auto labelCount = p1.elementCount();
-
-    QSignalSpy removedSpy(&model, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy pathsSpy(&model, &cwFixedGridModel::pathsChanged);
     model.setGridVisible(false);
-    REQUIRE(removedSpy.count() == 1);
-    auto remArgs = removedSpy.takeFirst();
-    CHECK(remArgs.at(1).toInt() == 0);
-    CHECK(remArgs.at(2).toInt() == 1);
+    REQUIRE(pathsSpy.count() >= 1);
+    CHECK(model.paths().isEmpty());
 
-    REQUIRE(model.rowCount() == 0);
-
-    QSignalSpy insertedSpy(&model, &QAbstractItemModel::rowsInserted);
+    const int afterHide = pathsSpy.count();
     model.setGridVisible(true);
-    REQUIRE(insertedSpy.count() == 1);
-    auto insArgs = insertedSpy.takeFirst();
-    CHECK(insArgs.at(1).toInt() == 0);
-    CHECK(insArgs.at(2).toInt() == 1);
+    REQUIRE(pathsSpy.count() > afterHide);
 
-    REQUIRE(model.rowCount() == 2);
-    const QModelIndex backIdx0 = model.index(0, 0);
-    auto pBack0 = model.data(backIdx0, cwAbstractSketchPainterPathModel::PainterPathRole).value<QPainterPath>();
-    CHECK(pBack0.elementCount() == gridCount);
-
-    idx1 = model.index(1, 0);
-    p1 = model.data(idx1, cwAbstractSketchPainterPathModel::PainterPathRole).value<QPainterPath>();
-    CHECK(p1.elementCount() == labelCount);
+    paths = model.paths();
+    REQUIRE(paths.size() == 2);
+    CHECK(paths.at(0).painterPath.elementCount() == gridCount);
+    CHECK(paths.at(1).painterPath.elementCount() == labelCount);
 }
 
-TEST_CASE("cwFixedGridModel row availability toggles with labelVisible", "[cwFixedGridModel]") {
+TEST_CASE("cwFixedGridModel paths() availability toggles with labelVisible", "[cwFixedGridModel]") {
     cwFixedGridModel model;
     model.setViewport(QRectF(0, 0, 10, 10));
 
-    REQUIRE(model.rowCount() == 2);
-    QModelIndex idx0 = model.index(0, 0);
-    auto p0 = model.data(idx0, cwAbstractSketchPainterPathModel::PainterPathRole).value<QPainterPath>();
-    REQUIRE(p0.elementCount() > 0);
-    const auto gridCount = p0.elementCount();
+    auto paths = model.paths();
+    REQUIRE(paths.size() == 2);
+    const auto gridCount  = paths.at(0).painterPath.elementCount();
+    const auto labelCount = paths.at(1).painterPath.elementCount();
+    REQUIRE(gridCount > 0);
+    CHECK(labelCount > 0);
 
-    QModelIndex idx1 = model.index(1, 0);
-    auto p1 = model.data(idx1, cwAbstractSketchPainterPathModel::PainterPathRole).value<QPainterPath>();
-    CHECK(p1.elementCount() > 0);
-    const auto labelCount = p1.elementCount();
-
-    QSignalSpy removedSpy(&model, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy pathsSpy(&model, &cwFixedGridModel::pathsChanged);
     model.setLabelVisible(false);
-    REQUIRE(removedSpy.count() == 1);
-    auto remArgs = removedSpy.takeFirst();
-    CHECK(remArgs.at(1).toInt() == 1);
-    CHECK(remArgs.at(2).toInt() == 1);
-    REQUIRE(model.rowCount() == 1);
+    REQUIRE(pathsSpy.count() >= 1);
+    CHECK(model.paths().size() == 1); // grid only
 
-    QSignalSpy insertedSpy(&model, &QAbstractItemModel::rowsInserted);
     model.setLabelVisible(true);
-    REQUIRE(insertedSpy.count() == 1);
-    auto insArgs = insertedSpy.takeFirst();
-    CHECK(insArgs.at(1).toInt() == 1);
-    CHECK(insArgs.at(2).toInt() == 1);
-    REQUIRE(model.rowCount() == 2);
-
-    idx0 = model.index(0, 0);
-    p0 = model.data(idx0, cwAbstractSketchPainterPathModel::PainterPathRole).value<QPainterPath>();
-    REQUIRE(p0.elementCount() == gridCount);
-
-    idx1 = model.index(1, 0);
-    p1 = model.data(idx1, cwAbstractSketchPainterPathModel::PainterPathRole).value<QPainterPath>();
-    CHECK(p1.elementCount() == labelCount);
+    paths = model.paths();
+    REQUIRE(paths.size() == 2);
+    CHECK(paths.at(0).painterPath.elementCount() == gridCount);
+    CHECK(paths.at(1).painterPath.elementCount() == labelCount);
 }
 
-TEST_CASE("cwFixedGridModel dataChanged signals on property updates", "[cwFixedGridModel]") {
+TEST_CASE("cwFixedGridModel pathsChanged fires on property updates", "[cwFixedGridModel]") {
     cwFixedGridModel model;
     model.setViewport(QRectF(0, 0, 20, 20));
 
-    QSignalSpy spy(&model, &QAbstractItemModel::dataChanged);
+    QSignalSpy spy(&model, &cwFixedGridModel::pathsChanged);
 
-    SECTION("lineWidth emits StrokeWidthRole for grid row") {
+    SECTION("lineWidth updates the grid path width") {
         spy.clear();
         model.setLineWidth(2.5);
         REQUIRE(spy.count() == 1);
-        auto args = spy.takeFirst();
-        REQUIRE(args.at(0).value<QModelIndex>() == model.index(0, 0));
-        REQUIRE(args.at(1).value<QModelIndex>() == model.index(0, 0));
-        const auto roles = args.at(2).value<QVector<int>>();
-        REQUIRE(roles.contains(cwAbstractSketchPainterPathModel::StrokeWidthRole));
-        REQUIRE(roles.size() == 1);
+        CHECK(model.paths().at(0).strokeWidth == Approx(2.5));
     }
 
-    SECTION("lineColor emits StrokeColorRole for grid row") {
+    SECTION("lineColor updates the grid path color") {
         spy.clear();
         model.setLineColor(Qt::red);
         REQUIRE(spy.count() == 1);
-        auto args = spy.takeFirst();
-        REQUIRE(args.at(0).value<QModelIndex>() == model.index(0, 0));
-        const auto roles = args.at(2).value<QVector<int>>();
-        REQUIRE(roles.contains(cwAbstractSketchPainterPathModel::StrokeColorRole));
+        CHECK(model.paths().at(0).strokeColor == QColor(Qt::red));
     }
 
-    SECTION("labelColor emits StrokeColorRole for label row") {
+    SECTION("labelColor change repaints") {
         spy.clear();
         model.setLabelColor(Qt::blue);
         REQUIRE(spy.count() == 1);
-        auto args = spy.takeFirst();
-        REQUIRE(args.at(0).value<QModelIndex>() == model.index(1, 0));
-        const auto roles = args.at(2).value<QVector<int>>();
-        REQUIRE(roles.contains(cwAbstractSketchPainterPathModel::StrokeColorRole));
     }
 
-    SECTION("labelFont emits PainterPathRole for label row") {
+    SECTION("labelFont change rebuilds the label background path") {
         spy.clear();
         QFont font("Arial", 14);
         model.setLabelFont(font);
-        REQUIRE(spy.count() == 1);
-        auto args = spy.takeFirst();
-        REQUIRE(args.at(0).value<QModelIndex>() == model.index(1, 0));
-        const auto roles = args.at(2).value<QVector<int>>();
-        REQUIRE(roles.contains(cwAbstractSketchPainterPathModel::PainterPathRole));
+        REQUIRE(spy.count() >= 1);
     }
 
-    SECTION("viewport change emits PainterPathRole for each row separately") {
+    SECTION("viewport change rebuilds grid and label paths") {
         spy.clear();
         model.setViewport(QRectF(0, 0, 30, 30));
-        REQUIRE(spy.count() == 2);
-
-        auto args0 = spy.takeFirst();
-        REQUIRE(args0.at(0).value<QModelIndex>() == model.index(0, 0));
-        REQUIRE(args0.at(1).value<QModelIndex>() == model.index(0, 0));
-        const auto roles0 = args0.at(2).value<QVector<int>>();
-        REQUIRE(roles0.contains(cwAbstractSketchPainterPathModel::PainterPathRole));
-
-        auto args1 = spy.takeFirst();
-        REQUIRE(args1.at(0).value<QModelIndex>() == model.index(1, 0));
-        REQUIRE(args1.at(1).value<QModelIndex>() == model.index(1, 0));
-        const auto roles1 = args1.at(2).value<QVector<int>>();
-        REQUIRE(roles1.contains(cwAbstractSketchPainterPathModel::PainterPathRole));
+        REQUIRE(spy.count() >= 1);
     }
 
-    SECTION("gridInterval value change emits PainterPathRole for both rows") {
+    SECTION("gridInterval value change rebuilds grid and label paths") {
         spy.clear();
-
         CHECK(model.gridInterval()->value() == 10.0);
         model.gridInterval()->setValue(20.0);
-
-        REQUIRE(spy.count() == 2);
-        auto margs0 = spy.takeFirst();
-        REQUIRE(margs0.at(0).value<QModelIndex>() == model.index(0, 0));
-        REQUIRE(margs0.at(1).value<QModelIndex>() == model.index(0, 0));
-        const auto mroles0 = margs0.at(2).value<QVector<int>>();
-        REQUIRE(mroles0.contains(cwAbstractSketchPainterPathModel::PainterPathRole));
-
-        auto margs1 = spy.takeFirst();
-        REQUIRE(margs1.at(0).value<QModelIndex>() == model.index(1, 0));
-        REQUIRE(margs1.at(1).value<QModelIndex>() == model.index(1, 0));
-        const auto mroles1 = margs1.at(2).value<QVector<int>>();
-        REQUIRE(mroles1.contains(cwAbstractSketchPainterPathModel::PainterPathRole));
+        REQUIRE(spy.count() >= 1);
     }
 }
 

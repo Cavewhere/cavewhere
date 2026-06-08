@@ -10,18 +10,19 @@
 
 //Qt includes
 #include <QColor>
+#include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
 #include <QVector>
 
 //Our includes
-#include "cwAbstractSketchPainterPathModel.h"
 #include "cwGridTextModel.h"
 #include "cwScale.h"
+#include "cwSketchPathSource.h"
 #include "cwSurvey2DGeometryArtifact.h"
 #include "CaveWhereLibExport.h"
 
-class CAVEWHERE_LIB_EXPORT cwCenterlineSketchPainterModel : public cwAbstractSketchPainterPathModel
+class CAVEWHERE_LIB_EXPORT cwCenterlineSketchPainterModel : public QObject, public cwSketchPathSource
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(CenterlineSketchPainterModel)
@@ -52,7 +53,9 @@ public:
     QColor shotLineColor() const { return m_shotLineColor; }
     void setShotLineColor(const QColor &color);
 
-    int rowCount(const QModelIndex &parent = QModelIndex()) const override;
+    // cwSketchPathSource: the shot-line path followed by the station-symbol
+    // fill path. Empty until survey2DGeometry resolves.
+    QList<Path> paths() const override { return m_paths; }
 
     // Station labels are emitted as text rows (not baked glyph paths) so the
     // backend draws real text — this keeps character counters ('8', '0', 'e')
@@ -67,8 +70,8 @@ signals:
     void stationColorChanged();
     void shotLineColorChanged();
 
-protected:
-    Path path(const QModelIndex &index) const override;
+    // Emitted whenever paths() would return a different result.
+    void pathsChanged();
 
 private slots:
     void updateModel();
@@ -78,7 +81,7 @@ private:
 
     QPointer<cwSurvey2DGeometryArtifact> m_geometryArtifact;
     QPointer<cwScale> m_mapScale;
-    QVector<Path> m_paths;
+    QList<Path> m_paths;
     QVector<cwGridTextModel::TextRow> m_textRows;
     QColor m_stationColor = Qt::black;
     QColor m_shotLineColor = Qt::black;

@@ -14,35 +14,18 @@
 #include <QFontMetricsF>
 
 cwFixedGridModel::cwFixedGridModel(QObject *parent) :
-    cwAbstractSketchPainterPathModel(parent),
+    QObject(parent),
     m_gridInterval(new cwLength(10.0, cwUnits::Meters, this)),
     m_textModel(new cwGridTextModel(this))
 {
-    m_gridVisibleNotifier = m_gridVisible.addNotifier([this]() {
-        if (m_gridVisible.value()) {
-            beginInsertRows(QModelIndex(), GridLineIndex, LabelBackgroundIndex);
-            m_size = 2;
-            endInsertRows();
-        } else {
-            beginRemoveRows(QModelIndex(), GridLineIndex, LabelBackgroundIndex);
-            m_size = 0;
-            endRemoveRows();
-        }
-    });
+    // Any property feeding paths() republishes the whole list on change; the
+    // canvas coalesces the repaint, so per-property granularity isn't needed.
+    auto notifyPaths = [this](auto &property) {
+        return property.addNotifier([this]() { emit pathsChanged(); });
+    };
 
-    m_labelVisibleNotifier = m_labelVisible.addNotifier([this]() {
-        if (m_gridVisible.value()) {
-            if (m_labelVisible.value()) {
-                beginInsertRows(QModelIndex(), LabelBackgroundIndex, LabelBackgroundIndex);
-                m_size = 2;
-                endInsertRows();
-            } else {
-                beginRemoveRows(QModelIndex(), LabelBackgroundIndex, LabelBackgroundIndex);
-                m_size = 1;
-                endRemoveRows();
-            }
-        }
-    });
+    m_gridVisibleNotifier = notifyPaths(m_gridVisible);
+    m_labelVisibleNotifier = notifyPaths(m_labelVisible);
 
     connect(m_gridInterval, &cwLength::valueChanged, this, [this]() {
         m_gridIntervalLength.notify();
@@ -249,41 +232,11 @@ cwFixedGridModel::cwFixedGridModel(QObject *parent) :
         return painterPath;
     });
 
-    m_lineWidthNotifier = m_lineWidth.addNotifier([this]() {
-        const QModelIndex idx = index(GridLineIndex);
-        if (idx.isValid()) {
-            emit dataChanged(idx, idx, { StrokeWidthRole });
-        }
-    });
-
-    m_lineColorNotifier = m_lineColor.addNotifier([this]() {
-        const QModelIndex idx = index(GridLineIndex);
-        if (idx.isValid()) {
-            emit dataChanged(idx, idx, { StrokeColorRole });
-        }
-    });
-
-    m_labelColorNotifier = m_labelColor.addNotifier([this]() {
-        const int row = m_gridVisible ? LabelBackgroundIndex : GridLineIndex;
-        const QModelIndex idx = index(row);
-        if (idx.isValid()) {
-            emit dataChanged(idx, idx, { StrokeColorRole });
-        }
-    });
-
-    m_gridPathNotifier = m_gridPath.addNotifier([this]() {
-        const QModelIndex idx = index(GridLineIndex);
-        if (idx.isValid()) {
-            emit dataChanged(idx, idx, { PainterPathRole });
-        }
-    });
-
-    m_labelsBackgroundNotifier = m_labelBackgroundPath.addNotifier([this]() {
-        const QModelIndex idx = index(LabelBackgroundIndex);
-        if (idx.isValid()) {
-            emit dataChanged(idx, idx, { PainterPathRole });
-        }
-    });
+    m_lineWidthNotifier = notifyPaths(m_lineWidth);
+    m_lineColorNotifier = notifyPaths(m_lineColor);
+    m_labelColorNotifier = notifyPaths(m_labelColor);
+    m_gridPathNotifier = notifyPaths(m_gridPath);
+    m_labelsBackgroundNotifier = notifyPaths(m_labelBackgroundPath);
 
     m_textRows.setBinding([this]() {
         const auto font = m_labelFont.value();
@@ -317,12 +270,6 @@ cwFixedGridModel::cwFixedGridModel(QObject *parent) :
     });
 }
 
-int cwFixedGridModel::rowCount(const QModelIndex &parent) const
-{
-    Q_UNUSED(parent);
-    return m_size;
-}
-
 double cwFixedGridModel::gridIntervalLength() const
 {
     return m_gridInterval->value();
@@ -333,38 +280,29 @@ int cwFixedGridModel::gridIntervalUnit() const
     return m_gridInterval->unit();
 }
 
-cwAbstractSketchPainterPathModel::Path cwFixedGridModel::path(const QModelIndex &index) const
+QList<cwSketchPathSource::Path> cwFixedGridModel::paths() const
 {
-    auto gridPath = [this]() {
-        return Path{
-            m_gridPath,
-            m_lineColor,
-            m_lineWidth,
-            m_gridZ,
-        };
-    };
+    QList<Path> result;
 
-    auto labelBackground = [this]() {
-        return Path{
-            m_labelBackgroundPath,
-            m_labelBackgroundColor,
-            -1.0, // No line width
-            m_labelBackgroundZ
-        };
-    };
-
-    if (m_gridVisible.value() && m_labelVisible.value()) {
-        if (index.row() == GridLineIndex) {
-            return gridPath();
-        } else if (index.row() == LabelBackgroundIndex) {
-            return labelBackground();
-        }
-    } else if (m_gridVisible.value()) {
-        if (index.row() == GridLineIndex) {
-            return gridPath();
-        }
+    if (!m_gridVisible.value()) {
+        return result;
     }
 
-    // Model and QProperty can be in a transitional state; return an empty path.
-    return Path{};
+    result.append(Path{
+        m_gridPath,
+        m_lineColor,
+        m_lineWidth,
+        m_gridZ,
+    });
+
+    if (m_labelVisible.value()) {
+        result.append(Path{
+            m_labelBackgroundPath,
+            m_labelBackgroundColor,
+            -1.0, // No line width — fill pass.
+            m_labelBackgroundZ
+        });
+    }
+
+    return result;
 }

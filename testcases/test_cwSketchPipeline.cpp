@@ -26,7 +26,7 @@
 #include "cwSurveyNetwork.h"
 #include "cwStationPositionLookup.h"
 #include "cwCenterlineSketchPainterModel.h"
-#include "cwAbstractSketchPainterPathModel.h"
+#include "cwSketchPathSource.h"
 #include "cwGridTextModel.h"
 #include "cwSketchDraw.h"
 #include "cwSketchPainter.h"
@@ -172,30 +172,24 @@ TEST_CASE("cwCenterlineSketchPainterModel populates three rows from survey2DGeom
     waitForGeometry(&sketch); // ensure the rule has settled
 
     cwCenterlineSketchPainterModel centerline;
-    QSignalSpy resetSpy(&centerline, &cwCenterlineSketchPainterModel::modelReset);
+    QSignalSpy pathsSpy(&centerline, &cwCenterlineSketchPainterModel::pathsChanged);
     centerline.setSurvey2DGeometry(sketch.survey2DGeometry());
 
     // The painter model fans out to a worker thread to build QPainterPaths.
-    // Spin the event loop until the model resets.
+    // Spin the event loop until the paths are published.
     QElapsedTimer timer;
     timer.start();
-    while (centerline.rowCount() == 0 && timer.elapsed() < 2000) {
+    while (centerline.paths().isEmpty() && timer.elapsed() < 2000) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
     }
 
-    REQUIRE(centerline.rowCount() == 2); // shotLines, stationDots
+    const auto paths = centerline.paths();
+    REQUIRE(paths.size() == 2); // shotLines, stationDots
 
-    const auto shotLinesPath =
-        centerline.data(centerline.index(0),
-                        cwAbstractSketchPainterPathModel::PainterPathRole)
-            .value<QPainterPath>();
-    CHECK_FALSE(shotLinesPath.isEmpty());
+    CHECK_FALSE(paths.at(0).painterPath.isEmpty());
 
-    const double symbolsWidth =
-        centerline.data(centerline.index(1),
-                        cwAbstractSketchPainterPathModel::StrokeWidthRole)
-            .toDouble();
-    CHECK(symbolsWidth == Catch::Approx(0.0));
+    // Element 1 is the station-symbol fill pass (strokeWidth == 0).
+    CHECK(paths.at(1).strokeWidth == Catch::Approx(0.0));
 
     const auto textRows = centerline.textRows();
     REQUIRE_FALSE(textRows.isEmpty());
@@ -279,13 +273,11 @@ TEST_CASE("cwSketchPainter scales linePlot text with PaintContext::linePlotTextS
 
 namespace {
 
-// Minimal path model that publishes a single straight-line path with a
+// Minimal path source that publishes a single straight-line path with a
 // caller-specified stored stroke width.
-class SinglePathModel final : public cwAbstractSketchPainterPathModel
+class SinglePathModel final : public cwSketchPathSource
 {
 public:
-    using cwAbstractSketchPainterPathModel::Path;
-
     SinglePathModel(double width, QColor color)
     {
         QPainterPath p;
@@ -294,10 +286,7 @@ public:
         m_path = Path(p, color, width, 0.0);
     }
 
-    int rowCount(const QModelIndex & = QModelIndex()) const override { return 1; }
-
-protected:
-    Path path(const QModelIndex &) const override { return m_path; }
+    QList<Path> paths() const override { return { m_path }; }
 
 private:
     Path m_path;

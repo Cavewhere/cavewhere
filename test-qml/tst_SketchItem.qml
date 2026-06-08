@@ -59,8 +59,8 @@ Item {
             tryVerify(() => sketchCanvas.grid.gridOrigin.x !== 0
                           && sketchCanvas.grid.gridOrigin.y !== 0,
                       2000, "gridOrigin should shift when pan changes")
-            tryVerify(() => sketchCanvas.grid.majorGridModel.rowCount() > 0,
-                      2000, "major grid model should populate for the viewport")
+            tryVerify(() => sketchCanvas.grid.majorGridModel.gridIntervalPixels > 0,
+                      2000, "major grid model should size itself for the viewport")
         }
 
         function selectEraser() {

@@ -10,7 +10,6 @@
 
 //Qt includes
 #include <QColor>
-#include <QConcatenateTablesProxyModel>
 #include <QMatrix4x4>
 #include <QObject>
 #include <QObjectBindableProperty>
@@ -124,8 +123,6 @@ public:
     double minorColorLightness() const { return m_minorColorLightness.value(); }
     void   setMinorColorLightness(const double &value) { m_minorColorLightness = value; }
     QBindable<double> bindableMinorColorLightness() { return &m_minorColorLightness; }
-
-    QHash<int, QByteArray> roleNames() const { return m_majorGrid->roleNames(); }
 
     cwFixedGridModel *majorGridModel() const;
     cwFixedGridModel *minorGridModel() const;
