@@ -38,6 +38,16 @@ void cwEDLEffect::initialize(QRhi* rhi,
     m_rhi = rhi;
     m_globalUBO = globalUBO;
 
+    const auto fail = [this]() {
+        // Leave m_pipeline null so apply()'s guard skips the composite cleanly
+        // rather than binding an uncreated pipeline. Drop the layout too so a
+        // later retry (createPipeline allocates it unconditionally) can't leak.
+        delete m_pipeline;
+        m_pipeline = nullptr;
+        delete m_layout;
+        m_layout = nullptr;
+    };
+
     // Detect Y-axis convention for the offscreen texture sampling. Metal,
     // Vulkan, and D3D store textures top-left (Y-down); OpenGL stores them
     // bottom-left (Y-up). The shader uses textureYFlip to compensate.
@@ -49,7 +59,10 @@ void cwEDLEffect::initialize(QRhi* rhi,
     if (!m_edlUBO) {
         const quint32 size = rhi->ubufAligned(sizeof(EdlUniform));
         m_edlUBO = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, size);
-        m_edlUBO->create();
+        if (!m_edlUBO->create()) {
+            fail();
+            return;
+        }
         m_uniformsDirty = true;
     }
 
@@ -61,11 +74,15 @@ void cwEDLEffect::initialize(QRhi* rhi,
                                     QRhiSampler::None,
                                     QRhiSampler::ClampToEdge,
                                     QRhiSampler::ClampToEdge);
-        m_sampler->create();
+        if (!m_sampler->create()) {
+            fail();
+            return;
+        }
     }
 
-    if (!m_pipeline) {
-        createPipeline(outputRPDesc);
+    if (!m_pipeline && !createPipeline(outputRPDesc)) {
+        fail();
+        return;
     }
 }
 
@@ -75,6 +92,12 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
     // projectionMatrix to detect backend Y-flip, fragment uses viewportSize
     // and devicePixelRatio for the sample radius. Stage flags must match
     // shader usage or the bind silently feeds zeros to the missing stage.
+    const QShader vs = cwRHIObject::loadShader(QStringLiteral(":/shaders/EDL.vert.qsb"));
+    const QShader fs = cwRHIObject::loadShader(QStringLiteral(":/shaders/EDL.frag.qsb"));
+    if (!vs.isValid() || !fs.isValid()) {
+        return false;
+    }
+
     const auto bothStages =
         QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage;
     m_layout = m_rhi->newShaderResourceBindings();
@@ -83,11 +106,11 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
         QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, nullptr),
         QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr),
         QRhiShaderResourceBinding::sampledTexture(3, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr),
+        QRhiShaderResourceBinding::sampledTexture(4, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr),
     });
-    m_layout->create();
-
-    QShader vs = cwRHIObject::loadShader(QStringLiteral(":/shaders/EDL.vert.qsb"));
-    QShader fs = cwRHIObject::loadShader(QStringLiteral(":/shaders/EDL.frag.qsb"));
+    if (!m_layout->create()) {
+        return false;
+    }
 
     m_pipeline = m_rhi->newGraphicsPipeline();
     m_pipeline->setShaderStages({
@@ -98,10 +121,10 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
     // No vertex buffer — gl_VertexIndex drives the fullscreen triangle.
     m_pipeline->setVertexInputLayout({});
     m_pipeline->setTopology(QRhiGraphicsPipeline::Triangles);
-    // Depth test off — the swap-chain depth at composite time is the clear
-    // value (Background pass doesn't write depth), so any cloud depth passes.
-    // Depth write on — the fragment shader writes gl_FragDepth = cloud depth
-    // so subsequent Opaque draws can z-test against the cloud surface.
+    // Depth test off — this fullscreen pass writes every swap-chain pixel.
+    // Depth write on — the shader writes gl_FragDepth = combined cloud+scene
+    // depth so post-composite passes (Transparent, Overlay) z-test correctly
+    // against everything already drawn.
     m_pipeline->setDepthTest(false);
     m_pipeline->setDepthWrite(true);
     m_pipeline->setCullMode(QRhiGraphicsPipeline::None);
@@ -111,14 +134,12 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
     // averaged in three transparent-black samples).
     m_pipeline->setSampleCount(m_outputSampleCount);
 
-    // Premultiplied-alpha blend: keep Scene-layer content where the cloud is
-    // transparent (alpha=0). Source RGB is already premultiplied in the shader.
+    // No blend: the composite writes the final color (the scene, or the shaded
+    // cloud over it) opaquely over the freshly-cleared swap chain. The scene
+    // and cloud were already combined in the shader, not via fixed-function
+    // blending, because the silhouette darkens the cloud edge before compositing.
     QRhiGraphicsPipeline::TargetBlend blend;
-    blend.enable = true;
-    blend.srcColor = QRhiGraphicsPipeline::One;
-    blend.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
-    blend.srcAlpha = QRhiGraphicsPipeline::One;
-    blend.dstAlpha = QRhiGraphicsPipeline::OneMinusSrcAlpha;
+    blend.enable = false;
     m_pipeline->setTargetBlends({ blend });
 
     m_pipeline->setShaderResourceBindings(m_layout);
@@ -126,13 +147,13 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
     return m_pipeline->create();
 }
 
-bool cwEDLEffect::ensureBindings(QRhiTexture* color, QRhiTexture* depth)
+bool cwEDLEffect::ensureBindings(QRhiTexture* sceneColor, QRhiTexture* cloudColor, QRhiTexture* depth)
 {
-    if (!color || !depth || !m_globalUBO || !m_edlUBO || !m_sampler || !m_layout) {
+    if (!sceneColor || !cloudColor || !depth || !m_globalUBO || !m_edlUBO || !m_sampler || !m_layout) {
         return false;
     }
 
-    if (m_srb && m_lastColor == color && m_lastDepth == depth) {
+    if (m_srb && m_lastSceneColor == sceneColor && m_lastCloudColor == cloudColor && m_lastDepth == depth) {
         return true;
     }
 
@@ -143,8 +164,9 @@ bool cwEDLEffect::ensureBindings(QRhiTexture* color, QRhiTexture* depth)
     m_srb->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, bothStages, m_globalUBO),
         QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, m_edlUBO),
-        QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage, color, m_sampler),
+        QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage, cloudColor, m_sampler),
         QRhiShaderResourceBinding::sampledTexture(3, QRhiShaderResourceBinding::FragmentStage, depth, m_sampler),
+        QRhiShaderResourceBinding::sampledTexture(4, QRhiShaderResourceBinding::FragmentStage, sceneColor, m_sampler),
     });
     if (!m_srb->create()) {
         delete m_srb;
@@ -154,9 +176,24 @@ bool cwEDLEffect::ensureBindings(QRhiTexture* color, QRhiTexture* depth)
 
     Q_ASSERT(m_layout->isLayoutCompatible(m_srb));
 
-    m_lastColor = color;
+    m_lastSceneColor = sceneColor;
+    m_lastCloudColor = cloudColor;
     m_lastDepth = depth;
     return true;
+}
+
+void cwEDLEffect::resize(QSize outputSize)
+{
+    Q_UNUSED(outputSize);
+    // Force the next apply() to rebuild the SRB against the recreated textures.
+    // Clearing the cached pointer identities is essential: a freed texture can
+    // be reallocated at the same address, which would make ensureBindings()'s
+    // pointer compare wrongly report "unchanged" and keep the stale SRB.
+    delete m_srb;
+    m_srb = nullptr;
+    m_lastSceneColor = nullptr;
+    m_lastCloudColor = nullptr;
+    m_lastDepth = nullptr;
 }
 
 void cwEDLEffect::updateFrameUniforms(const FrameUniformContext& ctx)
@@ -207,15 +244,16 @@ void cwEDLEffect::updateFrameUniforms(const FrameUniformContext& ctx)
 }
 
 void cwEDLEffect::apply(QRhiCommandBuffer* cb,
-                        QRhiTexture* inputColor,
-                        QRhiTexture* inputDepth,
+                        QRhiTexture* sceneColor,
+                        QRhiTexture* cloudColor,
+                        QRhiTexture* depth,
                         QSize outputSize)
 {
     if (!cb || !m_pipeline) {
         return;
     }
 
-    if (!ensureBindings(inputColor, inputDepth)) {
+    if (!ensureBindings(sceneColor, cloudColor, depth)) {
         return;
     }
 

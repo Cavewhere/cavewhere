@@ -11,10 +11,9 @@ class QRhiCommandBuffer;
 #include <QHash>
 #include <QSize>
 #include <QString>
+#include <array>
 #include <functional>
 #include <memory>
-#include <unordered_map>
-#include <vector>
 class cwScene;
 class cwRenderObject;
 class cwRhiItemRenderer;
@@ -58,18 +57,33 @@ public:
         quint32 refCount = 0;
     };
 
-    // Per-pass configuration. A default-constructed PassConfig means "render
-    // directly to the swap-chain with no post-processing." Passes that need
-    // their own offscreen color+depth populate the texture/target/rpDesc
-    // fields and (optionally) an effect chain.
-    struct PassConfig {
-        QRhiTexture* color = nullptr;
-        QRhiTexture* depth = nullptr;
-        QRhiTextureRenderTarget* target = nullptr;
-        QRhiRenderPassDescriptor* rpDesc = nullptr;
+    // Offscreen targets for the EDL composite, engaged only while a point cloud
+    // is visible. Background + Opaque render into sceneColor with sceneDepth;
+    // the point cloud then renders into cloudColor while *sharing* sceneDepth
+    // (loaded via PreserveDepthStencilContents) so the hardware depth test
+    // occludes the cloud against scene geometry and leaves the combined depth in
+    // the buffer. The EDL effect then composites over(sceneColor, shadedCloud)
+    // to the swap chain. All three textures are 1x and sampler-readable; MSAA on
+    // Background/Opaque is intentionally dropped while a cloud is shown (a
+    // tracked follow-up restores it via a resolve).
+    // Owns its GPU resources via unique_ptr so it can't be copied (would alias
+    // raw pointers) and a missed teardown can't leak. destroyEdlOffscreen() still
+    // drives the *ordered* release (effect's SRB before its textures; pipeline
+    // eviction before the rpDescs) — declaration order also makes the implicit
+    // destructor a safe backstop (effect, declared last, is destroyed first).
+    struct EdlOffscreen {
+        std::unique_ptr<QRhiTexture> sceneColor;
+        std::unique_ptr<QRhiTexture> cloudColor;
+        std::unique_ptr<QRhiTexture> depth;            // shared by both targets
+        std::unique_ptr<QRhiTextureRenderTarget> sceneTarget;
+        std::unique_ptr<QRhiTextureRenderTarget> cloudTarget;
+        std::unique_ptr<QRhiRenderPassDescriptor> sceneRpDesc;
+        std::unique_ptr<QRhiRenderPassDescriptor> cloudRpDesc;
         QSize size;
-        std::vector<std::unique_ptr<cwRhiPostProcessEffect>> effects;
-        bool clearOnBegin = true;
+        std::unique_ptr<cwRhiPostProcessEffect> effect;
+
+        static constexpr int kSampleCount = 1;
+        bool valid() const { return sceneTarget && cloudTarget && effect != nullptr; }
     };
 
     ~cwRhiScene();
@@ -93,11 +107,14 @@ public:
     // allocated descriptors at the same address.
     void evictPipelinesFor(QRhiRenderPassDescriptor* descriptor);
 
-    // Read-only access used by tests and (later) the EDL compositor.
-    // std::unordered_map (not QHash) because PassConfig holds move-only
-    // unique_ptr effects; QHash requires CopyConstructible values.
-    using PassConfigMap = std::unordered_map<cwRHIObject::RenderPass, PassConfig>;
-    const PassConfigMap& passConfigs() const { return m_passConfigs; }
+    // Per-pass routing for the current frame: the render-pass descriptor and
+    // MSAA sample count a given pass draws into. Filled at the start of render()
+    // and queried by render objects that build their pipelines outside gather()
+    // (cwRhiTexturedItems) so they key on the correct target. Background,
+    // Opaque, and PointCloud route to the EDL offscreen (1x) while a cloud is
+    // visible; every other pass routes to the swap chain.
+    QRhiRenderPassDescriptor* passRenderPassDescriptor(cwRHIObject::RenderPass pass) const;
+    int passSampleCount(cwRHIObject::RenderPass pass) const;
     const QHash<cwRhiPipelineKey, PipelineRecord*>& pipelineCache() const { return m_pipelineCache; }
 
 private:
@@ -132,23 +149,35 @@ private:
     QRhiBuffer* m_globalUniformBuffer = nullptr;
     QHash<cwRhiPipelineKey, PipelineRecord*> m_pipelineCache;
     QRhiSampler* m_sharedLinearSampler = nullptr;
-    PassConfigMap m_passConfigs;
+    EdlOffscreen m_edlOffscreen;
+
+    static constexpr int kPassCount = static_cast<int>(cwRHIObject::RenderPass::Count);
+    std::array<QRhiRenderPassDescriptor*, kPassCount> m_passRpDesc{};
+    std::array<int, kPassCount> m_passSampleCount{};
 
     void updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi);
     bool needsUpdate(cwSceneUpdate::Flag flag) const { return (m_updateFlags & flag) == flag; }
 
-    void ensurePointCloudPass(QRhi* rhi, QSize size);
+    // Build (or rebuild on resize) the shared-depth EDL offscreen: sceneColor +
+    // cloudColor + shared depth, the two render targets, their rpDescs, and the
+    // EDL effect. No-op when already valid at the requested size.
+    void ensureEdlOffscreen(QRhi* rhi, QSize size);
 
-    // Release a PassConfig's GPU resources in dependency order: drop effects
-    // (their SRBs reference cfg.color/depth), evict pipelines keyed on rpDesc,
-    // then delete the target chain. Leaves cfg in a default-constructed state.
-    void destroyPassConfig(PassConfig& cfg);
+    // Release the EDL offscreen's GPU resources in dependency order: drop the
+    // effect (its SRB references the textures), evict pipelines keyed on the
+    // rpDescs, then delete the targets and textures.
+    void destroyEdlOffscreen();
 
-    // Swap-chain rpDesc isn't available until the first render(), so the
-    // post-process effects' initialize() is deferred to then.
+    // Fill m_passRpDesc / m_passSampleCount for this frame. Both are read from
+    // the same render target per pass, so a pass's sample count is always the
+    // sample count of the target it draws into — they can never disagree (a
+    // pipeline whose sample count differs from its render target does not render
+    // and triggers backend validation errors).
+    void setupPassRouting(QRhiRenderTarget* swapchainTarget, bool edlActive);
+
+    // Swap-chain rpDesc isn't available until the first render(), so the EDL
+    // effect's initialize() is deferred to then.
     bool m_effectsInitialized = false;
-
-
 };
 
 

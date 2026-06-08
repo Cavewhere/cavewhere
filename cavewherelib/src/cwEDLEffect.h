@@ -16,12 +16,14 @@
 #include <QSize>
 
 /**
- * @brief Eye-Dome Lighting post-process effect.
+ * @brief Eye-Dome Lighting composite.
  *
- * Samples the PointCloud pass's offscreen color+depth into the swap-chain
- * pass with depth-aware darkening of silhouette edges. Standard CloudCompare /
- * Potree response: log-space 8-tap depth comparison, premultiplied-alpha
- * composite so transparent (non-cloud) pixels leave the Scene layer intact.
+ * The final pass that writes the swap chain. Reads three 1x offscreen textures:
+ * the scene color (Background + Opaque), the point-cloud color, and the depth
+ * buffer they share (combined cloud+scene depth). Outputs the scene where there
+ * is no cloud and the depth-shaded cloud where there is, with a CloudCompare /
+ * Potree log-space 8-tap response plus a near-side silhouette term that darkens
+ * cloud edges against more-distant scene geometry and the background.
  */
 class cwEDLEffect : public cwRhiPostProcessEffect {
 public:
@@ -32,12 +34,17 @@ public:
                     QRhiRenderPassDescriptor* outputRPDesc,
                     int outputSampleCount,
                     QRhiBuffer* globalUBO) override;
-    // No resize() — ensureBindings() detects the new color/depth pointers on
-    // the next apply() call and rebuilds the SRB automatically.
+    // Drop the cached SRB and texture-pointer identities so the next apply()
+    // rebuilds bindings. cwRhiScene calls this when the offscreen textures are
+    // recreated (resize) while the effect is preserved — otherwise ensureBindings
+    // could compare new texture pointers against freed ones that the allocator
+    // reused at the same address and wrongly skip the rebuild.
+    void resize(QSize outputSize) override;
     void updateFrameUniforms(const FrameUniformContext& ctx) override;
     void apply(QRhiCommandBuffer* cb,
-               QRhiTexture* inputColor,
-               QRhiTexture* inputDepth,
+               QRhiTexture* sceneColor,
+               QRhiTexture* cloudColor,
+               QRhiTexture* depth,
                QSize outputSize) override;
 
 private:
@@ -54,7 +61,7 @@ private:
     };
 
     bool createPipeline(QRhiRenderPassDescriptor* outputRPDesc);
-    bool ensureBindings(QRhiTexture* color, QRhiTexture* depth);
+    bool ensureBindings(QRhiTexture* sceneColor, QRhiTexture* cloudColor, QRhiTexture* depth);
 
     QRhi* m_rhi = nullptr;
     QRhiBuffer* m_globalUBO = nullptr;       // owned by cwRhiScene
@@ -83,7 +90,8 @@ private:
     QRhiShaderResourceBindings* m_layout = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
 
-    QRhiTexture* m_lastColor = nullptr;
+    QRhiTexture* m_lastSceneColor = nullptr;
+    QRhiTexture* m_lastCloudColor = nullptr;
     QRhiTexture* m_lastDepth = nullptr;
 
     EdlUniform m_uniformData;

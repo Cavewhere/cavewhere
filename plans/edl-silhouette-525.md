@@ -170,6 +170,36 @@ and the `cloudColor.a` mask.
   screenshot, compare to issue #525 image.
 - Run **both** suites offscreen, tee logs, before pushing.
 
+### Implementation notes (as built)
+
+The plan assumed per-pass `renderData.renderPassDescriptor` was enough to route
+Background + Opaque into the offscreen. Two things were missing and had to be
+added:
+
+1. **Per-pass MSAA sample count.** The swap chain is 4× MSAA
+   (`cw3dRegionViewer::setSampleCount(4)`) but the offscreen is 1×, and every
+   RHI object keyed its pipeline `sampleCount` off the swap chain. Added
+   `int sampleCount` to `cwRHIObject::RenderData` and a per-frame routing table
+   in `cwRhiScene` (`passRenderPassDescriptor` / `passSampleCount`), so each
+   pass's pipeline matches the target it actually draws into. This also fixed a
+   latent Phase 1 mismatch (cloud pipeline was 4× into a 1× offscreen).
+
+2. **Textured-item pipeline timing.** `cwRhiTexturedItems` built pipelines in
+   `updateResources` (only when an item was dirty), keyed on the swap chain — so
+   scraps/notes would never have rebuilt for the offscreen when a cloud appears.
+   Moved their pipeline validation into `gather()` (self-guarding on the key,
+   like the other objects), resolving the target from the scene routing. The SRB
+   layout is rpDesc-independent, so it stays valid across a routing rebuild.
+
+`usesPointCloudPass()` (a new `cwRHIObject` virtual) lets `cwRhiScene` detect a
+visible cloud *before* gathering, so routing is settled before any pipeline is
+built that frame. The old generic `PassConfig` map was replaced by a dedicated
+`EdlOffscreen` struct (two color targets sharing one depth texture), since the
+shared-depth design doesn't fit one-target-per-pass.
+
+Automated suites cover the no-cloud path; the cloud-composite path (Pass A/B/C)
+has no offscreen-readback test and still needs visual verification.
+
 ---
 
 ## Sequencing & risk
@@ -179,6 +209,24 @@ and the `cloudColor.a` mask.
 2. **Phase 2** (touches the core render loop) -> gated behind cloud-presence so
    non-cloud rendering is unchanged -> review against the issue screenshot -> land.
 3. **Follow-up issue**: MSAA preservation for the offscreen scene path.
+
+### Deferred altitude follow-ups (from /simplify review)
+
+- **Generalize pass membership.** `cwRHIObject::usesPointCloudPass()` is a narrow
+  predicate read only by the EDL routing. If a second offscreen consumer appears
+  (shadow map, another post effect), prefer a general `usesPass(RenderPass)` (or
+  letting the scene discover non-empty passes) over adding more `usesXPass()`.
+- **Table-drive `render()` pass sequencing.** The cloud and no-cloud branches each
+  hand-order the same passes; the begin/endPass walk could be driven off the
+  `m_passRpDesc` routing table (start a new pass when the target changes, run the
+  composite at the PointCloud->swap-chain boundary). Deferred: restructuring the
+  live render loop risks regressing the just-fixed path; do it as its own change.
+- **Enforce "semi-transparent objects must not write shared depth."** Today only
+  the grid is moved to Transparent + depthWrite-off. Scraps/LiDAR notes are
+  `BlendMode::None` (opaque) and correctly write shared depth, so this is not a
+  live bug — but the invariant lives only as a comment. A material/pass contract
+  (`blendMode != None` => Transparent, no shared-depth write) would prevent a
+  future alpha-blended Opaque item from silently swallowing the cloud.
 
 ## Relevant files
 

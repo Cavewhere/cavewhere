@@ -55,12 +55,9 @@ cwRhiScene::~cwRhiScene()
     }
     delete m_globalUniformBuffer;
 
-    // Tear down per-pass offscreen targets before the pipeline cache so
-    // pipelines keyed on the per-pass rpDesc are released first.
-    for (auto& kv : m_passConfigs) {
-        destroyPassConfig(kv.second);
-    }
-    m_passConfigs.clear();
+    // Tear down the EDL offscreen before the pipeline cache so pipelines keyed
+    // on its rpDescs are released first.
+    destroyEdlOffscreen();
 
     for (auto record : std::as_const(m_pipelineCache)) {
         delete record->pipeline;
@@ -175,24 +172,34 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
         ? renderer->renderTarget()->renderPassDescriptor()
         : nullptr;
 
-    ensurePointCloudPass(rhi, m_viewportSize);
+    const int swapchainSampleCount =
+        (renderer && renderer->renderTarget()) ? renderer->renderTarget()->sampleCount() : 1;
 
-    // The swap-chain rpDesc isn't available until the first render(), so
-    // post-process effects are initialized here. sampleCount must match the
-    // swap-chain (4× MSAA per cw3dRegionViewer::setSampleCount) — a mismatched
-    // pipeline only writes sample 0, producing dim translucent output after
-    // resolve.
-    if (!m_effectsInitialized && swapchainRPDesc && renderer && renderer->renderTarget()) {
-        const int swapchainSampleCount = renderer->renderTarget()->sampleCount();
-        for (auto& kv : m_passConfigs) {
-            for (auto& fx : kv.second.effects) {
-                fx->initialize(rhi, swapchainRPDesc, swapchainSampleCount, m_globalUniformBuffer);
-            }
-        }
+    // Decide up front whether the EDL composite path is needed — it reroutes
+    // Background + Opaque (and the cloud) through the shared-depth offscreen, so
+    // the routing must be settled before any object builds a pipeline this frame.
+    const bool cloudVisible = std::any_of(
+        m_rhiObjects.cbegin(), m_rhiObjects.cend(),
+        [](const cwRHIObject* object) {
+            return object->isVisible() && object->usesPointCloudPass();
+        });
+
+    if (cloudVisible) {
+        ensureEdlOffscreen(rhi, m_viewportSize);
+    }
+    const bool edlActive = cloudVisible && m_edlOffscreen.valid();
+
+    setupPassRouting(renderer ? renderer->renderTarget() : nullptr, edlActive);
+
+    // The swap-chain rpDesc isn't available until the first render(), so the EDL
+    // effect's initialize() — which needs the swap-chain sample count (4× MSAA
+    // per cw3dRegionViewer::setSampleCount) — is deferred to here.
+    if (!m_effectsInitialized && swapchainRPDesc && m_edlOffscreen.effect) {
+        m_edlOffscreen.effect->initialize(rhi, swapchainRPDesc, swapchainSampleCount, m_globalUniformBuffer);
         m_effectsInitialized = true;
     }
 
-    cwRHIObject::RenderData renderData{cb, renderer, m_updateFlags, swapchainRPDesc};
+    cwRHIObject::RenderData renderData{cb, renderer, m_updateFlags, swapchainRPDesc, swapchainSampleCount};
 
     QRhiResourceUpdateBatch* resources = rhi->nextResourceUpdateBatch();
     cwRHIObject::ResourceUpdateData resourceUpdateData{resources, renderData};
@@ -214,12 +221,12 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
         m_rhiNeedResourceUpdate.clear();
     }
 
-    constexpr int kPassCount = static_cast<int>(cwRHIObject::RenderPass::Count);
     using PassBatchesArray = std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>;
     PassBatchesArray passBatches;
 
-    // Pass order. Passes without an entry in m_passConfigs render straight
-    // to the swap-chain; passes with an entry use the offscreen target there.
+    // Pass order for the no-cloud path (drawn straight to the swap chain). The
+    // EDL composite path below splits these across the scene/cloud/composite
+    // passes instead.
     const std::array<cwRHIObject::RenderPass, 5> passOrder = {
         cwRHIObject::RenderPass::Background,
         cwRHIObject::RenderPass::PointCloud,
@@ -228,17 +235,15 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
         cwRHIObject::RenderPass::Overlay,
     };
 
-    // Per-pass render-data: gather() reads renderData.renderPassDescriptor
-    // when building pipeline keys, so each pass needs its own copy with the
-    // pass's rpDesc (offscreen target or swap-chain fallback).
+    // Per-pass render-data: gather() reads renderData.renderPassDescriptor and
+    // .sampleCount when building pipeline keys, so each pass needs its own copy
+    // carrying the target it routes into this frame (EDL offscreen or swap chain).
     std::array<cwRHIObject::RenderData, kPassCount> perPassRenderData;
     for (int i = 0; i < kPassCount; ++i) {
         perPassRenderData[i] = renderData;
         const auto pass = static_cast<cwRHIObject::RenderPass>(i);
-        auto cfgIt = m_passConfigs.find(pass);
-        if (cfgIt != m_passConfigs.end() && cfgIt->second.rpDesc) {
-            perPassRenderData[i].renderPassDescriptor = cfgIt->second.rpDesc;
-        }
+        perPassRenderData[i].renderPassDescriptor = passRenderPassDescriptor(pass);
+        perPassRenderData[i].sampleCount = passSampleCount(pass);
     }
 
     quint32 objectOrder = 0;
@@ -280,9 +285,10 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     }
 
     // Issue draws for one batches array against the currently-open pass.
-    auto drainBatches = [&renderData](QRhiCommandBuffer* cb,
-                                      QVector<cwRHIObject::PipelineBatch>& batches,
-                                      QRhiGraphicsPipeline*& boundPipeline) {
+    auto drainBatches = [](QRhiCommandBuffer* cb,
+                           QVector<cwRHIObject::PipelineBatch>& batches,
+                           QRhiGraphicsPipeline*& boundPipeline,
+                           const cwRHIObject::RenderData& passRenderData) {
         if (batches.isEmpty()) {
             return;
         }
@@ -308,7 +314,7 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
                 case cwRHIObject::Drawable::Type::Custom:
                     boundPipeline = nullptr;
                     if (drawable.customDraw) {
-                        drawable.customDraw(renderData);
+                        drawable.customDraw(passRenderData);
                     }
                     break;
                 case cwRHIObject::Drawable::Type::Indexed: {
@@ -359,61 +365,70 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     };
 
     using RP = cwRHIObject::RenderPass;
-    const int pcIndex = static_cast<int>(RP::PointCloud);
-    auto pcCfgIt = m_passConfigs.find(RP::PointCloud);
-    const bool runPointCloudOffscreenPass =
-        (pcCfgIt != m_passConfigs.end()
-         && pcCfgIt->second.target != nullptr
-         && !passBatches[pcIndex].isEmpty());
-
-    // Offscreen PointCloud pass must complete before the swap-chain pass so
-    // its color+depth textures are sampler-readable when EDL samples them.
-    // Qt RHI inserts the necessary barriers.
-    if (runPointCloudOffscreenPass) {
-        PassConfig& cfg = pcCfgIt->second;
-        QRhiGraphicsPipeline* offscreenBound = nullptr;
-        cb->beginPass(cfg.target,
-                      QColor::fromRgbF(0.0, 0.0, 0.0, 0.0),
-                      { 1.0f, 0 },
-                      resources);
-        cb->setViewport(QRhiViewport(0, 0, cfg.size.width(), cfg.size.height()));
-        drainBatches(cb, passBatches[pcIndex], offscreenBound);
-        cb->endPass();
-
-        // resources batch has been consumed by beginPass; null it so the
-        // swap-chain beginPass below doesn't double-submit.
-        resources = nullptr;
-    }
-
-    // Swap-chain pass: Background → EDL composite (inline) → Opaque / etc.
-    const QColor clearColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0);
-    cb->beginPass(renderer->renderTarget(), clearColor, { 1.0f, 0 }, resources);
-
-    const QSize outputSize = renderer->renderTarget()->pixelSize();
-    cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
-
-    const cwRhiPostProcessEffect::FrameUniformContext effectFrameCtx{
-        m_projectionCorrectedMatrix, m_viewportSize, m_devicePixelRatio
+    auto passBatchFor = [&](RP pass) -> QVector<cwRHIObject::PipelineBatch>& {
+        return passBatches[static_cast<int>(pass)];
+    };
+    auto passDataFor = [&](RP pass) -> const cwRHIObject::RenderData& {
+        return perPassRenderData[static_cast<int>(pass)];
     };
 
-    QRhiGraphicsPipeline* boundPipeline = nullptr;
-    for (cwRHIObject::RenderPass pass : passOrder) {
-        if (pass == RP::PointCloud && runPointCloudOffscreenPass) {
-            // Cloud batches were drawn offscreen; this slot runs the effect chain.
-            PassConfig& cfg = pcCfgIt->second;
-            for (auto& fx : cfg.effects) {
-                fx->updateFrameUniforms(effectFrameCtx);
-                fx->apply(cb, cfg.color, cfg.depth, outputSize);
-            }
-            // Effects bind their own pipeline + SRB; reset the tracker.
-            boundPipeline = nullptr;
-            continue;
+    const QColor clearColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0);
+    const QSize outputSize = renderer->renderTarget()->pixelSize();
+
+    if (edlActive) {
+        EdlOffscreen& edl = m_edlOffscreen;
+        const QRhiViewport offscreenViewport(0, 0, edl.size.width(), edl.size.height());
+
+        // Pass A — scene offscreen: Background + Opaque into sceneColor with
+        // sceneDepth. Consumes the frame's resource-update batch.
+        {
+            QRhiGraphicsPipeline* bound = nullptr;
+            cb->beginPass(edl.sceneTarget.get(), clearColor, { 1.0f, 0 }, resources);
+            cb->setViewport(offscreenViewport);
+            drainBatches(cb, passBatchFor(RP::Background), bound, passDataFor(RP::Background));
+            drainBatches(cb, passBatchFor(RP::Opaque), bound, passDataFor(RP::Opaque));
+            cb->endPass();
+            resources = nullptr;
         }
 
-        drainBatches(cb, passBatches[static_cast<int>(pass)], boundPipeline);
-    }
+        // Pass B — cloud offscreen: the point cloud into cloudColor while
+        // *sharing* sceneDepth (loaded via PreserveDepthStencilContents), so the
+        // hardware depth test occludes the cloud against scene geometry and the
+        // buffer ends up holding the combined cloud+scene depth.
+        {
+            QRhiGraphicsPipeline* bound = nullptr;
+            cb->beginPass(edl.cloudTarget.get(), clearColor, { 1.0f, 0 }, nullptr);
+            cb->setViewport(offscreenViewport);
+            drainBatches(cb, passBatchFor(RP::PointCloud), bound, passDataFor(RP::PointCloud));
+            cb->endPass();
+        }
 
-    cb->endPass();
+        // Pass C — swap chain: the EDL composite writes the final scene+cloud
+        // pixel (and the combined depth), then Transparent + Overlay draw on top.
+        cb->beginPass(renderer->renderTarget(), clearColor, { 1.0f, 0 }, nullptr);
+        cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
+
+        const cwRhiPostProcessEffect::FrameUniformContext effectFrameCtx{
+            m_projectionCorrectedMatrix, m_viewportSize, m_devicePixelRatio
+        };
+        edl.effect->updateFrameUniforms(effectFrameCtx);
+        edl.effect->apply(cb, edl.sceneColor.get(), edl.cloudColor.get(), edl.depth.get(), outputSize);
+
+        QRhiGraphicsPipeline* bound = nullptr;  // effect bound its own pipeline
+        drainBatches(cb, passBatchFor(RP::Transparent), bound, passDataFor(RP::Transparent));
+        drainBatches(cb, passBatchFor(RP::Overlay), bound, passDataFor(RP::Overlay));
+        cb->endPass();
+    } else {
+        // No cloud: every pass renders straight to the (MSAA) swap chain.
+        cb->beginPass(renderer->renderTarget(), clearColor, { 1.0f, 0 }, resources);
+        cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
+
+        QRhiGraphicsPipeline* boundPipeline = nullptr;
+        for (cwRHIObject::RenderPass pass : passOrder) {
+            drainBatches(cb, passBatchFor(pass), boundPipeline, passDataFor(pass));
+        }
+        cb->endPass();
+    }
 }
 
 void cwRhiScene::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi)
@@ -476,105 +491,163 @@ void cwRhiScene::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi*
     m_updateFlags = cwSceneUpdate::Flag::None;
 }
 
-void cwRhiScene::ensurePointCloudPass(QRhi* rhi, QSize size)
+void cwRhiScene::ensureEdlOffscreen(QRhi* rhi, QSize size)
 {
     if (!rhi || size.isEmpty()) {
         return;
     }
 
-    using RP = cwRHIObject::RenderPass;
-    auto it = m_passConfigs.find(RP::PointCloud);
-    const bool exists = it != m_passConfigs.end();
-    const bool needsRebuild = exists && it->second.size != size;
-
-    if (exists && !needsRebuild) {
+    if (m_edlOffscreen.valid() && m_edlOffscreen.size == size) {
         return;
     }
 
-    // Move the effect chain off before destroying the rest of the pass; the
-    // effects' pipelines are bound to the swap-chain rpDesc (stable across
-    // resizes) and their SRBs detect the new color/depth via pointer-change
-    // in cwEDLEffect::ensureBindings(), so they survive a rebuild as-is.
-    std::vector<std::unique_ptr<cwRhiPostProcessEffect>> savedEffects;
-    if (needsRebuild) {
-        savedEffects = std::move(it->second.effects);
-        destroyPassConfig(it->second);
-        m_passConfigs.erase(it);
-    }
+    // Preserve the effect across a resize — its pipeline is keyed on the stable
+    // swap-chain rpDesc, and its SRB rebinds to the new textures on the next
+    // apply() (cwEDLEffect::ensureBindings detects the pointer change).
+    std::unique_ptr<cwRhiPostProcessEffect> savedEffect = std::move(m_edlOffscreen.effect);
+    destroyEdlOffscreen();
 
-    PassConfig fresh;
+    EdlOffscreen fresh;
     fresh.size = size;
 
-    fresh.color = rhi->newTexture(QRhiTexture::RGBA8,
-                                  size,
-                                  1,
-                                  QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource);
-    if (!fresh.color->create()) {
-        delete fresh.color;
-        return;
-    }
+    // fresh owns its resources via unique_ptr, so any early return below releases
+    // the partially-built set automatically; we only need to restore the saved
+    // effect so a later frame can retry the allocation.
+    auto bail = [&]() {
+        m_edlOffscreen.effect = std::move(savedEffect);
+    };
 
-    // D32F where supported; D24S8 elsewhere. Both are sampler-readable on
-    // every Qt RHI backend.
+    const auto colorFlags = QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource;
+    fresh.sceneColor.reset(rhi->newTexture(QRhiTexture::RGBA8, size, EdlOffscreen::kSampleCount, colorFlags));
+    fresh.cloudColor.reset(rhi->newTexture(QRhiTexture::RGBA8, size, EdlOffscreen::kSampleCount, colorFlags));
+
+    // D32F where supported; D24S8 elsewhere. Both are sampler-readable on every
+    // Qt RHI backend. One depth texture is shared by both targets.
     const QRhiTexture::Format depthFormat =
         rhi->isTextureFormatSupported(QRhiTexture::D32F) ? QRhiTexture::D32F
                                                          : QRhiTexture::D24S8;
-    fresh.depth = rhi->newTexture(depthFormat, size, 1, QRhiTexture::RenderTarget);
-    if (!fresh.depth->create()) {
-        delete fresh.color;
-        delete fresh.depth;
+    fresh.depth.reset(rhi->newTexture(depthFormat, size, EdlOffscreen::kSampleCount, QRhiTexture::RenderTarget));
+
+    if (!fresh.sceneColor->create() || !fresh.cloudColor->create() || !fresh.depth->create()) {
+        bail();
         return;
     }
 
-    QRhiTextureRenderTargetDescription desc;
-    desc.setColorAttachments({ QRhiColorAttachment(fresh.color) });
-    desc.setDepthTexture(fresh.depth);
-
-    fresh.target = rhi->newTextureRenderTarget(desc);
-    fresh.rpDesc = fresh.target->newCompatibleRenderPassDescriptor();
-    if (!fresh.rpDesc) {
-        delete fresh.target;
-        delete fresh.color;
-        delete fresh.depth;
-        return;
-    }
-    fresh.target->setRenderPassDescriptor(fresh.rpDesc);
-    if (!fresh.target->create()) {
-        delete fresh.target;
-        delete fresh.rpDesc;
-        delete fresh.color;
-        delete fresh.depth;
-        return;
+    // Scene target: Background + Opaque draw here; it writes and (by default)
+    // stores the shared depth for the cloud target to load.
+    {
+        QRhiTextureRenderTargetDescription desc;
+        desc.setColorAttachments({ QRhiColorAttachment(fresh.sceneColor.get()) });
+        desc.setDepthTexture(fresh.depth.get());
+        fresh.sceneTarget.reset(rhi->newTextureRenderTarget(desc));
+        fresh.sceneRpDesc.reset(fresh.sceneTarget->newCompatibleRenderPassDescriptor());
+        if (!fresh.sceneRpDesc) { bail(); return; }
+        fresh.sceneTarget->setRenderPassDescriptor(fresh.sceneRpDesc.get());
+        if (!fresh.sceneTarget->create()) { bail(); return; }
     }
 
-    if (needsRebuild) {
-        fresh.effects = std::move(savedEffects);
-    } else {
-        fresh.effects.push_back(std::make_unique<cwEDLEffect>());
+    // Cloud target: shares the depth texture and preserves its contents so the
+    // hardware depth test occludes the cloud against the scene geometry.
+    {
+        QRhiTextureRenderTargetDescription desc;
+        desc.setColorAttachments({ QRhiColorAttachment(fresh.cloudColor.get()) });
+        desc.setDepthTexture(fresh.depth.get());
+        fresh.cloudTarget.reset(rhi->newTextureRenderTarget(desc));
+        fresh.cloudTarget->setFlags(QRhiTextureRenderTarget::PreserveDepthStencilContents);
+        fresh.cloudRpDesc.reset(fresh.cloudTarget->newCompatibleRenderPassDescriptor());
+        if (!fresh.cloudRpDesc) { bail(); return; }
+        fresh.cloudTarget->setRenderPassDescriptor(fresh.cloudRpDesc.get());
+        if (!fresh.cloudTarget->create()) { bail(); return; }
     }
 
-    m_passConfigs.emplace(RP::PointCloud, std::move(fresh));
+    const bool reusedEffect = static_cast<bool>(savedEffect);
+    fresh.effect = reusedEffect ? std::move(savedEffect)
+                                : std::make_unique<cwEDLEffect>();
+    if (reusedEffect) {
+        // The preserved effect's SRB references the now-deleted textures; force a
+        // rebind on the next apply() (pointer-identity caching is unsafe across a
+        // free+realloc that may reuse the same address).
+        fresh.effect->resize(size);
+    }
+
+    m_edlOffscreen = std::move(fresh);
 }
 
-void cwRhiScene::destroyPassConfig(PassConfig& cfg)
+void cwRhiScene::destroyEdlOffscreen()
 {
-    // Effects must die before the textures they sample (their SRBs reference
-    // cfg.color / cfg.depth).
-    cfg.effects.clear();
-    // Evict pipelines keyed on the rpDesc *before* deleting it — newly
-    // allocated rpDescs may reuse the same address and hash-collide with
-    // stale cache entries.
-    if (cfg.rpDesc) {
-        evictPipelinesFor(cfg.rpDesc);
+    // Effect first — its SRB references the textures below.
+    m_edlOffscreen.effect.reset();
+    // Evict pipelines keyed on the rpDescs *before* deleting them — a newly
+    // allocated rpDesc may reuse the same address and hash-collide with a stale
+    // cache entry.
+    if (m_edlOffscreen.sceneRpDesc) {
+        evictPipelinesFor(m_edlOffscreen.sceneRpDesc.get());
     }
-    delete cfg.target;
-    delete cfg.rpDesc;
-    delete cfg.color;
-    delete cfg.depth;
-    cfg.target = nullptr;
-    cfg.rpDesc = nullptr;
-    cfg.color = nullptr;
-    cfg.depth = nullptr;
+    if (m_edlOffscreen.cloudRpDesc) {
+        evictPipelinesFor(m_edlOffscreen.cloudRpDesc.get());
+    }
+    // Targets before their rpDescs/textures (the proven release order); each
+    // reset() both frees and nulls, so there's no field-by-field nulling to drift.
+    m_edlOffscreen.sceneTarget.reset();
+    m_edlOffscreen.cloudTarget.reset();
+    m_edlOffscreen.sceneRpDesc.reset();
+    m_edlOffscreen.cloudRpDesc.reset();
+    m_edlOffscreen.sceneColor.reset();
+    m_edlOffscreen.cloudColor.reset();
+    m_edlOffscreen.depth.reset();
+    m_edlOffscreen.size = QSize();
+}
+
+void cwRhiScene::setupPassRouting(QRhiRenderTarget* swapchainTarget, bool edlActive)
+{
+    // Read both the rpDesc and the sample count from one target object so a
+    // pass's pipeline is always built for the exact target it draws into. The
+    // sample count is owned by the target — never tracked separately — because a
+    // pipeline/target sample-count mismatch fails to render (backend validation
+    // error) rather than degrading gracefully.
+    // An unrouted pass is signalled by a null rpDesc; its sample count is left at
+    // the unset sentinel 0 (never a legal RHI count). A routed pass always
+    // carries its target's real count. Consumers branch on the null rpDesc and
+    // fall back to the live target, so the 0 never reaches a pipeline.
+    auto route = [&](cwRHIObject::RenderPass pass, QRhiRenderTarget* target) {
+        const int i = static_cast<int>(pass);
+        m_passRpDesc[i] = target ? target->renderPassDescriptor() : nullptr;
+        m_passSampleCount[i] = target ? target->sampleCount() : 0;
+    };
+
+    for (int i = 0; i < kPassCount; ++i) {
+        route(static_cast<cwRHIObject::RenderPass>(i), swapchainTarget);
+    }
+
+    if (!edlActive) {
+        return;
+    }
+
+    // Background + Opaque draw into the scene offscreen, the cloud into the cloud
+    // offscreen (both 1x); the composite + Transparent + Overlay stay on the
+    // swap chain. Each pass's sample count follows its offscreen target.
+    using RP = cwRHIObject::RenderPass;
+    route(RP::Background, m_edlOffscreen.sceneTarget.get());
+    route(RP::Opaque, m_edlOffscreen.sceneTarget.get());
+    route(RP::PointCloud, m_edlOffscreen.cloudTarget.get());
+}
+
+QRhiRenderPassDescriptor* cwRhiScene::passRenderPassDescriptor(cwRHIObject::RenderPass pass) const
+{
+    const int i = static_cast<int>(pass);
+    if (i < 0 || i >= kPassCount) {
+        return nullptr;
+    }
+    return m_passRpDesc[i];
+}
+
+int cwRhiScene::passSampleCount(cwRHIObject::RenderPass pass) const
+{
+    const int i = static_cast<int>(pass);
+    if (i < 0 || i >= kPassCount) {
+        return 1;
+    }
+    return m_passSampleCount[i];
 }
 
 cwRhiScene::PipelineRecord* cwRhiScene::acquirePipeline(const cwRhiPipelineKey& key,

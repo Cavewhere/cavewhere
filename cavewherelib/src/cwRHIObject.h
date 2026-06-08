@@ -25,10 +25,16 @@ public:
         QRhiCommandBuffer* cb;
         cwRhiItemRenderer* renderer;
         cwSceneUpdate::Flag updateFlag;
-        // Active pass's render-pass descriptor — offscreen when the pass has a
-        // PassConfig entry in cwRhiScene, swap-chain otherwise. Back-ends key
-        // their pipelines on this so they rebuild when a pass switches targets.
+        // Active pass's render-pass descriptor — offscreen when the pass routes
+        // through an EDL offscreen target in cwRhiScene, swap-chain otherwise.
+        // Back-ends key their pipelines on this so they rebuild when a pass
+        // switches targets.
         QRhiRenderPassDescriptor* renderPassDescriptor = nullptr;
+        // Active pass's MSAA sample count. The swap chain is multisampled, but
+        // the EDL offscreen targets are 1x, so a pass routed offscreen needs a
+        // 1x pipeline. Back-ends key their pipelines on this; it must match the
+        // sample count of the render target the pass actually draws into.
+        int sampleCount = 1;
     };
 
     struct ResourceUpdateData {
@@ -116,6 +122,13 @@ public:
     void setVisible(bool visible) { m_isVisible = visible; }
     bool isVisible() const { return m_isVisible; }
 
+    // True when this object draws into the PointCloud pass with real geometry.
+    // cwRhiScene polls this before gathering to decide whether to engage the
+    // EDL offscreen-composite path (which reroutes Background + Opaque through
+    // a shared-depth offscreen so the cloud silhouette can darken against the
+    // scene). Default false; cwRHIPointCloud overrides.
+    virtual bool usesPointCloudPass() const { return false; }
+
     static QShader loadShader(const QString& name);
 private:
     bool m_isVisible = true;
@@ -180,11 +193,14 @@ public:
     virtual void updateFrameUniforms(const FrameUniformContext&) {}
 
     // Emit pipeline+SRB+draw into `cb` (which must be inside an open beginPass
-    // against the output target). `inputColor`/`inputDepth` are the source
-    // pass's offscreen textures.
+    // against the output target, typically the swap chain). The effect is the
+    // final composite: `sceneColor` holds Background + Opaque drawn at 1x,
+    // `cloudColor` holds the point cloud (opaque where present, transparent
+    // elsewhere), and `depth` is the combined cloud+scene depth they share.
     virtual void apply(QRhiCommandBuffer* cb,
-                       QRhiTexture* inputColor,
-                       QRhiTexture* inputDepth,
+                       QRhiTexture* sceneColor,
+                       QRhiTexture* cloudColor,
+                       QRhiTexture* depth,
                        QSize outputSize) = 0;
 };
 

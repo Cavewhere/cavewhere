@@ -203,7 +203,7 @@ bool cwRHILinePlot::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    const auto key = buildPipelineKey(target, data.renderPassDescriptor);
+    const auto key = buildPipelineKey(data.renderPassDescriptor, data.sampleCount);
     if (!m_hasPipelineKey || !(m_pipelineKey == key)) {
         releasePipeline();
 
@@ -301,12 +301,12 @@ bool cwRHILinePlot::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer
     return true;
 }
 
-cwRhiPipelineKey cwRHILinePlot::buildPipelineKey(QRhiRenderTarget* target,
-                                                 QRhiRenderPassDescriptor* renderPassDescriptor) const
+cwRhiPipelineKey cwRHILinePlot::buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
+                                                 int sampleCount) const
 {
     cwRhiPipelineKey key;
     key.renderPass = renderPassDescriptor;
-    key.sampleCount = target ? target->sampleCount() : 1;
+    key.sampleCount = sampleCount;
     key.vertexShader = QStringLiteral(":/shaders/LinePlot.vert.qsb");
     key.fragmentShader = QStringLiteral(":/shaders/LinePlot.frag.qsb");
     key.cullMode = static_cast<quint8>(cwRenderMaterialState::CullMode::None);

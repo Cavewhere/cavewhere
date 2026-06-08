@@ -192,7 +192,7 @@ void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
         }
 
         if (item->pipelineNeedsUpdate) {
-            item->ensurePipeline(data, m_sharedData, m_inputLayout);
+            item->ensurePipeline(data.renderData, m_sharedData, m_inputLayout);
             item->createShaderResourceBindings(data, m_sharedData);
         }
     }
@@ -252,11 +252,24 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
     const auto desiredPass = context.renderPass;
     bool appended = false;
 
+    // const iteration: the mapped values are Item* (the pointee is non-const, so
+    // item->ensurePipeline() below is still callable) — avoids a QHash detach.
     for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
-        const Item* item = it.value();
+        Item* item = it.value();
         if (!item || !item->visible) {
             continue;
         }
+
+        if (toRenderPass(item->material.renderPass) != desiredPass) {
+            continue;
+        }
+
+        // Rebuild the pipeline if this pass's target changed since last frame
+        // (cloud appeared/disappeared → Opaque routes through the 1x offscreen
+        // or back to the swap chain). Self-guards on the key, so a no-op when
+        // the routing is unchanged. The SRB layout is rpDesc-independent, so it
+        // stays valid across the rebuild — no need to recreate it here.
+        item->ensurePipeline(*context.renderData, m_sharedData, m_inputLayout);
 
         if (item->numberOfIndices <= 0 ||
             !item->pipelineRecord ||
@@ -264,10 +277,6 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
             !item->srb ||
             !item->vertexBuffer ||
             !item->indexBuffer) {
-            continue;
-        }
-
-        if (toRenderPass(item->material.renderPass) != desiredPass) {
             continue;
         }
 
@@ -414,7 +423,7 @@ void cwRhiTexturedItems::Item::updateUniformBuffer(const ResourceUpdateData& dat
     modelMatrixNeedsUpdate = false;
 }
 
-void cwRhiTexturedItems::Item::ensurePipeline(const ResourceUpdateData& data,
+void cwRhiTexturedItems::Item::ensurePipeline(const RenderData& renderData,
                                               const SharedItemData& sharedData,
                                               const QRhiVertexInputLayout& layout)
 {
@@ -423,10 +432,26 @@ void cwRhiTexturedItems::Item::ensurePipeline(const ResourceUpdateData& data,
         return;
     }
 
-    auto* renderer = data.renderData.renderer;
+    auto* renderer = renderData.renderer;
+    if (!owner->m_scene && renderer) {
+        owner->m_scene = renderer->sceneBackend();
+    }
+
+    // The pass an item belongs to is fixed by its material, but which target
+    // that pass renders into changes when the cloud composite engages (Opaque
+    // routes to the 1x EDL offscreen then, the swap chain otherwise). Resolve
+    // the target from the scene's per-frame routing so the pipeline — keyed on
+    // rpDesc + sampleCount — rebuilds itself when the routing flips.
     auto* renderTarget = renderer->renderTarget();
-    auto* currentPass = renderTarget->renderPassDescriptor();
-    const int currentSampleCount = renderTarget->sampleCount();
+    const cwRHIObject::RenderPass pass = cwRhiTexturedItems::toRenderPass(material.renderPass);
+    QRhiRenderPassDescriptor* currentPass =
+        owner->m_scene ? owner->m_scene->passRenderPassDescriptor(pass) : nullptr;
+    int currentSampleCount =
+        owner->m_scene ? owner->m_scene->passSampleCount(pass) : 0;
+    if (!currentPass) {
+        currentPass = renderTarget->renderPassDescriptor();
+        currentSampleCount = renderTarget->sampleCount();
+    }
 
     const cwRhiPipelineKey key = owner->makePipelineKey(currentPass, currentSampleCount, material);
 
@@ -435,7 +460,7 @@ void cwRhiTexturedItems::Item::ensurePipeline(const ResourceUpdateData& data,
     }
 
     releasePipeline();
-    pipelineRecord = owner->acquirePipeline(key, material, data.renderData.cb->rhi(), layout, sharedData);
+    pipelineRecord = owner->acquirePipeline(key, material, renderData.cb->rhi(), layout, sharedData);
     pipelineNeedsUpdate = (pipelineRecord == nullptr);
 
     if (!material.wantsPerDrawUniform()) {

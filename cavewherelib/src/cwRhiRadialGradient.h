@@ -50,8 +50,8 @@ private:
     void releasePipeline();
     bool ensurePipeline(const RenderData& data);
     bool ensureShaderResources(QRhi* rhi);
-    cwRhiPipelineKey buildPipelineKey(QRhiRenderTarget* target,
-                                      QRhiRenderPassDescriptor* renderPassDescriptor) const;
+    cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
+                                      int sampleCount) const;
 };
 
 #endif // CWRADIALGRADIENTRHIOBJECT_H

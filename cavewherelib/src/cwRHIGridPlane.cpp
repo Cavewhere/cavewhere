@@ -157,7 +157,11 @@ bool cwRHIGridPlane::gather(const GatherContext& context, QVector<PipelineBatch>
         return false;
     }
 
-    if (context.renderPass != RenderPass::Opaque) {
+    // The grid is a semi-transparent reference overlay: it must draw *after* the
+    // point cloud (and the EDL composite), depth-testing against the combined
+    // scene+cloud depth but never writing its own full-plane depth — otherwise
+    // its invisible inter-line areas occlude everything behind them.
+    if (context.renderPass != RenderPass::Transparent) {
         return false;
     }
 
@@ -215,7 +219,7 @@ bool cwRHIGridPlane::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    const auto key = buildPipelineKey(target, data.renderPassDescriptor);
+    const auto key = buildPipelineKey(data.renderPassDescriptor, data.sampleCount);
     if (!m_hasPipelineKey || !(m_pipelineKey == key)) {
         releasePipeline();
 
@@ -236,7 +240,7 @@ bool cwRHIGridPlane::ensurePipeline(const RenderData& data)
             });
 
             record->pipeline->setDepthTest(true);
-            record->pipeline->setDepthWrite(true);
+            record->pipeline->setDepthWrite(false);
             record->pipeline->setSampleCount(key.sampleCount);
             record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
             record->pipeline->setVertexInputLayout(m_inputLayout);
@@ -315,19 +319,19 @@ bool cwRHIGridPlane::ensureShaderResources(QRhi* rhi)
     return true;
 }
 
-cwRhiPipelineKey cwRHIGridPlane::buildPipelineKey(QRhiRenderTarget* target,
-                                                  QRhiRenderPassDescriptor* renderPassDescriptor) const
+cwRhiPipelineKey cwRHIGridPlane::buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
+                                                  int sampleCount) const
 {
     cwRhiPipelineKey key;
     key.renderPass = renderPassDescriptor;
-    key.sampleCount = target ? target->sampleCount() : 1;
+    key.sampleCount = sampleCount;
     key.vertexShader = QStringLiteral(":/shaders/grid.vert.qsb");
     key.fragmentShader = QStringLiteral(":/shaders/grid.frag.qsb");
     key.cullMode = static_cast<quint8>(cwRenderMaterialState::CullMode::None);
     key.frontFace = static_cast<quint8>(cwRenderMaterialState::FrontFace::CCW);
     key.blendMode = static_cast<quint8>(cwRenderMaterialState::BlendMode::Alpha);
     key.depthTest = 1;
-    key.depthWrite = 1;
+    key.depthWrite = 0;
     key.globalBinding = 0;
     key.perDrawBinding = 0xFF;
     key.textureBinding = 0xFF;

@@ -226,6 +226,11 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     return true;
 }
 
+bool cwRHIPointCloud::usesPointCloudPass() const
+{
+    return isVisible() && m_geometry.value().geometry.vertexCount() > 0;
+}
+
 void cwRHIPointCloud::releasePipeline()
 {
     if (m_pipelineRecord && m_scene) {
@@ -261,7 +266,7 @@ bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    const auto key = buildPipelineKey(target, data.renderPassDescriptor);
+    const auto key = buildPipelineKey(data.renderPassDescriptor, data.sampleCount);
     if (!m_hasPipelineKey || !(m_pipelineKey == key)) {
         releasePipeline();
 
@@ -361,12 +366,12 @@ bool cwRHIPointCloud::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* render
     return true;
 }
 
-cwRhiPipelineKey cwRHIPointCloud::buildPipelineKey(QRhiRenderTarget* target,
-                                                   QRhiRenderPassDescriptor* renderPassDescriptor) const
+cwRhiPipelineKey cwRHIPointCloud::buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
+                                                   int sampleCount) const
 {
     cwRhiPipelineKey key;
     key.renderPass = renderPassDescriptor;
-    key.sampleCount = target ? target->sampleCount() : 1;
+    key.sampleCount = sampleCount;
     key.vertexShader = QStringLiteral(":/shaders/PointCloud.vert.qsb");
     key.fragmentShader = QStringLiteral(":/shaders/PointCloud.frag.qsb");
     key.cullMode = static_cast<quint8>(cwRenderMaterialState::CullMode::None);

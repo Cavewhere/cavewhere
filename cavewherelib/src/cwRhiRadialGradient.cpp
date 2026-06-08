@@ -151,7 +151,7 @@ bool cwRhiRadialGradient::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    const auto key = buildPipelineKey(target, data.renderPassDescriptor);
+    const auto key = buildPipelineKey(data.renderPassDescriptor, data.sampleCount);
     if (!m_hasPipelineKey || !(m_pipelineKey == key)) {
         releasePipeline();
 
@@ -249,12 +249,12 @@ void cwRhiRadialGradient::releasePipeline()
     m_hasPipelineKey = false;
 }
 
-cwRhiPipelineKey cwRhiRadialGradient::buildPipelineKey(QRhiRenderTarget* target,
-                                                       QRhiRenderPassDescriptor* renderPassDescriptor) const
+cwRhiPipelineKey cwRhiRadialGradient::buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
+                                                       int sampleCount) const
 {
     cwRhiPipelineKey key;
     key.renderPass = renderPassDescriptor;
-    key.sampleCount = target ? target->sampleCount() : 1;
+    key.sampleCount = sampleCount;
     key.vertexShader = QString::fromUtf8(kVertexShaderPath);
     key.fragmentShader = QString::fromUtf8(kFragmentShaderPath);
     key.cullMode = static_cast<quint8>(cwRenderMaterialState::CullMode::None);

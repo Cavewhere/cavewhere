@@ -33,14 +33,15 @@ public:
     void updateResources(const ResourceUpdateData& data) override;
     void render(const RenderData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
+    bool usesPointCloudPass() const override;
 
 private:
     void initializeResources(const ResourceUpdateData& data);
     void releasePipeline();
     bool ensurePipeline(const RenderData& data);
     bool ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer);
-    cwRhiPipelineKey buildPipelineKey(QRhiRenderTarget* target,
-                                      QRhiRenderPassDescriptor* renderPassDescriptor) const;
+    cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
+                                      int sampleCount) const;
 
     // std140 rounds a uniform block to a multiple of 16 bytes; pad three
     // floats so the C++ struct matches the shader-side block size. Mirrors

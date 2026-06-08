@@ -7,16 +7,21 @@
 
 #version 440 core
 
-// Eye-Dome Lighting (Boucheny 2009 / CloudCompare / Potree). For each pixel,
-// compare its depth to a ring of 8 neighbors. Pixels behind a silhouette
-// edge (cloud neighbors closer) get darkened in proportion to the depth gap.
+// Eye-Dome Lighting (Boucheny 2009 / CloudCompare / Potree), run as the final
+// composite. The scene (Background + Opaque) and the point cloud were rendered
+// into separate 1x color textures that share one depth buffer, so the cloud is
+// already hardware-occluded by scene geometry and the depth buffer holds the
+// combined cloud+scene depth. This pass writes the final swap-chain pixel:
+// scene where there is no cloud, shaded cloud where there is.
 //
-// On top of that classic far-side shading we add a near-side silhouette term:
-// where a cloud edge borders a non-cloud neighbor (background here; opaque
-// scene geometry once the shared-depth pass lands) the cloud edge itself is
-// darkened, so the cloud keeps a visible outline instead of bleeding into the
-// background. Neighbors are classified cloud vs non-cloud by the color
-// texture's alpha (cloud is opaque, background is transparent).
+// For each cloud pixel we compare its depth to a ring of 8 neighbors. Cloud
+// neighbors closer than the center give the classic far-side shape darkening
+// (interior depth cues). Non-cloud neighbors (scene geometry or background,
+// always farther where they border a cloud edge) give a near-side silhouette
+// term that darkens the cloud edge in proportion to the real depth gap — strong
+// against a distant background, fading to nothing where the cloud sits flush
+// against same-depth geometry. Neighbors are classified cloud vs non-cloud by
+// the cloud texture's alpha (cloud is opaque, everything else is transparent).
 //
 // Operates in log2(linear view-space Z). The window-space depth buffer is
 // hyperbolic under perspective (d = A + B/z_view), so log2 of the raw
@@ -53,8 +58,9 @@ layout(std140, binding = 1) uniform EdlBlock {
     float silhouetteClamp;
 };
 
-layout(binding = 2) uniform sampler2D uColor;
-layout(binding = 3) uniform sampler2D uDepth;
+layout(binding = 2) uniform sampler2D uCloudColor;   // point cloud (opaque where present)
+layout(binding = 3) uniform sampler2D uDepth;         // combined cloud + scene depth
+layout(binding = 4) uniform sampler2D uSceneColor;    // Background + Opaque, drawn at 1x
 
 layout(location = 0) in vec2 vUV;
 layout(location = 0) out vec4 fragColor;
@@ -96,17 +102,22 @@ void main()
 {
     vec2 uv = (textureYFlip > 0.5) ? vec2(vUV.x, 1.0 - vUV.y) : vUV;
 
-    // Sample depth first and discard background fragments before sampling
-    // color — saves the color tap and the 8 EDL depth taps on every empty
-    // pixel. discard skips both color blend AND depth write so the swap-chain
-    // depth buffer keeps its cleared (far-plane) value where there's no cloud.
+    // Combined cloud+scene depth, already in the backend's window-space range
+    // ([0,1] post-clipSpaceCorrMatrix). Forward it to the swap-chain depth
+    // buffer so post-composite passes (Transparent, Overlay) z-test correctly
+    // against everything drawn so far.
     float d0 = texture(uDepth, uv).r;
-    if (d0 >= 0.9999) {
-        discard;
-    }
-    vec4 src = texture(uColor, uv);
-    if (src.a < kCloudAlphaThreshold) {
-        discard;
+    gl_FragDepth = d0;
+
+    vec4 scene = texture(uSceneColor, uv);
+    vec4 cloud = texture(uCloudColor, uv);
+
+    // No cloud here: pass the scene (Background + Opaque) straight through. This
+    // also covers pixels where opaque geometry occluded the cloud (the cloud
+    // failed the shared-depth test, so cloud.a stayed at its cleared zero).
+    if (cloud.a < kCloudAlphaThreshold) {
+        fragColor = scene;
+        return;
     }
 
     // Linearize as distance from near plane (always >= 0).
@@ -117,18 +128,18 @@ void main()
         vec2( 0.707,  0.707), vec2(-0.707,  0.707),
         vec2( 0.707, -0.707), vec2(-0.707, -0.707));
 
-    // Classify each neighbor with the cloud mask (the color texture's alpha).
+    // Classify each neighbor with the cloud mask (the cloud texture's alpha).
     //  - cloud neighbor closer than the center -> far-side shape darkening,
     //    the classic EDL look that gives interior depth cues.
-    //  - non-cloud neighbor (farther by construction; occluded cloud is
-    //    rejected before this pass) -> near-side silhouette darkening so the
-    //    cloud edge keeps an outline against the background.
+    //  - non-cloud neighbor (scene geometry or background, farther where it
+    //    borders a cloud edge) -> near-side silhouette darkening modulated by
+    //    the real depth gap, so the cloud keeps an outline against the scene.
     float shapeResponse = 0.0;
     float silhouetteResponse = 0.0;
     for (int i = 0; i < 8; ++i) {
         vec2 nuv = uv + dirs[i] * sampleOffset;
         float logZi = log2(linearDepthFromNear(texture(uDepth, nuv).r) + 1e-6);
-        if (texture(uColor, nuv).a > kCloudAlphaThreshold) {
+        if (texture(uCloudColor, nuv).a > kCloudAlphaThreshold) {
             shapeResponse += max(0.0, logZ0 - logZi);
         } else {
             silhouetteResponse += clamp(logZi - logZ0, 0.0, silhouetteClamp);
@@ -139,14 +150,6 @@ void main()
     float shade = exp(-(shapeResponse * strength
                         + silhouetteResponse * silhouetteStrength) / 8.0);
 
-    // Premultiplied alpha so the swap-chain composite (One, OneMinusSrcAlpha)
-    // leaves the Scene-layer pixels intact wherever the cloud is transparent.
-    fragColor = vec4(src.rgb * shade * src.a, src.a);
-
-    // Forward the cloud's depth into the swap-chain depth buffer so that
-    // Opaque-pass draws (grid, lines, etc.) that come after the composite
-    // can z-test correctly against the cloud's surface. The depth value
-    // sampled from uDepth is already in the backend's window-space depth
-    // range ([0,1] post-clipSpaceCorrMatrix), so it can be written directly.
-    gl_FragDepth = d0;
+    // The cloud is opaque where present, so it fully covers the scene here.
+    fragColor = vec4(cloud.rgb * shade, 1.0);
 }

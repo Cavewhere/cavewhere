@@ -57,7 +57,7 @@ private:
         cwRhiTexturedItems* owner = nullptr;
 
         void initializeResources(const ResourceUpdateData &data, const SharedItemData &sharedData);
-        void ensurePipeline(const ResourceUpdateData& data, const SharedItemData &sharedData, const QRhiVertexInputLayout& layout);
+        void ensurePipeline(const RenderData& renderData, const SharedItemData &sharedData, const QRhiVertexInputLayout& layout);
         void updateGeometryBuffers(const ResourceUpdateData& data);
         void updateTextureResource(const ResourceUpdateData& data, const SharedItemData &sharedData);
         void updateUniformBuffer(const ResourceUpdateData& data);

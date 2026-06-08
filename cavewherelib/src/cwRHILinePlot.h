@@ -54,8 +54,8 @@ private:
     void releasePipeline();
     bool ensurePipeline(const RenderData& data);
     bool ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer);
-    cwRhiPipelineKey buildPipelineKey(QRhiRenderTarget* target,
-                                      QRhiRenderPassDescriptor* renderPassDescriptor) const;
+    cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
+                                      int sampleCount) const;
 };
 
 #endif // CWRHILINEPLOT_H

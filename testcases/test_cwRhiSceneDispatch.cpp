@@ -57,11 +57,17 @@ TEST_CASE("RenderPass enum exposes Background and PointCloud in expected order",
     REQUIRE(static_cast<int>(RP::ShadowMap) < static_cast<int>(RP::Count));
 }
 
-TEST_CASE("cwRhiScene defaults to empty PassConfig table (fallthrough to swap-chain)",
+TEST_CASE("cwRhiScene defaults to unrouted passes (fallthrough to swap-chain)",
           "[cwRhiSceneDispatch]")
 {
     cwRhiScene scene;
-    REQUIRE(scene.passConfigs().empty());
+    // Before the first render() the per-pass routing is unset, so objects fall
+    // back to the swap-chain target and nothing is allocated yet.
+    using RP = cwRHIObject::RenderPass;
+    REQUIRE(scene.passRenderPassDescriptor(RP::Background) == nullptr);
+    REQUIRE(scene.passRenderPassDescriptor(RP::Opaque) == nullptr);
+    REQUIRE(scene.passRenderPassDescriptor(RP::PointCloud) == nullptr);
+    REQUIRE(scene.passSampleCount(RP::Opaque) == 0);
     REQUIRE(scene.pipelineCache().isEmpty());
 }
 
