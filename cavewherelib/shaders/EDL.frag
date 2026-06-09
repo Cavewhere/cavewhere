@@ -118,14 +118,15 @@ void main()
     float d0 = texture(uDepth, uv).r;
     gl_FragDepth = d0;
 
-    vec4 scene = texture(uSceneColor, uv);
     vec4 cloud = texture(uCloudColor, uv);
 
     // No cloud here: pass the scene (Background + Opaque) straight through. This
     // also covers pixels where opaque geometry occluded the cloud (the cloud
-    // failed the shared-depth test, so cloud.a stayed at its cleared zero).
+    // failed the shared-depth test, so cloud.a stayed at its cleared zero). The
+    // scene color is fetched only on this branch — cloud pixels (the 8-tap path
+    // below) never read it, so sampling it here keeps that texel fetch off them.
     if (cloud.a < kCloudAlphaThreshold) {
-        fragColor = scene;
+        fragColor = texture(uSceneColor, uv);
         return;
     }
 
