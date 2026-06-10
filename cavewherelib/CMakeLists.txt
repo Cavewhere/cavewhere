@@ -239,8 +239,8 @@ target_include_directories(cavewherelib
 )
 
 # Collect source files cavewhereLib
-file(GLOB cavewherelib_CPP_FILES CONFIGURE_DEPENDS "src/*.cpp" "src/utils/*.cpp" "src/rendering/*.cpp")
-file(GLOB cavewherelib_H_FILES CONFIGURE_DEPENDS "src/*.h" "src/utils/*.h" "src/rendering/*.h")
+file(GLOB cavewherelib_CPP_FILES CONFIGURE_DEPENDS "src/*.cpp" "src/utils/*.cpp" "src/rendering/*.cpp" "src/cwPlacementRules/*.cpp")
+file(GLOB cavewherelib_H_FILES CONFIGURE_DEPENDS "src/*.h" "src/utils/*.h" "src/rendering/*.h" "src/cwPlacementRules/*.h")
 
 if(IOS)
     list(APPEND cavewherelib_CPP_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/cwClipboard_ios.mm")

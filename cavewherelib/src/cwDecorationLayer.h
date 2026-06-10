@@ -21,28 +21,24 @@
 #include "cwPlacementRuleData.h"
 
 // One drawn layer of a brush. A brush has no built-in centerline — a normal
-// wall's visible line is just an OffsetCurve layer with offset 0.
-// All dimensional fields are in paper millimetres.
+// wall's visible line is just a layer whose rule stack traces an offset polyline
+// at offset 0. What a layer draws is decided entirely by its `rules` (the
+// terminal rule produces either glyph stamps or a traced polyline); there is no
+// mode. All dimensional fields are in paper millimetres.
 struct CAVEWHERE_LIB_EXPORT cwDecorationLayer {
-    enum Mode : int {
-        RigidStamp = 0,   // glyph drawn straight at anchor + tangent rotation
-        BendingStamp = 1, // glyph re-parameterised along centerline arclength
-        PointStamp = 2,   // single glyph placement at an explicit anchor; no centerline
-        OffsetCurve = 3,  // continuous polyline traced at perpendicular offset; no glyph
-    };
-
     cwDecorationLayer() = default;
 
-    QString glyphName;                       // used by all modes except OffsetCurve
-    Mode    mode = RigidStamp;
-    QVector<cwPlacementRuleData> rules;      // empty = use the mode's default stack
+    QString glyphName;                       // glyph ref for stamp layers; empty for line (offset-polyline) layers
+    QVector<cwPlacementRuleData> rules;      // the placement-rule stack; empty = no ink
 
     double bufferMm = 1.0;                    // collision keep-clear; currently dormant
     int    collisionPriority = 0;             // MutateScene tiebreak
     double minPaperScale = 0.0;               // 0 = unbounded
     double maxPaperScale = 0.0;
 
-    // OffsetCurve params (read only when mode == OffsetCurve).
+    // Line-styling params, read by a Trace-offset-polyline terminal rule. (These
+    // will migrate into that rule's params when param interpretation lands; see
+    // the symbology plan's params/editor commit.)
     QColor           offsetCurveColorLight;
     QColor           offsetCurveColorDark;
     double           offsetCurveWidthMm  = 0.4;

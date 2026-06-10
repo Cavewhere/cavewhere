@@ -42,7 +42,6 @@ cwLineBrush brushStampingGlyph(const QString &name, const QString &glyphName)
     cwLineBrush brush;
     brush.name = name;
     cwDecorationLayer layer;
-    layer.mode = cwDecorationLayer::RigidStamp;
     layer.glyphName = glyphName;
     brush.decorations.append(layer);
     return brush;

@@ -18,12 +18,17 @@
 
 namespace {
 
+// A line layer is one whose rule stack traces an offset polyline (what used to
+// be "OffsetCurve mode").
 int offsetCurveLayerCount(const cwLineBrush &brush)
 {
     int count = 0;
     for (const auto &layer : brush.decorations) {
-        if (layer.mode == cwDecorationLayer::OffsetCurve) {
-            ++count;
+        for (const auto &rule : layer.rules) {
+            if (rule.name == QStringLiteral("Trace offset polyline")) {
+                ++count;
+                break;
+            }
         }
     }
     return count;
@@ -83,12 +88,13 @@ TEST_CASE("Seed ships the floor-step brush and floor-step-tick glyph",
     REQUIRE(floorStep.has_value());
     CHECK_FALSE(floorStep->scrapOutline);
 
-    // floor-step has two layers: an OffsetCurve edge line + a RigidStamp of the
-    // tick glyph.
+    // floor-step has two layers: a traced edge line + a rigid-stamp stack for
+    // the tick glyph.
     CHECK(offsetCurveLayerCount(*floorStep) == 1);
     REQUIRE(floorStep->decorations.size() == 2);
     const auto &stamp = floorStep->decorations.at(1);
-    CHECK(stamp.mode == cwDecorationLayer::RigidStamp);
+    REQUIRE_FALSE(stamp.rules.isEmpty());
+    CHECK(stamp.rules.last().name == QStringLiteral("Rigid stamp"));
     CHECK(stamp.glyphName == cwSymbologyPaletteSeed::floorStepTickGlyphName());
 
     // floor-step paints between feature and wall.

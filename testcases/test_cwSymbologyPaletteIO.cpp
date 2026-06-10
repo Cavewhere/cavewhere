@@ -112,7 +112,6 @@ TEST_CASE("Brush color hex round-trips opaque and translucent values", "[cwSymbo
     const QColor translucent(0x12, 0x34, 0x56, 0x78);    // "#RRGGBBAA"
 
     cwDecorationLayer layer;
-    layer.mode = cwDecorationLayer::OffsetCurve;
     layer.offsetCurveColorLight = opaque;
     layer.offsetCurveColorDark = translucent;
 

@@ -43,6 +43,13 @@ public:
     // unknown glyph returns an empty path and is not cached.
     QPainterPath tessellate(const QString &glyphName, double mapScale);
 
+    // Paper-millimetres to world metres at a given map-scale ratio:
+    //   world_m = paper_mm / (1000 * scaleRatio)
+    // e.g. at 1:250, 1 mm paper ≈ 0.25 m world. The single source of truth so
+    // glyph ink and stamp spacing stay paper-sized across scales (cwSketchPainter::
+    // LinePlotReferenceMapScaleRatio is the fallback when mapScale <= 0).
+    static double paperMmToWorldM(double mapScale);
+
     // Invalidation hooks.
     void clear();
     void invalidateScale(double mapScale);       // cwScale::scaleChanged

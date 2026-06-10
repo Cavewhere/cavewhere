@@ -281,8 +281,8 @@ so prototype-era sketches no longer load (no legacy loader — Decision&nbsp;2).
     <tr>
       <td>4</td>
       <td>Placement rules + decoration layout</td>
-      <td><code>cwPlacementRule</code> abstract base + registry, concrete rules under <code>cwPlacementRules/</code> (Generate / MutatePerLayer / Stamp stages — Decision&nbsp;11), <code>cwSketchDecorationLayout</code> running the pipeline against a <code>cwPaletteSnapshot</code>. The four modes (RigidStamp / BendingStamp / PointStamp / OffsetCurve at offset=0). No <code>MutateScene</code> rules yet.</td>
-      <td></td>
+      <td><code>cwPlacementRule</code> abstract base + registry, concrete rules under <code>cwPlacementRules/</code> (Generate / MutatePerLayer / Terminal stages — Decision&nbsp;11), <code>cwSketchDecorationLayout</code> running the pipeline against a <code>cwPaletteSnapshot</code>. <strong>Modes are gone (Decision&nbsp;11b — full collapse):</strong> a decoration layer <em>is</em> a rule stack; the Terminal rule produces the layer's geometry and names its <code>OutputKind</code> (stamps vs a traced polyline). Six rules ship: <code>Uniform spacing</code>, <code>Explicit point</code>, <code>Align to tangent</code>, <code>Rigid stamp</code>, <code>Bending stamp</code>, <code>Trace offset polyline</code> (offset=0). The rule owns its shape (Decision&nbsp;11a). No <code>MutateScene</code> rules yet.</td>
+      <td><span class="badge i1">built · green · uncommitted</span></td>
     </tr>
     <tr>
       <td>5</td>
@@ -306,6 +306,12 @@ so prototype-era sketches no longer load (no legacy loader — Decision&nbsp;2).
       <td>8</td>
       <td>Glyph editor</td>
       <td><code>cwSketchGlyphCanvas</code> (origin marker, tangent indicator, paper-mm extent overlay), <code>GlyphEditorPage.qml</code> host with save / cancel / rename, draw-and-save into a writable palette fork; <code>tst_GlyphEditor.qml</code>.</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Rule params interpretation + brush editor</td>
+      <td>Interpret <code>cwPlacementRuleData::params</code> (today an uninterpreted <code>bytes</code> blob): one proto message per rule, decoded by the rule at layout time, replacing the hard-coded defaults (e.g. <code>Uniform spacing</code>'s 2&nbsp;mm step, <code>Explicit point</code>'s anchor → a <code>By count</code> N, etc.). <strong>Migrate line styling into rule params:</strong> the flat <code>cwDecorationLayer</code> offset-curve fields (color light/dark, width, dash, cap, join, offset, pressure) move into <code>Trace offset polyline</code>'s params, where they belong post-collapse (Decision&nbsp;11b) — the layer stops carrying terminal-specific fields. Plus the <strong>in-app brush editor</strong>: add/remove/reorder decoration layers, compose each layer's rule stack from the registry, edit rule params with live preview. Stack-wellformedness validation (commit&nbsp;4.1) is the editor's authoring guard. <code>cavewhere_symbology.proto</code> churn: per-rule param messages; drop the migrated <code>DecorationLayer</code> styling fields.</td>
       <td></td>
     </tr>
   </tbody>
@@ -536,14 +542,16 @@ message LineBrush {
 }
 
 message DecorationLayer {
-    // Mode + glyph (glyph modes only).
+    // A layer is a rule stack (Decision 11b — no mode). The Terminal rule
+    // produces the layer's geometry; its OutputKind names what (stamps vs.
+    // a traced polyline).
     string glyphName = 1;                  // ref into Palette.glyphs by name (Decision 9);
-                                           //   empty when mode == OffsetCurve
-    int32  mode      = 2;                  // 0=rigid, 1=bending, 2=point, 3=offsetCurve (Decision 10)
-    // Ordered rule pipeline: Generate / MutatePerLayer / Stamp / MutateScene
-    // rules, sorted by stage at execution time. Empty = use the mode's
-    // default rule stack (Decision 11). The default stack does NOT include
-    // MutateScene rules in iter 1 — those land in iter 2.
+                                           //   empty for a polyline-tracing layer
+    reserved 2; reserved "mode";           // was int32 mode (Decision 11b removed modes)
+    // Ordered rule pipeline: Generate / MutatePerLayer / Terminal / MutateScene
+    // rules, sorted by stage at execution time. Empty = no rules = no ink
+    // (there is no per-mode default stack; the seed/editor write explicit
+    // stacks). MutateScene rules land in iter 2.
     repeated PlacementRule rules = 3;
     double bufferMm           = 4;         // collision keep-clear, default 1.0 mm.
                                            //   Serialized from iter 1 for forward-compat
@@ -829,8 +837,9 @@ maxPaperScale]</code> window?" — no other scale arithmetic needed.
 plan said <code>...Px</code>, the field becomes <code>...Mm</code>
 (paper millimetres). The prototype's <code>cwPenStroke::width</code>
 override is removed entirely (Decision 2) — width lives on the
-<code>OffsetCurve</code> decoration layer's
-<code>offsetCurveWidthMm</code>, full stop. The
+decoration layer's <code>offsetCurveWidthMm</code> field (flat for now;
+it migrates into <code>Trace offset polyline</code>'s rule params in
+commit&nbsp;9, Decision&nbsp;11b), full stop. The
 <code>strokePenScale</code> field on
 <code>cwSketchPainter::PaintContext</code> still exists for the
 prototype path-batching code, but the new symbology pipeline does not
@@ -1097,6 +1106,14 @@ fires on the sketch's map scale.
 
 <h3>10. Decoration layers run in one of four modes <span class="badge i1">iter 1</span> <span class="badge i3">iter 2</span></h3>
 
+<p class="small"><strong>Superseded by Decision&nbsp;11b — modes are gone.</strong>
+The four modes below were collapsed into the rule stack: a layer no longer has a
+<code>mode</code>; what it draws is decided by its rules, with the Terminal rule's
+<code>OutputKind</code> standing in for the stamps-vs-offset-curve split. The four
+behaviours described here are still correct as <em>behaviours</em> — read
+"RigidStamp" as "a <code>Rigid stamp</code> terminal", "OffsetCurve" as "a
+<code>Trace offset polyline</code> terminal", etc.</p>
+
 <pre><code>struct cwDecorationLayer {
     QString glyphName;            // glyph reference, used by all modes EXCEPT OffsetCurve
 
@@ -1272,6 +1289,13 @@ ink paints over anything beneath. No special-case code anywhere.
 
 <h3>11. Placement rules — a four-stage registry <span class="badge i1">iter 1</span> <span class="badge i3">iter 2</span></h3>
 
+<p class="small"><strong>Updated by Decision&nbsp;11b.</strong> The four stages
+stand, but the third is renamed <code>Stamp</code> → <code>Terminal</code> (it can
+produce a traced polyline, not just stamps) and reads its
+<code>OutputKind</code>; there are no per-mode default stacks
+(<code>defaultRules</code> is removed) and no <code>compatibleModes()</code> —
+validation is stack well-formedness, not mode compatibility.</p>
+
 <p>
 A decoration layer's <code>rules</code> field is one ordered pipeline
 spanning four stages. The first three run <em>per-layer</em>; the
@@ -1284,7 +1308,7 @@ emitted stamps plus every stroke's centerline keep-clear band:
   <tbody>
     <tr><td><code>Generate</code></td><td>per-layer</td><td>This stroke's centerline + this layer's params</td><td>iter 1</td></tr>
     <tr><td><code>MutatePerLayer</code></td><td>per-layer</td><td>Same + the candidate stamp list from <code>Generate</code></td><td>iter 1</td></tr>
-    <tr><td><code>Stamp</code></td><td>per-layer</td><td>Same + finalises stamps into drawn geometry; terminates the per-layer pipeline</td><td>iter 1</td></tr>
+    <tr><td><code>Terminal</code></td><td>per-layer</td><td>Same + the tessellated glyph; the rule produces the layer's geometry — stamps (materialised into ink + bbox, Decision&nbsp;11a) or a traced polyline — per its <code>OutputKind</code>, and terminates the per-layer pipeline</td><td>iter 1</td></tr>
     <tr><td><code>MutateScene</code></td><td><strong>global</strong></td><td>Every layer's stamps + every centerline's keep-clear band via <code>cwSceneContext</code></td><td>iter 2</td></tr>
   </tbody>
 </table>
@@ -1300,41 +1324,120 @@ that references it. UI translation happens via the regular Qt
 </p>
 
 <pre><code>struct cwStampPosition {
+    // Ordered widest-first so the layout packs without internal padding holes.
+    QRectF  bufferedBboxWorld;    // ink bbox inflated by layer.bufferMm; populated at Terminal time
     QPointF anchorWorld;          // where glyph (0,0) sits
+    QString glyphName;            // usually layer.glyphName; rules may swap it
     double  rotationRad = 0.0;    // 0 = +X along world +X
     double  scale       = 1.0;    // 1.0 = glyph's authored size; the Taper
                                   //   scale rule may vary it. Applied as a
                                   //   draw-time transform on the cached path,
                                   //   NOT part of the tessellation cache key.
     int     side        = +1;     // +1 / -1 (for mirror-aware rules)
-    QString glyphName;            // usually layer.glyphName; rules may swap it
-    int     priority    = 0;      // copied from layer.collisionPriority at Stamp time
-    QRectF  bufferedBboxWorld;    // ink bbox inflated by layer.bufferMm; populated at Stamp time
+    int     priority    = 0;      // copied from layer.collisionPriority at Terminal time
     bool    visible     = true;
+};
+
+// Read-only inputs every per-layer rule runs against, bundled so new
+// inputs don't churn each rule's signature (the implemented shape).
+struct cwPlacementContext {
+    const cwStrokePath&amp;      strokePath;      // arclength sampler over this stroke
+    const cwDecorationLayer&amp; layer;
+    double                   worldPerPaperMm = 0.0;
+    cwSceneContext*          scene = nullptr; // MutateScene state; nullptr pre-iter-2
+};
+
+// What a Stamp rule needs to turn one placed position into ink. The glyph
+// is tessellated once by cwGlyphTessellationCache and passed in, so the
+// rule never reaches the cache and stays cheap to re-invoke.
+struct cwStampGeometry {
+    const QPainterPath&amp; glyphPath;            // unplaced world-metre glyph ink
+    const cwStrokePath&amp; strokePath;
 };
 
 class cwPlacementRule {
 public:
     virtual ~cwPlacementRule() = default;
     virtual QString displayName() const = 0;  // also the registry key
-    enum Stage { Generate, MutatePerLayer, Stamp, MutateScene };
+    enum Stage { Generate, MutatePerLayer, Terminal, MutateScene };
     virtual Stage stage() const = 0;
 
-    // Which decoration modes this rule is valid against. Checked at
-    // palette-load time (Decision 3's validation pass). Generate /
-    // MutatePerLayer / Stamp rules declare the modes they support;
-    // MutateScene rules are mode-agnostic (they operate on the unified
-    // stamp set) and return every mode.
-    virtual QFlags&lt;cwDecorationLayer::Mode&gt; compatibleModes() const = 0;
+    // What the layer's Terminal rule produces (Decision 11b). Non-terminal
+    // rules return None; a stamp Terminal returns Stamps; the polyline
+    // Terminal returns Polylines. cwSketchDecorationLayout reads this off the
+    // stack's Terminal rule instead of switching on a (removed) layer mode.
+    enum class OutputKind { None, Stamps, Polylines };
+    virtual OutputKind outputKind() const { return OutputKind::None; }
 
-    // Per-layer rules use this signature; scene-stage rules ignore the
-    // arguments and pull from `scene` instead. cwSketchDecorationLayout
-    // selects the right invocation by stage.
-    virtual void apply(QVector&lt;cwStampPosition&gt; &amp;positions,
-                       const QVector&lt;QPointF&gt; &amp;centerline,    // world m
-                       const cwDecorationLayer &amp;layer,
-                       cwSceneContext *scene) const = 0;
+    // Placement. Per-layer rules read `context`, read/write `positions`;
+    // scene-stage rules ignore `positions` and pull from context.scene.
+    virtual void apply(QVector&lt;cwStampPosition&gt;&amp; positions,
+                       const cwPlacementContext&amp; context) const = 0;
+
+    // Materialisation — the Terminal rule owns its shape (Decision 11a). A
+    // Stamps Terminal overrides stampPath() (rigid transform or arclength
+    // warp); a Polylines Terminal overrides tracePolylines(). The defaults
+    // are empty, so Generate / MutatePerLayer / Scene rules ignore them.
+    // measureBbox() (iter 2) is the cheap counterpart the MutateScene stage
+    // re-runs for each trial shift/scale so only collision survivors pay for
+    // a full QPainterPath.
+    virtual QPainterPath stampPath  (const cwStampPosition&amp; p,
+                                     const cwStampGeometry&amp; geo) const { return {}; }
+    virtual QVector&lt;QPolygonF&gt; tracePolylines(const QVector&lt;QPointF&gt;&amp; strokeWorld,
+                                     const cwPlacementContext&amp; context) const { return {}; }
+    virtual QRectF       measureBbox(const cwStampPosition&amp; p,
+                                     const cwStampGeometry&amp; geo) const { return {}; }
 };</code></pre>
+
+<p>
+<strong>Decision 11a — the rule owns its shape.</strong> Turning a placed
+<code>cwStampPosition</code> into world-metre ink is the Terminal rule's job, not
+<code>cwSketchDecorationLayout</code>'s. The layout orchestrates and owns
+resources — it tessellates the glyph through
+<code>cwGlyphTessellationCache</code>, runs the pipeline, then calls the
+resolved Terminal rule's <code>stampPath()</code> (or <code>tracePolylines()</code>)
+— but the per-terminal transform (rigid place vs. arclength warp) lives in
+<code>cwRigidStampRule</code> / <code>cwBendingStampRule</code>, reached
+polymorphically rather than through a removed-mode switch in the layout. Adding a new stamp style is then
+one rule class, with no edit to the layout, and the rule's name finally carries
+its behaviour. The geometry methods take their inputs (glyph path, stroke path)
+by parameter so they are pure and re-callable: in iter 2 the
+<code>MutateScene</code> stage, which shifts and scales stamps to resolve
+collisions, re-runs <code>measureBbox()</code> for each trial position (cheap),
+and only the survivors are materialised into a full <code>QPainterPath</code>
+once collision settles. Performance is a wash versus doing the transform in the
+layout — the geometry math is identical; what this buys is altitude, not speed.
+</p>
+
+<p>
+<strong>Decision 11b — modes collapsed; a layer <em>is</em> a rule stack.</strong>
+This supersedes the four-mode framing of Decisions&nbsp;10 &amp; 11 below (their
+prose still reads in mode terms; the model is now mode-free). The repeated
+investigation that "the mode never carries behaviour — the rule stack does"
+reached its conclusion: <code>cwDecorationLayer::Mode</code> is removed entirely
+(no enum, no stored field, no preset id; the proto <code>mode</code> field is
+<code>reserved</code>). Every distinction the four modes encoded lives in the
+stack instead:
+</p>
+<ul>
+  <li><strong>Repeated vs. single</strong> was a <em>Generate</em>-stage choice all along — <code>Uniform spacing</code> (every <var>n</var> mm) vs. <code>Explicit point</code> (one anchor). "Single" is just the degenerate count; a future <code>By count</code> rule (commit&nbsp;9) covers "exactly N".</li>
+  <li><strong>Rigid vs. bending</strong> is a <em>Terminal</em>-rule choice — <code>Rigid stamp</code> vs. <code>Bending stamp</code>, differing only in <code>stampPath()</code>.</li>
+  <li><strong>Stamps vs. offset curve</strong> is the Terminal rule's <code>OutputKind</code> (<code>Stamps</code> / <code>Polylines</code>); <code>cwSketchDecorationLayout</code> reads it off the stack's Terminal rule instead of switching on a layer mode. The old <code>RigidStamp</code>+<code>PointStamp</code> duplication dissolves — both end with <code>Rigid stamp</code>, differing only in their Generate rule.</li>
+</ul>
+<p>
+Consequences: the <code>Stamp</code> stage is renamed <code>Terminal</code>;
+<code>cwPlacementRuleRegistry::defaultRules(mode)</code> is removed (a layer with
+no rules draws nothing — there is no per-mode fallback, so the seed and the
+future editor write explicit stacks); and <code>compatibleModes()</code> + its
+<code>QFlags</code> apparatus are deleted, since there are no modes to validate
+against. The load-time check (commit&nbsp;4.1) becomes <em>stack
+well-formedness</em> — exactly one Terminal, stages ordered, Generate rules
+agreeing with the Terminal's input needs — not mode compatibility. Line styling
+(<code>offsetCurve*</code>) stays as flat <code>cwDecorationLayer</code> fields
+<em>for now</em>; it migrates into <code>Trace offset polyline</code>'s rule
+params in commit&nbsp;9 (params interpretation + brush editor), where
+terminal-specific data belongs.
+</p>
 
 <p>
 <strong>cwSceneContext.</strong> The shared object that
@@ -1370,7 +1473,7 @@ between rules in the chain, so a subsequent rule sees the previous
 rule's effects.
 </p>
 
-<p>Iter 1 + iter 2 ship these rules as code. Until the in-app brush editor lands (iter 4+), cartographers compose them by editing palette files directly; the editor then offers them through a mode-filtered rule picker (see the validation note above):</p>
+<p>Iter 1 + iter 2 ship these rules as code. Until the in-app brush editor lands (commit 9 / iter 4+), cartographers compose them by editing palette files directly; the editor then offers them through a rule picker that keeps the stack well-formed (see the validation note above). Iter 1 ships six rules — <code>Uniform spacing</code>, <code>Explicit point</code>, <code>Align to tangent</code>, <code>Rigid stamp</code>, <code>Bending stamp</code>, <code>Trace offset polyline</code>; the rest are additive follow-ups:</p>
 
 <table>
   <thead><tr><th>Stage</th><th>Name</th><th>What it does</th></tr></thead>
@@ -1378,7 +1481,7 @@ rule's effects.
     <tr><td>Generate</td><td>Uniform spacing</td><td>Seeds positions at every <code>spacingMm</code> along the centerline arclength.</td></tr>
     <tr><td>Generate</td><td>Explicit point</td><td>Seeds a single position from a world-coord anchor (point-stamp default).</td></tr>
     <tr><td>Generate</td><td>Distribute by count</td><td>Evenly spaces N stamps between two arclength bounds.</td></tr>
-    <tr><td>MutatePerLayer</td><td>Rotate by tangent</td><td>Sets each position's <code>rotationRad</code> to the local centerline tangent.</td></tr>
+    <tr><td>MutatePerLayer</td><td>Align to tangent</td><td>Sets each position's <code>rotationRad</code> to the local centerline tangent.</td></tr>
     <tr><td>MutatePerLayer</td><td>Rotate fixed</td><td>Sets a constant rotation for axis-aligned glyphs.</td></tr>
     <tr><td>MutatePerLayer</td><td>Skip sharp bends</td><td>Marks <code>visible = false</code> when local centerline angle &gt; threshold.</td></tr>
     <tr><td>MutatePerLayer</td><td>Skip near endpoints</td><td>Hides positions within <code>marginMm</code> of stroke ends.</td></tr>
@@ -1386,10 +1489,9 @@ rule's effects.
     <tr><td>MutatePerLayer</td><td>Phase offset</td><td>Shifts all positions by N arclength.</td></tr>
     <tr><td>MutatePerLayer</td><td>Taper scale</td><td>Varies <code>scale</code> as a function of arclength (tapered fault, waterfall).</td></tr>
     <tr><td>MutatePerLayer</td><td>Swap glyph cycle</td><td>Rotates <code>glyphId</code> among a list every N stamps.</td></tr>
-    <tr><td>Stamp</td><td>Rigid stamp</td><td>Materialises each visible position via <code>RigidStamp</code> semantics; populates <code>bufferedBboxWorld</code> and <code>priority</code>.</td></tr>
-    <tr><td>Stamp</td><td>Bending stamp</td><td>Materialises via <code>BendingStamp</code>.</td></tr>
-    <tr><td>Stamp</td><td>Point stamp</td><td>Materialises a single position.</td></tr>
-    <tr><td>Stamp</td><td>Trace offset polyline</td><td>For an <code>OffsetCurve</code>-mode layer, samples the cartographer's polyline at fine resolution and emits one polyline at signed perpendicular distance <code>offsetCurveOffsetMm</code>. No iteration over stamps — the layer produces a single piece of geometry covering the whole stroke. Iter 1 ships the fast path (offset = 0, output equals input); iter 2 adds non-zero offset handling.</td></tr>
+    <tr><td>Terminal</td><td>Rigid stamp</td><td><code>OutputKind::Stamps</code>. Materialises each visible position with a rigid transform at the anchor; populates <code>bufferedBboxWorld</code> and <code>priority</code>. (A single oriented placement is just <code>Explicit point → Align to tangent → Rigid stamp</code> — the old "point stamp" mode, no separate rule.)</td></tr>
+    <tr><td>Terminal</td><td>Bending stamp</td><td><code>OutputKind::Stamps</code>. Materialises by warping the glyph along the stroke arclength.</td></tr>
+    <tr><td>Terminal</td><td>Trace offset polyline</td><td><code>OutputKind::Polylines</code>. Samples the cartographer's polyline at fine resolution and emits one polyline at signed perpendicular distance <code>offsetCurveOffsetMm</code>. No iteration over stamps — the layer produces a single piece of geometry covering the whole stroke. Iter 1 ships the fast path (offset = 0, output equals input); commit 4.5 adds non-zero offset handling.</td></tr>
     <tr><td>MutateScene</td><td>Try shift to fit</td><td>For each stamp whose <code>bufferedBboxWorld</code> collides with another stamp or centerline band, try shifts of ±¼ spacing, ±½ spacing along the arclength; accept the first non-colliding shift.</td></tr>
     <tr><td>MutateScene</td><td>Try shorten to fit</td><td>For each still-colliding stamp, scale geometry to 0.5×; accept if the smaller bbox clears.</td></tr>
     <tr><td>MutateScene</td><td>Hide if still colliding</td><td>For each still-colliding stamp, set <code>visible = false</code>. Last resort.</td></tr>
@@ -1398,25 +1500,26 @@ rule's effects.
 </table>
 
 <p>
-<strong>Default rule stacks per mode</strong> (used when
-<code>layer.rules</code> is empty — collision avoidance is opt-out, not
-opt-in, since it's what cartographers expect):
+<strong>No per-mode default stacks</strong> (Decision 11b). With modes gone,
+an empty <code>layer.rules</code> draws nothing — there is no fallback. The
+seed and the future editor write explicit stacks; the four old "modes" are
+now just four different stacks. The seed's brushes use:
 </p>
 
 <table>
-  <thead><tr><th>Mode</th><th>Default rules (iter 1)</th><th>Default rules (iter 2, scene rules added)</th></tr></thead>
+  <thead><tr><th>Brush layer</th><th>Rule stack (iter 1)</th><th>Iter 2 (scene rules appended)</th></tr></thead>
   <tbody>
-    <tr><td><code>RigidStamp</code></td><td>Uniform spacing → Rotate by tangent → Rigid stamp</td><td>… → Sort by priority desc → Try shift to fit → Try shorten to fit → Hide if still colliding</td></tr>
-    <tr><td><code>BendingStamp</code></td><td>Uniform spacing → Bending stamp</td><td>… → Sort by priority desc → Try shift to fit → Hide if still colliding</td></tr>
-    <tr><td><code>PointStamp</code></td><td>Explicit point → Point stamp</td><td>… → Sort by priority desc → Hide if still colliding</td></tr>
-    <tr><td><code>OffsetCurve</code></td><td>Trace offset polyline (offset=0 only in iter 1 — fast path equals the input polyline)</td><td>… → Sort by priority desc → Hide if still colliding (no shift / shorten — a continuous parallel line can't shift along arclength without breaking the "parallel to the whole stroke" contract). Iter 2 also extends Trace to non-zero offsets.</td></tr>
+    <tr><td>Wall / feature edge</td><td>Trace offset polyline</td><td>(unchanged — a continuous parallel line can't shift along arclength without breaking the "parallel to the whole stroke" contract)</td></tr>
+    <tr><td>Floor-step ticks (repeated, rigid)</td><td>Uniform spacing → Align to tangent → Rigid stamp</td><td>… → Sort by priority desc → Try shift to fit → Try shorten to fit → Hide if still colliding</td></tr>
+    <tr><td>Bending dash (repeated, bending)</td><td>Uniform spacing → Bending stamp</td><td>… → Sort by priority desc → Try shift to fit → Hide if still colliding</td></tr>
+    <tr><td>Oriented point (single, rigid)</td><td>Explicit point → Align to tangent → Rigid stamp</td><td>… → Sort by priority desc → Hide if still colliding</td></tr>
   </tbody>
 </table>
 
 <p>
 In iter 1 decorations are drawn at their candidate positions with no
 collision resolution — overlap is allowed. Iter 2's scene-rule chain is
-opt-out (extending the defaults above). A cartographer who wants "let
+opt-out (appended to the seed stacks above). A cartographer who wants "let
 it overlap permanently" removes the scene rules from the layer; a
 cartographer who wants different arbitration reorders or substitutes
 rules. No enum, no hard-coded policy — composition all the way down.
@@ -1426,59 +1529,48 @@ rules. No enum, no hard-coded policy — composition all the way down.
 <strong>Execution model.</strong>
 <code>cwSketchDecorationLayout</code> sorts every layer's rule list
 into stage order: <code>Generate</code> → <code>MutatePerLayer</code>
-→ <code>Stamp</code> → (barrier) → <code>MutateScene</code>. Per-layer
+→ <code>Terminal</code> → (barrier) → <code>MutateScene</code>. Per-layer
 stages can run concurrently across layers and strokes; scene rules run
 serially after the barrier against the unified stamp set. The
 cartographer can drag rules around in the UI without worrying about
 stage order — the framework sorts them. Exactly one
-<code>Stamp</code>-stage rule must terminate the per-layer portion of
+<code>Terminal</code>-stage rule must terminate the per-layer portion of
 each layer's pipeline.
 </p>
 
 <p>
-<strong>Mode is the source of truth; rules are validated against it
-at load time.</strong> A layer's <code>mode</code> (one of
-<code>RigidStamp</code> / <code>BendingStamp</code> /
-<code>PointStamp</code> / <code>OffsetCurve</code>) is authoritative. Each
-per-layer rule declares which modes it supports via
-<code>compatibleModes()</code> — e.g. <code>Trace offset polyline</code>
-→ <code>{OffsetCurve}</code>, <code>Rigid stamp</code> →
-<code>{RigidStamp}</code>, <code>Bend stamp to tangent</code> →
-<code>{BendingStamp}</code>, <code>Scatter</code> →
-<code>{PointStamp}</code>.
+<strong>A layer is a rule stack; validation is stack well-formedness, not
+mode compatibility</strong> (Decision 11b). With <code>compatibleModes()</code>
+gone there is no (rule × mode) matrix to check. The load-time check
+(commit 4.1) instead verifies the stack is well-formed: exactly one
+<code>Terminal</code> rule, stages in order, and the Generate rules agreeing
+with the Terminal's needs — a <code>Stamps</code> Terminal needs a
+stamp-seeding Generate (<code>Uniform spacing</code> / <code>Explicit
+point</code>); a <code>Polylines</code> Terminal needs none.
 </p>
 
 <p>
-<strong>The primary defense is the UX: invalid rules can't be authored
-in-app.</strong> When the in-app brush editor lands (iter 4+), its
-per-layer rule picker is filtered by the layer's <code>mode</code> —
-only rules whose <code>compatibleModes()</code> include the current mode
-are offered, and changing a layer's mode prunes (or disables, with a
-tooltip) any rule that no longer applies. A cartographer working through
-the UI therefore can't compose an invalid stack in the first place,
-which heads off essentially all of these errors at the source. The same
-<code>compatibleModes()</code> declaration drives both the picker filter
-and the load-time check below — one source of truth.
+<strong>The primary defense is the UX.</strong> When the in-app brush editor
+lands (commit 9 / iter 4+), its rule picker only offers rules that keep the
+stack well-formed and previews the result live, so a cartographer can't
+compose a broken stack in the first place — heading off essentially all of
+these errors at the source.
 </p>
 
 <p>
 <strong>Load-time validation is the backstop</strong> for palette files
 edited outside the app or authored against a different CaveWhere version.
 <code>cwSymbologyPaletteIO</code> validates every layer's resolved rule
-stack against the layer's mode on load: any <code>Generate</code> /
-<code>MutatePerLayer</code> / <code>Stamp</code> rule whose
-<code>compatibleModes()</code> excludes the layer's mode is
-<strong>dropped from that layer's pipeline</strong> and a one-shot
-warning logs a specific message (<code>brush "floor-step" layer 2: rule
-"Rigid stamp" not valid for mode OffsetCurve — skipping</code>). The rest
-of the palette loads normally — same skip-and-warn philosophy as unknown
-rule names (below): a malformed rule stack degrades that one layer rather
-than taking down the whole palette. If dropping rules leaves a layer with
-no terminating <code>Stamp</code> rule, the layer falls back to its
-mode's default rule stack (also warned). The per-mode default stacks
-(below) always pass validation; this only bites hand-edited or
-version-skewed files. <code>MutateScene</code> rules are exempt — they're
-mode-agnostic and operate on the unified stamp set after the barrier.
+stack on load: a layer that is malformed (no Terminal, two Terminals, a
+Stamps Terminal with no seeding Generate) has its offending rules
+<strong>dropped</strong> — or the whole layer dropped if it has no usable
+Terminal — and a one-shot warning logs a specific message. The rest of the
+palette loads normally — same skip-and-warn philosophy as unknown rule
+names (below): a malformed stack degrades that one layer rather than taking
+down the whole palette. An empty stack is valid and simply draws nothing
+(there is no default-stack fallback). <code>MutateScene</code> rules are
+exempt — they're stage-agnostic and operate on the unified stamp set after
+the barrier.
 </p>
 
 <p>
@@ -2009,11 +2101,11 @@ re-points the sketch to the seed palette and re-renders.
 <ul>
   <li><code>cwSceneContext</code> — owns the R-tree of buffered stamp bboxes plus the read-only list of every stroke's cartographer-drawn-polyline keep-clear band. Built lazily on first query, invalidated by dirty rect.</li>
   <li>Ship the four <code>MutateScene</code> rules listed in Decision 11: <em>Try shift to fit</em>, <em>Try shorten to fit</em>, <em>Hide if still colliding</em>, <em>Sort by priority desc</em>. Each is a small <code>cwPlacementRule</code> subclass registered the same way as iter-1 rules.</li>
-  <li>Wire the default scene-rule chain into each mode's default rule stack (Decision 11 table). Existing iter-1 brushes inherit the chain transparently; cartographers who want overlap drop the scene rules from a layer.</li>
-  <li><strong>Non-zero <code>OffsetCurve</code> offsets (Decision 10).</strong> Iter 1 shipped OffsetCurve with offset=0 (the centerline-replacement path). Iter 2 generalises to arbitrary offsets, including miter handling at sharp corners and self-intersection detection at tight bends (clip or split as needed). End-to-end targets: overhang line on a wall = one <code>OffsetCurve</code> decoration layer with offset 1 mm, width 0.3 mm; double-wall passage = two <code>OffsetCurve</code> layers at offsets ±2 mm; triple line = three layers at <code>{-2, 0, +2}</code>.</li>
+  <li>Append the scene-rule chain to the seed brushes' stacks (the seed-stack table in Decision 11). Existing iter-1 brushes inherit the chain transparently; cartographers who want overlap drop the scene rules from a layer.</li>
+  <li><strong>Non-zero <code>Trace offset polyline</code> offsets.</strong> Iter 1 shipped the trace with offset=0 (the centerline-replacement path). Honouring <code>offsetCurveOffsetMm</code> — miter handling at sharp corners, self-intersection on tight bends — is pulled forward to <strong>commit 4.5</strong> (<code>SYMBOLOGY_PALETTE_OFFSET_CURVE_PLAN.md</code>), since it's self-contained layout compute. End-to-end targets: overhang line on a wall = one <code>Trace offset polyline</code> layer with offset 1 mm, width 0.3 mm; double-wall passage = two such layers at offsets ±2 mm; triple line = three layers at <code>{-2, 0, +2}</code>.</li>
   <li><strong>New file <code>cwSketchSettings.{h,cpp}</code></strong> — project-wide <code>defaultBufferMm</code> (the dormant <code>cwDecorationLayer::bufferMm</code> from iter 1 becomes live here). Created in iter 2 because nothing reads buffer values until the scene rules exist.</li>
   <li>Debug overlay (toggleable in <code>cwSketchSettings</code>) showing which stamps each scene rule shifted, shortened, or hid — important for tuning. Performance target: under 16 ms per scene pass on a 5 000-stroke sketch after a single-stroke edit; if missed, lift to <code>cwConcurrent::run</code> (the <code>cwPaletteSnapshot</code> flow already supports this).</li>
-  <li>UIS / NSS starter palette shipped as a separate installable palette (not added to the seed); ceiling step + drip line + pit edge + overhang line land as concrete validations of the rule set across all four modes.</li>
+  <li>UIS / NSS starter palette shipped as a separate installable palette (not added to the seed); ceiling step + drip line + pit edge + overhang line land as concrete validations of the rule set across stamp and polyline terminals.</li>
 </ul>
 
 <h3>Iteration 3 — scale visibility</h3>
@@ -2026,10 +2118,10 @@ re-points the sketch to the seed palette and re-renders.
 <h3>Iteration 4+ sketches</h3>
 <ul>
   <li><strong>Git sync</strong> via <code>QQuickGit</code> clone/pull; palette manager UI with "add from URL", "update all", "remove" rows; reuse of <code>cwGitHubDeviceAuth</code> for push credentials when authoring.</li>
-  <li><strong>Area + point brushes.</strong> Point brushes are a degenerate case of the existing model — a brush with a single <code>PointStamp</code> decoration layer (and no <code>OffsetCurve</code> layer); the cartographer places one anchor and the glyph stamps there. Area brushes add a fill component (a glyph stamped in a grid inside a closed polygon) plus a perimeter stroking with a line brush. No new schema concepts — same glyphs, same placement rules.</li>
+  <li><strong>Area + point brushes.</strong> Point brushes are a degenerate case of the existing model — a brush with a single decoration layer stacked <code>Explicit point → Rigid stamp</code> (and no <code>Trace offset polyline</code> layer); the cartographer places one anchor and the glyph stamps there. Area brushes add a fill component (a glyph stamped in a grid inside a closed polygon) plus a perimeter stroking with a line brush. No new schema concepts — same glyphs, same placement rules.</li>
   <li><strong>Brush inheritance</strong> (if iter 1 use shows palette bloat from clone-and-tweak). <code>cwLineBrush::parentBrushName</code> with per-field overridden flags. Resolution walks the parent chain; cycle detection at palette load (same machinery as glyphs). Non-breaking addition.</li>
   <li><strong>Per-stamp overrides.</strong> The sketch carries an optional <code>QVector&lt;cwStampOverride&gt;</code> alongside its strokes. Each override targets <code>(strokeId, decorationLayerIndex, stampIndex)</code> and supplies a parametric mutation ("move forward 1 mm", "hide", "swap to glyph G2"). Applied as a final mutator pass after the brush's rule pipeline. Hand-edits survive brush edits because they're parametric, not absolute.</li>
-  <li><strong>In-app brush editor</strong>: pick a base brush, add / remove decoration layers, reorder placement rules, tweak rule params with live preview. The per-layer rule picker is filtered by the layer's <code>mode</code> (via <code>compatibleModes()</code>) so invalid rule/mode combinations can't be authored — this is the primary defense behind the load-time skip-and-warn backstop (Decision 11).</li>
+  <li><strong>In-app brush editor</strong>: pick a base brush, add / remove decoration layers, reorder placement rules, tweak rule params with live preview. The rule picker only offers rules that keep the stack well-formed (exactly one Terminal, stages ordered) so a broken stack can't be authored — the primary defense behind the load-time skip-and-warn backstop (Decision 11b). This is commit 9, which also migrates the flat <code>offsetCurve*</code> styling fields into <code>Trace offset polyline</code>'s rule params.</li>
   <li><strong>Halo (if needed)</strong>: revisited when label/text symbology or genuine ceiling-step legibility issues prove z-order isn't enough. Lands as additive fields on <code>cwDecorationLayer</code>; existing palettes are unaffected.</li>
   <li><strong><code>.th2</code> interop</strong>: brushes get a <code>therionLinetype</code> field and glyphs get a <code>therionPointtype</code> field; importer consults palette lookup tables to translate. The placement-rule pipeline maps Therion's "auto-place along line" + style modifiers cleanly.</li>
 </ul>

@@ -35,12 +35,12 @@ constexpr int kFeatureZOrder   = 10;
 const QColor kInkLight = QColor(QStringLiteral("#000000"));
 const QColor kInkDark  = QColor(QStringLiteral("#ffffff"));
 
-// A single offset-0 OffsetCurve layer — the visible line on a normal brush.
-// There is no separate "centerline" concept.
+// A single offset-0 line layer — the visible line on a normal brush. Its rule
+// stack is just the polyline trace; there is no separate "centerline" concept.
 cwDecorationLayer centerlineLayer(double widthMm)
 {
     cwDecorationLayer layer;
-    layer.mode = cwDecorationLayer::OffsetCurve;
+    layer.rules = {cwPlacementRuleData{QStringLiteral("Trace offset polyline"), {}}};
     layer.offsetCurveColorLight = kInkLight;
     layer.offsetCurveColorDark = kInkDark;
     layer.offsetCurveWidthMm = widthMm;
@@ -101,9 +101,9 @@ cwSymbologyPaletteData create()
     brushes.append(feature);
 
     // floor-step — the shipped glyph-stamping demo: an edge line plus a tick
-    // glyph repeated along the +normal side. The stamp spacing/side live in the
-    // RigidStamp layer's placement rules, which the rule registry (a later
-    // phase) fills in; the layer here only references the glyph.
+    // glyph repeated along the +normal side. The tick layer's rule stack repeats
+    // the glyph at a uniform spacing, oriented to the local tangent, then stamps
+    // it rigidly.
     cwLineBrush floorStep;
     floorStep.name = floorStepBrushName();
     floorStep.displayName = QStringLiteral("Floor Step");
@@ -112,8 +112,10 @@ cwSymbologyPaletteData create()
     floorStep.scrapOutline = false;
     floorStep.decorations.append(centerlineLayer(kFloorStepEdgeWidthMm));
     cwDecorationLayer tickLayer;
-    tickLayer.mode = cwDecorationLayer::RigidStamp;
     tickLayer.glyphName = floorStepTickGlyphName();
+    tickLayer.rules = {cwPlacementRuleData{QStringLiteral("Uniform spacing"), {}},
+                       cwPlacementRuleData{QStringLiteral("Align to tangent"), {}},
+                       cwPlacementRuleData{QStringLiteral("Rigid stamp"), {}}};
     floorStep.decorations.append(tickLayer);
     brushes.append(floorStep);
 

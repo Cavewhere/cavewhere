@@ -128,7 +128,7 @@ QString cwSymbologyPaletteData::findGlyphDependencyCycle() const
             const auto it = brushByName.constFind(node.name);
             if (it != brushByName.constEnd()) {
                 for (const auto &layer : it->decorations) {
-                    if (layer.mode != cwDecorationLayer::OffsetCurve && !layer.glyphName.isEmpty()) {
+                    if (!layer.glyphName.isEmpty()) {
                         out.append({DependencyNode::Glyph, layer.glyphName});
                     }
                 }

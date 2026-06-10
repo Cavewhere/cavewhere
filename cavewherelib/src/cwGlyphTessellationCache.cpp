@@ -13,37 +13,27 @@
 
 namespace {
 
-// Paper-millimetres to world metres at a given map-scale ratio:
-//   world_m = paper_mm / (1000 * scaleRatio)
-// e.g. at 1:250, 1 mm paper ≈ 0.25 m world. Mirrors the conversion in
-// cwCenterlineSketchPainterModel so glyph ink stays paper-sized across scales.
-double paperMmToWorldM(double mapScale)
-{
-    constexpr double kMmPerMeter = 1000.0;
-    const double ratio =
-        mapScale > 0.0 ? mapScale : cwSketchPainter::LinePlotReferenceMapScaleRatio;
-    return 1.0 / (kMmPerMeter * ratio);
-}
-
-// A stroke contributes ink only if its brush carries at least one OffsetCurve
-// layer. A missing brush draws the debug fallback line (also an OffsetCurve), so
-// it contributes too; a brush with no OffsetCurve layer (e.g. scrap-outline)
-// draws nothing.
+// A stroke contributes ink only if its brush carries at least one decoration
+// layer. A missing brush draws the debug fallback line, so it contributes too; a
+// brush with no decoration layers (e.g. scrap-outline) draws nothing.
 bool strokeHasInk(const cwPaletteSnapshot &snapshot, const cwPenStroke &stroke)
 {
     const auto brush = snapshot.findBrush(stroke.brushName);
     if (!brush) {
         return true;
     }
-    for (const auto &layer : brush->decorations) {
-        if (layer.mode == cwDecorationLayer::OffsetCurve) {
-            return true;
-        }
-    }
-    return false;
+    return !brush->decorations.isEmpty();
 }
 
 } // namespace
+
+double cwGlyphTessellationCache::paperMmToWorldM(double mapScale)
+{
+    constexpr double kMmPerMeter = 1000.0;
+    const double ratio =
+        mapScale > 0.0 ? mapScale : cwSketchPainter::LinePlotReferenceMapScaleRatio;
+    return 1.0 / (kMmPerMeter * ratio);
+}
 
 void cwGlyphTessellationCache::setSnapshot(const cwPaletteSnapshot &snapshot)
 {

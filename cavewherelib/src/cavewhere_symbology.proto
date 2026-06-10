@@ -63,14 +63,15 @@ message LineBrush {
     repeated DecorationLayer decorations = 6;  // empty = no ink (scrap-outline case)
     double minPaperScale = 7;
     double maxPaperScale = 8;
-    // No centerline fields. A normal wall's visible line is an
-    // OffsetCurve decoration layer with offset = 0.
+    // No centerline fields. A normal wall's visible line is a decoration layer
+    // whose rule stack traces an offset polyline at offset = 0.
 }
 
 message DecorationLayer {
-    string glyphName = 1;                  // glyph ref by name; empty when mode == OffsetCurve
-    int32  mode      = 2;                  // 0=rigid, 1=bending, 2=point, 3=offsetCurve
-    repeated PlacementRule rules = 3;      // empty = use the mode's default rule stack
+    reserved 2;                            // was `mode`; layers are now defined entirely by `rules`
+    reserved "mode";
+    string glyphName = 1;                  // glyph ref for stamp layers; empty for line (offset-polyline) layers
+    repeated PlacementRule rules = 3;      // the placement-rule stack; empty = no ink
 
     optional double bufferMm          = 4; // collision keep-clear, default 1.0 mm. Currently dormant.
     int32  collisionPriority          = 5; // MutateScene tiebreak

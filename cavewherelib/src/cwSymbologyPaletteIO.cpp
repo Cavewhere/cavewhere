@@ -92,7 +92,6 @@ QColor colorFromHex(const QString &hex)
 void layerToProto(CavewhereSymbologyProto::DecorationLayer *proto, const cwDecorationLayer &layer)
 {
     proto->set_glyphname(toStd(layer.glyphName));
-    proto->set_mode(static_cast<int>(layer.mode));
     for (const auto &rule : layer.rules) {
         auto *protoRule = proto->add_rules();
         protoRule->set_name(toStd(rule.name));
@@ -117,7 +116,6 @@ cwDecorationLayer layerFromProto(const CavewhereSymbologyProto::DecorationLayer 
 {
     cwDecorationLayer layer;
     layer.glyphName = fromStd(proto.glyphname());
-    layer.mode = static_cast<cwDecorationLayer::Mode>(proto.mode());
     layer.rules.reserve(proto.rules_size());
     for (const auto &protoRule : proto.rules()) {
         cwPlacementRuleData rule;
