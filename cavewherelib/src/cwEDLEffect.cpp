@@ -27,21 +27,29 @@ cwEDLEffect::~cwEDLEffect()
 void cwEDLEffect::initialize(QRhi* rhi,
                              QRhiRenderPassDescriptor* outputRPDesc,
                              int outputSampleCount,
-                             QRhiBuffer* globalUBO)
+                             QRhiBuffer* globalUBO,
+                             int inputSampleCount)
 {
     if (!rhi || !outputRPDesc || !globalUBO) {
         return;
     }
 
+    const int newInputSampleCount = inputSampleCount > 1 ? inputSampleCount : 1;
+    // The shader variant is selected by 1x-vs-MSAA, not the exact sample count.
+    const bool variantChanged = (newInputSampleCount > 1) != (m_inputSampleCount > 1);
+
     m_outputSampleCount = outputSampleCount > 0 ? outputSampleCount : 1;
+    m_inputSampleCount = newInputSampleCount;
 
     m_rhi = rhi;
     m_globalUBO = globalUBO;
 
-    const auto fail = [this]() {
+    const auto discardPipeline = [this]() {
         // Leave m_pipeline null so apply()'s guard skips the composite cleanly
         // rather than binding an uncreated pipeline. Drop the layout too so a
         // later retry (createPipeline allocates it unconditionally) can't leak.
+        // Used both to reset before the unconditional rebuild below and to bail
+        // out cleanly on a failed init step.
         delete m_pipeline;
         m_pipeline = nullptr;
         delete m_layout;
@@ -56,11 +64,30 @@ void cwEDLEffect::initialize(QRhi* rhi,
     m_uniformData.maxDarken = m_parameters.value().maxDarken;
     m_uniformsDirty = true;
 
+    // initialize() runs on first use and again whenever the sample count changes
+    // (cwRhiScene re-inits when the offscreen count differs). Always rebuild the
+    // pipeline so it matches the current output rpDesc + sample count and the 1x
+    // / MSAA shader variant — a stale pipeline whose sample count differs from
+    // the swap chain fails to render.
+    discardPipeline();
+
+    if (variantChanged) {
+        // The sampleOffset field changes units between 1x and MSAA (UV step vs.
+        // texel radius), so force a full uniform recompute, and drop the SRB so
+        // it rebinds (the offscreen textures were recreated too).
+        delete m_srb;
+        m_srb = nullptr;
+        m_lastSceneColor = nullptr;
+        m_lastCloudColor = nullptr;
+        m_lastDepth = nullptr;
+        m_frameStateSeen = false;
+    }
+
     if (!m_edlUBO) {
         const quint32 size = rhi->ubufAligned(sizeof(EdlUniform));
         m_edlUBO = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, size);
         if (!m_edlUBO->create()) {
-            fail();
+            discardPipeline();
             return;
         }
         m_uniformsDirty = true;
@@ -75,13 +102,13 @@ void cwEDLEffect::initialize(QRhi* rhi,
                                     QRhiSampler::ClampToEdge,
                                     QRhiSampler::ClampToEdge);
         if (!m_sampler->create()) {
-            fail();
+            discardPipeline();
             return;
         }
     }
 
-    if (!m_pipeline && !createPipeline(outputRPDesc)) {
-        fail();
+    if (!createPipeline(outputRPDesc)) {
+        discardPipeline();
         return;
     }
 }
@@ -93,7 +120,11 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
     // and devicePixelRatio for the sample radius. Stage flags must match
     // shader usage or the bind silently feeds zeros to the missing stage.
     const QShader vs = cwRHIObject::loadShader(QStringLiteral(":/shaders/EDL.vert.qsb"));
-    const QShader fs = cwRHIObject::loadShader(QStringLiteral(":/shaders/EDL.frag.qsb"));
+    // MSAA variant samples the multisample offscreen per-sample (sampler2DMS +
+    // gl_SampleID); 1x variant uses the plain sampler2D path.
+    const QShader fs = cwRHIObject::loadShader(
+        m_inputSampleCount > 1 ? QStringLiteral(":/shaders/EDL_MSAA.frag.qsb")
+                               : QStringLiteral(":/shaders/EDL.frag.qsb"));
     if (!vs.isValid() || !fs.isValid()) {
         return false;
     }
@@ -263,6 +294,14 @@ void cwEDLEffect::recomputeSampleOffset()
         return;
     }
     const float scale = m_parameters.value().radiusPx * m_lastDevicePixelRatio;
+    if (m_inputSampleCount > 1) {
+        // MSAA path: EDL_MSAA.frag offsets neighbors in integer texels off
+        // gl_FragCoord, so the radius stays in device pixels (no UV division).
+        // sampleOffset.x carries it; .y is unused.
+        m_uniformData.sampleOffset[0] = scale;
+        m_uniformData.sampleOffset[1] = 0.0f;
+        return;
+    }
     m_uniformData.sampleOffset[0] = scale / float(m_lastViewportSize.width());
     m_uniformData.sampleOffset[1] = scale / float(m_lastViewportSize.height());
 }

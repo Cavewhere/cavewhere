@@ -53,7 +53,7 @@ Item {
         id: rendererId
         anchors.fill: parent
         camera.devicePixelRatio: Screen.devicePixelRatio
-        sampleCount:4
+        // Don't set sampleCount; cwRenderingSettings drives it.
     }
 
     Binding {
@@ -153,7 +153,7 @@ Item {
             width: Math.min(Math.max(rendererId.width * 0.25, 80), 175)
             height: width
             compassRotation: turnTableInteractionId.cameraRotation
-            sampleCount: 4
+            // Don't set sampleCount; cwRenderingSettings drives it.
         }
     }
 

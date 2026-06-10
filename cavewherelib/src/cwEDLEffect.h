@@ -20,7 +20,7 @@
 /**
  * @brief Eye-Dome Lighting composite.
  *
- * The final pass that writes the swap chain. Reads three 1x offscreen textures:
+ * The final pass that writes the swap chain. Reads three offscreen textures:
  * the scene color (Background + Opaque), the point-cloud color, and the depth
  * buffer they share (combined cloud+scene depth). Outputs the scene where there
  * is no cloud and the depth-shaded cloud where there is, with a CloudCompare /
@@ -28,6 +28,11 @@
  * cue plus a near-side silhouette term that darkens cloud edges against anything
  * more distant behind them — scene geometry, the background, or another cloud
  * surface — so every edge outlines consistently.
+ *
+ * Bimodal on the offscreen sample count (inputSampleCount on initialize()):
+ * > 1 loads EDL_MSAA.frag.qsb and runs per-sample over multisample textures so
+ * the swap-chain resolve anti-aliases the result; == 1 loads EDL.frag.qsb and
+ * runs the plain 1x path. The pipeline is rebuilt if the mode changes.
  */
 class cwEDLEffect : public cwRhiPostProcessEffect {
 public:
@@ -37,7 +42,8 @@ public:
     void initialize(QRhi* rhi,
                     QRhiRenderPassDescriptor* outputRPDesc,
                     int outputSampleCount,
-                    QRhiBuffer* globalUBO) override;
+                    QRhiBuffer* globalUBO,
+                    int inputSampleCount) override;
     // Drop the cached SRB and texture-pointer identities so the next apply()
     // rebuilds bindings. cwRhiScene calls this when the offscreen textures are
     // recreated (resize) while the effect is preserved — otherwise ensureBindings
@@ -78,6 +84,9 @@ private:
     QRhi* m_rhi = nullptr;
     QRhiBuffer* m_globalUBO = nullptr;       // owned by cwRhiScene
     int m_outputSampleCount = 1;
+    // Sample count of the offscreen textures this effect reads. > 1 selects the
+    // per-sample EDL_MSAA.frag path; 1 the plain EDL.frag path.
+    int m_inputSampleCount = 1;
 
     // CPU-side knobs (see EdlUniform / EDL.frag). m_parameters.strength is the
     // *baseline* slope of the shared darkening transfer function; the effective

@@ -178,10 +178,14 @@ public:
     // outputSampleCount must match the destination render target's sample
     // count — mismatched MSAA pipelines silently write only sample 0 on
     // Metal/Vulkan, producing dim translucent output after resolve.
+    // inputSampleCount is the sample count of the offscreen textures the effect
+    // reads: > 1 selects a per-sample (sampler2DMS) path, 1 the plain sampler2D
+    // path. May be called again with a different inputSampleCount to swap paths.
     virtual void initialize(QRhi* rhi,
                             QRhiRenderPassDescriptor* outputRPDesc,
                             int outputSampleCount,
-                            QRhiBuffer* globalUBO) = 0;
+                            QRhiBuffer* globalUBO,
+                            int inputSampleCount) = 0;
 
     // Called when an input texture is recreated (e.g. on swap-chain resize) so
     // the effect can rebuild SRBs that reference it.

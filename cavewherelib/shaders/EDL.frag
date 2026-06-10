@@ -9,10 +9,20 @@
 
 // Eye-Dome Lighting (Boucheny 2009 / CloudCompare / Potree), run as the final
 // composite. The scene (Background + Opaque) and the point cloud were rendered
-// into separate 1x color textures that share one depth buffer, so the cloud is
+// into separate color textures that share one depth buffer, so the cloud is
 // already hardware-occluded by scene geometry and the depth buffer holds the
 // combined cloud+scene depth. This pass writes the final swap-chain pixel:
 // scene where there is no cloud, shaded cloud where there is.
+//
+// Compiled to two .qsb variants from this one source (see CMakeLists.txt):
+//  - default (no MSAA define): the offscreen textures are 1x sampler2D and the
+//    pass runs once per pixel sampling by UV. This is the no-AA fallback.
+//  - MSAA=1: the offscreen textures are multisample sampler2DMS and the pass
+//    runs once per *sample* (gl_SampleID), reading each sample with texelFetch
+//    by integer texel. Writing per-sample colors lets the swap chain's own
+//    color resolve at end of frame produce anti-aliased geometry AND EDL
+//    silhouettes. The shared EDL math below is identical between variants; only
+//    the fetch mechanism (and the neighbor-offset units) differ.
 //
 // For each cloud pixel we look at a ring of 8 neighbors. Each neighbor darkens
 // the center by ONE shared transfer function of the log-depth gap g:
@@ -58,18 +68,38 @@ layout(std140, binding = 1) uniform EdlBlock {
     float strength;
     // 1.0 when the backend's framebuffer is Y-down (Metal/Vulkan/D3D) so the
     // offscreen texture's V axis follows native top-left convention and we
-    // must flip V when sampling; 0.0 on OpenGL (Y-up framebuffer).
+    // must flip V when sampling; 0.0 on OpenGL (Y-up framebuffer). Used only on
+    // the 1x path — the MSAA path fetches by gl_FragCoord, a 1:1 framebuffer
+    // pixel → texel map that needs no flip.
     float textureYFlip;
-    // radiusPx * devicePixelRatio / viewportSize, precomputed CPU-side.
+    // 1x path: radiusPx * devicePixelRatio / viewportSize (UV-space step per
+    // tap). MSAA path: .x = radiusPx * devicePixelRatio (texel-space radius, no
+    // viewport division); .y unused. Both precomputed CPU-side.
     vec2 sampleOffset;
     // Ceiling on per-neighbor darkening — the darkness an edge reaches at a large
     // depth gap, shared by the far-side and border cases.
     float maxDarken;
 };
 
+#if MSAA
+// Multisample inputs, read per-sample with texelFetch(coord, gl_SampleID).
+layout(binding = 2) uniform sampler2DMS uCloudColor; // point cloud (opaque where present)
+layout(binding = 3) uniform sampler2DMS uDepth;       // combined cloud + scene depth
+layout(binding = 4) uniform sampler2DMS uSceneColor;  // Background + Opaque
+
+// texelFetch ignores the bound sampler; coordinates are integer texels.
+#define FETCH_DEPTH(c) texelFetch(uDepth, (c), sampleId).r
+#define FETCH_CLOUD(c) texelFetch(uCloudColor, (c), sampleId)
+#define FETCH_SCENE(c) texelFetch(uSceneColor, (c), sampleId)
+#else
 layout(binding = 2) uniform sampler2D uCloudColor;   // point cloud (opaque where present)
 layout(binding = 3) uniform sampler2D uDepth;         // combined cloud + scene depth
 layout(binding = 4) uniform sampler2D uSceneColor;    // Background + Opaque, drawn at 1x
+
+#define FETCH_DEPTH(c) texture(uDepth, (c)).r
+#define FETCH_CLOUD(c) texture(uCloudColor, (c))
+#define FETCH_SCENE(c) texture(uSceneColor, (c))
+#endif
 
 layout(location = 0) in vec2 vUV;
 layout(location = 0) out vec4 fragColor;
@@ -109,16 +139,23 @@ float linearDepthFromNear(float d)
 
 void main()
 {
-    vec2 uv = (textureYFlip > 0.5) ? vec2(vUV.x, 1.0 - vUV.y) : vUV;
+#if MSAA
+    // Per-sample: gl_SampleID forces sample-rate shading, and gl_FragCoord maps
+    // 1:1 to the multisample texel, so no UV / Y-flip is needed.
+    int sampleId = gl_SampleID;
+    ivec2 center = ivec2(gl_FragCoord.xy);
+#else
+    vec2 center = (textureYFlip > 0.5) ? vec2(vUV.x, 1.0 - vUV.y) : vUV;
+#endif
 
     // Combined cloud+scene depth, already in the backend's window-space range
     // ([0,1] post-clipSpaceCorrMatrix). Forward it to the swap-chain depth
     // buffer so post-composite passes (Transparent, Overlay) z-test correctly
     // against everything drawn so far.
-    float d0 = texture(uDepth, uv).r;
+    float d0 = FETCH_DEPTH(center);
     gl_FragDepth = d0;
 
-    vec4 cloud = texture(uCloudColor, uv);
+    vec4 cloud = FETCH_CLOUD(center);
 
     // No cloud here: pass the scene (Background + Opaque) straight through. This
     // also covers pixels where opaque geometry occluded the cloud (the cloud
@@ -126,7 +163,7 @@ void main()
     // scene color is fetched only on this branch — cloud pixels (the 8-tap path
     // below) never read it, so sampling it here keeps that texel fetch off them.
     if (cloud.a < kCloudAlphaThreshold) {
-        fragColor = texture(uSceneColor, uv);
+        fragColor = FETCH_SCENE(center);
         return;
     }
 
@@ -140,11 +177,15 @@ void main()
 
     float response = 0.0;
     for (int i = 0; i < 8; ++i) {
-        vec2 nuv = uv + dirs[i] * sampleOffset;
-        float logZi = log2(linearDepthFromNear(texture(uDepth, nuv).r) + 1e-6);
+#if MSAA
+        ivec2 ncoord = center + ivec2(round(dirs[i] * sampleOffset.x));
+#else
+        vec2 ncoord = center + dirs[i] * sampleOffset;
+#endif
+        float logZi = log2(linearDepthFromNear(FETCH_DEPTH(ncoord)) + 1e-6);
         // Far side for a closer cloud neighbor, near side for a farther non-cloud
         // neighbor — one shared transfer function either way.
-        float g = (texture(uCloudColor, nuv).a > kCloudAlphaThreshold)
+        float g = (FETCH_CLOUD(ncoord).a > kCloudAlphaThreshold)
                   ? (logZ0 - logZi)
                   : (logZi - logZ0);
         response += min(max(0.0, g) * strength, maxDarken);

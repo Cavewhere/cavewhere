@@ -63,9 +63,14 @@ public:
     // (loaded via PreserveDepthStencilContents) so the hardware depth test
     // occludes the cloud against scene geometry and leaves the combined depth in
     // the buffer. The EDL effect then composites over(sceneColor, shadedCloud)
-    // to the swap chain. All three textures are 1x and sampler-readable; MSAA on
-    // Background/Opaque is intentionally dropped while a cloud is shown (a
-    // tracked follow-up restores it via a resolve).
+    // to the swap chain.
+    //
+    // All three textures are created at `sampleCount`. When the backend supports
+    // multisample textures + per-sample shading and the swap chain is MSAA, they
+    // are MSAA: the EDL composite reads them per-sample (EDL_MSAA.frag) and the
+    // swap chain's own color resolve at frame end anti-aliases both the geometry
+    // and the EDL silhouettes. When MSAA isn't available (or sampleCount == 1)
+    // they are 1x and the plain EDL.frag runs — no AA, today's behavior.
     // Owns its GPU resources via unique_ptr so it can't be copied (would alias
     // raw pointers) and a missed teardown can't leak. destroyEdlOffscreen() still
     // drives the *ordered* release (effect's SRB before its textures; pipeline
@@ -80,9 +85,10 @@ public:
         std::unique_ptr<QRhiRenderPassDescriptor> sceneRpDesc;
         std::unique_ptr<QRhiRenderPassDescriptor> cloudRpDesc;
         QSize size;
+        int requestedSampleCount = 1;   // swap-chain count this was built for
+        int sampleCount = 1;            // effective MSAA samples (1 = no AA fallback)
         std::unique_ptr<cwRhiPostProcessEffect> effect;
 
-        static constexpr int kSampleCount = 1;
         bool valid() const { return sceneTarget && cloudTarget && effect != nullptr; }
     };
 
@@ -98,6 +104,11 @@ public:
                                     QRhi* rhi,
                                     const std::function<PipelineRecord*(QRhi*)>& createFn);
     void releasePipeline(PipelineRecord* record);
+
+    // Free a record's GPU objects and the record itself. The caller is
+    // responsible for removing it from m_pipelineCache first.
+    static void destroyPipelineRecord(PipelineRecord* record);
+
     QRhiSampler* sharedLinearClampSampler(QRhi* rhi);
 
     // Evict (and delete) any cached PipelineRecord whose pipeline key references
@@ -158,10 +169,18 @@ private:
     void updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi);
     bool needsUpdate(cwSceneUpdate::Flag flag) const { return (m_updateFlags & flag) == flag; }
 
-    // Build (or rebuild on resize) the shared-depth EDL offscreen: sceneColor +
-    // cloudColor + shared depth, the two render targets, their rpDescs, and the
-    // EDL effect. No-op when already valid at the requested size.
-    void ensureEdlOffscreen(QRhi* rhi, QSize size);
+    // Build (or rebuild on resize / sample-count change) the shared-depth EDL
+    // offscreen: sceneColor + cloudColor + shared depth, the two render targets,
+    // their rpDescs, and the EDL effect. requestedSampleCount is the swap-chain
+    // sample count; the actual textures use the capability-gated effective count
+    // (stored in EdlOffscreen::sampleCount). No-op when already valid at the
+    // requested size and sample count.
+    void ensureEdlOffscreen(QRhi* rhi, QSize size, int requestedSampleCount);
+
+    // Capability-gated effective sample count for the offscreen: the swap-chain
+    // count when the backend supports multisample textures + per-sample shading
+    // and that count is a supported MSAA level, else 1 (no-AA fallback).
+    int effectiveEdlSampleCount(QRhi* rhi, int requestedSampleCount) const;
 
     // Release the EDL offscreen's GPU resources in dependency order: drop the
     // effect (its SRB references the textures), evict pipelines keyed on the
@@ -178,6 +197,16 @@ private:
     // Swap-chain rpDesc isn't available until the first render(), so the EDL
     // effect's initialize() is deferred to then.
     bool m_effectsInitialized = false;
+
+    // Input sample count the EDL effect last built its pipeline for. When the
+    // offscreen's sample count changes (user toggled cwRenderingSettings), this
+    // no longer matches and the effect is re-initialized to swap the 1x / MSAA
+    // shader variant.
+    int m_effectInputSampleCount = 0;
+
+    // The device's supported MSAA levels are reported once (render thread → GUI)
+    // to cwRenderingSettings so the UI offers only valid sample counts.
+    bool m_reportedSupportedSampleCounts = false;
 };
 
 

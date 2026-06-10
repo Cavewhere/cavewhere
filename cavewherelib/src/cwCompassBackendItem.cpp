@@ -8,6 +8,7 @@
 //Our includes
 #include "cwCompassBackendItem.h"
 #include "cwCompassRenderer.h" // The back-end renderer
+#include "cwRenderingSettings.h"
 // #include "cwGLShader.h"
 // #include "cwGlobalDirectory.h"
 // #include "cwShaderDebugger.h"
@@ -27,7 +28,10 @@ cwCompassBackendItem::cwCompassBackendItem(QQuickItem* parent)
     : QQuickRhiItem(parent)
 {
     setAlphaBlending(true); //make the background see through
-    //setSampleCount(2);
+
+    cwRenderingSettings* renderingSettings = cwRenderingSettings::instance();
+    Q_ASSERT(renderingSettings);
+    renderingSettings->driveSampleCount(this);
 
     // Bind label positions to rotation and size
     double offset = 0.63;

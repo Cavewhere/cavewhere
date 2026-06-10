@@ -7,6 +7,7 @@
 #include "cwEDLSettings.h"
 #include "cwCamera.h"
 #include "cwEDLEffect.h"
+#include "cwRenderingSettings.h"
 
 #include <algorithm>
 #include <array>
@@ -186,6 +187,18 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     const int swapchainSampleCount =
         (renderer && renderer->renderTarget()) ? renderer->renderTarget()->sampleCount() : 1;
 
+    // Report the device's supported MSAA levels to cwRenderingSettings (GUI thread)
+    // once, so the settings UI can offer only sample counts this backend accepts.
+    if (!m_reportedSupportedSampleCounts && rhi) {
+        m_reportedSupportedSampleCounts = true;
+        const QList<int> supported = rhi->supportedSampleCounts();
+        QMetaObject::invokeMethod(cwRenderingSettings::instance(), [supported]() {
+            if (cwRenderingSettings::instance()) {
+                cwRenderingSettings::instance()->setSupportedSampleCounts(supported);
+            }
+        }, Qt::QueuedConnection);
+    }
+
     // Decide up front whether the EDL composite path is needed — it reroutes
     // Background + Opaque (and the cloud) through the shared-depth offscreen, so
     // the routing must be settled before any object builds a pipeline this frame.
@@ -196,18 +209,23 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
         });
 
     if (cloudVisible) {
-        ensureEdlOffscreen(rhi, m_viewportSize);
+        ensureEdlOffscreen(rhi, m_viewportSize, swapchainSampleCount);
     }
     const bool edlActive = cloudVisible && m_edlOffscreen.valid();
 
     setupPassRouting(renderer ? renderer->renderTarget() : nullptr, edlActive);
 
     // The swap-chain rpDesc isn't available until the first render(), so the EDL
-    // effect's initialize() — which needs the swap-chain sample count (4× MSAA
-    // per cw3dRegionViewer::setSampleCount) — is deferred to here.
-    if (!m_effectsInitialized && swapchainRPDesc && m_edlOffscreen.effect) {
-        m_edlOffscreen.effect->initialize(rhi, swapchainRPDesc, swapchainSampleCount, m_globalUniformBuffer);
+    // effect's initialize() — which needs the swap-chain sample count
+    // (cwRenderingSettings::sampleCount via cw3dRegionViewer) — is deferred to
+    // here. Re-init when the offscreen's effective sample count changes so the
+    // effect swaps between the 1x and MSAA shader variants.
+    if (swapchainRPDesc && m_edlOffscreen.effect
+        && (!m_effectsInitialized || m_effectInputSampleCount != m_edlOffscreen.sampleCount)) {
+        m_edlOffscreen.effect->initialize(rhi, swapchainRPDesc, swapchainSampleCount,
+                                          m_globalUniformBuffer, m_edlOffscreen.sampleCount);
         m_effectsInitialized = true;
+        m_effectInputSampleCount = m_edlOffscreen.sampleCount;
     }
 
     cwRHIObject::RenderData renderData{cb, renderer, m_updateFlags, swapchainRPDesc, swapchainSampleCount};
@@ -502,24 +520,50 @@ void cwRhiScene::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi*
     m_updateFlags = cwSceneUpdate::Flag::None;
 }
 
-void cwRhiScene::ensureEdlOffscreen(QRhi* rhi, QSize size)
+int cwRhiScene::effectiveEdlSampleCount(QRhi* rhi, int requestedSampleCount) const
+{
+    if (!rhi || requestedSampleCount <= 1) {
+        return 1;
+    }
+    // MultisampleTexture lets us sample the MSAA offscreen; SampleVariables lets
+    // EDL_MSAA.frag run per-sample via gl_SampleID. Without both, fall back to
+    // 1x (no AA). The requested count must also be an MSAA level the device
+    // offers, or the texture create / pipeline build would fail validation.
+    if (!rhi->isFeatureSupported(QRhi::MultisampleTexture)
+        || !rhi->isFeatureSupported(QRhi::SampleVariables)
+        || !rhi->supportedSampleCounts().contains(requestedSampleCount)) {
+        return 1;
+    }
+    return requestedSampleCount;
+}
+
+void cwRhiScene::ensureEdlOffscreen(QRhi* rhi, QSize size, int requestedSampleCount)
 {
     if (!rhi || size.isEmpty()) {
         return;
     }
 
-    if (m_edlOffscreen.valid() && m_edlOffscreen.size == size) {
+    // Cheap early-out before the RHI capability queries in effectiveEdlSampleCount:
+    // the offscreen only needs rebuilding when the size or the requested swap-chain
+    // sample count changes, both of which are rare relative to the per-frame calls.
+    if (m_edlOffscreen.valid() && m_edlOffscreen.size == size
+        && m_edlOffscreen.requestedSampleCount == requestedSampleCount) {
         return;
     }
 
+    const int sampleCount = effectiveEdlSampleCount(rhi, requestedSampleCount);
+
     // Preserve the effect across a resize — its pipeline is keyed on the stable
     // swap-chain rpDesc, and its SRB rebinds to the new textures on the next
-    // apply() (cwEDLEffect::ensureBindings detects the pointer change).
+    // apply() (cwEDLEffect::ensureBindings detects the pointer change). render()
+    // re-initializes the effect when sampleCount changes the 1x / MSAA variant.
     std::unique_ptr<cwRhiPostProcessEffect> savedEffect = std::move(m_edlOffscreen.effect);
     destroyEdlOffscreen();
 
     EdlOffscreen fresh;
     fresh.size = size;
+    fresh.requestedSampleCount = requestedSampleCount;
+    fresh.sampleCount = sampleCount;
 
     // fresh owns its resources via unique_ptr, so any early return below releases
     // the partially-built set automatically; we only need to restore the saved
@@ -528,16 +572,21 @@ void cwRhiScene::ensureEdlOffscreen(QRhi* rhi, QSize size)
         m_edlOffscreen.effect = std::move(savedEffect);
     };
 
-    const auto colorFlags = QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource;
-    fresh.sceneColor.reset(rhi->newTexture(QRhiTexture::RGBA8, size, EdlOffscreen::kSampleCount, colorFlags));
-    fresh.cloudColor.reset(rhi->newTexture(QRhiTexture::RGBA8, size, EdlOffscreen::kSampleCount, colorFlags));
+    // MSAA color textures can't be transfer sources; the EDL composite only
+    // samples them anyway, so the flag is needed only on the 1x path.
+    auto colorFlags = QRhiTexture::Flags(QRhiTexture::RenderTarget);
+    if (sampleCount == 1) {
+        colorFlags |= QRhiTexture::UsedAsTransferSource;
+    }
+    fresh.sceneColor.reset(rhi->newTexture(QRhiTexture::RGBA8, size, sampleCount, colorFlags));
+    fresh.cloudColor.reset(rhi->newTexture(QRhiTexture::RGBA8, size, sampleCount, colorFlags));
 
     // D32F where supported; D24S8 elsewhere. Both are sampler-readable on every
     // Qt RHI backend. One depth texture is shared by both targets.
     const QRhiTexture::Format depthFormat =
         rhi->isTextureFormatSupported(QRhiTexture::D32F) ? QRhiTexture::D32F
                                                          : QRhiTexture::D24S8;
-    fresh.depth.reset(rhi->newTexture(depthFormat, size, EdlOffscreen::kSampleCount, QRhiTexture::RenderTarget));
+    fresh.depth.reset(rhi->newTexture(depthFormat, size, sampleCount, QRhiTexture::RenderTarget));
 
     if (!fresh.sceneColor->create() || !fresh.cloudColor->create() || !fresh.depth->create()) {
         bail();
@@ -707,6 +756,11 @@ void cwRhiScene::releasePipeline(PipelineRecord* record)
         m_pipelineCache.erase(it);
     }
 
+    destroyPipelineRecord(record);
+}
+
+void cwRhiScene::destroyPipelineRecord(PipelineRecord* record)
+{
     delete record->pipeline;
     delete record->layout;
     delete record;
@@ -723,9 +777,15 @@ void cwRhiScene::evictPipelinesFor(QRhiRenderPassDescriptor* descriptor)
         if (it.key().renderPass == descriptor) {
             PipelineRecord* record = it.value();
             it = m_pipelineCache.erase(it);
-            delete record->pipeline;
-            delete record->layout;
-            delete record;
+            // Only destroy records nothing references anymore. A record still held
+            // by an RHI object (refCount > 0 — e.g. cwRHILinePlot::m_pipelineRecord)
+            // is merely orphaned from the cache here; deleting it now would dangle
+            // that object's pointer and crash on its next frame. The owning object
+            // deletes it via releasePipeline() when it rebuilds for the new render
+            // pass (which happens because the sample count / rpDesc changed).
+            if (record->refCount == 0) {
+                destroyPipelineRecord(record);
+            }
         } else {
             ++it;
         }
