@@ -647,26 +647,12 @@ void cwSaveLoadPrivate::trackDisconnected(const QObject* object)
 
 bool cwSaveLoadPrivate::hasQueuedOperationType(Operation::Type type) const
 {
-    if (activeOperation
-            && activeOperation->generation == operationGeneration
-            && activeOperation->type == type) {
-        return true;
-    }
-
-    for (const auto& op : operationQueue) {
-        if (op
-                && op->generation == operationGeneration
-                && op->type == type) {
-            return true;
-        }
-    }
-
-    return false;
+    return m_operations.hasOperation(type, operationGeneration);
 }
 
 void cwSaveLoadPrivate::maybeStartPendingFileJobs(cwSaveLoad* context)
 {
-    if (activeOperation == nullptr) {
+    if (!m_operations.hasActive()) {
         return;
     }
 
@@ -714,30 +700,30 @@ QFuture<Monad::ResultBase> cwSaveLoadPrivate::enqueueOperation(cwSaveLoad* conte
     op->generation = operationGeneration;
     op->run = std::move(run);
 
-    operationQueue.enqueue(op);
+    auto future = op->deferred.future();
+    m_operations.enqueue(std::move(op));
     runNextOperation(context);
-    return op->deferred.future();
+    return future;
 }
 
 void cwSaveLoadPrivate::runNextOperation(cwSaveLoad* context)
 {
-    if (activeOperation != nullptr) {
+    if (m_operations.hasActive()) {
         return;
     }
 
-    if (operationQueue.isEmpty()) {
+    if (m_operations.isEmpty()) {
         return;
     }
 
-    activeOperation = operationQueue.dequeue();
-    auto op = activeOperation;
+    auto op = m_operations.activateNext();
 
     if (op->generation != operationGeneration) {
         const QString cancelReason = pendingCancellationReason.isEmpty()
                 ? QStringLiteral("Operation canceled.")
                 : pendingCancellationReason;
         op->deferred.complete(Monad::ResultBase(cancelReason));
-        activeOperation.reset();
+        m_operations.clearActive();
         runNextOperation(context);
         return;
     }
@@ -763,8 +749,8 @@ void cwSaveLoadPrivate::runNextOperation(cwSaveLoad* context)
             op->deferred.complete(result);
         }
 
-        if (activeOperation == op) {
-            activeOperation.reset();
+        if (m_operations.active() == op) {
+            m_operations.clearActive();
         }
 
         if (op->type == Operation::Type::SaveFlush && result.hasError()) {
@@ -783,14 +769,14 @@ void cwSaveLoadPrivate::cancelPendingOperations(const QString& reason)
     ++operationGeneration;
     pendingCancellationReason = reason;
 
-    if (activeOperation && !activeOperation->deferred.future().isFinished()) {
-        activeOperation->deferred.complete(Monad::ResultBase(reason));
+    if (const auto& active = m_operations.active();
+            active && !active->deferred.future().isFinished()) {
+        active->deferred.complete(Monad::ResultBase(reason));
     }
 
-    while (!operationQueue.isEmpty()) {
-        auto op = operationQueue.dequeue();
-        op->deferred.complete(Monad::ResultBase(reason));
-    }
+    // Any active operation is left running; it settles the idle future from its
+    // completion callback (via clearActive()).
+    m_operations.cancelQueued(reason);
 }
 
 void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
@@ -924,7 +910,7 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
 
     m_pendingJobs.append(job);
 
-    if (activeOperation != nullptr) {
+    if (m_operations.hasActive()) {
         maybeStartPendingFileJobs(context);
     } else {
         ensureSaveFlushScheduled(context);
@@ -963,7 +949,7 @@ void cwSaveLoadPrivate::addExplicitFileSystemJob(Job job, cwSaveLoad* context) {
 
     m_pendingJobs.append(job);
 
-    if (activeOperation != nullptr) {
+    if (m_operations.hasActive()) {
         maybeStartPendingFileJobs(context);
     } else {
         ensureSaveFlushScheduled(context);

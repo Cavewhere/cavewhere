@@ -3192,6 +3192,11 @@ void cwSaveLoad::waitForFinished()
     cwFutureManagerModel model;
     auto saveJobs = completeSaveJobs();
     model.addJob(cwFuture(saveJobs, QString()));
+    // Also wait for the operation queue to drain. A SaveFlush operation only
+    // settles after saveFlushImpl() has emitted saveFlushCompleted, so this
+    // gives callers a happens-before guarantee on that signal — completeSaveJobs()
+    // alone resolves upstream of the flush emit and would race it.
+    model.addJob(cwFuture(d->operationsFinished(), QString()));
     model.waitForFinished();
 }
 

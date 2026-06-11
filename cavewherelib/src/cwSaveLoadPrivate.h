@@ -260,8 +260,91 @@ struct cwSaveLoadPrivate {
         AsyncFuture::Deferred<Monad::ResultBase> deferred;
     };
 
-    QQueue<std::shared_ptr<Operation>> operationQueue;
-    std::shared_ptr<Operation> activeOperation;
+    // FIFO of pending operations plus the one currently running. It owns an
+    // "idle" future (finished()) that resolves whenever the queue is empty and
+    // nothing is active. enqueue()/activateNext()/clearActive()/cancelQueued()
+    // are the only mutators, so the idle future is maintained as a function of
+    // queue state and can never be stranded by a drain path that forgets to
+    // update it.
+    //
+    // The idle future is the ordering waitForFinished() relies on: a SaveFlush
+    // operation only settles after saveFlushImpl() has emitted
+    // saveFlushCompleted, so a finished idle future guarantees that emit
+    // already happened. Blocking on the raw m_pendingJobsDeferred (which is
+    // upstream of the flush emit) does not give that guarantee.
+    class OperationQueue
+    {
+    public:
+        OperationQueue() { m_idle.complete(); }
+
+        bool isEmpty() const { return m_queue.isEmpty(); }
+        bool hasActive() const { return m_active != nullptr; }
+        const std::shared_ptr<Operation>& active() const { return m_active; }
+        QFuture<void> finished() const { return m_idle.future(); }
+
+        bool hasOperation(Operation::Type type, quint64 generation) const
+        {
+            const auto matches = [&](const std::shared_ptr<Operation>& op) {
+                return op && op->generation == generation && op->type == type;
+            };
+            if (matches(m_active)) {
+                return true;
+            }
+            for (const auto& op : m_queue) {
+                if (matches(op)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void enqueue(std::shared_ptr<Operation> op)
+        {
+            m_queue.enqueue(std::move(op));
+            if (m_idle.future().isFinished()) {
+                m_idle = {};
+            }
+        }
+
+        std::shared_ptr<Operation> activateNext()
+        {
+            m_active = m_queue.dequeue();
+            return m_active;
+        }
+
+        void clearActive()
+        {
+            m_active.reset();
+            settleIfDrained();
+        }
+
+        // Drop every queued operation, completing each one's deferred with
+        // reason. An active operation is left untouched; it settles the idle
+        // future from clearActive().
+        void cancelQueued(const QString& reason)
+        {
+            while (!m_queue.isEmpty()) {
+                m_queue.dequeue()->deferred.complete(Monad::ResultBase(reason));
+            }
+            settleIfDrained();
+        }
+
+    private:
+        void settleIfDrained()
+        {
+            if (m_active == nullptr
+                    && m_queue.isEmpty()
+                    && !m_idle.future().isFinished()) {
+                m_idle.complete();
+            }
+        }
+
+        QQueue<std::shared_ptr<Operation>> m_queue;
+        std::shared_ptr<Operation> m_active;
+        AsyncFuture::Deferred<void> m_idle;
+    };
+
+    OperationQueue m_operations;
     quint64 operationGeneration = 0;
     QString pendingCancellationReason;
     quint64 modelMutationEpoch = 0;
@@ -366,6 +449,8 @@ struct cwSaveLoadPrivate {
                                          std::function<QFuture<Monad::ResultBase>()> run);
 
     void runNextOperation(cwSaveLoad* context);
+
+    QFuture<void> operationsFinished() const { return m_operations.finished(); }
 
     void cancelPendingOperations(const QString& reason);
 
