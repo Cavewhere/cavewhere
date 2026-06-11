@@ -49,6 +49,7 @@ uint qHash(const cwRhiPipelineKey& key, uint seed) noexcept;
 class cwRhiScene {
 public:
     friend class cwRhiItemRenderer;
+    friend struct CwRhiSceneTestAccess;
 
     struct PipelineRecord {
         cwRhiPipelineKey key;
@@ -132,6 +133,11 @@ private:
     void initialize(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer);
     void synchroize(cwScene* scene, cwRhiItemRenderer* renderer);
     void render(QRhiCommandBuffer *cb, cwRhiItemRenderer* renderer);
+
+    // Delete an RHI object and purge it from every tracking list, so neither the
+    // delete loop nor the issue #512 address-reuse cleanup can leave a dangling
+    // pointer behind in m_rhiObjectsToInitilize / m_rhiNeedResourceUpdate.
+    void destroyRhiObject(cwRHIObject* rhiObject);
 
     QList<cwRHIObject*> m_rhiObjectsToInitilize;
     QList<cwRHIObject*> m_rhiObjects;

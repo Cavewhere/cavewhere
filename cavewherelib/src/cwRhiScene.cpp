@@ -119,6 +119,17 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
     //Add new rendering object
     if(!scene->m_newRenderObjects.isEmpty()) {
         for(auto object : std::as_const(scene->m_newRenderObjects)) {
+            // A freed render object may have been replaced by a new one at the
+            // same address (issue #512): cwScene::addItem cancels the old
+            // object's pending delete on pointer equality, so its stale
+            // cwRHIObject never reaches the delete loop below. Free it before
+            // remapping the address — overwriting the lookup entry blindly would
+            // orphan it in m_rhiObjects and render it forever. The lookup entry
+            // itself is left dangling only until it is reassigned just below.
+            if(auto* stale = m_rhiObjectLookup.value(object)) {
+                destroyRhiObject(stale);
+            }
+
             auto rhiObject = object->createRHIObject();
             // qDebug() << "Creating rhiObject:" << object << "->" << rhiObject;
             m_rhiObjects.append(rhiObject);
@@ -133,27 +144,17 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
     //Remove old rendering objects
     if(!scene->m_toDeleteRenderObjects.isEmpty()) {
         for(auto object : std::as_const(scene->m_toDeleteRenderObjects)) {
-            auto rhiObject = m_rhiObjectLookup[object];
-            if(rhiObject != nullptr) {
-                auto it = std::remove_if(m_rhiObjects.begin(), m_rhiObjects.end(),
-                                         [rhiObject](const cwRHIObject* currentRhiObject) {
-                                             if (currentRhiObject == rhiObject) {
-                                                 delete currentRhiObject;
-                                                 return true; // Marks for removal
-                                             }
-                                             return false;
-                                         });
-                m_rhiObjects.erase(it);
+            if(auto* rhiObject = m_rhiObjectLookup.value(object)) {
+                destroyRhiObject(rhiObject);
                 m_rhiObjectLookup.remove(object);
             }
-
         }
         scene->m_toDeleteRenderObjects.clear();
     }
 
     //Update rendering objects
     for(auto object : std::as_const(scene->m_toUpdateRenderObjects)) {
-        auto rhiObject = m_rhiObjectLookup[object];
+        auto rhiObject = m_rhiObjectLookup.value(object);
         if(rhiObject) {
             rhiObject->setVisible(object->isVisible());
             rhiObject->synchronize({object, renderer});
@@ -162,6 +163,21 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
     }
     scene->m_toUpdateRenderObjects.clear();
 
+}
+
+void cwRhiScene::destroyRhiObject(cwRHIObject* rhiObject)
+{
+    if(rhiObject == nullptr) {
+        return;
+    }
+
+    // Drop every pending reference before the delete — synchroize() can run more
+    // than once before render() drains these (no render between syncs in tests),
+    // so a stale pointer left here would be dereferenced after free.
+    m_rhiObjects.removeOne(rhiObject);
+    m_rhiObjectsToInitilize.removeOne(rhiObject);
+    m_rhiNeedResourceUpdate.removeOne(rhiObject);
+    delete rhiObject;
 }
 
 void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
