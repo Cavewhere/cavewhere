@@ -35,16 +35,12 @@ class cwStrokePath;
 struct cwPlacementContext {
     const cwStrokePath &strokePath;  // built once per stroke; rules share it
     const cwDecorationLayer &layer;
-    double worldPerPaperMm = 0.0;    // paper-mm -> world-m at the active map scale
+    // paper-mm -> world-m at the active map scale. The layout fills this from
+    // cwGlyphTessellationCache::paperMmToWorldM, which clamps the scale and so is
+    // always > 0; the 0.0 here is a degenerate default for directly-built contexts,
+    // never a live value.
+    double worldPerPaperMm = 0.0;
     cwSceneContext *scene = nullptr; // iter-2 MutateScene state; nullptr in iter 1
-};
-
-// What a Stamp rule needs to turn one placed position into world-metre ink. The
-// glyph is tessellated once by cwGlyphTessellationCache and passed in, so the
-// rule never touches the cache and stays cheap to re-invoke.
-struct cwStampGeometry {
-    const QPainterPath &glyphPath;   // unplaced world-metre glyph ink
-    const cwStrokePath &strokePath;  // for arclength-warping stamps
 };
 
 // One executable placement rule. Decoration layers store rules as data
@@ -85,12 +81,17 @@ public:
 
     // Materialise one placed position into world-metre glyph ink (the rule owns
     // its shape — Decision 11a). Overridden by Stamps-kind terminals; the default
-    // "no ink" suits every other rule.
+    // "no ink" suits every other rule. `glyphPath` is the unplaced world-metre
+    // glyph, tessellated once by cwGlyphTessellationCache and passed in so the rule
+    // never touches the cache; `context` supplies the stroke path and scale shared
+    // by the whole layer.
     virtual QPainterPath stampPath(const cwStampPosition &position,
-                                   const cwStampGeometry &geometry) const
+                                   const QPainterPath &glyphPath,
+                                   const cwPlacementContext &context) const
     {
         Q_UNUSED(position)
-        Q_UNUSED(geometry)
+        Q_UNUSED(glyphPath)
+        Q_UNUSED(context)
         return QPainterPath();
     }
 

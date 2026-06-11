@@ -90,6 +90,32 @@ QPointF cwStrokePath::normalAtArcLength(double s) const
     return QPointF(-tangent.y(), tangent.x());
 }
 
+void cwStrokePath::pointAndNormalAtArcLength(double s, QPointF &point, QPointF &normal) const
+{
+    if (m_points.isEmpty()) {
+        point = QPointF();
+        normal = QPointF(0.0, 1.0);   // left normal of the default (1, 0) tangent
+        return;
+    }
+    if (isEmpty()) {
+        point = m_points.first();
+        normal = QPointF(0.0, 1.0);
+        return;
+    }
+
+    int segment = 0;
+    double t = 0.0;
+    locate(s, segment, t);
+    const QPointF &a = m_points.at(segment);
+    const QPointF &b = m_points.at(segment + 1);
+    point = a + (b - a) * t;
+
+    const QPointF delta = b - a;
+    const double length = std::hypot(delta.x(), delta.y());
+    const QPointF tangent = (length > 0.0) ? delta / length : QPointF(1.0, 0.0);
+    normal = QPointF(-tangent.y(), tangent.x());
+}
+
 int cwStrokePath::closestSegment(const QPointF &worldPoint, double &t) const
 {
     int bestSegment = 0;

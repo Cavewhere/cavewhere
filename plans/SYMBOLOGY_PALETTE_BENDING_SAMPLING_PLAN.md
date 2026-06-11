@@ -1,20 +1,30 @@
-# Bending-stamp chord under-sampling (commit 4.1)
+# Curve-following bending stamp + Jointed stamp split (commit 4.1)
 
-Slot **after commit 4**, a small, self-contained correctness fix to the
-bending-stamp materialisation introduced in commit 4. Only
-`cwBendingStampRule` (and its test) change — the registry, data model, proto,
-IO, and the layout are untouched.
+Slot **after commit 4**. Adds a **second** glyph-warping Terminal rule so a glyph
+can *follow* a curving stroke, and renames the existing warp rule to reflect what
+it actually does. Touches the two rules, the registry, `cwStampGeometry`, the
+seed, and tests — no proto, IO, or data-model change.
 
-> **Post-collapse note (Decision 11b).** Commit 4 removed
-> `cwDecorationLayer::Mode`; a layer is now a rule stack and the **Terminal**
-> rule owns its shape (Decision 11a). So the warp this plan fixes lives in
-> `cwBendingStampRule::stampPath()`, not in a `cwSketchDecorationLayout`
-> `bendingStampPath` helper as an earlier draft assumed.
+> **Design (settled with the user) — two rules, not one in-place fix.** An earlier
+> draft "fixed" `cwBendingStampRule` in place to always subdivide. Instead we keep
+> the current vertex-only behaviour as a distinct, legitimately-useful rule and add
+> the curve-following behaviour as a new rule:
+>
+> | Rule (displayName) | Class | Behaviour |
+> |--------------------|-------|-----------|
+> | **Jointed stamp** | `cwJointedStampRule` (renamed from `cwBendingStampRule`) | Warps only the glyph's **vertices** onto the stroke; edges stay **straight chords**. Cheap, crisp facets — right for short-segment glyphs (ticks, small dashes). Behaviour **unchanged** from commit 4. |
+> | **Bending stamp** | `cwBendingStampRule` (new file, reuses the name) | **Subdivides** each glyph edge along arclength so the whole glyph **curves to follow** the stroke. Right for long features (a bar, a long dash, a wavy decoration). |
+>
+> The new curve-following rule takes the canonical name **"Bending stamp"** —
+> that's what a cartographer means by "bending" — and the old vertex-warp rule
+> becomes **"Jointed stamp"** (hinges at the vertices, straight between). The
+> cartographer picks per glyph: "should my glyph's straight parts stay straight, or
+> curve with the line?"
 
 ## Context / problem
 
-Commit 4's `cwBendingStampRule::stampPath()` warps **only the glyph's
-vertices** and connects them with straight `lineTo`s:
+Commit 4's `cwBendingStampRule::stampPath()` warps **only the glyph's vertices**
+and connects them with straight `lineTo`s:
 
 ```cpp
 for (int i = 0; i < geometry.glyphPath.elementCount(); ++i) {
@@ -28,94 +38,134 @@ A glyph stroke that spans a long arclength — e.g. a 2-point dash
 warped endpoints. On a gentle curve this is invisible; on a tightly bending
 stroke the glyph cuts across the bend instead of following it.
 
+That chord behaviour is **correct and desirable** for some glyphs (a chevron tick
+whose straight arms should stay crisp; any glyph whose segments are already short
+relative to curvature, where subdivision is wasted work). It is **wrong** for a
+long continuous glyph that should read as part of the curving line. Hence two
+rules rather than one.
+
 This is **not** the plan's deferred "strip-tessellation" (Decision 10). That
 addresses *shear of a **tall** glyph* (large `y` extent: the top and bottom edges
-cover different arclengths). Chord under-sampling is a plain correctness gap in
-the along-arclength (`x`) direction — cheaper, more fundamental, and worth fixing
-on its own.
+cover different arclengths). Curve-following here is along the **`x`** (arclength)
+direction only — cheaper and more fundamental.
 
 ## Decisions (settled with the user)
 
-1. **Sample by default** (Option A). Bending exists to follow curvature, so the
-   warp should always follow it. Today's chord is just the degenerate
-   "no subdivision" case. No new placement rule, no per-glyph flag, no
-   data-model change.
-2. **The fix stays in the rule** (`cwBendingStampRule::stampPath`). Post-collapse
-   the Terminal rule owns its shape (Decision 11a); sampling is a property of
-   *how the bending Terminal materialises geometry*. Generate / MutatePerLayer
-   rules remain pure `cwStampPosition` transformers — the glyph→world warp,
-   including its subdivision, belongs to the one rule that produces ink.
-3. **True strip-tessellation stays deferred** — the plan's demand-gated per-glyph
-   flag for tall-glyph shear, unscheduled. Out of scope here.
+1. **Two rules, both shipped.** Keep the vertex/chord warp as `Jointed stamp`
+   (behaviour unchanged); add `Bending stamp` for the subdivided, curve-following
+   warp. No "default sampling" flag, no per-glyph toggle — the choice *is* the
+   rule the layer's stack ends with.
+2. **Rename the existing rule.** `cwBendingStampRule` → `cwJointedStampRule`,
+   `displayName "Bending stamp"` → `"Jointed stamp"`. Nothing ships in palette
+   files yet (only the seed, which we control), so the rename is cheap. Use
+   `git mv` so blame on the warp logic is preserved.
+3. **Materialisation stays in the rule** (Decision 11a). Both rules are Terminal,
+   `OutputKind::Stamps`, inherit `cwStampRuleBase`'s position finalisation, and
+   override only `stampPath()`. The shared warp lives in one helper (below);
+   `Bending stamp` differs solely by subdividing before warping.
+4. **True strip-tessellation stays deferred** — the demand-gated per-glyph flag
+   for tall-glyph shear. Out of scope.
 
 ## Approach
 
-In `cwBendingStampRule::stampPath`, subdivide each glyph segment (`lineTo`) by
-its along-arclength span before warping, so each sub-point lands on the stroke:
+### Rename (no behaviour change)
 
-- For a segment from `p0` to `p1` (glyph-local, already world-scaled), compute its
-  world length `L`. Emit `N = max(1, ceil(L / stepWorld))` sub-segments, linearly
-  interpolating `(x, y)` in glyph space at each `t = k/N`, and warp each via the
-  `cwStrokePath` carried in `cwStampGeometry`
-  (`(x, y) → pointAtArcLength(S + x) + y·normalAtArcLength(S + x)`).
-- `moveTo` elements pass through unchanged; each `lineTo` becomes `N` `lineTo`s.
-- A vertical tick (`Δx ≈ 0`, short `L`) subdivides into ~1 step — no measurable
-  cost; a long dash subdivides enough to hug the curve.
+`git mv cwBendingStampRule.{h,cpp} cwJointedStampRule.{h,cpp}`; rename the class
+and guard to `cwJointedStampRule` / `CWJOINTEDSTAMPRULE_H`; `displayName()`
+returns `"Jointed stamp"`. The vertex-warp loop is untouched.
 
-Step size: a named constant `kBendingSampleStepMm` (~0.25 mm), converted to world
-metres with the same `worldPerPaperMm` the layout passes through
-`cwPlacementContext` / `cwStampGeometry`. Promote to a per-glyph field only if
-real authoring shows a need.
+### Shared warp helper
+
+Both rules apply the same map — glyph `(x, y) → path(S + scale·x) + scale·y ·
+normal(S + scale·x)`, with `S = strokePath.arcLengthNearPoint(anchorWorld)`.
+Factor it so neither rule duplicates it — e.g. a protected helper on a small
+shared base, or a free function `cwBendWarp(strokePath, startArc, scale,
+glyphPoint)`. `Jointed stamp` applies it per glyph vertex; `Bending stamp`
+applies it per sub-sample.
+
+### New `cwBendingStampRule` (curve-following)
+
+New `cwBendingStampRule.{h,cpp}`, `displayName "Bending stamp"`, Terminal /
+`OutputKind::Stamps`. Its `stampPath()` subdivides each glyph segment by its
+along-arclength span before warping:
+
+- Track the previous glyph point. `moveTo` passes through (warp + `moveTo`).
+- For each `lineTo` from `p0` to `p1` (glyph-local, already world-metre after the
+  cache tessellation, scaled by `position.scale`): compute the segment's world
+  length `L = position.scale · |p1 − p0|`. Emit `N = max(1, ceil(L / stepWorld))`
+  sub-segments, lerping `(x, y)` in glyph space at each `t = k/N` and warping each
+  via the shared helper. A short tick → `N = 1` (no extra cost); a long dash →
+  enough points to hug the curve.
+
+### Sample step needs `worldPerPaperMm` in `cwStampGeometry`
+
+`stampPath(position, geometry)` has no `cwPlacementContext`, so it can't see
+`worldPerPaperMm` — but the sample step `kBendingSampleStepMm` (~0.25 mm) is in
+paper-mm and the glyph path is already world-metre, so the conversion is needed.
+**Add `double worldPerPaperMm = 0.0;` to `cwStampGeometry`** and have
+`cwSketchDecorationLayout` populate it where it builds the geometry (it already
+holds the value — it's in `cwPlacementContext`). `stepWorld = kBendingSampleStepMm
+· geometry.worldPerPaperMm`. `Rigid stamp` / `Jointed stamp` ignore the new field.
 
 ## Files
 
-- `cavewherelib/src/cwPlacementRules/cwBendingStampRule.cpp` — subdivision inside
-  `stampPath` (the only production change).
-- `testcases/test_cwPlacementRules.cpp` — rule-level assertions on the subdivided
-  warp (tag `[cwPlacementRule]`), exercising `cwBendingStampRule::stampPath`
-  directly against a hand-built `cwStrokePath` + glyph.
-- `testcases/test_cwSketchDecorationLayout.cpp` — the visual PNG panel (below),
-  since the composite reference image lives with the layout test.
+- `cavewherelib/src/cwPlacementRules/cwJointedStampRule.{h,cpp}` — `git mv` of the
+  current bending rule; class/guard/`displayName` renamed; warp logic unchanged.
+- `cavewherelib/src/cwPlacementRules/cwBendingStampRule.{h,cpp}` — new
+  curve-following rule (subdivided warp).
+- the shared warp helper (new small header or a protected base method).
+- `cavewherelib/src/cwPlacementRule.h` — `cwStampGeometry` gains `worldPerPaperMm`.
+- `cavewherelib/src/cwSketchDecorationLayout.cpp` — populate
+  `cwStampGeometry::worldPerPaperMm` at the construction site.
+- `cavewherelib/src/cwPlacementRuleRegistry.cpp` — register **both** rules
+  (`cwJointedStampRule` + `cwBendingStampRule`).
+- `cavewherelib/src/cwSymbologyPaletteSeed.cpp` — any seed layer that wants the
+  curve-following look keeps `"Bending stamp"`; any that wants crisp facets uses
+  `"Jointed stamp"`. (Audit the existing bending usage and pick deliberately.)
+- (CMake globs `cwPlacementRules/*.{cpp,h}` with `CONFIGURE_DEPENDS`, so new files
+  are picked up automatically.)
 
 ## Tests
 
-- **Tightly-bending stroke + long-segment glyph** (rule-level, in
-  `test_cwPlacementRules.cpp`). A small-radius, large-sweep arc `cwStrokePath`
-  with a glyph whose stroke spans a long arclength (e.g. a 3 mm horizontal bar).
-  Assert:
-  - the materialised stamp path has many vertices (≫ 2 per segment), i.e. the
-    segment was subdivided, and
-  - every sampled vertex lies within a tight tolerance of the stroke (max
-    perpendicular deviation small via `cwStrokePath::arcLengthNearPoint` /
-    `pointAtArcLength`), i.e. the glyph follows the curve rather than chording.
-  - As a contrast, confirm the same glyph warped at only its 2 endpoints would
-    deviate far more (sanity bound), so the test would fail against the pre-fix
-    behaviour.
-- **Short glyphs unaffected.** A tick/short dash still produces a correct,
-  low-vertex path (no regression, negligible extra points).
-- **Reference PNG panel.** Add a "bending (sampled)" panel: a tight curve with a
-  long bar glyph, visually hugging the curve, alongside the existing chevron
-  panel.
+- **`test_cwPlacementRules.cpp`** (tag `[cwPlacementRule]`):
+  - **Jointed stamp** (vertex warp): the renamed rule still produces straight
+    chords — on a curved `cwStrokePath`, a long-segment glyph yields exactly its
+    original vertex count (no subdivision) and the midpoint of a warped segment
+    deviates from the stroke by the expected chord error. (Move the existing
+    "Bending stamp warps the glyph…" assertions here under the new name.)
+  - **Bending stamp** (sampled): same tight-curve `cwStrokePath` + long glyph →
+    many vertices (≫ 2 per segment) and every sampled vertex within a tight
+    tolerance of the stroke (`cwStrokePath::pointAtArcLength` /
+    `arcLengthNearPoint`), i.e. it follows the curve. Contrast against the Jointed
+    deviation as the sanity bound, so the test would fail if `Bending stamp`
+    didn't subdivide.
+  - **Short glyph unaffected** under `Bending stamp` — low-vertex path, negligible
+    extra points (`N = 1` per short segment).
+  - **Straight stroke equivalence** — on a straight stroke both rules produce the
+    same geometry (subdivision lands on the same line), guarding against a
+    regression that perturbs the simple case.
+- **`test_cwPlacementRuleRegistry.cpp`:** both `"Bending stamp"` and `"Jointed
+  stamp"` resolve; each is Terminal / `OutputKind::Stamps`.
+- **`test_cwSketchDecorationLayout.cpp`:** add a "bending (curve-following)" PNG
+  panel — a tight curve with a long bar glyph hugging the curve — alongside the
+  existing chevron panel; optionally a "jointed (faceted)" panel for contrast.
 
 ## Out of scope / deferred
 
-- **True strip-tessellation** for tall-glyph shear (the plan's per-glyph flag) —
+- **True strip-tessellation** for tall-glyph shear (the per-glyph flag) —
   unscheduled, demand-gated.
 - **Sibling follow-up — polygon decoration (pen + fill)** (closed glyphs, e.g. a
   stream indicator) is **commit 4.2**, in `SYMBOLOGY_PALETTE_FILL_PLAN.md`.
   Independent of this 4.1 — either order is fine.
 - **Sibling follow-up — flow-aligned point symbol** (single-shot stack
-  `Explicit point → Align to tangent → Rigid stamp` so a stream arrowhead rides
-  the tangent) is **commit 4.3**, in `SYMBOLOGY_PALETTE_ORIENTED_POINT_PLAN.md`.
-  Post-collapse it needs no production change.
-- **Sibling follow-up — load-time stack validation.** Decision 11b reframed the
-  old `compatibleModes()` skip-and-warn as a **stack well-formedness** check
-  (exactly one Terminal, stages ordered, Generate agrees with the Terminal) — no
-  longer a (rule × mode) matrix. It's a *separate* IO-layer change, its own
-  reviewable commit — **commit 4.4**.
-- **Sibling follow-up — non-zero offset trace** (parallel rails, e.g. a
-  railroad track) is **commit 4.5**, in `SYMBOLOGY_PALETTE_OFFSET_CURVE_PLAN.md`.
-  Originally "iter 2"; pulled forward as self-contained layout compute.
+  `Explicit point → Align to tangent → Rigid stamp`) is **commit 4.3**, in
+  `SYMBOLOGY_PALETTE_ORIENTED_POINT_PLAN.md`. Needs no production change post-collapse.
+- **Sibling follow-up — load-time stack well-formedness validation** (exactly one
+  Terminal, stages ordered, Generate agrees with the Terminal) is **commit 4.4**,
+  an IO-layer change. (Decision 11b reframed the old `compatibleModes()` matrix as
+  this stack check.)
+- **Sibling follow-up — non-zero offset trace** (parallel rails) is **commit
+  4.5**, in `SYMBOLOGY_PALETTE_OFFSET_CURVE_PLAN.md`.
 
 ## Note — bezier strokes (the flattening boundary)
 
@@ -125,7 +175,7 @@ world-metre polyline because strokes are captured as polylines today (stylus pen
 sampling).
 
 If strokes ever become bezier curves, **flattening is the single boundary that
-changes** — every placement rule and the bending sampler stay untouched:
+changes** — both warp rules and the sampler stay untouched:
 
 - Add a `cwStrokePath(const QPainterPath&)` constructor that flattens the curve
   **once** via `QPainterPath::toSubpathPolygons()` into the same internal
@@ -147,12 +197,21 @@ changes** — every placement rule and the bending sampler stay untouched:
 ## Dependency
 
 Follows commit 4 (which introduced `cwBendingStampRule` and the chord-based
-`stampPath`).
+warp). Independent of 4.2–4.5.
 
 ## Checklist
 
-- [ ] `cwBendingStampRule::stampPath` subdivides glyph segments by `kBendingSampleStepMm`.
-- [ ] Rule test: tight curve + long glyph follows the stroke (deviation bound).
-- [ ] Rule test: short glyph unaffected.
-- [ ] Reference-PNG "bending (sampled)" panel.
-- [ ] `cavewhere-test "[cwPlacementRule],[cwSketchDecorationLayout]"` green.
+- [x] `git mv` existing rule → `cwJointedStampRule`; `displayName "Jointed stamp"`;
+      behaviour unchanged.
+- [x] New `cwBendingStampRule` (`"Bending stamp"`) subdivides by `kBendingSampleStepMm`.
+- [x] Shared warp helper (`cwStampRuleBase::bendWarp`) used by both rules (no duplication).
+- [x] `cwStampGeometry::worldPerPaperMm` added + populated by the layout.
+- [x] Registry registers both rules.
+- [x] Seed audited — no bending/jointed layer in the seed, so no change needed.
+- [x] Tests: jointed chord behaviour, bending curve-following (deviation bound),
+      short-glyph no-op, straight-stroke equivalence, registry resolves both.
+- [x] Reference-PNG: two ceiling-step panels (bending curve-following vs jointed faceted),
+      dashed with gaps.
+- [x] Main plan rule catalog gains the `Jointed stamp` row.
+- [x] `cavewhere-test "[cwPlacementRule],[cwPlacementRuleRegistry],[cwSketchDecorationLayout]"` green
+      (171 assertions, 25 cases).

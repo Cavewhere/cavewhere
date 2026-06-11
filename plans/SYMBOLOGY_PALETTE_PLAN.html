@@ -281,7 +281,7 @@ so prototype-era sketches no longer load (no legacy loader — Decision&nbsp;2).
     <tr>
       <td>4</td>
       <td>Placement rules + decoration layout</td>
-      <td><code>cwPlacementRule</code> abstract base + registry, concrete rules under <code>cwPlacementRules/</code> (Generate / MutatePerLayer / Terminal stages — Decision&nbsp;11), <code>cwSketchDecorationLayout</code> running the pipeline against a <code>cwPaletteSnapshot</code>. <strong>Modes are gone (Decision&nbsp;11b — full collapse):</strong> a decoration layer <em>is</em> a rule stack; the Terminal rule produces the layer's geometry and names its <code>OutputKind</code> (stamps vs a traced polyline). Six rules ship: <code>Uniform spacing</code>, <code>Explicit point</code>, <code>Align to tangent</code>, <code>Rigid stamp</code>, <code>Bending stamp</code>, <code>Trace offset polyline</code> (offset=0). The rule owns its shape (Decision&nbsp;11a). No <code>MutateScene</code> rules yet.</td>
+      <td><code>cwPlacementRule</code> abstract base + registry, concrete rules under <code>cwPlacementRules/</code> (Generate / MutatePerLayer / Terminal stages — Decision&nbsp;11), <code>cwSketchDecorationLayout</code> running the pipeline against a <code>cwPaletteSnapshot</code>. <strong>Modes are gone (Decision&nbsp;11b — full collapse):</strong> a decoration layer <em>is</em> a rule stack; the Terminal rule produces the layer's geometry and names its <code>OutputKind</code> (stamps vs a traced polyline). Six rules ship in commit&nbsp;4: <code>Uniform spacing</code>, <code>Explicit point</code>, <code>Align to tangent</code>, <code>Rigid stamp</code>, <code>Bending stamp</code>, <code>Trace offset polyline</code> (offset=0); commit&nbsp;4.1 splits the bending warp into <code>Jointed stamp</code> (vertices only) + <code>Bending stamp</code> (subdivided, curve-following), for seven. The rule owns its shape (Decision&nbsp;11a). No <code>MutateScene</code> rules yet.</td>
       <td><span class="badge i1">built · green · uncommitted</span></td>
     </tr>
     <tr>
@@ -1421,7 +1421,7 @@ stack instead:
 </p>
 <ul>
   <li><strong>Repeated vs. single</strong> was a <em>Generate</em>-stage choice all along — <code>Uniform spacing</code> (every <var>n</var> mm) vs. <code>Explicit point</code> (one anchor). "Single" is just the degenerate count; a future <code>By count</code> rule (commit&nbsp;9) covers "exactly N".</li>
-  <li><strong>Rigid vs. bending</strong> is a <em>Terminal</em>-rule choice — <code>Rigid stamp</code> vs. <code>Bending stamp</code>, differing only in <code>stampPath()</code>.</li>
+  <li><strong>Rigid vs. jointed vs. bending</strong> is a <em>Terminal</em>-rule choice — <code>Rigid stamp</code> (rigid transform), <code>Jointed stamp</code> (warp the vertices, straight chords), <code>Bending stamp</code> (subdivide so the glyph follows the curve), differing only in <code>stampPath()</code> (the jointed/bending split is commit&nbsp;4.1).</li>
   <li><strong>Stamps vs. offset curve</strong> is the Terminal rule's <code>OutputKind</code> (<code>Stamps</code> / <code>Polylines</code>); <code>cwSketchDecorationLayout</code> reads it off the stack's Terminal rule instead of switching on a layer mode. The old <code>RigidStamp</code>+<code>PointStamp</code> duplication dissolves — both end with <code>Rigid stamp</code>, differing only in their Generate rule.</li>
 </ul>
 <p>
@@ -1473,7 +1473,7 @@ between rules in the chain, so a subsequent rule sees the previous
 rule's effects.
 </p>
 
-<p>Iter 1 + iter 2 ship these rules as code. Until the in-app brush editor lands (commit 9 / iter 4+), cartographers compose them by editing palette files directly; the editor then offers them through a rule picker that keeps the stack well-formed (see the validation note above). Iter 1 ships six rules — <code>Uniform spacing</code>, <code>Explicit point</code>, <code>Align to tangent</code>, <code>Rigid stamp</code>, <code>Bending stamp</code>, <code>Trace offset polyline</code>; the rest are additive follow-ups:</p>
+<p>Iter 1 + iter 2 ship these rules as code. Until the in-app brush editor lands (commit 9 / iter 4+), cartographers compose them by editing palette files directly; the editor then offers them through a rule picker that keeps the stack well-formed (see the validation note above). Iter 1 ships seven rules — <code>Uniform spacing</code>, <code>Explicit point</code>, <code>Align to tangent</code>, <code>Rigid stamp</code>, <code>Jointed stamp</code>, <code>Bending stamp</code>, <code>Trace offset polyline</code> (the jointed/bending split landed in commit&nbsp;4.1); the rest are additive follow-ups:</p>
 
 <table>
   <thead><tr><th>Stage</th><th>Name</th><th>What it does</th></tr></thead>
@@ -1490,7 +1490,8 @@ rule's effects.
     <tr><td>MutatePerLayer</td><td>Taper scale</td><td>Varies <code>scale</code> as a function of arclength (tapered fault, waterfall).</td></tr>
     <tr><td>MutatePerLayer</td><td>Swap glyph cycle</td><td>Rotates <code>glyphId</code> among a list every N stamps.</td></tr>
     <tr><td>Terminal</td><td>Rigid stamp</td><td><code>OutputKind::Stamps</code>. Materialises each visible position with a rigid transform at the anchor; populates <code>bufferedBboxWorld</code> and <code>priority</code>. (A single oriented placement is just <code>Explicit point → Align to tangent → Rigid stamp</code> — the old "point stamp" mode, no separate rule.)</td></tr>
-    <tr><td>Terminal</td><td>Bending stamp</td><td><code>OutputKind::Stamps</code>. Materialises by warping the glyph along the stroke arclength.</td></tr>
+    <tr><td>Terminal</td><td>Jointed stamp</td><td><code>OutputKind::Stamps</code>. Warps only the glyph's <em>vertices</em> onto the stroke arclength; edges stay straight chords (hinged at the vertices). Cheap and crisp — for short-segment glyphs (ticks, chevrons). Commit&nbsp;4.1.</td></tr>
+    <tr><td>Terminal</td><td>Bending stamp</td><td><code>OutputKind::Stamps</code>. <em>Subdivides</em> each glyph edge along arclength so the whole glyph curves to follow the stroke — for long features (a bar, a long dash). Commit&nbsp;4.1 reframed this from the original vertex-only warp.</td></tr>
     <tr><td>Terminal</td><td>Trace offset polyline</td><td><code>OutputKind::Polylines</code>. Samples the cartographer's polyline at fine resolution and emits one polyline at signed perpendicular distance <code>offsetCurveOffsetMm</code>. No iteration over stamps — the layer produces a single piece of geometry covering the whole stroke. Iter 1 ships the fast path (offset = 0, output equals input); commit 4.5 adds non-zero offset handling.</td></tr>
     <tr><td>MutateScene</td><td>Try shift to fit</td><td>For each stamp whose <code>bufferedBboxWorld</code> collides with another stamp or centerline band, try shifts of ±¼ spacing, ±½ spacing along the arclength; accept the first non-colliding shift.</td></tr>
     <tr><td>MutateScene</td><td>Try shorten to fit</td><td>For each still-colliding stamp, scale geometry to 0.5×; accept if the smaller bbox clears.</td></tr>

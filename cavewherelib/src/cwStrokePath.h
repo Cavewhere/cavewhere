@@ -47,6 +47,11 @@ public:
     // Left normal at arclength s: tangent rotated +90deg (world +X -> world +Y).
     QPointF normalAtArcLength(double s) const;
 
+    // Point and left normal at arclength s in one segment lookup. The arclength
+    // warp samples both at the same s per glyph point, so this shares the single
+    // binary search instead of paying for pointAtArcLength + normalAtArcLength.
+    void pointAndNormalAtArcLength(double s, QPointF &point, QPointF &normal) const;
+
     // Unit tangent of the polyline segment nearest worldPoint. Exact for points
     // sampled onto the polyline (e.g. stamp anchors seeded by a Generate rule),
     // letting MutatePerLayer rules orient a stamp without tracking its arclength.

@@ -90,11 +90,18 @@ cwDecorationLayer rigidStampLayer(const QString &glyphName)
                                  QStringLiteral("Rigid stamp")});
 }
 
-// Repeated glyph warped along the stroke arclength.
+// Repeated glyph subdivided to curve with the stroke arclength.
 cwDecorationLayer bendingStampLayer(const QString &glyphName)
 {
     return ruleLayer(glyphName, {QStringLiteral("Uniform spacing"),
                                  QStringLiteral("Bending stamp")});
+}
+
+// Repeated glyph warped at its vertices only — straight chords between them.
+cwDecorationLayer jointedStampLayer(const QString &glyphName)
+{
+    return ruleLayer(glyphName, {QStringLiteral("Uniform spacing"),
+                                 QStringLiteral("Jointed stamp")});
 }
 
 // A single glyph at the stroke start (no tangent rotation).
@@ -409,6 +416,39 @@ TEST_CASE("A bending stamp warps glyphs along a curved stroke", "[cwSketchDecora
     }
 }
 
+TEST_CASE("The layout feeds worldPerPaperMm so bending subdivides end to end",
+          "[cwSketchDecorationLayout]")
+{
+    cwGlyphTessellationCache cache;
+    cache.setSnapshot(demoPalette().snapshot());
+    const cwSketchDecorationLayout layout(&cache);
+
+    const QVector<QPointF> strokeWorld = arcCurve(2.0, M_PI / 2.0, 24);
+
+    // Same Generate rule and same "plus" glyph (1.6 mm -> several step lengths at
+    // 1:250); only the terminal differs. Bending subdivides the glyph's long edges,
+    // jointed leaves them as chords — so the bending stamp carries more vertices.
+    // If the layout passed worldPerPaperMm = 0, bending wouldn't subdivide and the
+    // two would match, failing this check.
+    const cwLineBrush bending = makeBrush(
+        QStringLiteral("bending-plus"), {bendingStampLayer(QStringLiteral("plus"))});
+    const cwLineBrush jointed = makeBrush(
+        QStringLiteral("jointed-plus"), {jointedStampLayer(QStringLiteral("plus"))});
+
+    const cwBrushDecorationGeometry bg = layout.layout(bending, strokeWorld, kScale250);
+    const cwBrushDecorationGeometry jg = layout.layout(jointed, strokeWorld, kScale250);
+
+    REQUIRE_FALSE(bg.layers.isEmpty());
+    REQUIRE_FALSE(jg.layers.isEmpty());
+    REQUIRE_FALSE(bg.layers.first().stamps.isEmpty());
+    REQUIRE(bg.layers.first().stamps.size() == jg.layers.first().stamps.size());
+
+    const QPainterPath bendPath = bg.layers.first().stamps.first().path;
+    const QPainterPath jointPath = jg.layers.first().stamps.first().path;
+    REQUIRE_FALSE(jointPath.isEmpty());
+    CHECK(bendPath.elementCount() > jointPath.elementCount());
+}
+
 TEST_CASE("Decoration layout renders to a reference image", "[cwSketchDecorationLayout]")
 {
     cwGlyphTessellationCache cache;
@@ -427,11 +467,19 @@ TEST_CASE("Decoration layout renders to a reference image", "[cwSketchDecoration
     const cwLineBrush dashedBrush = makeBrush(
         QStringLiteral("dashed"),
         {bendingStampLayer(QStringLiteral("dash"))});
-    // Ceiling step: no solid edge — a bending dashed line plus short rigid
-    // ticks on the +normal side (Decision 10's ceiling-step example).
-    const cwLineBrush ceilingStepBrush = makeBrush(
-        QStringLiteral("ceiling-step"),
+    // Ceiling step: no solid edge — a dashed line (dash glyph shorter than the
+    // stamp spacing, so gaps fall between dashes) plus short rigid ticks on the
+    // +normal side (Decision 10's ceiling-step example). Two variants contrast
+    // the terminal warp: Bending stamp subdivides each dash so it follows the
+    // curve; Jointed stamp warps only the dash vertices, so each dash is a
+    // straight chord.
+    const cwLineBrush ceilingStepBendingBrush = makeBrush(
+        QStringLiteral("ceiling-step-bending"),
         {bendingStampLayer(QStringLiteral("dash")),
+         rigidStampLayer(QStringLiteral("ceiling-tick"))});
+    const cwLineBrush ceilingStepJointedBrush = makeBrush(
+        QStringLiteral("ceiling-step-jointed"),
+        {jointedStampLayer(QStringLiteral("dash")),
          rigidStampLayer(QStringLiteral("ceiling-tick"))});
     const cwLineBrush bendingBrush = makeBrush(
         QStringLiteral("bending"),
@@ -460,7 +508,8 @@ TEST_CASE("Decoration layout renders to a reference image", "[cwSketchDecoration
         {*wall, gentle, QStringLiteral("wall  —  traced offset polyline (offset 0)")},
         {dashedBrush, gentle, QStringLiteral("dashed  —  bending dash glyph (dashed stroke)")},
         {*floorStep, gentle, QStringLiteral("floor-step  —  traced edge + rigid ticks")},
-        {ceilingStepBrush, gentle, QStringLiteral("ceiling-step  —  bending dashes + short rigid ticks")},
+        {ceilingStepBendingBrush, tighter, QStringLiteral("ceiling-step (bending)  —  dashes (with gaps) subdivided to follow the curve")},
+        {ceilingStepJointedBrush, tighter, QStringLiteral("ceiling-step (jointed)  —  dashes (with gaps) warped at vertices only (chords)")},
         {bendingBrush, tighter, QStringLiteral("bending  —  traced line + bending chevrons")},
         {pointBrush, straightLine(0.4, 1), QStringLiteral("point  —  single stamped glyph")},
         {streamBrush, straightLine(0.8, 1), QStringLiteral("stream  —  traced line + single triangle arrowhead (<-----)")},

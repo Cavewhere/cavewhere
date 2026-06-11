@@ -12,6 +12,7 @@
 #include "cwPlacementRules/cwExplicitPointRule.h"
 #include "cwPlacementRules/cwAlignToTangentRule.h"
 #include "cwPlacementRules/cwRigidStampRule.h"
+#include "cwPlacementRules/cwJointedStampRule.h"
 #include "cwPlacementRules/cwBendingStampRule.h"
 #include "cwPlacementRules/cwTraceOffsetPolylineRule.h"
 
@@ -21,6 +22,7 @@ cwPlacementRuleRegistry::cwPlacementRuleRegistry()
     add(std::make_unique<cwExplicitPointRule>());
     add(std::make_unique<cwAlignToTangentRule>());
     add(std::make_unique<cwRigidStampRule>());
+    add(std::make_unique<cwJointedStampRule>());
     add(std::make_unique<cwBendingStampRule>());
     add(std::make_unique<cwTraceOffsetPolylineRule>());
 }

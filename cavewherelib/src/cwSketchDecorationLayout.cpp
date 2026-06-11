@@ -124,7 +124,7 @@ cwBrushDecorationGeometry cwSketchDecorationLayout::layout(const cwLineBrush &br
                 continue;
             }
 
-            const QPainterPath placed = terminal->stampPath(position, cwStampGeometry{glyphPath, strokePath});
+            const QPainterPath placed = terminal->stampPath(position, glyphPath, context);
             position.bufferedBboxWorld =
                 placed.boundingRect().adjusted(-bufferWorld, -bufferWorld, bufferWorld, bufferWorld);
             out.stamps.append(cwResolvedStamp{position, placed});
