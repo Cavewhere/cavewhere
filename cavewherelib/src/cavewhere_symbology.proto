@@ -1,10 +1,14 @@
 syntax = "proto3";
 import "qt.proto";
+import "cavewhere_common.proto";
 
-// Standalone schema for the symbology palette system (see
-// plans/SYMBOLOGY_PALETTE_PLAN.html). Kept separate from cavewhere.proto so
-// palettes version on their own clock and third-party consumers can read a
-// palette without pulling in the whole project schema.
+// Schema for the symbology palette system (see plans/SYMBOLOGY_PALETTE_PLAN.html).
+// Kept in its own file so a third-party consumer can read a palette by importing
+// only this schema plus the small shared cavewhere_common.proto, without pulling
+// in the whole project schema. Palettes are versioned on the same clock as
+// projects: every file carries a CavewhereCommonProto.FileVersion stamped with
+// cwRegionIOTask::protoVersion(), and a palette newer than the running build is
+// gated read-only (same rule cavewhere.proto entities follow).
 //
 // Colors are hex strings ("#RRGGBB" / "#RRGGBBAA") matching cavewhere.proto's
 // existing convention — no QtProto.QColor message.
@@ -25,6 +29,7 @@ message Palette {
     string description = 3;
     string author      = 4;
     string version     = 5;       // semver-ish, author's choice
+    optional CavewhereCommonProto.FileVersion fileVersion = 6; // save/load format stamp
 }
 
 // The per-glyph file payload (glyphs/<name>.cwglyph). Self-contained so a glyph
@@ -34,21 +39,8 @@ message Palette {
 message Glyph {
     string name                  = 1;  // must match the file stem (glyphs/<name>.cwglyph)
     string displayName           = 2;
-    repeated GlyphStroke strokes = 3;
-}
-
-// Glyph strokes mirror cavewhere.proto's PenStroke/PenPoint but are redeclared
-// here so the palette schema stays standalone (no cavewhere.proto import).
-message GlyphStroke {
-    string brushName                 = 1;  // resolves to a cwLineBrush in this palette
-    repeated GlyphStrokePoint points = 2;
-    string id                        = 3;  // UUID
-}
-
-message GlyphStrokePoint {
-    QtProto.QPointF position = 1;
-    optional double pressure = 2;  // -1 == unknown
-    int64           timestampMs = 3;
+    repeated CavewhereCommonProto.Stroke strokes = 3; // glyph-local paper-mm strokes
+    optional CavewhereCommonProto.FileVersion fileVersion = 4; // save/load format stamp
 }
 
 // The per-file payload for brushes/<name>.cwbrush, exactly as Glyph is for
@@ -63,6 +55,7 @@ message LineBrush {
     repeated DecorationLayer decorations = 6;  // empty = no ink (scrap-outline case)
     double minPaperScale = 7;
     double maxPaperScale = 8;
+    optional CavewhereCommonProto.FileVersion fileVersion = 9; // save/load format stamp
     // No centerline fields. A normal wall's visible line is a decoration layer
     // whose rule stack traces an offset polyline at offset = 0.
 }

@@ -50,12 +50,15 @@ class ProjectedProfileScrapViewMatrix;
 class ImageResolution;
 class Length;
 class Image;
-class PenPoint;
-class PenStroke;
 class Scale;
 class Sketch;
 class FixStation;
 class DoubleVector3d;
+}
+
+namespace CavewhereCommonProto {
+class StrokePoint;
+class Stroke;
 }
 
 namespace QtProto {
@@ -160,13 +163,13 @@ CAVEWHERE_LIB_EXPORT QQuaternion fromProtoQuaternion(const QtProto::QQuaternion&
 CAVEWHERE_LIB_EXPORT cwLength::Data fromProtoLength(const CavewhereProto::Length& protoLength);
 
 // Sketch
-CAVEWHERE_LIB_EXPORT void savePenPoint (CavewhereProto::PenPoint*  protoPoint,  const cwPenPoint&    point);
-CAVEWHERE_LIB_EXPORT void savePenStroke(CavewhereProto::PenStroke* protoStroke, const cwPenStroke&   stroke);
+CAVEWHERE_LIB_EXPORT void savePenPoint (CavewhereCommonProto::StrokePoint* protoPoint,  const cwPenPoint&  point);
+CAVEWHERE_LIB_EXPORT void savePenStroke(CavewhereCommonProto::Stroke*      protoStroke, const cwPenStroke& stroke);
 CAVEWHERE_LIB_EXPORT void saveScale    (CavewhereProto::Scale*     protoScale,  const cwScale::Data& scale);
 CAVEWHERE_LIB_EXPORT void saveSketch   (CavewhereProto::Sketch*    protoSketch, const cwSketchData&  data);
 
-CAVEWHERE_LIB_EXPORT cwPenPoint    fromProtoPenPoint (const CavewhereProto::PenPoint&  protoPoint);
-CAVEWHERE_LIB_EXPORT cwPenStroke   fromProtoPenStroke(const CavewhereProto::PenStroke& protoStroke);
+CAVEWHERE_LIB_EXPORT cwPenPoint    fromProtoPenPoint (const CavewhereCommonProto::StrokePoint& protoPoint);
+CAVEWHERE_LIB_EXPORT cwPenStroke   fromProtoPenStroke(const CavewhereCommonProto::Stroke&      protoStroke);
 CAVEWHERE_LIB_EXPORT cwScale::Data fromProtoScale    (const CavewhereProto::Scale&     protoScale);
 CAVEWHERE_LIB_EXPORT cwSketchData  fromProtoSketch   (const CavewhereProto::Sketch&    protoSketch);
 

@@ -151,7 +151,7 @@ TEST_CASE("Palette saves and loads from a directory", "[cwSymbologyPaletteIO]")
 
     const auto loaded = cwSymbologyPaletteIO::load(dir);
     REQUIRE_FALSE(loaded.hasError());
-    CHECK(loaded.value() == source);
+    CHECK(loaded.value().palette == source);
 }
 
 TEST_CASE("Loading from a directory with no palette file fails", "[cwSymbologyPaletteIO]")
@@ -179,8 +179,8 @@ TEST_CASE("Scan discovers brushes dropped in without editing palette.json",
 
     const auto loaded = cwSymbologyPaletteIO::load(dir);
     REQUIRE_FALSE(loaded.hasError());
-    CHECK(loaded.value().brush(QStringLiteral("extra-brush")).has_value());
-    CHECK(loaded.value().brush(cwSymbologyPaletteSeed::wallBrushName()).has_value());
+    CHECK(loaded.value().palette.brush(QStringLiteral("extra-brush")).has_value());
+    CHECK(loaded.value().palette.brush(cwSymbologyPaletteSeed::wallBrushName()).has_value());
 }
 
 TEST_CASE("save() reconciles deletes against the in-memory palette", "[cwSymbologyPaletteIO]")
@@ -216,7 +216,7 @@ TEST_CASE("save() reconciles deletes against the in-memory palette", "[cwSymbolo
 
     const auto loaded = cwSymbologyPaletteIO::load(dir);
     REQUIRE_FALSE(loaded.hasError());
-    CHECK(loaded.value() == trimmed);
+    CHECK(loaded.value().palette == trimmed);
 }
 
 TEST_CASE("Brushes load sorted by name regardless of write order", "[cwSymbologyPaletteIO]")
@@ -233,9 +233,9 @@ TEST_CASE("Brushes load sorted by name regardless of write order", "[cwSymbology
 
     const auto loaded = cwSymbologyPaletteIO::load(dir);
     REQUIRE_FALSE(loaded.hasError());
-    REQUIRE(loaded.value().lineBrushes.size() == 2);
-    CHECK(loaded.value().lineBrushes.at(0).name == QStringLiteral("alpha"));
-    CHECK(loaded.value().lineBrushes.at(1).name == QStringLiteral("zebra"));
+    REQUIRE(loaded.value().palette.lineBrushes.size() == 2);
+    CHECK(loaded.value().palette.lineBrushes.at(0).name == QStringLiteral("alpha"));
+    CHECK(loaded.value().palette.lineBrushes.at(1).name == QStringLiteral("zebra"));
 }
 
 TEST_CASE("Editing one brush leaves the other brush files untouched", "[cwSymbologyPaletteIO]")

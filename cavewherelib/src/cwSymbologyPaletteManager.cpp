@@ -10,6 +10,9 @@
 #include "cwSymbologyPalette.h"
 #include "cwSymbologyPaletteSeed.h"
 #include "cwSymbologyPaletteIO.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
+#include "cwRegionIOTask.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -81,34 +84,71 @@ void cwSymbologyPaletteManager::reload()
         for (const QFileInfo &entry : entries) {
             const auto result = cwSymbologyPaletteIO::load(entry.absoluteFilePath());
             if (result.hasError()) {
-                qWarning("cwSymbologyPaletteManager: %s",
-                         qPrintable(result.errorMessage()));
-                m_loadErrors.append(result.errorMessage());
+                reportLoadProblem(result.errorMessage());
                 continue;
             }
-            const cwSymbologyPaletteData data = result.value();
+            const auto loadResult = result.value();
+            const cwSymbologyPaletteData &data = loadResult.palette;
 
             const auto existing = directoryById.constFind(data.id);
             if (existing != directoryById.constEnd()) {
-                const QString message =
+                reportLoadProblem(
                     QStringLiteral("duplicate palette id %1 in \"%2\"; keeping the one from \"%3\"")
                         .arg(data.id.toString(QUuid::WithoutBraces),
                              entry.absoluteFilePath(),
-                             existing.value());
-                qWarning("cwSymbologyPaletteManager: %s", qPrintable(message));
-                m_loadErrors.append(message);
+                             existing.value()));
                 continue;
+            }
+
+            // A palette stamped newer than this build is forward-incompatible:
+            // load it (its known brushes stay usable) but mark it read-only and
+            // warn, so re-saving can't drop data the newer version added.
+            const bool versionSupported =
+                cwRegionIOTask::isVersionSupported(loadResult.maxFileVersion);
+            if (!versionSupported) {
+                reportLoadProblem(cwRegionIOTask::newerVersionWarning(
+                    QStringLiteral("Symbology palette \"%1\"").arg(entry.fileName()),
+                    loadResult.maxFileVersion,
+                    QStringLiteral("It is read-only here. Please upgrade CaveWhere to edit it.")));
             }
 
             auto *palette = new cwSymbologyPalette(this);
             palette->setData(data);
-            palette->setWritable(true);
+            palette->setWritable(versionSupported);
             directoryById.insert(data.id, entry.absoluteFilePath());
             m_palettes.append(palette);
         }
     }
 
     emit palettesChanged();
+}
+
+void cwSymbologyPaletteManager::setErrorModel(cwErrorListModel *model)
+{
+    if (m_errorModel == model) { return; }
+    m_errorModel = model;
+
+    // The constructor's reload() ran before the app could wire a model; replay
+    // its accumulated problems so they reach the UI now.
+    for (const QString &message : std::as_const(m_loadErrors)) {
+        postToErrorModel(message);
+    }
+}
+
+void cwSymbologyPaletteManager::reportLoadProblem(const QString &message)
+{
+    m_loadErrors.append(message);
+    qWarning("cwSymbologyPaletteManager: %s", qPrintable(message));
+    postToErrorModel(message);
+}
+
+void cwSymbologyPaletteManager::postToErrorModel(const QString &message)
+{
+    if (m_errorModel == nullptr) { return; }
+    const cwError error(message, cwError::Warning);
+    if (!m_errorModel->contains(error)) {
+        m_errorModel->append(error);
+    }
 }
 
 cwSymbologyPalette *cwSymbologyPaletteManager::paletteById(const QUuid &id) const

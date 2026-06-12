@@ -80,3 +80,20 @@ QString cwRegionIOTask::toVersion(int protoVersion)
 
     return protoToVersionString.value(protoVersion, "Unknown Version");
 }
+
+bool cwRegionIOTask::isVersionSupported(int fileVersion)
+{
+    return fileVersion <= protoVersion();
+}
+
+QString cwRegionIOTask::newerVersionWarning(const QString &subject, int fileVersion,
+                                            const QString &consequence)
+{
+    return QStringLiteral("%1 was created by a newer version of CaveWhere "
+                          "(v%2, file version %3). This copy only supports file version %4. %5")
+        .arg(subject,
+             toVersion(fileVersion),
+             QString::number(fileVersion),
+             QString::number(protoVersion()),
+             consequence);
+}

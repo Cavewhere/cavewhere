@@ -1,0 +1,36 @@
+syntax = "proto3";
+import "qt.proto";
+
+// Shared message types used by both the project schema (cavewhere.proto) and the
+// standalone symbology-palette schema (cavewhere_symbology.proto), factored out
+// so the two share one definition instead of redeclaring it:
+//   • FileVersion is the save/load format stamp both gate on.
+//   • Stroke / StrokePoint is the one "brush stroke = brush reference + pressure
+//     points" concept that both a sketch and a glyph store (both already
+//     deserialize to the same C++ cwPenStroke).
+//
+// A third-party palette consumer importing this file pulls in only these small
+// shared types, not the whole project schema.
+
+package CavewhereCommonProto;
+
+// Save/load format stamp. `version` is the monotonic protobuf format number the
+// app controls (cwRegionIOTask::protoVersion()); a file whose version exceeds the
+// running build's is forward-incompatible and must not be re-saved.
+message FileVersion {
+    optional int32 version = 1;            // protobuf file format version
+    optional string cavewhereVersion = 2;  // human marketing version that wrote it
+}
+
+message StrokePoint {
+    optional QtProto.QPointF position = 1;
+    optional double pressure = 2;          // -1 == unknown
+    optional int64 timestampMs = 3;
+}
+
+// A brush stroke: a brush reference plus its pressure points.
+message Stroke {
+    repeated StrokePoint points = 1;
+    optional string id = 2;                // UUID
+    optional string brushName = 3;         // resolves to a cwLineBrush via the active palette
+}

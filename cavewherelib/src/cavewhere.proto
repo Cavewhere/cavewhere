@@ -1,5 +1,6 @@
 syntax = "proto3";
 import "qt.proto";
+import "cavewhere_common.proto";
 
 // Field-number allocation rules
 // ─────────────────────────────
@@ -13,10 +14,8 @@ import "qt.proto";
 
 package CavewhereProto;
 
-message FileVersion {
-    optional int32 version = 1; //Protobuf file version
-    optional string cavewhereVersion = 2;
-}
+// FileVersion now lives in cavewhere_common.proto (CavewhereCommonProto.FileVersion),
+// shared with the symbology palette schema so both gate on one save/load stamp.
 
 message ProjectMetadata {
     optional string dataRoot = 1;
@@ -32,13 +31,13 @@ message ProjectMetadata {
 // matching .laz/.las file in "GIS Layers/". Discovery is by folder scan;
 // the project's .cwproj file no longer references individual LAZ layers.
 message LazLayer {
-    optional FileVersion fileVersion = 1;
+    optional CavewhereCommonProto.FileVersion fileVersion = 1;
     optional string id = 2;       // UUID, stable across reopen
     optional bool enabled = 3;    // default true; absence == true
 }
 
 message Project {
-    optional FileVersion fileVersion = 1;
+    optional CavewhereCommonProto.FileVersion fileVersion = 1;
     optional string name = 2;
     optional ProjectMetadata metadata = 3;
     optional string id = 4; // UUID, stable across renames
@@ -103,7 +102,7 @@ message LocalSettings {
 }
 
 message Cave {
-    optional FileVersion fileVersion = 9;
+    optional CavewhereCommonProto.FileVersion fileVersion = 9;
     optional string name = 8;
     optional string id = 10;
     repeated Trip legacy_trips = 2; // Legacy v6 only, not written in v9+
@@ -128,7 +127,7 @@ message Cave {
 }
 
 message Trip {
-    optional FileVersion fileVersion = 8;
+    optional CavewhereCommonProto.FileVersion fileVersion = 8;
     optional string name = 7;
     optional string id = 9;
     optional QtProto.QDate date = 2;
@@ -175,7 +174,7 @@ message SurveyNoteModel {
 }
 
 message Note {
-    optional FileVersion fileVersion = 6;
+    optional CavewhereCommonProto.FileVersion fileVersion = 6;
     optional Image image = 1;
     optional double rotation = 2;
     repeated Scrap scraps = 3;
@@ -483,7 +482,7 @@ message NoteLiDARTransformation {
 }
 
 message NoteLiDAR {
-    optional FileVersion fileVersion = 6;
+    optional CavewhereCommonProto.FileVersion fileVersion = 6;
     optional string name = 1;
     optional string fileName = 2;
     repeated NoteLiDARStation noteStations = 3;
@@ -492,18 +491,10 @@ message NoteLiDAR {
     optional string id = 7;
 }
 
-message PenPoint {
-    optional QtProto.QPointF position = 1;
-    optional double pressure = 2;       // -1 == unknown
-    optional int64 timestampMs = 3;
-}
-
-message PenStroke {
-    reserved 1, 2, 3;                   // was kind, width, colorHex (prototype, no longer loaded)
-    repeated PenPoint points = 4;
-    optional string id = 5;             // UUID
-    optional string brushName = 6;      // resolves to a cwLineBrush via the active palette
-}
+// PenPoint/PenStroke now live in cavewhere_common.proto as
+// CavewhereCommonProto.StrokePoint / CavewhereCommonProto.Stroke. Renumbering
+// the moved fields is safe: Sketch is serialized to JSON (keyed by field name,
+// not number) and the binary PenStroke prototype was never released.
 
 message Scale {
     optional Length scaleNumerator = 1;
@@ -511,7 +502,7 @@ message Scale {
 }
 
 message Sketch {
-    optional FileVersion fileVersion = 1;
+    optional CavewhereCommonProto.FileVersion fileVersion = 1;
     enum ViewType {
         Plan = 0;
         RunningProfile = 1;
@@ -522,7 +513,7 @@ message Sketch {
     optional ViewType viewType = 4;
     optional Scale mapScale = 5;
     optional string referenceStationName = 6; // reserved for RP/PP (future)
-    repeated PenStroke strokes = 7;
+    repeated CavewhereCommonProto.Stroke strokes = 7;
     optional string anchorStation = 8; // per-trip centerline anchor station
 }
 

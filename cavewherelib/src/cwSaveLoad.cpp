@@ -2660,6 +2660,12 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
             .future();
 }
 
+// Closing clause of the forward-incompatible warning for project files; shared
+// by the per-entity and project-level gates so the wording stays in one place.
+static const QString kProjectVersionConsequence =
+    QStringLiteral("Saving is disabled because it would lose data added by the newer version. "
+                   "Please upgrade CaveWhere to save or sync this project.");
+
 template<typename ProtoType>
 static std::optional<cwError> checkEntityVersion(const ProtoType& proto, const QString& filename, int& maxFileVersion)
 {
@@ -2668,16 +2674,11 @@ static std::optional<cwError> checkEntityVersion(const ProtoType& proto, const Q
     }
     const int version = proto.fileversion().version();
     maxFileVersion = std::max(maxFileVersion, version);
-    if (version > cwRegionIOTask::protoVersion()) {
+    if (!cwRegionIOTask::isVersionSupported(version)) {
         return cwError(
-                    QStringLiteral("\"%1\" was created by a newer version of CaveWhere (v%2, file version %3). "
-                                   "This copy only supports file version %4. "
-                                   "Saving is disabled because it would lose data added by the newer version. "
-                                   "Please upgrade CaveWhere to save or sync this project.")
-                    .arg(QFileInfo(filename).fileName())
-                    .arg(cwRegionIOTask::toVersion(version))
-                    .arg(version)
-                    .arg(cwRegionIOTask::protoVersion()),
+                    cwRegionIOTask::newerVersionWarning(
+                        QStringLiteral("\"%1\"").arg(QFileInfo(filename).fileName()),
+                        version, kProjectVersionConsequence),
                     cwError::Warning);
     }
     return std::nullopt;
@@ -2887,15 +2888,11 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
         ProjectLoadData loadData;
         loadData.maxFileVersion = fileVersion;
 
-        if (fileVersion > cwRegionIOTask::protoVersion()) {
+        if (!cwRegionIOTask::isVersionSupported(fileVersion)) {
             loadData.errors.append(cwError(
-                                       QStringLiteral("This project was created by a newer version of CaveWhere "
-                                                      "(v%1, file version %2). This copy only supports file version %3. "
-                                                      "Saving is disabled because it would lose data added by the newer version. "
-                                                      "Please upgrade CaveWhere to save or sync this project.")
-                                       .arg(cwRegionIOTask::toVersion(fileVersion))
-                                       .arg(fileVersion)
-                                       .arg(cwRegionIOTask::protoVersion()),
+                                       cwRegionIOTask::newerVersionWarning(
+                                           QStringLiteral("This project"), fileVersion,
+                                           kProjectVersionConsequence),
                                        cwError::Warning));
         }
         if (projectProto.has_name()) {

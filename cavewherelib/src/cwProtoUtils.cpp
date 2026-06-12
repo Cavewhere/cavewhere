@@ -694,14 +694,14 @@ cwLength::Data fromProtoLength(const CavewhereProto::Length& protoLength)
     };
 }
 
-void savePenPoint(CavewhereProto::PenPoint* protoPoint, const cwPenPoint& point)
+void savePenPoint(CavewhereCommonProto::StrokePoint* protoPoint, const cwPenPoint& point)
 {
     savePointF(protoPoint->mutable_position(), point.position);
     protoPoint->set_pressure(point.pressure);
     protoPoint->set_timestampms(point.timestampMs);
 }
 
-void savePenStroke(CavewhereProto::PenStroke* protoStroke, const cwPenStroke& stroke)
+void savePenStroke(CavewhereCommonProto::Stroke* protoStroke, const cwPenStroke& stroke)
 {
     saveString(protoStroke->mutable_brushname(), stroke.brushName);
     for (const auto& point : stroke.points) {
@@ -734,7 +734,7 @@ void saveSketch(CavewhereProto::Sketch* protoSketch, const cwSketchData& data)
     }
 }
 
-cwPenPoint fromProtoPenPoint(const CavewhereProto::PenPoint& protoPoint)
+cwPenPoint fromProtoPenPoint(const CavewhereCommonProto::StrokePoint& protoPoint)
 {
     cwPenPoint point;
     point.position    = loadPointF(protoPoint.position());
@@ -743,7 +743,7 @@ cwPenPoint fromProtoPenPoint(const CavewhereProto::PenPoint& protoPoint)
     return point;
 }
 
-cwPenStroke fromProtoPenStroke(const CavewhereProto::PenStroke& protoStroke)
+cwPenStroke fromProtoPenStroke(const CavewhereCommonProto::Stroke& protoStroke)
 {
     cwPenStroke stroke;
     stroke.brushName = QString::fromStdString(protoStroke.brushname());

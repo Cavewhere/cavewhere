@@ -12,7 +12,10 @@
 #include "cwSymbologyName.h"
 #include "cwLineBrush.h"
 #include "cwPenStroke.h"
+#include "cwRegionIOTask.h"
+#include "cavewhereVersion.h"
 #include "cavewhere_symbology.pb.h"
+#include "cavewhere_common.pb.h"
 
 //Qt includes
 #include <QColor>
@@ -27,6 +30,7 @@
 #include <google/protobuf/util/json_util.h>
 
 //Std includes
+#include <algorithm>
 #include <string>
 
 namespace {
@@ -51,6 +55,23 @@ std::string toStd(const QString &s)
 QString fromStd(const std::string &s)
 {
     return QString::fromUtf8(s.data(), static_cast<int>(s.size()));
+}
+
+// Stamp the save/load format version onto a per-file message. Synced with the
+// project clock: the same monotonic cwRegionIOTask::protoVersion() that
+// cwSaveLoad writes, so palettes and projects gate on one version number.
+void stampFileVersion(CavewhereCommonProto::FileVersion *proto)
+{
+    proto->set_version(cwRegionIOTask::protoVersion());
+    proto->set_cavewhereversion(toStd(CavewhereVersion));
+}
+
+// The file's stamped format version, or 0 when unstamped (a pre-versioning file,
+// which is always in range).
+template <typename Proto>
+int fileVersionOf(const Proto &proto)
+{
+    return proto.has_fileversion() ? proto.fileversion().version() : 0;
 }
 
 // Colors round-trip as "#RRGGBB" (opaque) or "#RRGGBBAA" (with alpha).
@@ -155,6 +176,7 @@ void brushToProto(CavewhereSymbologyProto::LineBrush *proto, const cwLineBrush &
     }
     proto->set_minpaperscale(brush.minPaperScale);
     proto->set_maxpaperscale(brush.maxPaperScale);
+    stampFileVersion(proto->mutable_fileversion());
 }
 
 cwLineBrush brushFromProto(const CavewhereSymbologyProto::LineBrush &proto)
@@ -174,7 +196,7 @@ cwLineBrush brushFromProto(const CavewhereSymbologyProto::LineBrush &proto)
     return brush;
 }
 
-void glyphStrokeToProto(CavewhereSymbologyProto::GlyphStroke *proto, const cwPenStroke &stroke)
+void glyphStrokeToProto(CavewhereCommonProto::Stroke *proto, const cwPenStroke &stroke)
 {
     proto->set_brushname(toStd(stroke.brushName));
     for (const auto &point : stroke.points) {
@@ -189,7 +211,7 @@ void glyphStrokeToProto(CavewhereSymbologyProto::GlyphStroke *proto, const cwPen
     }
 }
 
-cwPenStroke glyphStrokeFromProto(const CavewhereSymbologyProto::GlyphStroke &proto)
+cwPenStroke glyphStrokeFromProto(const CavewhereCommonProto::Stroke &proto)
 {
     cwPenStroke stroke;
     stroke.brushName = fromStd(proto.brushname());
@@ -215,6 +237,7 @@ void glyphToProto(CavewhereSymbologyProto::Glyph *proto, const cwSymbologyGlyph 
     for (const auto &stroke : glyph.strokes) {
         glyphStrokeToProto(proto->add_strokes(), stroke);
     }
+    stampFileVersion(proto->mutable_fileversion());
 }
 
 cwSymbologyGlyph glyphFromProto(const CavewhereSymbologyProto::Glyph &proto)
@@ -238,6 +261,7 @@ void paletteToProto(CavewhereSymbologyProto::Palette *proto, const cwSymbologyPa
     proto->set_description(toStd(palette.description));
     proto->set_author(toStd(palette.author));
     proto->set_version(toStd(palette.version));
+    stampFileVersion(proto->mutable_fileversion());
 }
 
 // Builds palette identity from `proto`. The directory layer fills lineBrushes
@@ -255,6 +279,55 @@ Monad::Result<cwSymbologyPaletteData> paletteFromProto(const CavewhereSymbologyP
     palette.author = fromStd(proto.author());
     palette.version = fromStd(proto.version());
     return Monad::Result<cwSymbologyPaletteData>(palette);
+}
+
+// Parse JSON bytes into `proto`, returning a load error on failure.
+template <typename Proto>
+Monad::ResultBase parseJsonInto(const QByteArray &json, Proto &proto, const QString &kind)
+{
+    const auto status = google::protobuf::util::JsonStringToMessage(
+        std::string(json.constData(), static_cast<size_t>(json.size())), &proto);
+    if (!status.ok()) {
+        return Monad::ResultBase(
+            QStringLiteral("%1%2 JSON parse error: %3")
+                .arg(kLoadErrorPrefix, kind, QString::fromUtf8(status.ToString().c_str())));
+    }
+    return Monad::ResultBase();
+}
+
+// JSON -> value plus the file's stamped format version (the public *FromJson
+// entry points discard the version; load() aggregates it for the gate).
+Monad::Result<cwLineBrush> parseBrushJson(const QByteArray &json, int &fileVersion)
+{
+    CavewhereSymbologyProto::LineBrush proto;
+    const auto parsed = parseJsonInto(json, proto, QStringLiteral("brush"));
+    if (parsed.hasError()) {
+        return Monad::Result<cwLineBrush>(parsed.errorMessage());
+    }
+    fileVersion = fileVersionOf(proto);
+    return Monad::Result<cwLineBrush>(brushFromProto(proto));
+}
+
+Monad::Result<cwSymbologyGlyph> parseGlyphJson(const QByteArray &json, int &fileVersion)
+{
+    CavewhereSymbologyProto::Glyph proto;
+    const auto parsed = parseJsonInto(json, proto, QStringLiteral("glyph"));
+    if (parsed.hasError()) {
+        return Monad::Result<cwSymbologyGlyph>(parsed.errorMessage());
+    }
+    fileVersion = fileVersionOf(proto);
+    return Monad::Result<cwSymbologyGlyph>(glyphFromProto(proto));
+}
+
+Monad::Result<cwSymbologyPaletteData> parsePaletteJson(const QByteArray &json, int &fileVersion)
+{
+    CavewhereSymbologyProto::Palette proto;
+    const auto parsed = parseJsonInto(json, proto, QStringLiteral("palette"));
+    if (parsed.hasError()) {
+        return Monad::Result<cwSymbologyPaletteData>(parsed.errorMessage());
+    }
+    fileVersion = fileVersionOf(proto);
+    return paletteFromProto(proto);
 }
 
 Monad::Result<QByteArray> serializeJson(const google::protobuf::Message &proto)
@@ -417,15 +490,8 @@ QByteArray brushToJson(const cwLineBrush &brush)
 
 Monad::Result<cwLineBrush> brushFromJson(const QByteArray &json)
 {
-    CavewhereSymbologyProto::LineBrush proto;
-    const auto status = google::protobuf::util::JsonStringToMessage(
-        std::string(json.constData(), static_cast<size_t>(json.size())), &proto);
-    if (!status.ok()) {
-        return Monad::Result<cwLineBrush>(
-            QStringLiteral("%1brush JSON parse error: %2")
-                .arg(kLoadErrorPrefix, QString::fromUtf8(status.ToString().c_str())));
-    }
-    return Monad::Result<cwLineBrush>(brushFromProto(proto));
+    int fileVersion = 0;
+    return parseBrushJson(json, fileVersion);
 }
 
 QByteArray glyphToJson(const cwSymbologyGlyph &glyph)
@@ -437,15 +503,8 @@ QByteArray glyphToJson(const cwSymbologyGlyph &glyph)
 
 Monad::Result<cwSymbologyGlyph> glyphFromJson(const QByteArray &json)
 {
-    CavewhereSymbologyProto::Glyph proto;
-    const auto status = google::protobuf::util::JsonStringToMessage(
-        std::string(json.constData(), static_cast<size_t>(json.size())), &proto);
-    if (!status.ok()) {
-        return Monad::Result<cwSymbologyGlyph>(
-            QStringLiteral("%1glyph JSON parse error: %2")
-                .arg(kLoadErrorPrefix, QString::fromUtf8(status.ToString().c_str())));
-    }
-    return Monad::Result<cwSymbologyGlyph>(glyphFromProto(proto));
+    int fileVersion = 0;
+    return parseGlyphJson(json, fileVersion);
 }
 
 QByteArray toJson(const cwSymbologyPaletteData &palette)
@@ -457,15 +516,8 @@ QByteArray toJson(const cwSymbologyPaletteData &palette)
 
 Monad::Result<cwSymbologyPaletteData> fromJson(const QByteArray &json)
 {
-    CavewhereSymbologyProto::Palette proto;
-    const auto status = google::protobuf::util::JsonStringToMessage(
-        std::string(json.constData(), static_cast<size_t>(json.size())), &proto);
-    if (!status.ok()) {
-        return Monad::Result<cwSymbologyPaletteData>(
-            QStringLiteral("%1JSON parse error: %2")
-                .arg(kLoadErrorPrefix, QString::fromUtf8(status.ToString().c_str())));
-    }
-    return paletteFromProto(proto);
+    int fileVersion = 0;
+    return parsePaletteJson(json, fileVersion);
 }
 
 Monad::ResultBase save(const cwSymbologyPaletteData &palette, const QString &directory)
@@ -572,43 +624,79 @@ Monad::Result<cwSymbologyGlyph> loadGlyph(const QString &directory, const QStrin
     return glyphFromJson(contents.value());
 }
 
-Monad::Result<cwSymbologyPaletteData> load(const QString &directory)
+Monad::Result<cwSymbologyPaletteLoadResult> load(const QString &directory)
 {
+    using LoadResult = Monad::Result<cwSymbologyPaletteLoadResult>;
+
     const QDir dir(directory);
     const QString jsonPath = dir.filePath(kPaletteJsonFileName);
     if (!QFileInfo::exists(jsonPath)) {
-        return Monad::Result<cwSymbologyPaletteData>(
+        return LoadResult(
             QStringLiteral("%1no %2 in %3").arg(kLoadErrorPrefix, kPaletteJsonFileName, directory));
     }
 
     QFile file(jsonPath);
     if (!file.open(QFile::ReadOnly)) {
-        return Monad::Result<cwSymbologyPaletteData>(
+        return LoadResult(
             QStringLiteral("%1cannot open %2: %3")
                 .arg(kLoadErrorPrefix, jsonPath, file.errorString()));
     }
     const QByteArray contents = file.readAll();
     file.close();
 
-    auto paletteResult = fromJson(contents);
+    // Highest format version across palette.json + every brush/glyph file. The
+    // directory-truth model lets a newer build add one file to an older palette,
+    // so the gate is the max over all files, not just palette.json's stamp.
+    int maxFileVersion = 0;
+
+    int paletteVersion = 0;
+    auto paletteResult = parsePaletteJson(contents, paletteVersion);
     if (paletteResult.hasError()) {
-        return paletteResult;
+        return LoadResult(paletteResult.errorMessage());
     }
+    maxFileVersion = (std::max)(maxFileVersion, paletteVersion);
     cwSymbologyPaletteData palette = paletteResult.value();
 
     // The directory is the source of truth: the brushes/ and glyphs/ files
-    // present *are* the palette's brushes and glyphs.
-    auto brushes = scanEntities<cwLineBrush>(directory, kBrushesSubdirName, kBrushFileSuffix,
-                                             QStringLiteral("brush"), loadBrush);
+    // present *are* the palette's brushes and glyphs. The per-file loaders fold
+    // each file's stamped version into maxFileVersion as they parse.
+    auto brushes = scanEntities<cwLineBrush>(
+        directory, kBrushesSubdirName, kBrushFileSuffix, QStringLiteral("brush"),
+        [&maxFileVersion](const QString &d, const QString &name) {
+            const auto fileContents =
+                readNamedFile(d, kBrushesSubdirName, kBrushFileSuffix, name, QStringLiteral("brush"));
+            if (fileContents.hasError()) {
+                return Monad::Result<cwLineBrush>(fileContents.errorMessage());
+            }
+            int version = 0;
+            auto brush = parseBrushJson(fileContents.value(), version);
+            if (!brush.hasError()) {
+                maxFileVersion = (std::max)(maxFileVersion, version);
+            }
+            return brush;
+        });
     if (brushes.hasError()) {
-        return Monad::Result<cwSymbologyPaletteData>(brushes.errorMessage());
+        return LoadResult(brushes.errorMessage());
     }
     palette.lineBrushes = brushes.value();
 
-    auto glyphs = scanEntities<cwSymbologyGlyph>(directory, kGlyphsSubdirName, kGlyphFileSuffix,
-                                                 QStringLiteral("glyph"), loadGlyph);
+    auto glyphs = scanEntities<cwSymbologyGlyph>(
+        directory, kGlyphsSubdirName, kGlyphFileSuffix, QStringLiteral("glyph"),
+        [&maxFileVersion](const QString &d, const QString &name) {
+            const auto fileContents =
+                readNamedFile(d, kGlyphsSubdirName, kGlyphFileSuffix, name, QStringLiteral("glyph"));
+            if (fileContents.hasError()) {
+                return Monad::Result<cwSymbologyGlyph>(fileContents.errorMessage());
+            }
+            int version = 0;
+            auto glyph = parseGlyphJson(fileContents.value(), version);
+            if (!glyph.hasError()) {
+                maxFileVersion = (std::max)(maxFileVersion, version);
+            }
+            return glyph;
+        });
     if (glyphs.hasError()) {
-        return Monad::Result<cwSymbologyPaletteData>(glyphs.errorMessage());
+        return LoadResult(glyphs.errorMessage());
     }
     palette.glyphs = glyphs.value();
 
@@ -617,11 +705,11 @@ Monad::Result<cwSymbologyPaletteData> load(const QString &directory)
     // tessellation time, so reject the palette here.
     const QString cycle = palette.findGlyphDependencyCycle();
     if (!cycle.isEmpty()) {
-        return Monad::Result<cwSymbologyPaletteData>(
+        return LoadResult(
             QStringLiteral("%1glyph dependency cycle: %2").arg(kLoadErrorPrefix, cycle));
     }
 
-    return Monad::Result<cwSymbologyPaletteData>(palette);
+    return LoadResult(cwSymbologyPaletteLoadResult{palette, maxFileVersion});
 }
 
 } // namespace cwSymbologyPaletteIO

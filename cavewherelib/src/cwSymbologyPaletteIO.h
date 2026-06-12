@@ -31,6 +31,17 @@
 // guard) and checked against its filename stem.
 namespace cwSymbologyPaletteIO {
 
+// Result of a directory load(): the palette plus the highest save/load format
+// version (CavewhereCommonProto.FileVersion.version) seen across palette.json and
+// every brush/glyph file. maxFileVersion > cwRegionIOTask::protoVersion() means a
+// newer build wrote part of this palette — the caller marks it read-only and
+// warns rather than re-saving and dropping the newer data. maxFileVersion == 0
+// means nothing carried a stamp (a pre-versioning palette), which is in range.
+struct cwSymbologyPaletteLoadResult {
+    cwSymbologyPaletteData palette;
+    int maxFileVersion = 0;
+};
+
 CAVEWHERE_LIB_EXPORT extern const QString kPaletteJsonFileName; // "palette.json"
 CAVEWHERE_LIB_EXPORT extern const QString kBrushesSubdirName;   // "brushes"
 CAVEWHERE_LIB_EXPORT extern const QString kBrushFileSuffix;     // ".cwbrush"
@@ -42,7 +53,7 @@ CAVEWHERE_LIB_EXPORT extern const QString kGlyphFileSuffix;     // ".cwglyph"
 // the palette); load reads palette.json then scans the brushes/ and glyphs/
 // subdirs, assembling the palette from the files present.
 CAVEWHERE_LIB_EXPORT Monad::ResultBase save(const cwSymbologyPaletteData &palette, const QString &directory);
-CAVEWHERE_LIB_EXPORT Monad::Result<cwSymbologyPaletteData> load(const QString &directory);
+CAVEWHERE_LIB_EXPORT Monad::Result<cwSymbologyPaletteLoadResult> load(const QString &directory);
 
 // Single-brush file I/O against the palette directory's brushes/ subdir. The
 // brush editor and palette save() use saveBrush; rewriting one brush leaves the
