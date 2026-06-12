@@ -40,20 +40,15 @@ cwScene::~cwScene() = default;
  */
 void cwScene::addItem(cwRenderObject *item)
 {
-    if(m_renderingObjects.contains(item)) {
-        return;
-    }
+    // Cancel a pending delete only for the *same* object being re-added. Keyed on
+    // the stable id, so a new object reusing a freed address can't false-match a
+    // dead entry and steal its cancellation (issue #512).
+    m_toDeleteRenderObjects.removeOne(item->renderObjectId());
 
-    if(m_toDeleteRenderObjects.contains(item)) {
-        m_toDeleteRenderObjects.removeOne(item);
-    }
-
-    if(!m_renderingObjects.contains(item)) {
-        m_newRenderObjects.append(item);
-        item->setScene(this);
-        item->setParent(this);
-        update();
-    }
+    m_newRenderObjects.append(item);
+    item->setScene(this);
+    item->setParent(this);
+    update();
 }
 
 /**
@@ -71,17 +66,18 @@ void cwScene::removeItem(cwRenderObject *item)
     // Drop live references before the caller deletes `item` (issue #491);
     // synchroize() dereferences entries in m_newRenderObjects and
     // m_toUpdateRenderObjects.
-    const qsizetype removedCount = m_renderingObjects.removeAll(item)
-                                   + m_newRenderObjects.removeAll(item)
+    const qsizetype removedCount = m_newRenderObjects.removeAll(item)
                                    + (m_toUpdateRenderObjects.remove(item) ? 1 : 0);
     if (removedCount == 0) {
         return;
     }
 
-    // Pointer used as hash key only (never dereferenced) so the next sync
-    // drops the matching m_rhiObjectLookup entry.
-    if (!m_toDeleteRenderObjects.contains(item)) {
-        m_toDeleteRenderObjects.append(item);
+    // Capture the id while `item` is still alive (the caller deletes it next), so
+    // the next sync can drop the matching m_rhiObjectLookup entry without ever
+    // dereferencing — or pointer-matching — a dangling pointer.
+    const cwRenderObjectId id = item->renderObjectId();
+    if (!m_toDeleteRenderObjects.contains(id)) {
+        m_toDeleteRenderObjects.append(id);
     }
     update();
 }
@@ -161,8 +157,7 @@ void cwScene::update()
 
 int cwScene::pendingItemCount() const
 {
-    return m_renderingObjects.size()
-           + m_newRenderObjects.size()
+    return m_newRenderObjects.size()
            + m_toUpdateRenderObjects.size();
 }
 

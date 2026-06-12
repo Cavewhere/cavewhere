@@ -12,10 +12,20 @@
 
 //Qt includes
 #include <QFile>
+#include <QAtomicInteger>
+
+namespace {
+    // Monotonic source of cwRenderObject ids. Atomic so ids stay unique even if a
+    // render object is ever constructed off the main thread; relaxed ordering is
+    // enough — we need value uniqueness, not any happens-before relationship.
+    // Starts at 1 so 0 can read as "no render object".
+    QAtomicInteger<quint64> g_nextRenderObjectId = 1;
+}
 
 cwRenderObject::cwRenderObject(QObject* parent) :
     QObject(parent),
-    m_scene(nullptr)
+    m_scene(nullptr),
+    m_renderObjectId(static_cast<cwRenderObjectId>(g_nextRenderObjectId.fetchAndAddRelaxed(1)))
 {
 }
 

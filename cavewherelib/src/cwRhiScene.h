@@ -143,8 +143,10 @@ private:
     QList<cwRHIObject*> m_rhiObjects;
     QList<cwRHIObject*> m_rhiNeedResourceUpdate;
 
-    //Should only be used in synchroize
-    QHash<cwRenderObject*, cwRHIObject*> m_rhiObjectLookup;
+    //Should only be used in synchroize. Keyed by cwRenderObject::renderObjectId()
+    //(stable, never reused) rather than the raw pointer, whose address can be
+    //recycled by the allocator (issue #512).
+    QHash<cwRenderObjectId, cwRHIObject*> m_rhiObjectLookup;
 
     struct GlobalUniform {
         float viewProjectionMatrix[16];

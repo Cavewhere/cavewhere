@@ -18,6 +18,7 @@
 
 //Our includes
 #include "cwSceneUpdate.h"
+#include "cwRenderObjectId.h"
 #include "CaveWhereLibExport.h"
 class cwRenderObject;
 class cwCamera;
@@ -71,9 +72,12 @@ signals:
 
 private:
     //Items to render
-    QList<cwRenderObject*> m_renderingObjects;
     QList<cwRenderObject*> m_newRenderObjects;
-    QList<cwRenderObject*> m_toDeleteRenderObjects;
+    // Render-object ids (not pointers) queued for delete. The render object is
+    // already deleted by the caller by the time synchroize() drains this, so we
+    // key on the stable id — a reused address must not masquerade as a still-live
+    // entry (issue #512).
+    QList<cwRenderObjectId> m_toDeleteRenderObjects;
     QSet<cwRenderObject*> m_toUpdateRenderObjects;
 
     //For interaction

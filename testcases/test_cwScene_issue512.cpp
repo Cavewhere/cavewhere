@@ -1,17 +1,20 @@
-// Reproducer for issue #512: cwScene::addItem cancels a pending delete when a
-// freshly-allocated cwRenderObject* reuses the address of one already queued
-// for deletion. Because the address is reused, the old cwRHIObject in
-// cwRhiScene's m_rhiObjects / m_rhiObjectLookup is never freed — its lookup
-// entry is silently overwritten by the new object's, orphaning it in the
-// render list for the rest of the scene's life.
+// Reproducer for issue #512: a freshly-allocated cwRenderObject can reuse the
+// address of one already queued for deletion. When identity was the raw pointer,
+// cwScene::addItem then cancelled the dead object's pending delete and its
+// cwRHIObject was orphaned in cwRhiScene's m_rhiObjects / m_rhiObjectLookup,
+// rendered for the rest of the scene's life.
+//
+// The fix gives each cwRenderObject a stable, never-reused renderObjectId() and
+// keys every queue / lookup on it, so a reused address can't masquerade as the
+// dead object — the two get independent ids and independent RHI objects.
 //
 // The test drives the backend apply step (cwRhiScene::synchroize) directly with
 // stub render/RHI objects that touch no GPU, so it is fully CPU-only and
 // deterministic. Address reuse is forced with placement-new into storage we
 // own, mirroring the allocator reuse seen in the 2026-05-18 LAZ-clip log.
 //
-// Regression guard: synchroize() must free the stale cwRHIObject before
-// remapping a reused address, so exactly one cwRHIObject stays alive.
+// Regression guard: after reusing the address, exactly one cwRHIObject stays
+// alive and the two render objects carry distinct ids.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -90,13 +93,18 @@ TEST_CASE("issue #512: reusing a deleted render object's address must not orphan
     scene.removeItem(first);                // queues #1 for delete; RHI #1 still live
 
     const void* reusedAddress = static_cast<void*>(first);
+    const cwRenderObjectId firstId = first->renderObjectId();  // capture before destroy
     first->~StubRenderObject();             // destroy logical #1; RHI #1 still alive
 
     // --- Logical object #2, reusing #1's address ---
     auto* second = new (storage) StubRenderObject();
     REQUIRE(static_cast<void*>(second) == reusedAddress);
 
-    second->setScene(&scene);               // addItem() cancels #1's pending delete
+    // Same address, but a distinct id — this is what keeps addItem() from
+    // cancelling #1's still-pending delete and orphaning RHI #1.
+    REQUIRE(second->renderObjectId() != firstId);
+
+    second->setScene(&scene);
     second->setParent(nullptr);
 
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // creates RHI object #2
@@ -108,4 +116,43 @@ TEST_CASE("issue #512: reusing a deleted render object's address must not orphan
 
     second->~StubRenderObject();
     ::operator delete(storage);
+}
+
+TEST_CASE("issue #512: re-adding the same render object before a sync must free "
+          "its previous cwRHIObject",
+          "[cwScene][cwRhiScene][issue512]")
+{
+    // Drives the synchroize() add-loop guard directly. An already-synced object
+    // removed then re-added before the next sync keeps its id, so its old
+    // cwRHIObject is still mapped under that id; addItem() cancels the pending
+    // delete, so the delete loop won't free it. The add-loop must spot the live
+    // lookup entry and free it before remapping — otherwise the old cwRHIObject
+    // orphans in m_rhiObjects (the #512 leak via the legitimate re-add path).
+    g_aliveRhiObjects = 0;
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    auto* object = new StubRenderObject();
+    object->setScene(&scene);
+    object->setParent(nullptr);   // we manage its lifetime, not the scene
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // creates RHI object #1
+    REQUIRE(g_aliveRhiObjects == 1);
+
+    // Toggle visibility so the synced object lands back in a live queue, then
+    // remove it — queuing its id while RHI #1 stays mapped under that id.
+    object->setVisible(false);
+    scene.removeItem(object);
+
+    // Re-add the *same* object before syncing: addItem() cancels the pending
+    // delete, so only the add-loop guard can free RHI #1.
+    scene.addItem(object);
+    object->setParent(nullptr);
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // must free RHI #1, make RHI #2
+
+    REQUIRE(g_aliveRhiObjects == 1);        // 2 would mean RHI #1 was orphaned
+
+    delete object;
 }
