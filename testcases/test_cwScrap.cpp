@@ -27,6 +27,15 @@
 #include "cwFutureManagerModel.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
 #include "cwJobSettings.h"
+#include "cwFixStation.h"
+#include "cwFixStationModel.h"
+#include "cwGridConvergence.h"
+#include "cwCoordinateTransform.h"
+#include "cwGeoPoint.h"
+#include "cwMath.h"
+#include "cwNoteStation.h"
+#include "cwSurveyNetwork.h"
+#include "cwStationPositionLookup.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -435,6 +444,169 @@ TEST_CASE("Manual scrap rotation uses declination during triangulation", "[cwScr
 
     scrap->setType(cwScrap::ProjectedProfile);
     CHECK(scrap->noteTransformAdjustedDeclination().north == Catch::Approx(originalNorthUp).epsilon(1e-6));
+}
+
+TEST_CASE("Plan scrap removes grid convergence from the note transform", "[cwScrap]") {
+    // Build a cave -> trip -> note -> scrap chain in memory and georeference
+    // the cave with a projected coordinate system so grid convergence is
+    // non-zero. Survex folds grid convergence into the plotted stations only
+    // when declination is auto-computed (it leaves manual declination
+    // verbatim, see survex datain.c get_declination). The note transform must
+    // mirror that: remove convergence in addition to declination, but only
+    // when the trip uses auto-declination.
+
+    const QString utm13N = QStringLiteral("EPSG:32613"); // central meridian -105°
+
+    cwCave cave;
+    auto* trip = new cwTrip(&cave);
+    cave.addTrip(trip);
+
+    auto* note = new cwNote();
+    trip->notes()->addNotes({note});
+
+    auto* scrap = new cwScrap();
+    note->addScrap(scrap);
+
+    scrap->setType(cwScrap::Plan);
+    scrap->setCalculateNoteTransform(false);
+    scrap->noteTransformation()->setNorthUp(30.0);
+
+    // Fix the cave east of the central meridian -> positive convergence.
+    cwCoordinateTransform geoToUtm(QStringLiteral("EPSG:4326"), utm13N);
+    REQUIRE(geoToUtm.isValid());
+    const cwGeoPoint fixPoint = geoToUtm.transform(cwGeoPoint(-104.0, 40.015, 1655.0));
+
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("a1"));
+    fix.setInputCS(utm13N);
+    fix.setEasting(fixPoint.x);
+    fix.setNorthing(fixPoint.y);
+    fix.setElevation(fixPoint.z);
+    cave.fixStations()->appendFixStation(fix);
+
+    // The cave caches its convergence, computed the same way as the readout.
+    auto expectedConvergence = cwGridConvergence::computeAt(fixPoint, utm13N);
+    REQUIRE_FALSE(expectedConvergence.hasError());
+    REQUIRE(expectedConvergence.value() > 0.0);
+    CHECK(cave.gridConvergence()->angle() == Catch::Approx(expectedConvergence.value()).epsilon(1e-9));
+
+    const double rawNorth = scrap->noteTransformation()->northUp();
+    cwTripCalibration* calibration = trip->calibrations();
+
+    SECTION("Auto declination: convergence is removed alongside declination") {
+        trip->setDate(QDateTime(QDate(2020, 1, 1), QTime(0, 0)));
+        calibration->setAutoDeclination(true);
+
+        const double declination = calibration->declination();
+        const double adjusted = scrap->noteTransformAdjustedDeclination().north;
+
+        const double expected = cwWrapDegrees360(
+            rawNorth - declination + expectedConvergence.value());
+        CHECK(adjusted == Catch::Approx(expected).epsilon(1e-6));
+
+        // The only difference from a declination-only adjustment is the
+        // independently-computed grid convergence.
+        const double declinationOnly =
+            cwNoteTranformation::northAdjustedForDeclination(rawNorth, declination);
+        CHECK(cwWrapDegrees360(adjusted - declinationOnly)
+              == Catch::Approx(expectedConvergence.value()).margin(1e-6));
+    }
+
+    SECTION("Manual declination: convergence is left in (survex does not remove it)") {
+        calibration->setAutoDeclination(false);
+        calibration->setDeclinationManual(12.5);
+
+        const double declination = calibration->declination();
+        const double adjusted = scrap->noteTransformAdjustedDeclination().north;
+
+        const double expected =
+            cwNoteTranformation::northAdjustedForDeclination(rawNorth, declination);
+        CHECK(adjusted == Catch::Approx(expected).epsilon(1e-6));
+    }
+
+    SECTION("Non-plan scraps ignore both declination and convergence") {
+        trip->setDate(QDateTime(QDate(2020, 1, 1), QTime(0, 0)));
+        calibration->setAutoDeclination(true);
+
+        scrap->setType(cwScrap::RunningProfile);
+        CHECK(scrap->noteTransformAdjustedDeclination().north
+              == Catch::Approx(rawNorth).epsilon(1e-6));
+    }
+}
+
+TEST_CASE("Auto-calculated note transform accounts for grid convergence", "[cwScrap]") {
+    // updateNoteTransformation fits the note to the actual 3D plot, so the
+    // effective transform (noteTransformAdjustedDeclination) is a purely
+    // geometric alignment. Declination and grid convergence are storage-frame
+    // bookkeeping that must cancel in the store/read round-trip. If auto-calc
+    // fails to remove grid convergence at storage time, the effective alignment
+    // of a georeferenced cave drifts from an identical un-georeferenced one by
+    // the convergence angle — even though both fit the same plot.
+
+    const QString utm13N = QStringLiteral("EPSG:32613"); // central meridian -105°
+
+    // Builds an in-memory cave whose plot has two stations one grid-north of the
+    // other, drawn as a single shot on the note, then auto-calculates and
+    // returns the resolved (effective) north. The plot geometry is identical
+    // whether or not the cave is georeferenced.
+    auto effectiveAutoNorth = [&](bool georeference) -> double {
+        auto cave = std::make_unique<cwCave>();
+        auto* trip = new cwTrip(cave.get());
+        cave->addTrip(trip);
+        auto* note = new cwNote();
+        trip->notes()->addNotes({note});
+        auto* scrap = new cwScrap();
+        note->addScrap(scrap);
+        scrap->setType(cwScrap::Plan);
+        scrap->setCalculateNoteTransform(true);
+
+        cwStationPositionLookup lookup;
+        lookup.setPosition(QStringLiteral("a1"), QVector3D(0.0f, 0.0f, 0.0f));
+        lookup.setPosition(QStringLiteral("a2"), QVector3D(0.0f, 10.0f, 0.0f));
+        cave->setStationPositionLookup(lookup);
+
+        cwSurveyNetwork network;
+        network.addShot(QStringLiteral("a1"), QStringLiteral("a2"));
+        cave->setSurveyNetwork(network);
+
+        cwNoteStation s1;
+        s1.setName(QStringLiteral("a1"));
+        s1.setPositionOnNote(QPointF(0.5, 0.4));
+        cwNoteStation s2;
+        s2.setName(QStringLiteral("a2"));
+        s2.setPositionOnNote(QPointF(0.5, 0.6));
+        scrap->setStations({s1, s2});
+
+        if(georeference) {
+            cwCoordinateTransform geoToUtm(QStringLiteral("EPSG:4326"), utm13N);
+            REQUIRE(geoToUtm.isValid());
+            const cwGeoPoint fixPoint = geoToUtm.transform(cwGeoPoint(-104.0, 40.015, 1655.0));
+
+            cwFixStation fix;
+            fix.setStationName(QStringLiteral("a1"));
+            fix.setInputCS(utm13N);
+            fix.setEasting(fixPoint.x);
+            fix.setNorthing(fixPoint.y);
+            fix.setElevation(fixPoint.z);
+            cave->fixStations()->appendFixStation(fix);
+
+            trip->setDate(QDateTime(QDate(2020, 1, 1), QTime(0, 0)));
+            trip->calibrations()->setAutoDeclination(true);
+
+            // Precondition: this cave really does have a non-trivial grid
+            // rotation, otherwise the test proves nothing.
+            REQUIRE(qAbs(cave->gridConvergence()->angle()) > 0.1);
+        }
+
+        scrap->updateNoteTransformation();
+        return scrap->noteTransformAdjustedDeclination().north;
+    };
+
+    const double plain = effectiveAutoNorth(false);
+    const double georeferenced = effectiveAutoNorth(true);
+
+    INFO("plain=" << plain << " georeferenced=" << georeferenced);
+    CHECK(georeferenced == Catch::Approx(plain).margin(1e-6));
 }
 
 TEST_CASE("Auto-calculate scrap transform handles declination correctly", "[cwScrap]") {

@@ -445,17 +445,17 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
     emit regionPtr->beginInsertRows(QModelIndex(), BeginIndex, EndIndex);
     for(int i = 0; i < Caves.size(); i++) {
         int index = BeginIndex + i;
-        regionPtr->m_caves.insert(index, Caves[i]);
-        regionPtr->m_caveNames.insert(Caves[i]->name());
-        Caves[i]->setParent(regionPtr);
+        regionPtr->m_caves.insert(index, Caves.at(i));
+        regionPtr->m_caveNames.insert(Caves.at(i)->name());
+        Caves.at(i)->setParent(regionPtr);
 
         // The cave's grid-convergence readout depends on the region's
         // globalCS when a fix station omits its own inputCS. UniqueConnection
         // keeps re-insert/undo paths from doubling up.
         QObject::connect(regionPtr, &cwCavingRegion::globalCoordinateSystemChanged,
-                         Caves[i], &cwCave::recomputeGridConvergenceText,
+                         Caves.at(i), &cwCave::recomputeGridConvergence,
                          Qt::UniqueConnection);
-        Caves[i]->recomputeGridConvergenceText();
+        Caves.at(i)->recomputeGridConvergence();
     }
 
     OwnsCaves = false;
@@ -532,14 +532,14 @@ cwCavingRegion::RemoveCaveCommand::RemoveCaveCommand(cwCavingRegion* region,
     InsertRemoveCave(region, beginIndex, endIndex)
 {
     for(int i = beginIndex; i <= endIndex; i++) {
-       Caves.append(region->m_caves[i]);
+       Caves.append(region->m_caves.at(i));
     }
 
     QString commandText;
     if(beginIndex != endIndex) {
         commandText = QString("Remove %1 caves").arg(endIndex - beginIndex);
     } else {
-        cwCave* cave = region->m_caves[beginIndex];
+        cwCave* cave = region->m_caves.at(beginIndex);
         commandText = QString("Remove %1").arg(cave->name());
     }
 }

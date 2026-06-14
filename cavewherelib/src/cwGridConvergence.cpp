@@ -29,6 +29,8 @@ struct ConvergencePj {
     PJ*         pj  = nullptr;
     QString     error;
 
+    ConvergencePj() = default;
+
     ~ConvergencePj()
     {
         if (pj) {
@@ -38,6 +40,8 @@ struct ConvergencePj {
             proj_context_destroy(ctx);
         }
     }
+
+    Q_DISABLE_COPY_MOVE(ConvergencePj)
 };
 
 std::shared_ptr<ConvergencePj> makeConvergencePj(const QString& sourceCS)
@@ -84,10 +88,91 @@ std::shared_ptr<ConvergencePj> cachedConvergencePj(const QString& sourceCS)
 
 } // namespace
 
-namespace cwGridConvergence {
+cwGridConvergence::cwGridConvergence(QObject* parent) :
+    QObject(parent)
+{
+}
 
-Monad::Result<double> computeAt(const cwGeoPoint& location,
-                                const QString& sourceCS)
+QString cwGridConvergence::text() const
+{
+    switch (m_state) {
+    case Valid:
+        return QStringLiteral("%1° at %2").arg(m_angle, 0, 'f', 2).arg(m_station);
+    case NoFixStation:
+        return QStringLiteral("n/a (no fix station)");
+    case NoCoordinateSystem:
+        return QStringLiteral("n/a (no coordinate system)");
+    case Geographic:
+        return QStringLiteral("n/a (geographic CS)");
+    case Error:
+        return QStringLiteral("n/a (%1)").arg(m_error);
+    }
+    return QString();
+}
+
+QString cwGridConvergence::detailText() const
+{
+    if (m_state == Valid) {
+        return QStringLiteral("%1 (%2)").arg(text(), m_coordinateSystem);
+    }
+    return text();
+}
+
+void cwGridConvergence::update(const QList<cwFixStation>& fixStations,
+                               const QString& fallbackCoordinateSystem)
+{
+    // 0.0 / empty for every non-Valid case — no grid means no rotation.
+    struct Resolved { double angle; State state; QString station; QString cs; QString error; };
+    const Resolved resolved = [&]() -> Resolved {
+        if (fixStations.isEmpty()) {
+            return { 0.0, NoFixStation, QString(), QString(), QString() };
+        }
+
+        const cwFixStation& first = fixStations.first();
+        QString sourceCS = first.inputCS().trimmed();
+        if (sourceCS.isEmpty()) {
+            sourceCS = fallbackCoordinateSystem.trimmed();
+        }
+
+        if (sourceCS.isEmpty()) {
+            return { 0.0, NoCoordinateSystem, QString(), QString(), QString() };
+        }
+        if (cwCoordinateTransform::isGeographic(sourceCS)) {
+            return { 0.0, Geographic, QString(), QString(), QString() };
+        }
+
+        const cwGeoPoint location(first.easting(), first.northing(), first.elevation());
+        const auto convergence = computeAt(location, sourceCS);
+        if (convergence.hasError()) {
+            return { 0.0, Error, QString(), QString(), convergence.errorMessage() };
+        }
+
+        const QString station = first.stationName().isEmpty()
+            ? QStringLiteral("fix station")
+            : first.stationName();
+        const QString csName = cwCoordinateTransform::nameFor(sourceCS);
+        const QString csLabel = csName.isEmpty() ? sourceCS : csName;
+        return { convergence.value(), Valid, station, csLabel, QString() };
+    }();
+
+    if (resolved.angle == m_angle
+        && resolved.state == m_state
+        && resolved.station == m_station
+        && resolved.cs == m_coordinateSystem
+        && resolved.error == m_error) {
+        return;
+    }
+
+    m_angle = resolved.angle;
+    m_state = resolved.state;
+    m_station = resolved.station;
+    m_coordinateSystem = resolved.cs;
+    m_error = resolved.error;
+    emit changed();
+}
+
+Monad::Result<double> cwGridConvergence::computeAt(const cwGeoPoint& location,
+                                                   const QString& sourceCS)
 {
     const QString normalized = sourceCS.trimmed();
     if (normalized.isEmpty()) {
@@ -120,9 +205,27 @@ Monad::Result<double> computeAt(const cwGeoPoint& location,
     PJ_COORD lp;
     lp.lp.lam = qDegreesToRadians(geo.x);
     lp.lp.phi = qDegreesToRadians(geo.y);
+
+    // proj_factors() reports failure through the context errno, not its return
+    // value — on an out-of-domain point it hands back a zero-filled struct,
+    // making a real failure indistinguishable from a legitimate 0.0 (the value
+    // on the central meridian). The PJ is cached across calls, so reset first
+    // to avoid reading a stale errno from a previous failure.
+    proj_errno_reset(pjCtx->pj);
     const PJ_FACTORS factors = proj_factors(pjCtx->pj, lp);
+    const int err = proj_errno(pjCtx->pj);
+    if (err != 0) {
+        return Monad::Result<double>(
+            QStringLiteral("PROJ proj_factors failed for '%1': %2")
+                .arg(normalized, QString::fromUtf8(proj_errno_string(err))));
+    }
 
-    return Monad::Result<double>(qRadiansToDegrees(factors.meridian_convergence));
+    const double convergence = qRadiansToDegrees(factors.meridian_convergence);
+    if (!qIsFinite(convergence)) {
+        return Monad::Result<double>(
+            QStringLiteral("PROJ returned a non-finite convergence for '%1'")
+                .arg(normalized));
+    }
+
+    return Monad::Result<double>(convergence);
 }
-
-} // namespace cwGridConvergence

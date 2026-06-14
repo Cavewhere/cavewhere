@@ -11,6 +11,7 @@
 //Our include
 class cwTrip;
 class cwCavingRegion;
+#include "cwGridConvergence.h"
 #include "cwErrorModel.h"
 #include "cwExternalCenterline.h"
 #include "cwLength.h"
@@ -46,8 +47,7 @@ class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
     Q_PROPERTY(cwLength* depth READ depth CONSTANT)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
     Q_PROPERTY(cwFixStationModel* fixStations READ fixStations CONSTANT)
-    Q_PROPERTY(QString gridConvergenceText READ gridConvergenceText NOTIFY gridConvergenceTextChanged)
-    Q_PROPERTY(QString gridConvergenceDetailText READ gridConvergenceDetailText NOTIFY gridConvergenceTextChanged)
+    Q_PROPERTY(cwGridConvergence* gridConvergence READ gridConvergence CONSTANT)
     Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
 
 public:
@@ -76,21 +76,11 @@ public:
     cwErrorModel* errorModel() const;
     cwFixStationModel* fixStations() const { return FixStations; }
 
-    /**
-     * Compact grid-convergence string for inline display. Format:
-     * "0.7° at <stationName>" when computable, "n/a (geographic CS)" /
-     * "n/a (no fix station)" otherwise. CS name lives in the
-     * gridConvergenceDetailText sibling for tooltip use.
-     */
-    QString gridConvergenceText() const { return m_gridConvergenceText; }
-
-    /**
-     * Full grid-convergence string with CS name appended for tooltip
-     * display: "0.7° at <stationName> (WGS 84 / UTM zone 13N)". For n/a
-     * cases this matches gridConvergenceText since there's nothing extra
-     * to show.
-     */
-    QString gridConvergenceDetailText() const { return m_gridConvergenceDetailText; }
+    /// Per-cave grid-convergence readout (angle + state + display text).
+    /// Recomputed from the fix stations / region CS via recomputeGridConvergence();
+    /// cwScrap reads gridConvergence()->angle() to remove grid rotation from the
+    /// note transform.
+    cwGridConvergence* gridConvergence() const { return m_gridConvergence; }
 
     int tripCount() const;
     Q_INVOKABLE cwTrip* trip(int index) const;
@@ -140,16 +130,14 @@ signals:
     void stationPositionPositionChanged();
     void surveyNetworkChanged();
 
-    void gridConvergenceTextChanged();
-
     void externalCenterlineChanged();
 
 public slots:
-    /// Recompute m_gridConvergenceText eagerly. CavePage's binding reads
-    /// the cached string on each property read — letting it call
-    /// cwGridConvergence directly would re-do the PROJ work every time
-    /// a dependent binding re-evaluates.
-    void recomputeGridConvergenceText();
+    /// Feed the cave's current fix stations and region coordinate system into
+    /// the gridConvergence() readout, which caches the PROJ result and only
+    /// re-emits when it actually changes. Wired to fix-station edits (here) and
+    /// the region's globalCS changes (in cwCavingRegion).
+    void recomputeGridConvergence();
 
 private:
     QList<cwTrip*> Trips;
@@ -168,8 +156,7 @@ private:
     cwSurveyNetwork Network;
     cwSanitizedNameSet m_tripNames;
 
-    QString m_gridConvergenceText;
-    QString m_gridConvergenceDetailText;
+    cwGridConvergence* m_gridConvergence;
 
     cwExternalCenterline m_externalCenterline;
 

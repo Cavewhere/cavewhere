@@ -12,9 +12,7 @@
 #include "cwLength.h"
 #include "cwErrorModel.h"
 #include "cwCavingRegion.h"
-#include "cwCoordinateTransform.h"
 #include "cwData.h"
-#include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwGridConvergence.h"
 #include "cwNameUtils.h"
@@ -30,7 +28,8 @@ cwCave::cwCave(QObject* parent) :
     ErrorModel(new cwErrorModel(this)),
     FixStations(new cwFixStationModel(this)),
     StationPositionModelStale(false),
-    Id(QUuid::createUuid())
+    Id(QUuid::createUuid()),
+    m_gridConvergence(new cwGridConvergence(this))
 {
     Length->setUnit(cwUnits::Meters);
     Depth->setUnit(cwUnits::Meters);
@@ -41,9 +40,9 @@ cwCave::cwCave(QObject* parent) :
 //    ErrorModel->addParent(this);
 
     connect(FixStations, &cwFixStationModel::countChanged,
-            this, &cwCave::recomputeGridConvergenceText);
+            this, &cwCave::recomputeGridConvergence);
     connect(FixStations, &QAbstractItemModel::modelReset,
-            this, &cwCave::recomputeGridConvergenceText);
+            this, &cwCave::recomputeGridConvergence);
     // Filter dataChanged on the roles that actually influence the
     // formatted convergence — variance/id edits would otherwise walk
     // PROJ only to be discarded by the change-detection guard.
@@ -55,10 +54,10 @@ cwCave::cwCave(QObject* parent) :
                     || roles.contains(cwFixStationModel::NorthingRole)
                     || roles.contains(cwFixStationModel::ElevationRole)
                     || roles.contains(cwFixStationModel::StationNameRole)) {
-                    recomputeGridConvergenceText();
+                    recomputeGridConvergence();
                 }
             });
-    recomputeGridConvergenceText();
+    recomputeGridConvergence();
 }
 
 // /**
@@ -251,58 +250,14 @@ cwCavingRegion *cwCave::parentRegion() const
     return dynamic_cast<cwCavingRegion*>(parent());
 }
 
-void cwCave::recomputeGridConvergenceText()
+void cwCave::recomputeGridConvergence()
 {
-    struct Texts { QString compact; QString detail; };
-    const Texts texts = [this]() -> Texts {
-        const QList<cwFixStation>& fixes = FixStations->fixStations();
-        if (fixes.isEmpty()) {
-            const QString t = QStringLiteral("n/a (no fix station)");
-            return { t, t };
-        }
-
-        const cwFixStation& first = fixes.first();
-        QString sourceCS = first.inputCS().trimmed();
-        if (sourceCS.isEmpty()) {
-            const cwCavingRegion* region = parentRegion();
-            sourceCS = region ? region->globalCoordinateSystem().trimmed() : QString();
-        }
-
-        if (sourceCS.isEmpty()) {
-            const QString t = QStringLiteral("n/a (no coordinate system)");
-            return { t, t };
-        }
-        if (cwCoordinateTransform::isGeographic(sourceCS)) {
-            const QString t = QStringLiteral("n/a (geographic CS)");
-            return { t, t };
-        }
-
-        const cwGeoPoint location(first.easting(), first.northing(), first.elevation());
-        const auto result = cwGridConvergence::computeAt(location, sourceCS);
-        if (result.hasError()) {
-            const QString t = QStringLiteral("n/a (%1)").arg(result.errorMessage());
-            return { t, t };
-        }
-
-        const QString stationName = first.stationName().isEmpty()
-            ? QStringLiteral("fix station")
-            : first.stationName();
-        const QString csName = cwCoordinateTransform::nameFor(sourceCS);
-        const QString csLabel = csName.isEmpty() ? sourceCS : csName;
-
-        const QString compact = QStringLiteral("%1° at %2")
-            .arg(result.value(), 0, 'f', 2)
-            .arg(stationName);
-        const QString detail = QStringLiteral("%1 (%2)").arg(compact, csLabel);
-        return { compact, detail };
-    }();
-
-    if (texts.compact != m_gridConvergenceText
-        || texts.detail != m_gridConvergenceDetailText) {
-        m_gridConvergenceText = texts.compact;
-        m_gridConvergenceDetailText = texts.detail;
-        emit gridConvergenceTextChanged();
-    }
+    // The readout owns the PROJ work and change detection; we just feed it the
+    // current fix stations plus the region CS to fall back on when a fix
+    // station omits its own input CS.
+    const cwCavingRegion* region = parentRegion();
+    const QString fallbackCS = region ? region->globalCoordinateSystem() : QString();
+    m_gridConvergence->update(FixStations->fixStations(), fallbackCS);
 }
 
 /**
