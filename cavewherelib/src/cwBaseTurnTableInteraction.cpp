@@ -983,6 +983,37 @@ void cwBaseTurnTableInteraction::setCamera(cwCamera* camera) {
 }
 
 /**
+ * @brief cwBaseTurnTableInteraction::reconcileZoomForProjection
+ *
+ * Converts the inactive zoom channel so the visible world half-height at the
+ * orbit center is preserved across an ortho<->perspective swap. See the
+ * header for the channel relationship.
+ */
+void cwBaseTurnTableInteraction::reconcileZoomForProjection(bool toPerspective, double fovRadians)
+{
+    if(Camera.isNull()) { return; }
+
+    const double halfViewportHeight = Camera->viewport().height() / 2.0;
+    if(halfViewportHeight <= 0.0) { return; }
+
+    const double tanHalfFov = std::tan(0.5 * fovRadians);
+    if(!std::isfinite(tanHalfFov) || tanHalfFov <= 0.0) { return; }
+
+    cwTurnTableViewState state = viewState();
+
+    if(toPerspective) {
+        // Solve distance * tan(fov/2) == halfViewportHeight * zoomScale.
+        state.distance = halfViewportHeight * state.zoomScale / tanHalfFov;
+    } else {
+        // Invert the same relation for zoomScale. distance is read from the
+        // live (still perspective-built) view matrix.
+        state.zoomScale = state.distance * tanHalfFov / halfViewportHeight;
+    }
+
+    setViewState(state);
+}
+
+/**
 * @brief cwBaseTurnTableInteraction::setScene
 * @param scene
 */

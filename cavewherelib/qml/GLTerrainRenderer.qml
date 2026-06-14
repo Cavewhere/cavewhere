@@ -19,6 +19,7 @@ Item {
     property alias interactionManager: interactionManagerId
     property alias leadView: leadViewId
     property alias renderer: rendererId
+    property alias projectionTransition: projectionTransitionId
     property alias scene: rendererId.scene
 
     clip: true
@@ -82,6 +83,14 @@ Item {
         scene: rendererId.scene
         gridPlane: RootData.regionSceneManager.gridPlane.plane
         pointCloudWorldRadiusTarget: RootData.regionSceneManager.lazLayersSceneNode
+    }
+
+    ProjectionTransition {
+        id: projectionTransitionId
+        camera: rendererId.camera
+        orthoProjection: rendererId.orthoProjection
+        perspectiveProjection: rendererId.perspectiveProjection
+        interaction: turnTableInteractionId
     }
 
     // While the picker is the active Interaction, the turn-table is disabled.

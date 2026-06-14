@@ -36,8 +36,8 @@ protected:
     cwProjection calculateProjection();
 
 private:
-    double FieldOfView;
-    
+    double FieldOfView = 0;
+
 };
 
 /**

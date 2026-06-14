@@ -62,11 +62,11 @@ MainWindowTest {
             //Change the projection to perspectiveProjection
             let projectionSlider = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->cameraOptions->GroupBox->projectionSlider")
             let slider = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->cameraOptions->GroupBox->projectionSlider->slider")
-            verify(projectionSlider.viewer.orthoProjection.enabled === true)
-            verify(projectionSlider.viewer.perspectiveProjection.enabled === false)
+            verify(projectionSlider.projectionTransition.orthoProjection.enabled === true)
+            verify(projectionSlider.projectionTransition.perspectiveProjection.enabled === false)
             mouseClick(slider, slider.width-1, 0)
-            tryVerify(() => { return projectionSlider.viewer.orthoProjection.enabled === false})
-            tryVerify(() => { return projectionSlider.viewer.perspectiveProjection.enabled === true})
+            tryVerify(() => { return projectionSlider.projectionTransition.orthoProjection.enabled === false})
+            tryVerify(() => { return projectionSlider.projectionTransition.perspectiveProjection.enabled === true})
 
             // wait(500)
 

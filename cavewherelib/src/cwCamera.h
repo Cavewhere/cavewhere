@@ -91,6 +91,7 @@ public:
     QVector3D position() const;
 
     double defaultZoomScale() const { return 0.5; }
+    static constexpr double defaultFieldOfView() { return 55.0; }
 
 signals:
     void viewportChanged();

@@ -108,6 +108,18 @@ public:
 
     Q_INVOKABLE void zoomTo(const QBox3D& box);
 
+    // Converts the inactive zoom channel so the visible world half-height at
+    // the orbit center is preserved across an ortho<->perspective swap (issue
+    // #513). The two modes encode zoom differently — ortho in zoomScale (the
+    // frustum half-height is viewportHeight/2 * zoomScale), perspective in the
+    // eye-to-center distance (half-height is distance * tan(fov/2)). toPerspective
+    // selects the direction (true: set the eye distance from the current ortho
+    // zoom; false: set the ortho zoom from the current eye distance).
+    // fovRadians is the perspective field of view to convert against. This is a
+    // pure service: cwProjectionTransition calls it at the start of a projection
+    // transition; the interaction itself never initiates a swap.
+    void reconcileZoomForProjection(bool toPerspective, double fovRadians);
+
     // Returns the 5-channel viewState that frames @a box at the supplied
     // @a azimuth / @a pitch (degrees). Unlike zoomTo() this is const, does
     // NOT call resetView(), and uses the supplied orientation for BOTH the

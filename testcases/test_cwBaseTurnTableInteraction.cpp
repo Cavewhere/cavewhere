@@ -7,6 +7,7 @@
 #include "cwCamera.h"
 #include "cwScene.h"
 #include "cwTurnTableViewState.h"
+#include "ProjectionScaleTestHelpers.h"
 
 //Qt includes
 #include <QMatrix4x4>
@@ -58,8 +59,8 @@ constexpr int kAnimationQuietWindowMs = 100;
 const QVector3D kZoomToBoxMin(-10.0f, -10.0f, -1.0f);
 const QVector3D kZoomToBoxMax(10.0f, 10.0f, 1.0f);
 
-// Match cwCamera::perspectiveProjectionDefault (cwCamera.cpp:259-265).
-constexpr double kPerspectiveFovYDegrees = 55.0;
+// Match cwCamera::perspectiveProjectionDefault, which uses the camera default.
+constexpr double kPerspectiveFovYDegrees = cwCamera::defaultFieldOfView();
 constexpr double kPerspectiveAspect =
         double(kViewportWidth) / double(kViewportHeight);
 
@@ -1401,4 +1402,112 @@ TEST_CASE("cwBaseTurnTableInteraction animationFinished is queued — slot re-en
     CHECK(got.center.x() == Approx(second.center.x()).margin(kMatrixEps));
     CHECK(got.azimuth == Approx(second.azimuth));
     CHECK(got.pitch == Approx(second.pitch));
+}
+
+// --- Projection-swap zoom reconcile (issue #513) ---
+//
+// reconcileZoomForProjection is the pure service cwProjectionTransition calls
+// at the start of a transition. The on-screen-scale-preservation behaviour
+// (driving the whole morph through the controller) lives in
+// test_cwProjectionTransition.cpp; here we unit-test the channel conversion.
+
+namespace {
+constexpr double kPerspectiveFovYRadians = kPerspectiveFovYDegrees * M_PI / 180.0;
+}
+
+TEST_CASE("cwBaseTurnTableInteraction reconcileZoomForProjection(true) sets the matched eye distance",
+          "[cwBaseTurnTableInteraction]")
+{
+    // ortho->perspective: the eye distance is set from the ortho zoom so the
+    // visible half-height (distance * tan(fov/2)) matches the ortho box
+    // (viewportHeight/2 * zoomScale). zoomScale, the source channel, is left
+    // untouched.
+    Fixture f;
+
+    cwTurnTableViewState s;
+    s.center = QVector3D(0.0f, 0.0f, 0.0f);
+    s.azimuth = 0.0;
+    s.pitch = 90.0;
+    s.distance = 50.0;
+    s.zoomScale = 0.8;
+    f.interaction.setViewState(s);
+
+    f.interaction.reconcileZoomForProjection(true, kPerspectiveFovYRadians);
+
+    const double expectedDist =
+            matchedPerspectiveDistance(s.zoomScale, kPerspectiveFovYDegrees, kViewportHeight);
+    const QVector3D centerView = f.camera.viewMatrix().map(s.center);
+    CHECK(centerView.z() == Approx(-expectedDist).margin(kMatrixEps));
+    CHECK(f.camera.zoomScale() == Approx(s.zoomScale));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction reconcileZoomForProjection(false) sets the matched zoom scale",
+          "[cwBaseTurnTableInteraction]")
+{
+    // perspective->ortho: the ortho zoom is set from the eye distance. The
+    // distance (view-matrix depth), the source channel, is left untouched.
+    Fixture f;
+    f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+
+    cwTurnTableViewState s;
+    s.center = QVector3D(0.0f, 0.0f, 0.0f);
+    s.azimuth = 0.0;
+    s.pitch = 90.0;
+    s.distance = 300.0;
+    s.zoomScale = f.camera.defaultZoomScale();
+    f.interaction.setViewState(s);
+
+    f.interaction.reconcileZoomForProjection(false, kPerspectiveFovYRadians);
+
+    const double expectedZoom =
+            matchedOrthoZoom(s.distance, kPerspectiveFovYDegrees, kViewportHeight);
+    CHECK(f.camera.zoomScale() == Approx(expectedZoom).margin(kMatrixEps));
+    const QVector3D centerView = f.camera.viewMatrix().map(s.center);
+    CHECK(centerView.z() == Approx(-s.distance).margin(kMatrixEps));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction reconcileZoomForProjection honors a non-default field of view",
+          "[cwBaseTurnTableInteraction]")
+{
+    // A wider fov needs a larger eye distance to hold the same on-screen scale.
+    Fixture f;
+
+    cwTurnTableViewState s;
+    s.center = QVector3D(0.0f, 0.0f, 0.0f);
+    s.azimuth = 0.0;
+    s.pitch = 90.0;
+    s.distance = 50.0;
+    s.zoomScale = 0.5;
+    f.interaction.setViewState(s);
+
+    constexpr double kWideFovDegrees = 80.0;
+    f.interaction.reconcileZoomForProjection(true, kWideFovDegrees * M_PI / 180.0);
+
+    const double expectedDist =
+            matchedPerspectiveDistance(s.zoomScale, kWideFovDegrees, kViewportHeight);
+    const QVector3D centerView = f.camera.viewMatrix().map(s.center);
+    CHECK(centerView.z() == Approx(-expectedDist).margin(kMatrixEps));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction reconcileZoomForProjection round-trips zoomScale",
+          "[cwBaseTurnTableInteraction]")
+{
+    // The two directions are exact inverses, so converting to perspective and
+    // back returns the ortho zoom to its starting value.
+    Fixture f;
+
+    cwTurnTableViewState s;
+    s.center = QVector3D(2.0f, -3.0f, 0.0f);
+    s.azimuth = 0.0;
+    s.pitch = 90.0;
+    s.distance = 50.0;
+    s.zoomScale = 1.35;
+    f.interaction.setViewState(s);
+
+    const double zoomBefore = f.camera.zoomScale();
+
+    f.interaction.reconcileZoomForProjection(true, kPerspectiveFovYRadians);
+    f.interaction.reconcileZoomForProjection(false, kPerspectiveFovYRadians);
+
+    CHECK(f.camera.zoomScale() == Approx(zoomBefore).margin(kMatrixEps));
 }

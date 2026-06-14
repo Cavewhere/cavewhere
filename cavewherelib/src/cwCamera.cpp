@@ -265,7 +265,7 @@ QMatrix4x4 cwCamera::qtViewportMatrix() const
  {
      cwProjection projection;
      QRectF viewport = this->viewport();
-     projection.setPerspective(55, viewport.width() / (float)viewport.height(), 1, 10000);
+     projection.setPerspective(defaultFieldOfView(), viewport.width() / (float)viewport.height(), 1, 10000);
      return projection;
  }
 

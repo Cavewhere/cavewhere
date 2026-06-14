@@ -25,12 +25,6 @@ public:
 
 protected:
     cwProjection calculateProjection();
-    
-signals:
-    
-public slots:
-
-private:
 };
 
 
