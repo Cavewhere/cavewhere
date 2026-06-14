@@ -21,14 +21,21 @@
 
 namespace {
 
+// A resolved rule paired with its decoded parameters, kept together so each
+// rule's apply() sees its own params (the layout builds a per-rule context).
+struct ResolvedRule {
+    const cwPlacementRule *rule = nullptr;
+    QVariant parameters;
+};
+
 // The layer's resolved rule stack in stage order. The stack is the layer's own
 // rules (unknown names dropped with a one-shot warning); a layer with no rules
 // resolves to nothing and draws nothing — there is no mode-derived default.
-QVector<const cwPlacementRule *> resolveRuleStack(const cwDecorationLayer &layer)
+QVector<ResolvedRule> resolveRuleStack(const cwDecorationLayer &layer)
 {
     const cwPlacementRuleRegistry &registry = cwPlacementRuleRegistry::instance();
 
-    QVector<const cwPlacementRule *> stack;
+    QVector<ResolvedRule> stack;
     stack.reserve(layer.rules.size());
     for (const cwPlacementRuleData &ruleData : layer.rules) {
         const cwPlacementRule *rule = registry.rule(ruleData.name);
@@ -43,26 +50,27 @@ QVector<const cwPlacementRule *> resolveRuleStack(const cwDecorationLayer &layer
             }
             continue;
         }
-        stack.append(rule);
+        stack.append(ResolvedRule{rule, ruleData.parameters});
     }
 
     std::stable_sort(stack.begin(), stack.end(),
-                     [](const cwPlacementRule *a, const cwPlacementRule *b) {
-                         return a->stage() < b->stage();
+                     [](const ResolvedRule &a, const ResolvedRule &b) {
+                         return a.rule->stage() < b.rule->stage();
                      });
     return stack;
 }
 
 // The Terminal-stage rule in a resolved stack — the rule that produces the
 // layer's geometry and decides its output kind (Decision 11a). One per stack.
-const cwPlacementRule *terminalOf(const QVector<const cwPlacementRule *> &stack)
+// Returns nullptr in `out.rule` when the stack has no terminal.
+ResolvedRule terminalOf(const QVector<ResolvedRule> &stack)
 {
-    for (const cwPlacementRule *rule : stack) {
-        if (rule->stage() == cwPlacementRule::Terminal) {
-            return rule;
+    for (const ResolvedRule &step : stack) {
+        if (step.rule->stage() == cwPlacementRule::Terminal) {
+            return step;
         }
     }
-    return nullptr;
+    return ResolvedRule{};
 }
 
 } // namespace
@@ -89,24 +97,28 @@ cwBrushDecorationGeometry cwSketchDecorationLayout::layout(const cwLineBrush &br
         cwBrushDecorationGeometry::Layer out;
 
         QVector<cwStampPosition> positions;
-        const cwPlacementContext context{strokePath, layer, worldPerPaperMm, nullptr};
-        const QVector<const cwPlacementRule *> stack = resolveRuleStack(layer);
-        for (const cwPlacementRule *rule : stack) {
-            rule->apply(positions, context);
+        const QVector<ResolvedRule> stack = resolveRuleStack(layer);
+        for (const ResolvedRule &step : stack) {
+            const cwPlacementContext context{strokePath, layer, worldPerPaperMm,
+                                             step.parameters, nullptr};
+            step.rule->apply(positions, context);
         }
 
         // The terminal rule produces the layer's geometry and names its kind
         // (Decision 11a): a traced polyline, or glyph stamps it materialises
         // from the positions the pipeline placed.
-        const cwPlacementRule *terminal = terminalOf(stack);
-        if (terminal == nullptr) {
+        const ResolvedRule terminal = terminalOf(stack);
+        if (terminal.rule == nullptr) {
             geometry.layers.append(out);
             continue;
         }
 
-        if (terminal->outputKind() == cwPlacementRule::OutputKind::Polylines) {
+        const cwPlacementContext terminalCtx{strokePath, layer, worldPerPaperMm,
+                                             terminal.parameters, nullptr};
+
+        if (terminal.rule->outputKind() == cwPlacementRule::OutputKind::Polylines) {
             out.kind = cwBrushDecorationGeometry::Layer::Polylines;
-            out.offsetPolylines = terminal->tracePolylines(strokeWorld, context);
+            out.offsetPolylines = terminal.rule->tracePolylines(strokeWorld, terminalCtx);
             geometry.layers.append(out);
             continue;
         }
@@ -124,7 +136,7 @@ cwBrushDecorationGeometry cwSketchDecorationLayout::layout(const cwLineBrush &br
                 continue;
             }
 
-            const QPainterPath placed = terminal->stampPath(position, glyphPath, context);
+            const QPainterPath placed = terminal.rule->stampPath(position, glyphPath, terminalCtx);
             position.bufferedBboxWorld =
                 placed.boundingRect().adjusted(-bufferWorld, -bufferWorld, bufferWorld, bufferWorld);
             out.stamps.append(cwResolvedStamp{position, placed});

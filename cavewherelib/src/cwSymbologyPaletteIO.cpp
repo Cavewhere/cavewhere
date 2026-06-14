@@ -12,6 +12,7 @@
 #include "cwSymbologyName.h"
 #include "cwLineBrush.h"
 #include "cwPenStroke.h"
+#include "cwPlacementRuleParamsCodec.h"
 #include "cwRegionIOTask.h"
 #include "cavewhereVersion.h"
 #include "cavewhere_symbology.pb.h"
@@ -116,7 +117,8 @@ void layerToProto(CavewhereSymbologyProto::DecorationLayer *proto, const cwDecor
     for (const auto &rule : layer.rules) {
         auto *protoRule = proto->add_rules();
         protoRule->set_name(toStd(rule.name));
-        protoRule->set_params(rule.params.constData(), static_cast<size_t>(rule.params.size()));
+        const QByteArray bytes = cwPlacementRuleParamsCodec::encode(rule.name, rule.parameters);
+        protoRule->set_params(bytes.constData(), static_cast<size_t>(bytes.size()));
     }
     proto->set_buffermm(layer.bufferMm);
     proto->set_collisionpriority(layer.collisionPriority);
@@ -142,7 +144,8 @@ cwDecorationLayer layerFromProto(const CavewhereSymbologyProto::DecorationLayer 
         cwPlacementRuleData rule;
         rule.name = fromStd(protoRule.name());
         const std::string &params = protoRule.params();
-        rule.params = QByteArray(params.data(), static_cast<int>(params.size()));
+        rule.parameters = cwPlacementRuleParamsCodec::decode(
+            rule.name, QByteArray(params.data(), static_cast<int>(params.size())));
         layer.rules.append(rule);
     }
     // optional fields fall back to the value-type default when absent.

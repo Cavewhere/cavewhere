@@ -8,16 +8,14 @@
 //Our includes
 #include "cwUniformSpacingRule.h"
 #include "cwStrokePath.h"
+#include "cwPlacementRuleParams.h"
 
-namespace {
-// Authored 2 mm spacing of the seed floor-step tick. A real per-layer override
-// arrives when rule params are interpreted (commit 4.x).
-constexpr double kDefaultStampSpacingMm = 2.0;
-}
+//Std includes
+#include <cmath>
 
 QString cwUniformSpacingRule::displayName() const
 {
-    return QStringLiteral("Uniform spacing");
+    return cwUniformSpacingRuleName();
 }
 
 void cwUniformSpacingRule::apply(QVector<cwStampPosition> &positions,
@@ -28,8 +26,12 @@ void cwUniformSpacingRule::apply(QVector<cwStampPosition> &positions,
         return;
     }
 
-    const double spacingWorld = kDefaultStampSpacingMm * context.worldPerPaperMm;
-    if (spacingWorld <= 0.0) {
+    const auto params = context.ruleParameters.value<cwUniformSpacingParams>();
+    const double spacingWorld = params.spacingMm * context.worldPerPaperMm;
+    // Reject non-positive AND non-finite spacing: spacingMm is file-driven, so a
+    // crafted/corrupt palette could carry +Inf (which slips past `<= 0.0` and
+    // makes the loop below never terminate) or NaN. Both -> no stamps.
+    if (!std::isfinite(spacingWorld) || spacingWorld <= 0.0) {
         return;
     }
 

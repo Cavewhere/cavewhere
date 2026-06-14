@@ -90,3 +90,16 @@ message PlacementRule {
     string name   = 1;
     bytes  params = 2;                      // proto-encoded per-rule struct
 }
+
+// Per-rule parameter messages. Serialized into PlacementRule.params (opaque
+// bytes on the wire). Decoded ONLY by cwPlacementRuleParamsCodec.
+//
+// BUMP-RULE: adding or removing a field in ANY *Params message below MUST bump
+// cwRegionIOTask::protoVersion(). The codec decodes these into plain C++ structs
+// that do NOT carry proto unknown-fields, so an un-bumped newer field would be
+// dropped on re-save. Bumping makes the version gate open such palettes
+// read-only on older builds instead of silently losing the field. Introducing a
+// brand-new *Params message (no older build interprets it) does NOT bump.
+message UniformSpacingParams {
+    optional double spacingMm = 1;   // unset -> 2.0 mm (cwUniformSpacingParams default)
+}

@@ -13,6 +13,7 @@
 #include <QPointF>
 #include <QPolygonF>
 #include <QString>
+#include <QVariant>
 #include <QVector>
 
 //Our includes
@@ -40,6 +41,10 @@ struct cwPlacementContext {
     // always > 0; the 0.0 here is a degenerate default for directly-built contexts,
     // never a live value.
     double worldPerPaperMm = 0.0;
+    // This rule invocation's decoded params (proto-free; see
+    // cwPlacementRuleParams.h). Null/wrong-typed -> the rule's value<T>()
+    // default. The layout rebuilds the context per rule so each gets its own.
+    QVariant ruleParameters;
     cwSceneContext *scene = nullptr; // iter-2 MutateScene state; nullptr in iter 1
 };
 

@@ -106,7 +106,7 @@ TEST_CASE("Uniform spacing seeds stamps at each arclength step", "[cwPlacementRu
     cwDecorationLayer layer;
     layer.glyphName = QStringLiteral("g");
     // worldPerPaperMm = 1 -> the 2 mm default step is 2 world metres.
-    const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 1.0};
 
     QVector<cwStampPosition> positions;
     rule(QStringLiteral("Uniform spacing"))->apply(positions, context);
@@ -127,7 +127,7 @@ TEST_CASE("Uniform spacing seeds nothing on a degenerate or zero-spacing layer",
     SECTION("degenerate stroke") {
         const QVector<QPointF> points = {QPointF(0.0, 0.0)};
         const cwStrokePath strokePath(points);
-        const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+        const cwPlacementContext context{strokePath, layer, 1.0};
         QVector<cwStampPosition> positions;
         rule(QStringLiteral("Uniform spacing"))->apply(positions, context);
         CHECK(positions.isEmpty());
@@ -136,7 +136,7 @@ TEST_CASE("Uniform spacing seeds nothing on a degenerate or zero-spacing layer",
     SECTION("zero world-per-paper-mm -> zero spacing") {
         const QVector<QPointF> points = {QPointF(0.0, 0.0), QPointF(10.0, 0.0)};
         const cwStrokePath strokePath(points);
-        const cwPlacementContext context{strokePath, layer, 0.0, nullptr};
+        const cwPlacementContext context{strokePath, layer, 0.0};
         QVector<cwStampPosition> positions;
         rule(QStringLiteral("Uniform spacing"))->apply(positions, context);
         CHECK(positions.isEmpty());
@@ -150,7 +150,7 @@ TEST_CASE("Explicit point seeds a single stamp at the stroke start", "[cwPlaceme
 
     cwDecorationLayer layer;
     layer.glyphName = QStringLiteral("g");
-    const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 1.0};
 
     QVector<cwStampPosition> positions;
     rule(QStringLiteral("Explicit point"))->apply(positions, context);
@@ -162,7 +162,7 @@ TEST_CASE("Explicit point seeds a single stamp at the stroke start", "[cwPlaceme
     SECTION("degenerate stroke seeds nothing") {
         const QVector<QPointF> single = {QPointF(0.0, 0.0)};
         const cwStrokePath empty(single);
-        const cwPlacementContext emptyContext{empty, layer, 1.0, nullptr};
+        const cwPlacementContext emptyContext{empty, layer, 1.0};
         QVector<cwStampPosition> none;
         rule(QStringLiteral("Explicit point"))->apply(none, emptyContext);
         CHECK(none.isEmpty());
@@ -177,7 +177,7 @@ TEST_CASE("Align to tangent orients each stamp to its local tangent", "[cwPlacem
     const cwStrokePath strokePath(points);
 
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 1.0};
 
     QVector<cwStampPosition> positions(2);
     positions[0].anchorWorld = QPointF(3.0, 0.0);   // on the horizontal segment
@@ -196,7 +196,7 @@ TEST_CASE("Align to tangent leaves stamps untouched on a degenerate stroke",
     const cwStrokePath strokePath(points);
 
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 1.0};
 
     QVector<cwStampPosition> positions(1);
     positions[0].rotationRad = 0.5;
@@ -217,7 +217,7 @@ TEST_CASE("Rigid stamp transforms the glyph by scale, rotation, and anchor",
     position.rotationRad = M_PI / 2.0; // 90 deg CCW (world +Y up)
 
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 0.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 0.0};
     const QPainterPath placed =
         rule(QStringLiteral("Rigid stamp"))
             ->stampPath(position, unitSegmentGlyph(), context);
@@ -238,7 +238,7 @@ TEST_CASE("The stamp base copies the layer's collision priority onto each stamp"
 
     cwDecorationLayer layer;
     layer.collisionPriority = 7;
-    const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 1.0};
 
     QVector<cwStampPosition> positions(2);
     rule(QStringLiteral("Rigid stamp"))->apply(positions, context);
@@ -265,7 +265,7 @@ TEST_CASE("Jointed stamp warps each glyph vertex along the stroke arclength",
     glyph.lineTo(0.0, 1.0); // +Y offsets along the normal
 
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 0.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 0.0};
     const QPainterPath warped =
         rule(QStringLiteral("Jointed stamp"))
             ->stampPath(position, glyph, context);
@@ -294,7 +294,7 @@ TEST_CASE("Jointed stamp leaves a long edge as a straight chord across a curve",
     position.scale = 1.0;
 
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 1.0};
     const QPainterPath warped =
         rule(QStringLiteral("Jointed stamp"))
             ->stampPath(position, glyph, context);
@@ -322,7 +322,7 @@ TEST_CASE("Bending stamp subdivides a long edge to follow a curved stroke",
     position.scale = 1.0;
 
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 1.0};
     const QPainterPath warped =
         rule(QStringLiteral("Bending stamp"))
             ->stampPath(position, glyph, context);
@@ -347,7 +347,7 @@ TEST_CASE("Bending stamp leaves a short edge as a single chord", "[cwPlacementRu
     position.scale = 1.0;
 
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 1.0};
     const QPainterPath warped =
         rule(QStringLiteral("Bending stamp"))
             ->stampPath(position, glyph, context);
@@ -368,7 +368,7 @@ TEST_CASE("Bending and jointed stamps agree on a straight stroke", "[cwPlacement
     position.anchorWorld = QPointF(10.0, 0.0);
     position.scale = 1.0;
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 1.0};
 
     const QPainterPath bent = rule(QStringLiteral("Bending stamp"))->stampPath(position, glyph, context);
     const QPainterPath jointed = rule(QStringLiteral("Jointed stamp"))->stampPath(position, glyph, context);
@@ -407,7 +407,7 @@ TEST_CASE("Bending stamp guards against a degenerate (non-positive) scale",
     position.scale = 1.0;
 
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 0.0, nullptr}; // worldPerPaperMm = 0
+    const cwPlacementContext context{strokePath, layer, 0.0}; // worldPerPaperMm = 0
     const QPainterPath bent =
         rule(QStringLiteral("Bending stamp"))->stampPath(position, glyph, context);
     const QPainterPath jointed =
@@ -437,7 +437,7 @@ TEST_CASE("Bending stamp caps subdivisions at the defensive maximum",
     position.scale = 1.0;
 
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 1.0};
     const QPainterPath warped =
         rule(QStringLiteral("Bending stamp"))->stampPath(position, glyph, context);
 
@@ -463,7 +463,7 @@ TEST_CASE("Bending stamp subdivides every segment of a multi-vertex glyph",
     position.scale = 1.0;
 
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 1.0};
     const QPainterPath bent = rule(QStringLiteral("Bending stamp"))->stampPath(position, glyph, context);
 
     // Both ~3.16 m segments subdivide at the 0.25 m step, far beyond the 3 glyph
@@ -501,7 +501,7 @@ TEST_CASE("Stamp warp scales the glyph's arclength advance and lateral offset",
     glyph.lineTo(0.0, 1.0); // +Y * scale -> +2 along the normal
 
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 0.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 0.0};
     const QPainterPath warped =
         rule(QStringLiteral("Jointed stamp"))
             ->stampPath(position, glyph, context);
@@ -519,7 +519,7 @@ TEST_CASE("Trace offset polyline returns the stroke and seeds no stamps", "[cwPl
     const cwStrokePath strokePath(strokeWorld);
 
     cwDecorationLayer layer;
-    const cwPlacementContext context{strokePath, layer, 1.0, nullptr};
+    const cwPlacementContext context{strokePath, layer, 1.0};
 
     const cwPlacementRule *trace = rule(QStringLiteral("Trace offset polyline"));
 
