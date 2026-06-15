@@ -16,6 +16,7 @@
 #include "cwFixStationModel.h"
 #include "cwGridConvergence.h"
 #include "cwNameUtils.h"
+#include "cwKeywordModel.h"
 
 //Qt includes
 #include <QThread>
@@ -29,7 +30,8 @@ cwCave::cwCave(QObject* parent) :
     FixStations(new cwFixStationModel(this)),
     StationPositionModelStale(false),
     Id(QUuid::createUuid()),
-    m_gridConvergence(new cwGridConvergence(this))
+    m_gridConvergence(new cwGridConvergence(this)),
+    m_keywordModel(new cwKeywordModel(this))
 {
     Length->setUnit(cwUnits::Meters);
     Depth->setUnit(cwUnits::Meters);
@@ -148,6 +150,19 @@ QString cwCave::validateName(const QString& proposedName) const
     const auto* nameSet = parentRegion() ? &parentRegion()->caveNameSet() : nullptr;
     return cwNameUtils::validateEntityName(Name, proposedName, nameSet,
                                            QStringLiteral("cave"));
+}
+
+void cwCave::updateKeywords()
+{
+    if(!m_keywordModel) {
+        return;
+    }
+
+    if(!Name.isEmpty()) {
+        m_keywordModel->replace({cwKeywordModel::CaveKey, Name});
+    } else {
+        m_keywordModel->removeAll(cwKeywordModel::CaveKey);
+    }
 }
 
 void cwCave::setId(const QUuid& id)
@@ -339,6 +354,7 @@ void cwCave::NameCommand::redo() {
         }
     }
     cave->Name = newName;
+    cave->updateKeywords();
     emit cave->nameChanged();
 }
 
@@ -351,6 +367,7 @@ void cwCave::NameCommand::undo() {
         }
     }
     cave->Name = oldName;
+    cave->updateKeywords();
     emit cave->nameChanged();
 }
 

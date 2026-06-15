@@ -481,8 +481,16 @@ void cwTrip::setUndoStackForChildren() {
   */
 void cwTrip::setParentCave(cwCave* parentCave) {
     if(ParentCave != parentCave) {
+        if(ParentCave) {
+            KeywordModel->removeExtension(ParentCave->keywordModel());
+        }
+
         ParentCave = parentCave;
         setParent(parentCave);
+
+        if(ParentCave) {
+            KeywordModel->addExtension(ParentCave->keywordModel());
+        }
 
         // Notes->setParentCave(ParentCave);
         emit parentCaveChanged();

@@ -11,6 +11,7 @@
 //Our include
 class cwTrip;
 class cwCavingRegion;
+class cwKeywordModel;
 #include "cwGridConvergence.h"
 #include "cwErrorModel.h"
 #include "cwExternalCenterline.h"
@@ -49,6 +50,7 @@ class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
     Q_PROPERTY(cwFixStationModel* fixStations READ fixStations CONSTANT)
     Q_PROPERTY(cwGridConvergence* gridConvergence READ gridConvergence CONSTANT)
     Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
+    Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
 
 public:
     enum Roles {
@@ -69,6 +71,8 @@ public:
 
     cwExternalCenterline externalCenterline() const { return m_externalCenterline; }
     void setExternalCenterline(const cwExternalCenterline& value);
+
+    cwKeywordModel* keywordModel() const { return m_keywordModel; }
 
     cwLength* length() const;
     cwLength* depth() const;
@@ -159,6 +163,9 @@ private:
     cwGridConvergence* m_gridConvergence;
 
     cwExternalCenterline m_externalCenterline;
+
+    cwKeywordModel* m_keywordModel = nullptr;
+    void updateKeywords();
 
     cwCave& Copy(const cwCave& object);
     void addTripNullHelper();
