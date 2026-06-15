@@ -40,14 +40,13 @@ const QColor kInkDark  = QColor(QStringLiteral("#ffffff"));
 cwDecorationLayer centerlineLayer(double widthMm)
 {
     cwDecorationLayer layer;
-    layer.rules = {cwPlacementRuleData{QStringLiteral("Trace offset polyline"), {}}};
-    layer.offsetCurveColorLight = kInkLight;
-    layer.offsetCurveColorDark = kInkDark;
-    layer.offsetCurveWidthMm = widthMm;
-    layer.offsetCurveOffsetMm = 0.0;
-    layer.offsetCurveDash = Qt::SolidLine;
-    layer.offsetCurveCap = Qt::RoundCap;
-    layer.offsetCurveJoin = Qt::RoundJoin;
+    layer.rules = {cwPlacementRuleData{QStringLiteral("Trace polyline"), {}}};
+    layer.lineColorLight = kInkLight;
+    layer.lineColorDark = kInkDark;
+    layer.lineWidthMm = widthMm;
+    layer.lineDash = Qt::SolidLine;
+    layer.lineCap = Qt::RoundCap;
+    layer.lineJoin = Qt::RoundJoin;
     return layer;
 }
 

@@ -30,6 +30,16 @@ QVariant cwPlacementRuleParamsCodec::decode(const QString &name, const QByteArra
         return QVariant::fromValue(params);
     }
 
+    if (name == cwOffsetStrokeRuleName()) {
+        CavewhereSymbologyProto::OffsetStrokeParams proto;
+        if (proto.ParseFromArray(params.constData(), static_cast<int>(params.size()))) {
+            cwOffsetStrokeParams out;
+            out.offsetMm = proto.offsetmm();
+            return QVariant::fromValue(out);
+        }
+        return QVariant::fromValue(params);
+    }
+
     // Unknown rule: keep the opaque bytes so it round-trips intact.
     return QVariant::fromValue(params);
 }
@@ -50,6 +60,15 @@ QByteArray cwPlacementRuleParamsCodec::encode(const QString &name, const QVarian
         const cwUniformSpacingParams in = params.value<cwUniformSpacingParams>();
         CavewhereSymbologyProto::UniformSpacingParams proto;
         proto.set_spacingmm(in.spacingMm);
+        const std::string bytes = proto.SerializeAsString();
+        return QByteArray(bytes.data(), static_cast<int>(bytes.size()));
+    }
+
+    if (name == cwOffsetStrokeRuleName()
+        && params.typeId() == qMetaTypeId<cwOffsetStrokeParams>()) {
+        const cwOffsetStrokeParams in = params.value<cwOffsetStrokeParams>();
+        CavewhereSymbologyProto::OffsetStrokeParams proto;
+        proto.set_offsetmm(in.offsetMm);
         const std::string bytes = proto.SerializeAsString();
         return QByteArray(bytes.data(), static_cast<int>(bytes.size()));
     }

@@ -73,6 +73,20 @@ ResolvedRule terminalOf(const QVector<ResolvedRule> &stack)
     return ResolvedRule{};
 }
 
+// The TransformStroke-stage rule in a resolved stack — the rule that rebuilds the
+// stroke the rest of the stack runs against (the lateral offset). Pulled out and
+// applied first, the mirror of pulling the terminal out and applying it last.
+// Returns nullptr in `out.rule` when the stack applies no stroke transform.
+ResolvedRule transformOf(const QVector<ResolvedRule> &stack)
+{
+    for (const ResolvedRule &step : stack) {
+        if (step.rule->stage() == cwPlacementRule::TransformStroke) {
+            return step;
+        }
+    }
+    return ResolvedRule{};
+}
+
 } // namespace
 
 cwSketchDecorationLayout::cwSketchDecorationLayout(cwGlyphTessellationCache *tessellationCache) :
@@ -90,14 +104,33 @@ cwBrushDecorationGeometry cwSketchDecorationLayout::layout(const cwLineBrush &br
     }
 
     const double worldPerPaperMm = cwGlyphTessellationCache::paperMmToWorldM(mapScale);
-    const cwStrokePath strokePath(strokeWorld);
+    const cwStrokePath baseStrokePath(strokeWorld);
 
     geometry.layers.reserve(brush.decorations.size());
     for (const cwDecorationLayer &layer : brush.decorations) {
         cwBrushDecorationGeometry::Layer out;
 
-        QVector<cwStampPosition> positions;
         const QVector<ResolvedRule> stack = resolveRuleStack(layer);
+
+        // TransformStroke stage: rebuild the stroke the rest of the stack runs
+        // against (a lateral offset). Applied first, before any position is
+        // seeded, so stamps and the polyline trace both follow the offset for
+        // free by sampling the transformed stroke. Held in a local the per-layer
+        // cwStrokePath borrows for the whole layer.
+        const ResolvedRule transform = transformOf(stack);
+        QVector<QPointF> layerStroke = strokeWorld;
+        if (transform.rule != nullptr) {
+            const cwPlacementContext transformContext{baseStrokePath, layer, worldPerPaperMm,
+                                                      transform.parameters, nullptr};
+            layerStroke = transform.rule->transformStroke(strokeWorld, transformContext);
+        }
+        if (layerStroke.size() < 2) {
+            geometry.layers.append(out);   // the transform collapsed the stroke
+            continue;
+        }
+        const cwStrokePath strokePath(layerStroke);
+
+        QVector<cwStampPosition> positions;
         for (const ResolvedRule &step : stack) {
             const cwPlacementContext context{strokePath, layer, worldPerPaperMm,
                                              step.parameters, nullptr};
@@ -118,7 +151,7 @@ cwBrushDecorationGeometry cwSketchDecorationLayout::layout(const cwLineBrush &br
 
         if (terminal.rule->outputKind() == cwPlacementRule::OutputKind::Polylines) {
             out.kind = cwBrushDecorationGeometry::Layer::Polylines;
-            out.offsetPolylines = terminal.rule->tracePolylines(strokeWorld, terminalCtx);
+            out.offsetPolylines = terminal.rule->tracePolylines(layerStroke, terminalCtx);
             geometry.layers.append(out);
             continue;
         }

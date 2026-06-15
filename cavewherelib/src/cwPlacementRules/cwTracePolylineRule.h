@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-#ifndef CWTRACEOFFSETPOLYLINERULE_H
-#define CWTRACEOFFSETPOLYLINERULE_H
+#ifndef CWTRACEPOLYLINERULE_H
+#define CWTRACEPOLYLINERULE_H
 
 //Our includes
 #include "cwPlacementRule.h"
@@ -14,9 +14,12 @@
 // Terminal rule whose output is one continuous traced polyline, not stamps —
 // the visible line of a wall/feature, and the edge of a floor-step. It ignores
 // the per-stamp position vector; cwSketchDecorationLayout asks it for the
-// polylines (iter 1: offset 0, the polyline equals the stroke). A layer ending
-// with this rule is what used to be "OffsetCurve mode".
-class cwTraceOffsetPolylineRule : public cwPlacementRule {
+// polyline, which is the stroke it is handed. A lateral offset (parallel rails,
+// ceiling channel) is not this rule's job: an "Offset stroke" TransformStroke
+// rule earlier in the stack rebuilds the stroke first, so this just traces it.
+// This is where line-specific styling (dash, width, taper) will live once the
+// layer's line* fields migrate into rule params (commit 9).
+class cwTracePolylineRule : public cwPlacementRule {
 public:
     QString displayName() const override;
     Stage stage() const override { return Terminal; }
@@ -27,4 +30,4 @@ public:
                                       const cwPlacementContext &context) const override;
 };
 
-#endif // CWTRACEOFFSETPOLYLINERULE_H
+#endif // CWTRACEPOLYLINERULE_H

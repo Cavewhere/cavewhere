@@ -18,14 +18,14 @@
 
 namespace {
 
-// A line layer is one whose rule stack traces an offset polyline (what used to
-// be "OffsetCurve mode").
-int offsetCurveLayerCount(const cwLineBrush &brush)
+// A line layer is one whose rule stack traces a polyline (what used to be
+// "OffsetCurve mode").
+int lineLayerCount(const cwLineBrush &brush)
 {
     int count = 0;
     for (const auto &layer : brush.decorations) {
         for (const auto &rule : layer.rules) {
-            if (rule.name == QStringLiteral("Trace offset polyline")) {
+            if (rule.name == QStringLiteral("Trace polyline")) {
                 ++count;
                 break;
             }
@@ -68,12 +68,11 @@ TEST_CASE("Seed brushes carry the expected decoration layers", "[cwSymbologyPale
 
     // wall + feature each have exactly one OffsetCurve(offset 0) layer; the
     // scrap-outline brush draws no ink (zero layers).
-    CHECK(offsetCurveLayerCount(*wall) == 1);
-    CHECK(offsetCurveLayerCount(*feature) == 1);
+    CHECK(lineLayerCount(*wall) == 1);
+    CHECK(lineLayerCount(*feature) == 1);
     CHECK(scrapOutline->decorations.isEmpty());
 
     REQUIRE(wall->decorations.size() == 1);
-    CHECK(wall->decorations.first().offsetCurveOffsetMm == 0.0);
 
     // Wall paints over feature regardless of draw order.
     CHECK(wall->zOrder > feature->zOrder);
@@ -90,7 +89,7 @@ TEST_CASE("Seed ships the floor-step brush and floor-step-tick glyph",
 
     // floor-step has two layers: a traced edge line + a rigid-stamp stack for
     // the tick glyph.
-    CHECK(offsetCurveLayerCount(*floorStep) == 1);
+    CHECK(lineLayerCount(*floorStep) == 1);
     REQUIRE(floorStep->decorations.size() == 2);
     const auto &stamp = floorStep->decorations.at(1);
     REQUIRE_FALSE(stamp.rules.isEmpty());

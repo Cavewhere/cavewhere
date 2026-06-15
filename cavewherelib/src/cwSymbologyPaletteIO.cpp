@@ -125,14 +125,13 @@ void layerToProto(CavewhereSymbologyProto::DecorationLayer *proto, const cwDecor
     proto->set_minpaperscale(layer.minPaperScale);
     proto->set_maxpaperscale(layer.maxPaperScale);
 
-    proto->set_offsetcurvecolorlight(toStd(colorToHex(layer.offsetCurveColorLight)));
-    proto->set_offsetcurvecolordark(toStd(colorToHex(layer.offsetCurveColorDark)));
-    proto->set_offsetcurvewidthmm(layer.offsetCurveWidthMm);
-    proto->set_offsetcurveoffsetmm(layer.offsetCurveOffsetMm);
-    proto->set_offsetcurvedash(static_cast<int>(layer.offsetCurveDash));
-    proto->set_offsetcurvecap(static_cast<int>(layer.offsetCurveCap));
-    proto->set_offsetcurvejoin(static_cast<int>(layer.offsetCurveJoin));
-    proto->set_offsetcurveacceptspressure(layer.offsetCurveAcceptsPressure);
+    proto->set_linecolorlight(toStd(colorToHex(layer.lineColorLight)));
+    proto->set_linecolordark(toStd(colorToHex(layer.lineColorDark)));
+    proto->set_linewidthmm(layer.lineWidthMm);
+    proto->set_linedash(static_cast<int>(layer.lineDash));
+    proto->set_linecap(static_cast<int>(layer.lineCap));
+    proto->set_linejoin(static_cast<int>(layer.lineJoin));
+    proto->set_lineacceptspressure(layer.lineAcceptsPressure);
 }
 
 cwDecorationLayer layerFromProto(const CavewhereSymbologyProto::DecorationLayer &proto)
@@ -154,15 +153,14 @@ cwDecorationLayer layerFromProto(const CavewhereSymbologyProto::DecorationLayer 
     layer.minPaperScale = proto.minpaperscale();
     layer.maxPaperScale = proto.maxpaperscale();
 
-    layer.offsetCurveColorLight = colorFromHex(fromStd(proto.offsetcurvecolorlight()));
-    layer.offsetCurveColorDark  = colorFromHex(fromStd(proto.offsetcurvecolordark()));
-    if (proto.has_offsetcurvewidthmm()) { layer.offsetCurveWidthMm = proto.offsetcurvewidthmm(); }
-    layer.offsetCurveOffsetMm = proto.offsetcurveoffsetmm();
-    if (proto.has_offsetcurvedash()) { layer.offsetCurveDash = static_cast<Qt::PenStyle>(proto.offsetcurvedash()); }
-    if (proto.has_offsetcurvecap())  { layer.offsetCurveCap  = static_cast<Qt::PenCapStyle>(proto.offsetcurvecap()); }
-    if (proto.has_offsetcurvejoin()) { layer.offsetCurveJoin = static_cast<Qt::PenJoinStyle>(proto.offsetcurvejoin()); }
-    if (proto.has_offsetcurveacceptspressure()) {
-        layer.offsetCurveAcceptsPressure = proto.offsetcurveacceptspressure();
+    layer.lineColorLight = colorFromHex(fromStd(proto.linecolorlight()));
+    layer.lineColorDark  = colorFromHex(fromStd(proto.linecolordark()));
+    if (proto.has_linewidthmm()) { layer.lineWidthMm = proto.linewidthmm(); }
+    if (proto.has_linedash()) { layer.lineDash = static_cast<Qt::PenStyle>(proto.linedash()); }
+    if (proto.has_linecap())  { layer.lineCap  = static_cast<Qt::PenCapStyle>(proto.linecap()); }
+    if (proto.has_linejoin()) { layer.lineJoin = static_cast<Qt::PenJoinStyle>(proto.linejoin()); }
+    if (proto.has_lineacceptspressure()) {
+        layer.lineAcceptsPressure = proto.lineacceptspressure();
     }
     return layer;
 }

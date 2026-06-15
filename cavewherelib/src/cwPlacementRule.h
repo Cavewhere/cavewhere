@@ -55,10 +55,11 @@ struct cwPlacementContext {
 class CAVEWHERE_LIB_EXPORT cwPlacementRule {
 public:
     enum Stage {
-        Generate = 0,        // seed candidate positions from the stroke path
-        MutatePerLayer = 1,  // adjust rotation / scale / visibility per layer
-        Terminal = 2,        // produce the layer's geometry; ends the per-layer pipeline
-        MutateScene = 3,     // global collision arbitration (iter 2)
+        TransformStroke = 0, // rebuild the stroke the rest of the stack runs against (e.g. offset)
+        Generate = 1,        // seed candidate positions from the stroke path
+        MutatePerLayer = 2,  // adjust rotation / scale / visibility per layer
+        Terminal = 3,        // produce the layer's geometry; ends the per-layer pipeline
+        MutateScene = 4,     // global collision arbitration (iter 2)
     };
 
     // What a Terminal rule produces. A layer's output kind (stamps vs a traced
@@ -109,6 +110,19 @@ public:
         Q_UNUSED(strokeWorld)
         Q_UNUSED(context)
         return {};
+    }
+
+    // Rebuild the world-metre stroke the rest of the layer's stack runs against.
+    // Overridden by TransformStroke-stage rules (the lateral offset); the default
+    // returns the stroke unchanged. cwSketchDecorationLayout pulls the stack's
+    // TransformStroke rule out and applies it first — before Generate — so every
+    // downstream rule (stamps and the polyline trace) follows the transformed
+    // stroke for free by sampling it.
+    virtual QVector<QPointF> transformStroke(const QVector<QPointF> &strokeWorld,
+                                             const cwPlacementContext &context) const
+    {
+        Q_UNUSED(context)
+        return strokeWorld;
     }
 };
 

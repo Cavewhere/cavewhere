@@ -11,6 +11,9 @@
 
 // Our
 #include "cwSketchDecorationLayout.h"
+#include "cwPlacementRule.h"
+#include "cwPlacementRuleRegistry.h"
+#include "cwPlacementRuleParams.h"
 #include "cwGlyphTessellationCache.h"
 #include "cwSymbologyPaletteData.h"
 #include "cwSymbologyPaletteSeed.h"
@@ -23,6 +26,7 @@
 // Qt
 #include <QColor>
 #include <QDir>
+#include <QFont>
 #include <QImage>
 #include <QPainter>
 #include <QPainterPath>
@@ -33,6 +37,7 @@
 #include <QStringList>
 
 // Std
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 
@@ -76,9 +81,45 @@ cwDecorationLayer ruleLayer(const QString &glyphName, const QStringList &ruleNam
 
 cwDecorationLayer offsetLayer(double widthMm)
 {
-    cwDecorationLayer layer = ruleLayer(QString(), {QStringLiteral("Trace offset polyline")});
-    layer.offsetCurveWidthMm = widthMm;
-    layer.offsetCurveOffsetMm = 0.0;
+    cwDecorationLayer layer = ruleLayer(QString(), {QStringLiteral("Trace polyline")});
+    layer.lineWidthMm = widthMm;
+    return layer;
+}
+
+// An "Offset stroke" rule carrying a signed paper-mm lateral offset.
+cwPlacementRuleData offsetStrokeRule(double offsetMm)
+{
+    return cwPlacementRuleData{cwOffsetStrokeRuleName(),
+                               QVariant::fromValue(cwOffsetStrokeParams{offsetMm})};
+}
+
+// A "Uniform spacing" rule carrying an explicit paper-mm step (overriding the
+// 2 mm default).
+cwPlacementRuleData uniformSpacingRule(double spacingMm)
+{
+    return cwPlacementRuleData{cwUniformSpacingRuleName(),
+                               QVariant::fromValue(cwUniformSpacingParams{spacingMm})};
+}
+
+// A traced rail parallel to the stroke at a signed offset (commit 4.5): the
+// Offset stroke transform rebuilds the stroke, the polyline trace follows it.
+cwDecorationLayer railLayer(double offsetMm, double widthMm)
+{
+    cwDecorationLayer layer;
+    layer.rules = {offsetStrokeRule(offsetMm),
+                   cwPlacementRuleData{QStringLiteral("Trace polyline"), {}}};
+    layer.lineWidthMm = widthMm;
+    return layer;
+}
+
+// A glyph-stamp layer whose stroke is first pushed laterally by offsetMm (commit
+// 4.6 ceiling channel): the offset rule prepended to a normal stamp stack.
+cwDecorationLayer offsetRuleLayer(double offsetMm,
+                                  const QString &glyphName,
+                                  const QStringList &ruleNames)
+{
+    cwDecorationLayer layer = ruleLayer(glyphName, ruleNames);
+    layer.rules.prepend(offsetStrokeRule(offsetMm));
     return layer;
 }
 
@@ -120,6 +161,30 @@ cwLineBrush makeBrush(const QString &name, const QVector<cwDecorationLayer> &lay
     return brush;
 }
 
+// Railroad demo dimensions (paper-mm), one source of truth for the functional
+// test and the reference-image panel.
+constexpr double kRailroadHalfGaugeMm = 0.5;   // rails at +-this
+constexpr double kRailroadRailWidthMm = 0.2;   // thin rails
+constexpr double kRailroadTieWidthMm  = 0.8;   // thick cross-ties
+constexpr double kRailroadTieSpacingMm = 0.4;  // spacing > tie width so ties stay distinct
+
+// Railroad (commit 4.5): two thin traced rails offset +-d via the Offset stroke
+// transform, plus a closely-spaced layer of thick cross-ties.
+cwLineBrush makeRailroadBrush()
+{
+    cwDecorationLayer ties;
+    ties.glyphName = QStringLiteral("rail-tie");
+    ties.lineWidthMm = kRailroadTieWidthMm;   // drives the tie stamp pen
+    ties.rules = {uniformSpacingRule(kRailroadTieSpacingMm),
+                  cwPlacementRuleData{QStringLiteral("Align to tangent"), {}},
+                  cwPlacementRuleData{QStringLiteral("Rigid stamp"), {}}};
+
+    return makeBrush(QStringLiteral("railroad"),
+                     {railLayer(kRailroadHalfGaugeMm, kRailroadRailWidthMm),
+                      railLayer(-kRailroadHalfGaugeMm, kRailroadRailWidthMm),
+                      ties});
+}
+
 cwPenStroke featureStroke(const QVector<QPointF> &points)
 {
     cwPenStroke stroke;
@@ -159,6 +224,15 @@ cwSymbologyPaletteData demoPalette()
     // A short tick along +normal, 1/4 of the 1.5 mm floor-step tick.
     palette.glyphs.append(lineGlyph(QStringLiteral("ceiling-tick"),
                                     {QPointF(0.0, 0.0), QPointF(0.0, 1.5 / 4.0)}));
+    // The same tick mirrored to -normal — the inward tick for the +d side of a
+    // ceiling channel (proper side-mirroring is a future Mirror-on-side rule;
+    // until then the channel authors both tick glyphs).
+    palette.glyphs.append(lineGlyph(QStringLiteral("ceiling-tick-down"),
+                                    {QPointF(0.0, 0.0), QPointF(0.0, -1.5 / 4.0)}));
+    // A cross-tie spanning the rail gauge (±0.6 mm > the ±0.5 mm rails), authored
+    // along +Y so Align to tangent lays it across the stroke normal.
+    palette.glyphs.append(lineGlyph(QStringLiteral("rail-tie"),
+                                    {QPointF(0.0, -0.6), QPointF(0.0, 0.6)}));
     // A closed triangle whose apex points back along -X — the "<" arrowhead of a
     // "<-----" stream symbol. Outline only until fill lands (commit 4.2); a
     // single-stamp stack drops it at the stroke start.
@@ -191,6 +265,63 @@ QRectF geometryBounds(const cwBrushDecorationGeometry &geometry)
 // world->pixel fit so widths stay comparable across panels.
 constexpr double kOffsetWidthPxPerMm = 6.6;
 
+// One rule's label for the composition readout, annotated with its decoded
+// param (the values Commit B carries) so the readout shows not just which rules
+// run but what they're parameterised with. Param-less rules show just the name;
+// a param-bearing rule with absent params shows its struct default in (default …).
+QString ruleLabel(const cwPlacementRuleData &ruleData)
+{
+    if (ruleData.name == cwOffsetStrokeRuleName()) {
+        // Always set in these demos; signed (sign = side).
+        const double mm = ruleData.parameters.value<cwOffsetStrokeParams>().offsetMm;
+        return QStringLiteral("%1 (%2%3 mm)")
+            .arg(ruleData.name,
+                 mm >= 0.0 ? QStringLiteral("+") : QString(),
+                 QString::number(mm, 'g', 2));
+    }
+    if (ruleData.name == cwUniformSpacingRuleName()) {
+        const bool hasParams = ruleData.parameters.canConvert<cwUniformSpacingParams>();
+        const double mm = ruleData.parameters.value<cwUniformSpacingParams>().spacingMm;
+        return QStringLiteral("%1 (%2%3 mm)")
+            .arg(ruleData.name,
+                 hasParams ? QString() : QStringLiteral("default "),
+                 QString::number(mm, 'g', 2));
+    }
+    return ruleData.name;
+}
+
+// Each decoration layer's rule stack as one arrow-joined line, sorted into the
+// pipeline order the layout runs them (TransformStroke -> Generate -> ... ->
+// Terminal) so the readout matches execution rather than authoring order.
+QStringList ruleComposition(const cwLineBrush &brush)
+{
+    const cwPlacementRuleRegistry &registry = cwPlacementRuleRegistry::instance();
+    const auto stageOf = [&registry](const cwPlacementRuleData &r) {
+        const cwPlacementRule *rule = registry.rule(r.name);
+        return rule != nullptr ? static_cast<int>(rule->stage()) : 99;
+    };
+
+    QStringList lines;
+    for (int i = 0; i < brush.decorations.size(); ++i) {
+        QVector<cwPlacementRuleData> rules = brush.decorations.at(i).rules;
+        std::stable_sort(rules.begin(), rules.end(),
+                         [&stageOf](const cwPlacementRuleData &a, const cwPlacementRuleData &b) {
+                             return stageOf(a) < stageOf(b);
+                         });
+        QStringList names;
+        for (const cwPlacementRuleData &r : rules) {
+            names.append(ruleLabel(r));
+        }
+        const QString stack = names.isEmpty() ? QStringLiteral("(no rules)")
+                                              : names.join(QStringLiteral("  →  "));
+        lines.append(QStringLiteral("L%1:  %2").arg(i).arg(stack));
+    }
+    if (lines.isEmpty()) {
+        lines.append(QStringLiteral("(no decoration layers)"));
+    }
+    return lines;
+}
+
 void paintPanel(QPainter &painter,
                 const QRectF &panelPixels,
                 const cwLineBrush &brush,
@@ -199,7 +330,12 @@ void paintPanel(QPainter &painter,
                 const QString &caption)
 {
     constexpr double kMargin = 24.0;
-    const QRectF inner = panelPixels.adjusted(kMargin, kMargin, -kMargin, -kMargin);
+    // Reserve the right of the panel for the rule-composition readout; fit the
+    // geometry into the left "art" region so the two never overlap.
+    constexpr double kArtFraction = 0.56;
+    const QRectF artRegion(panelPixels.left(), panelPixels.top(),
+                           panelPixels.width() * kArtFraction, panelPixels.height());
+    const QRectF inner = artRegion.adjusted(kMargin, kMargin, -kMargin, -kMargin);
     QRectF bounds = geometryBounds(geometry);
     const QRectF strokeBounds = QPolygonF(strokeWorld).boundingRect();
     bounds = bounds.isNull() ? strokeBounds : bounds.united(strokeBounds);
@@ -207,6 +343,27 @@ void paintPanel(QPainter &painter,
     painter.fillRect(panelPixels, Qt::white);
     painter.setPen(QPen(QColor(QStringLiteral("#888888"))));
     painter.drawText(QPointF(panelPixels.left() + 8.0, panelPixels.top() + 18.0), caption);
+
+    // Rule composition readout: each layer's rule stack, in the panel's right
+    // region, so the panel shows not just the result but the rules that built it.
+    {
+        constexpr double kLineHeight = 15.0;
+        const double textX = panelPixels.left() + panelPixels.width() * kArtFraction + 8.0;
+        double textY = panelPixels.top() + 40.0;
+
+        painter.save();
+        QFont compositionFont = painter.font();
+        compositionFont.setPointSizeF(8.5);
+        painter.setFont(compositionFont);
+        painter.setPen(QPen(QColor(QStringLiteral("#555555"))));
+        painter.drawText(QPointF(textX, panelPixels.top() + 22.0),
+                         QStringLiteral("rule composition (pipeline order):"));
+        for (const QString &line : ruleComposition(brush)) {
+            painter.drawText(QPointF(textX, textY), line);
+            textY += kLineHeight;
+        }
+        painter.restore();
+    }
 
     // Cell border: inset by half a pixel so the 1 px stroke lands on whole
     // pixels rather than straddling the panel edge.
@@ -227,24 +384,21 @@ void paintPanel(QPainter &painter,
     toPixel.translate(-bounds.left(), -bounds.top());
     painter.setTransform(toPixel, false);
 
-    QPen stampPen(Qt::black);
-    stampPen.setCosmetic(true);
-    stampPen.setWidthF(1.4);
-
-    // geometry.layers is 1:1 with brush.decorations, so an OffsetCurve layer's
-    // authored offsetCurveWidthMm drives its drawn width (wall 0.6 mm reads as
-    // double feature/floor-step's 0.3 mm).
+    // geometry.layers is 1:1 with brush.decorations, so each layer's authored
+    // lineWidthMm drives the drawn width of both its traced lines and its
+    // glyph stamps (wall 0.6 mm reads as double feature/floor-step's 0.3 mm; a
+    // railroad's thick ties vs thin rails come from this too).
     for (int i = 0; i < geometry.layers.size(); ++i) {
         const auto &layer = geometry.layers.at(i);
 
-        QPen offsetPen(Qt::black);
-        offsetPen.setCosmetic(true);
-        offsetPen.setWidthF(std::max(1.0, brush.decorations.at(i).offsetCurveWidthMm * kOffsetWidthPxPerMm));
-        painter.setPen(offsetPen);
+        QPen layerPen(Qt::black);
+        layerPen.setCosmetic(true);
+        layerPen.setWidthF(std::max(1.0, brush.decorations.at(i).lineWidthMm * kOffsetWidthPxPerMm));
+        painter.setPen(layerPen);
+
         for (const QPolygonF &polyline : layer.offsetPolylines) {
             painter.drawPolyline(polyline);
         }
-        painter.setPen(stampPen);
         for (const cwResolvedStamp &stamp : layer.stamps) {
             painter.drawPath(stamp.path);
         }
@@ -449,6 +603,71 @@ TEST_CASE("The layout feeds worldPerPaperMm so bending subdivides end to end",
     CHECK(bendPath.elementCount() > jointPath.elementCount());
 }
 
+TEST_CASE("Railroad brush traces two rails offset to opposite sides of the stroke",
+          "[cwSketchDecorationLayout]")
+{
+    cwGlyphTessellationCache cache;
+    cache.setSnapshot(demoPalette().snapshot());
+    const cwSketchDecorationLayout layout(&cache);
+
+    const cwLineBrush brush = makeRailroadBrush();
+
+    const double lengthWorld = 20.0 * kWorldPerPaperMm250;
+    const QVector<QPointF> strokeWorld = straightLine(lengthWorld, 1);
+    const cwBrushDecorationGeometry geometry = layout.layout(brush, strokeWorld, kScale250);
+
+    REQUIRE(geometry.layers.size() == 3);
+    REQUIRE(geometry.layers.at(0).kind == cwBrushDecorationGeometry::Layer::Polylines);
+    REQUIRE(geometry.layers.at(1).kind == cwBrushDecorationGeometry::Layer::Polylines);
+    CHECK(geometry.layers.at(2).kind == cwBrushDecorationGeometry::Layer::Stamps);
+
+    // Horizontal stroke on y = 0 -> left normal is +Y, so +d rails up, -d down.
+    const double offsetWorld = kRailroadHalfGaugeMm * kWorldPerPaperMm250;
+    REQUIRE(geometry.layers.at(0).offsetPolylines.size() == 1);
+    REQUIRE(geometry.layers.at(1).offsetPolylines.size() == 1);
+    CHECK(geometry.layers.at(0).offsetPolylines.first().first().y() == Approx(offsetWorld));
+    CHECK(geometry.layers.at(1).offsetPolylines.first().first().y() == Approx(-offsetWorld));
+
+    // Cross-ties were stamped (one machinery as floor-step ticks).
+    CHECK(geometry.layers.at(2).stamps.size() > 1);
+}
+
+TEST_CASE("Ceiling-channel stamps ride two offset strokes on opposite sides",
+          "[cwSketchDecorationLayout]")
+{
+    cwGlyphTessellationCache cache;
+    cache.setSnapshot(demoPalette().snapshot());
+    const cwSketchDecorationLayout layout(&cache);
+
+    constexpr double kChannelHalfWidthMm = 0.6;
+    const QStringList dashedLine = {QStringLiteral("Uniform spacing"),
+                                    QStringLiteral("Bending stamp")};
+    const QStringList inwardTicks = {QStringLiteral("Uniform spacing"),
+                                     QStringLiteral("Align to tangent"),
+                                     QStringLiteral("Rigid stamp")};
+    const cwLineBrush brush = makeBrush(
+        QStringLiteral("ceiling-channel"),
+        {offsetRuleLayer(kChannelHalfWidthMm, QStringLiteral("dash"), dashedLine),
+         offsetRuleLayer(kChannelHalfWidthMm, QStringLiteral("ceiling-tick-down"), inwardTicks),
+         offsetRuleLayer(-kChannelHalfWidthMm, QStringLiteral("dash"), dashedLine),
+         offsetRuleLayer(-kChannelHalfWidthMm, QStringLiteral("ceiling-tick"), inwardTicks)});
+
+    const double lengthWorld = 20.0 * kWorldPerPaperMm250;
+    const QVector<QPointF> strokeWorld = straightLine(lengthWorld, 1);
+    const cwBrushDecorationGeometry geometry = layout.layout(brush, strokeWorld, kScale250);
+
+    REQUIRE(geometry.layers.size() == 4);
+    for (const auto &layer : geometry.layers) {
+        CHECK(layer.kind == cwBrushDecorationGeometry::Layer::Stamps);
+        CHECK_FALSE(layer.stamps.isEmpty());
+    }
+
+    // The two dashed lines sit on the +d and -d offset strokes.
+    const double offsetWorld = kChannelHalfWidthMm * kWorldPerPaperMm250;
+    CHECK(geometry.layers.at(0).stamps.first().position.anchorWorld.y() == Approx(offsetWorld));
+    CHECK(geometry.layers.at(2).stamps.first().position.anchorWorld.y() == Approx(-offsetWorld));
+}
+
 TEST_CASE("Decoration layout renders to a reference image", "[cwSketchDecorationLayout]")
 {
     cwGlyphTessellationCache cache;
@@ -495,6 +714,20 @@ TEST_CASE("Decoration layout renders to a reference image", "[cwSketchDecoration
         QStringLiteral("stream"),
         {offsetLayer(0.3),
          pointStampLayer(QStringLiteral("stream-triangle"))});
+    // Railroad (commit 4.5): two thick traced rails + closely-spaced cross-ties.
+    const cwLineBrush railroadBrush = makeRailroadBrush();
+    // Ceiling channel (commit 4.6): two dashed lines at +-0.6 mm, ticks inward.
+    const QStringList dashedLine = {QStringLiteral("Uniform spacing"),
+                                    QStringLiteral("Bending stamp")};
+    const QStringList inwardTicks = {QStringLiteral("Uniform spacing"),
+                                     QStringLiteral("Align to tangent"),
+                                     QStringLiteral("Rigid stamp")};
+    const cwLineBrush ceilingChannelBrush = makeBrush(
+        QStringLiteral("ceiling-channel"),
+        {offsetRuleLayer(0.6, QStringLiteral("dash"), dashedLine),
+         offsetRuleLayer(0.6, QStringLiteral("ceiling-tick-down"), inwardTicks),
+         offsetRuleLayer(-0.6, QStringLiteral("dash"), dashedLine),
+         offsetRuleLayer(-0.6, QStringLiteral("ceiling-tick"), inwardTicks)});
 
     const QVector<QPointF> gentle = arcCurve(2.0, M_PI / 3.0, 32);
     const QVector<QPointF> tighter = arcCurve(1.2, M_PI / 2.0, 32);
@@ -517,6 +750,10 @@ TEST_CASE("Decoration layout renders to a reference image", "[cwSketchDecoration
          QStringLiteral("stream 45deg  —  line follows, but the single arrow is NOT tangent-rotated")},
         {streamBrush, arcCurve(0.5, M_PI / 2.0, 24),
          QStringLiteral("stream curve  —  line follows the curve; arrow stays fixed at the start")},
+        {railroadBrush, gentle,
+         QStringLiteral("railroad (4.5)  —  two traced rails offset +-d follow the curve + cross-ties")},
+        {ceilingChannelBrush, tighter,
+         QStringLiteral("ceiling-channel (4.6)  —  two dashed lines offset +-d, ticks pointing inward")},
     };
 
     constexpr int kWidth = 900;

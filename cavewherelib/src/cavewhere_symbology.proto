@@ -63,6 +63,8 @@ message LineBrush {
 message DecorationLayer {
     reserved 2;                            // was `mode`; layers are now defined entirely by `rules`
     reserved "mode";
+    reserved 11;                           // was `offsetCurveOffsetMm`; lateral offset is now the Offset stroke rule's param
+    reserved "offsetCurveOffsetMm";
     string glyphName = 1;                  // glyph ref for stamp layers; empty for line (offset-polyline) layers
     repeated PlacementRule rules = 3;      // the placement-rule stack; empty = no ink
 
@@ -71,16 +73,15 @@ message DecorationLayer {
     double minPaperScale              = 6;
     double maxPaperScale              = 7;
 
-    // OffsetCurve params. Ignored when mode != OffsetCurve. Currently only
-    // offsetCurveOffsetMm = 0 is supported (the centerline-replacement path).
-    string          offsetCurveColorLight = 8;
-    string          offsetCurveColorDark  = 9;
-    optional double offsetCurveWidthMm    = 10; // default 0.4 mm
-    double          offsetCurveOffsetMm   = 11; // sign = side; 0 = on the centerline
-    optional int32  offsetCurveDash       = 12; // Qt::PenStyle, default SolidLine
-    optional int32  offsetCurveCap        = 13; // Qt::PenCapStyle, default RoundCap
-    optional int32  offsetCurveJoin       = 14; // Qt::PenJoinStyle, default RoundJoin
-    optional bool   offsetCurveAcceptsPressure = 15; // default true
+    // Line styling, read by a Trace polyline terminal rule. (These migrate into
+    // that rule's params in the commit-9 styling migration; field numbers kept.)
+    string          lineColorLight = 8;
+    string          lineColorDark  = 9;
+    optional double lineWidthMm    = 10; // default 0.4 mm
+    optional int32  lineDash       = 12; // Qt::PenStyle, default SolidLine
+    optional int32  lineCap        = 13; // Qt::PenCapStyle, default RoundCap
+    optional int32  lineJoin       = 14; // Qt::PenJoinStyle, default RoundJoin
+    optional bool   lineAcceptsPressure = 15; // default true
 }
 
 message PlacementRule {
@@ -102,4 +103,13 @@ message PlacementRule {
 // brand-new *Params message (no older build interprets it) does NOT bump.
 message UniformSpacingParams {
     optional double spacingMm = 1;   // unset -> 2.0 mm (cwUniformSpacingParams default)
+}
+
+// Lateral offset applied by the "Offset stroke" TransformStroke rule: the stroke
+// the rest of the layer's stack runs against is pushed offsetMm along its left
+// normal. Signed (sign = side); 0 == on the stroke. The zero default is the wire
+// default, so the field is not marked optional. Brand-new message -> no
+// protoVersion() bump (see BUMP-RULE above).
+message OffsetStrokeParams {
+    double offsetMm = 1;   // signed paper-mm; 0 -> no offset (cwOffsetStrokeParams default)
 }

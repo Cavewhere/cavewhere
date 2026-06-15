@@ -112,8 +112,8 @@ TEST_CASE("Brush color hex round-trips opaque and translucent values", "[cwSymbo
     const QColor translucent(0x12, 0x34, 0x56, 0x78);    // "#RRGGBBAA"
 
     cwDecorationLayer layer;
-    layer.offsetCurveColorLight = opaque;
-    layer.offsetCurveColorDark = translucent;
+    layer.lineColorLight = opaque;
+    layer.lineColorDark = translucent;
 
     cwLineBrush brush = makeBrush(QStringLiteral("colortest"), 0);
     brush.decorations.append(layer);
@@ -123,8 +123,8 @@ TEST_CASE("Brush color hex round-trips opaque and translucent values", "[cwSymbo
 
     const QVector<cwDecorationLayer> layers = loaded.value().decorations;
     REQUIRE(layers.size() == 1);
-    CHECK(layers.first().offsetCurveColorLight == opaque);
-    CHECK(layers.first().offsetCurveColorDark == translucent);
+    CHECK(layers.first().lineColorLight == opaque);
+    CHECK(layers.first().lineColorDark == translucent);
 }
 
 TEST_CASE("Loading a palette with a null id fails", "[cwSymbologyPaletteIO]")

@@ -27,4 +27,18 @@ struct cwUniformSpacingParams {
 
 Q_DECLARE_METATYPE(cwUniformSpacingParams)
 
+// The Offset stroke rule's registry/displayName key — see cwUniformSpacingRuleName
+// for why it lives here rather than inline in the rule and the codec.
+inline QString cwOffsetStrokeRuleName() { return QStringLiteral("Offset stroke"); }
+
+// Signed lateral offset (paper-mm) the Offset stroke rule pushes the stroke by,
+// along its left normal: + = left side, 0 = on the stroke. The 0.0 default makes
+// a null or wrong-typed QVariant a no-op offset.
+struct cwOffsetStrokeParams {
+    double offsetMm = 0.0;
+    bool operator==(const cwOffsetStrokeParams &other) const = default;
+};
+
+Q_DECLARE_METATYPE(cwOffsetStrokeParams)
+
 #endif // CWPLACEMENTRULEPARAMS_H

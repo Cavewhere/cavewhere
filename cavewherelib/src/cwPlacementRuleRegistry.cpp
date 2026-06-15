@@ -14,7 +14,8 @@
 #include "cwPlacementRules/cwRigidStampRule.h"
 #include "cwPlacementRules/cwJointedStampRule.h"
 #include "cwPlacementRules/cwBendingStampRule.h"
-#include "cwPlacementRules/cwTraceOffsetPolylineRule.h"
+#include "cwPlacementRules/cwTracePolylineRule.h"
+#include "cwPlacementRules/cwOffsetStrokeRule.h"
 
 cwPlacementRuleRegistry::cwPlacementRuleRegistry()
 {
@@ -24,7 +25,8 @@ cwPlacementRuleRegistry::cwPlacementRuleRegistry()
     add(std::make_unique<cwRigidStampRule>());
     add(std::make_unique<cwJointedStampRule>());
     add(std::make_unique<cwBendingStampRule>());
-    add(std::make_unique<cwTraceOffsetPolylineRule>());
+    add(std::make_unique<cwTracePolylineRule>());
+    add(std::make_unique<cwOffsetStrokeRule>());
 }
 
 void cwPlacementRuleRegistry::add(std::unique_ptr<cwPlacementRule> rule)

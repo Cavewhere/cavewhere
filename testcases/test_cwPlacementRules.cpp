@@ -12,6 +12,7 @@
 // Our
 #include "cwPlacementRule.h"
 #include "cwPlacementRuleRegistry.h"
+#include "cwPlacementRuleParams.h"
 #include "cwStrokePath.h"
 #include "cwDecorationLayer.h"
 #include "cwStampPosition.h"
@@ -513,7 +514,7 @@ TEST_CASE("Stamp warp scales the glyph's arclength advance and lateral offset",
     checkPoint(got.at(2), QPointF(4.0, 2.0)); // (0,1) -> arclength 4, +2 normal
 }
 
-TEST_CASE("Trace offset polyline returns the stroke and seeds no stamps", "[cwPlacementRule]")
+TEST_CASE("Trace polyline returns the stroke and seeds no stamps", "[cwPlacementRule]")
 {
     const QVector<QPointF> strokeWorld = {QPointF(0.0, 0.0), QPointF(1.0, 1.0), QPointF(2.0, 0.0)};
     const cwStrokePath strokePath(strokeWorld);
@@ -521,7 +522,7 @@ TEST_CASE("Trace offset polyline returns the stroke and seeds no stamps", "[cwPl
     cwDecorationLayer layer;
     const cwPlacementContext context{strokePath, layer, 1.0};
 
-    const cwPlacementRule *trace = rule(QStringLiteral("Trace offset polyline"));
+    const cwPlacementRule *trace = rule(QStringLiteral("Trace polyline"));
 
     // Iter 1: offset 0 -> the traced polyline is the stroke itself.
     const QVector<QPolygonF> polylines = trace->tracePolylines(strokeWorld, context);
@@ -532,4 +533,81 @@ TEST_CASE("Trace offset polyline returns the stroke and seeds no stamps", "[cwPl
     QVector<cwStampPosition> positions;
     trace->apply(positions, context);
     CHECK(positions.isEmpty());
+}
+
+namespace {
+
+// Run the Offset stroke rule's transformStroke over `points` with offsetMm
+// (worldPerPaperMm = 1 -> offsetMm maps 1:1 to world metres).
+QVector<QPointF> offsetStroke(const QVector<QPointF> &points, double offsetMm)
+{
+    const cwStrokePath strokePath(points);
+    cwDecorationLayer layer;
+    cwPlacementContext context{strokePath, layer, 1.0};
+    context.ruleParameters = QVariant::fromValue(cwOffsetStrokeParams{offsetMm});
+    return rule(cwOffsetStrokeRuleName())->transformStroke(points, context);
+}
+
+// Perpendicular distance from p to the nearest point on `path`.
+double distanceToPath(const cwStrokePath &path, const QPointF &p)
+{
+    const QPointF nearest = path.pointAtArcLength(path.arcLengthNearPoint(p));
+    return std::hypot(p.x() - nearest.x(), p.y() - nearest.y());
+}
+
+} // namespace
+
+TEST_CASE("Offset stroke pushes a straight stroke by +d / -d along the left normal",
+          "[cwPlacementRule]")
+{
+    // Tangent +X -> left normal +Y, so +d lands on +Y and -d on -Y.
+    const QVector<QPointF> points = {QPointF(0.0, 0.0), QPointF(10.0, 0.0)};
+
+    const QVector<QPointF> plus = offsetStroke(points, 3.0);
+    REQUIRE(plus.size() == points.size());
+    checkPoint(plus.at(0), QPointF(0.0, 3.0));
+    checkPoint(plus.at(1), QPointF(10.0, 3.0));
+
+    const QVector<QPointF> minus = offsetStroke(points, -3.0);
+    REQUIRE(minus.size() == points.size());
+    checkPoint(minus.at(0), QPointF(0.0, -3.0));
+    checkPoint(minus.at(1), QPointF(10.0, -3.0));
+}
+
+TEST_CASE("Offset stroke leaves the stroke unchanged at offset 0 or with absent params",
+          "[cwPlacementRule]")
+{
+    const QVector<QPointF> points = {QPointF(0.0, 0.0), QPointF(1.0, 1.0), QPointF(2.0, 0.0)};
+    CHECK(offsetStroke(points, 0.0) == points);
+
+    // Null / wrong-typed params fall to the 0 mm default -> stroke untouched.
+    const cwStrokePath strokePath(points);
+    cwDecorationLayer layer;
+    const cwPlacementContext nullCtx{strokePath, layer, 1.0};
+    CHECK(rule(cwOffsetStrokeRuleName())->transformStroke(points, nullCtx) == points);
+}
+
+TEST_CASE("Offset stroke tracks a curve at a constant perpendicular distance",
+          "[cwPlacementRule]")
+{
+    // Finely sampled so the parallel offset hugs the curve (d far below the
+    // radius — the regime where the documented self-intersection limit doesn't bite).
+    const QVector<QPointF> points = quarterArc(5.0, 64);
+    const cwStrokePath strokePath(points);
+    const double d = 0.5;
+
+    const QVector<QPointF> offset = offsetStroke(points, d);
+    REQUIRE(offset.size() >= points.size());
+    for (const QPointF &p : offset) {
+        CHECK(distanceToPath(strokePath, p) == Approx(d).margin(d * 0.05));
+    }
+}
+
+TEST_CASE("Offset stroke rejects a non-finite offset from a crafted file", "[cwPlacementRule]")
+{
+    // offsetMm is file-driven; +Inf / NaN must leave the stroke untouched rather
+    // than produce NaN coordinates downstream.
+    const QVector<QPointF> points = {QPointF(0.0, 0.0), QPointF(10.0, 0.0)};
+    CHECK(offsetStroke(points, std::numeric_limits<double>::infinity()) == points);
+    CHECK(offsetStroke(points, std::numeric_limits<double>::quiet_NaN()) == points);
 }

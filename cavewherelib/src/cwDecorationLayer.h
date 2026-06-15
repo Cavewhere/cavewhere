@@ -36,17 +36,17 @@ struct CAVEWHERE_LIB_EXPORT cwDecorationLayer {
     double minPaperScale = 0.0;               // 0 = unbounded
     double maxPaperScale = 0.0;
 
-    // Line-styling params, read by a Trace-offset-polyline terminal rule. (These
-    // will migrate into that rule's params when param interpretation lands; see
-    // the symbology plan's params/editor commit.)
-    QColor           offsetCurveColorLight;
-    QColor           offsetCurveColorDark;
-    double           offsetCurveWidthMm  = 0.4;
-    double           offsetCurveOffsetMm = 0.0;   // sign = side; 0 = on the centerline
-    Qt::PenStyle     offsetCurveDash = Qt::SolidLine;
-    Qt::PenCapStyle  offsetCurveCap  = Qt::RoundCap;
-    Qt::PenJoinStyle offsetCurveJoin = Qt::RoundJoin;
-    bool             offsetCurveAcceptsPressure = true;
+    // Line-styling params, read by a Trace polyline terminal rule. (These will
+    // migrate into that rule's params when param interpretation lands; see the
+    // symbology plan's params/editor commit. Lateral offset is NOT here — it is
+    // the Offset stroke rule's param.)
+    QColor           lineColorLight;
+    QColor           lineColorDark;
+    double           lineWidthMm  = 0.4;
+    Qt::PenStyle     lineDash = Qt::SolidLine;
+    Qt::PenCapStyle  lineCap  = Qt::RoundCap;
+    Qt::PenJoinStyle lineJoin = Qt::RoundJoin;
+    bool             lineAcceptsPressure = true;
 
     bool operator==(const cwDecorationLayer &o) const = default;
 };

@@ -84,6 +84,19 @@ TEST_CASE("Codec round-trips a known param struct", "[cwPlacementRuleParams]")
     CHECK(decoded.value<cwUniformSpacingParams>() == cwUniformSpacingParams{3.0});
 }
 
+TEST_CASE("Codec round-trips Offset stroke params", "[cwPlacementRuleParams]")
+{
+    // Signed, non-zero so the wire payload isn't empty (proto3 omits zero scalars).
+    const QByteArray bytes =
+        cwPlacementRuleParamsCodec::encode(cwOffsetStrokeRuleName(),
+                                           QVariant::fromValue(cwOffsetStrokeParams{-1.5}));
+    REQUIRE_FALSE(bytes.isEmpty());
+
+    const QVariant decoded = cwPlacementRuleParamsCodec::decode(cwOffsetStrokeRuleName(), bytes);
+    REQUIRE(decoded.canConvert<cwOffsetStrokeParams>());
+    CHECK(decoded.value<cwOffsetStrokeParams>() == cwOffsetStrokeParams{-1.5});
+}
+
 TEST_CASE("Codec maps empty bytes to a null QVariant and back", "[cwPlacementRuleParams]")
 {
     const QVariant decoded = cwPlacementRuleParamsCodec::decode(kUniformSpacing, QByteArray());
