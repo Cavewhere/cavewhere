@@ -540,6 +540,15 @@ QBox3D cwGeometryItersecter::boundingBox(const Key &objectKey) const
     }
 }
 
+QBox3D cwGeometryItersecter::boundingBox() const
+{
+    QBox3D box;
+    for (const Node& node : Nodes) {
+        box.unite(node.BoundingBox.transformed(node.Object.modelMatrix()));
+    }
+    return box;
+}
+
 /**
  * @brief cwGeometryItersecter::intersects
  * @param ray

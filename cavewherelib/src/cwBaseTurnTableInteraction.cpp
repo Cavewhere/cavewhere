@@ -23,6 +23,30 @@
 
 Q_LOGGING_CATEGORY(lcInteract, "cw.interaction", QtWarningMsg)
 
+namespace {
+    // A non-geometry pick (grid plane) is only accepted as a pivot if it
+    // lands inside the scene box grown by this fraction of the box diagonal.
+    // Keeps a grazing grid hit kilometres away from the cave from becoming
+    // the orbit center and teleporting the view (issue #527).
+    constexpr float kFallbackBoxMargin = 1.0f;
+
+    bool acceptFallbackPoint(const QVector3D& point, const QBox3D& sceneBox)
+    {
+        if(sceneBox.isNull() || !sceneBox.isFinite()) {
+            // No finite geometry to anchor against (empty/unloaded project):
+            // the grid plane is the only reference, so accept it. There's
+            // nothing on screen to teleport away from. The #527 teleport only
+            // happens once real geometry exists and the grid hit lands far
+            // from it — handled by the box test below.
+            return true;
+        }
+        const float pad = sceneBox.size().length() * kFallbackBoxMargin;
+        const QBox3D grown(sceneBox.minimum() - QVector3D(pad, pad, pad),
+                           sceneBox.maximum() + QVector3D(pad, pad, pad));
+        return grown.contains(point);
+    }
+}
+
 cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
     cwInteraction(parent),
     m_stateAnimation(new QVariantAnimation(this))
@@ -91,12 +115,15 @@ void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
 
 /**
  * @brief cwBaseTurnTableInteraction::unProject
- * @param point
- * @return  QVector3d in world coordinates
+ * @param point - screen point in GL viewport coordinates
+ * @return World point under the cursor, or nullopt on a miss
  *
- * Unprojects the screen point at point and returns a QVector3d in world coordinates
+ * Returns a geometry hit when one is under the cursor; otherwise a grid-plane
+ * hit, but only if it lands near the scene bounding box. Returns nullopt when
+ * nothing usable is under the cursor so callers keep the current pivot rather
+ * than teleporting the view (issue #527).
  */
-QVector3D cwBaseTurnTableInteraction::unProject(QPoint point) {
+std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point) const {
     Q_ASSERT(Camera);
     Q_ASSERT(scene());
     Q_ASSERT(scene()->geometryItersecter());
@@ -104,30 +131,54 @@ QVector3D cwBaseTurnTableInteraction::unProject(QPoint point) {
     //Create a ray from the back projection front and back plane
     auto ray = Camera->frustrumRay(point);
 
-    //See if it hits any of the scraps or objects
-    double t = scene()->geometryItersecter()->intersects(ray);
-    const bool geometryHit = !std::isnan(t);
-
-    if(std::isnan(t)) {
-        //See where it intersects ground plane geometry
-        t = m_gridPlane.intersection(ray);
-        if(std::isnan(t)) {
-            qCDebug(lcInteract).nospace()
-                << "unProject(" << point << "): no geometry hit, no grid hit -> (0,0,0)"
-                << " rayOrigin=" << ray.origin()
-                << " rayDir=" << ray.direction();
-            return QVector3D();
-        }
+    //See if it hits any of the scraps or objects — always trust a real hit.
+    const double t = scene()->geometryItersecter()->intersects(ray);
+    if(!std::isnan(t)) {
+        const QVector3D world = ray.point(t);
+        qCDebug(lcInteract).nospace()
+            << "unProject(" << point << "): geometry t=" << t
+            << " world=" << world << " rayOrigin=" << ray.origin();
+        return world;
     }
 
-    const QVector3D world = ray.point(t);
-    qCDebug(lcInteract).nospace()
-        << "unProject(" << point << "): "
-        << (geometryHit ? "geometry" : "gridPlane")
-        << " t=" << t
-        << " world=" << world
-        << " rayOrigin=" << ray.origin();
-    return world;
+    //No geometry under the cursor. Fall back to the grid plane, but only if
+    //the hit lands near the cave — an infinite grid plane hit at a grazing
+    //angle can be kilometres away and would teleport the view (issue #527).
+    const double gridT = m_gridPlane.intersection(ray);
+    if(!std::isnan(gridT)) {
+        const QVector3D gridHit = ray.point(gridT);
+        if(acceptFallbackPoint(gridHit, scene()->geometryItersecter()->boundingBox())) {
+            qCDebug(lcInteract).nospace()
+                << "unProject(" << point << "): gridPlane t=" << gridT
+                << " world=" << gridHit << " rayOrigin=" << ray.origin();
+            return gridHit;
+        }
+        qCDebug(lcInteract).nospace()
+            << "unProject(" << point << "): grid hit " << gridHit
+            << " rejected (outside scene box) -> miss";
+    } else {
+        qCDebug(lcInteract).nospace()
+            << "unProject(" << point << "): no geometry hit, no grid hit -> miss"
+            << " rayOrigin=" << ray.origin() << " rayDir=" << ray.direction();
+    }
+
+    return std::nullopt;
+}
+
+QVector3D cwBaseTurnTableInteraction::rayPointAtCenterDepth(QPoint mappedPoint) const {
+    Q_ASSERT(Camera);
+
+    // Plane through the current center, facing the camera. The ray's direction
+    // sign doesn't matter — it's only used as the plane normal and the ray
+    // parameter, both of which yield the same world point on the plane.
+    const QRay3D ray = Camera->frustrumRay(mappedPoint);
+    const QPlane3D plane(m_center, ray.direction());
+
+    const double t = plane.intersection(ray);
+    if(qIsNaN(t)) {
+        return m_center;
+    }
+    return ray.point(t);
 }
 
 /**
@@ -147,8 +198,9 @@ void cwBaseTurnTableInteraction::stopAnimation()
 void cwBaseTurnTableInteraction::bindPerspectiveIntersection()
 {
     if(Camera && Scene) {
-        m_perspectiveIntersection.setBinding([this](){
-            return unProject(m_perspectiveMappedPos);
+        m_perspectiveIntersection.setBinding([this]() -> QVector3D {
+            // On a miss, zoom toward the current center rather than (0,0,0).
+            return unProject(m_perspectiveMappedPos).value_or(m_center);
         });
     } else {
         m_perspectiveIntersection.setValue(QVector3D());
@@ -160,16 +212,18 @@ void cwBaseTurnTableInteraction::bindPerspectiveIntersection()
   */
 void cwBaseTurnTableInteraction::startPanning(QPoint position) {
     QPoint mappedPosition = Camera->mapToGLViewport(position);
-    const QVector3D clickWorld = unProject(mappedPosition);
-    if(!m_centerLocked) {
-        setCenter(clickWorld);
+    const std::optional<QVector3D> clickWorld = unProject(mappedPosition);
+
+    if(clickWorld && !m_centerLocked) {
+        setCenter(*clickWorld);
     }
 
-    // The pan anchor is always the click point — independent of the
-    // orbit-pivot lock. m_center stays where it is (locked: sink centroid;
-    // unlocked: just got set to clickWorld too), but the pan drag tracks
-    // the click position under the cursor so there's no initial jump.
-    m_panAnchor = clickWorld;
+    // The pan anchor is always a point under the cursor — independent of the
+    // orbit-pivot lock. On a real pick it's the click point; on a miss it's
+    // the cursor ray at the current center's depth, so the pan tracks the
+    // cursor without teleporting the pivot (issue #527). m_center stays where
+    // it is (locked: sink centroid; unlocked: just got set to the pick too).
+    m_panAnchor = clickWorld ? *clickWorld : rayPointAtCenterDepth(mappedPosition);
 
     //Get the ray from the front of the screen to the back of the screen
     //Using the center of the screen
@@ -213,7 +267,11 @@ void cwBaseTurnTableInteraction::startRotating(QPoint position) {
     const QPoint rawPosition = position;
     position = Camera->mapToGLViewport(position);
     if(!m_centerLocked) {
-        setCenter(unProject(position));
+        // Only re-center on a real pick. On a miss keep m_center so the view
+        // orbits the existing pivot instead of teleporting (issue #527).
+        if(const std::optional<QVector3D> picked = unProject(position)) {
+            setCenter(*picked);
+        }
     }
     LastMousePosition = position;
     qCDebug(lcInteract).nospace()

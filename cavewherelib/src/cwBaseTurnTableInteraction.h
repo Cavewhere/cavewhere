@@ -27,6 +27,9 @@
 #include <QQuaternion>
 #include <QVariantAnimation>
 
+//Std includes
+#include <optional>
+
 class cwBaseTurnTableInteraction : public cwInteraction
 {
     Q_OBJECT
@@ -227,7 +230,17 @@ private:
     double clampAzimuth(double azimuth) const;
     double clampPitch(double pitch) const;
 
-    QVector3D unProject(QPoint point);
+    //! Picks a world point under @a point (in GL viewport coords). Returns
+    //! a geometry hit, else a grid-plane hit that lies near the scene's
+    //! bounding box. Returns nullopt when nothing usable is under the cursor
+    //! so callers keep the current pivot instead of teleporting (issue #527).
+    std::optional<QVector3D> unProject(QPoint point) const;
+
+    //! World point on the cursor ray at the depth of the current orbit center.
+    //! Used as the pan anchor when unProject misses, so panning stays attached
+    //! to the cursor without moving the pivot. @a mappedPoint is in GL viewport
+    //! coords. Falls back to m_center if the ray is parallel to the plane.
+    QVector3D rayPointAtCenterDepth(QPoint mappedPoint) const;
 
     void stopAnimation();
 

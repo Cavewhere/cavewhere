@@ -6,6 +6,8 @@
 #include "cwBaseTurnTableInteraction.h"
 #include "cwCamera.h"
 #include "cwScene.h"
+#include "cwGeometryItersecter.h"
+#include "cwGeometry.h"
 #include "cwTurnTableViewState.h"
 #include "ProjectionScaleTestHelpers.h"
 
@@ -110,6 +112,28 @@ struct Fixture
         interaction.setScene(&scene);
     }
 };
+
+// Adds a small point cluster spanning [-extent, extent] in XY at z=0 to the
+// scene's intersecter and blocks until the BVH is built, so unProject() has
+// real geometry to hit and to bound the grid-plane fallback against (#527).
+void addSmallGeometry(cwScene& scene, float extent, uint64_t id = 1)
+{
+    cwGeometry geometry {
+        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
+    };
+    geometry.set(cwGeometry::Semantic::Position, QVector<QVector3D>{
+        QVector3D(0.0f, 0.0f, 0.0f),   // center point so a screen-center ray hits
+        QVector3D(-extent, -extent, 0.0f),
+        QVector3D( extent,  extent, 0.0f),
+        QVector3D(-extent,  extent, 0.0f),
+        QVector3D( extent, -extent, 0.0f),
+    });
+    geometry.setType(cwGeometry::Type::Points);
+
+    scene.geometryItersecter()->addObject(
+        cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4(), 0.5f));
+    scene.geometryItersecter()->waitForFinish();
+}
 
 bool matricesNearlyEqual(const QMatrix4x4& a, const QMatrix4x4& b, float eps = kMatrixEps)
 {
@@ -727,6 +751,62 @@ TEST_CASE("cwBaseTurnTableInteraction successive startRotating updates the orbit
 
     CHECK(screenAfter.x() == Approx(screenBefore.x()).margin(kPixelTolerance));
     CHECK(screenAfter.y() == Approx(screenBefore.y()).margin(kPixelTolerance));
+}
+
+// --- Issue #527: missed intersection must not teleport the view ---
+
+TEST_CASE("cwBaseTurnTableInteraction startRotating on empty space far from geometry keeps the pivot",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Geometry sits in a tiny box near the origin. The grid plane is infinite,
+    // so an off-center click misses the geometry but still hits the grid plane
+    // far away. The old code teleported the pivot there; now it must keep the
+    // current center because the far grid hit is outside the scene box.
+    Fixture f;
+    addSmallGeometry(f.scene, 1.0f);
+
+    const QVector3D centerBefore = f.interaction.center();
+
+    // Precondition: the grid hit this click produces is far from the geometry,
+    // so it is the teleport the fix must suppress.
+    const QVector3D farGridHit = unprojectClickOntoGrid(f.camera, kOffCenterClick);
+    REQUIRE(farGridHit.length() > 10.0f);
+
+    f.interaction.startRotating(kOffCenterClick);
+
+    CHECK(f.interaction.center().x() == Approx(centerBefore.x()));
+    CHECK(f.interaction.center().y() == Approx(centerBefore.y()));
+    CHECK(f.interaction.center().z() == Approx(centerBefore.z()));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction startRotating that hits geometry re-centers on the hit",
+          "[cwBaseTurnTableInteraction]")
+{
+    // A click at screen center looks straight down the default ortho view onto
+    // the geometry at the origin: a real pick, so the pivot moves to it.
+    Fixture f;
+    addSmallGeometry(f.scene, 5.0f);
+
+    f.interaction.startRotating(screenCenter().toPoint());
+
+    CHECK(f.interaction.center().x() == Approx(0.0f).margin(kPixelTolerance));
+    CHECK(f.interaction.center().y() == Approx(0.0f).margin(kPixelTolerance));
+    CHECK(f.interaction.center().z() == Approx(0.0f).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction startRotating with no geometry still uses the grid plane",
+          "[cwBaseTurnTableInteraction]")
+{
+    // With nothing loaded there is nothing to teleport away from, so the grid
+    // plane remains the pivot source (original behavior preserved).
+    Fixture f;
+
+    const QVector3D expected = unprojectClickOntoGrid(f.camera, kOffCenterClick);
+    f.interaction.startRotating(kOffCenterClick);
+
+    CHECK(f.interaction.center().x() == Approx(expected.x()));
+    CHECK(f.interaction.center().y() == Approx(expected.y()));
+    CHECK(f.interaction.center().z() == Approx(expected.z()));
 }
 
 // --- Commit 2 cases ---

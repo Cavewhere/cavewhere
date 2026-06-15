@@ -91,6 +91,9 @@ public:
 
     QBox3D boundingBox(const Key& objectKey) const;
 
+    //! World-space union of every object's bounding box. Null box when empty.
+    QBox3D boundingBox() const;
+
     double intersects(const QRay3D& ray) const;
     cwRayHit intersectsDetailed(const QRay3D& ray) const;
 
