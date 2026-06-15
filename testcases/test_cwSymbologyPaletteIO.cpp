@@ -15,6 +15,10 @@
 #include "cwSymbologyGlyph.h"
 #include "cwLineBrush.h"
 #include "cwPenStroke.h"
+#include "cwDecorationLayer.h"
+#include "cwPlacementRuleData.h"
+#include "cwSymbologyErrorCodes.h"
+#include "cwError.h"
 
 // Qt
 #include <QColor>
@@ -366,4 +370,68 @@ TEST_CASE("saveGlyph rejects a name that escapes glyphs/", "[cwSymbologyPaletteI
     // The traversal target (one level above the would-be glyphs/ dir) must not
     // have been written.
     CHECK_FALSE(QFileInfo::exists(QDir(dir).filePath(QStringLiteral("pwned.cwglyph"))));
+}
+
+namespace {
+
+cwLineBrush brushWithRules(const QString &name, const QStringList &ruleNames)
+{
+    cwLineBrush brush = makeBrush(name, 1);
+    cwDecorationLayer layer;
+    for (const QString &ruleName : ruleNames) {
+        cwPlacementRuleData rule;
+        rule.name = ruleName;
+        layer.rules.append(rule);
+    }
+    brush.decorations.append(layer);
+    return brush;
+}
+
+bool warningsContain(const QList<cwError> &warnings, SymbologyErrorCode code)
+{
+    for (const cwError &warning : warnings) {
+        if (warning.errorTypeId() == static_cast<int>(code)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+TEST_CASE("A fatal rule-stack problem fails the load", "[cwSymbologyPaletteIO]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    const QString dir = uniqueDir(temp, QStringLiteral("stack-fatal"));
+
+    cwSymbologyPaletteData source;
+    source.id = QUuid::createUuid();
+    // Two terminal rules — the engine would keep one arbitrarily, so it's fatal.
+    source.lineBrushes = {brushWithRules(QStringLiteral("two-terminals"),
+                                         {QStringLiteral("Rigid stamp"),
+                                          QStringLiteral("Trace polyline")})};
+    REQUIRE_FALSE(cwSymbologyPaletteIO::save(source, dir).hasError());
+
+    const auto loaded = cwSymbologyPaletteIO::load(dir);
+    CHECK(loaded.hasError());
+}
+
+TEST_CASE("A non-fatal rule-stack problem loads with a warning", "[cwSymbologyPaletteIO]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    const QString dir = uniqueDir(temp, QStringLiteral("stack-warning"));
+
+    cwSymbologyPaletteData source;
+    source.id = QUuid::createUuid();
+    // A placement rule under a polyline terminal is dead — a warning, not fatal.
+    source.lineBrushes = {brushWithRules(QStringLiteral("dead-rule"),
+                                         {QStringLiteral("Uniform spacing"),
+                                          QStringLiteral("Trace polyline")})};
+    REQUIRE_FALSE(cwSymbologyPaletteIO::save(source, dir).hasError());
+
+    const auto loaded = cwSymbologyPaletteIO::load(dir);
+    REQUIRE_FALSE(loaded.hasError());
+    CHECK(warningsContain(loaded.value().warnings, SymbologyErrorCode::DeadRulesUnderPolylines));
 }

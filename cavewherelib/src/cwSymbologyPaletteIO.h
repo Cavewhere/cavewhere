@@ -10,10 +10,12 @@
 
 //Qt includes
 #include <QByteArray>
+#include <QList>
 #include <QString>
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwError.h"
 #include "cwLineBrush.h"
 #include "cwSymbologyGlyph.h"
 #include "cwSymbologyPaletteData.h"
@@ -40,6 +42,11 @@ namespace cwSymbologyPaletteIO {
 struct cwSymbologyPaletteLoadResult {
     cwSymbologyPaletteData palette;
     int maxFileVersion = 0;
+    // Non-fatal rule-stack well-formedness problems (commit 4.4). Fatal problems
+    // refuse the load (Result error) instead, so this list is always warnings.
+    // Each cwError carries a SymbologyErrorCode in errorTypeId; the message is
+    // prefixed with the owning brush and layer.
+    QList<cwError> warnings;
 };
 
 CAVEWHERE_LIB_EXPORT extern const QString kPaletteJsonFileName; // "palette.json"

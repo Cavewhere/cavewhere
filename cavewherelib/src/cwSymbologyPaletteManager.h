@@ -12,14 +12,14 @@
 #include <QList>
 #include <QObject>
 #include <QString>
-#include <QStringList>
 #include <QUuid>
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwError.h"
 
 class cwSymbologyPalette;
-class cwErrorListModel;
+class cwErrorModel;
 
 // Owns the set of installed palettes. The built-in seed palette is always
 // present. The on-disk palette directory is scanned for subdirectories
@@ -34,6 +34,8 @@ class CAVEWHERE_LIB_EXPORT cwSymbologyPaletteManager : public QObject
 {
     Q_OBJECT
 
+    Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
+
 public:
     explicit cwSymbologyPaletteManager(QObject *parent = nullptr);
 
@@ -44,13 +46,12 @@ public:
     QString paletteDirectory() const { return m_paletteDirectory; }
     void setPaletteDirectory(const QString &directory);
 
-    // Where reload() posts non-fatal load problems (failed palettes, duplicate
-    // ids, forward-incompatible palettes) as warnings, so the UI shows them.
-    // Optional; nullptr disables posting. Setting it replays the most recent
-    // reload()'s problems, covering the constructor reload that ran before the
-    // app could wire a model. The manager never clears the model (it doesn't own
-    // it) and de-dupes before appending.
-    void setErrorModel(cwErrorListModel *model);
+    // The model of non-fatal load problems from the most recent reload(): failed
+    // palettes, duplicate-id skips, forward-incompatible palettes, and rule-stack
+    // warnings. Owned by the manager and refreshed on each reload(); bind to it
+    // for UI display. fatalCount stays 0 — fatal problems fail the palette load
+    // outright rather than landing here.
+    cwErrorModel *errorModel() const { return m_errorModel; }
 
     // Rescan the palette directory. The seed is always re-added first.
     void reload();
@@ -60,11 +61,6 @@ public:
     cwSymbologyPalette *seedPalette() const { return m_seed; }
     cwSymbologyPalette *paletteById(const QUuid &id) const;
 
-    // Non-fatal problems from the most recent reload(): palettes that failed to
-    // load and duplicate-id skips. Empty when every directory loaded cleanly.
-    // Refreshed on each reload(); query it after palettesChanged().
-    QStringList loadErrors() const { return m_loadErrors; }
-
     static QString defaultPaletteDirectory();
 
 signals:
@@ -73,18 +69,19 @@ signals:
 private:
     void clearInstalled();
 
-    // Record a non-fatal reload problem: append to m_loadErrors, qWarning, and
-    // post to the error model (de-duped) when one is wired.
+    // Record a non-fatal reload problem into the owned error model (de-duped,
+    // qWarning'd). The QString overload is a Warning convenience; the cwError
+    // overload preserves a typed error's severity and SymbologyErrorCode (the
+    // editor keys off the code).
+    void reportLoadProblem(const cwError &error);
     void reportLoadProblem(const QString &message);
-    void postToErrorModel(const QString &message);
 
     static cwSymbologyPaletteManager *Singleton;
 
     QString m_paletteDirectory;
     cwSymbologyPalette *m_seed = nullptr;
     QList<cwSymbologyPalette *> m_palettes;
-    QStringList m_loadErrors;
-    cwErrorListModel *m_errorModel = nullptr;
+    cwErrorModel *m_errorModel = nullptr;
 };
 
 #endif // CWSYMBOLOGYPALETTEMANAGER_H

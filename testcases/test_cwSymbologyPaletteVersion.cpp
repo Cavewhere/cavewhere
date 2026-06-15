@@ -14,6 +14,7 @@
 #include "cwSymbologyPaletteManager.h"
 #include "cwSymbologyPalette.h"
 #include "cwLineBrush.h"
+#include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwRegionIOTask.h"
 
@@ -104,8 +105,6 @@ TEST_CASE("Manager marks a forward-incompatible palette read-only and warns",
     QTemporaryDir temp;
     REQUIRE(temp.isValid());
     const QString root = uniqueDir(temp, QStringLiteral("mgr-fwd"));
-    const QString empty = uniqueDir(temp, QStringLiteral("mgr-empty"));
-    REQUIRE(QDir().mkpath(empty));
 
     const QUuid id = QUuid::createUuid();
     const QString paletteDir = QDir(root).filePath(QStringLiteral("future-palette"));
@@ -114,38 +113,10 @@ TEST_CASE("Manager marks a forward-incompatible palette read-only and warns",
                             cwRegionIOTask::protoVersion() + 1);
 
     cwSymbologyPaletteManager manager;
-    manager.setPaletteDirectory(empty); // clean baseline before wiring the model
-
-    cwErrorListModel model;
-    manager.setErrorModel(&model);
-    REQUIRE(model.isEmpty());
-
-    manager.setPaletteDirectory(root); // reload posts the warning
+    manager.setPaletteDirectory(root); // reload posts the warning into the owned model
 
     auto *palette = manager.paletteById(id);
     REQUIRE(palette != nullptr);
     CHECK_FALSE(palette->isWritable()); // read-only: re-saving can't clobber newer data
-    CHECK_FALSE(manager.loadErrors().isEmpty());
-    CHECK_FALSE(model.isEmpty());       // surfaced to the UI's error model
-}
-
-TEST_CASE("setErrorModel replays problems from a reload that preceded it",
-          "[cwSymbologyPaletteVersion]")
-{
-    QTemporaryDir temp;
-    REQUIRE(temp.isValid());
-    const QString root = uniqueDir(temp, QStringLiteral("mgr-replay"));
-
-    const QString paletteDir = QDir(root).filePath(QStringLiteral("future-palette"));
-    saveMinimalPalette(paletteDir, QUuid::createUuid(), QStringLiteral("Future Palette"));
-    writeVersionedBrushFile(paletteDir, QStringLiteral("future-brush"),
-                            cwRegionIOTask::protoVersion() + 1);
-
-    cwSymbologyPaletteManager manager;
-    manager.setPaletteDirectory(root); // reload runs with no error model wired
-    REQUIRE_FALSE(manager.loadErrors().isEmpty());
-
-    cwErrorListModel model;
-    manager.setErrorModel(&model); // replays the prior reload's problems
-    CHECK_FALSE(model.isEmpty());
+    CHECK_FALSE(manager.errorModel()->errors()->isEmpty()); // surfaced to the UI's error model
 }

@@ -13,6 +13,10 @@
 #include "cwLineBrush.h"
 #include "cwPenStroke.h"
 #include "cwPlacementRuleParamsCodec.h"
+#include "cwDecorationLayerValidator.h"
+#include "cwPlacementRuleRegistry.h"
+#include "cwSymbologyErrorCodes.h"
+#include "cwError.h"
 #include "cwRegionIOTask.h"
 #include "cavewhereVersion.h"
 #include "cavewhere_symbology.pb.h"
@@ -25,6 +29,7 @@
 #include <QFileInfo>
 #include <QSaveFile>
 #include <QSet>
+#include <QStringList>
 #include <QUuid>
 
 //protobuf includes
@@ -710,7 +715,43 @@ Monad::Result<cwSymbologyPaletteLoadResult> load(const QString &directory)
             QStringLiteral("%1glyph dependency cycle: %2").arg(kLoadErrorPrefix, cycle));
     }
 
-    return LoadResult(cwSymbologyPaletteLoadResult{palette, maxFileVersion});
+    // Rule-stack well-formedness (commit 4.4). With brushes and glyphs both
+    // present, every decoration layer's stack is checked here: a fatal problem
+    // (an ambiguous stack the engine would resolve arbitrarily) refuses the
+    // palette like the cycle check above; warnings ride out in the result for the
+    // app and editor to surface. Glyph references resolve against the loaded set.
+    QSet<QString> glyphNames;
+    glyphNames.reserve(palette.glyphs.size());
+    for (const cwSymbologyGlyph &glyph : palette.glyphs) {
+        glyphNames.insert(glyph.name);
+    }
+
+    const cwPlacementRuleRegistry &registry = cwPlacementRuleRegistry::instance();
+    QList<cwError> warnings;
+    QStringList fatalMessages;
+    for (const cwLineBrush &brush : palette.lineBrushes) {
+        for (int i = 0; i < brush.decorations.size(); ++i) {
+            const QList<cwError> layerErrors =
+                cwDecorationLayerValidator::validate(brush.decorations.at(i), registry, glyphNames);
+            for (const cwError &error : layerErrors) {
+                const QString located = QStringLiteral("brush \"%1\" layer %2 %3")
+                                            .arg(brush.name).arg(i).arg(error.message());
+                if (error.type() == cwError::Fatal) {
+                    fatalMessages.append(located);
+                } else {
+                    cwError relocated = error;
+                    relocated.setMessage(located);
+                    warnings.append(relocated);
+                }
+            }
+        }
+    }
+    if (!fatalMessages.isEmpty()) {
+        return LoadResult(QStringLiteral("%1%2").arg(
+            kLoadErrorPrefix, fatalMessages.join(QStringLiteral("; "))));
+    }
+
+    return LoadResult(cwSymbologyPaletteLoadResult{palette, maxFileVersion, warnings});
 }
 
 } // namespace cwSymbologyPaletteIO

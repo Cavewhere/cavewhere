@@ -11,6 +11,7 @@
 #include "cwSymbologyPaletteSeed.h"
 #include "cwSymbologyPaletteIO.h"
 #include "cwError.h"
+#include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwRegionIOTask.h"
 
@@ -24,7 +25,8 @@ cwSymbologyPaletteManager *cwSymbologyPaletteManager::Singleton = nullptr;
 
 cwSymbologyPaletteManager::cwSymbologyPaletteManager(QObject *parent) :
     QObject(parent),
-    m_paletteDirectory(defaultPaletteDirectory())
+    m_paletteDirectory(defaultPaletteDirectory()),
+    m_errorModel(new cwErrorModel(this))
 {
     reload();
 }
@@ -66,7 +68,7 @@ void cwSymbologyPaletteManager::clearInstalled()
 void cwSymbologyPaletteManager::reload()
 {
     clearInstalled();
-    m_loadErrors.clear();
+    m_errorModel->errors()->clear();
 
     // The seed is always present and always wins its id.
     m_seed = new cwSymbologyPalette(this);
@@ -117,38 +119,29 @@ void cwSymbologyPaletteManager::reload()
             palette->setWritable(versionSupported);
             directoryById.insert(data.id, entry.absoluteFilePath());
             m_palettes.append(palette);
+
+            // Rule-stack warnings for an accepted palette (commit 4.4). Fatal
+            // problems already failed the load above, so these are all warnings.
+            for (const cwError &warning : std::as_const(loadResult.warnings)) {
+                reportLoadProblem(warning);
+            }
         }
     }
 
     emit palettesChanged();
 }
 
-void cwSymbologyPaletteManager::setErrorModel(cwErrorListModel *model)
+void cwSymbologyPaletteManager::reportLoadProblem(const cwError &error)
 {
-    if (m_errorModel == model) { return; }
-    m_errorModel = model;
-
-    // The constructor's reload() ran before the app could wire a model; replay
-    // its accumulated problems so they reach the UI now.
-    for (const QString &message : std::as_const(m_loadErrors)) {
-        postToErrorModel(message);
+    qWarning("cwSymbologyPaletteManager: %s", qPrintable(error.message()));
+    if (!m_errorModel->errors()->contains(error)) {
+        m_errorModel->errors()->append(error);
     }
 }
 
 void cwSymbologyPaletteManager::reportLoadProblem(const QString &message)
 {
-    m_loadErrors.append(message);
-    qWarning("cwSymbologyPaletteManager: %s", qPrintable(message));
-    postToErrorModel(message);
-}
-
-void cwSymbologyPaletteManager::postToErrorModel(const QString &message)
-{
-    if (m_errorModel == nullptr) { return; }
-    const cwError error(message, cwError::Warning);
-    if (!m_errorModel->contains(error)) {
-        m_errorModel->append(error);
-    }
+    reportLoadProblem(cwError(message, cwError::Warning));
 }
 
 cwSymbologyPalette *cwSymbologyPaletteManager::paletteById(const QUuid &id) const
