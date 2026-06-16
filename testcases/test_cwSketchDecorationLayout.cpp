@@ -154,6 +154,16 @@ cwDecorationLayer pointStampLayer(const QString &glyphName)
                                  QStringLiteral("Rigid stamp")});
 }
 
+// A single glyph at the stroke start, rotated to the local flow direction — the
+// oriented counterpart of pointStampLayer (commit 4.3). Align to tangent slots
+// between the Generate and Terminal rules and orients the lone stamp.
+cwDecorationLayer orientedPointStampLayer(const QString &glyphName)
+{
+    return ruleLayer(glyphName, {QStringLiteral("Explicit point"),
+                                 QStringLiteral("Align to tangent"),
+                                 QStringLiteral("Rigid stamp")});
+}
+
 cwLineBrush makeBrush(const QString &name, const QVector<cwDecorationLayer> &layers)
 {
     cwLineBrush brush;
@@ -652,6 +662,49 @@ TEST_CASE("A single-stamp stack places one glyph at the anchor", "[cwSketchDecor
     CHECK(stampCount(geometry) == 1);
 }
 
+TEST_CASE("Flow-aligned point orients a single stamp to the stroke tangent",
+          "[cwSketchDecorationLayout]")
+{
+    cwGlyphTessellationCache cache;
+    cache.setSnapshot(demoPalette().snapshot());
+    const cwSketchDecorationLayout layout(&cache);
+
+    const cwLineBrush oriented = makeBrush(
+        QStringLiteral("flow-point"),
+        {orientedPointStampLayer(QStringLiteral("plus"))});
+
+    const auto positionOf = [&](const cwLineBrush &brush, const QVector<QPointF> &strokeWorld) {
+        const cwBrushDecorationGeometry geometry = layout.layout(brush, strokeWorld, kScale250);
+        REQUIRE(geometry.layers.size() == 1);
+        REQUIRE(geometry.layers.first().kind == cwBrushDecorationGeometry::Layer::Stamps);
+        REQUIRE(geometry.layers.first().stamps.size() == 1);
+        return geometry.layers.first().stamps.first().position;
+    };
+
+    const double d = 0.5 * kWorldPerPaperMm250;
+
+    // One stamp anchored at the stroke start.
+    const cwStampPosition horizontal = positionOf(oriented, {QPointF(0.0, 0.0), QPointF(d, 0.0)});
+    CHECK(horizontal.anchorWorld.x() == Approx(0.0).margin(1e-9));
+    CHECK(horizontal.anchorWorld.y() == Approx(0.0).margin(1e-9));
+    CHECK(horizontal.rotationRad == Approx(0.0).margin(1e-6));
+
+    // A 45-degree stroke rotates the lone stamp to the flow direction.
+    CHECK(positionOf(oriented, {QPointF(0.0, 0.0), QPointF(d, d)}).rotationRad
+          == Approx(M_PI / 4.0).margin(1e-6));
+
+    // The arrow flips with the flow: a stroke running -X faces back along the
+    // line. abs() folds atan2's +pi/-pi sign ambiguity at the wrap point.
+    CHECK(std::abs(positionOf(oriented, {QPointF(0.0, 0.0), QPointF(-d, 0.0)}).rotationRad)
+          == Approx(M_PI).margin(1e-6));
+
+    // Contrast: the un-oriented point stamp leaves the same diagonal stamp at 0.
+    const cwLineBrush plain = makeBrush(QStringLiteral("plain-point"),
+                                        {pointStampLayer(QStringLiteral("plus"))});
+    CHECK(positionOf(plain, {QPointF(0.0, 0.0), QPointF(d, d)}).rotationRad
+          == Approx(0.0).margin(1e-6));
+}
+
 TEST_CASE("A filled Trace brush lays out a filled region with pen and fill",
           "[cwSketchDecorationLayout]")
 {
@@ -900,6 +953,13 @@ TEST_CASE("Decoration layout renders to a reference image", "[cwSketchDecoration
         QStringLiteral("stream"),
         {offsetLayer(0.3),
          pointStampLayer(QStringLiteral("stream-indicator"))});
+    // The flow-aligned variant (commit 4.3): the same arrowhead through the
+    // oriented point stack, so the lone arrow rotates to the local flow direction
+    // instead of drawing at its authored orientation.
+    const cwLineBrush streamOrientedBrush = makeBrush(
+        QStringLiteral("stream-oriented"),
+        {offsetLayer(0.3),
+         orientedPointStampLayer(QStringLiteral("stream-indicator"))});
     // The same symbol with a pure-fill arrowhead (no outline pen): the polygon
     // primitive's zero-width-pen degenerate case.
     const cwLineBrush streamFillOnlyBrush = makeBrush(
@@ -940,6 +1000,8 @@ TEST_CASE("Decoration layout renders to a reference image", "[cwSketchDecoration
         {streamBrush, straightLine(0.8, 1), QStringLiteral("stream  —  traced line + single triangle arrowhead (<-----)")},
         {streamBrush, {QPointF(0.0, 0.0), QPointF(0.57, 0.57)},
          QStringLiteral("stream 45deg  —  line follows, but the single arrow is NOT tangent-rotated")},
+        {streamOrientedBrush, {QPointF(0.0, 0.0), QPointF(0.57, 0.57)},
+         QStringLiteral("stream 45deg (flow-aligned, 4.3)  —  the single arrow rotates to the flow direction")},
         {streamFillOnlyBrush, arcCurve(0.5, M_PI / 2.0, 24),
          QStringLiteral("stream curve (fill only)  —  pure-fill arrowhead, no outline pen; line follows the curve")},
         {railroadBrush, gentle,
