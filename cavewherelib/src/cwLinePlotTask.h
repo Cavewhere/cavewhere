@@ -14,6 +14,7 @@ class cwCavingRegion;
 #include "cwSurveyNetwork.h"
 #include "cwFindUnconnectedSurveyChunks.h"
 #include "cwCavingRegionData.h"
+#include "cwLinePlotGeometry.h"
 class cwScrap;
 class cwTrip;
 class cwCave;
@@ -160,21 +161,20 @@ public:
         void setTrip(QSet<cwTrip*> trips);
         void setScraps(QSet<cwScrap*> scraps);
         void setPositions(QVector<QVector3D> positions);
-        void setPlotIndexData(QVector<unsigned int> indexData);
-        void setTripIds(QVector<quint32> tripIds);
+        void setTripVertexRanges(QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges);
         void setTripUuids(QVector<QUuid> tripUuids);
 
         QMap<cwCave*, LinePlotCaveData> caveData() const;
         QSet<cwTrip*> trips() const;
         QSet<cwScrap*> scraps() const;
         QVector<QVector3D> stationPositions() const;
-        QVector<unsigned int> linePlotIndexData() const;
 
-        // Per-vertex running trip id (parallel to stationPositions) and the
-        // running-id -> stable cwTrip::id mapping. Only value-type UUIDs cross
-        // the worker boundary; the manager resolves them to live cwTrip* at use
-        // time. See cwLinePlotGeometry for how the ids are assigned.
-        QVector<quint32> tripIds() const;
+        // Per-trip vertex span in stationPositions and the running-id -> stable
+        // cwTrip::id mapping (both running-id indexed). Only value-type data
+        // crosses the worker boundary; the manager resolves each UUID to a live
+        // cwTrip* and binds its visibility proxy to the matching vertex range.
+        // See cwLinePlotGeometry for how the ranges are assigned.
+        QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges() const;
         QVector<QUuid> tripUuids() const;
 
     public:
@@ -186,8 +186,7 @@ public:
         QSet<cwTrip*> Trips;
         QSet<cwScrap*> Scraps;
         QVector<QVector3D> StationPositions;
-        QVector<unsigned int> LinePlotIndexData;
-        QVector<quint32> TripIds;
+        QVector<cwLinePlotGeometry::VertexRange> TripVertexRanges;
         QVector<QUuid> TripUuids;
         cwSurveyNetwork RegionNetwork;
         bool RegionNetworkChanged = false;
@@ -308,17 +307,6 @@ inline QVector<QVector3D> cwLinePlotTask::LinePlotResultData::stationPositions()
     return StationPositions;
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotResultData::linePlotIndexData
- * @return Returns all the plot line data indexes.  This is to construct a line array
- *
- *  This functions aren't thread safe!! You should only call these if the task isn't running
- */
-inline QVector<unsigned int> cwLinePlotTask::LinePlotResultData::linePlotIndexData() const
-{
-    return LinePlotIndexData;
-}
-
 inline void cwLinePlotTask::LinePlotResultData::setRegionNetwork(cwSurveyNetwork network)
 {
     RegionNetwork = std::move(network);
@@ -364,27 +352,21 @@ inline void cwLinePlotTask::LinePlotResultData::setScraps(QSet<cwScrap*> scraps)
  * @param positions
  */
 inline void cwLinePlotTask::LinePlotResultData::setPositions(QVector<QVector3D> positions) {
-    StationPositions = positions;
+    StationPositions = std::move(positions);
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotResultData::setPlotIndexData
- * @param indexData
- */
-inline void cwLinePlotTask::LinePlotResultData::setPlotIndexData(QVector<unsigned int> indexData) {
-    LinePlotIndexData = indexData;
-}
-
-inline void cwLinePlotTask::LinePlotResultData::setTripIds(QVector<quint32> tripIds) {
-    TripIds = std::move(tripIds);
+inline void cwLinePlotTask::LinePlotResultData::setTripVertexRanges(
+    QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges) {
+    TripVertexRanges = std::move(tripVertexRanges);
 }
 
 inline void cwLinePlotTask::LinePlotResultData::setTripUuids(QVector<QUuid> tripUuids) {
     TripUuids = std::move(tripUuids);
 }
 
-inline QVector<quint32> cwLinePlotTask::LinePlotResultData::tripIds() const {
-    return TripIds;
+inline QVector<cwLinePlotGeometry::VertexRange>
+cwLinePlotTask::LinePlotResultData::tripVertexRanges() const {
+    return TripVertexRanges;
 }
 
 inline QVector<QUuid> cwLinePlotTask::LinePlotResultData::tripUuids() const {

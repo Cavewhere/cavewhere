@@ -16,10 +16,11 @@ cwLinePlotTripVisibility::cwLinePlotTripVisibility(cwTrip* trip,
 {
 }
 
-void cwLinePlotTripVisibility::setTarget(cwRenderLinePlot* linePlot, int tripId)
+void cwLinePlotTripVisibility::setTarget(cwRenderLinePlot* linePlot, int vertexStart, int vertexCount)
 {
     m_linePlot = linePlot;
-    m_tripId = tripId;
+    m_vertexStart = vertexStart;
+    m_vertexCount = vertexCount;
 }
 
 void cwLinePlotTripVisibility::setVisible(bool visible)
@@ -30,7 +31,7 @@ void cwLinePlotTripVisibility::setVisible(bool visible)
 
     m_visible = visible;
     if(m_linePlot) {
-        m_linePlot->setTripVisible(m_tripId, visible);
+        m_linePlot->setRangeVisible(m_vertexStart, m_vertexCount, visible);
     }
 
     emit visibleChanged();

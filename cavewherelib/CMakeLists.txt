@@ -364,10 +364,10 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
         "shaders/unlit.vert"
     )
 
-# LinePlot reads a per-trip visibility lookup texture in the vertex shader via
-# texelFetch, which the legacy 120 / 100es targets reject. Target GLSL 150 /
-# GLSL ES 300 (both have texelFetch) plus the usual HLSL SM5 / MSL 1.2; Vulkan
-# SPIR-V is always emitted.
+# LinePlot reads a per-vertex unsigned-integer visibility attribute in the
+# vertex shader, which the legacy 120 / 100es targets reject (integer vertex
+# inputs need GLSL 150 / GLSL ES 300). Target those plus the usual HLSL SM5 /
+# MSL 1.2; Vulkan SPIR-V is always emitted.
 qt_add_shaders(cavewherelib "cavewherelib_shaders_lineplot"
     PREFIX "/"
     GLSL "150,300es"

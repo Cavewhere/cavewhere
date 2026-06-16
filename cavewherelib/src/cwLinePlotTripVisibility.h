@@ -21,10 +21,10 @@ class cwTrip;
  * \brief The setVisible() target for a trip's centerline keyword item.
  *
  * cwKeywordVisibility calls setVisible() on this object when keyword filters
- * change. It flips the trip's slot in the render object's visibility texture by
- * its running id, exactly like cwRenderTexturedItemVisibility does for scraps.
- * The manager re-points the proxy (setTarget) after every solve, because the
- * running id is renumbered each time the geometry is rebuilt.
+ * change. It flips the trip's contiguous span in the render object's per-vertex
+ * visibility buffer, exactly like cwRenderTexturedItemVisibility does for
+ * scraps. The manager re-points the proxy (setTarget) after every solve,
+ * because the vertex range shifts each time the geometry is rebuilt.
  */
 class CAVEWHERE_LIB_EXPORT cwLinePlotTripVisibility : public QObject
 {
@@ -38,8 +38,8 @@ public:
     bool isVisible() const { return m_visible; }
     cwTrip* trip() const { return m_trip; }
 
-    // Re-binds the proxy to the render object and the trip's current running id.
-    void setTarget(cwRenderLinePlot* linePlot, int tripId);
+    // Re-binds the proxy to the render object and the trip's current vertex span.
+    void setTarget(cwRenderLinePlot* linePlot, int vertexStart, int vertexCount);
 
 public slots:
     void setVisible(bool visible);
@@ -50,7 +50,8 @@ signals:
 private:
     QPointer<cwRenderLinePlot> m_linePlot;
     QPointer<cwTrip> m_trip;
-    int m_tripId = -1;
+    int m_vertexStart = 0;
+    int m_vertexCount = 0;
     bool m_visible = true;
 };
 

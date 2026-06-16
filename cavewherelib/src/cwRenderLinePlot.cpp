@@ -7,6 +7,7 @@
 
 // Std includes
 #include <limits>
+#include <numeric>
 
 // Our includes
 #include "cwRenderLinePlot.h"
@@ -19,10 +20,7 @@ cwRenderLinePlot::cwRenderLinePlot(QObject *parent) :
 {
 }
 
-void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData,
-                                   QVector<unsigned int> indexData,
-                                   QVector<quint32> tripIds,
-                                   int tripCount)
+void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
 {
     Data data;
 
@@ -35,15 +33,25 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData,
         data.minZValue = qMin(data.minZValue, point.z());
     }
 
+    const int vertexCount = pointData.size();
+
     // Hand the geometry to the intersecter before moving it into data — the
-    // by-value params still own the only copy at this point, so the moves below
-    // avoid a second deep copy of the (large) vertex/index vectors.
+    // by-value param still owns the only copy at this point, so the move below
+    // avoids a second deep copy of the (large) vertex vector. The render path
+    // is non-indexed (consecutive pairs), but the intersecter's Lines path
+    // still wants an index per vertex, so synthesize a sequential index list
+    // (CPU-side only — never uploaded to the GPU). Lines are not picker-visible
+    // today (the BVH skips them, #530); this keeps the geometry registered for
+    // when they become so.
     if (auto* intersecter = geometryItersecter()) {
         cwGeometry geometry {
             { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
         };
         geometry.set(cwGeometry::Semantic::Position, pointData);
-        geometry.setIndices(indexData);
+
+        QVector<uint32_t> sequentialIndices(vertexCount);
+        std::iota(sequentialIndices.begin(), sequentialIndices.end(), 0u);
+        geometry.setIndices(std::move(sequentialIndices));
         geometry.setType(cwGeometry::Type::Lines);
 
         intersecter->addObject(cwGeometryItersecter::Object(cwGeometryItersecter::Key{this, 0},
@@ -51,33 +59,40 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData,
     }
 
     data.points = std::move(pointData);
-    data.indexes = std::move(indexData);
-    data.tripIds = std::move(tripIds);
 
     m_data.setValue(data);
 
-    // New geometry renumbers trip ids, so the prior visibility no longer maps
-    // to the right trips; reset to all-visible. The owner re-applies hidden
-    // trips by id right after (cwLinePlotManager::reconcileTripKeywordItems).
-    m_tripVisibility.setValue(QVector<quint8>(tripCount, kTripVisible));
+    // New geometry replaces the vertex layout, so the prior visibility no longer
+    // maps to the right vertices; reset to all-visible, one byte per vertex. The
+    // owner re-applies hidden ranges right after
+    // (cwLinePlotManager::reconcileTripKeywordItems).
+    m_visibility.setValue(QVector<quint8>(vertexCount, kVisible));
 
     update();
 }
 
-void cwRenderLinePlot::setTripVisible(int tripId, bool visible)
+void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)
 {
-    QVector<quint8> visibility = m_tripVisibility.value();
-    if (tripId < 0 || tripId >= visibility.size()) {
+    // Validate against the live buffer (a free const-ref read) before copying it,
+    // so an out-of-range call doesn't pay for a detach.
+    if (start < 0 || count <= 0 || start + count > m_visibility.value().size()) {
         return;
     }
 
-    const quint8 flag = visible ? kTripVisible : kTripHidden;
-    if (visibility.at(tripId) == flag) {
+    QVector<quint8> visibility = m_visibility.value();
+    const quint8 flag = visible ? kVisible : kHidden;
+    bool changed = false;
+    for (int i = start; i < start + count; ++i) {
+        if (visibility.at(i) != flag) {
+            visibility[i] = flag;
+            changed = true;
+        }
+    }
+    if (!changed) {
         return;
     }
 
-    visibility[tripId] = flag;
-    m_tripVisibility.setValue(std::move(visibility));
+    m_visibility.setValue(std::move(visibility));
     update();
 }
 

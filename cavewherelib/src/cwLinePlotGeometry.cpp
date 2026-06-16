@@ -40,8 +40,6 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region)
     const int caveCount = region.caves.size();
     result.cavesLengthAndDepths.resize(caveCount);
 
-    quint32 runningTripId = 0;
-
     for (int caveIndex = 0; caveIndex < caveCount; caveIndex++) {
         const cwCaveData& cave = region.caves.at(caveIndex);
         const QHash<QString, QVector3D> stationPositions = caveStationPositions(cave);
@@ -54,33 +52,19 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region)
         for (int tripIndex = 0; tripIndex < cave.trips.size(); tripIndex++) {
             const cwTripData& trip = cave.trips.at(tripIndex);
 
-            // Every trip gets a running id in iteration order, even ones that
-            // emit no geometry, so tripUuids stays a dense total-trip-count list
-            // aligned with the per-vertex ids.
-            const quint32 tripId = runningTripId++;
+            // Every trip gets a running id (== index into tripUuids /
+            // tripVertexRanges) in iteration order, even ones that emit no
+            // geometry, so both tables stay a dense total-trip-count list.
             result.tripUuids.append(trip.id);
+            const int vertexStart = result.points.size();
 
-            // De-share across trips: each trip owns its vertices. A station
-            // reused by consecutive shots within this trip is one vertex, but a
-            // tie-in station shared with another trip is duplicated — so both
-            // endpoints of any segment carry the same tripId.
-            QHash<QString, unsigned int> tripVertexLookup;
-
-            const auto vertexFor = [&](const QString& stationName) -> int {
-                const QString key = cwStation::canonicalKey(stationName);
-                auto existing = tripVertexLookup.constFind(key);
-                if (existing != tripVertexLookup.constEnd()) {
-                    return int(existing.value());
-                }
-                auto posIt = stationPositions.constFind(key);
+            const auto resolve = [&](const QString& stationName, QVector3D* out) -> bool {
+                auto posIt = stationPositions.constFind(cwStation::canonicalKey(stationName));
                 if (posIt == stationPositions.constEnd()) {
-                    return -1;
+                    return false;
                 }
-                const unsigned int index = static_cast<unsigned int>(result.points.size());
-                result.points.append(posIt.value());
-                result.tripIds.append(tripId);
-                tripVertexLookup.insert(key, index);
-                return int(index);
+                *out = posIt.value();
+                return true;
             };
 
             for (const cwSurveyChunkData& chunk : trip.chunks) {
@@ -89,21 +73,21 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region)
                 }
 
                 // Empty leading stations (bug #435) have no position —
-                // bootstrap from the first station that resolves to a vertex.
+                // bootstrap from the first station that has a solved position.
                 int startIndex = 0;
-                int previousVertex = -1;
+                QVector3D previousPoint;
+                bool havePrevious = false;
                 while (startIndex < chunk.stations.size()) {
-                    previousVertex = vertexFor(chunk.stations.at(startIndex).name());
-                    if (previousVertex >= 0) {
+                    if (resolve(chunk.stations.at(startIndex).name(), &previousPoint)) {
+                        havePrevious = true;
                         break;
                     }
                     startIndex++;
                 }
-                if (previousVertex < 0 || startIndex >= chunk.stations.size() - 1) {
+                if (!havePrevious || startIndex >= chunk.stations.size() - 1) {
                     continue;
                 }
 
-                QVector3D previousPoint = result.points.at(previousVertex);
                 minDepth = qMin(minDepth, (double)previousPoint.z());
                 maxDepth = qMax(maxDepth, (double)previousPoint.z());
                 hasDepth = true;
@@ -111,26 +95,34 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region)
                 for (int stationIndex = startIndex + 1;
                      stationIndex < chunk.stations.size();
                      stationIndex++) {
-                    const cwStation& station = chunk.stations.at(stationIndex);
                     const cwShot& shot = chunk.shots.at(stationIndex - 1);
 
-                    const int currentVertex = vertexFor(station.name());
-                    if (currentVertex >= 0) {
-                        const QVector3D currentPoint = result.points.at(currentVertex);
-                        if (shot.isDistanceIncluded()) {
-                            minDepth = qMin(minDepth, (double)currentPoint.z());
-                            maxDepth = qMax(maxDepth, (double)currentPoint.z());
-                            length += QVector3D(currentPoint - previousPoint).length();
-                        }
-                        previousPoint = currentPoint;
-
-                        result.indices.append(static_cast<unsigned int>(previousVertex));
-                        result.indices.append(static_cast<unsigned int>(currentVertex));
-
-                        previousVertex = currentVertex;
+                    QVector3D currentPoint;
+                    if (!resolve(chunk.stations.at(stationIndex).name(), &currentPoint)) {
+                        // Unresolved station — skip the shot; the next resolved
+                        // station bridges back to previousPoint, exactly as the
+                        // shared-vertex path did.
+                        continue;
                     }
+
+                    if (shot.isDistanceIncluded()) {
+                        minDepth = qMin(minDepth, (double)currentPoint.z());
+                        maxDepth = qMax(maxDepth, (double)currentPoint.z());
+                        length += QVector3D(currentPoint - previousPoint).length();
+                    }
+
+                    // Per-shot de-share: emit both endpoints as this shot's own
+                    // vertices (a station shared with the prior shot is
+                    // duplicated), so the pair [2i, 2i+1] is one segment.
+                    result.points.append(previousPoint);
+                    result.points.append(currentPoint);
+
+                    previousPoint = currentPoint;
                 }
             }
+
+            const int vertexCount = result.points.size() - vertexStart;
+            result.tripVertexRanges.append(VertexRange{vertexStart, vertexCount});
         }
 
         if (hasDepth) {
@@ -141,8 +133,7 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region)
     }
 
     result.points.squeeze();
-    result.indices.squeeze();
-    result.tripIds.squeeze();
+    result.tripVertexRanges.squeeze();
     result.tripUuids.squeeze();
 
     return Monad::Result<Result>(std::move(result));

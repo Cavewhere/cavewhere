@@ -1184,7 +1184,7 @@ TEST_CASE("cwLinePlotManager registers per-trip centerline keyword visibility",
 
     auto countHidden = [&]() {
         int count = 0;
-        for (quint8 b : linePlot.tripVisibility()) {
+        for (quint8 b : linePlot.visibility()) {
             if (b == 0) { count++; }
         }
         return count;
@@ -1201,9 +1201,10 @@ TEST_CASE("cwLinePlotManager registers per-trip centerline keyword visibility",
         return nullptr;
     };
 
-    SECTION("geometry is de-shared into the render object") {
-        CHECK(linePlot.tripIds().size() == linePlot.points().size());
-        CHECK(linePlot.points().size() == 4); // a1, a2(trip1), a2(trip2), a3
+    SECTION("geometry is de-shared per shot into the render object") {
+        // shot a1->a2 = [a1, a2], shot a2->a3 = [a2, a3] -> 4 vertices, a2 twice.
+        CHECK(linePlot.points().size() == 4);
+        CHECK(linePlot.visibility().size() == linePlot.points().size());
         int a2Count = 0;
         for (const QVector3D& p : linePlot.points()) {
             if (p == QVector3D(0.0f, 10.0f, 0.0f)) { a2Count++; }
@@ -1231,26 +1232,27 @@ TEST_CASE("cwLinePlotManager registers per-trip centerline keyword visibility",
         }
     }
 
-    SECTION("default visibility is all-visible, sized to the trip count") {
-        CHECK(linePlot.tripVisibility().size() == 2);
+    SECTION("default visibility is all-visible, one byte per vertex") {
+        CHECK(linePlot.visibility().size() == 4);
         CHECK(countHidden() == 0);
     }
 
-    SECTION("hiding a trip's proxy masks exactly that trip") {
+    SECTION("hiding a trip's proxy masks exactly that trip's vertices") {
         auto* proxyA = proxyForTrip(trip1);
         REQUIRE(proxyA != nullptr);
 
+        // trip1 is one shot (a1->a2) = 2 vertices.
         proxyA->setVisible(false);
-        CHECK(countHidden() == 1);
+        CHECK(countHidden() == 2);
 
         SECTION("the hidden state survives a re-solve (identity keyed)") {
-            // Rename the cave to force a re-solve; trip ids are renumbered but
-            // the trip's hidden state is re-applied by UUID identity.
+            // Rename the cave to force a re-solve; vertex ranges shift but the
+            // trip's hidden state is re-applied by UUID identity.
             cave->setName(QStringLiteral("Renamed Cave"));
             plotManager->waitToFinish();
 
-            CHECK(linePlot.tripVisibility().size() == 2);
-            CHECK(countHidden() == 1);
+            CHECK(linePlot.visibility().size() == 4);
+            CHECK(countHidden() == 2);
         }
     }
 
@@ -1261,7 +1263,8 @@ TEST_CASE("cwLinePlotManager registers per-trip centerline keyword visibility",
         plotManager->waitToFinish();
 
         CHECK(keywordModel.rowCount() == 1);
-        CHECK(linePlot.tripVisibility().size() == 1);
+        // Only trip1 remains: one shot (a1->a2) = 2 vertices.
+        CHECK(linePlot.visibility().size() == 2);
     }
 }
 

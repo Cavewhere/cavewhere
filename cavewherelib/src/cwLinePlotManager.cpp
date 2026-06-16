@@ -212,11 +212,17 @@ void cwLinePlotManager::setKeywordItemModel(cwKeywordItemModel* keywordItemModel
     // geometry; nothing to do here.
 }
 
-void cwLinePlotManager::reconcileTripKeywordItems(const QVector<QUuid>& tripUuids)
+void cwLinePlotManager::reconcileTripKeywordItems(
+    const QVector<QUuid>& tripUuids,
+    const QVector<cwLinePlotGeometry::VertexRange>& tripVertexRanges)
 {
     if (Region == nullptr) {
         return;
     }
+
+    // Built in lockstep in cwLinePlotGeometry::generate (one append each per
+    // trip), so the running id indexes both tables identically.
+    Q_ASSERT(tripVertexRanges.size() == tripUuids.size());
 
     // Resolve UUIDs to live trips by identity (never by list position).
     QHash<QUuid, cwTrip*> liveByUuid;
@@ -265,13 +271,16 @@ void cwLinePlotManager::reconcileTripKeywordItems(const QVector<QUuid>& tripUuid
             m_tripKeywordEntries.insert(trip, item);
         }
 
-        // Re-bind the proxy to the trip's current running id (it is renumbered
-        // each solve) and seed the render object. setGeometry just reset every
-        // trip to visible, so only hidden trips need an explicit push.
+        // Re-bind the proxy to the trip's current vertex span (it shifts each
+        // solve) and seed the render object. setGeometry just reset every vertex
+        // to visible, so only hidden trips need an explicit push.
         if (visibility) {
-            visibility->setTarget(m_linePlot, i);
+            // tripVertexRanges is parallel to tripUuids (both appended once per
+            // trip in cwLinePlotGeometry::generate), so index i is always valid.
+            const cwLinePlotGeometry::VertexRange range = tripVertexRanges.at(i);
+            visibility->setTarget(m_linePlot, range.start, range.count);
             if (m_linePlot && !visibility->isVisible()) {
-                m_linePlot->setTripVisible(i, false);
+                m_linePlot->setRangeVisible(range.start, range.count, false);
             }
         }
     }
@@ -637,20 +646,18 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     }
 
     const QVector<QUuid> tripUuids = results.tripUuids();
+    const QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges = results.tripVertexRanges();
 
     //Update the 3D plot
     if(m_linePlot != nullptr) {
-        m_linePlot->setGeometry(results.stationPositions(),
-                                results.linePlotIndexData(),
-                                results.tripIds(),
-                                tripUuids.size());
+        m_linePlot->setGeometry(results.stationPositions());
     }
 
     // Re-attach per-trip centerline keyword items to the new geometry and
-    // re-seed each trip's visibility by its (renumbered) running id. setGeometry
+    // re-seed each trip's visibility by its (shifted) vertex span. setGeometry
     // reset the render object to all-visible, so reconcile only pushes the trips
     // that are currently hidden.
-    reconcileTripKeywordItems(tripUuids);
+    reconcileTripKeywordItems(tripUuids, tripVertexRanges);
 
     // Skip emission when the network hasn't changed so 2D-geometry rules
     // don't rebuild on every line-plot completion triggered by unrelated

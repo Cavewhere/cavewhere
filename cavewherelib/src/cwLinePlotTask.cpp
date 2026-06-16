@@ -116,8 +116,7 @@ void cwLinePlotTask::LinePlotResultData::clear()
     Trips.clear();
     Scraps.clear();
     StationPositions.clear();
-    LinePlotIndexData.clear();
-    TripIds.clear();
+    TripVertexRanges.clear();
     TripUuids.clear();
 }
 
@@ -233,8 +232,7 @@ struct cwLinePlotTask::LinePlotWorker {
 
         cwLinePlotGeometry::Result geometry = generateGeometry();
         result.setPositions(geometry.points);
-        result.setPlotIndexData(geometry.indices);
-        result.setTripIds(geometry.tripIds);
+        result.setTripVertexRanges(geometry.tripVertexRanges);
         result.setTripUuids(geometry.tripUuids);
 
         updateDepthLength(geometry.cavesLengthAndDepths, result);

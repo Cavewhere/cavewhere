@@ -44,13 +44,26 @@ int countPositions(const QVector<QVector3D>& points, const QVector3D& position)
     return count;
 }
 
+// Returns the index of the trip whose vertex range covers vertex `vertexIndex`,
+// or -1 if none does.
+int tripForVertex(const QVector<cwLinePlotGeometry::VertexRange>& ranges, int vertexIndex)
+{
+    for (int i = 0; i < ranges.size(); ++i) {
+        const auto& r = ranges.at(i);
+        if (vertexIndex >= r.start && vertexIndex < r.start + r.count) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 } // namespace
 
-TEST_CASE("cwLinePlotGeometry de-shares vertices per trip", "[cwLinePlotGeometry]")
+TEST_CASE("cwLinePlotGeometry de-shares vertices per shot", "[cwLinePlotGeometry]")
 {
-    // Two trips share the tie-in station a2. After de-sharing each trip owns its
-    // own copy of a2, so a2 appears twice — once per trip — and every vertex
-    // carries exactly one trip id.
+    // Two trips share the tie-in station a2. With per-shot de-share each shot
+    // owns its own two endpoint vertices, so a2 appears twice — once per shot —
+    // and each trip occupies a contiguous vertex range.
     cwCavingRegion region;
 
     cwCave* cave = new cwCave();
@@ -80,49 +93,50 @@ TEST_CASE("cwLinePlotGeometry de-shares vertices per trip", "[cwLinePlotGeometry
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 
-    SECTION("per-vertex trip ids are parallel to points") {
-        CHECK(geometry.tripIds.size() == geometry.points.size());
-    }
-
-    SECTION("the shared station is duplicated, one copy per trip") {
-        // a1, a2(trip1), a2(trip2), a3
+    SECTION("each shot emits two vertices; the shared station is duplicated") {
+        // shot a1->a2 = [a1, a2], shot a2->a3 = [a2, a3] -> 4 vertices, a2 twice.
         CHECK(geometry.points.size() == 4);
         CHECK(countPositions(geometry.points, QVector3D(0.0f, 10.0f, 0.0f)) == 2);
     }
 
-    SECTION("each trip gets a distinct dense id covering [0, tripCount)") {
+    SECTION("each trip occupies a contiguous vertex range") {
+        REQUIRE(geometry.tripVertexRanges.size() == 2);
         REQUIRE(geometry.tripUuids.size() == 2);
-        QSet<quint32> ids(geometry.tripIds.constBegin(), geometry.tripIds.constEnd());
-        CHECK(ids.size() == 2);
-        for (quint32 id : ids) {
-            CHECK(id < quint32(geometry.tripUuids.size()));
+
+        CHECK(geometry.tripVertexRanges.at(0).start == 0);
+        CHECK(geometry.tripVertexRanges.at(0).count == 2);
+        CHECK(geometry.tripVertexRanges.at(1).start == 2);
+        CHECK(geometry.tripVertexRanges.at(1).count == 2);
+
+        // Ranges cover every vertex with no gaps or overlap.
+        for (int i = 0; i < geometry.points.size(); ++i) {
+            CHECK(tripForVertex(geometry.tripVertexRanges, i) >= 0);
         }
     }
 
-    SECTION("the index->uuid table is keyed by identity, not list position") {
-        // The dense id is just an index into tripUuids; the UUID is the stable
-        // key the manager resolves back to a live trip.
+    SECTION("the range->uuid table is keyed by identity, not list position") {
         REQUIRE(geometry.tripUuids.size() == 2);
         CHECK(geometry.tripUuids.at(0) == trip1->id());
         CHECK(geometry.tripUuids.at(1) == trip2->id());
 
-        // The vertices for a1 (trip1-only) and a3 (trip2-only) must carry ids
-        // whose UUID resolves to the right trip.
+        // The vertices for a1 (trip1-only) and a3 (trip2-only) must fall in the
+        // range whose UUID resolves to the right trip.
         for (int i = 0; i < geometry.points.size(); ++i) {
-            const quint32 id = geometry.tripIds.at(i);
+            const int tripIndex = tripForVertex(geometry.tripVertexRanges, i);
+            REQUIRE(tripIndex >= 0);
             if (geometry.points.at(i) == QVector3D(0.0f, 0.0f, 0.0f)) {
-                CHECK(geometry.tripUuids.at(id) == trip1->id());
+                CHECK(geometry.tripUuids.at(tripIndex) == trip1->id());
             } else if (geometry.points.at(i) == QVector3D(10.0f, 10.0f, 0.0f)) {
-                CHECK(geometry.tripUuids.at(id) == trip2->id());
+                CHECK(geometry.tripUuids.at(tripIndex) == trip2->id());
             }
         }
     }
 }
 
-TEST_CASE("cwLinePlotGeometry shares vertices within a trip", "[cwLinePlotGeometry]")
+TEST_CASE("cwLinePlotGeometry duplicates a station shared by consecutive shots", "[cwLinePlotGeometry]")
 {
-    // A station reused by consecutive chunks of the *same* trip is one vertex —
-    // de-sharing only duplicates across trips.
+    // A station reused by consecutive chunks of the same trip is duplicated —
+    // per-shot de-share gives every shot its own endpoints.
     cwCavingRegion region;
 
     cwCave* cave = new cwCave();
@@ -149,12 +163,13 @@ TEST_CASE("cwLinePlotGeometry shares vertices within a trip", "[cwLinePlotGeomet
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 
-    // a1, a2, a3 — a2 appears once (shared within the single trip).
-    CHECK(geometry.points.size() == 3);
-    CHECK(countPositions(geometry.points, QVector3D(0.0f, 10.0f, 0.0f)) == 1);
-    CHECK(geometry.tripUuids.size() == 1);
+    // shot a1->a2 = [a1, a2], shot a2->a3 = [a2, a3] -> 4 vertices, a2 twice.
+    CHECK(geometry.points.size() == 4);
+    CHECK(countPositions(geometry.points, QVector3D(0.0f, 10.0f, 0.0f)) == 2);
 
-    // All vertices belong to the one trip.
-    QSet<quint32> ids(geometry.tripIds.constBegin(), geometry.tripIds.constEnd());
-    CHECK(ids.size() == 1);
+    // All vertices belong to the one trip's single range.
+    REQUIRE(geometry.tripUuids.size() == 1);
+    REQUIRE(geometry.tripVertexRanges.size() == 1);
+    CHECK(geometry.tripVertexRanges.at(0).start == 0);
+    CHECK(geometry.tripVertexRanges.at(0).count == 4);
 }

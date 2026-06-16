@@ -27,28 +27,25 @@ class cwRenderLinePlot : public cwRenderObject
 public:
     explicit cwRenderLinePlot(QObject *parent = nullptr);
 
-    // tripCount sizes the per-trip visibility vector (the running-id space,
-    // including geometry-less trips). New geometry remaps trip ids, so this
-    // resets visibility to all-visible; the owner re-applies any hidden trips.
-    void setGeometry(QVector<QVector3D> pointData,
-                     QVector<unsigned int> indexData,
-                     QVector<quint32> tripIds = {},
-                     int tripCount = 0);
+    // Points are a non-indexed line list: a drawn shot owns vertices [2i, 2i+1].
+    // New geometry resets visibility to all-visible, one byte per vertex; the
+    // owner re-applies any hidden ranges (cwLinePlotManager::reconcileTripKeywordItems).
+    void setGeometry(QVector<QVector3D> pointData);
 
-    // Per-trip visibility, one byte per running trip id (255 = visible,
-    // 0 = hidden). Sampled in the vertex shader keyed by the vertex's tripId.
+    // Per-vertex visibility, one byte per vertex (255 = visible, 0 = hidden;
+    // both vertices of a shot share the value). Read directly as a vertex
+    // attribute in the shader, which collapses hidden vertices off-clip.
     // Tracked independently of the geometry so a keyword toggle re-uploads only
-    // the small visibility texture, not the vertex/index buffers. Mirrors the
-    // incremental cwRenderTexturedItems::setVisible(id, bool) used by scraps.
-    void setTripVisible(int tripId, bool visible);
+    // the small visibility buffer, not the position buffer. setRangeVisible
+    // flips a contiguous span (one trip's vertices); the manager ANDs
+    // overlapping groups CPU-side. Mirrors cwRenderTexturedItems::setVisible.
+    void setRangeVisible(int start, int count, bool visible);
 
     float maxZValue() const;
     float minZValue() const;
 
     QVector<QVector3D> points() const;
-    QVector<unsigned int> indexes() const;
-    QVector<quint32> tripIds() const;
-    QVector<quint8> tripVisibility() const;
+    QVector<quint8> visibility() const;
 
 protected:
     virtual cwRHIObject* createRHIObject() override;
@@ -59,22 +56,20 @@ private:
         float minZValue = 0.0;
 
         QVector<QVector3D> points;
-        QVector<unsigned int> indexes;
-        QVector<quint32> tripIds;
 
         // This is needed for cwTracked to work, all ways changes
         bool operator!=(const Data& other) const { return true; }
     };
 
     cwTracked<Data> m_data;
-    cwTracked<QVector<quint8>> m_tripVisibility;
+    cwTracked<QVector<quint8>> m_visibility;
 
 public:
-    // R8 visibility-texture sentinels: one byte per running trip id, read in the
-    // vertex shader. Shared with cwRHILinePlot (its empty-geometry fallback must
-    // agree on which value means "visible").
-    static constexpr quint8 kTripVisible = 0xFF;
-    static constexpr quint8 kTripHidden = 0x00;
+    // Per-vertex visibility sentinels: one byte per vertex, read as a vertex
+    // attribute in the shader. Shared with cwRHILinePlot (its empty-geometry
+    // fallback must agree on which value means "visible").
+    static constexpr quint8 kVisible = 0xFF;
+    static constexpr quint8 kHidden = 0x00;
 };
 
 inline float cwRenderLinePlot::maxZValue() const
@@ -92,19 +87,9 @@ inline QVector<QVector3D> cwRenderLinePlot::points() const
     return m_data.value().points;
 }
 
-inline QVector<unsigned int> cwRenderLinePlot::indexes() const
+inline QVector<quint8> cwRenderLinePlot::visibility() const
 {
-    return m_data.value().indexes;
-}
-
-inline QVector<quint32> cwRenderLinePlot::tripIds() const
-{
-    return m_data.value().tripIds;
-}
-
-inline QVector<quint8> cwRenderLinePlot::tripVisibility() const
-{
-    return m_tripVisibility.value();
+    return m_visibility.value();
 }
 
 #endif // CWRENDERLINEPLOT_H

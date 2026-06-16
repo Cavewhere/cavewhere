@@ -212,11 +212,13 @@ private:
 
     // Re-attaches the per-trip keyword items to the freshly-solved geometry:
     // resolves each running id's UUID to a live cwTrip*, creates/removes keyword
-    // items to match, re-binds each trip's visibility proxy to its new running
-    // id, and re-seeds the render object's hidden trips. Identity (UUID) keyed,
-    // so it is immune to list-order drift; trips deleted mid-solve simply fail
-    // to resolve and are skipped.
-    void reconcileTripKeywordItems(const QVector<QUuid>& tripUuids);
+    // items to match, re-binds each trip's visibility proxy to its new vertex
+    // span, and re-seeds the render object's hidden trips. Identity (UUID)
+    // keyed, so it is immune to list-order drift; trips deleted mid-solve simply
+    // fail to resolve and are skipped. tripVertexRanges is parallel to
+    // tripUuids (both running-id indexed).
+    void reconcileTripKeywordItems(const QVector<QUuid>& tripUuids,
+                                   const QVector<cwLinePlotGeometry::VertexRange>& tripVertexRanges);
     void removeTripKeywordEntry(cwTrip* trip);
 
     // Tears down every keyword entry synchronously (for manager destruction /
