@@ -13,6 +13,9 @@
 class QRhiBuffer;
 class QRhiShaderResourceBindings;
 class QRhiGraphicsPipeline;
+class QRhiTexture;
+class QRhiSampler;
+class QRhiResourceUpdateBatch;
 
 class cwRHILinePlot : public cwRHIObject
 {
@@ -34,9 +37,18 @@ private:
     // QRhi resources
     QRhiVertexInputLayout m_inputLayout;
     QRhiBuffer* m_vertexBuffer = nullptr;
+    QRhiBuffer* m_tripIdBuffer = nullptr;
     QRhiBuffer* m_indexBuffer = nullptr;
     // QRhiBuffer* m_uniformBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
+
+    // Per-trip visibility lookup, sampled in the vertex shader. R8, width =
+    // trip count, height 1. Recreated only when the trip count changes; a plain
+    // visibility toggle re-uploads its (few-KB) contents in place.
+    QRhiTexture* m_visibilityTexture = nullptr;
+    QRhiSampler* m_visibilitySampler = nullptr;
+    int m_visibilityTextureWidth = 0;
+
     cwRhiScene* m_scene = nullptr;
     cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;
     cwRhiPipelineKey m_pipelineKey;
@@ -44,6 +56,9 @@ private:
 
     //The front end data that will be rendered
     cwTracked<cwRenderLinePlot::Data> m_data;
+    cwTracked<QVector<quint8>> m_tripVisibility;
+
+    void updateVisibilityTexture(QRhiResourceUpdateBatch* batch);
 
     // Update uniform buffer
     // struct UniformData {

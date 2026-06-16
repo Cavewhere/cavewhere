@@ -27,13 +27,28 @@ class cwRenderLinePlot : public cwRenderObject
 public:
     explicit cwRenderLinePlot(QObject *parent = nullptr);
 
-    void setGeometry(QVector<QVector3D> pointData, QVector<unsigned int> indexData);
+    // tripCount sizes the per-trip visibility vector (the running-id space,
+    // including geometry-less trips). New geometry remaps trip ids, so this
+    // resets visibility to all-visible; the owner re-applies any hidden trips.
+    void setGeometry(QVector<QVector3D> pointData,
+                     QVector<unsigned int> indexData,
+                     QVector<quint32> tripIds = {},
+                     int tripCount = 0);
+
+    // Per-trip visibility, one byte per running trip id (255 = visible,
+    // 0 = hidden). Sampled in the vertex shader keyed by the vertex's tripId.
+    // Tracked independently of the geometry so a keyword toggle re-uploads only
+    // the small visibility texture, not the vertex/index buffers. Mirrors the
+    // incremental cwRenderTexturedItems::setVisible(id, bool) used by scraps.
+    void setTripVisible(int tripId, bool visible);
 
     float maxZValue() const;
     float minZValue() const;
 
     QVector<QVector3D> points() const;
     QVector<unsigned int> indexes() const;
+    QVector<quint32> tripIds() const;
+    QVector<quint8> tripVisibility() const;
 
 protected:
     virtual cwRHIObject* createRHIObject() override;
@@ -45,12 +60,21 @@ private:
 
         QVector<QVector3D> points;
         QVector<unsigned int> indexes;
+        QVector<quint32> tripIds;
 
         // This is needed for cwTracked to work, all ways changes
         bool operator!=(const Data& other) const { return true; }
     };
 
     cwTracked<Data> m_data;
+    cwTracked<QVector<quint8>> m_tripVisibility;
+
+public:
+    // R8 visibility-texture sentinels: one byte per running trip id, read in the
+    // vertex shader. Shared with cwRHILinePlot (its empty-geometry fallback must
+    // agree on which value means "visible").
+    static constexpr quint8 kTripVisible = 0xFF;
+    static constexpr quint8 kTripHidden = 0x00;
 };
 
 inline float cwRenderLinePlot::maxZValue() const
@@ -71,6 +95,16 @@ inline QVector<QVector3D> cwRenderLinePlot::points() const
 inline QVector<unsigned int> cwRenderLinePlot::indexes() const
 {
     return m_data.value().indexes;
+}
+
+inline QVector<quint32> cwRenderLinePlot::tripIds() const
+{
+    return m_data.value().tripIds;
+}
+
+inline QVector<quint8> cwRenderLinePlot::tripVisibility() const
+{
+    return m_tripVisibility.value();
 }
 
 #endif // CWRENDERLINEPLOT_H

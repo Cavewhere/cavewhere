@@ -14,7 +14,10 @@ cwRHILinePlot::cwRHILinePlot()
 cwRHILinePlot::~cwRHILinePlot()
 {
     delete m_vertexBuffer;
+    delete m_tripIdBuffer;
     delete m_indexBuffer;
+    delete m_visibilityTexture;
+    delete m_visibilitySampler;
     // delete m_uniformBuffer;
     delete m_srb;
     releasePipeline();
@@ -41,16 +44,30 @@ void cwRHILinePlot::initializeResources(const ResourceUpdateData& data)
     m_vertexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
     m_vertexBuffer->create();
 
+    m_tripIdBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
+    m_tripIdBuffer->create();
+
     m_indexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::IndexBuffer, 0);
     m_indexBuffer->create();
 
-    // Input layout
+    // Nearest / clamp: the visibility texture is fetched with texelFetch (no
+    // filtering), but a sampler object is still required for the binding.
+    m_visibilitySampler = rhi->newSampler(QRhiSampler::Nearest,
+                                          QRhiSampler::Nearest,
+                                          QRhiSampler::None,
+                                          QRhiSampler::ClampToEdge,
+                                          QRhiSampler::ClampToEdge);
+    m_visibilitySampler->create();
+
+    // Input layout: binding 0 = vec3 position, binding 1 = uint trip id.
     QRhiVertexInputLayout inputLayout;
     inputLayout.setBindings({
-        { sizeof(QVector3D) }
+        { sizeof(QVector3D) },
+        { sizeof(quint32) }
     });
     inputLayout.setAttributes({
-        { 0, 0, QRhiVertexInputAttribute::Float3, 0 }
+        { 0, 0, QRhiVertexInputAttribute::Float3, 0 },
+        { 1, 1, QRhiVertexInputAttribute::UInt, 0 }
     });
     m_inputLayout = inputLayout;
 }
@@ -62,6 +79,9 @@ void cwRHILinePlot::synchronize(const SynchronizeData& data)
 
     m_data = linePlot->m_data;
     linePlot->m_data.resetChanged();
+
+    m_tripVisibility = linePlot->m_tripVisibility;
+    linePlot->m_tripVisibility.resetChanged();
 }
 
 void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
@@ -80,6 +100,16 @@ void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
                 m_vertexBuffer->create();
             }
             batch->updateDynamicBuffer(m_vertexBuffer, 0, vertexBufferSize, data.points.constData());
+        }
+
+        if (!data.tripIds.isEmpty()) {
+            // Update trip-id vertex buffer (parallel to the position buffer).
+            int tripIdBufferSize = data.tripIds.size() * sizeof(quint32);
+            if (m_tripIdBuffer->size() != tripIdBufferSize) {
+                m_tripIdBuffer->setSize(tripIdBufferSize);
+                m_tripIdBuffer->create();
+            }
+            batch->updateDynamicBuffer(m_tripIdBuffer, 0, tripIdBufferSize, data.tripIds.constData());
         }
 
         if (!data.indexes.isEmpty()) {
@@ -109,6 +139,60 @@ void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
     }
 
     m_data.resetChanged();
+
+    updateVisibilityTexture(batch);
+}
+
+// Ensures the R8 visibility texture matches the current trip count and, when
+// the flags changed (or the texture was just (re)created), uploads them. The
+// texture is recreated only when the width (trip count) changes; recreating it
+// invalidates the SRB, which ensureShaderResources rebuilds with the new
+// handle.
+void cwRHILinePlot::updateVisibilityTexture(QRhiResourceUpdateBatch* batch)
+{
+    if (!m_visibilitySampler) {
+        return;
+    }
+    QRhi* rhi = m_visibilitySampler->rhi();
+    if (!rhi) {
+        return;
+    }
+
+    const QVector<quint8>& flags = m_tripVisibility.value();
+    const int width = qMax(1, flags.size());
+
+    bool recreated = false;
+    if (!m_visibilityTexture || m_visibilityTextureWidth != width) {
+        delete m_visibilityTexture;
+        m_visibilityTexture = rhi->newTexture(QRhiTexture::R8, QSize(width, 1), 1);
+        m_visibilityTexture->create();
+        m_visibilityTextureWidth = width;
+        recreated = true;
+
+        // The SRB references the old texture handle — drop it so
+        // ensureShaderResources rebuilds against the new one.
+        if (m_srb) {
+            delete m_srb;
+            m_srb = nullptr;
+        }
+    }
+
+    if (recreated || m_tripVisibility.isChanged()) {
+        QByteArray bytes;
+        if (flags.isEmpty()) {
+            // No trips yet -> all visible.
+            bytes = QByteArray(width, char(cwRenderLinePlot::kTripVisible));
+        } else {
+            bytes = QByteArray(reinterpret_cast<const char*>(flags.constData()), flags.size());
+        }
+
+        QRhiTextureSubresourceUploadDescription sub(bytes);
+        sub.setSourceSize(QSize(width, 1));
+        QRhiTextureUploadDescription desc(QRhiTextureUploadEntry(0, 0, sub));
+        batch->uploadTexture(m_visibilityTexture, desc);
+    }
+
+    m_tripVisibility.resetChanged();
 }
 
 void cwRHILinePlot::render(const RenderData& data)
@@ -127,8 +211,11 @@ void cwRHILinePlot::render(const RenderData& data)
 
     data.cb->setGraphicsPipeline(m_pipelineRecord->pipeline);
     data.cb->setShaderResources(m_srb);
-    const QRhiCommandBuffer::VertexInput vertexInput(m_vertexBuffer, 0);
-    data.cb->setVertexInput(0, 1, &vertexInput, m_indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
+    const QRhiCommandBuffer::VertexInput vertexInputs[2] = {
+        QRhiCommandBuffer::VertexInput(m_vertexBuffer, 0),
+        QRhiCommandBuffer::VertexInput(m_tripIdBuffer, 0)
+    };
+    data.cb->setVertexInput(0, 2, vertexInputs, m_indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
     data.cb->drawIndexed(m_data.value().indexes.size());
 }
 
@@ -153,7 +240,7 @@ bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>&
     }
 
     auto* pipeline = m_pipelineRecord ? m_pipelineRecord->pipeline : nullptr;
-    if (!pipeline || !m_vertexBuffer || !m_indexBuffer || !m_srb) {
+    if (!pipeline || !m_vertexBuffer || !m_tripIdBuffer || !m_indexBuffer || !m_srb) {
         return false;
     }
 
@@ -165,6 +252,7 @@ bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>&
     cwRHIObject::Drawable drawable;
     drawable.type = cwRHIObject::Drawable::Type::Indexed;
     drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(m_vertexBuffer, 0));
+    drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(m_tripIdBuffer, 0));
     drawable.indexBuffer = m_indexBuffer;
     drawable.indexFormat = QRhiCommandBuffer::IndexUInt32;
     drawable.indexCount = static_cast<quint32>(value.indexes.size());
@@ -236,7 +324,8 @@ bool cwRHILinePlot::ensurePipeline(const RenderData& data)
 
             record->layout = localRhi->newShaderResourceBindings();
             record->layout->setBindings({
-                QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr)
+                QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr),
+                QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::VertexStage, nullptr, nullptr)
             });
             record->layout->create();
 
@@ -288,9 +377,16 @@ bool cwRHILinePlot::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer
         return false;
     }
 
+    // The visibility texture is created lazily in updateResources; the SRB can't
+    // be built until it exists.
+    if (!m_visibilityTexture || !m_visibilitySampler) {
+        return false;
+    }
+
     m_srb = rhi->newShaderResourceBindings();
     m_srb->setBindings({
-        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer())
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer()),
+        QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::VertexStage, m_visibilityTexture, m_visibilitySampler)
     });
     m_srb->create();
 
@@ -316,10 +412,10 @@ cwRhiPipelineKey cwRHILinePlot::buildPipelineKey(QRhiRenderPassDescriptor* rende
     key.depthWrite = 1;
     key.globalBinding = 0;
     key.perDrawBinding = 0xFF;
-    key.textureBinding = 0xFF;
+    key.textureBinding = 1;
     key.globalStages = cwShaderStageMask(cwRenderMaterialState::ShaderStage::Vertex);
     key.perDrawStages = 0;
-    key.textureStages = 0;
+    key.textureStages = cwShaderStageMask(cwRenderMaterialState::ShaderStage::Vertex);
     key.hasPerDraw = 0;
     key.topology = static_cast<quint8>(QRhiGraphicsPipeline::Lines);
     return key;

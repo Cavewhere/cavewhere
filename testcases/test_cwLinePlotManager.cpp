@@ -23,6 +23,12 @@
 #include "cwProject.h"
 #include "cwFixStationModel.h"
 #include "cwFixStation.h"
+#include "cwRenderLinePlot.h"
+#include "cwKeywordItemModel.h"
+#include "cwKeywordItem.h"
+#include "cwKeywordModel.h"
+#include "cwKeyword.h"
+#include "cwLinePlotTripVisibility.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -1130,6 +1136,132 @@ TEST_CASE("cwLinePlotManager handles chunks with empty shots (bug #435)", "[Line
         CHECK(cave->stationPositionLookup().hasPosition("a4"));
         // Geometry must cover chunk1 (10m) + chunk3 (5m); chunk2 is dropped.
         CHECK(cave->length()->value() == Catch::Approx(15.0).epsilon(0.01));
+    }
+}
+
+TEST_CASE("cwLinePlotManager registers per-trip centerline keyword visibility",
+          "[LinePlotManager][keyword]")
+{
+    // Two trips sharing the tie-in station a2: trip1 a1->a2, trip2 a2->a3.
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave 1"));
+    region.addCave(cave);
+
+    auto makeShot = [](const QString& dist, const QString& compass, const QString& clino) {
+        cwShot s;
+        s.setDistance(cwDistanceReading(dist));
+        s.setCompass(cwCompassReading(compass));
+        s.setClino(cwClinoReading(clino));
+        return s;
+    };
+
+    cwTrip* trip1 = new cwTrip();
+    trip1->setName(QStringLiteral("Trip A"));
+    trip1->calibrations()->setAutoDeclination(false);
+    cwSurveyChunk* chunk1 = new cwSurveyChunk();
+    trip1->addChunk(chunk1);
+    chunk1->appendShot(cwStation("a1"), cwStation("a2"), makeShot("10.0", "0.0", "0.0"));
+    cave->addTrip(trip1);
+
+    cwTrip* trip2 = new cwTrip();
+    trip2->setName(QStringLiteral("Trip B"));
+    trip2->calibrations()->setAutoDeclination(false);
+    cwSurveyChunk* chunk2 = new cwSurveyChunk();
+    trip2->addChunk(chunk2);
+    chunk2->appendShot(cwStation("a2"), cwStation("a3"), makeShot("10.0", "90.0", "0.0"));
+    cave->addTrip(trip2);
+
+    cwKeywordItemModel keywordModel;
+    cwRenderLinePlot linePlot;
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setKeywordItemModel(&keywordModel);
+    plotManager->setRenderLinePlot(&linePlot);
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    auto countHidden = [&]() {
+        int count = 0;
+        for (quint8 b : linePlot.tripVisibility()) {
+            if (b == 0) { count++; }
+        }
+        return count;
+    };
+
+    auto proxyForTrip = [&](cwTrip* trip) -> cwLinePlotTripVisibility* {
+        for (int i = 0; i < keywordModel.rowCount(); ++i) {
+            auto* item = keywordModel.item(i);
+            auto* proxy = qobject_cast<cwLinePlotTripVisibility*>(item->object());
+            if (proxy && proxy->trip() == trip) {
+                return proxy;
+            }
+        }
+        return nullptr;
+    };
+
+    SECTION("geometry is de-shared into the render object") {
+        CHECK(linePlot.tripIds().size() == linePlot.points().size());
+        CHECK(linePlot.points().size() == 4); // a1, a2(trip1), a2(trip2), a3
+        int a2Count = 0;
+        for (const QVector3D& p : linePlot.points()) {
+            if (p == QVector3D(0.0f, 10.0f, 0.0f)) { a2Count++; }
+        }
+        CHECK(a2Count == 2);
+    }
+
+    SECTION("one keyword item per trip, each extending its trip's keyword model") {
+        CHECK(keywordModel.rowCount() == 2);
+
+        auto* proxyA = proxyForTrip(trip1);
+        auto* proxyB = proxyForTrip(trip2);
+        REQUIRE(proxyA != nullptr);
+        REQUIRE(proxyB != nullptr);
+
+        // The item's keyword model aggregates the trip's keywords (Trip / Year /
+        // Date / Cave / Caver) via addExtension, plus publishes Type=Line Plot
+        // on its own model so filtering the Type keyword toggles the centerline.
+        for (int i = 0; i < keywordModel.rowCount(); ++i) {
+            auto* item = keywordModel.item(i);
+            const auto keywords = item->keywordModel()->keywords();
+            CHECK_FALSE(keywords.isEmpty());
+            CHECK(keywords.contains(cwKeyword(cwKeywordModel::TypeKey,
+                                              QStringLiteral("Line Plot"))));
+        }
+    }
+
+    SECTION("default visibility is all-visible, sized to the trip count") {
+        CHECK(linePlot.tripVisibility().size() == 2);
+        CHECK(countHidden() == 0);
+    }
+
+    SECTION("hiding a trip's proxy masks exactly that trip") {
+        auto* proxyA = proxyForTrip(trip1);
+        REQUIRE(proxyA != nullptr);
+
+        proxyA->setVisible(false);
+        CHECK(countHidden() == 1);
+
+        SECTION("the hidden state survives a re-solve (identity keyed)") {
+            // Rename the cave to force a re-solve; trip ids are renumbered but
+            // the trip's hidden state is re-applied by UUID identity.
+            cave->setName(QStringLiteral("Renamed Cave"));
+            plotManager->waitToFinish();
+
+            CHECK(linePlot.tripVisibility().size() == 2);
+            CHECK(countHidden() == 1);
+        }
+    }
+
+    SECTION("removing a trip drops its keyword item") {
+        REQUIRE(keywordModel.rowCount() == 2);
+
+        cave->removeTrip(1); // trip2
+        plotManager->waitToFinish();
+
+        CHECK(keywordModel.rowCount() == 1);
+        CHECK(linePlot.tripVisibility().size() == 1);
     }
 }
 

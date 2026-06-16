@@ -29,6 +29,10 @@
 #include "cwErrorListModel.h"
 #include "cwSurveyNetworkArtifact.h"
 #include "cwFixStationModel.h"
+#include "cwKeywordItem.h"
+#include "cwKeywordItemModel.h"
+#include "cwKeywordModel.h"
+#include "cwLinePlotTripVisibility.h"
 #include "asyncfuture.h"
 
 #include <QDir>
@@ -83,6 +87,8 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
 cwLinePlotManager::~cwLinePlotManager() {
     m_restarter.future().cancel();
     waitToFinish();
+
+    clearTripKeywordEntries();
 }
 
 void cwLinePlotManager::setCaveAttachmentDirs(QHash<QUuid, QString> dirs)
@@ -189,6 +195,132 @@ void cwLinePlotManager::setRenderLinePlot(cwRenderLinePlot* linePlot) {
 void cwLinePlotManager::setFutureManagerToken(cwFutureManagerToken token)
 {
     m_futureManagerToken = token;
+}
+
+void cwLinePlotManager::setKeywordItemModel(cwKeywordItemModel* keywordItemModel)
+{
+    if (m_keywordItemModel == keywordItemModel) {
+        return;
+    }
+
+    // Tear down items registered with the old model before switching.
+    clearTripKeywordEntries();
+
+    m_keywordItemModel = keywordItemModel;
+
+    // Entries are (re)created on the next updateLinePlot() against the current
+    // geometry; nothing to do here.
+}
+
+void cwLinePlotManager::reconcileTripKeywordItems(const QVector<QUuid>& tripUuids)
+{
+    if (Region == nullptr) {
+        return;
+    }
+
+    // Resolve UUIDs to live trips by identity (never by list position).
+    QHash<QUuid, cwTrip*> liveByUuid;
+    for (cwCave* cave : Region->caves()) {
+        for (cwTrip* trip : cave->trips()) {
+            liveByUuid.insert(trip->id(), trip);
+        }
+    }
+
+    QSet<cwTrip*> present;
+    for (int i = 0; i < tripUuids.size(); ++i) {
+        cwTrip* trip = liveByUuid.value(tripUuids.at(i), nullptr);
+        if (trip == nullptr) {
+            continue; // trip deleted mid-solve — skip, no dangling deref
+        }
+        present.insert(trip);
+
+        cwLinePlotTripVisibility* visibility = nullptr;
+        auto entryIt = m_tripKeywordEntries.constFind(trip);
+        if (entryIt != m_tripKeywordEntries.constEnd()) {
+            visibility = entryIt.value()
+                ? qobject_cast<cwLinePlotTripVisibility*>(entryIt.value()->object())
+                : nullptr;
+        } else if (m_keywordItemModel) {
+            auto item = new cwKeywordItem();
+            // The item publishes Type=Line Plot on its own model (so filtering
+            // the Type keyword toggles the whole centerline) plus inherits the
+            // trip's Trip/Year/Date/Cave/Caver keywords via the extension. Type
+            // lives on the item, not the trip, so scraps/notes under the trip
+            // don't inherit it.
+            item->keywordModel()->add({cwKeywordModel::TypeKey, QStringLiteral("Line Plot")});
+            item->keywordModel()->addExtension(trip->keywordModel());
+
+            visibility = new cwLinePlotTripVisibility(trip, item);
+            item->setObject(visibility);
+
+            // addItem fires resolveVisibility → proxy setVisible, which sets the
+            // proxy's state; the seed below pushes it to the render object.
+            m_keywordItemModel->addItem(item);
+
+            // Prompt cleanup if the trip is destroyed before the next solve.
+            connect(trip, &QObject::destroyed, this, [this, trip]() {
+                removeTripKeywordEntry(trip);
+            });
+
+            m_tripKeywordEntries.insert(trip, item);
+        }
+
+        // Re-bind the proxy to the trip's current running id (it is renumbered
+        // each solve) and seed the render object. setGeometry just reset every
+        // trip to visible, so only hidden trips need an explicit push.
+        if (visibility) {
+            visibility->setTarget(m_linePlot, i);
+            if (m_linePlot && !visibility->isVisible()) {
+                m_linePlot->setTripVisible(i, false);
+            }
+        }
+    }
+
+    // Drop entries for trips that are no longer in the solved geometry.
+    const QList<cwTrip*> tracked = m_tripKeywordEntries.keys();
+    for (cwTrip* trip : tracked) {
+        if (!present.contains(trip)) {
+            removeTripKeywordEntry(trip);
+        }
+    }
+}
+
+void cwLinePlotManager::removeTripKeywordEntry(cwTrip* trip)
+{
+    auto it = m_tripKeywordEntries.find(trip);
+    if (it == m_tripKeywordEntries.end()) {
+        return;
+    }
+
+    if (it.value() && m_keywordItemModel) {
+        m_keywordItemModel->removeItem(it.value());
+    }
+    if (it.value()) {
+        it.value()->deleteLater();
+    }
+    m_tripKeywordEntries.erase(it);
+
+    // Drop the destroyed() connection added when the entry was created;
+    // otherwise a trip that leaves and re-enters the solved geometry
+    // accumulates a duplicate connection on every cycle. (Lambda connections
+    // can't use Qt::UniqueConnection, so disconnect explicitly.)
+    disconnect(trip, &QObject::destroyed, this, nullptr);
+}
+
+void cwLinePlotManager::clearTripKeywordEntries()
+{
+    // Synchronous delete (not deleteLater): used for manager destruction and
+    // model swaps, where the event loop may not run again to drain deferred
+    // deletes. addItem reparents each item to the model, so deleting it here
+    // (rather than leaking) is required; the proxy is the item's child, so
+    // deleting the item deletes the proxy too.
+    for (auto it = m_tripKeywordEntries.begin(); it != m_tripKeywordEntries.end(); ++it) {
+        if (it.value() && m_keywordItemModel) {
+            m_keywordItemModel->removeItem(it.value());
+        }
+        delete it.value();
+    }
+    m_tripKeywordEntries.clear();
 }
 
 /**
@@ -504,10 +636,21 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
         }
     }
 
+    const QVector<QUuid> tripUuids = results.tripUuids();
+
     //Update the 3D plot
     if(m_linePlot != nullptr) {
-        m_linePlot->setGeometry(results.stationPositions(), results.linePlotIndexData());
+        m_linePlot->setGeometry(results.stationPositions(),
+                                results.linePlotIndexData(),
+                                results.tripIds(),
+                                tripUuids.size());
     }
+
+    // Re-attach per-trip centerline keyword items to the new geometry and
+    // re-seed each trip's visibility by its (renumbered) running id. setGeometry
+    // reset the render object to all-visible, so reconcile only pushes the trips
+    // that are currently hidden.
+    reconcileTripKeywordItems(tripUuids);
 
     // Skip emission when the network hasn't changed so 2D-geometry rules
     // don't rebuild on every line-plot completion triggered by unrelated

@@ -20,6 +20,9 @@ class cwRenderLinePlot;
 class cwSurveyChunkSignaler;
 class cwErrorListModel;
 class cwSaveLoad;
+class cwKeywordItem;
+class cwKeywordItemModel;
+class cwLinePlotTripVisibility;
 #include "cwLinePlotTask.h"
 #include "cwLocalSettings.h"
 #include "cwSurveyNetwork.h"
@@ -68,6 +71,12 @@ public:
     void setRegion(cwCavingRegion* region);
     Q_INVOKABLE void setRenderLinePlot(cwRenderLinePlot* linePlot);
     void setFutureManagerToken(cwFutureManagerToken token);
+
+    // Registers one keyword item per trip so the centerline participates in
+    // keyword visibility filtering (trip / year / date / cave / caver). Items
+    // are (re)created on each solve in updateLinePlot(). Mirrors the scrap and
+    // note managers.
+    void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
 
     // Per-owner attachment directories (abs paths on disk) consumed by
     // the line-plot driver's *include emission. Populated by the project
@@ -181,6 +190,13 @@ private:
 
     QList<QUuid> m_missingSourceOwners;
 
+    // Per-trip centerline keyword visibility. One keyword item per trip, keyed
+    // by the live cwTrip*. The visibility proxy (reachable via item->object())
+    // owns the running id and pushes toggles straight to the render object, so
+    // the manager keeps no flag array or running-id map of its own.
+    QPointer<cwKeywordItemModel> m_keywordItemModel;
+    QHash<cwTrip*, QPointer<cwKeywordItem>> m_tripKeywordEntries;
+
     bool AutomaticUpdate = true;
 
     void connectCaves(cwCavingRegion* region);
@@ -193,6 +209,20 @@ private:
     void clearUnconnectedChunkErrors();
 
     void updateLinePlot(cwLinePlotTask::LinePlotResultData results);
+
+    // Re-attaches the per-trip keyword items to the freshly-solved geometry:
+    // resolves each running id's UUID to a live cwTrip*, creates/removes keyword
+    // items to match, re-binds each trip's visibility proxy to its new running
+    // id, and re-seeds the render object's hidden trips. Identity (UUID) keyed,
+    // so it is immune to list-order drift; trips deleted mid-solve simply fail
+    // to resolve and are skipped.
+    void reconcileTripKeywordItems(const QVector<QUuid>& tripUuids);
+    void removeTripKeywordEntry(cwTrip* trip);
+
+    // Tears down every keyword entry synchronously (for manager destruction /
+    // model swap); removeTripKeywordEntry drops a single entry via deleteLater.
+    void clearTripKeywordEntries();
+
     void publishResults(const cwLinePlotTask::LinePlotResultData& results);
     void publishCavernOutput(QString cavernLog,
                              QString loopClosureStats,

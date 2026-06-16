@@ -112,6 +112,7 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager = new cwLinePlotManager(Project);
     LinePlotManager->setRegion(Region);
     LinePlotManager->setFutureManagerToken(FutureManagerModel->token());
+    LinePlotManager->setKeywordItemModel(m_keywordItemModel);
 
     //Setup the scrap manager
     ScrapManager = new cwScrapManager(Project);

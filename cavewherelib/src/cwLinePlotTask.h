@@ -160,13 +160,22 @@ public:
         void setTrip(QSet<cwTrip*> trips);
         void setScraps(QSet<cwScrap*> scraps);
         void setPositions(QVector<QVector3D> positions);
-        void setPlotIndexData(QVector<unsigned int> indexData);      
+        void setPlotIndexData(QVector<unsigned int> indexData);
+        void setTripIds(QVector<quint32> tripIds);
+        void setTripUuids(QVector<QUuid> tripUuids);
 
         QMap<cwCave*, LinePlotCaveData> caveData() const;
         QSet<cwTrip*> trips() const;
         QSet<cwScrap*> scraps() const;
         QVector<QVector3D> stationPositions() const;
         QVector<unsigned int> linePlotIndexData() const;
+
+        // Per-vertex running trip id (parallel to stationPositions) and the
+        // running-id -> stable cwTrip::id mapping. Only value-type UUIDs cross
+        // the worker boundary; the manager resolves them to live cwTrip* at use
+        // time. See cwLinePlotGeometry for how the ids are assigned.
+        QVector<quint32> tripIds() const;
+        QVector<QUuid> tripUuids() const;
 
     public:
         void setRegionNetwork(cwSurveyNetwork network);
@@ -178,6 +187,8 @@ public:
         QSet<cwScrap*> Scraps;
         QVector<QVector3D> StationPositions;
         QVector<unsigned int> LinePlotIndexData;
+        QVector<quint32> TripIds;
+        QVector<QUuid> TripUuids;
         cwSurveyNetwork RegionNetwork;
         bool RegionNetworkChanged = false;
 
@@ -362,6 +373,22 @@ inline void cwLinePlotTask::LinePlotResultData::setPositions(QVector<QVector3D> 
  */
 inline void cwLinePlotTask::LinePlotResultData::setPlotIndexData(QVector<unsigned int> indexData) {
     LinePlotIndexData = indexData;
+}
+
+inline void cwLinePlotTask::LinePlotResultData::setTripIds(QVector<quint32> tripIds) {
+    TripIds = std::move(tripIds);
+}
+
+inline void cwLinePlotTask::LinePlotResultData::setTripUuids(QVector<QUuid> tripUuids) {
+    TripUuids = std::move(tripUuids);
+}
+
+inline QVector<quint32> cwLinePlotTask::LinePlotResultData::tripIds() const {
+    return TripIds;
+}
+
+inline QVector<QUuid> cwLinePlotTask::LinePlotResultData::tripUuids() const {
+    return TripUuids;
 }
 
 inline QList<int> cwLinePlotTask::StationTripScrapLookup::trips(QString stationName) const

@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Centerline Keyword Visibility — Implementation Plan</title>
+<style>
+  :root {
+    --bg: #1a1d21;
+    --panel: #23272e;
+    --panel2: #2b3038;
+    --ink: #e6e9ee;
+    --muted: #9aa4b2;
+    --accent: #5aa9e6;
+    --accent2: #7ddc8f;
+    --warn: #e6b35a;
+    --bad: #e66a6a;
+    --line: #3a414b;
+    --code-bg: #15181c;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 120px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 {
+    font-size: 22px; margin: 52px 0 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); letter-spacing: -0.2px;
+  }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  p { margin: 10px 0; }
+  code {
+    font-family: var(--mono); font-size: 13.5px;
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    color: #d8e0ea;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono);
+    font-size: 13px; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 18px 0;
+  }
+  .fig {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin: 22px 0; text-align: center;
+  }
+  .fig svg { max-width: 100%; height: auto; }
+  .figcap {
+    color: var(--muted); font-size: 13.5px; margin-top: 12px; text-align: center;
+  }
+  .figcap b { color: var(--ink); }
+  .pill {
+    display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px;
+    border-radius: 999px; vertical-align: middle;
+  }
+  .pill.ok { background: rgba(125,220,143,.16); color: var(--accent2); }
+  .pill.new { background: rgba(90,169,230,.16); color: var(--accent); }
+  .pill.edit { background: rgba(230,179,90,.16); color: var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); font-weight: 600; }
+  td code { font-size: 12.5px; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  .callout {
+    border-left: 3px solid var(--accent); background: var(--panel2);
+    padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0;
+  }
+  .callout.warn { border-color: var(--warn); }
+  .callout.bad { border-color: var(--bad); }
+  .toc { columns: 2; column-gap: 32px; font-size: 14px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .legend { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; font-size:12.5px; color:var(--muted); margin-top:10px;}
+  .legend span { display:inline-flex; align-items:center; gap:6px;}
+  .sw { width:14px; height:14px; border-radius:3px; display:inline-block;}
+  .step-num {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:24px; height:24px; border-radius:50%; background:var(--accent);
+    color:#0d1014; font-weight:700; font-size:13px; margin-right:8px;
+  }
+  hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+  .mono-note { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Centerline Keyword Visibility</h1>
+  <p class="sub">Implementation plan — make the 3D survey centerline hide/show through keyword filtering, at the trip level (date, team, cave, trip). GitHub follow-up to the Cave keyword work (#488).</p>
+
+  <div class="panel">
+    <strong>Decisions locked in (from design discussion):</strong>
+    <ul>
+      <li><b>De-share vertices per trip</b> — each vertex belongs to exactly one trip, so per-trip masking is leak-free.</li>
+      <li><b>Trip-id attribute + R8 visibility texture (option B2)</b> — geometry stays static on toggle; flipping a keyword updates one texel, not the geometry buffers.</li>
+      <li><b>Identity (UUID) keying, not position</b> — the index→trip mapping is carried by <code>cwTripData::id</code>, never by list position, so it can't silently drift between the geometry path and the manager.</li>
+      <li><b>No live pointers cross the worker boundary</b> — only value-type UUIDs travel async; the manager resolves UUID→live <code>cwTrip*</code> at use time, eliminating dangling-pointer risk.</li>
+      <li><b>Render object owns visibility, proxy pokes it by id</b> — exactly like the scrap path (<code>cwRenderTexturedItems::setVisible(id, bool)</code>). A toggle flips one byte of the render object's tracked vector; the manager keeps no flag array, no running-id map, and needs no re-entrancy guard.</li>
+    </ul>
+  </div>
+  <div class="callout">
+    Picking is <b>not</b> in scope here — the centerline isn't pickable today (the BVH skips <code>Lines</code>). That's tracked separately in <a href="https://github.com/Cavewhere/cavewhere/issues/530">issue&nbsp;#530</a> (Summer 2026); see §10.
+  </div>
+
+  <h2>Contents</h2>
+  <div class="toc">
+    <a href="#problem">1. The problem</a><br>
+    <a href="#today">2. How it works today</a><br>
+    <a href="#gap">3. Why the centerline can't hide</a><br>
+    <a href="#deshare">4. De-sharing per trip</a><br>
+    <a href="#mask">5. Masking in the vertex shader</a><br>
+    <a href="#wiring">6. Keyword wiring</a><br>
+    <a href="#toggle">7. Toggle &amp; rebuild sequences</a><br>
+    <a href="#robust">7½. Robustness (the boring parts)</a><br>
+    <a href="#files">8. File-by-file changes</a><br>
+    <a href="#tests">9. Tests</a><br>
+    <a href="#followups">10. Known follow-ups</a><br>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="problem">1. The problem</h2>
+  <p>The Keyword tab can hide scraps, notes and LiDAR by metadata, but the survey <b>centerline never turns off</b>. We want it keyworded at the <b>trip</b> level so that filtering by date, team, cave or trip hides the matching legs of the line plot — using the same keyword machinery everything else already uses.</p>
+
+  <!-- ============================================================ -->
+  <h2 id="today">2. How it works today</h2>
+  <p>The keyword visibility system is <b>per object</b>: each filterable thing is wrapped in a <code>cwKeywordItem</code> whose keyword model is fed from the source's model, and <code>cwKeywordVisibility</code> calls <code>setVisible(bool)</code> on a small proxy when filters change. The centerline, by contrast, is <b>one merged geometry buffer for the entire region</b>.</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <!-- data model -->
+      <rect x="20" y="20" width="200" height="260" rx="10" fill="#2b3038" stroke="#3a414b"/>
+      <text x="120" y="44" fill="#9aa4b2" font-size="13" text-anchor="middle">Data model</text>
+      <rect x="44" y="58" width="152" height="30" rx="6" fill="#23272e" stroke="#3a414b"/>
+      <text x="120" y="78" fill="#e6e9ee" font-size="13" text-anchor="middle">cwCavingRegion</text>
+      <rect x="60" y="100" width="136" height="28" rx="6" fill="#23272e" stroke="#3a414b"/>
+      <text x="128" y="119" fill="#e6e9ee" font-size="12.5" text-anchor="middle">cwCave</text>
+      <rect x="76" y="140" width="120" height="28" rx="6" fill="#23272e" stroke="#5aa9e6"/>
+      <text x="136" y="159" fill="#cfe6fb" font-size="12.5" text-anchor="middle">cwTrip</text>
+      <rect x="92" y="180" width="104" height="26" rx="6" fill="#23272e" stroke="#3a414b"/>
+      <text x="144" y="198" fill="#e6e9ee" font-size="12" text-anchor="middle">cwSurveyChunk</text>
+      <rect x="108" y="218" width="88" height="24" rx="6" fill="#23272e" stroke="#3a414b"/>
+      <text x="152" y="235" fill="#e6e9ee" font-size="11.5" text-anchor="middle">cwShot</text>
+
+      <!-- arrow -->
+      <line x1="230" y1="150" x2="300" y2="150" stroke="#9aa4b2" stroke-width="2" marker-end="url(#ah)"/>
+      <text x="265" y="142" fill="#9aa4b2" font-size="11" text-anchor="middle">solve</text>
+
+      <!-- line plot task -->
+      <rect x="305" y="95" width="180" height="110" rx="10" fill="#2b3038" stroke="#3a414b"/>
+      <text x="395" y="120" fill="#9aa4b2" font-size="13" text-anchor="middle">cwLinePlotGeometry</text>
+      <text x="395" y="150" fill="#e6e9ee" font-size="12" text-anchor="middle">points[]  (one per</text>
+      <text x="395" y="167" fill="#e6e9ee" font-size="12" text-anchor="middle">unique station)</text>
+      <text x="395" y="190" fill="#e6e9ee" font-size="12" text-anchor="middle">indices[]  (line pairs)</text>
+
+      <line x1="495" y1="150" x2="565" y2="150" stroke="#9aa4b2" stroke-width="2" marker-end="url(#ah)"/>
+
+      <!-- render -->
+      <rect x="570" y="95" width="200" height="110" rx="10" fill="#2b3038" stroke="#e6b35a"/>
+      <text x="670" y="120" fill="#9aa4b2" font-size="13" text-anchor="middle">cwRenderLinePlot</text>
+      <text x="670" y="150" fill="#e6b35a" font-size="12.5" text-anchor="middle">ONE buffer for the</text>
+      <text x="670" y="167" fill="#e6b35a" font-size="12.5" text-anchor="middle">whole region</text>
+      <text x="670" y="190" fill="#9aa4b2" font-size="11.5" text-anchor="middle">setVisible() = all or nothing</text>
+
+      <defs>
+        <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+          <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#9aa4b2"/>
+        </marker>
+      </defs>
+    </svg>
+    <div class="figcap"><b>Figure 1.</b> The solver flattens every cave/trip/shot into a single vertex+index buffer. There is no per-trip handle to toggle.</div>
+  </div>
+
+  <p>Key detail from <code>cwLinePlotGeometry::generate()</code>: station positions are <b>deduplicated per cave</b> (one vertex per unique station name), while line segments are emitted per shot, and each shot is iterated under exactly one trip.</p>
+
+  <!-- ============================================================ -->
+  <h2 id="gap">3. Why the centerline can't hide</h2>
+  <ol>
+    <li>The centerline render object is <b>never registered</b> with the keyword system.</li>
+    <li>Even if it were, it's a single object — toggling it hides the <b>entire region's</b> centerline, not a trip.</li>
+    <li>The visibility unit we want is the <b>trip</b>, but the geometry has no notion of which vertex belongs to which trip.</li>
+  </ol>
+
+  <!-- ============================================================ -->
+  <h2 id="deshare">4. De-sharing per trip</h2>
+  <p>Because stations are deduped per cave, a <b>tie-in station</b> (where trip B starts where trip A ended) is a single shared vertex. A line segment needs both endpoints, so a per-vertex flag can't independently express two trips meeting at one station — hiding a shared vertex would leak into the neighbouring trip.</p>
+
+  <p>The fix: in the geometry builder, give <b>each trip its own copy</b> of the stations it uses (a trip-local name→vertex lookup). Junction stations get duplicated — a tiny increase — and now every vertex carries exactly one <code>tripId</code>.</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <!-- BEFORE -->
+      <text x="225" y="28" fill="#e66a6a" font-size="14" text-anchor="middle" font-weight="700">BEFORE — shared station X</text>
+      <!-- trip A line -->
+      <line x1="70" y1="120" x2="170" y2="90" stroke="#5aa9e6" stroke-width="3"/>
+      <line x1="170" y1="90" x2="270" y2="120" stroke="#5aa9e6" stroke-width="3"/>
+      <!-- trip B line -->
+      <line x1="270" y1="120" x2="370" y2="160" stroke="#7ddc8f" stroke-width="3"/>
+      <!-- stations -->
+      <circle cx="70" cy="120" r="7" fill="#5aa9e6"/><text x="70" y="145" fill="#9aa4b2" font-size="11" text-anchor="middle">W</text>
+      <circle cx="170" cy="90" r="7" fill="#5aa9e6"/><text x="170" y="80" fill="#9aa4b2" font-size="11" text-anchor="middle">V</text>
+      <circle cx="270" cy="120" r="9" fill="#e6b35a" stroke="#fff" stroke-width="1.5"/><text x="270" y="145" fill="#e6b35a" font-size="11" text-anchor="middle" font-weight="700">X (shared)</text>
+      <circle cx="370" cy="160" r="7" fill="#7ddc8f"/><text x="370" y="183" fill="#9aa4b2" font-size="11" text-anchor="middle">Y</text>
+      <text x="120" y="220" fill="#9aa4b2" font-size="12" text-anchor="middle">Hide trip A → must hide X,</text>
+      <text x="120" y="238" fill="#e66a6a" font-size="12" text-anchor="middle">but X also anchors trip B's leg → leak</text>
+
+      <!-- divider -->
+      <line x1="450" y1="50" x2="450" y2="280" stroke="#3a414b" stroke-width="1.5" stroke-dasharray="4 4"/>
+
+      <!-- AFTER -->
+      <text x="675" y="28" fill="#7ddc8f" font-size="14" text-anchor="middle" font-weight="700">AFTER — X duplicated per trip</text>
+      <line x1="520" y1="120" x2="620" y2="90" stroke="#5aa9e6" stroke-width="3"/>
+      <line x1="620" y1="90" x2="720" y2="120" stroke="#5aa9e6" stroke-width="3"/>
+      <line x1="730" y1="124" x2="830" y2="164" stroke="#7ddc8f" stroke-width="3"/>
+      <circle cx="520" cy="120" r="7" fill="#5aa9e6"/><text x="520" y="145" fill="#9aa4b2" font-size="11" text-anchor="middle">W·A</text>
+      <circle cx="620" cy="90" r="7" fill="#5aa9e6"/><text x="620" y="80" fill="#9aa4b2" font-size="11" text-anchor="middle">V·A</text>
+      <circle cx="720" cy="120" r="7" fill="#5aa9e6"/><text x="712" y="112" fill="#5aa9e6" font-size="11" text-anchor="middle">X·A</text>
+      <circle cx="730" cy="124" r="7" fill="#7ddc8f"/><text x="744" y="120" fill="#7ddc8f" font-size="11" text-anchor="middle">X·B</text>
+      <circle cx="830" cy="164" r="7" fill="#7ddc8f"/><text x="830" y="187" fill="#9aa4b2" font-size="11" text-anchor="middle">Y·B</text>
+      <text x="675" y="220" fill="#9aa4b2" font-size="12" text-anchor="middle">Hide trip A → collapse X·A only.</text>
+      <text x="675" y="238" fill="#7ddc8f" font-size="12" text-anchor="middle">X·B keeps trip B intact → no leak</text>
+    </svg>
+    <div class="figcap"><b>Figure 2.</b> Duplicating the tie-in station so each trip owns its vertices makes per-trip masking exact. Both endpoints of any hidden segment share the same trip, so they collapse together.</div>
+  </div>
+
+  <div class="callout">
+    <b>Two layers of id, deliberately.</b> The per-vertex attribute is a <b>dense running index</b> (0…N−1), assigned to <em>every</em> trip in iteration order — small enough for a vertex attribute and a texture column. Separately, the geometry emits an index→<b>UUID</b> table (<code>cwTripData::id</code>, which it already has), so the running index is anchored to a stable <em>identity</em>, not a list position. The dense index is a per-snapshot label regenerated each solve; the UUID is how the manager re-attaches it to a live <code>cwTrip</code>. This is what makes the mapping robust instead of fragile — see §<a href="#robust">7½</a>.
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="mask">5. Masking in the vertex shader</h2>
+  <p>Each vertex gets a second attribute <code>uint vTripId</code>. A one-row <b>R8 texture</b> (width = trip count) holds one visibility byte per trip. The vertex shader fetches that byte and, if the trip is hidden, pushes the vertex outside the clip volume so the GPU discards the line.</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <!-- vertex buffers -->
+      <text x="150" y="30" fill="#9aa4b2" font-size="13" text-anchor="middle">Vertex buffers (static)</text>
+      <rect x="40" y="44" width="220" height="34" rx="6" fill="#23272e" stroke="#3a414b"/>
+      <text x="150" y="66" fill="#e6e9ee" font-size="12" text-anchor="middle">binding 0 · vec3 position</text>
+      <rect x="40" y="86" width="220" height="34" rx="6" fill="#23272e" stroke="#5aa9e6"/>
+      <text x="150" y="108" fill="#cfe6fb" font-size="12" text-anchor="middle">binding 1 · uint tripId  ← new</text>
+
+      <!-- visibility texture -->
+      <text x="150" y="166" fill="#9aa4b2" font-size="13" text-anchor="middle">R8 visibility texture (dynamic)</text>
+      <g>
+        <rect x="40" y="180" width="30" height="30" fill="#7ddc8f" stroke="#15181c"/>
+        <rect x="70" y="180" width="30" height="30" fill="#7ddc8f" stroke="#15181c"/>
+        <rect x="100" y="180" width="30" height="30" fill="#e66a6a" stroke="#15181c"/>
+        <rect x="130" y="180" width="30" height="30" fill="#7ddc8f" stroke="#15181c"/>
+        <rect x="160" y="180" width="30" height="30" fill="#e66a6a" stroke="#15181c"/>
+        <rect x="190" y="180" width="30" height="30" fill="#7ddc8f" stroke="#15181c"/>
+        <text x="55" y="228" fill="#9aa4b2" font-size="10" text-anchor="middle">0</text>
+        <text x="85" y="228" fill="#9aa4b2" font-size="10" text-anchor="middle">1</text>
+        <text x="115" y="228" fill="#9aa4b2" font-size="10" text-anchor="middle">2</text>
+        <text x="145" y="228" fill="#9aa4b2" font-size="10" text-anchor="middle">3</text>
+        <text x="175" y="228" fill="#9aa4b2" font-size="10" text-anchor="middle">4</text>
+        <text x="205" y="228" fill="#9aa4b2" font-size="10" text-anchor="middle">5</text>
+        <text x="130" y="250" fill="#9aa4b2" font-size="11" text-anchor="middle">one texel per trip (1=show, 0=hide)</text>
+      </g>
+
+      <!-- arrows to shader -->
+      <line x1="265" y1="103" x2="360" y2="150" stroke="#9aa4b2" stroke-width="2" marker-end="url(#ah2)"/>
+      <line x1="225" y1="195" x2="360" y2="175" stroke="#9aa4b2" stroke-width="2" marker-end="url(#ah2)"/>
+
+      <!-- shader -->
+      <rect x="365" y="70" width="500" height="220" rx="10" fill="#15181c" stroke="#3a414b"/>
+      <text x="385" y="96" fill="#9aa4b2" font-size="12" font-family="monospace">LinePlot.vert</text>
+      <text x="385" y="124" fill="#cfe6fb" font-size="12.5" font-family="monospace">layout(location=1) in uint vTripId;</text>
+      <text x="385" y="144" fill="#cfe6fb" font-size="12.5" font-family="monospace">layout(binding=1) uniform sampler2D tripVis;</text>
+      <text x="385" y="178" fill="#e6e9ee" font-size="12.5" font-family="monospace">float v = texelFetch(tripVis,</text>
+      <text x="405" y="196" fill="#e6e9ee" font-size="12.5" font-family="monospace">             ivec2(int(vTripId),0), 0).r;</text>
+      <text x="385" y="222" fill="#e6b35a" font-size="12.5" font-family="monospace">if (v &lt; 0.5) {</text>
+      <text x="405" y="240" fill="#e6b35a" font-size="12.5" font-family="monospace">gl_Position = vec4(2,2,2,1); // off-clip</text>
+      <text x="405" y="258" fill="#e6b35a" font-size="12.5" font-family="monospace">return;</text>
+      <text x="385" y="276" fill="#e6b35a" font-size="12.5" font-family="monospace">}</text>
+
+      <defs>
+        <marker id="ah2" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+          <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#9aa4b2"/>
+        </marker>
+      </defs>
+    </svg>
+    <div class="figcap"><b>Figure 3.</b> The shader indexes the visibility texture by the vertex's trip id. Hidden trips' vertices are moved to NDC (2,2,2), outside the [-1,1] clip box, so their line segments never rasterize. There is no "discard a vertex" in a vertex shader — collapsing the primitive is the standard technique.</div>
+    <div class="legend">
+      <span><span class="sw" style="background:#7ddc8f"></span>trip visible</span>
+      <span><span class="sw" style="background:#e66a6a"></span>trip hidden</span>
+      <span><span class="sw" style="background:#5aa9e6"></span>new in this change</span>
+    </div>
+  </div>
+
+  <p>The two GPU inputs update <b>independently</b>: geometry (positions, tripIds, indices) re-uploads only on a solve; the visibility texture re-uploads on a keyword toggle. This is done with two separate <code>cwTracked</code> members on the render object — the same pattern <code>cwRHIPointCloud</code> uses for geometry vs. render state.</p>
+
+  <!-- ============================================================ -->
+  <h2 id="wiring">6. Keyword wiring</h2>
+  <p>Each trip is registered exactly like a scrap: a <code>cwKeywordItem</code> whose model <code>addExtension(trip-&gt;keywordModel())</code> — which already aggregates <b>Trip / Year / Date</b>, the <b>Cave</b> keyword (from #488) and the team's <b>Caver</b> keywords. The item also publishes <code>Type = Line Plot</code> on its <em>own</em> model (the same <code>Type</code> keyword scraps/LiDAR notes use), so filtering the <b>Type</b> keyword toggles the whole centerline at once. <code>Type</code> lives on the item, not the trip, so scraps/notes under the trip don't inherit it. The item's "object" is a tiny visibility proxy. <code>cwLinePlotManager</code> owns the map and pokes the render object per trip.</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <!-- trip -->
+      <rect x="30" y="30" width="170" height="70" rx="8" fill="#23272e" stroke="#5aa9e6"/>
+      <text x="115" y="55" fill="#cfe6fb" font-size="13" text-anchor="middle" font-weight="600">cwTrip</text>
+      <text x="115" y="76" fill="#9aa4b2" font-size="11" text-anchor="middle">keywordModel():</text>
+      <text x="115" y="91" fill="#9aa4b2" font-size="10.5" text-anchor="middle">Trip·Year·Date·Cave·Caver</text>
+
+      <!-- keyword item -->
+      <rect x="265" y="30" width="180" height="70" rx="8" fill="#23272e" stroke="#3a414b"/>
+      <text x="355" y="55" fill="#e6e9ee" font-size="13" text-anchor="middle" font-weight="600">cwKeywordItem</text>
+      <text x="355" y="78" fill="#9aa4b2" font-size="10.5" text-anchor="middle">model.addExtension(trip)</text>
+      <text x="355" y="92" fill="#9aa4b2" font-size="10.5" text-anchor="middle">object = proxy ↓</text>
+      <line x1="200" y1="65" x2="262" y2="65" stroke="#9aa4b2" stroke-width="2" marker-end="url(#ah3)"/>
+      <text x="231" y="56" fill="#9aa4b2" font-size="10" text-anchor="middle">extends</text>
+
+      <!-- keyword item model -->
+      <rect x="510" y="30" width="180" height="70" rx="8" fill="#23272e" stroke="#3a414b"/>
+      <text x="600" y="55" fill="#e6e9ee" font-size="12.5" text-anchor="middle" font-weight="600">cwKeywordItemModel</text>
+      <text x="600" y="80" fill="#9aa4b2" font-size="10.5" text-anchor="middle">addItem(item)</text>
+      <line x1="445" y1="65" x2="507" y2="65" stroke="#9aa4b2" stroke-width="2" marker-end="url(#ah3)"/>
+
+      <!-- keyword visibility -->
+      <rect x="510" y="140" width="180" height="64" rx="8" fill="#23272e" stroke="#3a414b"/>
+      <text x="600" y="166" fill="#e6e9ee" font-size="12.5" text-anchor="middle" font-weight="600">cwKeywordVisibility</text>
+      <text x="600" y="188" fill="#9aa4b2" font-size="10.5" text-anchor="middle">filter → setVisible(bool)</text>
+      <line x1="600" y1="100" x2="600" y2="137" stroke="#9aa4b2" stroke-width="2" marker-end="url(#ah3)"/>
+
+      <!-- proxy -->
+      <rect x="265" y="140" width="180" height="64" rx="8" fill="#23272e" stroke="#7ddc8f"/>
+      <text x="355" y="163" fill="#7ddc8f" font-size="12" text-anchor="middle" font-weight="600">cwLinePlotTripVisibility</text>
+      <text x="355" y="184" fill="#9aa4b2" font-size="10" text-anchor="middle">setVisible(bool) [new class]</text>
+      <text x="355" y="197" fill="#9aa4b2" font-size="10" text-anchor="middle">holds render obj + trip id</text>
+      <line x1="508" y1="172" x2="447" y2="172" stroke="#9aa4b2" stroke-width="2" marker-end="url(#ah3)"/>
+
+      <!-- manager -->
+      <rect x="265" y="250" width="180" height="74" rx="8" fill="#23272e" stroke="#e6b35a"/>
+      <text x="355" y="274" fill="#e6b35a" font-size="12.5" text-anchor="middle" font-weight="600">cwLinePlotManager</text>
+      <text x="355" y="294" fill="#9aa4b2" font-size="10" text-anchor="middle">UUID → cwTrip*</text>
+      <text x="355" y="307" fill="#9aa4b2" font-size="10" text-anchor="middle">reconcile + setTarget(id)</text>
+      <text x="355" y="320" fill="#9aa4b2" font-size="10" text-anchor="middle">seed hidden on solve</text>
+      <line x1="355" y1="204" x2="355" y2="247" stroke="#9aa4b2" stroke-width="2" marker-end="url(#ah3)"/>
+      <text x="395" y="228" fill="#9aa4b2" font-size="10" text-anchor="start">binds proxy</text>
+
+      <!-- render -->
+      <rect x="540" y="250" width="170" height="74" rx="8" fill="#23272e" stroke="#e6b35a"/>
+      <text x="625" y="276" fill="#e6b35a" font-size="12.5" text-anchor="middle" font-weight="600">cwRenderLinePlot</text>
+      <text x="625" y="298" fill="#9aa4b2" font-size="10" text-anchor="middle">setTripVisible(id, bool)</text>
+      <text x="625" y="312" fill="#9aa4b2" font-size="10" text-anchor="middle">→ R8 texture upload</text>
+      <line x1="445" y1="287" x2="537" y2="287" stroke="#9aa4b2" stroke-width="2" marker-end="url(#ah3)"/>
+
+      <!-- toggle path: proxy pokes the render object directly -->
+      <line x1="445" y1="185" x2="565" y2="247" stroke="#7ddc8f" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#ah3)"/>
+      <text x="520" y="200" fill="#7ddc8f" font-size="10" text-anchor="middle">toggle: setTripVisible(id)</text>
+
+      <defs>
+        <marker id="ah3" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+          <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#9aa4b2"/>
+        </marker>
+      </defs>
+    </svg>
+    <div class="figcap"><b>Figure 4.</b> The proven scrap pattern, applied to trips. The only new class is the small <code>cwLinePlotTripVisibility</code> proxy. A keyword toggle pokes the render object directly by trip id (green dashed path); the manager only wires items and re-binds/seeds proxies after each solve.</div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="toggle">7. Toggle &amp; rebuild sequences</h2>
+
+  <h3>A user toggles a keyword filter</h3>
+  <div class="panel">
+    <p><span class="step-num">1</span><code>cwKeywordVisibility</code> resolves the filter and calls <code>setVisible(false)</code> on the trip's proxy.</p>
+    <p><span class="step-num">2</span>The proxy flips its slot directly: <code>cwRenderLinePlot::setTripVisible(tripId, false)</code> — an O(1) byte change on the render object's tracked visibility vector. The manager is not involved.</p>
+    <p><span class="step-num">3</span>The render object marks only its <i>visibility</i> <code>cwTracked</code> dirty → the RHI object re-uploads the <b>whole</b> R8 texture (a few KB even for thousands of trips, so no dirty-rect tracking) in one <code>QRhiTextureUploadDescription</code>. <b>Geometry buffers are untouched.</b> The <code>QRhiTexture</code> is only <i>recreated</i> when the trip count changes on a re-solve; a plain toggle reuses it.</p>
+  </div>
+
+  <h3>The survey re-solves (any edit)</h3>
+  <div class="panel">
+    <p><span class="step-num">1</span><code>updateLinePlot()</code> receives new geometry + a per-vertex <code>tripIds</code> array + an index→<b>UUID</b> table — all <b>value types</b>, no live pointers carried across the worker boundary.</p>
+    <p><span class="step-num">2</span><code>setGeometry(points, indices, tripIds, tripCount)</code> uploads the new geometry and <b>resets</b> the render object's visibility vector to all-visible, sized to the new trip count.</p>
+    <p><span class="step-num">3</span>Reconcile resolves each index's UUID against a <code>QHash&lt;QUuid, cwTrip*&gt;</code> built from the <b>current live region</b> (unresolved UUIDs — trip deleted mid-solve — are skipped, no dangling deref). For each present trip it creates the keyword item if new, <b>re-binds</b> the proxy to the trip's freshly renumbered running id (<code>setTarget</code>), and removes items for trips no longer present.</p>
+    <p><span class="step-num">4</span>Because step&nbsp;2 reset everything to visible, reconcile only re-pushes the <b>hidden</b> trips: <code>setTripVisible(id, false)</code> for each proxy that is currently hidden — so filter state survives the re-solve even though the dense ids were renumbered. No bulk flag, no full-array rebuild.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="robust">7½. Robustness — why the boring parts are handled</h2>
+  <p>The architecture above is straightforward; the failure modes live in the seams (cross-file mapping, async lifetime, re-entrancy). These three measures close them.</p>
+
+  <h3>① Identity, not position</h3>
+  <p>The earlier draft aligned the per-vertex running index with an ordered <code>QVector&lt;cwTrip*&gt;</code> built by iterating <code>RegionDataPtrs</code> in "the same order" as the geometry. That's an <b>unenforced positional contract across two files</b> — sort or filter one path and visibility silently maps to the wrong trips, with no crash and no failing test.</p>
+  <p><b>Fix:</b> <code>cwLinePlotGeometry</code> already sees <code>cwTripData::id</code> (a <code>QUuid</code>), so it emits an <code>index → UUID</code> table directly. The manager resolves UUID → live <code>cwTrip*</code> by identity. Order is irrelevant; the mapping can't drift. This also <em>deletes</em> the fragile positional <code>tripsByIndex</code> step from the task.</p>
+
+  <h3>② No live pointers cross the async boundary</h3>
+  <p>The solve runs on a worker and the result arrives later; a trip can be deleted in between. Carrying raw <code>cwTrip*</code> would dangle (the existing code needs <code>validateResultsData()</code> for exactly this reason).</p>
+  <p><b>Fix:</b> only <code>QUuid</code> values travel async. Live pointers are obtained on the main thread, at use time, from the current region — a deleted trip just fails to resolve. The proxy stores a <code>QPointer&lt;cwTrip&gt;</code>, and each trip's <code>destroyed()</code> is connected to prompt entry removal (a trip delete also triggers a re-solve, so reconcile is the backstop).</p>
+
+  <h3>③ Incremental visibility instead of a re-entrancy guard</h3>
+  <p>An earlier draft routed every toggle up through the manager, which rebuilt a whole <code>QVector&lt;quint8&gt;</code> flag array and re-pushed it. That made <code>addItem()</code> → <code>resolveVisibility()</code> → proxy <code>setVisible()</code> trigger a full rebuild <b>per item</b> during reconcile, forcing a <code>m_bulkUpdating</code> flag to suppress the storm — a guard that only existed to paper over the design.</p>
+  <p><b>Fix:</b> visibility lives on the render object (like <code>cwRenderTexturedItems</code> for scraps). Each toggle is an O(1) <code>setTripVisible(id, bool)</code> that flips one byte; Qt RHI coalesces the resulting <code>update()</code> calls into one upload per frame. No flag array is rebuilt, so there is nothing to storm and no guard to add. After a solve, <code>setGeometry</code> resets to all-visible and reconcile re-pushes only the hidden trips.</p>
+
+  <div class="callout warn">
+    Dense trip ids change every solve — that's expected. Identity (UUID) is the stable key; the dense index is just a compact per-snapshot encoding for the vertex attribute and texture column.
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="files">8. File-by-file changes</h2>
+  <table>
+    <tr><th>File</th><th></th><th>Change</th></tr>
+    <tr>
+      <td><code>cwLinePlotGeometry.h/.cpp</code></td>
+      <td><span class="pill edit">edit</span></td>
+      <td><code>Result</code> gains <code>QVector&lt;quint32&gt; tripIds</code> (per-vertex) <b>and</b> <code>QVector&lt;QUuid&gt; tripUuids</code> (index→identity, from <code>cwTripData::id</code>). Rewrite <code>generate()</code> to use a <b>trip-local</b> name→vertex lookup (de-share across trips, share within), tagging each vertex with a running trip id assigned to every trip in order, and recording that trip's UUID at the matching index. <b>Preserve</b> the empty-leading-station bootstrap (bug&nbsp;#435) and per-cave depth/length exactly — guard with existing geometry tests.</td>
+    </tr>
+    <tr>
+      <td><code>cwLinePlotTask.h/.cpp</code></td>
+      <td><span class="pill edit">edit</span></td>
+      <td><code>LinePlotResultData</code> gains <code>tripIds()</code> (per-vertex) and <code>tripUuids()</code> (index→UUID) — pure pass-throughs of the geometry <code>Result</code>. <b>No positional <code>QVector&lt;cwTrip*&gt;</code></b>; only value-type UUIDs cross the worker boundary.</td>
+    </tr>
+    <tr>
+      <td><code>cwRenderLinePlot.h/.cpp</code></td>
+      <td><span class="pill edit">edit</span></td>
+      <td><code>Data</code> gains <code>tripIds</code>. Add a second <code>cwTracked</code> for the visibility vector — the render object <b>owns</b> it. New <code>setGeometry(points, indices, tripIds, tripCount)</code> (resets visibility to all-visible) and incremental <code>setTripVisible(id, bool)</code> (mirrors <code>cwRenderTexturedItems::setVisible</code>); public <code>tripIds()</code> / <code>tripVisibility()</code> getters (consistent with existing <code>points()</code>/<code>indexes()</code>).</td>
+    </tr>
+    <tr>
+      <td><code>cwRHILinePlot.h/.cpp</code></td>
+      <td><span class="pill edit">edit</span></td>
+      <td>Second vertex buffer (binding 1, <code>uint</code> tripId). R8 <code>QRhiTexture</code> + point <code>QRhiSampler</code>, recreated on trip-count change, uploaded when the visibility <code>cwTracked</code> changes. SRB binding 1 with <code>VertexStage</code>.</td>
+    </tr>
+    <tr>
+      <td><code>shaders/LinePlot.vert</code></td>
+      <td><span class="pill edit">edit</span></td>
+      <td>Add <code>location=1 in uint vTripId</code> + <code>binding=1 sampler2D</code>; collapse vertex off-clip when its trip is hidden. Already in <code>qt_add_shaders</code> — recompiles automatically.</td>
+    </tr>
+    <tr>
+      <td><code>cwLinePlotTripVisibility.h/.cpp</code></td>
+      <td><span class="pill new">new</span></td>
+      <td>Tiny <code>QObject</code> proxy mirroring <code>cwRenderTexturedItemVisibility</code>: holds a <code>QPointer&lt;cwRenderLinePlot&gt;</code> + the trip's running id + <b><code>QPointer&lt;cwTrip&gt;</code></b>; <code>setVisible(bool)</code> slot flips the render object's slot directly via <code>setTripVisible(id, bool)</code>. <code>setTarget()</code> re-binds it after each solve.</td>
+    </tr>
+    <tr>
+      <td><code>cwLinePlotManager.h/.cpp</code></td>
+      <td><span class="pill edit">edit</span></td>
+      <td><code>setKeywordItemModel()</code>; <code>QHash&lt;cwTrip*, QPointer&lt;cwKeywordItem&gt;&gt;</code> (the proxy is reachable via <code>item-&gt;object()</code>, so no separate state). Reconcile builds a <code>QHash&lt;QUuid, cwTrip*&gt;</code> from the live region, resolves <code>tripUuids()</code> through it (skip unresolved), re-binds each proxy to its new running id and seeds hidden trips. No flag array, no running-id map, no bulk guard. Clean up on trip <code>destroyed()</code> and on reconcile.</td>
+    </tr>
+    <tr>
+      <td><code>cwRootData.cpp</code></td>
+      <td><span class="pill edit">edit</span></td>
+      <td>One line: <code>LinePlotManager-&gt;setKeywordItemModel(m_keywordItemModel);</code></td>
+    </tr>
+    <tr>
+      <td><code>cavewherelib/CMakeLists.txt</code></td>
+      <td><span class="pill edit">edit</span></td>
+      <td>Add the new <code>cwLinePlotTripVisibility.{h,cpp}</code> sources.</td>
+    </tr>
+  </table>
+
+  <!-- ============================================================ -->
+  <h2 id="tests">9. Tests</h2>
+  <p>All C++ (<code>testcases/</code>), since RHI rendering isn't exercised offscreen. We verify the data and wiring that drive the GPU, not pixels.</p>
+  <ul>
+    <li><b>Geometry de-sharing</b> — a station shared by two trips yields two vertices with distinct trip ids; a station reused within one trip yields a single vertex; <code>tripIds.size() == points.size()</code>; ids cover <code>[0, tripCount)</code>.</li>
+    <li><b>Identity mapping (guards #1)</b> — for a known dataset, the vertex carrying a given trip's station has the trip id whose <code>tripUuids[id]</code> equals that trip's UUID; <b>reorder the caves/trips and re-solve</b> → the same trip still resolves to the same live <code>cwTrip*</code>. This is the regression test for the positional-drift bug.</li>
+    <li><b>Async lifetime (guards #2)</b> — delete a trip before the solve result is applied → its UUID fails to resolve and is skipped; no dangling deref (clean under ASan), no leftover keyword item.</li>
+    <li><b>Bulk push (guards #3)</b> — adding many trips on one re-solve results in exactly <b>one</b> visibility push, not one per trip. Assert via a <code>SignalSpy</code> on the render object's visibility-changed signal (no test-only counters).</li>
+    <li><b>Manager registration</b> — one keyword item per trip in the model; each item's model extends <code>trip-&gt;keywordModel()</code> and publishes <code>Type = Line Plot</code>; items removed on trip delete.</li>
+    <li><b>Visibility flow</b> — toggling a trip's proxy <code>setVisible(false)</code> sets that trip's byte to 0 in <code>cwRenderLinePlot::tripVisibility()</code>; state is preserved after a re-solve.</li>
+  </ul>
+  <p class="mono-note">Note: the GPU masking itself (vertex texture fetch, off-clip collapse, the new <code>uint</code> attribute binding) can't be unit-tested offscreen — it stays manual verification. The data tests above pin everything that feeds it, including the previously-fragile mapping.</p>
+  <p class="mono-note">Build &amp; run both suites per CLAUDE.md, teeing output to /tmp logs. New tests first; full suite once at the end.</p>
+
+  <!-- ============================================================ -->
+  <h2 id="followups">10. Known follow-ups (out of scope)</h2>
+  <ul>
+    <li><b>Picking</b> — the centerline is <i>not pickable at all</i> today: the CPU BVH (<code>cwGeometryItersecter</code>) skips <code>Lines</code> primitives (<code>countNodePrimitives()</code> returns 0). Making the centerline pickable (ray–segment proximity test with a pick radius) is tracked separately in <a href="https://github.com/Cavewhere/cavewhere/issues/530">issue #530</a> (Summer 2026). When that lands, per-trip pick filtering reuses this plan's per-segment trip id + visibility flags so hidden trips' centerline can't be picked. Vertex duplication from de-sharing is harmless to the BVH.</li>
+    <li><b>Trip-count ceiling</b> — none; the R8 texture sizes dynamically to the trip count.</li>
+  </ul>
+
+  <hr>
+  <p class="mono-note">Plan document — safe to delete. Generated for review before implementation.</p>
+
+</div>
+</body>
+</html>
