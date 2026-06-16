@@ -14,7 +14,8 @@ layout(location = 1) in vec4 projectedPosition;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(std140, binding = 1) uniform FragmentUniforms {
+// binding 1 is the vertex-stage Matrices block; this fragment block is at 2.
+layout(std140, binding = 2) uniform FragmentUniforms {
     vec4 lineColor;
 };
 

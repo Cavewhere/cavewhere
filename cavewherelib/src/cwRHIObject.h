@@ -3,6 +3,7 @@
 
 //Qt includes
 #include "cwScene.h"
+#include "cwRhiPipelineSet.h"
 class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 
@@ -83,6 +84,14 @@ public:
         quint32 firstInstance = 0;
         QRhiShaderResourceBindings* bindings = nullptr;
         std::function<void(const RenderData&)> customDraw;
+
+        // When >= 0, `bindings` binds the shared global camera UBO at this
+        // binding point with a dynamic offset. cwRhiScene supplies the per-pass
+        // camera slot offset at draw time (0 for the live frame, the offscreen
+        // slot for an offscreen render), so the same SRB renders the object from
+        // either camera. -1 (default) means no dynamic global-camera binding and
+        // the SRB is bound with no dynamic offsets.
+        qint32 globalCameraBinding = -1;
     };
 
     struct PipelineState {
@@ -129,6 +138,18 @@ public:
     // scene). Default false; cwRHIPointCloud overrides.
     virtual bool usesPointCloudPass() const { return false; }
 
+    // Drop any pipelines this object has cached against @a descriptor. The scene
+    // calls this on every render object just before it tears down a render
+    // target (and its render-pass descriptor), so per-object pipeline caches
+    // never outlive the descriptor their pipelines were built on. The default
+    // purges m_pipelines (the common case); cwRhiTexturedItems overrides it to
+    // fan out to its per-item sets.
+    virtual void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor)
+    {
+        m_pipelines.purgeFor(descriptor);
+        m_pipelineRecord = nullptr; // re-acquired in the next ensurePipeline
+    }
+
     static QShader loadShader(const QString& name);
 private:
     bool m_isVisible = true;
@@ -148,6 +169,15 @@ protected:
         batches.append(PipelineBatch{state, {}});
         return batches.last();
     }
+
+    // Per-render-target pipeline cache: one resident pipeline per render target
+    // this object draws into (live swap chain + any offscreen targets), so
+    // live↔offscreen toggling never rebuilds them. m_pipelineRecord is the
+    // record for the pass currently being gathered/rendered (set in the
+    // subclass's ensurePipeline). cwRhiTexturedItems keeps a set per item
+    // instead and leaves these unused.
+    cwRhiPipelineSet m_pipelines;
+    cwRhiPipelineRecord* m_pipelineRecord = nullptr;
 
 };
 
@@ -181,10 +211,15 @@ public:
     // inputSampleCount is the sample count of the offscreen textures the effect
     // reads: > 1 selects a per-sample (sampler2DMS) path, 1 the plain sampler2D
     // path. May be called again with a different inputSampleCount to swap paths.
+    // globalUBOStride is the byte stride between camera slots in globalUBO; the
+    // effect binds the global block with a dynamic offset so apply() can select
+    // the live (offset 0) or offscreen camera slot, matching the camera the
+    // depth buffer was rendered with.
     virtual void initialize(QRhi* rhi,
                             QRhiRenderPassDescriptor* outputRPDesc,
                             int outputSampleCount,
                             QRhiBuffer* globalUBO,
+                            quint32 globalUBOStride,
                             int inputSampleCount) = 0;
 
     // Called when an input texture is recreated (e.g. on swap-chain resize) so
@@ -201,11 +236,15 @@ public:
     // final composite: `sceneColor` holds Background + Opaque drawn at 1x,
     // `cloudColor` holds the point cloud (opaque where present, transparent
     // elsewhere), and `depth` is the combined cloud+scene depth they share.
+    // cameraUniformOffset selects the global-UBO camera slot (0 = live frame,
+    // the per-slot stride = offscreen) so the depth linearization uses the same
+    // camera the depth buffer was rendered with.
     virtual void apply(QRhiCommandBuffer* cb,
                        QRhiTexture* sceneColor,
                        QRhiTexture* cloudColor,
                        QRhiTexture* depth,
-                       QSize outputSize) = 0;
+                       QSize outputSize,
+                       quint32 cameraUniformOffset) = 0;
 };
 
 

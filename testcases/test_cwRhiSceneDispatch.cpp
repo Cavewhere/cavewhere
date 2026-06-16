@@ -30,11 +30,11 @@ cwRhiPipelineKey makeKey(QRhiRenderPassDescriptor* rpDesc, const QString& vsTag)
     return key;
 }
 
-// PipelineRecord with null pipeline/layout — the eviction's `delete` is then
+// cwRhiPipelineRecord with null pipeline/layout — the eviction's `delete` is then
 // a safe no-op so tests don't have to fabricate real QRhi pipelines.
-cwRhiScene::PipelineRecord* makeStubRecord(QRhi*)
+cwRhiPipelineRecord* makeStubRecord(QRhi*)
 {
-    auto* r = new cwRhiScene::PipelineRecord;
+    auto* r = new cwRhiPipelineRecord;
     r->pipeline = nullptr;
     r->layout = nullptr;
     return r;

@@ -28,6 +28,7 @@ void cwEDLEffect::initialize(QRhi* rhi,
                              QRhiRenderPassDescriptor* outputRPDesc,
                              int outputSampleCount,
                              QRhiBuffer* globalUBO,
+                             quint32 globalUBOStride,
                              int inputSampleCount)
 {
     if (!rhi || !outputRPDesc || !globalUBO) {
@@ -43,6 +44,7 @@ void cwEDLEffect::initialize(QRhi* rhi,
 
     m_rhi = rhi;
     m_globalUBO = globalUBO;
+    m_globalUBOStride = globalUBOStride;
 
     const auto discardPipeline = [this]() {
         // Leave m_pipeline null so apply()'s guard skips the composite cleanly
@@ -133,7 +135,7 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
         QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage;
     m_layout = m_rhi->newShaderResourceBindings();
     m_layout->setBindings({
-        QRhiShaderResourceBinding::uniformBuffer(0, bothStages, nullptr),
+        QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, bothStages, nullptr, m_globalUBOStride),
         QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, nullptr),
         QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr),
         QRhiShaderResourceBinding::sampledTexture(3, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr),
@@ -193,7 +195,7 @@ bool cwEDLEffect::ensureBindings(QRhiTexture* sceneColor, QRhiTexture* cloudColo
         QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage;
     m_srb = m_rhi->newShaderResourceBindings();
     m_srb->setBindings({
-        QRhiShaderResourceBinding::uniformBuffer(0, bothStages, m_globalUBO),
+        QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, bothStages, m_globalUBO, m_globalUBOStride),
         QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, m_edlUBO),
         QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage, cloudColor, m_sampler),
         QRhiShaderResourceBinding::sampledTexture(3, QRhiShaderResourceBinding::FragmentStage, depth, m_sampler),
@@ -266,8 +268,8 @@ void cwEDLEffect::updateFrameUniforms(const FrameUniformContext& ctx)
 
         const float midZ = depthFromNear(0.5f);
         const float farZ = depthFromNear(1.0f);
-        const float normalizer = std::log2(farZ / std::max(midZ, 1e-6f));
-        m_logDepthNormalizer = std::max(normalizer, 1.0f);
+        const float normalizer = std::log2(farZ / (std::max)(midZ, 1e-6f));
+        m_logDepthNormalizer = (std::max)(normalizer, 1.0f);
     }
 
     // Effective slope is the baseline divided by the per-projection normalizer,
@@ -310,7 +312,8 @@ void cwEDLEffect::apply(QRhiCommandBuffer* cb,
                         QRhiTexture* sceneColor,
                         QRhiTexture* cloudColor,
                         QRhiTexture* depth,
-                        QSize outputSize)
+                        QSize outputSize,
+                        quint32 cameraUniformOffset)
 {
     if (!cb || !m_pipeline) {
         return;
@@ -328,7 +331,11 @@ void cwEDLEffect::apply(QRhiCommandBuffer* cb,
     }
 
     cb->setGraphicsPipeline(m_pipeline);
-    cb->setShaderResources(m_srb);
+    // Binding 0 (the global camera block) is dynamic-offset so the composite
+    // linearizes depth with the same camera slot the depth buffer was rendered
+    // with (live = 0, offscreen = the per-slot stride).
+    const QRhiCommandBuffer::DynamicOffset cameraOffset(0, cameraUniformOffset);
+    cb->setShaderResources(m_srb, 1, &cameraOffset);
     cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
     cb->draw(3);
 }

@@ -14,10 +14,13 @@
 #include "cwCamera.h"
 #include "cwGeometryItersecter.h"
 #include "cwEDLSettings.h"
+#include "cwOffscreenRenderParameters.h"
+#include "cwOffscreenRenderJob.h"
 
 
 //Qt includes
 #include <rhi/qrhi.h>
+#include <QThread>
 
 cwScene::cwScene(QObject *parent) :
     QObject(parent),
@@ -30,7 +33,17 @@ cwScene::cwScene(QObject *parent) :
     connect(m_edl, &cwEDLSettings::changed, this, &cwScene::update);
 }
 
-cwScene::~cwScene() = default;
+cwScene::~cwScene()
+{
+    // Finish any offscreen jobs that were queued but never handed off to the
+    // render thread (e.g. the scene is torn down before the next synchroize), so
+    // their futures resolve rather than hang.
+    for (const auto& job : std::as_const(m_pendingOffscreenJobs)) {
+        if (job) {
+            job->promise.finish();
+        }
+    }
+}
 
 /**
  * @brief cwScene::addItem
@@ -159,6 +172,26 @@ int cwScene::pendingItemCount() const
 {
     return m_newRenderObjects.size()
            + m_toUpdateRenderObjects.size();
+}
+
+QFuture<QImage> cwScene::renderOffscreen(const cwOffscreenRenderParameters& parameters)
+{
+    // The queue handoff to the render thread is guarded only by the synchroize()
+    // barrier, so this must run on the thread cwScene lives on. Fail loudly in
+    // debug rather than silently corrupting the list from a worker thread.
+    Q_ASSERT(QThread::currentThread() == thread());
+
+    // cwScene owns the promise; the caller only ever sees the future. Mark the
+    // computation started so the future reports state correctly, then hand the
+    // job to the render thread (or a teardown path) to addResult()/finish().
+    auto job = std::make_shared<cwOffscreenRenderJob>();
+    job->parameters = parameters;
+    job->promise.start();
+    QFuture<QImage> future = job->promise.future();
+
+    m_pendingOffscreenJobs.append(std::move(job));
+    update();
+    return future;
 }
 
 

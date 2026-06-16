@@ -52,6 +52,7 @@ QC.ApplicationWindow {
         saveAsFileDialog: saveAsFileDialogId
         loadFileDialog: loadDialogId.loadFileDialog
         askToSaveDialog: askToSaveDialogId
+        mainContentLoader: mainContentId
         onShareRequested: shareDialogId.open()
         onOpenSharedLinkRequested: openSharedLinkDialogId.open()
     }

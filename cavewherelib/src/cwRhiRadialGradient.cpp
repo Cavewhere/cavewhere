@@ -12,8 +12,7 @@ cwRhiRadialGradient::~cwRhiRadialGradient()
     delete m_vertexBuffer;
     delete m_uniformBuffer;
     delete m_srb;
-
-    releasePipeline();
+    // m_pipelines releases its held pipeline references on destruction.
 }
 
 void cwRhiRadialGradient::initialize(const ResourceUpdateData& data)
@@ -152,53 +151,45 @@ bool cwRhiRadialGradient::ensurePipeline(const RenderData& data)
     }
 
     const auto key = buildPipelineKey(data.renderPassDescriptor, data.sampleCount);
-    if (!m_hasPipelineKey || !(m_pipelineKey == key)) {
-        releasePipeline();
 
-        auto createFn = [this, key](QRhi* localRhi) -> cwRhiScene::PipelineRecord* {
-            if (!localRhi) {
-                return nullptr;
-            }
-
-            auto* record = new cwRhiScene::PipelineRecord;
-            record->pipeline = localRhi->newGraphicsPipeline();
-
-            QShader vs = loadShader(kVertexShaderPath);
-            QShader fs = loadShader(kFragmentShaderPath);
-            record->pipeline->setShaderStages({
-                { QRhiShaderStage::Vertex, vs },
-                { QRhiShaderStage::Fragment, fs }
-            });
-            record->pipeline->setDepthTest(false);
-            record->pipeline->setDepthWrite(false);
-            record->pipeline->setSampleCount(key.sampleCount);
-            record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
-            record->pipeline->setVertexInputLayout(m_inputLayout);
-            record->pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
-            record->pipeline->setTargetBlends({ QRhiGraphicsPipeline::TargetBlend() });
-
-            record->layout = localRhi->newShaderResourceBindings();
-            record->layout->setBindings({
-                QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::FragmentStage, nullptr)
-            });
-            record->layout->create();
-
-            record->pipeline->setShaderResourceBindings(record->layout);
-            record->pipeline->setRenderPassDescriptor(key.renderPass);
-            record->pipeline->create();
-
-            return record;
-        };
-
-        m_pipelineRecord = m_scene->acquirePipeline(key, rhi, createFn);
-        m_pipelineKey = key;
-        m_hasPipelineKey = (m_pipelineRecord != nullptr);
-
-        if (m_srb) {
-            delete m_srb;
-            m_srb = nullptr;
+    auto createFn = [this, key](QRhi* localRhi) -> cwRhiPipelineRecord* {
+        if (!localRhi) {
+            return nullptr;
         }
-    }
+
+        auto* record = new cwRhiPipelineRecord;
+        record->pipeline = localRhi->newGraphicsPipeline();
+
+        QShader vs = loadShader(kVertexShaderPath);
+        QShader fs = loadShader(kFragmentShaderPath);
+        record->pipeline->setShaderStages({
+            { QRhiShaderStage::Vertex, vs },
+            { QRhiShaderStage::Fragment, fs }
+        });
+        record->pipeline->setDepthTest(false);
+        record->pipeline->setDepthWrite(false);
+        record->pipeline->setSampleCount(key.sampleCount);
+        record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
+        record->pipeline->setVertexInputLayout(m_inputLayout);
+        record->pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+        record->pipeline->setTargetBlends({ QRhiGraphicsPipeline::TargetBlend() });
+
+        record->layout = localRhi->newShaderResourceBindings();
+        record->layout->setBindings({
+            QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::FragmentStage, nullptr)
+        });
+        record->layout->create();
+
+        record->pipeline->setShaderResourceBindings(record->layout);
+        record->pipeline->setRenderPassDescriptor(key.renderPass);
+        record->pipeline->create();
+
+        return record;
+    };
+
+    m_pipelineRecord = m_pipelines.acquire(m_scene, key, [&]() {
+        return m_scene->acquirePipeline(key, rhi, createFn);
+    });
 
     if (!m_pipelineRecord) {
         return false;
@@ -238,15 +229,6 @@ bool cwRhiRadialGradient::ensureShaderResources(QRhi* rhi)
     }
 
     return true;
-}
-
-void cwRhiRadialGradient::releasePipeline()
-{
-    if (m_pipelineRecord && m_scene) {
-        m_scene->releasePipeline(m_pipelineRecord);
-    }
-    m_pipelineRecord = nullptr;
-    m_hasPipelineKey = false;
 }
 
 cwRhiPipelineKey cwRhiRadialGradient::buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,

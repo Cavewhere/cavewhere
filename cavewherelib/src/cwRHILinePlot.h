@@ -38,9 +38,6 @@ private:
     // QRhiBuffer* m_uniformBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
     cwRhiScene* m_scene = nullptr;
-    cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;
-    cwRhiPipelineKey m_pipelineKey;
-    bool m_hasPipelineKey = false;
 
     //The front end data that will be rendered
     cwTracked<cwRenderLinePlot::Data> m_data;
@@ -51,7 +48,6 @@ private:
     //     float minZValue;
     // };
 
-    void releasePipeline();
     bool ensurePipeline(const RenderData& data);
     bool ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer);
     cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,

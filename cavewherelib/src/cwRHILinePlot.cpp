@@ -17,7 +17,7 @@ cwRHILinePlot::~cwRHILinePlot()
     delete m_indexBuffer;
     // delete m_uniformBuffer;
     delete m_srb;
-    releasePipeline();
+    // m_pipelines releases its held pipeline references on destruction.
 }
 
 void cwRHILinePlot::initialize(const ResourceUpdateData& data)
@@ -126,7 +126,10 @@ void cwRHILinePlot::render(const RenderData& data)
     }
 
     data.cb->setGraphicsPipeline(m_pipelineRecord->pipeline);
-    data.cb->setShaderResources(m_srb);
+    // The global camera UBO at binding 0 is dynamic-offset; this legacy path only
+    // ever draws the live frame, so it reads slot 0 (offset 0).
+    const QRhiCommandBuffer::DynamicOffset cameraOffset(0, 0);
+    data.cb->setShaderResources(m_srb, 1, &cameraOffset);
     const QRhiCommandBuffer::VertexInput vertexInput(m_vertexBuffer, 0);
     data.cb->setVertexInput(0, 1, &vertexInput, m_indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
     data.cb->drawIndexed(m_data.value().indexes.size());
@@ -169,18 +172,10 @@ bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>&
     drawable.indexFormat = QRhiCommandBuffer::IndexUInt32;
     drawable.indexCount = static_cast<quint32>(value.indexes.size());
     drawable.bindings = m_srb;
+    drawable.globalCameraBinding = 0; // slot 0 binds the global camera UBO (dynamic offset)
 
     batch.drawables.append(drawable);
     return true;
-}
-
-void cwRHILinePlot::releasePipeline()
-{
-    if (m_pipelineRecord && m_scene) {
-        m_scene->releasePipeline(m_pipelineRecord);
-    }
-    m_pipelineRecord = nullptr;
-    m_hasPipelineKey = false;
 }
 
 bool cwRHILinePlot::ensurePipeline(const RenderData& data)
@@ -203,59 +198,53 @@ bool cwRHILinePlot::ensurePipeline(const RenderData& data)
         return false;
     }
 
+    const quint32 globalStride = data.renderer->globalUniformBufferStride();
+
     const auto key = buildPipelineKey(data.renderPassDescriptor, data.sampleCount);
-    if (!m_hasPipelineKey || !(m_pipelineKey == key)) {
-        releasePipeline();
 
-        auto createFn = [this, key](QRhi* localRhi) -> cwRhiScene::PipelineRecord* {
-            if (!localRhi) {
-                return nullptr;
-            }
-
-            auto* record = new cwRhiScene::PipelineRecord;
-            record->pipeline = localRhi->newGraphicsPipeline();
-
-            QShader vs = loadShader(":/shaders/LinePlot.vert.qsb");
-            QShader fs = loadShader(":/shaders/LinePlot.frag.qsb");
-
-            record->pipeline->setShaderStages({
-                { QRhiShaderStage::Vertex, vs },
-                { QRhiShaderStage::Fragment, fs }
-            });
-
-            record->pipeline->setDepthTest(true);
-            record->pipeline->setDepthWrite(true);
-            record->pipeline->setSampleCount(key.sampleCount);
-            record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
-            record->pipeline->setVertexInputLayout(m_inputLayout);
-            record->pipeline->setTopology(QRhiGraphicsPipeline::Lines);
-
-            QRhiGraphicsPipeline::TargetBlend blendState;
-            blendState.enable = false;
-            record->pipeline->setTargetBlends({ blendState });
-
-            record->layout = localRhi->newShaderResourceBindings();
-            record->layout->setBindings({
-                QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr)
-            });
-            record->layout->create();
-
-            record->pipeline->setShaderResourceBindings(record->layout);
-            record->pipeline->setRenderPassDescriptor(key.renderPass);
-            record->pipeline->create();
-
-            return record;
-        };
-
-        m_pipelineRecord = m_scene->acquirePipeline(key, rhi, createFn);
-        m_pipelineKey = key;
-        m_hasPipelineKey = (m_pipelineRecord != nullptr);
-
-        if (m_srb) {
-            delete m_srb;
-            m_srb = nullptr;
+    auto createFn = [this, key, globalStride](QRhi* localRhi) -> cwRhiPipelineRecord* {
+        if (!localRhi) {
+            return nullptr;
         }
-    }
+
+        auto* record = new cwRhiPipelineRecord;
+        record->pipeline = localRhi->newGraphicsPipeline();
+
+        QShader vs = loadShader(":/shaders/LinePlot.vert.qsb");
+        QShader fs = loadShader(":/shaders/LinePlot.frag.qsb");
+
+        record->pipeline->setShaderStages({
+            { QRhiShaderStage::Vertex, vs },
+            { QRhiShaderStage::Fragment, fs }
+        });
+
+        record->pipeline->setDepthTest(true);
+        record->pipeline->setDepthWrite(true);
+        record->pipeline->setSampleCount(key.sampleCount);
+        record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
+        record->pipeline->setVertexInputLayout(m_inputLayout);
+        record->pipeline->setTopology(QRhiGraphicsPipeline::Lines);
+
+        QRhiGraphicsPipeline::TargetBlend blendState;
+        blendState.enable = false;
+        record->pipeline->setTargetBlends({ blendState });
+
+        record->layout = localRhi->newShaderResourceBindings();
+        record->layout->setBindings({
+            QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, nullptr, globalStride)
+        });
+        record->layout->create();
+
+        record->pipeline->setShaderResourceBindings(record->layout);
+        record->pipeline->setRenderPassDescriptor(key.renderPass);
+        record->pipeline->create();
+
+        return record;
+    };
+
+    m_pipelineRecord = m_pipelines.acquire(m_scene, key, [&]() {
+        return m_scene->acquirePipeline(key, rhi, createFn);
+    });
 
     if (!m_pipelineRecord) {
         return false;
@@ -290,7 +279,7 @@ bool cwRHILinePlot::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer
 
     m_srb = rhi->newShaderResourceBindings();
     m_srb->setBindings({
-        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer())
+        QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer(), renderer->globalUniformBufferStride())
     });
     m_srb->create();
 

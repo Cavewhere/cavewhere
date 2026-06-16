@@ -33,9 +33,6 @@ private:
     QRhiShaderResourceBindings* m_srb = nullptr;
 
     cwRhiScene* m_scene = nullptr;
-    cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;
-    cwRhiPipelineKey m_pipelineKey;
-    bool m_hasPipelineKey = false;
     bool m_resourcesInitialized = false;
 
     struct UniformData {
@@ -47,7 +44,6 @@ private:
         //make sure you add padding if you put more parameters in here
     } m_uniformData;
 
-    void releasePipeline();
     bool ensurePipeline(const RenderData& data);
     bool ensureShaderResources(QRhi* rhi);
     cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,

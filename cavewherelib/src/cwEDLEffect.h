@@ -43,6 +43,7 @@ public:
                     QRhiRenderPassDescriptor* outputRPDesc,
                     int outputSampleCount,
                     QRhiBuffer* globalUBO,
+                    quint32 globalUBOStride,
                     int inputSampleCount) override;
     // Drop the cached SRB and texture-pointer identities so the next apply()
     // rebuilds bindings. cwRhiScene calls this when the offscreen textures are
@@ -55,7 +56,8 @@ public:
                QRhiTexture* sceneColor,
                QRhiTexture* cloudColor,
                QRhiTexture* depth,
-               QSize outputSize) override;
+               QSize outputSize,
+               quint32 cameraUniformOffset) override;
 
     // Live tuning, fed each synchroize() from cwScene::edl(). Staged on a
     // cwTracked; the derived UBO values are recomputed in updateFrameUniforms()
@@ -83,6 +85,7 @@ private:
 
     QRhi* m_rhi = nullptr;
     QRhiBuffer* m_globalUBO = nullptr;       // owned by cwRhiScene
+    quint32 m_globalUBOStride = 0;           // per-slot stride for the dynamic offset
     int m_outputSampleCount = 1;
     // Sample count of the offscreen textures this effect reads. > 1 selects the
     // per-sample EDL_MSAA.frag path; 1 the plain EDL.frag path.

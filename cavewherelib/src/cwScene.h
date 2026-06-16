@@ -15,6 +15,11 @@
 #include <QQueue>
 #include <QQmlEngine>
 #include <QHash>
+#include <QFuture>
+#include <QImage>
+
+//Std includes
+#include <memory>
 
 //Our includes
 #include "cwSceneUpdate.h"
@@ -27,6 +32,8 @@ class cwSceneCommand;
 class cwGeometryItersecter;
 class cwRhiItemRenderer;
 class cwEDLSettings;
+struct cwOffscreenRenderParameters;
+struct cwOffscreenRenderJob;
 
 
 /**
@@ -66,6 +73,25 @@ public:
     // Live pointers held in queues that cwRhiScene::synchroize() dereferences.
     int pendingItemCount() const;
 
+    // Render the resident scene from an arbitrary camera into an offscreen image,
+    // returning a QFuture that resolves to the result. A GUI-thread consumer
+    // (hi-res map export, sink classifier) supplies pure parameters (camera
+    // matrices + output size + clear colour + DPR); cwScene owns the QPromise
+    // internally and hands back only the read-only future, so the caller can
+    // observe or cancel the result but never resolve it. cwRhiScene::synchroize()
+    // drains the queued job onto the render thread, which renders into an
+    // offscreen target and fulfils the promise from a texture read-back; update()
+    // is called so a frame runs and the queue drains. Cancelling the future before
+    // the render thread reaches the job skips the GPU work.
+    //
+    // Must be called on the thread cwScene lives on (the GUI thread). The queue
+    // is a bare QList handed to the render thread with no mutex; its safety rests
+    // entirely on synchroize() draining it while the GUI thread is blocked at the
+    // scene-graph sync barrier. An off-thread caller would race that drain and
+    // corrupt the list, so a debug build asserts the calling thread. Consumers on
+    // a worker thread must marshal here via a queued connection first.
+    QFuture<QImage> renderOffscreen(const cwOffscreenRenderParameters& parameters);
+
 signals:
     void cameraChanged();
     void needsRendering();
@@ -91,6 +117,11 @@ private:
 
     // Live EDL tuning; owned here, read by cwRhiScene::synchroize().
     cwEDLSettings* m_edl;
+
+    // Offscreen render requests queued from the GUI thread, drained onto the
+    // render thread by cwRhiScene::synchroize() (a friend). shared_ptr so the
+    // promise survives the handoff and the async read-back completion.
+    QList<std::shared_ptr<cwOffscreenRenderJob>> m_pendingOffscreenJobs;
 
 };
 

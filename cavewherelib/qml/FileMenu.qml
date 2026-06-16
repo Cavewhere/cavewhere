@@ -146,6 +146,30 @@ QC.Menu {
             onTriggered: RootData.scrapManager.updateAllScraps()
         }
 
+        QC.MenuItem {
+            text: "Render Offscreen to PNG"
+            onTriggered: {
+                // MainContent.renderer is the GLTerrainRenderer; its .renderer
+                // alias is the RegionViewer (cw3dRegionViewer) that owns the
+                // offscreen render path.
+                let regionViewer = fileMenuId.mainContentLoader?.item?.renderer?.renderer ?? null
+                if (!regionViewer) {
+                    console.warn("Render Offscreen: no 3D renderer available (open the View page first)")
+                    return
+                }
+
+                // The render is async; open the PNG once it's actually written.
+                // One-shot: disconnect after the first emission so repeated
+                // triggers don't stack handlers.
+                let openWhenReady = function(path) {
+                    regionViewer.imageRendered.disconnect(openWhenReady)
+                    Qt.openUrlExternally("file://" + path)
+                }
+                regionViewer.imageRendered.connect(openWhenReady)
+                regionViewer.renderToImage("/tmp/cavewhere_offscreen.png")
+            }
+        }
+
         // QC.MenuItem {
         //     text: "Reload"
         //     shortcut: "Ctrl+R"

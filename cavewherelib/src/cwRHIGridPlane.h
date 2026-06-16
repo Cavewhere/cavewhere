@@ -28,10 +28,11 @@ public:
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
 
 private:
-    //Shader layout
+    //Shader layout — view/projection comes from the shared global UBO (binding 0);
+    //this per-object block (binding 1) carries only the grid's own matrices.
     struct UniformData {
-        float mvpMatrix[16];
-        float modelMatrix[16]; // scale-only matrix used for contour sampling
+        float modelMatrix[16]; // grid placement
+        float scaleMatrix[16]; // scale-only matrix used for contour sampling
     };
 
     struct FragmentUniformData {
@@ -44,9 +45,6 @@ private:
     QRhiBuffer* m_fragmentUniformBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
     cwRhiScene* m_scene = nullptr;
-    cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;
-    cwRhiPipelineKey m_pipelineKey;
-    bool m_hasPipelineKey = false;
 
     cwTracked<QMatrix4x4> m_modelMatrix;
     cwTracked<QMatrix4x4> m_scaleMatrix;
@@ -54,9 +52,8 @@ private:
     bool m_resourcesInitialized = false;
 
     void initializeResources(const ResourceUpdateData& data);
-    void releasePipeline();
     bool ensurePipeline(const RenderData& data);
-    bool ensureShaderResources(QRhi* rhi);
+    bool ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer);
     cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
                                       int sampleCount) const;
 };

@@ -30,7 +30,7 @@ cwRHIPointCloud::~cwRHIPointCloud()
     }
     delete m_perCloudUBO;
     delete m_srb;
-    releasePipeline();
+    // m_pipelines releases its held pipeline references on destruction.
 }
 
 void cwRHIPointCloud::initialize(const ResourceUpdateData& data)
@@ -172,7 +172,10 @@ void cwRHIPointCloud::render(const RenderData& data)
     }
 
     data.cb->setGraphicsPipeline(m_pipelineRecord->pipeline);
-    data.cb->setShaderResources(m_srb);
+    // The global camera UBO at binding 0 is dynamic-offset; this legacy path only
+    // ever draws the live frame, so it reads slot 0 (offset 0).
+    const QRhiCommandBuffer::DynamicOffset cameraOffset(0, 0);
+    data.cb->setShaderResources(m_srb, 1, &cameraOffset);
 
     QVarLengthArray<QRhiCommandBuffer::VertexInput, 4> inputs;
     inputs.reserve(m_vertexBuffers.size());
@@ -221,6 +224,7 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     }
     drawable.vertexCount = quint32(vertexCount);
     drawable.bindings = m_srb;
+    drawable.globalCameraBinding = 0; // slot 0 binds the global camera UBO (dynamic offset)
 
     batch.drawables.append(drawable);
     return true;
@@ -229,15 +233,6 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
 bool cwRHIPointCloud::usesPointCloudPass() const
 {
     return isVisible() && m_geometry.value().geometry.vertexCount() > 0;
-}
-
-void cwRHIPointCloud::releasePipeline()
-{
-    if (m_pipelineRecord && m_scene) {
-        m_scene->releasePipeline(m_pipelineRecord);
-    }
-    m_pipelineRecord = nullptr;
-    m_hasPipelineKey = false;
 }
 
 bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
@@ -266,60 +261,54 @@ bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
         return false;
     }
 
+    const quint32 globalStride = data.renderer->globalUniformBufferStride();
+
     const auto key = buildPipelineKey(data.renderPassDescriptor, data.sampleCount);
-    if (!m_hasPipelineKey || !(m_pipelineKey == key)) {
-        releasePipeline();
 
-        auto createFn = [this, key](QRhi* localRhi) -> cwRhiScene::PipelineRecord* {
-            if (!localRhi) {
-                return nullptr;
-            }
-
-            auto* record = new cwRhiScene::PipelineRecord;
-            record->pipeline = localRhi->newGraphicsPipeline();
-
-            QShader vs = loadShader(":/shaders/PointCloud.vert.qsb");
-            QShader fs = loadShader(":/shaders/PointCloud.frag.qsb");
-
-            record->pipeline->setShaderStages({
-                { QRhiShaderStage::Vertex, vs },
-                { QRhiShaderStage::Fragment, fs }
-            });
-
-            record->pipeline->setDepthTest(true);
-            record->pipeline->setDepthWrite(true);
-            record->pipeline->setSampleCount(key.sampleCount);
-            record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
-            record->pipeline->setVertexInputLayout(m_inputLayout);
-            record->pipeline->setTopology(QRhiGraphicsPipeline::Points);
-
-            QRhiGraphicsPipeline::TargetBlend blendState;
-            blendState.enable = false;
-            record->pipeline->setTargetBlends({ blendState });
-
-            record->layout = localRhi->newShaderResourceBindings();
-            record->layout->setBindings({
-                QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr),
-                QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, nullptr),
-            });
-            record->layout->create();
-
-            record->pipeline->setShaderResourceBindings(record->layout);
-            record->pipeline->setRenderPassDescriptor(key.renderPass);
-            record->pipeline->create();
-
-            return record;
-        };
-
-        m_pipelineRecord = m_scene->acquirePipeline(key, rhi, createFn);
-        m_pipelineKey = key;
-        m_hasPipelineKey = (m_pipelineRecord != nullptr);
-
-        if (m_srb) {
-            delete m_srb;
-            m_srb = nullptr;
+    auto createFn = [this, key, globalStride](QRhi* localRhi) -> cwRhiPipelineRecord* {
+        if (!localRhi) {
+            return nullptr;
         }
-    }
+
+        auto* record = new cwRhiPipelineRecord;
+        record->pipeline = localRhi->newGraphicsPipeline();
+
+        QShader vs = loadShader(":/shaders/PointCloud.vert.qsb");
+        QShader fs = loadShader(":/shaders/PointCloud.frag.qsb");
+
+        record->pipeline->setShaderStages({
+            { QRhiShaderStage::Vertex, vs },
+            { QRhiShaderStage::Fragment, fs }
+        });
+
+        record->pipeline->setDepthTest(true);
+        record->pipeline->setDepthWrite(true);
+        record->pipeline->setSampleCount(key.sampleCount);
+        record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
+        record->pipeline->setVertexInputLayout(m_inputLayout);
+        record->pipeline->setTopology(QRhiGraphicsPipeline::Points);
+
+        QRhiGraphicsPipeline::TargetBlend blendState;
+        blendState.enable = false;
+        record->pipeline->setTargetBlends({ blendState });
+
+        record->layout = localRhi->newShaderResourceBindings();
+        record->layout->setBindings({
+            QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, nullptr, globalStride),
+            QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, nullptr),
+        });
+        record->layout->create();
+
+        record->pipeline->setShaderResourceBindings(record->layout);
+        record->pipeline->setRenderPassDescriptor(key.renderPass);
+        record->pipeline->create();
+
+        return record;
+    };
+
+    m_pipelineRecord = m_pipelines.acquire(m_scene, key, [&]() {
+        return m_scene->acquirePipeline(key, rhi, createFn);
+    });
 
     if (!m_pipelineRecord) {
         return false;
@@ -354,7 +343,7 @@ bool cwRHIPointCloud::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* render
 
     m_srb = rhi->newShaderResourceBindings();
     m_srb->setBindings({
-        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer()),
+        QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer(), renderer->globalUniformBufferStride()),
         QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, m_perCloudUBO),
     });
     m_srb->create();
