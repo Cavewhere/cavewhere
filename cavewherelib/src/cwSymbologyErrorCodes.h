@@ -22,7 +22,7 @@ enum class SymbologyErrorCode : int {
     StampsWithoutGenerate   = Monad::ResultBase::CustomError + 3,   // 1027
     StampsWithoutGlyph      = Monad::ResultBase::CustomError + 4,   // 1028
     MissingGlyph            = Monad::ResultBase::CustomError + 5,   // 1029
-    DeadRulesUnderPolylines = Monad::ResultBase::CustomError + 6,   // 1030
+    DeadRulesUnderTrace     = Monad::ResultBase::CustomError + 6,   // 1030
     UnknownRule             = Monad::ResultBase::CustomError + 7,   // 1031
 };
 

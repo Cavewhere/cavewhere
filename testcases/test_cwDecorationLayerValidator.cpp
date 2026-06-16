@@ -17,6 +17,7 @@
 #include "cwError.h"
 
 // Qt
+#include <QColor>
 #include <QList>
 #include <QSet>
 #include <QString>
@@ -68,10 +69,10 @@ TEST_CASE("A well-formed stamp stack reports no problems", "[cwDecorationLayerVa
     CHECK(validate(layer, {QStringLiteral("tick")}).isEmpty());
 }
 
-TEST_CASE("A well-formed polyline stack reports no problems", "[cwDecorationLayerValidator]")
+TEST_CASE("A well-formed trace stack reports no problems", "[cwDecorationLayerValidator]")
 {
     cwDecorationLayer layer;
-    layer.rules = {rule(QStringLiteral("Trace polyline"))};
+    layer.rules = {rule(QStringLiteral("Trace"))};
     CHECK(validate(layer).isEmpty());
 }
 
@@ -79,7 +80,16 @@ TEST_CASE("An offset polyline stack reports no problems", "[cwDecorationLayerVal
 {
     cwDecorationLayer layer;
     layer.rules = {rule(QStringLiteral("Offset stroke")),
-                   rule(QStringLiteral("Trace polyline"))};
+                   rule(QStringLiteral("Trace"))};
+    CHECK(validate(layer).isEmpty());
+}
+
+TEST_CASE("A trace stack carrying a fill reports no problems", "[cwDecorationLayerValidator]")
+{
+    cwDecorationLayer layer;
+    layer.rules = {rule(QStringLiteral("Trace"))};
+    layer.fillColorLight = QColor(QStringLiteral("#1e90ff"));
+    layer.fillColorDark = QColor(QStringLiteral("#1e90ff"));
     CHECK(validate(layer).isEmpty());
 }
 
@@ -87,7 +97,7 @@ TEST_CASE("Two terminal rules is fatal", "[cwDecorationLayerValidator]")
 {
     cwDecorationLayer layer;
     layer.rules = {rule(QStringLiteral("Rigid stamp")),
-                   rule(QStringLiteral("Trace polyline"))};
+                   rule(QStringLiteral("Trace"))};
     const QList<cwError> errors = validate(layer);
     REQUIRE(hasCode(errors, SymbologyErrorCode::TwoTerminals));
     CHECK(severityOf(errors, SymbologyErrorCode::TwoTerminals) == cwError::Fatal);
@@ -98,7 +108,7 @@ TEST_CASE("Two Offset stroke rules is fatal", "[cwDecorationLayerValidator]")
     cwDecorationLayer layer;
     layer.rules = {rule(QStringLiteral("Offset stroke")),
                    rule(QStringLiteral("Offset stroke")),
-                   rule(QStringLiteral("Trace polyline"))};
+                   rule(QStringLiteral("Trace"))};
     const QList<cwError> errors = validate(layer);
     REQUIRE(hasCode(errors, SymbologyErrorCode::TwoTransformStrokes));
     CHECK(severityOf(errors, SymbologyErrorCode::TwoTransformStrokes) == cwError::Fatal);
@@ -146,22 +156,22 @@ TEST_CASE("A stamp terminal naming a glyph absent from the palette warns",
     CHECK_FALSE(hasCode(errors, SymbologyErrorCode::StampsWithoutGlyph));
 }
 
-TEST_CASE("Placement rules under a polyline terminal are dead and warn",
+TEST_CASE("Placement rules under a trace terminal are dead and warn",
           "[cwDecorationLayerValidator]")
 {
     cwDecorationLayer layer;
     layer.rules = {rule(QStringLiteral("Uniform spacing")),
-                   rule(QStringLiteral("Trace polyline"))};
+                   rule(QStringLiteral("Trace"))};
     const QList<cwError> errors = validate(layer);
-    REQUIRE(hasCode(errors, SymbologyErrorCode::DeadRulesUnderPolylines));
-    CHECK(severityOf(errors, SymbologyErrorCode::DeadRulesUnderPolylines) == cwError::Warning);
+    REQUIRE(hasCode(errors, SymbologyErrorCode::DeadRulesUnderTrace));
+    CHECK(severityOf(errors, SymbologyErrorCode::DeadRulesUnderTrace) == cwError::Warning);
 }
 
 TEST_CASE("An unknown rule name warns", "[cwDecorationLayerValidator]")
 {
     cwDecorationLayer layer;
     layer.rules = {rule(QStringLiteral("No Such Rule")),
-                   rule(QStringLiteral("Trace polyline"))};
+                   rule(QStringLiteral("Trace"))};
     const QList<cwError> errors = validate(layer);
     REQUIRE(hasCode(errors, SymbologyErrorCode::UnknownRule));
     CHECK(severityOf(errors, SymbologyErrorCode::UnknownRule) == cwError::Warning);

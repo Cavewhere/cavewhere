@@ -36,10 +36,10 @@ struct CAVEWHERE_LIB_EXPORT cwDecorationLayer {
     double minPaperScale = 0.0;               // 0 = unbounded
     double maxPaperScale = 0.0;
 
-    // Line-styling params, read by a Trace polyline terminal rule. (These will
-    // migrate into that rule's params when param interpretation lands; see the
-    // symbology plan's params/editor commit. Lateral offset is NOT here — it is
-    // the Offset stroke rule's param.)
+    // Line-styling params, read by a Trace terminal rule. (These will migrate
+    // into that rule's params when param interpretation lands; see the symbology
+    // plan's params/editor commit. Lateral offset is NOT here — it is the Offset
+    // stroke rule's param.)
     QColor           lineColorLight;
     QColor           lineColorDark;
     double           lineWidthMm  = 0.4;
@@ -47,6 +47,14 @@ struct CAVEWHERE_LIB_EXPORT cwDecorationLayer {
     Qt::PenCapStyle  lineCap  = Qt::RoundCap;
     Qt::PenJoinStyle lineJoin = Qt::RoundJoin;
     bool             lineAcceptsPressure = true;
+
+    // Fill colour, read by a Trace terminal rule alongside the line* pen. Invalid
+    // (default QColor) = no fill, so the trace draws outline-only; a valid colour
+    // makes it a filled region. Both variants are stored because cave maps invert
+    // in dark mode. Migrates into the Trace rule's params with the line* migration
+    // (commit 9).
+    QColor fillColorLight;
+    QColor fillColorDark;
 
     bool operator==(const cwDecorationLayer &o) const = default;
 };

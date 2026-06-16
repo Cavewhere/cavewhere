@@ -159,7 +159,7 @@ TEST_CASE("Manager surfaces a typed rule-stack warning in its error model",
     const QUuid id = QUuid::createUuid();
     // A placement rule under a polyline terminal is dead — a non-fatal warning.
     writeRuleStackPalette(temp.path(), QStringLiteral("dead-rule"), id,
-                          {QStringLiteral("Uniform spacing"), QStringLiteral("Trace polyline")});
+                          {QStringLiteral("Uniform spacing"), QStringLiteral("Trace")});
 
     cwSymbologyPaletteManager manager;
     manager.setPaletteDirectory(temp.path());
@@ -172,7 +172,7 @@ TEST_CASE("Manager surfaces a typed rule-stack warning in its error model",
     cwErrorModel *model = manager.errorModel();
     CHECK(model->fatalCount() == 0);
     CHECK(model->warningCount() >= 1);
-    CHECK(modelHasWarning(model, SymbologyErrorCode::DeadRulesUnderPolylines));
+    CHECK(modelHasWarning(model, SymbologyErrorCode::DeadRulesUnderTrace));
 }
 
 TEST_CASE("Manager refuses a palette with a fatal rule-stack problem",
@@ -185,7 +185,7 @@ TEST_CASE("Manager refuses a palette with a fatal rule-stack problem",
     // Two terminal rules — the engine would resolve the ambiguity arbitrarily, so
     // the load is fatal and the whole palette is refused.
     writeRuleStackPalette(temp.path(), QStringLiteral("two-terminals"), id,
-                          {QStringLiteral("Rigid stamp"), QStringLiteral("Trace polyline")});
+                          {QStringLiteral("Rigid stamp"), QStringLiteral("Trace")});
 
     cwSymbologyPaletteManager manager;
     manager.setPaletteDirectory(temp.path());

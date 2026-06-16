@@ -11,6 +11,7 @@
 
 // Our
 #include "cwSketchDecorationLayout.h"
+#include "cwGlyphSubPath.h"
 #include "cwPlacementRule.h"
 #include "cwPlacementRuleRegistry.h"
 #include "cwPlacementRuleParams.h"
@@ -24,6 +25,7 @@
 #include "cwPenPoint.h"
 
 // Qt
+#include <QBrush>
 #include <QColor>
 #include <QDir>
 #include <QFont>
@@ -81,7 +83,7 @@ cwDecorationLayer ruleLayer(const QString &glyphName, const QStringList &ruleNam
 
 cwDecorationLayer offsetLayer(double widthMm)
 {
-    cwDecorationLayer layer = ruleLayer(QString(), {QStringLiteral("Trace polyline")});
+    cwDecorationLayer layer = ruleLayer(QString(), {QStringLiteral("Trace")});
     layer.lineWidthMm = widthMm;
     return layer;
 }
@@ -107,7 +109,7 @@ cwDecorationLayer railLayer(double offsetMm, double widthMm)
 {
     cwDecorationLayer layer;
     layer.rules = {offsetStrokeRule(offsetMm),
-                   cwPlacementRuleData{QStringLiteral("Trace polyline"), {}}};
+                   cwPlacementRuleData{QStringLiteral("Trace"), {}}};
     layer.lineWidthMm = widthMm;
     return layer;
 }
@@ -206,6 +208,49 @@ cwSymbologyGlyph lineGlyph(const QString &name, const QVector<QPointF> &points)
     return glyph;
 }
 
+// A glyph that is a single stroke drawn by `brushName` (glyph-local paper-mm).
+cwSymbologyGlyph brushedGlyph(const QString &name, const QString &brushName,
+                              const QVector<QPointF> &points)
+{
+    cwSymbologyGlyph glyph;
+    glyph.name = name;
+    glyph.displayName = name;
+    cwPenStroke stroke;
+    stroke.brushName = brushName;
+    for (const QPointF &p : points) {
+        stroke.points.append(cwPenPoint(p, 1.0));
+    }
+    glyph.strokes.append(stroke);
+    return glyph;
+}
+
+constexpr double kStreamPenWidthMm = 0.15;
+const QColor kStreamFillLight = QColor(QStringLiteral("#1e90ff"));
+const QColor kStreamFillDark  = QColor(QStringLiteral("#1e90ff"));
+
+// stream-fill: a filled Trace brush — blue body with an optional edge (a Trace
+// terminal carrying a fill colour). penWidthMm == 0 leaves the pen colours unset,
+// the pure-fill degenerate case (fill only, no outline). The fill-bearing analog
+// of the plain (unfilled) centerline Trace brushes.
+cwLineBrush makeStreamFillBrush(const QString &name, double penWidthMm)
+{
+    cwDecorationLayer fill;
+    fill.rules = {cwPlacementRuleData{QStringLiteral("Trace"), {}}};
+    if (penWidthMm > 0.0) {
+        fill.lineColorLight = QColor(QStringLiteral("#000000"));
+        fill.lineColorDark = QColor(QStringLiteral("#ffffff"));
+    }
+    fill.lineWidthMm = penWidthMm;
+    fill.fillColorLight = kStreamFillLight;
+    fill.fillColorDark = kStreamFillDark;
+    return makeBrush(name, {fill});
+}
+
+// The closed-triangle arrowhead (paper-mm), apex pointing back along -X — the "<"
+// of a "<-----" stream symbol.
+const QVector<QPointF> kStreamTriangle = {QPointF(0.14, -0.14), QPointF(-0.18, 0.0),
+                                          QPointF(0.14, 0.14), QPointF(0.14, -0.14)};
+
 
 // Seed palette plus extra glyphs for the bending / single-stamp demos (the seed
 // only exercises traced lines + rigid stamps).
@@ -233,13 +278,28 @@ cwSymbologyPaletteData demoPalette()
     // along +Y so Align to tangent lays it across the stroke normal.
     palette.glyphs.append(lineGlyph(QStringLiteral("rail-tie"),
                                     {QPointF(0.0, -0.6), QPointF(0.0, 0.6)}));
-    // A closed triangle whose apex points back along -X — the "<" arrowhead of a
-    // "<-----" stream symbol. Outline only until fill lands (commit 4.2); a
-    // single-stamp stack drops it at the stroke start.
-    palette.glyphs.append(lineGlyph(QStringLiteral("stream-triangle"),
-                                    {QPointF(0.14, -0.14), QPointF(-0.18, 0.0),
-                                     QPointF(0.14, 0.14), QPointF(0.14, -0.14)}));
+    // A filled triangle arrowhead (commit 4.2): the stream-fill polygon brush
+    // plus a stream-indicator glyph whose triangle stroke resolves to it, so a
+    // single-stamp stack drops a pen+fill arrowhead at the stroke start. A second
+    // pen-less variant shows the pure-fill (no outline) degenerate case.
+    palette.lineBrushes.append(makeStreamFillBrush(QStringLiteral("stream-fill"), kStreamPenWidthMm));
+    palette.lineBrushes.append(makeStreamFillBrush(QStringLiteral("stream-fill-nopen"), 0.0));
+    palette.glyphs.append(brushedGlyph(QStringLiteral("stream-indicator"),
+                                       QStringLiteral("stream-fill"), kStreamTriangle));
+    palette.glyphs.append(brushedGlyph(QStringLiteral("stream-indicator-nopen"),
+                                       QStringLiteral("stream-fill-nopen"), kStreamTriangle));
     return palette;
+}
+
+// A placed stamp's sub-paths unioned into one path, for bounds / element-count
+// checks that don't care about per-sub-path style.
+QPainterPath combinedStampPath(const cwResolvedStamp &stamp)
+{
+    QPainterPath path;
+    for (const cwGlyphSubPath &sub : stamp.subPaths) {
+        path.addPath(sub.path);
+    }
+    return path;
 }
 
 // World bounding box over all of a brush's laid-out geometry.
@@ -250,11 +310,11 @@ QRectF geometryBounds(const cwBrushDecorationGeometry &geometry)
         bounds = bounds.isNull() ? r : bounds.united(r);
     };
     for (const auto &layer : geometry.layers) {
-        for (const QPolygonF &polyline : layer.offsetPolylines) {
-            add(polyline.boundingRect());
+        for (const cwGlyphSubPath &traced : layer.traced) {
+            add(traced.path.boundingRect());
         }
         for (const cwResolvedStamp &stamp : layer.stamps) {
-            add(stamp.path.boundingRect());
+            add(combinedStampPath(stamp).boundingRect());
         }
     }
     return bounds;
@@ -322,6 +382,35 @@ QStringList ruleComposition(const cwLineBrush &brush)
     return lines;
 }
 
+// The outline pen for a polygon sub-path: its own pen, or no outline at all when
+// the pen is zero-width / colourless (the pure-fill degenerate case).
+QPen polygonPen(const cwGlyphSubPath &sub)
+{
+    if (!sub.penColorLight.isValid() || sub.penWidthMm <= 0.0) {
+        return QPen(Qt::NoPen);
+    }
+    QPen pen(sub.penColorLight);
+    pen.setCosmetic(true);
+    pen.setWidthF(std::max(1.0, sub.penWidthMm * kOffsetWidthPxPerMm));
+    return pen;
+}
+
+// Draw one sub-path: a Polygon paints with its own pen + fill (pen-less = fill
+// only) under a save/restore; a Stroke paints with the painter's current pen.
+void drawGlyphSubPath(QPainter &painter, const cwGlyphSubPath &sub)
+{
+    if (sub.kind != cwGlyphSubPath::Polygon) {
+        painter.drawPath(sub.path);
+        return;
+    }
+    painter.save();
+    painter.setPen(polygonPen(sub));
+    painter.setBrush(sub.fillColorLight.isValid() ? QBrush(sub.fillColorLight)
+                                                  : QBrush(Qt::NoBrush));
+    painter.drawPath(sub.path);
+    painter.restore();
+}
+
 void paintPanel(QPainter &painter,
                 const QRectF &panelPixels,
                 const cwLineBrush &brush,
@@ -384,6 +473,16 @@ void paintPanel(QPainter &painter,
     toPixel.translate(-bounds.left(), -bounds.top());
     painter.setTransform(toPixel, false);
 
+    // The cartographer-drawn stroke path the decorations are generated from,
+    // drawn first (underneath) so opaque decorations paint over it — e.g. a
+    // filled glyph occludes the centerline, demonstrating layer paint order.
+    // Offset decorations sit off-centre and leave it visible.
+    QPen strokePen(QColor(QStringLiteral("#e00000")));
+    strokePen.setCosmetic(true);
+    strokePen.setWidthF(1.0);
+    painter.setPen(strokePen);
+    painter.drawPolyline(QPolygonF(strokeWorld));
+
     // geometry.layers is 1:1 with brush.decorations, so each layer's authored
     // lineWidthMm drives the drawn width of both its traced lines and its
     // glyph stamps (wall 0.6 mm reads as double feature/floor-step's 0.3 mm; a
@@ -396,21 +495,20 @@ void paintPanel(QPainter &painter,
         layerPen.setWidthF(std::max(1.0, brush.decorations.at(i).lineWidthMm * kOffsetWidthPxPerMm));
         painter.setPen(layerPen);
 
-        for (const QPolygonF &polyline : layer.offsetPolylines) {
-            painter.drawPolyline(polyline);
+        // Traced regions: a Stroke keeps the layer pen; a Polygon (the layer
+        // carries a fill) paints its own pen + fill (a zero-width or colourless
+        // pen draws fill only).
+        for (const cwGlyphSubPath &traced : layer.traced) {
+            drawGlyphSubPath(painter, traced);
         }
+        // Stamps: same rule per sub-path — a Polygon sub-path uses its glyph
+        // brush's own pen + fill, a Stroke sub-path keeps the layer pen.
         for (const cwResolvedStamp &stamp : layer.stamps) {
-            painter.drawPath(stamp.path);
+            for (const cwGlyphSubPath &sub : stamp.subPaths) {
+                drawGlyphSubPath(painter, sub);
+            }
         }
     }
-
-    // The cartographer-drawn stroke path the decorations are generated from,
-    // drawn last so it reads on top: solid 1 px red.
-    QPen strokePen(QColor(QStringLiteral("#e00000")));
-    strokePen.setCosmetic(true);
-    strokePen.setWidthF(1.0);
-    painter.setPen(strokePen);
-    painter.drawPolyline(QPolygonF(strokeWorld));
 
     painter.restore();
 }
@@ -440,9 +538,14 @@ TEST_CASE("Layout traces a line brush along the stroke path", "[cwSketchDecorati
     const cwBrushDecorationGeometry geometry = layout.layout(*brush, strokeWorld, kScale250);
 
     REQUIRE(geometry.layers.size() == 1);
-    CHECK(geometry.layers.first().kind == cwBrushDecorationGeometry::Layer::Polylines);
-    REQUIRE(geometry.layers.first().offsetPolylines.size() == 1);
-    CHECK(geometry.layers.first().offsetPolylines.first() == QPolygonF(strokeWorld));
+    CHECK(geometry.layers.first().kind == cwBrushDecorationGeometry::Layer::Trace);
+    REQUIRE(geometry.layers.first().traced.size() == 1);
+    // No fill on this brush, so the traced region is a bare Stroke equal to the stroke.
+    const cwGlyphSubPath &traced = geometry.layers.first().traced.first();
+    CHECK(traced.kind == cwGlyphSubPath::Stroke);
+    QPainterPath expected;
+    expected.addPolygon(QPolygonF(strokeWorld));
+    CHECK(traced.path == expected);
     CHECK(geometry.layers.first().stamps.isEmpty());
 }
 
@@ -465,14 +568,14 @@ TEST_CASE("Layout stamps floor-step ticks at 2 mm spacing along the tangent",
 
     // Two layers: the traced edge line, then the stamped ticks.
     REQUIRE(geometry.layers.size() == 2);
-    CHECK(geometry.layers.at(0).kind == cwBrushDecorationGeometry::Layer::Polylines);
+    CHECK(geometry.layers.at(0).kind == cwBrushDecorationGeometry::Layer::Trace);
     CHECK(geometry.layers.at(1).kind == cwBrushDecorationGeometry::Layer::Stamps);
 
     // 20 mm / 2 mm spacing, sampled at 0,2,...,20 -> 11 ticks.
     CHECK(geometry.layers.at(1).stamps.size() == 11);
 
     for (const cwResolvedStamp &stamp : geometry.layers.at(1).stamps) {
-        CHECK_FALSE(stamp.path.isEmpty());
+        CHECK_FALSE(combinedStampPath(stamp).isEmpty());
         // Horizontal stroke -> tangent angle 0.
         CHECK(stamp.position.rotationRad == Approx(0.0).margin(1e-9));
     }
@@ -549,6 +652,88 @@ TEST_CASE("A single-stamp stack places one glyph at the anchor", "[cwSketchDecor
     CHECK(stampCount(geometry) == 1);
 }
 
+TEST_CASE("A filled Trace brush lays out a filled region with pen and fill",
+          "[cwSketchDecorationLayout]")
+{
+    cwGlyphTessellationCache cache;
+    cache.setSnapshot(demoPalette().snapshot());
+    const cwSketchDecorationLayout layout(&cache);
+
+    const auto brush = demoPalette().snapshot().findBrush(QStringLiteral("stream-fill"));
+    REQUIRE(brush.has_value());
+
+    // Lay the fill brush directly over the closed-triangle stroke (paper-mm -> world).
+    QVector<QPointF> stroke;
+    for (const QPointF &p : kStreamTriangle) {
+        stroke.append(p * kWorldPerPaperMm250);
+    }
+    const cwBrushDecorationGeometry geometry = layout.layout(*brush, stroke, kScale250);
+
+    REQUIRE(geometry.layers.size() == 1);
+    CHECK(geometry.layers.first().kind == cwBrushDecorationGeometry::Layer::Trace);
+    CHECK(geometry.layers.first().stamps.isEmpty());
+
+    REQUIRE(geometry.layers.first().traced.size() == 1);
+    const cwGlyphSubPath &polygon = geometry.layers.first().traced.first();
+    CHECK(polygon.kind == cwGlyphSubPath::Polygon);
+    CHECK(polygon.fillColorLight == kStreamFillLight);
+    CHECK(polygon.fillColorDark == kStreamFillDark);
+    CHECK(polygon.penWidthMm == Approx(kStreamPenWidthMm));
+    // One path element per triangle vertex (moveTo + lineTos).
+    CHECK(polygon.path.elementCount() == kStreamTriangle.size());
+}
+
+TEST_CASE("A stamped glyph carries its brush's fill through to the stamp",
+          "[cwSketchDecorationLayout]")
+{
+    cwGlyphTessellationCache cache;
+    cache.setSnapshot(demoPalette().snapshot());
+    const cwSketchDecorationLayout layout(&cache);
+
+    // A brush that drops the filled stream-indicator glyph once at the start.
+    const cwLineBrush brush = makeBrush(
+        QStringLiteral("stream-point"),
+        {pointStampLayer(QStringLiteral("stream-indicator"))});
+
+    const cwBrushDecorationGeometry geometry =
+        layout.layout(brush, straightLine(0.5, 2), kScale250);
+
+    REQUIRE(geometry.layers.size() == 1);
+    REQUIRE(geometry.layers.first().stamps.size() == 1);
+    const cwResolvedStamp &stamp = geometry.layers.first().stamps.first();
+    // The triangle is one sub-path, tagged Polygon, carrying the brush's fill —
+    // the dividend of the tessellation cache surfacing per-stroke look.
+    REQUIRE(stamp.subPaths.size() == 1);
+    CHECK(stamp.subPaths.first().kind == cwGlyphSubPath::Polygon);
+    CHECK(stamp.subPaths.first().fillColorLight == kStreamFillLight);
+    CHECK_FALSE(stamp.subPaths.first().path.isEmpty());
+}
+
+TEST_CASE("An open polygon sub-path still carries a fill", "[cwSketchDecorationLayout]")
+{
+    cwGlyphTessellationCache cache;
+    cache.setSnapshot(demoPalette().snapshot());
+    const cwSketchDecorationLayout layout(&cache);
+
+    const auto brush = demoPalette().snapshot().findBrush(QStringLiteral("stream-fill"));
+    REQUIRE(brush.has_value());
+
+    // The same arrowhead, but NOT closed (drop the repeated last vertex). A fill
+    // closes it implicitly; the pen would leave the closing edge undrawn.
+    QVector<QPointF> open;
+    for (int i = 0; i < kStreamTriangle.size() - 1; ++i) {
+        open.append(kStreamTriangle.at(i) * kWorldPerPaperMm250);
+    }
+    REQUIRE(open.size() == 3);
+
+    const cwBrushDecorationGeometry geometry = layout.layout(*brush, open, kScale250);
+    REQUIRE(geometry.layers.size() == 1);
+    REQUIRE(geometry.layers.first().traced.size() == 1);
+    const cwGlyphSubPath &polygon = geometry.layers.first().traced.first();
+    CHECK(polygon.fillColorLight.isValid());
+    CHECK(polygon.path.elementCount() == 3);
+}
+
 TEST_CASE("A bending stamp warps glyphs along a curved stroke", "[cwSketchDecorationLayout]")
 {
     cwGlyphTessellationCache cache;
@@ -565,7 +750,7 @@ TEST_CASE("A bending stamp warps glyphs along a curved stroke", "[cwSketchDecora
     CHECK(stampCount(geometry) > 1);
     for (const auto &layer : geometry.layers) {
         for (const cwResolvedStamp &stamp : layer.stamps) {
-            CHECK_FALSE(stamp.path.isEmpty());
+            CHECK_FALSE(combinedStampPath(stamp).isEmpty());
         }
     }
 }
@@ -597,8 +782,8 @@ TEST_CASE("The layout feeds worldPerPaperMm so bending subdivides end to end",
     REQUIRE_FALSE(bg.layers.first().stamps.isEmpty());
     REQUIRE(bg.layers.first().stamps.size() == jg.layers.first().stamps.size());
 
-    const QPainterPath bendPath = bg.layers.first().stamps.first().path;
-    const QPainterPath jointPath = jg.layers.first().stamps.first().path;
+    const QPainterPath bendPath = combinedStampPath(bg.layers.first().stamps.first());
+    const QPainterPath jointPath = combinedStampPath(jg.layers.first().stamps.first());
     REQUIRE_FALSE(jointPath.isEmpty());
     CHECK(bendPath.elementCount() > jointPath.elementCount());
 }
@@ -617,16 +802,16 @@ TEST_CASE("Railroad brush traces two rails offset to opposite sides of the strok
     const cwBrushDecorationGeometry geometry = layout.layout(brush, strokeWorld, kScale250);
 
     REQUIRE(geometry.layers.size() == 3);
-    REQUIRE(geometry.layers.at(0).kind == cwBrushDecorationGeometry::Layer::Polylines);
-    REQUIRE(geometry.layers.at(1).kind == cwBrushDecorationGeometry::Layer::Polylines);
+    REQUIRE(geometry.layers.at(0).kind == cwBrushDecorationGeometry::Layer::Trace);
+    REQUIRE(geometry.layers.at(1).kind == cwBrushDecorationGeometry::Layer::Trace);
     CHECK(geometry.layers.at(2).kind == cwBrushDecorationGeometry::Layer::Stamps);
 
     // Horizontal stroke on y = 0 -> left normal is +Y, so +d rails up, -d down.
     const double offsetWorld = kRailroadHalfGaugeMm * kWorldPerPaperMm250;
-    REQUIRE(geometry.layers.at(0).offsetPolylines.size() == 1);
-    REQUIRE(geometry.layers.at(1).offsetPolylines.size() == 1);
-    CHECK(geometry.layers.at(0).offsetPolylines.first().first().y() == Approx(offsetWorld));
-    CHECK(geometry.layers.at(1).offsetPolylines.first().first().y() == Approx(-offsetWorld));
+    REQUIRE(geometry.layers.at(0).traced.size() == 1);
+    REQUIRE(geometry.layers.at(1).traced.size() == 1);
+    CHECK(geometry.layers.at(0).traced.first().path.elementAt(0).y == Approx(offsetWorld));
+    CHECK(geometry.layers.at(1).traced.first().path.elementAt(0).y == Approx(-offsetWorld));
 
     // Cross-ties were stamped (one machinery as floor-step ticks).
     CHECK(geometry.layers.at(2).stamps.size() > 1);
@@ -707,13 +892,20 @@ TEST_CASE("Decoration layout renders to a reference image", "[cwSketchDecoration
         QStringLiteral("point"),
         {pointStampLayer(QStringLiteral("plus")),
          pointStampLayer(QStringLiteral("plus-v"))});
-    // Stream indicator "<-----": a traced line plus a single triangle arrowhead
-    // dropped at the stroke start by the Explicit-point rule. Triangle outline
-    // only (fill is commit 4.2).
+    // Stream indicator "<-----": a traced line plus a single filled triangle
+    // arrowhead (commit 4.2) dropped at the stroke start by the Explicit-point
+    // rule. The arrowhead glyph's stroke resolves to the stream-fill polygon
+    // brush, so it stamps with a black edge + blue body.
     const cwLineBrush streamBrush = makeBrush(
         QStringLiteral("stream"),
         {offsetLayer(0.3),
-         pointStampLayer(QStringLiteral("stream-triangle"))});
+         pointStampLayer(QStringLiteral("stream-indicator"))});
+    // The same symbol with a pure-fill arrowhead (no outline pen): the polygon
+    // primitive's zero-width-pen degenerate case.
+    const cwLineBrush streamFillOnlyBrush = makeBrush(
+        QStringLiteral("stream-fillonly"),
+        {offsetLayer(0.3),
+         pointStampLayer(QStringLiteral("stream-indicator-nopen"))});
     // Railroad (commit 4.5): two thick traced rails + closely-spaced cross-ties.
     const cwLineBrush railroadBrush = makeRailroadBrush();
     // Ceiling channel (commit 4.6): two dashed lines at +-0.6 mm, ticks inward.
@@ -748,8 +940,8 @@ TEST_CASE("Decoration layout renders to a reference image", "[cwSketchDecoration
         {streamBrush, straightLine(0.8, 1), QStringLiteral("stream  —  traced line + single triangle arrowhead (<-----)")},
         {streamBrush, {QPointF(0.0, 0.0), QPointF(0.57, 0.57)},
          QStringLiteral("stream 45deg  —  line follows, but the single arrow is NOT tangent-rotated")},
-        {streamBrush, arcCurve(0.5, M_PI / 2.0, 24),
-         QStringLiteral("stream curve  —  line follows the curve; arrow stays fixed at the start")},
+        {streamFillOnlyBrush, arcCurve(0.5, M_PI / 2.0, 24),
+         QStringLiteral("stream curve (fill only)  —  pure-fill arrowhead, no outline pen; line follows the curve")},
         {railroadBrush, gentle,
          QStringLiteral("railroad (4.5)  —  two traced rails offset +-d follow the curve + cross-ties")},
         {ceilingChannelBrush, tighter,

@@ -25,7 +25,7 @@ int lineLayerCount(const cwLineBrush &brush)
     int count = 0;
     for (const auto &layer : brush.decorations) {
         for (const auto &rule : layer.rules) {
-            if (rule.name == QStringLiteral("Trace polyline")) {
+            if (rule.name == QStringLiteral("Trace")) {
                 ++count;
                 break;
             }

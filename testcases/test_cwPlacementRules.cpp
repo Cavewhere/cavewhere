@@ -514,7 +514,7 @@ TEST_CASE("Stamp warp scales the glyph's arclength advance and lateral offset",
     checkPoint(got.at(2), QPointF(4.0, 2.0)); // (0,1) -> arclength 4, +2 normal
 }
 
-TEST_CASE("Trace polyline returns the stroke and seeds no stamps", "[cwPlacementRule]")
+TEST_CASE("Trace returns the stroke and seeds no stamps", "[cwPlacementRule]")
 {
     const QVector<QPointF> strokeWorld = {QPointF(0.0, 0.0), QPointF(1.0, 1.0), QPointF(2.0, 0.0)};
     const cwStrokePath strokePath(strokeWorld);
@@ -522,7 +522,7 @@ TEST_CASE("Trace polyline returns the stroke and seeds no stamps", "[cwPlacement
     cwDecorationLayer layer;
     const cwPlacementContext context{strokePath, layer, 1.0};
 
-    const cwPlacementRule *trace = rule(QStringLiteral("Trace polyline"));
+    const cwPlacementRule *trace = rule(QStringLiteral("Trace"));
 
     // Iter 1: offset 0 -> the traced polyline is the stroke itself.
     const QVector<QPolygonF> polylines = trace->tracePolylines(strokeWorld, context);

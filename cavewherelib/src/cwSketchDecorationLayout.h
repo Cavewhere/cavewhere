@@ -9,38 +9,39 @@
 #define CWSKETCHDECORATIONLAYOUT_H
 
 //Qt includes
-#include <QPainterPath>
 #include <QPointF>
-#include <QPolygonF>
 #include <QVector>
 
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwDecorationLayer.h"
+#include "cwGlyphSubPath.h"
 #include "cwStampPosition.h"
 
 class cwGlyphTessellationCache;
 class cwLineBrush;
 
-// A finalised glyph stamp plus its materialised world-metre ink. `path` is the
-// cached glyph path the layer's terminal rule placed — rigidly transformed
-// (Rigid stamp) or arclength-warped (Bending stamp); `position` carries the
+// A finalised glyph stamp plus its materialised world-metre ink. `subPaths` are
+// the cached glyph's typed sub-paths the layer's terminal rule placed — each
+// rigidly transformed (Rigid stamp) or arclength-warped (Bending stamp) — so a
+// filled glyph stamp keeps its per-sub-path pen/fill. `position` carries the
 // anchor/rotation/priority the pipeline produced (kept for iter-2 scene rules
 // and tests).
 struct cwResolvedStamp {
-    cwStampPosition position;
-    QPainterPath    path;   // world metres
+    cwStampPosition         position;
+    QVector<cwGlyphSubPath> subPaths;   // world metres, placed
 };
 
 // One decoration layer's laid-out geometry, in the brush's declared layer order
 // (== paint order, Decision 12). `kind` is set from the layer's terminal rule —
-// stamps or a traced polyline, never both.
+// stamps or a traced path, never both. A traced region is a Stroke sub-path, or a
+// Polygon sub-path when the layer carries a fill (the fill closes it).
 struct cwBrushDecorationGeometry {
     struct Layer {
-        enum Kind { Stamps, Polylines };
+        enum Kind { Stamps, Trace };
         Kind                     kind = Stamps;
-        QVector<QPolygonF>       offsetPolylines; // kind == Polylines (iter 1: offset 0 -> stroke path)
-        QVector<cwResolvedStamp> stamps;          // kind == Stamps; visible stamps only
+        QVector<cwGlyphSubPath>  traced;   // kind == Trace; one per region (Stroke, or Polygon if filled)
+        QVector<cwResolvedStamp> stamps;   // kind == Stamps; visible stamps only
     };
     QVector<Layer> layers;
 };
@@ -53,6 +54,14 @@ struct cwBrushDecorationGeometry {
 //
 // Iter 1 runs the three per-layer stages (Generate -> MutatePerLayer -> Stamp);
 // the global MutateScene stage is iter 2.
+//
+// CONCURRENCY: layout() is a const transform and is designed to run concurrently
+// across strokes/layers (the cwConcurrent::run follow-up; iter 1 is synchronous on
+// the UI thread). The injected cache is shared, so before that path is wired the
+// cache must be made thread-safe — see the thread-safety note on
+// cwGlyphTessellationCache. An unknown rule name reaching the pipeline is dropped
+// silently here; it is reported once at load/edit by cwDecorationLayerValidator
+// into the error model, so the render path never re-reports.
 class CAVEWHERE_LIB_EXPORT cwSketchDecorationLayout {
 public:
     explicit cwSketchDecorationLayout(cwGlyphTessellationCache *tessellationCache);

@@ -410,7 +410,7 @@ TEST_CASE("A fatal rule-stack problem fails the load", "[cwSymbologyPaletteIO]")
     // Two terminal rules — the engine would keep one arbitrarily, so it's fatal.
     source.lineBrushes = {brushWithRules(QStringLiteral("two-terminals"),
                                          {QStringLiteral("Rigid stamp"),
-                                          QStringLiteral("Trace polyline")})};
+                                          QStringLiteral("Trace")})};
     REQUIRE_FALSE(cwSymbologyPaletteIO::save(source, dir).hasError());
 
     const auto loaded = cwSymbologyPaletteIO::load(dir);
@@ -428,10 +428,10 @@ TEST_CASE("A non-fatal rule-stack problem loads with a warning", "[cwSymbologyPa
     // A placement rule under a polyline terminal is dead — a warning, not fatal.
     source.lineBrushes = {brushWithRules(QStringLiteral("dead-rule"),
                                          {QStringLiteral("Uniform spacing"),
-                                          QStringLiteral("Trace polyline")})};
+                                          QStringLiteral("Trace")})};
     REQUIRE_FALSE(cwSymbologyPaletteIO::save(source, dir).hasError());
 
     const auto loaded = cwSymbologyPaletteIO::load(dir);
     REQUIRE_FALSE(loaded.hasError());
-    CHECK(warningsContain(loaded.value().warnings, SymbologyErrorCode::DeadRulesUnderPolylines));
+    CHECK(warningsContain(loaded.value().warnings, SymbologyErrorCode::DeadRulesUnderTrace));
 }

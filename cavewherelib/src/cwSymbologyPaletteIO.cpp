@@ -137,6 +137,9 @@ void layerToProto(CavewhereSymbologyProto::DecorationLayer *proto, const cwDecor
     proto->set_linecap(static_cast<int>(layer.lineCap));
     proto->set_linejoin(static_cast<int>(layer.lineJoin));
     proto->set_lineacceptspressure(layer.lineAcceptsPressure);
+
+    proto->set_fillcolorlight(toStd(colorToHex(layer.fillColorLight)));
+    proto->set_fillcolordark(toStd(colorToHex(layer.fillColorDark)));
 }
 
 cwDecorationLayer layerFromProto(const CavewhereSymbologyProto::DecorationLayer &proto)
@@ -167,6 +170,9 @@ cwDecorationLayer layerFromProto(const CavewhereSymbologyProto::DecorationLayer 
     if (proto.has_lineacceptspressure()) {
         layer.lineAcceptsPressure = proto.lineacceptspressure();
     }
+
+    layer.fillColorLight = colorFromHex(fromStd(proto.fillcolorlight()));
+    layer.fillColorDark  = colorFromHex(fromStd(proto.fillcolordark()));
     return layer;
 }
 

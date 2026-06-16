@@ -36,11 +36,11 @@ const QColor kInkLight = QColor(QStringLiteral("#000000"));
 const QColor kInkDark  = QColor(QStringLiteral("#ffffff"));
 
 // A single offset-0 line layer — the visible line on a normal brush. Its rule
-// stack is just the polyline trace; there is no separate "centerline" concept.
+// stack is just the trace; there is no separate "centerline" concept.
 cwDecorationLayer centerlineLayer(double widthMm)
 {
     cwDecorationLayer layer;
-    layer.rules = {cwPlacementRuleData{QStringLiteral("Trace polyline"), {}}};
+    layer.rules = {cwPlacementRuleData{QStringLiteral("Trace"), {}}};
     layer.lineColorLight = kInkLight;
     layer.lineColorDark = kInkDark;
     layer.lineWidthMm = widthMm;

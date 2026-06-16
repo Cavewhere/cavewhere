@@ -14,7 +14,8 @@
 #include "cwPlacementRuleRegistry.h"
 
 //Qt includes
-#include <QSet>
+#include <QPainterPath>
+#include <QRectF>
 
 //Std includes
 #include <algorithm>
@@ -29,8 +30,11 @@ struct ResolvedRule {
 };
 
 // The layer's resolved rule stack in stage order. The stack is the layer's own
-// rules (unknown names dropped with a one-shot warning); a layer with no rules
-// resolves to nothing and draws nothing — there is no mode-derived default.
+// rules; unknown names are dropped silently — the validator
+// (cwDecorationLayerValidator, run at load/edit) already reports UnknownRule into
+// the error model, so the render path trusts a pre-validated palette and does not
+// re-report per frame. A layer with no rules resolves to nothing and draws nothing
+// — there is no mode-derived default.
 QVector<ResolvedRule> resolveRuleStack(const cwDecorationLayer &layer)
 {
     const cwPlacementRuleRegistry &registry = cwPlacementRuleRegistry::instance();
@@ -40,15 +44,7 @@ QVector<ResolvedRule> resolveRuleStack(const cwDecorationLayer &layer)
     for (const cwPlacementRuleData &ruleData : layer.rules) {
         const cwPlacementRule *rule = registry.rule(ruleData.name);
         if (rule == nullptr) {
-            // thread_local: layout runs concurrently across strokes/layers, so a
-            // shared warned-set would race. One warning per thread is fine.
-            thread_local QSet<QString> warned;
-            if (!warned.contains(ruleData.name)) {
-                warned.insert(ruleData.name);
-                qWarning("cwSketchDecorationLayout: unknown placement rule \"%s\" — skipping",
-                         qPrintable(ruleData.name));
-            }
-            continue;
+            continue;   // unknown rule already reported by the validator at load/edit
         }
         stack.append(ResolvedRule{rule, ruleData.parameters});
     }
@@ -149,30 +145,60 @@ cwBrushDecorationGeometry cwSketchDecorationLayout::layout(const cwLineBrush &br
         const cwPlacementContext terminalCtx{strokePath, layer, worldPerPaperMm,
                                              terminal.parameters, nullptr};
 
-        if (terminal.rule->outputKind() == cwPlacementRule::OutputKind::Polylines) {
-            out.kind = cwBrushDecorationGeometry::Layer::Polylines;
-            out.offsetPolylines = terminal.rule->tracePolylines(layerStroke, terminalCtx);
+        // Trace: one traced path per region. Each carries the layer's pen; if the
+        // layer carries a fill colour the region is a Polygon (the fill closes an
+        // open path's implicit edge, which the pen leaves undrawn), otherwise a
+        // bare Stroke. addPolygon leaves the path open either way.
+        if (terminal.rule->outputKind() == cwPlacementRule::OutputKind::Trace) {
+            out.kind = cwBrushDecorationGeometry::Layer::Trace;
+            const QVector<QPolygonF> regions = terminal.rule->tracePolylines(layerStroke, terminalCtx);
+            const bool filled = layer.fillColorLight.isValid();
+            out.traced.reserve(regions.size());
+            for (const QPolygonF &region : regions) {
+                cwGlyphSubPath traced;
+                traced.kind = filled ? cwGlyphSubPath::Polygon : cwGlyphSubPath::Stroke;
+                traced.path.addPolygon(region);
+                traced.penColorLight = layer.lineColorLight;
+                traced.penColorDark = layer.lineColorDark;
+                traced.penWidthMm = layer.lineWidthMm;
+                if (filled) {
+                    traced.fillColorLight = layer.fillColorLight;
+                    traced.fillColorDark = layer.fillColorDark;
+                }
+                out.traced.append(traced);
+            }
             geometry.layers.append(out);
             continue;
         }
 
         // Stamps: the layout owns the tessellation cache + bbox derivation; the
-        // terminal owns the per-glyph transform (stampPath).
+        // terminal owns the per-glyph transform (stampPath), applied to each of
+        // the glyph's typed sub-paths so per-sub-path pen/fill rides through.
         out.kind = cwBrushDecorationGeometry::Layer::Stamps;
         const double bufferWorld = layer.bufferMm * worldPerPaperMm;
         for (cwStampPosition &position : positions) {
             if (!position.visible) {
                 continue;
             }
-            const QPainterPath glyphPath = m_tessellationCache->tessellate(position.glyphName, mapScale);
-            if (glyphPath.isEmpty()) {
+            const QVector<cwGlyphSubPath> glyphSubPaths =
+                m_tessellationCache->tessellate(position.glyphName, mapScale);
+            if (glyphSubPaths.isEmpty()) {
                 continue;
             }
 
-            const QPainterPath placed = terminal.rule->stampPath(position, glyphPath, terminalCtx);
+            cwResolvedStamp resolved;
+            resolved.subPaths.reserve(glyphSubPaths.size());
+            QRectF bbox;
+            for (const cwGlyphSubPath &glyphSub : glyphSubPaths) {
+                cwGlyphSubPath placed = glyphSub;
+                placed.path = terminal.rule->stampPath(position, glyphSub.path, terminalCtx);
+                bbox = bbox.united(placed.path.boundingRect());
+                resolved.subPaths.append(placed);
+            }
             position.bufferedBboxWorld =
-                placed.boundingRect().adjusted(-bufferWorld, -bufferWorld, bufferWorld, bufferWorld);
-            out.stamps.append(cwResolvedStamp{position, placed});
+                bbox.adjusted(-bufferWorld, -bufferWorld, bufferWorld, bufferWorld);
+            resolved.position = position;
+            out.stamps.append(resolved);
         }
 
         geometry.layers.append(out);

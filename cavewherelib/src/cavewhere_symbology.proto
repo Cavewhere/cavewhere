@@ -73,8 +73,8 @@ message DecorationLayer {
     double minPaperScale              = 6;
     double maxPaperScale              = 7;
 
-    // Line styling, read by a Trace polyline terminal rule. (These migrate into
-    // that rule's params in the commit-9 styling migration; field numbers kept.)
+    // Line styling, read by a Trace terminal rule. (These migrate into that
+    // rule's params in the commit-9 styling migration; field numbers kept.)
     string          lineColorLight = 8;
     string          lineColorDark  = 9;
     optional double lineWidthMm    = 10; // default 0.4 mm
@@ -82,6 +82,13 @@ message DecorationLayer {
     optional int32  lineCap        = 13; // Qt::PenCapStyle, default RoundCap
     optional int32  lineJoin       = 14; // Qt::PenJoinStyle, default RoundJoin
     optional bool   lineAcceptsPressure = 15; // default true
+
+    // Fill colour, read by a Trace terminal rule. Stored as color-name strings
+    // like line*; empty = no fill (outline only), a value = a filled region. Both
+    // variants because cave maps invert in dark mode. (Migrate into the rule's
+    // params at commit 9.)
+    string fillColorLight = 16;
+    string fillColorDark  = 17;
 }
 
 message PlacementRule {

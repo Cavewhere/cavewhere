@@ -105,10 +105,10 @@ QList<cwError> cwDecorationLayerValidator::validate(const cwDecorationLayer &lay
                     .arg(layer.glyphName)));
         }
         break;
-    case cwPlacementRule::OutputKind::Polylines:
+    case cwPlacementRule::OutputKind::Trace:
         if (generateCount > 0 || mutatePerLayerCount > 0) {
-            errors.append(makeError(SymbologyErrorCode::DeadRulesUnderPolylines, cwError::Warning,
-                QStringLiteral("traces a polyline but also has stamp-placement rules, which have no effect")));
+            errors.append(makeError(SymbologyErrorCode::DeadRulesUnderTrace, cwError::Warning,
+                QStringLiteral("traces a line but also has stamp-placement rules, which have no effect")));
         }
         break;
     case cwPlacementRule::OutputKind::None:

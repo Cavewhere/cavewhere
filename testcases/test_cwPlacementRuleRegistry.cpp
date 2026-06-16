@@ -26,7 +26,7 @@ TEST_CASE("Registry resolves the iter-1 rules by name", "[cwPlacementRuleRegistr
         QStringLiteral("Rigid stamp"),
         QStringLiteral("Jointed stamp"),
         QStringLiteral("Bending stamp"),
-        QStringLiteral("Trace polyline"),
+        QStringLiteral("Trace"),
         QStringLiteral("Offset stroke"),
     };
 
@@ -55,7 +55,7 @@ TEST_CASE("Each rule reports its stage", "[cwPlacementRuleRegistry]")
     CHECK(registry.rule(QStringLiteral("Rigid stamp"))->stage() == cwPlacementRule::Terminal);
     CHECK(registry.rule(QStringLiteral("Jointed stamp"))->stage() == cwPlacementRule::Terminal);
     CHECK(registry.rule(QStringLiteral("Bending stamp"))->stage() == cwPlacementRule::Terminal);
-    CHECK(registry.rule(QStringLiteral("Trace polyline"))->stage() == cwPlacementRule::Terminal);
+    CHECK(registry.rule(QStringLiteral("Trace"))->stage() == cwPlacementRule::Terminal);
     CHECK(registry.rule(QStringLiteral("Offset stroke"))->stage() == cwPlacementRule::TransformStroke);
 }
 
@@ -70,8 +70,8 @@ TEST_CASE("Terminal rules report their output kind; others report none",
           == cwPlacementRule::OutputKind::Stamps);
     CHECK(registry.rule(QStringLiteral("Bending stamp"))->outputKind()
           == cwPlacementRule::OutputKind::Stamps);
-    CHECK(registry.rule(QStringLiteral("Trace polyline"))->outputKind()
-          == cwPlacementRule::OutputKind::Polylines);
+    CHECK(registry.rule(QStringLiteral("Trace"))->outputKind()
+          == cwPlacementRule::OutputKind::Trace);
 
     CHECK(registry.rule(QStringLiteral("Uniform spacing"))->outputKind()
           == cwPlacementRule::OutputKind::None);

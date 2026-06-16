@@ -11,17 +11,22 @@
 
 // Our
 #include "cwGlyphTessellationCache.h"
+#include "cwGlyphSubPath.h"
 #include "cwPaletteSnapshot.h"
 #include "cwSymbologyPaletteData.h"
 #include "cwSymbologyPaletteSeed.h"
 #include "cwSymbologyGlyph.h"
+#include "cwDecorationLayer.h"
+#include "cwPlacementRuleData.h"
 #include "cwLineBrush.h"
 #include "cwPenStroke.h"
 
 // Qt
+#include <QColor>
 #include <QPainterPath>
 #include <QPointF>
 #include <QUuid>
+#include <QVector>
 
 using Catch::Approx;
 
@@ -38,13 +43,15 @@ TEST_CASE("Tessellating a seed glyph produces world-metre geometry",
     cwGlyphTessellationCache cache;
     cache.setSnapshot(cwSymbologyPaletteSeed::create().snapshot());
 
-    const QPainterPath path =
+    const QVector<cwGlyphSubPath> subPaths =
         cache.tessellate(cwSymbologyPaletteSeed::floorStepTickGlyphName(), kScale250);
-    REQUIRE_FALSE(path.isEmpty());
+    REQUIRE(subPaths.size() == 1);
+    // feature is a Trace brush with no fill, so the tick stroke resolves to a Stroke.
+    CHECK(subPaths.first().kind == cwGlyphSubPath::Stroke);
 
     // floor-step-tick is a 1.5 mm tick along +Y. At 1:250, 1 mm paper = 0.25 m
     // world, so the tick spans 0.375 m.
-    CHECK(path.boundingRect().height() == Approx(1.5 * 0.25));
+    CHECK(subPaths.first().path.boundingRect().height() == Approx(1.5 * 0.25));
 }
 
 TEST_CASE("Tessellation caches by (glyphName, mapScale)", "[cwGlyphTessellationCache]")
@@ -100,16 +107,16 @@ TEST_CASE("An unknown glyph tessellates to an empty, uncached path",
     cwGlyphTessellationCache cache;
     cache.setSnapshot(cwSymbologyPaletteSeed::create().snapshot());
 
-    const QPainterPath path = cache.tessellate(QStringLiteral("not-a-glyph"), kScale250);
-    CHECK(path.isEmpty());
+    const QVector<cwGlyphSubPath> subPaths = cache.tessellate(QStringLiteral("not-a-glyph"), kScale250);
+    CHECK(subPaths.isEmpty());
     CHECK(cache.entryCount() == 0);
 }
 
 TEST_CASE("A glyph stroke whose brush draws no ink contributes nothing",
           "[cwGlyphTessellationCache]")
 {
-    // A brush with zero OffsetCurve layers (the scrap-outline case) produces no
-    // ink, so a glyph built from such strokes tessellates to an empty path.
+    // A brush with zero decoration layers (the scrap-outline case) produces no
+    // ink, so a glyph built from such strokes tessellates to no sub-paths.
     cwLineBrush inkless;
     inkless.name = QStringLiteral("inkless");
 
@@ -129,6 +136,56 @@ TEST_CASE("A glyph stroke whose brush draws no ink contributes nothing",
     cwGlyphTessellationCache cache;
     cache.setSnapshot(palette.snapshot());
 
-    const QPainterPath path = cache.tessellate(glyph.name, kScale250);
-    CHECK(path.isEmpty());
+    CHECK(cache.tessellate(glyph.name, kScale250).isEmpty());
+}
+
+TEST_CASE("A glyph stroke on a filled Trace brush tessellates to a filled polygon",
+          "[cwGlyphTessellationCache]")
+{
+    // A fill brush: one decoration layer whose stack is just the Trace terminal,
+    // carrying a pen (line*) and a fill (fill*). The fill is what makes the stroke
+    // resolve to a Polygon rather than a bare Stroke.
+    const QColor pen(QStringLiteral("#000000"));
+    const QColor fillLight(QStringLiteral("#1e90ff"));
+    const QColor fillDark(QStringLiteral("#88c0ff"));
+
+    cwDecorationLayer polygonLayer;
+    polygonLayer.rules = {cwPlacementRuleData{QStringLiteral("Trace"), {}}};
+    polygonLayer.lineColorLight = pen;
+    polygonLayer.lineColorDark = pen;
+    polygonLayer.lineWidthMm = 0.15;
+    polygonLayer.fillColorLight = fillLight;
+    polygonLayer.fillColorDark = fillDark;
+
+    cwLineBrush fillBrush;
+    fillBrush.name = QStringLiteral("triangle-fill");
+    fillBrush.decorations = {polygonLayer};
+
+    // A triangle glyph whose single stroke is drawn by the fill brush.
+    cwSymbologyGlyph glyph;
+    glyph.name = QStringLiteral("triangle");
+    cwPenStroke stroke;
+    stroke.brushName = fillBrush.name;
+    stroke.points.append(cwPenPoint(QPointF(0.0, 0.0), 1.0));
+    stroke.points.append(cwPenPoint(QPointF(1.0, 0.0), 1.0));
+    stroke.points.append(cwPenPoint(QPointF(0.5, 1.0), 1.0));
+    glyph.strokes.append(stroke);
+
+    cwSymbologyPaletteData palette;
+    palette.id = QUuid::createUuid();
+    palette.lineBrushes = {fillBrush};
+    palette.glyphs = {glyph};
+
+    cwGlyphTessellationCache cache;
+    cache.setSnapshot(palette.snapshot());
+
+    const QVector<cwGlyphSubPath> subPaths = cache.tessellate(glyph.name, kScale250);
+    REQUIRE(subPaths.size() == 1);
+    const cwGlyphSubPath &sub = subPaths.first();
+    CHECK(sub.kind == cwGlyphSubPath::Polygon);
+    CHECK(sub.penColorLight == pen);
+    CHECK(sub.penWidthMm == Approx(0.15));
+    CHECK(sub.fillColorLight == fillLight);
+    CHECK(sub.fillColorDark == fillDark);
+    CHECK_FALSE(sub.path.isEmpty());
 }

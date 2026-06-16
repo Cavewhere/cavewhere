@@ -62,10 +62,14 @@ public:
         MutateScene = 4,     // global collision arbitration (iter 2)
     };
 
-    // What a Terminal rule produces. A layer's output kind (stamps vs a traced
-    // polyline) is decided by which Terminal rule its stack ends with — there is
-    // no layer "mode". None is the default for non-terminal stages.
-    enum class OutputKind { None, Stamps, Polylines };
+    // What a Terminal rule produces. A layer's output kind (stamps or a traced
+    // path) is decided by which Terminal rule its stack ends with — there is no
+    // layer "mode". None is the default for non-terminal stages. Trace covers both
+    // a stroked-only line and a filled region: whether the traced path is filled
+    // is the layer's concern (it carries the fill), not a second output kind. An
+    // unfilled trace and a filled one differ only in that the layout attaches the
+    // layer's fill, which closes the path the pen leaves open.
+    enum class OutputKind { None, Stamps, Trace };
 
     virtual ~cwPlacementRule() = default;
 
@@ -101,9 +105,9 @@ public:
         return QPainterPath();
     }
 
-    // Produce the layer's traced polylines in world metres. Overridden by
-    // Polylines-kind terminals (the offset-curve trace); the default empty result
-    // suits every other rule.
+    // Produce the layer's traced path(s) in world metres. Overridden by Trace-kind
+    // terminals; the default empty result suits every other rule. The layout fills
+    // the result iff the layer carries a fill colour.
     virtual QVector<QPolygonF> tracePolylines(const QVector<QPointF> &strokeWorld,
                                               const cwPlacementContext &context) const
     {
