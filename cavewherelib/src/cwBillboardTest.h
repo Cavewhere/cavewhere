@@ -3,13 +3,11 @@
 
 // =====================================================================
 // PROTOTYPE / RESEARCH SPIKE for issues #535 (leads) and #536 (station
-// labels). Throwaway code: it proves that a live QML Item can be rendered
-// as a depth-occluded billboard *inside* the cwRhiScene 3D pass, reusing
-// Qt Quick's own scene-graph renderer (QSGRenderer in RenderMode3D) via
-// private API — the same mechanism QtQuick3D uses for 2D-in-3D content.
-//
-// Not for merge. The shipping design will encapsulate every private-API
-// call behind a small public CaveWhere surface (see the plan).
+// labels). Throwaway code: it is the live, on-screen exercise of the real
+// billboard path — it builds one QML content item and hands it to
+// cwRenderBillboards, which renders it as a depth-occluded billboard inside
+// the cwRhiScene 3D pass. Deleted in Phase 5 once cwLabel3dView /
+// LeadPoint.qml drive cwRenderBillboards directly.
 // =====================================================================
 
 //Qt includes
@@ -18,42 +16,21 @@
 #include <QPointer>
 #include <QVector3D>
 
-//Our includes
-#include "cwRenderObject.h"
-
-//Std includes
-#include <memory>
-
 class cwScene;
-class cwRHIObject;
-class cwQuickItemSubscene;
+class cwRenderBillboards;
 class QQmlComponent;
 
-// GUI-side render object handed to cwScene. Carries the referenced subscene and
-// the world position to the render thread; spawns the matching cwRHIObject
-// backend.
-class cwBillboardTestRender : public cwRenderObject
-{
-    Q_OBJECT
-public:
-    explicit cwBillboardTestRender(QObject* parent = nullptr);
-
-    cwQuickItemSubscene* subscene = nullptr;
-    QVector3D worldPosition;
-
-protected:
-    cwRHIObject* createRHIObject() override;
-};
-
-// QML element placed in the 3D view. Builds a throwaway QML content item,
-// references it so the scene graph materializes its node tree (refFromEffectItem),
-// and registers a cwBillboardTestRender with the scene.
+// QML element placed in the 3D view. Builds a throwaway QML content item and
+// registers it with a cwRenderBillboards as a single billboard slot. The
+// screenConstant property toggles between the two SizeMode behaviors so both
+// can be verified on screen.
 class cwBillboardTest : public QQuickItem
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(BillboardTest)
     Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
     Q_PROPERTY(QVector3D worldPosition READ worldPosition WRITE setWorldPosition NOTIFY worldPositionChanged)
+    Q_PROPERTY(bool screenConstant READ screenConstant WRITE setScreenConstant NOTIFY screenConstantChanged)
 
 public:
     explicit cwBillboardTest(QQuickItem* parent = nullptr);
@@ -65,9 +42,13 @@ public:
     QVector3D worldPosition() const;
     void setWorldPosition(const QVector3D& position);
 
+    bool screenConstant() const;
+    void setScreenConstant(bool screenConstant);
+
 signals:
     void sceneChanged();
     void worldPositionChanged();
+    void screenConstantChanged();
 
 protected:
     void componentComplete() override;
@@ -75,18 +56,20 @@ protected:
 
 private:
     void tryInitialize();
+    void updateBillboards();
 
     QPointer<cwScene> m_scene;
     QVector3D m_worldPosition;
+    bool m_screenConstant = true;
 
     QPointer<QQuickItem> m_content;
     QQmlComponent* m_component = nullptr;
-    std::unique_ptr<cwQuickItemSubscene> m_subscene;
-    cwBillboardTestRender* m_renderObject = nullptr;
+    cwRenderBillboards* m_renderObject = nullptr;
     bool m_initialized = false;
 };
 
 inline cwScene* cwBillboardTest::scene() const { return m_scene; }
 inline QVector3D cwBillboardTest::worldPosition() const { return m_worldPosition; }
+inline bool cwBillboardTest::screenConstant() const { return m_screenConstant; }
 
 #endif // CWBILLBOARDTEST_H

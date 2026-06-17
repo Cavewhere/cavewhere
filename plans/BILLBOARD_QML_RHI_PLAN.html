@@ -226,7 +226,32 @@ fail &mdash; not the whole app.
       everything, EDL or not, with no routing changes. <span class="muted">(The spike confirmed this.)</span></li>
   <li>One <code>cwItem2DRenderer</code> per slot (matches QtQuick3D; each caches its render list). Visible
       slot count is bounded by culling (Phases 3&ndash;4), so this stays cheap.</li>
+  <li><b>Slot identity (Phase-1 shortcut):</b> the GUI hands the whole list to the render side via
+      <code>setBillboards(...)</code>, and the render thread keys <code>m_slots</code> &harr;
+      <code>m_renderers</code> by <em>list position</em>. Correct while the content set is static
+      (one billboard in the spike), but it bakes a positional contract into the API &mdash; addressed in
+      Phase 3 (see "stable identity").</li>
 </ul>
+
+<div class="panel note">
+<b>Batching &mdash; documented, not pursued yet.</b> One <code>QSGRenderer</code> per billboard means the
+Qt scene-graph batcher merges draw calls <em>within</em> a billboard (mixed component types in one content
+item batch by material, as in the normal 2D pass) but <em>not across</em> billboards &mdash; each is an
+independent <code>renderSceneInline()</code>. This mirrors QtQuick3D's <code>Item2D</code> (also no
+cross-item batching). The shared <code>QSGRenderContext</code> still amortizes the expensive resources
+(glyph atlas, material shaders, pipeline + texture caches) across all of them, so the per-renderer cost is
+batch-building + draw submission, not re-uploading glyphs/shaders.
+<br><br>
+A <em>batched</em> alternative exists: one shared renderer over a root node holding every billboard subtree,
+each under its own <code>QSGTransformNode</code> carrying that billboard's camera-facing model matrix (renderer
+projection = bare <code>viewProjection</code>), letting the batcher merge across billboards (all label
+backgrounds &rarr; one batch, glyphs &rarr; glyph batches). Costs: per-frame transform-node updates as the
+camera moves, moving the billboard math out of a single per-renderer MVP, and more private-API surface to
+validate &mdash; and it is <b>unverified</b> that the batcher merges as hoped across <code>refFromEffectItem</code>
+subtrees. <b>Decision:</b> not worth it now &mdash; likely over-optimization, and the per-renderer count is
+already bounded by culling. Pull this lever only if a <b>benchmark comparison</b> (per-renderer vs.
+shared-renderer at realistic label counts) shows the per-renderer overhead is the bottleneck.
+</div>
 
 <h2 id="math">6. Phase 2 &mdash; Billboarding math</h2>
 <ul>
@@ -244,6 +269,15 @@ fail &mdash; not the whole app.
 <ul>
   <li>Repoint <code>cwLabel3dView</code> / <code>cwLinePlotLabelView</code> <span class="pill edit">edit</span>
       to feed <code>cwRenderBillboards</code> instead of positioning 2D overlay items.</li>
+  <li><b>Stable identity</b> <span class="pill edit">edit cwRenderBillboards</span>: labels are added and
+      removed dynamically (culling, edits, view changes), so replace Phase 1's positional index keying
+      with a <b>stable per-billboard id</b>. Move the API from whole-list <code>setBillboards(...)</code> to
+      granular <code>addBillboard(id)</code> / <code>updateBillboard(id, ...)</code> / <code>removeBillboard(id)</code>,
+      and key the render-side <code>cwItem2DRenderer</code> map by that id so each renderer's cached render
+      list stays bound to <em>its</em> content across insert/remove. This mirrors two patterns the codebase
+      already settled: <code>cwRhiTexturedItems</code>' <code>QHash&lt;uint32_t, Item*&gt;</code> keying and
+      <code>cwRenderObjectId</code> (issue&nbsp;#512 &mdash; "a freed object's address can be reused").
+      Index keying would otherwise silently re-bind every renderer past a removal point to the wrong label.</li>
   <li><b>Keep</b> the KD-tree overlap culling (it now bounds the billboard slot count) and the
       <code>Label3d.qml</code> fade-in &mdash; a live item, so its <code>NumberAnimation</code> keeps
       working inside the 3D pass.</li>
