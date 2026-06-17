@@ -29,7 +29,6 @@ void cwRenderPointCloud::setGeometry(GeometryData geometry)
     state.bboxMin = geometry.bboxMin;
     state.bboxMax = geometry.bboxMax;
     state.meanSpacingXY = geometry.meanSpacingXY;
-    m_geometry.setValue(state);
 
     // Register with the scene's intersecter so 3D picking can hit points.
     // meanSpacingXY drives the per-point sphere radius — without it the
@@ -46,6 +45,10 @@ void cwRenderPointCloud::setGeometry(GeometryData geometry)
             intersecter->removeObject(this, 0);
         }
     }
+
+    // Moved last so the geometry buffer is stolen rather than copied; the
+    // intersecter above still needs state.geometry, so the move waits for it.
+    m_geometry.setValue(std::move(state));
 
     update();
 }

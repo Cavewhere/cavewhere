@@ -60,7 +60,7 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
 
     data.points = std::move(pointData);
 
-    m_data.setValue(data);
+    m_data.setValue(std::move(data));
 
     // New geometry replaces the vertex layout, so the prior visibility no longer
     // maps to the right vertices; reset to all-visible, one byte per vertex. The

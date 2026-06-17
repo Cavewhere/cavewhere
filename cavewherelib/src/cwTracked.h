@@ -1,6 +1,8 @@
 #ifndef TRACKED_H
 #define TRACKED_H
 
+#include <utility>
+
 template <typename T>
 class cwTracked {
 public:
@@ -18,6 +20,14 @@ public:
     void setValue(const T& newValue) {
         if (m_value != newValue) {  // Only mark as updated if the value is changed
             m_value = newValue;
+            m_needsUpdate = true;   // Mark as needing update
+        }
+    }
+
+    // Rvalue overload, move-assigns the value when it changes
+    void setValue(T&& newValue) {
+        if (m_value != newValue) {  // Only mark as updated if the value is changed
+            m_value = std::move(newValue);
             m_needsUpdate = true;   // Mark as needing update
         }
     }
