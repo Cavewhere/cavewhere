@@ -21,6 +21,11 @@ MainWindowTest {
 
             //Zoom into the data, in the 3d view
             let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
+            // The export render path needs a live QRhi; the headless offscreen QPA has none.
+            if (!OffscreenRenderTester.windowHasRhi(renderer)) {
+                skip("no QRhi on this platform (headless offscreen); run with a GPU-backed platform");
+                return;
+            }
             let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.2;
 
