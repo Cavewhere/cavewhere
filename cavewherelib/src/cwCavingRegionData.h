@@ -5,6 +5,7 @@
 #include "cwGeoPoint.h"
 
 #include <QStringList>
+#include <QUuid>
 
 //This is useful for async thread process, extracts all the data from cwCavingRegion
 struct cwCavingRegionData {
@@ -12,6 +13,7 @@ struct cwCavingRegionData {
     QList<cwCaveData> caves;
     QString globalCoordinateSystem;
     cwGeoPoint worldOrigin;
+    QUuid defaultPaletteId;
 };
 
 

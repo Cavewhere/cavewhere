@@ -365,6 +365,7 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
 {
     setName(data.name);
     setGlobalCoordinateSystem(data.globalCoordinateSystem);
+    setDefaultPaletteId(data.defaultPaletteId);
     // worldOrigin is intentionally not persisted (see cavewhere.proto:
     // "reserved 5; // Removed: worldOrigin ... recomputed on load"). On
     // disk-load, data.worldOrigin is always default-constructed cwGeoPoint{},
@@ -396,7 +397,8 @@ cwCavingRegionData cwCavingRegion::data() const
         m_name.value(),
         cwData::toDataList<cwCaveData>(m_caves),
         m_globalCoordinateSystem,
-        m_worldOrigin.value
+        m_worldOrigin.value,
+        m_defaultPaletteId
     };
 }
 

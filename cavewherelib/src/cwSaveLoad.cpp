@@ -1839,6 +1839,10 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
                                      region->globalCoordinateSystem());
         }
 
+        if (!region->defaultPaletteId().isNull()) {
+            cwProtoUtils::saveString(protoMetadata->mutable_defaultpaletteid(),
+                                     uuidToProtoString(region->defaultPaletteId()));
+        }
     }
 
     return protoProject;
@@ -2915,6 +2919,10 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
                 loadData.region.globalCoordinateSystem =
                     QString::fromStdString(metadataProto.globalcoordinatesystem());
             }
+            if (metadataProto.has_defaultpaletteid()) {
+                loadData.region.defaultPaletteId =
+                    cwProtoUtils::toUuid(metadataProto.defaultpaletteid());
+            }
         }
 
         if (loadData.metadata.dataRoot.isEmpty()) {
@@ -3485,16 +3493,17 @@ void cwSaveLoad::connectTreeModel()
             saveProject(projectRootDir(), region);
         });
 
-        // globalCoordinateSystem lives in the project metadata file. Without
-        // this handler the save pipeline wouldn't see the change, so the dirty
-        // bit (and any autosave keyed off it) wouldn't fire and the edit could
-        // be dropped on close. worldOrigin is intentionally not persisted —
-        // it's a derived centroid of fix-station coords, recomputed on the
-        // first line-plot completion of each session.
+        // globalCoordinateSystem and defaultPaletteId live in the project
+        // metadata file. Without these handlers the save pipeline wouldn't see
+        // the change, so the dirty bit (and any autosave keyed off it) wouldn't
+        // fire and the edit could be dropped on close. worldOrigin is
+        // intentionally not persisted — it's a derived centroid of fix-station
+        // coords, recomputed on the first line-plot completion of each session.
         const auto saveMetadata = [this, region]() {
             saveProject(projectRootDir(), region);
         };
         connect(region, &cwCavingRegion::globalCoordinateSystemChanged, this, saveMetadata);
+        connect(region, &cwCavingRegion::defaultPaletteIdChanged, this, saveMetadata);
 
         // LAZ layers live in "GIS Layers/" inside the project root and are
         // discovered by directory scan, so adds go through cwProject::addFiles

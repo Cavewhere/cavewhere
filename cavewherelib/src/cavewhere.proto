@@ -25,6 +25,7 @@ message ProjectMetadata {
     reserved 7; // Removed: lazLayerStates (now persisted per-layer in <basename>.cwlaz)
     optional bool syncEnabled = 3;
     optional string globalCoordinateSystem = 4;
+    optional string defaultPaletteId = 8; // UUID of the region-wide symbology palette
 }
 
 // Per-LAZ-layer persistent state. Stored as <basename>.cwlaz next to the
