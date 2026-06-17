@@ -14,6 +14,7 @@ QQ.Item {
     property int scrapId; //enable the testcase to work correctly
     property bool selected: false
     property QQ.vector3d position3D;
+    required property SelectionManager selectionManager; //Injected by cwLeadView
 
     z: selected ? 1 : 0
 
@@ -39,7 +40,11 @@ QQ.Item {
 
         QQ.TapHandler {
             gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
-            onTapped: pointId.selected = !pointId.selected
+            onTapped: {
+                // Route through the manager so selecting this lead deselects any
+                // other open lead; tapping the selected lead again closes it.
+                pointId.selectionManager.selectedItem = pointId.selected ? null : pointId
+            }
         }
     }
 

@@ -401,23 +401,88 @@ one ray-cast per non-clipped label per camera change.</span>
 </div>
 
 <h2 id="leads">8. Phase 4 &mdash; Leads (#535)</h2>
-<ul>
-  <li>Drive <code>LeadPoint.qml</code> through <code>cwRenderBillboards</code> &rarr; occluded leads.</li>
-  <li><b>Keyword visibility:</b> gate lead visibility on scrap keywords and fold leads into the
-      <code>type</code> keyword (<code>cwKeywordItemModel</code> / <code>cwKeywordFilterPipelineModel</code>).</li>
-  <li><b>Zoom-out clustering:</b> a CPU pass projects lead world positions, groups those within a
-      screen-space radius, and emits a single numbered cluster billboard (with a count) that expands to a
-      lead list &mdash; mirrors the label KD-tree, feeds the same billboard set.</li>
-</ul>
-<div class="panel note">
-<b>Lead interaction &mdash; resolved: hit-proxy.</b> Lead popups are clickable, but an item rendered inside
-the 3D pass no longer receives normal 2D events. We keep a thin, invisible 2D hit-proxy at the projected
-screen position to receive input, while the <em>visible</em> billboard renders (and is occluded) in the 3D
-pass. <span class="muted">Considered but not chosen: routing clicks through
-<code>cwGeometryItersecter</code>/<code>cwCoordinatePicker</code>, or replicating QtQuick3D's subscene
-input delivery (<code>ensureSubsceneDeliveryAgent</code> + synthetic events) &mdash; faithful but
-heaviest.</span>
+
+<div class="panel warn">
+<b>Readiness: 3/10 as a single unit &mdash; split into 4a/4b/4c (below).</b> Unlike labels, this is not a
+clean greenfield view: <code>cwLeadView</code> is the <em>legacy</em> architecture and leads are
+<em>interactive</em>. The work is dominated by (1) a substantial rewrite of <code>cwLeadView</code> and
+(2) the input/occlusion model &mdash; not by "drive <code>LeadPoint.qml</code> through
+<code>cwRenderBillboards</code>".
 </div>
+
+<h3>Gap 1 &mdash; <code>cwLeadView</code> is a rewrite, not a one-liner</h3>
+<p>Today <code>cwLeadView</code> (~382 lines) uses the legacy repeater pattern: <code>cwTransformUpdater</code>
++ <code>cwSelectionManager</code> + a per-scrap <code>QVector&lt;QQuickItem*&gt;</code>, each
+<code>LeadPoint.qml</code> parented as a <b>2D child</b> and positioned by CPU-projecting 3D&rarr;screen and
+setting the item's x/y (the <code>//TODO: convert to cwItem3DRepeater</code> at the top of the class). Porting
+to billboards means rebuilding it to mirror <code>cwLabel3dView</code> (billboard add/update/remove, per-lead
+<code>cwBillboardId</code> tracking parallel to the item list, window rebind via <code>itemChange</code>,
+opacity-driven on-demand re-render) <b>while preserving</b> the existing scrap/lead model wiring
+(<code>leadsBeginInserted</code> / <code>leadsInserted</code> / <code>leadsRemoved</code> /
+<code>leadsReset</code> / <code>leadsDataChanged</code> with the <code>LeadPosition</code> role, and selection).
+Position source is unchanged: <code>cwScrap::LeadPosition</code> (carpeted global) &rarr; the billboard's
+<code>worldPosition</code>; <code>cwTransformUpdater</code>'s CPU projection is retired in favor of the
+render-side projection in <code>cwRenderBillboards</code>.</p>
+
+<div class="panel note">
+<b>Lead interaction &mdash; RESOLVED.</b>
+The visible question-mark renders as a depth-occluded billboard in the 3D pass (like a label). The existing
+<code>LeadPoint.qml</code> item stays alive as the <b>2D input layer</b> &mdash; its
+<code>refFromEffectItem(hide=true)</code> reference already hides its own 2D draw, so there's no
+double-drawing, but it still receives taps and still owns selection + the popup <code>Loader</code>. Decisions:
+<ul>
+  <li><b>Minimal churn &mdash; keep <code>LeadPoint</code> as the (now-invisible) hit layer.</b> Its existing
+      <code>TapHandler</code>, <code>LeadListener</code>, <code>selected</code> state, and <code>QuoteBox</code>
+      <code>Loader</code> are reused as-is. We only (a) feed the question-mark graphic to
+      <code>cwRenderBillboards</code> for the occluded draw, and (b) add the occlusion gate inside
+      <code>onTapped</code>. The item follows the camera only for <b>positioning</b> (the existing
+      transform-updater projection); positioning is not occlusion.</li>
+  <li><b>Occlusion is tested ON CLICK, not per-frame.</b> There is NO camera-change subscription. On tap, cast
+      one ray from the eye through the lead's world position and ask <code>cwGeometryItersecter::intersects(QRay3D)</code>
+      (CPU-only / works offscreen &mdash; see <code>[[project_bvh_cpu_side]]</code>); if the nearest hit is
+      closer than the lead, the lead is behind geometry &mdash; ignore the tap. One ray cast per click, zero
+      per-frame work. Rationale: "clicks must not pass through walls" is a correctness requirement for leads,
+      but it only needs to hold at the moment of the click. The same test can later refine the label cull
+      "hole" (&sect;deferred).</li>
+  <li><b>The <code>QuoteBox</code> popup stays a normal 2D overlay</b> &mdash; NOT billboarded. It is a callout
+      anchored to the question mark; billboarding it would clip it into geometry and make it unreadable.</li>
+  <li><b>Popup behaves like a dialog: click-away closes it.</b> Today the popup stays open (annoying) &mdash;
+      it should dismiss on a press outside it. <code>QuoteBox</code> is a custom Shape-drawn callout, NOT a Qt
+      <code>Popup</code>, so there is no built-in <code>closePolicy</code>; "close" = setting the lead's
+      <code>selected = false</code> (which clears the <code>Loader</code>). Because selection is single
+      (<code>cwSelectionManager</code> &mdash; at most one popup open), put a <b>single view-level press-outside
+      catcher</b> at <code>cwLeadView</code> scope that deselects the open lead, rather than a per-
+      <code>LeadPoint</code> catcher (those would fight each other). It must not swallow presses meant for
+      another lead or for camera interaction &mdash; let those through / re-dispatch.</li>
+</ul>
+<span class="muted">Considered but not chosen: an always-clickable hit layer that ignores depth (simplest, but
+lets users click leads through walls); a view-level click handler with no per-lead items (discards the
+existing <code>LeadPoint</code> popup/selection structure &mdash; bigger rewrite); replicating QtQuick3D
+subscene input delivery (<code>ensureSubsceneDeliveryAgent</code> + synthetic events &mdash; faithful but
+heaviest); billboarding the popup itself (poor UX).</span>
+</div>
+
+<h3>Gap 2 &mdash; Keyword visibility is net-new for leads</h3>
+<p>Nothing in the leads code touches keywords today. Wire lead visibility to the keyword filter
+(<code>cwKeywordVisibility</code> is the likely hook; <code>cwKeywordItemModel</code> /
+<code>cwKeywordFilterPipelineModel</code> for the pipeline), and fold leads into the <code>type</code>
+keyword. Data flow (where the filter lives, how a lead's billboard subscribes to visibility changes) is
+undesigned and must be sketched before 4b.</p>
+
+<h3>Gap 3 &mdash; Clustering is net-new and the expand UX is unspecified</h3>
+<p>Leads have no cull/cluster today. A CPU pass projects lead world positions, groups those within a
+screen-space radius, and emits one numbered cluster billboard (with a count) &mdash; mirroring the label
+KD-tree and feeding the same billboard set. The "expands to a lead list" interaction (a cluster is itself a
+clickable proxy) needs a defined UX before 4c.</p>
+
+<h3>Suggested decomposition</h3>
+<ol>
+  <li><b>4a &mdash; Occluded leads + working input</b> (the 80%): port <code>cwLeadView</code> to the billboard
+      pattern; <code>LeadPoint</code> renders occluded; tap + <code>QuoteBox</code> work via the
+      CPU-BVH-gated 2D hit-proxy; popup stays a 2D overlay.</li>
+  <li><b>4b &mdash; Keyword visibility</b>: subscribe lead visibility to the keyword filter.</li>
+  <li><b>4c &mdash; Clustering</b> + the expand-to-list UX.</li>
+</ol>
 
 <h2 id="crosscut">9. Cross-cutting concerns</h2>
 <ul>
@@ -452,7 +517,9 @@ heaviest.</span>
   <li><b>Phase 0</b> (encapsulation) &mdash; unblocks everything, smallest risk.</li>
   <li><b>Phase 1 + 2</b> (billboard object + math).</li>
   <li><b>Phase 3</b> (labels) &mdash; first user-visible win, no input complexity.</li>
-  <li><b>Phase 4</b> (leads) &mdash; clustering + keywords + the input decision.</li>
+  <li><b>Phase 4</b> (leads), split: <b>4a</b> occluded leads + CPU-BVH-gated 2D hit-proxy (the bulk of the
+      risk &mdash; rewrites <code>cwLeadView</code> onto the billboard pattern), then <b>4b</b> keyword
+      visibility, then <b>4c</b> clustering.</li>
   <li>Cross-cutting hardening + offscreen + tests. <b>Spike deleted</b>
       <span class="pill ok">done</span> (<code>cwBillboardTest.{h,cpp}</code> and the
       <code>BillboardTest</code> block in <code>GLTerrainRenderer.qml</code> removed once the labels hot path

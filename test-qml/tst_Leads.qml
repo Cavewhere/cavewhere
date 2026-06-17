@@ -361,6 +361,66 @@ MainWindowTest {
             compare(descriptionDisplay.text, "New lead");
         }
 
+        // Lead popups act like a dialog: tapping empty space closes the open popup.
+        function test_clickAwayClosesLeadPopup() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            let leadPoint = null;
+            tryVerify(() => {
+                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
+                return leadPoint !== null;
+            });
+            mouseClick(leadPoint)
+
+            let quoteBox = null;
+            tryVerify(() => {
+                quoteBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox")
+                return quoteBox !== null;
+            })
+            verify(leadPoint.selected, "lead should be selected after clicking it")
+
+            // Tap empty space — click the renderer corner opposite the lead so the
+            // tap can't land on this (or, most likely, any) lead.
+            let renderer = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer")
+            let leadPos = leadPoint.mapToItem(renderer, 0, 0)
+            let cornerX = (leadPos.x > renderer.width * 0.5) ? 5 : renderer.width - 5
+            let cornerY = (leadPos.y > renderer.height * 0.5) ? 5 : renderer.height - 5
+            mouseClick(renderer, cornerX, cornerY)
+
+            tryVerify(() => !leadPoint.selected, 2000, "lead should deselect after tapping empty space")
+            tryVerify(() => {
+                return ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox") === null;
+            }, 2000, "lead quote box should close after tapping away")
+        }
+
+        // The empty-space dismiss TapHandler must NOT also fire on a lead tap
+        // (it uses the default DragThreshold/passive grab). If it did, tapping a
+        // selected lead would re-clear-then-reselect (or never stick). Tapping a
+        // selected lead a second time must toggle it closed.
+        function test_tapSelectedLeadTogglesClosed() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            let leadPoint = null;
+            tryVerify(() => {
+                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
+                return leadPoint !== null;
+            });
+
+            mouseClick(leadPoint)
+            tryVerify(() => leadPoint.selected, 2000, "lead should select on first tap")
+            tryVerify(() => {
+                return ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox") !== null;
+            }, 2000, "popup should open on first tap")
+
+            mouseClick(leadPoint)
+            tryVerify(() => !leadPoint.selected, 2000, "tapping the selected lead again should close it")
+            tryVerify(() => {
+                return ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox") === null;
+            }, 2000, "popup should close on second tap")
+        }
+
         // Regression test for GitHub issue #368:
         // When a lead and a scrap outline point overlap, clicking selects both
         // via their TapHandlers. The outline point's deselection cascade

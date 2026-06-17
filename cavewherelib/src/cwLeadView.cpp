@@ -253,7 +253,13 @@ QQuickItem* cwLeadView::createItem()
     }
 
     QQmlContext* context = QQmlEngine::contextForObject(this);
-    QQuickItem* item = qobject_cast<QQuickItem*>(m_itemComponent->create(context));
+    //Supply the required selectionManager at creation: lead selection routes
+    //through the shared manager so only one lead popup is open at a time and a
+    //tap on empty space can clear it (dialog behavior).
+    QQuickItem* item = qobject_cast<QQuickItem*>(
+        m_itemComponent->createWithInitialProperties(
+            {{QStringLiteral("selectionManager"), QVariant::fromValue(SelectionMananger)}},
+            context));
     if(item == nullptr) {
         qDebug() << "Problem creating new point item ... " << qmlSource() << "Didn't compile. THIS IS A BUG!" << LOCATION;
         qDebug() << "Compiling errors:" << m_itemComponent->errorString();

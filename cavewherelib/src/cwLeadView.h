@@ -38,6 +38,7 @@ class cwLeadView : public QQuickItem
 
     Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel WRITE setRegionModel NOTIFY regionModelChanged)
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
+    Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager CONSTANT)
 
 
 public:
@@ -49,6 +50,8 @@ public:
 
     cwCamera* camera() const;
     void setCamera(cwCamera* camera);
+
+    cwSelectionManager* selectionManager() const;
 
     Q_INVOKABLE void select(cwScrap* scarp, int index);
 
@@ -84,5 +87,14 @@ private slots:
     void scrapsRemoved(QModelIndex parent, int begin, int end);
 
 };
+
+/**
+ * @brief cwLeadView::selectionManager
+ * @return The selection manager that tracks the single selected lead, so lead
+ * taps route through it (single selection) and a tap on empty space can clear it.
+ */
+inline cwSelectionManager* cwLeadView::selectionManager() const {
+    return SelectionMananger;
+}
 
 #endif // CWLEADVIEW_H

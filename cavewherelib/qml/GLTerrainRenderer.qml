@@ -139,6 +139,12 @@ Item {
         regionModel: RootData.regionTreeModel
         camera: rendererId.camera
         visible: RootData.leadsVisible
+
+        // Tap on empty space closes the open lead popup (dialog dismiss). Lead
+        // items grab their taps exclusively, so this only fires off a lead.
+        TapHandler {
+            onTapped: leadViewId.selectionManager.selectedItem = null
+        }
     }
 
     Row {
