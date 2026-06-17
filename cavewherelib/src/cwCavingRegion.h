@@ -18,6 +18,7 @@
 #include <QSharedPointer>
 #include <QQmlEngine>
 #include <QObjectBindableProperty>
+#include <QUuid>
 
 //Our includes
 class cwCave;
@@ -41,6 +42,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_PROPERTY(QString globalCoordinateSystem READ globalCoordinateSystem WRITE setGlobalCoordinateSystem NOTIFY globalCoordinateSystemChanged)
     Q_PROPERTY(cwGeoPoint worldOrigin READ worldOrigin WRITE setWorldOrigin NOTIFY worldOriginChanged)
     Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)
+    Q_PROPERTY(QUuid defaultPaletteId READ defaultPaletteId WRITE setDefaultPaletteId NOTIFY defaultPaletteIdChanged)
 
 public:
     enum Roles {
@@ -73,6 +75,12 @@ public:
 
     cwLazLayerModel* lazLayers() const { return m_lazLayers; }
     void setFutureManagerToken(const cwFutureManagerToken& token);
+
+    // Project-wide default symbology palette — the second level of the
+    // per-sketch resolver chain (sketch → region → settings → shipped
+    // default). Null means "fall through to the next level."
+    QUuid defaultPaletteId() const { return m_defaultPaletteId; }
+    void setDefaultPaletteId(const QUuid& id);
 
     bool hasCaves() const;
     Q_INVOKABLE int caveCount() const;
@@ -114,6 +122,7 @@ signals:
 
     void globalCoordinateSystemChanged();
     void worldOriginChanged();
+    void defaultPaletteIdChanged();
 
 public slots:
 
@@ -139,6 +148,8 @@ private:
         bool explicitlySet = false;
     };
     WorldOriginState m_worldOrigin;
+
+    QUuid m_defaultPaletteId;
 
     cwLazLayerModel* m_lazLayers = nullptr;
 

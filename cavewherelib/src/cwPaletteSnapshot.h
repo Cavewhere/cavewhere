@@ -57,6 +57,11 @@ public:
     int  brushCount() const { return m_brushes.size(); }
     int  glyphCount() const { return m_glyphs.size(); }
 
+    // Value equality over the resolved brush/glyph content (the QHashes).
+    // cwSketch uses it to re-skin only when the resolved palette's content
+    // actually changes — including a same-id reload that edited brushes.
+    bool operator==(const cwPaletteSnapshot &other) const = default;
+
 private:
     QHash<QString, cwLineBrush> m_brushes;
     QHash<QString, cwSymbologyGlyph> m_glyphs;

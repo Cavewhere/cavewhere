@@ -289,6 +289,15 @@ void cwCavingRegion::setGlobalCoordinateSystem(const QString& cs)
     emit globalCoordinateSystemChanged();
 }
 
+void cwCavingRegion::setDefaultPaletteId(const QUuid& id)
+{
+    if (m_defaultPaletteId == id) {
+        return;
+    }
+    m_defaultPaletteId = id;
+    emit defaultPaletteIdChanged();
+}
+
 void cwCavingRegion::setWorldOrigin(const cwGeoPoint& origin)
 {
     // Short-circuit only when both the value AND the explicit-set flag are

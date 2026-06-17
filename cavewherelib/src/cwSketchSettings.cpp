@@ -9,6 +9,7 @@
 namespace {
 QString autoIconUpdatesKey() { return QStringLiteral("sketch/autoIconUpdates"); }
 QString idleIntervalMsKey()  { return QStringLiteral("sketch/idleIntervalMs"); }
+QString defaultPaletteIdKey() { return QStringLiteral("sketch/defaultPaletteId"); }
 
 // Rendering thumbnails while the stylus is active lags sketching and eats
 // battery. Desktop defaults to live-updating; mobile defers to navigation
@@ -25,12 +26,29 @@ cwSketchSettings::cwSketchSettings(QObject* parent) :
     QSettings settings;
     AutoIconUpdates = settings.value(autoIconUpdatesKey(), defaultAutoIconUpdates()).toBool();
     IdleIntervalMs  = qMax(0, settings.value(idleIntervalMsKey(), defaultIdleIntervalMs()).toInt());
+    DefaultPaletteId = QUuid(settings.value(defaultPaletteIdKey()).toString());
+}
+
+void cwSketchSettings::setDefaultPaletteId(const QUuid& id)
+{
+    if (DefaultPaletteId == id) {
+        return;
+    }
+    DefaultPaletteId = id;
+    QSettings settings;
+    if (id.isNull()) {
+        settings.remove(defaultPaletteIdKey());
+    } else {
+        settings.setValue(defaultPaletteIdKey(), id.toString(QUuid::WithoutBraces));
+    }
+    emit defaultPaletteIdChanged();
 }
 
 void cwSketchSettings::resetToDefaults()
 {
     setAutoIconUpdates(defaultAutoIconUpdates());
     setIdleIntervalMs(defaultIdleIntervalMs());
+    setDefaultPaletteId(QUuid());
 }
 
 void cwSketchSettings::setAutoIconUpdates(bool enabled)

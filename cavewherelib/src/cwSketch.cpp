@@ -29,8 +29,12 @@
 #include "cwSurvey2DGeometryRule.h"
 #include "cwSurvey2DGeometryArtifact.h"
 #include "cwSurveyNetworkArtifact.h"
-#include "cwSymbologyPaletteData.h"
-#include "cwSymbologyPaletteSeed.h"
+#include "cwSymbologyPaletteManager.h"
+#include "cwSymbologyPalette.h"
+#include "cwSketchSettings.h"
+#include "cwCavingRegion.h"
+#include "cwCave.h"
+#include "cwTrip.h"
 
 namespace {
 
@@ -265,7 +269,20 @@ cwSketch::cwSketch(QObject *parent)
 {
     m_undoStack->setUndoLimit(32);
 
-    m_paletteSnapshot = cwSymbologyPaletteSeed::create().snapshot();
+    // The active palette resolves through the manager singleton; re-resolve
+    // when the installed set changes (rescan) or the app-wide default changes.
+    // The region-level subscription is (re)wired in setParentTrip. The manager
+    // is initialized at startup before any sketch is constructed (see main.cpp
+    // / cwRootData); if it is somehow absent here the snapshot stays empty.
+    if (auto *manager = cwSymbologyPaletteManager::instance()) {
+        connect(manager, &cwSymbologyPaletteManager::palettesChanged,
+                this, &cwSketch::resolveSnapshot);
+    }
+    if (auto *settings = cwSketchSettings::instance()) {
+        connect(settings, &cwSketchSettings::defaultPaletteIdChanged,
+                this, &cwSketch::resolveSnapshot);
+    }
+    resolveSnapshot();
 
     // Default paper scale 1:250 — matches SketchItem.qml's view-matrix default.
     m_mapScale->scaleDenominator()->setValue(250.0);
@@ -279,7 +296,74 @@ cwSketch::~cwSketch() = default;
 
 void cwSketch::setParentTrip(cwTrip *trip)
 {
+    if (m_parentTrip == trip) {
+        return;
+    }
     m_parentTrip = trip;
+    connectRegionPalette();
+    resolveSnapshot();
+}
+
+cwCavingRegion *cwSketch::parentRegion() const
+{
+    cwCave *cave = m_parentTrip ? m_parentTrip->parentCave() : nullptr;
+    return cave ? cave->parentRegion() : nullptr;
+}
+
+void cwSketch::connectRegionPalette()
+{
+    disconnect(m_regionPaletteConnection);
+    if (cwCavingRegion *region = parentRegion()) {
+        m_regionPaletteConnection =
+            connect(region, &cwCavingRegion::defaultPaletteIdChanged,
+                    this, &cwSketch::resolveSnapshot);
+    }
+}
+
+void cwSketch::resolveSnapshot()
+{
+    auto *manager = cwSymbologyPaletteManager::instance();
+    if (manager == nullptr) {
+        // Manager not initialized yet — leave the snapshot empty and resolve
+        // lazily once the manager comes online and emits palettesChanged.
+        return;
+    }
+
+    cwCavingRegion *region = parentRegion();
+    const QUuid settingsId =
+        cwSketchSettings::instance() ? cwSketchSettings::instance()->defaultPaletteId() : QUuid();
+
+    // First non-null id that resolves to a loaded palette wins; otherwise the
+    // shipped default. A referenced-but-missing id falls through rather than
+    // blanking the sketch. The palette is a project-wide choice — the region's
+    // default, then the app-wide default, then the shipped default.
+    cwSymbologyPalette *resolved = nullptr;
+    const QUuid candidateIds[] = {
+        region ? region->defaultPaletteId() : QUuid(),
+        settingsId
+    };
+    for (const QUuid &id : candidateIds) {
+        if (id.isNull()) { continue; }
+        if (cwSymbologyPalette *palette = manager->paletteById(id)) {
+            resolved = palette;
+            break;
+        }
+    }
+    if (resolved == nullptr) {
+        resolved = manager->defaultPalette();
+    }
+
+    // Dedup on resolved content, not on palette id: a no-op set (e.g. a sketch
+    // id that doesn't resolve while already on the default) leaves the content
+    // unchanged and stays quiet, while a same-id manager reload that edited the
+    // brushes produces a different snapshot and re-skins. Comparison runs on
+    // input-change only, never per frame.
+    cwPaletteSnapshot resolvedSnapshot = resolved ? resolved->snapshot() : cwPaletteSnapshot();
+    if (resolvedSnapshot == m_paletteSnapshot) {
+        return;
+    }
+    m_paletteSnapshot = resolvedSnapshot;
+    emit paletteSnapshotChanged();
 }
 
 void cwSketch::setName(const QString &name)

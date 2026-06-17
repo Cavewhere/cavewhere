@@ -21,6 +21,7 @@
 #include "cwRootData.h"
 #include "GitRepository.h"
 #include "cwSettings.h"
+#include "cwSymbologyPaletteManager.h"
 #include "cwTask.h"
 #include "cwMetaTypeSystem.h"
 #include "cwGlobals.h"
@@ -49,6 +50,11 @@ int main( int argc, char* argv[] )
   }
 
   cwSettings::initialize();
+
+  // Sketches resolve their active palette through this singleton; the built-in
+  // default palette is always present, so a freshly constructed cwSketch gets
+  // the seed snapshot even with no installed palettes (mirrors app startup).
+  cwSymbologyPaletteManager::initialize();
 
   app.thread()->setObjectName("Main QThread");
 

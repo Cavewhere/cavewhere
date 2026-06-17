@@ -33,6 +33,7 @@ class cwAbstractScrapViewMatrix;
 class cwMatrix4x4Artifact;
 class cwSurvey2DGeometryRule;
 class cwTrip;
+class cwCavingRegion;
 
 // Result of cwSketch::findContinuationTarget. strokeIndex == -1 means no
 // qualifying stroke was within proximity. armProbation() reads strokeWidth to
@@ -134,9 +135,11 @@ public:
     cwKeywordModel   *keywordModel() const { return m_keywordModel; }
 
     // The palette every render/topology consumer resolves stroke brushNames
-    // against. Currently the built-in seed; commit 6 wires this to the
-    // per-sketch activePaletteId. Returned by value — it is an implicitly
-    // shared snapshot, cheap to copy.
+    // against. Recomputed by resolveSnapshot() from the resolver chain
+    // (region → settings → shipped default); paletteSnapshotChanged() fires
+    // when the resolved palette changes. Returned by value — it is an
+    // implicitly shared snapshot, cheap to copy. The palette is a project-wide
+    // (region) choice; a sketch has no per-sketch palette override.
     cwPaletteSnapshot paletteSnapshot() const { return m_paletteSnapshot; }
 
     // Region-wide network input; typically pointed at
@@ -149,6 +152,10 @@ public:
 
     void setParentTrip(cwTrip *trip);
     Q_INVOKABLE cwTrip *parentTrip() const { return m_parentTrip; }
+
+    // Walks the parent chain (trip → cave → region); null until the sketch is
+    // attached. Used by the palette resolver to read the region-level default.
+    cwCavingRegion *parentRegion() const;
 
     Q_INVOKABLE int  beginStroke(const QString &brushName);
 
@@ -243,6 +250,12 @@ signals:
     void surveyNetworkArtifactChanged();
     void anchorStationChanged();
 
+    // Fired by resolveSnapshot() when the resolved palette actually changes
+    // (region/settings default change, or a manager reload). The
+    // render path (cwSketchCanvas) reacts by re-pushing paletteSnapshot() into
+    // its path model, re-skinning every stroke.
+    void paletteSnapshotChanged();
+
     // Fired from inside appendPoint() when probation passes the hit-rate
     // threshold. The probation row has been removed from m_strokes and the
     // candidate (now `newActiveStrokeIndex`) has been truncated + grafted.
@@ -268,9 +281,11 @@ private:
     cwKeywordModel    *m_keywordModel = nullptr;
     cwSketchViewState *m_viewState   = nullptr;
 
-    // Seeded in the constructor; commit 6 replaces this with the active
-    // palette resolved from activePaletteId.
+    // Resolved-palette snapshot cached by resolveSnapshot() from the
+    // region → settings → shipped-default chain; paletteSnapshotChanged() is
+    // re-emitted only when the resolved content actually changes.
     cwPaletteSnapshot m_paletteSnapshot;
+    QMetaObject::Connection m_regionPaletteConnection;
 
     cwAbstractScrapViewMatrix *m_viewMatrix      = nullptr;
     cwMatrix4x4Artifact       *m_matrixArtifact  = nullptr;
@@ -368,6 +383,19 @@ private:
     ContinuationState m_continuationState;
 
     void applyStrokes(const QVector<cwPenStroke> &strokes);
+
+    // Walk the resolver chain (sketch → region → settings → shipped default),
+    // recompute m_paletteSnapshot from the first palette the manager resolves,
+    // and emit paletteSnapshotChanged() iff the resolved palette changed. A
+    // null/uninitialized manager leaves the snapshot empty (resolved lazily on
+    // the next manager reload).
+    void resolveSnapshot();
+
+    // (Re)subscribe to the current parent region's defaultPaletteIdChanged so a
+    // region-level default change re-resolves the snapshot. Called from
+    // setParentTrip.
+    void connectRegionPalette();
+
     void rebuildViewMatrixForType();
     void syncMatrixArtifact();
     // Coalesces per-sample dataChanged emits into one queued call per row so

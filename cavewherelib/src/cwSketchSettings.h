@@ -4,6 +4,7 @@
 //Qt includes
 #include <QObject>
 #include <QQmlEngine>
+#include <QUuid>
 
 //Our includes
 #include "cwGlobals.h"
@@ -19,6 +20,7 @@ class CAVEWHERE_LIB_EXPORT cwSketchSettings : public QObject
 
     Q_PROPERTY(bool autoIconUpdates READ autoIconUpdates WRITE setAutoIconUpdates NOTIFY autoIconUpdatesChanged)
     Q_PROPERTY(int  idleIntervalMs  READ idleIntervalMs  WRITE setIdleIntervalMs  NOTIFY idleIntervalMsChanged)
+    Q_PROPERTY(QUuid defaultPaletteId READ defaultPaletteId WRITE setDefaultPaletteId NOTIFY defaultPaletteIdChanged)
 
 public:
     bool autoIconUpdates() const { return AutoIconUpdates; }
@@ -26,6 +28,13 @@ public:
 
     int  idleIntervalMs() const { return IdleIntervalMs; }
     void setIdleIntervalMs(int ms);
+
+    // App-wide default symbology palette — the third level of the per-sketch
+    // resolver chain (sketch → region → settings → shipped default). Null means
+    // "fall through to the shipped default." Persisted via QSettings, so it's a
+    // remembered preference for new sketches, not part of any project file.
+    QUuid defaultPaletteId() const { return DefaultPaletteId; }
+    void setDefaultPaletteId(const QUuid& id);
 
     Q_INVOKABLE void resetToDefaults();
 
@@ -35,6 +44,7 @@ public:
 signals:
     void autoIconUpdatesChanged();
     void idleIntervalMsChanged();
+    void defaultPaletteIdChanged();
 
 private:
     explicit cwSketchSettings(QObject* parent = nullptr);
@@ -44,6 +54,7 @@ private:
     // Defaults derived from cwRootData::isMobileBuild() at construction time.
     bool AutoIconUpdates;
     int  IdleIntervalMs;
+    QUuid DefaultPaletteId;
 };
 
 #endif // CWSKETCHSETTINGS_H

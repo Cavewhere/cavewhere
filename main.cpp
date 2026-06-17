@@ -34,6 +34,7 @@
 #include "cwMetaTypeSystem.h"
 #include "cwTask.h"
 #include "cwSettings.h"
+#include "cwSymbologyPaletteManager.h"
 #include "cwFontSettings.h"
 
 //QuickQanave includes
@@ -177,6 +178,12 @@ int main(int argc, char *argv[])
     // viewers cannot render. Align C++ rendering with the user's configured
     // font family (QML UI already follows Theme.fontFamily).
     cwSettings::initialize();
+
+    // Sketches resolve their palette through this singleton (region → settings
+    // → shipped default); it must exist before any sketch is constructed, so
+    // initialize it up front. The built-in default palette is always present.
+    cwSymbologyPaletteManager::initialize();
+
     auto syncAppFont = []() {
         const QString configured = cwFontSettings::instance()->fontFamily();
         const QString family = configured.isEmpty()
