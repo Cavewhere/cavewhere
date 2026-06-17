@@ -237,10 +237,11 @@ void cwCaptureViewport::capture()
                                                     camera->viewport().size(),
                                                     originalProj);
 
-    // Hide everything but the scrap geometry so the rendered tiles are
-    // transparent-backed (no gradient/grid/line-plot/point-cloud). Pulled by
-    // cwRhiScene::synchroize(); the renderOffscreen() calls below queue the work
-    // that the same sync drains, so the gate is in effect by the time they run.
+    // Hide the gradient/grid/line-plot so the rendered tiles are transparent-backed,
+    // but keep point clouds visible so they appear in the export (EDL-lit, as in the
+    // live view). Pulled by cwRhiScene::synchroize(); the renderOffscreen() calls below
+    // queue the work that the same sync drains, so the gate is in effect by the time
+    // they run.
     m_sceneManager->setCapturing(true);
 
     const int sampleCount = cwRenderingSettings::instance()->sampleCount();

@@ -94,6 +94,5 @@ void cwRegionSceneManager::setCapturing(bool newCapturing)
     m_background->setVisible(!m_capturing);
     m_linePlot->setVisible(!m_capturing);
     m_plane->setVisible(!m_capturing);
-    m_lazLayers->setVisibleForAll(!m_capturing);
     emit capturingChanged();
 }
