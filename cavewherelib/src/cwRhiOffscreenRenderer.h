@@ -39,10 +39,14 @@ public:
     // duplicate or strand ownership, so forbid both explicitly.
     Q_DISABLE_COPY_MOVE(cwRhiOffscreenRenderer)
 
-    // Max offscreen requests drained per frame. Offscreen renders are budgeted and
-    // re-armed across frames (cwRhiItemRenderer::requestUpdate) so a large batch
-    // never stalls the live render. Public so tests can assert the multi-frame bound.
-    static constexpr int kOffscreenRendersPerFrame = 4;
+    // Renders drained per frame. Must be 1: every render targets the shared
+    // m_target and the read-back resolves against it at frame end, so batching two
+    // renders into one frame makes both read-backs return the last tile (the
+    // repeated-tile bug). render() re-arms a frame while hasPendingWork(), so a
+    // large batch still drains fully — one tile per frame. (Reintroducing real
+    // batching would require a distinct read-back texture per job.) Public so tests
+    // can assert the one-render-per-frame bound.
+    static constexpr int kOffscreenRendersPerFrame = 1;
 
     // Move GUI-side jobs (handed over in cwRhiScene::synchroize while the GUI thread
     // is blocked at the scene-graph sync barrier) onto the render-thread queue,
@@ -53,8 +57,8 @@ public:
     // uses this to decide whether to drain and re-arm another frame.
     bool hasPendingWork() const;
 
-    // Drain up to kOffscreenRendersPerFrame queued jobs: render the resident scene
-    // into the offscreen target from each job's camera and enqueue a texture
+    // Render one queued job (see kOffscreenRendersPerFrame): draw the resident
+    // scene into the offscreen target from the job's camera and enqueue a texture
     // read-back that fulfils the job's promise on completion. Render-thread only.
     void drainPending(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer);
 

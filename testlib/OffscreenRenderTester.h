@@ -79,6 +79,16 @@ public:
     // a blank or grossly mis-rendered export moves it. Returns (-1,-1) for a null or
     // fully transparent image.
     Q_INVOKABLE QPointF opaqueCentroid(const QString& path) const;
+
+    // Map-export tile-uniqueness probes. The tiled exporter renders each tile
+    // through the offscreen renderer; a multi-job batching bug once made tiles
+    // rendered in the same frame read back identical (every tile a copy of the
+    // last). SVG export writes each tile as its own base64 <image>, so these parse
+    // them out: svgContentTileCount is how many tiles carry real (non-transparent)
+    // content, and svgDistinctContentTileCount how many of those are byte-distinct.
+    // A correct export keeps the two equal; the bug collapses the distinct count.
+    Q_INVOKABLE int svgContentTileCount(const QString& svgPath) const;
+    Q_INVOKABLE int svgDistinctContentTileCount(const QString& svgPath) const;
 };
 
 #endif // OFFSCREENRENDERTESTER_H

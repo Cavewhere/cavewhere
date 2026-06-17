@@ -18,6 +18,7 @@
 #include <QImage>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QSet>
 #include <QSGRendererInterface>
 #include <QTemporaryDir>
 
@@ -65,6 +66,44 @@ OpaqueScan scanOpaque(const QImage& source)
         }
     }
     return scan;
+}
+
+// Opaque fraction above which an embedded SVG tile counts as carrying real drawn
+// content (rather than a transparent/empty edge tile).
+constexpr double kSvgContentOpaqueThreshold = 0.001;
+
+// Pull the base64 payloads of every embedded raster tile that carries content out
+// of an SVG export. QSvgGenerator writes each painted QImage as its own
+// <image ... base64,...> element, so one entry per rendered map tile; the
+// transparent edge/empty tiles are filtered out by opaque fraction. The repeated-
+// tile offscreen bug made same-frame tiles read back identical, so two content
+// tiles would share a byte-identical (hence base64-identical) payload here.
+QList<QByteArray> svgContentTileBlobs(const QString& svgPath)
+{
+    QList<QByteArray> blobs;
+    QFile file(svgPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return blobs;
+    }
+    const QByteArray svg = file.readAll();
+    const QByteArray marker = "base64,";
+    qsizetype pos = 0;
+    while ((pos = svg.indexOf(marker, pos)) >= 0) {
+        pos += marker.size();
+        const qsizetype end = svg.indexOf('"', pos);
+        if (end < 0) {
+            break;
+        }
+        const QByteArray base64 = svg.mid(pos, end - pos);
+        pos = end;
+        const QImage tile = QImage::fromData(QByteArray::fromBase64(base64));
+        const OpaqueScan scan = scanOpaque(tile);
+        if (scan.total > 0
+            && double(scan.count) / double(scan.total) > kSvgContentOpaqueThreshold) {
+            blobs.append(base64);
+        }
+    }
+    return blobs;
 }
 } // namespace
 
@@ -256,4 +295,16 @@ QPointF OffscreenRenderTester::opaqueCentroid(const QString& path) const
     }
     return QPointF((scan.sumX / scan.count) / scan.width,
                    (scan.sumY / scan.count) / scan.height);
+}
+
+int OffscreenRenderTester::svgContentTileCount(const QString& svgPath) const
+{
+    return int(svgContentTileBlobs(svgPath).size());
+}
+
+int OffscreenRenderTester::svgDistinctContentTileCount(const QString& svgPath) const
+{
+    const QList<QByteArray> blobs = svgContentTileBlobs(svgPath);
+    const QSet<QByteArray> distinct(blobs.constBegin(), blobs.constEnd());
+    return int(distinct.size());
 }

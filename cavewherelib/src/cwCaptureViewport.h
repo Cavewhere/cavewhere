@@ -128,9 +128,6 @@ private:
     double CameraPitch; //!<
 
     bool CapturingImages;
-    int NumberOfImagesProcessed;
-    int Columns;
-    int Rows;
     QSize TileSize;
 
     //Scene state information

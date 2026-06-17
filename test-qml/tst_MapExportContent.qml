@@ -143,5 +143,46 @@ MainWindowTest {
 
             OffscreenRenderTester.removeFile(path)
         }
+
+        // Regression guard for the tiled-export offscreen render path. Each tile is
+        // rendered through cwScene::renderOffscreen; a multi-job batching bug made
+        // tiles rendered in the same frame read back as copies of the last tile
+        // (the page showed one tile repeated). SVG export embeds each tile as its
+        // own base64 raster, so we assert that the tiles carrying content are all
+        // byte-distinct — which the bug violated. The deterministic setup spans
+        // more than one full content tile, so this is non-vacuous.
+        function test_svgTileUniqueness() {
+            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
+            if (!OffscreenRenderTester.windowHasRhi(renderer)) {
+                skip("no QRhi on this platform (headless offscreen); run with a GPU-backed platform");
+                return;
+            }
+
+            setupExport();
+
+            let manager = captureManager()
+            verify(manager.numberOfCaptures === 1, "exactly one capture layer was created")
+
+            let path = OffscreenRenderTester.tempPngPath("map_export_tiles").replace(".png", ".svg")
+            OffscreenRenderTester.removeFile(path)
+
+            captureManagerFinished.target = manager
+            captureManagerFinished.clear()
+            manager.filename = TestHelper.toLocalUrl(path)
+            manager.fileType = CaptureManager.SVG
+            manager.capture()
+            captureManagerFinished.wait(20000)
+
+            verify(OffscreenRenderTester.fileExists(path), "export SVG was written")
+
+            let contentTiles = OffscreenRenderTester.svgContentTileCount(path)
+            let distinctTiles = OffscreenRenderTester.svgDistinctContentTileCount(path)
+            verify(contentTiles >= 2, "export spans multiple content tiles (got " + contentTiles + ")")
+            compare(distinctTiles, contentTiles,
+                    "every content tile renders its own region (got " + distinctTiles
+                    + " distinct of " + contentTiles + ")")
+
+            OffscreenRenderTester.removeFile(path)
+        }
     }
 }

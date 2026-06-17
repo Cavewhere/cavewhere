@@ -179,8 +179,14 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
     m_inflightReadbacks.removeIf(
         [](const InflightOffscreenReadback& inflight) { return inflight.job.expired(); });
 
+    // At most one *render* per frame. Every render draws into the shared m_target,
+    // and a texture read-back recorded into this frame's command buffer resolves
+    // against that target's contents at frame end — so two renders into it in one
+    // frame would make both read-backs return the second tile's image (the
+    // repeated-tile bug). render() re-arms another frame while hasPendingWork(), so
+    // the queue still drains fully, just one tile per frame. Non-rendering jobs
+    // (cancelled / empty) are resolved without consuming that budget.
     int processed = 0;
-    bool recordedReadbackThisFrame = false;
     while (processed < kOffscreenRendersPerFrame && !m_queue.isEmpty()) {
         // Defense-in-depth: jobs are always non-null (cwScene::renderOffscreen
         // make_shares them and synchroize moves only non-null pointers), but the
@@ -191,8 +197,8 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
             continue;
         }
         // The consumer cancelled the future before we reached it — skip the GPU work
-        // and just resolve. Checked before the size/deferral logic so a cancelled job
-        // never costs frame budget or blocks a differently-sized one.
+        // and just resolve. Checked before the render so a cancelled job never costs
+        // frame budget.
         if (next->promise.isCanceled()) {
             m_queue.takeFirst()->promise.finish();
             continue;
@@ -206,14 +212,6 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
         // and the composite effect are all built at this count (1 = no AA, today's
         // behavior). The same gate drives ensureEdlOffscreen, so all three agree.
         const int sampleCount = m_scene->effectiveEdlSampleCount(rhi, next->parameters.sampleCount);
-        // An output-size or sample-count change rebuilds the target, freeing the
-        // colour texture. If a read-back recorded earlier this frame still references
-        // it, defer the differing request to the next frame to avoid a GPU
-        // use-after-free. (Uniform batches — the common case — never defer.)
-        if (recordedReadbackThisFrame
-            && (m_target.size != size || m_target.sampleCount != sampleCount)) {
-            break;
-        }
 
         auto job = m_queue.takeFirst();
         const cwOffscreenRenderParameters& p = job->parameters;
@@ -330,6 +328,5 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
         readbackBatch->readBackTexture(QRhiReadbackDescription(m_target.readbackTexture()),
                                        readback);
         cb->resourceUpdate(readbackBatch);
-        recordedReadbackThisFrame = true;
     }
 }
