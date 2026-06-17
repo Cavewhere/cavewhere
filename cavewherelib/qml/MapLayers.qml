@@ -4,6 +4,7 @@ import QtQuick as QQ
 import QtQuick.Layouts
 import QtQuick.Controls as QC
 import cavewherelib
+import "Utils.js" as Utils
 
 ColumnLayout {
     id: mapLayersId
