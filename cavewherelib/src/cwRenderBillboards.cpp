@@ -11,7 +11,7 @@
 #include <QVector4D>
 
 //Std includes
-#include <vector>
+#include <unordered_map>
 
 namespace {
 
@@ -100,17 +100,22 @@ public:
         // point dereferences a QQuickItem on the render thread.
         m_slots = renderObject->buildRenderSlots();
 
-        // One renderer per slot, kept across frames so each caches its render
-        // list. Phase 1 maps by index; Phases 3-4 add stable per-content keying.
-        const size_t slotCount = size_t(m_slots.size());
-        if (m_renderers.size() > slotCount) {
-            m_renderers.resize(slotCount);
+        // One renderer per billboard id, kept across frames so each caches its
+        // render list. Keying by the stable id (not array position) keeps a
+        // renderer bound to its content when other billboards are added/removed.
+        // Rebuild by moving survivors into a fresh map in a single pass; renderers
+        // whose id is gone are left behind and destroyed with the old map.
+        std::unordered_map<cwBillboardId, std::unique_ptr<cwItem2DRenderer>> renderers;
+        renderers.reserve(m_slots.size());
+        for (const cwRenderBillboards::RenderSlot& slot : m_slots) {
+            auto existing = m_renderers.find(slot.id);
+            if (existing != m_renderers.end()) {
+                renderers.emplace(slot.id, std::move(existing->second));
+            } else if (m_window) {
+                renderers.emplace(slot.id, std::make_unique<cwItem2DRenderer>(m_window));
+            }
         }
-        while (m_renderers.size() < slotCount) {
-            m_renderers.push_back(m_window
-                                      ? std::make_unique<cwItem2DRenderer>(m_window)
-                                      : nullptr);
-        }
+        m_renderers = std::move(renderers);
     }
 
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override
@@ -135,7 +140,10 @@ public:
         const QMatrix4x4 viewProjection = renderer->viewProjectionMatrix();
         const QVector3D eye = view.inverted().column(3).toVector3D();
         const QSize pixelSize = target->pixelSize();
-        const float devicePixelRatio = target->devicePixelRatio();
+        // The scene's device pixel ratio (camera/cwRhiScene), NOT the
+        // QRhiRenderTarget's — the latter defaults to 1.0, which would size
+        // ScreenConstant billboards at half their pixels on a retina display.
+        const float devicePixelRatio = renderer->devicePixelRatio();
         const QSizeF logicalViewport(pixelSize.width() / devicePixelRatio,
                                      pixelSize.height() / devicePixelRatio);
 
@@ -148,10 +156,11 @@ public:
                 continue;
             }
 
-            cwItem2DRenderer* renderer2d = m_renderers[size_t(i)].get();
-            if (!renderer2d) {
+            auto rendererIt = m_renderers.find(slot.id);
+            if (rendererIt == m_renderers.end() || !rendererIt->second) {
                 continue;
             }
+            cwItem2DRenderer* renderer2d = rendererIt->second.get();
 
             const QMatrix4x4 model = buildModelMatrix(slot, view, projection,
                                                        viewProjection, logicalViewport, eye);
@@ -195,7 +204,7 @@ public:
 private:
     QPointer<QQuickWindow> m_window;
     QVector<cwRenderBillboards::RenderSlot> m_slots;
-    std::vector<std::unique_ptr<cwItem2DRenderer>> m_renderers;
+    std::unordered_map<cwBillboardId, std::unique_ptr<cwItem2DRenderer>> m_renderers;
 };
 
 } // namespace
@@ -213,7 +222,10 @@ void cwRenderBillboards::setWindow(QQuickWindow* window)
         return;
     }
     m_window = window;
-    rebuildSubscenes();  // subscenes are bound to a window's scene graph
+    // Subscenes are bound to a window's scene graph, so recreate them all.
+    for (auto& [id, entry] : m_billboards) {
+        entry.subscene = makeSubscene(entry.billboard.content);
+    }
     update();
 }
 
@@ -222,58 +234,78 @@ QQuickWindow* cwRenderBillboards::window() const
     return m_window;
 }
 
-void cwRenderBillboards::setBillboards(const QList<Billboard>& billboards)
+std::unique_ptr<cwQuickItemSubscene> cwRenderBillboards::makeSubscene(QQuickItem* content) const
 {
-    m_billboards = billboards;
-    rebuildSubscenes();
+    if (!content || !m_window) {
+        return nullptr;
+    }
+    return std::make_unique<cwQuickItemSubscene>(content, m_window);
+}
+
+cwBillboardId cwRenderBillboards::addBillboard(const Billboard& billboard)
+{
+    const cwBillboardId id = cwBillboardId{m_nextId++};
+    m_billboards.emplace(id, Entry{billboard, makeSubscene(billboard.content)});
+    update();
+    return id;
+}
+
+void cwRenderBillboards::updateBillboard(cwBillboardId id, const Billboard& billboard)
+{
+    auto it = m_billboards.find(id);
+    if (it == m_billboards.end()) {
+        return;
+    }
+
+    Billboard& current = it->second.billboard;
+    if (current.content == billboard.content
+        && current.worldPosition == billboard.worldPosition
+        && current.sizeMode == billboard.sizeMode
+        && current.depthBias == billboard.depthBias) {
+        return;  // nothing changed — cheap to re-push an unchanged billboard
+    }
+
+    if (current.content != billboard.content) {
+        it->second.subscene = makeSubscene(billboard.content);
+    }
+    current = billboard;
     update();
 }
 
-void cwRenderBillboards::rebuildSubscenes()
+void cwRenderBillboards::removeBillboard(cwBillboardId id)
 {
-    // Reference each distinct content item into the scene graph exactly once,
-    // reusing the subscene where the content persists across a setBillboards()
-    // call; entries left behind in m_subscenes deref on destruction below. All
-    // ref/deref happen here on the GUI thread (cwQuickItemSubscene's ctor/dtor).
-    std::unordered_map<QQuickItem*, std::unique_ptr<cwQuickItemSubscene>> updated;
-    if (m_window) {
-        for (const Billboard& billboard : m_billboards) {
-            QQuickItem* content = billboard.content;
-            if (!content || updated.count(content)) {
-                continue;
-            }
-            auto existing = m_subscenes.find(content);
-            if (existing != m_subscenes.end()) {
-                updated.emplace(content, std::move(existing->second));
-            } else {
-                updated.emplace(content,
-                                std::make_unique<cwQuickItemSubscene>(content, m_window));
-            }
-        }
+    if (m_billboards.erase(id) > 0) {  // also destroys the subscene, dereferencing the item
+        update();
     }
-    m_subscenes = std::move(updated);
+}
+
+bool cwRenderBillboards::hasBillboard(cwBillboardId id) const
+{
+    return m_billboards.find(id) != m_billboards.end();
+}
+
+int cwRenderBillboards::billboardCount() const
+{
+    return int(m_billboards.size());
 }
 
 QVector<cwRenderBillboards::RenderSlot> cwRenderBillboards::buildRenderSlots() const
 {
     QVector<RenderSlot> renderSlots;
-    renderSlots.reserve(m_billboards.size());
-    for (const Billboard& billboard : m_billboards) {
-        QQuickItem* content = billboard.content;
-        if (!content) {
-            continue;
-        }
-        auto it = m_subscenes.find(content);
-        if (it == m_subscenes.end()) {
+    renderSlots.reserve(int(m_billboards.size()));
+    for (const auto& [id, entry] : m_billboards) {
+        QQuickItem* content = entry.billboard.content;
+        if (!content || !entry.subscene) {
             continue;
         }
 
         RenderSlot slot;
-        slot.rootNodeHandle = it->second->rootNodeHandle();
+        slot.id = id;
+        slot.rootNodeHandle = entry.subscene->rootNodeHandle();
         slot.contentSize = QSizeF(content->width(), content->height());
-        slot.worldPosition = billboard.worldPosition;
-        slot.sizeMode = billboard.sizeMode;
-        slot.depthBias = billboard.depthBias;
+        slot.worldPosition = entry.billboard.worldPosition;
+        slot.sizeMode = entry.billboard.sizeMode;
+        slot.depthBias = entry.billboard.depthBias;
         renderSlots.append(slot);
     }
     return renderSlots;

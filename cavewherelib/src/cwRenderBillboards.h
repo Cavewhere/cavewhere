@@ -8,19 +8,31 @@
 // the Phase-0 encapsulation classes (cwQuickItemSubscene + cwItem2DRenderer),
 // so no private Qt API leaks through this surface.
 //
-// Threading: the GUI object owns one cwQuickItemSubscene per content item and
-// references it into the scene graph (GUI thread only). The render-thread
-// backend snapshots plain data via buildRenderSlots() during synchronize()
-// (when the GUI thread is blocked) and never dereferences a QQuickItem or
-// QQuickWindow afterwards.
+// Identity: billboards are added/updated/removed individually by a stable
+// cwBillboardId (returned by addBillboard). The render-side renderer cache is
+// keyed by that id so a billboard's cached scene-graph render list survives
+// other billboards being inserted or removed — positional keying would re-bind
+// renderers to the wrong content past a removal (the cwRenderObjectId hazard,
+// issue #512, which is exactly what happens when a pooled content item is
+// recycled across stations).
+//
+// Each billboard owns one cwQuickItemSubscene for its content item; there is no
+// content sharing (one billboard, one content item). refFromEffectItem is itself
+// reference-counted inside Qt, so even if two billboards referenced the same
+// item it would stay valid until both released it.
+//
+// Threading: the GUI object owns the subscenes and references them into the
+// scene graph (GUI thread only). The render-thread backend snapshots plain data
+// via buildRenderSlots() during synchronize() (when the GUI thread is blocked)
+// and never dereferences a QQuickItem or QQuickWindow afterwards.
 
 //Our includes
 #include "cwRenderObject.h"
+#include "cwBillboardId.h"
 
 //Qt includes
 #include <QVector3D>
 #include <QSizeF>
-#include <QList>
 #include <QVector>
 #include <QPointer>
 
@@ -54,6 +66,7 @@ public:
     // plain values plus an opaque scene-graph node handle — never a QQuickItem
     // pointer to dereference on the render thread (the D-002 invariant).
     struct RenderSlot {
+        cwBillboardId id = cwBillboardId{};
         quintptr rootNodeHandle = 0;
         QSizeF contentSize;
         QVector3D worldPosition;
@@ -65,12 +78,18 @@ public:
     ~cwRenderBillboards();
 
     // The window whose scene graph hosts the content items. Set this before
-    // setBillboards(); content items are expected to live in this window.
+    // adding billboards; content items are expected to live in this window.
     void setWindow(QQuickWindow* window);
     QQuickWindow* window() const;
 
-    void setBillboards(const QList<Billboard>& billboards);
-    const QList<Billboard>& billboards() const { return m_billboards; }
+    // Granular, stable-id API. addBillboard returns the id the caller keeps for
+    // later update/remove. updateBillboard is a no-op when nothing changed, so
+    // callers may re-push an unchanged billboard cheaply each frame.
+    cwBillboardId addBillboard(const Billboard& billboard);
+    void updateBillboard(cwBillboardId id, const Billboard& billboard);
+    void removeBillboard(cwBillboardId id);
+    bool hasBillboard(cwBillboardId id) const;
+    int billboardCount() const;
 
     // Render-thread handoff: packs the current billboards into plain data. Reads
     // QQuickItem state, so it MUST be called only while the GUI thread is
@@ -81,11 +100,18 @@ protected:
     cwRHIObject* createRHIObject() override;
 
 private:
-    void rebuildSubscenes();
+    // One billboard: its parameters plus the subscene that references its content
+    // item into the scene graph. The subscene is null until a window is set.
+    struct Entry {
+        Billboard billboard;
+        std::unique_ptr<cwQuickItemSubscene> subscene;
+    };
+
+    std::unique_ptr<cwQuickItemSubscene> makeSubscene(QQuickItem* content) const;
 
     QPointer<QQuickWindow> m_window;
-    QList<Billboard> m_billboards;
-    std::unordered_map<QQuickItem*, std::unique_ptr<cwQuickItemSubscene>> m_subscenes;
+    uint32_t m_nextId = 1;
+    std::unordered_map<cwBillboardId, Entry> m_billboards;
 };
 
 #endif // CWRENDERBILLBOARDS_H

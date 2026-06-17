@@ -16,6 +16,7 @@ class QQuickItem;
 
 //Our includes
 #include "cwLabel3dItem.h"
+#include "cwBillboardId.h"
 class cwLabel3dView;
 
 class cwLabel3dGroup : public QObject
@@ -42,6 +43,10 @@ private:
     QPointer<cwLabel3dView> m_parentView;
     QList<cwLabel3dItem> m_labels;
     QVector<QQuickItem*> m_labelItems;
+
+    // Stable cwRenderBillboards id per label (default cwBillboardId{} = not
+    // currently billboarded), kept in lockstep with m_labelItems.
+    QVector<cwBillboardId> m_billboardIds;
 
     //For caching and memory efficientcy
     QVector<QQuickItem*> m_itemPool;

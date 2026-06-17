@@ -266,25 +266,139 @@ shared-renderer at realistic label counts) shows the per-renderer overhead is th
 </ul>
 
 <h2 id="labels">7. Phase 3 &mdash; Station labels (#536)</h2>
+<p>Labels become occluded by walls/clouds &mdash; the headline ask of #536 &mdash; with no interaction needed
+(labels aren't clickable), so this is the right first real feature, free of the input problem.</p>
+
+<div class="panel">
+<b>Current architecture (what we're repointing).</b>
+<code>LinePlotLabelView</code> (a <code>cwLinePlotLabelView</code>, subclass of <code>cwLabel3dView</code>) is a
+full-bleed <code>QQuickItem</code> overlay in <code>GLTerrainRenderer.qml</code>. <code>cwLinePlotLabelView</code>
+is purely a <b>data source</b>: it watches <code>cwCavingRegion</code> and builds one <code>cwLabel3dGroup</code>
+per cave, each holding <code>cwLabel3dItem</code>s (plain data: text + world position) from the cave's
+station-position lookup. <code>cwLabel3dView</code> does the work: on every camera change
+(<code>updateGroupPositions</code>) it projects each station, clips off-frustum ones, sorts the rest
+nearest-first, greedy-packs screen rects into <code>m_labelKdTree</code>, and for each survivor
+<code>acquireLabelItem()</code> (from <code>Label3d.qml</code>, recycled via a per-group
+<code>m_itemPool</code>), sets its text, <code>setVisible(true)</code>, and
+<code>setPosition(projectedScreenCoord)</code> &mdash; i.e. the QQuickItems <em>are</em> the labels, placed as
+2D overlay children and drawn on top of everything (no depth). That last step is what Phase 3 replaces.
+</div>
+
 <ul>
-  <li>Repoint <code>cwLabel3dView</code> / <code>cwLinePlotLabelView</code> <span class="pill edit">edit</span>
-      to feed <code>cwRenderBillboards</code> instead of positioning 2D overlay items.</li>
-  <li><b>Stable identity</b> <span class="pill edit">edit cwRenderBillboards</span>: labels are added and
-      removed dynamically (culling, edits, view changes), so replace Phase 1's positional index keying
-      with a <b>stable per-billboard id</b>. Move the API from whole-list <code>setBillboards(...)</code> to
-      granular <code>addBillboard(id)</code> / <code>updateBillboard(id, ...)</code> / <code>removeBillboard(id)</code>,
-      and key the render-side <code>cwItem2DRenderer</code> map by that id so each renderer's cached render
-      list stays bound to <em>its</em> content across insert/remove. This mirrors two patterns the codebase
-      already settled: <code>cwRhiTexturedItems</code>' <code>QHash&lt;uint32_t, Item*&gt;</code> keying and
-      <code>cwRenderObjectId</code> (issue&nbsp;#512 &mdash; "a freed object's address can be reused").
-      Index keying would otherwise silently re-bind every renderer past a removal point to the wrong label.</li>
-  <li><b>Keep</b> the KD-tree overlap culling (it now bounds the billboard slot count) and the
-      <code>Label3d.qml</code> fade-in &mdash; a live item, so its <code>NumberAnimation</code> keeps
-      working inside the 3D pass.</li>
-  <li>Labels become occluded by walls/clouds &mdash; the headline ask of #536.</li>
-  <li>No interaction needed (labels aren't clickable) &rarr; this is the right first real feature, free of
-      the input problem.</li>
+  <li><b>Edits land almost entirely in <code>cwLabel3dView</code></b> <span class="pill edit">edit</span>.
+      <code>cwLinePlotLabelView</code> is unchanged &mdash; it only feeds <code>cwLabel3dItem</code>s, and
+      inherits the new rendering path. The view stays a <code>QQuickItem</code> (it still holds the camera,
+      the groups, the KD-tree, and runs the cull) but stops positioning visible 2D children; instead it owns
+      one <code>cwRenderBillboards</code> and feeds it the surviving labels.</li>
+
+  <li><b>New <code>scene</code> property</b> <span class="pill edit">edit + qml</span>: the billboard render
+      object must be added to a <code>cwScene</code> (like any <code>cwRenderObject</code>), so
+      <code>cwLabel3dView</code> gains a <code>cwScene*</code> property and
+      <code>GLTerrainRenderer.qml</code> passes <code>scene: rendererId.scene</code> to
+      <code>LinePlotLabelView</code> (it already passes <code>camera</code>). The GUI-thread cull uses
+      <code>cwCamera</code>; the render-thread billboard uses <code>cwRhiItemRenderer</code>'s matrices &mdash;
+      same camera, so projected positions agree.</li>
+
+  <li><b>Cull output becomes a membership diff, not a reposition.</b> The cull (unchanged &mdash; see culling
+      note below) produces the visible set each frame. A station's <code>worldPosition</code> is camera-invariant,
+      so per frame we only diff visible-set membership: newly-visible &rarr; <code>addBillboard(id, content,
+      worldPos, ScreenConstant, depthBias)</code>; newly-hidden/clipped &rarr; <code>removeBillboard(id)</code>
+      (and return the item to <code>m_itemPool</code>, as today). <code>updateBillboard(id, worldPos)</code> only
+      fires when a station actually moves (<code>setLabels</code>). The billboard count stays bounded by the
+      KD-tree.</li>
+
+  <li><b>Stable identity</b> <span class="pill edit">edit cwRenderBillboards</span>: replace Phase 1's
+      positional index keying with a <b>stable id</b> (<code>cwBillboardId</code>, a strong
+      <code>enum class : uint32_t</code> mirroring <code>cwRenderObjectId</code> #512, so it can't be confused
+      with a label index). The API moves from whole-list <code>setBillboards(...)</code> to granular
+      <code>addBillboard() &rarr; id</code> / <code>updateBillboard(id, &hellip;)</code> /
+      <code>removeBillboard(id)</code>, keying the render-side <code>cwItem2DRenderer</code> map by that id so a
+      renderer's cached render list stays bound to <em>its</em> billboard across insert/remove. The id is
+      <b>generated</b> (a monotonic counter), and <code>cwLabel3dView</code> holds the id for each visible label
+      (in <code>cwLabel3dGroup::m_billboardIds</code>, parallel to <code>m_labelItems</code>): minted on cull-in,
+      kept stable across camera frames, released on cull-out. That stability &mdash; not the
+      <code>QQuickItem*</code> &mdash; is what the renderer cache and the fade depend on.</li>
+
+  <li><b>Pooling &times; id keying &times; subscenes.</b>
+      <code>m_itemPool</code> recycles a <code>QQuickItem</code> across <em>different</em> stations over time, so
+      the content pointer's address is reused &mdash; exactly the "freed address reused" hazard #512 names.
+      Keying by the generated id (not by <code>QQuickItem*</code>) sidesteps it: a pooled item released from
+      label A (<code>removeBillboard(id_A)</code>) and reacquired for label B
+      (<code>addBillboard() &rarr; id_B</code>) gets a fresh renderer under id_B. Each billboard owns one
+      <code>cwQuickItemSubscene</code> keyed by its id (no content-keyed map, no manual refcount) &mdash;
+      <code>refFromEffectItem</code> is itself reference-counted inside Qt, so even the (never-occurring) shared
+      content case stays valid until the last release.</li>
+
+  <li><b>No <code>setPosition</code>, and the original 2D draw is auto-suppressed.</b> The billboard's model
+      matrix places the quad in 3D, so we never call <code>setPosition</code> again. We also don't need
+      <code>setVisible(false)</code> to stop the old overlay draw: <code>cwQuickItemSubscene</code> references
+      content via <code>refFromEffectItem(<b>true</b>)</code> &mdash; the <code>hide</code> flag &mdash; which
+      already removes the item from its normal 2D rendering. The item stays "visible" (so its scene graph keeps
+      syncing) while only the billboard renders it.</li>
+
+  <li><b>Fade-in &mdash; two real gotchas found in implementation</b> <span class="pill edit">edit qml</span>.
+      The <code>visible</code> trigger still works: the pool toggles the item's <code>visible</code> flag
+      (<code>false</code> when pooled, <code>true</code> on cull-in), so <code>Label3d.qml</code>'s
+      <code>onVisibleChanged &rarr; fadeInIfVisible</code> fires once per appearance, and <code>visible: false</code>
+      on a pooled item is what keeps it from drawing while idle. But the animation only renders after fixing two
+      things:
+      <ol>
+        <li><b>Animate a child's opacity, not the root's.</b> <code>refFromEffectItem(true)</code> excludes the
+            <em>referenced</em> item's own opacity/transform from the rendered subtree (Qt expects the effect to
+            apply them &mdash; same reason <code>ShaderEffectSource</code> ignores <code>sourceItem.opacity</code>).
+            So <code>Label3d.qml</code> is now a plain root <code>Item</code> wrapping a child <code>QC.Label</code>
+            whose opacity animates &mdash; the child's opacity <em>is</em> in the subtree and shows. The root sizes
+            to the child's implicit size (that's what <code>buildRenderSlots</code> reads for
+            <code>contentSize</code>).</li>
+        <li><b>Drive on-demand re-renders &mdash; without reaching into the QML.</b> The 3D pass only renders when
+            something calls <code>update()</code>; an opacity animation alone doesn't. The clean seam: the
+            <b>content item's <code>opacityChanged</code> is the "re-render me" signal</b>, so
+            <code>cwLabel3dView</code> connects to the item it already holds (function-pointer, no
+            <code>findChild</code>/<code>objectName</code> into the QML internals). To make that signal fire,
+            <code>Label3d.qml</code> mirrors the animated child opacity onto the root's <code>opacity</code>
+            (<code>opacity: labelText.opacity</code>) &mdash; the root's opacity is excluded from the render (see
+            above), so the binding is purely the change signal and has no visual effect. The window's sync phase
+            refreshes the (dirty) child opacity node before each requested frame renders, so no manual
+            <code>forceSync</code> is needed; the connection self-limits to while opacity is changing.</li>
+      </ol>
+      Cull-out needs no fade (today's release just hides) &mdash; we <code>removeBillboard</code> immediately.</li>
+
+  <li><b>Size mode &amp; depth bias.</b> Labels use <code>ScreenConstant</code> (constant pixel size, matching
+      today's screen-space overlay &mdash; readable at any zoom). Stations sit <em>on</em> the centerline/point
+      geometry, so a small positive <code>depthBias</code> toward the camera keeps a label from being
+      self-occluded by its own station point; the value is a tunable named <code>constexpr</code>.</li>
+
+  <li><b>contentSize timing.</b> <code>cwRenderBillboards</code> reads <code>content-&gt;width()/height()</code>
+      at <code>synchronize</code>; a freshly-created <code>QC.Label</code> may report size 0 for a frame, so the
+      billboard appears a frame late &mdash; the same benign "materializes a frame later" behaviour as the
+      <code>rootNodeHandle == 0</code> skip. (The existing cull already tolerates this via
+      <code>m_averageLabelSize</code>.)</li>
 </ul>
+<div class="panel note">
+<b>Culling vs. depth occlusion &mdash; analysis &amp; decision.</b>
+The existing screen-space cull (<code>cwLabel3dView::updateGroupPositions</code>) already sorts overlapping
+labels <b>nearest-first</b> (<code>sortVisibleEntries()</code> orders by projected <code>position.z()</code>
+ascending) and greedily packs them into <code>m_labelKdTree</code>, so the closest label of an overlapping
+cluster wins its screen rect. That heuristic is <em>aligned</em> with depth occlusion (the nearest marker is
+least likely to be behind geometry; when it is, the depth test hiding it is exactly #536's ask) and
+<em>orthogonal</em> in purpose (depth removes "label through a wall"; the KD-tree removes "text crowding
+text"). So we <b>keep the packing as-is</b> &mdash; the nearest-first priority is already correct, nothing to add.
+<br><br>
+<b>Known residual ("the hole"):</b> packing runs on the GUI thread and can't see what the render thread's
+depth test will kill. If a nearer label wins its rect but is then occluded by geometry at its pixel, the
+farther label it culled &mdash; which might have been visible at a neighbouring pixel &mdash; stays hidden, so
+an overlap region can show <em>no</em> label even though one was visible. This is a new failure mode
+billboarding introduces (today labels draw unconditionally on top). Severity is geometry-dependent: a
+non-issue in open passage, occasionally visible in cluttered breakdown.
+<br><br>
+<b>Decision:</b> ship the simple version (accept the rare hole) and <b>defer the fix to a future
+iteration</b> &mdash; the added cost isn't justified blind, before we see real caves rendered.
+<span class="muted">Future refinement (documented, not pursued): make the cull depth-aware on the GUI thread
+by ray-casting camera&rarr;station through <code>cwGeometryItersecter</code> (<code>intersects(QRay3D)</code> /
+<code>intersectsDetailed</code> &mdash; CPU-only, runs offscreen, no GPU readback) and skipping labels that will
+be occluded <em>before</em> packing, so reserved rects only go to labels that survive the depth test. Cost is
+one ray-cast per non-clipped label per camera change.</span>
+</div>
 
 <h2 id="leads">8. Phase 4 &mdash; Leads (#535)</h2>
 <ul>
@@ -339,9 +453,11 @@ heaviest.</span>
   <li><b>Phase 1 + 2</b> (billboard object + math).</li>
   <li><b>Phase 3</b> (labels) &mdash; first user-visible win, no input complexity.</li>
   <li><b>Phase 4</b> (leads) &mdash; clustering + keywords + the input decision.</li>
-  <li>Cross-cutting hardening + offscreen + tests; <b>delete the spike files</b>
-      (<code>cwBillboardTest.{h,cpp}</code>, the <code>BillboardTest</code> block in
-      <code>GLTerrainRenderer.qml</code>). <span class="pill del">remove</span></li>
+  <li>Cross-cutting hardening + offscreen + tests. <b>Spike deleted</b>
+      <span class="pill ok">done</span> (<code>cwBillboardTest.{h,cpp}</code> and the
+      <code>BillboardTest</code> block in <code>GLTerrainRenderer.qml</code> removed once the labels hot path
+      proved out &mdash; ahead of the rest of Phase 5, since leaving a registered <code>BillboardTest</code> QML
+      element in the production module is scaffolding in production).</li>
 </ol>
 
 <h2 id="decisions">12. Decisions <span class="pill ok">settled</span></h2>
@@ -357,11 +473,13 @@ heaviest.</span>
   <tr><th>File</th><th>Change</th><th>Role</th></tr>
   <tr><td><code>src/cwQuickItemSubscene.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>GUI: ref item into scene graph; the only file touching <code>qquickitem_p.h</code></td></tr>
   <tr><td><code>src/cwItem2DRenderer.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>Render: pimpl over <code>QSGRenderer</code> inline draw; the only file touching <code>qsgrenderer_p.h</code></td></tr>
-  <tr><td><code>src/cwRenderBillboards.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>GUI render object holding billboard slots</td></tr>
+  <tr><td><code>src/cwRenderBillboards.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>GUI render object holding billboards (one subscene + id each)</td></tr>
+  <tr><td><code>src/cwBillboardId.h</code></td><td><span class="pill new">new</span></td><td>Strong <code>enum class : uint32_t</code> billboard id (mirrors <code>cwRenderObjectId</code>)</td></tr>
   <tr><td><code>src/cwRHIBillboards.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>Render backend; gather() &rarr; prepare + Custom draw in Overlay</td></tr>
-  <tr><td><code>src/cwLabel3dView.*</code>, <code>cwLinePlotLabelView.*</code></td><td><span class="pill edit">edit</span></td><td>Feed billboards instead of 2D overlay (#536)</td></tr>
+  <tr><td><code>src/cwLabel3dView.*</code> (and <code>cwLinePlotLabelView.*</code> unchanged)</td><td><span class="pill edit">edit</span></td><td>Own a <code>cwRenderBillboards</code>; cull feeds add/update/removeBillboard instead of 2D overlay (#536)</td></tr>
+  <tr><td><code>qml/Label3d.qml</code>, <code>qml/GLTerrainRenderer.qml</code></td><td><span class="pill edit">edit</span></td><td>Child-opacity fade (effect-ref excludes root opacity); pass <code>scene</code> to <code>LinePlotLabelView</code> (#536)</td></tr>
   <tr><td><code>src/cwLeadView.*</code>, <code>qml/LeadPoint.qml</code></td><td><span class="pill edit">edit</span></td><td>Billboard leads + clustering + keywords + input (#535)</td></tr>
-  <tr><td><code>src/cwBillboardTest.{h,cpp}</code>, <code>qml/GLTerrainRenderer.qml</code></td><td><span class="pill del">remove</span></td><td>Throwaway spike</td></tr>
+  <tr><td><code>src/cwBillboardTest.{h,cpp}</code>, <code>BillboardTest</code> in <code>qml/GLTerrainRenderer.qml</code></td><td><span class="pill ok">removed</span></td><td>Throwaway spike &mdash; deleted once labels proved the path</td></tr>
 </table>
 
 <hr>

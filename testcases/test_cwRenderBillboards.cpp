@@ -26,10 +26,14 @@ TEST_CASE("cwRenderBillboards: snapshot reflects the billboards", "[cwRenderBill
     billboard.worldPosition = QVector3D(1, 2, 3);
     billboard.sizeMode = cwRenderBillboards::SizeMode::ScreenConstant;
     billboard.depthBias = 0.5f;
-    billboards.setBillboards({billboard});
+    const cwBillboardId id = billboards.addBillboard(billboard);
+    REQUIRE(id != cwBillboardId{});
+    REQUIRE(billboards.hasBillboard(id));
+    REQUIRE(billboards.billboardCount() == 1);
 
     const auto renderSlots = billboards.buildRenderSlots();
     REQUIRE(renderSlots.size() == 1);
+    REQUIRE(renderSlots.at(0).id == id);
     REQUIRE(renderSlots.at(0).contentSize == QSizeF(120, 40));
     REQUIRE(renderSlots.at(0).worldPosition == QVector3D(1, 2, 3));
     REQUIRE(renderSlots.at(0).sizeMode == cwRenderBillboards::SizeMode::ScreenConstant);
@@ -40,6 +44,29 @@ TEST_CASE("cwRenderBillboards: snapshot reflects the billboards", "[cwRenderBill
     REQUIRE(renderSlots.at(0).rootNodeHandle == 0);
 }
 
+TEST_CASE("cwRenderBillboards: updateBillboard changes the snapshot", "[cwRenderBillboards]")
+{
+    QQuickWindow window;
+    auto content = std::make_unique<QQuickItem>(window.contentItem());
+    content->setSize(QSizeF(10, 10));
+
+    cwRenderBillboards billboards;
+    billboards.setWindow(&window);
+
+    cwRenderBillboards::Billboard billboard;
+    billboard.content = content.get();
+    billboard.worldPosition = QVector3D(0, 0, 0);
+    const cwBillboardId id = billboards.addBillboard(billboard);
+
+    billboard.worldPosition = QVector3D(5, 6, 7);
+    billboards.updateBillboard(id, billboard);
+
+    const auto renderSlots = billboards.buildRenderSlots();
+    REQUIRE(renderSlots.size() == 1);
+    REQUIRE(renderSlots.at(0).id == id);
+    REQUIRE(renderSlots.at(0).worldPosition == QVector3D(5, 6, 7));
+}
+
 TEST_CASE("cwRenderBillboards: null content is skipped", "[cwRenderBillboards]")
 {
     QQuickWindow window;
@@ -47,7 +74,7 @@ TEST_CASE("cwRenderBillboards: null content is skipped", "[cwRenderBillboards]")
     billboards.setWindow(&window);
 
     cwRenderBillboards::Billboard billboard;  // content left null
-    billboards.setBillboards({billboard});
+    billboards.addBillboard(billboard);
 
     REQUIRE(billboards.buildRenderSlots().isEmpty());
 }
@@ -62,11 +89,12 @@ TEST_CASE("cwRenderBillboards: clearing billboards releases subscenes", "[cwRend
 
     cwRenderBillboards::Billboard billboard;
     billboard.content = content.get();
-    billboards.setBillboards({billboard});
+    const cwBillboardId id = billboards.addBillboard(billboard);
     REQUIRE(billboards.buildRenderSlots().size() == 1);
 
     // Removing the billboard must deref its subscene without crashing.
-    billboards.setBillboards({});
+    billboards.removeBillboard(id);
+    REQUIRE(billboards.billboardCount() == 0);
     REQUIRE(billboards.buildRenderSlots().isEmpty());
 
     // The content item outlives the render object cleanly.

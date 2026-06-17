@@ -12,13 +12,25 @@
 #include "cwCamera.h"
 #include "cwDebug.h"
 #include "cwLabel3dGroup.h"
+#include "cwRenderBillboards.h"
+#include "cwScene.h"
 
 //Qt includes
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQuickWindow>
 #include <algorithm>
 #include <QRectF>
 #include <QSizeF>
+
+namespace {
+// Pull a label toward the camera (along the line of sight, so its screen
+// position and size are unaffected) so local scrap/centerline geometry near the
+// station doesn't draw over the text and make it unreadable. Biased enough to
+// win against local clutter while a more distant wall still occludes it. World
+// units (cave coordinates are metres); tunable.
+constexpr float kLabelDepthBias = 1.0f;
+}
 cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
     QQuickItem(parent),
     m_component(nullptr),
@@ -98,8 +110,10 @@ void cwLabel3dView::updateGroup(cwLabel3dGroup* group) {
             releaseLabelItem(group, i);
         }
         group->m_labelItems.resize(labelSize);
+        group->m_billboardIds.resize(labelSize);
     } else if(labelSize > itemSize) {
         group->m_labelItems.resize(labelSize);
+        group->m_billboardIds.resize(labelSize);  // new entries default to 0 (no billboard)
     }
 
     //Update all the positions
@@ -148,6 +162,20 @@ QQuickItem* cwLabel3dView::acquireLabelItem(cwLabel3dGroup* group, int labelInde
         item = group->m_itemPool.takeLast();
     } else {
         item = qobject_cast<QQuickItem*>(m_component->create());
+
+        if(item != nullptr) {
+            // The billboard draws in the on-demand 3D pass, so a fade animation
+            // must request a frame per step. Label3d mirrors its animated child
+            // opacity onto the root's opacity (its own opacity is excluded from
+            // the rendered subtree by refFromEffectItem, so it only serves as
+            // this signal), letting us drive re-renders without reaching into the
+            // QML internals. The connection self-limits to while opacity changes.
+            connect(item, &QQuickItem::opacityChanged, this, [this]() {
+                if(m_renderBillboards != nullptr) {
+                    m_renderBillboards->update();
+                }
+            });
+        }
     }
 
     if(item == nullptr) {
@@ -176,10 +204,41 @@ void cwLabel3dView::releaseLabelItem(cwLabel3dGroup* group, int labelIndex)
         return;
     }
 
+    if(m_renderBillboards != nullptr && group->m_billboardIds.at(labelIndex) != cwBillboardId{}) {
+        m_renderBillboards->removeBillboard(group->m_billboardIds.at(labelIndex));
+    }
+    group->m_billboardIds[labelIndex] = cwBillboardId{};
+
     item->setVisible(false);
     item->setOpacity(0.0);
     group->m_itemPool.append(item);
     group->m_labelItems[labelIndex] = nullptr;
+}
+
+/**
+ * @brief cwLabel3dView::addOrUpdateBillboard
+ *
+ * Registers (or refreshes) a visible label as a billboard. A station's world
+ * position is camera-invariant, so this only does real work on first appearance
+ * or when the station actually moves (updateBillboard is a no-op otherwise).
+ */
+void cwLabel3dView::addOrUpdateBillboard(cwLabel3dGroup* group, int labelIndex, QQuickItem* item) {
+    if(m_renderBillboards == nullptr || item == nullptr) {
+        return;
+    }
+
+    cwRenderBillboards::Billboard billboard;
+    billboard.content = item;
+    billboard.worldPosition = group->m_labels.at(labelIndex).position();
+    billboard.sizeMode = cwRenderBillboards::SizeMode::ScreenConstant;
+    billboard.depthBias = kLabelDepthBias;
+
+    cwBillboardId& id = group->m_billboardIds[labelIndex];
+    if(id == cwBillboardId{}) {
+        id = m_renderBillboards->addBillboard(billboard);
+    } else {
+        m_renderBillboards->updateBillboard(id, billboard);
+    }
 }
 
 /**
@@ -193,6 +252,60 @@ void cwLabel3dView::setCamera(cwCamera* camera) {
         updatePositions();
         emit cameraChanged();
     }
+}
+
+cwScene *cwLabel3dView::scene() const {
+    return m_scene;
+}
+
+void cwLabel3dView::setScene(cwScene* scene) {
+    if(m_scene == scene) {
+        return;
+    }
+    m_scene = scene;
+    if(m_renderBillboards != nullptr) {
+        m_renderBillboards->setScene(scene);
+    } else {
+        ensureRenderBillboards();
+    }
+    updatePositions();
+    emit sceneChanged();
+}
+
+/**
+ * @brief cwLabel3dView::ensureRenderBillboards
+ *
+ * Lazily creates the billboard render object once both the window (from the
+ * scene graph) and the scene are available. Labels render as depth-occluded
+ * billboards through it instead of as 2D overlay children.
+ */
+void cwLabel3dView::ensureRenderBillboards() {
+    if(m_renderBillboards != nullptr) {
+        return;
+    }
+
+    QQuickWindow* quickWindow = window();
+    if(quickWindow == nullptr || m_scene == nullptr) {
+        return;
+    }
+
+    m_renderBillboards = new cwRenderBillboards(this);
+    m_renderBillboards->setWindow(quickWindow);
+    m_renderBillboards->setScene(m_scene);
+}
+
+void cwLabel3dView::itemChange(ItemChange change, const ItemChangeData& value) {
+    if(change == ItemSceneChange) {
+        if(m_renderBillboards != nullptr) {
+            // The view moved to a different window (value.window is null when it
+            // left one); rebind the billboards and their subscenes to it.
+            m_renderBillboards->setWindow(value.window);
+        } else {
+            ensureRenderBillboards();
+        }
+        updatePositions();
+    }
+    QQuickItem::itemChange(change, value);
 }
 
 /**
@@ -232,9 +345,9 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
                 item->setVisible(true);
             }
 
-            if (item) {
-                item->setPosition(qtViewportCoordinate.toPointF());
-            }
+            // The billboard's model matrix places the item in 3D (depth-tested
+            // against cave geometry); we no longer position it in screen space.
+            addOrUpdateBillboard(group, i, item);
         };
 
         auto reject = [&]() {
