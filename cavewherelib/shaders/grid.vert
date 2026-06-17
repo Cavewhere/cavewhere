@@ -14,25 +14,24 @@ layout(location = 0) in vec3 vVertex;
 layout(location = 0) out vec4 vPosition;
 layout(location = 1) out vec4 projectedPosition;
 
-//Not used
-// layout(std140, binding = 0) uniform Global {
-//     mat4 viewProjectionMatrix;
-//     mat4 viewMatrix;
-//     mat4 projectionMatrix;
-//     float devicePixelRatio;
-// };
-
-layout(std140, binding = 0) uniform Matrices {
-    mat4 ModelViewProjectionMatrix;
-    mat4 ModelMatrix;
+// Shared scene camera — same buffer and layout every other render object binds
+// at slot 0 (cwRhiScene::GlobalUniform).
+layout(std140, binding = 0) uniform Global {
+    mat4 viewProjectionMatrix;
+    mat4 viewMatrix;
+    mat4 projectionMatrix;
+    float devicePixelRatio;
 };
 
-const float z = 0.0;
+// Grid placement (ModelMatrix) + the scale-only matrix used for contour sampling.
+layout(std140, binding = 1) uniform Matrices {
+    mat4 ModelMatrix;
+    mat4 ScaleMatrix;
+};
 
 void main() {
     vec4 position = vec4(vVertex, 1.0);
-    gl_Position = ModelViewProjectionMatrix * position;
+    gl_Position = viewProjectionMatrix * ModelMatrix * position;
     projectedPosition = gl_Position;
-    vPosition.xyz = (ModelMatrix * position).xyz;
-    // vPosition.xyz = (position).xyz;
+    vPosition.xyz = (ScaleMatrix * position).xyz;
 }

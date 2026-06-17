@@ -218,6 +218,8 @@ if(BUILD_TESTING)
             testlib/MockAuthProvider.h
             testlib/SvgOverlapAnalyzer.cpp
             testlib/SvgOverlapAnalyzer.h
+            testlib/OffscreenRenderTester.cpp
+            testlib/OffscreenRenderTester.h
             QQuickGit/tests/lfs/LfsServer.cpp
             QQuickGit/tests/lfs/LfsServer.h
         QML_FILES

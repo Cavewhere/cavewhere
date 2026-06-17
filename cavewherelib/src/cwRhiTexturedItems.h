@@ -4,6 +4,7 @@
 //Our includes
 #include "cwRHIObject.h"
 #include "cwRenderTexturedItems.h"
+#include "cwRhiPipelineSet.h"
 #include "cwRhiScene.h"
 #include <QMatrix4x4>
 
@@ -18,6 +19,7 @@ public:
     void updateResources(const ResourceUpdateData& data) override;
     void render(const RenderData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
+    void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor) override;
 
 private:
     struct SharedItemData {
@@ -33,7 +35,12 @@ private:
         QRhiBuffer* uniformBuffer = nullptr;
         QRhiTexture* texture = nullptr;
         QRhiShaderResourceBindings* srb = nullptr;
-        cwRhiScene::PipelineRecord* pipelineRecord = nullptr;
+        // One pipeline per render target this item draws into, kept resident so
+        // live↔offscreen toggling never rebuilds them. pipelineRecord is the
+        // record for the pass currently being gathered/rendered. The srb above
+        // is render-pass-independent and shared across all of them.
+        cwRhiPipelineSet pipelines;
+        cwRhiPipelineRecord* pipelineRecord = nullptr;
 
         int numberOfIndices = 0;
 
@@ -62,7 +69,7 @@ private:
         void updateTextureResource(const ResourceUpdateData& data, const SharedItemData &sharedData);
         void updateUniformBuffer(const ResourceUpdateData& data);
         void createShaderResourceBindings(const ResourceUpdateData& data, const SharedItemData &sharedData);
-        void releasePipeline();
+        void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor);
         QByteArray buildPerDrawUniformPayload() const;
     };
 
@@ -83,12 +90,11 @@ private:
     cwRhiPipelineKey makePipelineKey(QRhiRenderPassDescriptor* renderPass,
                                      int sampleCount,
                                      const cwRenderMaterialState& material) const;
-    cwRhiScene::PipelineRecord* acquirePipeline(const cwRhiPipelineKey& key,
+    cwRhiPipelineRecord* acquirePipeline(const cwRhiPipelineKey& key,
                                                 const cwRenderMaterialState& material,
                                                 QRhi* rhi,
                                                 const QRhiVertexInputLayout& layout,
                                                 const SharedItemData& sharedData);
-    void releasePipeline(cwRhiScene::PipelineRecord* record);
     QRhiSampler* sharedSampler(QRhi* rhi);
     static cwRHIObject::RenderPass toRenderPass(cwRenderMaterialState::RenderPass pass);
 };

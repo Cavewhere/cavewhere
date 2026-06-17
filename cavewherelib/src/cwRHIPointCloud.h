@@ -37,7 +37,6 @@ public:
 
 private:
     void initializeResources(const ResourceUpdateData& data);
-    void releasePipeline();
     bool ensurePipeline(const RenderData& data);
     bool ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer);
     cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
@@ -66,9 +65,6 @@ private:
     float m_lastUploadedWorldRadius = std::numeric_limits<float>::quiet_NaN();
     QRhiShaderResourceBindings* m_srb = nullptr;
     cwRhiScene* m_scene = nullptr;
-    cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;
-    cwRhiPipelineKey m_pipelineKey;
-    bool m_hasPipelineKey = false;
 
     // Geometry and render-state tracked independently so a uniform-only
     // change (world radius / point size) never re-stages the vertex buffer —

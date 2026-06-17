@@ -44,7 +44,14 @@ public:
     QMatrix4x4 viewProjectionMatrix() const { return m_sceneRenderer->viewProjectionMatrix(); }
     float devicePixelRatio() const { return m_sceneRenderer->devicePixelRatio(); }
     QRhiBuffer* globalUniformBuffer() const { return m_sceneRenderer->globalUniformBuffer(); }
+    quint32 globalUniformBufferStride() const { return m_sceneRenderer->globalUniformBufferStride(); }
     cwRhiScene* sceneBackend() const { return m_sceneRenderer; }
+
+    // Request another frame from within the render thread (wraps the protected
+    // QQuickRhiItemRenderer::update()). cwRhiScene calls this to spread offscreen
+    // renders across frames and to flush pending texture read-backs. Guarded by
+    // cwRhiScene so it isn't called unconditionally (that would loop forever).
+    void requestUpdate() { update(); }
 
 protected:
     void initialize(QRhiCommandBuffer *cb) override;
