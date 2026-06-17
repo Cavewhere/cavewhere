@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Depth-Occluded QML Billboards in the RHI Scene — Implementation Plan</title>
+<style>
+  :root {
+    --bg: #1a1d21;
+    --panel: #23272e;
+    --panel2: #2b3038;
+    --ink: #e6e9ee;
+    --muted: #9aa4b2;
+    --accent: #5aa9e6;
+    --accent2: #7ddc8f;
+    --warn: #e6b35a;
+    --bad: #e66a6a;
+    --line: #3a414b;
+    --code-bg: #15181c;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 120px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 {
+    font-size: 22px; margin: 52px 0 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); letter-spacing: -0.2px;
+  }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+  code {
+    font-family: var(--mono); font-size: 13.5px;
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    color: #d8e0ea;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono);
+    font-size: 13px; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 18px 0;
+  }
+  .panel.tip { border-left: 3px solid var(--accent2); }
+  .panel.warn { border-left: 3px solid var(--warn); }
+  .panel.note { border-left: 3px solid var(--accent); }
+  .pill {
+    display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px;
+    border-radius: 999px; vertical-align: middle;
+  }
+  .pill.ok { background: rgba(125,220,143,.16); color: var(--accent2); }
+  .pill.new { background: rgba(90,169,230,.16); color: var(--accent); }
+  .pill.edit { background: rgba(230,179,90,.16); color: var(--warn); }
+  .pill.del { background: rgba(230,106,106,.16); color: var(--bad); }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); font-weight: 600; }
+  td code { font-size: 12.5px; }
+  .muted { color: var(--muted); }
+  .lead { font-size: 17px; color: var(--ink); }
+  .meta { color: var(--muted); font-size: 14px; margin: 2px 0; }
+  .kbd { font-family: var(--mono); font-size: 12.5px; background: var(--panel2);
+         border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+  .toc { columns: 2; column-gap: 32px; font-size: 14px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .flow code { display:block; white-space:pre; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Depth-Occluded QML Billboards in the RHI Scene</h1>
+<p class="sub">Implementation plan &mdash; rendering live QML <code>Item</code>s as billboards that participate in the 3D depth buffer.</p>
+<p class="meta">Issues: <b>#535</b> (Lead visibility, keywords, overlap, z-order) &middot; <b>#536</b> (Station labels should be billboarded)</p>
+<p class="meta">Date: 2026-06-16 &middot; Status: research + spike complete, decisions settled &mdash; implementing Phase 0 next</p>
+
+<h2 id="problem">1. Problem</h2>
+<p>
+Station labels (<code>Label3d.qml</code> via <code>cwLabel3dView</code>) and lead markers
+(<code>LeadPoint.qml</code> via <code>cwLeadView</code>) are plain Qt Quick <code>Item</code>s
+anchored <em>over</em> the RHI 3D view and positioned by CPU projection
+(<code>cwTransformUpdater::updatePoint</code>, <code>cwLabel3dView::updateGroupPositions</code>).
+They composite on top of the 3D color output as ordinary 2D items, so they <b>always draw over the
+geometry</b> &mdash; a label behind a passage wall is not hidden. Both issues ask for the same thing:
+markers that are <b>occluded by cave geometry via the depth buffer</b> ("billboarded so they use the
+z-buffer"). The markers already track their 3D point and face the camera; the missing piece is
+<b>depth occlusion + z-ordering</b>.
+</p>
+
+<div class="panel warn">
+<b>Why it can't be done in the QML layer.</b> A <code>QQuickRhiItem</code> exposes only its
+<em>color</em> texture to Qt Quick; the live depth-stencil is a non-sampleable
+<code>QRhiRenderBuffer</code> on the render thread. <code>ShaderEffect</code> is a 2D item &mdash; it
+cannot depth-test or write <code>gl_FragDepth</code>. Qt 6.10/6.11 has no public path to share a depth
+buffer between two offscreen renderers (a <code>View3D</code>/Qt3D scene and our custom
+<code>QQuickRhiItem</code> cannot cross-occlude). The only way to occlude a QML item against
+<em>our</em> geometry is to draw it <b>inside our own RHI pass</b>, sharing our depth buffer.
+</div>
+
+<h2 id="mechanism">2. How Qt does it (the mechanism we reuse)</h2>
+<p>
+QtQuick3D renders 2D <code>Item</code>s inline in its 3D pass &mdash; not by re-implementing 2D
+rendering, but by reusing Qt Quick's own batch renderer in a special mode. Traced through the Qt source
+(<code>qtquick3d</code> + <code>qtdeclarative</code>):
+</p>
+<ol>
+  <li><b>Harvest the item's scene-graph subtree.</b> <code>QQuick3DItem2D</code> calls
+      <code>refWindow()</code> + <code>refFromEffectItem(true)</code> on the content item (the same call
+      <code>ShaderEffectSource</code> uses) so its <code>QSGRootNode</code> is built without it appearing
+      in the normal 2D overlay.</li>
+  <li><b>Create a Qt Quick renderer in 3D mode.</b>
+      <code>QSGRenderContext::createRenderer(QSGRendererInterface::RenderMode3D)</code> &rarr;
+      <code>setRootNode(rootNode)</code>.</li>
+  <li><b>Feed the 3D MVP as the renderer's "projection."</b>
+      <code>mvp = clipSpaceCorr &times; cameraViewProjection &times; nodeWorldTransform &times; flipY</code>,
+      so the 2D vertices (and their depth) land in the 3D scene.</li>
+  <li><b>Bind the 3D render target + command buffer</b> via
+      <code>QSGRenderTarget(rt, rpDesc, cb)</code>, then
+      <code>prepareSceneInline()</code> &rarr; <code>renderSceneInline()</code> &mdash; recording draws
+      into the <em>already-open</em> 3D pass, sharing color <b>and depth</b>.</li>
+  <li><b>Depth behaviour.</b> In <code>RenderMode3D</code> the batch renderer disables its normal 2D
+      z-allocation (<code>useDepthBuffer()==false</code>), draws with <code>depthTest=true,
+      depthWrite=false</code> (so 3D geometry occludes the item), then runs a color-write-off depth
+      post-pass so subsequent 3D content is occluded by the item too.</li>
+</ol>
+<p class="muted">
+Sources: <code>qquick3ditem2d.cpp</code>, <code>qssgrenderdata.cpp:683&ndash;746</code>,
+<code>qssgrenderpass.cpp:1175&ndash;1258</code>, <code>qsgbatchrenderer.cpp:3907&ndash;4032</code>,
+<code>qsgbatchrenderer_p.h:971&ndash;982</code>. The private API is identical in Qt&nbsp;6.11.1 (our build).
+</p>
+
+<h2 id="spike">3. Spike result <span class="pill ok">validated</span></h2>
+<p>
+A throwaway spike (<code>cwBillboardTest.{h,cpp}</code> + a <code>BillboardTest</code> in
+<code>GLTerrainRenderer.qml</code>) wired this path into <code>cwRhiScene</code> with <b>no engine
+changes</b>: the integration seam is <code>gather()</code>, which runs <em>before</em>
+<code>beginPass</code> (so <code>prepareSceneInline()</code>'s resource uploads are legal) and emits a
+<code>Custom</code> drawable that calls <code>renderSceneInline()</code> inside the open pass.
+</p>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Private-API path compiles against <code>QuickPrivate</code>/<code>GuiPrivate</code></td><td><span class="pill ok">yes</span> &mdash; zero errors</td></tr>
+  <tr><td>Live QML item renders inside the 3D pass, camera-tracked</td><td><span class="pill ok">yes</span> &mdash; visually confirmed</td></tr>
+  <tr><td>Occluded by scene depth (point cloud)</td><td><span class="pill ok">yes</span> &mdash; confirmed against a point cloud</td></tr>
+  <tr><td>Works under both orthographic and perspective projection</td><td><span class="pill ok">yes</span></td></tr>
+  <tr><td>No RHI / QSG validation errors at runtime</td><td><span class="pill ok">clean</span></td></tr>
+</table>
+<p>
+The spike binds the <b>Overlay</b> pass's render target, which draws into the final target after the EDL
+composite (which writes combined scene+cloud depth) &mdash; this is why it occluded against the point
+cloud with no routing changes.
+</p>
+
+<h2 id="encapsulation">4. Phase 0 &mdash; Encapsulation layer (the public API)</h2>
+<p>
+The whole plan hinges on hiding the 9 private-API calls behind a small CaveWhere surface. <b>Two classes
+are the only files in the codebase that include Qt private headers.</b> Everything else uses public types
+(<code>QMatrix4x4</code>, <code>QRhi*</code>, <code>QQuickItem*</code>, <code>QQuickWindow*</code>).
+</p>
+
+<h3><code>cwQuickItemSubscene</code> <span class="pill new">new</span> &mdash; GUI thread</h3>
+<p>Owns the "make a <code>QQuickItem</code> renderable off-tree" lifecycle.</p>
+<ul>
+  <li><code>cwQuickItemSubscene(QQuickItem* content, QQuickWindow* window)</code> &rarr; internally
+      <code>refWindow</code> + <code>refFromEffectItem(true)</code>.</li>
+  <li><code>~cwQuickItemSubscene()</code> &rarr; <code>derefFromEffectItem(true)</code> +
+      <code>derefWindow</code> <span class="muted">(the spike leaked these &mdash; real teardown lives here)</span>.</li>
+  <li><code>bool nodeReady() const</code> / <code>void forceSync()</code> &rarr; wraps the
+      <code>rootNode()</code>-null / <code>updateDirtyNode</code> retry.</li>
+  <li>An opaque <code>quintptr rootNodeHandle()</code> so the <code>QSGRootNode</code> type never leaks
+      into a public header.</li>
+</ul>
+<p class="muted"><code>.cpp</code> includes <code>qquickitem_p.h</code>, <code>qquickwindow_p.h</code>.</p>
+
+<h3><code>cwItem2DRenderer</code> <span class="pill new">new</span> &mdash; render thread</h3>
+<p>A pimpl wrapper over <code>QSGRenderer</code> inline rendering.</p>
+<pre><code>// header — no private types
+class cwItem2DRenderer {
+public:
+    struct Frame {
+        QMatrix4x4 mvp;                       // clip-corrected MVP
+        QRhiRenderTarget* rt;
+        QRhiRenderPassDescriptor* rpd;
+        QRhiCommandBuffer* cb;
+        QSize deviceRect;
+        float devicePixelRatio;
+        quintptr rootNodeHandle;              // from cwQuickItemSubscene
+    };
+    explicit cwItem2DRenderer(QQuickWindow* window);
+    ~cwItem2DRenderer();
+    bool prepare(const Frame&amp; frame);          // lazy createRenderer + prepareSceneInline
+    void render();                            // renderSceneInline
+private:
+    struct Impl; std::unique_ptr&lt;Impl&gt; d;     // hides QSGRenderer / QSGRenderTarget
+};</code></pre>
+<p class="muted"><code>.cpp</code> includes <code>qsgrenderer_p.h</code>.</p>
+
+<div class="panel tip">
+<b>Tripwire.</b> Both classes get focused smoke tests (construct &rarr; ref &rarr; prepare against an
+offscreen target &rarr; render &rarr; destroy). If a Qt upgrade breaks the private-API contract, these
+fail &mdash; not the whole app.
+</div>
+
+<h2 id="billboards">5. Phase 1 &mdash; Generic billboard render object</h2>
+<ul>
+  <li><code>cwRenderBillboards</code> <span class="pill new">new</span> (<code>cwRenderObject</code>, GUI)
+      + <code>cwRHIBillboards</code> <span class="pill new">new</span> (<code>cwRHIObject</code>, render):
+      render a <em>set</em> of billboards. The GUI object holds slots
+      <code>{ QQuickItem* content, QVector3D worldPos, SizeMode mode, float depthBias }</code>;
+      <code>synchronize()</code> hands the list to the render side; <code>gather()</code> preps each
+      slot's <code>cwItem2DRenderer</code> and appends a <code>Custom</code> draw.</li>
+  <li><b>Pass routing:</b> draw in the existing <b>Overlay</b> pass (or a dedicated
+      <code>RenderPass::Billboard</code> just before it). Overlay runs in the final target after the EDL
+      composite, which writes combined scene+cloud depth &mdash; so billboards depth-test against
+      everything, EDL or not, with no routing changes. <span class="muted">(The spike confirmed this.)</span></li>
+  <li>One <code>cwItem2DRenderer</code> per slot (matches QtQuick3D; each caches its render list). Visible
+      slot count is bounded by culling (Phases 3&ndash;4), so this stays cheap.</li>
+</ul>
+
+<h2 id="math">6. Phase 2 &mdash; Billboarding math</h2>
+<ul>
+  <li><b>Screen-constant size</b> (default for labels/leads): build the model matrix so the quad is a
+      fixed pixel size independent of distance &mdash; unlike the spike's world-sized ~3.6&nbsp;m tag.
+      Derive scale from <code>gl_Position.w</code> / viewport height (inverse of the world-radius trick
+      <code>PointCloud.vert:36&ndash;54</code> already uses).</li>
+  <li><b>Depth bias:</b> stations/leads sit <em>on</em> the wall surface, so a naive test self-occludes
+      them. Offset the world position slightly toward the eye (or a polygon-offset equivalent) so a label
+      on a wall stays visible while one <em>behind</em> a wall is hidden.</li>
+  <li>Centering/anchoring; ortho + perspective both confirmed in the spike.</li>
+</ul>
+
+<h2 id="labels">7. Phase 3 &mdash; Station labels (#536)</h2>
+<ul>
+  <li>Repoint <code>cwLabel3dView</code> / <code>cwLinePlotLabelView</code> <span class="pill edit">edit</span>
+      to feed <code>cwRenderBillboards</code> instead of positioning 2D overlay items.</li>
+  <li><b>Keep</b> the KD-tree overlap culling (it now bounds the billboard slot count) and the
+      <code>Label3d.qml</code> fade-in &mdash; a live item, so its <code>NumberAnimation</code> keeps
+      working inside the 3D pass.</li>
+  <li>Labels become occluded by walls/clouds &mdash; the headline ask of #536.</li>
+  <li>No interaction needed (labels aren't clickable) &rarr; this is the right first real feature, free of
+      the input problem.</li>
+</ul>
+
+<h2 id="leads">8. Phase 4 &mdash; Leads (#535)</h2>
+<ul>
+  <li>Drive <code>LeadPoint.qml</code> through <code>cwRenderBillboards</code> &rarr; occluded leads.</li>
+  <li><b>Keyword visibility:</b> gate lead visibility on scrap keywords and fold leads into the
+      <code>type</code> keyword (<code>cwKeywordItemModel</code> / <code>cwKeywordFilterPipelineModel</code>).</li>
+  <li><b>Zoom-out clustering:</b> a CPU pass projects lead world positions, groups those within a
+      screen-space radius, and emits a single numbered cluster billboard (with a count) that expands to a
+      lead list &mdash; mirrors the label KD-tree, feeds the same billboard set.</li>
+</ul>
+<div class="panel note">
+<b>Lead interaction &mdash; resolved: hit-proxy.</b> Lead popups are clickable, but an item rendered inside
+the 3D pass no longer receives normal 2D events. We keep a thin, invisible 2D hit-proxy at the projected
+screen position to receive input, while the <em>visible</em> billboard renders (and is occluded) in the 3D
+pass. <span class="muted">Considered but not chosen: routing clicks through
+<code>cwGeometryItersecter</code>/<code>cwCoordinatePicker</code>, or replicating QtQuick3D's subscene
+input delivery (<code>ensureSubsceneDeliveryAgent</code> + synthetic events) &mdash; faithful but
+heaviest.</span>
+</div>
+
+<h2 id="crosscut">9. Cross-cutting concerns</h2>
+<ul>
+  <li><b>Offscreen / export</b> (<code>cwScene::renderOffscreen</code>): the spike binds the swap-chain
+      target, so it is not offscreen-aware. Make <code>cwItem2DRenderer::Frame</code> carry the active
+      target so billboards can render into either. <b>Decision:</b> both labels and leads are
+      <b>off in map exports by default</b> &mdash; <code>cwRHIBillboards</code> skips its slots when
+      rendering into an offscreen target. Finer control comes from keywords (a future per-keyword
+      "show in export" toggle), not a hard-coded exclusion.</li>
+  <li><b>MSAA:</b> the Overlay pass's sample count must flow into the <code>QSGRenderTarget</code>; the
+      per-pass sample count is already tracked in <code>RenderData</code>.</li>
+  <li><b>Threading &amp; lifetime:</b> ref/deref strictly on the GUI thread; <code>rootNode</code> read +
+      render on the render thread; on content-item destruction, tear down the slot before the
+      <code>QSGRenderer</code>. <code>QPointer</code> guards as in the spike.</li>
+  <li><b>Private-API risk:</b> isolated to the two Phase-0 <code>.cpp</code> files; a breaking Qt upgrade
+      fails their unit tests, not the app.</li>
+</ul>
+
+<h2 id="testing">10. Testing</h2>
+<ul>
+  <li>C++ smoke tests for <code>cwItem2DRenderer</code> / <code>cwQuickItemSubscene</code> (the private-API
+      tripwire).</li>
+  <li>QML/offscreen test: load geometry + a billboard, render offscreen from a "behind the wall" camera,
+      read back, assert the billboard pixels are absent (occluded) and present from the front &mdash;
+      automatable once the offscreen path is billboard-aware.</li>
+  <li>Run both <code>cavewhere-test</code> and <code>cavewhere-qml-test</code> per the usual rule
+      (tee output to <code>/tmp/*.log</code>).</li>
+</ul>
+
+<h2 id="sequencing">11. Suggested sequencing</h2>
+<ol>
+  <li><b>Phase 0</b> (encapsulation) &mdash; unblocks everything, smallest risk.</li>
+  <li><b>Phase 1 + 2</b> (billboard object + math).</li>
+  <li><b>Phase 3</b> (labels) &mdash; first user-visible win, no input complexity.</li>
+  <li><b>Phase 4</b> (leads) &mdash; clustering + keywords + the input decision.</li>
+  <li>Cross-cutting hardening + offscreen + tests; <b>delete the spike files</b>
+      (<code>cwBillboardTest.{h,cpp}</code>, the <code>BillboardTest</code> block in
+      <code>GLTerrainRenderer.qml</code>). <span class="pill del">remove</span></li>
+</ol>
+
+<h2 id="decisions">12. Decisions <span class="pill ok">settled</span></h2>
+<table>
+  <tr><th>#</th><th>Decision</th><th>Resolution</th></tr>
+  <tr><td>1</td><td>Lead interaction approach</td><td><b>(a) hit-proxy</b> &mdash; invisible 2D proxy at the projected position handles input; the visible billboard renders in the 3D pass.</td></tr>
+  <tr><td>2</td><td>Labels / leads in map exports (offscreen)?</td><td><b>Both off by default.</b> Billboards skip offscreen targets; keyword-driven per-export visibility is a later refinement.</td></tr>
+  <tr><td>3</td><td>New <code>RenderPass::Billboard</code> vs reuse <code>Overlay</code></td><td><b>Reuse <code>Overlay</code></b> &mdash; already draws into the final target after the EDL composite (combined depth).</td></tr>
+</table>
+
+<h2 id="files">Appendix &mdash; file inventory</h2>
+<table>
+  <tr><th>File</th><th>Change</th><th>Role</th></tr>
+  <tr><td><code>src/cwQuickItemSubscene.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>GUI: ref item into scene graph; the only file touching <code>qquickitem_p.h</code></td></tr>
+  <tr><td><code>src/cwItem2DRenderer.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>Render: pimpl over <code>QSGRenderer</code> inline draw; the only file touching <code>qsgrenderer_p.h</code></td></tr>
+  <tr><td><code>src/cwRenderBillboards.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>GUI render object holding billboard slots</td></tr>
+  <tr><td><code>src/cwRHIBillboards.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>Render backend; gather() &rarr; prepare + Custom draw in Overlay</td></tr>
+  <tr><td><code>src/cwLabel3dView.*</code>, <code>cwLinePlotLabelView.*</code></td><td><span class="pill edit">edit</span></td><td>Feed billboards instead of 2D overlay (#536)</td></tr>
+  <tr><td><code>src/cwLeadView.*</code>, <code>qml/LeadPoint.qml</code></td><td><span class="pill edit">edit</span></td><td>Billboard leads + clustering + keywords + input (#535)</td></tr>
+  <tr><td><code>src/cwBillboardTest.{h,cpp}</code>, <code>qml/GLTerrainRenderer.qml</code></td><td><span class="pill del">remove</span></td><td>Throwaway spike</td></tr>
+</table>
+
+<hr>
+<p class="muted">
+Generated from the research + spike session of 2026-06-16. The spike confirmed compile, in-scene render,
+depth occlusion (point cloud), and ortho/perspective behaviour before this plan was written.
+</p>
+
+</div>
+</body>
+</html>

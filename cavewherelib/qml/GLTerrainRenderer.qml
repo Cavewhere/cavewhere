@@ -57,6 +57,12 @@ Item {
         // Don't set sampleCount; cwRenderingSettings drives it.
     }
 
+    // PROTOTYPE SPIKE (#535/#536): depth-occluded QML billboard inside the RHI pass.
+    BillboardTest {
+        scene: rendererId.scene
+        worldPosition: Qt.vector3d(0, 0, 0)
+    }
+
     Binding {
         target: RootData.regionSceneManager.background
         property: "color1"
