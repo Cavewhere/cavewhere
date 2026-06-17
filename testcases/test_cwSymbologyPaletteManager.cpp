@@ -89,11 +89,11 @@ TEST_CASE("Manager always provides the seed palette", "[cwSymbologyPaletteManage
     REQUIRE(temp.isValid());
 
     cwSymbologyPaletteManager manager;
-    manager.setPaletteDirectory(temp.path()); // empty dir: only the seed
+    manager.setPaletteDirectory(temp.path()); // empty dir: only the default
 
     REQUIRE(manager.palettes().size() == 1);
-    CHECK(manager.seedPalette() != nullptr);
-    CHECK(manager.paletteById(cwSymbologyPaletteSeed::id()) == manager.seedPalette());
+    CHECK(manager.defaultPalette() != nullptr);
+    CHECK(manager.paletteById(cwSymbologyPaletteSeed::id()) == manager.defaultPalette());
     CHECK(manager.errorModel()->errors()->isEmpty());
     CHECK(manager.errorModel()->fatalCount() == 0);
     CHECK(manager.errorModel()->warningCount() == 0);

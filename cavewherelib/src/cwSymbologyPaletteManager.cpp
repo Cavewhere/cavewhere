@@ -8,7 +8,6 @@
 //Our includes
 #include "cwSymbologyPaletteManager.h"
 #include "cwSymbologyPalette.h"
-#include "cwSymbologyPaletteSeed.h"
 #include "cwSymbologyPaletteIO.h"
 #include "cwError.h"
 #include "cwErrorModel.h"
@@ -62,7 +61,7 @@ void cwSymbologyPaletteManager::clearInstalled()
         delete palette;
     }
     m_palettes.clear();
-    m_seed = nullptr;
+    m_default = nullptr;
 }
 
 void cwSymbologyPaletteManager::reload()
@@ -70,14 +69,31 @@ void cwSymbologyPaletteManager::reload()
     clearInstalled();
     m_errorModel->errors()->clear();
 
-    // The seed is always present and always wins its id.
-    m_seed = new cwSymbologyPalette(this);
-    m_seed->setData(cwSymbologyPaletteSeed::create());
-    m_seed->setWritable(false);
-    m_palettes.append(m_seed);
-
     QHash<QUuid, QString> directoryById;
-    directoryById.insert(m_seed->id(), QStringLiteral("<built-in seed>"));
+
+    // The default palette is shipped embedded as a qrc resource and loaded
+    // through the normal IO path. It is always present, read-only, and wins its
+    // id on duplicates. A load failure here is a build defect (corrupt embedded
+    // resource): report it and leave m_default null — there is no code-built
+    // fallback.
+    const QString defaultPath = QStringLiteral(":/palettes/cavewhere-default");
+    const auto defaultResult = cwSymbologyPaletteIO::load(defaultPath);
+    if (defaultResult.hasError()) {
+        reportLoadProblem(
+            QStringLiteral("failed to load the built-in default palette \"%1\": %2")
+                .arg(defaultPath, defaultResult.errorMessage()));
+    } else {
+        const auto &loadResult = defaultResult.value();
+        m_default = new cwSymbologyPalette(this);
+        m_default->setData(loadResult.palette);
+        m_default->setWritable(false);
+        m_palettes.append(m_default);
+        directoryById.insert(m_default->id(), defaultPath);
+
+        for (const cwError &warning : std::as_const(loadResult.warnings)) {
+            reportLoadProblem(warning);
+        }
+    }
 
     const QDir root(m_paletteDirectory);
     if (root.exists()) {

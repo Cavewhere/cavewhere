@@ -21,7 +21,8 @@
 class cwSymbologyPalette;
 class cwErrorModel;
 
-// Owns the set of installed palettes. The built-in seed palette is always
+// Owns the set of installed palettes. The built-in default palette is shipped
+// embedded as a qrc resource (:/palettes/cavewhere-default) and is always
 // present. The on-disk palette directory is scanned for subdirectories
 // containing a palette.json; a palette's identity is its Palette.id, not its
 // directory name, so duplicate ids resolve first-scanned-wins with a one-shot
@@ -53,12 +54,12 @@ public:
     // outright rather than landing here.
     cwErrorModel *errorModel() const { return m_errorModel; }
 
-    // Rescan the palette directory. The seed is always re-added first.
+    // Rescan the palette directory. The default is always re-added first.
     void reload();
 
-    // Seed first, then installed palettes in scan order.
+    // Default first, then installed palettes in scan order.
     QList<cwSymbologyPalette *> palettes() const { return m_palettes; }
-    cwSymbologyPalette *seedPalette() const { return m_seed; }
+    cwSymbologyPalette *defaultPalette() const { return m_default; }
     cwSymbologyPalette *paletteById(const QUuid &id) const;
 
     static QString defaultPaletteDirectory();
@@ -79,7 +80,7 @@ private:
     static cwSymbologyPaletteManager *Singleton;
 
     QString m_paletteDirectory;
-    cwSymbologyPalette *m_seed = nullptr;
+    cwSymbologyPalette *m_default = nullptr;
     QList<cwSymbologyPalette *> m_palettes;
     cwErrorModel *m_errorModel = nullptr;
 };
