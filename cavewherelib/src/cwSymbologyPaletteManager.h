@@ -18,6 +18,10 @@
 #include "CaveWhereLibExport.h"
 #include "cwError.h"
 
+// moc needs the complete cwSymbologyPalette to register the paletteById return
+// metatype; Q_MOC_INCLUDE keeps it out of this header.
+Q_MOC_INCLUDE("cwSymbologyPalette.h")
+
 class cwSymbologyPalette;
 class cwErrorModel;
 
@@ -60,7 +64,10 @@ public:
     // Default first, then installed palettes in scan order.
     QList<cwSymbologyPalette *> palettes() const { return m_palettes; }
     cwSymbologyPalette *defaultPalette() const { return m_default; }
-    cwSymbologyPalette *paletteById(const QUuid &id) const;
+
+    // Q_INVOKABLE so QML (the missing-palette banner) can ask whether a stored
+    // region/settings id still resolves without scanning the palette list.
+    Q_INVOKABLE cwSymbologyPalette *paletteById(const QUuid &id) const;
 
     static QString defaultPaletteDirectory();
 

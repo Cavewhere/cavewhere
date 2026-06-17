@@ -353,6 +353,11 @@ void cwSketch::resolveSnapshot()
         resolved = manager->defaultPalette();
     }
 
+    // Cache the resolved palette pointer unconditionally (independent of the
+    // content dedup below) so resolvedPalette() always reflects the current
+    // selection — the brush picker enumerates brushes from it.
+    m_resolvedPalette = resolved;
+
     // Dedup on resolved content, not on palette id: a no-op set (e.g. a sketch
     // id that doesn't resolve while already on the default) leaves the content
     // unchanged and stays quiet, while a same-id manager reload that edited the

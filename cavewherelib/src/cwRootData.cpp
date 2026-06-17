@@ -33,6 +33,7 @@
 // #include "cwImageCompressionUpdater.h"
 #include "cwJobSettings.h"
 #include "cwSketchSettings.h"
+#include "cwSymbologyPaletteManager.h"
 #include "cwSurveyNoteModel.h"
 #include "cwCoordinateTransform.h"
 #include "cwGlobals.h"
@@ -68,6 +69,11 @@ cwRootData::cwRootData(QObject *parent) :
     DefaultTripCalibration(new cwTripCalibration(this))
 {
     cwSettings::initialize(); //Init's a singleton
+
+    // Guarantee the palette manager exists before any sketch (which resolves
+    // its snapshot through the singleton) is constructed. Idempotent: the app
+    // also calls this in main.cpp, but tests build cwRootData directly.
+    cwSymbologyPaletteManager::initialize();
 
     //Task Manager, allows the users to see running tasks
     TaskManagerModel = new cwTaskManagerModel(this);
@@ -228,6 +234,10 @@ Gets undoStack
 */
 QUndoStack* cwRootData::undoStack() const {
     return Project->undoStack();
+}
+
+cwSymbologyPaletteManager* cwRootData::paletteManager() const {
+    return cwSymbologyPaletteManager::instance();
 }
 
 /**

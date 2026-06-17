@@ -21,6 +21,10 @@
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwPaletteSnapshot.h"
+
+// moc needs the complete cwSymbologyPalette to register the resolvedPalette
+// property metatype; Q_MOC_INCLUDE keeps it out of this widely-included header.
+Q_MOC_INCLUDE("cwSymbologyPalette.h")
 #include "cwPenStroke.h"
 #include "cwSketchData.h"
 #include "cwSketchViewState.h"
@@ -34,6 +38,7 @@ class cwMatrix4x4Artifact;
 class cwSurvey2DGeometryRule;
 class cwTrip;
 class cwCavingRegion;
+class cwSymbologyPalette;
 
 // Result of cwSketch::findContinuationTarget. strokeIndex == -1 means no
 // qualifying stroke was within proximity. armProbation() reads strokeWidth to
@@ -87,6 +92,7 @@ class CAVEWHERE_LIB_EXPORT cwSketch : public QObject
     Q_PROPERTY(cwSurvey2DGeometryArtifact* survey2DGeometry READ survey2DGeometry CONSTANT)
     Q_PROPERTY(QString anchorStation READ anchorStation WRITE setAnchorStation NOTIFY anchorStationChanged)
     Q_PROPERTY(cwSketchViewState* viewState READ viewState CONSTANT)
+    Q_PROPERTY(cwSymbologyPalette* resolvedPalette READ resolvedPalette NOTIFY paletteSnapshotChanged)
 
 public:
     enum ViewType {
@@ -141,6 +147,14 @@ public:
     // implicitly shared snapshot, cheap to copy. The palette is a project-wide
     // (region) choice; a sketch has no per-sketch palette override.
     cwPaletteSnapshot paletteSnapshot() const { return m_paletteSnapshot; }
+
+    // The cwSymbologyPalette the resolver chain selected (region → settings →
+    // shipped default), cached by resolveSnapshot(). This is the brush-picker's
+    // enumeration source — paletteSnapshot() is lookup-only and can't list
+    // brushes. Null until the manager is online. Owned by the manager, not the
+    // sketch; consumers should copy what they need (brushes are value types)
+    // rather than retain the pointer across a manager reload.
+    cwSymbologyPalette *resolvedPalette() const { return m_resolvedPalette; }
 
     // Region-wide network input; typically pointed at
     // cwLinePlotManager::surveyNetworkArtifact(). When it or the view matrix
@@ -285,6 +299,7 @@ private:
     // region → settings → shipped-default chain; paletteSnapshotChanged() is
     // re-emitted only when the resolved content actually changes.
     cwPaletteSnapshot m_paletteSnapshot;
+    cwSymbologyPalette *m_resolvedPalette = nullptr;
     QMetaObject::Connection m_regionPaletteConnection;
 
     cwAbstractScrapViewMatrix *m_viewMatrix      = nullptr;

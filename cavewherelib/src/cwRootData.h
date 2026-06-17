@@ -39,10 +39,16 @@
 #include "cwSettings.h"
 #include "cwPageView.h"
 #include "cwRecentProjectModel.h"
+
+// moc needs the complete cwSymbologyPaletteManager to register the paletteManager
+// property metatype; Q_MOC_INCLUDE keeps it out of this widely-included header.
+Q_MOC_INCLUDE("cwSymbologyPaletteManager.h")
+
 class cwKeywordItemModel;
 class cwKeywordFilterPipelineModel;
 class cwRemoteServices;
 class cwDeepLinkHandler;
+class cwSymbologyPaletteManager;
 
 //QQuickGit inculdes
 #include "Account.h"
@@ -63,6 +69,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwScrapManager* scrapManager READ scrapManager NOTIFY scrapManagerChanged)
     Q_PROPERTY(cwNoteLiDARManager* noteLiDARManager READ noteLiDARManager NOTIFY noteLiDARManagerChanged FINAL)
     Q_PROPERTY(cwSketchManager* sketchManager READ sketchManager CONSTANT)
+    Q_PROPERTY(cwSymbologyPaletteManager* paletteManager READ paletteManager CONSTANT)
     Q_PROPERTY(cwProject* project READ project NOTIFY projectChanged)
     Q_PROPERTY(cwTripCalibration* defaultTripCalibration READ defaultTripCalibration NOTIFY defaultTripCalibrationChanged)
     Q_PROPERTY(cwTrip* defaultTrip READ defaultTrip NOTIFY defaultTripChanged)
@@ -177,6 +184,11 @@ public:
 
     cwNoteLiDARManager *noteLiDARManager() const;
     cwSketchManager *sketchManager() const { return SketchManager; }
+
+    // The process-wide symbology palette manager singleton (owned by the
+    // QCoreApplication, not cwRootData), exposed so QML pickers can enumerate
+    // installed palettes. cwRootData's ctor guarantees it is initialize()-d.
+    cwSymbologyPaletteManager *paletteManager() const;
 
     Q_INVOKABLE void shutdown();
     void shutdownBlocking();
