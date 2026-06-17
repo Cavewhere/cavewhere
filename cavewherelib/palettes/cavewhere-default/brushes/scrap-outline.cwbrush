@@ -1,0 +1,14 @@
+{
+ "name": "scrap-outline",
+ "displayName": "Scrap Outline",
+ "category": "Walls",
+ "scrapOutline": true,
+ "zOrder": 100,
+ "decorations": [],
+ "minPaperScale": 0,
+ "maxPaperScale": 0,
+ "fileVersion": {
+  "version": 9,
+  "cavewhereVersion": "2026.4.3-320-gd66f4b10"
+ }
+}

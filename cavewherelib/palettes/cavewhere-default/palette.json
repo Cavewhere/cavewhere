@@ -1,0 +1,11 @@
+{
+ "id": "5eed0000-0000-4000-8000-000000000001",
+ "name": "CaveWhere Seed",
+ "description": "Built-in minimal palette mirroring CaveWhere's prototype symbols.",
+ "author": "CaveWhere",
+ "version": "1.0",
+ "fileVersion": {
+  "version": 9,
+  "cavewhereVersion": "2026.4.3-320-gd66f4b10"
+ }
+}

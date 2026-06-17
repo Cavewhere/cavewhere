@@ -217,6 +217,7 @@ endif()
 qt_add_resources(QT_RESOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/cwResources.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/fonts/cwFonts.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/cwPalettes.qrc
 )
 target_sources(cavewherelib PRIVATE ${QT_RESOURCES})
 

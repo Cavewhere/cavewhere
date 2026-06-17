@@ -1,0 +1,31 @@
+{
+ "name": "floor-step-tick",
+ "displayName": "Floor Step Tick",
+ "strokes": [
+  {
+   "points": [
+    {
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "pressure": 1,
+     "timestampMs": "0"
+    },
+    {
+     "position": {
+      "x": 0,
+      "y": 1.5
+     },
+     "pressure": 1,
+     "timestampMs": "0"
+    }
+   ],
+   "brushName": "feature"
+  }
+ ],
+ "fileVersion": {
+  "version": 9,
+  "cavewhereVersion": "2026.4.3-320-gd66f4b10"
+ }
+}

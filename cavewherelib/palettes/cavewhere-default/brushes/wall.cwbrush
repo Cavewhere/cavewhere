@@ -1,0 +1,37 @@
+{
+ "name": "wall",
+ "displayName": "Wall",
+ "category": "Walls",
+ "scrapOutline": true,
+ "zOrder": 100,
+ "decorations": [
+  {
+   "glyphName": "",
+   "rules": [
+    {
+     "name": "Trace",
+     "params": ""
+    }
+   ],
+   "bufferMm": 1,
+   "collisionPriority": 0,
+   "minPaperScale": 0,
+   "maxPaperScale": 0,
+   "lineColorLight": "#000000",
+   "lineColorDark": "#ffffff",
+   "lineWidthMm": 0.6,
+   "lineDash": 1,
+   "lineCap": 32,
+   "lineJoin": 128,
+   "lineAcceptsPressure": true,
+   "fillColorLight": "",
+   "fillColorDark": ""
+  }
+ ],
+ "minPaperScale": 0,
+ "maxPaperScale": 0,
+ "fileVersion": {
+  "version": 9,
+  "cavewhereVersion": "2026.4.3-320-gd66f4b10"
+ }
+}

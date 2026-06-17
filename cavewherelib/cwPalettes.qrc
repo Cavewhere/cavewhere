@@ -1,0 +1,10 @@
+<RCC>
+    <qresource prefix="/">
+        <file>palettes/cavewhere-default/palette.json</file>
+        <file>palettes/cavewhere-default/brushes/wall.cwbrush</file>
+        <file>palettes/cavewhere-default/brushes/feature.cwbrush</file>
+        <file>palettes/cavewhere-default/brushes/scrap-outline.cwbrush</file>
+        <file>palettes/cavewhere-default/brushes/floor-step.cwbrush</file>
+        <file>palettes/cavewhere-default/glyphs/floor-step-tick.cwglyph</file>
+    </qresource>
+</RCC>
