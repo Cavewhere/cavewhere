@@ -32,7 +32,12 @@ MainWindowTest {
         }
 
         function cleanup() {
+            // A test skipped under headless offscreen (no QRhi) never creates a
+            // capture manager, so guard against null.
             let manager = captureManager()
+            if (!manager) {
+                return
+            }
             while (manager.numberOfCaptures > 0) {
                 let index = manager.index(0)
                 let capture = manager.data(index, CaptureManager.LayerObjectRole)

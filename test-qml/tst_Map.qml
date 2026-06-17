@@ -12,18 +12,24 @@ MainWindowTest {
         when: windowShown
 
         function cleanup() {
+            // A test skipped under headless offscreen (no QRhi) never navigates to
+            // the map page, so these chains may not resolve — guard against null.
             let mapPage = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->mapPage"); //"->screenCaptureManager")
-            let catpureManager = findChild(mapPage, "screenCaptureManager")
-            while(catpureManager.numberOfCaptures > 0) {
-                let index = catpureManager.index(0);
-                let capture = catpureManager.data(index, CaptureManager.LayerObjectRole);
-                catpureManager.removeCaptureViewport(capture)
+            let catpureManager = mapPage ? findChild(mapPage, "screenCaptureManager") : null
+            if (catpureManager) {
+                while(catpureManager.numberOfCaptures > 0) {
+                    let index = catpureManager.index(0);
+                    let capture = catpureManager.data(index, CaptureManager.LayerObjectRole);
+                    catpureManager.removeCaptureViewport(capture)
+                }
             }
 
             //Return the paper back to it's original
             let paperComboBox_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->mapOptions->GroupBox->paperComboBox")
-            let customPaperIndex = paperComboBox_obj1.find("Letter")
-            paperComboBox_obj1.currentIndex = customPaperIndex
+            if (paperComboBox_obj1) {
+                let customPaperIndex = paperComboBox_obj1.find("Letter")
+                paperComboBox_obj1.currentIndex = customPaperIndex
+            }
         }
 
         function setupExport() {
@@ -37,6 +43,11 @@ MainWindowTest {
 
             //Zoom into the data, in the 3d view
             let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
+            // The export render path needs a live QRhi; the headless offscreen QPA has none.
+            if (!OffscreenRenderTester.windowHasRhi(renderer)) {
+                skip("no QRhi on this platform (headless offscreen); run with a GPU-backed platform");
+                return;
+            }
             let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.05;
 

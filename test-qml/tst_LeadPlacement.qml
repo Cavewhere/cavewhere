@@ -21,6 +21,13 @@ MainWindowTest {
         when: windowShown
 
         function test_exportSvgWithLeads() {
+            // The export render path needs a live QRhi; the headless offscreen QPA has none.
+            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
+            if (!OffscreenRenderTester.windowHasRhi(renderer)) {
+                skip("no QRhi on this platform (headless offscreen); run with a GPU-backed platform");
+                return;
+            }
+
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
             // Wait for scrap triangulation / image upload futures to drain so
@@ -32,7 +39,6 @@ MainWindowTest {
             // Zoom into the data, in the 3d view (keep default plan view; do
             // not click the profile button — we want labels exported against
             // the plan-view rendering).
-            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
             let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.2;
 
