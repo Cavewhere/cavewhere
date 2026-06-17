@@ -8,6 +8,7 @@
 //Our includes
 #include "cwSketchCanvas.h"
 #include "cwSketch.h"
+#include "cwScale.h"
 #include "cwSketchCanvasRenderer.h"
 #include "cwSketchManager.h"
 #include "cwScrapManager.h"
@@ -70,8 +71,21 @@ void cwSketchCanvas::setSketch(cwSketch *sketch)
 
     m_sketch = sketch;
 
+    if (m_mapScaleConnection) {
+        QObject::disconnect(m_mapScaleConnection);
+        m_mapScaleConnection = {};
+    }
+
     if (m_sketch != nullptr) {
         m_pathModel->setSketch(m_sketch);
+        m_pathModel->setSnapshot(m_sketch->paletteSnapshot());
+        if (cwScale *scale = m_sketch->mapScale()) {
+            m_pathModel->setMapScaleRatio(scale->scale());
+            m_mapScaleConnection =
+                connect(scale, &cwScale::scaleChanged, m_pathModel, [this, scale]() {
+                    m_pathModel->setMapScaleRatio(scale->scale());
+                });
+        }
         m_linePlotModel->setMapScale(m_sketch->mapScale());
         connect(m_sketch, &cwSketch::strokesReset,
                 this, [this]() { update(); });

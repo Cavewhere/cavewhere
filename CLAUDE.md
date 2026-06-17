@@ -73,6 +73,7 @@ Uses Qt's RHI (Rendering Hardware Interface). Key classes: `cwRegionSceneManager
 ## Coding Conventions
 
 - **Comment sparingly.** Let clear names and structure carry the code. Comment only to explain non-obvious behavior (a subtle invariant, a workaround, a "why" not visible from the code), and keep it brief.
+- **Write everything in American English** — comments, code (identifiers, strings), and plans. Use American spellings, never British: `color` not `colour`, `behavior` not `behaviour`, `gray` not `grey`, `center` not `centre`, `initialize` not `initialise`. This matches Qt's own API (`QColor`, `colorScheme`).
 
 ### C++
 - 4-space indentation, opening braces on the next line

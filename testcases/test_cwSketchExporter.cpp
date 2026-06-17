@@ -33,6 +33,7 @@ TEST_CASE("cwSketchExporter exports a non-empty PDF with the %PDF- magic",
     seedSketch(sketch);
 
     cwDecoratedStrokePathSource pathModel;
+    pathModel.setSnapshot(sketch.paletteSnapshot());
     pathModel.setSketch(&sketch);
 
     cwSketchExporter exporter;
@@ -55,6 +56,7 @@ TEST_CASE("cwSketchExporter exports a non-empty SVG",
     seedSketch(sketch);
 
     cwDecoratedStrokePathSource pathModel;
+    pathModel.setSnapshot(sketch.paletteSnapshot());
     pathModel.setSketch(&sketch);
 
     cwSketchExporter exporter;
@@ -78,6 +80,7 @@ TEST_CASE("cwSketchExporter handles an empty sketch without crashing",
     cwSketch sketch;
 
     cwDecoratedStrokePathSource pathModel;
+    pathModel.setSnapshot(sketch.paletteSnapshot());
     pathModel.setSketch(&sketch);
 
     cwSketchExporter exporter;
@@ -98,6 +101,7 @@ TEST_CASE("cwSketchExporter Y-flips world-up strokes into paper coordinates",
     sketch.endStroke();
 
     cwDecoratedStrokePathSource pathModel;
+    pathModel.setSnapshot(sketch.paletteSnapshot());
     pathModel.setSketch(&sketch);
 
     cwSketchExporter exporter;

@@ -157,8 +157,9 @@ QQ.Item {
         activeStrokeIndex: sketchItemId._activeStrokeIndex
         grid: gridModel
 
-        pathModel.wallStrokeColor: Theme.sketchStrokeWall
-        pathModel.nonWallStrokeColor: Theme.sketchStrokeNonWall
+        // Finished strokes take per-brush ink from the palette snapshot; this
+        // one token only colors the neutral in-progress stroke preview.
+        pathModel.activeStrokeColor: Theme.sketchStrokeWall
         linePlotModel.stationColor: Theme.sketchStation
         linePlotModel.shotLineColor: Theme.sketchShotLine
 

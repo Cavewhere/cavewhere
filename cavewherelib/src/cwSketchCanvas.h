@@ -22,6 +22,7 @@
 #include "cwTripLinePlotTask.h"
 
 class cwSketch;
+class cwScale;
 class cwInfiniteGridModel;
 class cwFixedGridModel;
 class cwCenterlineSketchPainterModel;
@@ -111,6 +112,7 @@ private:
     QPointF m_pan;
     QMatrix4x4 m_mapMatrix;
 
+    QMetaObject::Connection m_mapScaleConnection;
     QPointer<cwSketchManager> m_sketchManager;
     QPointer<cwScrapManager> m_scrapManager;
     QMetaObject::Connection m_scrapDebugChangedConnection;
