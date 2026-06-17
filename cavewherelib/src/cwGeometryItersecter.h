@@ -91,6 +91,9 @@ public:
 
     QBox3D boundingBox(const Key& objectKey) const;
 
+    //! World-space union of the bounding boxes for the given keys. Null box when empty.
+    QBox3D boundingBox(const QList<Key>& keys) const;
+
     //! World-space union of every object's bounding box. Null box when empty.
     QBox3D boundingBox() const;
 

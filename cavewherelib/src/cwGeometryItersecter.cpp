@@ -540,6 +540,15 @@ QBox3D cwGeometryItersecter::boundingBox(const Key &objectKey) const
     }
 }
 
+QBox3D cwGeometryItersecter::boundingBox(const QList<Key>& keys) const
+{
+    QBox3D box;
+    for (const Key& key : keys) {
+        box.unite(boundingBox(key));
+    }
+    return box;
+}
+
 QBox3D cwGeometryItersecter::boundingBox() const
 {
     QBox3D box;
