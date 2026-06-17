@@ -16,6 +16,7 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QImage>
+#include <QMatrix4x4>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSet>
@@ -221,10 +222,108 @@ void OffscreenRenderTester::renderToImage(QQuickItem* viewer, const QString& fil
     });
 }
 
+int OffscreenRenderTester::renderPannedBatch(QQuickItem* viewer, const QString& dirPath,
+                                             const QString& tag, int count, int tileSize)
+{
+    auto* rhiViewer = qobject_cast<cwRhiViewer*>(viewer);
+    if (!rhiViewer) {
+        qWarning() << "renderPannedBatch: item is not a cwRhiViewer";
+        return 0;
+    }
+    cwScene* sceneObject = rhiViewer->scene();
+    cwCamera* cameraObject = rhiViewer->camera();
+    if (!sceneObject || !cameraObject || count < 1 || tileSize < 1) {
+        qWarning() << "renderPannedBatch: bad arguments";
+        return 0;
+    }
+    const QDir outputDir(dirPath);
+    if (!outputDir.exists()) {
+        qWarning() << "renderPannedBatch: output directory does not exist" << dirPath;
+        return 0;
+    }
+
+    const QMatrix4x4 baseView = cameraObject->viewMatrix();
+    const QMatrix4x4 projection = cameraObject->projectionMatrix();
+
+    // Per-index pan in view space so each tile frames a distinct crop. Laid out as a
+    // bounded 2D raster (col across, row down) rather than a single growing axis, so even
+    // a several-hundred-tile spillover batch stays on-scene and pairwise distinct instead
+    // of drifting off into a blank, uniform frame. Index 0 is (0,0) — unpanned — so its
+    // image matches the single-tile reference render bit-for-bit.
+    constexpr float kPanStep = 0.15f;
+    constexpr int kPanGridStride = 16;
+
+    // Issue the whole batch before returning to the event loop, so all jobs reach the
+    // render queue in one sync and a count > 1 drains through the atlas path.
+    QList<QFuture<QImage>> futures;
+    futures.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        QMatrix4x4 view = baseView;
+        view.translate(kPanStep * float(i % kPanGridStride),
+                        kPanStep * float(i / kPanGridStride), 0.0f);
+
+        cwOffscreenRenderParameters parameters;
+        parameters.viewMatrix = view;
+        parameters.projectionMatrix = projection;
+        parameters.outputSize = QSize(tileSize, tileSize);
+        parameters.devicePixelRatio = 1.0f;
+        parameters.sampleCount = 1;
+        parameters.backgroundColor = QColor::fromRgbF(0.0, 0.0, 0.0, 1.0);
+        futures.append(sceneObject->renderOffscreen(parameters));
+    }
+
+    // waitForFinished is test-only (it spins a nested event loop) — fine here, and it lets
+    // the render thread drain the queued batch across however many frames spillover needs.
+    auto combine = AsyncFuture::combine(AsyncFuture::AllSettled);
+    for (const auto& future : std::as_const(futures)) {
+        combine << future;
+    }
+    AsyncFuture::waitForFinished(combine.future(), 30000);
+
+    int written = 0;
+    for (int i = 0; i < count; ++i) {
+        const QFuture<QImage>& future = futures.at(i);
+        if (!future.isFinished() || future.resultCount() != 1 || future.result().isNull()) {
+            qWarning() << "renderPannedBatch: tile" << i << "produced no image";
+            continue;
+        }
+        const QString path = outputDir.filePath(QStringLiteral("%1_%2.png").arg(tag).arg(i));
+        if (future.result().save(path)) {
+            ++written;
+        } else {
+            qWarning() << "renderPannedBatch: failed to write" << path;
+        }
+    }
+    return written;
+}
+
+bool OffscreenRenderTester::imagesEqual(const QString& pathA, const QString& pathB) const
+{
+    const QImage a(pathA);
+    const QImage b(pathB);
+    if (a.isNull() || b.isNull() || a.size() != b.size()) {
+        return false;
+    }
+    return a.convertToFormat(QImage::Format_ARGB32) == b.convertToFormat(QImage::Format_ARGB32);
+}
+
 QString OffscreenRenderTester::tempPngPath(const QString& tag) const
 {
     return QDir(QDir::tempPath()).filePath(
         QStringLiteral("cw_%1_%2.png").arg(tag).arg(QCoreApplication::applicationPid()));
+}
+
+QString OffscreenRenderTester::makeTempDir(const QString& tag) const
+{
+    const QString path = QDir(QDir::tempPath()).filePath(
+        QStringLiteral("cw_%1_%2").arg(tag).arg(QCoreApplication::applicationPid()));
+    QDir().mkpath(path);
+    return path;
+}
+
+bool OffscreenRenderTester::removeDir(const QString& path) const
+{
+    return QDir(path).removeRecursively();
 }
 
 bool OffscreenRenderTester::fileExists(const QString& path) const

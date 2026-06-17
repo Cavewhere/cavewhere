@@ -14,6 +14,42 @@
 #include <array>
 #include <cstring>
 
+namespace {
+    // Atlas-batch tuning (see plans/OFFSCREEN_ATLAS_BATCHING_PLAN §5). The grid is the
+    // smallest of: the backend's TextureSizeMax, this byte budget (atlas colour + the one
+    // scratch's colour+depth), and the per-frame tile cap. The tile cap is
+    // cwRhiScene::kOffscreenBatchCameraSlots — the UBO camera-slot count is the real
+    // per-frame bound (one slot per batched tile) and doubles as the GPU-work cap that
+    // keeps a single command buffer from stalling long enough to trip a watchdog (the
+    // Phase 0 spike ran 256 passes + copies in ~20 ms safely).
+    constexpr qint64 kAtlasByteBudget = qint64(128) * 1024 * 1024;   // 128 MB
+    // The scratch carries a depth texture; preferredDepthFormat is 24- or 32-bit, so 4
+    // bytes/pixel is the budget term (a small over-estimate for a 16-bit depth).
+    constexpr int kScratchDepthBytesPerPixel = 4;
+    // Global-UBO camera slot 0 is the live on-screen camera; the offscreen cameras start at
+    // slot 1 (a solitary render uses it; batch tile i uses kFirstOffscreenCameraSlot + i).
+    constexpr int kFirstOffscreenCameraSlot = 1;
+    // Bytes per pixel of the read-back source; always RGBA8 (the scratch colour/resolve and
+    // the atlas alike), enforced by the format guard in readbackView.
+    constexpr int kRgba8BytesPerPixel = 4;
+
+    // Wrap a completed RGBA8 read-back as a non-owning QImage over its transient buffer,
+    // or a null image on a short/empty/wrong-format result. The buffer (held by the
+    // QRhiReadbackResult) must outlive every use of the returned view.
+    QImage readbackView(const QRhiReadbackResult& readback)
+    {
+        const QSize pixelSize = readback.pixelSize;
+        const qsizetype expectedBytes =
+            qsizetype(pixelSize.width()) * pixelSize.height() * kRgba8BytesPerPixel;
+        if (readback.format != QRhiTexture::RGBA8 || pixelSize.isEmpty()
+            || readback.data.size() < expectedBytes) {
+            return QImage();
+        }
+        return QImage(reinterpret_cast<const uchar*>(readback.data.constData()),
+                      pixelSize.width(), pixelSize.height(), QImage::Format_RGBA8888);
+    }
+}
+
 cwRhiOffscreenRenderer::cwRhiOffscreenRenderer(cwRhiScene* scene) :
     m_scene(scene)
 {
@@ -72,17 +108,29 @@ void cwRhiOffscreenRenderer::shutdown()
     // ref means the lambda has not run: finish the promise and reclaim the read-back
     // it would have deleted.
     for (const auto& inflight : std::as_const(m_inflightReadbacks)) {
-        if (auto job = inflight.job.lock()) {
-            job->promise.finish();
+        bool lambdaPending = false;
+        for (const auto& weakJob : inflight.jobs) {
+            if (auto job = weakJob.lock()) {
+                job->promise.finish();
+                lambdaPending = true; // a lockable job means the lambda has not run
+            }
+        }
+        // Only a not-yet-fired read-back still owns its result; a completed one's lambda
+        // already freed it (and all its jobs have expired, so we took none of them).
+        if (lambdaPending) {
             delete inflight.result;
         }
     }
     m_inflightReadbacks.clear();
+    // The reclaimed lambdas will never run their `--(*counter)`, so the counter would stay
+    // elevated forever; zero it so hasPendingWork() reflects the now-empty state.
+    *m_outstandingReadbacks = 0;
 
     // Tear down the offscreen targets before the scene's pipeline cache (caller
     // ordering) so pipelines keyed on their rpDescs are released first.
     m_scene->destroyEdlOffscreen(m_edl);
     destroyTarget();
+    destroyAtlas();
 }
 
 void cwRhiOffscreenRenderer::ensureTarget(QRhi* rhi, QSize size, int sampleCount)
@@ -131,6 +179,9 @@ void cwRhiOffscreenRenderer::ensureTarget(QRhi* rhi, QSize size, int sampleCount
     desc.setColorAttachments({ colorAttachment });
     desc.setDepthTexture(fresh.depth.get());
     fresh.target.reset(rhi->newTextureRenderTarget(desc));
+    if (!fresh.target) {
+        return; // fresh frees its partial resources on scope exit
+    }
     fresh.rpDesc.reset(fresh.target->newCompatibleRenderPassDescriptor());
     if (!fresh.rpDesc) {
         return;
@@ -162,6 +213,54 @@ void cwRhiOffscreenRenderer::destroyTarget()
     m_edl.effectOutputRpDesc = nullptr;
 }
 
+void cwRhiOffscreenRenderer::ensureAtlas(QRhi* rhi, QSize size)
+{
+    if (!rhi || size.isEmpty()) {
+        return;
+    }
+    if (m_atlas.valid() && m_atlas.size == size) {
+        return;
+    }
+    destroyAtlas();
+
+    AtlasTarget fresh;
+    fresh.size = size;
+    // Colour-only RGBA8. Never a render target: tiles are copyTexture'd in and the whole
+    // atlas is read back, so it needs only UsedAsTransferSource (the read-back source).
+    fresh.color.reset(rhi->newTexture(QRhiTexture::RGBA8, size, 1, QRhiTexture::UsedAsTransferSource));
+    if (!fresh.color->create()) {
+        return; // fresh frees its partial resource on scope exit
+    }
+    m_atlas = std::move(fresh);
+}
+
+void cwRhiOffscreenRenderer::destroyAtlas()
+{
+    // No render-pass descriptor keys a pipeline on the atlas, so unlike destroyTarget
+    // there is nothing to evict — just release the texture.
+    m_atlas.color.reset();
+    m_atlas.size = QSize();
+}
+
+bool cwRhiOffscreenRenderer::dropLeadingNonRenderable()
+{
+    if (m_queue.isEmpty()) {
+        return false;
+    }
+    const std::shared_ptr<cwOffscreenRenderJob>& front = m_queue.first();
+    // Defense-in-depth on null: jobs are non-null in practice, but the queue crosses the
+    // GUI→render boundary.
+    if (!front) {
+        m_queue.removeFirst();
+        return true;
+    }
+    if (front->promise.isCanceled() || front->parameters.outputSize.isEmpty()) {
+        m_queue.takeFirst()->promise.finish();
+        return true;
+    }
+    return false; // front is a real render job
+}
+
 void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer)
 {
     assertRenderThread();
@@ -177,156 +276,252 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
     // result), keeping the in-flight list bounded. shutdown() walks whatever remains
     // to finish stragglers and reclaim their results.
     m_inflightReadbacks.removeIf(
-        [](const InflightOffscreenReadback& inflight) { return inflight.job.expired(); });
+        [](const InflightOffscreenReadback& inflight) { return inflight.completed(); });
 
-    // At most one *render* per frame. Every render draws into the shared m_target,
-    // and a texture read-back recorded into this frame's command buffer resolves
-    // against that target's contents at frame end — so two renders into it in one
-    // frame would make both read-backs return the second tile's image (the
-    // repeated-tile bug). render() re-arms another frame while hasPendingWork(), so
-    // the queue still drains fully, just one tile per frame. Non-rendering jobs
-    // (cancelled / empty) are resolved without consuming that budget.
-    int processed = 0;
-    while (processed < kOffscreenRendersPerFrame && !m_queue.isEmpty()) {
-        // Defense-in-depth: jobs are always non-null (cwScene::renderOffscreen
-        // make_shares them and synchroize moves only non-null pointers), but the
-        // queue crosses the GUI→render boundary.
-        const std::shared_ptr<cwOffscreenRenderJob>& next = m_queue.first();
-        if (!next) {
-            m_queue.removeFirst();
-            continue;
-        }
-        // The consumer cancelled the future before we reached it — skip the GPU work
-        // and just resolve. Checked before the render so a cancelled job never costs
-        // frame budget.
-        if (next->promise.isCanceled()) {
-            m_queue.takeFirst()->promise.finish();
-            continue;
-        }
-        const QSize size = next->parameters.outputSize;
-        if (size.isEmpty()) {
-            m_queue.takeFirst()->promise.finish(); // nothing to render
-            continue;
-        }
-        // Capability-gated MSAA count for this request; the target, the offscreen EDL,
-        // and the composite effect are all built at this count (1 = no AA, today's
-        // behavior). The same gate drives ensureEdlOffscreen, so all three agree.
-        const int sampleCount = m_scene->effectiveEdlSampleCount(rhi, next->parameters.sampleCount);
-
-        auto job = m_queue.takeFirst();
-        const cwOffscreenRenderParameters& p = job->parameters;
-        ++processed;
-
-        ensureTarget(rhi, size, sampleCount);
-        if (!m_target.valid()) {
-            job->promise.finish(); // can't allocate the target — empty result
-            continue;
-        }
-
-        // Engage the EDL composite when a point cloud is visible, so the offscreen
-        // image matches the live view's eye-dome-lit look (what the sink classifier
-        // trains on). The offscreen EDL buffers are sized to the request and MSAA-
-        // matched to it (ensureEdlOffscreen gates p.sampleCount to the same effective
-        // count as the target above).
-        const bool cloudVisible = m_scene->anyCloudVisible();
-        if (cloudVisible) {
-            m_scene->ensureEdlOffscreen(m_edl, rhi, size, p.sampleCount);
-        }
-        const bool offscreenEdlActive = cloudVisible && m_edl.valid();
-
-        // The offscreen effect composites into m_target. The helper re-inits whenever
-        // that target's rpDesc changes (a size/sample-count-driven rebuild) or the
-        // input sample count changes; then keep its tuning fresh each render. The
-        // composite writes m_target, so its output sample count is the target's.
-        if (offscreenEdlActive && m_edl.effect) {
-            m_scene->ensureEffectInitialized(m_edl, rhi, m_target.rpDesc.get(), sampleCount);
-            static_cast<cwEDLEffect*>(m_edl.effect.get())->setParameters(m_scene->m_edlParameters);
-        }
-
-        // Route passes to the offscreen targets (EDL split when active, else flat into
-        // m_target). Objects that resolve their pipeline from the scene's per-frame
-        // routing (textured items) then build for the right rpDesc. Mutating the
-        // routing here is safe: the live passes are already recorded, and the next
-        // live render() resets it at its top.
-        m_scene->setupPassRouting(m_target.target.get(),
-                                  offscreenEdlActive ? &m_edl : nullptr);
-
-        const cwRHIObject::RenderData offscreenRenderData{
-            cb, renderer, cwSceneUpdate::Flag::None, m_target.rpDesc.get(), sampleCount
-        };
-        const std::array<cwRHIObject::RenderData, cwRhiScene::kPassCount> perPassRenderData =
-            m_scene->buildPerPassRenderData(offscreenRenderData);
-
-        std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiScene::kPassCount> passBatches;
-        m_scene->gatherScene(passBatches, perPassRenderData);
-
-        // The offscreen camera lives in global-UBO slot 1; write it (and the offscreen
-        // viewport metrics) so the pass reads it via the globalUniformBufferStride
-        // dynamic offset.
-        const cwRhiScene::ClipSpaceCamera clipCamera =
-            cwRhiScene::clipSpaceCorrectedCamera(rhi, p.projectionMatrix, p.viewMatrix);
-
-        cwRhiScene::GlobalUniform camera;
-        std::memcpy(camera.viewProjectionMatrix, clipCamera.viewProjection.constData(),
-                    sizeof(camera.viewProjectionMatrix));
-        std::memcpy(camera.viewMatrix, p.viewMatrix.constData(),
-                    sizeof(camera.viewMatrix));
-        std::memcpy(camera.projectionMatrix, clipCamera.projectionCorrected.constData(),
-                    sizeof(camera.projectionMatrix));
-        camera.devicePixelRatio = p.devicePixelRatio;
-        camera._pad0 = 0.0f;
-        camera.viewportSize[0] = float(size.width());
-        camera.viewportSize[1] = float(size.height());
-
-        QRhiResourceUpdateBatch* cameraBatch = rhi->nextResourceUpdateBatch();
-        cameraBatch->updateDynamicBuffer(m_scene->globalUniformBuffer(),
-                                         m_scene->globalUniformBufferStride(),
-                                         sizeof(cwRhiScene::GlobalUniform), &camera);
-
-        const cwRhiPostProcessEffect::FrameUniformContext offscreenFrameContext{
-            clipCamera.projectionCorrected, size, p.devicePixelRatio
-        };
-
-        m_scene->drawScene(cb, m_target.target.get(),
-                           offscreenEdlActive ? &m_edl : nullptr,
-                           passBatches, perPassRenderData, cameraBatch, offscreenFrameContext,
-                           m_scene->globalUniformBufferStride(), p.backgroundColor);
-
-        // Read the colour texture back into the job's promise. The completion runs on
-        // the render thread; it holds the job (shared_ptr) and the outstanding-count
-        // (shared_ptr<int>) so neither a torn-down scene nor a destroyed caller can
-        // dangle. A weak copy is tracked so shutdown() can finish the promise if the
-        // QRhi is destroyed before this fires.
-        auto* readback = new QRhiReadbackResult;
-        auto holder = job;
-        m_inflightReadbacks.append({holder, readback});
-        auto counter = m_outstandingReadbacks;
-        ++(*counter);
-        readback->completed = [readback, holder, counter]() {
-            const QSize pixelSize = readback->pixelSize;
-            const qsizetype expectedBytes = qsizetype(pixelSize.width()) * pixelSize.height() * 4;
-            // The read-back source is always created RGBA8 (colour and the MSAA
-            // resolve alike), so the wrapper below assumes that layout. Guard on the
-            // actual format so a future target-format change fails loud (no result)
-            // instead of silently producing swapped/garbled colours.
-            if (readback->format == QRhiTexture::RGBA8
-                && !pixelSize.isEmpty() && readback->data.size() >= expectedBytes) {
-                const QImage view(reinterpret_cast<const uchar*>(readback->data.constData()),
-                                  pixelSize.width(), pixelSize.height(),
-                                  QImage::Format_RGBA8888);
-                holder->promise.addResult(view.copy()); // deep copy: read-back buffer is transient
-            }
-            // A short/empty/wrong-format read-back still finishes the promise (with no
-            // result) so the future resolves rather than hanging.
-            holder->promise.finish();
-            --(*counter);
-            delete readback;
-        };
-
-        QRhiResourceUpdateBatch* readbackBatch = rhi->nextResourceUpdateBatch();
-        // Read the 1x resolve under MSAA, else the 1x colour directly.
-        readbackBatch->readBackTexture(QRhiReadbackDescription(m_target.readbackTexture()),
-                                       readback);
-        cb->resourceUpdate(readbackBatch);
+    // Skip past any leading non-renderable jobs (resolving them) so the batch config below
+    // is read from a real render job.
+    while (dropLeadingNonRenderable()) { }
+    if (m_queue.isEmpty()) {
+        return;
     }
+
+    // Batch config from the leading renderable job. Compatible followers (§5: same output
+    // size, same effective sample count, same background) share one atlas + one read-back.
+    const cwOffscreenRenderParameters& cfg = m_queue.first()->parameters;
+    const QSize size = cfg.outputSize;
+    const int sampleCount = m_scene->effectiveEdlSampleCount(rhi, cfg.sampleCount);
+    const QColor background = cfg.backgroundColor;
+
+    // The grid the atlas can hold for this tile config, bounded by TextureSizeMax, the
+    // byte budget, and the per-frame work cap. An invalid grid (tile too big / budget too
+    // small) caps the run at 1, falling back to the single-tile path.
+    const cwOffscreenAtlasGrid grid =
+        cwOffscreenAtlasGrid::choose(size, rhi->resourceLimit(QRhi::TextureSizeMax),
+                                     kAtlasByteBudget, cwRhiScene::kOffscreenBatchCameraSlots,
+                                     kScratchDepthBytesPerPixel);
+    const int cap = grid.isValid() ? grid.capacity() : 1;
+
+    // Peel a compatible run off the front, bounded by one atlas-full. Spillover and the
+    // first incompatible job stay queued; render() re-arms another frame while
+    // hasPendingWork(). Non-renderable jobs met along the way are resolved for free.
+    QList<std::shared_ptr<cwOffscreenRenderJob>> batch;
+    while (batch.size() < cap) {
+        while (dropLeadingNonRenderable()) { } // a job cancelled mid-queue is resolved here
+        if (m_queue.isEmpty()) {
+            break;
+        }
+        const cwOffscreenRenderParameters& fp = m_queue.first()->parameters;
+        if (fp.outputSize != size || fp.backgroundColor != background
+            || m_scene->effectiveEdlSampleCount(rhi, fp.sampleCount) != sampleCount) {
+            break; // incompatible: it starts the next batch on a later frame
+        }
+        batch.append(m_queue.takeFirst());
+    }
+
+    // cap is 1 for an invalid grid, so batch.size() > 1 implies a valid grid; renderAtlas-
+    // Batch also self-protects (empty atlasSize -> single-tile fallback).
+    if (batch.size() > 1) {
+        renderAtlasBatch(cb, renderer, batch, grid, sampleCount);
+    } else {
+        // Solitary or atlas-ineligible: the proven one-target / one-read-back path.
+        for (const auto& job : std::as_const(batch)) {
+            renderSingleTile(cb, renderer, job, size, sampleCount);
+        }
+    }
+}
+
+bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
+                                                  cwRhiItemRenderer* renderer,
+                                                  const std::shared_ptr<cwOffscreenRenderJob>& job,
+                                                  QSize size, int sampleCount, int cameraSlot)
+{
+    QRhi* rhi = cb->rhi();
+    const cwOffscreenRenderParameters& p = job->parameters;
+
+    ensureTarget(rhi, size, sampleCount);
+    if (!m_target.valid()) {
+        return false; // can't allocate the scratch
+    }
+
+    // Engage the EDL composite when a point cloud is visible, so the offscreen image
+    // matches the live view's eye-dome-lit look that offscreen point-cloud captures need. The
+    // EDL buffers are sized to the request and MSAA-matched (ensureEdlOffscreen gates
+    // p.sampleCount to the same effective count as the target above).
+    const bool cloudVisible = m_scene->anyCloudVisible();
+    if (cloudVisible) {
+        m_scene->ensureEdlOffscreen(m_edl, rhi, size, p.sampleCount);
+    }
+    const bool offscreenEdlActive = cloudVisible && m_edl.valid();
+
+    // The offscreen effect composites into m_target. The helper re-inits whenever that
+    // target's rpDesc changes (a size/sample-count rebuild) or the input sample count
+    // changes; then keep its tuning fresh each render.
+    if (offscreenEdlActive && m_edl.effect) {
+        m_scene->ensureEffectInitialized(m_edl, rhi, m_target.rpDesc.get(), sampleCount);
+        static_cast<cwEDLEffect*>(m_edl.effect.get())->setParameters(m_scene->m_edlParameters);
+    }
+
+    // Route passes to the offscreen targets (EDL split when active, else flat into
+    // m_target). Mutating the routing here is safe: the live passes are already recorded,
+    // and the next live render() resets it at its top.
+    m_scene->setupPassRouting(m_target.target.get(), offscreenEdlActive ? &m_edl : nullptr);
+
+    const cwRHIObject::RenderData offscreenRenderData{
+        cb, renderer, cwSceneUpdate::Flag::None, m_target.rpDesc.get(), sampleCount
+    };
+    const std::array<cwRHIObject::RenderData, cwRhiScene::kPassCount> perPassRenderData =
+        m_scene->buildPerPassRenderData(offscreenRenderData);
+
+    std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiScene::kPassCount> passBatches;
+    m_scene->gatherScene(passBatches, perPassRenderData);
+
+    // This tile's camera lives in global-UBO slot @a cameraSlot; write it (and the
+    // offscreen viewport metrics) so the pass reads it at that slot's dynamic offset.
+    // Batched tiles each take a distinct slot so the K passes in one command buffer don't
+    // collapse onto one camera.
+    const quint32 cameraOffset = m_scene->globalUniformBufferStride() * quint32(cameraSlot);
+    const cwRhiScene::ClipSpaceCamera clipCamera =
+        cwRhiScene::clipSpaceCorrectedCamera(rhi, p.projectionMatrix, p.viewMatrix);
+
+    cwRhiScene::GlobalUniform camera;
+    std::memcpy(camera.viewProjectionMatrix, clipCamera.viewProjection.constData(),
+                sizeof(camera.viewProjectionMatrix));
+    std::memcpy(camera.viewMatrix, p.viewMatrix.constData(),
+                sizeof(camera.viewMatrix));
+    std::memcpy(camera.projectionMatrix, clipCamera.projectionCorrected.constData(),
+                sizeof(camera.projectionMatrix));
+    camera.devicePixelRatio = p.devicePixelRatio;
+    camera._pad0 = 0.0f;
+    camera.viewportSize[0] = float(size.width());
+    camera.viewportSize[1] = float(size.height());
+
+    QRhiResourceUpdateBatch* cameraBatch = rhi->nextResourceUpdateBatch();
+    cameraBatch->updateDynamicBuffer(m_scene->globalUniformBuffer(), cameraOffset,
+                                     sizeof(cwRhiScene::GlobalUniform), &camera);
+
+    const cwRhiPostProcessEffect::FrameUniformContext offscreenFrameContext{
+        clipCamera.projectionCorrected, size, p.devicePixelRatio
+    };
+
+    m_scene->drawScene(cb, m_target.target.get(),
+                       offscreenEdlActive ? &m_edl : nullptr,
+                       passBatches, perPassRenderData, cameraBatch, offscreenFrameContext,
+                       cameraOffset, p.backgroundColor);
+    return true;
+}
+
+void cwRhiOffscreenRenderer::renderSingleTile(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer,
+                                              const std::shared_ptr<cwOffscreenRenderJob>& job,
+                                              QSize size, int sampleCount)
+{
+    // Solitary render: the first offscreen camera slot.
+    if (!renderJobIntoScratch(cb, renderer, job, size, sampleCount, kFirstOffscreenCameraSlot)) {
+        job->promise.finish(); // can't allocate the scratch — empty result
+        return;
+    }
+    // One read-back of the scratch, one slice spanning the whole image (null sub-rect).
+    // The read-back source is the 1x resolve under MSAA, else the 1x colour directly.
+    recordReadbackFanout(cb, m_target.readbackTexture(), { job }, { QRect() });
+}
+
+void cwRhiOffscreenRenderer::renderAtlasBatch(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer,
+                                              const QList<std::shared_ptr<cwOffscreenRenderJob>>& batch,
+                                              const cwOffscreenAtlasGrid& grid, int sampleCount)
+{
+    QRhi* rhi = cb->rhi();
+    const QSize tileSize = grid.tileSize;
+
+    ensureAtlas(rhi, grid.atlasSize());
+    if (!m_atlas.valid()) {
+        // Atlas allocation failed; fall back to the proven single-tile path per job.
+        for (const auto& job : std::as_const(batch)) {
+            renderSingleTile(cb, renderer, job, tileSize, sampleCount);
+        }
+        return;
+    }
+
+    QList<std::shared_ptr<cwOffscreenRenderJob>> rendered;
+    QList<QRect> subRects;
+    rendered.reserve(batch.size());
+    subRects.reserve(batch.size());
+
+    for (int i = 0; i < batch.size(); ++i) {
+        const std::shared_ptr<cwOffscreenRenderJob>& job = batch.at(i);
+        // Tile i takes its own offscreen camera slot; the batch is capped at
+        // kOffscreenBatchCameraSlots so the slot stays within the UBO.
+        if (!renderJobIntoScratch(cb, renderer, job, tileSize, sampleCount,
+                                  kFirstOffscreenCameraSlot + i)) {
+            job->promise.finish(); // scratch alloc failed for this tile
+            continue;
+        }
+        // Copy this tile out of the reused scratch into its atlas cell before the next
+        // tile's pass overwrites the scratch. Recorded between the two render passes, this
+        // snapshots the tile in-stream (proven on Metal by the Phase 0 spike). Source is
+        // the 1x resolve under MSAA, else the 1x colour.
+        const QRect cell = grid.tileRect(i);
+        QRhiTextureCopyDescription copyDesc;
+        copyDesc.setDestinationTopLeft(cell.topLeft());
+        QRhiResourceUpdateBatch* copyBatch = rhi->nextResourceUpdateBatch();
+        copyBatch->copyTexture(m_atlas.color.get(), m_target.readbackTexture(), copyDesc);
+        cb->resourceUpdate(copyBatch);
+
+        rendered.append(job);
+        subRects.append(cell);
+    }
+
+    if (rendered.isEmpty()) {
+        return; // every tile failed to allocate; each promise already finished
+    }
+
+    // One read-back of the whole atlas; the completion slices each cell to its job.
+    recordReadbackFanout(cb, m_atlas.color.get(), rendered, subRects);
+}
+
+void cwRhiOffscreenRenderer::recordReadbackFanout(QRhiCommandBuffer* cb, QRhiTexture* readbackTexture,
+                                                  const QList<std::shared_ptr<cwOffscreenRenderJob>>& jobs,
+                                                  const QList<QRect>& subRects)
+{
+    Q_ASSERT(jobs.size() == subRects.size());
+    Q_ASSERT(!jobs.isEmpty()); // InflightOffscreenReadback::completed() relies on this
+    QRhi* rhi = cb->rhi();
+
+    // The completion runs on the render thread; it holds every job (shared_ptr) and the
+    // outstanding-count (shared_ptr<int>) so neither a torn-down scene nor a destroyed
+    // caller can dangle. Weak copies are tracked so shutdown() can finish the promises if
+    // the QRhi is destroyed before this fires.
+    auto* readback = new QRhiReadbackResult;
+    InflightOffscreenReadback inflight;
+    inflight.result = readback;
+    inflight.jobs.reserve(jobs.size());
+    for (const auto& job : std::as_const(jobs)) {
+        inflight.jobs.append(job); // weak ref for shutdown(); the lambda holds the strong ref
+    }
+    m_inflightReadbacks.append(inflight);
+
+    auto counter = m_outstandingReadbacks;
+    ++(*counter);
+
+    const QList<std::shared_ptr<cwOffscreenRenderJob>> holders = jobs;
+    const QList<QRect> rects = subRects;
+    readback->completed = [readback, holders, rects, counter]() {
+        // The read-back source is always RGBA8 (the scratch colour/resolve and the atlas
+        // alike); a short/empty/wrong-format result yields a null view, and every promise
+        // still finishes (with no result) so no future hangs.
+        const QImage image = readbackView(*readback);
+        for (int i = 0; i < holders.size(); ++i) {
+            if (!image.isNull()) {
+                const QRect r = rects.at(i);
+                // Null sub-rect = the whole image (single-tile path); else slice the cell.
+                // Either branch deep-copies, since the read-back buffer is transient.
+                holders.at(i)->promise.addResult(r.isNull() ? image.copy() : image.copy(r));
+            }
+            holders.at(i)->promise.finish();
+        }
+        --(*counter);
+        delete readback;
+    };
+
+    QRhiResourceUpdateBatch* readbackBatch = rhi->nextResourceUpdateBatch();
+    readbackBatch->readBackTexture(QRhiReadbackDescription(readbackTexture), readback);
+    cb->resourceUpdate(readbackBatch);
 }

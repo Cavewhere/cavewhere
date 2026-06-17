@@ -51,9 +51,28 @@ public:
     Q_INVOKABLE void renderToImage(QQuickItem* viewer, const QString& filePath,
                                    QSize size = QSize(), int sampleCount = -1);
 
+    // Render @a count offscreen images of the resident scene, each panned by a distinct
+    // per-index amount so the tiles differ, all issued before the render thread drains so
+    // @a count > 1 batches through the atlas path (the way the map exporter and other
+    // batched offscreen consumers queue their tiles). Saves them to <dirPath>/<tag>_<i>.png and returns
+    // how many were written. @a count == 1 takes the single-tile path (the parity
+    // reference); index 0 is the unpanned camera, so the index-0 image is identical across
+    // batch sizes. A display-independent square render at @a tileSize px, DPR 1.
+    Q_INVOKABLE int renderPannedBatch(QQuickItem* viewer, const QString& dirPath,
+                                      const QString& tag, int count, int tileSize);
+
+    // True when the two saved images have identical dimensions and pixels (compared in a
+    // common format). The atlas slice of a tile must equal its standalone single-tile
+    // render, and distinct-camera tiles must not be equal.
+    Q_INVOKABLE bool imagesEqual(const QString& pathA, const QString& pathB) const;
+
     // PID-tagged path under the system temp dir so parallel test processes
     // never collide.
     Q_INVOKABLE QString tempPngPath(const QString& tag) const;
+    // Create and return a PID-tagged directory under the system temp dir (for a batch of
+    // tile PNGs); removeDir tears it down.
+    Q_INVOKABLE QString makeTempDir(const QString& tag) const;
+    Q_INVOKABLE bool removeDir(const QString& path) const;
     Q_INVOKABLE bool fileExists(const QString& path) const;
     Q_INVOKABLE bool removeFile(const QString& path) const;
     Q_INVOKABLE QSize imageSize(const QString& path) const;

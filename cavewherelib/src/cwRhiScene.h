@@ -206,12 +206,17 @@ private:
     QSize m_viewportSize;
 
     QRhiBuffer* m_globalUniformBuffer = nullptr;
-    // The global UBO holds kGlobalCameraSlotCount aligned camera slots: slot 0 is
-    // the live on-screen camera (written by updateGlobalUniformBuffer), slot 1 is
-    // the offscreen camera (written by cwRhiOffscreenRenderer::drainPending).
-    // m_globalUniformStride is the aligned per-slot size and the dynamic offset of
-    // slot 1.
-    static constexpr int kGlobalCameraSlotCount = 2;
+    // The global UBO holds kGlobalCameraSlotCount aligned camera slots: slot 0 is the
+    // live on-screen camera (written by updateGlobalUniformBuffer); slots 1..N are the
+    // offscreen cameras (written by cwRhiOffscreenRenderer). A solitary offscreen render
+    // uses slot 1; an atlas batch uses one distinct slot per tile, so the K tiles drawn
+    // into a single command buffer each read their own camera. A shared slot would
+    // collapse — every pass reads the slot's final value at GPU-execution time, so all
+    // tiles would render the last tile's camera (the repeated-tile bug). N is the
+    // per-frame atlas-batch cap; the UBO stays tiny (one stride per slot) so 256 costs
+    // ~64 KB. m_globalUniformStride is the aligned per-slot size and the offset of slot 1.
+    static constexpr int kOffscreenBatchCameraSlots = 256;
+    static constexpr int kGlobalCameraSlotCount = 1 + kOffscreenBatchCameraSlots;
     quint32 m_globalUniformStride = 0;
 
     QHash<cwRhiPipelineKey, cwRhiPipelineRecord*> m_pipelineCache;

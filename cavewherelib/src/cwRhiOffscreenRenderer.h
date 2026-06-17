@@ -11,6 +11,7 @@
 
 //Our includes
 #include "cwRhiScene.h"   // for cwRhiScene::EdlOffscreen and the friend back-ref
+#include "cwOffscreenAtlasGrid.h"
 class cwRhiItemRenderer;
 class QThread;
 struct cwOffscreenRenderJob;
@@ -20,7 +21,7 @@ struct cwOffscreenRenderJob;
  *
  * Renders the resident scene from an arbitrary camera into an offscreen target and
  * reads it back into a QImage that fulfils each queued job's promise (hi-res map
- * export, the sink classifier, the debug render hook). Render-thread-owned; held by
+ * export, offscreen point-cloud capture, the debug render hook). Render-thread-owned; held by
  * cwRhiScene as a unique_ptr member.
  *
  * It does not re-implement the draw pipeline: it reaches cwRhiScene's shared
@@ -39,15 +40,6 @@ public:
     // duplicate or strand ownership, so forbid both explicitly.
     Q_DISABLE_COPY_MOVE(cwRhiOffscreenRenderer)
 
-    // Renders drained per frame. Must be 1: every render targets the shared
-    // m_target and the read-back resolves against it at frame end, so batching two
-    // renders into one frame makes both read-backs return the last tile (the
-    // repeated-tile bug). render() re-arms a frame while hasPendingWork(), so a
-    // large batch still drains fully — one tile per frame. (Reintroducing real
-    // batching would require a distinct read-back texture per job.) Public so tests
-    // can assert the one-render-per-frame bound.
-    static constexpr int kOffscreenRendersPerFrame = 1;
-
     // Move GUI-side jobs (handed over in cwRhiScene::synchroize while the GUI thread
     // is blocked at the scene-graph sync barrier) onto the render-thread queue,
     // clearing the source list. Render-thread only.
@@ -57,9 +49,10 @@ public:
     // uses this to decide whether to drain and re-arm another frame.
     bool hasPendingWork() const;
 
-    // Render one queued job (see kOffscreenRendersPerFrame): draw the resident
-    // scene into the offscreen target from the job's camera and enqueue a texture
-    // read-back that fulfils the job's promise on completion. Render-thread only.
+    // Drain one frame's worth of queued work: peel a maximal compatible run off the front
+    // and render it either as an atlas batch (one read-back fanned out to every tile) or,
+    // for a solitary/incompatible job, the single-tile path. render() re-arms another frame
+    // while hasPendingWork(), so the queue drains fully across frames. Render-thread only.
     void drainPending(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer);
 
     // Finish any straggler promises (so their QFutures can't hang when the QRhi is
@@ -94,15 +87,37 @@ private:
         QRhiTexture* readbackTexture() const { return resolve ? resolve.get() : color.get(); }
     };
 
-    // Read-backs recorded but not yet completed. Each entry pairs a weak ref to the
-    // job with the raw QRhiReadbackResult the completion lambda owns. shutdown()
-    // finishes any still-pending promise and reclaims the result the lambda would
-    // otherwise have freed. A non-expired weak ref is the signal that the lambda has
-    // not run yet — it holds the only other strong ref to the job — so shutdown
-    // finishes/deletes only those entries. Render-thread only.
+    // Colour-only atlas texture for the batch path: many compatible tiles are rendered
+    // into the reused scratch (m_target) and copyTexture'd into their own sub-rect here,
+    // then the whole atlas is read back once and sliced per job. It is never a render
+    // target (no depth, no rpDesc) — purely a copyTexture destination + read-back source,
+    // so it carries only UsedAsTransferSource. Cached and reused across frames for the
+    // same grid size, like m_target.
+    struct AtlasTarget {
+        std::unique_ptr<QRhiTexture> color;
+        QSize size;
+
+        bool valid() const { return color != nullptr; }
+    };
+
+    // A read-back recorded but not yet completed. One read-back fans out to one or more
+    // jobs (single-tile path: one; atlas path: one per tile). We track only weak refs to
+    // those jobs plus the raw QRhiReadbackResult the completion lambda owns — the per-job
+    // sub-rects live solely in that lambda, which does the slicing. The lambda holds the
+    // only strong refs to every job, so a still-lockable job is the signal it has not run;
+    // shutdown() finishes those promises and reclaims the result. Render-thread only.
     struct InflightOffscreenReadback {
-        std::weak_ptr<cwOffscreenRenderJob> job;
         QRhiReadbackResult* result = nullptr;
+        QList<std::weak_ptr<cwOffscreenRenderJob>> jobs;
+
+        // True once the completion lambda has run. It owned the only strong refs to every
+        // job and releases them together when destroyed, so they expire as one — checking
+        // any job is enough. jobs is never empty (recordReadbackFanout asserts it), so this
+        // never reports an unfired read-back as completed (which would leak its result).
+        bool completed() const
+        {
+            return jobs.constFirst().expired();
+        }
     };
 
     // The queue and in-flight read-back list are unsynchronized; their safety rests
@@ -119,6 +134,50 @@ private:
     // render-pass descriptor first (same ordering rule as the EDL offscreen).
     void destroyTarget();
 
+    // Build (or rebuild on size change) the colour-only batch atlas. Cheaper than
+    // ensureTarget: no depth, no render-pass descriptor, so no pipeline eviction.
+    void ensureAtlas(QRhi* rhi, QSize size);
+    void destroyAtlas();
+
+    // If the job at the front of the queue is non-renderable — null, cancelled, or
+    // empty-sized — resolve it (finish its promise) and drop it, returning true. Returns
+    // false when the front is a real render job (or the queue is empty). Callers loop on
+    // it to skip past dead jobs without consuming frame budget.
+    bool dropLeadingNonRenderable();
+
+    // Draw one job's scene into the reused scratch (m_target) exactly as a standalone
+    // render would — ensureTarget, EDL composite when a cloud is visible, pass routing,
+    // gather, camera UBO, drawScene. @a size / @a sampleCount are the resolved
+    // (capability-gated) render config. @a cameraSlot selects the global-UBO camera slot
+    // this tile's camera is written to and drawn from (1 for a solitary render; 1+i for
+    // tile i of a batch, so batched tiles don't share a slot). Returns false if the
+    // scratch could not be allocated. Shared by the single-tile and atlas-batch paths.
+    bool renderJobIntoScratch(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer,
+                              const std::shared_ptr<cwOffscreenRenderJob>& job,
+                              QSize size, int sampleCount, int cameraSlot);
+
+    // Non-atlas fallback: render @a job into the scratch and read that scratch back into
+    // the job's promise (one read-back, one slice). Used for solitary or incompatible
+    // jobs, and when the atlas cannot be allocated.
+    void renderSingleTile(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer,
+                          const std::shared_ptr<cwOffscreenRenderJob>& job,
+                          QSize size, int sampleCount);
+
+    // Atlas path (B1): render each job in @a batch into the scratch and copyTexture it
+    // into its @a grid sub-rect, then read the atlas back once and fan the slices out to
+    // the jobs' promises. Falls back to renderSingleTile per job if the atlas can't be
+    // allocated.
+    void renderAtlasBatch(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer,
+                          const QList<std::shared_ptr<cwOffscreenRenderJob>>& batch,
+                          const cwOffscreenAtlasGrid& grid, int sampleCount);
+
+    // Record a single texture read-back that fulfils every job in @a jobs from its
+    // matching @a subRects slice on completion; tracks it for shutdown() fan-out. The
+    // lists are parallel and equal length.
+    void recordReadbackFanout(QRhiCommandBuffer* cb, QRhiTexture* readbackTexture,
+                              const QList<std::shared_ptr<cwOffscreenRenderJob>>& jobs,
+                              const QList<QRect>& subRects);
+
     cwRhiScene* m_scene;   // back-ref to the owner; not owned
 
     bool m_didShutdown = false;   // guards shutdown() so the dtor backstop is a no-op
@@ -129,6 +188,7 @@ private:
 
     QList<std::shared_ptr<cwOffscreenRenderJob>> m_queue;
     OffscreenTarget m_target;
+    AtlasTarget m_atlas;
     // EDL composite buffers for the offscreen render, sized to the request and
     // always 1x (no MSAA on the offscreen path). Separate from cwRhiScene's live
     // m_edlOffscreen because an offscreen request's size differs from the live
