@@ -83,7 +83,7 @@ bool modelHasWarning(cwErrorModel *model, SymbologyErrorCode code)
 
 } // namespace
 
-TEST_CASE("Manager always provides the seed palette", "[cwSymbologyPaletteManager]")
+TEST_CASE("Manager always provides the default palette", "[cwSymbologyPaletteManager]")
 {
     QTemporaryDir temp;
     REQUIRE(temp.isValid());
@@ -92,8 +92,24 @@ TEST_CASE("Manager always provides the seed palette", "[cwSymbologyPaletteManage
     manager.setPaletteDirectory(temp.path()); // empty dir: only the default
 
     REQUIRE(manager.palettes().size() == 1);
-    CHECK(manager.defaultPalette() != nullptr);
-    CHECK(manager.paletteById(cwSymbologyPaletteSeed::id()) == manager.defaultPalette());
+
+    cwSymbologyPalette *defaultPalette = manager.defaultPalette();
+    REQUIRE(defaultPalette != nullptr);
+
+    // It loads from the embedded qrc keyed by the seed id, and is listed first.
+    CHECK(manager.paletteById(cwSymbologyPaletteSeed::id()) == defaultPalette);
+    CHECK(manager.palettes().constFirst() == defaultPalette);
+
+    // Shipped read-only — the user edits a copy, never the built-in.
+    CHECK_FALSE(defaultPalette->isWritable());
+
+    // The qrc payload carries the seed's brushes, so the cross-palette
+    // substitution keys resolve out of the box.
+    CHECK(defaultPalette->brush(cwSymbologyPaletteSeed::wallBrushName()).has_value());
+    CHECK(defaultPalette->brush(cwSymbologyPaletteSeed::featureBrushName()).has_value());
+    CHECK(defaultPalette->brush(cwSymbologyPaletteSeed::scrapOutlineBrushName()).has_value());
+    CHECK(defaultPalette->brush(cwSymbologyPaletteSeed::floorStepBrushName()).has_value());
+
     CHECK(manager.errorModel()->errors()->isEmpty());
     CHECK(manager.errorModel()->fatalCount() == 0);
     CHECK(manager.errorModel()->warningCount() == 0);
@@ -114,7 +130,7 @@ TEST_CASE("Manager enumerates installed palettes by Palette.id, not directory na
     cwSymbologyPaletteManager manager;
     manager.setPaletteDirectory(temp.path());
 
-    // seed + two installed.
+    // default + two installed.
     CHECK(manager.palettes().size() == 3);
 
     auto *a = manager.paletteById(idA);
@@ -139,7 +155,7 @@ TEST_CASE("Manager resolves duplicate palette ids first-scanned-wins",
     cwSymbologyPaletteManager manager;
     manager.setPaletteDirectory(temp.path());
 
-    // seed + exactly one of the two duplicates.
+    // default + exactly one of the two duplicates.
     CHECK(manager.palettes().size() == 2);
     auto *kept = manager.paletteById(sharedId);
     REQUIRE(kept != nullptr);
@@ -190,7 +206,7 @@ TEST_CASE("Manager refuses a palette with a fatal rule-stack problem",
     cwSymbologyPaletteManager manager;
     manager.setPaletteDirectory(temp.path());
 
-    // The palette is not installed (seed only), and the failure is reported.
+    // The palette is not installed (default only), and the failure is reported.
     CHECK(manager.paletteById(id) == nullptr);
     CHECK_FALSE(manager.errorModel()->errors()->isEmpty());
 }

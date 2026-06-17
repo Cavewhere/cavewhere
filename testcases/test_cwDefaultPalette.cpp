@@ -27,9 +27,9 @@
 //   CW_DEFAULT_PALETTE_DIR=<repo>/cavewherelib/palettes/cavewhere-default \
 //     cavewhere-test "[regenerateDefaultPalette]"
 //
-// The files are produced from create() so nobody hand-edits serialized JSON; a
-// drift-guard test (added later) asserts the committed qrc files still equal what
-// create() produces.
+// The files are produced from create() so nobody hand-edits serialized JSON; the
+// drift-guard test below asserts the committed qrc files still equal what create()
+// produces.
 TEST_CASE("Regenerate the default palette files from the seed generator",
           "[.][regenerateDefaultPalette]")
 {
@@ -43,4 +43,18 @@ TEST_CASE("Regenerate the default palette files from the seed generator",
 
     std::cout << "[regenerateDefaultPalette] wrote default palette to: "
               << directory.toStdString() << std::endl;
+}
+
+// Drift guard: the palette embedded in cwPalettes.qrc must still match what the
+// seed generator produces. If create() changes, this fails until the committed
+// files are regenerated with [regenerateDefaultPalette] above. Equality is over
+// cwSymbologyPaletteData (id/name/description/author/version/brushes/glyphs) —
+// the JSON cavewhereVersion stamp is not a field, so it doesn't affect this.
+TEST_CASE("The shipped default palette qrc matches the seed generator",
+          "[cwDefaultPalette]")
+{
+    const auto loaded = cwSymbologyPaletteIO::load(QStringLiteral(":/palettes/cavewhere-default"));
+    INFO("load error: " << loaded.errorMessage().toStdString());
+    REQUIRE_FALSE(loaded.hasError());
+    CHECK(loaded.value().palette == cwSymbologyPaletteSeed::create());
 }
