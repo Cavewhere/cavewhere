@@ -6,16 +6,18 @@
 
 // Qt includes
 #include <QObject>
+#include <QPointF>
 #include <QSize>
 #include <QString>
 #include <qqmlintegration.h>
 class QQuickItem;
 
 /**
- * Test-only helpers for the offscreen-render QML regression test: the
- * renderToImage driver itself, plus a PID-tagged temp path and inspectors for the
- * PNG it writes. Lives in cavewhere-testlib so production code carries no test
- * scaffolding.
+ * Test-only helpers for the render-to-PNG QML regression tests (the offscreen
+ * renderer and the tiled map export): the renderToImage driver itself, plus a
+ * PID-tagged temp path and content inspectors for a saved PNG (size, uniformity,
+ * non-black / opaque fraction, opaque centroid). Lives in cavewhere-testlib so
+ * production code carries no test scaffolding.
  */
 class CAVEWHERE_TESTLIB_EXPORT OffscreenRenderTester : public QObject
 {
@@ -63,6 +65,20 @@ public:
     // that fills the frame (gradient background ≈ 1.0) from the EDL-composite
     // regression that painted everything black except a tiny cloud (≈ 0).
     Q_INVOKABLE double nonBlackFraction(const QString& path) const;
+
+    // Fraction (0..1) of pixels whose alpha is above a small threshold — i.e. real
+    // rendered content over a transparent clear. The map-export PNG fills with
+    // Qt::transparent, so its drawn geometry is exactly the opaque region; a value
+    // near 0 means a blank export. Returns 1.0 for an image with no alpha channel.
+    Q_INVOKABLE double opaqueFraction(const QString& path) const;
+
+    // Center of mass of the opaque pixels, normalized to 0..1 in each axis (x to the
+    // right, y downward). A robust placement/orientation probe: unlike a tight
+    // bounding box it is not thrown off by a few stray edge pixels (the map export
+    // leaves single opaque pixels at the page corners). A vertical flip maps y -> 1-y;
+    // a blank or grossly mis-rendered export moves it. Returns (-1,-1) for a null or
+    // fully transparent image.
+    Q_INVOKABLE QPointF opaqueCentroid(const QString& path) const;
 };
 
 #endif // OFFSCREENRENDERTESTER_H

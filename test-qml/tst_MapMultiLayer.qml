@@ -163,7 +163,7 @@ MainWindowTest {
             function exportImage(filename, fileType) {
                 let localFileUrl = Qt.resolvedUrl(filename)
                 TestHelper.removeFile(localFileUrl);
-                verify(!TestHelper.fileExistslocalFileUrl);
+                verify(!TestHelper.fileExists(localFileUrl));
 
                 let mapPage = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage")
                 let screenCaptureManager = findChild(mapPage, "screenCaptureManager")

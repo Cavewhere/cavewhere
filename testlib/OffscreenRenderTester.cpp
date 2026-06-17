@@ -23,6 +23,51 @@
 
 #include <asyncfuture.h>
 
+namespace {
+// Alpha (0..255) above which a pixel counts as drawn content rather than the
+// transparent clear; ignores the near-transparent anti-aliased fringe.
+constexpr int kMinOpaqueAlpha = 16;
+
+// Single pass over an image's alpha, gathering everything the opaque-* inspectors
+// need (count, total, and the x/y sums for the centroid) so they don't each
+// re-scan. Reads alpha straight from the loaded buffer when it already carries it
+// (the export PNG is RGBA); converts only when it doesn't. qAlpha is correct for
+// premultiplied formats too — premultiplication leaves the alpha byte untouched.
+struct OpaqueScan {
+    qsizetype count = 0;   // pixels with alpha > kMinOpaqueAlpha
+    qsizetype total = 0;   // all pixels
+    double sumX = 0.0;     // summed x of opaque pixels
+    double sumY = 0.0;     // summed y of opaque pixels
+    int width = 0;
+    int height = 0;
+};
+
+OpaqueScan scanOpaque(const QImage& source)
+{
+    OpaqueScan scan;
+    if (source.isNull()) {
+        return scan;
+    }
+    const QImage image = (source.format() == QImage::Format_ARGB32
+                          || source.format() == QImage::Format_ARGB32_Premultiplied)
+                             ? source
+                             : source.convertToFormat(QImage::Format_ARGB32);
+    scan.width = image.width();
+    scan.height = image.height();
+    scan.total = qsizetype(image.width()) * image.height();
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            if (qAlpha(image.pixel(x, y)) > kMinOpaqueAlpha) {
+                ++scan.count;
+                scan.sumX += x;
+                scan.sumY += y;
+            }
+        }
+    }
+    return scan;
+}
+} // namespace
+
 OffscreenRenderTester::OffscreenRenderTester(QObject* parent) :
     QObject(parent)
 {
@@ -195,4 +240,20 @@ double OffscreenRenderTester::nonBlackFraction(const QString& path) const
         }
     }
     return total > 0 ? double(nonBlack) / double(total) : 0.0;
+}
+
+double OffscreenRenderTester::opaqueFraction(const QString& path) const
+{
+    const OpaqueScan scan = scanOpaque(QImage(path));
+    return scan.total > 0 ? double(scan.count) / double(scan.total) : 0.0;
+}
+
+QPointF OffscreenRenderTester::opaqueCentroid(const QString& path) const
+{
+    const OpaqueScan scan = scanOpaque(QImage(path));
+    if (scan.count == 0) {
+        return QPointF(-1.0, -1.0);
+    }
+    return QPointF((scan.sumX / scan.count) / scan.width,
+                   (scan.sumY / scan.count) / scan.height);
 }
