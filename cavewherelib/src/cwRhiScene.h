@@ -20,6 +20,7 @@ class QRhiCommandBuffer;
 class cwScene;
 class cwRenderObject;
 class cwRhiItemRenderer;
+class cwRhiOffscreenRenderer;
 struct cwOffscreenRenderJob;
 
 /**
@@ -31,6 +32,32 @@ class cwRhiScene {
 public:
     friend class cwRhiItemRenderer;
     friend struct CwRhiSceneTestAccess;
+
+    // cwRhiOffscreenRenderer drives the offscreen-render queue + readback but leans
+    // on this class's draw primitives (gatherScene / drawScene / setupPassRouting /
+    // buildPerPassRenderData / anyCloudVisible / ensureEffectInitialized and the
+    // global-UBO accessors), so it reaches them through this friend rather than a
+    // formal interface. The coupling is a deliberate choice (D1, Option A): with
+    // only two consumers of those primitives — the live frame and the offscreen
+    // renderer — a friend is cheaper than extracting a shared draw layer, and it
+    // leaves the live hot path untouched.
+    //
+    // Promote that primitive set into a standalone cwRhiFrameRenderer that both
+    // compose (dropping this friend) when ANY of these turns true — until then the
+    // friend is the right tool:
+    //   1. A third consumer of the draw primitives appears (a shadow/depth pass, a
+    //      thumbnail renderer, a second offscreen mode). Two callers justify a
+    //      friend; the third justifies the class.
+    //   2. The friend surface grows past the primitives listed above — the
+    //      offscreen renderer starts needing new cwRhiScene internals. The seam is
+    //      leaking and wants to become a real interface.
+    //   3. The draw layer needs unit-testing without a live scene/window — friend
+    //      coupling blocks that; a free cwRhiFrameRenderer is testable in isolation.
+    //   4. cwRhiScene's size/responsibilities creep back up after this extraction —
+    //      the god-object smell returning despite the split.
+    // The friend already names the exact methods cwRhiFrameRenderer would expose, so
+    // B is a mechanical promotion of those primitives, not a do-over.
+    friend class cwRhiOffscreenRenderer;
 
     // cwRhiPipelineKey and cwRhiPipelineRecord live in cwRhiPipelineTypes.h.
 
@@ -66,31 +93,22 @@ public:
         int sampleCount = 1;            // effective MSAA samples (1 = no AA fallback)
         std::unique_ptr<cwRhiPostProcessEffect> effect;
 
+        // What the effect's pipeline was last initialized for, owned per-instance so
+        // the live and offscreen EDLs each track their own init key (no shared
+        // bool/int that drifts between them). ensureEffectInitialized re-inits when
+        // the output target it composites into (rpDesc + that target's sample count)
+        // or the input sample count it reads (== this->sampleCount, which selects the
+        // 1x vs MSAA shader variant) changes. The null/0 sentinels on a freshly built
+        // struct force the first init; they are preserved across an effect-reuse
+        // resize so a pure resize doesn't needlessly rebuild the pipeline.
+        QRhiRenderPassDescriptor* effectOutputRpDesc = nullptr;
+        int effectOutputSampleCount = 0;
+        int effectInputSampleCount = 0;
+
         bool valid() const { return sceneTarget && cloudTarget && effect != nullptr; }
     };
 
-    // Generic offscreen render target: a single RGBA8 colour + depth texture at
-    // the requested output size, 1x, the colour flagged as a transfer source so
-    // it can be read back. The resident scene is rendered here from a request's
-    // camera and the result read back into a QImage — flat, or as the final
-    // composite target of the EDL path (m_offscreenEdl) when a cloud is visible.
-    // Always 1x for now; MSAA parity with the live view (A3) is still future.
-    struct OffscreenTarget {
-        std::unique_ptr<QRhiTexture> color;
-        std::unique_ptr<QRhiTexture> depth;
-        std::unique_ptr<QRhiTextureRenderTarget> target;
-        std::unique_ptr<QRhiRenderPassDescriptor> rpDesc;
-        QSize size;
-
-        bool valid() const { return target != nullptr; }
-    };
-
-    // Max offscreen requests drained per frame. Offscreen renders are budgeted
-    // and re-armed across frames (cwRhiItemRenderer::requestUpdate) so a large
-    // batch never stalls the live render. Public so tests can assert the
-    // multi-frame bound.
-    static constexpr int kOffscreenRendersPerFrame = 4;
-
+    cwRhiScene();
     ~cwRhiScene();
 
     QMatrix4x4 viewMatrix() const { return m_viewMatrix; }
@@ -161,6 +179,24 @@ private:
         float viewportSize[2];
     };
 
+    // A raw camera mapped into the active backend's clip space: the projection
+    // adjusted by clipSpaceCorrMatrix() and the combined view-projection. The single
+    // source of the clip-space convention for both the live frame (updateGlobalUniform
+    // Buffer) and the offscreen path (cwRhiOffscreenRenderer, via the friend back-ref),
+    // which feed the global UBO from these.
+    struct ClipSpaceCamera {
+        QMatrix4x4 projectionCorrected;
+        QMatrix4x4 viewProjection;
+    };
+    static ClipSpaceCamera clipSpaceCorrectedCamera(QRhi* rhi,
+                                                    const QMatrix4x4& projection,
+                                                    const QMatrix4x4& view);
+
+    // D32F where supported; D24S8 elsewhere — both sampler-readable on every Qt RHI
+    // backend, so offscreen depth attachments use either interchangeably. Shared by
+    // the live EDL offscreen and the offscreen renderer's target.
+    static QRhiTexture::Format preferredDepthFormat(QRhi* rhi);
+
     cwSceneUpdate::Flag m_updateFlags = cwSceneUpdate::Flag::None;
     QMatrix4x4 m_projectionMatrix;
     QMatrix4x4 m_projectionCorrectedMatrix;
@@ -172,8 +208,9 @@ private:
     QRhiBuffer* m_globalUniformBuffer = nullptr;
     // The global UBO holds kGlobalCameraSlotCount aligned camera slots: slot 0 is
     // the live on-screen camera (written by updateGlobalUniformBuffer), slot 1 is
-    // the offscreen camera (written by renderPendingOffscreen). m_globalUniformStride
-    // is the aligned per-slot size and the dynamic offset of slot 1.
+    // the offscreen camera (written by cwRhiOffscreenRenderer::drainPending).
+    // m_globalUniformStride is the aligned per-slot size and the dynamic offset of
+    // slot 1.
     static constexpr int kGlobalCameraSlotCount = 2;
     quint32 m_globalUniformStride = 0;
 
@@ -181,47 +218,19 @@ private:
     QRhiSampler* m_sharedLinearSampler = nullptr;
     EdlOffscreen m_edlOffscreen;
 
-    // Offscreen render state. m_offscreenQueue is filled in synchroize() from
-    // cwScene's GUI-side queue and drained in render() via renderPendingOffscreen.
-    // m_outstandingOffscreenReadbacks is a render-thread counter held by
-    // shared_ptr so a read-back completion lambda can decrement it without
-    // capturing `this` (the scene may be torn down before the read-back fires).
-    OffscreenTarget m_offscreenTarget;
-    // EDL composite buffers for the offscreen render, sized to the request and
-    // always 1x (no MSAA on the offscreen path). Separate from m_edlOffscreen
-    // because an offscreen request's size differs from the live viewport and
-    // both are live within the same frame. Its effect composites into
-    // m_offscreenTarget; m_offscreenEffectRpDesc tracks the rpDesc that effect
-    // was last initialized against so a target rebuild re-inits it.
-    EdlOffscreen m_offscreenEdl;
-    QRhiRenderPassDescriptor* m_offscreenEffectRpDesc = nullptr;
-    // Latest EDL tuning, staged in synchroize() and pushed to the offscreen
-    // effect at render time (the live effect is fed directly in synchroize()).
+    // Latest EDL tuning, staged in synchroize() and pushed to the offscreen effect
+    // at render time (the live effect is fed directly in synchroize()). Read by the
+    // offscreen renderer through the friend back-ref.
     EdlParametersData m_edlParameters;
-    QList<std::shared_ptr<cwOffscreenRenderJob>> m_offscreenQueue;
-    // Read-backs recorded but not yet completed. Each entry pairs a weak ref to
-    // the job with the raw QRhiReadbackResult the completion lambda owns.
-    // ~cwRhiScene finishes any still-pending promise (so its QFuture can't hang
-    // when the QRhi is torn down mid-flight) and reclaims the result the lambda
-    // would otherwise have freed. A non-expired weak ref is the signal that the
-    // lambda has not run yet — it holds the only other strong ref to the job —
-    // so the destructor finishes/deletes only those entries. Render-thread only.
-    struct InflightOffscreenReadback {
-        std::weak_ptr<cwOffscreenRenderJob> job;
-        QRhiReadbackResult* result = nullptr;
-    };
-    QList<InflightOffscreenReadback> m_inflightOffscreenReadbacks;
-    std::shared_ptr<int> m_outstandingOffscreenReadbacks = std::make_shared<int>(0);
 
-    // Build (or rebuild on output-size change) the offscreen render target.
-    void ensureOffscreenTarget(QRhi* rhi, QSize size);
-    // Release the offscreen target's GPU resources, evicting pipelines keyed on
-    // its render-pass descriptor first (same ordering rule as the EDL offscreen).
-    void destroyOffscreenTarget();
-    // Drain up to @a budget queued offscreen requests: render the resident scene
-    // into the offscreen target from each request's camera and enqueue a texture
-    // read-back that fulfils the request's promise on completion.
-    void renderPendingOffscreen(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer);
+    // Drives the generic offscreen-render queue (queue + target + offscreen EDL +
+    // read-back lifecycle). Owns none of the live frame; it reaches this class's
+    // shared draw primitives via the friend back-ref. Held by unique_ptr so this
+    // header needs only a forward declaration of it (avoids an include cycle, since
+    // it includes cwRhiScene.h for EdlOffscreen); constructed in the ctor with
+    // `this` and torn down explicitly via shutdown() from ~cwRhiScene, before the
+    // pipeline cache is freed.
+    std::unique_ptr<cwRhiOffscreenRenderer> m_offscreen;
 
     static constexpr int kPassCount = static_cast<int>(cwRHIObject::RenderPass::Count);
 
@@ -282,7 +291,7 @@ private:
     // sample count; the actual textures use the capability-gated effective count
     // (stored in EdlOffscreen::sampleCount). No-op when already valid at the
     // requested size and sample count. Operates on @a edl so the same builder
-    // serves both the live m_edlOffscreen and the offscreen m_offscreenEdl.
+    // serves both the live m_edlOffscreen and the offscreen renderer's EDL.
     void ensureEdlOffscreen(EdlOffscreen& edl, QRhi* rhi, QSize size, int requestedSampleCount);
 
     // Capability-gated effective sample count for the offscreen: the swap-chain
@@ -295,22 +304,25 @@ private:
     // rpDescs, then delete the targets and textures.
     void destroyEdlOffscreen(EdlOffscreen& edl);
 
+    // (Re)initialize @a edl's composite effect for the target it writes into:
+    // @a outputRpDesc + @a outputSampleCount are that target's render-pass
+    // descriptor and sample count; the input sample count is edl.sampleCount. A
+    // no-op when the effect is already initialized for the same key (tracked on the
+    // EdlOffscreen itself). One helper for both the live render() path (output =
+    // swap chain) and the offscreen drain (output = the offscreen target), so the
+    // two can no longer drift. The swap-chain rpDesc isn't available until the
+    // first render(), which is why effect init is deferred to here rather than done
+    // when the effect is created.
+    void ensureEffectInitialized(EdlOffscreen& edl, QRhi* rhi,
+                                 QRhiRenderPassDescriptor* outputRpDesc,
+                                 int outputSampleCount);
+
     // Fill m_passRpDesc / m_passSampleCount for this frame. Both are read from
     // the same render target per pass, so a pass's sample count is always the
     // sample count of the target it draws into — they can never disagree (a
     // pipeline whose sample count differs from its render target does not render
     // and triggers backend validation errors).
     void setupPassRouting(QRhiRenderTarget* finalTarget, const EdlOffscreen* edl);
-
-    // Swap-chain rpDesc isn't available until the first render(), so the EDL
-    // effect's initialize() is deferred to then.
-    bool m_effectsInitialized = false;
-
-    // Input sample count the EDL effect last built its pipeline for. When the
-    // offscreen's sample count changes (user toggled cwRenderingSettings), this
-    // no longer matches and the effect is re-initialized to swap the 1x / MSAA
-    // shader variant.
-    int m_effectInputSampleCount = 0;
 
     // The device's supported MSAA levels are reported once (render thread → GUI)
     // to cwRenderingSettings so the UI offers only valid sample counts.

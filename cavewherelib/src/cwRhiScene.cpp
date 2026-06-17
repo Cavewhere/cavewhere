@@ -9,6 +9,7 @@
 #include "cwEDLEffect.h"
 #include "cwRenderingSettings.h"
 #include "cwOffscreenRenderJob.h"
+#include "cwRhiOffscreenRenderer.h"
 
 #include <algorithm>
 #include <array>
@@ -37,32 +38,6 @@ size_t qHash(const cwRhiPipelineKey& key, size_t seed) noexcept
 }
 
 namespace {
-// D32F where supported; D24S8 elsewhere. Both are sampler-readable on every Qt
-// RHI backend, so offscreen depth attachments can use either interchangeably.
-QRhiTexture::Format preferredDepthFormat(QRhi* rhi)
-{
-    return rhi->isTextureFormatSupported(QRhiTexture::D32F) ? QRhiTexture::D32F
-                                                            : QRhiTexture::D24S8;
-}
-
-// A raw camera mapped into the active RHI backend's clip space: the projection
-// adjusted by clipSpaceCorrMatrix() and the combined view-projection. Single
-// source of the clip-space convention for both the live frame and the offscreen
-// path, which feed the global UBO from these.
-struct ClipSpaceCamera {
-    QMatrix4x4 projectionCorrected;
-    QMatrix4x4 viewProjection;
-};
-
-ClipSpaceCamera clipSpaceCorrectedCamera(QRhi* rhi, const QMatrix4x4& projection,
-                                         const QMatrix4x4& view)
-{
-    ClipSpaceCamera camera;
-    camera.projectionCorrected = rhi->clipSpaceCorrMatrix() * projection;
-    camera.viewProjection = camera.projectionCorrected * view;
-    return camera;
-}
-
 cwRHIObject::PipelineBatch& ensurePipelineBatch(QVector<cwRHIObject::PipelineBatch>& batches,
                                                 const cwRHIObject::PipelineState& state)
 {
@@ -89,45 +64,51 @@ constexpr std::array<cwRHIObject::RenderPass, 5> kPassOrder = {
 };
 }
 
+QRhiTexture::Format cwRhiScene::preferredDepthFormat(QRhi* rhi)
+{
+    return rhi->isTextureFormatSupported(QRhiTexture::D32F) ? QRhiTexture::D32F
+                                                            : QRhiTexture::D24S8;
+}
+
+cwRhiScene::ClipSpaceCamera cwRhiScene::clipSpaceCorrectedCamera(QRhi* rhi,
+                                                                const QMatrix4x4& projection,
+                                                                const QMatrix4x4& view)
+{
+    ClipSpaceCamera camera;
+    camera.projectionCorrected = rhi->clipSpaceCorrMatrix() * projection;
+    camera.viewProjection = camera.projectionCorrected * view;
+    return camera;
+}
+
+cwRhiScene::cwRhiScene()
+    : m_offscreen(std::make_unique<cwRhiOffscreenRenderer>(this))
+{
+}
+
 cwRhiScene::~cwRhiScene()
 {
     for(auto rhiObject : std::as_const(m_rhiObjects)) {
         delete rhiObject;
     }
     // Clear the tracking lists before tearing down the offscreen targets below:
-    // destroyEdlOffscreen/destroyOffscreenTarget call evictPipelinesFor, which
-    // iterates m_rhiObjects to purge their pipeline caches — the objects are
-    // gone now, so a stale entry would be a use-after-free. Their destructors
-    // already released every pipeline reference they held.
+    // destroyEdlOffscreen and the offscreen renderer's shutdown() call
+    // evictPipelinesFor, which iterates m_rhiObjects to purge their pipeline caches —
+    // the objects are gone now, so a stale entry would be a use-after-free. Their
+    // destructors already released every pipeline reference they held.
     m_rhiObjects.clear();
     m_rhiObjectsToInitilize.clear();
 
+    // Tear down the offscreen subsystem before the pipeline cache below: its
+    // shutdown() destroys the offscreen target + EDL, which evict pipelines keyed on
+    // their rpDescs (must happen while the cache still exists), and finishes any
+    // straggler promises so their futures don't hang.
+    m_offscreen->shutdown();
+
     delete m_globalUniformBuffer;
 
-    // Drop any unstarted offscreen jobs; destroying the promises finishes
-    // their futures so consumers don't hang.
-    m_offscreenQueue.clear();
-
-    // Read-backs recorded but not yet completed will never fire now the QRhi is
-    // going away, so their completion lambdas (the only other owner) would leave
-    // the promise unfinished and the QFuture hung, and the QRhiReadbackResult they
-    // own leaked. A lambda that already ran released its holder (weak ref expired)
-    // and freed its result, so skip those — no double finish, no double free.
-    // A live weak ref means the lambda has not run: finish the promise and reclaim
-    // the read-back it would have deleted.
-    for (const auto& inflight : std::as_const(m_inflightOffscreenReadbacks)) {
-        if (auto job = inflight.job.lock()) {
-            job->promise.finish();
-            delete inflight.result;
-        }
-    }
-    m_inflightOffscreenReadbacks.clear();
-
-    // Tear down the offscreen targets before the pipeline cache so pipelines
-    // keyed on their rpDescs are released first.
+    // Tear down the live EDL offscreen before the pipeline cache so pipelines keyed
+    // on its rpDescs are released first.
     destroyEdlOffscreen(m_edlOffscreen);
-    destroyEdlOffscreen(m_offscreenEdl);
-    destroyOffscreenTarget();
 
     for (auto record : std::as_const(m_pipelineCache)) {
         delete record->pipeline;
@@ -238,14 +219,9 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer *renderer)
     }
     scene->m_toUpdateRenderObjects.clear();
 
-    // Move queued offscreen jobs across to the render thread (GUI is blocked
-    // during synchronize, so the handoff is safe). render() drains m_offscreenQueue.
-    if(!scene->m_pendingOffscreenJobs.isEmpty()) {
-        for(auto& job : scene->m_pendingOffscreenJobs) {
-            m_offscreenQueue.append(std::move(job));
-        }
-        scene->m_pendingOffscreenJobs.clear();
-    }
+    // Move queued offscreen jobs across to the render thread (GUI is blocked during
+    // synchronize, so the handoff is safe). render() drains them via m_offscreen.
+    m_offscreen->enqueue(scene->m_pendingOffscreenJobs);
 }
 
 void cwRhiScene::destroyRhiObject(cwRHIObject* rhiObject)
@@ -311,18 +287,13 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     setupPassRouting(renderer ? renderer->renderTarget() : nullptr,
                      edlActive ? &m_edlOffscreen : nullptr);
 
-    // The swap-chain rpDesc isn't available until the first render(), so the EDL
-    // effect's initialize() — which needs the swap-chain sample count
-    // (cwRenderingSettings::sampleCount via cw3dRegionViewer) — is deferred to
-    // here. Re-init when the offscreen's effective sample count changes so the
-    // effect swaps between the 1x and MSAA shader variants.
-    if (swapchainRPDesc && m_edlOffscreen.effect
-        && (!m_effectsInitialized || m_effectInputSampleCount != m_edlOffscreen.sampleCount)) {
-        m_edlOffscreen.effect->initialize(rhi, swapchainRPDesc, swapchainSampleCount,
-                                          m_globalUniformBuffer, m_globalUniformStride,
-                                          m_edlOffscreen.sampleCount);
-        m_effectsInitialized = true;
-        m_effectInputSampleCount = m_edlOffscreen.sampleCount;
+    // Initialize (or re-init) the live EDL effect for the swap-chain target. The
+    // effect needs the swap-chain sample count (cwRenderingSettings::sampleCount via
+    // cw3dRegionViewer), so this is deferred to render() where the swap-chain rpDesc
+    // first exists. The helper owns the init-key bookkeeping and re-inits only when
+    // the output target or the effective input sample count changes.
+    if (swapchainRPDesc) {
+        ensureEffectInitialized(m_edlOffscreen, rhi, swapchainRPDesc, swapchainSampleCount);
     }
 
     cwRHIObject::RenderData renderData{cb, renderer, m_updateFlags, swapchainRPDesc, swapchainSampleCount};
@@ -372,10 +343,8 @@ void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
     // Zero cost when nothing is queued and no read-back is in flight. When work
     // remains, request another frame so it drains across frames and the pending
     // texture read-backs get a chance to complete.
-    if (!m_offscreenQueue.isEmpty() || *m_outstandingOffscreenReadbacks > 0) {
-        if (!m_offscreenQueue.isEmpty()) {
-            renderPendingOffscreen(cb, renderer);
-        }
+    if (m_offscreen->hasPendingWork()) {
+        m_offscreen->drainPending(cb, renderer);
         if (renderer) {
             renderer->requestUpdate();
         }
@@ -481,6 +450,9 @@ void cwRhiScene::ensureEdlOffscreen(EdlOffscreen& edl, QRhi* rhi, QSize size, in
     // (cwEDLEffect::ensureBindings detects the pointer change). The caller
     // re-initializes the effect when sampleCount changes the 1x / MSAA variant.
     std::unique_ptr<cwRhiPostProcessEffect> savedEffect = std::move(edl.effect);
+    QRhiRenderPassDescriptor* savedEffectOutputRpDesc = edl.effectOutputRpDesc;
+    const int savedEffectOutputSampleCount = edl.effectOutputSampleCount;
+    const int savedEffectInputSampleCount = edl.effectInputSampleCount;
     destroyEdlOffscreen(edl);
 
     EdlOffscreen fresh;
@@ -548,6 +520,13 @@ void cwRhiScene::ensureEdlOffscreen(EdlOffscreen& edl, QRhi* rhi, QSize size, in
         // rebind on the next apply() (pointer-identity caching is unsafe across a
         // free+realloc that may reuse the same address).
         fresh.effect->resize(size);
+        // Carry the init key forward: the pipeline is keyed on the output rpDesc +
+        // sample counts, not texture identity, so a pure resize must not trigger a
+        // needless re-init. ensureEffectInitialized still re-inits if the output
+        // target or the input sample count actually changed.
+        fresh.effectOutputRpDesc = savedEffectOutputRpDesc;
+        fresh.effectOutputSampleCount = savedEffectOutputSampleCount;
+        fresh.effectInputSampleCount = savedEffectInputSampleCount;
     }
 
     edl = std::move(fresh);
@@ -578,61 +557,31 @@ void cwRhiScene::destroyEdlOffscreen(EdlOffscreen& edl)
     edl.size = QSize();
 }
 
-void cwRhiScene::ensureOffscreenTarget(QRhi* rhi, QSize size)
+void cwRhiScene::ensureEffectInitialized(EdlOffscreen& edl, QRhi* rhi,
+                                         QRhiRenderPassDescriptor* outputRpDesc,
+                                         int outputSampleCount)
 {
-    if (!rhi || size.isEmpty()) {
-        return;
-    }
-    if (m_offscreenTarget.valid() && m_offscreenTarget.size == size) {
+    if (!edl.effect || !rhi || !outputRpDesc) {
         return;
     }
 
-    destroyOffscreenTarget();
-
-    OffscreenTarget fresh;
-    fresh.size = size;
-
-    // 1x colour, flagged as a transfer source so readBackTexture can read it.
-    fresh.color.reset(rhi->newTexture(QRhiTexture::RGBA8, size, 1,
-                                      QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
-    fresh.depth.reset(rhi->newTexture(preferredDepthFormat(rhi), size, 1,
-                                      QRhiTexture::RenderTarget));
-    if (!fresh.color->create() || !fresh.depth->create()) {
-        return; // fresh frees its partial resources on scope exit
-    }
-
-    QRhiTextureRenderTargetDescription desc;
-    desc.setColorAttachments({ QRhiColorAttachment(fresh.color.get()) });
-    desc.setDepthTexture(fresh.depth.get());
-    fresh.target.reset(rhi->newTextureRenderTarget(desc));
-    fresh.rpDesc.reset(fresh.target->newCompatibleRenderPassDescriptor());
-    if (!fresh.rpDesc) {
-        return;
-    }
-    fresh.target->setRenderPassDescriptor(fresh.rpDesc.get());
-    if (!fresh.target->create()) {
+    // Re-initialize the effect's pipeline whenever the target it composites into
+    // (rpDesc + that target's sample count) or the offscreen input sample count it
+    // reads (edl.sampleCount — the 1x vs MSAA shader variant) changes. The key is
+    // stored on the EdlOffscreen, so the live and offscreen effects never share or
+    // overwrite each other's state.
+    if (edl.effectOutputRpDesc == outputRpDesc
+        && edl.effectOutputSampleCount == outputSampleCount
+        && edl.effectInputSampleCount == edl.sampleCount) {
         return;
     }
 
-    m_offscreenTarget = std::move(fresh);
-}
-
-void cwRhiScene::destroyOffscreenTarget()
-{
-    // Evict pipelines keyed on the rpDesc before deleting it — a newly allocated
-    // rpDesc may reuse the address and hash-collide with a stale cache entry.
-    if (m_offscreenTarget.rpDesc) {
-        evictPipelinesFor(m_offscreenTarget.rpDesc.get());
-    }
-    m_offscreenTarget.target.reset();
-    m_offscreenTarget.rpDesc.reset();
-    m_offscreenTarget.color.reset();
-    m_offscreenTarget.depth.reset();
-    m_offscreenTarget.size = QSize();
-
-    // The offscreen effect's pipeline was built against the now-freed rpDesc; a
-    // rebuild may reuse the address, so force a re-init by forgetting it.
-    m_offscreenEffectRpDesc = nullptr;
+    edl.effect->initialize(rhi, outputRpDesc, outputSampleCount,
+                           m_globalUniformBuffer, m_globalUniformStride,
+                           edl.sampleCount);
+    edl.effectOutputRpDesc = outputRpDesc;
+    edl.effectOutputSampleCount = outputSampleCount;
+    edl.effectInputSampleCount = edl.sampleCount;
 }
 
 bool cwRhiScene::anyCloudVisible() const
@@ -861,168 +810,6 @@ void cwRhiScene::drawScene(QRhiCommandBuffer* cb,
             drainBatches(cb, passBatchFor(pass), boundPipeline, passDataFor(pass), cameraUniformOffset);
         }
         cb->endPass();
-    }
-}
-
-void cwRhiScene::renderPendingOffscreen(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer)
-{
-    if (!cb || !renderer) {
-        return;
-    }
-    QRhi* rhi = cb->rhi();
-    if (!rhi) {
-        return;
-    }
-
-    // Drop entries whose read-back has since completed (the lambda freed its own
-    // result), keeping the in-flight list bounded. The destructor walks whatever
-    // remains to finish stragglers and reclaim their results.
-    m_inflightOffscreenReadbacks.removeIf(
-        [](const InflightOffscreenReadback& inflight) { return inflight.job.expired(); });
-
-    int processed = 0;
-    bool recordedReadbackThisFrame = false;
-    while (processed < kOffscreenRendersPerFrame && !m_offscreenQueue.isEmpty()) {
-        // Defense-in-depth: jobs are always non-null (cwScene::renderOffscreen
-        // make_shares them and synchroize moves only non-null pointers), but the
-        // queue crosses the GUI→render boundary.
-        const std::shared_ptr<cwOffscreenRenderJob>& next = m_offscreenQueue.first();
-        if (!next) {
-            m_offscreenQueue.removeFirst();
-            continue;
-        }
-        // The consumer cancelled the future before we reached it — skip the GPU
-        // work and just resolve. Checked before the size/deferral logic so a
-        // cancelled job never costs frame budget or blocks a differently-sized one.
-        if (next->promise.isCanceled()) {
-            m_offscreenQueue.takeFirst()->promise.finish();
-            continue;
-        }
-        const QSize size = next->parameters.outputSize;
-        if (size.isEmpty()) {
-            m_offscreenQueue.takeFirst()->promise.finish(); // nothing to render
-            continue;
-        }
-        // An output-size change rebuilds the target, freeing the colour texture.
-        // If a read-back recorded earlier this frame still references it, defer the
-        // differently-sized request to the next frame to avoid a GPU use-after-free.
-        // (Single-size batches — the common case — never defer.)
-        if (recordedReadbackThisFrame && m_offscreenTarget.size != size) {
-            break;
-        }
-
-        auto job = m_offscreenQueue.takeFirst();
-        const cwOffscreenRenderParameters& p = job->parameters;
-        ++processed;
-
-        ensureOffscreenTarget(rhi, size);
-        if (!m_offscreenTarget.valid()) {
-            job->promise.finish(); // can't allocate the target — empty result
-            continue;
-        }
-
-        // Engage the EDL composite when a point cloud is visible, so the
-        // offscreen image matches the live view's eye-dome-lit look (what the
-        // sink classifier trains on). The offscreen EDL buffers are sized to the
-        // request and always 1x.
-        const bool cloudVisible = anyCloudVisible();
-        if (cloudVisible) {
-            ensureEdlOffscreen(m_offscreenEdl, rhi, size, 1);
-        }
-        const bool offscreenEdlActive = cloudVisible && m_offscreenEdl.valid();
-
-        // The offscreen effect composites into m_offscreenTarget (1x). Re-init it
-        // whenever that target's rpDesc changes (a size-driven rebuild), then keep
-        // its tuning fresh each render.
-        if (offscreenEdlActive && m_offscreenEdl.effect) {
-            if (m_offscreenEffectRpDesc != m_offscreenTarget.rpDesc.get()) {
-                m_offscreenEdl.effect->initialize(rhi, m_offscreenTarget.rpDesc.get(), 1,
-                                                  m_globalUniformBuffer, m_globalUniformStride,
-                                                  m_offscreenEdl.sampleCount);
-                m_offscreenEffectRpDesc = m_offscreenTarget.rpDesc.get();
-            }
-            static_cast<cwEDLEffect*>(m_offscreenEdl.effect.get())->setParameters(m_edlParameters);
-        }
-
-        // Route passes to the offscreen targets (EDL split when active, else flat
-        // into m_offscreenTarget). Objects that resolve their pipeline from the
-        // scene's per-frame routing (textured items) then build for the right
-        // rpDesc. Mutating the routing here is safe: the live passes are already
-        // recorded, and the next live render() resets it at its top.
-        setupPassRouting(m_offscreenTarget.target.get(),
-                         offscreenEdlActive ? &m_offscreenEdl : nullptr);
-
-        const cwRHIObject::RenderData offscreenRenderData{
-            cb, renderer, cwSceneUpdate::Flag::None, m_offscreenTarget.rpDesc.get(), 1
-        };
-        const std::array<cwRHIObject::RenderData, kPassCount> perPassRenderData =
-            buildPerPassRenderData(offscreenRenderData);
-
-        std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount> passBatches;
-        gatherScene(passBatches, perPassRenderData);
-
-        // The offscreen camera lives in global-UBO slot 1; write it (and the
-        // offscreen viewport metrics) so the pass reads it via the
-        // m_globalUniformStride dynamic offset.
-        const ClipSpaceCamera clipCamera =
-            clipSpaceCorrectedCamera(rhi, p.projectionMatrix, p.viewMatrix);
-
-        GlobalUniform camera;
-        std::memcpy(camera.viewProjectionMatrix, clipCamera.viewProjection.constData(),
-                    sizeof(camera.viewProjectionMatrix));
-        std::memcpy(camera.viewMatrix, p.viewMatrix.constData(),
-                    sizeof(camera.viewMatrix));
-        std::memcpy(camera.projectionMatrix, clipCamera.projectionCorrected.constData(),
-                    sizeof(camera.projectionMatrix));
-        camera.devicePixelRatio = p.devicePixelRatio;
-        camera._pad0 = 0.0f;
-        camera.viewportSize[0] = float(size.width());
-        camera.viewportSize[1] = float(size.height());
-
-        QRhiResourceUpdateBatch* cameraBatch = rhi->nextResourceUpdateBatch();
-        cameraBatch->updateDynamicBuffer(m_globalUniformBuffer, m_globalUniformStride,
-                                         sizeof(GlobalUniform), &camera);
-
-        const cwRhiPostProcessEffect::FrameUniformContext offscreenFrameContext{
-            clipCamera.projectionCorrected, size, p.devicePixelRatio
-        };
-
-        drawScene(cb, m_offscreenTarget.target.get(),
-                  offscreenEdlActive ? &m_offscreenEdl : nullptr,
-                  passBatches, perPassRenderData, cameraBatch, offscreenFrameContext,
-                  m_globalUniformStride, p.backgroundColor);
-
-        // Read the colour texture back into the job's promise. The completion
-        // runs on the render thread; it holds the job (shared_ptr) and the
-        // outstanding-count (shared_ptr<int>) so neither a torn-down scene nor a
-        // destroyed caller can dangle. A weak copy is tracked so ~cwRhiScene can
-        // finish the promise if the QRhi is destroyed before this fires.
-        auto* readback = new QRhiReadbackResult;
-        auto holder = job;
-        m_inflightOffscreenReadbacks.append({holder, readback});
-        auto counter = m_outstandingOffscreenReadbacks;
-        ++(*counter);
-        readback->completed = [readback, holder, counter]() {
-            const QSize pixelSize = readback->pixelSize;
-            const qsizetype expectedBytes = qsizetype(pixelSize.width()) * pixelSize.height() * 4;
-            if (!pixelSize.isEmpty() && readback->data.size() >= expectedBytes) {
-                const QImage view(reinterpret_cast<const uchar*>(readback->data.constData()),
-                                  pixelSize.width(), pixelSize.height(),
-                                  QImage::Format_RGBA8888);
-                holder->promise.addResult(view.copy()); // deep copy: read-back buffer is transient
-            }
-            // A short/empty read-back still finishes the promise (with no result) so
-            // the future resolves rather than hanging.
-            holder->promise.finish();
-            --(*counter);
-            delete readback;
-        };
-
-        QRhiResourceUpdateBatch* readbackBatch = rhi->nextResourceUpdateBatch();
-        readbackBatch->readBackTexture(QRhiReadbackDescription(m_offscreenTarget.color.get()),
-                                       readback);
-        cb->resourceUpdate(readbackBatch);
-        recordedReadbackThisFrame = true;
     }
 }
 

@@ -11,7 +11,7 @@ MainWindowTest {
         name: "OffscreenRender"
         when: windowShown
 
-        // Drives cw3dRegionViewer::renderToImage end-to-end: it queues an
+        // Drives OffscreenRenderTester.renderToImage end-to-end: it queues an
         // offscreen request on the resident scene, the render thread renders it
         // and reads the texture back, and the resulting QImage is saved as a PNG.
         // Asserts the saved image honours the requested size and holds real
@@ -48,7 +48,7 @@ MainWindowTest {
             OffscreenRenderTester.removeFile(path);
 
             let outputSize = Qt.size(400, 300);
-            regionViewer.renderToImage(path, outputSize);
+            OffscreenRenderTester.renderToImage(regionViewer, path, outputSize);
 
             tryVerify(function() { return OffscreenRenderTester.fileExists(path); }, 10000,
                       "offscreen PNG was written");

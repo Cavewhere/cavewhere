@@ -1,16 +1,27 @@
 #include "OffscreenRenderTester.h"
 #include "LazFixtureHelper.h"
 #include "cwRootData.h"
+#include "cwRhiViewer.h"
+#include "cwScene.h"
+#include "cwCamera.h"
+#include "cwOffscreenRenderParameters.h"
+#include "cwRenderingSettings.h"
 
 // Qt includes
+#include <QColor>
 #include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QFuture>
 #include <QImage>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QTemporaryDir>
+
+#include <asyncfuture.h>
 
 OffscreenRenderTester::OffscreenRenderTester(QObject* parent) :
     QObject(parent)
@@ -45,6 +56,85 @@ bool OffscreenRenderTester::windowHasRhi(QQuickItem* item) const
         return false;
     }
     return renderer->getResource(item->window(), QSGRendererInterface::RhiResource) != nullptr;
+}
+
+void OffscreenRenderTester::renderToImage(QQuickItem* viewer, const QString& filePath,
+                                          QSize size, int sampleCount)
+{
+    auto* rhiViewer = qobject_cast<cwRhiViewer*>(viewer);
+    if (!rhiViewer) {
+        qWarning() << "renderToImage: item is not a cwRhiViewer";
+        return;
+    }
+
+    cwScene* sceneObject = rhiViewer->scene();
+    cwCamera* cameraObject = rhiViewer->camera();
+    if (!sceneObject || !cameraObject || filePath.isEmpty()) {
+        qWarning() << "renderToImage: no scene/camera or empty path";
+        return;
+    }
+
+    // Catch a bad destination here, on the GUI thread, so the caller gets an
+    // immediate, specific failure instead of a misleading "failed to save" after
+    // the async render completes.
+    const QDir outputDir = QFileInfo(filePath).absoluteDir();
+    if (!outputDir.exists()) {
+        qWarning() << "renderToImage: output directory does not exist" << outputDir.absolutePath();
+        return;
+    }
+
+    // Empty size means "render what's on screen": mirror the live framebuffer by
+    // rendering at the physical (DPR-scaled) resolution and feeding the live DPR,
+    // so DPR-dependent geometry — point-cloud point size scales by it in the
+    // shader — matches the live view exactly. An explicit size is a
+    // display-independent render, so it keeps DPR at 1 to stay consistent across
+    // machines.
+    const double dpr = cameraObject->devicePixelRatio();
+    QSize outputSize;
+    float requestDevicePixelRatio;
+    int requestSampleCount;
+    if (size.isEmpty()) {
+        const QSize logical = cameraObject->viewport().size();
+        outputSize = QSize(qRound(logical.width() * dpr), qRound(logical.height() * dpr));
+        requestDevicePixelRatio = float(dpr);
+        // Auto: mirror the live framebuffer's MSAA so the "render what's on screen"
+        // image is a faithful copy (anti-aliased edges match the live view).
+        requestSampleCount = (sampleCount < 0) ? cwRenderingSettings::instance()->sampleCount()
+                                               : sampleCount;
+    } else {
+        outputSize = size;
+        requestDevicePixelRatio = 1.0f;
+        // Auto: a display-independent export defaults to no AA. A caller can still
+        // force MSAA by passing an explicit sampleCount.
+        requestSampleCount = (sampleCount < 0) ? 1 : sampleCount;
+    }
+    if (outputSize.isEmpty()) {
+        qWarning() << "renderToImage: empty output size";
+        return;
+    }
+
+    // The offscreen path applies the RHI clip-space correction itself, so hand it
+    // the camera's raw projection (matching how the live frame feeds the scene).
+    cwOffscreenRenderParameters parameters;
+    parameters.viewMatrix = cameraObject->viewMatrix();
+    parameters.projectionMatrix = cameraObject->projectionMatrix();
+    parameters.outputSize = outputSize;
+    parameters.devicePixelRatio = requestDevicePixelRatio;
+    parameters.sampleCount = requestSampleCount;
+    parameters.backgroundColor = QColor::fromRgbF(0.0, 0.0, 0.0, 1.0);
+
+    QFuture<QImage> future = sceneObject->renderOffscreen(parameters);
+
+    AsyncFuture::observe(future).context(this, [filePath](QImage image) {
+        if (image.isNull()) {
+            qWarning() << "renderToImage: offscreen render produced no image" << filePath;
+            return;
+        }
+        if (!image.save(filePath)) {
+            qWarning() << "renderToImage: failed to write image to" << filePath
+                       << "(check the extension and write permissions)";
+        }
+    });
 }
 
 QString OffscreenRenderTester::tempPngPath(const QString& tag) const

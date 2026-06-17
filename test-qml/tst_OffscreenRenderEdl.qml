@@ -46,7 +46,7 @@ MainWindowTest {
             OffscreenRenderTester.removeFile(path);
 
             let outputSize = Qt.size(400, 300);
-            regionViewer.renderToImage(path, outputSize);
+            OffscreenRenderTester.renderToImage(regionViewer, path, outputSize);
 
             tryVerify(function() { return OffscreenRenderTester.fileExists(path); }, 10000,
                       "offscreen EDL PNG was written");

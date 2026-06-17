@@ -40,7 +40,7 @@ TEST_CASE("renderOffscreen returns a future the caller can cancel",
     // The caller only ever holds the future, so the only thing it can do to the
     // result channel is observe or cancel it. This asserts the consumer-side API:
     // cancelling marks the future. The render-thread side honours it in
-    // cwRhiScene::renderPendingOffscreen (skips the GPU work when isCanceled()),
+    // cwRhiOffscreenRenderer::drainPending (skips the GPU work when isCanceled()),
     // which needs a live QRhi and is not asserted here. Teardown of the un-drained
     // job must not crash.
     cwScene scene;

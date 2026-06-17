@@ -31,6 +31,14 @@ struct cwOffscreenRenderParameters {
     // to 1.0 for display-independent renders (e.g. a fixed-resolution export);
     // the "render what's on screen" path sets it from the live camera.
     float devicePixelRatio = 1.0f;
+    // MSAA sample count the scene is rasterized at, then resolved down to the 1x
+    // read-back image, so anti-aliased edges match the live view. Capability-gated at
+    // render time (falls back to 1 when the backend lacks MSAA support for the count).
+    // Defaults to 1 (no AA) for display-independent renders (a fixed-resolution export
+    // / the sink classifier); the "render what's on screen" path sets it from the live
+    // framebuffer's sample count (cwRenderingSettings::sampleCount) so the render is a
+    // faithful copy.
+    int sampleCount = 1;
 };
 
 #endif // CWOFFSCREENRENDERPARAMETERS_H

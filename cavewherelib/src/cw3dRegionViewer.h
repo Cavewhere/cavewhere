@@ -34,19 +34,8 @@ public:
     cwOrthogonalProjection* orthoProjection() const;
     cwPerspectiveProjection* perspectiveProjection() const;
 
-    // Render the resident scene through the offscreen path using the current
-    // camera and save the result to filePath as a PNG. When size is empty the
-    // camera's viewport size is used. The seed for the image-export and
-    // sink-render paths (and a debug/eyeball hook for the offscreen renderer).
-    Q_INVOKABLE void renderToImage(const QString& filePath, QSize size = QSize());
-
 signals:
     void resized();
-
-    // Emitted once the offscreen render requested by renderToImage has been
-    // written to filePath. Lets callers act on the finished file (the debug menu
-    // opens it; the export/sink paths can chain off it).
-    void imageRendered(const QString& filePath);
 
 private slots:
     virtual void resizeGL();

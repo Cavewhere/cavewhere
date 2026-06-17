@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 
-import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Dialogs
 import cavewherelib
@@ -8,7 +7,6 @@ import cavewherelib
 QC.Menu {
     id: fileMenuId
 
-    property QQ.Loader mainContentLoader
     required property FileDialog loadFileDialog
     required property SaveAsDialog saveAsFileDialog
     required property QC.ApplicationWindow applicationWindow
@@ -145,50 +143,6 @@ QC.Menu {
             text: "Compute Scraps"
             onTriggered: RootData.scrapManager.updateAllScraps()
         }
-
-        QC.MenuItem {
-            text: "Render Offscreen to PNG"
-            onTriggered: {
-                // MainContent.renderer is the GLTerrainRenderer; its .renderer
-                // alias is the RegionViewer (cw3dRegionViewer) that owns the
-                // offscreen render path.
-                let regionViewer = fileMenuId.mainContentLoader?.item?.renderer?.renderer ?? null
-                if (!regionViewer) {
-                    console.warn("Render Offscreen: no 3D renderer available (open the View page first)")
-                    return
-                }
-
-                // The render is async; open the PNG once it's actually written.
-                // One-shot: disconnect after the first emission so repeated
-                // triggers don't stack handlers.
-                let openWhenReady = function(path) {
-                    regionViewer.imageRendered.disconnect(openWhenReady)
-                    Qt.openUrlExternally("file://" + path)
-                }
-                regionViewer.imageRendered.connect(openWhenReady)
-                regionViewer.renderToImage("/tmp/cavewhere_offscreen.png")
-            }
-        }
-
-        // QC.MenuItem {
-        //     text: "Reload"
-        //     shortcut: "Ctrl+R"
-        //     onTriggered: {
-        //         //Keep the current address for the current page
-        //         var currentAddress = RootData.pageSelectionModel.currentPageAddress;
-        //         RootData.pageSelectionModel.clear();
-
-        //         var currentSource = mainContentLoader.source;
-        //         mainContentLoader.source = ""
-        //         mainContentLoader.asynchronous = false;
-        //         qmlReloader.reload();
-        //         mainContentLoader.source = currentSource;
-
-        //         console.log("Loader status:" + mainContentLoader.status + "Loader:" + QQ.Loader.Ready + " " + currentAddress)
-
-        //         RootData.pageSelectionModel.currentPageAddress = currentAddress;
-        //     }
-        // }
 
         QC.MenuItem {
             text: "Scraps Visible"
