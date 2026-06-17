@@ -289,18 +289,18 @@ QList<cwSketchPathSource::Path> cwFixedGridModel::paths() const
     }
 
     result.append(Path{
-        m_gridPath,
-        m_lineColor,
-        m_lineWidth,
-        m_gridZ,
+        .painterPath = m_gridPath,
+        .strokeColor = m_lineColor,
+        .strokeWidth = m_lineWidth,
+        .z = m_gridZ,
     });
 
     if (m_labelVisible.value()) {
         result.append(Path{
-            m_labelBackgroundPath,
-            m_labelBackgroundColor,
-            -1.0, // No line width — fill pass.
-            m_labelBackgroundZ
+            .painterPath = m_labelBackgroundPath,
+            .strokeColor = m_labelBackgroundColor,
+            .strokeWidth = -1.0, // No line width — fill pass.
+            .z = m_labelBackgroundZ
         });
     }
 

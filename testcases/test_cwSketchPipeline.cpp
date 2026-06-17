@@ -211,6 +211,8 @@ public:
     };
     QList<TextCall> textCalls;
     QList<double> penWidths;
+    QList<Qt::PenCapStyle> penCaps;
+    QList<Qt::PenJoinStyle> penJoins;
 
     void save() override {}
     void restore() override {}
@@ -218,8 +220,11 @@ public:
     void translate(double, double) override {}
     void scale(double, double) override {}
     void setClipRect(const QRectF &) override {}
-    void setStrokePen(const QColor &, double width, Qt::PenCapStyle, Qt::PenJoinStyle) override {
+    void setStrokePen(const QColor &, double width, Qt::PenCapStyle cap,
+                      Qt::PenJoinStyle join) override {
         penWidths.append(width);
+        penCaps.append(cap);
+        penJoins.append(join);
     }
     void setFillBrush(const QColor &) override {}
     void strokePath(const QPainterPath &) override {}
@@ -283,7 +288,7 @@ public:
         QPainterPath p;
         p.moveTo(0.0, 0.0);
         p.lineTo(1.0, 0.0);
-        m_path = Path(p, color, width, 0.0);
+        m_path = Path{.painterPath = p, .strokeColor = color, .strokeWidth = width};
     }
 
     QList<Path> paths() const override { return { m_path }; }
@@ -291,6 +296,32 @@ public:
 private:
     Path m_path;
 };
+
+// Path source that publishes a caller-supplied list verbatim.
+class MultiPathModel final : public cwSketchPathSource
+{
+public:
+    explicit MultiPathModel(QList<Path> paths) : m_paths(std::move(paths)) {}
+    QList<Path> paths() const override { return m_paths; }
+
+private:
+    QList<Path> m_paths;
+};
+
+// A unit-length horizontal path so each Path::strokeWidth doubles as an
+// identity tag in RecordingDraw::penWidths (under penScale = 1).
+cwSketchPathSource::Path tagPath(double widthTag, double z,
+                                 bool widthInWorldMetres = false,
+                                 Qt::PenCapStyle cap = Qt::RoundCap,
+                                 Qt::PenJoinStyle join = Qt::RoundJoin)
+{
+    QPainterPath p;
+    p.moveTo(0.0, 0.0);
+    p.lineTo(1.0, 0.0);
+    return cwSketchPathSource::Path{
+        .painterPath = p, .strokeColor = Qt::black, .strokeWidth = widthTag,
+        .widthInWorldMetres = widthInWorldMetres, .cap = cap, .join = join, .z = z};
+}
 
 } // namespace
 
@@ -332,6 +363,58 @@ TEST_CASE("cwSketchPainter::strokePenScale<=0 falls back to default penScale", "
 
     REQUIRE(draw.penWidths.size() == 1);
     CHECK(draw.penWidths.first() == Catch::Approx(strokeWidth * (1.0 / ctx.mapScale)));
+}
+
+TEST_CASE("cwSketchPainter stable-sorts strokes by z and applies per-item cap/join",
+          "[cwSketchPainter]") {
+    // Emission order (by width tag): 2.0@z=2, 3.0@z=0, 4.0@z=1, 5.0@z=0.
+    // Stable z-sort => 3.0, 5.0 (equal z keep emission order), 4.0, 2.0.
+    MultiPathModel strokes({
+        tagPath(2.0, 2.0),
+        tagPath(3.0, 0.0, false, Qt::FlatCap, Qt::MiterJoin),
+        tagPath(4.0, 1.0),
+        tagPath(5.0, 0.0, false, Qt::SquareCap, Qt::BevelJoin),
+    });
+
+    cwSketchPainter::PaintContext ctx;
+    ctx.worldToItem = QTransform::fromScale(1.0, -1.0);
+    ctx.mapScale    = 1.0; // penScale = 1, so width tags pass through unscaled
+    ctx.strokes     = &strokes;
+
+    RecordingDraw draw;
+    cwSketchPainter::paint(&draw, ctx);
+
+    REQUIRE(draw.penWidths.size() == 4);
+    CHECK(draw.penWidths.at(0) == Catch::Approx(3.0));
+    CHECK(draw.penWidths.at(1) == Catch::Approx(5.0));
+    CHECK(draw.penWidths.at(2) == Catch::Approx(4.0));
+    CHECK(draw.penWidths.at(3) == Catch::Approx(2.0));
+
+    // Per-item cap/join travel with each path through the sort.
+    CHECK(draw.penCaps.at(0)  == Qt::FlatCap);   // the 3.0 path
+    CHECK(draw.penJoins.at(0) == Qt::MiterJoin);
+    CHECK(draw.penCaps.at(1)  == Qt::SquareCap);  // the 5.0 path
+    CHECK(draw.penJoins.at(1) == Qt::BevelJoin);
+}
+
+TEST_CASE("cwSketchPainter draws world-metre widths unscaled", "[cwSketchPainter]") {
+    // z keeps a deterministic draw order: pixel-width first, world-width second.
+    MultiPathModel strokes({
+        tagPath(4.0, 0.0, /*widthInWorldMetres=*/false),
+        tagPath(4.0, 1.0, /*widthInWorldMetres=*/true),
+    });
+
+    cwSketchPainter::PaintContext ctx;
+    ctx.worldToItem = QTransform::fromScale(1.0, -1.0);
+    ctx.mapScale    = 10.0; // strokePenScale falls back to penScale = 0.1
+    ctx.strokes     = &strokes;
+
+    RecordingDraw draw;
+    cwSketchPainter::paint(&draw, ctx);
+
+    REQUIRE(draw.penWidths.size() == 2);
+    CHECK(draw.penWidths.at(0) == Catch::Approx(4.0 * 0.1)); // pixel width: scaled
+    CHECK(draw.penWidths.at(1) == Catch::Approx(4.0));       // world width: as-is
 }
 
 // ---------------- cwSketchManager per-trip line plot pipeline ----------------

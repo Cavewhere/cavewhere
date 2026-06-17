@@ -14,25 +14,39 @@
 #include <QFontMetricsF>
 #include <QPainterPath>
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
 
 void drawPaths(cwSketchDraw *draw,
                const cwSketchPathSource *source,
-               double penScale)
+               double penScale,
+               bool sortByZ = false)
 {
     if (source == nullptr) {
         return;
     }
-    const QList<cwSketchPathSource::Path> paths = source->paths();
+    QList<cwSketchPathSource::Path> paths = source->paths();
+    if (sortByZ) {
+        // Stable so equal-z items keep emission order (= per-layer paint order).
+        std::stable_sort(paths.begin(), paths.end(),
+                         [](const cwSketchPathSource::Path &a,
+                            const cwSketchPathSource::Path &b) {
+            return a.z < b.z;
+        });
+    }
     for (const auto &path : paths) {
         if (path.painterPath.isEmpty()) {
             continue;
         }
         if (path.strokeWidth > 0.0) {
-            draw->setStrokePen(path.strokeColor, path.strokeWidth * penScale,
-                               Qt::RoundCap, Qt::RoundJoin);
+            // World-metre widths are scaled by worldToItem itself; screen-pixel
+            // widths cancel the mapScale component via penScale.
+            const double width = path.widthInWorldMetres
+                                     ? path.strokeWidth
+                                     : path.strokeWidth * penScale;
+            draw->setStrokePen(path.strokeColor, width, path.cap, path.join);
             draw->strokePath(path.painterPath);
         } else {
             draw->setFillBrush(path.strokeColor);
@@ -138,7 +152,7 @@ void cwSketchPainter::paint(cwSketchDraw *draw, const PaintContext &context)
     const double strokePenScale = context.strokePenScale > 0.0
                                       ? context.strokePenScale
                                       : penScale;
-    drawPaths(draw, context.strokes, strokePenScale);
+    drawPaths(draw, context.strokes, strokePenScale, /*sortByZ=*/true);
 
     draw->restore();
 }

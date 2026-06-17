@@ -12,6 +12,7 @@
 #include <QColor>
 #include <QList>
 #include <QPainterPath>
+#include <Qt>
 
 //Our includes
 #include "CaveWhereLibExport.h"
@@ -30,7 +31,20 @@ public:
         // strokeWidth <= 0 flags a fill pass (fillPath with strokeColor)
         // instead of a stroked outline.
         double strokeWidth = 1.0;
-        double z = 0.0;
+
+        // false = strokeWidth is in screen pixels (grid/line-plot/legacy: the
+        // painter cancels mapScale via strokePenScale). true = world metres
+        // (brush widths, paper-mm already baked to world-m): drawn straight
+        // under worldToItem with no penScale.
+        bool widthInWorldMetres = false;
+
+        Qt::PenCapStyle  cap  = Qt::RoundCap;
+        Qt::PenJoinStyle join = Qt::RoundJoin;
+        // Dash deliberately omitted: the live RHI canvas (cwSketchDrawCanvas)
+        // cannot dash, so it would always render solid. Re-add a dash arg to
+        // setStrokePen when an export backend actually renders dashed strokes.
+
+        double z = 0.0; // paint order; strokes are stable-sorted by z
     };
 
     virtual ~cwSketchPathSource();
