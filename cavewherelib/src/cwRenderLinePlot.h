@@ -47,6 +47,12 @@ public:
     QVector<QVector3D> points() const;
     QVector<quint8> visibility() const;
 
+signals:
+    // Emitted whenever setGeometry() replaces the vertex data (and therefore the
+    // min/max Z extents). Lets owners reposition dependent objects, e.g. the grid
+    // plane snapping to the lowest cave depth.
+    void geometryChanged();
+
 protected:
     virtual cwRHIObject* createRHIObject() override;
 

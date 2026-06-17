@@ -69,6 +69,8 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
     m_visibility.setValue(QVector<quint8>(vertexCount, kVisible));
 
     update();
+
+    emit geometryChanged();
 }
 
 void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)

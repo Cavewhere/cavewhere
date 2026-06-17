@@ -78,6 +78,8 @@ signals:
 public slots:
 
 private:
+    void updateGridPlaneElevation();
+
     cwScene* Scene; //!<
 
     //The terrain that's rendered
