@@ -10,23 +10,23 @@
 #include "cwPenPoint.h"
 #include "cwPenStroke.h"
 #include "cwSketch.h"
-#include "cwSketchPainterPathModel.h"
+#include "cwDecoratedStrokePathSource.h"
 #include "cwSketchPathSource.h"
 
 namespace {
-int pathCount(const cwSketchPainterPathModel &model) {
+int pathCount(const cwDecoratedStrokePathSource &model) {
     return static_cast<int>(model.paths().size());
 }
 
-QPainterPath pathAt(const cwSketchPainterPathModel &model, int row) {
+QPainterPath pathAt(const cwDecoratedStrokePathSource &model, int row) {
     return model.paths().at(row).painterPath;
 }
 
-double widthAt(const cwSketchPainterPathModel &model, int row) {
+double widthAt(const cwDecoratedStrokePathSource &model, int row) {
     return model.paths().at(row).strokeWidth;
 }
 
-QColor colorAt(const cwSketchPainterPathModel &model, int row) {
+QColor colorAt(const cwDecoratedStrokePathSource &model, int row) {
     return model.paths().at(row).strokeColor;
 }
 
@@ -38,18 +38,18 @@ void flush() {
 }
 } // namespace
 
-TEST_CASE("cwSketchPainterPathModel defaults", "[cwSketchPainterPathModel]") {
-    cwSketchPainterPathModel model;
+TEST_CASE("cwDecoratedStrokePathSource defaults", "[cwDecoratedStrokePathSource]") {
+    cwDecoratedStrokePathSource model;
     CHECK(pathCount(model) == 1);
     CHECK(model.activeStrokeIndex() == -1);
     CHECK(model.sketch() == nullptr);
     CHECK(pathAt(model, 0).isEmpty());
 }
 
-TEST_CASE("cwSketchPainterPathModel active stroke renders centerline at the uniform width",
-          "[cwSketchPainterPathModel]") {
+TEST_CASE("cwDecoratedStrokePathSource active stroke renders centerline at the uniform width",
+          "[cwDecoratedStrokePathSource]") {
     cwSketch sketch;
-    cwSketchPainterPathModel model;
+    cwDecoratedStrokePathSource model;
     model.setNonWallStrokeColor(Qt::blue);
     model.setSketch(&sketch);
 
@@ -76,10 +76,10 @@ TEST_CASE("cwSketchPainterPathModel active stroke renders centerline at the unif
     CHECK(colorAt(model, 0) == QColor(Qt::blue));
 }
 
-TEST_CASE("cwSketchPainterPathModel colours strokes by brush class",
-          "[cwSketchPainterPathModel]") {
+TEST_CASE("cwDecoratedStrokePathSource colours strokes by brush class",
+          "[cwDecoratedStrokePathSource]") {
     cwSketch sketch;
-    cwSketchPainterPathModel model;
+    cwDecoratedStrokePathSource model;
     model.setWallStrokeColor(Qt::black);
     model.setNonWallStrokeColor(Qt::blue);
     model.setSketch(&sketch);
@@ -94,10 +94,10 @@ TEST_CASE("cwSketchPainterPathModel colours strokes by brush class",
     CHECK(colorAt(model, 0) == QColor(Qt::black));
 }
 
-TEST_CASE("cwSketchPainterPathModel finalizes stroke when active index moves on",
-          "[cwSketchPainterPathModel]") {
+TEST_CASE("cwDecoratedStrokePathSource finalizes stroke when active index moves on",
+          "[cwDecoratedStrokePathSource]") {
     cwSketch sketch;
-    cwSketchPainterPathModel model;
+    cwDecoratedStrokePathSource model;
     model.setSketch(&sketch);
 
     // Stroke A: active, then finalized.
@@ -119,10 +119,10 @@ TEST_CASE("cwSketchPainterPathModel finalizes stroke when active index moves on"
     CHECK_FALSE(pathAt(model, 1).isEmpty()); // finished batch containing A
 }
 
-TEST_CASE("cwSketchPainterPathModel batches finished strokes by colour",
-          "[cwSketchPainterPathModel]") {
+TEST_CASE("cwDecoratedStrokePathSource batches finished strokes by colour",
+          "[cwDecoratedStrokePathSource]") {
     cwSketch sketch;
-    cwSketchPainterPathModel model;
+    cwDecoratedStrokePathSource model;
     model.setWallStrokeColor(Qt::black);
     model.setNonWallStrokeColor(Qt::blue);
     model.setSketch(&sketch);
@@ -153,10 +153,10 @@ TEST_CASE("cwSketchPainterPathModel batches finished strokes by colour",
     CHECK((c1 == QColor(Qt::black) || c2 == QColor(Qt::black)));
 }
 
-TEST_CASE("cwSketchPainterPathModel setSketch(nullptr) clears state",
-          "[cwSketchPainterPathModel]") {
+TEST_CASE("cwDecoratedStrokePathSource setSketch(nullptr) clears state",
+          "[cwDecoratedStrokePathSource]") {
     cwSketch sketch;
-    cwSketchPainterPathModel model;
+    cwDecoratedStrokePathSource model;
     model.setSketch(&sketch);
 
     const int r = sketch.beginStroke(QStringLiteral("feature"));
@@ -171,10 +171,10 @@ TEST_CASE("cwSketchPainterPathModel setSketch(nullptr) clears state",
     CHECK(pathAt(model, 0).isEmpty());
 }
 
-TEST_CASE("cwSketchPainterPathModel modelReset rebuilds from source",
-          "[cwSketchPainterPathModel]") {
+TEST_CASE("cwDecoratedStrokePathSource modelReset rebuilds from source",
+          "[cwDecoratedStrokePathSource]") {
     cwSketch sketch;
-    cwSketchPainterPathModel model;
+    cwDecoratedStrokePathSource model;
     model.setSketch(&sketch);
 
     const int r = sketch.beginStroke(QStringLiteral("feature"));
@@ -190,16 +190,16 @@ TEST_CASE("cwSketchPainterPathModel modelReset rebuilds from source",
     CHECK(pathAt(model, 0).isEmpty());
 }
 
-TEST_CASE("cwSketchPainterPathModel pathsChanged coalescing updates active path",
-          "[cwSketchPainterPathModel]") {
+TEST_CASE("cwDecoratedStrokePathSource pathsChanged coalescing updates active path",
+          "[cwDecoratedStrokePathSource]") {
     cwSketch sketch;
-    cwSketchPainterPathModel model;
+    cwDecoratedStrokePathSource model;
     model.setSketch(&sketch);
 
     model.setActiveStrokeIndex(sketch.strokeCount());
     const int r = sketch.beginStroke(QStringLiteral("feature"));
 
-    QSignalSpy pathsSpy(&model, &cwSketchPainterPathModel::pathsChanged);
+    QSignalSpy pathsSpy(&model, &cwDecoratedStrokePathSource::pathsChanged);
 
     // Five rapid appends — cwSketch coalesces to one dataChanged on the source.
     for (int i = 0; i < 5; ++i) {

@@ -11,7 +11,7 @@
 #include "cwSketchCanvasRenderer.h"
 #include "cwSketchManager.h"
 #include "cwScrapManager.h"
-#include "cwSketchPainterPathModel.h"
+#include "cwDecoratedStrokePathSource.h"
 #include "cwInfiniteGridModel.h"
 #include "cwFixedGridModel.h"
 #include "cwGridTextModel.h"
@@ -33,7 +33,7 @@ Q_LOGGING_CATEGORY(lcSketchCanvas, "cw.sketch.canvas")
 
 cwSketchCanvas::cwSketchCanvas(QQuickItem *parent)
     : QCanvasPainterItem(parent),
-      m_pathModel(new cwSketchPainterPathModel(this)),
+      m_pathModel(new cwDecoratedStrokePathSource(this)),
       m_linePlotModel(new cwCenterlineSketchPainterModel(this)),
       m_linePlotGeometry(new cwSurvey2DGeometryArtifact(this))
 {
@@ -183,7 +183,7 @@ void cwSketchCanvas::geometryChange(const QRectF &newGeometry, const QRectF &old
 
 void cwSketchCanvas::connectPathModelSignals()
 {
-    connect(m_pathModel, &cwSketchPainterPathModel::pathsChanged,
+    connect(m_pathModel, &cwDecoratedStrokePathSource::pathsChanged,
             this, [this]() { update(); });
 }
 

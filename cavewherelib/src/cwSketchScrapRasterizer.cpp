@@ -11,7 +11,7 @@
 #include "cwSketch.h"
 #include "cwSketchDrawQPainter.h"
 #include "cwSketchPainter.h"
-#include "cwSketchPainterPathModel.h"
+#include "cwDecoratedStrokePathSource.h"
 
 //Qt includes
 #include <QPainter>
@@ -66,7 +66,7 @@ QImage cwSketchScrapRasterizer::rasterize(const cwSketch *sketch,
                            tripLocalBoundingBox.bottom() * ppm);
     worldToItem.scale(ppm, -ppm);
 
-    cwSketchPainterPathModel pathModel;
+    cwDecoratedStrokePathSource pathModel;
     pathModel.setSketch(sketch);
 
     cwSketchDrawQPainter draw(&painter);

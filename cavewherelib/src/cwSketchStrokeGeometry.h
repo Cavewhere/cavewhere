@@ -24,7 +24,7 @@ struct Params {
 };
 
 // Pure builder: thread-safe, no Qt thread-affinity dependencies. Matches the
-// original cwSketchPainterPathModel geometry exactly — constant-width strokes
+// original cwDecoratedStrokePathSource geometry exactly — constant-width strokes
 // become line paths (driven by a pen), variable-width strokes are tessellated
 // into a closed filled polygon (top edge → end cap → bottom edge).
 CAVEWHERE_LIB_EXPORT

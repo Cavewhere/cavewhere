@@ -6,7 +6,7 @@
 **************************************************************************/
 
 //Our includes
-#include "cwSketchPainterPathModel.h"
+#include "cwDecoratedStrokePathSource.h"
 #include "cwSketch.h"
 #include "cwSketchStrokeGeometry.h"
 #include "cwPenStroke.h"
@@ -17,15 +17,15 @@
 #include <QPolygonF>
 #include <cmath>
 
-cwSketchPainterPathModel::cwSketchPainterPathModel(QObject *parent)
+cwDecoratedStrokePathSource::cwDecoratedStrokePathSource(QObject *parent)
     : QObject(parent),
       m_snapshot(cwSymbologyPaletteSeed::create().snapshot())
 {
-    connect(this, &cwSketchPainterPathModel::activeStrokeIndexChanged,
-            this, &cwSketchPainterPathModel::onActiveStrokeIndexChanged);
+    connect(this, &cwDecoratedStrokePathSource::activeStrokeIndexChanged,
+            this, &cwDecoratedStrokePathSource::onActiveStrokeIndexChanged);
 }
 
-void cwSketchPainterPathModel::setWallStrokeColor(const QColor &color)
+void cwDecoratedStrokePathSource::setWallStrokeColor(const QColor &color)
 {
     if (m_wallStrokeColor == color) {
         return;
@@ -35,7 +35,7 @@ void cwSketchPainterPathModel::setWallStrokeColor(const QColor &color)
     scheduleColorRebuild();
 }
 
-void cwSketchPainterPathModel::setNonWallStrokeColor(const QColor &color)
+void cwDecoratedStrokePathSource::setNonWallStrokeColor(const QColor &color)
 {
     if (m_nonWallStrokeColor == color) {
         return;
@@ -49,7 +49,7 @@ void cwSketchPainterPathModel::setNonWallStrokeColor(const QColor &color)
 // (a theme toggle fires both bindings) into a single rebuild pass.
 // addOrUpdateFinishPath batches by (width, rgba), so a color change
 // shifts batch membership — finished paths must be torn down and rebuilt.
-void cwSketchPainterPathModel::scheduleColorRebuild()
+void cwDecoratedStrokePathSource::scheduleColorRebuild()
 {
     if (m_colorRebuildPending) {
         return;
@@ -62,12 +62,12 @@ void cwSketchPainterPathModel::scheduleColorRebuild()
     }, Qt::QueuedConnection);
 }
 
-const cwSketch *cwSketchPainterPathModel::sketch() const
+const cwSketch *cwDecoratedStrokePathSource::sketch() const
 {
     return m_sketch;
 }
 
-void cwSketchPainterPathModel::setSketch(const cwSketch *sketch)
+void cwDecoratedStrokePathSource::setSketch(const cwSketch *sketch)
 {
     if (m_sketch == sketch) {
         return;
@@ -84,13 +84,13 @@ void cwSketchPainterPathModel::setSketch(const cwSketch *sketch)
 
     if (m_sketch) {
         connect(m_sketch, &cwSketch::strokeInserted, this,
-                &cwSketchPainterPathModel::onStrokeInserted);
+                &cwDecoratedStrokePathSource::onStrokeInserted);
         connect(m_sketch, &cwSketch::strokeRemoved, this,
-                &cwSketchPainterPathModel::onStrokeRemoved);
+                &cwDecoratedStrokePathSource::onStrokeRemoved);
         connect(m_sketch, &cwSketch::strokeChanged, this,
-                &cwSketchPainterPathModel::onStrokeChanged);
+                &cwDecoratedStrokePathSource::onStrokeChanged);
         connect(m_sketch, &cwSketch::strokesReset, this,
-                &cwSketchPainterPathModel::onStrokesReset);
+                &cwDecoratedStrokePathSource::onStrokesReset);
 
         for (int row = 0; row < strokeCount(); ++row) {
             if (row == m_activeStrokeIndex) {
@@ -104,12 +104,12 @@ void cwSketchPainterPathModel::setSketch(const cwSketch *sketch)
     emit pathsChanged();
 }
 
-int cwSketchPainterPathModel::strokeCount() const
+int cwDecoratedStrokePathSource::strokeCount() const
 {
     return m_sketch ? static_cast<int>(m_sketch->strokes().size()) : 0;
 }
 
-QVector<cwPenPoint> cwSketchPainterPathModel::strokePoints(int row) const
+QVector<cwPenPoint> cwDecoratedStrokePathSource::strokePoints(int row) const
 {
     if (!m_sketch || row < 0 || row >= m_sketch->strokes().size()) {
         return {};
@@ -117,13 +117,13 @@ QVector<cwPenPoint> cwSketchPainterPathModel::strokePoints(int row) const
     return m_sketch->strokes().at(row).points;
 }
 
-double cwSketchPainterPathModel::strokeWidth(int row) const
+double cwDecoratedStrokePathSource::strokeWidth(int row) const
 {
     Q_UNUSED(row);
     return kSketchStrokeRenderWidth;
 }
 
-QColor cwSketchPainterPathModel::strokeColor(int row) const
+QColor cwDecoratedStrokePathSource::strokeColor(int row) const
 {
     if (!m_sketch || row < 0 || row >= m_sketch->strokes().size()) {
         return m_wallStrokeColor;
@@ -133,7 +133,7 @@ QColor cwSketchPainterPathModel::strokeColor(int row) const
     return wallClass ? m_wallStrokeColor : m_nonWallStrokeColor;
 }
 
-QList<cwSketchPathSource::Path> cwSketchPainterPathModel::paths() const
+QList<cwSketchPathSource::Path> cwDecoratedStrokePathSource::paths() const
 {
     QList<Path> result;
     result.reserve(m_finishedPaths.size() + 1);
@@ -142,7 +142,7 @@ QList<cwSketchPathSource::Path> cwSketchPainterPathModel::paths() const
     return result;
 }
 
-void cwSketchPainterPathModel::onStrokeInserted(int row)
+void cwDecoratedStrokePathSource::onStrokeInserted(int row)
 {
     if (row == m_activeStrokeIndex) {
         updateActivePath();
@@ -151,7 +151,7 @@ void cwSketchPainterPathModel::onStrokeInserted(int row)
     }
 }
 
-void cwSketchPainterPathModel::onStrokeRemoved(int row)
+void cwDecoratedStrokePathSource::onStrokeRemoved(int row)
 {
     Q_UNUSED(row);
     // Batches don't track which source strokes contributed to them, so rebuild
@@ -160,7 +160,7 @@ void cwSketchPainterPathModel::onStrokeRemoved(int row)
     rebuildAllFinished();
 }
 
-void cwSketchPainterPathModel::onStrokeChanged(int row)
+void cwDecoratedStrokePathSource::onStrokeChanged(int row)
 {
     // Only the active stroke mutates via strokeChanged (live pen input);
     // finished strokes are immutable. Updating a finished batch in-place would
@@ -170,13 +170,13 @@ void cwSketchPainterPathModel::onStrokeChanged(int row)
     }
 }
 
-void cwSketchPainterPathModel::onStrokesReset()
+void cwDecoratedStrokePathSource::onStrokesReset()
 {
     rebuildAllFinished();
     updateActivePath();
 }
 
-void cwSketchPainterPathModel::onActiveStrokeIndexChanged()
+void cwDecoratedStrokePathSource::onActiveStrokeIndexChanged()
 {
     updateActivePath();
     if (m_previousActiveStroke >= 0
@@ -186,7 +186,7 @@ void cwSketchPainterPathModel::onActiveStrokeIndexChanged()
     m_previousActiveStroke = m_activeStrokeIndex;
 }
 
-void cwSketchPainterPathModel::updateActivePath()
+void cwDecoratedStrokePathSource::updateActivePath()
 {
     m_activePath.painterPath.clear();
 
@@ -207,7 +207,7 @@ void cwSketchPainterPathModel::updateActivePath()
     emit pathsChanged();
 }
 
-void cwSketchPainterPathModel::rebuildAllFinished()
+void cwDecoratedStrokePathSource::rebuildAllFinished()
 {
     m_finishedPaths.clear();
     if (m_sketch) {
@@ -221,7 +221,7 @@ void cwSketchPainterPathModel::rebuildAllFinished()
     emit pathsChanged();
 }
 
-void cwSketchPainterPathModel::addOrUpdateFinishPath(int sourceRow)
+void cwDecoratedStrokePathSource::addOrUpdateFinishPath(int sourceRow)
 {
     if (mergeFinishPath(sourceRow)) {
         emit pathsChanged();
@@ -231,7 +231,7 @@ void cwSketchPainterPathModel::addOrUpdateFinishPath(int sourceRow)
 // Folds the stroke into its (width, rgba) batch without emitting, so loop
 // callers (rebuildAllFinished, setSketch) can emit pathsChanged() once for the
 // whole pass. Returns true when the finished set changed.
-bool cwSketchPainterPathModel::mergeFinishPath(int sourceRow)
+bool cwDecoratedStrokePathSource::mergeFinishPath(int sourceRow)
 {
     if (!m_sketch || sourceRow < 0 || sourceRow >= strokeCount()) {
         return false;
@@ -259,7 +259,7 @@ bool cwSketchPainterPathModel::mergeFinishPath(int sourceRow)
     return true;
 }
 
-void cwSketchPainterPathModel::buildStrokeGeometry(QPainterPath &out, int sourceRow) const
+void cwDecoratedStrokePathSource::buildStrokeGeometry(QPainterPath &out, int sourceRow) const
 {
     const QVector<cwPenPoint> points = strokePoints(sourceRow);
     if (points.size() < 2) {

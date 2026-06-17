@@ -18,7 +18,7 @@
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwSketchManager.h"
-#include "cwSketchPainterPathModel.h"
+#include "cwDecoratedStrokePathSource.h"
 #include "cwTripLinePlotTask.h"
 
 class cwSketch;
@@ -39,7 +39,7 @@ class CAVEWHERE_LIB_EXPORT cwSketchCanvas : public QCanvasPainterItem
     Q_PROPERTY(double zoom READ zoom WRITE setZoom NOTIFY zoomChanged)
     Q_PROPERTY(QPointF pan READ pan WRITE setPan NOTIFY panChanged)
     Q_PROPERTY(int activeStrokeIndex READ activeStrokeIndex WRITE setActiveStrokeIndex NOTIFY activeStrokeIndexChanged)
-    Q_PROPERTY(cwSketchPainterPathModel* pathModel READ pathModel CONSTANT)
+    Q_PROPERTY(cwDecoratedStrokePathSource* pathModel READ pathModel CONSTANT)
     Q_PROPERTY(cwInfiniteGridModel* grid READ grid WRITE setGrid NOTIFY gridChanged)
     Q_PROPERTY(QMatrix4x4 mapMatrix READ mapMatrix WRITE setMapMatrix NOTIFY mapMatrixChanged)
     Q_PROPERTY(cwSketchManager* sketchManager READ sketchManager WRITE setSketchManager NOTIFY sketchManagerChanged)
@@ -63,7 +63,7 @@ public:
     int activeStrokeIndex() const;
     void setActiveStrokeIndex(int index);
 
-    cwSketchPainterPathModel *pathModel() const { return m_pathModel; }
+    cwDecoratedStrokePathSource *pathModel() const { return m_pathModel; }
 
     cwInfiniteGridModel *grid() const { return m_grid; }
     void setGrid(cwInfiniteGridModel *grid);
@@ -105,7 +105,7 @@ signals:
 
 private:
     cwSketch *m_sketch = nullptr;
-    cwSketchPainterPathModel *m_pathModel = nullptr;
+    cwDecoratedStrokePathSource *m_pathModel = nullptr;
     cwInfiniteGridModel *m_grid = nullptr;
     double m_zoom = 1.0;
     QPointF m_pan;

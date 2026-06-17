@@ -12,7 +12,7 @@
 #include "cwPenStroke.h"
 #include "cwSketch.h"
 #include "cwSketchExporter.h"
-#include "cwSketchPainterPathModel.h"
+#include "cwDecoratedStrokePathSource.h"
 
 namespace {
 void seedSketch(cwSketch &sketch) {
@@ -32,7 +32,7 @@ TEST_CASE("cwSketchExporter exports a non-empty PDF with the %PDF- magic",
     cwSketch sketch;
     seedSketch(sketch);
 
-    cwSketchPainterPathModel pathModel;
+    cwDecoratedStrokePathSource pathModel;
     pathModel.setSketch(&sketch);
 
     cwSketchExporter exporter;
@@ -54,7 +54,7 @@ TEST_CASE("cwSketchExporter exports a non-empty SVG",
     cwSketch sketch;
     seedSketch(sketch);
 
-    cwSketchPainterPathModel pathModel;
+    cwDecoratedStrokePathSource pathModel;
     pathModel.setSketch(&sketch);
 
     cwSketchExporter exporter;
@@ -77,7 +77,7 @@ TEST_CASE("cwSketchExporter handles an empty sketch without crashing",
           "[cwSketchExporter]") {
     cwSketch sketch;
 
-    cwSketchPainterPathModel pathModel;
+    cwDecoratedStrokePathSource pathModel;
     pathModel.setSketch(&sketch);
 
     cwSketchExporter exporter;
@@ -97,7 +97,7 @@ TEST_CASE("cwSketchExporter Y-flips world-up strokes into paper coordinates",
     sketch.appendPoint(stroke, cwPenPoint(QPointF(1.0, 10.0), 0.5));
     sketch.endStroke();
 
-    cwSketchPainterPathModel pathModel;
+    cwDecoratedStrokePathSource pathModel;
     pathModel.setSketch(&sketch);
 
     cwSketchExporter exporter;

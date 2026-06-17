@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-#ifndef CWSKETCHPAINTERPATHMODEL_H
-#define CWSKETCHPAINTERPATHMODEL_H
+#ifndef CWDECORATEDSTROKEPATHSOURCE_H
+#define CWDECORATEDSTROKEPATHSOURCE_H
 
 //Qt includes
 #include <QColor>
@@ -26,17 +26,17 @@
 
 class cwSketch;
 
-class CAVEWHERE_LIB_EXPORT cwSketchPainterPathModel : public QObject, public cwSketchPathSource
+class CAVEWHERE_LIB_EXPORT cwDecoratedStrokePathSource : public QObject, public cwSketchPathSource
 {
     Q_OBJECT
-    QML_NAMED_ELEMENT(SketchPainterPathModel)
+    QML_NAMED_ELEMENT(DecoratedStrokePathSource)
 
     Q_PROPERTY(int activeStrokeIndex READ activeStrokeIndex WRITE setActiveStrokeIndex NOTIFY activeStrokeIndexChanged BINDABLE bindableActiveStrokeIndex)
     Q_PROPERTY(QColor wallStrokeColor READ wallStrokeColor WRITE setWallStrokeColor NOTIFY wallStrokeColorChanged)
     Q_PROPERTY(QColor nonWallStrokeColor READ nonWallStrokeColor WRITE setNonWallStrokeColor NOTIFY nonWallStrokeColorChanged)
 
 public:
-    explicit cwSketchPainterPathModel(QObject *parent = nullptr);
+    explicit cwDecoratedStrokePathSource(QObject *parent = nullptr);
 
     // Read-only stroke source. const because the painter only reads strokes()
     // and connects to change signals (which accept a const sender).
@@ -71,8 +71,8 @@ signals:
 
 private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(
-        cwSketchPainterPathModel, int, m_activeStrokeIndex, -1,
-        &cwSketchPainterPathModel::activeStrokeIndexChanged);
+        cwDecoratedStrokePathSource, int, m_activeStrokeIndex, -1,
+        &cwDecoratedStrokePathSource::activeStrokeIndexChanged);
 
     QPointer<const cwSketch> m_sketch;
     Path m_activePath;
@@ -114,4 +114,4 @@ private:
     void buildStrokeGeometry(QPainterPath &out, int sourceRow) const;
 };
 
-#endif // CWSKETCHPAINTERPATHMODEL_H
+#endif // CWDECORATEDSTROKEPATHSOURCE_H
