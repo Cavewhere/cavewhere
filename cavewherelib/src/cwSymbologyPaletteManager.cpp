@@ -19,6 +19,48 @@
 #include <QDir>
 #include <QHash>
 #include <QStandardPaths>
+#include <QUuid>
+
+namespace {
+
+// Turn a human palette name into a path-safe kebab-case directory stem. The
+// directory name is cosmetic — a palette's identity is its UUID — so an empty
+// or all-punctuation name still yields a usable folder.
+QString slugify(const QString &name)
+{
+    QString slug;
+    slug.reserve(name.size());
+    bool lastWasDash = false;
+    for (const QChar c : name) {
+        if (c.isLetterOrNumber()) {
+            slug.append(c.toLower());
+            lastWasDash = false;
+        } else if (!slug.isEmpty() && !lastWasDash) {
+            slug.append(QLatin1Char('-'));
+            lastWasDash = true;
+        }
+    }
+    while (slug.endsWith(QLatin1Char('-'))) {
+        slug.chop(1);
+    }
+    if (slug.isEmpty()) {
+        slug = QStringLiteral("palette");
+    }
+    return slug;
+}
+
+// First "<slug>", "<slug>-2", "<slug>-3"… not already a subdirectory of root.
+QString uniqueSubdirName(const QDir &root, const QString &slug)
+{
+    QString candidate = slug;
+    int suffix = 2;
+    while (root.exists(candidate)) {
+        candidate = QStringLiteral("%1-%2").arg(slug).arg(suffix++);
+    }
+    return candidate;
+}
+
+}
 
 cwSymbologyPaletteManager *cwSymbologyPaletteManager::Singleton = nullptr;
 
@@ -87,6 +129,7 @@ void cwSymbologyPaletteManager::reload()
         m_default = new cwSymbologyPalette(this);
         m_default->setData(loadResult.palette);
         m_default->setWritable(false);
+        m_default->setDirectory(defaultPath);
         m_palettes.append(m_default);
         directoryById.insert(m_default->id(), defaultPath);
 
@@ -133,6 +176,7 @@ void cwSymbologyPaletteManager::reload()
             auto *palette = new cwSymbologyPalette(this);
             palette->setData(data);
             palette->setWritable(versionSupported);
+            palette->setDirectory(entry.absoluteFilePath());
             directoryById.insert(data.id, entry.absoluteFilePath());
             m_palettes.append(palette);
 
@@ -168,4 +212,104 @@ cwSymbologyPalette *cwSymbologyPaletteManager::paletteById(const QUuid &id) cons
         }
     }
     return nullptr;
+}
+
+cwSymbologyPalette *cwSymbologyPaletteManager::duplicatePalette(cwSymbologyPalette *source,
+                                                               const QString &newName)
+{
+    if (source == nullptr) {
+        reportLoadProblem(QStringLiteral("cannot duplicate a null palette"));
+        return nullptr;
+    }
+
+    // Copy the value payload (cheap, implicitly-shared) and give the fork a fresh
+    // identity. Brush and glyph names are in-palette keys and stay as-is.
+    cwSymbologyPaletteData data = source->data();
+    const QUuid newId = QUuid::createUuid();
+    data.id = newId;
+    if (!newName.isEmpty()) {
+        data.name = newName;
+    }
+
+    QDir root(m_paletteDirectory);
+    if (!root.exists() && !root.mkpath(QStringLiteral("."))) {
+        reportLoadProblem(
+            QStringLiteral("failed to create palette directory \"%1\"").arg(m_paletteDirectory));
+        return nullptr;
+    }
+
+    const QString targetDir = root.filePath(uniqueSubdirName(root, slugify(data.name)));
+    const auto result = cwSymbologyPaletteIO::save(data, targetDir);
+    if (result.hasError()) {
+        reportLoadProblem(
+            QStringLiteral("failed to write palette \"%1\": %2").arg(targetDir, result.errorMessage()));
+        return nullptr;
+    }
+
+    reload();
+    return paletteById(newId);
+}
+
+bool cwSymbologyPaletteManager::saveGlyph(cwSymbologyPalette *palette, const cwSymbologyGlyph &glyph)
+{
+    if (palette == nullptr) {
+        reportLoadProblem(QStringLiteral("cannot save a glyph to a null palette"));
+        return false;
+    }
+    if (!palette->isWritable()) {
+        reportLoadProblem(QStringLiteral("palette \"%1\" is read-only; cannot save glyph \"%2\"")
+                              .arg(palette->name(), glyph.name));
+        return false;
+    }
+
+    const auto result = cwSymbologyPaletteIO::saveGlyph(glyph, palette->directory());
+    if (result.hasError()) {
+        reportLoadProblem(
+            QStringLiteral("failed to save glyph \"%1\": %2").arg(glyph.name, result.errorMessage()));
+        return false;
+    }
+
+    return refreshPalette(palette);
+}
+
+bool cwSymbologyPaletteManager::removeGlyph(cwSymbologyPalette *palette, const QString &glyphName)
+{
+    if (palette == nullptr) {
+        reportLoadProblem(QStringLiteral("cannot remove a glyph from a null palette"));
+        return false;
+    }
+    if (!palette->isWritable()) {
+        reportLoadProblem(QStringLiteral("palette \"%1\" is read-only; cannot remove glyph \"%2\"")
+                              .arg(palette->name(), glyphName));
+        return false;
+    }
+
+    const auto result = cwSymbologyPaletteIO::removeGlyph(palette->directory(), glyphName);
+    if (result.hasError()) {
+        reportLoadProblem(result.errorMessage());
+        return false;
+    }
+
+    return refreshPalette(palette);
+}
+
+bool cwSymbologyPaletteManager::refreshPalette(cwSymbologyPalette *palette)
+{
+    const auto result = cwSymbologyPaletteIO::load(palette->directory());
+    if (result.hasError()) {
+        reportLoadProblem(result.errorMessage());
+        return false;
+    }
+
+    const auto loadResult = result.value();
+    palette->setData(loadResult.palette);
+
+    // Parity with reload(): a write can introduce non-fatal rule-stack warnings,
+    // so surface them now rather than hiding them until the next full reload().
+    for (const cwError &warning : std::as_const(loadResult.warnings)) {
+        reportLoadProblem(warning);
+    }
+
+    emit palettesChanged();
+    return true;
 }

@@ -17,6 +17,9 @@
 #include "cwLineBrush.h"
 #include "cwDecorationLayer.h"
 #include "cwPlacementRuleData.h"
+#include "cwSymbologyGlyph.h"
+#include "cwPenStroke.h"
+#include "cwPenPoint.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwError.h"
@@ -25,6 +28,8 @@
 // Qt
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
+#include <QPointF>
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QUuid>
@@ -79,6 +84,27 @@ bool modelHasWarning(cwErrorModel *model, SymbologyErrorCode code)
         }
     }
     return false;
+}
+
+// A minimal two-point glyph whose stroke uses the seed's "wall" brush, so it
+// resolves (and stays acyclic) inside a fork of the seed palette.
+cwSymbologyGlyph makeGlyph(const QString &name)
+{
+    cwPenPoint start;
+    start.position = QPointF(0.0, 0.0);
+
+    cwPenPoint end;
+    end.position = QPointF(1.0, 0.0);
+
+    cwPenStroke stroke;
+    stroke.brushName = QStringLiteral("wall");
+    stroke.points = {start, end};
+
+    cwSymbologyGlyph glyph;
+    glyph.name = name;
+    glyph.displayName = name;
+    glyph.strokes = {stroke};
+    return glyph;
 }
 
 } // namespace
@@ -209,4 +235,157 @@ TEST_CASE("Manager refuses a palette with a fatal rule-stack problem",
     // The palette is not installed (default only), and the failure is reported.
     CHECK(manager.paletteById(id) == nullptr);
     CHECK_FALSE(manager.errorModel()->errors()->isEmpty());
+}
+
+TEST_CASE("Manager forks a read-only palette into a writable copy",
+          "[cwSymbologyPaletteManager]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+
+    cwSymbologyPaletteManager manager;
+    manager.setPaletteDirectory(temp.path());
+
+    cwSymbologyPalette *seed = manager.defaultPalette();
+    REQUIRE(seed != nullptr);
+    REQUIRE_FALSE(seed->isWritable());
+    const QUuid seedId = seed->id();
+    const int seedBrushCount = seed->lineBrushes().size();
+    const int seedGlyphCount = seed->glyphs().size();
+
+    cwSymbologyPalette *fork = manager.duplicatePalette(seed, QStringLiteral("My Palette"));
+    REQUIRE(fork != nullptr);
+
+    // Fresh identity, editable, renamed.
+    CHECK(fork->id() != seedId);
+    CHECK(fork->isWritable());
+    CHECK(fork->name() == QStringLiteral("My Palette"));
+
+    // Content carried across verbatim (names are the in-palette keys).
+    CHECK(fork->lineBrushes().size() == seedBrushCount);
+    CHECK(fork->glyphs().size() == seedGlyphCount);
+    CHECK(fork->brush(cwSymbologyPaletteSeed::wallBrushName()).has_value());
+
+    // A new subdirectory was written and rediscovered: default + fork.
+    CHECK(manager.palettes().size() == 2);
+    CHECK(QDir(temp.path()).exists(QStringLiteral("my-palette")));
+}
+
+TEST_CASE("Manager de-duplicates fork directory names",
+          "[cwSymbologyPaletteManager]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+
+    cwSymbologyPaletteManager manager;
+    manager.setPaletteDirectory(temp.path());
+
+    // defaultPalette() is re-fetched each time: duplicatePalette() reloads and
+    // invalidates the prior pointers.
+    cwSymbologyPalette *first =
+        manager.duplicatePalette(manager.defaultPalette(), QStringLiteral("Caves"));
+    cwSymbologyPalette *second =
+        manager.duplicatePalette(manager.defaultPalette(), QStringLiteral("Caves"));
+    REQUIRE(first != nullptr);
+    REQUIRE(second != nullptr);
+
+    CHECK(first->id() != second->id());
+    CHECK(QDir(temp.path()).exists(QStringLiteral("caves")));
+    CHECK(QDir(temp.path()).exists(QStringLiteral("caves-2")));
+    CHECK(manager.palettes().size() == 3); // default + two forks
+}
+
+TEST_CASE("Manager saves a glyph into a writable palette",
+          "[cwSymbologyPaletteManager]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+
+    cwSymbologyPaletteManager manager;
+    manager.setPaletteDirectory(temp.path());
+
+    cwSymbologyPalette *fork =
+        manager.duplicatePalette(manager.defaultPalette(), QStringLiteral("Editable"));
+    REQUIRE(fork != nullptr);
+    const QUuid forkId = fork->id();
+    const int glyphsBefore = fork->glyphs().size();
+
+    const cwSymbologyGlyph glyph = makeGlyph(QStringLiteral("my-tick"));
+    REQUIRE(manager.saveGlyph(fork, glyph));
+
+    // Refreshed in place — same pointer, now carrying the glyph.
+    CHECK(manager.paletteById(forkId) == fork);
+    CHECK(fork->glyphs().size() == glyphsBefore + 1);
+    const auto saved = fork->glyph(QStringLiteral("my-tick"));
+    REQUIRE(saved.has_value());
+    CHECK(saved.value() == glyph);
+
+    // The glyph file landed under the fork's glyphs/ subdir.
+    const QString glyphFile =
+        QDir(fork->directory()).absoluteFilePath(QStringLiteral("glyphs/my-tick.cwglyph"));
+    CHECK(QFile::exists(glyphFile));
+}
+
+TEST_CASE("Manager refuses to save a glyph into a read-only palette",
+          "[cwSymbologyPaletteManager]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+
+    cwSymbologyPaletteManager manager;
+    manager.setPaletteDirectory(temp.path());
+
+    cwSymbologyPalette *seed = manager.defaultPalette();
+    REQUIRE(seed != nullptr);
+    REQUIRE_FALSE(seed->isWritable());
+
+    const int errorsBefore = manager.errorModel()->errors()->size();
+    CHECK_FALSE(manager.saveGlyph(seed, makeGlyph(QStringLiteral("nope"))));
+
+    // Nothing added, problem reported.
+    CHECK_FALSE(seed->glyph(QStringLiteral("nope")).has_value());
+    CHECK(manager.errorModel()->errors()->size() > errorsBefore);
+}
+
+TEST_CASE("Manager removes a glyph from a writable palette",
+          "[cwSymbologyPaletteManager]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+
+    cwSymbologyPaletteManager manager;
+    manager.setPaletteDirectory(temp.path());
+
+    cwSymbologyPalette *fork =
+        manager.duplicatePalette(manager.defaultPalette(), QStringLiteral("Trimmed"));
+    REQUIRE(fork != nullptr);
+    REQUIRE(manager.saveGlyph(fork, makeGlyph(QStringLiteral("doomed"))));
+    REQUIRE(fork->glyph(QStringLiteral("doomed")).has_value());
+
+    REQUIRE(manager.removeGlyph(fork, QStringLiteral("doomed")));
+    CHECK_FALSE(fork->glyph(QStringLiteral("doomed")).has_value());
+
+    const QString glyphFile =
+        QDir(fork->directory()).absoluteFilePath(QStringLiteral("glyphs/doomed.cwglyph"));
+    CHECK_FALSE(QFile::exists(glyphFile));
+}
+
+TEST_CASE("Manager rejects a path-unsafe glyph name on remove",
+          "[cwSymbologyPaletteManager]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+
+    cwSymbologyPaletteManager manager;
+    manager.setPaletteDirectory(temp.path());
+
+    cwSymbologyPalette *fork =
+        manager.duplicatePalette(manager.defaultPalette(), QStringLiteral("Guarded"));
+    REQUIRE(fork != nullptr);
+
+    // A path-traversal name is rejected on the kebab-case guard before any
+    // filesystem touch, and the problem is reported.
+    const int errorsBefore = manager.errorModel()->errors()->size();
+    CHECK_FALSE(manager.removeGlyph(fork, QStringLiteral("../palette")));
+    CHECK(manager.errorModel()->errors()->size() > errorsBefore);
 }

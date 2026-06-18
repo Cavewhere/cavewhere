@@ -74,6 +74,12 @@ CAVEWHERE_LIB_EXPORT Monad::Result<cwLineBrush> loadBrush(const QString &directo
 CAVEWHERE_LIB_EXPORT Monad::ResultBase saveGlyph(const cwSymbologyGlyph &glyph, const QString &directory);
 CAVEWHERE_LIB_EXPORT Monad::Result<cwSymbologyGlyph> loadGlyph(const QString &directory, const QString &glyphName);
 
+// Delete glyphs/<glyphName>.cwglyph. Validates the name (kebab-case, the
+// path-safety guard) before touching the filesystem, so an out-of-tree name
+// can't escape the glyphs/ subdir. Removing an absent glyph succeeds (a rename
+// is saveGlyph(newGlyph) + removeGlyph(oldName)).
+CAVEWHERE_LIB_EXPORT Monad::ResultBase removeGlyph(const QString &directory, const QString &glyphName);
+
 // In-memory (de)serialization, used by the file layer above and directly by
 // tests. Proto types stay out of this header so consumers don't pull in the
 // generated schema. The palette form carries palette-level identity only (no

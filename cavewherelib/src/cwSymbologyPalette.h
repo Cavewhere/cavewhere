@@ -60,6 +60,13 @@ public:
     bool isWritable() const { return m_writable; }
     void setWritable(bool writable);
 
+    // Runtime-only locator (not persisted) — the on-disk directory this palette
+    // was loaded from, set by cwSymbologyPaletteManager during reload(). The
+    // seed's is a qrc path (":/palettes/cavewhere-default"); writable palettes
+    // get a filesystem path the editor writes glyph/brush files into.
+    QString directory() const { return m_directory; }
+    void setDirectory(const QString &directory) { m_directory = directory; }
+
     QVector<cwLineBrush> lineBrushes() const { return m_data.lineBrushes; }
     QVector<cwSymbologyGlyph> glyphs() const { return m_data.glyphs; }
 
@@ -76,6 +83,7 @@ signals:
 private:
     cwSymbologyPaletteData m_data;
     bool m_writable = false;
+    QString m_directory;
 };
 
 #endif // CWSYMBOLOGYPALETTE_H

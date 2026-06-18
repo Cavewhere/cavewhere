@@ -421,6 +421,21 @@ Monad::Result<QByteArray> readNamedFile(const QString &directory, const QString 
     return Monad::Result<QByteArray>(file.readAll());
 }
 
+Monad::ResultBase removeNamedFile(const QString &directory, const QString &subdirName,
+                                  const QString &suffix, const QString &name,
+                                  const QString &entityKind)
+{
+    if (!cwSymbology::isValidName(name)) {
+        return Monad::ResultBase(invalidNameMessage(kSaveErrorPrefix, entityKind, name));
+    }
+    const QString path = QDir(QDir(directory).filePath(subdirName)).filePath(name + suffix);
+    if (QFile::exists(path) && !QFile::remove(path)) {
+        return Monad::ResultBase(
+            QStringLiteral("%1cannot remove %2 file %3").arg(kSaveErrorPrefix, entityKind, path));
+    }
+    return Monad::ResultBase();
+}
+
 // Scans <directory>/<subdir> for *<suffix> files, sorted by name (deterministic
 // load order). Each filename stem is the authoritative entity name: it must be
 // kebab-case and must equal the payload's declared name. The directory is the
@@ -634,6 +649,12 @@ Monad::Result<cwSymbologyGlyph> loadGlyph(const QString &directory, const QStrin
         return Monad::Result<cwSymbologyGlyph>(contents.errorMessage());
     }
     return glyphFromJson(contents.value());
+}
+
+Monad::ResultBase removeGlyph(const QString &directory, const QString &glyphName)
+{
+    return removeNamedFile(directory, kGlyphsSubdirName, kGlyphFileSuffix, glyphName,
+                           QStringLiteral("glyph"));
 }
 
 Monad::Result<cwSymbologyPaletteLoadResult> load(const QString &directory)
