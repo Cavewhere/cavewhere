@@ -299,6 +299,15 @@ QVector<cwRenderBillboards::RenderSlot> cwRenderBillboards::buildRenderSlots() c
             continue;
         }
 
+        // The subscene draws the content via its render node, which ignores the
+        // item's visible property — so an invisible content item (e.g. a
+        // completed, unselected lead marker) would still be drawn. Honour
+        // visibility here. Safe to read on the render thread: buildRenderSlots
+        // runs from synchronize() while the GUI thread is blocked.
+        if (!content->isVisible()) {
+            continue;
+        }
+
         RenderSlot slot;
         slot.id = id;
         slot.rootNodeHandle = entry.subscene->rootNodeHandle();

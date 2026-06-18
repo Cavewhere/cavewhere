@@ -288,14 +288,25 @@ MainWindowTest {
             verify(leadPoint.x <= render.width)
             verify(leadPoint.y <= render.height)
 
-            // lead is not in the center. Initially the projection places the
-            // lead at exact viewport center; a secondary cwTransformUpdater
-            // tick ~100ms later shifts it off-center. Bumped to 10s from the
+            // cwLeadView projects each lead's world position to screen; the lead
+            // is not parked at the exact viewport center. Bumped to 10s from the
             // default 5s since the nightly has flaked at the 5s budget.
             tryVerify(() => { return leadPoint.x !== render.width * 0.5; }, 10000,
-                      "lead point should move off horizontal center")
+                      "lead point should be off horizontal center")
             tryVerify(() => { return leadPoint.y !== render.height * 0.5; }, 10000,
-                      "lead point should move off vertical center")
+                      "lead point should be off vertical center")
+
+            // A lead click is gated by cwLeadView::isOccluded (clicks must not
+            // pass through walls). The gate now tests the tapped marker pixel
+            // against the billboard's own depth, so a lead resting on its scrap
+            // is clickable from the default framing — confirm the gate agrees,
+            // then click it for real.
+            let leadView = leadPoint.leadView
+            verify(leadView !== null, "leadView should be injected into LeadPoint")
+
+            let leadPos = leadPoint.position3D
+            let tap = leadPoint.mapToItem(leadView, 0, 0)
+            verify(!leadView.isOccluded(leadPos, tap), "a lead resting on its scrap should not be occluded")
 
             mouseClick(leadPoint)
 

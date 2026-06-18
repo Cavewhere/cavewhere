@@ -67,6 +67,33 @@ TEST_CASE("cwRenderBillboards: updateBillboard changes the snapshot", "[cwRender
     REQUIRE(renderSlots.at(0).worldPosition == QVector3D(5, 6, 7));
 }
 
+TEST_CASE("cwRenderBillboards: invisible content is skipped", "[cwRenderBillboards]")
+{
+    QQuickWindow window;
+    auto content = std::make_unique<QQuickItem>(window.contentItem());
+    content->setSize(QSizeF(20, 20));
+
+    cwRenderBillboards billboards;
+    billboards.setWindow(&window);
+
+    cwRenderBillboards::Billboard billboard;
+    billboard.content = content.get();
+    billboards.addBillboard(billboard);
+
+    // Visible content produces a slot.
+    REQUIRE(billboards.buildRenderSlots().size() == 1);
+
+    // A hidden content item must NOT be drawn. The subscene renders the content
+    // via its render node, which ignores the visible property, so buildRenderSlots
+    // is where visibility is honoured — otherwise a completed, unselected lead
+    // marker (visible == false) keeps drawing and overlaps live leads.
+    content->setVisible(false);
+    REQUIRE(billboards.buildRenderSlots().isEmpty());
+
+    content->setVisible(true);
+    REQUIRE(billboards.buildRenderSlots().size() == 1);
+}
+
 TEST_CASE("cwRenderBillboards: null content is skipped", "[cwRenderBillboards]")
 {
     QQuickWindow window;

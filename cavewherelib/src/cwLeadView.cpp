@@ -9,25 +9,42 @@
 #include "cwLeadView.h"
 #include "cwRegionTreeModel.h"
 #include "cwCavingRegion.h"
-#include "cwScrapLeadView.h"
-#include "cwTransformUpdater.h"
+#include "cwScrap.h"
 #include "cwSelectionManager.h"
+#include "cwCamera.h"
+#include "cwScene.h"
+#include "cwGeometryItersecter.h"
+#include "cwRayHit.h"
+#include "cwRenderBillboards.h"
 #include "cwDebug.h"
 
 //Qt includes
 #include <QQmlEngine>
 #include <QQmlContext>
+#include <QQuickWindow>
+#include <QMatrix4x4>
+#include <QRay3D>
+
+namespace {
+// Pull the lead marker toward the eye along the line of sight (screen position
+// and size unaffected) so local scrap/centerline geometry near the lead doesn't
+// draw over it. Same rationale and value as the station-label bias. The click
+// occlusion test (isOccluded) reuses this as its slack so a click is rejected
+// only when geometry is more than this far in front of the lead — i.e. exactly
+// when the drawn marker is hidden too. A lead sits on its scrap surface, so a
+// generous bias keeps that surface from reporting the lead as self-occluded.
+constexpr float kLeadDepthBias = 1.0f;
+}
 
 cwLeadView::cwLeadView(QQuickItem *parent) :
     QQuickItem(parent),
-    TransformUpdater(new cwTransformUpdater(this)),
     SelectionMananger(new cwSelectionManager(this))
 {
-    connect(TransformUpdater, &cwTransformUpdater::cameraChanged, this, &cwLeadView::cameraChanged);
     connect(this, &cwLeadView::visibleChanged, this, [this](){
-        TransformUpdater->setEnabled(isVisible());
+        if(isVisible()) {
+            updateItemPositions();
+        }
     });
-
 }
 
 cwLeadView::~cwLeadView()
@@ -124,7 +141,13 @@ void cwLeadView::addScrap(cwScrap *scrap)
             for(int i = begin; i <= end; i++) {
                 //Create the item
                 auto item = createItem();
+                if(item == nullptr) {
+                    //createItem already logged the compile failure; skip rather
+                    //than dereference null below.
+                    continue;
+                }
                 entry.items.insert(i, item);
+                entry.billboardIds.insert(i, cwBillboardId{});
 
                 item->setProperty("scrap", QVariant::fromValue(scrap));
                 item->setProperty("scrapId", entry.scrapLeadId);
@@ -143,9 +166,14 @@ void cwLeadView::addScrap(cwScrap *scrap)
 
         for(int index = end; index >= begin; index--) {
             SelectionMananger->clear();
-            TransformUpdater->removePointItem(entry.items[index]);
-            entry.items[index]->deleteLater();
+            if(m_renderBillboards != nullptr
+                    && index < entry.billboardIds.size()
+                    && entry.billboardIds.at(index) != cwBillboardId{}) {
+                m_renderBillboards->removeBillboard(entry.billboardIds.at(index));
+            }
+            entry.items.at(index)->deleteLater();
             entry.items.removeAt(index);
+            entry.billboardIds.removeAt(index);
         }
 
         updateIndexesToEnd(begin);
@@ -187,10 +215,17 @@ void cwLeadView::addScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::leadsDataChanged, this, [this, scrap, updatePositions](int begin, int end, const QList<int>& roles) {
         if(roles.contains(cwScrap::LeadPosition)) {
             updatePositions(begin, end);
+            updateItemPositions();
         }
     });
 
     connect(scrap, &cwScrap::leadsReset, this, resetScrap);
+
+    // Reproject + (re)register billboards after the model mutates the item list.
+    // These run after the lambdas above (connection order), so position3D is set.
+    connect(scrap, &cwScrap::leadsInserted, this, &cwLeadView::updateItemPositions);
+    connect(scrap, &cwScrap::leadsRemoved, this, &cwLeadView::updateItemPositions);
+    connect(scrap, &cwScrap::leadsReset, this, &cwLeadView::updateItemPositions);
 
     //Setup the leads
     m_leadItems.insert(scrap, {++m_currentScrapId, {}});
@@ -198,19 +233,7 @@ void cwLeadView::addScrap(cwScrap *scrap)
     auto lastIndex = scrap->numberOfLeads() - 1;
     beginInsert(0, lastIndex);
     insert(0, lastIndex);
-
-
-    // QQmlContext* context = QQmlEngine::contextForObject(this);
-    // cwScrapLeadView* leadView = new cwScrapLeadView(this);
-    // QQmlEngine::setContextForObject(leadView, context);
-    // leadView->setWidth(width());
-    // leadView->setHeight(height());
-    // leadView->setPositionRole(cwScrap::LeadPosition);
-    // // leadView->setTransformUpdater(TransformUpdater);
-    // leadView->setSelectionManager(SelectionMananger);
-    // leadView->setScrap(scrap);
-
-    // ScrapToView.insert(scrap, leadView);
+    updateItemPositions();
 }
 
 /**
@@ -226,6 +249,13 @@ void cwLeadView::removeScrap(cwScrap *scrap)
     disconnect(scrap, nullptr, this, nullptr);
 
     const auto& entry = m_leadItems.value(scrap);
+    if(m_renderBillboards != nullptr) {
+        for(const cwBillboardId id : entry.billboardIds) {
+            if(id != cwBillboardId{}) {
+                m_renderBillboards->removeBillboard(id);
+            }
+        }
+    }
     for(auto item : entry.items) {
         item->deleteLater();
     }
@@ -234,14 +264,6 @@ void cwLeadView::removeScrap(cwScrap *scrap)
     if(m_leadItems.size() == 0) {
         m_currentScrapId = 0; //Reset the scrap id, this is useful for the qml testcase to work correctly
     }
-
-
-//    Q_ASSERT(ScrapToView.contains(scrap));
-
-    // if(ScrapToView.contains(scrap)) {
-    //     cwScrapLeadView* view = ScrapToView.value(scrap);
-    //     view->deleteLater();
-    // }
 }
 
 QQuickItem* cwLeadView::createItem()
@@ -253,12 +275,13 @@ QQuickItem* cwLeadView::createItem()
     }
 
     QQmlContext* context = QQmlEngine::contextForObject(this);
-    //Supply the required selectionManager at creation: lead selection routes
-    //through the shared manager so only one lead popup is open at a time and a
-    //tap on empty space can clear it (dialog behavior).
+    //Supply the required injected properties at creation: selectionManager routes
+    //selection through the shared manager (single open popup, click-away clears),
+    //and leadView lets the tap handler gate clicks with the occlusion test.
     QQuickItem* item = qobject_cast<QQuickItem*>(
         m_itemComponent->createWithInitialProperties(
-            {{QStringLiteral("selectionManager"), QVariant::fromValue(SelectionMananger)}},
+            {{QStringLiteral("selectionManager"), QVariant::fromValue(SelectionMananger)},
+             {QStringLiteral("leadView"), QVariant::fromValue(this)}},
             context));
     if(item == nullptr) {
         qDebug() << "Problem creating new point item ... " << qmlSource() << "Didn't compile. THIS IS A BUG!" << LOCATION;
@@ -272,11 +295,18 @@ QQuickItem* cwLeadView::createItem()
     item->setParent(this);
     // Q_ASSERT(item->parent() == this);
 
-    //Add the point to the transform updater
-    if(TransformUpdater != nullptr) {
-        TransformUpdater->addPointItem(item);
-    } else {
-        qDebug() << "No transformUpdater, point's won't be positioned correctly, this is a bug" << LOCATION;
+    // The marker draws in the on-demand 3D pass, so its fade/visibility changes
+    // must request a frame. Mirror the label pattern: re-render the billboards
+    // when the content item's opacity or visibility changes.
+    QQuickItem* content = item->property("billboardContent").value<QQuickItem*>();
+    if(content != nullptr) {
+        auto requestRender = [this]() {
+            if(m_renderBillboards != nullptr) {
+                m_renderBillboards->update();
+            }
+        };
+        connect(content, &QQuickItem::opacityChanged, this, requestRender);
+        connect(content, &QQuickItem::visibleChanged, this, requestRender);
     }
 
     return item;
@@ -354,17 +384,218 @@ void cwLeadView::scrapsRemoved(QModelIndex parent, int begin, int end)
 * @return The camera that the lead view uses to calculate the lead positions
 */
 cwCamera* cwLeadView::camera() const {
-    return TransformUpdater->camera();
+    return m_camera;
 }
 
 /**
 * @brief cwLeadView::setCamera
 * @param camera - The camera for the LeadView
 *
-* The camera allows the leadView to translate the lead positions into 2D space
+* The camera allows the leadView to translate the lead positions into 2D space.
+* Mirrors cwLabel3dView: the view projects lead world positions itself on each
+* camera change rather than relying on the legacy cwTransformUpdater.
 */
 void cwLeadView::setCamera(cwCamera* camera) {
-    TransformUpdater->setCamera(camera);
+    if(m_camera == camera) {
+        return;
+    }
+
+    if(!m_camera.isNull()) {
+        disconnect(m_camera, nullptr, this, nullptr);
+    }
+
+    m_camera = camera;
+
+    if(!m_camera.isNull()) {
+        connect(m_camera, &cwCamera::viewMatrixChanged, this, &cwLeadView::updateItemPositions);
+        connect(m_camera, &cwCamera::projectionChanged, this, &cwLeadView::updateItemPositions);
+    }
+
+    updateItemPositions();
+    emit cameraChanged();
+}
+
+/**
+* @brief cwLeadView::scene
+* @return The scene whose 3D pass hosts the lead billboards and whose geometry
+* intersecter answers the occlusion test.
+*/
+cwScene* cwLeadView::scene() const {
+    return m_scene;
+}
+
+void cwLeadView::setScene(cwScene* scene) {
+    if(m_scene == scene) {
+        return;
+    }
+
+    m_scene = scene;
+
+    if(m_renderBillboards != nullptr) {
+        m_renderBillboards->setScene(scene);
+    } else {
+        ensureRenderBillboards();
+    }
+
+    updateItemPositions();
+    emit sceneChanged();
+}
+
+/**
+ * @brief cwLeadView::ensureRenderBillboards
+ *
+ * Lazily creates the billboard render object once both the window (from the
+ * scene graph) and the scene are available. Leads render as depth-occluded
+ * billboards through it instead of as 2D overlay children.
+ */
+void cwLeadView::ensureRenderBillboards() {
+    if(m_renderBillboards != nullptr) {
+        return;
+    }
+
+    QQuickWindow* quickWindow = window();
+    if(quickWindow == nullptr || m_scene.isNull()) {
+        return;
+    }
+
+    m_renderBillboards = new cwRenderBillboards(this);
+    m_renderBillboards->setWindow(quickWindow);
+    m_renderBillboards->setScene(m_scene);
+}
+
+void cwLeadView::itemChange(ItemChange change, const ItemChangeData& value) {
+    if(change == ItemSceneChange) {
+        if(m_renderBillboards != nullptr) {
+            // The view moved to a different window (value.window is null when it
+            // left one); rebind the billboards and their subscenes to it.
+            m_renderBillboards->setWindow(value.window);
+        } else {
+            ensureRenderBillboards();
+        }
+        updateItemPositions();
+    }
+    QQuickItem::itemChange(change, value);
+}
+
+/**
+ * @brief cwLeadView::updateItemPositions
+ *
+ * Projects every lead's world position to screen (placing the invisible 2D hit
+ * item) and registers/updates its billboard for the occluded draw. The hit item
+ * and the billboard share the camera, so the tap target sits under the marker.
+ */
+void cwLeadView::updateItemPositions() {
+    if(m_camera.isNull() || !isVisible()) {
+        return;
+    }
+
+    const QMatrix4x4 matrix = m_camera->qtViewportMatrix() * m_camera->viewProjectionMatrix();
+
+    for(auto it = m_leadItems.begin(); it != m_leadItems.end(); ++it) {
+        ScrapEntry& entry = it.value();
+        for(int i = 0; i < entry.items.size(); i++) {
+            QQuickItem* item = entry.items.at(i);
+            if(item == nullptr) {
+                continue;
+            }
+
+            const QVector3D world = item->property("position3D").value<QVector3D>();
+            const QVector3D screen = matrix.map(world);
+            item->setPosition(QPointF(screen.x(), screen.y()));
+
+            addOrUpdateBillboard(entry, i, item, world);
+        }
+    }
+}
+
+/**
+ * @brief cwLeadView::addOrUpdateBillboard
+ *
+ * Registers (or refreshes) a lead's question-mark marker as a depth-occluded
+ * billboard. The content is the LeadPoint's billboardContent sub-item, so the
+ * 2D QuoteBox popup (a sibling) stays an un-occluded overlay.
+ */
+void cwLeadView::addOrUpdateBillboard(ScrapEntry& entry, int index, QQuickItem* item, const QVector3D& worldPosition) {
+    if(m_renderBillboards == nullptr || item == nullptr) {
+        return;
+    }
+    if(index < 0 || index >= entry.billboardIds.size()) {
+        return;
+    }
+
+    QQuickItem* content = item->property("billboardContent").value<QQuickItem*>();
+    if(content == nullptr) {
+        return;
+    }
+
+    cwRenderBillboards::Billboard billboard;
+    billboard.content = content;
+    billboard.worldPosition = worldPosition;
+    billboard.sizeMode = cwRenderBillboards::SizeMode::ScreenConstant;
+    billboard.depthBias = kLeadDepthBias;
+
+    cwBillboardId& id = entry.billboardIds[index];
+    if(id == cwBillboardId{}) {
+        id = m_renderBillboards->addBillboard(billboard);
+    } else {
+        m_renderBillboards->updateBillboard(id, billboard);
+    }
+}
+
+/**
+ * @brief cwLeadView::isOccluded
+ *
+ * Casts one CPU ray through the tapped viewport pixel and reports whether cave
+ * geometry sits in front of the lead's billboard at that pixel. The marker is a
+ * camera-facing quad, so a single eye->center ray cannot match the per-pixel
+ * silhouette the depth buffer clips against (a click on a visible rim pixel would
+ * be rejected because the center happens to sit behind a fold). Comparing the
+ * cave hit to the billboard plane's depth *at the tapped pixel* keeps the click
+ * consistent with what is drawn. Main-thread / works offscreen (the BVH is
+ * CPU-side). Returns false when there is no camera, scene, or geometry to test.
+ */
+bool cwLeadView::isOccluded(const QVector3D& worldPosition,
+                            const QPointF& tapViewportPosition) const {
+    if(m_camera.isNull() || m_scene.isNull()) {
+        return false;
+    }
+
+    cwGeometryItersecter* intersecter = m_scene->geometryItersecter();
+    if(intersecter == nullptr) {
+        return false;
+    }
+
+    const QRay3D ray = m_camera->rayFromQtViewport(tapViewportPosition);
+
+    // The marker is a camera-facing quad centred on worldPosition; its plane
+    // normal is the camera's view direction (third row of the view matrix). The
+    // tap usually lands off-centre, so the point under the cursor is where the
+    // ray crosses that plane — NOT worldPosition itself. Comparing the cave hit
+    // to the centre's depth would mis-gate off-centre taps under perspective
+    // (the ray through a rim pixel does not pass through the centre). Solve the
+    // ray/plane crossing so the depth is taken at the tapped quad point.
+    const QMatrix4x4 view = m_camera->viewMatrix();
+    const QVector3D planeNormal(view(2, 0), view(2, 1), view(2, 2));
+    const double denom = QVector3D::dotProduct(ray.direction(), planeNormal);
+    if(qFuzzyIsNull(denom)) {
+        return false;
+    }
+    // ray.direction() is unit length (cwCamera::frustrumRay normalizes it), so
+    // this parameter is a world distance comparable to cwRayHit::tWorld(). The
+    // - kLeadDepthBias slack mirrors the eye-ward shift the billboard renders
+    // with (cwRenderBillboards::buildModelMatrix).
+    const double quadDistance =
+        QVector3D::dotProduct(worldPosition - ray.origin(), planeNormal) / denom;
+    if(quadDistance <= 0.0) {
+        return false;
+    }
+
+    const cwRayHit hit = intersecter->intersectsDetailed(ray);
+    if(!hit.hit()) {
+        return false;
+    }
+
+    return hit.tWorld() < quadDistance - kLeadDepthBias;
 }
 
 /**

@@ -138,6 +138,7 @@ Item {
         anchors.fill: parent
         regionModel: RootData.regionTreeModel
         camera: rendererId.camera
+        scene: rendererId.scene
         visible: RootData.leadsVisible
 
         // Tap on empty space closes the open lead popup (dialog dismiss). Lead

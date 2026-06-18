@@ -421,6 +421,43 @@ MainWindowTest {
             }, 2000, "popup should close on second tap")
         }
 
+        // 4a: a click on a lead hidden behind cave geometry must be ignored (the
+        // click must not pass through walls). cwLeadView::isOccluded gates the
+        // tap; here we drive it directly. A visible lead (the one the other tests
+        // click through) is not occluded; a point far down the same eye->lead ray,
+        // well behind the surface the lead rests on, is.
+        function test_occludedLeadIsNotClickable() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            let leadPoint = null;
+            tryVerify(() => {
+                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
+                return leadPoint !== null;
+            });
+
+            let leadView = leadPoint.leadView;
+            verify(leadView !== null, "leadView should be injected into LeadPoint");
+            verify(leadView.camera !== null, "leadView needs a camera for the occlusion ray");
+
+            let leadPos = leadPoint.position3D;
+
+            // isOccluded now tests the tapped viewport pixel. The lead item is
+            // positioned with its origin at the projected marker centre, so map
+            // that into the leadView (viewport) space for the tap point.
+            let tap = leadPoint.mapToItem(leadView, 0, 0);
+            verify(!leadView.isOccluded(leadPos, tap), "a visible lead must not be occluded");
+
+            // A point deep along the view direction (behind the wall the lead
+            // sits on) projects to the same pixel but its billboard plane is far
+            // behind the cave surface, so the surface occludes it. Using the view
+            // forward keeps this correct under both ortho and perspective.
+            let vm = leadView.camera.viewMatrix;
+            let forward = Qt.vector3d(-vm.m31, -vm.m32, -vm.m33).normalized();
+            let deepPoint = leadPos.plus(forward.times(1000));
+            verify(leadView.isOccluded(deepPoint, tap), "a point behind cave geometry must be occluded");
+        }
+
         // Regression test for GitHub issue #368:
         // When a lead and a scrap outline point overlap, clicking selects both
         // via their TapHandlers. The outline point's deselection cascade
