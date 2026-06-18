@@ -280,8 +280,6 @@ TEST_CASE("Manager de-duplicates fork directory names",
     cwSymbologyPaletteManager manager;
     manager.setPaletteDirectory(temp.path());
 
-    // defaultPalette() is re-fetched each time: duplicatePalette() reloads and
-    // invalidates the prior pointers.
     cwSymbologyPalette *first =
         manager.duplicatePalette(manager.defaultPalette(), QStringLiteral("Caves"));
     cwSymbologyPalette *second =
@@ -388,4 +386,107 @@ TEST_CASE("Manager rejects a path-unsafe glyph name on remove",
     const int errorsBefore = manager.errorModel()->errors()->size();
     CHECK_FALSE(manager.removeGlyph(fork, QStringLiteral("../palette")));
     CHECK(manager.errorModel()->errors()->size() > errorsBefore);
+}
+
+TEST_CASE("Reload preserves the pointers of palettes that stay on disk",
+          "[cwSymbologyPaletteManager]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+
+    const QUuid idA = QUuid::createUuid();
+    writePalette(temp.path(), QStringLiteral("dir-a"), idA, QStringLiteral("Alpha"));
+
+    cwSymbologyPaletteManager manager;
+    manager.setPaletteDirectory(temp.path());
+
+    cwSymbologyPalette *defaultBefore = manager.defaultPalette();
+    cwSymbologyPalette *aBefore = manager.paletteById(idA);
+    REQUIRE(defaultBefore != nullptr);
+    REQUIRE(aBefore != nullptr);
+
+    // Adding a palette and reloading must not churn the survivors' identities.
+    const QUuid idB = QUuid::createUuid();
+    writePalette(temp.path(), QStringLiteral("dir-b"), idB, QStringLiteral("Beta"));
+    manager.reload();
+
+    CHECK(manager.defaultPalette() == defaultBefore);
+    CHECK(manager.paletteById(idA) == aBefore);
+    CHECK(manager.paletteById(idB) != nullptr);
+    CHECK(manager.palettes().size() == 3); // default + A + B
+}
+
+TEST_CASE("Reload updates a surviving palette's data in place",
+          "[cwSymbologyPaletteManager]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+
+    const QUuid id = QUuid::createUuid();
+    writePalette(temp.path(), QStringLiteral("dir-a"), id, QStringLiteral("Before"));
+
+    cwSymbologyPaletteManager manager;
+    manager.setPaletteDirectory(temp.path());
+
+    cwSymbologyPalette *before = manager.paletteById(id);
+    REQUIRE(before != nullptr);
+    CHECK(before->name() == QStringLiteral("Before"));
+
+    // Rewriting the same id+directory then reloading keeps the object but updates
+    // its content.
+    writePalette(temp.path(), QStringLiteral("dir-a"), id, QStringLiteral("After"));
+    manager.reload();
+
+    CHECK(manager.paletteById(id) == before);
+    CHECK(before->name() == QStringLiteral("After"));
+}
+
+TEST_CASE("Reload deletes only palettes whose directory is gone",
+          "[cwSymbologyPaletteManager]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+
+    const QUuid idA = QUuid::createUuid();
+    const QUuid idB = QUuid::createUuid();
+    writePalette(temp.path(), QStringLiteral("dir-a"), idA, QStringLiteral("Alpha"));
+    writePalette(temp.path(), QStringLiteral("dir-b"), idB, QStringLiteral("Beta"));
+
+    cwSymbologyPaletteManager manager;
+    manager.setPaletteDirectory(temp.path());
+
+    cwSymbologyPalette *aBefore = manager.paletteById(idA);
+    REQUIRE(aBefore != nullptr);
+    REQUIRE(manager.paletteById(idB) != nullptr);
+
+    REQUIRE(QDir(QDir(temp.path()).filePath(QStringLiteral("dir-b"))).removeRecursively());
+    manager.reload();
+
+    // A survives with its pointer intact; B is gone.
+    CHECK(manager.paletteById(idA) == aBefore);
+    CHECK(manager.paletteById(idB) == nullptr);
+    CHECK(manager.palettes().size() == 2); // default + A
+}
+
+TEST_CASE("duplicatePalette leaves the source pointer valid",
+          "[cwSymbologyPaletteManager]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+
+    cwSymbologyPaletteManager manager;
+    manager.setPaletteDirectory(temp.path());
+
+    cwSymbologyPalette *source = manager.defaultPalette();
+    REQUIRE(source != nullptr);
+    const QUuid sourceId = source->id();
+
+    cwSymbologyPalette *fork = manager.duplicatePalette(source, QStringLiteral("Forked"));
+    REQUIRE(fork != nullptr);
+
+    // The reconciling reload keeps the source object: same pointer, same id, and
+    // still resolvable through the manager.
+    CHECK(source->id() == sourceId);
+    CHECK(manager.paletteById(sourceId) == source);
+    CHECK(fork != source);
 }

@@ -20,6 +20,7 @@
 #include <QHash>
 #include <QStandardPaths>
 #include <QUuid>
+#include <QVector>
 
 namespace {
 
@@ -97,26 +98,27 @@ void cwSymbologyPaletteManager::setPaletteDirectory(const QString &directory)
     reload();
 }
 
-void cwSymbologyPaletteManager::clearInstalled()
-{
-    for (auto *palette : std::as_const(m_palettes)) {
-        delete palette;
-    }
-    m_palettes.clear();
-    m_default = nullptr;
-}
-
 void cwSymbologyPaletteManager::reload()
 {
-    clearInstalled();
     m_errorModel->errors()->clear();
 
+    // Phase 1 — scan every palette directory into an ordered list (default first).
+    // A palette's identity is its id; the scan also carries the directory it came
+    // from and whether it is writable here.
+    struct ScannedPalette {
+        cwSymbologyPaletteData data;
+        QString directory;
+        bool writable = false;
+        bool isDefault = false;
+    };
+
+    QVector<ScannedPalette> scanned;
     QHash<QUuid, QString> directoryById;
 
     // The default palette is shipped embedded as a qrc resource and loaded
     // through the normal IO path. It is always present, read-only, and wins its
     // id on duplicates. A load failure here is a build defect (corrupt embedded
-    // resource): report it and leave m_default null — there is no code-built
+    // resource): report it and leave the default absent — there is no code-built
     // fallback.
     const QString defaultPath = QStringLiteral(":/palettes/cavewhere-default");
     const auto defaultResult = cwSymbologyPaletteIO::load(defaultPath);
@@ -126,12 +128,8 @@ void cwSymbologyPaletteManager::reload()
                 .arg(defaultPath, defaultResult.errorMessage()));
     } else {
         const auto &loadResult = defaultResult.value();
-        m_default = new cwSymbologyPalette(this);
-        m_default->setData(loadResult.palette);
-        m_default->setWritable(false);
-        m_default->setDirectory(defaultPath);
-        m_palettes.append(m_default);
-        directoryById.insert(m_default->id(), defaultPath);
+        scanned.append({loadResult.palette, defaultPath, false, true});
+        directoryById.insert(loadResult.palette.id, defaultPath);
 
         for (const cwError &warning : std::as_const(loadResult.warnings)) {
             reportLoadProblem(warning);
@@ -173,12 +171,8 @@ void cwSymbologyPaletteManager::reload()
                     QStringLiteral("It is read-only here. Please upgrade CaveWhere to edit it.")));
             }
 
-            auto *palette = new cwSymbologyPalette(this);
-            palette->setData(data);
-            palette->setWritable(versionSupported);
-            palette->setDirectory(entry.absoluteFilePath());
+            scanned.append({data, entry.absoluteFilePath(), versionSupported, false});
             directoryById.insert(data.id, entry.absoluteFilePath());
-            m_palettes.append(palette);
 
             // Rule-stack warnings for an accepted palette (commit 4.4). Fatal
             // problems already failed the load above, so these are all warnings.
@@ -187,6 +181,43 @@ void cwSymbologyPaletteManager::reload()
             }
         }
     }
+
+    // Phase 2 — reconcile the scan against the live palettes by id, so a palette's
+    // cwSymbologyPalette* (and any QML binding to it) survives a reload as long as
+    // its id is still on disk: survivors are updated in place, only added palettes
+    // are constructed, and only removed ones are deleted. take() pulls each reused
+    // palette out of liveById, so whatever remains afterward is exactly the set
+    // whose directory is gone.
+    QHash<QUuid, cwSymbologyPalette *> liveById;
+    liveById.reserve(m_palettes.size());
+    for (auto *palette : std::as_const(m_palettes)) {
+        liveById.insert(palette->id(), palette);
+    }
+
+    QList<cwSymbologyPalette *> rebuilt;
+    rebuilt.reserve(scanned.size());
+    m_default = nullptr;
+
+    for (const ScannedPalette &entry : std::as_const(scanned)) {
+        cwSymbologyPalette *palette = liveById.take(entry.data.id);
+        if (palette == nullptr) {
+            palette = new cwSymbologyPalette(this);
+        }
+        palette->setData(entry.data);
+        palette->setWritable(entry.writable);
+        palette->setDirectory(entry.directory);
+        rebuilt.append(palette);
+
+        if (entry.isDefault) {
+            m_default = palette;
+        }
+    }
+
+    for (auto *palette : std::as_const(liveById)) {
+        delete palette;
+    }
+
+    m_palettes = rebuilt;
 
     emit palettesChanged();
 }
@@ -269,7 +300,8 @@ bool cwSymbologyPaletteManager::saveGlyph(cwSymbologyPalette *palette, const cwS
         return false;
     }
 
-    return refreshPalette(palette);
+    reload(); // reconciles by id — `palette` stays valid and picks up the glyph
+    return true;
 }
 
 bool cwSymbologyPaletteManager::removeGlyph(cwSymbologyPalette *palette, const QString &glyphName)
@@ -290,26 +322,6 @@ bool cwSymbologyPaletteManager::removeGlyph(cwSymbologyPalette *palette, const Q
         return false;
     }
 
-    return refreshPalette(palette);
-}
-
-bool cwSymbologyPaletteManager::refreshPalette(cwSymbologyPalette *palette)
-{
-    const auto result = cwSymbologyPaletteIO::load(palette->directory());
-    if (result.hasError()) {
-        reportLoadProblem(result.errorMessage());
-        return false;
-    }
-
-    const auto loadResult = result.value();
-    palette->setData(loadResult.palette);
-
-    // Parity with reload(): a write can introduce non-fatal rule-stack warnings,
-    // so surface them now rather than hiding them until the next full reload().
-    for (const cwError &warning : std::as_const(loadResult.warnings)) {
-        reportLoadProblem(warning);
-    }
-
-    emit palettesChanged();
+    reload(); // reconciles by id — `palette` stays valid and drops the glyph
     return true;
 }

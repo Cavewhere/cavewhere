@@ -75,18 +75,20 @@ public:
     // fresh id, writes a new subdirectory under paletteDirectory(), reloads, and
     // returns the new palette. Returns nullptr on failure (the reason is pushed
     // to errorModel()). This is how a user gets something editable, since the
-    // seed is read-only. Note: the reload() invalidates every existing palette
-    // pointer (including `source`); use the returned pointer afterward.
+    // seed is read-only. The reload() reconciles by id, so existing palette
+    // pointers (including `source`) stay valid across it.
     Q_INVOKABLE cwSymbologyPalette *duplicatePalette(cwSymbologyPalette *source,
                                                      const QString &newName);
 
-    // Write a single glyph into a writable palette's glyphs/ subdir and refresh
-    // that palette in place (its pointer stays valid). No-op returning false if
-    // the palette is null or read-only. Used by the glyph editor's Save.
+    // Write a single glyph into a writable palette's glyphs/ subdir, then reload.
+    // The reload reconciles by id, so the palette's pointer stays valid. No-op
+    // returning false if the palette is null or read-only. Used by the glyph
+    // editor's Save.
     Q_INVOKABLE bool saveGlyph(cwSymbologyPalette *palette, const cwSymbologyGlyph &glyph);
 
-    // Delete a glyph file from a writable palette and refresh it in place. A
-    // rename is saveGlyph(newGlyph) followed by removeGlyph(oldName).
+    // Delete a glyph file from a writable palette, then reload (the palette's
+    // pointer survives). A rename is saveGlyph(newGlyph) followed by
+    // removeGlyph(oldName).
     Q_INVOKABLE bool removeGlyph(cwSymbologyPalette *palette, const QString &glyphName);
 
     static QString defaultPaletteDirectory();
@@ -95,14 +97,6 @@ signals:
     void palettesChanged();
 
 private:
-    void clearInstalled();
-
-    // Re-read a single palette's directory and setData() it in place, keeping the
-    // palette pointer (and any QML binding to it) valid. Used after a glyph
-    // write so the editor's palette doesn't get swapped out from under it. Emits
-    // palettesChanged(). Returns false (and reports) if the reload fails.
-    bool refreshPalette(cwSymbologyPalette *palette);
-
     // Record a non-fatal reload problem into the owned error model (de-duped,
     // qWarning'd). The QString overload is a Warning convenience; the cwError
     // overload preserves a typed error's severity and SymbologyErrorCode (the
