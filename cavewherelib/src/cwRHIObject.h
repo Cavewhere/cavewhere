@@ -59,10 +59,28 @@ public:
         Count
     };
 
+    // Per-object appearance-slot budget for offscreen render overrides. Slot 0 is
+    // the live appearance; the remaining slots hold per-job appearance overrides
+    // for offscreen jobs in flight (see cwOffscreenRenderParameters::appearanceSlot
+    // and Drawable::appearanceBinding). An object that supports appearance
+    // overrides sizes its per-object appearance UBO to kAppearanceSlotCount slots.
+    // Intentionally smaller than the camera-slot budget
+    // (cwRhiScene::kOffscreenBatchCameraSlots): a multi-view job shares ONE
+    // appearance slot across all its camera views, so a batch needs far fewer
+    // appearance slots than camera slots.
+    static constexpr int kOffscreenBatchAppearanceSlots = 32;
+    static constexpr int kAppearanceSlotCount = 1 + kOffscreenBatchAppearanceSlots;
+
     struct GatherContext {
         const RenderData* renderData;
         RenderPass renderPass;
         quint32 objectOrder = 0;
+        // Per-object appearance slot this render job selects (0 = the live
+        // appearance written to slot 0; higher slots = per-job overrides the
+        // object wrote at synchronize()/updateResources()). An object's gather()
+        // turns this into Drawable::appearanceUniformOffset by multiplying by its
+        // own per-slot stride. The live frame always passes 0.
+        int appearanceSlot = 0;
     };
 
     struct Drawable {
@@ -92,6 +110,19 @@ public:
         // either camera. -1 (default) means no dynamic global-camera binding and
         // the SRB is bound with no dynamic offsets.
         qint32 globalCameraBinding = -1;
+
+        // When >= 0, `bindings` binds a per-object "appearance" UBO at this
+        // binding point with a dynamic offset of appearanceUniformOffset bytes,
+        // selecting one slot of that object's multi-slot appearance UBO. Unlike
+        // the camera slot (one shared global UBO, offset supplied per render job
+        // in drainBatches), the appearance UBO is per object with its own per-slot
+        // stride, so the byte offset is computed by the object in gather() — from
+        // GatherContext::appearanceSlot times the object's own slot stride — and
+        // travels on the drawable. -1 (default) means no dynamic appearance
+        // binding. Independent of globalCameraBinding: a drawable may carry
+        // neither, either, or both.
+        qint32 appearanceBinding = -1;
+        quint32 appearanceUniformOffset = 0;
     };
 
     struct PipelineState {

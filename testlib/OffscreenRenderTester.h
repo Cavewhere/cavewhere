@@ -36,6 +36,24 @@ public:
     // the type into this header). Returns true on success.
     Q_INVOKABLE bool addSyntheticPointCloud(QObject* rootData);
 
+    // Set a per-appearance-slot world-radius override on every visible point
+    // cloud, so an offscreen render selecting @a slot draws the cloud at @a
+    // worldRadius while the live view (slot 0) is unaffected. @a sceneManager is
+    // the cwRegionSceneManager (QObject* to keep this header free of the type).
+    // Drives the Tier-2 per-object appearance rail. Returns the number of clouds
+    // set (0 = none found).
+    Q_INVOKABLE int setPointCloudWorldRadiusOverride(QObject* sceneManager, int slot,
+                                                     double worldRadius);
+
+    // Render the first visible point cloud, framed to its own bounds with the
+    // export chrome hidden over a transparent clear, at appearance slot @a
+    // appearanceSlot — so the opaque region is exactly the cloud and its coverage
+    // tracks that slot's world-radius. The cloud is framed (not the live camera)
+    // so the assertion never depends on where the on-screen view happens to look.
+    Q_INVOKABLE void renderPointCloudFramed(QQuickItem* viewer, QObject* sceneManager,
+                                            const QString& filePath, QSize size,
+                                            int appearanceSlot);
+
     // True when the item's window has a live QRhi device. False under the
     // headless `offscreen` QPA, which provides none — the readback path then
     // can't run, so the test skips rather than fails.

@@ -17,9 +17,6 @@
 #include <QMatrix4x4>
 #include <QVector3D>
 
-// Std includes
-#include <limits>
-
 class cwRhiItemRenderer;
 
 class cwRHIPointCloud : public cwRHIObject
@@ -59,10 +56,13 @@ private:
     QRhiVertexInputLayout m_inputLayout;
     QVector<QRhiBuffer*> m_vertexBuffers;
     QVector<qsizetype> m_vertexBufferCapacities;
-    // Per-cloud uniform block (binding 1): world-space sprite radius in
-    // meters. NaN sentinel forces the first upload since NaN != anything.
+    // Per-cloud uniform block (binding 1): world-space sprite radius in meters,
+    // one aligned slot per appearance slot (kAppearanceSlotCount of them) bound
+    // with a dynamic offset so an offscreen job can render the cloud at an
+    // overridden radius without disturbing the live view (slot 0). m_perCloudStride
+    // is the aligned byte size of one slot, also the dynamic-offset granularity.
     QRhiBuffer* m_perCloudUBO = nullptr;
-    float m_lastUploadedWorldRadius = std::numeric_limits<float>::quiet_NaN();
+    quint32 m_perCloudStride = 0;
     QRhiShaderResourceBindings* m_srb = nullptr;
     cwRhiScene* m_scene = nullptr;
 

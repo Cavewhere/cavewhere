@@ -375,7 +375,7 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
         m_scene->buildPerPassRenderData(offscreenRenderData);
 
     std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiScene::kPassCount> passBatches;
-    m_scene->gatherScene(passBatches, perPassRenderData, p.hiddenObjectIds);
+    m_scene->gatherScene(passBatches, perPassRenderData, {p.hiddenObjectIds, p.appearanceSlot});
 
     // This tile's camera lives in global-UBO slot @a cameraSlot; write it (and the
     // offscreen viewport metrics) so the pass reads it at that slot's dynamic offset.

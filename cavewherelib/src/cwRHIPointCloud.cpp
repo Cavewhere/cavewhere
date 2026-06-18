@@ -18,6 +18,9 @@
 #include <QDebug>
 #include <QFile>
 
+// Std includes
+#include <algorithm>
+
 
 cwRHIPointCloud::cwRHIPointCloud()
 {
@@ -129,28 +132,42 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
         }
     }
 
-    // Per-cloud uniform — world-space sprite radius in meters. A fixed
-    // default (set on cwRenderPointCloud::RenderState) produces consistent
-    // sprite sizes across every loaded cloud; the earlier meanSpacingXY * 0.5
-    // auto-derivation was unreliable because mean-spacing estimates vary with
-    // LAZ density / sampling. Overridden via cwLazLayersSceneNode::
+    // Per-cloud uniform — world-space sprite radius in meters. A fixed default
+    // (set on cwRenderPointCloud::RenderState) produces consistent sprite sizes
+    // across every loaded cloud; the earlier meanSpacingXY * 0.5 auto-derivation
+    // was unreliable because mean-spacing estimates vary with LAZ density /
+    // sampling. The live radius is overridden via cwLazLayersSceneNode::
     // setWorldRadius (P+wheel gesture in the 3D view, and sink_repatcher
-    // --point-radius for offline renders). Tracked in render state, so a
-    // change re-uploads only this small UBO — never the vertex buffer.
-    const float worldRadius = m_renderState.value().worldRadius;
-
+    // --point-radius for offline renders). Tracked in render state, so a change
+    // re-uploads only this small UBO — never the vertex buffer.
+    //
+    // The UBO holds one aligned slot per appearance slot (slot 0 = live radius,
+    // slots >= 1 = per-job overrides), addressed at draw time by a dynamic offset
+    // (see gather()), so an offscreen render can size the cloud differently than
+    // the on-screen view without a second buffer.
+    bool uboCreated = false;
     if (!m_perCloudUBO) {
-        const quint32 size = rhi->ubufAligned(sizeof(PerCloudUniform));
+        m_perCloudStride = rhi->ubufAligned(sizeof(PerCloudUniform));
         m_perCloudUBO = rhi->newBuffer(QRhiBuffer::Dynamic,
                                        QRhiBuffer::UniformBuffer,
-                                       size);
+                                       m_perCloudStride * kAppearanceSlotCount);
         m_perCloudUBO->create();
+        uboCreated = true;
     }
 
-    if (m_lastUploadedWorldRadius != worldRadius) {
-        const PerCloudUniform uniform{ worldRadius, {0.0f, 0.0f, 0.0f} };
-        batch->updateDynamicBuffer(m_perCloudUBO, 0, sizeof(PerCloudUniform), &uniform);
-        m_lastUploadedWorldRadius = worldRadius;
+    // Re-upload every slot when the render state changed (cheap: a few KB) or on
+    // first creation. resetChanged() gates this so a geometry-only change never
+    // re-stages it.
+    if (renderStateChanged || uboCreated) {
+        const auto& renderState = m_renderState.value();
+        for (int slot = 0; slot < kAppearanceSlotCount; ++slot) {
+            const float radius = (slot == 0)
+                ? renderState.worldRadius
+                : renderState.worldRadiusOverrides.value(slot, renderState.worldRadius);
+            const PerCloudUniform uniform{ radius, {0.0f, 0.0f, 0.0f} };
+            batch->updateDynamicBuffer(m_perCloudUBO, slot * m_perCloudStride,
+                                       sizeof(PerCloudUniform), &uniform);
+        }
     }
 
     m_geometry.resetChanged();
@@ -172,10 +189,14 @@ void cwRHIPointCloud::render(const RenderData& data)
     }
 
     data.cb->setGraphicsPipeline(m_pipelineRecord->pipeline);
-    // The global camera UBO at binding 0 is dynamic-offset; this legacy path only
-    // ever draws the live frame, so it reads slot 0 (offset 0).
-    const QRhiCommandBuffer::DynamicOffset cameraOffset(0, 0);
-    data.cb->setShaderResources(m_srb, 1, &cameraOffset);
+    // Both the global camera UBO (binding 0) and the per-cloud appearance UBO
+    // (binding 1) are dynamic-offset. This legacy path only ever draws the live
+    // frame, so both read slot 0 (offset 0).
+    const QRhiCommandBuffer::DynamicOffset offsets[2] = {
+        QRhiCommandBuffer::DynamicOffset(0, 0),
+        QRhiCommandBuffer::DynamicOffset(1, 0),
+    };
+    data.cb->setShaderResources(m_srb, 2, offsets);
 
     QVarLengthArray<QRhiCommandBuffer::VertexInput, 4> inputs;
     inputs.reserve(m_vertexBuffers.size());
@@ -224,7 +245,14 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     }
     drawable.vertexCount = quint32(vertexCount);
     drawable.bindings = m_srb;
-    drawable.globalCameraBinding = 0; // slot 0 binds the global camera UBO (dynamic offset)
+    drawable.globalCameraBinding = 0; // binding 0 = global camera UBO (dynamic offset)
+
+    // binding 1 = per-cloud appearance UBO (dynamic offset). The job picks the
+    // appearance slot; resolve it to this cloud's byte offset. Clamp defensively
+    // so an out-of-range slot falls back to the live appearance (slot 0).
+    drawable.appearanceBinding = 1;
+    const int appearanceSlot = std::clamp(context.appearanceSlot, 0, kAppearanceSlotCount - 1);
+    drawable.appearanceUniformOffset = quint32(appearanceSlot) * m_perCloudStride;
 
     batch.drawables.append(drawable);
     return true;
@@ -262,10 +290,11 @@ bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
     }
 
     const quint32 globalStride = data.renderer->globalUniformBufferStride();
+    const quint32 perCloudStride = rhi->ubufAligned(sizeof(PerCloudUniform));
 
     const auto key = buildPipelineKey(data.renderPassDescriptor, data.sampleCount);
 
-    auto createFn = [this, key, globalStride](QRhi* localRhi) -> cwRhiPipelineRecord* {
+    auto createFn = [this, key, globalStride, perCloudStride](QRhi* localRhi) -> cwRhiPipelineRecord* {
         if (!localRhi) {
             return nullptr;
         }
@@ -295,7 +324,7 @@ bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
         record->layout = localRhi->newShaderResourceBindings();
         record->layout->setBindings({
             QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, nullptr, globalStride),
-            QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, nullptr),
+            QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(1, QRhiShaderResourceBinding::VertexStage, nullptr, perCloudStride),
         });
         record->layout->create();
 
@@ -344,7 +373,7 @@ bool cwRHIPointCloud::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* render
     m_srb = rhi->newShaderResourceBindings();
     m_srb->setBindings({
         QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer(), renderer->globalUniformBufferStride()),
-        QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, m_perCloudUBO),
+        QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(1, QRhiShaderResourceBinding::VertexStage, m_perCloudUBO, m_perCloudStride),
     });
     m_srb->create();
 

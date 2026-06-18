@@ -608,16 +608,16 @@ std::array<cwRHIObject::RenderData, cwRhiScene::kPassCount> cwRhiScene::buildPer
 
 void cwRhiScene::gatherScene(std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>& passBatches,
                             const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData,
-                            const QSet<cwRenderObjectId>& hiddenIds)
+                            const cwSceneGatherOptions& options)
 {
     // Resolve the per-job hidden ids to the live cwRHIObject pointers once, so the
     // gather loop skips them with a pointer-set lookup rather than re-hashing ids.
     // Skipped entirely on the live frame (empty set) so its hot path stays
     // allocation-free; contains() on the resulting null set is a cheap no-op.
     QSet<const cwRHIObject*> hiddenObjects;
-    if (!hiddenIds.isEmpty()) {
-        hiddenObjects.reserve(hiddenIds.size());
-        for (cwRenderObjectId id : hiddenIds) {
+    if (!options.hiddenObjectIds.isEmpty()) {
+        hiddenObjects.reserve(options.hiddenObjectIds.size());
+        for (cwRenderObjectId id : options.hiddenObjectIds) {
             if (cwRHIObject* object = m_rhiObjectLookup.value(id, nullptr)) {
                 hiddenObjects.insert(object);
             }
@@ -636,7 +636,7 @@ void cwRhiScene::gatherScene(std::array<QVector<cwRHIObject::PipelineBatch>, kPa
             const int passIndex = static_cast<int>(pass);
             auto& batches = passBatches[passIndex];
             const cwRHIObject::GatherContext context {
-                &perPassRenderData[passIndex], pass, objectOrder
+                &perPassRenderData[passIndex], pass, objectOrder, options.appearanceSlot
             };
             gathered |= object->gather(context, batches);
         }
@@ -678,12 +678,27 @@ void cwRhiScene::drainBatches(QRhiCommandBuffer* cb,
             cb->setShaderResources();
             return;
         }
+        // Compose the per-draw dynamic offsets: the shared global camera slot
+        // (offset supplied per render job) and the per-object appearance slot
+        // (offset baked onto the drawable at gather time). A drawable may carry
+        // neither, either, or both. They are appended in ascending binding order
+        // (camera binding < appearance binding everywhere they coexist), which
+        // some backends require — asserted below rather than re-sorted per draw.
+        std::array<QRhiCommandBuffer::DynamicOffset, 2> offsets;
+        int count = 0;
         if (drawable.globalCameraBinding >= 0) {
-            const QRhiCommandBuffer::DynamicOffset offset(drawable.globalCameraBinding,
-                                                          cameraUniformOffset);
-            cb->setShaderResources(drawable.bindings, 1, &offset);
-        } else {
+            offsets[count++] = QRhiCommandBuffer::DynamicOffset(drawable.globalCameraBinding,
+                                                               cameraUniformOffset);
+        }
+        if (drawable.appearanceBinding >= 0) {
+            offsets[count++] = QRhiCommandBuffer::DynamicOffset(drawable.appearanceBinding,
+                                                               drawable.appearanceUniformOffset);
+        }
+        Q_ASSERT(count < 2 || offsets[0].first < offsets[1].first);
+        if (count == 0) {
             cb->setShaderResources(drawable.bindings);
+        } else {
+            cb->setShaderResources(drawable.bindings, count, offsets.data());
         }
     };
 

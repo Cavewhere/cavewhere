@@ -61,6 +61,16 @@ struct cwOffscreenRenderParameters {
     // back-compatible default); set it to render with a different eye-dome look than
     // the on-screen view.
     std::optional<EdlParametersData> edlOverride = std::nullopt;
+
+    // Per-object appearance slot this job renders with. 0 (default) = the live
+    // appearance every render object wrote to slot 0, so a plain capture matches
+    // the on-screen look. A consumer that wants an overridden look (e.g. a
+    // monochrome point cloud at a custom radius) first writes those values into a
+    // higher appearance slot of the relevant render objects, then issues the job
+    // with that slot here; cwRhiScene stamps it into every GatherContext and each
+    // object resolves it to its own dynamic UBO offset. Valid range is
+    // [0, cwRHIObject::kAppearanceSlotCount).
+    int appearanceSlot = 0;
 };
 
 #endif // CWOFFSCREENRENDERPARAMETERS_H

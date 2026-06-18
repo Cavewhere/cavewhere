@@ -10,8 +10,10 @@ class QRhiCommandBuffer;
 #include "cwRHIObject.h"
 #include "cwRhiPipelineTypes.h"
 #include "cwEdlParametersData.h"
+#include "cwRenderObjectId.h"
 #include <QHash>
 #include <QList>
+#include <QSet>
 #include <QSize>
 #include <QString>
 #include <array>
@@ -22,6 +24,20 @@ class cwRenderObject;
 class cwRhiItemRenderer;
 class cwRhiOffscreenRenderer;
 struct cwOffscreenRenderJob;
+
+// Per-render-job inputs to cwRhiScene::gatherScene that change which objects are
+// gathered and how they look. Defaults = gather the scene exactly like the live
+// frame, which is what the live frame passes. New per-job overrides go here as
+// fields rather than as more gatherScene() arguments.
+struct cwSceneGatherOptions {
+    // Render objects to suppress for this gather only, by stable id (per-job
+    // visibility override); empty = honor each object's live isVisible().
+    QSet<cwRenderObjectId> hiddenObjectIds;
+    // Appearance slot stamped into each GatherContext (0 = live appearance); an
+    // object that supports appearance overrides reads it to pick its dynamic
+    // UBO offset.
+    int appearanceSlot = 0;
+};
 
 /**
  * @brief The cwRhiScene class
@@ -254,12 +270,12 @@ private:
     // Build the per-pass pipeline batches for every visible object, using the
     // supplied per-pass render data (which carries the target rpDesc + sample
     // count each pass routes into). Shared by the live frame and the offscreen
-    // render so both dispatch the same scene. @a hiddenIds are render objects to
-    // skip for this gather only (per-job visibility override); empty = honor each
-    // object's live isVisible() exactly, which is what the live frame passes.
+    // render so both dispatch the same scene. @a options carries the per-job
+    // overrides (default = gather exactly like the live frame, which is what the
+    // live frame passes): see cwSceneGatherOptions.
     void gatherScene(std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>& passBatches,
                      const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData,
-                     const QSet<cwRenderObjectId>& hiddenIds = {});
+                     const cwSceneGatherOptions& options = {});
 
     // Issue draws for one pass's batches against the currently-open render pass.
     // cameraUniformOffset selects which camera slot of the global UBO a draw

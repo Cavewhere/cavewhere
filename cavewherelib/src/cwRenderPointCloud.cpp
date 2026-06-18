@@ -11,6 +11,9 @@
 #include "cwGeometryItersecter.h"
 #include "cwScene.h"
 
+// Qt includes
+#include <QDebug>
+
 namespace {
     // Sphere radius used for ray-vs-point picking. Matches the half-spacing
     // factor in PointCloud.vert so that "visible point under cursor" picks.
@@ -84,6 +87,39 @@ void cwRenderPointCloud::setWorldRadius(float worldRadius)
         return;
     }
     state.worldRadius = worldRadius;
+    m_renderState.setValue(state);
+    update();
+}
+
+void cwRenderPointCloud::setWorldRadiusOverride(int slot, float worldRadius)
+{
+    // Slot 0 is the live radius (setWorldRadius); overrides occupy slots
+    // [1, kAppearanceSlotCount). A slot outside that range can neither be uploaded
+    // (the UBO has only kAppearanceSlotCount slots) nor selected by a render job
+    // (gather() clamps into range), so reject it loudly instead of silently
+    // storing an override that never renders.
+    if (slot <= 0 || slot >= cwRHIObject::kAppearanceSlotCount) {
+        qWarning() << "cwRenderPointCloud::setWorldRadiusOverride: slot" << slot
+                   << "out of range [1," << cwRHIObject::kAppearanceSlotCount << ")";
+        return;
+    }
+    RenderState state = m_renderState.value();
+    const auto existing = state.worldRadiusOverrides.constFind(slot);
+    if (existing != state.worldRadiusOverrides.constEnd()
+        && qFuzzyCompare(existing.value(), worldRadius)) {
+        return;
+    }
+    state.worldRadiusOverrides.insert(slot, worldRadius);
+    m_renderState.setValue(state);
+    update();
+}
+
+void cwRenderPointCloud::clearWorldRadiusOverride(int slot)
+{
+    RenderState state = m_renderState.value();
+    if (state.worldRadiusOverrides.remove(slot) == 0) {
+        return;
+    }
     m_renderState.setValue(state);
     update();
 }

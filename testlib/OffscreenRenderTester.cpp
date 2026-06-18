@@ -6,6 +6,10 @@
 #include "cwCamera.h"
 #include "cwOffscreenRenderParameters.h"
 #include "cwRenderingSettings.h"
+#include "cwRegionSceneManager.h"
+#include "cwLazLayersSceneNode.h"
+#include "cwLazLayer.h"
+#include "cwRenderPointCloud.h"
 
 // Qt includes
 #include <QColor>
@@ -17,11 +21,13 @@
 #include <QFuture>
 #include <QImage>
 #include <QMatrix4x4>
+#include <QtMath>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSet>
 #include <QSGRendererInterface>
 #include <QTemporaryDir>
+#include <QVector3D>
 
 #include <asyncfuture.h>
 
@@ -106,6 +112,26 @@ QList<QByteArray> svgContentTileBlobs(const QString& svgPath)
     }
     return blobs;
 }
+
+// Every visible point cloud owned by @a manager's LAZ scene node, in model order.
+QList<cwRenderPointCloud*> visiblePointClouds(cwRegionSceneManager* manager)
+{
+    QList<cwRenderPointCloud*> clouds;
+    if (!manager) {
+        return clouds;
+    }
+    cwLazLayersSceneNode* node = manager->lazLayersSceneNode();
+    if (!node) {
+        return clouds;
+    }
+    const QList<cwLazLayer*> layers = node->visibleLayers();
+    for (cwLazLayer* layer : layers) {
+        if (cwRenderPointCloud* cloud = node->pointCloudForLayer(layer)) {
+            clouds.append(cloud);
+        }
+    }
+    return clouds;
+}
 } // namespace
 
 OffscreenRenderTester::OffscreenRenderTester(QObject* parent) :
@@ -129,6 +155,96 @@ bool OffscreenRenderTester::addSyntheticPointCloud(QObject* rootData)
     writeMinimalLaz(lazPath);
     addLazAndWait(root, QStringList{lazPath});
     return true;
+}
+
+int OffscreenRenderTester::setPointCloudWorldRadiusOverride(QObject* sceneManager, int slot,
+                                                            double worldRadius)
+{
+    auto* manager = qobject_cast<cwRegionSceneManager*>(sceneManager);
+    if (!manager) {
+        qWarning() << "setPointCloudWorldRadiusOverride: not a cwRegionSceneManager";
+        return 0;
+    }
+    const QList<cwRenderPointCloud*> clouds = visiblePointClouds(manager);
+    for (cwRenderPointCloud* cloud : clouds) {
+        cloud->setWorldRadiusOverride(slot, float(worldRadius));
+    }
+    return int(clouds.size());
+}
+
+void OffscreenRenderTester::renderPointCloudFramed(QQuickItem* viewer, QObject* sceneManager,
+                                                   const QString& filePath, QSize size,
+                                                   int appearanceSlot)
+{
+    auto* rhiViewer = qobject_cast<cwRhiViewer*>(viewer);
+    auto* manager = qobject_cast<cwRegionSceneManager*>(sceneManager);
+    if (!rhiViewer || !manager) {
+        qWarning() << "renderPointCloudFramed: bad viewer or sceneManager";
+        return;
+    }
+    cwScene* sceneObject = rhiViewer->scene();
+    if (!sceneObject || filePath.isEmpty() || size.isEmpty()) {
+        qWarning() << "renderPointCloudFramed: no scene, empty path, or empty size";
+        return;
+    }
+    const QDir outputDir = QFileInfo(filePath).absoluteDir();
+    if (!outputDir.exists()) {
+        qWarning() << "renderPointCloudFramed: output directory does not exist"
+                   << outputDir.absolutePath();
+        return;
+    }
+
+    const QList<cwRenderPointCloud*> clouds = visiblePointClouds(manager);
+    if (clouds.isEmpty()) {
+        qWarning() << "renderPointCloudFramed: no visible point cloud";
+        return;
+    }
+    cwRenderPointCloud* cloud = clouds.first();
+
+    // Frame the cloud's scene-space bounds head-on. The distance must satisfy two
+    // things at once: (a) the whole bbox fits the frustum, and (b) the LIVE
+    // world-radius renders well below the shader's maxPointSizePx clamp — a frame
+    // too tight saturates the live sprites at the clamp, where a larger override
+    // radius can't grow them and the per-slot difference vanishes (an earlier
+    // bounds-only version did exactly this and the test could not tell the slots
+    // apart). So take the farther of two distances: bounds-fit, and the distance
+    // at which the live radius projects to ~kTargetLivePx (mirrors the size
+    // formula in PointCloud.vert, dpr 1, point near the view axis so w ≈ distance).
+    const QVector3D bboxMin = cloud->bboxMin();
+    const QVector3D bboxMax = cloud->bboxMax();
+    const QVector3D center = (bboxMin + bboxMax) * 0.5f;
+    const float boundsRadius = qMax(0.5f * (bboxMax - bboxMin).length(), 1.0f);
+
+    constexpr float kFovDeg = 45.0f;
+    constexpr float kFrameMargin = 1.5f;
+    constexpr float kTargetLivePx = 4.0f;
+    const float halfFov = qDegreesToRadians(kFovDeg * 0.5f);
+    const float liveRadius = cloud->worldRadius();
+    const float distanceForBounds = boundsRadius / std::sin(halfFov) * kFrameMargin;
+    const float distanceForSprite = (liveRadius > 0.0f)
+        ? liveRadius * (1.0f / std::tan(halfFov)) * (size.height() * 0.5f) / kTargetLivePx
+        : 0.0f;
+    const float distance = qMax(distanceForBounds, distanceForSprite);
+    const QVector3D eye = center + QVector3D(0.0f, 0.0f, distance);
+
+    QMatrix4x4 viewMatrix;
+    viewMatrix.lookAt(eye, center, QVector3D(0.0f, 1.0f, 0.0f));
+    QMatrix4x4 projectionMatrix;
+    projectionMatrix.perspective(kFovDeg, 1.0f,
+                                 qMax(0.01f, distance - boundsRadius * 2.0f),
+                                 distance + boundsRadius * 2.0f);
+
+    cwOffscreenRenderParameters parameters;
+    parameters.viewMatrix = viewMatrix;
+    parameters.projectionMatrix = projectionMatrix;
+    parameters.outputSize = size;
+    parameters.devicePixelRatio = 1.0f;
+    parameters.sampleCount = 1;
+    parameters.backgroundColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0); // transparent clear
+    parameters.hiddenObjectIds = manager->captureHiddenObjectIds();    // isolate the cloud
+    parameters.appearanceSlot = appearanceSlot;
+
+    saveOffscreenRender(sceneObject, parameters, filePath);
 }
 
 bool OffscreenRenderTester::windowHasRhi(QQuickItem* item) const
