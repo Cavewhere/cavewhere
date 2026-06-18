@@ -11,6 +11,8 @@
 #include <QString>
 #include <qqmlintegration.h>
 class QQuickItem;
+class cwScene;
+struct cwOffscreenRenderParameters;
 
 /**
  * Test-only helpers for the render-to-PNG QML regression tests (the offscreen
@@ -50,6 +52,19 @@ public:
     // cwRhiViewer (passed as QQuickItem* to keep this header free of that type).
     Q_INVOKABLE void renderToImage(QQuickItem* viewer, const QString& filePath,
                                    QSize size = QSize(), int sampleCount = -1);
+
+    // Render the resident scene to a transparent-backed PNG (alpha-0 clear, so drawn
+    // geometry is exactly the opaque region — opaqueFraction is meaningful). When
+    // @a hideExportChrome is true, the map-export chrome (background gradient, line
+    // plot, grid plane) is suppressed for this render only via the per-job
+    // hiddenObjectIds override — the exact mechanism the tiled exporter uses, fed from
+    // @a sceneManager's captureHiddenObjectIds(). @a sceneManager is the
+    // cwRegionSceneManager (passed as QObject* to keep this header free of the type);
+    // it may be null only when @a hideExportChrome is false. A display-independent
+    // square render at DPR 1, no MSAA.
+    Q_INVOKABLE void renderTransparentImage(QQuickItem* viewer, QObject* sceneManager,
+                                            const QString& filePath, QSize size,
+                                            bool hideExportChrome);
 
     // Render @a count offscreen images of the resident scene, each panned by a distinct
     // per-index amount so the tiles differ, all issued before the render thread drains so
@@ -108,6 +123,14 @@ public:
     // A correct export keeps the two equal; the bug collapses the distinct count.
     Q_INVOKABLE int svgContentTileCount(const QString& svgPath) const;
     Q_INVOKABLE int svgDistinctContentTileCount(const QString& svgPath) const;
+
+private:
+    // Shared tail of the single-image render-to-PNG helpers: queue the offscreen
+    // render and, when it completes, save the QImage to filePath (warning on a null
+    // result or a write failure). The render parameters and destination differ per
+    // caller; this queue-and-save plumbing does not.
+    void saveOffscreenRender(cwScene* scene, const cwOffscreenRenderParameters& parameters,
+                             const QString& filePath);
 };
 
 #endif // OFFSCREENRENDERTESTER_H

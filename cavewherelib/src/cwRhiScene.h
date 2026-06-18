@@ -165,9 +165,10 @@ private:
     QList<cwRHIObject*> m_rhiObjects;
     QList<cwRHIObject*> m_rhiNeedResourceUpdate;
 
-    //Should only be used in synchroize. Keyed by cwRenderObject::renderObjectId()
-    //(stable, never reused) rather than the raw pointer, whose address can be
-    //recycled by the allocator (issue #512).
+    //Render-thread only: written in synchroize(), read in synchroize() and
+    //gatherScene() (the per-job hidden-id resolution). Keyed by
+    //cwRenderObject::renderObjectId() (stable, never reused) rather than the raw
+    //pointer, whose address can be recycled by the allocator (issue #512).
     QHash<cwRenderObjectId, cwRHIObject*> m_rhiObjectLookup;
 
     struct GlobalUniform {
@@ -253,9 +254,12 @@ private:
     // Build the per-pass pipeline batches for every visible object, using the
     // supplied per-pass render data (which carries the target rpDesc + sample
     // count each pass routes into). Shared by the live frame and the offscreen
-    // render so both dispatch the same scene.
+    // render so both dispatch the same scene. @a hiddenIds are render objects to
+    // skip for this gather only (per-job visibility override); empty = honor each
+    // object's live isVisible() exactly, which is what the live frame passes.
     void gatherScene(std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>& passBatches,
-                     const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData);
+                     const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData,
+                     const QSet<cwRenderObjectId>& hiddenIds = {});
 
     // Issue draws for one pass's batches against the currently-open render pass.
     // cameraUniformOffset selects which camera slot of the global UBO a draw

@@ -148,14 +148,12 @@ void cwCaptureViewport::capture()
 
     // Every bail-out below must still emit finishedCapture(): cwCaptureManager
     // chains the next layer (and the final save) on that signal, so a silent
-    // return would stall the whole export. abort() restores capture state
-    // (idempotent setCapturing(false), clears the re-entrancy flag) and signals
-    // completion so the manager advances rather than hangs.
+    // return would stall the whole export. abort() clears the re-entrancy flag and
+    // signals completion so the manager advances rather than hangs. Capture no
+    // longer touches global scene state (the gradient/grid/line-plot are hidden
+    // per-tile via hiddenObjectIds), so there is nothing to restore here.
     const auto abort = [this](const QString& reason) {
         qWarning().noquote() << "Map export aborted:" << reason;
-        if(!m_sceneManager.isNull()) {
-            m_sceneManager->setCapturing(false);
-        }
         CapturingImages = false;
         emit finishedCapture();
     };
@@ -239,10 +237,11 @@ void cwCaptureViewport::capture()
 
     // Hide the gradient/grid/line-plot so the rendered tiles are transparent-backed,
     // but keep point clouds visible so they appear in the export (EDL-lit, as in the
-    // live view). Pulled by cwRhiScene::synchroize(); the renderOffscreen() calls below
-    // queue the work that the same sync drains, so the gate is in effect by the time
-    // they run.
-    m_sceneManager->setCapturing(true);
+    // live view). Per-tile visibility override (not a global toggle), so the live 3D
+    // view stays interactive and undisturbed throughout the export.
+    const QSet<cwRenderObjectId> hiddenObjectIds =
+        m_sceneManager.isNull() ? QSet<cwRenderObjectId>{}
+                                : m_sceneManager->captureHiddenObjectIds();
 
     const int sampleCount = cwRenderingSettings::instance()->sampleCount();
     const QMatrix4x4 viewMatrix = camera->viewMatrix();
@@ -278,6 +277,7 @@ void cwCaptureViewport::capture()
             parameters.outputSize = croppedTileSize;
             parameters.devicePixelRatio = kExportDevicePixelRatio;
             parameters.sampleCount = sampleCount;
+            parameters.hiddenObjectIds = hiddenObjectIds;
 
             tiles.append(Tile{QPointF(originX, originY), scene->renderOffscreen(parameters)});
         }
@@ -338,11 +338,8 @@ void cwCaptureViewport::capture()
         // available as an obstacle source.
         placeLabelsAfterTiles(parent, imageScale);
 
-        // Clean up. m_sceneManager is a QPointer and this runs deferred, so guard
-        // against it having been destroyed during the async render.
-        if(!m_sceneManager.isNull()) {
-            m_sceneManager->setCapturing(false);
-        }
+        // Clean up. Visibility was overridden per-tile, never globally, so there is
+        // no scene state to restore here.
         CapturingImages = false;
 
         emit finishedCapture();

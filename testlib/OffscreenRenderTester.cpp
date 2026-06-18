@@ -208,18 +208,67 @@ void OffscreenRenderTester::renderToImage(QQuickItem* viewer, const QString& fil
     parameters.sampleCount = requestSampleCount;
     parameters.backgroundColor = QColor::fromRgbF(0.0, 0.0, 0.0, 1.0);
 
-    QFuture<QImage> future = sceneObject->renderOffscreen(parameters);
+    saveOffscreenRender(sceneObject, parameters, filePath);
+}
 
+void OffscreenRenderTester::saveOffscreenRender(cwScene* scene,
+                                                const cwOffscreenRenderParameters& parameters,
+                                                const QString& filePath)
+{
+    QFuture<QImage> future = scene->renderOffscreen(parameters);
     AsyncFuture::observe(future).context(this, [filePath](QImage image) {
         if (image.isNull()) {
-            qWarning() << "renderToImage: offscreen render produced no image" << filePath;
+            qWarning() << "saveOffscreenRender: offscreen render produced no image" << filePath;
             return;
         }
         if (!image.save(filePath)) {
-            qWarning() << "renderToImage: failed to write image to" << filePath
+            qWarning() << "saveOffscreenRender: failed to write image to" << filePath
                        << "(check the extension and write permissions)";
         }
     });
+}
+
+void OffscreenRenderTester::renderTransparentImage(QQuickItem* viewer, QObject* sceneManager,
+                                                   const QString& filePath, QSize size,
+                                                   bool hideExportChrome)
+{
+    auto* rhiViewer = qobject_cast<cwRhiViewer*>(viewer);
+    if (!rhiViewer) {
+        qWarning() << "renderTransparentImage: item is not a cwRhiViewer";
+        return;
+    }
+    cwScene* sceneObject = rhiViewer->scene();
+    cwCamera* cameraObject = rhiViewer->camera();
+    if (!sceneObject || !cameraObject || filePath.isEmpty() || size.isEmpty()) {
+        qWarning() << "renderTransparentImage: no scene/camera, empty path, or empty size";
+        return;
+    }
+    const QDir outputDir = QFileInfo(filePath).absoluteDir();
+    if (!outputDir.exists()) {
+        qWarning() << "renderTransparentImage: output directory does not exist"
+                   << outputDir.absolutePath();
+        return;
+    }
+
+    cwOffscreenRenderParameters parameters;
+    parameters.viewMatrix = cameraObject->viewMatrix();
+    parameters.projectionMatrix = cameraObject->projectionMatrix();
+    parameters.outputSize = size;
+    parameters.devicePixelRatio = 1.0f;
+    parameters.sampleCount = 1;
+    parameters.backgroundColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0); // transparent clear
+
+    if (hideExportChrome) {
+        auto* manager = qobject_cast<cwRegionSceneManager*>(sceneManager);
+        if (!manager) {
+            qWarning() << "renderTransparentImage: hideExportChrome set but sceneManager is not a"
+                          " cwRegionSceneManager";
+            return;
+        }
+        parameters.hiddenObjectIds = manager->captureHiddenObjectIds();
+    }
+
+    saveOffscreenRender(sceneObject, parameters, filePath);
 }
 
 int OffscreenRenderTester::renderPannedBatch(QQuickItem* viewer, const QString& dirPath,

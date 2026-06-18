@@ -4,7 +4,15 @@
 //Qt includes
 #include <QColor>
 #include <QMatrix4x4>
+#include <QSet>
 #include <QSize>
+
+//Std includes
+#include <optional>
+
+//Our includes
+#include "cwRenderObjectId.h"
+#include "cwEdlParametersData.h"
 
 /**
  * @brief Pure-input description of an offscreen render of the resident scene.
@@ -39,6 +47,20 @@ struct cwOffscreenRenderParameters {
     // framebuffer's sample count (cwRenderingSettings::sampleCount) so the render is a
     // faithful copy.
     int sampleCount = 1;
+
+    // Per-job appearance overrides. Both default to "render the scene exactly as the
+    // live frame does", so a plain capture is unchanged.
+    //
+    // Render objects to suppress for this job only, by stable render-object id. The
+    // live frame's visibility is untouched (no setVisible mutation, no race): the ids
+    // are resolved to render objects inside cwRhiScene::gatherScene and skipped there.
+    // Lets a capture hide chrome (gradient/grid/line-plot) while the on-screen view
+    // stays interactive — replacing the global cwRegionSceneManager::setCapturing hack.
+    QSet<cwRenderObjectId> hiddenObjectIds;
+    // EDL tuning for this job. Absent = use the scene's live EDL parameters (the
+    // back-compatible default); set it to render with a different eye-dome look than
+    // the on-screen view.
+    std::optional<EdlParametersData> edlOverride = std::nullopt;
 };
 
 #endif // CWOFFSCREENRENDERPARAMETERS_H

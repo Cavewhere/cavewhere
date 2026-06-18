@@ -607,11 +607,26 @@ std::array<cwRHIObject::RenderData, cwRhiScene::kPassCount> cwRhiScene::buildPer
 }
 
 void cwRhiScene::gatherScene(std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>& passBatches,
-                            const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData)
+                            const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData,
+                            const QSet<cwRenderObjectId>& hiddenIds)
 {
+    // Resolve the per-job hidden ids to the live cwRHIObject pointers once, so the
+    // gather loop skips them with a pointer-set lookup rather than re-hashing ids.
+    // Skipped entirely on the live frame (empty set) so its hot path stays
+    // allocation-free; contains() on the resulting null set is a cheap no-op.
+    QSet<const cwRHIObject*> hiddenObjects;
+    if (!hiddenIds.isEmpty()) {
+        hiddenObjects.reserve(hiddenIds.size());
+        for (cwRenderObjectId id : hiddenIds) {
+            if (cwRHIObject* object = m_rhiObjectLookup.value(id, nullptr)) {
+                hiddenObjects.insert(object);
+            }
+        }
+    }
+
     quint32 objectOrder = 0;
     for (auto object : std::as_const(m_rhiObjects)) {
-        if (!object->isVisible()) {
+        if (!object->isVisible() || hiddenObjects.contains(object)) {
             ++objectOrder;
             continue;
         }

@@ -358,7 +358,9 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
     // changes; then keep its tuning fresh each render.
     if (offscreenEdlActive && m_edl.effect) {
         m_scene->ensureEffectInitialized(m_edl, rhi, m_target.rpDesc.get(), sampleCount);
-        static_cast<cwEDLEffect*>(m_edl.effect.get())->setParameters(m_scene->m_edlParameters);
+        // Per-job EDL when the job overrides it; otherwise the scene's live tuning.
+        static_cast<cwEDLEffect*>(m_edl.effect.get())
+            ->setParameters(p.edlOverride.value_or(m_scene->m_edlParameters));
     }
 
     // Route passes to the offscreen targets (EDL split when active, else flat into
@@ -373,7 +375,7 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
         m_scene->buildPerPassRenderData(offscreenRenderData);
 
     std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiScene::kPassCount> passBatches;
-    m_scene->gatherScene(passBatches, perPassRenderData);
+    m_scene->gatherScene(passBatches, perPassRenderData, p.hiddenObjectIds);
 
     // This tile's camera lives in global-UBO slot @a cameraSlot; write it (and the
     // offscreen viewport metrics) so the pass reads it at that slot's dynamic offset.

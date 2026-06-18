@@ -13,8 +13,10 @@
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QSet>
 
 //Our includes
+#include "cwRenderObjectId.h"
 class cwScene;
 class cwGLLinePlot;
 class cwRenderGridPlane;
@@ -43,8 +45,6 @@ class cwRegionSceneManager : public QObject
     Q_PROPERTY(cwRenderRadialGradient* background READ background CONSTANT)
     Q_PROPERTY(cwLazLayersSceneNode* lazLayersSceneNode READ lazLayersSceneNode CONSTANT)
 
-    Q_PROPERTY(bool capturing READ isCapturing WRITE setCapturing NOTIFY capturingChanged FINAL)
-
 public:
     explicit cwRegionSceneManager(QObject *parent = 0);
 
@@ -56,8 +56,11 @@ public:
 
     cwScene* scene() const;
 
-    bool isCapturing() const;
-    void setCapturing(bool newCapturing);
+    // The render objects a map-export capture hides (background gradient, line
+    // plot, grid plane), by stable id. Fed to cwOffscreenRenderParameters::
+    // hiddenObjectIds per export tile so the capture renders transparent-backed
+    // without mutating the live view's visibility.
+    QSet<cwRenderObjectId> captureHiddenObjectIds() const;
 
     cwRenderGridPlane *gridPlane() const { return m_plane; }
 
@@ -72,8 +75,6 @@ signals:
     void cavingRegionChanged();
     void linePlotChanged();
     void scrapsChanged();
-
-    void capturingChanged();
 
 public slots:
 
@@ -93,7 +94,6 @@ private:
 
     //For rendering label
     QPointer<cwCavingRegion> Region;
-    bool m_capturing;
 };
 
 /**
@@ -108,11 +108,6 @@ inline cwScene* cwRegionSceneManager::scene() const {
   \brief Returns the object that renderes the line plot
   */
 inline cwRenderLinePlot* cwRegionSceneManager::linePlot() { return m_linePlot; }
-
-inline bool cwRegionSceneManager::isCapturing() const
-{
-    return m_capturing;
-}
 
 inline cwRenderTexturedItems *cwRegionSceneManager::items() const
 {

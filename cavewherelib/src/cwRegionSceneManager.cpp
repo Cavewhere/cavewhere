@@ -85,14 +85,11 @@ cwCavingRegion* cwRegionSceneManager::cavingRegion() const {
     return Region;
 }
 
-void cwRegionSceneManager::setCapturing(bool newCapturing)
+QSet<cwRenderObjectId> cwRegionSceneManager::captureHiddenObjectIds() const
 {
-    if (m_capturing == newCapturing) {
-        return;
-    }
-    m_capturing = newCapturing;
-    m_background->setVisible(!m_capturing);
-    m_linePlot->setVisible(!m_capturing);
-    m_plane->setVisible(!m_capturing);
-    emit capturingChanged();
+    return {
+        m_background->renderObjectId(),
+        m_linePlot->renderObjectId(),
+        m_plane->renderObjectId()
+    };
 }
