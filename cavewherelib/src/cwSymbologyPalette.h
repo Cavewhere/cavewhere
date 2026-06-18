@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QQmlEngine>
 #include <QString>
 #include <QStringView>
 #include <QUuid>
@@ -32,6 +33,8 @@
 class CAVEWHERE_LIB_EXPORT cwSymbologyPalette : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SymbologyPalette)
+    QML_UNCREATABLE("Palettes are owned by cwSymbologyPaletteManager")
 
     Q_PROPERTY(QUuid id READ id NOTIFY dataChanged)
     Q_PROPERTY(QString name READ name NOTIFY dataChanged)

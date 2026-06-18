@@ -5,6 +5,9 @@
         <file>palettes/cavewhere-default/brushes/feature.cwbrush</file>
         <file>palettes/cavewhere-default/brushes/scrap-outline.cwbrush</file>
         <file>palettes/cavewhere-default/brushes/floor-step.cwbrush</file>
+        <file>palettes/cavewhere-default/brushes/ceiling-step.cwbrush</file>
         <file>palettes/cavewhere-default/glyphs/floor-step-tick.cwglyph</file>
+        <file>palettes/cavewhere-default/glyphs/ceiling-step-tick.cwglyph</file>
+        <file>palettes/cavewhere-default/glyphs/ceiling-step-dash.cwglyph</file>
     </qresource>
 </RCC>

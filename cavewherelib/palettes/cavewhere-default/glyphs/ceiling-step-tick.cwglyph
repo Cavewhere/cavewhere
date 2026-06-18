@@ -1,0 +1,31 @@
+{
+ "name": "ceiling-step-tick",
+ "displayName": "Ceiling Step Tick",
+ "strokes": [
+  {
+   "points": [
+    {
+     "position": {
+      "x": 0,
+      "y": 0
+     },
+     "pressure": 1,
+     "timestampMs": "0"
+    },
+    {
+     "position": {
+      "x": 0,
+      "y": 0.375
+     },
+     "pressure": 1,
+     "timestampMs": "0"
+    }
+   ],
+   "brushName": "feature"
+  }
+ ],
+ "fileVersion": {
+  "version": 9,
+  "cavewhereVersion": "2026.4.3-327-g02f932a6"
+ }
+}

@@ -7,7 +7,6 @@
 
 pragma ComponentBehavior: Bound
 
-import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
@@ -17,9 +16,10 @@ QC.Frame {
 
     property Sketch sketch
 
-    // Name of the brush new strokes are drawn with (resolved via the active
-    // palette). A temporary fixed set until the brush picker lands in commit 7.
-    property string brushName: "wall"
+    // The canvas owning currentBrushName — the single source of truth the brush
+    // picker writes (3b). The toolbar drives it but does not store the brush
+    // itself.
+    property SketchCanvas canvas
 
     // Eraser is a tool mode, not a brush (Decision 2). When true, pen input
     // erases instead of drawing. Pending the eraser redesign.
@@ -32,66 +32,73 @@ QC.Frame {
 
     padding: Theme.tightSpacing
 
+    function _selectBrush(name: string) {
+        if (toolbarId.canvas) {
+            toolbarId.canvas.currentBrushName = name
+        }
+        toolbarId.eraseActive = false
+    }
+
     ColumnLayout {
         spacing: Theme.tightSpacing
 
-        QC.ButtonGroup {
-            id: kindGroupId
+        QC.Label {
+            text: "Palette"
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeCaption
+            color: Theme.textSubtle
         }
 
-        QC.RadioButton {
-            id: wallButtonId
-            objectName: "wallButton"
-            text: "Wall"
-            checked: !toolbarId.eraseActive && toolbarId.brushName === "wall"
-            QC.ButtonGroup.group: kindGroupId
-            onToggled: {
-                if (checked) {
-                    toolbarId.brushName = "wall"
-                    toolbarId.eraseActive = false
-                }
+        QC.ComboBox {
+            id: paletteComboId
+            objectName: "paletteCombo"
+            Layout.fillWidth: true
+            textRole: "name"
+            valueRole: "id"
+
+            model: SymbologyPaletteListModel {
+                manager: RootData.paletteManager
             }
-        }
 
-        QC.RadioButton {
-            id: featureButtonId
-            objectName: "featureButton"
-            text: "Feature"
-            checked: !toolbarId.eraseActive && toolbarId.brushName === "feature"
-            QC.ButtonGroup.group: kindGroupId
-            onToggled: {
-                if (checked) {
-                    toolbarId.brushName = "feature"
-                    toolbarId.eraseActive = false
-                }
+            // Reflect the resolved palette (may be inherited from settings/default
+            // when the region has no id of its own), not just the region's id.
+            // Reading `count` makes the binding re-run once the model populates —
+            // indexOfValue() alone isn't reactive to model row changes.
+            currentIndex: {
+                const ignored = paletteComboId.count
+                const resolvedId = (toolbarId.sketch && toolbarId.sketch.resolvedPalette)
+                    ? toolbarId.sketch.resolvedPalette.id
+                    : undefined
+                return paletteComboId.indexOfValue(resolvedId)
             }
+
+            // onActivated fires only on user selection, so it never loops with
+            // the currentIndex binding above.
+            onActivated: RootData.region.defaultPaletteId = currentValue
         }
 
-        QC.RadioButton {
-            id: scrapOutlineButtonId
-            objectName: "scrapOutlineButton"
-            text: "Scrap Outline"
-            checked: !toolbarId.eraseActive && toolbarId.brushName === "scrap-outline"
-            QC.ButtonGroup.group: kindGroupId
-            onToggled: {
-                if (checked) {
-                    toolbarId.brushName = "scrap-outline"
-                    toolbarId.eraseActive = false
-                }
-            }
+        QC.Label {
+            text: "Brush"
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeCaption
+            color: Theme.textSubtle
         }
 
-        QC.RadioButton {
+        BrushPicker {
+            id: brushPickerId
+            objectName: "brushPicker"
+            Layout.fillWidth: true
+            palette: toolbarId.sketch ? toolbarId.sketch.resolvedPalette : null
+            brushName: toolbarId.canvas ? toolbarId.canvas.currentBrushName : ""
+            onBrushSelected: (name) => toolbarId._selectBrush(name)
+        }
+
+        QC.CheckBox {
             id: eraserButtonId
             objectName: "eraserButton"
             text: "Eraser"
             checked: toolbarId.eraseActive
-            QC.ButtonGroup.group: kindGroupId
-            onToggled: {
-                if (checked) {
-                    toolbarId.eraseActive = true
-                }
-            }
+            onToggled: toolbarId.eraseActive = checked
         }
 
         RowLayout {

@@ -915,8 +915,10 @@ TEST_CASE("Decoration layout renders to a reference image", "[cwSketchDecoration
     const auto snapshot = demoPalette().snapshot();
     const auto wall = snapshot.findBrush(cwSymbologyPaletteSeed::wallBrushName());
     const auto floorStep = snapshot.findBrush(cwSymbologyPaletteSeed::floorStepBrushName());
+    const auto ceilingStep = snapshot.findBrush(cwSymbologyPaletteSeed::ceilingStepBrushName());
     REQUIRE(wall.has_value());
     REQUIRE(floorStep.has_value());
+    REQUIRE(ceilingStep.has_value());
 
     // Dashed stroke: a BendingStamp of a short dash glyph along the line.
     // There is no separate "dashed line" mode — the gaps come from the dash
@@ -992,7 +994,8 @@ TEST_CASE("Decoration layout renders to a reference image", "[cwSketchDecoration
     const QVector<Panel> panels = {
         {*wall, gentle, QStringLiteral("wall  —  traced offset polyline (offset 0)")},
         {dashedBrush, gentle, QStringLiteral("dashed  —  bending dash glyph (dashed stroke)")},
-        {*floorStep, gentle, QStringLiteral("floor-step  —  traced edge + rigid ticks")},
+        {*floorStep, gentle, QStringLiteral("floor-step  —  traced edge + rigid ticks (+normal side)")},
+        {*ceilingStep, gentle, QStringLiteral("ceiling-step (seed)  —  dashed line + rigid ticks (+normal side)")},
         {ceilingStepBendingBrush, tighter, QStringLiteral("ceiling-step (bending)  —  dashes (with gaps) subdivided to follow the curve")},
         {ceilingStepJointedBrush, tighter, QStringLiteral("ceiling-step (jointed)  —  dashes (with gaps) warped at vertices only (chords)")},
         {bendingBrush, tighter, QStringLiteral("bending  —  traced line + bending chevrons")},

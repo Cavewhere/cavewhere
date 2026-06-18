@@ -29,7 +29,7 @@ QQ.Item {
         ? sketch.viewState.pan
         : _centeredPan
 
-    readonly property string brushName: toolbarId.brushName
+    readonly property string brushName: sketchCanvasId.currentBrushName
     readonly property bool eraseActive: toolbarId.eraseActive
     readonly property bool zoomAllowed: sketch !== null && !sketch.viewState.zoomLocked
 
@@ -418,6 +418,7 @@ QQ.Item {
         anchors.left: parent.left
         anchors.margins: Theme.pageMargin
         sketch: sketchItemId.sketch
+        canvas: sketchCanvasId
     }
 
     RowLayoutPanel {

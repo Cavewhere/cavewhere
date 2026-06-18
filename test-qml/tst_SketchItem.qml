@@ -76,7 +76,9 @@ Item {
         function resetToolbarToPen() {
             const toolbar = findChild(rootId, "sketchToolbar")
             toolbar.eraseActive = false
-            toolbar.brushName = "wall"
+            // Brush selection now lives on the canvas (3b/3c).
+            const canvas = findChild(rootId, "sketchCanvas")
+            canvas.currentBrushName = "wall"
         }
 
         function test_eraserDragMergesIntoOneUndoStep() {
