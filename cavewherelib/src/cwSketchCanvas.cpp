@@ -20,6 +20,7 @@
 #include "cwStation.h"
 #include "cwSurvey2DGeometryArtifact.h"
 #include "cwSurvey2DGeometry.h"
+#include "cwSymbologyPaletteSeed.h"
 #include "cwTrip.h"
 #include "Monad/Result.h"
 #include "asyncfuture.h"
@@ -34,6 +35,7 @@ Q_LOGGING_CATEGORY(lcSketchCanvas, "cw.sketch.canvas")
 
 cwSketchCanvas::cwSketchCanvas(QQuickItem *parent)
     : QCanvasPainterItem(parent),
+      m_currentBrushName(cwSymbologyPaletteSeed::wallBrushName()),
       m_pathModel(new cwDecoratedStrokePathSource(this)),
       m_linePlotModel(new cwCenterlineSketchPainterModel(this)),
       m_linePlotGeometry(new cwSurvey2DGeometryArtifact(this))
@@ -79,6 +81,12 @@ void cwSketchCanvas::setSketch(cwSketch *sketch)
     if (m_sketch != nullptr) {
         m_pathModel->setSketch(m_sketch);
         m_pathModel->setSnapshot(m_sketch->paletteSnapshot());
+        // Re-skin the render path whenever the sketch re-resolves its palette
+        // (e.g. the region's defaultPaletteId changes). The `this` context lets
+        // the blanket disconnect above tear this down on the next setSketch().
+        connect(m_sketch, &cwSketch::paletteSnapshotChanged, this, [this]() {
+            m_pathModel->setSnapshot(m_sketch->paletteSnapshot());
+        });
         if (cwScale *scale = m_sketch->mapScale()) {
             m_pathModel->setMapScaleRatio(scale->scale());
             m_mapScaleConnection =
@@ -117,6 +125,15 @@ void cwSketchCanvas::setSketch(cwSketch *sketch)
 
     emit sketchChanged();
     update();
+}
+
+void cwSketchCanvas::setCurrentBrushName(const QString &name)
+{
+    if (m_currentBrushName == name) {
+        return;
+    }
+    m_currentBrushName = name;
+    emit currentBrushNameChanged();
 }
 
 void cwSketchCanvas::setZoom(double zoom)

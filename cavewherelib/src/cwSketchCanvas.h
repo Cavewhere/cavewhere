@@ -14,6 +14,7 @@
 #include <QPointer>
 #include <QPointF>
 #include <QQmlEngine>
+#include <QString>
 
 //Our includes
 #include "CaveWhereLibExport.h"
@@ -37,6 +38,7 @@ class CAVEWHERE_LIB_EXPORT cwSketchCanvas : public QCanvasPainterItem
     QML_NAMED_ELEMENT(SketchCanvas)
 
     Q_PROPERTY(cwSketch* sketch READ sketch WRITE setSketch NOTIFY sketchChanged)
+    Q_PROPERTY(QString currentBrushName READ currentBrushName WRITE setCurrentBrushName NOTIFY currentBrushNameChanged)
     Q_PROPERTY(double zoom READ zoom WRITE setZoom NOTIFY zoomChanged)
     Q_PROPERTY(QPointF pan READ pan WRITE setPan NOTIFY panChanged)
     Q_PROPERTY(int activeStrokeIndex READ activeStrokeIndex WRITE setActiveStrokeIndex NOTIFY activeStrokeIndexChanged)
@@ -54,6 +56,12 @@ public:
 
     cwSketch *sketch() const;
     void setSketch(cwSketch *sketch);
+
+    // The brush every new stroke is drawn with: the single source of truth
+    // shared by the QML brush picker, the keyboard shortcuts, and the
+    // beginStroke() call site. Defaults to the wall brush.
+    QString currentBrushName() const { return m_currentBrushName; }
+    void setCurrentBrushName(const QString &name);
 
     double zoom() const { return m_zoom; }
     void setZoom(double zoom);
@@ -89,6 +97,7 @@ protected:
 
 signals:
     void sketchChanged();
+    void currentBrushNameChanged();
     void zoomChanged();
     void panChanged();
     void activeStrokeIndexChanged();
@@ -106,6 +115,7 @@ signals:
 
 private:
     cwSketch *m_sketch = nullptr;
+    QString m_currentBrushName;
     cwDecoratedStrokePathSource *m_pathModel = nullptr;
     cwInfiniteGridModel *m_grid = nullptr;
     double m_zoom = 1.0;
