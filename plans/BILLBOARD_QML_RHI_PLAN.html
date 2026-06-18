@@ -608,12 +608,93 @@ feature commit:</p>
 assertions; QML 651 passed / 9 skipped).</p>
 </div>
 
-<h3>Gap 2 &mdash; Keyword visibility is net-new for leads</h3>
-<p>Nothing in the leads code touches keywords today. Wire lead visibility to the keyword filter
-(<code>cwKeywordVisibility</code> is the likely hook; <code>cwKeywordItemModel</code> /
-<code>cwKeywordFilterPipelineModel</code> for the pipeline), and fold leads into the <code>type</code>
-keyword. Data flow (where the filter lives, how a lead's billboard subscribes to visibility changes) is
-undesigned and must be sketched before 4b.</p>
+<h3 id="leads-4b">Gap 2 &mdash; Keyword visibility for leads <span class="pill ok">implemented</span></h3>
+
+<p class="note"><b>Status &amp; design history.</b> A first cut (v1) shipped in the working tree, then a v2 redesign
+was explored and <em>mostly walked back</em> in discussion. The shipped design keeps v1's working mechanism and adds
+exactly <b>one</b> change &mdash; point&nbsp;#1, moving the lead keyword <em>data</em> onto <code>cwScrap</code>. The
+three other v2 ideas were dropped after weighing them against the stated goal (fewest <code>QObject</code>s, least
+indirection, clean MVC):</p>
+<ul>
+  <li><b>No new <code>cwLeadModel</code> enumeration class</b> (was &ldquo;architecture (b), model half&rdquo;).
+      <code>cwLeadModel</code> already exists as an unrelated per-lead-row <code>QAbstractListModel</code> scoped to one
+      cave (the leads <em>table</em> in <code>CaveLeadPage.qml</code>, via <code>cwLeadsSortFilterProxyModel</code> /
+      <code>cwLeadCSVExporter</code>); reusing that name was a mistake. Splitting out a <em>new</em> all-caves,
+      per-scrap enumeration class would add a <code>QObject</code> that merely duplicates the region-tree watching
+      <code>cwLeadView</code> already does. So the view <b>keeps its inline enumeration</b>
+      (<code>scrapsAdded</code>/<code>scrapsRemoved</code> on <code>cwRegionTreeModel</code>, the
+      <code>QHash&lt;cwScrap*, ScrapEntry&gt;</code>). Architecture (b) is satisfied by responsibility, not by a class:
+      the <em>data</em> (keywords) lives on the scrap, the <em>view</em> owns enumeration + registration + visibility.</li>
+  <li><b>No per-scrap container <code>QQuickItem</code></b> (was the v2 visibility target). A <code>QQuickItem</code>
+      per scrap, purely to hold a child list, is <em>heavier</em> than the proxy it would replace (transform node,
+      scene-graph + input plumbing vs. a bare <code>QObject</code> with one <code>bool</code>), and the per-scrap
+      grouping already exists in C++ as <code>ScrapEntry::items</code>. Its claimed wins (free initial visibility,
+      declarative popup-close) were marginal. So <b><code>cwLeadVisibility</code> stays</b> as the
+      <code>setVisible</code> target.</li>
+  <li><b>No Option Y</b> (was: generalize <code>cwKeywordItem</code> to reference an external model). Once the proxy
+      stays and #1 uses the established <code>addExtension</code> pass-through, Option Y's only justification (avoid the
+      item's redundant empty model) is a micro-optimization not worth touching a shared class for. <code>cwKeywordItem</code>
+      is <b>unchanged</b>.</li>
+</ul>
+
+<p><b>The pipeline (context).</b> An entity joins the filter by registering a <code>cwKeywordItem</code> that pairs a
+<code>cwKeywordModel</code> (its filterable keywords) with an <em>object</em> exposing <code>setVisible(bool)</code>;
+<code>cwKeywordVisibility</code> calls that slot when filters change. For leads the object is the
+<code>cwLeadVisibility</code> proxy, whose <code>setVisible</code> forwards to
+<code>cwLeadView::setScrapKeywordVisible(scrap, v)</code>, which toggles every <code>LeadPoint</code> in that scrap's
+<code>ScrapEntry</code> and closes the popup if the hidden scrap owned the selection.</p>
+
+<p><b>#1 (implemented) &mdash; <code>cwScrap</code> owns the lead keyword data.</b> The one change from v1. The
+filterable <em>data</em> for a scrap's leads now originates in the back-end, not the view:</p>
+<ul>
+  <li><b><code>cwScrap::leadKeywordModel()</code></b> (<code>cwScrap.h:145</code>, <code>cwScrap.cpp</code>): a
+      lazily-created <code>cwKeywordModel</code> seeded with <code>{TypeKey, &quot;Lead&quot;}</code> plus
+      <code>addExtension(this-&gt;keywordModel())</code>. Lazy &mdash; only scraps whose leads are actually registered by
+      the view allocate it; owned by the scrap (<code>parent = this</code>), so it rides the scrap's lifetime. The
+      <code>Type=Lead</code> row is static; the inherited <code>Type=Plan/Profile</code>, Cave, Year, &hellip; track the
+      scrap's own model automatically through the extension (no need to update on scrap type change).</li>
+  <li><b><code>cwLeadView::addKeywordItem</code></b> (<code>cwLeadView.cpp</code>): the per-scrap
+      <code>cwKeywordItem</code> now just does <code>item-&gt;keywordModel()-&gt;addExtension(scrap-&gt;leadKeywordModel())</code>
+      &mdash; the near-empty pass-through pattern <code>cwScrapManager</code>/<code>cwLinePlotManager</code> already use
+      &mdash; instead of v1's inline <code>add({Type, &quot;Lead&quot;})</code> + <code>addExtension(scrap-&gt;keywordModel())</code>.
+      Effective keywords are identical (<code>Type=Lead</code> + the scrap's full chain); the difference is that the
+      &ldquo;Lead&rdquo; identity is now data the scrap owns.</li>
+</ul>
+
+<p><b>Keywords &amp; composition (unchanged from v1).</b> A scrap already inherits the full chain (<code>scrap &rarr;
+note &rarr; trip &rarr; cave</code>/<code>team</code>; <code>cwNote.cpp:182/187/340</code>, <code>cwTrip.cpp:492</code>),
+so a lead carries <code>Type=[Lead, Plan]</code> + inherited Cave/Year/Date/TripName/Caver: the &ldquo;Lead&rdquo; row
+toggles all leads, unchecking the scrap's type (&ldquo;Plan&rdquo;) hides its leads with it, and Cave/Year narrows
+leads as it does scraps. Visibility composes as a logical AND, gated at each LeadPoint root:</p>
+<pre><code>lead drawn  &hArr;  scrap keyword-visible (LeadPoint.visible)  AND  (!lead.completed || selected)</code></pre>
+<p><code>questionImage</code>'s existing <code>!lead.completed || pointId.selected</code> binding governs within a
+keyword-visible scrap; <code>cwRenderBillboards::buildRenderSlots</code> skips <code>!content-&gt;isVisible()</code>,
+and <code>isVisible()</code> is <em>effective</em>, so a keyword-hidden LeadPoint suppresses the billboard and the
+<code>hitTarget</code> taps for free. A completed lead still <em>exists</em>, so it still counts toward the
+<code>Type=Lead</code> filter. This stays entirely on the QML-property path the offscreen suite exercises
+(<code>[[project_billboard_rhi_path_untested]]</code>).</p>
+
+<p><b>QObject accounting (per scrap-with-leads, unchanged from v1).</b> <code>cwKeywordItem</code> + its own
+(pass-through) <code>cwKeywordModel</code> + <code>cwLeadVisibility</code> proxy + N LeadPoints, <em>plus</em> the
+scrap-owned <code>leadKeywordModel</code>. #1 adds one model object on the scrap; in exchange the lead keyword identity
+lives in the data layer where it belongs. (We accept that single extra model as the price of the clean ownership; it is
+far cheaper than the container <code>QQuickItem</code> v2 would have added.)</p>
+
+<p><b>Files touched (4b, as shipped):</b>
+<code>cwScrap.h/.cpp</code> (lazy <code>leadKeywordModel()</code> = <code>{Type=Lead}</code> + extension &mdash; the only
+new public surface);
+<code>cwLeadView.cpp</code> (<code>addKeywordItem</code> references <code>scrap-&gt;leadKeywordModel()</code> via
+<code>addExtension</code>; doc comment updated). Everything else from v1 is retained as-is:
+<code>cwLeadVisibility.h/.cpp</code> (the proxy &mdash; <b>kept</b>), the <code>keywordItemModel</code>
+<code>Q_PROPERTY</code> on <code>cwLeadView</code>, the <code>setScrapKeywordVisible</code>/<code>keywordVisible</code>
+machinery, and the <code>GLTerrainRenderer.qml</code> <code>keywordItemModel: RootData.keywordItemModel</code> binding.
+<b>No</b> new <code>cwLeadModel</code>, <b>no</b> container <code>QQuickItem</code>, <b>no</b> <code>cwKeywordItem</code>
+change, <b>no</b> file deletions.</p>
+
+<p><b>Testing (4b).</b> The two offscreen cases (<code>test_leadKeywordVisibilityTogglesLeads</code>,
+<code>test_hidingLeadKeywordClosesSelectedPopup</code>) exercise the full keyword pipeline through the real layers tab
+UI and pass unchanged &mdash; no selector churn, because the QML object tree is unchanged (no container level was added).
+<code>tst_Leads.qml</code>: <b>17 passed, 0 failed</b> offscreen. Run both full suites before pushing.</p>
 
 <h3>Gap 3 &mdash; Clustering is net-new and the expand UX is unspecified</h3>
 <p>Leads have no cull/cluster today. <b>Direction (decided):</b> a cluster is a <em>state of
@@ -634,7 +715,14 @@ cluster on zoom-out, does its popup close or transfer to the cluster (<code>cwSe
       port <code>cwLeadView</code> to the billboard pattern; <code>LeadPoint</code> renders occluded; tap +
       <code>QuoteBox</code> work via the CPU-BVH-gated 2D hit-proxy; popup stays a 2D overlay. See
       <a href="#leads">&sect;8 &ldquo;4a &mdash; implementation design&rdquo;</a> for the locked mechanics.</li>
-  <li><b>4b &mdash; Keyword visibility</b>: subscribe lead visibility to the keyword filter.</li>
+  <li><b>4b &mdash; Keyword visibility</b> <span class="pill ok">implemented</span>: one
+      <code>cwKeywordItem</code> per scrap-with-leads (<code>Type=Lead</code> + the scrap's inherited keywords), the
+      <code>cwLeadVisibility</code> proxy as the <code>setVisible</code> target, and the view's inline scrap
+      enumeration. The only change beyond v1: <code>cwScrap</code> now owns <code>leadKeywordModel()</code> so the lead
+      keyword <em>data</em> lives in the back-end (point #1). The explored v2 extras &mdash; a new enumeration class, a
+      per-scrap container <code>QQuickItem</code>, and Option Y &mdash; were dropped (the existing
+      <code>cwLeadModel</code> is the unrelated leads-table model, the container is heavier than the proxy, and Option Y
+      isn't needed). See <a href="#leads-4b">&sect;8 Gap 2</a> for the rationale.</li>
   <li><b>4c &mdash; Clustering</b> + the expand-to-list UX.</li>
 </ol>
 
@@ -699,7 +787,9 @@ cluster on zoom-out, does its popup close or transfer to the cluster (<code>cwSe
   <tr><td><code>src/cwRHIBillboards.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>Render backend; gather() &rarr; prepare + Custom draw in Overlay</td></tr>
   <tr><td><code>src/cwLabel3dView.*</code> (and <code>cwLinePlotLabelView.*</code> unchanged)</td><td><span class="pill edit">edit</span></td><td>Own a <code>cwRenderBillboards</code>; cull feeds add/update/removeBillboard instead of 2D overlay (#536)</td></tr>
   <tr><td><code>qml/Label3d.qml</code>, <code>qml/GLTerrainRenderer.qml</code></td><td><span class="pill edit">edit</span></td><td>Child-opacity fade (effect-ref excludes root opacity); pass <code>scene</code> to <code>LinePlotLabelView</code> (#536)</td></tr>
-  <tr><td><code>src/cwLeadView.*</code>, <code>qml/LeadPoint.qml</code></td><td><span class="pill edit">edit</span></td><td>Billboard leads + clustering + keywords + input (#535)</td></tr>
+  <tr><td><code>src/cwLeadView.*</code>, <code>qml/LeadPoint.qml</code></td><td><span class="pill edit">edit</span></td><td>Billboard leads + clustering + keywords + input (#535); 4b keeps the inline enumeration, <code>addKeywordItem</code> references <code>scrap-&gt;leadKeywordModel()</code></td></tr>
+  <tr><td><code>src/cwScrap.*</code></td><td><span class="pill edit">edit</span></td><td>4b #1: lazy <code>cwScrap::leadKeywordModel()</code> (<code>Type=Lead</code> + extension) &mdash; lead keyword data owned by the scrap</td></tr>
+  <tr><td><code>src/cwLeadVisibility.*</code></td><td><span class="pill ok">kept</span></td><td>4b visibility proxy &mdash; the <code>setVisible</code> target; container <code>QQuickItem</code> idea dropped (heavier than the proxy)</td></tr>
   <tr><td><code>src/cwBillboardTest.{h,cpp}</code>, <code>BillboardTest</code> in <code>qml/GLTerrainRenderer.qml</code></td><td><span class="pill ok">removed</span></td><td>Throwaway spike &mdash; deleted once labels proved the path</td></tr>
 </table>
 

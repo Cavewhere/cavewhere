@@ -16,6 +16,10 @@
 #include "cwGeometryItersecter.h"
 #include "cwRayHit.h"
 #include "cwRenderBillboards.h"
+#include "cwKeywordItem.h"
+#include "cwKeywordItemModel.h"
+#include "cwKeywordModel.h"
+#include "cwLeadVisibility.h"
 #include "cwDebug.h"
 
 //Qt includes
@@ -49,7 +53,19 @@ cwLeadView::cwLeadView(QQuickItem *parent) :
 
 cwLeadView::~cwLeadView()
 {
-
+    // The keyword items are owned by the model (addItem reparents them), so they
+    // outlive the view unless removed here. Synchronous delete: the event loop
+    // won't run again to drain deleteLater during teardown.
+    for(auto it = m_leadItems.begin(); it != m_leadItems.end(); ++it) {
+        cwKeywordItem* item = it.value().keywordItem;
+        if(item != nullptr) {
+            if(!m_keywordItemModel.isNull()) {
+                m_keywordItemModel->removeItem(item);
+            }
+            delete item;
+            it.value().keywordItem = nullptr;
+        }
+    }
 }
 
 /**
@@ -151,6 +167,10 @@ void cwLeadView::addScrap(cwScrap *scrap)
 
                 item->setProperty("scrap", QVariant::fromValue(scrap));
                 item->setProperty("scrapId", entry.scrapLeadId);
+
+                // A lead created while a filter already hides this scrap's leads
+                // must start hidden, or it flashes in before the next filter pass.
+                item->setVisible(entry.keywordVisible);
             }
 
             updateIndexesToEnd(begin);
@@ -227,6 +247,13 @@ void cwLeadView::addScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::leadsRemoved, this, &cwLeadView::updateItemPositions);
     connect(scrap, &cwScrap::leadsReset, this, &cwLeadView::updateItemPositions);
 
+    // Register/unregister the scrap's keyword item as its lead count crosses 0.
+    // These run last (after the item list reflects the change), so updateKeywordItem
+    // sees the correct count.
+    connect(scrap, &cwScrap::leadsInserted, this, [this, scrap]() { updateKeywordItem(scrap); });
+    connect(scrap, &cwScrap::leadsRemoved, this, [this, scrap]() { updateKeywordItem(scrap); });
+    connect(scrap, &cwScrap::leadsReset, this, [this, scrap]() { updateKeywordItem(scrap); });
+
     //Setup the leads
     m_leadItems.insert(scrap, {++m_currentScrapId, {}});
 
@@ -234,6 +261,7 @@ void cwLeadView::addScrap(cwScrap *scrap)
     beginInsert(0, lastIndex);
     insert(0, lastIndex);
     updateItemPositions();
+    updateKeywordItem(scrap);
 }
 
 /**
@@ -248,21 +276,143 @@ void cwLeadView::removeScrap(cwScrap *scrap)
     // re-add of the same live scrap would stack a second set of handlers.
     disconnect(scrap, nullptr, this, nullptr);
 
-    const auto& entry = m_leadItems.value(scrap);
-    if(m_renderBillboards != nullptr) {
-        for(const cwBillboardId id : entry.billboardIds) {
-            if(id != cwBillboardId{}) {
-                m_renderBillboards->removeBillboard(id);
+    auto entryIt = m_leadItems.find(scrap);
+    if(entryIt != m_leadItems.end()) {
+        ScrapEntry& entry = entryIt.value();
+        removeKeywordItem(entry);
+        if(m_renderBillboards != nullptr) {
+            for(const cwBillboardId id : entry.billboardIds) {
+                if(id != cwBillboardId{}) {
+                    m_renderBillboards->removeBillboard(id);
+                }
             }
         }
+        for(auto item : std::as_const(entry.items)) {
+            item->deleteLater();
+        }
+        m_leadItems.erase(entryIt);
     }
-    for(auto item : entry.items) {
-        item->deleteLater();
-    }
-    m_leadItems.remove(scrap);
 
     if(m_leadItems.size() == 0) {
         m_currentScrapId = 0; //Reset the scrap id, this is useful for the qml testcase to work correctly
+    }
+}
+
+/**
+ * @brief cwLeadView::keywordItemModel
+ * @return The keyword model this view publishes its per-scrap lead items into.
+ */
+cwKeywordItemModel* cwLeadView::keywordItemModel() const {
+    return m_keywordItemModel;
+}
+
+void cwLeadView::setKeywordItemModel(cwKeywordItemModel* keywordItemModel) {
+    if(m_keywordItemModel == keywordItemModel) {
+        return;
+    }
+
+    // Remove existing items from the old model before switching.
+    for(auto it = m_leadItems.begin(); it != m_leadItems.end(); ++it) {
+        removeKeywordItem(it.value());
+    }
+
+    m_keywordItemModel = keywordItemModel;
+
+    // Re-register every scrap that currently has leads against the new model.
+    for(auto it = m_leadItems.keyValueBegin(); it != m_leadItems.keyValueEnd(); ++it) {
+        updateKeywordItem(it->first);
+    }
+
+    emit keywordItemModelChanged();
+}
+
+/**
+ * @brief cwLeadView::updateKeywordItem
+ *
+ * Lazily registers/unregisters the scrap's lead keyword item so the filter only
+ * carries a Type=Lead row for scraps that actually hold leads: create it when the
+ * count crosses 0->1, remove it when it returns to 0.
+ */
+void cwLeadView::updateKeywordItem(cwScrap* scrap) {
+    auto it = m_leadItems.find(scrap);
+    if(it == m_leadItems.end()) {
+        return;
+    }
+
+    ScrapEntry& entry = it.value();
+    if(entry.items.isEmpty()) {
+        removeKeywordItem(entry);
+    } else {
+        addKeywordItem(scrap);
+    }
+}
+
+/**
+ * @brief cwLeadView::addKeywordItem
+ *
+ * Publishes one cwKeywordItem for the scrap, referencing the scrap-owned
+ * cwScrap::leadKeywordModel() (Type="Lead" plus the scrap's inherited keywords:
+ * Type=Plan/Profile, Cave, Year, ...), so leads filter both as "Lead" and
+ * alongside their scrap. The proxy receives the filter's setVisible. Mirrors
+ * cwLinePlotManager / cwScrapManager.
+ */
+void cwLeadView::addKeywordItem(cwScrap* scrap) {
+    if(m_keywordItemModel.isNull()) {
+        return;
+    }
+
+    auto it = m_leadItems.find(scrap);
+    if(it == m_leadItems.end() || it.value().keywordItem != nullptr) {
+        return;
+    }
+
+    auto item = new cwKeywordItem();
+    item->keywordModel()->addExtension(scrap->leadKeywordModel());
+
+    auto visibility = new cwLeadVisibility(this, scrap, item);
+    item->setObject(visibility);
+
+    // addItem fires resolveVisibility -> proxy setVisible; if the current filter
+    // excludes leads, that calls back into setScrapKeywordVisible(scrap, false),
+    // which stores keywordVisible and hides the items.
+    it.value().keywordItem = item;
+    m_keywordItemModel->addItem(item);
+}
+
+void cwLeadView::removeKeywordItem(ScrapEntry& entry) {
+    if(entry.keywordItem == nullptr) {
+        return;
+    }
+
+    if(!m_keywordItemModel.isNull()) {
+        m_keywordItemModel->removeItem(entry.keywordItem);
+    }
+    entry.keywordItem->deleteLater();
+    entry.keywordItem = nullptr;
+}
+
+void cwLeadView::setScrapKeywordVisible(cwScrap* scrap, bool visible) {
+    auto it = m_leadItems.find(scrap);
+    if(it == m_leadItems.end()) {
+        return;
+    }
+
+    ScrapEntry& entry = it.value();
+    entry.keywordVisible = visible;
+
+    for(auto item : std::as_const(entry.items)) {
+        if(item != nullptr) {
+            item->setVisible(visible);
+        }
+    }
+
+    // The QuoteBox popup is a sibling overlay, not pulled into the billboard, so
+    // it would linger pointing at a now-hidden marker. Close it.
+    if(!visible) {
+        QQuickItem* selected = SelectionMananger->selectedItem();
+        if(selected != nullptr && entry.items.contains(selected)) {
+            SelectionMananger->setSelectedItem(nullptr);
+        }
     }
 }
 

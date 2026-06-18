@@ -1342,3 +1342,19 @@ void cwScrap::updateTypeKeyword()
                                 profile ? QStringLiteral("Profile")
                                         : QStringLiteral("Plan")));
 }
+
+/**
+* Keyword model for this scrap's leads. Carries Type="Lead" and extends the
+* scrap's own keyword model, so leads filter both as "Lead" and alongside their
+* scrap (Type=Plan/Profile, Cave, Year, ...). Created lazily on first use; the
+* lead view's cwKeywordItem references this rather than rebuilding it.
+*/
+cwKeywordModel* cwScrap::leadKeywordModel()
+{
+    if(m_leadKeywordModel == nullptr) {
+        m_leadKeywordModel = new cwKeywordModel(this);
+        m_leadKeywordModel->add(cwKeyword(cwKeywordModel::TypeKey, QStringLiteral("Lead")));
+        m_leadKeywordModel->addExtension(KeywordModel);
+    }
+    return m_leadKeywordModel;
+}

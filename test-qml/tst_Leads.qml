@@ -458,6 +458,99 @@ MainWindowTest {
             verify(leadView.isOccluded(deepPoint, tap), "a point behind cave geometry must be occluded");
         }
 
+        // 4b: open the layers tab, set the first filter row to the Type key, and
+        // return the keyword-list checkbox for the given Type value (or null).
+        function typeValueCheckbox(value) {
+            let layersTab = findChild(rootId.mainWindow, "layersTabButton");
+            verify(layersTab !== null);
+            mouseClick(layersTab);
+
+            let delegate = null;
+            tryVerify(() => {
+                delegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0");
+                return delegate !== null;
+            });
+
+            let keyCombo = findChild(delegate, "keyCombo");
+            verify(keyCombo);
+            keyCombo.currentIndex = keyCombo.model.indexOf("Type");
+            delegate.filterModelObjectRole.key = keyCombo.currentText;
+            verify(delegate.filterModelObjectRole.key === "Type");
+
+            let filterModel = delegate.filterModelObjectRole;
+            tryVerify(() => filterModel.rowCount() > 0);
+
+            let rowIndex = -1;
+            for(let i = 0; i < filterModel.rowCount(); ++i) {
+                let rowValue = filterModel.data(filterModel.index(i, 0), KeywordGroupByKeyModel.ValueRole);
+                if(rowValue === value) {
+                    rowIndex = i;
+                    break;
+                }
+            }
+            verify(rowIndex >= 0, "there should be a '" + value + "' Type row");
+
+            let checkbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row" + rowIndex + "->checkbox");
+            verify(checkbox);
+            return checkbox;
+        }
+
+        // 4b: unchecking the "Lead" Type keyword hides every lead; rechecking it
+        // brings them back. Leads register a Type=Lead keyword item per scrap, so
+        // they filter just like scraps.
+        function test_leadKeywordVisibilityTogglesLeads() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            RootData.pageSelectionModel.gotoPageByName(null, "View");
+
+            let leadPoint = null;
+            tryVerify(() => {
+                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
+                return leadPoint !== null;
+            });
+            tryVerify(() => leadPoint.visible, 5000, "lead should start visible");
+
+            let leadCheckbox = typeValueCheckbox("Lead");
+
+            mouseClick(leadCheckbox);
+            tryVerify(() => !leadPoint.visible, 5000, "lead should hide when the Lead Type is filtered out");
+
+            mouseClick(leadCheckbox);
+            tryVerify(() => leadPoint.visible, 5000, "lead should return when the Lead Type is re-enabled");
+        }
+
+        // 4b: hiding a scrap's leads via keyword while one is selected closes the
+        // popup (the QuoteBox is a sibling overlay that would otherwise linger
+        // pointing at a now-hidden marker).
+        function test_hidingLeadKeywordClosesSelectedPopup() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            RootData.pageSelectionModel.gotoPageByName(null, "View");
+
+            let leadPoint = null;
+            tryVerify(() => {
+                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
+                return leadPoint !== null;
+            });
+            mouseClick(leadPoint);
+
+            tryVerify(() => {
+                return ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox") !== null;
+            }, 5000, "popup should open on tap");
+            verify(leadPoint.selected, "lead should be selected after clicking it");
+
+            let leadCheckbox = typeValueCheckbox("Lead");
+            mouseClick(leadCheckbox);
+
+            tryVerify(() => leadPoint.selectionManager.selectedItem === null, 5000,
+                      "selection should clear when the selected lead's scrap is hidden");
+            tryVerify(() => {
+                return ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox") === null;
+            }, 5000, "popup should close when the lead is keyword-hidden");
+        }
+
         // Regression test for GitHub issue #368:
         // When a lead and a scrap outline point overlap, clicking selects both
         // via their TapHandlers. The outline point's deselection cascade

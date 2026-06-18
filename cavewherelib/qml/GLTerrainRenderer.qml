@@ -139,6 +139,7 @@ Item {
         regionModel: RootData.regionTreeModel
         camera: rendererId.camera
         scene: rendererId.scene
+        keywordItemModel: RootData.keywordItemModel
         visible: RootData.leadsVisible
 
         // Tap on empty space closes the open lead popup (dialog dismiss). Lead

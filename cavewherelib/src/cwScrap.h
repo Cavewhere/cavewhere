@@ -142,6 +142,7 @@ public:
     void updateIdKeyword();
 
     cwKeywordModel* keywordModel() const;
+    cwKeywordModel* leadKeywordModel();
 
     void addPoint(QPointF point);
     Q_INVOKABLE void insertPoint(int index, QPointF point);
@@ -308,6 +309,11 @@ private:
 
     //For visiblity and object orginization
     cwKeywordModel* KeywordModel = nullptr;
+
+    //Lazily created keyword model that identifies this scrap's leads (Type="Lead")
+    //and inherits the scrap's keywords via an extension. The lead view's keyword
+    //item references this, so the lead keyword data is owned by the scrap.
+    cwKeywordModel* m_leadKeywordModel = nullptr;
     void updateTypeKeyword();
 
     //Clamps a pointF that's in note coordinates to the scrap

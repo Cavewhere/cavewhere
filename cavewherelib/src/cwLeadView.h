@@ -26,6 +26,8 @@ class cwScrapLeadView;
 class cwCamera;
 class cwScene;
 class cwRenderBillboards;
+class cwKeywordItem;
+class cwKeywordItemModel;
 
 /**
  * @brief The cwLeadView class
@@ -46,6 +48,7 @@ class cwLeadView : public QQuickItem
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
     Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
     Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager CONSTANT)
+    Q_PROPERTY(cwKeywordItemModel* keywordItemModel READ keywordItemModel WRITE setKeywordItemModel NOTIFY keywordItemModelChanged)
 
 
 public:
@@ -63,6 +66,15 @@ public:
 
     cwSelectionManager* selectionManager() const;
 
+    cwKeywordItemModel* keywordItemModel() const;
+    void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
+
+    // Called by a scrap's cwLeadVisibility proxy when keyword filters change.
+    // Shows or hides every LeadPoint in the scrap (effective isVisible() then
+    // gates the billboard draw and the tap target), and closes the popup if the
+    // selected lead belongs to a scrap being hidden.
+    void setScrapKeywordVisible(cwScrap* scrap, bool visible);
+
     Q_INVOKABLE void select(cwScrap* scarp, int index);
 
     // True when cave geometry hides the billboard pixel the user actually tapped.
@@ -79,6 +91,7 @@ signals:
     void regionModelChanged();
     void cameraChanged();
     void sceneChanged();
+    void keywordItemModelChanged();
 
 protected:
     void itemChange(ItemChange change, const ItemChangeData& value) override;
@@ -94,14 +107,21 @@ private:
         int scrapLeadId = -1;
         QVector<QQuickItem*> items;
         QVector<cwBillboardId> billboardIds; //!< index-aligned with items
+        cwKeywordItem* keywordItem = nullptr; //!< registered only while the scrap has >=1 lead
+        bool keywordVisible = true; //!< last value pushed by the keyword filter
     };
 
     QHash<cwScrap*, ScrapEntry> m_leadItems;
     QQmlComponent* m_itemComponent = nullptr;
     int m_currentScrapId = 0;
+    QPointer<cwKeywordItemModel> m_keywordItemModel;
 
     void addScrap(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);
+
+    void addKeywordItem(cwScrap* scrap);
+    void removeKeywordItem(ScrapEntry& entry);
+    void updateKeywordItem(cwScrap* scrap);
 
     QQuickItem *createItem();
     void createComponent();
