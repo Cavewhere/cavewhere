@@ -32,6 +32,7 @@ public:
     void render(const RenderData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
     bool usesPointCloudPass() const override;
+    cwAppearanceSlotted* appearanceSlots() override { return this; }
 
     // cwAppearanceSlotted: unpack a cwPointCloudAppearance from the opaque payload
     // and write it (world radius) into one slot of m_perCloudUBO.

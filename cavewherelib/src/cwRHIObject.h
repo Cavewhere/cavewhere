@@ -16,6 +16,7 @@ class QRhiResourceUpdateBatch;
 //Our includes
 class cwRhiItemRenderer;
 class cwRenderObject;
+class cwAppearanceSlotted;
 
 class cwRHIObject {
 
@@ -176,6 +177,14 @@ public:
     // a shared-depth offscreen so the cloud silhouette can darken against the
     // scene). Default false; cwRHIPointCloud overrides.
     virtual bool usesPointCloudPass() const { return false; }
+
+    // The appearance-slot pool backing this object's per-job override slots, or
+    // nullptr if the object doesn't support appearance overrides. Slotted objects
+    // (those deriving cwAppearanceSlotted) return `this`; the offscreen renderer
+    // uses this instead of a dynamic_cast to find, pre-grow, and recycle the pool.
+    // The slot concept already lives on this base (GatherContext::appearanceSlot,
+    // Drawable::appearanceBinding); this accessor reunites it with the pool.
+    virtual cwAppearanceSlotted* appearanceSlots() { return nullptr; }
 
     // Drop any pipelines this object has cached against @a descriptor. The scene
     // calls this on every render object just before it tears down a render

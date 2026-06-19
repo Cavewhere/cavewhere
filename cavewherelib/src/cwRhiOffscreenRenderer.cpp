@@ -471,7 +471,7 @@ void cwRhiOffscreenRenderer::renderAtlasBatch(QRhiCommandBuffer* cb, cwRhiItemRe
             const auto& overrides = job->parameters.appearanceOverrides;
             for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
                 cwRHIObject* object = m_scene->m_rhiObjectLookup.value(it.key(), nullptr);
-                if (auto* slotted = dynamic_cast<cwAppearanceSlotted*>(object)) {
+                if (auto* slotted = object ? object->appearanceSlots() : nullptr) {
                     ++overrideCountByObject[slotted];
                 }
             }
@@ -575,7 +575,7 @@ void cwRhiOffscreenRenderer::recordReadbackFanout(QRhiCommandBuffer* cb, QRhiTex
 void cwRhiOffscreenRenderer::recycleFrameAppearanceSlots()
 {
     for (cwRHIObject* object : std::as_const(m_scene->m_rhiObjects)) {
-        if (auto* slotted = dynamic_cast<cwAppearanceSlotted*>(object)) {
+        if (auto* slotted = object->appearanceSlots()) {
             // Order: free last frame's orphans (that frame is submitted) THEN rewind
             // the cursor for this frame's acquires.
             slotted->flushRetiredAppearanceResources();
@@ -591,7 +591,7 @@ QHash<const cwRHIObject*, int> cwRhiOffscreenRenderer::resolveAppearanceOverride
     for (auto it = parameters.appearanceOverrides.cbegin();
          it != parameters.appearanceOverrides.cend(); ++it) {
         cwRHIObject* object = m_scene->m_rhiObjectLookup.value(it.key(), nullptr);
-        auto* slotted = dynamic_cast<cwAppearanceSlotted*>(object);
+        auto* slotted = object ? object->appearanceSlots() : nullptr;
         if (!slotted) {
             continue; // unknown id, or an object that doesn't support overrides
         }
