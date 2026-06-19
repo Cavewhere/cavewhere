@@ -4,7 +4,7 @@
 //Our includes
 #include "cwRHIObject.h"
 #include "cwRenderLinePlot.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 
 //Qt includes
 #include <QMatrix4x4>
@@ -40,7 +40,7 @@ private:
     QRhiBuffer* m_visibilityBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
 
-    cwRhiScene* m_scene = nullptr;
+    cwRhiFrameRenderer* m_frame = nullptr;
 
     //The front end data that will be rendered
     cwTracked<cwRenderLinePlot::Data> m_data;

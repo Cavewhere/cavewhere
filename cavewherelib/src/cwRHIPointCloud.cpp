@@ -13,7 +13,7 @@
 #include "cwRenderPointCloud.h"
 #include "cwRhiAttributeFormat.h"
 #include "cwRhiItemRenderer.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 #include "cwScene.h"
 
 // Qt includes
@@ -46,8 +46,8 @@ void cwRHIPointCloud::initialize(const ResourceUpdateData& data)
         return;
     }
 
-    if (!m_scene && data.renderData.renderer) {
-        m_scene = data.renderData.renderer->sceneBackend();
+    if (!m_frame && data.renderData.renderer) {
+        m_frame = data.renderData.renderer->frameRenderer();
     }
 
     initializeResources(data);
@@ -312,11 +312,11 @@ bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    if (!m_scene && data.renderer) {
-        m_scene = data.renderer->sceneBackend();
+    if (!m_frame && data.renderer) {
+        m_frame = data.renderer->frameRenderer();
     }
 
-    if (!m_scene || !data.renderer) {
+    if (!m_frame || !data.renderer) {
         return false;
     }
 
@@ -372,8 +372,8 @@ bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
         return record;
     };
 
-    m_pipelineRecord = m_pipelines.acquire(m_scene, key, [&]() {
-        return m_scene->acquirePipeline(key, rhi, createFn);
+    m_pipelineRecord = m_pipelines.acquire(m_frame, key, [&]() {
+        return m_frame->acquirePipeline(key, rhi, createFn);
     });
 
     if (!m_pipelineRecord) {

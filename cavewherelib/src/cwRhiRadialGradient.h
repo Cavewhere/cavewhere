@@ -2,7 +2,7 @@
 #define CWRADIALGRADIENTRHIOBJECT_H
 
 #include "cwRHIObject.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 
 //Qt includes
 #include <QMatrix4x4>
@@ -32,7 +32,7 @@ private:
     QRhiBuffer* m_uniformBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
 
-    cwRhiScene* m_scene = nullptr;
+    cwRhiFrameRenderer* m_frame = nullptr;
     bool m_resourcesInitialized = false;
 
     struct UniformData {

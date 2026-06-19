@@ -12,7 +12,7 @@
 #include "cwAppearanceSlotted.h"
 #include "cwRHIObject.h"
 #include "cwRenderPointCloud.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 
 // Qt includes
 #include <QMatrix4x4>
@@ -84,7 +84,7 @@ private:
     QRhiBuffer* m_perCloudUBO = nullptr;
     quint32 m_perCloudStride = 0;
     QRhiShaderResourceBindings* m_srb = nullptr;
-    cwRhiScene* m_scene = nullptr;
+    cwRhiFrameRenderer* m_frame = nullptr;
 
     // Geometry and render-state tracked independently so a uniform-only
     // change (world radius / point size) never re-stages the vertex buffer —

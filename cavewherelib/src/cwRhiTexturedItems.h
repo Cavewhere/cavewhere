@@ -5,7 +5,7 @@
 #include "cwRHIObject.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRhiPipelineSet.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 #include <QMatrix4x4>
 
 class cwRhiTexturedItems : public cwRHIObject
@@ -79,7 +79,7 @@ private:
     QPointer<cwRenderTexturedItems> m_renderItems;
     SharedItemData m_sharedData;
     QRhiVertexInputLayout m_inputLayout;
-    cwRhiScene* m_scene = nullptr;
+    cwRhiFrameRenderer* m_frame = nullptr;
 
     static QRhiShaderResourceBinding::StageFlags toRhiStages(cwRenderMaterialState::ShaderStages stages);
     static QRhiGraphicsPipeline::CullMode toRhiCullMode(cwRenderMaterialState::CullMode mode);

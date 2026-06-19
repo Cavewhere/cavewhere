@@ -35,8 +35,8 @@ void cwRhiTexturedItems::initialize(const ResourceUpdateData& data)
     }
 
     QRhi* rhi = data.renderData.cb->rhi();
-    if (!m_scene && data.renderData.renderer) {
-        m_scene = data.renderData.renderer->sceneBackend();
+    if (!m_frame && data.renderData.renderer) {
+        m_frame = data.renderData.renderer->frameRenderer();
     }
 
     {
@@ -159,8 +159,8 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
 
 void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
 {
-    if (!m_scene && data.renderData.renderer) {
-        m_scene = data.renderData.renderer->sceneBackend();
+    if (!m_frame && data.renderData.renderer) {
+        m_frame = data.renderData.renderer->frameRenderer();
     }
 
     for (auto it = m_items.begin(); it != m_items.end(); ++it) {
@@ -436,8 +436,8 @@ void cwRhiTexturedItems::Item::ensurePipeline(const RenderData& renderData,
     }
 
     auto* renderer = renderData.renderer;
-    if (!owner->m_scene && renderer) {
-        owner->m_scene = renderer->sceneBackend();
+    if (!owner->m_frame && renderer) {
+        owner->m_frame = renderer->frameRenderer();
     }
 
     // The pass an item belongs to is fixed by its material, but which target
@@ -448,9 +448,9 @@ void cwRhiTexturedItems::Item::ensurePipeline(const RenderData& renderData,
     auto* renderTarget = renderer->renderTarget();
     const cwRHIObject::RenderPass pass = cwRhiTexturedItems::toRenderPass(material.renderPass);
     QRhiRenderPassDescriptor* currentPass =
-        owner->m_scene ? owner->m_scene->passRenderPassDescriptor(pass) : nullptr;
+        owner->m_frame ? owner->m_frame->passRenderPassDescriptor(pass) : nullptr;
     int currentSampleCount =
-        owner->m_scene ? owner->m_scene->passSampleCount(pass) : 0;
+        owner->m_frame ? owner->m_frame->passSampleCount(pass) : 0;
     if (!currentPass) {
         currentPass = renderTarget->renderPassDescriptor();
         currentSampleCount = renderTarget->sampleCount();
@@ -465,7 +465,7 @@ void cwRhiTexturedItems::Item::ensurePipeline(const RenderData& renderData,
     // Keep a reference to every target's pipeline (in `pipelines`), so toggling
     // between the live swap chain and an offscreen target reuses the cached
     // record instead of releasing and rebuilding it each frame.
-    pipelineRecord = pipelines.acquire(owner->m_scene, key, [&]() {
+    pipelineRecord = pipelines.acquire(owner->m_frame, key, [&]() {
         return owner->acquirePipeline(key, material, renderData.cb->rhi(), layout, sharedData);
     });
     pipelineNeedsUpdate = (pipelineRecord == nullptr);
@@ -591,7 +591,7 @@ cwRhiPipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipelineKey&
 {
     Q_UNUSED(sharedData);
 
-    if (!m_scene) {
+    if (!m_frame) {
         return nullptr;
     }
 
@@ -600,7 +600,7 @@ cwRhiPipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipelineKey&
         return nullptr;
     }
 
-    const quint32 globalStride = m_scene->globalUniformBufferStride();
+    const quint32 globalStride = m_frame->globalUniformBufferStride();
 
     auto createFn = [material, layout, sampler, key, globalStride](QRhi* localRhi) -> cwRhiPipelineRecord* {
         if (!localRhi) {
@@ -659,7 +659,7 @@ cwRhiPipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipelineKey&
         return record;
     };
 
-    return m_scene->acquirePipeline(key, rhi, createFn);
+    return m_frame->acquirePipeline(key, rhi, createFn);
 }
 
 void cwRhiTexturedItems::purgePipelinesFor(QRhiRenderPassDescriptor* descriptor)
@@ -745,5 +745,5 @@ cwRHIObject::RenderPass cwRhiTexturedItems::toRenderPass(cwRenderMaterialState::
 
 QRhiSampler* cwRhiTexturedItems::sharedSampler(QRhi* rhi)
 {
-    return m_scene ? m_scene->sharedLinearClampSampler(rhi) : nullptr;
+    return m_frame ? m_frame->sharedLinearClampSampler(rhi) : nullptr;
 }

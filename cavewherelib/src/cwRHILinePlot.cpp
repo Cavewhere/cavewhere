@@ -2,7 +2,7 @@
 #include "cwRhiItemRenderer.h"
 #include "cwScene.h"
 #include "cwRenderLinePlot.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 #include "cwRenderMaterialState.h"
 #include <QFile>
 #include <QDebug>
@@ -24,8 +24,8 @@ void cwRHILinePlot::initialize(const ResourceUpdateData& data)
     if (m_resourcesInitialized)
         return;
 
-    if (!m_scene && data.renderData.renderer) {
-        m_scene = data.renderData.renderer->sceneBackend();
+    if (!m_frame && data.renderData.renderer) {
+        m_frame = data.renderData.renderer->frameRenderer();
     }
 
     initializeResources(data);
@@ -201,11 +201,11 @@ bool cwRHILinePlot::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    if (!m_scene && data.renderer) {
-        m_scene = data.renderer->sceneBackend();
+    if (!m_frame && data.renderer) {
+        m_frame = data.renderer->frameRenderer();
     }
 
-    if (!m_scene || !data.renderer) {
+    if (!m_frame || !data.renderer) {
         return false;
     }
 
@@ -259,8 +259,8 @@ bool cwRHILinePlot::ensurePipeline(const RenderData& data)
         return record;
     };
 
-    m_pipelineRecord = m_pipelines.acquire(m_scene, key, [&]() {
-        return m_scene->acquirePipeline(key, rhi, createFn);
+    m_pipelineRecord = m_pipelines.acquire(m_frame, key, [&]() {
+        return m_frame->acquirePipeline(key, rhi, createFn);
     });
 
     if (!m_pipelineRecord) {

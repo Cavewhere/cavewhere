@@ -21,8 +21,8 @@ void cwRhiRadialGradient::initialize(const ResourceUpdateData& data)
         return;
     }
 
-    if (!m_scene && data.renderData.renderer) {
-        m_scene = data.renderData.renderer->sceneBackend();
+    if (!m_frame && data.renderData.renderer) {
+        m_frame = data.renderData.renderer->frameRenderer();
     }
 
     QRhi* rhi = data.renderData.renderer->rhi();
@@ -70,8 +70,8 @@ void cwRhiRadialGradient::synchronize(const SynchronizeData& data)
 
 void cwRhiRadialGradient::updateResources(const ResourceUpdateData& data)
 {
-    if (!m_scene && data.renderData.renderer) {
-        m_scene = data.renderData.renderer->sceneBackend();
+    if (!m_frame && data.renderData.renderer) {
+        m_frame = data.renderData.renderer->frameRenderer();
     }
 
     data.resourceUpdateBatch->updateDynamicBuffer(m_uniformBuffer, 0, sizeof(UniformData), &m_uniformData);
@@ -137,10 +137,10 @@ bool cwRhiRadialGradient::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    if (!m_scene) {
-        m_scene = data.renderer->sceneBackend();
+    if (!m_frame) {
+        m_frame = data.renderer->frameRenderer();
     }
-    if (!m_scene) {
+    if (!m_frame) {
         return false;
     }
 
@@ -187,8 +187,8 @@ bool cwRhiRadialGradient::ensurePipeline(const RenderData& data)
         return record;
     };
 
-    m_pipelineRecord = m_pipelines.acquire(m_scene, key, [&]() {
-        return m_scene->acquirePipeline(key, rhi, createFn);
+    m_pipelineRecord = m_pipelines.acquire(m_frame, key, [&]() {
+        return m_frame->acquirePipeline(key, rhi, createFn);
     });
 
     if (!m_pipelineRecord) {

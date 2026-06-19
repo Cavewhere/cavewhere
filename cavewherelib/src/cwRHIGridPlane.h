@@ -4,7 +4,7 @@
 //Our includes
 #include "cwRHIObject.h"
 #include "cwRenderGridPlane.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 
 //Qt includes
 #include <rhi/qrhi.h>
@@ -44,7 +44,7 @@ private:
     QRhiBuffer* m_uniformBuffer = nullptr;
     QRhiBuffer* m_fragmentUniformBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
-    cwRhiScene* m_scene = nullptr;
+    cwRhiFrameRenderer* m_frame = nullptr;
 
     cwTracked<QMatrix4x4> m_modelMatrix;
     cwTracked<QMatrix4x4> m_scaleMatrix;

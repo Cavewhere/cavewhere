@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 
 //Qt includes
 #include <QQuickRhiItemRenderer>
@@ -39,13 +40,20 @@ public:
         return QQuickRhiItemRenderer::rhi();
     }
 
-    QMatrix4x4 viewMatrix() const { return m_sceneRenderer->viewMatrix(); }
-    QMatrix4x4 projectionMatrix() const { return m_sceneRenderer->projectionMatrix(); }
-    QMatrix4x4 viewProjectionMatrix() const { return m_sceneRenderer->viewProjectionMatrix(); }
-    float devicePixelRatio() const { return m_sceneRenderer->devicePixelRatio(); }
-    QRhiBuffer* globalUniformBuffer() const { return m_sceneRenderer->globalUniformBuffer(); }
-    quint32 globalUniformBufferStride() const { return m_sceneRenderer->globalUniformBufferStride(); }
-    cwRhiScene* sceneBackend() const { return m_sceneRenderer; }
+    // Camera/UBO accessors used by render objects and cwRenderBillboards. They read
+    // the composed draw engine directly (cwRhiItemRenderer is a friend of cwRhiScene),
+    // so they no longer pass through cwRhiScene's own surface.
+    QMatrix4x4 viewMatrix() const { return m_sceneRenderer->m_frame.viewMatrix(); }
+    QMatrix4x4 projectionMatrix() const { return m_sceneRenderer->m_frame.projectionMatrix(); }
+    QMatrix4x4 viewProjectionMatrix() const { return m_sceneRenderer->m_frame.viewProjectionMatrix(); }
+    float devicePixelRatio() const { return m_sceneRenderer->m_frame.devicePixelRatio(); }
+    QRhiBuffer* globalUniformBuffer() const { return m_sceneRenderer->m_frame.globalUniformBuffer(); }
+    quint32 globalUniformBufferStride() const { return m_sceneRenderer->m_frame.globalUniformBufferStride(); }
+
+    // The shared GPU draw engine. Render objects acquire pipelines, read pass
+    // routing, and bind the global UBO through this handle instead of reaching
+    // cwRhiScene; the offscreen renderer holds the same engine by reference.
+    cwRhiFrameRenderer* frameRenderer() const { return &m_sceneRenderer->m_frame; }
 
     // Request another frame from within the render thread (wraps the protected
     // QQuickRhiItemRenderer::update()). cwRhiScene calls this to spread offscreen
