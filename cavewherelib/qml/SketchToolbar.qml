@@ -7,6 +7,7 @@
 
 pragma ComponentBehavior: Bound
 
+import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
@@ -30,6 +31,18 @@ QC.Frame {
     // the actual erase region at any zoom.
     property real eraserRadius: 0.5
 
+    // The glyph-editor page we last opened, tracked so re-opening unregisters
+    // the stale one rather than leaking pages.
+    property QQ.QtObject _glyphEditorPage: null
+
+    // GlyphEditorPage loaded as a standalone component (from its own URL) rather
+    // than an inline Component: this file is `ComponentBehavior: Bound`, so an
+    // inline component would be tied to this toolbar's creation context and
+    // cwPageView could not instantiate it ("Cannot instantiate bound component
+    // outside its creation context"). The URL-loaded component is free of that
+    // binding and instantiable in the page view's context.
+    property QQ.Component _glyphEditorComponent: null
+
     padding: Theme.tightSpacing
 
     function _selectBrush(name: string) {
@@ -37,6 +50,24 @@ QC.Frame {
             toolbarId.canvas.currentBrushName = name
         }
         toolbarId.eraseActive = false
+    }
+
+    // Open the glyph editor on `targetPalette` (must be writable). Registers a
+    // fresh page carrying the palette as a property and navigates to it.
+    function _openGlyphEditor(targetPalette: SymbologyPalette) {
+        if (!targetPalette) {
+            return
+        }
+        if (toolbarId._glyphEditorComponent === null) {
+            toolbarId._glyphEditorComponent =
+                Qt.createComponent(Qt.resolvedUrl("GlyphEditorPage.qml"))
+        }
+        if (toolbarId._glyphEditorPage) {
+            RootData.pageSelectionModel.unregisterPage(toolbarId._glyphEditorPage)
+        }
+        toolbarId._glyphEditorPage = RootData.pageSelectionModel.registerPage(
+            null, "Glyph Editor", toolbarId._glyphEditorComponent, { palette: targetPalette })
+        RootData.pageSelectionModel.gotoPage(toolbarId._glyphEditorPage)
     }
 
     ColumnLayout {
@@ -75,6 +106,33 @@ QC.Frame {
             // onActivated fires only on user selection, so it never loops with
             // the currentIndex binding above.
             onActivated: RootData.region.defaultPaletteId = currentValue
+        }
+
+        // Fork a read-only palette so its glyphs can be edited.
+        QC.Button {
+            objectName: "duplicatePaletteButton"
+            Layout.fillWidth: true
+            text: "Duplicate to edit…"
+            visible: toolbarId.sketch !== null
+                     && toolbarId.sketch.resolvedPalette !== null
+                     && !toolbarId.sketch.resolvedPalette.writable
+            onClicked: {
+                const fork = RootData.paletteManager.duplicatePalette(
+                    toolbarId.sketch.resolvedPalette,
+                    toolbarId.sketch.resolvedPalette.name + " (copy)")
+                toolbarId._openGlyphEditor(fork)
+            }
+        }
+
+        // Edit the glyphs of a writable palette.
+        QC.Button {
+            objectName: "editGlyphsButton"
+            Layout.fillWidth: true
+            text: "Edit glyphs…"
+            visible: toolbarId.sketch !== null
+                     && toolbarId.sketch.resolvedPalette !== null
+                     && toolbarId.sketch.resolvedPalette.writable
+            onClicked: toolbarId._openGlyphEditor(toolbarId.sketch.resolvedPalette)
         }
 
         QC.Label {

@@ -80,12 +80,12 @@ void cwSketchCanvas::setSketch(cwSketch *sketch)
 
     if (m_sketch != nullptr) {
         m_pathModel->setSketch(m_sketch);
-        m_pathModel->setSnapshot(m_sketch->paletteSnapshot());
+        refreshPathSnapshot();
         // Re-skin the render path whenever the sketch re-resolves its palette
         // (e.g. the region's defaultPaletteId changes). The `this` context lets
         // the blanket disconnect above tear this down on the next setSketch().
         connect(m_sketch, &cwSketch::paletteSnapshotChanged, this, [this]() {
-            m_pathModel->setSnapshot(m_sketch->paletteSnapshot());
+            refreshPathSnapshot();
         });
         if (cwScale *scale = m_sketch->mapScale()) {
             m_pathModel->setMapScaleRatio(scale->scale());
@@ -197,6 +197,16 @@ void cwSketchCanvas::setGrid(cwInfiniteGridModel *grid)
 
     emit gridChanged();
     update();
+}
+
+cwPaletteSnapshot cwSketchCanvas::snapshotForPathModel() const
+{
+    return m_sketch != nullptr ? m_sketch->paletteSnapshot() : cwPaletteSnapshot();
+}
+
+void cwSketchCanvas::refreshPathSnapshot()
+{
+    m_pathModel->setSnapshot(snapshotForPathModel());
 }
 
 QCanvasPainterItemRenderer *cwSketchCanvas::createItemRenderer() const

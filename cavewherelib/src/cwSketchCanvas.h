@@ -95,6 +95,13 @@ protected:
     QCanvasPainterItemRenderer *createItemRenderer() const override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
+    // The palette snapshot pushed into the path model. The base resolves it from
+    // the sketch's region-resolved palette; cwSketchGlyphCanvas overrides it to
+    // inject an authoring palette directly, bypassing the resolver. Call
+    // refreshPathSnapshot() to re-push after the source changes.
+    virtual cwPaletteSnapshot snapshotForPathModel() const;
+    void refreshPathSnapshot();
+
 signals:
     void sketchChanged();
     void currentBrushNameChanged();
