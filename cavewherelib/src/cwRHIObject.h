@@ -65,11 +65,17 @@ public:
     // cwOffscreenRenderParameters::appearanceOverrides; the offscreen renderer
     // resolves it to a slot, and Drawable::appearanceBinding carries the offset). An
     // appearance-slotted object (cwAppearanceSlotted) grows its per-object UBO on
-    // demand up to this ceiling, not to it — steady state is one slot. Intentionally
-    // smaller than the camera-slot budget (cwRhiScene::kOffscreenBatchCameraSlots):
-    // a multi-view job shares ONE appearance slot across all its camera views, so a
-    // batch needs far fewer appearance slots than camera slots.
-    static constexpr int kOffscreenBatchAppearanceSlots = 32;
+    // demand up to this ceiling, not to it — steady state is one slot.
+    //
+    // The offscreen renderer acquires ONE appearance slot per tile/job, exactly as it
+    // takes one camera slot per tile, so the appearance budget mirrors the camera
+    // budget: an atlas batch of up to kOffscreenBatchCameraSlots tiles can have every
+    // tile override the same object. Kept numerically equal to
+    // cwRhiScene::kOffscreenBatchCameraSlots so no same-object override in a full batch
+    // silently degrades to live (acquireAppearanceSlot returns kNoAppearanceSlot past
+    // the ceiling). It is a literal, not a reference to that constant, because
+    // cwRhiScene.h includes this header (not the reverse) — keep the two in sync.
+    static constexpr int kOffscreenBatchAppearanceSlots = 256;
     static constexpr int kAppearanceSlotCount = 1 + kOffscreenBatchAppearanceSlots;
 
     struct GatherContext {

@@ -32,11 +32,11 @@ void cwAppearanceSlotted::reserveAppearanceSlots(QRhi* rhi, QRhiResourceUpdateBa
 
 int cwAppearanceSlotted::acquireAppearanceSlot(QRhi* rhi, QRhiResourceUpdateBatch* batch)
 {
-    // The appearance ceiling (kAppearanceSlotCount) is intentionally below the
-    // camera-slot batch cap, so a batch could in principle ask for more concurrent
-    // overrides of one object than the budget allows. Enforce it at runtime (not
-    // just via assert, which a release build drops): degrade to "no slot" so the
-    // caller renders the object live rather than growing the UBO past the budget.
+    // The appearance ceiling (kAppearanceSlotCount) matches the camera-slot batch cap,
+    // so a full atlas batch can override one object on every tile. A batch that somehow
+    // asks for even more concurrent overrides would exceed the budget; enforce it at
+    // runtime (not just via assert, which a release build drops): degrade to "no slot"
+    // so the caller renders the object live rather than growing the UBO past the budget.
     if (m_nextFreeAppearanceSlot >= cwRHIObject::kAppearanceSlotCount) {
         return kNoAppearanceSlot;
     }

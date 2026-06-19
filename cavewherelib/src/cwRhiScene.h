@@ -236,6 +236,8 @@ private:
     // tiles would render the last tile's camera (the repeated-tile bug). N is the
     // per-frame atlas-batch cap; the UBO stays tiny (one stride per slot) so 256 costs
     // ~64 KB. m_globalUniformStride is the aligned per-slot size and the offset of slot 1.
+    // cwRHIObject::kOffscreenBatchAppearanceSlots mirrors this value (one appearance slot
+    // per tile, same as the camera) — keep the two in sync.
     static constexpr int kOffscreenBatchCameraSlots = 256;
     static constexpr int kGlobalCameraSlotCount = 1 + kOffscreenBatchCameraSlots;
     quint32 m_globalUniformStride = 0;
