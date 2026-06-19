@@ -79,7 +79,7 @@
   specifics live in its own file:
   <ul>
     <li><a href="EXTERNAL_FILE_PHASE1.html"><code>EXTERNAL_FILE_PHASE1.html</code></a> &mdash; Data model, scanner, copy, driver, runner, watcher. <strong>Fully planned.</strong></li>
-    <li><a href="EXTERNAL_FILE_PHASE2.html"><code>EXTERNAL_FILE_PHASE2.html</code></a> &mdash; Trip-level attach + CavernOutputPage v1. (Stub; content still in master &sect;9 Phase 2.)</li>
+    <li><a href="EXTERNAL_FILE_PHASE2.html"><code>EXTERNAL_FILE_PHASE2.html</code></a> &mdash; Trip-level attach + CavernOutputPage v1.</li>
     <li><a href="EXTERNAL_FILE_PHASE3.html"><code>EXTERNAL_FILE_PHASE3.html</code></a> &mdash; Cave-level attach + nav badging. (Stub.)</li>
     <li><a href="EXTERNAL_FILE_PHASE4.html"><code>EXTERNAL_FILE_PHASE4.html</code></a> &mdash; Equates editor. (Stub; concept-level.)</li>
     <li><a href="EXTERNAL_FILE_PHASE5.html"><code>EXTERNAL_FILE_PHASE5.html</code></a> &mdash; Orphan detection + Replace/Re-link. (Stub.)</li>
@@ -2321,40 +2321,17 @@ QQ.Item {
   <h3>Phase 2 &mdash; Trip-level attach + CavernOutputPage v1</h3>
   <p class="meta">Goal: a user can attach an external centerline to a trip, see the resolved stations, attach a note to one, and watch an edit in the project tree trigger a re-solve.</p>
 
-  <h4>UI (per &sect;8.5 wireframe)</h4>
-  <ul>
-    <li>"Attach external centerline&hellip;" button on the trip-detail page.</li>
-    <li>Replace <code>SurveyEditor</code> with the new
-        <code>ExternalCenterlinePanel</code> when the trip has a
-        centerline attached. Panel shows: file path + format, last-solved
-        status, solve stats, stations list (this trip's
-        <code>*begin trip_&lt;uuid&gt;</code> scope), reload/detach
-        buttons, trip metadata.</li>
-    <li>Carpet sub-page station picker reads from the per-scope station
-        list model (see &sect;7.2) instead of <code>cwTrip::stations</code>.</li>
-    <li><strong>Extend existing</strong> <code>CavernOutputPage.qml</code> (shipped in commit <code>29bcd026</code> with cavern log + loop-closure stats + solve-error surfacing) with the attached-centerlines list and driver-source disclosure described in &sect;8.3.</li>
-    <li>New <code>LinkText</code> entry on <code>DataMainPage.qml</code> with summary stats.</li>
-    <li>Notes/scraps on the externally-backed trip use <code>externalStationCharactersRegex</code> for station-reference validation.</li>
-  </ul>
-
-  <h4>Files touched</h4>
-  <ul>
-    <li><code>cavewherelib/qml/CavernOutputPage.qml</code> &mdash; <strong>extend</strong> (already exists from the lineplot port; adds attached-centerlines list + driver-source disclosure sections).</li>
-    <li><code>cavewherelib/qml/ExternalCenterlineTripPanel.qml</code> + sub-components &mdash; new; the SurveyEditor replacement. Full breakdown of the seven sub-component files in &sect;<a class="anchor" href="#ux-trip-panel">8.5.1</a>; Phase 2 ships <code>TripPanel</code>, <code>AttachedHeader</code>, <code>SolveStatus</code>, <code>StationsList</code>, <code>MissingSourceBanner</code> (with the Re-link button stubbed pending Phase 5b), and <code>TripMetadata</code>. The <code>ScopeHeader</code> and <code>CaveSummary</code> files land in Phase 3.</li>
-    <li><code>cavewherelib/qml/DataMainPage.qml</code> &mdash; add link entry.</li>
-    <li><code>cavewherelib/qml/TripPage.qml</code> &mdash; conditional left-pane swap.</li>
-    <li><code>cwPageSelectionModel</code> &mdash; the page is already registered; add the linkable section anchors for attached centerlines / driver source.</li>
-    <li><code>cwLinePlotManager</code> &mdash; extend with attached-centerlines model + driver-source string (the manager already publishes <code>cavernLog</code> / <code>loopClosureStats</code> / <code>solveErrorMessage</code> Q_PROPERTYs from the lineplot port). No new model class for cavern output itself.</li>
-    <li>New per-scope station-list model (C++) backing both the panel's station list and the carpet picker autocomplete.</li>
-  </ul>
-
-  <h4>Acceptance criteria</h4>
-  <ul>
-    <li>QML test: attach a fixture <code>.svx</code>, verify shot editor is disabled, verify CavernOutputPage shows the attached centerline + resolved station count.</li>
-    <li>QML test: edit the in-project copy of the fixture <code>.svx</code>, <code>tryVerify</code> the re-solve completes and station positions change.</li>
-    <li>QML test: write a syntactically broken <code>.svx</code>, verify CavernOutputPage shows the cavern error text.</li>
-    <li>Manual: full round-trip on a real Survex project.</li>
-  </ul>
+  <div class="note">
+    <strong>Phase 2's full plan lives in
+    <a href="EXTERNAL_FILE_PHASE2.html">plans/EXTERNAL_FILE_PHASE2.html</a>.</strong>
+    That file is the source of truth for Phase 2's prerequisite, files
+    touched, acceptance criteria, attach orchestrator design, scanner
+    <code>SeededTripMetadata</code> extension, per-scope station-list
+    model, <code>ExternalCenterlineTripPanel</code> Phase-2 deltas vs.
+    &sect;8.5.1, failure-mode taxonomy, the 10-commit sequence,
+    per-commit test gates, and fixture files. The cross-cutting test
+    rules in &sect;10.1 apply unchanged.
+  </div>
 </div>
 
 <div class="phase" id="p3">
