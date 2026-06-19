@@ -13,7 +13,6 @@
 //Std includes
 #include <unordered_map>
 #include <algorithm>
-#include <numeric>
 
 namespace {
 
@@ -221,37 +220,32 @@ private:
 void cwSortBillboardSlotsBackToFront(QVector<cwRenderBillboards::RenderSlot>& renderSlots,
                                      const QMatrix4x4& viewProjection)
 {
-    const int count = renderSlots.size();
-    if (count < 2) {
+    if (renderSlots.size() < 2) {
         return;
     }
 
-    // Project each world position once. Recomputing the key inside the comparator
-    // would run the matrix multiply O(n log n) times, and a non-constant key
-    // breaks std::sort's ordering contract. Larger depth == farther from the eye;
-    // the clamped |w| matches buildModelMatrix so a billboard near the eye plane
-    // can't produce a degenerate key.
-    QVector<float> depths;
-    depths.reserve(count);
-    for (const cwRenderBillboards::RenderSlot& slot : renderSlots) {
+    // Project each world position once into a per-slot key, so the comparator
+    // never reruns the matrix multiply (that would be O(n log n) projections and,
+    // because the key wouldn't be constant, would break the ordering contract).
+    // Larger depth == farther from the eye; the clamped |w| matches buildModelMatrix
+    // so a billboard near the eye plane can't produce a degenerate key.
+    for (cwRenderBillboards::RenderSlot& slot : renderSlots) {
         const QVector4D clip = viewProjection * QVector4D(slot.worldPosition, 1.0f);
-        depths.append(clip.z() / qMax(qAbs(clip.w()), kMinClipW));
+        slot.sortDepth = clip.z() / qMax(qAbs(clip.w()), kMinClipW);
     }
 
-    // Sort indices so the precomputed depth travels with each slot; stable so
-    // equal-depth billboards keep their insertion order.
-    QVector<int> order(count);
-    std::iota(order.begin(), order.end(), 0);
-    std::stable_sort(order.begin(), order.end(), [&depths](int a, int b) {
-        return depths.at(a) > depths.at(b);  // farthest first (back-to-front)
+    // Sort the slots in place (std::sort is in-place introsort — no per-frame heap
+    // allocation, unlike stable_sort). The id tiebreak gives a total order, so the
+    // result is deterministic for equal-depth billboards without relying on a
+    // stable sort or on the incoming slot order.
+    std::sort(renderSlots.begin(), renderSlots.end(),
+              [](const cwRenderBillboards::RenderSlot& a,
+                 const cwRenderBillboards::RenderSlot& b) {
+        if (a.sortDepth != b.sortDepth) {
+            return a.sortDepth > b.sortDepth;  // farthest first (back-to-front)
+        }
+        return a.id < b.id;
     });
-
-    QVector<cwRenderBillboards::RenderSlot> sorted;
-    sorted.reserve(count);
-    for (const int index : order) {
-        sorted.append(renderSlots.at(index));
-    }
-    renderSlots = std::move(sorted);
 }
 
 cwRenderBillboards::cwRenderBillboards(QObject* parent)

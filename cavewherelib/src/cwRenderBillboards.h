@@ -73,6 +73,11 @@ public:
         QVector3D worldPosition;
         SizeMode sizeMode = SizeMode::ScreenConstant;
         float depthBias = 0.0f;
+        // Render-thread scratch: the NDC depth of worldPosition for the current
+        // frame's camera, filled by cwSortBillboardSlotsBackToFront so the sort
+        // doesn't recompute the projection per comparison. Not part of the GUI-side
+        // snapshot (buildRenderSlots leaves it 0).
+        float sortDepth = 0.0f;
     };
 
     explicit cwRenderBillboards(QObject* parent = nullptr);

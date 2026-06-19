@@ -78,6 +78,34 @@ TEST_CASE("cwRenderBillboards: updateBillboard changes the snapshot", "[cwRender
     REQUIRE(renderSlots.at(0).worldPosition == QVector3D(5, 6, 7));
 }
 
+TEST_CASE("cwRenderBillboards: sizeMode and depthBias survive into the snapshot", "[cwRenderBillboards]")
+{
+    QQuickWindow window;
+    auto content = std::make_unique<QQuickItem>(window.contentItem());
+    content->setSize(QSizeF(10, 10));
+
+    cwRenderBillboards billboards;
+    billboards.setWindow(&window);
+
+    cwRenderBillboards::Billboard billboard;
+    billboard.content = content.get();
+    billboard.sizeMode = cwRenderBillboards::SizeMode::WorldSized;
+    billboard.depthBias = 2.0f;
+    const cwBillboardId id = billboards.addBillboard(billboard);
+
+    auto renderSlots = billboards.buildRenderSlots();
+    REQUIRE(renderSlots.size() == 1);
+    REQUIRE(renderSlots.at(0).sizeMode == cwRenderBillboards::SizeMode::WorldSized);
+    REQUIRE(renderSlots.at(0).depthBias == 2.0f);
+
+    // Changing only depthBias must not be swallowed by updateBillboard's no-op
+    // equality check (it compares sizeMode and depthBias too).
+    billboard.depthBias = 5.0f;
+    billboards.updateBillboard(id, billboard);
+    renderSlots = billboards.buildRenderSlots();
+    REQUIRE(renderSlots.at(0).depthBias == 5.0f);
+}
+
 TEST_CASE("cwRenderBillboards: invisible content is skipped", "[cwRenderBillboards]")
 {
     QQuickWindow window;
@@ -164,17 +192,19 @@ TEST_CASE("cwSortBillboardSlotsBackToFront orders billboards farthest-first", "[
         REQUIRE(renderSlots.at(2).id == cwBillboardId{3});
     }
 
-    SECTION("equal depth keeps insertion order (stable)")
+    SECTION("equal depth resolves to a deterministic id order")
     {
         QMatrix4x4 projection;
         projection.ortho(-10, 10, -10, 10, 0.1f, 100);
         const QMatrix4x4 viewProjection = projection * view;
 
-        // Same depth plane, different x — order must not change.
+        // Same depth plane, different x, fed in non-id order. Equal-depth ties
+        // resolve by ascending id (a total order), so the result is deterministic
+        // regardless of incoming order — no reliance on a stable sort.
         QVector<cwRenderBillboards::RenderSlot> renderSlots{
+            makeSlot(12, QVector3D(4, 0, 2)),
             makeSlot(10, QVector3D(-4, 0, 2)),
             makeSlot(11, QVector3D(0, 0, 2)),
-            makeSlot(12, QVector3D(4, 0, 2)),
         };
         cwSortBillboardSlotsBackToFront(renderSlots, viewProjection);
 
