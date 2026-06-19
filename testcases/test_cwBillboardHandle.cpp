@@ -144,6 +144,43 @@ TEST_CASE("cwBillboardHandle: set to a different layer moves the billboard", "[c
     REQUIRE(layerB.billboardCount() == 0);
 }
 
+TEST_CASE("cwBillboardHandle: self-move-assignment keeps the billboard", "[cwBillboardHandle]")
+{
+    QQuickWindow window;
+    auto content = std::make_unique<QQuickItem>(window.contentItem());
+
+    cwRenderBillboards layer;
+    layer.setWindow(&window);
+
+    cwBillboardHandle handle;
+    handle.set(&layer, makeBillboard(content.get(), QVector3D(0, 0, 0)));
+    const cwBillboardId id = handle.id();
+
+    // Exercise the operator=(&&) self-assign guard. Indirect through a pointer so
+    // the compiler doesn't diagnose the obvious self-move; without the guard this
+    // would reset() then read its own just-cleared members.
+    cwBillboardHandle* alias = &handle;
+    handle = std::move(*alias);
+
+    REQUIRE(handle.isValid());
+    REQUIRE(handle.id() == id);
+    REQUIRE(layer.billboardCount() == 1);
+}
+
+TEST_CASE("cwBillboardHandle: set(nullptr) on an empty handle is a no-op", "[cwBillboardHandle]")
+{
+    QQuickWindow window;
+    auto content = std::make_unique<QQuickItem>(window.contentItem());
+
+    cwRenderBillboards layer;
+    layer.setWindow(&window);
+
+    cwBillboardHandle handle;
+    handle.set(nullptr, makeBillboard(content.get(), QVector3D(0, 0, 0)));
+    REQUIRE_FALSE(handle.isValid());
+    REQUIRE(layer.billboardCount() == 0);
+}
+
 TEST_CASE("cwBillboardHandle: set re-adds after its layer was destroyed", "[cwBillboardHandle]")
 {
     QQuickWindow window;

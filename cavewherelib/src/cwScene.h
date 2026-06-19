@@ -66,7 +66,9 @@ public:
     // the first time it's requested. Sharing one layer means all billboards sort
     // back-to-front together, so an overlapping lead and label can't bite each
     // other (#538). Callers still drive its window via setWindow(); the scene
-    // doesn't know the hosting QQuickWindow.
+    // doesn't know the hosting QQuickWindow. Invariant: every overlay sharing
+    // this layer must live in the same QQuickWindow — they each push setWindow()
+    // (last writer wins), which stays a no-op only while they agree.
     cwRenderBillboards* billboardLayer();
 
     void setCamera(cwCamera* camera);
