@@ -35,9 +35,8 @@ class cwNoteLiDAR;
 #include "cwTriangulateLiDARInData.h"
 #include "cwRenderTexturedItems.h"
 #include "cwUniqueConnectionChecker.h"
+#include "cwKeywordItemRegistry.h"
 class cwKeywordItemModel;
-class cwKeywordItem;
-class cwRenderTexturedItemVisibility;
 class cwRenderTexturedItemsVisibilityGroup;
 
 
@@ -142,12 +141,7 @@ private:
     QSet<cwNoteLiDAR*> m_dirtyNotes;
     QSet<cwNoteLiDAR*> m_deletedNotes;
     QHash<cwNoteLiDAR*, QVector<uint32_t>> m_noteToRender;
-    struct KeywordEntry {
-        QPointer<cwKeywordItem> item;
-        QPointer<QObject> visibility;
-    };
-    QPointer<cwKeywordItemModel> m_keywordItemModel;
-    QHash<cwNoteLiDAR*, KeywordEntry> m_keywordEntries;
+    cwKeywordItemRegistry<cwNoteLiDAR*> m_keywordRegistry;
 
     QPointer<cwRenderTexturedItems> m_render;
 

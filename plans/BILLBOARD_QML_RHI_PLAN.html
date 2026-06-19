@@ -516,20 +516,107 @@ pushing.</p>
 <p class="note"><b>Follow-up refactors (out of scope for 3b, surfaced by the pre-commit review).</b> Both are
 consistency/maintainability wins, not behavior changes; each is its own commit.</p>
 <ol>
-  <li><b>Reusable keyword-item lifecycle registry.</b> The &ldquo;lazily register one <code>cwKeywordItem</code> per
-  entity when it first has content, unregister at zero, swap models safely, sync-delete in the destructor&rdquo; pattern
-  is now reimplemented four times: <code>cwLeadView</code> (per scrap), <code>cwLinePlotLabelView</code> (per trip, new
-  in 3b), <code>cwLinePlotManager::reconcileTripKeywordItems</code> (per solved trip), and
-  <code>cwScrapManager</code> (per scrap). Each hand-rolls <code>addItem</code>/<code>removeItem</code>, the
-  <code>m_keywordItemModel.isNull()</code> guard, <code>deleteLater</code> vs sync-<code>delete</code> teardown, and
+  <li><b>Reusable keyword-item lifecycle registry.</b> The &ldquo;register one <code>cwKeywordItem</code> per entity,
+  swap models safely, sync-delete in the destructor&rdquo; pattern is reimplemented <em>six</em> times (the original
+  review said four &mdash; it undercounted): <code>cwLeadView</code> (per scrap), <code>cwLinePlotLabelView</code> (per
+  trip, new in 3b), <code>cwLinePlotManager::reconcileTripKeywordItems</code> (per solved trip),
+  <code>cwScrapManager</code> (per scrap), <code>cwNoteLiDARManager</code> (per note), and
+  <code>cwLazLayersSceneNode</code> (per layer). Each hand-rolls <code>addItem</code>/<code>removeItem</code>, the
+  <code>m_keywordItemModel</code> null-guard, <code>deleteLater</code> vs sync-<code>delete</code> teardown, and
   model-swap re-registration &mdash; the exact invariants that bit us once (the destructor double-free fixed via
-  declaration order in <code>test_cwLinePlotLabelView</code>). A small <code>cwKeywordItemRegistry&lt;Key&gt;</code>
-  helper would own the map (<code>Key*</code>&rarr;<code>{cwKeywordItem*, object}</code>), the lazy 0&harr;1 transitions,
-  the model pointer + swap, and the destructor contract, so the four call sites shrink to &ldquo;build the model + target,
-  ask the registry to ensure/drop.&rdquo; Out of scope now: the four sites have divergent <em>removal triggers</em>
-  (empty lead list / empty label group / solved-geometry delta / scrap deletion) and key types, so the right seam is
-  worth settling against all four at once rather than guessing from 3b. The lifecycle invariants would become testable
-  properties of one class.</li>
+  declaration order in <code>test_cwLinePlotLabelView</code>).
+
+  <p class="note"><b>Performance is a non-goal here.</b> Every site is cold-path (entity add/remove, model swap,
+  teardown); none runs per frame &mdash; the hot loops are <code>updatePositions</code>/<code>updateItemPositions</code>,
+  which the registry never touches. The win is <em>maintainability + testability</em>, not speed.</p>
+
+  <p>A small <code>cwKeywordItemRegistry&lt;Key&gt;</code> helper can own only the <em>mechanical sliver</em>: the
+  <code>Key*</code>&rarr;<code>cwKeywordItem*</code> map, the model pointer + swap (remove-all-from-old, defer
+  re-register to the site), <code>deleteLater</code> on live drop, and the synchronous-<code>delete</code>-with-
+  <code>removeItem</code>-first destructor contract. It also standardizes &ldquo;the proxy is always the item&rsquo;s
+  child, so deleting the item deletes the proxy&rdquo; &mdash; collapsing a real divergence (<code>cwLeadView</code>/
+  <code>cwLinePlotManager</code> parent the proxy to the item; <code>cwScrapManager</code>/<code>cwNoteLiDARManager</code>
+  store it separately and <code>deleteLater</code> it on its own). What the registry <em>cannot</em> absorb &mdash; and
+  why the call sites do not collapse to one line &mdash; is the per-site <em>predicate</em>, <em>factory</em> (which
+  keyword model to <code>addExtension</code>, which target to <code>setObject</code>), and rich per-entry data
+  (<code>cwLeadView</code>&rsquo;s items/billboardIds, etc.). Each site keeps those and delegates only the item&rsquo;s
+  lifecycle.</p>
+
+  <p><b>Recommended scope &mdash; three steps, not one big bang:</b></p>
+  <ol type="a">
+    <li><b>Step 1 (clear win, low risk): unify the two billboard <em>views</em> only</b> &mdash; <code>cwLeadView</code>
+    + <code>cwLinePlotLabelView</code>. Their <code>setKeywordItemModel</code>, <code>removeKeywordItem</code>, and
+    destructors are <em>verbatim</em> identical; <code>updateKeywordItem</code> differs only by predicate
+    (<code>items.isEmpty()</code> vs <code>labels().isEmpty()</code>); <code>addKeywordItem</code> differs only by
+    (extension model, target factory). A registry member + two small lambdas per view collapses ~60 lines of true
+    duplicate and makes the double-free invariant a unit-tested property of one class. At two sites it is roughly
+    LOC-neutral &mdash; the value is centralization, and the LOC win grows as more sites adopt it.
+    <span class="pill ok">implemented</span> (<code>cwKeywordItemRegistry&lt;Key&gt;</code>, behavior-preserving;
+    reviewed, both views converted).</li>
+    <li><b>Step 2 (IMPLEMENTED): folded in</b> <code>cwScrapManager</code> +
+    <code>cwNoteLiDARManager</code> (both per-entity attach/detach with a stored proxy), <em>and</em>
+    <code>cwLazLayersSceneNode</code> via the key-type-agnostic generalization below. Mechanical and
+    <em>behavior-preserving</em>; both suites green. <b>Seam evaluation (done):</b>
+    Step 1 proved the core abstraction on both target-ownership shapes &mdash; proxy-parented-to-item
+    (<code>cwLeadView</code>&rsquo;s <code>cwLeadVisibility</code>) and target-owned-elsewhere
+    (<code>cwLinePlotLabelView</code>&rsquo;s group). The managers use the first shape, which Step 1 directly exercised.
+    Two prerequisites for the managers, both now resolved on paper:
+    <ul>
+      <li><b>The separately-stored proxy is confirmed redundant &mdash; drop it.</b> Audited: in both managers the
+      <code>entry.visibility</code> handle is read <em>only</em> to <code>deleteLater()</code> it
+      (<code>cwScrapManager.cpp:300-301,372-373</code>; <code>cwNoteLiDARManager.cpp:247-248,859-860</code>), never
+      functionally, and the proxy is constructed with the keyword item as its QObject parent
+      (<code>new cwRenderTexturedItemVisibility(&hellip;, keywordItem)</code>), so deleting the item already tears the
+      proxy down. <code>cwLeadView</code> is the working precedent (same proxy-as-item-child pattern, proven in Step 1).
+      Removed the <code>visibility</code> field and its <code>deleteLater</code>, then adopted the registry. <b>(Done.)</b></li>
+      <li><b>Hardened the registry&rsquo;s map value to <code>QPointer&lt;cwKeywordItem&gt;</code> first.</b> Both managers
+      stored <code>QPointer&lt;cwKeywordItem&gt;</code>; the registry stored a raw <code>cwKeywordItem*</code>.
+      Adopting it as-is would have moved those sites from a guarded pointer to a raw one &mdash; a small robustness regression.
+      <code>m_items</code> now holds <code>QPointer</code> values (a self-deleted slot auto-nulls, so <code>ensure</code>
+      transparently rebuilds it). <b>(Done.)</b></li>
+    </ul>
+    Keep the two-map seam (site owns its rich entry hash; registry owns only the keyword item); do <em>not</em> add a
+    generic <code>&lt;Key,&nbsp;Value&gt;</code> form &mdash; the sites&rsquo; per-entry data (lead items/billboardIds vs
+    render-id lists) has nothing shareable.
+    <p><b><code>cwLazLayersSceneNode</code> &mdash; converted, keeping its <code>QUuid</code> keying.</b> It keys by
+    <code>QUuid</code> while the other five sites key by raw pointer. <em>UUID is the safer scheme:</em> raw-pointer keys
+    are reused after <code>delete</code>/<code>new</code>, so a stale entry can alias a freshly-allocated entity at the
+    same address; the pointer-keyed sites are safe only because they erase on the removal signal <em>before</em> deletion,
+    which UUID keying doesn&rsquo;t depend on. So Laz is the site doing identity right &mdash; downgrading it to pointer
+    keys to fit the helper would have been backwards. Instead the registry was generalized to be <em>key-type-agnostic</em>:
+    the template parameter is now the <em>key itself</em> (<code>QHash&lt;Key,&hellip;&gt;</code> /
+    <code>ensure(const Key&amp;,&hellip;)</code>, requiring only <code>qHash(Key)</code> + <code>operator==</code>). Laz
+    instantiates <code>&lt;QUuid&gt;</code> and keeps its UUID keys; the four pointer sites became
+    <code>&lt;cwScrap*&gt;</code>/<code>&lt;cwTrip*&gt;</code>/<code>&lt;cwNoteLiDAR*&gt;</code> (the <code>*</code> moved into
+    the type argument &mdash; pure churn, no behavior change). For a pointer <code>Key</code> a forward declaration of the
+    pointee still suffices since only the pointer is stored. Laz&rsquo;s <code>setObject</code> targets the separately-owned
+    <code>cwRenderPointCloud</code> (not a child proxy), so teardown ordering is load-bearing there; the registry preserves
+    it (<code>drop</code>/<code>clear</code> erase the item before the point cloud is deleted, matching the prior
+    hand-rolled order). The per-item <code>qCDebug</code> traces were preserved around the registry calls.</p></li>
+    <li><b>Step 3 (gated on Step 2 &mdash; a <em>behavior</em> change, its own commit): retire
+    <code>cwKeywordItem::setObject</code>&rsquo;s self-delete-on-target-<code>destroyed</code>.</b> Today
+    <code>setObject</code> (<code>cwKeywordItem.cpp:23-44</code>) wires the <em>target&rsquo;s</em> <code>destroyed()</code>
+    to <code>delete</code> the keyword item, while the registry independently owns and deletes that same item &mdash; two
+    lifetime owners for one object, kept from colliding only by a hand-maintained ordering contract (&ldquo;always
+    <code>drop</code>/<code>clear</code> the item <em>before</em> its target is destroyed&rdquo;) that the registry
+    class comment and several call-site comments now have to narrate. This is exactly the double-ownership class of bug
+    that already bit us once (the <code>test_cwLinePlotLabelView</code> destructor double-free fixed via declaration
+    order). Move to a <em>single</em> owner: either the model owns item lifetime with explicit
+    <code>removeItem</code>-deletes semantics (drop the target-<code>destroyed</code> self-delete entirely), or parent
+    the <code>cwKeywordItem</code> to its target so Qt&rsquo;s parent/child ownership handles teardown deterministically.
+    <b>Why gated on Step 2, not part of it:</b> the redesign is only safe/enforceable once <em>all six</em> attach/detach
+    sites funnel through the registry &mdash; that single chokepoint is the precondition for moving ownership off the
+    <code>destroyed()</code> self-delete. It also touches <code>cwKeywordItem</code>, <code>cwKeywordItemModel</code>&rsquo;s
+    reparenting contract, and the keyword tests (medium-large blast radius), so it is a behavior change on its own commit,
+    not a line item folded into Step 2&rsquo;s mechanical adoption. The registry is the <em>forcing function</em> for this
+    cleanup, not the vehicle.</li>
+  </ol>
+
+  <p><b><code>cwLinePlotManager</code> is intentionally excluded</b> (same reasoning as the tree-model follow-up below):
+  its trigger is a UUID-keyed reconcile against fresh solve output, with per-solve vertex-range rebinding and a
+  <code>destroyed()</code> connection &mdash; not a 0&harr;1 count lifecycle, and forcing it through a generic
+  <code>ensure</code>/<code>drop</code> would obscure the solver-specific parts. The lifecycle invariants the registry
+  owns would become testable properties of one class.</li>
 
   <li><b><code>cwLinePlotLabelView</code> should enumerate trips via <code>cwRegionTreeModel</code>, matching
   <code>cwLeadView</code>.</b> 3b left the view hand-rolling raw <code>cwCavingRegion</code> +

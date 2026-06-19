@@ -24,23 +24,6 @@ cwLinePlotLabelView::cwLinePlotLabelView(QQuickItem *parent) :
 
 }
 
-cwLinePlotLabelView::~cwLinePlotLabelView()
-{
-    // The keyword items are owned by the model (addItem reparents them), so they
-    // outlive the view unless removed here. Synchronous delete: the event loop
-    // won't run again to drain deleteLater during teardown.
-    for(auto it = m_tripEntries.begin(); it != m_tripEntries.end(); ++it) {
-        cwKeywordItem* item = it.value().keywordItem;
-        if(item != nullptr) {
-            if(!m_keywordItemModel.isNull()) {
-                m_keywordItemModel->removeItem(item);
-            }
-            delete item;
-            it.value().keywordItem = nullptr;
-        }
-    }
-}
-
 /**
 Sets region
 */
@@ -76,19 +59,15 @@ void cwLinePlotLabelView::setRegion(cwCavingRegion* region) {
  * @return The keyword model this view publishes its per-trip label items into.
  */
 void cwLinePlotLabelView::setKeywordItemModel(cwKeywordItemModel* keywordItemModel) {
-    if(m_keywordItemModel == keywordItemModel) {
+    if(m_keywordRegistry.model() == keywordItemModel) {
         return;
     }
 
-    // Remove existing items from the old model before switching.
-    for(auto it = m_tripEntries.begin(); it != m_tripEntries.end(); ++it) {
-        removeKeywordItem(it.value());
-    }
+    // Tears down items in the old model; re-register every trip that still has
+    // labels against the new one.
+    m_keywordRegistry.setModel(keywordItemModel);
 
-    m_keywordItemModel = keywordItemModel;
-
-    // Re-register every trip that currently has labels against the new model.
-    for(auto it = m_tripEntries.keyBegin(); it != m_tripEntries.keyEnd(); ++it) {
+    for(auto it = m_groups.keyBegin(); it != m_groups.keyEnd(); ++it) {
         updateKeywordItem(*it);
     }
 
@@ -165,9 +144,9 @@ void cwLinePlotLabelView::caveTripsRemoved(int begin, int end) {
 void cwLinePlotLabelView::updateStations() {
     cwCave* cave = static_cast<cwCave*>(sender());
     for(cwTrip* trip : cave->trips()) {
-        auto it = m_tripEntries.find(trip);
-        if(it != m_tripEntries.end()) {
-            it.value().group->setLabels(labels(cave, trip));
+        auto it = m_groups.find(trip);
+        if(it != m_groups.end()) {
+            it.value()->setLabels(labels(cave, trip));
             updateKeywordItem(trip);
         }
     }
@@ -179,14 +158,14 @@ void cwLinePlotLabelView::updateStations() {
  * @param trip - The trip to add a label group for
  */
 void cwLinePlotLabelView::addTrip(cwCave* cave, cwTrip* trip) {
-    if(m_tripEntries.contains(trip)) {
+    if(m_groups.contains(trip)) {
         return;
     }
 
     cwLabel3dGroup* group = new cwLabel3dGroup(this);
     group->setLabels(labels(cave, trip));
 
-    m_tripEntries.insert(trip, {group, nullptr});
+    m_groups.insert(trip, group);
     updateKeywordItem(trip);
 }
 
@@ -195,16 +174,19 @@ void cwLinePlotLabelView::addTrip(cwCave* cave, cwTrip* trip) {
  * @param trip - The trip whose label group is removed
  */
 void cwLinePlotLabelView::removeTrip(cwTrip* trip) {
-    auto it = m_tripEntries.find(trip);
-    if(it == m_tripEntries.end()) {
+    auto it = m_groups.find(trip);
+    if(it == m_groups.end()) {
         return;
     }
 
-    removeKeywordItem(it.value());
-    if(it.value().group != nullptr) {
-        it.value().group->deleteLater();
+    // Drop the keyword item before destroying its target group: setObject() wires
+    // the group's destroyed() to self-delete the item, so the registry must let go
+    // of it first.
+    m_keywordRegistry.drop(trip);
+    if(it.value() != nullptr) {
+        it.value()->deleteLater();
     }
-    m_tripEntries.erase(it);
+    m_groups.erase(it);
 }
 
 /**
@@ -260,62 +242,29 @@ QList<cwLabel3dItem> cwLinePlotLabelView::labels(cwCave *cave, cwTrip *trip) con
  *
  * Registers/unregisters the trip's label keyword item so the filter only carries
  * a row for trips that actually have labels: create it when the count crosses
- * 0->1, remove it when it returns to 0.
+ * 0->1, drop it when it returns to 0. The item references the trip-owned
+ * cwTrip::linePlotKeywordModel() (Type="Line Plot" plus the trip's inherited
+ * keywords), the same model the line plot geometry uses, and targets the trip's
+ * label group directly (a QObject with a setVisible(bool) slot, dispatched by
+ * cwKeywordVisibility), so filtering the line plot hides the labels with it.
  */
 void cwLinePlotLabelView::updateKeywordItem(cwTrip* trip) {
-    auto it = m_tripEntries.find(trip);
-    if(it == m_tripEntries.end()) {
+    auto it = m_groups.find(trip);
+    if(it == m_groups.end()) {
         return;
     }
 
-    TripEntry& entry = it.value();
-    if(entry.group == nullptr || entry.group->labels().isEmpty()) {
-        removeKeywordItem(entry);
+    cwLabel3dGroup* group = it.value();
+    if(group == nullptr || group->labels().isEmpty()) {
+        m_keywordRegistry.drop(trip);
     } else {
-        addKeywordItem(trip, entry.group);
+        m_keywordRegistry.ensure(trip, [trip, group]() {
+            auto item = new cwKeywordItem();
+            item->keywordModel()->addExtension(trip->linePlotKeywordModel());
+            item->setObject(group);
+            return item;
+        });
     }
-}
-
-/**
- * @brief cwLinePlotLabelView::addKeywordItem
- *
- * Publishes one cwKeywordItem for the trip, referencing the trip-owned
- * cwTrip::linePlotKeywordModel() (Type="Line Plot" plus the trip's inherited
- * keywords), the same model the line plot geometry uses. The trip's label group
- * is the setVisible() target, so filtering the line plot hides the labels with
- * it. Mirrors cwLeadView / cwLinePlotManager.
- */
-void cwLinePlotLabelView::addKeywordItem(cwTrip* trip, cwLabel3dGroup* group) {
-    if(m_keywordItemModel.isNull()) {
-        return;
-    }
-
-    auto it = m_tripEntries.find(trip);
-    if(it == m_tripEntries.end() || it.value().keywordItem != nullptr) {
-        return;
-    }
-
-    auto item = new cwKeywordItem();
-    item->keywordModel()->addExtension(trip->linePlotKeywordModel());
-
-    // The group is a QObject with a setVisible(bool) slot, so it is the keyword
-    // target directly (no proxy) via cwKeywordVisibility's generic dispatch.
-    item->setObject(group);
-
-    it.value().keywordItem = item;
-    m_keywordItemModel->addItem(item);
-}
-
-void cwLinePlotLabelView::removeKeywordItem(TripEntry& entry) {
-    if(entry.keywordItem == nullptr) {
-        return;
-    }
-
-    if(!m_keywordItemModel.isNull()) {
-        m_keywordItemModel->removeItem(entry.keywordItem);
-    }
-    entry.keywordItem->deleteLater();
-    entry.keywordItem = nullptr;
 }
 
 /**
@@ -324,11 +273,11 @@ void cwLinePlotLabelView::removeKeywordItem(TripEntry& entry) {
  * Removes all trip label groups and their keyword items from the view.
  */
 void cwLinePlotLabelView::clear() {
-    for(auto it = m_tripEntries.begin(); it != m_tripEntries.end(); ++it) {
-        removeKeywordItem(it.value());
-        if(it.value().group != nullptr) {
-            it.value().group->deleteLater();
+    for(auto it = m_groups.begin(); it != m_groups.end(); ++it) {
+        m_keywordRegistry.drop(it.key());
+        if(it.value() != nullptr) {
+            it.value()->deleteLater();
         }
     }
-    m_tripEntries.clear();
+    m_groups.clear();
 }

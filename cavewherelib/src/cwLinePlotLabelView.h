@@ -16,11 +16,11 @@
 //Our includes
 #include "cwLabel3dView.h"
 #include "cwGlobals.h"
+#include "cwKeywordItemRegistry.h"
 class cwCavingRegion;
 class cwCave;
 class cwTrip;
 class cwLabel3dGroup;
-class cwKeywordItem;
 class cwKeywordItemModel;
 
 
@@ -35,7 +35,6 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotLabelView : public cwLabel3dView
 
 public:
     explicit cwLinePlotLabelView(QQuickItem *parent = 0);
-    ~cwLinePlotLabelView();
 
     cwCavingRegion* region() const;
     void setRegion(cwCavingRegion* region);
@@ -49,17 +48,13 @@ signals:
 
 private:
     cwCavingRegion* Region; //!<
-    QPointer<cwKeywordItemModel> m_keywordItemModel;
 
-    // One label group + one keyword item per trip. The group is the keyword
-    // item's setVisible() target, so filtering a trip's line plot hides its
-    // station labels. The keyword item is registered only while the trip has
-    // labels (0<->1), mirroring cwLeadView's per-scrap lifecycle.
-    struct TripEntry {
-        cwLabel3dGroup* group = nullptr;
-        cwKeywordItem* keywordItem = nullptr;
-    };
-    QHash<cwTrip*, TripEntry> m_tripEntries;
+    // One label group per trip. The group is the trip's keyword item's
+    // setVisible() target (see updateKeywordItem), so filtering a trip's line plot
+    // hides its station labels. The keyword item itself is owned by the registry,
+    // registered only while the trip has labels (0<->1).
+    QHash<cwTrip*, cwLabel3dGroup*> m_groups;
+    cwKeywordItemRegistry<cwTrip*> m_keywordRegistry;
 
     void connectCave(cwCave* cave);
     void disconnectCave(cwCave* cave);
@@ -69,8 +64,6 @@ private:
 
     QList<cwLabel3dItem> labels(cwCave* cave, cwTrip* trip) const;
 
-    void addKeywordItem(cwTrip* trip, cwLabel3dGroup* group);
-    void removeKeywordItem(TripEntry& entry);
     void updateKeywordItem(cwTrip* trip);
 
     void clear();
@@ -92,6 +85,6 @@ inline cwCavingRegion* cwLinePlotLabelView::region() const {
 }
 
 inline cwKeywordItemModel* cwLinePlotLabelView::keywordItemModel() const {
-    return m_keywordItemModel;
+    return m_keywordRegistry.model();
 }
 #endif // CWLINEPLOTLABELVIEW_H

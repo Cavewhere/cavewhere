@@ -18,8 +18,8 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwKeywordItemRegistry.h"
 
-class cwKeywordItem;
 class cwKeywordItemModel;
 class cwLazLayer;
 class cwLazLayerModel;
@@ -92,11 +92,12 @@ private:
     void removeKeywordItemForLayer(cwLazLayer* layer);
 
     QPointer<cwScene> m_scene;
-    QPointer<cwKeywordItemModel> m_keywordItemModel;
     QPointer<cwLazLayerModel> m_model;
 
     QHash<QUuid, QPointer<cwRenderPointCloud>> m_pointClouds;
-    QHash<QUuid, QPointer<cwKeywordItem>> m_keywordItems;
+    // Declared after m_pointClouds so it destructs first: keyword items target
+    // the point clouds via setObject(), so they must die before the clouds do.
+    cwKeywordItemRegistry<QUuid> m_keywordRegistry;
 
     // Mirrors cwRenderPointCloud::RenderState::worldRadius default.
     // setWorldRadius fans out to every owned cwRenderPointCloud, is bound to

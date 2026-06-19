@@ -20,13 +20,13 @@
 //Our includes
 #include "cwAbstractPointManager.h"
 #include "cwBillboardId.h"
+#include "cwKeywordItemRegistry.h"
 class cwRegionTreeModel;
 class cwScrap;
 class cwScrapLeadView;
 class cwCamera;
 class cwScene;
 class cwRenderBillboards;
-class cwKeywordItem;
 class cwKeywordItemModel;
 
 /**
@@ -53,7 +53,6 @@ class cwLeadView : public QQuickItem
 
 public:
     cwLeadView(QQuickItem* parent = 0);
-    ~cwLeadView();
 
     cwRegionTreeModel* regionModel() const;
     void setRegionModel(cwRegionTreeModel* regionModel);
@@ -107,20 +106,20 @@ private:
         int scrapLeadId = -1;
         QVector<QQuickItem*> items;
         QVector<cwBillboardId> billboardIds; //!< index-aligned with items
-        cwKeywordItem* keywordItem = nullptr; //!< registered only while the scrap has >=1 lead
         bool keywordVisible = true; //!< last value pushed by the keyword filter
     };
 
     QHash<cwScrap*, ScrapEntry> m_leadItems;
     QQmlComponent* m_itemComponent = nullptr;
     int m_currentScrapId = 0;
-    QPointer<cwKeywordItemModel> m_keywordItemModel;
+
+    // The per-scrap lead keyword item is owned by the registry, registered only
+    // while the scrap has >=1 lead (see updateKeywordItem).
+    cwKeywordItemRegistry<cwScrap*> m_keywordRegistry;
 
     void addScrap(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);
 
-    void addKeywordItem(cwScrap* scrap);
-    void removeKeywordItem(ScrapEntry& entry);
     void updateKeywordItem(cwScrap* scrap);
 
     QQuickItem *createItem();

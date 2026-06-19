@@ -51,23 +51,6 @@ cwLeadView::cwLeadView(QQuickItem *parent) :
     });
 }
 
-cwLeadView::~cwLeadView()
-{
-    // The keyword items are owned by the model (addItem reparents them), so they
-    // outlive the view unless removed here. Synchronous delete: the event loop
-    // won't run again to drain deleteLater during teardown.
-    for(auto it = m_leadItems.begin(); it != m_leadItems.end(); ++it) {
-        cwKeywordItem* item = it.value().keywordItem;
-        if(item != nullptr) {
-            if(!m_keywordItemModel.isNull()) {
-                m_keywordItemModel->removeItem(item);
-            }
-            delete item;
-            it.value().keywordItem = nullptr;
-        }
-    }
-}
-
 /**
 * @brief cwLeadView::regionModel
 * @return The regionModel that this leadView looks for leads in
@@ -279,7 +262,9 @@ void cwLeadView::removeScrap(cwScrap *scrap)
     auto entryIt = m_leadItems.find(scrap);
     if(entryIt != m_leadItems.end()) {
         ScrapEntry& entry = entryIt.value();
-        removeKeywordItem(entry);
+        // Drop the keyword item before the scrap's lead items go away; its proxy
+        // is a child of the item, so the registry owns its teardown.
+        m_keywordRegistry.drop(scrap);
         if(m_renderBillboards != nullptr) {
             for(const cwBillboardId id : entry.billboardIds) {
                 if(id != cwBillboardId{}) {
@@ -303,22 +288,18 @@ void cwLeadView::removeScrap(cwScrap *scrap)
  * @return The keyword model this view publishes its per-scrap lead items into.
  */
 cwKeywordItemModel* cwLeadView::keywordItemModel() const {
-    return m_keywordItemModel;
+    return m_keywordRegistry.model();
 }
 
 void cwLeadView::setKeywordItemModel(cwKeywordItemModel* keywordItemModel) {
-    if(m_keywordItemModel == keywordItemModel) {
+    if(m_keywordRegistry.model() == keywordItemModel) {
         return;
     }
 
-    // Remove existing items from the old model before switching.
-    for(auto it = m_leadItems.begin(); it != m_leadItems.end(); ++it) {
-        removeKeywordItem(it.value());
-    }
+    // Tears down items in the old model; re-register every scrap that still has
+    // leads against the new one.
+    m_keywordRegistry.setModel(keywordItemModel);
 
-    m_keywordItemModel = keywordItemModel;
-
-    // Re-register every scrap that currently has leads against the new model.
     for(auto it = m_leadItems.keyValueBegin(); it != m_leadItems.keyValueEnd(); ++it) {
         updateKeywordItem(it->first);
     }
@@ -331,7 +312,12 @@ void cwLeadView::setKeywordItemModel(cwKeywordItemModel* keywordItemModel) {
  *
  * Lazily registers/unregisters the scrap's lead keyword item so the filter only
  * carries a Type=Lead row for scraps that actually hold leads: create it when the
- * count crosses 0->1, remove it when it returns to 0.
+ * count crosses 0->1, drop it when it returns to 0. The item references the
+ * scrap-owned cwScrap::leadKeywordModel() (Type="Lead" plus the scrap's inherited
+ * keywords: Type=Plan/Profile, Cave, Year, ...), so leads filter both as "Lead"
+ * and alongside their scrap. The cwLeadVisibility proxy (a child of the item)
+ * receives the filter's setVisible and calls back into setScrapKeywordVisible.
+ * Mirrors cwLinePlotManager / cwScrapManager.
  */
 void cwLeadView::updateKeywordItem(cwScrap* scrap) {
     auto it = m_leadItems.find(scrap);
@@ -339,56 +325,20 @@ void cwLeadView::updateKeywordItem(cwScrap* scrap) {
         return;
     }
 
-    ScrapEntry& entry = it.value();
-    if(entry.items.isEmpty()) {
-        removeKeywordItem(entry);
+    if(it.value().items.isEmpty()) {
+        m_keywordRegistry.drop(scrap);
     } else {
-        addKeywordItem(scrap);
+        // ensure() calls addItem, which fires resolveVisibility -> proxy
+        // setVisible; if the current filter excludes leads, that calls back into
+        // setScrapKeywordVisible(scrap, false), hiding the items.
+        m_keywordRegistry.ensure(scrap, [this, scrap]() {
+            auto item = new cwKeywordItem();
+            item->keywordModel()->addExtension(scrap->leadKeywordModel());
+            auto visibility = new cwLeadVisibility(this, scrap, item);
+            item->setObject(visibility);
+            return item;
+        });
     }
-}
-
-/**
- * @brief cwLeadView::addKeywordItem
- *
- * Publishes one cwKeywordItem for the scrap, referencing the scrap-owned
- * cwScrap::leadKeywordModel() (Type="Lead" plus the scrap's inherited keywords:
- * Type=Plan/Profile, Cave, Year, ...), so leads filter both as "Lead" and
- * alongside their scrap. The proxy receives the filter's setVisible. Mirrors
- * cwLinePlotManager / cwScrapManager.
- */
-void cwLeadView::addKeywordItem(cwScrap* scrap) {
-    if(m_keywordItemModel.isNull()) {
-        return;
-    }
-
-    auto it = m_leadItems.find(scrap);
-    if(it == m_leadItems.end() || it.value().keywordItem != nullptr) {
-        return;
-    }
-
-    auto item = new cwKeywordItem();
-    item->keywordModel()->addExtension(scrap->leadKeywordModel());
-
-    auto visibility = new cwLeadVisibility(this, scrap, item);
-    item->setObject(visibility);
-
-    // addItem fires resolveVisibility -> proxy setVisible; if the current filter
-    // excludes leads, that calls back into setScrapKeywordVisible(scrap, false),
-    // which stores keywordVisible and hides the items.
-    it.value().keywordItem = item;
-    m_keywordItemModel->addItem(item);
-}
-
-void cwLeadView::removeKeywordItem(ScrapEntry& entry) {
-    if(entry.keywordItem == nullptr) {
-        return;
-    }
-
-    if(!m_keywordItemModel.isNull()) {
-        m_keywordItemModel->removeItem(entry.keywordItem);
-    }
-    entry.keywordItem->deleteLater();
-    entry.keywordItem = nullptr;
 }
 
 void cwLeadView::setScrapKeywordVisible(cwScrap* scrap, bool visible) {
