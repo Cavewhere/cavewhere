@@ -531,11 +531,10 @@ void cwLeadView::setScene(cwScene* scene) {
 
     m_scene = scene;
 
-    if(m_renderBillboards != nullptr) {
-        m_renderBillboards->setScene(scene);
-    } else {
-        ensureRenderBillboards();
-    }
+    // The billboard layer is owned by the scene now, so a scene change means a
+    // different layer: drop the old reference and (re)fetch from the new scene.
+    m_renderBillboards = nullptr;
+    ensureRenderBillboards();
 
     updateItemPositions();
     emit sceneChanged();
@@ -558,9 +557,10 @@ void cwLeadView::ensureRenderBillboards() {
         return;
     }
 
-    m_renderBillboards = new cwRenderBillboards(this);
+    // One billboard layer per scene, shared with the label view and any future
+    // overlay so all billboards sort back-to-front together (#538).
+    m_renderBillboards = m_scene->billboardLayer();
     m_renderBillboards->setWindow(quickWindow);
-    m_renderBillboards->setScene(m_scene);
 }
 
 void cwLeadView::itemChange(ItemChange change, const ItemChangeData& value) {

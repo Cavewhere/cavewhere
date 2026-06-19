@@ -26,6 +26,7 @@
 #include "cwRenderObjectId.h"
 #include "CaveWhereLibExport.h"
 class cwRenderObject;
+class cwRenderBillboards;
 class cwCamera;
 class cwShaderDebugger;
 class cwSceneCommand;
@@ -59,6 +60,14 @@ public:
     void addItem(cwRenderObject* item);
     void removeItem(cwRenderObject* item);
     void updateItem(cwRenderObject* item);
+
+    // The one billboard layer shared by every overlay in this scene (leads,
+    // station labels, future overlays). Lazily created and parented to the scene
+    // the first time it's requested. Sharing one layer means all billboards sort
+    // back-to-front together, so an overlapping lead and label can't bite each
+    // other (#538). Callers still drive its window via setWindow(); the scene
+    // doesn't know the hosting QQuickWindow.
+    cwRenderBillboards* billboardLayer();
 
     void setCamera(cwCamera* camera);
     cwCamera *camera() const;
@@ -117,6 +126,10 @@ private:
 
     // Live EDL tuning; owned here, read by cwRhiScene::synchroize().
     cwEDLSettings* m_edl;
+
+    // The shared billboard overlay layer (see billboardLayer()); a render object
+    // parented to the scene, created on first request.
+    cwRenderBillboards* m_billboardLayer = nullptr;
 
     // Offscreen render requests queued from the GUI thread, drained onto the
     // render thread by cwRhiScene::synchroize() (a friend). shared_ptr so the

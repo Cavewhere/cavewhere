@@ -99,7 +99,7 @@ private:
     QPointer<cwRegionTreeModel> RegionModel; //!<
     QPointer<cwCamera> m_camera; //!<
     QPointer<cwScene> m_scene; //!<
-    cwRenderBillboards* m_renderBillboards = nullptr;
+    QPointer<cwRenderBillboards> m_renderBillboards; //!< shared, owned by m_scene
     cwSelectionManager* SelectionMananger;
 
     struct ScrapEntry {

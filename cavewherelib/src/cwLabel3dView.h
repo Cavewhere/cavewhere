@@ -63,7 +63,7 @@ private:
     QQmlComponent* m_component;
     QPointer<cwCamera> m_camera; //!<
     QPointer<cwScene> m_scene;
-    cwRenderBillboards* m_renderBillboards = nullptr;
+    QPointer<cwRenderBillboards> m_renderBillboards; //!< shared, owned by m_scene
     cwCollisionRectKdTree m_labelKdTree;
     QSizeF m_averageLabelSize = QSizeF(80.0, 14.0);
 

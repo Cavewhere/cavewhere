@@ -9,6 +9,7 @@
 //Our includes
 #include "cwScene.h"
 #include "cwRenderObject.h"
+#include "cwRenderBillboards.h"
 #include "cwDebug.h"
 #include "cwRHIObject.h"
 #include "cwCamera.h"
@@ -62,6 +63,16 @@ void cwScene::addItem(cwRenderObject *item)
     item->setScene(this);
     item->setParent(this);
     update();
+}
+
+cwRenderBillboards* cwScene::billboardLayer()
+{
+    if (m_billboardLayer == nullptr) {
+        m_billboardLayer = new cwRenderBillboards(this);
+        // Registers the layer with this scene (and reparents it here via addItem).
+        m_billboardLayer->setScene(this);
+    }
+    return m_billboardLayer;
 }
 
 /**
