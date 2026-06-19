@@ -476,7 +476,7 @@ decoration build goes async.</blockquote>
   conversion is single-sourced and reused by <code>cwSaveLoad::toProtoGlyph/Brush/Palette</code>).
   Split into two commits:
   <ol type="a">
-    <li><strong>3a — edit auto-save path.</strong> <code>cwSaveLoad::connectPalette()</code>
+    <li><span class="tag done">DONE</span> <strong>3a — edit auto-save path.</strong> <code>cwSaveLoad::connectPalette()</code>
     (mirrors <code>connectCave</code>) wires each <em>writable</em> manager palette's
     <code>glyphChanged</code>/<code>brushChanged</code>/<code>dataChanged</code> to per-file
     <code>WriteFile</code> jobs (present → write, absent → <code>Remove</code>), emitting
@@ -515,7 +515,26 @@ decoration build goes async.</blockquote>
       <code>palette.json</code> write — compression collapses repeats within a flush,
       but confirm the emission semantics so we don't churn identity on content edits.</li>
     </ul></li>
-    <li><strong>3b — structural persistence + load-only reload.</strong> Migrate
+    <li><span class="tag done">DONE</span> <strong>3b — structural persistence + load-only reload.</strong>
+    <br><em>As built (commit <code>9032d3a5</code>):</em> all three must-close gaps
+    closed and tested in <code>test_cwSymbologyPaletteProjectStorage.cpp</code> —
+    (1) write-back hazard: <code>cwSymbologyPaletteManager::aboutToReload</code> →
+    <code>cwSaveLoad::onPalettesAboutToReload()</code> disconnects the per-palette
+    wiring and sets <code>paletteReloadInProgress</code>, so the load's
+    <code>setData()</code> survivors never re-enter the auto-save path ("Reloading
+    … is load-only and never writes back"); (2) directory creation: <code>WriteFile</code>
+    jobs pre-create parents via <code>ensurePathForFile</code> (the <code>EnsureDir</code>
+    action exists if a dedicated job is ever needed); (3) removal teardown:
+    <code>enqueuePaletteTeardown()</code> enqueues a recursive directory
+    <code>Remove</code> ("Removing a palette tears down its directory via the save
+    queue"). <code>persistedPaletteDirs</code> seeds on first connect and diffs
+    fresh forks (full-write) vs. removed palettes (teardown);
+    <code>duplicatePalette</code>/<code>removePalette</code> are object-first (in-memory
+    + <code>palettesChanged</code>, no <code>IO::save</code>, no mutation-path
+    <code>reload()</code>); a shared <code>paletteEntityPath()</code> + path-safe-name
+    guard (<code>cwSymbology::isValidName</code>) keeps a malicious glyph name inside
+    the palette dir.
+    <br><strong>Original plan:</strong> Migrate
     <code>duplicatePalette</code> (and palette add/remove) off <code>IO::save</code> onto
     first-class <code>cwSaveLoad</code> writes: <code>connectPalettes</code> seeds a
     <code>QSet&lt;QUuid&gt; m_persistedPaletteIds</code> on first connect after open (no
