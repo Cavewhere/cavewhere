@@ -12,6 +12,8 @@
 
 //Std includes
 #include <unordered_map>
+#include <algorithm>
+#include <numeric>
 
 namespace {
 
@@ -147,6 +149,13 @@ public:
         const QSizeF logicalViewport(pixelSize.width() / devicePixelRatio,
                                      pixelSize.height() / devicePixelRatio);
 
+        // Draw farthest-first so an overlapping billboard's transparent quad
+        // corners can't reject the glyph of a billboard behind it (#538). The map
+        // iteration order behind m_slots is camera-independent, so without this the
+        // bite blinks in and out as the camera orbits. Reorders m_slots in place;
+        // the per-slot renderer lookup below is keyed by id, so order doesn't matter.
+        cwSortBillboardSlotsBackToFront(m_slots, viewProjection);
+
         bool appended = false;
         for (int i = 0; i < m_slots.size(); ++i) {
             const cwRenderBillboards::RenderSlot& slot = m_slots.at(i);
@@ -208,6 +217,42 @@ private:
 };
 
 } // namespace
+
+void cwSortBillboardSlotsBackToFront(QVector<cwRenderBillboards::RenderSlot>& renderSlots,
+                                     const QMatrix4x4& viewProjection)
+{
+    const int count = renderSlots.size();
+    if (count < 2) {
+        return;
+    }
+
+    // Project each world position once. Recomputing the key inside the comparator
+    // would run the matrix multiply O(n log n) times, and a non-constant key
+    // breaks std::sort's ordering contract. Larger depth == farther from the eye;
+    // the clamped |w| matches buildModelMatrix so a billboard near the eye plane
+    // can't produce a degenerate key.
+    QVector<float> depths;
+    depths.reserve(count);
+    for (const cwRenderBillboards::RenderSlot& slot : renderSlots) {
+        const QVector4D clip = viewProjection * QVector4D(slot.worldPosition, 1.0f);
+        depths.append(clip.z() / qMax(qAbs(clip.w()), kMinClipW));
+    }
+
+    // Sort indices so the precomputed depth travels with each slot; stable so
+    // equal-depth billboards keep their insertion order.
+    QVector<int> order(count);
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(), [&depths](int a, int b) {
+        return depths.at(a) > depths.at(b);  // farthest first (back-to-front)
+    });
+
+    QVector<cwRenderBillboards::RenderSlot> sorted;
+    sorted.reserve(count);
+    for (const int index : order) {
+        sorted.append(renderSlots.at(index));
+    }
+    renderSlots = std::move(sorted);
+}
 
 cwRenderBillboards::cwRenderBillboards(QObject* parent)
     : cwRenderObject(parent)

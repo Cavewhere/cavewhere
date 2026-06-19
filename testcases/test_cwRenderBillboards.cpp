@@ -9,8 +9,19 @@
 
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QMatrix4x4>
 
 #include "cwRenderBillboards.h"
+
+namespace {
+cwRenderBillboards::RenderSlot makeSlot(uint32_t id, const QVector3D& worldPosition)
+{
+    cwRenderBillboards::RenderSlot slot;
+    slot.id = cwBillboardId{id};
+    slot.worldPosition = worldPosition;
+    return slot;
+}
+}
 
 TEST_CASE("cwRenderBillboards: snapshot reflects the billboards", "[cwRenderBillboards]")
 {
@@ -104,6 +115,86 @@ TEST_CASE("cwRenderBillboards: null content is skipped", "[cwRenderBillboards]")
     billboards.addBillboard(billboard);
 
     REQUIRE(billboards.buildRenderSlots().isEmpty());
+}
+
+TEST_CASE("cwSortBillboardSlotsBackToFront orders billboards farthest-first", "[cwRenderBillboards]")
+{
+    // Camera at +z=10 looking down -z, so smaller world z is farther away. The
+    // sort must put the farthest billboard first regardless of insertion order,
+    // under both projection kinds — the bite only depends on draw order vs. true
+    // depth order, which is what this verifies.
+    QMatrix4x4 view;
+    view.lookAt(QVector3D(0, 0, 10), QVector3D(0, 0, 0), QVector3D(0, 1, 0));
+
+    SECTION("orthographic")
+    {
+        QMatrix4x4 projection;
+        projection.ortho(-10, 10, -10, 10, 0.1f, 100);
+        const QMatrix4x4 viewProjection = projection * view;
+
+        QVector<cwRenderBillboards::RenderSlot> renderSlots{
+            makeSlot(1, QVector3D(0, 0, 5)),    // nearest
+            makeSlot(2, QVector3D(0, 0, -5)),   // farthest
+            makeSlot(3, QVector3D(0, 0, 0)),    // middle
+        };
+        cwSortBillboardSlotsBackToFront(renderSlots, viewProjection);
+
+        REQUIRE(renderSlots.size() == 3);
+        REQUIRE(renderSlots.at(0).id == cwBillboardId{2});
+        REQUIRE(renderSlots.at(1).id == cwBillboardId{3});
+        REQUIRE(renderSlots.at(2).id == cwBillboardId{1});
+    }
+
+    SECTION("perspective")
+    {
+        QMatrix4x4 projection;
+        projection.perspective(60.0f, 1.0f, 0.1f, 100.0f);
+        const QMatrix4x4 viewProjection = projection * view;
+
+        QVector<cwRenderBillboards::RenderSlot> renderSlots{
+            makeSlot(1, QVector3D(2, 0, 0)),     // middle (off-axis)
+            makeSlot(2, QVector3D(-3, 0, -8)),   // farthest
+            makeSlot(3, QVector3D(1, 0, 7)),     // nearest
+        };
+        cwSortBillboardSlotsBackToFront(renderSlots, viewProjection);
+
+        REQUIRE(renderSlots.size() == 3);
+        REQUIRE(renderSlots.at(0).id == cwBillboardId{2});
+        REQUIRE(renderSlots.at(1).id == cwBillboardId{1});
+        REQUIRE(renderSlots.at(2).id == cwBillboardId{3});
+    }
+
+    SECTION("equal depth keeps insertion order (stable)")
+    {
+        QMatrix4x4 projection;
+        projection.ortho(-10, 10, -10, 10, 0.1f, 100);
+        const QMatrix4x4 viewProjection = projection * view;
+
+        // Same depth plane, different x — order must not change.
+        QVector<cwRenderBillboards::RenderSlot> renderSlots{
+            makeSlot(10, QVector3D(-4, 0, 2)),
+            makeSlot(11, QVector3D(0, 0, 2)),
+            makeSlot(12, QVector3D(4, 0, 2)),
+        };
+        cwSortBillboardSlotsBackToFront(renderSlots, viewProjection);
+
+        REQUIRE(renderSlots.size() == 3);
+        REQUIRE(renderSlots.at(0).id == cwBillboardId{10});
+        REQUIRE(renderSlots.at(1).id == cwBillboardId{11});
+        REQUIRE(renderSlots.at(2).id == cwBillboardId{12});
+    }
+
+    SECTION("fewer than two slots is a no-op")
+    {
+        QVector<cwRenderBillboards::RenderSlot> empty;
+        cwSortBillboardSlotsBackToFront(empty, QMatrix4x4());
+        REQUIRE(empty.isEmpty());
+
+        QVector<cwRenderBillboards::RenderSlot> one{makeSlot(7, QVector3D(0, 0, 0))};
+        cwSortBillboardSlotsBackToFront(one, QMatrix4x4());
+        REQUIRE(one.size() == 1);
+        REQUIRE(one.at(0).id == cwBillboardId{7});
+    }
 }
 
 TEST_CASE("cwRenderBillboards: clearing billboards releases subscenes", "[cwRenderBillboards]")

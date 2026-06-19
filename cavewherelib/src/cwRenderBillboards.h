@@ -42,6 +42,7 @@
 
 class QQuickItem;
 class QQuickWindow;
+class QMatrix4x4;
 class cwQuickItemSubscene;
 
 class CAVEWHERE_LIB_EXPORT cwRenderBillboards : public cwRenderObject
@@ -113,5 +114,17 @@ private:
     uint32_t m_nextId = 1;
     std::unordered_map<cwBillboardId, Entry> m_billboards;
 };
+
+// Sorts billboard render slots back-to-front (farthest from the eye first) by the
+// NDC depth of each slot's world position through @a viewProjection. Every quad
+// is a parallel, camera-facing plane, so center-depth order equals per-pixel
+// order everywhere on the quad — drawing in this order keeps an overlapping
+// billboard's transparent quad corners (which still write depth in RenderMode3D)
+// from rejecting the glyph pixels of a farther billboard behind it (#538). Stable,
+// so equal-depth billboards keep their insertion order. Pure (no QRhi), so it's
+// unit-tested directly.
+void CAVEWHERE_LIB_EXPORT cwSortBillboardSlotsBackToFront(
+    QVector<cwRenderBillboards::RenderSlot>& renderSlots,
+    const QMatrix4x4& viewProjection);
 
 #endif // CWRENDERBILLBOARDS_H
