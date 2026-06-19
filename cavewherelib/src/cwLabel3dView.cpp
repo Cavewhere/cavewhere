@@ -321,6 +321,18 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
         return;
     }
 
+    // A keyword-hidden group renders nothing and claims no declutter space:
+    // release its pooled items and billboards and skip projection entirely.
+    // Reached when the group is toggled hidden (updateGroup); the per-frame
+    // updatePositions skips hidden groups outright so this loop runs once per
+    // toggle, not every frame.
+    if(!group->m_visible) {
+        for(int i = 0; i < group->m_labelItems.size(); i++) {
+            releaseLabelItem(group, i);
+        }
+        return;
+    }
+
     Q_ASSERT(group->m_labels.size() == group->m_labelItems.size());
 
     QList<cwLabel3dItem>& labels = group->m_labels;
@@ -472,6 +484,11 @@ void cwLabel3dView::updatePositions()
         QSetIterator<cwLabel3dGroup*> iter(m_labelGroups);
         while(iter.hasNext()) {
             cwLabel3dGroup* group = iter.next();
+            // Hidden groups already released their items when toggled; skip the
+            // per-frame work entirely rather than re-walking an empty list.
+            if(!group->m_visible) {
+                continue;
+            }
             updateGroupPositions(group);
         }
 

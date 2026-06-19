@@ -130,6 +130,7 @@ Item {
         camera: rendererId.camera
         scene: rendererId.scene
         region: RootData.region
+        keywordItemModel: RootData.keywordItemModel
         visible: RootData.stationsVisible
     }
 

@@ -248,13 +248,13 @@ void cwLinePlotManager::reconcileTripKeywordItems(
                 : nullptr;
         } else if (m_keywordItemModel) {
             auto item = new cwKeywordItem();
-            // The item publishes Type=Line Plot on its own model (so filtering
-            // the Type keyword toggles the whole centerline) plus inherits the
-            // trip's Trip/Year/Date/Cave/Caver keywords via the extension. Type
-            // lives on the item, not the trip, so scraps/notes under the trip
-            // don't inherit it.
-            item->keywordModel()->add({cwKeywordModel::TypeKey, QStringLiteral("Line Plot")});
-            item->keywordModel()->addExtension(trip->keywordModel());
+            // References the trip-owned line plot keyword model (Type=Line Plot
+            // plus the trip's inherited Trip/Year/Date/Cave/Caver keywords), so
+            // filtering the Type keyword toggles the whole centerline. The Type
+            // lives on that dedicated model, not trip->keywordModel(), so
+            // scraps/notes under the trip don't inherit it. The station labels'
+            // keyword item references the same model.
+            item->keywordModel()->addExtension(trip->linePlotKeywordModel());
 
             visibility = new cwLinePlotTripVisibility(trip, item);
             item->setObject(visibility);

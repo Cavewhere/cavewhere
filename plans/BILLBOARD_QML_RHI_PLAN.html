@@ -286,10 +286,12 @@ nearest-first, greedy-packs screen rects into <code>m_labelKdTree</code>, and fo
 
 <ul>
   <li><b>Edits land almost entirely in <code>cwLabel3dView</code></b> <span class="pill edit">edit</span>.
-      <code>cwLinePlotLabelView</code> is unchanged &mdash; it only feeds <code>cwLabel3dItem</code>s, and
-      inherits the new rendering path. The view stays a <code>QQuickItem</code> (it still holds the camera,
-      the groups, the KD-tree, and runs the cull) but stops positioning visible 2D children; instead it owns
-      one <code>cwRenderBillboards</code> and feeds it the surviving labels.</li>
+      For the billboard rendering work, <code>cwLinePlotLabelView</code> was unchanged &mdash; it only feeds
+      <code>cwLabel3dItem</code>s, and inherits the new rendering path. The view stays a <code>QQuickItem</code> (it still
+      holds the camera, the groups, the KD-tree, and runs the cull) but stops positioning visible 2D children; instead
+      it owns one <code>cwRenderBillboards</code> and feeds it the surviving labels.
+      <span class="muted">(Superseded for keyword visibility: <a href="#labels-3b">&sect;7 Phase 3b</a> later restructured
+      <code>cwLinePlotLabelView</code> to one group per trip.)</span></li>
 
   <li><b>New <code>scene</code> property</b> <span class="pill edit">edit + qml</span>: the billboard render
       object must be added to a <code>cwScene</code> (like any <code>cwRenderObject</code>), so
@@ -399,6 +401,154 @@ by ray-casting camera&rarr;station through <code>cwGeometryItersecter</code> (<c
 be occluded <em>before</em> packing, so reserved rects only go to labels that survive the depth test. Cost is
 one ray-cast per non-clipped label per camera change.</span>
 </div>
+
+<h3 id="labels-3b">Phase 3b &mdash; Keyword visibility for station labels (#536) <span class="pill ok">implemented</span></h3>
+
+<p class="note"><b>Goal.</b> Station labels join the keyword filter the same way leads did (<a href="#leads-4b">&sect;8 Gap 2</a>),
+keyed <em>per trip</em> and matching the line-plot geometry: filtering out a trip's centerline (its
+<code>Type=Line&nbsp;Plot</code> row, or a Cave/Year/Trip value) hides that trip's station labels with it. Two decisions
+settled before implementation (both mirror the lead choices): the keyword <em>data</em> lives on the entity
+(<b>full analog</b> &mdash; a trip-owned model, shared with the geometry), and labels are grouped <em>per trip</em>
+(<b>per-trip groups</b>), so each group maps 1:1 to one keyword item exactly like a scrap's leads.</p>
+
+<p><b>Context (what's already there).</b> Line-plot <em>geometry</em> already has per-trip keyword items:
+<code>cwLinePlotManager::reconcileTripKeywordItems</code> (<code>cwLinePlotManager.cpp:215</code>) registers one
+<code>cwKeywordItem</code> per trip carrying <code>{Type=Line&nbsp;Plot}</code> on the item plus
+<code>addExtension(trip-&gt;keywordModel())</code>, with a <code>cwLinePlotTripVisibility</code> proxy that flips the
+trip's centerline vertex range. <code>cwLinePlotLabelView</code>, by contrast, is trip-<em>unaware</em>: it builds one
+<code>cwLabel3dGroup</code> per <b>cave</b> from <code>cave-&gt;stationPositionLookup()</code> (a deduplicated
+station&rarr;position map). <code>cwTrip</code> already exposes <code>keywordModel()</code> and
+<code>uniqueStations()</code>; <code>cwKeywordVisibility::invokeVisible</code> (<code>cwKeywordVisibility.cpp:39</code>)
+has a <b>generic <code>setVisible(bool)</code> slot path</b>, so any <code>QObject</code> with that slot is a valid
+keyword target &mdash; no bespoke proxy needed.</p>
+
+<p><b>1. <code>cwTrip::linePlotKeywordModel()</code> &mdash; the #1 analog.</b> Add a lazily-created
+<code>cwKeywordModel</code> on <code>cwTrip</code> = <code>{TypeKey, &quot;Line&nbsp;Plot&quot;}</code> +
+<code>addExtension(this-&gt;keywordModel())</code>, owned by the trip &mdash; the exact parallel of
+<code>cwScrap::leadKeywordModel()</code>. <b>Why a separate model and not <code>trip-&gt;keywordModel()</code>:</b>
+scraps/notes/leads <em>extend</em> the trip's keyword model, so putting <code>Type=Line&nbsp;Plot</code> there would
+make every scrap and lead under the trip wrongly inherit &ldquo;Line Plot&rdquo; &mdash; the same leak that forced the
+scrap to own a dedicated <code>leadKeywordModel</code>. Then refactor
+<code>cwLinePlotManager::reconcileTripKeywordItems</code> to drop its inline
+<code>add({Type, &quot;Line&nbsp;Plot&quot;})</code> + <code>addExtension(trip-&gt;keywordModel())</code> and instead
+<code>addExtension(trip-&gt;linePlotKeywordModel())</code> (the near-empty pass-through pattern, as
+<code>cwLeadView::addKeywordItem</code> now does). The label view's per-trip item references the <em>same</em>
+<code>trip-&gt;linePlotKeywordModel()</code>. Result: geometry and labels share one trip-owned &ldquo;this is line
+plot&rdquo; identity in the data layer.</p>
+
+<p class="note"><b>Two keyword items per trip (geometry + labels), by design.</b> The geometry item's target is the
+centerline vertex range; the label item's target is the label group &mdash; different render targets, so they remain
+separate registrations sharing the one data model. This is the proven coexistence pattern (a scrap already carries its
+own keyword item <em>and</em> its leads' item with overlapping inherited keywords). The filter UI groups by keyword
+<em>value</em>, so two items with the same keyword set don't create duplicate rows; toggling a value fires
+<code>setVisible</code> on both, hiding geometry and labels together. <span class="muted">Verify during implementation
+that identical-keyword items dedup in the filter tree as expected.</span></p>
+
+<p><b>2. Per-trip label groups; the group is the visibility target.</b> Restructure
+<code>cwLinePlotLabelView</code> to enumerate <b>trips</b> (region&rarr;cave&rarr;trips), building one
+<code>cwLabel3dGroup</code> per trip from <code>trip-&gt;uniqueStations()</code> positioned via the cave's
+<code>stationPositionLookup()</code> (stations without a solved position are skipped, as today). Give
+<code>cwLabel3dGroup</code> a <code>setVisible(bool)</code> slot + a <code>bool m_visible</code> +
+<code>Q_PROPERTY</code>/<code>visibleChanged</code>, so the group <em>is</em> the <code>setObject</code> target &mdash;
+this is the &ldquo;container as target&rdquo; idea we rejected for leads, except <code>cwLabel3dGroup</code>
+<b>already exists</b> as the grouping object, so it adds zero objects. <code>cwLabel3dView</code> honors it:
+<code>updatePositions</code>/<code>updateGroupPositions</code> skip a hidden group and release its pooled items +
+billboards (so a keyword-hidden trip claims no KD-tree space and renders nothing). Per trip the view registers one
+<code>cwKeywordItem</code> with <code>object =</code> the group and keyword model =
+<code>addExtension(trip-&gt;linePlotKeywordModel())</code>, lazily (0&harr;1 on the trip having labels), mirroring the
+lead lifecycle.</p>
+
+<p><b>3. Many-to-many stations &amp; OR semantics (the one real difference from leads).</b> A station at a junction
+belongs to several trips; the line plot draws its vertex once <em>per trip</em>, so the station shows iff <em>any</em>
+of its trips is visible. Per-trip groups give this for free: a shared station gets a (duplicate) label in each owning
+trip's group, and a label renders as long as <em>its</em> trip's group is visible. Duplicates don't double-render
+because the declutter <b>KD-tree is shared across all groups within a frame</b>
+(<code>cwLabel3dView::updatePositions</code> clears <code>m_labelKdTree</code> only <em>after</em> the group loop), so
+two co-located labels collide and the second is rejected &mdash; whichever trip is visible wins the rect. Cost is
+duplicate <code>cwLabel3dItem</code> value structs (text + <code>QVector3D</code>) for shared stations: cheap, and the
+alternative (per-cave groups + a station&rarr;trips refcount threaded into the declutter hot path) was rejected as more
+invasive for no rendering benefit.</p>
+
+<p><b>Composition &amp; offscreen testability.</b> Labels are already on the billboard path (#536), and
+<code>buildRenderSlots</code> skips <code>!isVisible()</code> content; gating at the group adds a C++/QML-property
+flag the offscreen suite can exercise through the layers tab, exactly like the lead keyword tests
+(<code>[[project_billboard_rhi_path_untested]]</code> &mdash; the RHI path itself stays untested offscreen, but the
+visibility gate is property-level).</p>
+
+<p><b>QObject accounting (per trip with labels).</b> Geometry (unchanged shape): <code>cwKeywordItem</code> + its
+pass-through model + <code>cwLinePlotTripVisibility</code>. New for labels: <code>cwKeywordItem</code> + its
+pass-through model (the <code>cwLabel3dGroup</code> is the target, <b>no proxy</b>). Plus one shared
+<code>trip-&gt;linePlotKeywordModel()</code> on the trip (the #1 cost, same tradeoff accepted for leads). The per-trip
+groups replace the per-cave groups &mdash; more groups, but each is the grouping object the view needs anyway.</p>
+
+<p><b>Files touched (3b):</b>
+<code>cwTrip.h/.cpp</code> (lazy <code>linePlotKeywordModel()</code> = <code>{Type=Line&nbsp;Plot}</code> + extension);
+<code>cwLinePlotManager.cpp</code> (<code>reconcileTripKeywordItems</code> references
+<code>trip-&gt;linePlotKeywordModel()</code> via <code>addExtension</code>);
+<code>cwLabel3dGroup.h/.cpp</code> (<code>setVisible(bool)</code> slot + visible flag + <code>Q_PROPERTY</code>);
+<code>cwLabel3dView.cpp</code> (skip + release hidden groups in the cull);
+<code>cwLinePlotLabelView.h/.cpp</code> (per-trip enumeration; one group + one keyword item per trip;
+<code>keywordItemModel</code> <code>Q_PROPERTY</code>; trip add/remove/station-change lifecycle);
+<code>GLTerrainRenderer.qml</code> (<code>keywordItemModel: RootData.keywordItemModel</code> on
+<code>LinePlotLabelView</code>).</p>
+
+<p class="note"><b>As built.</b> The per-cave&rarr;per-trip restructure of <code>cwLinePlotLabelView</code> landed as designed:
+the view now keys a <code>QHash&lt;cwTrip*, TripEntry&gt;</code> (no positional cave list) and watches
+<code>cwCave::insertedTrips</code>/<code>beginRemoveTrips</code> plus <code>stationPositionPositionChanged</code> per cave.
+<code>cwLabel3dGroup</code> gained a <code>visible</code> property + <code>setVisible(bool)</code> slot; the group is the
+keyword item's <code>setObject</code> target (no proxy), reached through <code>cwKeywordVisibility</code>'s generic
+<code>QObject</code> dispatch. <code>cwLabel3dView::updateGroupPositions</code> releases a hidden group's pooled items +
+billboards and skips its projection, so a hidden trip claims no KD-tree space. <code>cwTrip::linePlotKeywordModel()</code>
+is the shared trip-owned model; <code>cwLinePlotManager::reconcileTripKeywordItems</code> now references it via
+<code>addExtension</code> instead of an inline <code>Type=Line&nbsp;Plot</code>. Verified: the geometry keyword test
+(<code>test_cwLinePlotManager</code>) still sees <code>Type=Line&nbsp;Plot</code> through the extension; identical-keyword
+geometry+label items coexist (both suites green); a shared junction station (a2) gets one label per owning trip's group,
+deduped by the shared KD-tree. The §7 note that treated <code>cwLinePlotLabelView</code> as &ldquo;unchanged, pure data
+source&rdquo; no longer holds &mdash; superseded by this section.</p>
+
+<p><b>Testing (3b).</b> Add offscreen cases mirroring the lead keyword tests: toggle a trip's <code>Type=Line&nbsp;Plot</code>
+(and a Cave/Trip value), assert the trip's station labels hide and that a shared junction station stays visible while
+any of its trips is shown. Add a C++ check that <code>cwTrip::linePlotKeywordModel()</code> carries
+<code>Type=Line&nbsp;Plot</code> and extends the trip's model &mdash; through the real public surface, no scaffolding.
+Run <code>tst_LinePlotLabel</code>/label tests + <code>tst_KeywordTab</code> offscreen, then both full suites before
+pushing.</p>
+
+<p class="note"><b>Follow-up refactors (out of scope for 3b, surfaced by the pre-commit review).</b> Both are
+consistency/maintainability wins, not behavior changes; each is its own commit.</p>
+<ol>
+  <li><b>Reusable keyword-item lifecycle registry.</b> The &ldquo;lazily register one <code>cwKeywordItem</code> per
+  entity when it first has content, unregister at zero, swap models safely, sync-delete in the destructor&rdquo; pattern
+  is now reimplemented four times: <code>cwLeadView</code> (per scrap), <code>cwLinePlotLabelView</code> (per trip, new
+  in 3b), <code>cwLinePlotManager::reconcileTripKeywordItems</code> (per solved trip), and
+  <code>cwScrapManager</code> (per scrap). Each hand-rolls <code>addItem</code>/<code>removeItem</code>, the
+  <code>m_keywordItemModel.isNull()</code> guard, <code>deleteLater</code> vs sync-<code>delete</code> teardown, and
+  model-swap re-registration &mdash; the exact invariants that bit us once (the destructor double-free fixed via
+  declaration order in <code>test_cwLinePlotLabelView</code>). A small <code>cwKeywordItemRegistry&lt;Key&gt;</code>
+  helper would own the map (<code>Key*</code>&rarr;<code>{cwKeywordItem*, object}</code>), the lazy 0&harr;1 transitions,
+  the model pointer + swap, and the destructor contract, so the four call sites shrink to &ldquo;build the model + target,
+  ask the registry to ensure/drop.&rdquo; Out of scope now: the four sites have divergent <em>removal triggers</em>
+  (empty lead list / empty label group / solved-geometry delta / scrap deletion) and key types, so the right seam is
+  worth settling against all four at once rather than guessing from 3b. The lifecycle invariants would become testable
+  properties of one class.</li>
+
+  <li><b><code>cwLinePlotLabelView</code> should enumerate trips via <code>cwRegionTreeModel</code>, matching
+  <code>cwLeadView</code>.</b> 3b left the view hand-rolling raw <code>cwCavingRegion</code> +
+  <code>cwCave::insertedTrips</code>/<code>beginRemoveTrips</code> subscriptions, while <code>cwLeadView</code> already
+  consumes the tree model idiomatically (<code>rowsInserted</code>/<code>rowsAboutToBeRemoved</code> seeded by
+  <code>all&lt;cwScrap*&gt;()</code>). Converging means the view takes a <code>cwRegionTreeModel*</code> and watches
+  <code>rowsInserted</code>/<code>rowsAboutToBeRemoved</code> filtered by <code>isCave(parent)</code> &rarr; add/remove
+  trips, seeded via <code>all&lt;cwTrip*&gt;()</code>. <b>Caveat that keeps it from being a drop-in:</b> the label view
+  has a second trigger <code>cwLeadView</code> lacks &mdash; solved station-position changes
+  (<code>cwCave::stationPositionPositionChanged</code>). <code>cwRegionTreeModel</code> is purely <em>structural</em> and
+  carries no station-position <code>dataChanged</code>, so the view still needs a direct per-cave
+  <code>stationPositionPositionChanged</code> subscription for the positional rebuild. Net: this converges the structural
+  enumeration (caves/trips add/remove) and aligns the two billboard overlays, but the positional trigger stays
+  label-specific. <code>cwLinePlotManager</code> is intentionally <em>excluded</em> &mdash; it is a back-end survex
+  solver that reacts to deep data changes (shots, calibration, fix stations) and keys its keyword items by UUID off the
+  solve output, not off structural tree signals; the tree model is a poor fit there. Out of scope for 3b: it changes the
+  view's public QML property (<code>region</code> &rarr; <code>regionModel</code>) plus <code>GLTerrainRenderer.qml</code>
+  wiring and partially rewrites the just-landed enumeration &mdash; a consistency-only gain best kept off the 3b diff.</li>
+</ol>
 
 <h2 id="leads">8. Phase 4 &mdash; Leads (#535)</h2>
 
@@ -758,10 +908,12 @@ cluster on zoom-out, does its popup close or transfer to the cluster (<code>cwSe
 <ol>
   <li><b>Phase 0</b> (encapsulation) &mdash; unblocks everything, smallest risk.</li>
   <li><b>Phase 1 + 2</b> (billboard object + math).</li>
-  <li><b>Phase 3</b> (labels) &mdash; first user-visible win, no input complexity.</li>
+  <li><b>Phase 3</b> (labels) &mdash; first user-visible win, no input complexity. <b>3b</b> keyword visibility for
+      station labels (per-trip groups + <code>cwTrip::linePlotKeywordModel()</code>; mirrors 4b) is
+      <span class="pill ok">implemented</span> &mdash; see <a href="#labels-3b">&sect;7 Phase 3b</a>.</li>
   <li><b>Phase 4</b> (leads), split: <b>4a</b> occluded leads + CPU-BVH-gated 2D hit-proxy (the bulk of the
       risk &mdash; rewrites <code>cwLeadView</code> onto the billboard pattern), then <b>4b</b> keyword
-      visibility, then <b>4c</b> clustering.</li>
+      visibility <span class="pill ok">implemented</span>, then <b>4c</b> clustering.</li>
   <li>Cross-cutting hardening + offscreen + tests. <b>Spike deleted</b>
       <span class="pill ok">done</span> (<code>cwBillboardTest.{h,cpp}</code> and the
       <code>BillboardTest</code> block in <code>GLTerrainRenderer.qml</code> removed once the labels hot path
@@ -785,7 +937,11 @@ cluster on zoom-out, does its popup close or transfer to the cluster (<code>cwSe
   <tr><td><code>src/cwRenderBillboards.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>GUI render object holding billboards (one subscene + id each)</td></tr>
   <tr><td><code>src/cwBillboardId.h</code></td><td><span class="pill new">new</span></td><td>Strong <code>enum class : uint32_t</code> billboard id (mirrors <code>cwRenderObjectId</code>)</td></tr>
   <tr><td><code>src/cwRHIBillboards.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>Render backend; gather() &rarr; prepare + Custom draw in Overlay</td></tr>
-  <tr><td><code>src/cwLabel3dView.*</code> (and <code>cwLinePlotLabelView.*</code> unchanged)</td><td><span class="pill edit">edit</span></td><td>Own a <code>cwRenderBillboards</code>; cull feeds add/update/removeBillboard instead of 2D overlay (#536)</td></tr>
+  <tr><td><code>src/cwLabel3dView.*</code></td><td><span class="pill edit">edit</span></td><td>Own a <code>cwRenderBillboards</code>; cull feeds add/update/removeBillboard instead of 2D overlay (#536). 3b: skip + release hidden groups</td></tr>
+  <tr><td><code>src/cwLinePlotLabelView.*</code></td><td><span class="pill edit">edit</span></td><td>3b: per-trip enumeration; one <code>cwLabel3dGroup</code> + one keyword item per trip; <code>keywordItemModel</code> property (#536)</td></tr>
+  <tr><td><code>src/cwLabel3dGroup.*</code></td><td><span class="pill edit">edit</span></td><td>3b: <code>setVisible(bool)</code> slot + visible flag &mdash; the group is the keyword <code>setVisible</code> target (no proxy)</td></tr>
+  <tr><td><code>src/cwTrip.*</code></td><td><span class="pill edit">edit</span></td><td>3b #1: lazy <code>cwTrip::linePlotKeywordModel()</code> (<code>Type=Line&nbsp;Plot</code> + extension) &mdash; shared by geometry + labels</td></tr>
+  <tr><td><code>src/cwLinePlotManager.cpp</code></td><td><span class="pill edit">edit</span></td><td>3b: <code>reconcileTripKeywordItems</code> references <code>trip-&gt;linePlotKeywordModel()</code> instead of inline <code>Type=Line&nbsp;Plot</code></td></tr>
   <tr><td><code>qml/Label3d.qml</code>, <code>qml/GLTerrainRenderer.qml</code></td><td><span class="pill edit">edit</span></td><td>Child-opacity fade (effect-ref excludes root opacity); pass <code>scene</code> to <code>LinePlotLabelView</code> (#536)</td></tr>
   <tr><td><code>src/cwLeadView.*</code>, <code>qml/LeadPoint.qml</code></td><td><span class="pill edit">edit</span></td><td>Billboard leads + clustering + keywords + input (#535); 4b keeps the inline enumeration, <code>addKeywordItem</code> references <code>scrap-&gt;leadKeywordModel()</code></td></tr>
   <tr><td><code>src/cwScrap.*</code></td><td><span class="pill edit">edit</span></td><td>4b #1: lazy <code>cwScrap::leadKeywordModel()</code> (<code>Type=Lead</code> + extension) &mdash; lead keyword data owned by the scrap</td></tr>
