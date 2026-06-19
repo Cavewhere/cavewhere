@@ -117,7 +117,10 @@ void cwLeadView::addScrap(cwScrap *scrap)
     };
 
     auto updatePositions = [scrap, this, updatePosition, itemAt](int begin, int end) {
-        const auto& entry = m_leadItems.value(scrap);
+        // find() (not value()) — ScrapEntry is move-only now, so a copy won't compile.
+        const auto entryIt = m_leadItems.find(scrap);
+        if(entryIt == m_leadItems.end()) { return; }
+        const ScrapEntry& entry = entryIt->second;
         for(int i = begin; i <= end; i++) {
             auto item = itemAt(entry.items, i);
             updatePosition(item, i);
@@ -146,7 +149,7 @@ void cwLeadView::addScrap(cwScrap *scrap)
                     continue;
                 }
                 entry.items.insert(i, item);
-                entry.billboardIds.insert(i, cwBillboardId{});
+                entry.billboardHandles.emplace(entry.billboardHandles.begin() + i);
 
                 item->setProperty("scrap", QVariant::fromValue(scrap));
                 item->setProperty("scrapId", entry.scrapLeadId);
@@ -169,14 +172,10 @@ void cwLeadView::addScrap(cwScrap *scrap)
 
         for(int index = end; index >= begin; index--) {
             SelectionMananger->clear();
-            if(m_renderBillboards != nullptr
-                    && index < entry.billboardIds.size()
-                    && entry.billboardIds.at(index) != cwBillboardId{}) {
-                m_renderBillboards->removeBillboard(entry.billboardIds.at(index));
-            }
             entry.items.at(index)->deleteLater();
             entry.items.removeAt(index);
-            entry.billboardIds.removeAt(index);
+            // Erasing the handle removes its billboard from the shared layer.
+            entry.billboardHandles.erase(entry.billboardHandles.begin() + index);
         }
 
         updateIndexesToEnd(begin);
@@ -237,8 +236,9 @@ void cwLeadView::addScrap(cwScrap *scrap)
     connect(scrap, &cwScrap::leadsRemoved, this, [this, scrap]() { updateKeywordItem(scrap); });
     connect(scrap, &cwScrap::leadsReset, this, [this, scrap]() { updateKeywordItem(scrap); });
 
-    //Setup the leads
-    m_leadItems.insert(scrap, {++m_currentScrapId, {}});
+    //Setup the leads. operator[] default-constructs in place (no copy), since the
+    //entry is move-only now; insert() would try to copy the braced temporary.
+    m_leadItems[scrap].scrapLeadId = ++m_currentScrapId;
 
     auto lastIndex = scrap->numberOfLeads() - 1;
     beginInsert(0, lastIndex);
@@ -261,17 +261,12 @@ void cwLeadView::removeScrap(cwScrap *scrap)
 
     auto entryIt = m_leadItems.find(scrap);
     if(entryIt != m_leadItems.end()) {
-        ScrapEntry& entry = entryIt.value();
+        ScrapEntry& entry = entryIt->second;
         // Drop the keyword item before the scrap's lead items go away; its proxy
         // is a child of the item, so the registry owns its teardown.
         m_keywordRegistry.drop(scrap);
-        if(m_renderBillboards != nullptr) {
-            for(const cwBillboardId id : entry.billboardIds) {
-                if(id != cwBillboardId{}) {
-                    m_renderBillboards->removeBillboard(id);
-                }
-            }
-        }
+        // The entry's handles remove their billboards from the shared layer when
+        // the entry is erased below.
         for(auto item : std::as_const(entry.items)) {
             item->deleteLater();
         }
@@ -300,8 +295,8 @@ void cwLeadView::setKeywordItemModel(cwKeywordItemModel* keywordItemModel) {
     // leads against the new one.
     m_keywordRegistry.setModel(keywordItemModel);
 
-    for(auto it = m_leadItems.keyValueBegin(); it != m_leadItems.keyValueEnd(); ++it) {
-        updateKeywordItem(it->first);
+    for(const auto& [scrap, entry] : m_leadItems) {
+        updateKeywordItem(scrap);
     }
 
     emit keywordItemModelChanged();
@@ -325,7 +320,7 @@ void cwLeadView::updateKeywordItem(cwScrap* scrap) {
         return;
     }
 
-    if(it.value().items.isEmpty()) {
+    if(it->second.items.isEmpty()) {
         m_keywordRegistry.drop(scrap);
     } else {
         // ensure() calls addItem, which fires resolveVisibility -> proxy
@@ -347,7 +342,7 @@ void cwLeadView::setScrapKeywordVisible(cwScrap* scrap, bool visible) {
         return;
     }
 
-    ScrapEntry& entry = it.value();
+    ScrapEntry& entry = it->second;
     entry.keywordVisible = visible;
 
     for(auto item : std::as_const(entry.items)) {
@@ -592,7 +587,7 @@ void cwLeadView::updateItemPositions() {
     const QMatrix4x4 matrix = m_camera->qtViewportMatrix() * m_camera->viewProjectionMatrix();
 
     for(auto it = m_leadItems.begin(); it != m_leadItems.end(); ++it) {
-        ScrapEntry& entry = it.value();
+        ScrapEntry& entry = it->second;
         for(int i = 0; i < entry.items.size(); i++) {
             QQuickItem* item = entry.items.at(i);
             if(item == nullptr) {
@@ -619,7 +614,7 @@ void cwLeadView::addOrUpdateBillboard(ScrapEntry& entry, int index, QQuickItem* 
     if(m_renderBillboards == nullptr || item == nullptr) {
         return;
     }
-    if(index < 0 || index >= entry.billboardIds.size()) {
+    if(index < 0 || index >= int(entry.billboardHandles.size())) {
         return;
     }
 
@@ -634,12 +629,8 @@ void cwLeadView::addOrUpdateBillboard(ScrapEntry& entry, int index, QQuickItem* 
     billboard.sizeMode = cwRenderBillboards::SizeMode::ScreenConstant;
     billboard.depthBias = kLeadDepthBias;
 
-    cwBillboardId& id = entry.billboardIds[index];
-    if(id == cwBillboardId{}) {
-        id = m_renderBillboards->addBillboard(billboard);
-    } else {
-        m_renderBillboards->updateBillboard(id, billboard);
-    }
+    // Adds on first call, updates after; the handle removes it on teardown.
+    entry.billboardHandles.at(index).set(m_renderBillboards, billboard);
 }
 
 /**
@@ -708,8 +699,9 @@ bool cwLeadView::isOccluded(const QVector3D& worldPosition,
  */
 void cwLeadView::select(cwScrap *scrap, int index)
 {
-    if(m_leadItems.contains(scrap)) {
-        const auto& entry = m_leadItems.value(scrap);
+    const auto entryIt = m_leadItems.find(scrap);
+    if(entryIt != m_leadItems.end()) {
+        const ScrapEntry& entry = entryIt->second;
         if(index < entry.items.size()) {
             auto item = entry.items.at(index);
             SelectionMananger->setSelectedItem(item);

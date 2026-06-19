@@ -19,8 +19,12 @@
 
 //Our includes
 #include "cwAbstractPointManager.h"
-#include "cwBillboardId.h"
+#include "cwBillboardHandle.h"
 #include "cwKeywordItemRegistry.h"
+
+//Std includes
+#include <vector>
+#include <unordered_map>
 class cwRegionTreeModel;
 class cwScrap;
 class cwScrapLeadView;
@@ -105,11 +109,17 @@ private:
     struct ScrapEntry {
         int scrapLeadId = -1;
         QVector<QQuickItem*> items;
-        QVector<cwBillboardId> billboardIds; //!< index-aligned with items
+        // Index-aligned with items. Each handle owns its lead's billboard in the
+        // shared layer and removes it when erased or when the entry is destroyed,
+        // so there are no manual removeBillboard calls. Move-only, which makes the
+        // entry move-only (QHash holds it fine; .value() copies are now find()s).
+        std::vector<cwBillboardHandle> billboardHandles;
         bool keywordVisible = true; //!< last value pushed by the keyword filter
     };
 
-    QHash<cwScrap*, ScrapEntry> m_leadItems;
+    // std::unordered_map, not QHash: ScrapEntry is move-only (it owns billboard
+    // handles), and QHash's copy-on-write detach() requires a copyable value.
+    std::unordered_map<cwScrap*, ScrapEntry> m_leadItems;
     QQmlComponent* m_itemComponent = nullptr;
     int m_currentScrapId = 0;
 
