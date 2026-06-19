@@ -10,7 +10,7 @@
 #include <memory>
 
 //Our includes
-#include "cwRhiScene.h"   // for cwRhiScene::EdlOffscreen and the friend back-ref
+#include "cwRhiFrameRenderer.h"   // for cwRhiFrameRenderer::EdlOffscreen and the engine reference
 #include "cwOffscreenAtlasGrid.h"
 class cwRhiItemRenderer;
 class QThread;
@@ -25,15 +25,14 @@ struct cwOffscreenRenderJob;
  * export, offscreen point-cloud capture, the debug render hook). Render-thread-owned; held by
  * cwRhiScene as a unique_ptr member.
  *
- * It does not re-implement the draw pipeline: it reaches cwRhiScene's shared
- * primitives (gather / draw / pass routing / global UBO / EDL builder) through a
- * back-pointer, granted by `friend class cwRhiOffscreenRenderer;` in cwRhiScene. See
- * the tripwire note at that friend declaration for when this coupling should be
- * promoted to a standalone cwRhiFrameRenderer that both compose.
+ * It does not re-implement the draw pipeline: it renders the resident scene through
+ * cwRhiFrameRenderer's shared primitives (gather / draw / pass routing / global UBO /
+ * EDL builder), held by reference. cwRhiScene composes that engine and constructs
+ * this renderer with it.
  */
 class cwRhiOffscreenRenderer {
 public:
-    explicit cwRhiOffscreenRenderer(cwRhiScene* scene);
+    explicit cwRhiOffscreenRenderer(cwRhiFrameRenderer& frame);
     ~cwRhiOffscreenRenderer();
 
     // Single-owner render-thread type holding GPU resources, a back-ref to the
@@ -196,7 +195,7 @@ private:
         QRhi* rhi, QRhiResourceUpdateBatch* batch,
         const cwOffscreenRenderParameters& parameters);
 
-    cwRhiScene* m_scene;   // back-ref to the owner; not owned
+    cwRhiFrameRenderer& m_frame;   // the shared draw engine, owned by cwRhiScene
 
     bool m_didShutdown = false;   // guards shutdown() so the dtor backstop is a no-op
 
@@ -208,12 +207,12 @@ private:
     OffscreenTarget m_target;
     AtlasTarget m_atlas;
     // EDL composite buffers for the offscreen render, sized to the request and
-    // always 1x (no MSAA on the offscreen path). Separate from cwRhiScene's live
-    // m_edlOffscreen because an offscreen request's size differs from the live
+    // always 1x (no MSAA on the offscreen path). Separate from the frame renderer's
+    // live EDL offscreen because an offscreen request's size differs from the live
     // viewport and both are live within the same frame. Its effect composites into
     // m_target; its own EdlOffscreen::effectOutputRpDesc tracks the rpDesc that
     // effect was last initialized against so a target rebuild re-inits it.
-    cwRhiScene::EdlOffscreen m_edl;
+    cwRhiFrameRenderer::EdlOffscreen m_edl;
     QList<InflightOffscreenReadback> m_inflightReadbacks;
     // Render-thread counter held by shared_ptr so a read-back completion lambda can
     // decrement it without capturing `this` (the renderer may be torn down before

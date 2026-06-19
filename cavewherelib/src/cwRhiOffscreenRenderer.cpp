@@ -1,6 +1,6 @@
 //Our includes
 #include "cwRhiOffscreenRenderer.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 #include "cwRHIObject.h"
 #include "cwAppearanceSlotted.h"
 #include "cwAppearanceOverride.h"
@@ -20,7 +20,7 @@ namespace {
     // Atlas-batch tuning (see plans/OFFSCREEN_ATLAS_BATCHING_PLAN §5). The grid is the
     // smallest of: the backend's TextureSizeMax, this byte budget (atlas colour + the one
     // scratch's colour+depth), and the per-frame tile cap. The tile cap is
-    // cwRhiScene::kOffscreenBatchCameraSlots — the UBO camera-slot count is the real
+    // cwRhiFrameRenderer::kOffscreenBatchCameraSlots — the UBO camera-slot count is the real
     // per-frame bound (one slot per batched tile) and doubles as the GPU-work cap that
     // keeps a single command buffer from stalling long enough to trip a watchdog (the
     // Phase 0 spike ran 256 passes + copies in ~20 ms safely).
@@ -52,8 +52,8 @@ namespace {
     }
 }
 
-cwRhiOffscreenRenderer::cwRhiOffscreenRenderer(cwRhiScene* scene) :
-    m_scene(scene)
+cwRhiOffscreenRenderer::cwRhiOffscreenRenderer(cwRhiFrameRenderer& frame) :
+    m_frame(frame)
 {
 }
 
@@ -130,7 +130,7 @@ void cwRhiOffscreenRenderer::shutdown()
 
     // Tear down the offscreen targets before the scene's pipeline cache (caller
     // ordering) so pipelines keyed on their rpDescs are released first.
-    m_scene->destroyEdlOffscreen(m_edl);
+    m_frame.destroyEdlOffscreen(m_edl);
     destroyTarget();
     destroyAtlas();
 }
@@ -164,7 +164,7 @@ void cwRhiOffscreenRenderer::ensureTarget(QRhi* rhi, QSize size, int sampleCount
         fresh.color.reset(rhi->newTexture(QRhiTexture::RGBA8, size, 1,
                                           QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
     }
-    fresh.depth.reset(rhi->newTexture(cwRhiScene::preferredDepthFormat(rhi), size, sampleCount,
+    fresh.depth.reset(rhi->newTexture(cwRhiFrameRenderer::preferredDepthFormat(rhi), size, sampleCount,
                                       QRhiTexture::RenderTarget));
     if (!fresh.color->create() || !fresh.depth->create()
         || (fresh.resolve && !fresh.resolve->create())) {
@@ -201,7 +201,7 @@ void cwRhiOffscreenRenderer::destroyTarget()
     // Evict pipelines keyed on the rpDesc before deleting it — a newly allocated
     // rpDesc may reuse the address and hash-collide with a stale cache entry.
     if (m_target.rpDesc) {
-        m_scene->evictPipelinesFor(m_target.rpDesc.get());
+        m_frame.evictPipelinesFor(m_target.rpDesc.get());
     }
     m_target.target.reset();
     m_target.rpDesc.reset();
@@ -295,7 +295,7 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
     // size, same effective sample count, same background) share one atlas + one read-back.
     const cwOffscreenRenderParameters& cfg = m_queue.first()->parameters;
     const QSize size = cfg.outputSize;
-    const int sampleCount = m_scene->effectiveEdlSampleCount(rhi, cfg.sampleCount);
+    const int sampleCount = m_frame.effectiveEdlSampleCount(rhi, cfg.sampleCount);
     const QColor background = cfg.backgroundColor;
 
     // The grid the atlas can hold for this tile config, bounded by TextureSizeMax, the
@@ -303,7 +303,7 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
     // small) caps the run at 1, falling back to the single-tile path.
     const cwOffscreenAtlasGrid grid =
         cwOffscreenAtlasGrid::choose(size, rhi->resourceLimit(QRhi::TextureSizeMax),
-                                     kAtlasByteBudget, cwRhiScene::kOffscreenBatchCameraSlots,
+                                     kAtlasByteBudget, cwRhiFrameRenderer::kOffscreenBatchCameraSlots,
                                      kScratchDepthBytesPerPixel);
     const int cap = grid.isValid() ? grid.capacity() : 1;
 
@@ -318,7 +318,7 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
         }
         const cwOffscreenRenderParameters& fp = m_queue.first()->parameters;
         if (fp.outputSize != size || fp.backgroundColor != background
-            || m_scene->effectiveEdlSampleCount(rhi, fp.sampleCount) != sampleCount) {
+            || m_frame.effectiveEdlSampleCount(rhi, fp.sampleCount) != sampleCount) {
             break; // incompatible: it starts the next batch on a later frame
         }
         batch.append(m_queue.takeFirst());
@@ -353,9 +353,9 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
     // matches the live view's eye-dome-lit look that offscreen point-cloud captures need. The
     // EDL buffers are sized to the request and MSAA-matched (ensureEdlOffscreen gates
     // p.sampleCount to the same effective count as the target above).
-    const bool cloudVisible = m_scene->anyCloudVisible();
+    const bool cloudVisible = m_frame.anyCloudVisible();
     if (cloudVisible) {
-        m_scene->ensureEdlOffscreen(m_edl, rhi, size, p.sampleCount);
+        m_frame.ensureEdlOffscreen(m_edl, rhi, size, p.sampleCount);
     }
     const bool offscreenEdlActive = cloudVisible && m_edl.valid();
 
@@ -363,22 +363,22 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
     // target's rpDesc changes (a size/sample-count rebuild) or the input sample count
     // changes; then keep its tuning fresh each render.
     if (offscreenEdlActive && m_edl.effect) {
-        m_scene->ensureEffectInitialized(m_edl, rhi, m_target.rpDesc.get(), sampleCount);
+        m_frame.ensureEffectInitialized(m_edl, rhi, m_target.rpDesc.get(), sampleCount);
         // Per-job EDL when the job overrides it; otherwise the scene's live tuning.
         static_cast<cwEDLEffect*>(m_edl.effect.get())
-            ->setParameters(p.edlOverride.value_or(m_scene->m_edlParameters));
+            ->setParameters(p.edlOverride.value_or(m_frame.edlParameters()));
     }
 
     // Route passes to the offscreen targets (EDL split when active, else flat into
     // m_target). Mutating the routing here is safe: the live passes are already recorded,
     // and the next live render() resets it at its top.
-    m_scene->setupPassRouting(m_target.target.get(), offscreenEdlActive ? &m_edl : nullptr);
+    m_frame.setupPassRouting(m_target.target.get(), offscreenEdlActive ? &m_edl : nullptr);
 
     const cwRHIObject::RenderData offscreenRenderData{
         cb, renderer, cwSceneUpdate::Flag::None, m_target.rpDesc.get(), sampleCount
     };
-    const std::array<cwRHIObject::RenderData, cwRhiScene::kPassCount> perPassRenderData =
-        m_scene->buildPerPassRenderData(offscreenRenderData);
+    const std::array<cwRHIObject::RenderData, cwRhiFrameRenderer::kPassCount> perPassRenderData =
+        m_frame.buildPerPassRenderData(offscreenRenderData);
 
     // Resolve this job's per-object appearance overrides to transient slots,
     // uploading each payload just-in-time. Recorded before drawScene records the
@@ -391,19 +391,19 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
         cb->resourceUpdate(appearanceBatch);
     }
 
-    std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiScene::kPassCount> passBatches;
-    m_scene->gatherScene(passBatches, perPassRenderData,
+    std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiFrameRenderer::kPassCount> passBatches;
+    m_frame.gatherScene(passBatches, perPassRenderData,
                          {p.hiddenObjectIds, appearanceSlotForObject});
 
     // This tile's camera lives in global-UBO slot @a cameraSlot; write it (and the
     // offscreen viewport metrics) so the pass reads it at that slot's dynamic offset.
     // Batched tiles each take a distinct slot so the K passes in one command buffer don't
     // collapse onto one camera.
-    const quint32 cameraOffset = m_scene->globalUniformBufferStride() * quint32(cameraSlot);
-    const cwRhiScene::ClipSpaceCamera clipCamera =
-        cwRhiScene::clipSpaceCorrectedCamera(rhi, p.projectionMatrix, p.viewMatrix);
+    const quint32 cameraOffset = m_frame.globalUniformBufferStride() * quint32(cameraSlot);
+    const cwRhiFrameRenderer::ClipSpaceCamera clipCamera =
+        cwRhiFrameRenderer::clipSpaceCorrectedCamera(rhi, p.projectionMatrix, p.viewMatrix);
 
-    cwRhiScene::GlobalUniform camera;
+    cwRhiFrameRenderer::GlobalUniform camera;
     std::memcpy(camera.viewProjectionMatrix, clipCamera.viewProjection.constData(),
                 sizeof(camera.viewProjectionMatrix));
     std::memcpy(camera.viewMatrix, p.viewMatrix.constData(),
@@ -416,14 +416,14 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
     camera.viewportSize[1] = float(size.height());
 
     QRhiResourceUpdateBatch* cameraBatch = rhi->nextResourceUpdateBatch();
-    cameraBatch->updateDynamicBuffer(m_scene->globalUniformBuffer(), cameraOffset,
-                                     sizeof(cwRhiScene::GlobalUniform), &camera);
+    cameraBatch->updateDynamicBuffer(m_frame.globalUniformBuffer(), cameraOffset,
+                                     sizeof(cwRhiFrameRenderer::GlobalUniform), &camera);
 
     const cwRhiPostProcessEffect::FrameUniformContext offscreenFrameContext{
         clipCamera.projectionCorrected, size, p.devicePixelRatio
     };
 
-    m_scene->drawScene(cb, m_target.target.get(),
+    m_frame.drawScene(cb, m_target.target.get(),
                        offscreenEdlActive ? &m_edl : nullptr,
                        passBatches, perPassRenderData, cameraBatch, offscreenFrameContext,
                        cameraOffset, p.backgroundColor);
@@ -470,7 +470,7 @@ void cwRhiOffscreenRenderer::renderAtlasBatch(QRhiCommandBuffer* cb, cwRhiItemRe
         for (const auto& job : std::as_const(batch)) {
             const auto& overrides = job->parameters.appearanceOverrides;
             for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
-                cwRHIObject* object = m_scene->m_rhiObjectLookup.value(it.key(), nullptr);
+                cwRHIObject* object = m_frame.renderObjectForId(it.key());
                 if (auto* slotted = object ? object->appearanceSlots() : nullptr) {
                     ++overrideCountByObject[slotted];
                 }
@@ -574,7 +574,7 @@ void cwRhiOffscreenRenderer::recordReadbackFanout(QRhiCommandBuffer* cb, QRhiTex
 
 void cwRhiOffscreenRenderer::recycleFrameAppearanceSlots()
 {
-    for (cwRHIObject* object : std::as_const(m_scene->m_rhiObjects)) {
+    for (cwRHIObject* object : std::as_const(m_frame.renderObjects())) {
         if (auto* slotted = object->appearanceSlots()) {
             // Order: free last frame's orphans (that frame is submitted) THEN rewind
             // the cursor for this frame's acquires.
@@ -590,7 +590,7 @@ QHash<const cwRHIObject*, int> cwRhiOffscreenRenderer::resolveAppearanceOverride
     QHash<const cwRHIObject*, int> appearanceSlotForObject;
     for (auto it = parameters.appearanceOverrides.cbegin();
          it != parameters.appearanceOverrides.cend(); ++it) {
-        cwRHIObject* object = m_scene->m_rhiObjectLookup.value(it.key(), nullptr);
+        cwRHIObject* object = m_frame.renderObjectForId(it.key());
         auto* slotted = object ? object->appearanceSlots() : nullptr;
         if (!slotted) {
             continue; // unknown id, or an object that doesn't support overrides
