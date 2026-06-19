@@ -320,6 +320,20 @@ void cwSketch::connectRegionPalette()
     }
 }
 
+void cwSketch::connectResolvedPaletteContent()
+{
+    disconnect(m_resolvedPaletteGlyphConnection);
+    disconnect(m_resolvedPaletteBrushConnection);
+    if (m_resolvedPalette != nullptr) {
+        m_resolvedPaletteGlyphConnection =
+            connect(m_resolvedPalette, &cwSymbologyPalette::glyphChanged,
+                    this, &cwSketch::resolveSnapshot);
+        m_resolvedPaletteBrushConnection =
+            connect(m_resolvedPalette, &cwSymbologyPalette::brushChanged,
+                    this, &cwSketch::resolveSnapshot);
+    }
+}
+
 void cwSketch::resolveSnapshot()
 {
     auto *manager = cwSymbologyPaletteManager::instance();
@@ -353,10 +367,15 @@ void cwSketch::resolveSnapshot()
         resolved = manager->defaultPalette();
     }
 
-    // Cache the resolved palette pointer unconditionally (independent of the
-    // content dedup below) so resolvedPalette() always reflects the current
-    // selection — the brush picker enumerates brushes from it.
-    m_resolvedPalette = resolved;
+    // Cache the resolved palette pointer (independent of the content dedup
+    // below) so resolvedPalette() always reflects the current selection — the
+    // brush picker enumerates brushes from it. When the resolved palette
+    // changes, re-arm the per-palette content subscription so a glyph/brush
+    // edit on the *active* palette re-enters here and re-skins (Tier 1).
+    if (m_resolvedPalette != resolved) {
+        m_resolvedPalette = resolved;
+        connectResolvedPaletteContent();
+    }
 
     // Dedup on resolved content, not on palette id: a no-op set (e.g. a sketch
     // id that doesn't resolve while already on the default) leaves the content

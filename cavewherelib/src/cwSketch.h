@@ -302,6 +302,13 @@ private:
     cwSymbologyPalette *m_resolvedPalette = nullptr;
     QMetaObject::Connection m_regionPaletteConnection;
 
+    // Re-armed by resolveSnapshot() whenever the resolved palette changes, so a
+    // glyph/brush edit on the *active* palette re-resolves the snapshot and the
+    // render path re-skins (Tier 1). Tracking the active palette means edits to
+    // palettes this sketch isn't using don't trigger a re-resolve.
+    QMetaObject::Connection m_resolvedPaletteGlyphConnection;
+    QMetaObject::Connection m_resolvedPaletteBrushConnection;
+
     cwAbstractScrapViewMatrix *m_viewMatrix      = nullptr;
     cwMatrix4x4Artifact       *m_matrixArtifact  = nullptr;
     cwSurvey2DGeometryRule    *m_geometryRule    = nullptr;
@@ -410,6 +417,11 @@ private:
     // region-level default change re-resolves the snapshot. Called from
     // setParentTrip.
     void connectRegionPalette();
+
+    // (Re)subscribe to the resolved palette's glyphChanged/brushChanged so an
+    // edit to the active palette's content re-resolves the snapshot (Tier 1
+    // re-skin). Called by resolveSnapshot() when m_resolvedPalette changes.
+    void connectResolvedPaletteContent();
 
     void rebuildViewMatrixForType();
     void syncMatrixArtifact();

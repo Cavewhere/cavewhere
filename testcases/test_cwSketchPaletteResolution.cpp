@@ -240,3 +240,63 @@ TEST_CASE("A manager reload refreshes the snapshot when brushes change under the
     CHECK(f.wallDisplayName() == QStringLiteral("Wall v2"));
     CHECK(spy.count() >= 1);
 }
+
+TEST_CASE("Editing the resolved palette's content re-skins without a reload (Tier 1)",
+          "[cwSketchPaletteResolution]")
+{
+    SingletonGuard guard;
+
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+
+    const QUuid idA = QUuid::createUuid();
+    const QUuid idB = QUuid::createUuid();
+    writeWallPaletteWithId(temp.path(), QStringLiteral("a"), idA, QStringLiteral("Wall A v1"));
+    writeWallPaletteWithId(temp.path(), QStringLiteral("b"), idB, QStringLiteral("Wall B"));
+
+    auto *manager = cwSymbologyPaletteManager::instance();
+    manager->setPaletteDirectory(temp.path());
+
+    SketchInRegion f;
+    f.region.setDefaultPaletteId(idA);
+    REQUIRE(f.wallDisplayName() == QStringLiteral("Wall A v1"));
+
+    cwSymbologyPalette *paletteA = f.sketch.resolvedPalette();
+    REQUIRE(paletteA != nullptr);
+    REQUIRE(paletteA->id() == idA);
+
+    const auto editWall = [](cwSymbologyPalette *palette, const QString &displayName) {
+        cwLineBrush wall;
+        wall.name = QStringLiteral("wall");
+        wall.displayName = displayName;
+        palette->setBrush(wall);
+    };
+
+    QSignalSpy spy(&f.sketch, &cwSketch::paletteSnapshotChanged);
+
+    // An in-memory brush edit on the *resolved* palette (object-first, no
+    // reload) re-resolves the snapshot and re-skins.
+    editWall(paletteA, QStringLiteral("Wall A v2"));
+    CHECK(f.wallDisplayName() == QStringLiteral("Wall A v2"));
+    CHECK(spy.count() == 1);
+
+    // A no-op edit (same content) emits nothing.
+    editWall(paletteA, QStringLiteral("Wall A v2"));
+    CHECK(spy.count() == 1);
+
+    // Editing a palette the sketch is NOT resolved to is ignored.
+    cwSymbologyPalette *paletteB = manager->paletteById(idB);
+    REQUIRE(paletteB != nullptr);
+    editWall(paletteB, QStringLiteral("Wall B v2"));
+    CHECK(spy.count() == 1);
+
+    // Switching the active palette re-arms the content subscription: edits to
+    // the now-inactive A are ignored, edits to the active B re-skin.
+    f.region.setDefaultPaletteId(idB);
+    CHECK(spy.count() == 2); // the switch itself
+    editWall(paletteA, QStringLiteral("Wall A v3"));
+    CHECK(spy.count() == 2);
+    editWall(paletteB, QStringLiteral("Wall B v3"));
+    CHECK(f.wallDisplayName() == QStringLiteral("Wall B v3"));
+    CHECK(spy.count() == 3);
+}

@@ -283,53 +283,102 @@ the <em>version pin</em> in this work; the retained-history store (local git rep
 of defaults) and rollback UI can be staged right after, since the pin field makes
 them additive. (b) GitHub-linked palettes stay a later follow-up.</p>
 
-<h2>7. The re-skin / rebuild question <span class="tag done">DECIDED</span></h2>
+<h2>7. The re-skin / rebuild question <span class="tag done">DECIDED — re-verified against code 2026-06-19</span></h2>
 <p>
 <strong>Persistence and re-skin are decoupled.</strong> Auto-save is cheap and
 frequent; rebuilding dependent render geometry (tessellation cache + decoration
 relayout for every sketch whose brushes stamp the changed glyph) is expensive and
 must not run per pen sample.
 </p>
+<p class="note"><strong>Re-verified against the code (2026-06-19) — two earlier
+claims were stale and are corrected here:</strong>
+(a) the per-element <code>glyphChanged(name)</code>/<code>brushChanged(name)</code>
+signals <strong>now exist</strong> (added with the edit auto-save path, commit 3a)
+and are <em>no longer</em> net-new — with auto-save handling persistence, §7 adds
+<strong>no new palette signals at all</strong> (the originally-planned
+<code>saved()</code> is dropped — see the signal-surface note below).
+(b) <code>cwLinePlotManager</code> does <strong>not</strong> consume palette
+geometry — it is the survey loop-closure solve; strike it from the dependent list.
+The real consumers are the <strong>sketch decoration path source</strong>
+(<code>cwDecoratedStrokePathSource</code>, which owns a
+<code>cwGlyphTessellationCache</code>) feeding (i) the live
+<code>cwSketchCanvas</code> and (ii) the offline scrap PNG render
+(<code>cwSketchScrapRasterizer</code>, driven by <code>cwScrapManager</code>).</p>
+
+<p>The editor's own canvas re-skins live (one glyph, trivial). Everything else
+splits into two tiers — one nearly built, one not:</p>
 <ul>
-  <li><strong>Editor's own canvas</strong> re-skins live (one glyph, trivial).</li>
-  <li><strong>Project-wide rebuild reuses the existing
-  <code>automaticUpdate</code> flag</strong> <span class="tag open">corrected — already exists</span>
-  (on by default). <code>cwScrapManager</code> and <code>cwLinePlotManager</code>
-  already expose <code>automaticUpdate</code> (mirrored on
-  <code>cwJobSettings</code>) and already gate + coalesce their own rebuilds via a
-  per-manager <code>AsyncFuture::Restarter</code>. We do <em>not</em> add a new
-  flag or a new Restarter for the dependent managers — we route the palette
-  content change into their existing dirty/rebuild path so it honors the flag they
-  already have:
+  <li><strong>Tier 1 — live canvas re-skin (cheap; the downstream already exists).</strong>
+  The chain <code>cwSketch::paletteSnapshotChanged</code> →
+  <code>cwSketchCanvas::refreshPathSnapshot()</code> →
+  <code>cwDecoratedStrokePathSource::setSnapshot()</code> → cache clear +
+  <code>scheduleRebuild()</code> is fully wired today.
+  <code>cwSketch::resolveSnapshot()</code> already re-resolves on
+  <code>cwSymbologyPaletteManager::palettesChanged</code>,
+  <code>cwSketchSettings::defaultPaletteIdChanged</code>, and
+  <code>cwCavingRegion::defaultPaletteIdChanged</code>, and de-dupes on snapshot
+  <em>value</em> — so it already fires <code>paletteSnapshotChanged</code> only on a
+  real content change. <strong>The one missing wire:</strong> a glyph/brush edit on
+  the <em>currently-resolved</em> palette does not trigger a re-resolve. Connect the
+  resolved palette's <code>glyphChanged</code>/<code>brushChanged</code> to
+  <code>resolveSnapshot()</code> (re-armed inside <code>resolveSnapshot()</code>
+  whenever <code>m_resolvedPalette</code> changes, so the connection follows the
+  active palette). Once connected, the live canvas re-skins for free.</li>
+
+  <li><strong>Tier 2 — project-wide scrap re-render (the expensive rebuild; reuses
+  the existing <code>automaticUpdate</code> flag).</strong> Sketch-derived scrap
+  PNGs are rasterized by <code>cwSketchScrapRasterizer</code> from
+  <code>cwScrapManager::updateScrapGeometryHelper()</code>, gated by
+  <code>cwScrapManager::automaticUpdate()</code> and coalesced by its existing
+  <code>TriangulateRestarter</code>. Today scraps re-rasterize <em>only</em> on
+  stroke changes
+  (<code>strokesReset</code>/<code>strokeEnded</code>/<code>strokeRemoved</code>) —
+  a palette content edit does <strong>not</strong> mark them dirty, so glyph edits
+  don't reach the 3D model until strokes change or the project reopens.
+  <strong>The work:</strong> route the palette content change into
+  <code>cwScrapManager</code>'s existing dirty-mark + rebuild path so the same
+  <code>automaticUpdate</code>-gated <code>TriangulateRestarter</code> re-runs. We
+  do <em>not</em> add a new flag or a new Restarter — reuse the one
+  <code>cwScrapManager</code> already has.
     <ul>
-      <li>Always: scope the cache invalidation to the changed glyph via
-      <code>invalidateGlyph(name)</code> and <strong>set dirty flags</strong> on
-      the dependent rebuild managers (scrap manager / line plot manager — whatever
-      consumes palette geometry).</li>
-      <li><strong>Auto updates ON:</strong> the Restarter kicks the dependent
-      managers to re-run (coalesced — one rebuild per idle window, not per
-      sample).</li>
-      <li><strong>Auto updates OFF:</strong> the dirty flags are still set, but the
-      managers do <em>not</em> run. They re-run when the user re-enables auto
-      updates (or triggers a manual rebuild). This lets a user editing many glyphs
-      avoid thrashing the whole project, then rebuild once.</li>
+      <li><strong>Auto updates ON:</strong> the Restarter kicks
+      <code>cwScrapManager</code> to re-rasterize affected sketch-derived scraps
+      (coalesced — one rebuild per idle window, not per sample).</li>
+      <li><strong>Auto updates OFF:</strong> the scraps are marked dirty but do not
+      re-rasterize until the user re-enables auto updates (or triggers a manual
+      rebuild) — so editing many glyphs doesn't thrash the whole project.</li>
     </ul>
-  </li>
-  <li>This needs a "palette content changed" signal distinct from "palette
-  persisted". <strong>Today neither exists at glyph granularity</strong> — the
-  only palette signals are <code>dataChanged()</code> (identity/metadata) and
-  <code>writableChanged()</code>; glyph/brush changes surface only through the
-  coarse <code>reload()</code> → <code>palettesChanged</code>. <strong>Decided
-  signal surface (net-new):</strong>
+  <span class="tag open">caveat</span> <code>cwJobSettings::automaticUpdate</code>
+  is a <em>separate</em> global preference, not currently routed to the managers'
+  own <code>automaticUpdate</code>; reuse <code>cwScrapManager</code>'s own flag —
+  don't assume <code>cwJobSettings</code> drives it.</li>
+
+  <li><strong>Scoped invalidation is secondary, not a prerequisite.</strong>
+  <code>cwGlyphTessellationCache::invalidateGlyph(name)</code> exists, but the live
+  canvas reaches the cache only through <code>setSnapshot()</code>, which swaps the
+  whole snapshot value and clears the entire (per-sketch) cache. Since a brush edit
+  can change the ink of every glyph that uses it and each sketch owns a small cache,
+  the whole-cache clear is defensible; threading the changed name through to
+  <code>invalidateGlyph(name)</code> instead is a per-cache micro-optimization. Keep
+  it as a follow-up unless profiling says otherwise.</li>
+
+  <li><strong>Signal surface.</strong>
     <ul>
-      <li><code>cwSymbologyPalette::glyphChanged(QString name)</code> and
-      <code>brushChanged(QString name)</code> — the per-element "content changed"
-      signals. Both the writer Restarter (§5) and the rebuild Restarter subscribe;
-      the name keeps <code>invalidateGlyph(name)</code> and the rebuild scoped.</li>
-      <li><code>cwSymbologyPalette::saved()</code> — emitted when
-      <code>cwSaveLoad</code> finishes flushing the palette; UI/tests use it to
-      know the write landed (replaces relying on synchronous <code>reload()</code>
-      return). Relates to the granular-signal follow-up, task&nbsp;#38.</li>
+      <li><span class="tag done">DONE (3a)</span>
+      <code>cwSymbologyPalette::glyphChanged(QString name)</code> and
+      <code>brushChanged(QString name)</code> already exist and already drive the
+      auto-save path; Tier&nbsp;1 and Tier&nbsp;2 subscribe to these same signals.</li>
+      <li><strong>No net-new signal.</strong> The originally-planned
+      <code>saved()</code> ("palette persisted") is <strong>dropped</strong>: its
+      rationale was "replaces relying on synchronous <code>reload()</code> return,"
+      which evaporated once writes became async first-class <code>cwSaveLoad</code>
+      jobs. Auto-save is object-first, so the UI binds to the live in-memory object
+      and reflects edits immediately; durability is observable at the project level
+      via <code>cwProject</code>'s existing <code>saveFlushCompleted</code> /
+      <code>objectPathReady</code> and the tests' <code>waitSaveToFinish()</code>.
+      No concrete consumer needs <em>per-palette</em> write-completion today. If a
+      collaborative "share / commit this palette" workflow later needs it, add it
+      then under the granular-signal follow-up, task&nbsp;#38.</li>
     </ul>
   </li>
 </ul>
@@ -341,9 +390,10 @@ thread is the <strong>sketch decoration / path-source rebuild</strong>
 (<code>cwDecoratedStrokePathSource</code> rebuilds in
 <code>setSnapshot()</code>) — that's the one "commit 9/10" should move off-thread.
 This plan does <em>not</em> add a gating flag (it reuses the existing
-<code>automaticUpdate</code>); it only wires the palette content change into the
-scoped <code>invalidateGlyph</code> + the managers' existing dirty/rebuild path,
-and benefits automatically once the decoration build goes async.</blockquote>
+<code>automaticUpdate</code>); it only wires the palette content change into
+Tier&nbsp;1's snapshot re-resolve and Tier&nbsp;2's existing
+<code>cwScrapManager</code> dirty/rebuild path, and benefits automatically once the
+decoration build goes async.</blockquote>
 
 <h2>8. Knock-on items already tracked</h2>
 <ul>
@@ -376,7 +426,7 @@ and benefits automatically once the decoration build goes async.</blockquote>
 <tr><td>4</td><td>Does the app-global manager survive?</td>
 <td><span class="tag done">ANSWERED</span> Yes — it owns the read-only defaults + import library. A project references the default <em>or</em> a project-local fork. If a referenced palette is missing a glyph/brush, the <strong>slug + the stroke geometry survive</strong>, and the map renders a <strong>red line</strong> for the missing glyph/palette so it's visibly flagged (ties to #31).</td></tr>
 <tr><td>5</td><td>Minimal new signal surface for the re-skin split</td>
-<td><span class="tag done">ANSWERED</span> Per-element <code>glyphChanged(QString name)</code> + <code>brushChanged(QString name)</code> ("content changed", drives the writer + rebuild Restarters, keeps invalidation scoped) plus <code>saved()</code> ("persisted", for UI/tests). See §7.</td></tr>
+<td><span class="tag done">ANSWERED</span> Per-element <code>glyphChanged(QString name)</code> + <code>brushChanged(QString name)</code> ("content changed", drives the writer + rebuild paths, keeps invalidation scoped) — both shipped in 3a. The originally-planned <code>saved()</code> ("persisted") is <strong>dropped</strong>: async auto-save + <code>cwProject</code>'s project-level completion signals cover it; no per-palette write-completion consumer exists. See §7.</td></tr>
 </table>
 
 <h2>10. Commit sequencing (within this prerequisite)</h2>
@@ -496,11 +546,23 @@ and benefits automatically once the decoration build goes async.</blockquote>
       a dir-Remove action) so a removed palette leaves nothing on disk.</li>
     </ul></li>
   </ol></li>
-  <li>Wire the content change into the re-skin: scoped
-  <code>invalidateGlyph(name)</code> (replace the whole-cache
-  <code>setSnapshot</code> clear on the edit path) + mark the dependent managers
-  dirty so their <em>existing</em> <code>automaticUpdate</code>-gated Restarters
-  re-run (§7). Add the <code>saved()</code> signal for UI/tests.</li>
+  <li>Wire the content change into the re-skin (§7, two tiers):
+  <strong>Tier 1</strong> — connect the currently-resolved palette's
+  <code>glyphChanged</code>/<code>brushChanged</code> to
+  <code>cwSketch::resolveSnapshot()</code> (re-armed when the resolved palette
+  changes); the live-canvas downstream
+  (<code>paletteSnapshotChanged</code> → <code>cwSketchCanvas::refreshPathSnapshot</code>
+  → <code>setSnapshot</code> → rebuild) already exists.
+  <strong>Tier 2</strong> — mark sketch-derived scraps dirty in
+  <code>cwScrapManager</code> on palette content change so its <em>existing</em>
+  <code>automaticUpdate</code>-gated <code>TriangulateRestarter</code> re-rasterizes
+  them (not <code>cwLinePlotManager</code> — it doesn't consume palette geometry).
+  No new palette signals (<code>glyphChanged</code>/<code>brushChanged</code> from
+  3a suffice; <code>saved()</code> is dropped — auto-save +
+  <code>cwProject::saveFlushCompleted</code>/<code>waitSaveToFinish()</code> cover
+  persistence). Scoped <code>invalidateGlyph(name)</code> over the whole-cache
+  <code>setSnapshot</code> clear is an optional per-cache micro-opt, not
+  required.</li>
   <li>Add <code>source</code> (default / github / local-fork) +
   <code>version</code> pin fields in <code>palette.json</code> (§6); record the
   referenced default's version in the project; missing-glyph red-line render
