@@ -59,15 +59,16 @@ public:
         Count
     };
 
-    // Per-object appearance-slot budget for offscreen render overrides. Slot 0 is
-    // the live appearance; the remaining slots hold per-job appearance overrides
-    // for offscreen jobs in flight (see cwOffscreenRenderParameters::appearanceSlot
-    // and Drawable::appearanceBinding). An object that supports appearance
-    // overrides sizes its per-object appearance UBO to kAppearanceSlotCount slots.
-    // Intentionally smaller than the camera-slot budget
-    // (cwRhiScene::kOffscreenBatchCameraSlots): a multi-view job shares ONE
-    // appearance slot across all its camera views, so a batch needs far fewer
-    // appearance slots than camera slots.
+    // Per-object appearance-slot budget (ceiling) for offscreen render overrides.
+    // Slot 0 is the live appearance; the remaining slots hold per-job appearance
+    // overrides for offscreen jobs in flight (the payload travels on the job, see
+    // cwOffscreenRenderParameters::appearanceOverrides; the offscreen renderer
+    // resolves it to a slot, and Drawable::appearanceBinding carries the offset). An
+    // appearance-slotted object (cwAppearanceSlotted) grows its per-object UBO on
+    // demand up to this ceiling, not to it — steady state is one slot. Intentionally
+    // smaller than the camera-slot budget (cwRhiScene::kOffscreenBatchCameraSlots):
+    // a multi-view job shares ONE appearance slot across all its camera views, so a
+    // batch needs far fewer appearance slots than camera slots.
     static constexpr int kOffscreenBatchAppearanceSlots = 32;
     static constexpr int kAppearanceSlotCount = 1 + kOffscreenBatchAppearanceSlots;
 
@@ -76,9 +77,10 @@ public:
         RenderPass renderPass;
         quint32 objectOrder = 0;
         // Per-object appearance slot this render job selects (0 = the live
-        // appearance written to slot 0; higher slots = per-job overrides the
-        // object wrote at synchronize()/updateResources()). An object's gather()
-        // turns this into Drawable::appearanceUniformOffset by multiplying by its
+        // appearance in slot 0; higher slots = a per-job override the offscreen
+        // renderer acquired and uploaded for this object before gathering). The
+        // scene stamps it from cwSceneGatherOptions::appearanceSlotForObject; an
+        // object's gather() turns it into Drawable::appearanceUniformOffset via its
         // own per-slot stride. The live frame always passes 0.
         int appearanceSlot = 0;
     };

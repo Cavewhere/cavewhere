@@ -7,6 +7,8 @@
 
 // Our includes
 #include "cwRHIPointCloud.h"
+#include "cwAppearanceOverride.h"
+#include "cwPointCloudAppearance.h"
 #include "cwRenderMaterialState.h"
 #include "cwRenderPointCloud.h"
 #include "cwRhiAttributeFormat.h"
@@ -33,6 +35,8 @@ cwRHIPointCloud::~cwRHIPointCloud()
     }
     delete m_perCloudUBO;
     delete m_srb;
+    // Resources orphaned by a pool growth are owned by the cwAppearanceSlotted
+    // base and freed in its destructor (disjoint from m_perCloudUBO/m_srb above).
     // m_pipelines releases its held pipeline references on destruction.
 }
 
@@ -141,37 +145,67 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
     // --point-radius for offline renders). Tracked in render state, so a change
     // re-uploads only this small UBO — never the vertex buffer.
     //
-    // The UBO holds one aligned slot per appearance slot (slot 0 = live radius,
-    // slots >= 1 = per-job overrides), addressed at draw time by a dynamic offset
-    // (see gather()), so an offscreen render can size the cloud differently than
-    // the on-screen view without a second buffer.
-    bool uboCreated = false;
+    // Steady state is ONE slot (slot 0 = the live radius). Per-job appearance
+    // overrides acquire transient slots that grow the buffer on demand
+    // (cwAppearanceSlotted), so an interactive session pays 0.75 KB/cloud instead
+    // of the full kAppearanceSlotCount. resizeAppearanceSlots builds the buffer and
+    // writes slot 0; a later live-radius change re-writes only slot 0.
     if (!m_perCloudUBO) {
-        m_perCloudStride = rhi->ubufAligned(sizeof(PerCloudUniform));
-        m_perCloudUBO = rhi->newBuffer(QRhiBuffer::Dynamic,
-                                       QRhiBuffer::UniformBuffer,
-                                       m_perCloudStride * kAppearanceSlotCount);
-        m_perCloudUBO->create();
-        uboCreated = true;
-    }
-
-    // Re-upload every slot when the render state changed (cheap: a few KB) or on
-    // first creation. resetChanged() gates this so a geometry-only change never
-    // re-stages it.
-    if (renderStateChanged || uboCreated) {
-        const auto& renderState = m_renderState.value();
-        for (int slot = 0; slot < kAppearanceSlotCount; ++slot) {
-            const float radius = (slot == 0)
-                ? renderState.worldRadius
-                : renderState.worldRadiusOverrides.value(slot, renderState.worldRadius);
-            const PerCloudUniform uniform{ radius, {0.0f, 0.0f, 0.0f} };
-            batch->updateDynamicBuffer(m_perCloudUBO, slot * m_perCloudStride,
-                                       sizeof(PerCloudUniform), &uniform);
-        }
+        resizeAppearanceSlots(rhi, batch, 1);
+    } else if (renderStateChanged) {
+        writeAppearanceSlot(batch, kLiveAppearanceSlot, m_renderState.value().worldRadius);
     }
 
     m_geometry.resetChanged();
     m_renderState.resetChanged();
+}
+
+void cwRHIPointCloud::writeAppearanceSlot(QRhiResourceUpdateBatch* batch, int slot,
+                                          float worldRadius)
+{
+    const PerCloudUniform uniform{ worldRadius, {0.0f, 0.0f, 0.0f} };
+    batch->updateDynamicBuffer(m_perCloudUBO, slot * m_perCloudStride,
+                               sizeof(PerCloudUniform), &uniform);
+}
+
+void cwRHIPointCloud::uploadAppearance(QRhiResourceUpdateBatch* batch, int slot,
+                                       const cwAppearanceOverride& override)
+{
+    // Unpack the cloud's own appearance schema. A missing payload (or one that
+    // omits the radius) renders at the live radius, so an override that only
+    // tweaks a future field still draws at the right size.
+    const auto* appearance = override.payload<cwPointCloudAppearance>();
+    const float radius = (appearance && appearance->worldRadius.has_value())
+        ? appearance->worldRadius.value()
+        : m_renderState.value().worldRadius;
+    writeAppearanceSlot(batch, slot, radius);
+}
+
+void cwRHIPointCloud::resizeAppearanceSlots(QRhi* rhi, QRhiResourceUpdateBatch* batch,
+                                            int slotCount)
+{
+    if (m_perCloudStride == 0) {
+        m_perCloudStride = rhi->ubufAligned(sizeof(PerCloudUniform));
+    }
+
+    // Retire the old buffer + SRB rather than freeing them in place: a draw
+    // recorded earlier this frame (the live cloud) still binds them and is read at
+    // submit. The base frees them next frame (flushRetiredAppearanceResources),
+    // after this frame is submitted. Dropping the SRB forces ensureShaderResources
+    // to rebuild it against the new buffer on the next gather.
+    retireAppearanceResource(m_perCloudUBO);
+    retireAppearanceResource(m_srb);
+    m_srb = nullptr;
+
+    m_perCloudUBO = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer,
+                                   m_perCloudStride * quint32(slotCount));
+    m_perCloudUBO->create();
+    m_appearanceSlotCapacity = slotCount;
+
+    // Carry the live appearance into the fresh buffer's slot 0 so a non-overriding
+    // draw (the live view, or an offscreen job with no override for this cloud)
+    // reads the right radius from it.
+    writeAppearanceSlot(batch, kLiveAppearanceSlot, m_renderState.value().worldRadius);
 }
 
 void cwRHIPointCloud::render(const RenderData& data)
@@ -248,10 +282,13 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     drawable.globalCameraBinding = 0; // binding 0 = global camera UBO (dynamic offset)
 
     // binding 1 = per-cloud appearance UBO (dynamic offset). The job picks the
-    // appearance slot; resolve it to this cloud's byte offset. Clamp defensively
-    // so an out-of-range slot falls back to the live appearance (slot 0).
+    // appearance slot; resolve it to this cloud's byte offset. Clamp to the slots
+    // actually allocated so an out-of-range slot falls back to the live appearance
+    // (slot 0) rather than reading past the buffer. std::max guards the upper bound
+    // so the clamp range never inverts even if capacity were 0 (clamp UB otherwise).
     drawable.appearanceBinding = 1;
-    const int appearanceSlot = std::clamp(context.appearanceSlot, 0, kAppearanceSlotCount - 1);
+    const int maxAppearanceSlot = std::max(0, appearanceSlotCapacity() - 1);
+    const int appearanceSlot = std::clamp(context.appearanceSlot, 0, maxAppearanceSlot);
     drawable.appearanceUniformOffset = quint32(appearanceSlot) * m_perCloudStride;
 
     batch.drawables.append(drawable);

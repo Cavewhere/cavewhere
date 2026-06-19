@@ -52,15 +52,6 @@ public:
     float worldRadius() const;
     void setWorldRadius(float worldRadius);
 
-    // Per-appearance-slot world-radius override for offscreen render jobs
-    // (cwOffscreenRenderParameters::appearanceSlot). Slot 0 is always the live
-    // worldRadius() — only slots >= 1 are overridable. A slot with no override
-    // renders at the live radius, so an unset slot changes nothing. An offscreen
-    // render consumer sets a slot, then issues a job selecting it; the on-screen
-    // view (slot 0) is unaffected.
-    void setWorldRadiusOverride(int slot, float worldRadius);
-    void clearWorldRadiusOverride(int slot);
-
 protected:
     cwRHIObject* createRHIObject() override;
 
@@ -98,16 +89,9 @@ private:
         // live view and a plain capture both render with it.
         float worldRadius = 1.29f;
 
-        // Per-appearance-slot world-radius overrides, keyed by slot index >= 1
-        // (slot 0 is always the live worldRadius above). An offscreen job that
-        // selects slot N renders the cloud at the radius stored here for N, or
-        // the live radius when N has no entry. Sparse: only set slots appear.
-        QHash<int, float> worldRadiusOverrides;
-
         bool operator!=(const RenderState& other) const {
             return pointSize != other.pointSize
-                || worldRadius != other.worldRadius
-                || worldRadiusOverrides != other.worldRadiusOverrides;
+                || worldRadius != other.worldRadius;
         }
     };
 

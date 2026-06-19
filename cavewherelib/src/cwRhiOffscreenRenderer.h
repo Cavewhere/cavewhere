@@ -14,6 +14,7 @@
 #include "cwOffscreenAtlasGrid.h"
 class cwRhiItemRenderer;
 class QThread;
+struct cwOffscreenRenderParameters;
 struct cwOffscreenRenderJob;
 
 /**
@@ -177,6 +178,23 @@ private:
     void recordReadbackFanout(QRhiCommandBuffer* cb, QRhiTexture* readbackTexture,
                               const QList<std::shared_ptr<cwOffscreenRenderJob>>& jobs,
                               const QList<QRect>& subRects);
+
+    // Per-frame appearance-slot recycle, run before this frame's batch acquires any
+    // slots: for every appearance-slotted object, free the GPU resources orphaned by
+    // a growth on a PRIOR frame (now submitted) and rewind its override-slot cursor.
+    // This is the reliable reclaim site — a static object never runs updateResources,
+    // so the flush can't live there (§8.1). Render-thread only.
+    void recycleFrameAppearanceSlots();
+
+    // Resolve a job's opaque per-object appearance overrides to transient slots:
+    // acquire one slot per overridden cwAppearanceSlotted object, upload its payload
+    // just-in-time on @a batch, and return the slot to stamp into that object's
+    // GatherContext (cwSceneGatherOptions::appearanceSlotForObject). Objects without
+    // an override — or whose back-end isn't appearance-slotted — are absent, so they
+    // gather at the live slot 0.
+    QHash<const cwRHIObject*, int> resolveAppearanceOverrides(
+        QRhi* rhi, QRhiResourceUpdateBatch* batch,
+        const cwOffscreenRenderParameters& parameters);
 
     cwRhiScene* m_scene;   // back-ref to the owner; not owned
 

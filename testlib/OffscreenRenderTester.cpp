@@ -5,6 +5,8 @@
 #include "cwScene.h"
 #include "cwCamera.h"
 #include "cwOffscreenRenderParameters.h"
+#include "cwAppearanceOverride.h"
+#include "cwPointCloudAppearance.h"
 #include "cwRenderingSettings.h"
 #include "cwRegionSceneManager.h"
 #include "cwLazLayersSceneNode.h"
@@ -157,47 +159,31 @@ bool OffscreenRenderTester::addSyntheticPointCloud(QObject* rootData)
     return true;
 }
 
-int OffscreenRenderTester::setPointCloudWorldRadiusOverride(QObject* sceneManager, int slot,
-                                                            double worldRadius)
+int OffscreenRenderTester::visiblePointCloudCount(QObject* sceneManager) const
 {
-    auto* manager = qobject_cast<cwRegionSceneManager*>(sceneManager);
-    if (!manager) {
-        qWarning() << "setPointCloudWorldRadiusOverride: not a cwRegionSceneManager";
-        return 0;
-    }
-    const QList<cwRenderPointCloud*> clouds = visiblePointClouds(manager);
-    for (cwRenderPointCloud* cloud : clouds) {
-        cloud->setWorldRadiusOverride(slot, float(worldRadius));
-    }
-    return int(clouds.size());
+    return int(visiblePointClouds(qobject_cast<cwRegionSceneManager*>(sceneManager)).size());
 }
 
-void OffscreenRenderTester::renderPointCloudFramed(QQuickItem* viewer, QObject* sceneManager,
-                                                   const QString& filePath, QSize size,
-                                                   int appearanceSlot)
+bool OffscreenRenderTester::buildFramedCloudParameters(QQuickItem* viewer, QObject* sceneManager,
+                                                       QSize size, double worldRadiusOverride,
+                                                       cwScene*& sceneOut,
+                                                       cwOffscreenRenderParameters& parametersOut)
 {
     auto* rhiViewer = qobject_cast<cwRhiViewer*>(viewer);
     auto* manager = qobject_cast<cwRegionSceneManager*>(sceneManager);
     if (!rhiViewer || !manager) {
-        qWarning() << "renderPointCloudFramed: bad viewer or sceneManager";
-        return;
+        qWarning() << "buildFramedCloudParameters: bad viewer or sceneManager";
+        return false;
     }
     cwScene* sceneObject = rhiViewer->scene();
-    if (!sceneObject || filePath.isEmpty() || size.isEmpty()) {
-        qWarning() << "renderPointCloudFramed: no scene, empty path, or empty size";
-        return;
+    if (!sceneObject || size.isEmpty()) {
+        qWarning() << "buildFramedCloudParameters: no scene or empty size";
+        return false;
     }
-    const QDir outputDir = QFileInfo(filePath).absoluteDir();
-    if (!outputDir.exists()) {
-        qWarning() << "renderPointCloudFramed: output directory does not exist"
-                   << outputDir.absolutePath();
-        return;
-    }
-
     const QList<cwRenderPointCloud*> clouds = visiblePointClouds(manager);
     if (clouds.isEmpty()) {
-        qWarning() << "renderPointCloudFramed: no visible point cloud";
-        return;
+        qWarning() << "buildFramedCloudParameters: no visible point cloud";
+        return false;
     }
     cwRenderPointCloud* cloud = clouds.first();
 
@@ -205,11 +191,11 @@ void OffscreenRenderTester::renderPointCloudFramed(QQuickItem* viewer, QObject* 
     // things at once: (a) the whole bbox fits the frustum, and (b) the LIVE
     // world-radius renders well below the shader's maxPointSizePx clamp — a frame
     // too tight saturates the live sprites at the clamp, where a larger override
-    // radius can't grow them and the per-slot difference vanishes (an earlier
-    // bounds-only version did exactly this and the test could not tell the slots
-    // apart). So take the farther of two distances: bounds-fit, and the distance
-    // at which the live radius projects to ~kTargetLivePx (mirrors the size
-    // formula in PointCloud.vert, dpr 1, point near the view axis so w ≈ distance).
+    // radius can't grow them and the difference vanishes (an earlier bounds-only
+    // version did exactly this and the test could not tell the radii apart). So take
+    // the farther of two distances: bounds-fit, and the distance at which the live
+    // radius projects to ~kTargetLivePx (mirrors the size formula in PointCloud.vert,
+    // dpr 1, point near the view axis so w ≈ distance).
     const QVector3D bboxMin = cloud->bboxMin();
     const QVector3D bboxMax = cloud->bboxMax();
     const QVector3D center = (bboxMin + bboxMax) * 0.5f;
@@ -234,17 +220,80 @@ void OffscreenRenderTester::renderPointCloudFramed(QQuickItem* viewer, QObject* 
                                  qMax(0.01f, distance - boundsRadius * 2.0f),
                                  distance + boundsRadius * 2.0f);
 
-    cwOffscreenRenderParameters parameters;
-    parameters.viewMatrix = viewMatrix;
-    parameters.projectionMatrix = projectionMatrix;
-    parameters.outputSize = size;
-    parameters.devicePixelRatio = 1.0f;
-    parameters.sampleCount = 1;
-    parameters.backgroundColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0); // transparent clear
-    parameters.hiddenObjectIds = manager->captureHiddenObjectIds();    // isolate the cloud
-    parameters.appearanceSlot = appearanceSlot;
+    parametersOut = cwOffscreenRenderParameters{};
+    parametersOut.viewMatrix = viewMatrix;
+    parametersOut.projectionMatrix = projectionMatrix;
+    parametersOut.outputSize = size;
+    parametersOut.devicePixelRatio = 1.0f;
+    parametersOut.sampleCount = 1;
+    parametersOut.backgroundColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0); // transparent clear
+    parametersOut.hiddenObjectIds = manager->captureHiddenObjectIds();    // isolate the cloud
 
+    // Attach the per-job appearance override on the job itself (the on-job payload
+    // path), keyed by the cloud's stable render-object id.
+    if (worldRadiusOverride > 0.0) {
+        cwPointCloudAppearance appearance;
+        appearance.worldRadius = float(worldRadiusOverride);
+        parametersOut.appearanceOverrides.insert(cloud->renderObjectId(),
+                                                 cwAppearanceOverride(appearance));
+    }
+
+    sceneOut = sceneObject;
+    return true;
+}
+
+void OffscreenRenderTester::renderPointCloudFramed(QQuickItem* viewer, QObject* sceneManager,
+                                                   const QString& filePath, QSize size,
+                                                   double worldRadiusOverride)
+{
+    if (filePath.isEmpty() || !QFileInfo(filePath).absoluteDir().exists()) {
+        qWarning() << "renderPointCloudFramed: empty path or missing output directory" << filePath;
+        return;
+    }
+    cwScene* sceneObject = nullptr;
+    cwOffscreenRenderParameters parameters;
+    if (!buildFramedCloudParameters(viewer, sceneManager, size, worldRadiusOverride,
+                                    sceneObject, parameters)) {
+        return;
+    }
     saveOffscreenRender(sceneObject, parameters, filePath);
+}
+
+int OffscreenRenderTester::renderPointCloudFramedPair(QQuickItem* viewer, QObject* sceneManager,
+                                                      const QString& filePathA, double worldRadiusA,
+                                                      const QString& filePathB, double worldRadiusB,
+                                                      QSize size)
+{
+    cwScene* sceneObject = nullptr;
+    cwOffscreenRenderParameters paramsA;
+    cwOffscreenRenderParameters paramsB;
+    if (!buildFramedCloudParameters(viewer, sceneManager, size, worldRadiusA, sceneObject, paramsA)
+        || !buildFramedCloudParameters(viewer, sceneManager, size, worldRadiusB, sceneObject, paramsB)) {
+        return 0;
+    }
+
+    // Issue BOTH before returning to the event loop so they reach the render queue in
+    // one sync and drain through the atlas batch path — both override slots live at once.
+    QFuture<QImage> futureA = sceneObject->renderOffscreen(paramsA);
+    QFuture<QImage> futureB = sceneObject->renderOffscreen(paramsB);
+
+    auto combine = AsyncFuture::combine(AsyncFuture::AllSettled);
+    combine << futureA << futureB;
+    AsyncFuture::waitForFinished(combine.future(), 30000); // test-only nested loop
+
+    int written = 0;
+    const QPair<QFuture<QImage>, QString> outputs[2] = {
+        { futureA, filePathA }, { futureB, filePathB }
+    };
+    for (const auto& [future, path] : outputs) {
+        if (future.isFinished() && future.resultCount() == 1 && !future.result().isNull()
+            && future.result().save(path)) {
+            ++written;
+        } else {
+            qWarning() << "renderPointCloudFramedPair: no image written for" << path;
+        }
+    }
+    return written;
 }
 
 bool OffscreenRenderTester::windowHasRhi(QQuickItem* item) const

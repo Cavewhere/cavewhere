@@ -636,7 +636,8 @@ void cwRhiScene::gatherScene(std::array<QVector<cwRHIObject::PipelineBatch>, kPa
             const int passIndex = static_cast<int>(pass);
             auto& batches = passBatches[passIndex];
             const cwRHIObject::GatherContext context {
-                &perPassRenderData[passIndex], pass, objectOrder, options.appearanceSlot
+                &perPassRenderData[passIndex], pass, objectOrder,
+                options.appearanceSlotForObject.value(object, 0)
             };
             gathered |= object->gather(context, batches);
         }

@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QColor>
+#include <QHash>
 #include <QMatrix4x4>
 #include <QSet>
 #include <QSize>
@@ -11,6 +12,7 @@
 #include <optional>
 
 //Our includes
+#include "cwAppearanceOverride.h"
 #include "cwRenderObjectId.h"
 #include "cwEdlParametersData.h"
 
@@ -62,15 +64,17 @@ struct cwOffscreenRenderParameters {
     // the on-screen view.
     std::optional<EdlParametersData> edlOverride = std::nullopt;
 
-    // Per-object appearance slot this job renders with. 0 (default) = the live
-    // appearance every render object wrote to slot 0, so a plain capture matches
-    // the on-screen look. A consumer that wants an overridden look (e.g. a
-    // monochrome point cloud at a custom radius) first writes those values into a
-    // higher appearance slot of the relevant render objects, then issues the job
-    // with that slot here; cwRhiScene stamps it into every GatherContext and each
-    // object resolves it to its own dynamic UBO offset. Valid range is
-    // [0, cwRHIObject::kAppearanceSlotCount).
-    int appearanceSlot = 0;
+    // Per-object appearance overrides for this job, keyed by stable render-object
+    // id. Empty (default) = every object renders at its live appearance (slot 0),
+    // so a plain capture matches the on-screen look. An entry carries an opaque,
+    // per-object payload (cwAppearanceOverride wrapping e.g. cwPointCloudAppearance)
+    // that the matching object's back-end unpacks: the offscreen renderer acquires
+    // a transient appearance slot for that object, uploads the payload just-in-time,
+    // and draws the object at the slot's dynamic UBO offset — the live view is
+    // untouched. An object with no entry, or whose back-end does not recognise the
+    // payload, renders live. The payload travels here (self-describing job) rather
+    // than living in persistent renderer state behind a bare slot index.
+    QHash<cwRenderObjectId, cwAppearanceOverride> appearanceOverrides;
 };
 
 #endif // CWOFFSCREENRENDERPARAMETERS_H

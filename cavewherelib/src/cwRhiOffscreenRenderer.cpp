@@ -2,6 +2,8 @@
 #include "cwRhiOffscreenRenderer.h"
 #include "cwRhiScene.h"
 #include "cwRHIObject.h"
+#include "cwAppearanceSlotted.h"
+#include "cwAppearanceOverride.h"
 #include "cwRhiItemRenderer.h"
 #include "cwEDLEffect.h"
 #include "cwOffscreenRenderJob.h"
@@ -285,6 +287,10 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
         return;
     }
 
+    // Recycle appearance slots before this frame's batch acquires any: free last
+    // frame's growth orphans and rewind each object's override-slot cursor (§8.1).
+    recycleFrameAppearanceSlots();
+
     // Batch config from the leading renderable job. Compatible followers (§5: same output
     // size, same effective sample count, same background) share one atlas + one read-back.
     const cwOffscreenRenderParameters& cfg = m_queue.first()->parameters;
@@ -374,8 +380,20 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
     const std::array<cwRHIObject::RenderData, cwRhiScene::kPassCount> perPassRenderData =
         m_scene->buildPerPassRenderData(offscreenRenderData);
 
+    // Resolve this job's per-object appearance overrides to transient slots,
+    // uploading each payload just-in-time. Recorded before drawScene records the
+    // pass, so the GPU applies the writes first; a growth here drops the cloud's
+    // SRB, which gather() rebuilds against the new buffer via ensureShaderResources.
+    QHash<const cwRHIObject*, int> appearanceSlotForObject;
+    if (!p.appearanceOverrides.isEmpty()) {
+        QRhiResourceUpdateBatch* appearanceBatch = rhi->nextResourceUpdateBatch();
+        appearanceSlotForObject = resolveAppearanceOverrides(rhi, appearanceBatch, p);
+        cb->resourceUpdate(appearanceBatch);
+    }
+
     std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiScene::kPassCount> passBatches;
-    m_scene->gatherScene(passBatches, perPassRenderData, {p.hiddenObjectIds, p.appearanceSlot});
+    m_scene->gatherScene(passBatches, perPassRenderData,
+                         {p.hiddenObjectIds, appearanceSlotForObject});
 
     // This tile's camera lives in global-UBO slot @a cameraSlot; write it (and the
     // offscreen viewport metrics) so the pass reads it at that slot's dynamic offset.
@@ -440,6 +458,32 @@ void cwRhiOffscreenRenderer::renderAtlasBatch(QRhiCommandBuffer* cb, cwRhiItemRe
             renderSingleTile(cb, renderer, job, tileSize, sampleCount);
         }
         return;
+    }
+
+    // Pre-grow each overridden object's appearance pool once to this batch's
+    // concurrency (§8.1): every job that overrides an object needs its own live
+    // slot for the duration of the batch, so the object's pool must hold one slot
+    // per such job. Doing it here, before any tile is recorded, means the per-tile
+    // acquire never reallocates mid-batch (which would orphan a buffer per tile).
+    {
+        QHash<cwAppearanceSlotted*, int> overrideCountByObject;
+        for (const auto& job : std::as_const(batch)) {
+            const auto& overrides = job->parameters.appearanceOverrides;
+            for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
+                cwRHIObject* object = m_scene->m_rhiObjectLookup.value(it.key(), nullptr);
+                if (auto* slotted = dynamic_cast<cwAppearanceSlotted*>(object)) {
+                    ++overrideCountByObject[slotted];
+                }
+            }
+        }
+        if (!overrideCountByObject.isEmpty()) {
+            QRhiResourceUpdateBatch* preGrow = rhi->nextResourceUpdateBatch();
+            for (auto it = overrideCountByObject.cbegin();
+                 it != overrideCountByObject.cend(); ++it) {
+                it.key()->reserveAppearanceSlots(rhi, preGrow, 1 + it.value());
+            }
+            cb->resourceUpdate(preGrow);
+        }
     }
 
     QList<std::shared_ptr<cwOffscreenRenderJob>> rendered;
@@ -526,4 +570,37 @@ void cwRhiOffscreenRenderer::recordReadbackFanout(QRhiCommandBuffer* cb, QRhiTex
     QRhiResourceUpdateBatch* readbackBatch = rhi->nextResourceUpdateBatch();
     readbackBatch->readBackTexture(QRhiReadbackDescription(readbackTexture), readback);
     cb->resourceUpdate(readbackBatch);
+}
+
+void cwRhiOffscreenRenderer::recycleFrameAppearanceSlots()
+{
+    for (cwRHIObject* object : std::as_const(m_scene->m_rhiObjects)) {
+        if (auto* slotted = dynamic_cast<cwAppearanceSlotted*>(object)) {
+            // Order: free last frame's orphans (that frame is submitted) THEN rewind
+            // the cursor for this frame's acquires.
+            slotted->flushRetiredAppearanceResources();
+            slotted->resetFrameAppearanceSlots();
+        }
+    }
+}
+
+QHash<const cwRHIObject*, int> cwRhiOffscreenRenderer::resolveAppearanceOverrides(
+    QRhi* rhi, QRhiResourceUpdateBatch* batch, const cwOffscreenRenderParameters& parameters)
+{
+    QHash<const cwRHIObject*, int> appearanceSlotForObject;
+    for (auto it = parameters.appearanceOverrides.cbegin();
+         it != parameters.appearanceOverrides.cend(); ++it) {
+        cwRHIObject* object = m_scene->m_rhiObjectLookup.value(it.key(), nullptr);
+        auto* slotted = dynamic_cast<cwAppearanceSlotted*>(object);
+        if (!slotted) {
+            continue; // unknown id, or an object that doesn't support overrides
+        }
+        const int slot = slotted->acquireAppearanceSlot(rhi, batch);
+        if (slot == cwAppearanceSlotted::kNoAppearanceSlot) {
+            continue; // appearance budget exhausted — leave this object live (slot 0)
+        }
+        slotted->uploadAppearance(batch, slot, it.value());
+        appearanceSlotForObject.insert(object, slot);
+    }
+    return appearanceSlotForObject;
 }

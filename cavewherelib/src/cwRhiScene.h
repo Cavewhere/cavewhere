@@ -33,10 +33,14 @@ struct cwSceneGatherOptions {
     // Render objects to suppress for this gather only, by stable id (per-job
     // visibility override); empty = honor each object's live isVisible().
     QSet<cwRenderObjectId> hiddenObjectIds;
-    // Appearance slot stamped into each GatherContext (0 = live appearance); an
-    // object that supports appearance overrides reads it to pick its dynamic
-    // UBO offset.
-    int appearanceSlot = 0;
+    // Per-object appearance slot stamped into each object's GatherContext, by
+    // cwRHIObject pointer. Empty (the live frame) = every object gathers at slot 0
+    // (its live appearance). The offscreen renderer fills this after acquiring a
+    // transient slot per overridden object; an object absent from the map gathers
+    // at slot 0. Keyed by pointer because the resolution from id already happened
+    // (the renderer needed the cwAppearanceSlotted to acquire), so the gather loop
+    // does a cheap pointer lookup rather than re-hashing ids.
+    QHash<const cwRHIObject*, int> appearanceSlotForObject;
 };
 
 /**
