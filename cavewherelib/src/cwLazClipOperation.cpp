@@ -21,6 +21,7 @@
 //Std includes
 #include <atomic>
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 //Our includes
@@ -36,28 +37,26 @@ constexpr double kOutputScale = 0.001; // mm precision for encoded coords
 constexpr U8 kLasPointFormat = 0;
 constexpr U16 kLasFormat0RecordLength = 20;
 
-// Per-source validated slice into the geometry's packed Position buffer.
-// Built in preflight so the hot loop doesn't have to re-validate or fall
-// back on Q_ASSERTs.
-struct PositionSlice {
-    const QVector3D* points = nullptr;
+// Per-source validated cursors into the geometry's vertex buffers. Built in
+// preflight so the hot loop reads each attribute by stride without
+// re-validating. Position and Classification may be packed (each in its own
+// buffer, stride == element size) or interleaved (a shared PointRecord
+// stride): cwLazLoader emits the interleaved {Position, Classification,
+// SinkDepth} layout, the unit tests the packed one. Both reduce to
+// base + i * stride here, so the clip is layout-agnostic.
+struct PointSlice {
+    const char* positionBase = nullptr;
+    const char* classificationBase = nullptr; // null when the source has no class
+    int positionStride = 0;
+    int classificationStride = 0;
     qsizetype count = 0;
 };
 
-const cwGeometry::VertexAttribute* packedPositionAttribute(const cwGeometry& geom)
+const char* attributeBase(const cwGeometry& geom,
+                          const cwGeometry::VertexAttribute* attr)
 {
-    const cwGeometry::VertexAttribute* attr =
-        geom.attribute(cwGeometry::Semantic::Position);
-    if (attr == nullptr) {
-        return nullptr;
-    }
-    // Same invariant as cwLazLoader: a single Vec3 Position attribute makes
-    // the buffer a packed array of QVector3D so we can iterate by pointer.
-    if (attr->bufferStride != int(sizeof(QVector3D))
-        || attr->byteOffsetInBuffer != 0) {
-        return nullptr;
-    }
-    return attr;
+    const QByteArray* buf = geom.vertexBuffer(attr->bufferIndex);
+    return buf->constData() + attr->byteOffsetInBuffer;
 }
 
 bool isFinite(const cwGeoPoint& p)
@@ -98,7 +97,7 @@ QPolygonF projectPolygonToEyeXY(const QList<QVector3D>& worldXYZ,
     return result;
 }
 
-Monad::Result<qint64> clipOneSlice(const PositionSlice& slice,
+Monad::Result<qint64> clipOneSlice(const PointSlice& slice,
                                    const cwLazClipOperation::Request& request,
                                    const QPolygonF& polygonEyeXY,
                                    const QRectF& polygonBBox,
@@ -136,7 +135,8 @@ Monad::Result<qint64> clipOneSlice(const PositionSlice& slice,
                 break;
             }
         }
-        const QVector3D& v = slice.points[i];
+        QVector3D v;
+        std::memcpy(&v, slice.positionBase + i * slice.positionStride, sizeof(QVector3D));
         const double vx = double(v.x());
         const double vy = double(v.y());
         const double vz = double(v.z());
@@ -154,6 +154,19 @@ Monad::Result<qint64> clipOneSlice(const PositionSlice& slice,
             point.set_x(vx + ox);
             point.set_y(vy + oy);
             point.set_z(vz + oz);
+            // Preserve the source LAS classification (ground=2, etc.) so the
+            // clipped cloud keeps its ground/feature classes. Sources without
+            // a Classification attribute write 0 (unclassified), the LAS
+            // format-0 default.
+            U8 classification = 0;
+            if (slice.classificationBase != nullptr) {
+                quint32 raw = 0;
+                std::memcpy(&raw,
+                            slice.classificationBase + i * slice.classificationStride,
+                            sizeof(quint32));
+                classification = U8(raw & 0xFFu);
+            }
+            point.set_classification(classification);
             if (!writer->write_point(&point)) {
                 publishProgress(sinceReport);
                 return Monad::Result<qint64>(
@@ -168,10 +181,10 @@ Monad::Result<qint64> clipOneSlice(const PositionSlice& slice,
     return Monad::Result<qint64>(written);
 }
 
-qint64 totalPointsFor(const QList<PositionSlice>& slices) noexcept
+qint64 totalPointsFor(const QList<PointSlice>& slices) noexcept
 {
     qint64 total = 0;
-    for (const PositionSlice& s : slices) {
+    for (const PointSlice& s : slices) {
         total += qint64(s.count);
     }
     return total;
@@ -211,24 +224,36 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
                 return;
             }
 
-            // Build validated slices once. clipOneSlice can then read by
-            // pointer without re-running positionAttribute / bounds checks.
-            QList<PositionSlice> slices;
+            // Build validated cursors once. clipOneSlice can then read each
+            // attribute by stride without re-resolving attributes per point.
+            QList<PointSlice> slices;
             slices.reserve(request.sources.size());
             for (int i = 0; i < request.sources.size(); ++i) {
                 const cwGeometry& geom = request.sources.at(i);
-                const cwGeometry::VertexAttribute* attr = packedPositionAttribute(geom);
-                if (attr == nullptr) {
+                const cwGeometry::VertexAttribute* posAttr =
+                    geom.attribute(cwGeometry::Semantic::Position);
+                if (posAttr == nullptr
+                    || posAttr->format != cwGeometry::AttributeFormat::Vec3) {
                     promise.addResult(Result(
-                        QStringLiteral("Source %1 of %2 has no packed Vec3 Position attribute.")
+                        QStringLiteral("Source %1 of %2 has no Vec3 Position attribute.")
                             .arg(i + 1).arg(request.sources.size()),
                         MissingPosition));
                     return;
                 }
-                const QByteArray* buf = geom.vertexBuffer(attr->bufferIndex);
-                PositionSlice slice;
-                slice.points = reinterpret_cast<const QVector3D*>(buf->constData());
+                PointSlice slice;
                 slice.count = geom.vertexCount();
+                slice.positionBase = attributeBase(geom, posAttr);
+                slice.positionStride = posAttr->bufferStride;
+                // Classification is optional: real LAZ sources carry it
+                // (ground=2, etc.) and the clip preserves it; synthetic
+                // Position-only geometry simply writes class 0.
+                const cwGeometry::VertexAttribute* classAttr =
+                    geom.attribute(cwGeometry::Semantic::Classification);
+                if (classAttr != nullptr
+                    && classAttr->format == cwGeometry::AttributeFormat::UInt) {
+                    slice.classificationBase = attributeBase(geom, classAttr);
+                    slice.classificationStride = classAttr->bufferStride;
+                }
                 slices.append(slice);
             }
 
@@ -289,7 +314,7 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
             QString failureMessage;
             int failureCode = Monad::ResultBase::NoError;
 
-            for (const PositionSlice& slice : slices) {
+            for (const PointSlice& slice : slices) {
                 if (promise.isCanceled()) {
                     break;
                 }
