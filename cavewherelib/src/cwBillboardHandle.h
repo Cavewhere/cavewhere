@@ -57,11 +57,15 @@ public:
     // A null @a layer just releases any held billboard.
     void set(cwRenderBillboards* layer, const cwRenderBillboards::Billboard& billboard)
     {
-        if (m_layer && m_layer != layer) {
+        // Reset whenever our layer isn't the requested one. This also covers the
+        // case where m_layer (a QPointer) auto-nulled because the old layer was
+        // destroyed while m_id still held its old value: without the reset, set()
+        // would take the updateBillboard() branch against a layer that never
+        // minted m_id and silently drop the billboard.
+        if (m_layer != layer) {
             reset();
         }
         if (!layer) {
-            reset();
             return;
         }
         m_layer = layer;

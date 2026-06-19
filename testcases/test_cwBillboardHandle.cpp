@@ -144,6 +144,34 @@ TEST_CASE("cwBillboardHandle: set to a different layer moves the billboard", "[c
     REQUIRE(layerB.billboardCount() == 0);
 }
 
+TEST_CASE("cwBillboardHandle: set re-adds after its layer was destroyed", "[cwBillboardHandle]")
+{
+    QQuickWindow window;
+    auto content = std::make_unique<QQuickItem>(window.contentItem());
+
+    cwRenderBillboards survivor;
+    survivor.setWindow(&window);
+
+    cwBillboardHandle handle;
+
+    {
+        // A heap layer we can destroy out from under the handle, mimicking the old
+        // scene (and its billboard layer) being torn down on a scene swap.
+        auto doomed = std::make_unique<cwRenderBillboards>();
+        doomed->setWindow(&window);
+        handle.set(doomed.get(), makeBillboard(content.get(), QVector3D(0, 0, 0)));
+        REQUIRE(doomed->billboardCount() == 1);
+    }
+    // The handle's QPointer auto-nulled, but it still remembers its old id.
+
+    // Re-setting against a different layer must add fresh (not no-op via the
+    // updateBillboard branch against a layer that never minted that id).
+    handle.set(&survivor, makeBillboard(content.get(), QVector3D(1, 1, 1)));
+    REQUIRE(handle.isValid());
+    REQUIRE(survivor.billboardCount() == 1);
+    REQUIRE(survivor.hasBillboard(handle.id()));
+}
+
 TEST_CASE("cwBillboardHandle: a vector of handles cleans up on erase", "[cwBillboardHandle]")
 {
     QQuickWindow window;
