@@ -1757,19 +1757,21 @@ void cwSaveLoad::setFileName(const QString &filename)
             // into the bundle. The manager is a singleton; absent in headless
             // tests that never initialize() it, so guard the access.
             if (auto* paletteManager = cwSymbologyPaletteManager::instance()) {
-                // Drop any existing per-palette auto-save wiring first: setting
-                // the directory rescans, and the reconciling reload calls
-                // setData() on surviving palette objects. With the writes wired
-                // live that would re-enter the save path and write just-loaded
-                // content straight back to disk. connectPalettes() below rewires
-                // everything after the reload settles.
-                disconnectPalettes();
+                // Wire the reload bracket before repointing the manager: setting
+                // a new directory rescans (reload), which emits aboutToReload
+                // then palettesChanged. aboutToReload drops the per-palette
+                // auto-save wiring (so the reconciling setData() on survivors
+                // can't write just-loaded content back to disk) and flags the
+                // load; palettesChanged then reconnects and adopts the loaded
+                // palettes as already-persisted. If the directory is unchanged,
+                // reload is skipped and the existing wiring simply stays put.
+                connect(paletteManager, &cwSymbologyPaletteManager::aboutToReload,
+                        this, &cwSaveLoad::onPalettesAboutToReload, Qt::UniqueConnection);
+                connect(paletteManager, &cwSymbologyPaletteManager::palettesChanged,
+                        this, &cwSaveLoad::connectPalettes, Qt::UniqueConnection);
                 paletteManager->setPaletteDirectory(
                             projectRootDir().absoluteFilePath(
                                 cwSymbologyPaletteManager::folderName()));
-                connect(paletteManager, &cwSymbologyPaletteManager::palettesChanged,
-                        this, &cwSaveLoad::connectPalettes, Qt::UniqueConnection);
-                connectPalettes();
             }
         }
 
@@ -4040,16 +4042,97 @@ void cwSaveLoad::disconnectPalettes()
     }
 }
 
+void cwSaveLoad::onPalettesAboutToReload()
+{
+    // The manager is about to rescan the directory; everything it produces comes
+    // from disk. Drop the live wiring so the reconciling setData() can't write
+    // back, and flag the load so connectPalettes() (fired after, on
+    // palettesChanged) adopts the result as already-persisted instead of writing
+    // it. The flag is cleared by that connectPalettes() call.
+    disconnectPalettes();
+    d->paletteReloadInProgress = true;
+}
+
 void cwSaveLoad::connectPalettes()
 {
     auto* manager = cwSymbologyPaletteManager::instance();
     if (manager == nullptr) {
         return;
     }
+
     const auto palettes = manager->palettes();
+
+    // The current writable palettes, by id, with their on-disk directory.
+    QHash<QUuid, QString> present;
     for (auto* palette : palettes) {
         connectPalette(palette);
+        if (palette != nullptr && palette->isWritable()) {
+            present.insert(palette->id(), palette->directory());
+        }
     }
+
+    if (d->paletteReloadInProgress) {
+        // A reload just loaded these from disk — they are the on-disk truth.
+        // Adopt them as persisted without writing anything back.
+        d->persistedPaletteDirs = present;
+        d->paletteReloadInProgress = false;
+        return;
+    }
+
+    // Not a reload: the live set changed in memory. A writable palette that
+    // isn't yet persisted (a freshly forked one) is written in full; a palette
+    // that was persisted but is now gone (removed in memory) has its directory
+    // torn down. Both keep the on-disk tree in step with the manager.
+    for (auto it = present.constBegin(); it != present.constEnd(); ++it) {
+        if (!d->persistedPaletteDirs.contains(it.key())) {
+            writeFullPalette(manager->paletteById(it.key()));
+        }
+    }
+    for (auto it = d->persistedPaletteDirs.constBegin();
+         it != d->persistedPaletteDirs.constEnd(); ++it) {
+        if (!present.contains(it.key())) {
+            enqueuePaletteTeardown(it.value());
+        }
+    }
+
+    d->persistedPaletteDirs = present;
+}
+
+void cwSaveLoad::writeFullPalette(cwSymbologyPalette* palette)
+{
+    // Persist a whole palette as first-class file jobs: identity (palette.json)
+    // plus every glyph and brush. WriteFile's ensurePathForFile creates the
+    // palette directory and its glyphs//brushes/ subdirs, so no EnsureDir job is
+    // needed. Used when a fork first appears; later edits persist incrementally.
+    if (palette == nullptr) {
+        return;
+    }
+    writePaletteIdentity(palette);
+    const auto glyphs = palette->glyphs();
+    for (const auto& glyph : glyphs) {
+        writePaletteGlyph(palette, glyph.name);
+    }
+    const auto brushes = palette->lineBrushes();
+    for (const auto& brush : brushes) {
+        writePaletteBrush(palette, brush.name);
+    }
+}
+
+void cwSaveLoad::enqueuePaletteTeardown(const QString& directory)
+{
+    // A removed palette's whole directory (palette.json + glyphs/ + brushes/) is
+    // torn down as a single recursive directory Remove, keyed on the directory
+    // path so two removals of the same palette compress. ensureInsideRoot in the
+    // job guards against deleting anything outside the project root.
+    if (directory.isEmpty()) {
+        return;
+    }
+    cwSaveLoadPrivate::Job job(nullptr, cwSaveLoadPrivate::Job::Kind::Directory,
+                               cwSaveLoadPrivate::Job::Action::Remove);
+    job.oldPath = directory;
+    job.tag = QStringLiteral("palette-dir:") + directory;
+    d->addExplicitFileSystemJob(std::move(job), this);
+    markPaletteMutated();
 }
 
 void cwSaveLoad::connectPalette(cwSymbologyPalette* palette)
@@ -4083,6 +4166,18 @@ void cwSaveLoad::connectPalette(cwSymbologyPalette* palette)
     connect(palette, &cwSymbologyPalette::dataChanged, this,
             [this, palette]() {
         writePaletteIdentity(palette);
+    });
+
+    // Self-clean the connection tracking if the palette is destroyed while still
+    // connected (e.g. cwSymbologyPaletteManager::removePalette deletes it). Qt
+    // drops the lambda connections automatically, but the bookkeeping sets hold
+    // raw pointers — left stale, a later palette reusing the address would be
+    // misread as already-connected and skip wiring. Untrack by the QObject here.
+    connect(palette, &QObject::destroyed, this, [this](QObject* object) {
+        if (d->isTrackedConnected(object)) {
+            d->trackDisconnected(object);
+            d->connectionChecker.remove(object);
+        }
     });
 }
 

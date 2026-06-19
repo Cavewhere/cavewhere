@@ -18,6 +18,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QHash>
+#include <QSet>
 #include <QUuid>
 #include <QVector>
 
@@ -49,12 +50,19 @@ QString slugify(const QString &name)
     return slug;
 }
 
-// First "<slug>", "<slug>-2", "<slug>-3"… not already a subdirectory of root.
-QString uniqueSubdirName(const QDir &root, const QString &slug)
+// First "<slug>", "<slug>-2", "<slug>-3"… that is neither an existing
+// subdirectory of root nor already claimed by a not-yet-flushed palette. A fork
+// no longer writes its directory synchronously (cwSaveLoad's async full-write
+// creates it), so on-disk existence alone can't prevent two rapid forks from
+// colliding on a name — the taken set carries the in-memory claims too.
+QString uniqueSubdirName(const QDir &root, const QString &slug, const QSet<QString> &taken)
 {
+    const auto isClaimed = [&](const QString &name) {
+        return root.exists(name) || taken.contains(name);
+    };
     QString candidate = slug;
     int suffix = 2;
-    while (root.exists(candidate)) {
+    while (isClaimed(candidate)) {
         candidate = QStringLiteral("%1-%2").arg(slug).arg(suffix++);
     }
     return candidate;
@@ -97,6 +105,15 @@ void cwSymbologyPaletteManager::setPaletteDirectory(const QString &directory)
 
 void cwSymbologyPaletteManager::reload()
 {
+    // reload() is load-only: every palette it produces comes from disk (the
+    // shipped default, then a directory scan), so it must never write back.
+    // aboutToReload lets cwSaveLoad drop its per-palette auto-save wiring before
+    // the reconciling setData() below runs — otherwise a survivor's setData
+    // would re-enter the write path and rewrite just-loaded content. cwSaveLoad
+    // also keys off this to adopt the loaded palettes as already-persisted
+    // rather than enqueuing fresh writes.
+    emit aboutToReload();
+
     m_errorModel->errors()->clear();
 
     // Phase 1 — scan every palette directory into an ordered list (default first).
@@ -262,29 +279,32 @@ cwSymbologyPalette *cwSymbologyPaletteManager::duplicatePalette(cwSymbologyPalet
         data.name = newName;
     }
 
-    QDir root(m_paletteDirectory);
-    if (!root.exists() && !root.mkpath(QStringLiteral("."))) {
-        reportLoadProblem(
-            QStringLiteral("failed to create palette directory \"%1\"").arg(m_paletteDirectory));
+    if (m_paletteDirectory.isEmpty()) {
+        reportLoadProblem(QStringLiteral("cannot duplicate a palette with no project open"));
         return nullptr;
     }
 
-    const QString subdirName = uniqueSubdirName(root, slugify(data.name));
+    // Pick a collision-free directory among both on-disk subdirectories and the
+    // directories already claimed by live (possibly not-yet-flushed) palettes.
+    const QDir root(m_paletteDirectory);
+    QSet<QString> takenSubdirs;
+    for (auto *existing : std::as_const(m_palettes)) {
+        const QString dir = existing->directory();
+        if (dir.isEmpty()) { continue; }
+        const QFileInfo info(dir);
+        if (QDir(info.absolutePath()) == root) {
+            takenSubdirs.insert(info.fileName());
+        }
+    }
+    const QString subdirName = uniqueSubdirName(root, slugify(data.name), takenSubdirs);
     const QString targetDir = root.absoluteFilePath(subdirName);
-    const auto result = cwSymbologyPaletteIO::save(data, targetDir);
-    if (result.hasError()) {
-        reportLoadProblem(
-            QStringLiteral("failed to write palette \"%1\": %2").arg(targetDir, result.errorMessage()));
-        return nullptr;
-    }
 
-    // Object-first: construct the fork in memory and append it rather than
-    // reload()ing the whole directory. A reload would re-read every palette from
-    // disk to add this one; the reconcile would keep all existing pointers, so
-    // it does the same work for no benefit and re-emits content signals. The new
-    // palette is writable and rooted at targetDir; palettesChanged lets
-    // cwSaveLoad wire its auto-save (each future glyph/brush edit persists as a
-    // first-class file job).
+    // Object-first, no synchronous IO: construct the fork in memory and append
+    // it. The directory does not exist on disk yet — palettesChanged drives
+    // cwSaveLoad to enqueue a first-class full write (palette.json + every glyph
+    // and brush), and that job's path creation makes targetDir. The fork is
+    // writable and rooted at targetDir; every later glyph/brush edit then
+    // persists as its own incremental file job.
     auto *fork = new cwSymbologyPalette(this);
     fork->setData(data);
     fork->setWritable(true);
@@ -331,5 +351,33 @@ bool cwSymbologyPaletteManager::removeGlyph(cwSymbologyPalette *palette, const Q
     // emit glyphChanged. connectPalette removes the glyph file asynchronously;
     // the name's path-safety is enforced there, before it becomes a path.
     palette->removeGlyph(glyphName);
+    return true;
+}
+
+bool cwSymbologyPaletteManager::removePalette(cwSymbologyPalette *palette)
+{
+    if (palette == nullptr) {
+        reportLoadProblem(QStringLiteral("cannot remove a null palette"));
+        return false;
+    }
+    if (!palette->isWritable()) {
+        reportLoadProblem(QStringLiteral("palette \"%1\" is read-only and cannot be removed")
+                              .arg(palette->name()));
+        return false;
+    }
+    if (!m_palettes.contains(palette)) {
+        reportLoadProblem(QStringLiteral("palette \"%1\" is not managed here").arg(palette->name()));
+        return false;
+    }
+
+    // Drop it from the list and delete the object (mirrors reload()'s handling
+    // of a palette whose directory is gone). palettesChanged then drives
+    // cwSaveLoad to tear down the palette's whole directory on the save queue:
+    // the teardown reads the stored directory, not this now-deleted object, and
+    // the object's destruction auto-clears cwSaveLoad's connection tracking.
+    m_palettes.removeOne(palette);
+    delete palette;
+
+    emit palettesChanged();
     return true;
 }

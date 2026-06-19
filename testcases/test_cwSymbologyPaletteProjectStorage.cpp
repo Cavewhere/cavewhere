@@ -25,6 +25,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QPointF>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 
 namespace {
@@ -107,6 +108,13 @@ TEST_CASE("A forked palette is written under the project root",
     REQUIRE(fork != nullptr);
     CHECK(fork->isWritable());
 
+    // The fork is appended in memory immediately; its files are written
+    // asynchronously as first-class save jobs (palette.json + every glyph and
+    // brush), so wait for the save queue to drain before inspecting disk.
+    CHECK(manager->palettes().size() == 2);
+    CHECK(manager->paletteById(fork->id()) == fork);
+    project->waitSaveToFinish();
+
     // The fork's files live under the project's palettes/ dir, not app-data.
     const QDir paletteDir(projectPaletteDirectory(project));
     REQUIRE(paletteDir.exists());
@@ -114,10 +122,6 @@ TEST_CASE("A forked palette is written under the project root",
     REQUIRE(subdirs.size() == 1);
     CHECK(QFile::exists(paletteDir.absoluteFilePath(subdirs.first()
                                                    + QStringLiteral("/palette.json"))));
-
-    // default + the fork.
-    CHECK(manager->palettes().size() == 2);
-    CHECK(manager->paletteById(fork->id()) == fork);
 }
 
 TEST_CASE("A forked palette rides into a bundled .cw and reloads",
@@ -246,6 +250,79 @@ TEST_CASE("Removing a glyph deletes its file via the save queue",
     REQUIRE(manager->removeGlyph(fork, QStringLiteral("doomed")));
     project->waitSaveToFinish();
     CHECK_FALSE(QFile::exists(glyphFile));
+}
+
+TEST_CASE("Removing a palette tears down its directory via the save queue",
+          "[cwSymbologyPaletteProjectStorage]")
+{
+    PaletteManagerGuard guard;
+
+    auto root = std::make_unique<cwRootData>();
+    auto *project = root->project();
+    auto *manager = root->paletteManager();
+
+    cwSymbologyPalette *fork =
+        manager->duplicatePalette(manager->defaultPalette(), QStringLiteral("Doomed"));
+    REQUIRE(fork != nullptr);
+    const QUuid forkId = fork->id();
+
+    // The async full write creates the palette directory and its files.
+    const QString dir = fork->directory();
+    project->waitSaveToFinish();
+    REQUIRE(QDir(dir).exists());
+    REQUIRE(QFile::exists(QDir(dir).absoluteFilePath(QStringLiteral("palette.json"))));
+
+    // Removing it drops it from the manager and enqueues a recursive directory
+    // teardown. `fork` is dangling after this returns true — use forkId/dir.
+    REQUIRE(manager->removePalette(fork));
+    CHECK(manager->paletteById(forkId) == nullptr);
+    CHECK(manager->palettes().size() == 1); // only the shipped default remains
+
+    project->waitSaveToFinish();
+    CHECK_FALSE(QDir(dir).exists());
+}
+
+TEST_CASE("Removing a null or read-only palette is refused",
+          "[cwSymbologyPaletteProjectStorage]")
+{
+    PaletteManagerGuard guard;
+
+    auto root = std::make_unique<cwRootData>();
+    auto *manager = root->paletteManager();
+
+    // The shipped default is read-only; nothing should remove it (or a nullptr).
+    CHECK_FALSE(manager->removePalette(nullptr));
+    CHECK_FALSE(manager->removePalette(manager->defaultPalette()));
+    CHECK(manager->palettes().size() == 1);
+    CHECK(manager->defaultPalette() != nullptr);
+}
+
+TEST_CASE("Reloading the palette manager is load-only and never writes back",
+          "[cwSymbologyPaletteProjectStorage]")
+{
+    PaletteManagerGuard guard;
+
+    auto root = std::make_unique<cwRootData>();
+    auto *project = root->project();
+    auto *manager = root->paletteManager();
+
+    cwSymbologyPalette *fork =
+        manager->duplicatePalette(manager->defaultPalette(), QStringLiteral("Stable"));
+    REQUIRE(fork != nullptr);
+    const QUuid forkId = fork->id();
+    project->waitSaveToFinish();
+
+    // A reconciling reload re-applies each surviving palette's value through
+    // setData(). With the auto-save wiring dropped around the reload (manager
+    // aboutToReload -> cwSaveLoad disconnect), that setData must not re-enter the
+    // write path: no file is rewritten and no local mutation is recorded. If it
+    // did, a git/external sync that reloads after a pull would rewrite the
+    // just-pulled palette files and re-dirty the project.
+    QSignalSpy mutationSpy(project, &cwProject::localMutationOccurred);
+    manager->reload();
+    CHECK(manager->paletteById(forkId) != nullptr); // pointer survives the reload
+    project->waitSaveToFinish();
+    CHECK(mutationSpy.count() == 0);
 }
 
 TEST_CASE("A path-unsafe glyph name never escapes the palette directory",

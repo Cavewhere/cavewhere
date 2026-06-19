@@ -266,9 +266,12 @@ TEST_CASE("Manager forks a read-only palette into a writable copy",
     CHECK(fork->glyphs().size() == seedGlyphCount);
     CHECK(fork->brush(cwSymbologyPaletteSeed::wallBrushName()).has_value());
 
-    // A new subdirectory was written and rediscovered: default + fork.
+    // default + fork. The fork is assigned a collision-free subdirectory under
+    // the palette directory; nothing is written synchronously (cwSaveLoad's
+    // async full-write creates it on disk), so assert the in-memory path here.
+    // On-disk persistence is covered in test_cwSymbologyPaletteProjectStorage.
     CHECK(manager.palettes().size() == 2);
-    CHECK(QDir(temp.path()).exists(QStringLiteral("my-palette")));
+    CHECK(fork->directory() == QDir(temp.path()).absoluteFilePath(QStringLiteral("my-palette")));
 }
 
 TEST_CASE("Manager de-duplicates fork directory names",
@@ -287,9 +290,11 @@ TEST_CASE("Manager de-duplicates fork directory names",
     REQUIRE(first != nullptr);
     REQUIRE(second != nullptr);
 
+    // Distinct collision-free subdirectories, resolved in memory against the
+    // live palettes' directories (neither fork has been flushed to disk yet).
     CHECK(first->id() != second->id());
-    CHECK(QDir(temp.path()).exists(QStringLiteral("caves")));
-    CHECK(QDir(temp.path()).exists(QStringLiteral("caves-2")));
+    CHECK(first->directory() == QDir(temp.path()).absoluteFilePath(QStringLiteral("caves")));
+    CHECK(second->directory() == QDir(temp.path()).absoluteFilePath(QStringLiteral("caves-2")));
     CHECK(manager.palettes().size() == 3); // default + two forks
 }
 

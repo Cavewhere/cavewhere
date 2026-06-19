@@ -77,11 +77,13 @@ public:
 
     // Fork an existing palette (the read-only seed or any installed one) into a
     // new writable user palette: deep-copies its brushes and glyphs, assigns a
-    // fresh id, writes a new subdirectory under paletteDirectory(), appends the
-    // new palette in memory, and returns it. Returns nullptr on failure (the
-    // reason is pushed to errorModel()). This is how a user gets something
-    // editable, since the seed is read-only. Existing palette pointers
-    // (including `source`) stay valid — no reload happens.
+    // fresh id, picks a collision-free subdirectory under paletteDirectory(),
+    // appends the new palette in memory, and returns it. The fork is persisted
+    // asynchronously — palettesChanged drives cwSaveLoad to write the whole
+    // palette (and create its directory) as a first-class save job; nothing is
+    // written to disk synchronously. Returns nullptr on failure (the reason is
+    // pushed to errorModel()), including when no project is open. Existing
+    // palette pointers (including `source`) stay valid — no reload happens.
     Q_INVOKABLE cwSymbologyPalette *duplicatePalette(cwSymbologyPalette *source,
                                                      const QString &newName);
 
@@ -97,6 +99,15 @@ public:
     // saveGlyph(newGlyph) followed by removeGlyph(oldName).
     Q_INVOKABLE bool removeGlyph(cwSymbologyPalette *palette, const QString &glyphName);
 
+    // Remove a writable palette from the project: drops it from the list,
+    // deletes the object (so any QML binding to it must release), and emits
+    // palettesChanged. The palette's whole on-disk directory is torn down
+    // asynchronously by cwSaveLoad (a recursive directory Remove on the save
+    // queue). Returns false (with a reason on errorModel()) for a null,
+    // read-only (e.g. the shipped default), or unknown palette. The passed
+    // pointer is dangling on success — do not use it afterward.
+    Q_INVOKABLE bool removePalette(cwSymbologyPalette *palette);
+
     // The project-root subdirectory name that holds a project's forked palettes
     // ("palettes"). cwSaveLoad joins this onto the project root and points the
     // manager at it on every project open / new / save-as — the shipped default
@@ -105,6 +116,13 @@ public:
 
 signals:
     void palettesChanged();
+
+    // Emitted at the very start of reload(), before the directory is rescanned
+    // and surviving palettes are setData()'d. cwSaveLoad uses it to drop its
+    // per-palette auto-save wiring around the load so a just-loaded palette is
+    // never written back to disk (which would defeat conflict-free sync), and to
+    // mark the reloaded palettes as already-persisted.
+    void aboutToReload();
 
 private:
     // Record a non-fatal reload problem into the owned error model (de-duped,

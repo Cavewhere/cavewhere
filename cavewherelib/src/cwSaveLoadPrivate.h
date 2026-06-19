@@ -244,6 +244,17 @@ struct cwSaveLoadPrivate {
     QStringList m_ownedTempDirs; // QTemporaryDir paths owned by this project, cleaned up on retire/destroy
     bool newProjectCalled = false;
 
+    // Symbology-palette structural persistence (commit 3b). persistedPaletteDirs
+    // maps each writable palette id this project has fully written to disk to its
+    // on-disk directory. connectPalettes() diffs the manager's live writable
+    // palettes against it: a fresh fork (present, not persisted) gets a full
+    // write, a removed palette (persisted, gone) gets its directory torn down.
+    // paletteReloadInProgress is set across cwSymbologyPaletteManager::reload()
+    // (aboutToReload -> palettesChanged) so the reload's palettes are adopted as
+    // already-persisted instead of written back — reload is load-only.
+    QHash<QUuid, QString> persistedPaletteDirs;
+    bool paletteReloadInProgress = false;
+
     cwFutureManagerToken futureToken;
 
     //Helps watch if we already has objects connected, this is for debugging only

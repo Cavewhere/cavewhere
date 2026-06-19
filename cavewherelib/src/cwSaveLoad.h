@@ -506,11 +506,18 @@ private:
     // each glyph/brush/identity edit as a first-class file job, keyed by
     // (objectId = palette, tag), exactly like a cave saves. The shipped default
     // (qrc, read-only) is never wired. connectPalettes rebinds every palette
-    // (idempotent); disconnectPalettes is called before a reload so the
-    // setData() it performs on survivors can't re-enter the write path.
+    // (idempotent) and also drives structural persistence: a freshly forked
+    // palette (writable, not yet on disk) is written in full, and a palette
+    // removed in memory has its directory torn down. onPalettesAboutToReload
+    // (wired to the manager's aboutToReload) disconnects around a reload so the
+    // setData() it performs on survivors can't re-enter the write path, and so
+    // the reloaded palettes are adopted as already-persisted, not rewritten.
     void connectPalettes();
     void disconnectPalettes();
+    void onPalettesAboutToReload();
     void connectPalette(cwSymbologyPalette* palette);
+    void writeFullPalette(cwSymbologyPalette* palette);
+    void enqueuePaletteTeardown(const QString& directory);
     void writePaletteGlyph(cwSymbologyPalette* palette, const QString& name);
     void writePaletteBrush(cwSymbologyPalette* palette, const QString& name);
     void writePaletteIdentity(cwSymbologyPalette* palette);
