@@ -18,14 +18,16 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QQmlEngine>
+#include <QFuture>
 
 //Our includes
 class cwCavingRegion;
-class cwCompassImporter;
 class cwWallsImporter;
 class cwCSVImporterTask;
 class cwErrorListModel;
 #include "cwGlobals.h"
+#include "cwCompassImporter.h"
+#include "cwFutureManagerToken.h"
 
 /**
     This class allows qml to import data
@@ -53,6 +55,8 @@ public:
     cwErrorListModel* errorModel() const;
     void setErrorModel(cwErrorListModel* errorModel);
 
+    void setFutureManagerToken(cwFutureManagerToken token);
+
     Q_INVOKABLE void importSurvex();
     Q_INVOKABLE void importWalls();
     Q_INVOKABLE void importWallsSrv();
@@ -70,8 +74,6 @@ signals:
 public slots:
 
 private slots:
-    void compassImporterFinished();
-    void compassMessages(QString message);
     void wallsMessages(QString severity, QString message, QString source,
                        int startLine, int startColumn, int endLine, int endColumn);
 //    void csvImportedFinished();
@@ -84,8 +86,10 @@ private:
     QPointer<QUndoStack> UndoStack;
     QPointer<cwErrorListModel> ErrorModel; //!<
 
-    QStringList QueuedCompassFile;
-    cwCompassImporter* CompassImporter;
+    QList<QFuture<cwCompassImporter::Result>> m_compassFutures;
+    cwFutureManagerToken m_futureManagerToken;
+
+    void onCompassFinished(const cwCompassImporter::Result& result);
 
     QStringList urlsToStringList(QList<QUrl> urls);
 

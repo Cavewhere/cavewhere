@@ -23,7 +23,7 @@
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QFile>
-#include "cwSignalSpy.h"
+#include <QFuture>
 
 namespace {
 
@@ -65,13 +65,11 @@ TEST_CASE("Compass LRUD import keeps full precision and plain decimals", "[Compa
     REQUIRE(dir.isValid());
     const QString datFile = writeCompassFile(dir);
 
-    auto importer = std::make_unique<cwCompassImporter>();
-    cwSignalSpy messageSpy(importer.get(), SIGNAL(statusMessage(QString)));
-    importer->setCompassDataFiles(QStringList() << datFile);
-    importer->start();
-    importer->waitToFinish();
+    auto future = cwCompassImporter::run(QStringList() << datFile);
+    future.waitForFinished();
+    const auto result = future.result();
 
-    QList<cwCaveData> caveData = importer->caves();
+    QList<cwCaveData> caveData = result.caves;
     REQUIRE(caveData.size() == 1);
 
     auto cave = std::make_unique<cwCave>();
