@@ -82,8 +82,8 @@
 
 <h1>Depth-Occluded QML Billboards in the RHI Scene</h1>
 <p class="sub">Implementation plan &mdash; rendering live QML <code>Item</code>s as billboards that participate in the 3D depth buffer.</p>
-<p class="meta">Issues: <b>#535</b> (Lead visibility, keywords, overlap, z-order) &middot; <b>#536</b> (Station labels should be billboarded)</p>
-<p class="meta">Date: 2026-06-16 &middot; Status: research + spike complete, decisions settled &mdash; implementing Phase 0 next</p>
+<p class="meta">Issues: <b>#535</b> (Lead visibility, keywords, overlap, z-order) &middot; <b>#536</b> (Station labels should be billboarded) &middot; <b>#538</b> (Scrap lead blending &mdash; depth-ordered billboards)</p>
+<p class="meta">Date: 2026-06-16 (rev. 2026-06-19) &middot; Status: Phases 0&ndash;4b implemented; <b>Phase 5 (#538) implemented</b> &mdash; see <a href="#blending">&sect;9</a></p>
 
 <h2 id="problem">1. Problem</h2>
 <p>
@@ -963,7 +963,144 @@ cluster on zoom-out, does its popup close or transfer to the cluster (<code>cwSe
   <li><b>4c &mdash; Clustering</b> + the expand-to-list UX.</li>
 </ol>
 
-<h2 id="crosscut">9. Cross-cutting concerns</h2>
+<h2 id="blending">9. Phase 5 &mdash; Depth-ordered billboard blending (#538) <span class="pill ok">implemented</span></h2>
+
+<p class="lead">Lead markers show a <b>square &ldquo;bite&rdquo;</b> out of one marker where another overlaps it &mdash;
+appearing and disappearing as the camera orbits. The fix is a per-frame <b>back-to-front sort</b> of the
+billboards, plus a <b>shared scene-owned billboard layer</b> so the sort spans leads <em>and</em> labels, plus a
+reusable <b>RAII bookkeeping handle</b> so present and future overlays manage billboards without leaking.</p>
+
+<h3>The artifact &amp; root cause</h3>
+<p>
+<code>question.png</code> is an opaque glyph in a <b>square quad with alpha=0 corners</b>. In
+<code>RenderMode3D</code> the Qt batch renderer writes depth across the quad&rsquo;s <em>whole</em> footprint &mdash;
+including the transparent corners &mdash; so the item has a coherent 3D depth. The visible defect is a <b>depth
+rejection</b>, not a blend error: a nearer billboard&rsquo;s transparent corner stamps near-depth, and a farther
+billboard&rsquo;s <em>visible glyph</em> pixels in that overlap region then fail the depth test and are discarded.
+</p>
+<p>
+Whether the bite appears depends only on <b>draw order vs. true depth order</b>. Draw order today is
+<code>cwRenderBillboards::m_billboards</code> (an <code>unordered_map</code>) iteration order &mdash; <b>fixed
+regardless of camera</b>. So as the camera orbits and the real front/back relationship flips while the draw order
+stays put, the bite blinks in and out. (The same mechanism would also break the alpha-blended completed-lead case
+&mdash; pure painter&rsquo;s order &mdash; whether or not depth is written; the fix below covers both.)
+</p>
+<div class="panel note">
+<b>Why a sort is a <em>complete</em> fix.</b> Every billboard quad is built from the <em>same</em> camera basis
+(<code>right/up/forward</code> from the view matrix, <code>cwRenderBillboards.cpp:41&ndash;43</code>), so they are
+all <b>exactly parallel, camera-facing planes</b>. Parallel planes at distinct depths never interpenetrate &rarr;
+<b>center-depth order == per-pixel order everywhere on the quad</b>. Drawing farthest-first means each subsequent
+(nearer) billboard&rsquo;s glyph passes the depth test and draws on top, while its transparent corner blends to
+<em>no color change</em> over the already-drawn farther content &mdash; it can&rsquo;t bite anything, because
+everything behind it is already in the framebuffer. The sort is correct under <em>either</em> depth-write reality,
+so it&rsquo;s low-risk.
+</p>
+</div>
+
+<h3>Cross-object overlap &rarr; one shared layer (Option A)</h3>
+<p>
+Leads (<code>cwLeadView</code>) and station labels (<code>cwLabel3dView</code>) each
+<code>new cwRenderBillboards(this)</code> &mdash; two render objects, two <code>m_billboards</code> maps, two
+<code>gather()</code> calls, two batches ordered only by <code>objectOrder</code>. So a lead overlapping a label
+bites across instances (confirmed in practice, just less obvious). Fix: <b>the scene owns one
+<code>cwRenderBillboards</code></b> (the layer <code>setScene()</code> already attaches render objects to); both
+views fetch it via a <code>billboardLayer()</code> accessor instead of creating their own. One map, one
+<code>gather()</code>, one sort &rarr; cross-object ordering falls out for free, and any future overlay that pushes
+into the same layer sorts with everyone else automatically.
+</p>
+
+<h3>The bookkeeping helper &mdash; <code>cwBillboardHandle</code> <span class="pill new">new</span> (Option 3, chosen)</h3>
+<p>
+A move-only RAII type owning exactly one billboard in a shared layer. <code>set(layer, billboard)</code> adds on
+first call and updates thereafter; the destructor / <code>reset()</code> / move-assignment removes. It holds a
+<code>QPointer&lt;cwRenderBillboards&gt;</code> (guards teardown order) + a <code>cwBillboardId</code>. The producer
+holds a handle next to whatever it already tracks and calls <code>set()</code> &mdash; every manual
+<code>removeBillboard</code> call and teardown loop disappears, and a producer <b>cannot leak</b> into the shared
+layer (dropping the handle &mdash; <code>removeAt</code>/resize/member destruction &mdash; auto-removes).
+</p>
+<pre><code>// each update pass, for every overlay item:
+handle.set(layer, billboard);   // add first frame, cheap update after (updateBillboard early-outs)
+// removal: erase the slot  &rarr; handle destructs &rarr; billboard removed
+// view destroyed:           &rarr; handle container destructs &rarr; all removed</code></pre>
+<p>
+<b>Adding a 3rd overlay</b> then costs ~3 lines: hold a <code>cwBillboardHandle</code>, call <code>set()</code>,
+let it destruct &mdash; it inherits cross-object sorting and is churn-proof, with zero removal/teardown code.
+</p>
+<div class="panel warn">
+<b>Move-only ripple.</b> Handles make their container move-only. The inner billboard containers should be
+<code>std::vector&lt;cwBillboardHandle&gt;</code> (clean move-only support) rather than <code>QList</code> (CoW;
+breaks only if copied). <code>cwLeadView</code> reads <code>m_leadItems.value(scrap)</code> in two spots
+(<code>cwLeadView.cpp:120,712</code>) &mdash; <code>QHash::value()</code> returns a <em>copy</em>, which won&rsquo;t
+compile against a move-only <code>ScrapEntry</code>; those become const-ref <code>find()</code> lookups. Mechanical,
+~3&ndash;4 lines, the compiler finds every site.
+</div>
+
+<h3>Alternatives weighed &amp; rejected</h3>
+<div class="panel">
+<b>Performance framing (why a plain sort wins).</b> All three helper shapes feed the same layer, so the
+<em>render</em> cost (one <code>QSGRenderer</code> pass per billboard &mdash; ~10&ndash;100&micro;s each, milliseconds
+at N=200) and the sort cost (single-digit &micro;s at N=200) are identical. The shapes differ only in GUI-thread
+bookkeeping &mdash; a few &micro;s spread, &lt;0.1&ndash;1% of the pass it feeds. <b>The only way a helper choice
+hurts is by triggering needless <code>cwQuickItemSubscene</code> create/destroy (the expensive path).</b>
+</div>
+<ul>
+  <li><b>kd-tree / screen-overlap clustering &mdash; rejected.</b> The instinct (order only matters among
+      overlapping billboards) is right &mdash; the depth test handles non-overlapping ones for free &mdash; but a
+      single global back-to-front sort already satisfies every overlap cluster simultaneously and is <em>cheaper
+      than detecting the clusters</em> (which needs per-quad screen-AABB projection + tree build + queries, then a
+      sort anyway). It optimizes the thing that isn&rsquo;t the bottleneck.</li>
+  <li><b>Option 1 &mdash; immediate-mode reconciling set &mdash; rejected.</b> Most automatic (declare the live set
+      each frame; add/update/remove diffed), but carries the highest <b>churn risk</b>: a frame that fails to
+      re-<code>put</code> a still-live billboard removes and re-adds it &rarr; a subscene destroy+recreate (the
+      expensive path). Correct only if the loop reliably re-declares every live item every pass.</li>
+  <li><b>Option 2 &mdash; keyed registry (<code>cwBillboardRegistry&lt;Key&gt;</code>) &mdash; rejected.</b> Mirrors
+      the <code>cwKeywordItemRegistry</code> we shipped and is churn-proof, but the producer still hand-calls
+      <code>drop()</code> on the right events &mdash; it automates teardown, not the per-frame remove-stale step. The
+      handle is leaner and removes more bookkeeping for this index-aligned use.</li>
+</ul>
+<p class="muted">
+Option 3 (handle) is both the churn-proof option <em>and</em> the leanest; it kills the manual
+<code>removeBillboard</code> calls that are the actual bookkeeping pain, and is the lowest-risk choice for a path
+the offscreen suite can&rsquo;t render (<code>[[project_billboard_rhi_path_untested]]</code>).
+</p>
+
+<h3>Step plan</h3>
+<table>
+  <tr><th>Step</th><th>Change</th><th>Test (per-step)</th></tr>
+  <tr><td><b>1</b></td><td><b>Back-to-front sort</b>, per-instance, via an extracted <em>pure</em> ordering helper
+      (slots + view/projection &rarr; sorted order, by NDC depth of <code>worldPosition</code> through
+      <code>viewProjection</code>). <code>std::sort</code> in <code>gather()</code>.</td>
+      <td>Catch2 ordering test (ortho + perspective; parallel quads order by center depth; stable ties), no RHI.
+      <b>Fixes within-leads/within-labels bite immediately &mdash; independently verifiable in-app.</b></td></tr>
+  <tr><td><b>2</b></td><td>Add <b><code>cwBillboardHandle</code></b> (move-only RAII).</td>
+      <td>Catch2 lifecycle test via <code>billboardCount()</code>/<code>hasBillboard()</code> (add-once, update,
+      auto-remove, move, layer-swap, vector-erase) &mdash; no RHI needed (the map runs on the GUI thread).</td></tr>
+  <tr><td><b>3</b></td><td><b>Scene-owned shared layer</b> + <code>billboardLayer()</code>; both views fetch it
+      instead of <code>new</code>-ing their own.</td>
+      <td>Sort becomes global &rarr; <b>cross-object fix.</b> QML count assertions: both views push into one layer;
+      teardown drives count&rarr;0 (bookkeeping runs offscreen even though pixels don&rsquo;t).</td></tr>
+  <tr><td><b>4</b></td><td>Convert <b><code>cwLeadView</code></b> to handles (+ <code>value()</code>&rarr;<code>find()</code> ripple).</td>
+      <td><code>tst_Leads</code>, <code>tst_ScrapInteraction</code> green.</td></tr>
+  <tr><td><b>5</b></td><td>Convert <b><code>cwLabel3dView</code></b> to handles.</td>
+      <td>Label QML tests green.</td></tr>
+  <tr><td><b>6</b></td><td>Full suite (both) + <b>manual multi-angle verification</b>; update this plan + memory.</td>
+      <td>Both suites; in-app before/after orbiting overlapping leads and leads-vs-labels.</td></tr>
+</table>
+<p class="muted">
+Sequencing rationale: Step 1 lands the visible bug fix on its own (lowest risk; the sort code is unchanged when the
+layer unifies in Step 3 &mdash; it just sees more slots), de-risking the refactor behind it. Per the sketch-plan
+convention, run only the new test at each step and the full both-suites pass at Step 6.
+</p>
+
+<div class="panel tip">
+<b>Testing constraint (honest).</b> The billboard <em>render</em> path doesn&rsquo;t run under the offscreen suite
+(no <code>QRhi</code>), so the depth/alpha bite itself is <b>not offscreen-testable</b>
+(<code>[[project_billboard_rhi_path_untested]]</code>). Strategy: unit-test the <em>logic that determines
+correctness</em> (the pure sort ordering + the handle lifecycle, both RHI-free), assert the shared-layer
+<em>bookkeeping</em> via existing QML count checks, and verify the <em>pixels</em> by hand in the running app.
+</div>
+
+<h2 id="crosscut">10. Cross-cutting concerns</h2>
 <ul>
   <li><b>Offscreen / export</b> (<code>cwScene::renderOffscreen</code>): the spike binds the swap-chain
       target, so it is not offscreen-aware. Make <code>cwItem2DRenderer::Frame</code> carry the active
@@ -980,7 +1117,7 @@ cluster on zoom-out, does its popup close or transfer to the cluster (<code>cwSe
       fails their unit tests, not the app.</li>
 </ul>
 
-<h2 id="testing">10. Testing</h2>
+<h2 id="testing">11. Testing</h2>
 <ul>
   <li>C++ smoke tests for <code>cwItem2DRenderer</code> / <code>cwQuickItemSubscene</code> (the private-API
       tripwire).</li>
@@ -991,7 +1128,7 @@ cluster on zoom-out, does its popup close or transfer to the cluster (<code>cwSe
       (tee output to <code>/tmp/*.log</code>).</li>
 </ul>
 
-<h2 id="sequencing">11. Suggested sequencing</h2>
+<h2 id="sequencing">12. Suggested sequencing</h2>
 <ol>
   <li><b>Phase 0</b> (encapsulation) &mdash; unblocks everything, smallest risk.</li>
   <li><b>Phase 1 + 2</b> (billboard object + math).</li>
@@ -1001,6 +1138,10 @@ cluster on zoom-out, does its popup close or transfer to the cluster (<code>cwSe
   <li><b>Phase 4</b> (leads), split: <b>4a</b> occluded leads + CPU-BVH-gated 2D hit-proxy (the bulk of the
       risk &mdash; rewrites <code>cwLeadView</code> onto the billboard pattern), then <b>4b</b> keyword
       visibility <span class="pill ok">implemented</span>, then <b>4c</b> clustering.</li>
+  <li><b>Phase 5</b> (depth-ordered blending, #538) <span class="pill ok">implemented</span> &mdash; back-to-front
+      sort (Step 1, standalone bug fix), then a scene-owned shared billboard layer + the
+      <code>cwBillboardHandle</code> RAII helper to make cross-object sorting and overlay bookkeeping automatic.
+      See <a href="#blending">&sect;9 Phase 5</a>.</li>
   <li>Cross-cutting hardening + offscreen + tests. <b>Spike deleted</b>
       <span class="pill ok">done</span> (<code>cwBillboardTest.{h,cpp}</code> and the
       <code>BillboardTest</code> block in <code>GLTerrainRenderer.qml</code> removed once the labels hot path
@@ -1008,7 +1149,7 @@ cluster on zoom-out, does its popup close or transfer to the cluster (<code>cwSe
       element in the production module is scaffolding in production).</li>
 </ol>
 
-<h2 id="decisions">12. Decisions <span class="pill ok">settled</span></h2>
+<h2 id="decisions">13. Decisions <span class="pill ok">settled</span></h2>
 <table>
   <tr><th>#</th><th>Decision</th><th>Resolution</th></tr>
   <tr><td>1</td><td>Lead interaction approach</td><td><b>(a) hit-proxy</b> &mdash; invisible 2D proxy at the projected position handles input; the visible billboard renders in the 3D pass.</td></tr>
@@ -1023,7 +1164,9 @@ cluster on zoom-out, does its popup close or transfer to the cluster (<code>cwSe
   <tr><td><code>src/cwItem2DRenderer.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>Render: pimpl over <code>QSGRenderer</code> inline draw; the only file touching <code>qsgrenderer_p.h</code></td></tr>
   <tr><td><code>src/cwRenderBillboards.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>GUI render object holding billboards (one subscene + id each)</td></tr>
   <tr><td><code>src/cwBillboardId.h</code></td><td><span class="pill new">new</span></td><td>Strong <code>enum class : uint32_t</code> billboard id (mirrors <code>cwRenderObjectId</code>)</td></tr>
-  <tr><td><code>src/cwRHIBillboards.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>Render backend; gather() &rarr; prepare + Custom draw in Overlay</td></tr>
+  <tr><td><code>src/cwRHIBillboards.{h,cpp}</code></td><td><span class="pill new">new</span></td><td>Render backend; gather() &rarr; prepare + Custom draw in Overlay. <b>P5:</b> back-to-front sort of slots before draw (#538)</td></tr>
+  <tr><td><code>src/cwBillboardHandle.h</code></td><td><span class="pill new">new (P5)</span></td><td>Move-only RAII handle owning one billboard in the shared layer; auto-removes on destruct &mdash; the reusable overlay bookkeeping primitive (#538)</td></tr>
+  <tr><td><code>src/cwRhiScene.*</code></td><td><span class="pill edit">edit (P5)</span></td><td>Owns the single shared <code>cwRenderBillboards</code>; exposes <code>billboardLayer()</code> so all overlays share one sorted layer (#538)</td></tr>
   <tr><td><code>src/cwLabel3dView.*</code></td><td><span class="pill edit">edit</span></td><td>Own a <code>cwRenderBillboards</code>; cull feeds add/update/removeBillboard instead of 2D overlay (#536). 3b: skip + release hidden groups</td></tr>
   <tr><td><code>src/cwLinePlotLabelView.*</code></td><td><span class="pill edit">edit</span></td><td>3b: per-trip enumeration; one <code>cwLabel3dGroup</code> + one keyword item per trip; <code>keywordItemModel</code> property (#536)</td></tr>
   <tr><td><code>src/cwLabel3dGroup.*</code></td><td><span class="pill edit">edit</span></td><td>3b: <code>setVisible(bool)</code> slot + visible flag &mdash; the group is the keyword <code>setVisible</code> target (no proxy)</td></tr>
