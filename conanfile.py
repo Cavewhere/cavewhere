@@ -50,6 +50,10 @@ class CaveWhereConan(ConanFile):
 
         if self.settings.os == "Linux":
             self.requires("xorg-proto/[=2024.1]", override=True)
+            # libgcrypt/1.12.2 requires libgpg-error>=1.56, but Conan resolves
+            # libgpg-error to an older revision and the build fails. Pin to the
+            # previous libgcrypt release, which libsecret (via wxwidgets) accepts.
+            self.requires("libgcrypt/1.10.3", override=True)
 
         #Fixes a build issue on macos
         # if self.settings.os == "Macos":
