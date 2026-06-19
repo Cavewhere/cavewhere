@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pickable Survey Centerline — Implementation Plan (#530)</title>
+<style>
+  :root {
+    --bg: #1a1d21; --panel: #23272e; --panel2: #2b3038; --ink: #e6e9ee;
+    --muted: #9aa4b2; --accent: #5aa9e6; --accent2: #7ddc8f; --warn: #e6b35a;
+    --bad: #e66a6a; --line: #3a414b; --code-bg: #15181c;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 120px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 { font-size: 22px; margin: 52px 0 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); letter-spacing: -0.2px; }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  p { margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 13.5px; background: var(--code-bg);
+    padding: 1.5px 6px; border-radius: 4px; color: #d8e0ea; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 18px 0; }
+  .fig { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin: 22px 0; text-align: center; }
+  .fig svg { max-width: 100%; height: auto; }
+  .figcap { color: var(--muted); font-size: 13.5px; margin-top: 12px; text-align: center; }
+  .figcap b { color: var(--ink); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px;
+    border-radius: 999px; vertical-align: middle; }
+  .pill.ok { background: rgba(125,220,143,.16); color: var(--accent2); }
+  .pill.new { background: rgba(90,169,230,.16); color: var(--accent); }
+  .pill.edit { background: rgba(230,179,90,.16); color: var(--warn); }
+  .pill.del { background: rgba(230,106,106,.16); color: var(--bad); }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); font-weight: 600; }
+  td code { font-size: 12.5px; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel2);
+    padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+  .callout.warn { border-color: var(--warn); }
+  .callout.bad { border-color: var(--bad); }
+  .callout.ok { border-color: var(--accent2); }
+  .toc { columns: 2; column-gap: 32px; font-size: 14px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .commit { display:inline-block; font-family:var(--mono); font-size:12px; font-weight:700;
+    padding:3px 10px; border-radius:6px; background:rgba(90,169,230,.16); color:var(--accent);
+    border:1px solid rgba(90,169,230,.35); }
+  .commit.two { background:rgba(125,220,143,.16); color:var(--accent2); border-color:rgba(125,220,143,.35); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+  .mono-note { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Pickable Survey Centerline</h1>
+<p class="sub">Make the 3D line plot hittable by the pick BVH with a screen-space proximity test, and
+expose enough on the hit to clamp a pick to a station. Foundation for the 3D measurement tool
+(<a href="https://github.com/Cavewhere/cavewhere/issues/487" style="color:var(--accent)">#487</a>),
+which is tracked and built independently.</p>
+
+<div class="callout">
+  <b>Scope.</b> This plan covers GitHub
+  <a href="https://github.com/Cavewhere/cavewhere/issues/530" style="color:var(--accent)">#530</a> only,
+  delivered as <b>two commits</b>:
+  <span class="commit">Commit&nbsp;1 — centerline pickable</span> and
+  <span class="commit two">Commit&nbsp;2 — clamp-to-station-ready hit contract</span>.
+  The measurement tool itself (two-point readout: distance / azimuth / clino / vertical / horizontal)
+  is <b>#487 and out of scope here</b> — but Commit&nbsp;2 is shaped precisely so #487 can consume it
+  without re-touching the BVH.
+</div>
+
+<h2>1. Contents</h2>
+<div class="toc">
+  <a href="#why">2. Root cause</a><br>
+  <a href="#arch">3. Where lines plug into the BVH</a><br>
+  <a href="#screenspace">4. Screen-space proximity model</a><br>
+  <a href="#priority">5. Hit priority — runtime kind filter</a><br>
+  <a href="#broad">6. Broad-phase bounding</a><br>
+  <a href="#contract">7. The cwRayHit contract</a><br>
+  <a href="#commit1">8. Commit 1 — centerline pickable</a><br>
+  <a href="#commit2">9. Commit 2 — clamp-to-station</a><br>
+  <a href="#tests">10. Tests</a><br>
+  <a href="#out">11. Out of scope / handoff to #487</a><br>
+  <a href="#decisions">12. Decisions locked in</a>
+</div>
+
+<h2 id="why">2. Root cause</h2>
+<p>The picker is a two-level BVH (<code>cwGeometryItersecter</code>). Every geometry kind is enumerated
+into primitives, packed into a per-object model-space sub-BVH, and tested per-pick. <b>Lines are the
+one kind that contributes zero primitives</b>, so the centerline never enters the structure:</p>
+<ul>
+  <li><code>countNodePrimitives()</code> (<code>cwGeometryItersecter.cpp:317</code>) has no
+    <code>Lines</code> case → falls through <code>default: return 0</code>.</li>
+  <li><code>addLines()</code> (<code>:621</code>) still uses the <em>legacy flat-BVH</em> shape — one
+    <code>Node</code> per segment — but <code>launchBuildJob()</code> drops every node where
+    <code>countNodePrimitives() &lt;= 0</code>. The debug line literally says
+    <span class="mono-note">"Lines are currently not picker-visible — the BVH skips them"</span>.</li>
+  <li><code>cwRenderLinePlot::setGeometry()</code> (<code>:46</code>) already registers the centerline as
+    <code>Type::Lines</code> with a synthetic <code>std::iota</code> index list, awaiting this fix.</li>
+</ul>
+
+<div class="fig">
+<svg viewBox="0 0 860 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"/>
+    </marker>
+  </defs>
+  <g font-family="ui-monospace, monospace" font-size="12.5">
+    <rect x="10" y="70" width="150" height="56" rx="8" fill="#2b3038" stroke="#3a414b"/>
+    <text x="85" y="94" text-anchor="middle" fill="#e6e9ee">addObject(</text>
+    <text x="85" y="111" text-anchor="middle" fill="#5aa9e6">Type::Lines)</text>
+
+    <line x1="160" y1="98" x2="208" y2="98" stroke="#9aa4b2" marker-end="url(#ar)"/>
+
+    <rect x="210" y="70" width="180" height="56" rx="8" fill="#2b3038" stroke="#e66a6a"/>
+    <text x="300" y="92" text-anchor="middle" fill="#e6e9ee">countNodePrimitives</text>
+    <text x="300" y="112" text-anchor="middle" fill="#e66a6a">returns 0</text>
+
+    <line x1="390" y1="98" x2="438" y2="98" stroke="#9aa4b2" marker-end="url(#ar)"/>
+
+    <rect x="440" y="70" width="180" height="56" rx="8" fill="#2b3038" stroke="#e66a6a"/>
+    <text x="530" y="92" text-anchor="middle" fill="#e6e9ee">launchBuildJob</text>
+    <text x="530" y="112" text-anchor="middle" fill="#e66a6a">skips the node</text>
+
+    <line x1="620" y1="98" x2="668" y2="98" stroke="#9aa4b2" marker-end="url(#ar)"/>
+
+    <rect x="670" y="70" width="180" height="56" rx="8" fill="#2b3038" stroke="#3a414b"/>
+    <text x="760" y="92" text-anchor="middle" fill="#e6e9ee">intersectsDetailed</text>
+    <text x="760" y="112" text-anchor="middle" fill="#e66a6a">never hits a line</text>
+  </g>
+</svg>
+<div class="figcap"><b>Figure 1.</b> The drop-out path. Lines are registered but enumerate to zero
+primitives, so they are filtered out before the BVH is ever built.</div>
+</div>
+
+<h2 id="arch">3. Where lines plug into the BVH</h2>
+<p>Lines fit the existing two-level architecture the same way <b>points</b> do — a point is a 0-D
+proximity primitive with a radius; a line segment is a 1-D proximity primitive with a radius. We reuse
+the entire Phase-A/Phase-B build pipeline (enumerate → median split → sub-BVH) and add one new
+<code>Primitive::Kind</code> plus one new branch in the per-primitive test.</p>
+
+<div class="fig">
+<svg viewBox="0 0 820 320" xmlns="http://www.w3.org/2000/svg">
+  <g font-family="ui-monospace, monospace" font-size="12.5">
+    <text x="410" y="24" text-anchor="middle" fill="#9aa4b2">Top-level BVH (world space) — one leaf per Object</text>
+    <rect x="330" y="36" width="160" height="40" rx="8" fill="#23272e" stroke="#5aa9e6"/>
+    <text x="410" y="61" text-anchor="middle" fill="#e6e9ee">top-level root</text>
+
+    <line x1="380" y1="76" x2="180" y2="120" stroke="#3a414b"/>
+    <line x1="410" y1="76" x2="410" y2="120" stroke="#3a414b"/>
+    <line x1="440" y1="76" x2="640" y2="120" stroke="#3a414b"/>
+
+    <rect x="90" y="122" width="180" height="46" rx="8" fill="#2b3038" stroke="#3a414b"/>
+    <text x="180" y="142" text-anchor="middle" fill="#e6e9ee">Scrap sub-BVH</text>
+    <text x="180" y="159" text-anchor="middle" fill="#9aa4b2">Kind::Triangle</text>
+
+    <rect x="320" y="122" width="180" height="46" rx="8" fill="#2b3038" stroke="#3a414b"/>
+    <text x="410" y="142" text-anchor="middle" fill="#e6e9ee">LAZ / LiDAR sub-BVH</text>
+    <text x="410" y="159" text-anchor="middle" fill="#9aa4b2">Kind::Point</text>
+
+    <rect x="550" y="122" width="180" height="46" rx="8" fill="#2b3038" stroke="#7ddc8f" stroke-width="2"/>
+    <text x="640" y="142" text-anchor="middle" fill="#e6e9ee">Centerline sub-BVH</text>
+    <text x="640" y="159" text-anchor="middle" fill="#7ddc8f">Kind::Line  ← NEW</text>
+
+    <text x="640" y="208" text-anchor="middle" fill="#9aa4b2">one primitive per shot segment</text>
+    <g stroke="#7ddc8f" stroke-width="2" fill="none">
+      <path d="M560 240 L600 260 L650 232 L700 258 L730 238"/>
+    </g>
+    <g fill="#e6b35a">
+      <circle cx="560" cy="240" r="3.5"/><circle cx="600" cy="260" r="3.5"/>
+      <circle cx="650" cy="232" r="3.5"/><circle cx="700" cy="258" r="3.5"/>
+      <circle cx="730" cy="238" r="3.5"/>
+    </g>
+    <text x="645" y="292" text-anchor="middle" fill="#9aa4b2" font-size="11.5">
+      vertices (= station positions) · segment i owns indices [2i, 2i+1]</text>
+  </g>
+</svg>
+<div class="figcap"><b>Figure 2.</b> Lines become a third primitive kind alongside triangles (scraps) and
+points (LAZ/LiDAR). Once present, <em>all four measurable surfaces in #487 are pickable</em> — scraps
+and clouds already were.</div>
+</div>
+
+<h2 id="screenspace">4. Screen-space proximity model</h2>
+<p>A ray almost never exactly intersects a 1-D line, so picking is a <b>proximity test</b>: accept when
+the closest distance between the ray and the segment is within a pick radius. Per the design decision,
+that radius is <b>screen-space</b> — a constant number of pixels regardless of zoom — so it must grow
+with distance from the camera. The BVH is deliberately camera-agnostic (tests feed it bare rays), so we
+pass it a tiny evaluator instead of a camera.</p>
+
+<pre><code>// new — cwPickQuery.h (camera-agnostic, trivially testable)
+struct cwPickTolerance {
+    // Allowed world-space pick radius at ray-depth t (t = projectedDistance
+    // along the ray). Perspective is linear in t; ortho is constant. A
+    // linear model  radius(t) = constant + slope*t  is exact for both.
+    double slope    = 0.0;   // perspective: world radius per unit depth
+    double constant = 0.0;   // ortho: fixed world radius (also a near floor)
+
+    double radiusAt(double t) const { return constant + slope * t; }
+    bool   enabled()          const { return slope &gt; 0.0 || constant &gt; 0.0; }
+};</code></pre>
+
+<p><b>The picker fills it from the camera</b> (<code>cwCoordinatePicker</code> already holds
+<code>m_camera</code>). No fov accessor is needed — the perspective slope falls straight out of the
+projection matrix:</p>
+
+<pre><code>// cwCoordinatePicker — derive a kPixelRadius-pixel tolerance for this pick
+constexpr double kPickPixelRadius = 6.0;
+const QRect vp = camera-&gt;viewport();
+cwPickTolerance tol;
+if (camera-&gt;projection().type() == cwProjection::Ortho) {
+    // pixelsPerMeter is exact and valid only for ortho.
+    tol.constant = kPickPixelRadius / camera-&gt;pixelsPerMeter();
+} else {
+    // Perspective + PerspectiveFrustum: tan(fovY/2) == 1 / P(1,1);
+    // worldPerPixel(t) = 2*tan(fovY/2)/heightPx * t.
+    const double p11 = camera-&gt;projectionMatrix()(1, 1);
+    tol.slope = kPickPixelRadius * 2.0 / (p11 * vp.height());
+}</code></pre>
+
+<div class="callout warn">
+  <b>Central-ray approximation.</b> <code>radiusAt</code> keys off ray-depth <code>t</code>
+  (<code>projectedDistance</code>), while true world-per-pixel keys off view-space <code>z</code>. They
+  differ by <code>1/cos(angle-from-forward)</code> — up to ~10–15&nbsp;% at the frame edge. For a
+  6&nbsp;px pick tolerance that is sub-pixel slop, accepted deliberately rather than carrying the
+  cosine. Exact only for the central ray.
+</div>
+
+<div class="fig">
+<svg viewBox="0 0 820 260" xmlns="http://www.w3.org/2000/svg">
+  <g font-family="ui-monospace, monospace" font-size="12">
+    <circle cx="60" cy="130" r="6" fill="#5aa9e6"/>
+    <text x="60" y="112" text-anchor="middle" fill="#9aa4b2">eye</text>
+    <path d="M60 130 L770 70 L770 190 Z" fill="rgba(90,169,230,.10)" stroke="none"/>
+    <line x1="60" y1="130" x2="780" y2="130" stroke="#5aa9e6" stroke-dasharray="5 4"/>
+    <text x="700" y="124" fill="#5aa9e6">pick ray</text>
+    <line x1="300" y1="130" x2="300" y2="105" stroke="#7ddc8f"/>
+    <text x="300" y="100" text-anchor="middle" fill="#7ddc8f">r(t₁)</text>
+    <line x1="680" y1="130" x2="680" y2="78" stroke="#7ddc8f"/>
+    <text x="680" y="72" text-anchor="middle" fill="#7ddc8f">r(t₂) &gt; r(t₁)</text>
+    <line x1="280" y1="150" x2="330" y2="118" stroke="#e6b35a" stroke-width="3"/>
+    <text x="305" y="172" text-anchor="middle" fill="#7ddc8f">d ≤ r → HIT</text>
+    <line x1="640" y1="60" x2="700" y2="55" stroke="#e6b35a" stroke-width="3"/>
+    <text x="668" y="44" text-anchor="middle" fill="#e66a6a">d &gt; r → miss</text>
+  </g>
+</svg>
+<div class="figcap"><b>Figure 3.</b> The accept radius <code>r(t)=constant+slope·t</code> is a cone in
+perspective (constant pixels on screen) and a cylinder in ortho. The fine test compares the true
+ray–segment distance <code>d</code> against <code>r</code> at the hit's depth.</div>
+</div>
+
+<h3>Ray–segment closest approach</h3>
+<p>The substantive new math: the minimal distance between the (semi-infinite) pick ray and the finite
+segment <code>AB</code>, plus the closest point <em>on the segment</em> (which becomes
+<code>pointWorld</code>). Computed in <b>double precision</b> — at world-magnitude coordinates (~10⁴)
+the float cancellation problem that already bit the sphere test bites here too. The clamp logic is the
+standard segment/segment solver (Ericson) with the ray's parameter clamped only at its lower bound and
+the segment's clamped to <code>[0,1]</code>.</p>
+
+<pre><code>// returns squared distance + closest point on the segment (model space)
+struct RaySegmentHit { double dSq; QVector3D segPoint; };
+
+RaySegmentHit raySegmentClosest(const QRay3D&amp; ray,
+                                const QVector3D&amp; A, const QVector3D&amp; B);</code></pre>
+
+<div class="callout warn">
+  <b>Two degenerate cases the helper must name.</b> (1) <b>Zero-length segment</b> (a from==to shot —
+  no longer filtered out now that <code>addLines</code> builds one node; see §8): treat
+  <code>e=|B−A|²≈0</code> as a point and fall back to ray-vs-point. (2) <b>Ray parallel to the
+  segment</b> (<code>denom≈0</code>): the determinant solve is unstable, so pin the ray parameter to 0
+  and let the segment clamp pick the nearest endpoint — correct distance for the picking use, no NaN.
+</div>
+
+<div class="callout warn">
+  <b>Identity-matrix radius caveat.</b> Like the existing point/sphere path, the distance test compares
+  a <em>model-space</em> <code>dSq</code> against a <em>world-space</em> radius. That is exact for the
+  identity model matrix the line plot uses (<code>cwRenderLinePlot</code> passes a default
+  <code>QMatrix4x4</code>). Documented inline, identical to the assumption the sphere branch makes.
+</div>
+
+<h2 id="priority">5. Hit priority — runtime kind filter</h2>
+<p>Should a station near the cursor win over a scrap surface behind it? <b>For the measurement tool,
+yes; for ordinary coordinate readout, no — nearest wins.</b> This must be switchable per pick.</p>
+
+<div class="callout bad">
+  <b>Why priority can't be a depth bias.</b> The BVH prunes nodes whose box is farther than
+  <code>best.tWorld()</code>. Letting a far line "outrank" a near surface would force traversal to stop
+  pruning surfaces beyond the line's depth — breaking the hot path for <em>every</em> pick. Priority
+  therefore lives in the <b>caller</b>, expressed as a cheap <b>kind filter</b>, not as a ranking
+  tweak inside traversal.
+</div>
+
+<p>Bundle the tolerance and an optional kind filter into one options struct. Default <code>{}</code> =
+all kinds, disabled tolerance → identical to today.</p>
+
+<pre><code>// cwPickQuery.h
+struct cwPickQuery {
+    cwPickTolerance tolerance;                        // §4
+    enum class Kind : quint8 {                        // bitset over primitive kinds
+        Triangles = 0x1, Lines = 0x2, Points = 0x4
+    };
+    Q_DECLARE_FLAGS(Kinds, Kind)
+    static constexpr Kinds All = Kinds(Kind::Triangles) | Kind::Lines | Kind::Points;
+    Kinds kinds = All;
+};
+Q_DECLARE_OPERATORS_FOR_FLAGS(cwPickQuery::Kinds)
+
+cwRayHit intersectsDetailed(const QRay3D&amp;, const cwPickQuery&amp; = {}) const;</code></pre>
+
+<p>A <code>QFlags</code> bitset (not a 3-way enum) so a caller ORs exactly the kinds a pass should
+hit. Filtering is <b>one hoisted check per top-level leaf</b>, right beside the existing
+<code>isPickable()</code> guard (we already hold <code>sub.object.geometry().type()</code> there):
+map the object's type to its <code>Kind</code> bit and skip when
+<code>!(query.kinds &amp; bit)</code>. Pruning is untouched; the hot path pays nothing.</p>
+
+<div class="fig">
+<svg viewBox="0 0 820 280" xmlns="http://www.w3.org/2000/svg">
+  <g font-family="ui-monospace, monospace" font-size="12">
+    <!-- left: coordinate picker -->
+    <rect x="20" y="20" width="350" height="240" rx="10" fill="#23272e" stroke="#3a414b"/>
+    <text x="195" y="46" text-anchor="middle" fill="#e6e9ee" font-size="13">Coordinate picker — equal priority</text>
+    <rect x="60" y="70" width="270" height="40" rx="8" fill="#2b3038" stroke="#5aa9e6"/>
+    <text x="195" y="95" text-anchor="middle" fill="#5aa9e6">cwPickQuery{ kinds = All }</text>
+    <!-- All = Triangles | Lines | Points -->
+    <line x1="195" y1="110" x2="195" y2="150" stroke="#9aa4b2" marker-end="url(#ar)"/>
+    <rect x="60" y="152" width="270" height="44" rx="8" fill="#2b3038" stroke="#3a414b"/>
+    <text x="195" y="170" text-anchor="middle" fill="#e6e9ee">nearest of lines + surfaces</text>
+    <text x="195" y="187" text-anchor="middle" fill="#9aa4b2">by depth (today's behavior + lines)</text>
+
+    <!-- right: measurement tool -->
+    <rect x="450" y="20" width="350" height="240" rx="10" fill="#23272e" stroke="#3a414b"/>
+    <text x="625" y="46" text-anchor="middle" fill="#e6e9ee" font-size="13">Measurement tool — station priority</text>
+    <rect x="490" y="70" width="270" height="40" rx="8" fill="#2b3038" stroke="#7ddc8f"/>
+    <text x="625" y="95" text-anchor="middle" fill="#7ddc8f">① Kind::Lines pre-pick</text>
+    <line x1="625" y1="110" x2="625" y2="140" stroke="#9aa4b2" marker-end="url(#ar)"/>
+    <path d="M520 142 h210 l-18 22 h-174 z" fill="#2b3038" stroke="#e6b35a"/>
+    <text x="625" y="160" text-anchor="middle" fill="#e6b35a">hit within pixel radius?</text>
+    <line x1="540" y1="186" x2="540" y2="212" stroke="#7ddc8f" marker-end="url(#ar)"/>
+    <text x="540" y="180" text-anchor="middle" fill="#7ddc8f" font-size="11">yes</text>
+    <rect x="470" y="214" width="150" height="38" rx="8" fill="#2b3038" stroke="#7ddc8f"/>
+    <text x="545" y="237" text-anchor="middle" fill="#e6e9ee">clamp to station</text>
+    <line x1="710" y1="186" x2="710" y2="212" stroke="#9aa4b2" marker-end="url(#ar)"/>
+    <text x="710" y="180" text-anchor="middle" fill="#9aa4b2" font-size="11">no</text>
+    <rect x="632" y="214" width="150" height="38" rx="8" fill="#2b3038" stroke="#3a414b"/>
+    <text x="707" y="232" text-anchor="middle" fill="#e6e9ee">② Triangles | Points</text>
+    <text x="707" y="247" text-anchor="middle" fill="#9aa4b2" font-size="11">free point</text>
+  </g>
+</svg>
+<div class="figcap"><b>Figure 4.</b> Priority is a caller choice. Equal priority is one
+<code>All</code> pick by depth. Station priority is a cheap <code>Kind::Lines</code> pre-pick (single
+tiny sub-BVH) with a <code>Kind::Triangles | Kind::Points</code> fallback — two click-time
+traversals, the BVH stays generic.</div>
+</div>
+
+<p class="mono-note">Alternative considered: a single traversal tracking <code>bestLine</code> and
+<code>bestSurface</code> separately, then a policy enum. Rejected for now — it needs dual pruning
+thresholds and a relaxed top-level cull, i.e. more machinery for no measurable gain at these sizes.</p>
+
+<h2 id="broad">6. Broad-phase bounding</h2>
+<p>Because the radius <em>grows with depth</em>, a fixed AABB pad baked at build time can't bound it.
+Instead the per-pick traversal derives <b>one conservative scalar</b> — the radius at the farthest
+scene depth — and pads the box tests with it; the <em>fine</em> test still uses the exact
+<code>radiusAt(hitDepth)</code>, so accuracy is preserved while no near-grazing pick is rejected early.</p>
+
+<pre><code>// intersectsDetailed, once per pick, only when query.tolerance.enabled():
+const double farDepth = ray.projectedDistance(farthestCorner(rootWorldBox));
+const float  linePad  = float(query.tolerance.radiusAt(farDepth)); // conservative bound
+// fold into the existing top/sub box pads (max with the point-tube pad):
+const QVector3D pad(std::max(tubeDist, linePad), ...);</code></pre>
+
+<p>Line objects are few (one centerline, a few thousand segments), so the conservative over-test costs
+a handful of extra leaf visits. The leaf AABBs themselves stay <b>tight</b> (no baked pad), so when the
+tolerance is disabled the structure and traversal cost are byte-for-byte what they are today.</p>
+
+<div class="callout warn">
+  <b>One honest cost.</b> The pad is global, so when a tolerance is active <em>every</em> top-level box
+  inflates — including a giant LAZ object's. That means a few extra point sub-BVH descents per
+  <em>coordinate</em> pick (which now always carries a tolerance). Picks are click-time, not per-frame,
+  so this is acceptable; if a huge-cloud project ever shows it in a profile, the fix is to scope the
+  pad to line-bearing top-level subtrees. Noted, not pre-optimized.
+</div>
+
+<div class="fig">
+<svg viewBox="0 0 760 200" xmlns="http://www.w3.org/2000/svg">
+  <g font-family="ui-monospace, monospace" font-size="12">
+    <line x1="40" y1="40" x2="40" y2="170" stroke="#3a414b"/>
+    <rect x="120" y="70" width="120" height="60" fill="none" stroke="#9aa4b2" stroke-dasharray="4 3"/>
+    <line x1="150" y1="120" x2="210" y2="82" stroke="#e6b35a" stroke-width="3"/>
+    <text x="180" y="155" text-anchor="middle" fill="#9aa4b2">tight leaf AABB</text>
+    <rect x="430" y="55" width="150" height="90" fill="rgba(125,220,143,.08)" stroke="#7ddc8f"/>
+    <rect x="460" y="70" width="120" height="60" fill="none" stroke="#9aa4b2" stroke-dasharray="4 3"/>
+    <line x1="490" y1="120" x2="550" y2="82" stroke="#e6b35a" stroke-width="3"/>
+    <line x1="40" y1="150" x2="600" y2="58" stroke="#5aa9e6" stroke-dasharray="5 4"/>
+    <text x="505" y="165" text-anchor="middle" fill="#7ddc8f">+ linePad → ray enters box</text>
+  </g>
+</svg>
+<div class="figcap"><b>Figure 5.</b> A ray that grazes within <code>r(t)</code> of a segment would miss
+the tight AABB (left). Inflating the box test by the conservative <code>linePad</code> (right) lets
+traversal reach the leaf, where the exact distance test decides the hit.</div>
+</div>
+
+<h2 id="contract">7. The cwRayHit contract</h2>
+<p><b>A line hit adds no fields to <code>cwRayHit</code> and repurposes none gratuitously.</b> It slots
+into the existing per-kind contract: <code>firstIndex</code> already means "first index of the hit
+primitive," which is exactly a segment id, and <code>pointWorld</code> is simply snapped onto the line.
+A consumer needs only those two; everything else follows the conventions points already set.</p>
+
+<table>
+  <tr><th>field</th><th>Triangle</th><th>Point</th><th>Line <span class="pill new">spec</span></th></tr>
+  <tr><td><code>pointModel/World</code></td><td>surface hit point</td><td>sphere center</td>
+    <td><b>closest point on the segment</b> — readout snaps to the centerline</td></tr>
+  <tr><td><code>tModel/tWorld</code></td><td>depth</td><td>depth</td>
+    <td>depth of that closest point (<code>projectedDistance</code>)</td></tr>
+  <tr><td><code>firstIndex</code></td><td>first index of tri</td><td>vertex index</td>
+    <td><b>first index of the segment</b> — under the <code>iota</code> list this equals the
+      from-vertex index</td></tr>
+  <tr><td><code>u</code>, <code>v</code></td><td>barycentric</td><td><code>NaN</code>, <code>NaN</code></td>
+    <td><code>NaN</code>, <code>NaN</code> — no consumer needs the parametric <code>s</code>; the snap
+      helper derives it from the endpoints</td></tr>
+  <tr><td><code>normalModel/World</code></td><td>triangle normal</td><td><code>-rayDir</code></td>
+    <td><code>-rayDir</code> (camera-facing) — a line has no surface normal; a <em>defined</em> value,
+      not garbage</td></tr>
+  <tr><td><code>object/objectId</code></td><td>owner</td><td>owner</td><td>owner
+    (<code>cwRenderLinePlot</code>, id 0)</td></tr>
+</table>
+
+<div class="callout">
+  <b>The whole line-specific contract is two facts:</b> <code>pointWorld</code> lies on the line, and
+  <code>firstIndex</code> identifies the segment. <code>u</code>/<code>v</code> stay <code>NaN</code>
+  exactly like points. A single <code>fillLineHit()</code> helper writes these — the analogue of the
+  existing <code>fillPointHit()</code>.
+</div>
+
+<div class="callout warn">
+  <b>The <code>firstIndex == from-vertex</code> identity depends on the <code>iota</code> index list</b>
+  that <code>setGeometry</code> synthesizes. Commit&nbsp;2 leans on it. Guard it with an assert /
+  comment at the <code>segmentEndpoints</code> seam so a future switch to a truly indexed line buffer
+  fails loudly instead of mis-mapping stations.
+</div>
+
+<h2 id="commit1">8. <span class="commit">Commit 1</span> — centerline pickable</h2>
+<p>Self-contained: after this commit, clicking the centerline returns a hit whose
+<code>pointWorld</code> lies on the line. No clamp yet.</p>
+
+<table>
+  <tr><th>File</th><th>Change</th></tr>
+  <tr><td><code>cwPickQuery.h</code> <span class="pill new">new</span></td>
+    <td>Holds <code>cwPickTolerance</code> (§4) and <code>cwPickQuery</code> (§5). Header-only plain
+      structs, passed by const-ref — registered nowhere.</td></tr>
+  <tr><td><code>cwGeometryItersecter.h</code> <span class="pill edit">edit</span></td>
+    <td>Add <code>Primitive::Kind::Line</code>; add <code>const cwPickQuery&amp; = {}</code> param to
+      <code>intersects()</code> / <code>intersectsDetailed()</code>; declare
+      <code>enumerateLinesChunk()</code>, <code>raySegmentClosest()</code>, and
+      <code>fillLineHit()</code>.</td></tr>
+  <tr><td><code>cwGeometryItersecter.cpp</code> <span class="pill edit">edit</span></td>
+    <td>The core. Seven touch-points:
+      <ol>
+        <li><code>countNodePrimitives</code>: <code>case Lines: return indices().size()/2;</code></li>
+        <li><code>addLines</code>: collapse the per-segment <code>Node</code> loop into a single
+          whole-object <code>Node</code> with a tight box (mirror <code>addPoints</code>); delete the
+          now-dead <code>lineToBoundingBox</code> / per-segment path.</li>
+        <li><code>enumerateLinesChunk</code> + a <code>Lines</code> case in <code>buildSubBvh</code>'s
+          enumerate switch: <code>primitiveIndex = 2·segment</code>, <code>centroid = midpoint(A,B)</code>.</li>
+        <li><code>primitiveModelBox</code>: <code>Line</code> → endpoint AABB (no pad).</li>
+        <li><code>intersectsDetailed</code>: hoist the kind filter (§5) per top-level leaf; compute
+          <code>linePad</code> once (§6) and fold into the top/sub box pads; thread the query into
+          <code>testPrimitive</code>.</li>
+        <li><code>testPrimitive</code>: new <code>Line</code> branch — bail if
+          <code>!tolerance.enabled()</code>; else <code>raySegmentClosest</code>, accept when
+          <code>dSq ≤ radiusAt(tWorld)²</code>; <code>fillLineHit()</code> per §7.</li>
+        <li><code>fillLineHit</code>: write the §7 fields (analogue of <code>fillPointHit</code>).</li>
+      </ol></td></tr>
+  <tr><td><code>cwCoordinatePicker.cpp</code> <span class="pill edit">edit</span></td>
+    <td>Build a <code>cwPickQuery</code> (tolerance from the camera per §4, <code>kinds = All</code>) and
+      pass it to <code>intersectsDetailed</code>. This turns line picking <em>on</em> for the app.</td></tr>
+  <tr><td><code>cwRenderLinePlot.cpp</code> <span class="pill edit">edit</span></td>
+    <td>Trim the stale "not picker-visible (#530)" comment; keep the <code>Type::Lines</code> +
+      <code>iota</code> registration. No <code>pickRadius</code> needed — tolerance is per-pick now.</td></tr>
+  <tr><td>CMake / <code>testcases</code> <span class="pill new">new</span></td>
+    <td>Add <code>cwPickQuery.h</code> to the lib target and the new test file (§10).</td></tr>
+</table>
+
+<div class="callout ok">
+  <b>Backwards-compatible by construction.</b> Every existing caller of
+  <code>intersectsDetailed(ray)</code> gets the default <code>{}</code> query → <code>All</code> kinds,
+  disabled tolerance → line branch returns early, no <code>linePad</code> is computed, box pads are
+  unchanged. The brute-force and tube-pick parity tests keep passing untouched.
+</div>
+
+<h2 id="commit2">9. <span class="commit two">Commit 2</span> — clamp-to-station-ready hit contract</h2>
+<p>Stations <em>are</em> centerline vertices: shot <code>i</code> owns vertices
+<code>[2i, 2i+1]</code> = its from/to <b>solved station positions</b> (confirmed in
+<code>cwLinePlotGeometry</code>). So clamping a pick to a station is a screen-space snap to the nearer
+endpoint of the hit segment — <b>no new geometry data and no new hit state</b> (Commit&nbsp;1 already
+fills <code>firstIndex</code> + <code>pointWorld</code> per §7). This commit adds the two consumer hooks
+and proves the snap end-to-end.</p>
+
+<table>
+  <tr><th>File</th><th>Change</th></tr>
+  <tr><td><code>cwRenderLinePlot.h/.cpp</code> <span class="pill edit">edit</span></td>
+    <td>Add <code>std::optional&lt;QPair&lt;QVector3D,QVector3D&gt;&gt; segmentEndpoints(int firstIndex) const</code>
+      — reads <code>points[firstIndex]</code> / <code>points[firstIndex+1]</code> from the live vertex
+      buffer (bounds-checked; the §7 assert anchors the <code>iota</code> index == vertex identity).
+      Keeping the accessor on the render object keeps the BVH generic.</td></tr>
+  <tr><td><code>cwLinePlotStationSnap</code> <span class="pill new">new</span> (free fn / small helper)</td>
+    <td>Given a line <code>cwRayHit</code>, the cursor point, the camera, and
+      <code>kPickPixelRadius</code>: fetch the segment's two endpoints, <em>project</em> them, and if the
+      nearer one is within the pixel radius of the cursor, return that endpoint's world position + its
+      vertex index (the station); else return the free point on the segment. Pure, camera-aware, no BVH
+      coupling — exactly the seam #487 plugs into.</td></tr>
+  <tr><td><code>cwCoordinatePicker.cpp</code> <span class="pill edit">edit</span></td>
+    <td>After a line hit, run the snap so the reported coordinate is the exact station position when the
+      user clicks near a vertex. (A "snapped to station" <code>Q_PROPERTY</code> can wait for #487; not
+      required here.)</td></tr>
+</table>
+
+<div class="fig">
+<svg viewBox="0 0 820 240" xmlns="http://www.w3.org/2000/svg">
+  <g font-family="ui-monospace, monospace" font-size="12">
+    <line x1="160" y1="170" x2="520" y2="80" stroke="#e6b35a" stroke-width="3"/>
+    <circle cx="160" cy="170" r="6" fill="#7ddc8f"/><text x="150" y="192" fill="#7ddc8f">vertex 2i</text>
+    <circle cx="520" cy="80" r="6" fill="#7ddc8f"/><text x="520" y="66" fill="#7ddc8f">vertex 2i+1</text>
+    <circle cx="505" cy="96" r="36" fill="none" stroke="#5aa9e6" stroke-dasharray="4 3"/>
+    <text x="585" y="120" fill="#5aa9e6">cursor · kPickPixelRadius</text>
+    <path d="M505 96 L520 80" stroke="#5aa9e6" marker-end="url(#ar)"/>
+    <text x="430" y="150" fill="#e6e9ee">within radius → snap to station</text>
+    <circle cx="320" cy="130" r="36" fill="none" stroke="#9aa4b2" stroke-dasharray="4 3"/>
+    <text x="250" y="205" fill="#9aa4b2">mid-segment → free point on line</text>
+  </g>
+</svg>
+<div class="figcap"><b>Figure 6.</b> Clamp-to-station is a screen-space snap: project the hit segment's
+endpoints; if one is within the pick radius of the cursor, the pick becomes that exact station
+position. Otherwise the free point on the centerline stands.</div>
+</div>
+
+<h2 id="tests">10. Tests</h2>
+<h3>Commit 1 — <code>testcases/test_cwGeometryItersecter_linePick.cpp</code> <span class="pill new">new</span></h3>
+<ul>
+  <li>A known polyline at large world coordinates (the regime the brute-force test already targets).</li>
+  <li>With a populated <code>cwPickQuery</code>: rays passing within <code>radiusAt(depth)</code>
+    <b>hit</b>; rays just outside <b>miss</b>; <code>firstIndex</code> maps to the expected segment;
+    <code>pointWorld</code> lies on the segment.</li>
+  <li><b>Zoom invariance:</b> a near ray (small <code>slope·t</code>) and a far ray (large
+    <code>slope·t</code>) both behave per the radius model.</li>
+  <li><b>Kind filter:</b> <code>Kind::Lines</code> ignores a coincident triangle/point object;
+    <code>Kind::Triangles | Kind::Points</code> ignores the centerline; <code>All</code> returns the
+    nearer by depth.</li>
+  <li><b>Parity guard:</b> default query <code>{}</code> → line objects never hit, and a mixed scene's
+    triangle/point hits are identical to a triangles/points-only run.</li>
+  <li><b>Degenerate cases:</b> a zero-length shot and a ray parallel to a segment return sane results
+    (no NaN, no false hit).</li>
+  <li>Pre-existing <code>[bruteForce]</code> and <code>[tubePick]</code> suites must stay green.</li>
+</ul>
+<h3>Commit 2</h3>
+<ul>
+  <li><code>segmentEndpoints()</code> returns the right positions and rejects out-of-range indices.</li>
+  <li>Snap helper: cursor near a vertex snaps to it and reports the right vertex index; mid-segment
+    leaves the free point; an off-line cursor returns no hit.</li>
+  <li><code>cwCoordinatePicker</code> end-to-end: a click near a station yields exactly that station's
+    world coordinate.</li>
+</ul>
+<p class="mono-note">Run both suites before pushing each commit:
+cavewhere-test (narrow tag <code>[cwGeometryItersecter]</code>) + cavewhere-qml-test offscreen.</p>
+
+<h2 id="out">11. Out of scope / handoff to #487</h2>
+<ul>
+  <li><b>Measurement UI</b> — two-point pick, distance / azimuth / clino / vertical / horizontal
+    readout. Built independently on #487; it consumes <code>intersectsDetailed(ray, query)</code> with
+    the §5 priority recipe and the §9 snap helper for stations.</li>
+  <li><b>Station <em>names</em> on the hit.</b> The vertex→name map was discarded during geometry
+    generation; surfacing "from A4 to B12" needs per-segment name metadata added to
+    <code>cwLinePlotGeometry::Result</code> and plumbed through <code>setGeometry</code>. Purely
+    additive; the measurement <em>math</em> needs only positions, which Commit&nbsp;2 already provides.</li>
+  <li><b>Per-trip visibility filtering of picks</b> (skip hidden trips during traversal) — a separate
+    follow-up noted in #530; the per-vertex visibility buffer already exists to drive it.</li>
+  <li><b>Adopt an explicit <code>cwPickQuery</code> in the three other BVH callers.</b> Today
+    <code>cwLeadView::isLeadVisible</code> (<code>cwLeadView.cpp:574</code>),
+    <code>cwBaseTurnTableInteraction::unProject</code> (<code>cwBaseTurnTableInteraction.cpp:1121</code>)
+    and the pivot <code>intersects(ray)</code> (<code>cwBaseTurnTableInteraction.cpp:135</code>) all call
+    with the <em>default</em> query — <code>kinds = All</code>, tolerance disabled. That keeps lines off
+    (behavior unchanged), but these are occlusion / pivot queries that should <em>never</em> clamp to the
+    centerline, and relying on the implicit default couples their correctness to it: a future global
+    default flip (or a maintainer enabling a default tolerance) would silently change occlusion and pivot
+    behavior. Make the intent explicit — <code>cwPickQuery{ .kinds = Triangles | Points }</code> — and give
+    each its own coverage. A no-op-today change spanning two unrelated subsystems, so it's deferred out of
+    Commit&nbsp;1; pair it with #487.</li>
+</ul>
+
+<h2 id="decisions">12. Decisions locked in</h2>
+<ul>
+  <li><b>Screen-space radius</b>, ~6 px, via the camera-agnostic <code>cwPickTolerance</code> linear
+    model — exact for the central ray in both perspective and ortho.</li>
+  <li><b>Lines live in the BVH unconditionally</b>; the per-pick tolerance (not a baked radius) gates
+    whether they can be hit, so picking-disabled cost is unchanged.</li>
+  <li><b>Priority is a runtime kind filter chosen by the caller</b> (<code>cwPickQuery::kinds</code>),
+    never a depth bias inside traversal — the BVH stays generic and its pruning untouched.</li>
+  <li><b><code>cwRayHit</code> gains no fields</b>; lines reuse the existing per-kind contract
+    (<code>pointWorld</code> on the line, <code>firstIndex</code> = segment), <code>u</code>/<code>v</code>
+    stay <code>NaN</code>.</li>
+  <li><b>Conservative single-scalar broad-phase pad</b> from the far-depth radius; exact fine test.</li>
+  <li><b>Clamp lives one layer above the BVH</b> (render-object endpoint accessor + camera-aware snap),
+    keeping the intersecter generic.</li>
+  <li><b>Two commits</b>: (1) pickable centerline, (2) clamp-to-station hooks. #487 proceeds
+    independently on top.</li>
+</ul>
+
+</div>
+</body>
+</html>

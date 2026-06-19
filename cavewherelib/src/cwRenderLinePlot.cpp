@@ -40,9 +40,9 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
     // avoids a second deep copy of the (large) vertex vector. The render path
     // is non-indexed (consecutive pairs), but the intersecter's Lines path
     // still wants an index per vertex, so synthesize a sequential index list
-    // (CPU-side only — never uploaded to the GPU). Lines are not picker-visible
-    // today (the BVH skips them, #530); this keeps the geometry registered for
-    // when they become so.
+    // (CPU-side only — never uploaded to the GPU). The iota list also makes
+    // each segment's first index equal its from-vertex index, which the
+    // centerline pick contract relies on (#530).
     if (auto* intersecter = geometryItersecter()) {
         cwGeometry geometry {
             { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }

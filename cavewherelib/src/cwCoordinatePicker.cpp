@@ -13,10 +13,21 @@
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwGeometryItersecter.h"
+#include "cwPickQuery.h"
+#include "cwProjection.h"
 #include "cwRayHit.h"
+
+//Qt includes
+#include <QRect>
 
 //Qt 3D
 #include <qray3d.h>
+
+namespace {
+    // Screen-space pick tolerance for line picking, in pixels. The centerline
+    // is hit when the cursor is within this many pixels of it at any zoom.
+    constexpr double kPickPixelRadius = 6.0;
+}
 
 cwCoordinatePicker::cwCoordinatePicker(QQuickItem* parent) :
     cwInteraction(parent)
@@ -93,7 +104,28 @@ void cwCoordinatePicker::pick(QPointF screenPoint)
 
     const QRay3D ray = m_camera->rayFromQtViewport(screenPoint);
 
-    const cwRayHit hit = intersecter->intersectsDetailed(ray);
+    // Derive a screen-space line pick tolerance from the camera. No fov
+    // accessor is needed: the perspective slope falls out of the projection
+    // matrix, and ortho uses pixelsPerMeter directly. kinds defaults to
+    // cwPickQuery::All — nearest of every kind by depth wins.
+    cwPickQuery query;
+    const QRect viewport = m_camera->viewport();
+    if (m_camera->projection().type() == cwProjection::Ortho) {
+        const double pixelsPerMeter = m_camera->pixelsPerMeter();
+        if (pixelsPerMeter > 0.0) {
+            query.tolerance.constant = kPickPixelRadius / pixelsPerMeter;
+        }
+    } else {
+        // Slope from projectionMatrix(1,1) is exact for a symmetric frustum
+        // (the only perspective the 3D view uses). An off-axis/asymmetric
+        // frustum would make the tolerance slightly anisotropic.
+        const double p11 = m_camera->projectionMatrix()(1, 1);
+        if (p11 > 0.0 && viewport.height() > 0) {
+            query.tolerance.slope = kPickPixelRadius * 2.0 / (p11 * viewport.height());
+        }
+    }
+
+    const cwRayHit hit = intersecter->intersectsDetailed(ray, query);
     if (!hit.hit()) {
         return;
     }

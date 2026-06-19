@@ -22,6 +22,7 @@
 
 //Our includes
 #include "cwRayHit.h"
+#include "cwPickQuery.h"
 #include "cwGeometry.h"
 #include "cwFutureManagerToken.h"
 #include "asyncfuture.h"
@@ -97,8 +98,11 @@ public:
     //! World-space union of every object's bounding box. Null box when empty.
     QBox3D boundingBox() const;
 
-    double intersects(const QRay3D& ray) const;
-    cwRayHit intersectsDetailed(const QRay3D& ray) const;
+    // `ray` direction must be unit length: ray-depth (projectedDistance)
+    // divides by |dir|^2, and the screen-space line tolerance scales its
+    // radius by that depth — a non-normalized direction mis-sizes both.
+    double intersects(const QRay3D& ray, const cwPickQuery& query = {}) const;
+    cwRayHit intersectsDetailed(const QRay3D& ray, const cwPickQuery& query = {}) const;
 
     // Escape hatch for the BVH-tube fallback that snaps to a sphere-miss
     // within kTubeFactor * pickRadius of the ray. Disabling reverts to
@@ -144,23 +148,20 @@ private:
     class Node {
     public:
         Node();
-        Node(const cwGeometryItersecter::Object& object, int indexInIndexes);
         Node(const QBox3D boundingBox, const cwGeometryItersecter::Object& object);
 
         QBox3D BoundingBox;
         cwGeometryItersecter::Object Object;
 
-        static QBox3D triangleToBoundingBox(const cwGeometryItersecter::Object & object, int indexInIndexes);
         static QBox3D triangleToBoundingBox(const QVector3D& p1, const QVector3D& p2, const QVector3D& p3);
-        static QBox3D lineToBoundingBox(const cwGeometryItersecter::Object & object, int indexInIndexes);
     };
 
-    // BVH primitive handle. One slot per triangle (primitiveIndex is
-    // the first index into indices()) or per point (primitiveIndex is
-    // the vertex index). The owning SubBvh's `object` field provides the
-    // geometry context.
+    // BVH primitive handle. One slot per triangle or line segment
+    // (primitiveIndex is the first index into indices()) or per point
+    // (primitiveIndex is the vertex index). The owning SubBvh's `object`
+    // field provides the geometry context.
     struct Primitive {
-        enum class Kind : uint8_t { Triangle, Point };
+        enum class Kind : uint8_t { Triangle, Point, Line };
         Kind kind = Kind::Triangle;
         uint32_t primitiveIndex = 0;
     };
@@ -351,6 +352,7 @@ private:
                               const QRay3D& rayModel,
                               const QMatrix4x4& worldFromModel,
                               const QMatrix4x4& modelToWorld,
+                              const cwPickTolerance& tolerance,
                               cwRayHit& best,
                               NearMissResult* nearMiss,
                               PickStats* stats);
@@ -369,6 +371,18 @@ private:
                              double tModel,
                              double tWorld);
 
+    // cwRayHit field fill for a Line primitive (the §7 contract). The
+    // analogue of fillPointHit: pointWorld lies on the segment, firstIndex
+    // is the segment's first index, u/v stay NaN, normal is camera-facing.
+    static void fillLineHit(cwRayHit& best,
+                            const Object& object,
+                            const Primitive& prim,
+                            const QRay3D& ray,
+                            const QRay3D& rayModel,
+                            const QVector3D& segPointModel,
+                            const QVector3D& segPointWorld,
+                            double tWorld);
+
     // Post-traversal tube-pick promote. Snaps best to the closest tracked
     // sphere-miss whose perpendicular distance is within kTubeFactor *
     // pickRadius. No-op when best already hit, nearMiss is empty, or the
@@ -386,8 +400,8 @@ private:
                                   uint32_t localIdx);
 
     // Phase A: how many BVH primitives a single Node contributes. Lines
-    // stay out of the BVH and contribute zero. Points contribute zero
-    // unless pickRadius > 0.
+    // contribute one per segment (picked via a screen-space tolerance at
+    // query time). Points contribute zero unless pickRadius > 0.
     static qsizetype countNodePrimitives(const Object& object);
 
     // Phase A workers: fill BuildPrim slots for one chunk of a Triangles
@@ -398,6 +412,9 @@ private:
     static void enumeratePointsChunk(const Object& object,
                                      const EnumChunk& chunk,
                                      QVector<BuildPrim>& prims);
+    static void enumerateLinesChunk(const Object& object,
+                                    const EnumChunk& chunk,
+                                    QVector<BuildPrim>& prims);
 
     // Phase B: compute the centroid AABB, pick the longest axis, and
     // partition prims by median centroid along that axis. Returns
