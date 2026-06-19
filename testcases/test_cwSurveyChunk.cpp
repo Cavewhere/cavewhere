@@ -748,3 +748,44 @@ TEST_CASE("Fix to abort - Test cwSurveyChunk with mostly empty data and copy", "
 
     CHECK(chunkCopy.data(cwSurveyChunk::StationNameRole, 1).toString().toStdString() == "b2");
 }
+
+TEST_CASE("Zero-length LRUD-only shot warns instead of failing", "[cwSurveyChunk]") {
+    //Compass (and other formats) attach LRUD passage dimensions to a hanging
+    //station with an explicit zero-length shot that has no compass or clino.
+    //Such a shot should produce warnings, not fatal errors, for the missing
+    //direction.
+    //Set the shot measurements first and the station names last, mirroring how
+    //the importer builds a complete shot before the errors are evaluated.
+    auto chunk = std::make_unique<cwSurveyChunk>();
+    chunk->appendNewShot();
+
+    SECTION("Explicit zero distance with no compass/clino is non-fatal") {
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, 0);
+        chunk->setData(cwSurveyChunk::StationNameRole, 0, "a1lrud");
+        chunk->setData(cwSurveyChunk::StationNameRole, 1, "a1");
+
+        //No fatal errors - the missing compass/clino are expected on an
+        //LRUD-only shot and are reported as warnings.
+        CHECK(chunk->errorModel()->fatalCount() == 0);
+
+        //The shot has no distance error (zero is a valid, explicit length).
+        CHECK(chunk->errorsAt(0, cwSurveyChunk::ShotDistanceRole) == nullptr);
+
+        //The missing front/back compass and clino are now warnings.
+        checkNoShotDataError(chunk.get(), 0, cwSurveyChunk::ShotCompassRole, cwError::Warning);
+        checkNoShotDataError(chunk.get(), 0, cwSurveyChunk::ShotBackCompassRole, cwError::Warning);
+        checkNoShotDataError(chunk.get(), 0, cwSurveyChunk::ShotClinoRole, cwError::Warning);
+        checkNoShotDataError(chunk.get(), 0, cwSurveyChunk::ShotBackClinoRole, cwError::Warning);
+    }
+
+    SECTION("A real-length shot missing only the compass stays fatal") {
+        //Contrast: a genuine shot (non-zero length, has a clino) that is just
+        //missing its bearing is still incomplete data and must stay fatal.
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, 14.9);
+        chunk->setData(cwSurveyChunk::ShotClinoRole, 0, 0);
+        chunk->setData(cwSurveyChunk::StationNameRole, 0, "a1");
+        chunk->setData(cwSurveyChunk::StationNameRole, 1, "a2");
+
+        checkNoShotDataError(chunk.get(), 0, cwSurveyChunk::ShotCompassRole, cwError::Fatal);
+    }
+}

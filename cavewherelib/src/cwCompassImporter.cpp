@@ -19,6 +19,12 @@
 //Qt includes
 #include <QFileInfo>
 
+namespace {
+    //Compass only stores measurements to 1/100 of a unit, so metric values are
+    //rounded to the nearest centimeter.
+    constexpr double CentimetersPerMeter = 100.0;
+}
+
 cwCompassImporter::cwCompassImporter(QObject *parent) :
     cwTask(parent),
     SurveyNameRegExp("^SURVEY NAME:\\s*"),
@@ -533,17 +539,17 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             QString missingEntry = "-999.00";
             QString lrudMissingEntry = "-9.90";
 
-            cwUnits::LengthUnit distanceUnits = CurrentTrip->calibrations()->distanceUnit();
-
             if(lengthString != missingEntry) {
                 if(!convertNumber(lengthString, "length", &length)) { CurrentFileGood = false; return; }
 
-                shot.setDistance(cwDistanceReading(cwUnits::convert(length, cwUnits::Feet, distanceUnits)));
-
-                //Fix the rounding issue, for compass... Only stores 1 hundreds of an foot
-                if(distanceUnits == cwUnits::Meters) {
-                    shot.setDistance(cwDistanceReading(qRound(shot.distance().toDouble() * 100.0) / 100.0)); //Round to the nearest cm
+                //Compass stores the length in the survey's distance unit already
+                //(decimal feet for D/I/F formats, meters for M format), so no
+                //unit conversion is needed here.
+                if(CurrentTrip->calibrations()->distanceUnit() == cwUnits::Meters) {
+                    //Round to the nearest cm - Compass only stores 1/100 of a unit.
+                    length = qRound(length * CentimetersPerMeter) / CentimetersPerMeter;
                 }
+                shot.setDistance(cwDistanceReading(length));
             }
 
             if(bearingString != missingEntry) {
@@ -564,24 +570,26 @@ void cwCompassImporter::parseSurveyData(QFile *file)
                 return value == missingEntry || value == lrudMissingEntry;
             };
 
+            //Like the shot length, the LRUD passage dimensions are stored in
+            //the survey's distance unit already, so they're used as-is.
             if(!isLrudMissing(leftString)) {
                 if(!convertNumber(leftString, "left", &left)) { CurrentFileGood = false; return; }
-                fromStation.setLeft(toString(cwUnits::convert(left, cwUnits::Feet, distanceUnits)));
+                fromStation.setLeft(toString(left));
             }
 
             if(!isLrudMissing(rightString)) {
                 if(!convertNumber(rightString, "right", &right)) { CurrentFileGood = false; return; }
-                fromStation.setRight(toString(cwUnits::convert(right, cwUnits::Feet, distanceUnits)));
+                fromStation.setRight(toString(right));
             }
 
             if(!isLrudMissing(upString)) {
                 if(!convertNumber(upString, "up", &up)) { CurrentFileGood = false; return; }
-                fromStation.setUp(toString(cwUnits::convert(up, cwUnits::Feet, distanceUnits)));
+                fromStation.setUp(toString(up));
             }
 
             if(!isLrudMissing(downString)) {
                 if(!convertNumber(downString, "down", &down)) { CurrentFileGood = false; return; }
-                fromStation.setDown(toString(cwUnits::convert(down, cwUnits::Feet, distanceUnits)));
+                fromStation.setDown(toString(down));
             }
 
             if(CurrentTrip->calibrations()->hasBackSights() && dataStrings.size() >= 11) {

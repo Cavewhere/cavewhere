@@ -209,6 +209,8 @@ private:
     QList<cwError> checkWithTolerance(cwSurveyChunk::DataRole frontSightRole, cwSurveyChunk::DataRole backSightRole, int index, double tolerance = 2.0, QString units = "°") const;
     QList<cwError> checkClinoMixingType(cwSurveyChunk::DataRole role, int index) const;
     bool isShotDataEmpty(int index) const;
+    bool isLrudOnlyShot(int index) const;
+    static bool allDirectionReadingsEmpty(const cwShot& shot);
     bool isStationDataEmpty(int index) const;
     void clearErrors();
     void updateErrors();
