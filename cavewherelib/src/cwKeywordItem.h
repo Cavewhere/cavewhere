@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QPointer>
 
 //Our includes
 #include "cwGlobals.h"
@@ -26,7 +27,9 @@ public:
 
 private:
     cwKeywordModel* KeywordModel; //!<
-    QObject* Object = nullptr;
+    // QPointer so object() can never return a dangling pointer if the target is
+    // destroyed without its owner dropping this item first.
+    QPointer<QObject> Object = nullptr;
 
 signals:
     void objectChanged();
