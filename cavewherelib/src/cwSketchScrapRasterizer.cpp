@@ -67,6 +67,12 @@ QImage cwSketchScrapRasterizer::rasterize(const cwSketch *sketch,
     worldToItem.scale(ppm, -ppm);
 
     cwDecoratedStrokePathSource pathModel;
+    // Feed the resolved palette snapshot and paper scale before the sketch, so
+    // the (synchronous) rebuild that setSketch triggers decorates each stroke
+    // with its brush — without these the model has an empty snapshot and paints
+    // nothing. Mirrors how cwSketchCanvas wires the on-screen path source.
+    pathModel.setSnapshot(sketch->paletteSnapshot());
+    pathModel.setMapScaleRatio(paperScale);
     pathModel.setSketch(sketch);
 
     cwSketchDrawQPainter draw(&painter);
