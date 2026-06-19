@@ -308,7 +308,7 @@ The real consumers are the <strong>sketch decoration path source</strong>
 <p>The editor's own canvas re-skins live (one glyph, trivial). Everything else
 splits into two tiers — one nearly built, one not:</p>
 <ul>
-  <li><strong>Tier 1 — live canvas re-skin (cheap; the downstream already exists).</strong>
+  <li><span class="tag done">DONE</span> <strong>Tier 1 — live canvas re-skin (cheap; the downstream already exists).</strong>
   The chain <code>cwSketch::paletteSnapshotChanged</code> →
   <code>cwSketchCanvas::refreshPathSnapshot()</code> →
   <code>cwDecoratedStrokePathSource::setSnapshot()</code> → cache clear +
@@ -325,21 +325,24 @@ splits into two tiers — one nearly built, one not:</p>
   whenever <code>m_resolvedPalette</code> changes, so the connection follows the
   active palette). Once connected, the live canvas re-skins for free.</li>
 
-  <li><strong>Tier 2 — project-wide scrap re-render (the expensive rebuild; reuses
+  <li><span class="tag done">DONE</span> <strong>Tier 2 — project-wide scrap re-render (the expensive rebuild; reuses
   the existing <code>automaticUpdate</code> flag).</strong> Sketch-derived scrap
   PNGs are rasterized by <code>cwSketchScrapRasterizer</code> from
   <code>cwScrapManager::updateScrapGeometryHelper()</code>, gated by
   <code>cwScrapManager::automaticUpdate()</code> and coalesced by its existing
-  <code>TriangulateRestarter</code>. Today scraps re-rasterize <em>only</em> on
+  <code>TriangulateRestarter</code>. Previously scraps re-rasterized <em>only</em> on
   stroke changes
   (<code>strokesReset</code>/<code>strokeEnded</code>/<code>strokeRemoved</code>) —
-  a palette content edit does <strong>not</strong> mark them dirty, so glyph edits
-  don't reach the 3D model until strokes change or the project reopens.
-  <strong>The work:</strong> route the palette content change into
-  <code>cwScrapManager</code>'s existing dirty-mark + rebuild path so the same
-  <code>automaticUpdate</code>-gated <code>TriangulateRestarter</code> re-runs. We
-  do <em>not</em> add a new flag or a new Restarter — reuse the one
-  <code>cwScrapManager</code> already has.
+  a palette content edit did <strong>not</strong> mark them dirty, so glyph edits
+  didn't reach the 3D model until strokes changed or the project reopened.
+  <strong>The fix (one wire):</strong> <code>cwScrapManager::connectSketch()</code>
+  now also connects <code>cwSketch::paletteSnapshotChanged</code> →
+  <code>updateDerivedScrapsForSketch(sketch)</code> — the same per-sketch
+  re-derive that stroke edits use. That re-runs the outline detector against the
+  freshly resolved <code>sketch->paletteSnapshot()</code> and re-derives every
+  tracked scrap, routing through the existing
+  <code>automaticUpdate</code>-gated <code>TriangulateRestarter</code>. No new flag
+  or Restarter — reuse the one <code>cwScrapManager</code> already has.
     <ul>
       <li><strong>Auto updates ON:</strong> the Restarter kicks
       <code>cwScrapManager</code> to re-rasterize affected sketch-derived scraps
@@ -546,7 +549,7 @@ decoration build goes async.</blockquote>
       a dir-Remove action) so a removed palette leaves nothing on disk.</li>
     </ul></li>
   </ol></li>
-  <li>Wire the content change into the re-skin (§7, two tiers):
+  <li><span class="tag done">DONE</span> Wire the content change into the re-skin (§7, two tiers):
   <strong>Tier 1</strong> — connect the currently-resolved palette's
   <code>glyphChanged</code>/<code>brushChanged</code> to
   <code>cwSketch::resolveSnapshot()</code> (re-armed when the resolved palette

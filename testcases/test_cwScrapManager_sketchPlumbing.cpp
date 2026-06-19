@@ -7,12 +7,22 @@
 //Our includes
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwLineBrush.h"
 #include "cwPenStroke.h"
 #include "cwRegionTreeModel.h"
 #include "cwScrapManager.h"
 #include "cwSketch.h"
+#include "cwSketchSettings.h"
 #include "cwSurveyNoteSketchModel.h"
+#include "cwSymbologyPalette.h"
+#include "cwSymbologyPaletteData.h"
+#include "cwSymbologyPaletteIO.h"
+#include "cwSymbologyPaletteManager.h"
 #include "cwTrip.h"
+
+#include <QDir>
+#include <QTemporaryDir>
+#include <QUuid>
 
 namespace {
 
@@ -32,6 +42,29 @@ struct Fixture {
         cave->addTrip(trip);
     }
 };
+
+// Restores the singleton manager / settings so a palette test never leaks an
+// installed directory or an app-wide default into sibling tests.
+struct SingletonGuard {
+    ~SingletonGuard() {
+        cwSketchSettings::instance()->setDefaultPaletteId(QUuid());
+        cwSymbologyPaletteManager::instance()->setPaletteDirectory(QString());
+    }
+};
+
+void writeWallPalette(const QString& root, const QString& subdir,
+                      const QUuid& id, const QString& wallDisplayName) {
+    cwLineBrush wall;
+    wall.name = QStringLiteral("wall");
+    wall.displayName = wallDisplayName;
+
+    cwSymbologyPaletteData palette;
+    palette.id = id;
+    palette.name = wallDisplayName;
+    palette.lineBrushes = {wall};
+
+    REQUIRE_FALSE(cwSymbologyPaletteIO::save(palette, QDir(root).filePath(subdir)).hasError());
+}
 
 } // namespace
 
@@ -129,6 +162,48 @@ TEST_CASE("cwScrapManager re-evaluates derived scraps on stroke signals",
 
     sketch->clearStrokes();
     CHECK(updatedSpy.count() >= 1);
+}
+
+TEST_CASE("cwScrapManager re-derives scraps when the resolved palette changes (Tier 2)",
+          "[cwScrapManager][sketchPlumbing]")
+{
+    SingletonGuard guard;
+
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+
+    const QUuid idA = QUuid::createUuid();
+    writeWallPalette(temp.path(), QStringLiteral("a"), idA, QStringLiteral("Wall v1"));
+
+    auto* paletteManager = cwSymbologyPaletteManager::instance();
+    paletteManager->setPaletteDirectory(temp.path());
+
+    Fixture f;
+    f.region.setDefaultPaletteId(idA);
+
+    auto* sketch = f.trip->notesSketch()->addSketch(cwSketch::Plan);
+    REQUIRE(f.manager.isTrackingSketch(sketch));
+
+    cwSymbologyPalette* palette = sketch->resolvedPalette();
+    REQUIRE(palette != nullptr);
+    REQUIRE(palette->id() == idA);
+
+    QSignalSpy updatedSpy(&f.manager, &cwScrapManager::sketchDerivedScrapsUpdated);
+
+    // An in-memory edit to the active palette re-resolves the snapshot (Tier 1),
+    // which is the detector's symbology source — so the derived scraps re-derive
+    // without a stroke edit (Tier 2).
+    cwLineBrush wall;
+    wall.name = QStringLiteral("wall");
+    wall.displayName = QStringLiteral("Wall v2");
+    palette->setBrush(wall);
+
+    CHECK(updatedSpy.count() == 1);
+    CHECK(updatedSpy.takeFirst().at(0).value<cwSketch*>() == sketch);
+
+    // A no-op edit re-resolves to the same snapshot -> no re-derive.
+    palette->setBrush(wall);
+    CHECK(updatedSpy.count() == 0);
 }
 
 TEST_CASE("cwScrapManager stops re-evaluating once a sketch leaves the tree",

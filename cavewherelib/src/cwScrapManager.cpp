@@ -625,6 +625,14 @@ void cwScrapManager::connectSketch(cwSketch* sketch)
     connect(sketch, &cwSketch::strokeEnded,
             this, [this, sketch]() { updateDerivedScrapsForSketch(sketch); });
 
+    // A palette content edit or a project-palette switch re-resolves the
+    // sketch's snapshot (Tier 1), which is also the symbology source the
+    // outline detector reads — so re-derive the scraps to re-rasterize their
+    // ink. The existing automaticUpdate gate and TriangulateRestarter throttle
+    // the work, same as a stroke edit (§7 Tier 2).
+    connect(sketch, &cwSketch::paletteSnapshotChanged,
+            this, [this, sketch]() { updateDerivedScrapsForSketch(sketch); });
+
     // Flipping the overlay re-runs detection so the cached data matches
     // what the renderer is about to ask for.
     if(auto* viewState = sketch->viewState()) {
