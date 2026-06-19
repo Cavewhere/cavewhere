@@ -28,8 +28,10 @@
 
 // QObject wrapper around a cwSymbologyPaletteData (the cwTrip/cwTripData
 // pattern): the value half round-trips through cwSymbologyPaletteIO, while this
-// QObject is what the manager owns and QML observes. Mutation is wholesale via
-// setData() — palettes are loaded and re-skinned as a unit, not field-by-field.
+// QObject is what the manager owns and QML observes. setData() replaces the
+// whole value (load / reconciling reload); setGlyph/setBrush/removeGlyph/
+// removeBrush mutate a single member in place and emit a name-scoped change
+// signal — the object-first edit path the auto-save glyph library builds on.
 class CAVEWHERE_LIB_EXPORT cwSymbologyPalette : public QObject
 {
     Q_OBJECT
@@ -73,12 +75,25 @@ public:
     std::optional<cwLineBrush> brush(QStringView name) const { return m_data.brush(name); }
     std::optional<cwSymbologyGlyph> glyph(QStringView name) const { return m_data.glyph(name); }
 
+    // Single-member mutation, keyed by the unique name. setGlyph/setBrush upsert
+    // (replace in place if the name exists, append otherwise) and are no-ops when
+    // the content is unchanged; removeGlyph/removeBrush drop the named member if
+    // present. Each emits glyphChanged/brushChanged with the affected name only
+    // when something actually changed — a removal emits it too, so a consumer's
+    // name-scoped invalidation covers a deleted member as well.
+    void setGlyph(const cwSymbologyGlyph &glyph);
+    void removeGlyph(QStringView name);
+    void setBrush(const cwLineBrush &brush);
+    void removeBrush(QStringView name);
+
     // Cheap implicitly-shared lookup surface for the render path.
     cwPaletteSnapshot snapshot() const { return m_data.snapshot(); }
 
 signals:
     void dataChanged();
     void writableChanged();
+    void glyphChanged(const QString &name);
+    void brushChanged(const QString &name);
 
 private:
     cwSymbologyPaletteData m_data;
