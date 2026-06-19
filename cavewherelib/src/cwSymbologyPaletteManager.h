@@ -77,23 +77,24 @@ public:
 
     // Fork an existing palette (the read-only seed or any installed one) into a
     // new writable user palette: deep-copies its brushes and glyphs, assigns a
-    // fresh id, writes a new subdirectory under paletteDirectory(), reloads, and
-    // returns the new palette. Returns nullptr on failure (the reason is pushed
-    // to errorModel()). This is how a user gets something editable, since the
-    // seed is read-only. The reload() reconciles by id, so existing palette
-    // pointers (including `source`) stay valid across it.
+    // fresh id, writes a new subdirectory under paletteDirectory(), appends the
+    // new palette in memory, and returns it. Returns nullptr on failure (the
+    // reason is pushed to errorModel()). This is how a user gets something
+    // editable, since the seed is read-only. Existing palette pointers
+    // (including `source`) stay valid — no reload happens.
     Q_INVOKABLE cwSymbologyPalette *duplicatePalette(cwSymbologyPalette *source,
                                                      const QString &newName);
 
-    // Write a single glyph into a writable palette's glyphs/ subdir, then reload.
-    // The reload reconciles by id, so the palette's pointer stays valid. No-op
+    // Upsert a glyph on a writable palette (object-first): mutates the live
+    // palette and emits glyphChanged. Persistence is asynchronous — cwSaveLoad's
+    // connectPalette writes the glyph file as a first-class save job. No-op
     // returning false if the palette is null or read-only. Used by the glyph
     // editor's Save.
     Q_INVOKABLE bool saveGlyph(cwSymbologyPalette *palette, const cwSymbologyGlyph &glyph);
 
-    // Delete a glyph file from a writable palette, then reload (the palette's
-    // pointer survives). A rename is saveGlyph(newGlyph) followed by
-    // removeGlyph(oldName).
+    // Drop a glyph from a writable palette (object-first, a no-op if absent).
+    // cwSaveLoad removes the glyph file asynchronously. A rename is
+    // saveGlyph(newGlyph) followed by removeGlyph(oldName).
     Q_INVOKABLE bool removeGlyph(cwSymbologyPalette *palette, const QString &glyphName);
 
     // The project-root subdirectory name that holds a project's forked palettes

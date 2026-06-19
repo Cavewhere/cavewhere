@@ -269,7 +269,8 @@ cwSymbologyPalette *cwSymbologyPaletteManager::duplicatePalette(cwSymbologyPalet
         return nullptr;
     }
 
-    const QString targetDir = root.filePath(uniqueSubdirName(root, slugify(data.name)));
+    const QString subdirName = uniqueSubdirName(root, slugify(data.name));
+    const QString targetDir = root.absoluteFilePath(subdirName);
     const auto result = cwSymbologyPaletteIO::save(data, targetDir);
     if (result.hasError()) {
         reportLoadProblem(
@@ -277,8 +278,21 @@ cwSymbologyPalette *cwSymbologyPaletteManager::duplicatePalette(cwSymbologyPalet
         return nullptr;
     }
 
-    reload();
-    return paletteById(newId);
+    // Object-first: construct the fork in memory and append it rather than
+    // reload()ing the whole directory. A reload would re-read every palette from
+    // disk to add this one; the reconcile would keep all existing pointers, so
+    // it does the same work for no benefit and re-emits content signals. The new
+    // palette is writable and rooted at targetDir; palettesChanged lets
+    // cwSaveLoad wire its auto-save (each future glyph/brush edit persists as a
+    // first-class file job).
+    auto *fork = new cwSymbologyPalette(this);
+    fork->setData(data);
+    fork->setWritable(true);
+    fork->setDirectory(targetDir);
+    m_palettes.append(fork);
+
+    emit palettesChanged();
+    return fork;
 }
 
 bool cwSymbologyPaletteManager::saveGlyph(cwSymbologyPalette *palette, const cwSymbologyGlyph &glyph)
@@ -293,14 +307,11 @@ bool cwSymbologyPaletteManager::saveGlyph(cwSymbologyPalette *palette, const cwS
         return false;
     }
 
-    const auto result = cwSymbologyPaletteIO::saveGlyph(glyph, palette->directory());
-    if (result.hasError()) {
-        reportLoadProblem(
-            QStringLiteral("failed to save glyph \"%1\": %2").arg(glyph.name, result.errorMessage()));
-        return false;
-    }
-
-    reload(); // reconciles by id — `palette` stays valid and picks up the glyph
+    // Object-first: upsert the glyph on the live palette and emit glyphChanged.
+    // cwSaveLoad's connectPalette persists the glyph file asynchronously (a
+    // first-class WriteFile job); no synchronous IO and no reload() here, so an
+    // in-flight edit can't be clobbered by a stale re-read from disk.
+    palette->setGlyph(glyph);
     return true;
 }
 
@@ -316,12 +327,9 @@ bool cwSymbologyPaletteManager::removeGlyph(cwSymbologyPalette *palette, const Q
         return false;
     }
 
-    const auto result = cwSymbologyPaletteIO::removeGlyph(palette->directory(), glyphName);
-    if (result.hasError()) {
-        reportLoadProblem(result.errorMessage());
-        return false;
-    }
-
-    reload(); // reconciles by id — `palette` stays valid and drops the glyph
+    // Object-first: drop the glyph from the live palette (a no-op if absent) and
+    // emit glyphChanged. connectPalette removes the glyph file asynchronously;
+    // the name's path-safety is enforced there, before it becomes a path.
+    palette->removeGlyph(glyphName);
     return true;
 }

@@ -274,10 +274,11 @@ Monad::ResultBase cwSaveLoadPrivate::moveDirectoryRobust(const QString& sourcePa
 QString cwSaveLoadPrivate::Job::toString() const {
     const QString objectHex = QString::number(reinterpret_cast<quintptr>(objectId), 16);
     const auto* writePayload = std::get_if<WriteFilePayload>(&payload);
+    const auto* bytesPayload = std::get_if<WriteBytesPayload>(&payload);
     const auto* copyPayload = std::get_if<CopyFilePayload>(&payload);
     const auto* customPayload = std::get_if<CustomPayload>(&payload);
     const QString sourcePath = copyPayload ? copyPayload->sourcePath : QString();
-    return QStringLiteral("Job{action=%1 kind=%2 tag='%3' objectId=0x%4 oldPath='%5' newPath='%6' sourcePath='%7' dataRoot='%8' hasMessage=%9 hasCustom=%10}")
+    return QStringLiteral("Job{action=%1 kind=%2 tag='%3' objectId=0x%4 oldPath='%5' newPath='%6' sourcePath='%7' dataRoot='%8' hasMessage=%9 bytes=%10 hasCustom=%11}")
             .arg(QString::fromLatin1(actionName(action)),
                  QString::fromLatin1(kindName(kind)),
                  tag,
@@ -287,6 +288,7 @@ QString cwSaveLoadPrivate::Job::toString() const {
                  sourcePath,
                  dataRoot)
             .arg(writePayload && writePayload->message != nullptr)
+            .arg(bytesPayload ? bytesPayload->bytes.size() : -1)
             .arg(customPayload && customPayload->action != nullptr);
 }
 
@@ -500,15 +502,30 @@ Monad::ResultBase cwSaveLoadPrivate::Job::execute() const {
             return Monad::ResultBase();
         }
     case Action::WriteFile: {
-        auto* writePayload = std::get_if<WriteFilePayload>(&payload);
-        if (!writePayload || !writePayload->message) {
-            return Monad::ResultBase(QStringLiteral("Missing message for WriteFile job: %1").arg(path));
-        }
         {
             auto rootCheck = ensureInsideRoot(path);
             if (rootCheck.hasError()) {
                 return rootCheck;
             }
+        }
+        // Pre-serialized bytes (e.g. a palette glyph/brush JSON) are written
+        // verbatim, so the on-disk form matches its single-sourced serializer.
+        if (auto* bytesPayload = std::get_if<WriteBytesPayload>(&payload)) {
+            return Monad::mbind(ensurePathForFile(path), [&](Monad::ResultBase /*result*/) {
+                QSaveFile file(path);
+                if (!file.open(QFile::WriteOnly)) {
+                    return Monad::ResultBase(QStringLiteral("Failed to open file for writing: %1").arg(path));
+                }
+                file.write(bytesPayload->bytes);
+                if (!file.commit()) {
+                    return Monad::ResultBase(QStringLiteral("Failed to write file: %1").arg(path));
+                }
+                return Monad::ResultBase();
+            });
+        }
+        auto* writePayload = std::get_if<WriteFilePayload>(&payload);
+        if (!writePayload || !writePayload->message) {
+            return Monad::ResultBase(QStringLiteral("Missing message for WriteFile job: %1").arg(path));
         }
         return Monad::mbind(ensurePathForFile(path), [&](Monad::ResultBase /*result*/) {
             QSaveFile file(path);
@@ -526,7 +543,9 @@ Monad::ResultBase cwSaveLoadPrivate::Job::execute() const {
             }
 
             file.write(json_output.c_str(), json_output.size());
-            file.commit();
+            if (!file.commit()) {
+                return Monad::ResultBase(QStringLiteral("Failed to write file: %1").arg(path));
+            }
             return Monad::ResultBase();
         });
     }

@@ -10,18 +10,43 @@
 
 // Our
 #include "cwFutureManagerModel.h"
+#include "cwPenPoint.h"
+#include "cwPenStroke.h"
 #include "cwProject.h"
 #include "cwRootData.h"
+#include "cwSymbologyGlyph.h"
 #include "cwSymbologyPalette.h"
+#include "cwSymbologyPaletteIO.h"
 #include "cwSymbologyPaletteManager.h"
 
 // Qt
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QPointF>
 #include <QTemporaryDir>
 
 namespace {
+
+// A minimal one-stroke glyph with the given name.
+cwSymbologyGlyph makeGlyph(const QString &name)
+{
+    cwPenPoint start;
+    start.position = QPointF(0.0, 0.0);
+    cwPenPoint end;
+    end.position = QPointF(1.0, 0.0);
+
+    cwPenStroke stroke;
+    stroke.brushName = QStringLiteral("wall");
+    stroke.points = {start, end};
+
+    cwSymbologyGlyph glyph;
+    glyph.name = name;
+    glyph.displayName = name;
+    glyph.strokes = {stroke};
+    return glyph;
+}
 
 // The palette manager is an app-global singleton shared across cwRootData
 // instances in a test process; each project open re-points it. Reset it to "no
@@ -164,4 +189,89 @@ TEST_CASE("A forked palette survives a .cwproj round-trip",
     auto *manager2 = root2->paletteManager();
     REQUIRE(manager2->paletteById(forkId) != nullptr);
     CHECK(manager2->paletteById(forkId)->name() == QStringLiteral("Dir Fork"));
+}
+
+TEST_CASE("Editing a glyph auto-saves it as a first-class file job",
+          "[cwSymbologyPaletteProjectStorage]")
+{
+    PaletteManagerGuard guard;
+
+    auto root = std::make_unique<cwRootData>();
+    auto *project = root->project();
+    auto *manager = root->paletteManager();
+
+    cwSymbologyPalette *fork =
+        manager->duplicatePalette(manager->defaultPalette(), QStringLiteral("Editable"));
+    REQUIRE(fork != nullptr);
+
+    const cwSymbologyGlyph glyph = makeGlyph(QStringLiteral("my-tick"));
+    REQUIRE(manager->saveGlyph(fork, glyph));
+
+    // The edit marks the project modified (mirrors a cave/note edit).
+    CHECK(project->modified());
+
+    // The glyph file isn't on disk until the async save flush completes.
+    const QString glyphFile =
+        QDir(fork->directory()).absoluteFilePath(QStringLiteral("glyphs/my-tick.cwglyph"));
+    project->waitSaveToFinish();
+    REQUIRE(QFile::exists(glyphFile));
+
+    // The bytes are exactly what the single-sourced serializer produces, so a
+    // file written through the job path is identical to one cwSymbologyPaletteIO
+    // would write (conflict-free merges depend on this).
+    QFile file(glyphFile);
+    REQUIRE(file.open(QIODevice::ReadOnly));
+    CHECK(file.readAll() == cwSymbologyPaletteIO::glyphToJson(glyph));
+}
+
+TEST_CASE("Removing a glyph deletes its file via the save queue",
+          "[cwSymbologyPaletteProjectStorage]")
+{
+    PaletteManagerGuard guard;
+
+    auto root = std::make_unique<cwRootData>();
+    auto *project = root->project();
+    auto *manager = root->paletteManager();
+
+    cwSymbologyPalette *fork =
+        manager->duplicatePalette(manager->defaultPalette(), QStringLiteral("Trimmed"));
+    REQUIRE(fork != nullptr);
+
+    REQUIRE(manager->saveGlyph(fork, makeGlyph(QStringLiteral("doomed"))));
+    const QString glyphFile =
+        QDir(fork->directory()).absoluteFilePath(QStringLiteral("glyphs/doomed.cwglyph"));
+    project->waitSaveToFinish();
+    REQUIRE(QFile::exists(glyphFile));
+
+    REQUIRE(manager->removeGlyph(fork, QStringLiteral("doomed")));
+    project->waitSaveToFinish();
+    CHECK_FALSE(QFile::exists(glyphFile));
+}
+
+TEST_CASE("A path-unsafe glyph name never escapes the palette directory",
+          "[cwSymbologyPaletteProjectStorage]")
+{
+    PaletteManagerGuard guard;
+
+    auto root = std::make_unique<cwRootData>();
+    auto *project = root->project();
+    auto *manager = root->paletteManager();
+
+    cwSymbologyPalette *fork =
+        manager->duplicatePalette(manager->defaultPalette(), QStringLiteral("Guarded"));
+    REQUIRE(fork != nullptr);
+
+    // Setting a glyph whose name isn't kebab-case mutates the in-memory palette
+    // and emits glyphChanged, but connectPalette's path-safety guard refuses to
+    // turn it into a file — so nothing is written, in or out of the tree.
+    fork->setGlyph(makeGlyph(QStringLiteral("../escape")));
+    project->waitSaveToFinish();
+
+    const QDir paletteDir(fork->directory());
+    const QString inTree =
+        paletteDir.absoluteFilePath(QStringLiteral("glyphs/../escape.cwglyph"));
+    const QString escaped = QFileInfo(paletteDir.absoluteFilePath(QStringLiteral(".."))
+                                          ).absoluteFilePath() + QStringLiteral("/escape.cwglyph");
+    CHECK_FALSE(QFile::exists(inTree));
+    CHECK_FALSE(QFile::exists(escaped));
 }

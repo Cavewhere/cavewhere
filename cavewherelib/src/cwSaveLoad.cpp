@@ -22,6 +22,9 @@
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwSymbologyPaletteManager.h"
+#include "cwSymbologyPalette.h"
+#include "cwSymbologyPaletteIO.h"
+#include "cwSymbologyName.h"
 #include "cwProject.h"
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyNoteLiDARModel.h"
@@ -1754,9 +1757,19 @@ void cwSaveLoad::setFileName(const QString &filename)
             // into the bundle. The manager is a singleton; absent in headless
             // tests that never initialize() it, so guard the access.
             if (auto* paletteManager = cwSymbologyPaletteManager::instance()) {
+                // Drop any existing per-palette auto-save wiring first: setting
+                // the directory rescans, and the reconciling reload calls
+                // setData() on surviving palette objects. With the writes wired
+                // live that would re-enter the save path and write just-loaded
+                // content straight back to disk. connectPalettes() below rewires
+                // everything after the reload settles.
+                disconnectPalettes();
                 paletteManager->setPaletteDirectory(
                             projectRootDir().absoluteFilePath(
                                 cwSymbologyPaletteManager::folderName()));
+                connect(paletteManager, &cwSymbologyPaletteManager::palettesChanged,
+                        this, &cwSaveLoad::connectPalettes, Qt::UniqueConnection);
+                connectPalettes();
             }
         }
 
@@ -4006,6 +4019,184 @@ void cwSaveLoad::connectCave(cwCave *cave)
     connect(fixModel, &QAbstractItemModel::rowsRemoved, this, saveCave);
     connect(fixModel, &QAbstractItemModel::modelReset, this, saveCave);
     connect(fixModel, &QAbstractItemModel::dataChanged, this, saveCave);
+}
+
+void cwSaveLoad::disconnectPalettes()
+{
+    auto* manager = cwSymbologyPaletteManager::instance();
+    if (manager == nullptr) {
+        return;
+    }
+    const auto palettes = manager->palettes();
+    for (auto* palette : palettes) {
+        if (palette == nullptr) {
+            continue;
+        }
+        disconnect(palette, nullptr, this, nullptr);
+        if (d->isTrackedConnected(palette)) {
+            d->trackDisconnected(palette);
+            d->connectionChecker.remove(palette);
+        }
+    }
+}
+
+void cwSaveLoad::connectPalettes()
+{
+    auto* manager = cwSymbologyPaletteManager::instance();
+    if (manager == nullptr) {
+        return;
+    }
+    const auto palettes = manager->palettes();
+    for (auto* palette : palettes) {
+        connectPalette(palette);
+    }
+}
+
+void cwSaveLoad::connectPalette(cwSymbologyPalette* palette)
+{
+    // Only writable palettes auto-save; the shipped default (qrc, read-only)
+    // and any forward-incompatible palette are never wired.
+    if (palette == nullptr || !palette->isWritable()) {
+        return;
+    }
+
+    // Rebind defensively: a reconciling reload can reuse this pointer, so clear
+    // any prior connection before re-adding to avoid a doubled write per edit.
+    disconnect(palette, nullptr, this, nullptr);
+    if (d->isTrackedConnected(palette)) {
+        d->trackDisconnected(palette);
+        d->connectionChecker.remove(palette);
+    }
+    if (!d->trackConnected(palette)) {
+        return;
+    }
+    d->connectionChecker.add(palette);
+
+    connect(palette, &cwSymbologyPalette::glyphChanged, this,
+            [this, palette](const QString& name) {
+        writePaletteGlyph(palette, name);
+    });
+    connect(palette, &cwSymbologyPalette::brushChanged, this,
+            [this, palette](const QString& name) {
+        writePaletteBrush(palette, name);
+    });
+    connect(palette, &cwSymbologyPalette::dataChanged, this,
+            [this, palette]() {
+        writePaletteIdentity(palette);
+    });
+}
+
+bool cwSaveLoad::paletteWriteReady(cwSymbologyPalette* palette, const QString& name) const
+{
+    if (palette == nullptr || !palette->isWritable()) {
+        return false;
+    }
+    if (!d->saveEnabled) {
+        return false;
+    }
+    if (d->projectFileName.isEmpty() || palette->directory().isEmpty()) {
+        return false;
+    }
+    // No saveWillCauseDataLoss() gate here (unlike saveObject for region-tree
+    // objects): a palette stamped newer than this build is marked read-only on
+    // load, so isWritable() above already excludes it — a writable palette is
+    // always version-supported and safe to re-save.
+    // Glyph/brush names become file paths under the palette directory, so a name
+    // that isn't kebab-case (the path-safety guard) must never reach the disk —
+    // refuse it here rather than letting it escape glyphs//brushes/. The empty
+    // name is the identity write (palette.json, a fixed filename), which skips
+    // this check.
+    if (!name.isEmpty() && !cwSymbology::isValidName(name)) {
+        qWarning() << "cwSaveLoad: refusing to write palette entity with unsafe name" << name;
+        return false;
+    }
+    return true;
+}
+
+QString cwSaveLoad::paletteEntityPath(cwSymbologyPalette* palette, const QString& subdir,
+                                      const QString& name, const QString& suffix) const
+{
+    return QDir(QDir(palette->directory()).filePath(subdir)).filePath(name + suffix);
+}
+
+void cwSaveLoad::writePaletteGlyph(cwSymbologyPalette* palette, const QString& name)
+{
+    if (!paletteWriteReady(palette, name)) {
+        return;
+    }
+    const QString path = paletteEntityPath(palette, cwSymbologyPaletteIO::kGlyphsSubdirName,
+                                           name, cwSymbologyPaletteIO::kGlyphFileSuffix);
+    const QString tag = QStringLiteral("glyph:") + name;
+    // glyphChanged fires on both upsert and removal, so presence on the object
+    // decides write vs. delete.
+    if (const auto glyph = palette->glyph(name)) {
+        enqueuePaletteWrite(palette, tag, path, cwSymbologyPaletteIO::glyphToJson(*glyph));
+    } else {
+        enqueuePaletteRemove(palette, tag, path);
+    }
+}
+
+void cwSaveLoad::writePaletteBrush(cwSymbologyPalette* palette, const QString& name)
+{
+    if (!paletteWriteReady(palette, name)) {
+        return;
+    }
+    const QString path = paletteEntityPath(palette, cwSymbologyPaletteIO::kBrushesSubdirName,
+                                           name, cwSymbologyPaletteIO::kBrushFileSuffix);
+    const QString tag = QStringLiteral("brush:") + name;
+    if (const auto brush = palette->brush(name)) {
+        enqueuePaletteWrite(palette, tag, path, cwSymbologyPaletteIO::brushToJson(*brush));
+    } else {
+        enqueuePaletteRemove(palette, tag, path);
+    }
+}
+
+void cwSaveLoad::writePaletteIdentity(cwSymbologyPalette* palette)
+{
+    if (!paletteWriteReady(palette, QString())) {
+        return;
+    }
+    const QString path =
+            QDir(palette->directory()).filePath(cwSymbologyPaletteIO::kPaletteJsonFileName);
+    enqueuePaletteWrite(palette, QStringLiteral("palette"), path,
+                        cwSymbologyPaletteIO::toJson(palette->data()));
+}
+
+void cwSaveLoad::enqueuePaletteWrite(cwSymbologyPalette* palette, const QString& tag,
+                                     const QString& path, const QByteArray& bytes)
+{
+    cwSaveLoadPrivate::Job job(palette, cwSaveLoadPrivate::Job::Kind::File,
+                               cwSaveLoadPrivate::Job::Action::WriteFile, bytes);
+    job.path = path;
+    job.tag = tag;
+    d->addExplicitFileSystemJob(std::move(job), this);
+    markPaletteMutated();
+}
+
+void cwSaveLoad::enqueuePaletteRemove(cwSymbologyPalette* palette, const QString& tag,
+                                      const QString& path)
+{
+    cwSaveLoadPrivate::Job job(palette, cwSaveLoadPrivate::Job::Kind::File,
+                               cwSaveLoadPrivate::Job::Action::Remove);
+    job.oldPath = path;
+    job.tag = tag;
+    d->addExplicitFileSystemJob(std::move(job), this);
+    markPaletteMutated();
+}
+
+void cwSaveLoad::markPaletteMutated()
+{
+    // Mirror saveObject's mutation bookkeeping (cwSaveLoadPrivate::saveObject,
+    // kept intentionally duplicated since that block is a private-header
+    // template) so a palette edit marks the project modified — unless mutation
+    // tracking is suppressed (a remote apply is in flight), in which case the
+    // on-disk write still happens but isn't counted as a local change.
+    if (d->suppressLocalMutationTracking) {
+        return;
+    }
+    ++d->localMutationEpoch;
+    d->remoteApplyGuard.noteMutation();
+    emit localMutationOccurred();
 }
 
 

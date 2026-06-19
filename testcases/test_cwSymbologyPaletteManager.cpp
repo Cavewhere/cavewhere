@@ -311,17 +311,14 @@ TEST_CASE("Manager saves a glyph into a writable palette",
     const cwSymbologyGlyph glyph = makeGlyph(QStringLiteral("my-tick"));
     REQUIRE(manager.saveGlyph(fork, glyph));
 
-    // Refreshed in place — same pointer, now carrying the glyph.
+    // Object-first: the live palette carries the glyph immediately, same pointer.
+    // The bare manager does no disk I/O — persistence is cwSaveLoad's job and is
+    // covered by test_cwSymbologyPaletteProjectStorage.cpp (real cwProject).
     CHECK(manager.paletteById(forkId) == fork);
     CHECK(fork->glyphs().size() == glyphsBefore + 1);
     const auto saved = fork->glyph(QStringLiteral("my-tick"));
     REQUIRE(saved.has_value());
     CHECK(saved.value() == glyph);
-
-    // The glyph file landed under the fork's glyphs/ subdir.
-    const QString glyphFile =
-        QDir(fork->directory()).absoluteFilePath(QStringLiteral("glyphs/my-tick.cwglyph"));
-    CHECK(QFile::exists(glyphFile));
 }
 
 TEST_CASE("Manager refuses to save a glyph into a read-only palette",
@@ -362,31 +359,12 @@ TEST_CASE("Manager removes a glyph from a writable palette",
 
     REQUIRE(manager.removeGlyph(fork, QStringLiteral("doomed")));
     CHECK_FALSE(fork->glyph(QStringLiteral("doomed")).has_value());
-
-    const QString glyphFile =
-        QDir(fork->directory()).absoluteFilePath(QStringLiteral("glyphs/doomed.cwglyph"));
-    CHECK_FALSE(QFile::exists(glyphFile));
 }
 
-TEST_CASE("Manager rejects a path-unsafe glyph name on remove",
-          "[cwSymbologyPaletteManager]")
-{
-    QTemporaryDir temp;
-    REQUIRE(temp.isValid());
-
-    cwSymbologyPaletteManager manager;
-    manager.setPaletteDirectory(temp.path());
-
-    cwSymbologyPalette *fork =
-        manager.duplicatePalette(manager.defaultPalette(), QStringLiteral("Guarded"));
-    REQUIRE(fork != nullptr);
-
-    // A path-traversal name is rejected on the kebab-case guard before any
-    // filesystem touch, and the problem is reported.
-    const int errorsBefore = manager.errorModel()->errors()->size();
-    CHECK_FALSE(manager.removeGlyph(fork, QStringLiteral("../palette")));
-    CHECK(manager.errorModel()->errors()->size() > errorsBefore);
-}
+// Path-safety for glyph/brush names (the kebab-case guard) now lives where a
+// name actually becomes a file path — cwSaveLoad::connectPalette — so it is
+// exercised in test_cwSymbologyPaletteProjectStorage.cpp. The manager's
+// object-first removeGlyph of an out-of-tree name is a harmless in-memory no-op.
 
 TEST_CASE("Reload preserves the pointers of palettes that stay on disk",
           "[cwSymbologyPaletteManager]")

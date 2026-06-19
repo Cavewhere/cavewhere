@@ -190,28 +190,28 @@ front of it.</p>
   many <code>appendPoint</code>s; the canvas commits the edited glyph back into the
   palette object on <strong>pen-up / mouse-release</strong> (one mutation per
   committed stroke), and the file write coalesces from there.</li>
-  <li><strong>Debounce Restarter on the owner.</strong> Every
-  <code>AsyncFuture::Restarter</code> in this codebase is a member of the object
-  that owns the work (<code>cwScrapManager</code>, <code>cwLinePlotManager</code>,
-  <code>cwLazLayer</code>, …). The debounce Restarter lives on the palette's
-  <strong>owner</strong> (<code>cwSymbologyPaletteManager</code> — it already owns
-  the palette objects and <code>reload</code>), subscribes to the granular content
-  signals (§7), and collapses a burst of edits into one coalesced write. Editors
-  only mutate the palette; the owner persists.</li>
-  <li><strong>The coalesced write is enqueued as a <code>cwSaveLoad</code>
-  Operation (option B).</strong> <span class="tag done">DECIDED — B</span> The
-  Restarter does not write files directly; when it fires it enqueues a new
-  <code>cwSaveLoad</code> operation type (alongside
-  <code>SaveFlush</code>/<code>BundlePackage</code>/<code>ImportFiles</code>/…)
-  that writes the palette's <code>glyphs/</code>+<code>brushes/</code> files off
-  the UI thread. This is what makes ordering correct forever: a palette write and
-  a bundle/flush serialize in the <em>same</em> queue, so the bundle is never
-  zipped (<code>cwZip::zipDirectory</code> over the whole project dir) mid-write.
-  Cost — <code>cwSaveLoad</code> learns about directory-as-truth palette files
-  (one new operation + the IO call) — is accepted in exchange for the single
-  ordering guarantee. Each file is still written atomically (temp + rename, the
-  discipline <code>saveBundledArchiveAtomic</code> already uses) so even a crash
-  mid-queue leaves whole files.</li>
+  <li><strong>Debounce Restarter on the owner.</strong>
+  <span class="tag">SUPERSEDED by §10 step 3 (Option B)</span> — kept for history.
+  The first cut put an <code>AsyncFuture::Restarter</code> on the palette owner
+  (<code>cwSymbologyPaletteManager</code>) to coalesce a burst of edits into one
+  write. The as-built design drops it: <code>cwSaveLoad::connectPalette()</code>
+  listens to the granular signals directly (like <code>connectCave</code>), and the
+  editor already commits the palette object discretely (per Save / pen-up), so
+  <code>(objectId,tag)</code> job compression coalesces — no Restarter is needed.</li>
+  <li><strong>The write is a first-class <code>cwSaveLoad</code> job (option B).</strong>
+  <span class="tag done">DECIDED — B</span> <em>As built (see §10 step 3):</em> not a new
+  <em>Operation</em> type and not a <code>Custom</code> lambda — each palette file is a
+  genuine <code>WriteFile</code> <code>Job</code> on the existing file-job queue, keyed by
+  <code>(objectId = palette*, tag)</code> and pushed via <code>addExplicitFileSystemJob</code>.
+  This is what makes ordering correct forever: a <code>BundlePackage</code> operation is
+  preceded by a <code>SaveFlush</code> that drains all pending file jobs, so the bundle is
+  never zipped (<code>cwZip::zipDirectory</code> over the whole project dir) mid-write.
+  <code>cwSaveLoad</code> learns the directory-as-truth palette paths
+  (<code>palette-&gt;directory()/{glyphs,brushes}/&lt;name&gt;</code>) the same way it learns
+  <code>GIS Layers/</code> for LAZ. Each file is still written atomically (<code>QSaveFile</code>
+  temp + rename, the discipline <code>cwSymbologyPaletteIO</code> and
+  <code>saveBundledArchiveAtomic</code> already use) so even a crash mid-queue leaves whole
+  files.</li>
   <li><strong>Dirty tracking</strong> folds the forked palettes into the project's
   existing unsaved-state. Today <code>cwProject</code> goes
   <code>modified</code> via <code>cwSaveLoad::localMutationOccurred</code>; a
@@ -405,13 +405,97 @@ and benefits automatically once the decoration build goes async.</blockquote>
   bundled <code>.cw</code> + <code>.cwproj</code> fork round-trips. Fixed a latent
   bug: an empty palette directory made <code>reload()</code> scan the CWD
   (<code>QDir("")</code> → <code>"."</code>); now guarded.</li>
-  <li>Async write: a Restarter on <code>cwSymbologyPaletteManager</code>
-  subscribes to the granular signals, coalesces on pen-up, and <em>enqueues a new
-  <code>cwSaveLoad</code> operation</em> (option B, §5) that writes the
-  <code>glyphs/</code>+<code>brushes/</code> files atomically off-thread — so
-  palette writes serialize with bundle/flush in one queue. Feed
-  <code>cwProject</code>'s <code>modified</code> flag; drop the synchronous
-  <code>reload()</code>-after-write.</li>
+  <li><strong>Async write — palette writes are first-class <code>cwSaveLoad</code>
+  jobs.</strong> <span class="tag done">DECIDED — Option B</span> Glyph/brush/identity
+  writes become genuine <code>WriteFile</code> jobs (<em>not</em> <code>Action::Custom</code>
+  lambdas, <em>not</em> a manager-owned Restarter), keeping the per-file
+  directory-as-truth layout so collaborative palette edits merge conflict-free —
+  the workflow the user cares about most. Each write is a <code>Job</code> keyed by
+  <code>(objectId = palette*, tag = "glyph:&lt;name&gt;" / "brush:&lt;name&gt;" / "palette")</code>
+  with an explicit <code>path</code> under <code>palette-&gt;directory()</code>, pushed via
+  <code>addExplicitFileSystemJob</code> — same execution path, atomic <code>QSaveFile</code>
+  write, and <code>(objectId,tag)</code> compression as a cave's save, so a bundle's
+  preceding <code>SaveFlush</code> drains palette writes before any zip. Coalescing falls
+  out for free: the editor/canvas commits the palette object discretely (per Save / per
+  pen-up, not per-sample), and job compression collapses repeats — <strong>no Restarter
+  needed</strong> (supersedes §5's manager-Restarter wording). <code>cwSymbologyPaletteIO</code>
+  keeps its load/scan side; its write functions leave the auto-save path (their struct→proto
+  conversion is single-sourced and reused by <code>cwSaveLoad::toProtoGlyph/Brush/Palette</code>).
+  Split into two commits:
+  <ol type="a">
+    <li><strong>3a — edit auto-save path.</strong> <code>cwSaveLoad::connectPalette()</code>
+    (mirrors <code>connectCave</code>) wires each <em>writable</em> manager palette's
+    <code>glyphChanged</code>/<code>brushChanged</code>/<code>dataChanged</code> to per-file
+    <code>WriteFile</code> jobs (present → write, absent → <code>Remove</code>), emitting
+    <code>localMutationOccurred()</code> so <code>cwProject</code> goes <code>modified</code>.
+    <code>connectPalettes()</code> (disconnect+reconnect all writable palettes) runs on
+    <code>setFileName</code> (after the existing <code>setPaletteDirectory</code>) and on
+    <code>cwSymbologyPaletteManager::palettesChanged</code>. Manager
+    <code>saveGlyph</code>/<code>removeGlyph</code> become object-first
+    (<code>palette-&gt;setGlyph</code>/<code>removeGlyph</code>, no IO, <strong>no
+    <code>reload()</code></strong>); <code>duplicatePalette</code> keeps its synchronous
+    <code>IO::save</code> but replaces <code>reload()</code> with a direct in-memory
+    construct+append + <code>palettesChanged</code> (so there is <em>no</em> mutation-path
+    <code>reload()</code> → the stale-disk clobber hazard is gone, no temp guard). Manager
+    unit tests that asserted synchronous on-disk presence move to an integration test
+    (<code>test_cwSymbologyPaletteProjectStorage.cpp</code>, real <code>cwProject</code> +
+    <code>waitSaveToFinish</code>); in-memory assertions stay.
+    <p class="note"><strong>Must-close gaps in 3a:</strong></p>
+    <ul>
+      <li><strong>Single-source the name→path derivation, with validation.</strong>
+      <code>cwSymbologyPaletteIO</code> writes a glyph/brush as
+      <code>subdir.filePath(name + ".cwglyph"/".cwbrush")</code> — the user-controlled
+      <em>name is used verbatim as the filename, unsanitized</em>
+      (<code>cwSymbologyPaletteIO.cpp:395,414</code>). Dropping IO's
+      <code>removeGlyph</code> also drops whatever guard made the
+      <code>"../palette"</code> case return an error (old test 371). So
+      <code>connectPalette</code>'s job-path builder must reuse a <strong>single shared
+      helper</strong> for <code>(palette, kind, name) → path</code> that slugifies /
+      rejects names which aren't filesystem-safe (no <code>/</code>, <code>..</code>,
+      empty), so a glyph named <code>../../evil</code> can never escape
+      <code>palette-&gt;directory()</code>. Same helper used by both write and Remove
+      jobs, single-sourced alongside <code>toProto*</code>.</li>
+      <li><strong>Pin down what <code>dataChanged()</code> maps to.</strong> The
+      identity write (tag <code>"palette"</code>) must fire only on identity-field
+      changes. If <code>setGlyph</code> emits <em>both</em> <code>glyphChanged(name)</code>
+      and <code>dataChanged()</code>, every glyph edit also enqueues a redundant
+      <code>palette.json</code> write — compression collapses repeats within a flush,
+      but confirm the emission semantics so we don't churn identity on content edits.</li>
+    </ul></li>
+    <li><strong>3b — structural persistence + load-only reload.</strong> Migrate
+    <code>duplicatePalette</code> (and palette add/remove) off <code>IO::save</code> onto
+    first-class <code>cwSaveLoad</code> writes: <code>connectPalettes</code> seeds a
+    <code>QSet&lt;QUuid&gt; m_persistedPaletteIds</code> on first connect after open (no
+    write), and enqueues a full write (identity + every glyph + brush) for any
+    later-appearing writable id. <code>reload()</code> is then <strong>load-only</strong>
+    (construct / project-open / sync) and never runs after a local edit.
+    <p class="note"><strong>Must-close gaps in 3b:</strong></p>
+    <ul>
+      <li><strong>Disconnect around <code>reload()</code> (write-back hazard).</strong>
+      <code>reload()</code> calls <code>setData()</code> on <em>surviving</em> palette
+      objects, which emits <code>glyphChanged</code>/<code>dataChanged</code>. On a
+      git-sync / external-sync reload of the same project (same ids → survivors that are
+      already connected), the live connection would enqueue <code>WriteFile</code>s of
+      just-pulled content <em>back to disk</em> and fire
+      <code>localMutationOccurred()</code> → spurious <code>modified</code> and rewritten
+      files right after a pull, defeating the conflict-free goal.
+      <code>connectPalettes</code> must <strong>disconnect before reload and reconnect
+      after</strong> (or guard the load with a flag), so load-side
+      <code>setData</code> never re-enters the auto-save path.</li>
+      <li><strong>Enqueue <code>EnsureDir</code> before the writes.</strong>
+      <code>IO::save</code> currently <code>mkpath</code>s the palette dir and the
+      <code>glyphs/</code>/<code>brushes/</code> subdirs
+      (<code>cwSymbologyPaletteIO.cpp:391,555</code>); <code>QSaveFile</code> does
+      <em>not</em> create parent directories. When the full-write path leaves
+      <code>IO::save</code>, it must push <code>EnsureDir</code> jobs for the subdirs,
+      ordered before the <code>WriteFile</code>s.</li>
+      <li><strong>Specify palette-removal teardown.</strong> Removing a whole palette
+      means tearing down <code>palette.json</code> + every <code>glyphs/*</code> +
+      <code>brushes/*</code> + the dir. The job queue's <code>Remove</code> is per-file;
+      define how the recursive palette-dir delete is expressed (enumerate-and-Remove vs.
+      a dir-Remove action) so a removed palette leaves nothing on disk.</li>
+    </ul></li>
+  </ol></li>
   <li>Wire the content change into the re-skin: scoped
   <code>invalidateGlyph(name)</code> (replace the whole-cache
   <code>setSnapshot</code> clear on the edit path) + mark the dependent managers

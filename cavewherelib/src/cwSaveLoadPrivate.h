@@ -27,6 +27,7 @@
 
 //Qt includes
 #include <QDir>
+#include <QByteArray>
 #include <QFileInfo>
 #include <QHash>
 #include <QList>
@@ -59,9 +60,14 @@ struct cwSaveLoadPrivate {
 
         struct EmptyPayload { };
         struct WriteFilePayload { std::shared_ptr<const google::protobuf::Message> message; };
+        // Pre-serialized file contents. Used when the caller already holds the
+        // exact bytes to write (e.g. a palette glyph/brush JSON produced by
+        // cwSymbologyPaletteIO), so the on-disk form is byte-identical to that
+        // single-sourced serializer rather than re-serialized here.
+        struct WriteBytesPayload { QByteArray bytes; };
         struct CopyFilePayload { QString sourcePath; };
         struct CustomPayload { std::function<Monad::ResultBase()> action; };
-        using Payload = std::variant<EmptyPayload, WriteFilePayload, CopyFilePayload, CustomPayload>;
+        using Payload = std::variant<EmptyPayload, WriteFilePayload, WriteBytesPayload, CopyFilePayload, CustomPayload>;
 
         const void* objectId = nullptr;
         Kind kind = Kind::File;
@@ -109,6 +115,14 @@ struct cwSaveLoadPrivate {
               kind(kind),
               action(action),
               payload(CopyFilePayload{std::move(sourcePath)})
+        {
+        }
+
+        Job(const void* objectId, Kind kind, Action action, QByteArray bytes)
+            : objectId(objectId),
+              kind(kind),
+              action(action),
+              payload(WriteBytesPayload{std::move(bytes)})
         {
         }
 

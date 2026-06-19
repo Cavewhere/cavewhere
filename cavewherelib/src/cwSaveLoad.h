@@ -36,6 +36,7 @@ class cwNoteLiDARData;
 class cwSketch;
 class cwSketchData;
 class cwLazLayer;
+class cwSymbologyPalette;
 struct cwSaveLoadPrivate;
 #include "cwRemoteAuthProvider.h"
 #include "cwCavingRegionData.h"
@@ -499,6 +500,28 @@ private:
     void connectScrap(cwScrap* scrap);
     void connectNoteLiDAR(cwNoteLiDAR * lidarNote);
     void connectSketch(cwSketch* sketch);
+
+    // Palette auto-save. The palette manager is an app-global singleton pointed
+    // at <projectRoot>/palettes on setFileName; its writable palettes auto-save
+    // each glyph/brush/identity edit as a first-class file job, keyed by
+    // (objectId = palette, tag), exactly like a cave saves. The shipped default
+    // (qrc, read-only) is never wired. connectPalettes rebinds every palette
+    // (idempotent); disconnectPalettes is called before a reload so the
+    // setData() it performs on survivors can't re-enter the write path.
+    void connectPalettes();
+    void disconnectPalettes();
+    void connectPalette(cwSymbologyPalette* palette);
+    void writePaletteGlyph(cwSymbologyPalette* palette, const QString& name);
+    void writePaletteBrush(cwSymbologyPalette* palette, const QString& name);
+    void writePaletteIdentity(cwSymbologyPalette* palette);
+    bool paletteWriteReady(cwSymbologyPalette* palette, const QString& name) const;
+    QString paletteEntityPath(cwSymbologyPalette* palette, const QString& subdir,
+                              const QString& name, const QString& suffix) const;
+    void enqueuePaletteWrite(cwSymbologyPalette* palette, const QString& tag,
+                             const QString& path, const QByteArray& bytes);
+    void enqueuePaletteRemove(cwSymbologyPalette* palette, const QString& tag,
+                              const QString& path);
+    void markPaletteMutated();
 
     void setTemporary(bool isTemp);
 
