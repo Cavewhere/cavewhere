@@ -120,6 +120,13 @@ class CaveWhereConan(ConanFile):
             self.options["gdal"].with_libiconv = False
             self.options["proj"].with_curl = False
 
+            # gdal/3.13+ vendors a `crc32c` external symbol in frmts/zarr that
+            # collides at link time with libblkid's `crc32c`. libblkid is pulled
+            # in by glib (transitively via gtk). Building libmount as a shared
+            # library keeps libblkid's symbols out of the static-link namespace.
+            if self.settings.os == "Linux":
+                self.options["libmount"].shared = True
+
 
             #This prevents xcode build from failing
             self.options["libtiff"].zstd=False
