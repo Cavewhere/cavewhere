@@ -16,8 +16,11 @@ class QQuickItem;
 
 //Our includes
 #include "cwLabel3dItem.h"
-#include "cwBillboardId.h"
+#include "cwBillboardHandle.h"
 class cwLabel3dView;
+
+//Std includes
+#include <vector>
 
 class cwLabel3dGroup : public QObject
 {
@@ -53,9 +56,11 @@ private:
     QList<cwLabel3dItem> m_labels;
     QVector<QQuickItem*> m_labelItems;
 
-    // Stable cwRenderBillboards id per label (default cwBillboardId{} = not
-    // currently billboarded), kept in lockstep with m_labelItems.
-    QVector<cwBillboardId> m_billboardIds;
+    // One RAII handle per label, kept in lockstep with m_labelItems. Each owns its
+    // label's billboard in the shared layer and removes it when reset or when the
+    // group is destroyed (fixing the old leak where a removed group left billboards
+    // behind). An empty handle means the label isn't currently billboarded.
+    std::vector<cwBillboardHandle> m_billboardHandles;
 
     //For caching and memory efficientcy
     QVector<QQuickItem*> m_itemPool;

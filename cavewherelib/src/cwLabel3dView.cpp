@@ -110,10 +110,10 @@ void cwLabel3dView::updateGroup(cwLabel3dGroup* group) {
             releaseLabelItem(group, i);
         }
         group->m_labelItems.resize(labelSize);
-        group->m_billboardIds.resize(labelSize);
+        group->m_billboardHandles.resize(labelSize);
     } else if(labelSize > itemSize) {
         group->m_labelItems.resize(labelSize);
-        group->m_billboardIds.resize(labelSize);  // new entries default to 0 (no billboard)
+        group->m_billboardHandles.resize(labelSize);  // new entries are empty handles
     }
 
     //Update all the positions
@@ -204,10 +204,10 @@ void cwLabel3dView::releaseLabelItem(cwLabel3dGroup* group, int labelIndex)
         return;
     }
 
-    if(m_renderBillboards != nullptr && group->m_billboardIds.at(labelIndex) != cwBillboardId{}) {
-        m_renderBillboards->removeBillboard(group->m_billboardIds.at(labelIndex));
+    // Releasing the handle removes this label's billboard from the shared layer.
+    if(labelIndex < int(group->m_billboardHandles.size())) {
+        group->m_billboardHandles.at(labelIndex).reset();
     }
-    group->m_billboardIds[labelIndex] = cwBillboardId{};
 
     item->setVisible(false);
     item->setOpacity(0.0);
@@ -226,6 +226,9 @@ void cwLabel3dView::addOrUpdateBillboard(cwLabel3dGroup* group, int labelIndex, 
     if(m_renderBillboards == nullptr || item == nullptr) {
         return;
     }
+    if(labelIndex < 0 || labelIndex >= int(group->m_billboardHandles.size())) {
+        return;
+    }
 
     cwRenderBillboards::Billboard billboard;
     billboard.content = item;
@@ -233,12 +236,8 @@ void cwLabel3dView::addOrUpdateBillboard(cwLabel3dGroup* group, int labelIndex, 
     billboard.sizeMode = cwRenderBillboards::SizeMode::ScreenConstant;
     billboard.depthBias = kLabelDepthBias;
 
-    cwBillboardId& id = group->m_billboardIds[labelIndex];
-    if(id == cwBillboardId{}) {
-        id = m_renderBillboards->addBillboard(billboard);
-    } else {
-        m_renderBillboards->updateBillboard(id, billboard);
-    }
+    // Adds on first call, updates after; the handle removes it on teardown.
+    group->m_billboardHandles.at(labelIndex).set(m_renderBillboards, billboard);
 }
 
 /**
