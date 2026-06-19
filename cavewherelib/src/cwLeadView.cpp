@@ -15,7 +15,6 @@
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
 #include "cwRayHit.h"
-#include "cwRenderBillboards.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
@@ -25,7 +24,6 @@
 //Qt includes
 #include <QQmlEngine>
 #include <QQmlContext>
-#include <QQuickWindow>
 #include <QMatrix4x4>
 #include <QRay3D>
 
@@ -41,14 +39,9 @@ constexpr float kLeadDepthBias = 1.0f;
 }
 
 cwLeadView::cwLeadView(QQuickItem *parent) :
-    QQuickItem(parent),
+    cwBillboardOverlayItem(parent),
     SelectionMananger(new cwSelectionManager(this))
 {
-    connect(this, &cwLeadView::visibleChanged, this, [this](){
-        if(isVisible()) {
-            updateItemPositions();
-        }
-    });
 }
 
 /**
@@ -395,13 +388,8 @@ QQuickItem* cwLeadView::createItem()
     // when the content item's opacity or visibility changes.
     QQuickItem* content = item->property("billboardContent").value<QQuickItem*>();
     if(content != nullptr) {
-        auto requestRender = [this]() {
-            if(m_renderBillboards != nullptr) {
-                m_renderBillboards->update();
-            }
-        };
-        connect(content, &QQuickItem::opacityChanged, this, requestRender);
-        connect(content, &QQuickItem::visibleChanged, this, requestRender);
+        connect(content, &QQuickItem::opacityChanged, this, &cwLeadView::requestBillboardRender);
+        connect(content, &QQuickItem::visibleChanged, this, &cwLeadView::requestBillboardRender);
     }
 
     return item;
@@ -475,101 +463,14 @@ void cwLeadView::scrapsRemoved(QModelIndex parent, int begin, int end)
 
 
 /**
-* @brief cwLeadView::camera
-* @return The camera that the lead view uses to calculate the lead positions
-*/
-cwCamera* cwLeadView::camera() const {
-    return m_camera;
-}
-
-/**
-* @brief cwLeadView::setCamera
-* @param camera - The camera for the LeadView
+* @brief cwLeadView::repositionBillboards
 *
-* The camera allows the leadView to translate the lead positions into 2D space.
-* Mirrors cwLabel3dView: the view projects lead world positions itself on each
-* camera change rather than relying on the legacy cwTransformUpdater.
+* The base calls this on every scene/camera/window/visibility change. Leads have
+* a 2D hit item per lead in addition to the billboard, so we reproject through
+* updateItemPositions().
 */
-void cwLeadView::setCamera(cwCamera* camera) {
-    if(m_camera == camera) {
-        return;
-    }
-
-    if(!m_camera.isNull()) {
-        disconnect(m_camera, nullptr, this, nullptr);
-    }
-
-    m_camera = camera;
-
-    if(!m_camera.isNull()) {
-        connect(m_camera, &cwCamera::viewMatrixChanged, this, &cwLeadView::updateItemPositions);
-        connect(m_camera, &cwCamera::projectionChanged, this, &cwLeadView::updateItemPositions);
-    }
-
+void cwLeadView::repositionBillboards() {
     updateItemPositions();
-    emit cameraChanged();
-}
-
-/**
-* @brief cwLeadView::scene
-* @return The scene whose 3D pass hosts the lead billboards and whose geometry
-* intersecter answers the occlusion test.
-*/
-cwScene* cwLeadView::scene() const {
-    return m_scene;
-}
-
-void cwLeadView::setScene(cwScene* scene) {
-    if(m_scene == scene) {
-        return;
-    }
-
-    m_scene = scene;
-
-    // The billboard layer is owned by the scene now, so a scene change means a
-    // different layer: drop the old reference and (re)fetch from the new scene.
-    m_renderBillboards = nullptr;
-    ensureRenderBillboards();
-
-    updateItemPositions();
-    emit sceneChanged();
-}
-
-/**
- * @brief cwLeadView::ensureRenderBillboards
- *
- * Lazily creates the billboard render object once both the window (from the
- * scene graph) and the scene are available. Leads render as depth-occluded
- * billboards through it instead of as 2D overlay children.
- */
-void cwLeadView::ensureRenderBillboards() {
-    if(m_renderBillboards != nullptr) {
-        return;
-    }
-
-    QQuickWindow* quickWindow = window();
-    if(quickWindow == nullptr || m_scene.isNull()) {
-        return;
-    }
-
-    // One billboard layer per scene, shared with the label view and any future
-    // overlay so all billboards sort back-to-front together (#538).
-    m_renderBillboards = m_scene->billboardLayer();
-    m_renderBillboards->setWindow(quickWindow);
-}
-
-void cwLeadView::itemChange(ItemChange change, const ItemChangeData& value) {
-    if(change == ItemSceneChange) {
-        if(m_renderBillboards != nullptr) {
-            // The view moved to a different window (value.window is null when it
-            // left one); rebind the billboards and their subscenes to it.
-            m_renderBillboards->setWindow(value.window);
-        } else {
-            ensureRenderBillboards();
-        }
-        updateItemPositions();
-    }
-    QQuickItem::itemChange(change, value);
 }
 
 /**
@@ -580,11 +481,11 @@ void cwLeadView::itemChange(ItemChange change, const ItemChangeData& value) {
  * and the billboard share the camera, so the tap target sits under the marker.
  */
 void cwLeadView::updateItemPositions() {
-    if(m_camera.isNull() || !isVisible()) {
+    if(camera() == nullptr || !isVisible()) {
         return;
     }
 
-    const QMatrix4x4 matrix = m_camera->qtViewportMatrix() * m_camera->viewProjectionMatrix();
+    const QMatrix4x4 matrix = camera()->qtViewportMatrix() * camera()->viewProjectionMatrix();
 
     for(auto it = m_leadItems.begin(); it != m_leadItems.end(); ++it) {
         ScrapEntry& entry = it->second;
@@ -611,7 +512,7 @@ void cwLeadView::updateItemPositions() {
  * 2D QuoteBox popup (a sibling) stays an un-occluded overlay.
  */
 void cwLeadView::addOrUpdateBillboard(ScrapEntry& entry, int index, QQuickItem* item, const QVector3D& worldPosition) {
-    if(m_renderBillboards == nullptr || item == nullptr) {
+    if(item == nullptr) {
         return;
     }
     if(index < 0 || index >= int(entry.billboardHandles.size())) {
@@ -619,18 +520,7 @@ void cwLeadView::addOrUpdateBillboard(ScrapEntry& entry, int index, QQuickItem* 
     }
 
     QQuickItem* content = item->property("billboardContent").value<QQuickItem*>();
-    if(content == nullptr) {
-        return;
-    }
-
-    cwRenderBillboards::Billboard billboard;
-    billboard.content = content;
-    billboard.worldPosition = worldPosition;
-    billboard.sizeMode = cwRenderBillboards::SizeMode::ScreenConstant;
-    billboard.depthBias = kLeadDepthBias;
-
-    // Adds on first call, updates after; the handle removes it on teardown.
-    entry.billboardHandles.at(index).set(m_renderBillboards, billboard);
+    setBillboard(entry.billboardHandles.at(index), content, worldPosition, kLeadDepthBias);
 }
 
 /**
@@ -647,16 +537,16 @@ void cwLeadView::addOrUpdateBillboard(ScrapEntry& entry, int index, QQuickItem* 
  */
 bool cwLeadView::isOccluded(const QVector3D& worldPosition,
                             const QPointF& tapViewportPosition) const {
-    if(m_camera.isNull() || m_scene.isNull()) {
+    if(camera() == nullptr || scene() == nullptr) {
         return false;
     }
 
-    cwGeometryItersecter* intersecter = m_scene->geometryItersecter();
+    cwGeometryItersecter* intersecter = scene()->geometryItersecter();
     if(intersecter == nullptr) {
         return false;
     }
 
-    const QRay3D ray = m_camera->rayFromQtViewport(tapViewportPosition);
+    const QRay3D ray = camera()->rayFromQtViewport(tapViewportPosition);
 
     // The marker is a camera-facing quad centred on worldPosition; its plane
     // normal is the camera's view direction (third row of the view matrix). The
@@ -665,7 +555,7 @@ bool cwLeadView::isOccluded(const QVector3D& worldPosition,
     // to the centre's depth would mis-gate off-centre taps under perspective
     // (the ray through a rim pixel does not pass through the centre). Solve the
     // ray/plane crossing so the depth is taken at the tapped quad point.
-    const QMatrix4x4 view = m_camera->viewMatrix();
+    const QMatrix4x4 view = camera()->viewMatrix();
     const QVector3D planeNormal(view(2, 0), view(2, 1), view(2, 2));
     const double denom = QVector3D::dotProduct(ray.direction(), planeNormal);
     if(qFuzzyIsNull(denom)) {

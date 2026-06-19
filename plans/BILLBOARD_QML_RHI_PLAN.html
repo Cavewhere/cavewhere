@@ -1100,6 +1100,44 @@ correctness</em> (the pure sort ordering + the handle lifecycle, both RHI-free),
 <em>bookkeeping</em> via existing QML count checks, and verify the <em>pixels</em> by hand in the running app.
 </div>
 
+<p class="note"><b>Follow-up refactor (surfaced by the pre-commit review) &mdash; <span class="pill ok">implemented</span>.</b>
+Done as its own commit on top of Phase 5: a consistency/maintainability win that also folded in a latent bug fix
+(the camera lift, below).</p>
+<ol>
+  <li><b>Extract a <code>cwBillboardOverlayItem : public QQuickItem</code> base.</b> After Phase 5,
+  <code>cwLeadView</code> and <code>cwLabel3dView</code> carry <em>near-identical</em> billboard-wiring code:
+  <code>setScene()</code> (drop ref &rarr; <code>ensureRenderBillboards()</code> &rarr; reposition &rarr; emit),
+  <code>ensureRenderBillboards()</code> (bail without window/scene, then
+  <code>m_renderBillboards = m_scene-&gt;billboardLayer(); setWindow(window())</code>), and
+  <code>itemChange(ItemSceneChange)</code> (rebind the shared layer&rsquo;s window) are byte-for-byte the same. The
+  only deltas are the reposition hook (<code>updateItemPositions()</code> vs <code>updateGroupPositions()</code>) and
+  <code>m_scene == nullptr</code> vs <code>.isNull()</code>. The per-item push
+  (<code>addOrUpdateBillboard</code> &rarr; bounds-check &rarr; build <code>Billboard</code> &rarr;
+  <code>handle.set(layer, &hellip;)</code>) is likewise the same dance, differing only in the <code>depthBias</code>
+  constant and how the content <code>QQuickItem*</code> is fetched.
+
+  <p>A <code>cwBillboardOverlayItem</code> base holding <code>m_scene</code> + <code>m_renderBillboards</code> with a
+  virtual reposition hook deletes the exactly-duplicated lifecycle code and gives <em>any future overlay</em> the
+  scene/window/handle wiring for free &mdash; which is the whole point of the shared-layer +
+  <code>cwBillboardHandle</code> design. <b>As implemented:</b> the base is <code>QML_ANONYMOUS</code> (its
+  <code>scene</code>/<code>camera</code> properties are inherited by the QML-registered <code>LeadView</code> /
+  <code>Label3dView</code>), exposes a pure-virtual <code>repositionBillboards()</code> hook plus protected
+  <code>setBillboard()</code> / <code>requestBillboardRender()</code> helpers, and both views shed ~270 lines of
+  scene/window/billboard wiring (net &minus;200+ across the four files).</p>
+
+  <p><b>Camera lifted too (latent bug fix).</b> The <code>camera</code> property + change-driven reposition were
+  duplicated identically, but the two <code>setCamera()</code>s diverged: <code>cwLeadView</code> disconnected the old
+  camera, <code>cwLabel3dView</code> <em>never did</em> &mdash; so a camera swap left the stale camera still firing
+  relayouts. The single base <code>setCamera()</code> disconnects the prior camera's
+  <code>viewMatrixChanged</code>/<code>projectionChanged</code> before rewiring, so the asymmetry (and the leak) are
+  gone. Regression-guarded in <code>test_cwBillboardOverlayItem.cpp</code> (&ldquo;reassigning the camera disconnects
+  the old one&rdquo;).</p>
+
+  <p><b>Still deferred:</b> the shared layer&rsquo;s window is driven last-writer-wins by both views; a clean fix is
+  part of multi-window support, <a href="https://github.com/Cavewhere/cavewhere/issues/494">#494</a> &mdash; now a
+  single site (<code>cwBillboardOverlayItem::itemChange</code>) thanks to this extraction.</p></li>
+</ol>
+
 <h2 id="crosscut">10. Cross-cutting concerns</h2>
 <ul>
   <li><b>Offscreen / export</b> (<code>cwScene::renderOffscreen</code>): the spike binds the swap-chain

@@ -20,6 +20,7 @@
 //Our includes
 #include "cwAbstractPointManager.h"
 #include "cwBillboardHandle.h"
+#include "cwBillboardOverlayItem.h"
 #include "cwKeywordItemRegistry.h"
 
 //Std includes
@@ -28,9 +29,6 @@
 class cwRegionTreeModel;
 class cwScrap;
 class cwScrapLeadView;
-class cwCamera;
-class cwScene;
-class cwRenderBillboards;
 class cwKeywordItemModel;
 
 /**
@@ -43,14 +41,12 @@ class cwKeywordItemModel;
  * lead's marker as a depth-occluded billboard (cwRenderBillboards); the LeadPoint
  * item stays as the invisible 2D layer that owns the tap, selection, and popup.
  */
-class cwLeadView : public QQuickItem
+class cwLeadView : public cwBillboardOverlayItem
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(LeadView)
 
     Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel WRITE setRegionModel NOTIFY regionModelChanged)
-    Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
-    Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
     Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager CONSTANT)
     Q_PROPERTY(cwKeywordItemModel* keywordItemModel READ keywordItemModel WRITE setKeywordItemModel NOTIFY keywordItemModelChanged)
 
@@ -60,12 +56,6 @@ public:
 
     cwRegionTreeModel* regionModel() const;
     void setRegionModel(cwRegionTreeModel* regionModel);
-
-    cwCamera* camera() const;
-    void setCamera(cwCamera* camera);
-
-    cwScene* scene() const;
-    void setScene(cwScene* scene);
 
     cwSelectionManager* selectionManager() const;
 
@@ -92,18 +82,13 @@ public:
 
 signals:
     void regionModelChanged();
-    void cameraChanged();
-    void sceneChanged();
     void keywordItemModelChanged();
 
 protected:
-    void itemChange(ItemChange change, const ItemChangeData& value) override;
+    void repositionBillboards() override;
 
 private:
     QPointer<cwRegionTreeModel> RegionModel; //!<
-    QPointer<cwCamera> m_camera; //!<
-    QPointer<cwScene> m_scene; //!<
-    QPointer<cwRenderBillboards> m_renderBillboards; //!< shared, owned by m_scene
     cwSelectionManager* SelectionMananger;
 
     struct ScrapEntry {
@@ -137,7 +122,6 @@ private:
 
     QString qmlSource() const;
 
-    void ensureRenderBillboards();
     void addOrUpdateBillboard(ScrapEntry& entry, int index, QQuickItem* item, const QVector3D& worldPosition);
 
 private slots:

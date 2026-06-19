@@ -12,13 +12,10 @@
 #include "cwCamera.h"
 #include "cwDebug.h"
 #include "cwLabel3dGroup.h"
-#include "cwRenderBillboards.h"
-#include "cwScene.h"
 
 //Qt includes
 #include <QQmlContext>
 #include <QQmlEngine>
-#include <QQuickWindow>
 #include <algorithm>
 #include <QRectF>
 #include <QSizeF>
@@ -32,15 +29,9 @@ namespace {
 constexpr float kLabelDepthBias = 1.0f;
 }
 cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
-    QQuickItem(parent),
-    m_component(nullptr),
-    m_camera(nullptr)
+    cwBillboardOverlayItem(parent),
+    m_component(nullptr)
 {
-    connect(this, &cwLabel3dView::visibleChanged, this, [this]() {
-        if(isVisible()) {
-            updatePositions();
-        }
-    });
 }
 
 /**
@@ -170,11 +161,7 @@ QQuickItem* cwLabel3dView::acquireLabelItem(cwLabel3dGroup* group, int labelInde
             // the rendered subtree by refFromEffectItem, so it only serves as
             // this signal), letting us drive re-renders without reaching into the
             // QML internals. The connection self-limits to while opacity changes.
-            connect(item, &QQuickItem::opacityChanged, this, [this]() {
-                if(m_renderBillboards != nullptr) {
-                    m_renderBillboards->update();
-                }
-            });
+            connect(item, &QQuickItem::opacityChanged, this, &cwLabel3dView::requestBillboardRender);
         }
     }
 
@@ -223,88 +210,19 @@ void cwLabel3dView::releaseLabelItem(cwLabel3dGroup* group, int labelIndex)
  * or when the station actually moves (updateBillboard is a no-op otherwise).
  */
 void cwLabel3dView::addOrUpdateBillboard(cwLabel3dGroup* group, int labelIndex, QQuickItem* item) {
-    if(m_renderBillboards == nullptr || item == nullptr) {
+    if(item == nullptr) {
         return;
     }
     if(labelIndex < 0 || labelIndex >= int(group->m_billboardHandles.size())) {
         return;
     }
 
-    cwRenderBillboards::Billboard billboard;
-    billboard.content = item;
-    billboard.worldPosition = group->m_labels.at(labelIndex).position();
-    billboard.sizeMode = cwRenderBillboards::SizeMode::ScreenConstant;
-    billboard.depthBias = kLabelDepthBias;
-
-    // Adds on first call, updates after; the handle removes it on teardown.
-    group->m_billboardHandles.at(labelIndex).set(m_renderBillboards, billboard);
+    setBillboard(group->m_billboardHandles.at(labelIndex), item,
+                 group->m_labels.at(labelIndex).position(), kLabelDepthBias);
 }
 
-/**
-Sets camera
-*/
-void cwLabel3dView::setCamera(cwCamera* camera) {
-    if(m_camera != camera) {
-        m_camera = camera;
-        connect(m_camera, &cwCamera::viewMatrixChanged, this, &cwLabel3dView::updatePositions);
-        connect(m_camera, &cwCamera::projectionChanged, this, &cwLabel3dView::updatePositions);
-        updatePositions();
-        emit cameraChanged();
-    }
-}
-
-cwScene *cwLabel3dView::scene() const {
-    return m_scene;
-}
-
-void cwLabel3dView::setScene(cwScene* scene) {
-    if(m_scene == scene) {
-        return;
-    }
-    m_scene = scene;
-    // The billboard layer is owned by the scene now, so a scene change means a
-    // different layer: drop the old reference and (re)fetch from the new scene.
-    m_renderBillboards = nullptr;
-    ensureRenderBillboards();
+void cwLabel3dView::repositionBillboards() {
     updatePositions();
-    emit sceneChanged();
-}
-
-/**
- * @brief cwLabel3dView::ensureRenderBillboards
- *
- * Lazily creates the billboard render object once both the window (from the
- * scene graph) and the scene are available. Labels render as depth-occluded
- * billboards through it instead of as 2D overlay children.
- */
-void cwLabel3dView::ensureRenderBillboards() {
-    if(m_renderBillboards != nullptr) {
-        return;
-    }
-
-    QQuickWindow* quickWindow = window();
-    if(quickWindow == nullptr || m_scene == nullptr) {
-        return;
-    }
-
-    // One billboard layer per scene, shared with the lead view and any future
-    // overlay so all billboards sort back-to-front together (#538).
-    m_renderBillboards = m_scene->billboardLayer();
-    m_renderBillboards->setWindow(quickWindow);
-}
-
-void cwLabel3dView::itemChange(ItemChange change, const ItemChangeData& value) {
-    if(change == ItemSceneChange) {
-        if(m_renderBillboards != nullptr) {
-            // The view moved to a different window (value.window is null when it
-            // left one); rebind the billboards and their subscenes to it.
-            m_renderBillboards->setWindow(value.window);
-        } else {
-            ensureRenderBillboards();
-        }
-        updatePositions();
-    }
-    QQuickItem::itemChange(change, value);
 }
 
 /**
@@ -316,7 +234,7 @@ void cwLabel3dView::itemChange(ItemChange change, const ItemChangeData& value) {
  */
 void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 {
-    if(m_camera == nullptr) {
+    if(camera() == nullptr) {
         return;
     }
 
@@ -336,8 +254,8 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 
     QList<cwLabel3dItem>& labels = group->m_labels;
 
-    const QMatrix4x4 matrix = m_camera->qtViewportMatrix() * m_camera->viewProjectionMatrix();
-    const QRectF viewportRect(m_camera->viewport());
+    const QMatrix4x4 matrix = camera()->qtViewportMatrix() * camera()->viewProjectionMatrix();
+    const QRectF viewportRect(camera()->viewport());
     const QSizeF averageSize = m_averageLabelSize;
 
     const int labelCount = labels.size();
@@ -367,7 +285,7 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
             }
         };
 
-        if(m_camera->isQtViewportCoordinateClipped(qtViewportCoordinate)) {
+        if(camera()->isQtViewportCoordinateClipped(qtViewportCoordinate)) {
             reject();
             return;
         }
@@ -477,7 +395,7 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
  */
 void cwLabel3dView::updatePositions()
 {
-    if(m_camera == nullptr) { return; }
+    if(camera() == nullptr) { return; }
 
     if(isVisible()) {
         QSetIterator<cwLabel3dGroup*> iter(m_labelGroups);
@@ -493,11 +411,4 @@ void cwLabel3dView::updatePositions()
 
         m_labelKdTree.clear();
     }
-}
-
-/**
-Gets camera
-*/
-cwCamera *cwLabel3dView::camera() const {
-    return m_camera;
 }
