@@ -620,13 +620,8 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
 
     //Update all the positions for all the caves that need to be updated
     //Also update the length and depth information
-    QMapIterator<cwCave*, cwLinePlotTask::LinePlotCaveData> iter(results.caveData());
-    while(iter.hasNext()) {
-        iter.next();
-
-        cwCave* cave = iter.key();
-        cwLinePlotTask::LinePlotCaveData caveData = iter.value();
-
+    const QMap<cwCave*, cwLinePlotTask::LinePlotCaveData> caveDataMap = results.caveData();
+    for(const auto& [cave, caveData] : caveDataMap.asKeyValueRange()) {
         if(caveData.hasStationPositionsChanged()) {
             cave->setStationPositionLookup(caveData.stationPositions());
         }

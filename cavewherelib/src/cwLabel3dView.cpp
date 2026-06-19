@@ -41,17 +41,6 @@ cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
  */
 cwLabel3dView::~cwLabel3dView()
 {
-//    for(auto groups : LabelGroups) {
-//        groups->setParentView(nullptr);
-//    }
-//    //Delete all the child groups
-//    QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
-//    while(iter.hasNext()) {
-//        cwLabel3dGroup* group = iter.next();
-//        group->Labels.clear();
-//        group->setParentView(nullptr);
-//        group->deleteLater();
-//    }
 }
 
 void cwLabel3dView::addGroup(cwLabel3dGroup *group) {
@@ -398,9 +387,7 @@ void cwLabel3dView::updatePositions()
     if(camera() == nullptr) { return; }
 
     if(isVisible()) {
-        QSetIterator<cwLabel3dGroup*> iter(m_labelGroups);
-        while(iter.hasNext()) {
-            cwLabel3dGroup* group = iter.next();
+        for(cwLabel3dGroup* group : std::as_const(m_labelGroups)) {
             // Hidden groups already released their items when toggled; skip the
             // per-frame work entirely rather than re-walking an empty list.
             if(!group->m_visible) {
