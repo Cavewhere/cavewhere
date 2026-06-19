@@ -21,6 +21,7 @@
 #include "cwCavingRegion.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
+#include "cwSymbologyPaletteManager.h"
 #include "cwProject.h"
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyNoteLiDARModel.h"
@@ -1746,6 +1747,16 @@ void cwSaveLoad::setFileName(const QString &filename)
                                 QDir(projectRootDir().absoluteFilePath(
                                          cwLazLayerModel::folderName())));
                 }
+            }
+
+            // Point the (app-global) palette manager at this project's forked
+            // palettes so opening a project loads its palettes and they ride
+            // into the bundle. The manager is a singleton; absent in headless
+            // tests that never initialize() it, so guard the access.
+            if (auto* paletteManager = cwSymbologyPaletteManager::instance()) {
+                paletteManager->setPaletteDirectory(
+                            projectRootDir().absoluteFilePath(
+                                cwSymbologyPaletteManager::folderName()));
             }
         }
 

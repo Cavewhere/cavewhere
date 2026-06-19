@@ -79,8 +79,7 @@ struct SingletonGuard {
     ~SingletonGuard()
     {
         cwSketchSettings::instance()->setDefaultPaletteId(QUuid());
-        cwSymbologyPaletteManager::instance()->setPaletteDirectory(
-            cwSymbologyPaletteManager::defaultPaletteDirectory());
+        cwSymbologyPaletteManager::instance()->setPaletteDirectory(QString());
     }
 };
 

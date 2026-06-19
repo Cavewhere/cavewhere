@@ -28,7 +28,10 @@ class cwErrorModel;
 
 // Owns the set of installed palettes. The built-in default palette is shipped
 // embedded as a qrc resource (:/palettes/cavewhere-default) and is always
-// present. The on-disk palette directory is scanned for subdirectories
+// present. Forked (writable) palettes live inside the open project, under the
+// project root's palettes/ subdirectory (folderName()); cwSaveLoad points the
+// manager at that directory on every project open / new / save-as, the same way
+// LAZ layers resolve "GIS Layers". The directory is scanned for subdirectories
 // containing a palette.json; a palette's identity is its Palette.id, not its
 // directory name, so duplicate ids resolve first-scanned-wins with a one-shot
 // warning naming both directories.
@@ -48,7 +51,9 @@ public:
     static void initialize();
     static cwSymbologyPaletteManager *instance();
 
-    // Default: <AppDataLocation>/palettes. Setting it rescans.
+    // The directory holding the open project's forked palettes (project
+    // root + folderName()). Empty until a project is opened — with no writable
+    // directory the manager still serves the shipped default. Setting it rescans.
     QString paletteDirectory() const { return m_paletteDirectory; }
     void setPaletteDirectory(const QString &directory);
 
@@ -91,7 +96,11 @@ public:
     // removeGlyph(oldName).
     Q_INVOKABLE bool removeGlyph(cwSymbologyPalette *palette, const QString &glyphName);
 
-    static QString defaultPaletteDirectory();
+    // The project-root subdirectory name that holds a project's forked palettes
+    // ("palettes"). cwSaveLoad joins this onto the project root and points the
+    // manager at it on every project open / new / save-as — the shipped default
+    // palette is embedded in qrc and loaded regardless of this directory.
+    static QString folderName();
 
 signals:
     void palettesChanged();

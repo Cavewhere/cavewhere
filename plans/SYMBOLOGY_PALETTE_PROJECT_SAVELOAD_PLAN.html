@@ -15,18 +15,42 @@
   th { background: #f0f0f0; }
   blockquote { border-left: 4px solid #4a90d9; background: #f0f6fc; margin: 1rem 0; padding: .6rem 1rem; }
   .warn { border-left: 4px solid #d98a4a; background: #fcf6f0; padding: .6rem 1rem; }
+  .ok { border-left: 4px solid #4ad98a; background: #f0fcf4; padding: .6rem 1rem; }
   .note { color: #555; font-size: .9rem; }
   .tag { display: inline-block; background: #333; color: #fff; border-radius: 4px; padding: .05rem .4rem; font-size: .75rem; vertical-align: middle; }
+  .tag.done { background: #2c7a3f; }
+  .tag.open { background: #b25a17; }
 </style>
 </head>
 <body>
 
-<h1>Project-level palette + async save/load <span class="tag">draft / problem framing</span></h1>
+<h1>Project-level palette + async save/load <span class="tag">decided / design</span></h1>
 
-<p class="note">Untracked planning doc, fall2026 branch. Drafted 2026-06-18.
+<p class="note">Untracked planning doc, fall2026 branch. Drafted 2026-06-18,
+storage + write/rebuild decisions settled 2026-06-18, claims verified against
+the code 2026-06-18.
 <strong>Prerequisite</strong> for <code>SYMBOLOGY_PALETTE_GLYPH_LIBRARY_PLAN.html</code>
-(auto-save glyph library). This is a problem statement + options, not a settled
-design — several pieces are genuinely open and called out as such.</p>
+(auto-save glyph library).</p>
+
+<div class="warn"><strong>Code-verification pass (2026-06-18).</strong> Three
+findings change the work, not the direction:
+<ul>
+  <li><strong>The "Auto updates" flag already exists.</strong>
+  <code>automaticUpdate</code> is a <code>Q_PROPERTY</code> on
+  <code>cwScrapManager</code>, <code>cwLinePlotManager</code>, and
+  <code>cwJobSettings</code>; both managers already short-circuit on it. We
+  <em>reuse</em> it, we don't add one (§7).</li>
+  <li><strong>Scrap + line-plot rebuilds are already async</strong> (each owns an
+  <code>AsyncFuture::Restarter</code> + dirty set). The only sync build left is
+  the sketch decoration / path-source rebuild — that's what "async geometry
+  build, commit 9/10" actually means (§7 blockquote).</li>
+  <li><strong>Editing is file-first today</strong> (<code>saveGlyph</code> writes
+  a file then <code>reload()</code>s; the only palette signals are
+  <code>dataChanged()</code> / <code>writableChanged()</code>). The auto-save
+  model needs an <em>object-first</em> mutation API + granular signals before the
+  queue/Restarter wiring means anything (§5, §7).</li>
+</ul>
+</div>
 
 <h2>1. Why</h2>
 
@@ -38,8 +62,8 @@ every other CaveWhere serialized object is: owned by the project and written
 synchronous "write a file + full reload" path. Two coupled changes:
 </p>
 <ol>
-  <li><strong>Ownership moves to the project level.</strong> A palette becomes
-  part of the project's saved state, not an app-global install.</li>
+  <li><strong>Ownership moves to the project level.</strong> A forked palette
+  becomes part of the project's saved state, not an app-global install.</li>
   <li><strong>Writes go async through the save queue</strong>, like caves /
   trips / scraps, so editing never blocks the UI and there is no explicit Save.</li>
 </ol>
@@ -54,123 +78,355 @@ synchronous "write a file + full reload" path. Two coupled changes:
   directory, owns the live <code>cwSymbologyPalette</code> objects, and (since
   commit 8.1) does a <em>reconciling reload</em> that keeps a palette pointer
   stable across rescans.</li>
-  <li><strong>Writes:</strong> <code>saveGlyph</code>/<code>removeGlyph</code>/<code>duplicatePalette</code>
-  write to disk <strong>synchronously on the UI thread</strong>, then call
-  <code>reload()</code> — a full directory rescan. Fine for occasional edits;
-  wrong for per-stroke auto-save.</li>
+  <li><strong>Writes are file-first.</strong>
+  <code>cwSymbologyPaletteManager::saveGlyph</code>/<code>removeGlyph</code>/<code>duplicatePalette</code>
+  write to disk <strong>synchronously on the UI thread</strong>
+  (<code>cwSymbologyPaletteIO::saveGlyph</code> → JSON file), then call
+  <code>reload()</code> — a full directory rescan. There is <em>no</em> in-memory
+  "mutate this glyph on the live palette object" path: the file is the only way
+  to change a glyph, and the change becomes visible only after the reload. Fine
+  for occasional edits; wrong for per-stroke auto-save, which needs to mutate the
+  object first and persist behind it.</li>
   <li><strong>Project linkage:</strong> the region stores only a
   <code>defaultPaletteId</code> (in project metadata); the palette <em>data</em>
   lives in app-data, referenced by id. A project opened on another machine that
   lacks that palette id can't resolve it (this is also the "missing palette"
   load-error follow-up, task&nbsp;#31).</li>
-  <li><strong>Re-skin path:</strong> a content change → <code>palette.dataChanged()</code>
-  → <code>cwSketch</code> re-resolves its snapshot → path source rebuilds. The
-  glyph tessellation cache has a scoped <code>invalidateGlyph(name)</code> already.</li>
+  <li><strong>Re-skin path (actual chain):</strong> a content change reaches a
+  sketch only as a <em>coarse</em> reload today —
+  <code>cwSymbologyPaletteManager::palettesChanged</code> (or
+  <code>cwCavingRegion::defaultPaletteIdChanged</code>) →
+  <code>cwSketch::resolveSnapshot()</code> → it diffs the rebuilt
+  <code>cwPaletteSnapshot</code> by <code>operator==</code> and, if changed, emits
+  <code>cwSketch::paletteSnapshotChanged()</code> →
+  <code>cwSketchCanvas::refreshPathSnapshot()</code> →
+  <code>cwDecoratedStrokePathSource::setSnapshot()</code>. There is <strong>no
+  <code>palette.dataChanged()</code> hop</strong>, and
+  <code>setSnapshot()</code> currently calls
+  <code>cwGlyphTessellationCache::setSnapshot()</code>, which <strong>clears the
+  entire cache</strong>. The scoped <code>invalidateGlyph(name)</code> exists but
+  is <em>not</em> wired into this path yet — scoping the re-skin to it is part of
+  this work, not a freebie.</li>
+  <li><strong>Rebuild gating already exists.</strong> <code>cwScrapManager</code>
+  and <code>cwLinePlotManager</code> each expose
+  <code>automaticUpdate</code> (default on) and already run their rebuilds
+  asynchronously through an <code>AsyncFuture::Restarter</code>
+  (<code>cwScrapManager</code> also keeps a <code>DirtyScraps</code> set). The
+  palette re-skin needs to <em>hook into</em> this existing machinery, not
+  reinvent it.</li>
 </ul>
 
 <h2>3. Target</h2>
 <p>
-The project owns its palette(s). Editing a glyph mutates the project's palette
-and schedules an async write through <code>cwSaveLoad</code> (debounced), exactly
-like editing a station or a scrap. Opening a project restores its palettes
-without depending on the editing machine's app-data. The shipped read-only
-default stays app-global (it's a fallback/seed, not project data).
+The project owns its <em>forked</em> palette(s). Editing a glyph mutates the
+project's palette object and schedules an async write through
+<code>cwSaveLoad</code> (debounced to "edit finished"), exactly like editing a
+station or a scrap. Opening a project restores its forked palettes from inside
+the project, with no dependency on the editing machine's app-data. CaveWhere's
+shipped palettes stay app-global, <strong>read-only</strong>, and serve as
+fork sources / fallbacks — the project references them by identity, it does not
+copy them unless the user forks.
 </p>
 
-<h2>4. Open question — storage format <span class="tag warn">decide first</span></h2>
-<p>Where does the project's palette data physically live? The symbology format is
-<strong>unreleased on fall2026</strong>, so we are free to choose without a
-proto-version bump.</p>
-<table>
-<tr><th>Option</th><th>Shape</th><th>Trade-off</th></tr>
-<tr><td><strong>P1 — Protobuf in the project</strong></td>
-<td>A <code>Palette</code> message in <code>cavewhere.proto</code>, serialized
-into the bundled <code>.cw</code> / <code>.cwproj</code> alongside caves, written
-by the same <code>cwSaveLoad</code> pass.</td>
-<td>Uniform with every other object; one save pipeline; transactional with the
-rest of the project. But duplicates the existing JSON/dir IO, and the per-file
-dir layout (nice for Git diffs) is lost unless mirrored.</td></tr>
-<tr><td><strong>P2 — Project-local <code>palettes/</code> dir</strong></td>
-<td>Relocate the directory-as-truth layout <em>inside</em> the
-<code>.cwproj</code> (and into the bundle for <code>.cw</code>). Reuses
-<code>cwSymbologyPaletteIO</code> as-is; ties into the project-local palette
-idea already tracked (task&nbsp;#36).</td>
-<td>Great Git/sync story (per-glyph file diffs), reuses existing IO. But it is a
-<em>second</em> persistence channel outside <code>cwSaveLoad</code>'s protobuf
-pass — async/dirty/queue integration has to be built to match, and bundled
-<code>.cw</code> (zip) needs the dir packed in.</td></tr>
-<tr><td><strong>P3 — Hybrid</strong></td>
-<td>Edit against project-local files (P2) for Git-friendliness, but drive the
-writes through the <code>cwSaveLoad</code> queue so timing/threading matches the
-rest of the app.</td>
-<td>Best of both, most plumbing.</td></tr>
-</table>
-<p class="note">Leaning P2/P3 — the directory-as-truth format and the
-reconciling reload already exist and the Git sync story is a CaveWhere selling
-point; the work is the async/queue integration, not a new serializer. But P1 is
-the most "like every other object". Needs your call.</p>
+<h2>4. Storage format <span class="tag done">DECIDED — project-local files (was P2)</span></h2>
+<p>Forked palettes are stored as a per-palette directory <strong>inside the
+project</strong>. The symbology format is unreleased on fall2026, so this is a
+free choice — no proto-version bump.</p>
 
-<h2>5. Async write path</h2>
+<pre>my.cwproj/
+  palettes/
+    &lt;palette-slug-1&gt;/
+      palette.json          # palette metadata: id, name, source/version (see §6).
+                            #   NB: `writable` is runtime-only (derived from version
+                            #   support), not a persisted field.
+      glyphs/
+        my_glyph.cwglyph    # one file per glyph
+      brushes/
+        my_brush.cwbrush    # one file per brush
+    &lt;palette-slug-2&gt;/
+      glyphs/*.cwglyph
+      brushes/*.cwbrush</pre>
+
 <ul>
-  <li>Route palette mutations through <code>cwSaveLoad</code> (the existing
-  queued save infra) so writes are off the UI thread and serialized with project
-  saves. Use the <code>AsyncFuture::observe(future).context(this, …)</code>
-  pattern (never <code>waitForFinished</code> outside tests), per house rules.</li>
-  <li><strong>Debounce</strong>: a pen drag is many <code>appendPoint</code>s; one
-  write per glyph per idle window, not per sample.</li>
-  <li><strong>Dirty tracking</strong>: the project already tracks unsaved state;
-  the palette becomes part of that. Removes the bespoke synchronous
-  <code>reload()</code>-after-every-write.</li>
+  <li><strong>Keep the nested <code>glyphs/</code> + <code>brushes/</code>
+  layout</strong> <span class="tag done">DECIDED — keep nested</span> exactly as
+  <code>cwSymbologyPaletteIO</code> writes it today (constants
+  <code>kGlyphsSubdirName</code> / <code>kBrushesSubdirName</code>, reconciled on
+  save). This reuses the IO's directory scan + reconcile almost verbatim — only
+  the root path moves to a project-relative location. <code>palette.json</code>
+  stays as the palette-level metadata file (id, name; <code>writable</code> is
+  runtime-only, not persisted — see below; plus the source/version fields from
+  §6).</li>
+  <li><strong>Extensions confirmed:</strong> <code>.cwglyph</code> and
+  <code>.cwbrush</code> already exist and stay.</li>
+  <li><strong>For the bundled single-file <code>.cw</code> (zip):</strong> the
+  <code>palettes/</code> tree is packed into the archive, same as the rest of the
+  bundle. For <code>.cwproj</code> (Git-backed dir) it sits on disk as-is — per
+  glyph/brush file diffs are the Git-sync win.</li>
+  <li><strong>Reuses <code>cwSymbologyPaletteIO</code></strong> as the serializer
+  (relocated to a project-relative root); the new work is the async/queue
+  integration, not a new format.</li>
 </ul>
 
-<h2>6. The re-skin / rebuild question <span class="tag warn">shared with the library plan §5</span></h2>
+<p class="ok"><strong>Why this over protobuf-in-project:</strong> per-file diffs
+are a CaveWhere sync selling point, the directory-as-truth IO and the reconciling
+reload already exist, and a forked palette stored as plain files survives a
+CaveWhere upgrade unchanged (no schema-migration of embedded blobs). The cost —
+a second persistence channel outside the protobuf save pass — is paid by routing
+it through the same <code>cwSaveLoad</code> queue (§5).</p>
+
+<h2>5. Async write path <span class="tag done">DECIDED</span></h2>
+
+<p><strong>Object-first prerequisite.</strong> None of this works until the live
+<code>cwSymbologyPalette</code> can be mutated in memory. Today the only mutator
+is the file-first <code>saveGlyph</code>+<code>reload()</code>. So step one is a
+real in-memory API on the palette — e.g. <code>setGlyph(name, glyph)</code> /
+<code>removeGlyph(name)</code> that update the live object and emit the granular
+signals from §7 — with persistence riding <em>behind</em> the mutation, not in
+front of it.</p>
+
+<ul>
+  <li><strong>Debounce = "edit finished", not per-sample.</strong> A pen drag is
+  many <code>appendPoint</code>s; the canvas commits the edited glyph back into the
+  palette object on <strong>pen-up / mouse-release</strong> (one mutation per
+  committed stroke), and the file write coalesces from there.</li>
+  <li><strong>Debounce Restarter on the owner.</strong> Every
+  <code>AsyncFuture::Restarter</code> in this codebase is a member of the object
+  that owns the work (<code>cwScrapManager</code>, <code>cwLinePlotManager</code>,
+  <code>cwLazLayer</code>, …). The debounce Restarter lives on the palette's
+  <strong>owner</strong> (<code>cwSymbologyPaletteManager</code> — it already owns
+  the palette objects and <code>reload</code>), subscribes to the granular content
+  signals (§7), and collapses a burst of edits into one coalesced write. Editors
+  only mutate the palette; the owner persists.</li>
+  <li><strong>The coalesced write is enqueued as a <code>cwSaveLoad</code>
+  Operation (option B).</strong> <span class="tag done">DECIDED — B</span> The
+  Restarter does not write files directly; when it fires it enqueues a new
+  <code>cwSaveLoad</code> operation type (alongside
+  <code>SaveFlush</code>/<code>BundlePackage</code>/<code>ImportFiles</code>/…)
+  that writes the palette's <code>glyphs/</code>+<code>brushes/</code> files off
+  the UI thread. This is what makes ordering correct forever: a palette write and
+  a bundle/flush serialize in the <em>same</em> queue, so the bundle is never
+  zipped (<code>cwZip::zipDirectory</code> over the whole project dir) mid-write.
+  Cost — <code>cwSaveLoad</code> learns about directory-as-truth palette files
+  (one new operation + the IO call) — is accepted in exchange for the single
+  ordering guarantee. Each file is still written atomically (temp + rename, the
+  discipline <code>saveBundledArchiveAtomic</code> already uses) so even a crash
+  mid-queue leaves whole files.</li>
+  <li><strong>Dirty tracking</strong> folds the forked palettes into the project's
+  existing unsaved-state. Today <code>cwProject</code> goes
+  <code>modified</code> via <code>cwSaveLoad::localMutationOccurred</code>; a
+  palette mutation must feed the same flag. This removes the bespoke synchronous
+  <code>reload()</code>-after-every-write entirely. Production code uses
+  <code>AsyncFuture::observe(future).context(this, …)</code>, never
+  <code>waitForFinished</code> (test-only), per house rules.</li>
+</ul>
+
+<h2>6. Palette sources &amp; versioning <span class="tag done">DECIDED (a/c + default rollback), DEFERRED (b)</span></h2>
+<p>A palette a project can use comes from one of three places:</p>
+<ol>
+  <li><strong>(a) CaveWhere defaults</strong> — shipped, app-global,
+  <strong>read-only</strong>. The user forks one to edit; the project references
+  it by identity until then. <span class="tag done">in</span></li>
+  <li><strong>(b) GitHub-linked public palettes</strong> — the project stores
+  only a <em>link + pinned commit SHA-1</em> (submodule-style); the palette data
+  is fetched, not embedded. Lets people share/curate public palettes.
+  <span class="tag open">deferred — reserve the link/SHA fields now, build the
+  fetch later</span></li>
+  <li><strong>(c) Project-local forks</strong> — the forked palettes living in
+  <code>palettes/</code> (§4). Self-contained and travel with the project.
+  <span class="tag done">in — this plan</span></li>
+</ol>
+
+<h3>Drift, versioning &amp; default rollback <span class="tag done">REQUIREMENT</span></h3>
 <p>
-<strong>Persistence and re-skin must be decoupled.</strong> Auto-save is cheap
-and frequent; rebuilding dependent render geometry (tessellation cache +
-decoration relayout for every sketch whose brushes stamp the changed glyph) is
-expensive and must not run per pen sample.
+<strong>Requirement:</strong> if a user upgrades CaveWhere and a project that uses
+a shipped default palette suddenly "looks bad," they must be able to
+<strong>roll the project back to a previous default palette version</strong>. So
+versioned defaults are not just drift-avoidance — explicit rollback to an older
+default version is a user-facing feature.
+</p>
+<p>
+Two cases, both covered by the same <strong>version pin</strong>:
 </p>
 <ul>
-  <li>Editor's own canvas: re-skins live (one glyph, trivial).</li>
-  <li>Project-wide: scope to the changed glyph via
-  <code>invalidateGlyph(name)</code>, and run the dependent-sketch relayout
-  <em>coarsely</em> — on editor close, or debounced (library plan Decision A).</li>
-  <li>This needs a clean "palette content changed" signal distinct from "palette
-  persisted" — today both ride <code>reload()</code>. Splitting them is part of
-  this work (relates to the granular-signal follow-up, task&nbsp;#38).</li>
+  <li><strong>Forked palette (c)</strong> is already immune — it carries its own
+  copy in the project, so an upgrade can't touch it.</li>
+  <li><strong>Un-forked reference to a default (a)</strong> is where drift bites,
+  and where rollback applies.</li>
+</ul>
+<p>To support rollback, CaveWhere must <strong>retain multiple versions of each
+shipped default</strong> (not just the newest), and a project records which
+version it references:</p>
+<ul>
+  <li>Stamp each palette with an <strong>identity + version</strong> (in
+  <code>palette.json</code>). A project that references a default records the
+  version it expects (the pin).</li>
+  <li>On open, if the referenced version differs from the newest shipped default,
+  surface it (keep the pinned version vs update to the new one) instead of silently
+  re-skinning.</li>
+  <li>The user can explicitly <strong>switch the pin to any retained version</strong>
+  — that's the rollback. The retained older version must still be resolvable, so the
+  shipped defaults need to ship/keep their history.</li>
+  <li><strong>Distribute CaveWhere defaults as local git repositories</strong>
+  (versioned, distributed) so a project can check out a specific default version —
+  this is now the leading implementation, because it gives the retained-history /
+  rollback requirement for free (each version is a commit/tag). The lighter
+  "version field only" alternative would require us to bundle and index old versions
+  ourselves; git already does that. <span class="tag open">mechanism to confirm</span></li>
+  <li>For (b), the pinned commit SHA-1 <em>is</em> the version pin — same mechanism,
+  remote source.</li>
+</ul>
+<p class="note">Net: reserve <code>source</code> (default / github / local-fork)
+and <code>version</code>/<code>sha</code> fields in <code>palette.json</code> now
+so the format doesn't churn later. Implement (a) read-only defaults + (c) forks +
+the <em>version pin</em> in this work; the retained-history store (local git repo
+of defaults) and rollback UI can be staged right after, since the pin field makes
+them additive. (b) GitHub-linked palettes stay a later follow-up.</p>
+
+<h2>7. The re-skin / rebuild question <span class="tag done">DECIDED</span></h2>
+<p>
+<strong>Persistence and re-skin are decoupled.</strong> Auto-save is cheap and
+frequent; rebuilding dependent render geometry (tessellation cache + decoration
+relayout for every sketch whose brushes stamp the changed glyph) is expensive and
+must not run per pen sample.
+</p>
+<ul>
+  <li><strong>Editor's own canvas</strong> re-skins live (one glyph, trivial).</li>
+  <li><strong>Project-wide rebuild reuses the existing
+  <code>automaticUpdate</code> flag</strong> <span class="tag open">corrected — already exists</span>
+  (on by default). <code>cwScrapManager</code> and <code>cwLinePlotManager</code>
+  already expose <code>automaticUpdate</code> (mirrored on
+  <code>cwJobSettings</code>) and already gate + coalesce their own rebuilds via a
+  per-manager <code>AsyncFuture::Restarter</code>. We do <em>not</em> add a new
+  flag or a new Restarter for the dependent managers — we route the palette
+  content change into their existing dirty/rebuild path so it honors the flag they
+  already have:
+    <ul>
+      <li>Always: scope the cache invalidation to the changed glyph via
+      <code>invalidateGlyph(name)</code> and <strong>set dirty flags</strong> on
+      the dependent rebuild managers (scrap manager / line plot manager — whatever
+      consumes palette geometry).</li>
+      <li><strong>Auto updates ON:</strong> the Restarter kicks the dependent
+      managers to re-run (coalesced — one rebuild per idle window, not per
+      sample).</li>
+      <li><strong>Auto updates OFF:</strong> the dirty flags are still set, but the
+      managers do <em>not</em> run. They re-run when the user re-enables auto
+      updates (or triggers a manual rebuild). This lets a user editing many glyphs
+      avoid thrashing the whole project, then rebuild once.</li>
+    </ul>
+  </li>
+  <li>This needs a "palette content changed" signal distinct from "palette
+  persisted". <strong>Today neither exists at glyph granularity</strong> — the
+  only palette signals are <code>dataChanged()</code> (identity/metadata) and
+  <code>writableChanged()</code>; glyph/brush changes surface only through the
+  coarse <code>reload()</code> → <code>palettesChanged</code>. <strong>Decided
+  signal surface (net-new):</strong>
+    <ul>
+      <li><code>cwSymbologyPalette::glyphChanged(QString name)</code> and
+      <code>brushChanged(QString name)</code> — the per-element "content changed"
+      signals. Both the writer Restarter (§5) and the rebuild Restarter subscribe;
+      the name keeps <code>invalidateGlyph(name)</code> and the rebuild scoped.</li>
+      <li><code>cwSymbologyPalette::saved()</code> — emitted when
+      <code>cwSaveLoad</code> finishes flushing the palette; UI/tests use it to
+      know the write landed (replaces relying on synchronous <code>reload()</code>
+      return). Relates to the granular-signal follow-up, task&nbsp;#38.</li>
+    </ul>
+  </li>
 </ul>
 
-<h2>7. Knock-on items already tracked</h2>
+<blockquote><strong>Async geometry build is a separate refactor — and narrower
+than first thought.</strong> Scrap triangulation and the line-plot solve are
+<em>already</em> async (each manager owns a Restarter). The build still on the UI
+thread is the <strong>sketch decoration / path-source rebuild</strong>
+(<code>cwDecoratedStrokePathSource</code> rebuilds in
+<code>setSnapshot()</code>) — that's the one "commit 9/10" should move off-thread.
+This plan does <em>not</em> add a gating flag (it reuses the existing
+<code>automaticUpdate</code>); it only wires the palette content change into the
+scoped <code>invalidateGlyph</code> + the managers' existing dirty/rebuild path,
+and benefits automatically once the decoration build goes async.</blockquote>
+
+<h2>8. Knock-on items already tracked</h2>
 <ul>
   <li><strong>#31</strong> missing palette/brush as a load error — resolves more
-  naturally once the palette travels <em>with</em> the project.</li>
+  naturally once the palette travels <em>with</em> the project, and pairs with the
+  "render a red line for missing glyph/brush" decision (§9, Q4 answer).</li>
   <li><strong>#35</strong> non-transactional write + reload — superseded by the
-  async queued path.</li>
-  <li><strong>#36</strong> project-local <code>palettes/</code> dir — this is
-  option P2.</li>
+  async queued path (§5).</li>
+  <li><strong>#36</strong> project-local <code>palettes/</code> dir — this is the
+  decided storage format (§4).</li>
   <li><strong>#37</strong> targeted single-palette refresh — folds into the
-  decoupled re-skin signal (§6).</li>
+  scoped <code>invalidateGlyph</code> + dirty-flag rebuild (§7).</li>
   <li><strong>#38</strong> add/remove granularity — the "content changed" vs
-  "persisted" split (§6).</li>
+  "persisted" split (§7, §9-Q2).</li>
   <li><code>cwSymbologyPalette::directory()</code> is a runtime locator that must
   become a project-relative location/source-sink handle (noted in the reload
   memory).</li>
 </ul>
 
-<h2>8. Open questions</h2>
+<h2>9. Open questions — status</h2>
+
+<table>
+<tr><th>#</th><th>Question</th><th>Status</th></tr>
+<tr><td>1</td><td>Storage format</td>
+<td><span class="tag done">ANSWERED</span> Project-local <code>palettes/&lt;slug&gt;/*.cwglyph|*.cwbrush</code> + <code>palette.json</code> (§4).</td></tr>
+<tr><td>2</td><td>One palette or a set? forks vs imported</td>
+<td><span class="tag done">ANSWERED</span> A project may have multiple palettes; it stores only the <em>forked</em> ones (c). Defaults (a) are read-only references; GitHub links (b) deferred. The region's <code>defaultPaletteId</code> selects the active one (§6).</td></tr>
+<tr><td>3</td><td>Migration of existing app-data palettes + stored <code>defaultPaletteId</code></td>
+<td><span class="tag done">ANSWERED</span> <strong>No migration.</strong> The format is unreleased on fall2026; breaking serialization changes are allowed. No shipped project carries palette data. Dev-time app-data palettes stay as read-only default sources; a project gains project-local data only when the user forks.</td></tr>
+<tr><td>4</td><td>Does the app-global manager survive?</td>
+<td><span class="tag done">ANSWERED</span> Yes — it owns the read-only defaults + import library. A project references the default <em>or</em> a project-local fork. If a referenced palette is missing a glyph/brush, the <strong>slug + the stroke geometry survive</strong>, and the map renders a <strong>red line</strong> for the missing glyph/palette so it's visibly flagged (ties to #31).</td></tr>
+<tr><td>5</td><td>Minimal new signal surface for the re-skin split</td>
+<td><span class="tag done">ANSWERED</span> Per-element <code>glyphChanged(QString name)</code> + <code>brushChanged(QString name)</code> ("content changed", drives the writer + rebuild Restarters, keeps invalidation scoped) plus <code>saved()</code> ("persisted", for UI/tests). See §7.</td></tr>
+</table>
+
+<h2>10. Commit sequencing (within this prerequisite)</h2>
 <ol>
-  <li>Storage format — P1 / P2 / P3 (§4)?</li>
-  <li>Does a project carry one palette, or a set (with the region's
-  <code>defaultPaletteId</code> selecting among them)? Forks made in-project vs.
-  imported app-global palettes — how do they relate?</li>
-  <li>Migration: existing app-data palettes and the stored
-  <code>defaultPaletteId</code> → project-owned. Import-on-first-edit?</li>
-  <li>Does the app-global manager survive (for the shipped default + an import
-  library), with the project holding its own palettes, or does the project become
-  the sole owner while editing?</li>
-  <li>Re-skin signal split (§6) — what's the minimal new signal surface on
-  <code>cwSymbologyPalette</code> / the project?</li>
+  <li><strong>Object-first mutation API + granular signals.</strong> Add
+  in-memory <code>setGlyph(name,glyph)</code> / <code>removeGlyph(name)</code> (and
+  brush equivalents) on <code>cwSymbologyPalette</code> that mutate the live object
+  and emit <code>glyphChanged(QString)</code> / <code>brushChanged(QString)</code>
+  (§5, §7). Nothing else can be auto-saved until the object, not the file, is the
+  source of an edit.</li>
+  <li><span class="tag done">DONE</span> Relocate <code>cwSymbologyPaletteIO</code>
+  to a project-relative <code>palettes/</code> root, keeping the existing nested
+  <code>glyphs/</code>+<code>brushes/</code> layout (§4); load forked palettes from
+  the project on open; on-disk files ride into the bundled <code>.cw</code>
+  automatically via <code>cwZip::zipDirectory</code>.
+  <br><em>As built:</em> the IO is already root-agnostic, so the relocation is in
+  the manager. <code>cwSaveLoad::setFileName</code> (the funnel for
+  new/open/save-as/rename) points the singleton manager at
+  <code>projectRootDir()/palettes</code> — <strong>project-root level, a sibling
+  of the cave-scanned data root</strong>, mirroring how LAZ layers resolve
+  <code>"GIS Layers"</code> (<code>cwLazLayerModel::folderName()</code>). The
+  app-global <code>&lt;AppData&gt;/palettes</code> writable scan is removed
+  (<em>project-local only</em>); only the shipped qrc default stays app-global and
+  read-only. Tests:
+  <code>testcases/test_cwSymbologyPaletteProjectStorage.cpp</code> — wiring +
+  bundled <code>.cw</code> + <code>.cwproj</code> fork round-trips. Fixed a latent
+  bug: an empty palette directory made <code>reload()</code> scan the CWD
+  (<code>QDir("")</code> → <code>"."</code>); now guarded.</li>
+  <li>Async write: a Restarter on <code>cwSymbologyPaletteManager</code>
+  subscribes to the granular signals, coalesces on pen-up, and <em>enqueues a new
+  <code>cwSaveLoad</code> operation</em> (option B, §5) that writes the
+  <code>glyphs/</code>+<code>brushes/</code> files atomically off-thread — so
+  palette writes serialize with bundle/flush in one queue. Feed
+  <code>cwProject</code>'s <code>modified</code> flag; drop the synchronous
+  <code>reload()</code>-after-write.</li>
+  <li>Wire the content change into the re-skin: scoped
+  <code>invalidateGlyph(name)</code> (replace the whole-cache
+  <code>setSnapshot</code> clear on the edit path) + mark the dependent managers
+  dirty so their <em>existing</em> <code>automaticUpdate</code>-gated Restarters
+  re-run (§7). Add the <code>saved()</code> signal for UI/tests.</li>
+  <li>Add <code>source</code> (default / github / local-fork) +
+  <code>version</code> pin fields in <code>palette.json</code> (§6); record the
+  referenced default's version in the project; missing-glyph red-line render
+  (§9-Q4 / #31).</li>
 </ol>
+<p class="note"><strong>Staged right after</strong> (additive once the pin field
+exists): the retained-history store for shipped defaults — leading candidate a
+local git repo of defaults (§6) — and the rollback UI to switch a project's pin
+to a previous default version. Async geometry build (§7 blockquote) is a separate
+commit 9/10. GitHub-linked palettes (§6b) are a later follow-up.</p>
 
 </body>
 </html>

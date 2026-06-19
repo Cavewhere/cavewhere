@@ -18,7 +18,6 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QHash>
-#include <QStandardPaths>
 #include <QUuid>
 #include <QVector>
 
@@ -67,7 +66,6 @@ cwSymbologyPaletteManager *cwSymbologyPaletteManager::Singleton = nullptr;
 
 cwSymbologyPaletteManager::cwSymbologyPaletteManager(QObject *parent) :
     QObject(parent),
-    m_paletteDirectory(defaultPaletteDirectory()),
     m_errorModel(new cwErrorModel(this))
 {
     reload();
@@ -85,10 +83,9 @@ cwSymbologyPaletteManager *cwSymbologyPaletteManager::instance()
     return Singleton;
 }
 
-QString cwSymbologyPaletteManager::defaultPaletteDirectory()
+QString cwSymbologyPaletteManager::folderName()
 {
-    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    return QDir(base).filePath(QStringLiteral("palettes"));
+    return QStringLiteral("palettes");
 }
 
 void cwSymbologyPaletteManager::setPaletteDirectory(const QString &directory)
@@ -136,8 +133,11 @@ void cwSymbologyPaletteManager::reload()
         }
     }
 
+    // An empty directory means no project is open; serve only the shipped
+    // default. (QDir("") resolves to the current working directory, so the
+    // scan below must be skipped explicitly rather than relying on exists().)
     const QDir root(m_paletteDirectory);
-    if (root.exists()) {
+    if (!m_paletteDirectory.isEmpty() && root.exists()) {
         const QFileInfoList entries =
             root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         for (const QFileInfo &entry : entries) {
