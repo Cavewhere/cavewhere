@@ -194,3 +194,119 @@ TEST_CASE("cwSurvexExportRule writes UP/DOWN for vertical shots with azimuth", "
     CHECK(dataLines.at(1).contains("DOWN"));
     CHECK(!dataLines.at(1).contains(" -90"));
 }
+
+TEST_CASE("cwSurvexExportRule equates LRUD-only carrier shots", "[cwSurvexExportRule]") {
+    // Compass records passage dimensions on a synthetic zero-length shot with
+    // no compass/clino (e.g. "a1lrud a1 0 - - - -"). Survex can't parse that as
+    // a leg, so it must be exported as "*equate a1lrud a1".
+    cwSurveyDataArtifact::Trip trip;
+    trip.name = QStringLiteral("LrudCarrierTrip");
+    trip.calibration.setBackSights(false);
+
+    cwSurveyDataArtifact::SurveyChunk chunk;
+    cwStation carrier;
+    cwStation real;
+    carrier.setName(QStringLiteral("a1lrud"));
+    carrier.setLeft(cwDistanceReading(QStringLiteral("12")));
+    carrier.setRight(cwDistanceReading(QStringLiteral("1")));
+    carrier.setUp(cwDistanceReading(QStringLiteral("10")));
+    carrier.setDown(cwDistanceReading(QStringLiteral("2")));
+    real.setName(QStringLiteral("a1"));
+    chunk.stations.append(carrier);
+    chunk.stations.append(real);
+
+    cwShot lrudOnly;
+    lrudOnly.setDistance(cwDistanceReading(QStringLiteral("0")));
+    chunk.shots.append(lrudOnly);
+
+    trip.chunks.append(chunk);
+
+    QByteArray outputData;
+    QBuffer buffer(&outputData);
+    REQUIRE(buffer.open(QIODevice::WriteOnly));
+    QTextStream stream(&buffer);
+    auto result = cwSurvexExporterRule::writeTrip(stream, trip);
+    buffer.close();
+
+    REQUIRE(!result.hasError());
+
+    const QString output = QString::fromUtf8(outputData);
+    CHECK(output.contains(QStringLiteral("*equate a1lrud a1")));
+
+    // The carrier must not appear as a normal data leg. It still legitimately
+    // appears in the *data passage block (that's why it's equated), so only
+    // inspect lines inside the *data normal block.
+    const QStringList lines = output.split('\n');
+    bool inNormalBlock = false;
+    for(const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if(trimmed.startsWith(QStringLiteral("*data normal"))) {
+            inNormalBlock = true;
+            continue;
+        }
+        if(trimmed.startsWith(QStringLiteral("*data passage"))) {
+            inNormalBlock = false;
+            continue;
+        }
+        if(!inNormalBlock || trimmed.startsWith('*') || trimmed.startsWith(';')) {
+            continue;
+        }
+        CHECK_FALSE(trimmed.startsWith(QStringLiteral("a1lrud")));
+    }
+}
+
+TEST_CASE("cwSurvexExportRule rewrites scientific-notation distances", "[cwSurvexExportRule]") {
+    // Older imports could store a distance/LRUD string in scientific notation
+    // (e.g. "1.1e+02"). Survex's parser rejects it, so the exporter must emit a
+    // plain decimal.
+    cwSurveyDataArtifact::Trip trip;
+    trip.name = QStringLiteral("ScientificTrip");
+    trip.calibration.setBackSights(false);
+
+    cwSurveyDataArtifact::SurveyChunk chunk;
+    cwStation stationA;
+    cwStation stationB;
+    stationA.setName(QStringLiteral("a1"));
+    stationA.setUp(cwDistanceReading(QStringLiteral("1.1e+02")));
+    stationB.setName(QStringLiteral("a2"));
+    chunk.stations.append(stationA);
+    chunk.stations.append(stationB);
+
+    cwShot shot;
+    shot.setDistance(cwDistanceReading(QStringLiteral("1.1e+02")));
+    shot.setCompass(cwCompassReading(QStringLiteral("123")));
+    shot.setClino(cwClinoReading(QStringLiteral("2")));
+    chunk.shots.append(shot);
+
+    trip.chunks.append(chunk);
+
+    QByteArray outputData;
+    QBuffer buffer(&outputData);
+    REQUIRE(buffer.open(QIODevice::WriteOnly));
+    QTextStream stream(&buffer);
+    auto result = cwSurvexExporterRule::writeTrip(stream, trip);
+    buffer.close();
+
+    REQUIRE(!result.hasError());
+
+    const QString output = QString::fromUtf8(outputData);
+    CHECK_FALSE(output.contains(QStringLiteral("e+02")));
+
+    // The distance must be rewritten as a plain decimal on the actual data leg,
+    // not merely absent from the whole file.
+    QString dataLine;
+    const QStringList lines = output.split('\n');
+    for(const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if(trimmed.startsWith('*') || trimmed.startsWith(';')) {
+            continue;
+        }
+        if(trimmed.startsWith(QStringLiteral("a1")) && trimmed.contains(QStringLiteral("a2"))) {
+            dataLine = trimmed;
+            break;
+        }
+    }
+    REQUIRE_FALSE(dataLine.isEmpty());
+    CHECK(dataLine.contains(QStringLiteral("110.00")));
+    CHECK_FALSE(dataLine.contains(QLatin1Char('e')));
+}

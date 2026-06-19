@@ -562,34 +562,32 @@ void cwCompassImporter::parseSurveyData(QFile *file)
                 shot.setClino(inclinationString);
             }
 
-            auto toString = [](double value) {
-                return QString::number(value, 'g', 2);
-            };
-
             auto isLrudMissing = [&missingEntry, &lrudMissingEntry](const QString& value) {
                 return value == missingEntry || value == lrudMissingEntry;
             };
 
             //Like the shot length, the LRUD passage dimensions are stored in
-            //the survey's distance unit already, so they're used as-is.
+            //the survey's distance unit already, so the raw Compass string is
+            //used as-is (matching how compass/clino keep their raw strings).
+            //convertNumber still validates the field and flags parse errors.
             if(!isLrudMissing(leftString)) {
                 if(!convertNumber(leftString, "left", &left)) { CurrentFileGood = false; return; }
-                fromStation.setLeft(toString(left));
+                fromStation.setLeft(leftString);
             }
 
             if(!isLrudMissing(rightString)) {
                 if(!convertNumber(rightString, "right", &right)) { CurrentFileGood = false; return; }
-                fromStation.setRight(toString(right));
+                fromStation.setRight(rightString);
             }
 
             if(!isLrudMissing(upString)) {
                 if(!convertNumber(upString, "up", &up)) { CurrentFileGood = false; return; }
-                fromStation.setUp(toString(up));
+                fromStation.setUp(upString);
             }
 
             if(!isLrudMissing(downString)) {
                 if(!convertNumber(downString, "down", &down)) { CurrentFileGood = false; return; }
-                fromStation.setDown(toString(down));
+                fromStation.setDown(downString);
             }
 
             if(CurrentTrip->calibrations()->hasBackSights() && dataStrings.size() >= 11) {
