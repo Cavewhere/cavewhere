@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>4.3 — Flow-aligned point symbol (oriented stamp)</title>
+<style>
+  :root {
+    --fg: #1d1d1f; --muted: #555; --line: #e6e6e6; --soft: #fafafa;
+    --code-bg: #f4f4f5; --accent: #3949ab; --good: #1b7a3a; --warn: #a02a2a;
+  }
+  body { font: 15px/1.55 -apple-system, "SF Pro Text", system-ui, sans-serif; color: var(--fg);
+         max-width: 920px; margin: 0 auto; padding: 32px 24px 96px; background: #fff; }
+  h1 { font-size: 2em; margin-top: 0; }
+  h2 { margin-top: 2.4em; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { margin-top: 1.7em; }
+  p, ul, ol { margin: 0.6em 0 0.8em; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: 0.25em 0; }
+  code { font: 0.92em/1.4 "SF Mono", Menlo, Consolas, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 6px; overflow-x: auto; font: 0.85em/1.5 "SF Mono", Menlo, Consolas, monospace; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; margin: 14px 0; font-size: 0.93em; width: 100%; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  blockquote { border-left: 3px solid #c8c8cc; margin: 14px 0; padding: 4px 16px; color: #4a4a52; background: var(--soft); }
+  .rec { border-left-color: #9ccfb0; background: #f0faf4; color: #225c38; }
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin: 18px 0; }
+  .node { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px 12px; font-size: 0.84em; min-width: 0; }
+  .node .h { font-weight: 600; font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 5px; }
+  .node code { background: #f0f1f4; font-size: 0.9em; }
+  .node.rule { background: #eafaf1; border-color: #b6e5c8; }
+  .node.out { background: #f4f1fb; border-color: #d3c8ef; }
+  .arrow { align-self: center; color: var(--muted); font-size: 1.3em; padding: 0 2px; }
+  .tag { display:inline-block; font-size:0.7em; text-transform:uppercase; letter-spacing:0.06em; padding:1px 7px; border-radius:999px; border:1px solid #d2dcfb; background:#eef2ff; color:var(--accent); vertical-align:middle; }
+  .tag.rec { background:#eafaf1; color:var(--good); border-color:#b6e5c8; }
+  .tag.del { background:#fdecec; color:var(--warn); border-color:#f0c4c4; }
+  .small { font-size: 0.88em; color: var(--muted); }
+  .keyq { background: #fbfbfd; border: 1px solid var(--line); border-radius: 8px; padding: 4px 16px 10px; margin: 16px 0; }
+  ins { color: var(--good); text-decoration: none; background: #eafaf1; padding: 0 2px; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<h1>4.3 — Flow-aligned point symbol</h1>
+<p class="small">A single glyph dropped at one anchor and rotated to the local stroke tangent — the
+<em>oriented</em> counterpart of the existing un-oriented point stamp. The headline use case is a
+stream-flow arrow: the cartographer draws a short stroke in the flow direction, a single arrowhead lands
+at its start, pointing downstream. Commit 4.3 of the symbology-palette 4.x series; see
+<em>SYMBOLOGY_PALETTE_4X_ROADMAP.md</em> and <em>SYMBOLOGY_PALETTE_PLAN.html</em> Decision&nbsp;11.</p>
+
+<blockquote class="rec">
+<strong>Bottom line: 4.3 needs no new production code.</strong> The three rules it composes
+(<code>Explicit point</code> → <code>Align to tangent</code> → <code>Rigid stamp</code>) all exist and
+are all registered. 4.3 is a <em>stack composition</em> plus its verification: one unit test and one
+reference-image panel. The only real decision is whether the oriented point also ships as a real seed
+brush or stays a test-only demo (§5).
+</blockquote>
+
+<h2>The realization: it is the point stamp, plus one rule</h2>
+
+<p>The decoration engine already ships an un-oriented single-point stamp. In
+<code>test_cwSketchDecorationLayout.cpp</code> it is the <code>pointStampLayer</code> helper:</p>
+
+<pre><code>// A single glyph at the stroke start (no tangent rotation).
+cwDecorationLayer pointStampLayer(const QString &glyphName)
+{
+    return ruleLayer(glyphName, {QStringLiteral("Explicit point"),
+                                 QStringLiteral("Rigid stamp")});
+}</code></pre>
+
+<p>That stack <em>seeds</em> one stamp (Explicit point, at arclength&nbsp;0) and <em>materialises</em> it
+(Rigid stamp), but never sets its rotation — so the glyph always draws at its authored orientation
+regardless of which way the stroke runs. The reference-image suite calls this out today, in the very
+caption of the 45°&nbsp;stream panel:</p>
+
+<blockquote>
+<code>"stream 45deg  —  line follows, but the single arrow is NOT tangent-rotated"</code>
+</blockquote>
+
+<p><strong>4.3 closes exactly that gap.</strong> Insert the <code>Align to tangent</code> rule (which already
+exists and already runs at the <code>MutatePerLayer</code> stage, between Generate and the Terminal) and the
+single stamp picks up the local tangent angle:</p>
+
+<div class="flow">
+  <div class="node rule"><div class="h">Generate</div><code>Explicit point</code><br><span class="small">one stamp at stroke start</span></div>
+  <div class="arrow">→</div>
+  <div class="node rule"><div class="h">MutatePerLayer <span class="tag rec">the +1 rule</span></div><code>Align to tangent</code><br><span class="small">rotation = local tangent angle</span></div>
+  <div class="arrow">→</div>
+  <div class="node rule"><div class="h">Terminal · Stamps</div><code>Rigid stamp</code><br><span class="small">scale·rotate·translate glyph</span></div>
+  <div class="arrow">⇒</div>
+  <div class="node out"><div class="h">Output</div>one oriented glyph<br><span class="small">flow-aligned point</span></div>
+</div>
+
+<h2>Why this works unchanged — the verification trace</h2>
+
+<p>Each piece already behaves correctly for the single-position case; nothing assumes "many stamps":</p>
+
+<table>
+<tr><th>Rule</th><th>Stage</th><th>Behaviour relevant to a lone stamp</th></tr>
+<tr>
+  <td><code>cwExplicitPointRule</code></td>
+  <td>Generate</td>
+  <td>Appends one <code>cwStampPosition</code> at <code>strokePath.pointAtArcLength(0.0)</code>, glyph = <code>layer.glyphName</code>. (Anchor is the stroke's first point until rule params carry an explicit world anchor — fine for iter&nbsp;1.)</td>
+</tr>
+<tr>
+  <td><code>cwAlignToTangentRule</code></td>
+  <td>MutatePerLayer</td>
+  <td>Loops over <em>all</em> positions (so one is fine) and sets <code>rotationRad = atan2(t.y, t.x)</code> where <code>t = strokePath.tangentNearPoint(anchorWorld)</code>.</td>
+</tr>
+<tr>
+  <td><code>cwRigidStampRule</code> (via <code>cwStampRuleBase</code>)</td>
+  <td>Terminal · Stamps</td>
+  <td>Materialises each visible position: scale → rotate (CCW, world&nbsp;+Y&nbsp;up) → translate to anchor. Already used by both repeated and single-glyph stacks.</td>
+</tr>
+</table>
+
+<p>The one thing worth confirming was the tangent <em>at the stroke's start point</em> — does
+<code>tangentNearPoint</code> degenerate there? It does not. <code>tangentNearPoint(worldPoint)</code> →
+<code>closestSegment</code>, which for the start point returns segment&nbsp;0 with <code>t = 0</code>, then
+returns the normalised <code>points[1] − points[0]</code> — the direction of the first segment. So for a
+diagonal stroke <code>(0,0) → (0.57,0.57)</code> the tangent is the unit <code>(1,1)</code> and
+<code>rotationRad = atan2(0.707, 0.707) = π/4</code>. Exactly the desired flow orientation.</p>
+
+<p class="small"><strong>Convention note.</strong> <code>Align to tangent</code> is <em>absolute</em> alignment, not a
+relative spin: a glyph authored along <code>+X</code> ends up along the stroke; its <code>+Y</code> lands on
+the <code>+normal</code> (left) side. So a flow-arrow glyph should be authored pointing along <code>+X</code>
+(downstream) in glyph-local paper-mm, matching <code>rail-tie</code>/<code>floor-step</code> conventions.</p>
+
+<h2>Scope</h2>
+
+<h3>Production code</h3>
+<p><span class="tag rec">no change</span> No new rule, no registry edit, no proto change, no
+<code>protoVersion()</code> bump, no layout-engine change. The capability is emergent from the existing
+rule set. This plan exists to <em>verify and document</em> that, and to add the demo, not to add machinery.</p>
+
+<h3>Tests <span class="small">(in <code>testcases/test_cwSketchDecorationLayout.cpp</code>, tag <code>[cwSketchDecorationLayout]</code>)</span></h3>
+<ol>
+  <li>
+    <strong>New helper</strong>, alongside the existing <code>pointStampLayer</code>, making the contrast explicit:
+    <pre><code>// A single glyph at the stroke start, rotated to the local flow direction.
+cwDecorationLayer orientedPointStampLayer(const QString &glyphName)
+{
+    return ruleLayer(glyphName, {QStringLiteral("Explicit point"),
+                                 QStringLiteral("Align to tangent"),
+                                 QStringLiteral("Rigid stamp")});
+}</code></pre>
+  </li>
+  <li>
+    <strong>New functional case</strong> — "Flow-aligned point orients a single stamp to the stroke tangent":
+    <ul>
+      <li>One layer, one visible stamp (count&nbsp;== 1); <code>kind == Stamps</code>.</li>
+      <li>Anchor at the stroke start (matches <code>pointAtArcLength(0)</code>).</li>
+      <li>Diagonal 45° stroke → <code>position.rotationRad ≈ π/4</code> (the assertion the existing un-oriented helper would fail).</li>
+      <li>Horizontal stroke → <code>rotationRad ≈ 0</code> (sanity: same as the un-oriented case there).</li>
+      <li>A reversed stroke (running −X) → <code>rotationRad ≈ ±π</code>, proving the arrow flips with flow direction.</li>
+    </ul>
+    Pure compute, no temp files — safe under concurrent test processes (repo convention).
+  </li>
+  <li>
+    <strong>Optional contrast assertion</strong>: same glyph + same diagonal stroke through
+    <code>pointStampLayer</code> vs <code>orientedPointStampLayer</code> → first has
+    <code>rotationRad == 0</code>, second has <code>≈ π/4</code>. Documents the difference 4.3 introduces in one place.
+  </li>
+</ol>
+
+<h3>Reference image <span class="small">(the "visualize headless output" convention)</span></h3>
+<p>In the existing "Decoration layout renders to a reference image" case, add a panel so the oriented point can
+be eyeballed next to the un-oriented one. The cleanest demo reuses the <code>stream-indicator</code> arrowhead
+glyph already in <code>demoPalette()</code>:</p>
+<ul>
+  <li>Add a <code>streamOrientedBrush</code> = <code>{ offsetLayer(0.3), orientedPointStampLayer("stream-indicator") }</code>.</li>
+  <li>Add a panel with the 45° stroke and a caption that <em>contrasts</em> the existing one, e.g.
+      <code>"stream 45deg (flow-aligned)  —  the single arrow rotates to the flow (4.3)"</code>, placed right after the
+      existing <code>"…NOT tangent-rotated"</code> panel so the before/after sit together.</li>
+  <li>The existing un-oriented panels stay — they document the plain point stamp; 4.3 adds the oriented sibling, it does not replace it.</li>
+</ul>
+
+<h2 id="seed">The one decision: seed brush, or test-only demo?</h2>
+
+<div class="keyq">
+<p><strong>Should a flow-aligned point ship as a real brush in <code>cwSymbologyPaletteSeed</code>, or stay a
+test-only demo like the 4.5/4.6 railroad and ceiling-channel?</strong></p>
+<ul>
+  <li><strong>Test-only <span class="tag rec">precedent</span></strong> — matches the explicit 4.5/4.6 decision
+      ("demos are test-only, not in the seed … so we don't ship a half-mirrored demo glyph"). 4.3 stays pure
+      compute+demo; no seed churn, no committing a stream-arrow glyph we may want to redesign. The capability
+      is fully proven by the unit test + panel.</li>
+  <li><strong>Seed brush</strong> — a downstream flow arrow is a genuinely standard cave-map symbol (unlike the
+      railroad, which was only ever a stress test). Shipping a <code>water-flow</code> seed brush would make 4.3
+      the first 4.x feature a user could actually pick. <em>But</em> nothing renders the seed to screen until
+      commits 5–6, so a seed brush buys no user-visible value yet and does commit a glyph + brush to the wire
+      format ahead of the editor. Leans toward deferring the seed entry to the render-path work.</li>
+</ul>
+<p class="small"><strong>Recommendation:</strong> test-only for 4.3 (follow the 4.5/4.6 precedent); revisit a real
+<code>water-flow</code> seed brush when the render path (5–6) makes seed brushes user-visible. Happy to ship it
+in the seed now if you'd rather — it's a few lines in <code>cwSymbologyPaletteSeed.cpp</code> plus a glyph.</p>
+</div>
+
+<h2>Verification</h2>
+<pre><code>cd /Users/cave/Documents/projects/cavewhere_4
+cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test 2>&1 | tee /tmp/cw-build.log
+# targeted run (repo convention: single-tag, not the full suite)
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[cwSketchDecorationLayout]" -d yes 2>&1 | tee /tmp/cw-4.3-test.log
+# eyeball the panel
+CW_DECORATION_LAYOUT_PNG=/tmp/cw-decoration-layout.png \
+  ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[cwSketchDecorationLayout]" --platform offscreen</code></pre>
+<p>No QML, no rendering, no sketch-wiring changes. Will not commit unless you ask; will pause when 4.3 is built
+and green for your review.</p>
+
+<h2>Out of scope</h2>
+<ul>
+  <li><strong>Explicit world anchor for the point</strong> (place the symbol where the cartographer clicks, not at
+      the stroke's first vertex). That needs an <code>cwExplicitPointParams</code> proto message + codec entry —
+      the same rule-params recipe Commit&nbsp;B established for <code>Offset stroke</code> — and belongs with the
+      editor (commit&nbsp;9) or a small follow-up. 4.3 keeps the documented "first point" default.</li>
+  <li><strong>Relative rotation offset</strong> (e.g. arrow at tangent + 90°). A future <code>Rotate fixed</code>
+      MutatePerLayer rule from the iter-1 table; additive, independent of 4.3.</li>
+  <li><strong>Mirror on side / glyph cycling / multi-point</strong> — separate iter-1-table rules.</li>
+  <li><strong>Getting it on screen</strong> — render path, commits 5 → 6 (with the
+      <code>cwGlyphTessellationCache</code> thread-safety prerequisite noted in the roadmap).</li>
+</ul>
+
+</body>
+</html>

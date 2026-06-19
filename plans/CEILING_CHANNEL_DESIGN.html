@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ceiling channel — lateral offset for stamp terminals</title>
+<style>
+  :root {
+    --fg: #1d1d1f;
+    --muted: #555;
+    --line: #e6e6e6;
+    --soft: #fafafa;
+    --code-bg: #f4f4f5;
+    --accent: #3949ab;
+    --paper: #fbfaf6;
+    --ink: #2a2a2e;
+    --good: #1b7a3a;
+    --warn: #a02a2a;
+  }
+  body {
+    font: 15px/1.55 -apple-system, "SF Pro Text", system-ui, sans-serif;
+    color: var(--fg);
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 24px 96px;
+    background: #fff;
+  }
+  h1 { font-size: 2em; margin-top: 0; }
+  h2 { margin-top: 2.4em; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { margin-top: 1.8em; }
+  p, ul, ol { margin: 0.6em 0 0.8em; }
+  ul, ol { padding-left: 1.4em; }
+  code {
+    font: 0.92em/1.4 "SF Mono", Menlo, Consolas, monospace;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 14px 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font: 0.86em/1.5 "SF Mono", Menlo, Consolas, monospace;
+  }
+  table { border-collapse: collapse; margin: 14px 0; font-size: 0.93em; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  blockquote { border-left: 3px solid #c8c8cc; margin: 14px 0; padding: 4px 16px; color: #4a4a52; background: var(--soft); }
+  figure {
+    margin: 22px 0;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--soft);
+  }
+  figure canvas { display: block; width: 100%; height: auto; background: #fff; border: 1px solid #ececec; border-radius: 4px; }
+  figcaption { font-size: 0.88em; color: var(--muted); margin-top: 10px; line-height: 1.45; }
+  .grid2 { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; margin: 22px 0; align-items: start; }
+  @media (max-width: 680px) { .grid2 { grid-template-columns: 1fr; } }
+  .pipe { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 14px 0; }
+  .pbox {
+    border: 1px solid #c3d0f1; background: #eef2ff; color: var(--accent);
+    border-radius: 6px; padding: 6px 10px; font: 0.82em/1.2 "SF Mono", Menlo, monospace;
+  }
+  .pbox.gen { border-color: #b6e5c8; background: #eafaf1; color: var(--good); }
+  .pbox.term { border-color: #f0d9a3; background: #fff4e0; color: #8a5a00; }
+  .pbox.new { box-shadow: 0 0 0 2px #ffd27f; }
+  .arrow { color: var(--muted); font-size: 1.1em; }
+  .tag { display:inline-block; font-size:0.7em; text-transform:uppercase; letter-spacing:0.06em;
+         padding:1px 7px; border-radius:999px; border:1px solid #d2dcfb; background:#eef2ff; color:var(--accent); vertical-align:middle; }
+  .tag.a { background:#fdecec; color:var(--warn); border-color:#f3c3c3; }
+  .tag.b { background:#eafaf1; color:var(--good); border-color:#b6e5c8; }
+  .small { font-size: 0.88em; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Ceiling channel — lateral offset for stamp terminals</h1>
+<p class="small">Design note / discussion aid. Provisional <strong>commit 4.6</strong>, sibling of 4.1 (bending stamp) and
+4.5 (offset polyline rails). Nothing here is built yet — this document is to agree on the approach.</p>
+
+<h2>What we want</h2>
+
+<p>A <strong>ceiling channel</strong> is a recessed groove in the ceiling: two parallel "ceiling-step" lines that
+run alongside the passage centerline, each offset a fixed distance, with hatch ticks pointing
+<em>inward</em> toward the channel. It's two of the dashed-and-ticked ceiling-step symbols we just built,
+mirrored across the centerline.</p>
+
+<figure>
+  <canvas id="cChannel" w="860" h="300"></canvas>
+  <figcaption><strong>Target symbol.</strong> The faint grey dashed line is the cartographer's centerline (the
+  stroke). The two black dashed lines are offset <code>+d</code> and <code>−d</code> along the local normal and
+  <em>follow the curve</em>; the short ticks point inward. The whole thing is built from the placement-rule
+  stack — no new drawing code, only a way to push stamps off the centerline.</figcaption>
+</figure>
+
+<h2>Why the bending stamp is already 90% of the way there</h2>
+
+<p>Recall the warp at the heart of <code>cwBendingStampRule</code> (and <code>cwJointedStampRule</code>):</p>
+
+<pre>warp(x, y) = pointAtArcLength(S + scale·x)  +  scale·y · normal(S + scale·x)
+                      └── advance along the curve ──┘     └── push sideways along the normal ──┘</pre>
+
+<p>The glyph's <strong>x</strong> walks along the centerline's arclength; the glyph's <strong>y</strong> is already a
+<strong>push along the local normal</strong>. So a point authored at <code>y = +d</code> lands <code>d</code> off the
+centerline and rides the curve. Geometrically, <em>offset-following is the same operation the bending warp
+already performs</em> — a parallel offset curve is just "every sample at the same <code>y</code>."</p>
+
+<figure>
+  <canvas id="cWarp" w="860" h="320"></canvas>
+  <figcaption><strong>The warp's two axes.</strong> At a point <code>S</code> on the centerline, the green arrow is
+  the tangent (glyph <code>+x</code>) and the blue arrow is the left normal (glyph <code>+y</code>). A glyph vertex at
+  <code>(x, y)</code> maps to "walk <code>x</code> along the curve, then step <code>y</code> along the normal." The
+  blue dot shows a sample pushed to <code>y = +d</code> — that is exactly one point of an offset line.</figcaption>
+</figure>
+
+<h2>The catch: bending throws away the anchor's sideways position</h2>
+
+<p>So why can't we just seed the stamps off to the side? Because the bending terminal recovers its base
+arclength by <em>projecting the anchor back onto the centerline</em>:</p>
+
+<pre>const double S = strokePath.arcLengthNearPoint(position.anchorWorld); // collapses the anchor onto the centerline</pre>
+
+<p>Everything after that is rebuilt from <code>S</code> <em>along the centerline</em>. The anchor's lateral
+(sideways) component is discarded. A <code>MutatePerLayer</code> rule that nudges <code>anchorWorld</code> out
+along the normal would be <strong>silently ignored</strong> by the bending warp — it re-projects to the same
+<code>S</code> and offsets only by the glyph's own <code>y</code>.</p>
+
+<figure>
+  <canvas id="cAnchor" w="860" h="330"></canvas>
+  <figcaption><strong>Left — today.</strong> Move the red anchor off the centerline and the bending rule projects it
+  straight back to <code>S</code> (grey arrow); the offset is lost, the stamp lands on the line.
+  <strong>Right — the fix.</strong> Measure the signed distance the anchor sits off the centerline
+  (<code>anchorLateral</code>) and add it into every sample's normal push. Now a moved anchor produces an offset
+  stamp that follows the curve. When the anchor is on the line (every case today) <code>anchorLateral ≈ 0</code> and
+  nothing changes.</figcaption>
+</figure>
+
+<p>The fix is small and lives in the shared <code>bendWarp</code> helper, so Bending and Jointed both gain it, and
+Rigid already honours a moved anchor:</p>
+
+<pre>// once per stampPath(), in the stamp terminal:
+const double  S = strokePath.arcLengthNearPoint(anchorWorld);
+const QPointF base = strokePath.pointAtArcLength(S);
+const QPointF n    = strokePath.normalAtArcLength(S);
+const double  anchorLateral = QPointF::dotProduct(anchorWorld - base, n);   // 0 when on the line
+
+// bendWarp(x, y) = pointAtArcLength(S + scale·x) + (anchorLateral + scale·y)·normal(S + scale·x)</pre>
+
+<blockquote><strong>Superseded — see "Resolved direction" below.</strong> The per-stamp
+<code>anchorLateral</code> fix shown above is <em>not</em> the path we took. Offsetting the centerline the
+pipeline runs against (a stroke transform) subsumes it, needs no stamp-terminal change, and also covers traced
+lines and referenced sub-symbols. The figure stays because it explains <em>why</em> a naive anchor-nudge is
+ignored.</blockquote>
+
+<h2>Two ways to supply the offset</h2>
+
+<div class="grid2">
+  <div>
+    <h3><span class="tag a">A</span> Bake it into the glyph's <code>y</code></h3>
+    <figure style="margin:10px 0;">
+      <canvas id="cApproachA" w="420" h="240"></canvas>
+    </figure>
+    <p>Author <code>dash-+d</code> and <code>dash-−d</code> glyph variants (the dash shifted up / down in glyph
+    space). Two bending layers, <strong>zero engine code</strong> — it works against the build we have today.</p>
+    <ul class="small">
+      <li><strong>+</strong> Instant; proves the channel visually right now.</li>
+      <li><strong>−</strong> Glyph explosion — every symbol needs ±d twins.</li>
+      <li><strong>−</strong> Channel width is frozen into glyph geometry, not a tunable parameter.</li>
+      <li><strong>−</strong> Conflates "what the symbol looks like" with "where it sits."</li>
+    </ul>
+  </div>
+  <div>
+    <h3><span class="tag b">B</span> A parametric <code>Offset along normal</code> rule</h3>
+    <figure style="margin:10px 0;">
+      <canvas id="cApproachB" w="420" h="240"></canvas>
+    </figure>
+    <p>A new <code>MutatePerLayer</code> rule pushes each anchor <code>d·worldPerPaperMm</code> along the local
+    normal; the <code>anchorLateral</code> tweak above lets the bending warp honour it.</p>
+    <ul class="small">
+      <li><strong>+</strong> One offset value, any glyph — no twins.</li>
+      <li><strong>+</strong> Composes across Rigid / Jointed / Bending uniformly.</li>
+      <li><strong>+</strong> Channel width becomes a real parameter (editor-tunable later).</li>
+      <li><strong>−</strong> Needs a signed <code>±d</code> per layer → the first feature that reads a <em>rule
+      param</em> (we'd been deferring param interpretation to the editor, commit 8).</li>
+    </ul>
+  </div>
+</div>
+
+<p>The two layers of a channel need <em>opposite</em> offsets (<code>+d</code> and <code>−d</code>). A single rule
+running from a hard-coded default can only produce one sign — so option B is genuinely the first place a
+<strong>rule parameter</strong> has to be read. That's the one piece of new plumbing it forces.</p>
+
+<h3>The stack, the way B composes it</h3>
+
+<p>Each of the channel's four layers is just a rule stack. The new box is highlighted:</p>
+
+<div class="pipe">
+  <span class="pbox gen">Uniform spacing</span><span class="arrow">→</span>
+  <span class="pbox new">Offset along normal (+d)</span><span class="arrow">→</span>
+  <span class="pbox term">Bending stamp</span>
+  <span class="small" style="margin-left:8px;">— dashed line, offset +d</span>
+</div>
+<div class="pipe">
+  <span class="pbox gen">Uniform spacing</span><span class="arrow">→</span>
+  <span class="pbox new">Offset along normal (+d)</span><span class="arrow">→</span>
+  <span class="pbox">Align to tangent</span><span class="arrow">→</span>
+  <span class="pbox term">Rigid stamp</span>
+  <span class="small" style="margin-left:8px;">— inward ticks on the +d line</span>
+</div>
+<div class="pipe">
+  <span class="pbox gen">Uniform spacing</span><span class="arrow">→</span>
+  <span class="pbox new">Offset along normal (−d)</span><span class="arrow">→</span>
+  <span class="pbox term">Bending stamp</span>
+  <span class="small" style="margin-left:8px;">— dashed line, offset −d</span>
+</div>
+<div class="pipe">
+  <span class="pbox gen">Uniform spacing</span><span class="arrow">→</span>
+  <span class="pbox new">Offset along normal (−d)</span><span class="arrow">→</span>
+  <span class="pbox">Align to tangent</span><span class="arrow">→</span>
+  <span class="pbox term">Rigid stamp</span>
+  <span class="small" style="margin-left:8px;">— inward ticks on the −d line</span>
+</div>
+
+<p class="small">Tick <em>direction</em> (inward on both sides) is the existing mirror concern — the
+<code>cwStampPosition::side</code> field / a future <code>Mirror on side</code> rule flips the tick glyph for the
+far side. Not new work for the offset itself.</p>
+
+<h2>How the two compare</h2>
+
+<table>
+  <tr><th>&nbsp;</th><th>A — glyph <code>y</code></th><th>B — offset rule</th></tr>
+  <tr><td>Engine code</td><td>none</td><td>~15 lines + one small rule + read one param</td></tr>
+  <tr><td>Channel width</td><td>frozen in the glyph</td><td>a parameter</td></tr>
+  <tr><td>Reuse across glyphs</td><td>±d twin per glyph</td><td>any glyph, unchanged</td></tr>
+  <tr><td>Works with Rigid ticks</td><td>yes (author tick offset too)</td><td>yes (same rule)</td></tr>
+  <tr><td>Needs param interpretation</td><td>no</td><td>yes (first user of it)</td></tr>
+  <tr><td>Good for</td><td>a demo / proof today</td><td>the shipping mechanism</td></tr>
+</table>
+
+<h2>One caveat either way: tight concave bends</h2>
+
+<figure>
+  <canvas id="cSelf" w="860" h="240"></canvas>
+  <figcaption><strong>Self-intersection.</strong> A parametric-parallel offset (this, and 4.5's rails) folds over
+  itself on the <em>inner</em> side when the offset <code>d</code> approaches the curve radius. For cave passages
+  (<code>d ≪ radius</code>) it's invisible. We document the limit rather than ship robust (Clipper-style) offsetting
+  — same decision 4.5 already made.</figcaption>
+</figure>
+
+<p>This is the stamp twin of <strong>commit 4.5</strong> (offset <em>polyline</em> rails). Same geometry, different
+terminal: 4.5 offsets a traced solid line, this offsets stamped glyphs. If a channel ever wants <em>solid</em>
+edges instead of dashes, that's 4.5; the dashed/ticked channel is this. Their offset semantics should stay
+aligned (sign = side, paper-mm, left-normal positive).</p>
+
+<h2>Resolved direction</h2>
+
+<p>Offset is a <strong>stroke transform, surfaced as its own rule</strong>; <strong>constant for now</strong>;
+and <strong>symbol reuse via a DAG</strong> is the destination it's built toward.</p>
+
+<h3>1 — Offset is a stroke transform, surfaced as a rule</h3>
+
+<p>The layout builds an offset <code>cwStrokePath</code> (the centerline pushed <code>±d·worldPerPaperMm</code>
+along its left normal) and runs the layer's rule stack against <em>that</em> stroke. The offset rule is a new
+stage that runs <em>before</em> Generate; the layout pulls it out of the stack and applies it first, the same way
+it already pulls out the Terminal rule.</p>
+<ul>
+  <li>Bending / Jointed / Rigid stamps follow the offset for free — they sample the stroke. <strong>No
+  <code>bendWarp</code> / stamp-terminal change.</strong></li>
+  <li>A traced line would follow too — so this <strong>absorbs commit 4.5</strong> (parallel rails); both share one
+  offset-polyline helper (push along the left normal, miter join + bevel fallback).</li>
+  <li>It honours "offset is its own rule" (declarative, composable) while doing the right thing geometrically.</li>
+</ul>
+
+<h3>2 — Symbol reuse via a DAG (where this is heading)</h3>
+
+<p>A decoration layer gains a second shape: instead of <em>glyph + rules</em>, it can <em>reference another brush</em>
+plus a transform (offset, mirror). The layout renders the referenced brush's decorations against the transformed
+stroke — <strong>recursively</strong>. The graph must be <strong>acyclic</strong> (a DAG): a name/uuid reference,
+cycle detection, and a depth cap. This is symbol instancing — SVG <code>&lt;use&gt;</code>, CAD blocks.</p>
+<p><code>ceiling-step</code> is authored <strong>once</strong>; <code>ceiling-channel</code> = two references to it,
+offset <code>+d</code> and <code>−d</code> (the second mirrored). <strong>The stroke-transform offset built in
+step 1 is the exact primitive the reference reuses</strong> — so step 1 is the down payment on the DAG, not a
+detour.</p>
+
+<h3>3 — Constant for now</h3>
+
+<p>No param/editor plumbing yet. The offset's magnitude + sign comes from a temporary per-layer carrier (a channel
+needs <code>+d</code> on one side and <code>−d</code> on the other — a singleton rule with a hardcoded constant
+can't emit both). The carrier is set in code (seed/test), replaced later by rule params and ultimately by the
+DAG reference's transform.</p>
+
+<h3>Steps</h3>
+<ol>
+  <li><strong>Now:</strong> offset-polyline helper + an <code>Offset stroke</code> rule + the layout's
+  offset-stroke step; a <code>ceiling-channel</code> demo brush (constant <code>±d</code>, ticks mirrored inward)
+  + a PNG panel. <span class="small">(Supersedes the earlier <code>anchorLateral</code> step — not needed.)</span></li>
+  <li><strong>Later:</strong> parameterise — first via rule params, then fold the offset onto the DAG reference's
+  transform and drop the temporary carrier.</li>
+  <li><strong>Later:</strong> the DAG itself — brush references + recursive, cycle-checked layout — turning
+  <code>ceiling-channel</code> into two references of the one <code>ceiling-step</code> symbol.</li>
+</ol>
+
+<p class="small">Open sub-decision for step 1: how the constant <code>±d</code> is carried — a signed
+<code>lateralOffsetMm</code> layer field (matches the existing <code>offsetCurveOffsetMm</code> precedent, trivial
+to delete later) vs. two constant rule classes vs. the glyph-<code>y</code> demo. Recommend the layer field.</p>
+
+<script>
+(function () {
+  const D2R = Math.PI / 180;
+
+  function hi(id) {
+    const c = document.getElementById(id);
+    const w = +c.getAttribute('w'), h = +c.getAttribute('h');
+    const s = 2;
+    c.width = w * s; c.height = h * s;
+    const ctx = c.getContext('2d');
+    ctx.scale(s, s);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.W = w; ctx.H = h;
+    return ctx;
+  }
+  const pt = (C, R, a) => ({ x: C.x + R * Math.cos(a), y: C.y + R * Math.sin(a) });
+  function arc(ctx, C, R, a0, a1, width, color, dash) {
+    ctx.save();
+    ctx.setLineDash(dash || []);
+    ctx.lineWidth = width; ctx.strokeStyle = color;
+    ctx.beginPath(); ctx.arc(C.x, C.y, R, a0, a1); ctx.stroke();
+    ctx.restore();
+  }
+  function ticks(ctx, C, R, a0, a1, n, len, color) {
+    // tick points from the offset radius R toward the centerline radius (toward
+    // the channel middle). dir = sign(centerR - R) along the outward radial.
+    ctx.save();
+    ctx.lineWidth = 1.6; ctx.strokeStyle = color;
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + (a1 - a0) * i / n;
+      const base = pt(C, R, a);
+      const radial = { x: Math.cos(a), y: Math.sin(a) }; // outward
+      const sign = (ctx._centerR - R) > 0 ? 1 : -1;
+      const tip = { x: base.x + sign * radial.x * len, y: base.y + sign * radial.y * len };
+      ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function arrow(ctx, from, to, color, label, lblOff) {
+    ctx.save();
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke();
+    const ang = Math.atan2(to.y - from.y, to.x - from.x), hl = 9;
+    ctx.beginPath();
+    ctx.moveTo(to.x, to.y);
+    ctx.lineTo(to.x - hl * Math.cos(ang - 0.4), to.y - hl * Math.sin(ang - 0.4));
+    ctx.lineTo(to.x - hl * Math.cos(ang + 0.4), to.y - hl * Math.sin(ang + 0.4));
+    ctx.closePath(); ctx.fill();
+    if (label) {
+      ctx.font = '13px "SF Mono", Menlo, monospace';
+      const o = lblOff || { x: 6, y: -6 };
+      ctx.fillText(label, to.x + o.x, to.y + o.y);
+    }
+    ctx.restore();
+  }
+  function dot(ctx, p, r, color) {
+    ctx.save(); ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 2 * Math.PI); ctx.fill(); ctx.restore();
+  }
+  function label(ctx, p, text, color, font) {
+    ctx.save(); ctx.fillStyle = color || '#1d1d1f';
+    ctx.font = font || '13px -apple-system, system-ui, sans-serif';
+    ctx.fillText(text, p.x, p.y); ctx.restore();
+  }
+
+  const INK = '#2a2a2e', FAINT = '#b9b9c2', ACCENT = '#3949ab', GOOD = '#1b7a3a', RED = '#e00000', WARN = '#a02a2a';
+
+  // ---- Fig: target channel ----
+  (function () {
+    const ctx = hi('cChannel');
+    const C = { x: 430, y: 760 }, R = 560, d = 42;
+    const a0 = 247 * D2R, a1 = 293 * D2R;
+    ctx._centerR = R;
+    arc(ctx, C, R, a0, a1, 1.5, FAINT, [7, 7]);             // centerline
+    arc(ctx, C, R + d, a0, a1, 2.2, INK, [15, 11]);          // outer dashed line
+    arc(ctx, C, R - d, a0, a1, 2.2, INK, [15, 11]);          // inner dashed line
+    ticks(ctx, C, R + d, a0, a1, 9, 16, INK);
+    ticks(ctx, C, R - d, a0, a1, 9, 16, INK);
+    label(ctx, { x: 470, y: 250 }, 'centerline (stroke)', FAINT);
+    label(ctx, { x: 640, y: 168 }, '+d line', INK, '12px "SF Mono", monospace');
+    label(ctx, { x: 640, y: 248 }, '−d line', INK, '12px "SF Mono", monospace');
+  })();
+
+  // ---- Fig: warp axes ----
+  (function () {
+    const ctx = hi('cWarp');
+    const C = { x: 430, y: 820 }, R = 620;
+    const a0 = 250 * D2R, a1 = 290 * D2R, am = 270 * D2R;
+    arc(ctx, C, R, a0, a1, 2, INK);
+    const S = pt(C, R, am);
+    dot(ctx, S, 4, INK);
+    label(ctx, { x: S.x - 8, y: S.y + 22 }, 'S', INK, 'italic 15px serif');
+    const radial = { x: Math.cos(am), y: Math.sin(am) };       // points away from centre = up here
+    const nrm = { x: radial.x, y: radial.y };                  // left normal (glyph +y) = up
+    const tan = { x: -radial.y, y: radial.x };                 // tangent (glyph +x) = right
+    arrow(ctx, S, { x: S.x + tan.x * 150, y: S.y + tan.y * 150 }, GOOD, 'glyph +x  (along curve / arclength)', { x: 8, y: 4 });
+    arrow(ctx, S, { x: S.x + nrm.x * 120, y: S.y + nrm.y * 120 }, ACCENT, 'glyph +y  (along normal = OFFSET)', { x: 8, y: -2 });
+    const off = { x: S.x + nrm.x * 80, y: S.y + nrm.y * 80 };
+    dot(ctx, off, 5, ACCENT);
+    label(ctx, { x: off.x + 10, y: off.y + 18 }, 'a sample at y = +d', ACCENT, '12px "SF Mono", monospace');
+  })();
+
+  // ---- Fig: anchor discard vs fix ----
+  (function () {
+    const ctx = hi('cAnchor');
+    // two side-by-side panels sharing one curve shape
+    function panel(ox, title, fixed) {
+      const C = { x: ox + 200, y: 720 }, R = 460;
+      const a0 = 252 * D2R, a1 = 288 * D2R, am = 270 * D2R;
+      arc(ctx, C, R, a0, a1, 2, INK);
+      const S = pt(C, R, am);
+      dot(ctx, S, 3.5, INK);
+      label(ctx, { x: S.x + 8, y: S.y + 4 }, 'S', INK, 'italic 14px serif');
+      const radial = { x: Math.cos(am), y: Math.sin(am) };  // outward = up
+      const anchor = { x: S.x + radial.x * 90, y: S.y + radial.y * 90 };
+      dot(ctx, anchor, 5, RED);
+      label(ctx, { x: anchor.x + 12, y: anchor.y - 4 }, 'moved anchor', RED, '12px "SF Mono", monospace');
+      label(ctx, { x: ox + 30, y: 60 }, title, '#1d1d1f', '600 14px -apple-system, system-ui');
+      if (!fixed) {
+        arrow(ctx, anchor, S, FAINT, '', {});
+        label(ctx, { x: ox + 30, y: 84 }, 'projected back to S — offset lost', WARN, '12px -apple-system, system-ui');
+        arc(ctx, C, R, am - 6 * D2R, am + 6 * D2R, 4, RED);   // stamp lands on the line
+      } else {
+        label(ctx, { x: ox + 30, y: 84 }, 'anchorLateral kept — stamp offsets', GOOD, '12px -apple-system, system-ui');
+        arc(ctx, C, R + 90, am - 6 * D2R, am + 6 * D2R, 4, GOOD); // stamp on the offset line
+        arrow(ctx, S, anchor, ACCENT, 'anchorLateral', { x: 10, y: 4 });
+      }
+    }
+    panel(0, 'Today — anchor’s sideways position discarded', false);
+    ctx.save(); ctx.strokeStyle = '#e2e2e6'; ctx.beginPath(); ctx.moveTo(430, 30); ctx.lineTo(430, 320); ctx.stroke(); ctx.restore();
+    panel(440, 'The fix — keep the lateral offset', true);
+  })();
+
+  // ---- Fig: approach A (glyph y) ----
+  (function () {
+    const ctx = hi('cApproachA');
+    // glyph space axes
+    const O = { x: 70, y: 120 };
+    ctx.save(); ctx.strokeStyle = '#cfcfd6'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(O.x - 40, O.y); ctx.lineTo(O.x + 120, O.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(O.x, O.y + 70); ctx.lineTo(O.x, O.y - 90); ctx.stroke(); ctx.restore();
+    label(ctx, { x: O.x + 124, y: O.y + 4 }, 'x', '#999', '12px monospace');
+    label(ctx, { x: O.x - 4, y: O.y - 96 }, 'y', '#999', '12px monospace');
+    // dash authored at y = +d (shifted up)
+    const d = 52;
+    ctx.save(); ctx.strokeStyle = INK; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(O.x - 30, O.y - d); ctx.lineTo(O.x + 30, O.y - d); ctx.stroke(); ctx.restore();
+    arrow(ctx, { x: O.x - 42, y: O.y }, { x: O.x - 42, y: O.y - d }, ACCENT, '', {});
+    label(ctx, { x: O.x - 38, y: O.y - d / 2 }, '+d', ACCENT, '12px "SF Mono", monospace');
+    label(ctx, { x: 20, y: 220 }, 'dash glyph authored at y = +d', '#555', '12px -apple-system, system-ui');
+    label(ctx, { x: 20, y: 236 }, '(a second twin at y = −d)', '#999', '11px -apple-system, system-ui');
+  })();
+
+  // ---- Fig: approach B (offset rule) ----
+  (function () {
+    const ctx = hi('cApproachB');
+    const C = { x: 210, y: 470 }, R = 380, d = 40;
+    const a0 = 250 * D2R, a1 = 290 * D2R;
+    ctx._centerR = R;
+    arc(ctx, C, R, a0, a1, 1.5, FAINT, [6, 6]);
+    // anchors on the centerline, then arrows pushing them out by d
+    const n = 5;
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + (a1 - a0) * i / n;
+      const base = pt(C, R, a);
+      const out = pt(C, R + d, a);
+      dot(ctx, base, 2.5, FAINT);
+      arrow(ctx, base, out, ACCENT, '', {});
+      dot(ctx, out, 3.5, GOOD);
+    }
+    arc(ctx, C, R + d, a0, a1, 2.4, INK, [14, 10]);
+    label(ctx, { x: 18, y: 214 }, 'anchors seeded on the line, pushed +d by the rule', '#555', '12px -apple-system, system-ui');
+    label(ctx, { x: 18, y: 230 }, 'one glyph, offset is a parameter', '#999', '11px -apple-system, system-ui');
+  })();
+
+  // ---- Fig: self intersection (polyline offset so the fold actually shows) ----
+  (function () {
+    const ctx = hi('cSelf');
+    // A sharp Gaussian bump: one tight apex (small radius of curvature) with flat
+    // arms, so a modest offset exceeds the radius only near the apex and folds
+    // into a small localized loop that stays on-canvas. Concave side is below.
+    const N = 120, pts = [], base = 185, H = 105, w = 72;
+    for (let i = 0; i <= N; i++) {
+      const X = -250 + 500 * i / N;
+      pts.push({ x: 430 + X, y: base - H * Math.exp(-(X / w) * (X / w)) });
+    }
+    function offsetPoly(sign, d) {
+      const out = [];
+      for (let i = 0; i <= N; i++) {
+        const a = pts[Math.max(0, i - 1)], b = pts[Math.min(N, i + 1)];
+        let tx = b.x - a.x, ty = b.y - a.y;
+        const L = Math.hypot(tx, ty) || 1; tx /= L; ty /= L;
+        const nx = -ty, ny = tx;                 // left normal
+        out.push({ x: pts[i].x + sign * d * nx, y: pts[i].y + sign * d * ny });
+      }
+      return out;
+    }
+    function poly(p, color, width, dash) {
+      ctx.save(); ctx.setLineDash(dash || []); ctx.lineWidth = width; ctx.strokeStyle = color;
+      ctx.beginPath(); ctx.moveTo(p[0].x, p[0].y);
+      for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
+      ctx.stroke(); ctx.restore();
+    }
+    poly(pts, INK, 2);                            // centerline
+    poly(offsetPoly(-1, 46), GOOD, 2, [5, 4]);    // outer (convex) — clean
+    poly(offsetPoly(1, 46), WARN, 2, [5, 4]);     // inner (concave) — self-crosses near the apex
+    label(ctx, { x: 250, y: 150 }, 'centerline', INK, '12px -apple-system, system-ui');
+    label(ctx, { x: 70, y: 30 }, 'outer offset — ok', GOOD, '12px -apple-system, system-ui');
+    label(ctx, { x: 470, y: 150 }, 'inner offset self-crosses where d > local radius', WARN, '12px -apple-system, system-ui');
+  })();
+})();
+</script>
+
+</body>
+</html>

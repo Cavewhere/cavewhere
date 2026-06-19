@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Symbology Palette — project-level async save/load (prerequisite)</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.55; color: #1a1a1a; }
+  h1 { font-size: 1.8rem; border-bottom: 2px solid #333; padding-bottom: .3rem; }
+  h2 { font-size: 1.35rem; margin-top: 2.2rem; border-bottom: 1px solid #ccc; padding-bottom: .2rem; }
+  h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+  code { background: #f2f2f2; padding: .1rem .3rem; border-radius: 3px; font-size: .9em; }
+  pre { background: #f6f8fa; border: 1px solid #ddd; border-radius: 6px; padding: .8rem 1rem; overflow-x: auto; font-size: .85rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
+  th, td { border: 1px solid #ccc; padding: .4rem .6rem; text-align: left; vertical-align: top; }
+  th { background: #f0f0f0; }
+  blockquote { border-left: 4px solid #4a90d9; background: #f0f6fc; margin: 1rem 0; padding: .6rem 1rem; }
+  .warn { border-left: 4px solid #d98a4a; background: #fcf6f0; padding: .6rem 1rem; }
+  .note { color: #555; font-size: .9rem; }
+  .tag { display: inline-block; background: #333; color: #fff; border-radius: 4px; padding: .05rem .4rem; font-size: .75rem; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<h1>Project-level palette + async save/load <span class="tag">draft / problem framing</span></h1>
+
+<p class="note">Untracked planning doc, fall2026 branch. Drafted 2026-06-18.
+<strong>Prerequisite</strong> for <code>SYMBOLOGY_PALETTE_GLYPH_LIBRARY_PLAN.html</code>
+(auto-save glyph library). This is a problem statement + options, not a settled
+design — several pieces are genuinely open and called out as such.</p>
+
+<h2>1. Why</h2>
+
+<p>
+The glyph library wants <strong>auto-save</strong> (no Save/Cancel — edits
+persist as you draw). That only makes sense if the palette is persisted the way
+every other CaveWhere serialized object is: owned by the project and written
+<strong>asynchronously through <code>cwSaveLoad</code></strong>, not the current
+synchronous "write a file + full reload" path. Two coupled changes:
+</p>
+<ol>
+  <li><strong>Ownership moves to the project level.</strong> A palette becomes
+  part of the project's saved state, not an app-global install.</li>
+  <li><strong>Writes go async through the save queue</strong>, like caves /
+  trips / scraps, so editing never blocks the UI and there is no explicit Save.</li>
+</ol>
+
+<h2>2. Current state (what exists today)</h2>
+<ul>
+  <li><strong>Storage:</strong> <code>cwSymbologyPaletteIO</code> is
+  <em>directory-as-truth</em> — <code>&lt;AppDataLocation&gt;/palettes/&lt;slug&gt;/</code>
+  with <code>palette.json</code> + <code>brushes/*.cwbrush</code> +
+  <code>glyphs/*.cwglyph</code>. App-global, shared across all projects.</li>
+  <li><strong>Manager:</strong> <code>cwSymbologyPaletteManager</code> scans that
+  directory, owns the live <code>cwSymbologyPalette</code> objects, and (since
+  commit 8.1) does a <em>reconciling reload</em> that keeps a palette pointer
+  stable across rescans.</li>
+  <li><strong>Writes:</strong> <code>saveGlyph</code>/<code>removeGlyph</code>/<code>duplicatePalette</code>
+  write to disk <strong>synchronously on the UI thread</strong>, then call
+  <code>reload()</code> — a full directory rescan. Fine for occasional edits;
+  wrong for per-stroke auto-save.</li>
+  <li><strong>Project linkage:</strong> the region stores only a
+  <code>defaultPaletteId</code> (in project metadata); the palette <em>data</em>
+  lives in app-data, referenced by id. A project opened on another machine that
+  lacks that palette id can't resolve it (this is also the "missing palette"
+  load-error follow-up, task&nbsp;#31).</li>
+  <li><strong>Re-skin path:</strong> a content change → <code>palette.dataChanged()</code>
+  → <code>cwSketch</code> re-resolves its snapshot → path source rebuilds. The
+  glyph tessellation cache has a scoped <code>invalidateGlyph(name)</code> already.</li>
+</ul>
+
+<h2>3. Target</h2>
+<p>
+The project owns its palette(s). Editing a glyph mutates the project's palette
+and schedules an async write through <code>cwSaveLoad</code> (debounced), exactly
+like editing a station or a scrap. Opening a project restores its palettes
+without depending on the editing machine's app-data. The shipped read-only
+default stays app-global (it's a fallback/seed, not project data).
+</p>
+
+<h2>4. Open question — storage format <span class="tag warn">decide first</span></h2>
+<p>Where does the project's palette data physically live? The symbology format is
+<strong>unreleased on fall2026</strong>, so we are free to choose without a
+proto-version bump.</p>
+<table>
+<tr><th>Option</th><th>Shape</th><th>Trade-off</th></tr>
+<tr><td><strong>P1 — Protobuf in the project</strong></td>
+<td>A <code>Palette</code> message in <code>cavewhere.proto</code>, serialized
+into the bundled <code>.cw</code> / <code>.cwproj</code> alongside caves, written
+by the same <code>cwSaveLoad</code> pass.</td>
+<td>Uniform with every other object; one save pipeline; transactional with the
+rest of the project. But duplicates the existing JSON/dir IO, and the per-file
+dir layout (nice for Git diffs) is lost unless mirrored.</td></tr>
+<tr><td><strong>P2 — Project-local <code>palettes/</code> dir</strong></td>
+<td>Relocate the directory-as-truth layout <em>inside</em> the
+<code>.cwproj</code> (and into the bundle for <code>.cw</code>). Reuses
+<code>cwSymbologyPaletteIO</code> as-is; ties into the project-local palette
+idea already tracked (task&nbsp;#36).</td>
+<td>Great Git/sync story (per-glyph file diffs), reuses existing IO. But it is a
+<em>second</em> persistence channel outside <code>cwSaveLoad</code>'s protobuf
+pass — async/dirty/queue integration has to be built to match, and bundled
+<code>.cw</code> (zip) needs the dir packed in.</td></tr>
+<tr><td><strong>P3 — Hybrid</strong></td>
+<td>Edit against project-local files (P2) for Git-friendliness, but drive the
+writes through the <code>cwSaveLoad</code> queue so timing/threading matches the
+rest of the app.</td>
+<td>Best of both, most plumbing.</td></tr>
+</table>
+<p class="note">Leaning P2/P3 — the directory-as-truth format and the
+reconciling reload already exist and the Git sync story is a CaveWhere selling
+point; the work is the async/queue integration, not a new serializer. But P1 is
+the most "like every other object". Needs your call.</p>
+
+<h2>5. Async write path</h2>
+<ul>
+  <li>Route palette mutations through <code>cwSaveLoad</code> (the existing
+  queued save infra) so writes are off the UI thread and serialized with project
+  saves. Use the <code>AsyncFuture::observe(future).context(this, …)</code>
+  pattern (never <code>waitForFinished</code> outside tests), per house rules.</li>
+  <li><strong>Debounce</strong>: a pen drag is many <code>appendPoint</code>s; one
+  write per glyph per idle window, not per sample.</li>
+  <li><strong>Dirty tracking</strong>: the project already tracks unsaved state;
+  the palette becomes part of that. Removes the bespoke synchronous
+  <code>reload()</code>-after-every-write.</li>
+</ul>
+
+<h2>6. The re-skin / rebuild question <span class="tag warn">shared with the library plan §5</span></h2>
+<p>
+<strong>Persistence and re-skin must be decoupled.</strong> Auto-save is cheap
+and frequent; rebuilding dependent render geometry (tessellation cache +
+decoration relayout for every sketch whose brushes stamp the changed glyph) is
+expensive and must not run per pen sample.
+</p>
+<ul>
+  <li>Editor's own canvas: re-skins live (one glyph, trivial).</li>
+  <li>Project-wide: scope to the changed glyph via
+  <code>invalidateGlyph(name)</code>, and run the dependent-sketch relayout
+  <em>coarsely</em> — on editor close, or debounced (library plan Decision A).</li>
+  <li>This needs a clean "palette content changed" signal distinct from "palette
+  persisted" — today both ride <code>reload()</code>. Splitting them is part of
+  this work (relates to the granular-signal follow-up, task&nbsp;#38).</li>
+</ul>
+
+<h2>7. Knock-on items already tracked</h2>
+<ul>
+  <li><strong>#31</strong> missing palette/brush as a load error — resolves more
+  naturally once the palette travels <em>with</em> the project.</li>
+  <li><strong>#35</strong> non-transactional write + reload — superseded by the
+  async queued path.</li>
+  <li><strong>#36</strong> project-local <code>palettes/</code> dir — this is
+  option P2.</li>
+  <li><strong>#37</strong> targeted single-palette refresh — folds into the
+  decoupled re-skin signal (§6).</li>
+  <li><strong>#38</strong> add/remove granularity — the "content changed" vs
+  "persisted" split (§6).</li>
+  <li><code>cwSymbologyPalette::directory()</code> is a runtime locator that must
+  become a project-relative location/source-sink handle (noted in the reload
+  memory).</li>
+</ul>
+
+<h2>8. Open questions</h2>
+<ol>
+  <li>Storage format — P1 / P2 / P3 (§4)?</li>
+  <li>Does a project carry one palette, or a set (with the region's
+  <code>defaultPaletteId</code> selecting among them)? Forks made in-project vs.
+  imported app-global palettes — how do they relate?</li>
+  <li>Migration: existing app-data palettes and the stored
+  <code>defaultPaletteId</code> → project-owned. Import-on-first-edit?</li>
+  <li>Does the app-global manager survive (for the shipped default + an import
+  library), with the project holding its own palettes, or does the project become
+  the sole owner while editing?</li>
+  <li>Re-skin signal split (§6) — what's the minimal new signal surface on
+  <code>cwSymbologyPalette</code> / the project?</li>
+</ol>
+
+</body>
+</html>

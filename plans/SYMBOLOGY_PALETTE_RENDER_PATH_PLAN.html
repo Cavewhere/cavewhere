@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Commit 5 — Render path: decoration layout on the live sketch canvas</title>
+<style>
+  :root {
+    --fg: #1d1d1f; --muted: #555; --line: #e6e6e6; --soft: #fafafa;
+    --code-bg: #f4f4f5; --accent: #3949ab; --good: #1b7a3a; --warn: #a02a2a;
+  }
+  body { font: 15px/1.55 -apple-system, "SF Pro Text", system-ui, sans-serif; color: var(--fg);
+         max-width: 920px; margin: 0 auto; padding: 32px 24px 96px; background: #fff; }
+  h1 { font-size: 2em; margin-top: 0; }
+  h2 { margin-top: 2.4em; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { margin-top: 1.7em; }
+  p, ul, ol { margin: 0.6em 0 0.8em; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: 0.25em 0; }
+  code { font: 0.92em/1.4 "SF Mono", Menlo, Consolas, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 6px; overflow-x: auto; font: 0.85em/1.5 "SF Mono", Menlo, Consolas, monospace; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; margin: 14px 0; font-size: 0.93em; width: 100%; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  blockquote { border-left: 3px solid #c8c8cc; margin: 14px 0; padding: 4px 16px; color: #4a4a52; background: var(--soft); }
+  .rec { border-left-color: #9ccfb0; background: #f0faf4; color: #225c38; }
+  .warnote { border-left-color: #e6b8b8; background: #fdf3f3; color: #7a2a2a; }
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin: 18px 0; }
+  .node { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px 12px; font-size: 0.84em; min-width: 0; }
+  .node .h { font-weight: 600; font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 5px; }
+  .node code { background: #f0f1f4; font-size: 0.9em; }
+  .node.src { background: #eef2ff; border-color: #c8d4fb; }
+  .node.eng { background: #eafaf1; border-color: #b6e5c8; }
+  .node.out { background: #f4f1fb; border-color: #d3c8ef; }
+  .arrow { align-self: center; color: var(--muted); font-size: 1.3em; padding: 0 2px; }
+  .tag { display:inline-block; font-size:0.7em; text-transform:uppercase; letter-spacing:0.06em; padding:1px 7px; border-radius:999px; border:1px solid #d2dcfb; background:#eef2ff; color:var(--accent); vertical-align:middle; }
+  .tag.rec { background:#eafaf1; color:var(--good); border-color:#b6e5c8; }
+  .tag.del { background:#fdecec; color:var(--warn); border-color:#f0c4c4; }
+  .tag.i2 { background:#fff4e5; color:#8a5a00; border-color:#f0d9b0; }
+  .small { font-size: 0.88em; color: var(--muted); }
+  .keyq { background: #fbfbfd; border: 1px solid var(--line); border-radius: 8px; padding: 4px 16px 14px; margin: 18px 0; }
+  .keyq h3 { margin-top: 0.9em; }
+  ins { color: var(--good); text-decoration: none; background: #eafaf1; padding: 0 2px; border-radius: 2px; }
+  del { color: var(--warn); background: #fdecec; padding: 0 2px; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<h1>Commit 5 — Render path</h1>
+<p class="small">Putting the 4.x decoration engine onto the actual sketch canvas. Until now every
+placement rule has been verified through <code>cwSketchDecorationLayout</code>'s unit tests and a PNG
+reference panel; nothing the cartographer draws is decorated on screen. Commit 5 wires the layout engine
+into the live render path so a finished stroke renders as its brush's full symbology — traced lines
+<em>and</em> stamped glyphs — at the sketch's map scale, in light or dark mode. Part of the
+symbology-palette series; see <em>SYMBOLOGY_PALETTE_4X_ROADMAP.md</em>,
+<em>SYMBOLOGY_PALETTE_PLAN.html</em> (§8 "Rendering pipeline", Decision&nbsp;11, Decision&nbsp;12), and the
+4.x satellite plans it builds on
+(<em>TRACE_RULE_UNIFICATION_PLAN.html</em>, <em>CEILING_CHANNEL_DESIGN.html</em>,
+<em>SYMBOLOGY_PALETTE_ORIENTED_POINT_PLAN.html</em>).</p>
+
+<blockquote class="rec">
+<strong>Bottom line.</strong> Replace the prototype path model — which width-tessellates the raw
+centerline and knows nothing about glyphs — with a path source that runs
+<code>cwSketchDecorationLayout</code> per stroke and flattens <code>cwBrushDecorationGeometry</code> into
+the painter's draw list. The engine, the cache, and the geometry types already exist and are unit-tested;
+commit&nbsp;5 is <em>plumbing and a small painter extension</em>, not new symbology compute. It stays
+synchronous on the GUI thread (the cache thread-safety guard rides with the later async work), defers
+scene-level collision (<code>MutateScene</code>, iter&nbsp;2), and ships the first thing a user actually
+<em>sees</em> from all of 4.x.
+</blockquote>
+
+<h2>1. What renders today, and the gap</h2>
+
+<p>The live sketch canvas paints through a fixed pipeline:</p>
+
+<div class="flow">
+  <div class="node src"><div class="h">Source · GUI thread</div><code>cwSketchPainterPathModel</code><br><span class="small">width-tessellates each <code>cwPenStroke</code> centerline; batches by (width, rgba)</span></div>
+  <div class="arrow">→</div>
+  <div class="node"><div class="h">Snapshot · synchronize()</div><code>cwSketchCanvasRenderer</code><br><span class="small">copies <code>paths()</code> to a render-thread list</span></div>
+  <div class="arrow">→</div>
+  <div class="node out"><div class="h">Paint · render thread</div><code>cwSketchPainter::paint</code><br><span class="small">strokes each <code>Path</code> via <code>cwSketchDraw</code> (RHI / QPainter)</span></div>
+</div>
+
+<p>The path model (<code>cwSketchPainterPathModel.{h,cpp}</code>) is a commit-2 prototype. It:</p>
+<ul>
+  <li>renders only the <strong>raw centerline</strong> — a pressure-tessellated ribbon
+      (<code>cwSketchStrokeGeometry::buildPath</code>); <strong>no glyphs, no decoration layers</strong>;</li>
+  <li>uses a single uniform width <code>kSketchStrokeRenderWidth</code> for every stroke;</li>
+  <li>picks color from a two-bucket <strong>wall / non-wall</strong> split
+      (<code>m_snapshot.producesScrapOutline(brushName)</code> → <code>wallStrokeColor</code> vs
+      <code>nonWallStrokeColor</code>, set from <code>Theme.qml</code> in <code>SketchItem.qml</code>);</li>
+  <li><strong>self-seeds</strong> its own <code>cwSymbologyPaletteSeed::create().snapshot()</code> in its
+      ctor — a second, independent palette copy from the one <code>cwSketch</code> already owns.</li>
+</ul>
+
+<p>Meanwhile <code>cwSketchDecorationLayout</code> / <code>cwGlyphTessellationCache</code> /
+<code>cwBrushDecorationGeometry</code> are fully built and unit-tested but <strong>referenced nowhere
+outside <code>testcases/</code></strong>. Commit&nbsp;5 closes that gap: the path source <em>becomes</em>
+the layout engine's first real consumer.</p>
+
+<h3>A note on the master plan's stale names</h3>
+<p>SYMBOLOGY_PALETTE_PLAN.html (§8) predates the 4.x rule collapse. It calls the new class
+<code>cwOffsetCurveBatches</code> and frames it as batching "<code>OffsetCurve</code> layers". After 4.5/4.6
+there is no "OffsetCurve mode": offset became the <code>Offset stroke</code> <em>stroke transform</em>, and a
+layer's geometry is decided by its <strong>Terminal rule</strong> (a <code>Trace</code> line/polygon or a
+<em>Stamps</em> set). So the class commit&nbsp;5 actually builds renders <strong>both traces and stamps via
+the layout engine</strong>, not just offset curves. This plan supersedes the §8 naming; see Decision&nbsp;B.</p>
+
+<h2>2. What commit 5 delivers</h2>
+
+<div class="flow">
+  <div class="node src"><div class="h">Source · GUI thread <span class="tag rec">new</span></div><code>cwDecoratedStrokePathSource</code><br><span class="small">per finished stroke: <code>layout(brush, world, mapScale)</code> → resolve color for the active scheme → batch by style into <code>Path</code>s</span></div>
+  <div class="arrow">→</div>
+  <div class="node eng"><div class="h">Engine (exists)</div><code>cwSketchDecorationLayout</code><br>+ <code>cwGlyphTessellationCache</code><br><span class="small">owned by the model; fed the sketch's snapshot + map scale</span></div>
+  <div class="arrow">→</div>
+  <div class="node out"><div class="h">Paint <span class="tag rec">extended</span></div><code>cwSketchPainter::paint</code><br><span class="small">z paint-sort · per-brush width/dash/cap/join · world-unit pens (color already resolved)</span></div>
+</div>
+
+<p>Concretely, five moving parts:</p>
+<ol>
+  <li><strong>A new path source</strong> that owns a <code>cwGlyphTessellationCache</code> + a
+      <code>cwSketchDecorationLayout</code>, runs the layout for each finished stroke, and flattens the
+      resulting <code>cwGlyphSubPath</code> ink (trace regions + stamp sub-paths) into draw items.</li>
+  <li><strong>Single palette source of truth</strong>: the model stops self-seeding and takes its snapshot
+      from <code>cwSketch::paletteSnapshot()</code>; the same snapshot feeds the tessellation cache.</li>
+  <li><strong>Map-scale reactivity</strong>: the model re-runs the layout when
+      <code>cwSketch::mapScale()</code> changes (paper-mm → world-m conversion lives inside the layout), so
+      flipping 1:250 ↔ 1:1000 re-renders symbology at the new density (plan §6 "dynamic scale switching").</li>
+  <li><strong>A small <code>cwSketchPathSource::Path</code> extension</strong> so a draw item can carry the
+      style a brush demands: a paper-fixed width, cap/join/dash, fill-vs-stroke, a z value — and a
+      <em>single, already-resolved</em> color (Decision&nbsp;D resolves light/dark at build time, so the
+      low-level item stays lean — Decision&nbsp;E).</li>
+  <li><strong>A painter extension</strong>: sort by z before drawing and honour the per-item style.
+      Grid/line-plot draw items are unaffected (they use the existing defaults).</li>
+</ol>
+
+<h2>3. The draw-item contract: extend <code>cwSketchPathSource::Path</code></h2>
+
+<p>Today a <code>Path</code> is <code>{painterPath, strokeColor, strokeWidth, z}</code> and the painter
+hardcodes <code>RoundCap/RoundJoin</code>, applies <code>strokePenScale</code> to every width, and ignores
+<code>z</code>. A brush needs more: its own cap/join/dash, a paper-fixed width, and a fill pass for closed
+glyphs. The cleanest move — the painter and its backends (<code>cwSketchDraw</code>) are small and
+value-style — is to widen <code>Path</code> minimally and teach the painter the new fields, leaving every
+existing producer (grid, line-plot, debug) on the defaults.</p>
+
+<p><strong>Kept lean on purpose (Decisions D + E).</strong> The public item carries <em>one</em> resolved
+<code>strokeColor</code>, not a light/dark pair — the source pair lives in the model's internal batch record
+(§4), and a theme toggle re-resolves each batch's color without a layout rebuild (D). So the extension adds
+only two small enums and a bool to the existing struct:</p>
+
+<pre><code>struct Path {
+    QPainterPath painterPath;
+    QColor       strokeColor;                   // single, already light/dark-resolved (Decision D)
+    double       strokeWidth = 1.0;             // <= 0 still flags a fill pass
+
+    // Width-unit flag (Decision E). false = screen pixels (grid/line-plot/legacy,
+    // keep the existing strokePenScale path). true = world metres: paper-mm baked
+    // to world-m in the model, drawn straight under worldToItem with no penScale.
+    bool             widthInWorldMetres = false;
+
+    Qt::PenCapStyle  cap  = Qt::RoundCap;
+    Qt::PenJoinStyle join = Qt::RoundJoin;
+
+    double           z = 0.0;                   // paint order (Decision 12)
+};</code></pre>
+
+<p class="small"><strong>Dash dropped (5a).</strong> An earlier draft carried
+<code>Qt::PenStyle dash</code> (mirroring <code>cwDecorationLayer::lineDash</code>). But the live RHI canvas
+(<code>cwSketchDrawCanvas</code> / <code>QCanvasPainter</code>) has <em>no</em> dash support, so on-screen it
+would always render solid — and no producer in 5a&ndash;5c emits a non-solid dash. Rather than plumb a field
+only the QPainter export backend could honour, dash is omitted; the brush's <code>lineDash</code> stays in the
+data model and a <code>dash</code> arg can be re-added to <code>setStrokePen</code> when an export backend
+actually renders dashed strokes.</p>
+
+<p class="small">Fill passes (closed/filled glyphs, <code>strokeWidth &lt;= 0</code>) reuse
+<code>strokeColor</code> as the fill color — the convention the painter uses today. A filled glyph emits two
+items: a fill pass and a pen pass, mirroring <code>cwGlyphSubPath</code>'s Polygon (pen + fill).</p>
+
+<h3>Memory: batch sub-paths by resolved style (Decision E)</h3>
+<p>The struct above is small, but the real memory lever is <em>how many</em> exist. A naïve "one
+<code>Path</code> per sub-path" emits, say, a <code>floor-step</code> stroke's 50 ticks as 50 items with
+identical style — and at 100k strokes that multiplies badly. So the model keeps the prototype's
+<strong>batching</strong>: merge every sub-path that shares a resolved <code>(strokeColor, width,
+widthInWorldMetres, cap, join, dash, z)</code> tuple into a <em>single</em> <code>QPainterPath</code> (one
+<code>moveTo</code> per disjoint piece). The style fields then live <strong>once per batch</strong> (a handful
+of items), not once per stamp, and the painter issues far fewer draw calls. Fill and pen passes batch
+separately (different draw op); equal-<code>z</code> batches keep emission order. The only retained geometry
+is the batched ink itself — no per-stroke <code>cwBrushDecorationGeometry</code> intermediate is kept (it is
+re-derived from the layout on change), which is what keeps the doubled glyph colors
+(<code>cwGlyphSubPath</code> carries 4 <code>QColor</code>s each) out of resident memory.</p>
+
+<h3>Why widen <code>Path</code> rather than add a parallel struct</h3>
+<p>The painter already iterates one <code>Path</code> list through one <code>drawPaths()</code> loop across
+two backends. A second item type would fork that loop, the snapshot copy in <code>synchronize()</code>, and
+both <code>cwSketchDraw</code> implementations. Widening keeps one code path; the new fields are inert for
+existing producers. This is the "right altitude" choice — generalise the one draw item, don't special-case a
+symbology lane beside it.</p>
+
+<h2>4. The new path source</h2>
+
+<p>Rename and rewrite <code>cwSketchPainterPathModel</code> →
+<code>cwDecoratedStrokePathSource</code> (Decision&nbsp;B). It keeps the existing reactive shape — it is a
+<code>QObject</code> + <code>cwSketchPathSource</code>, connects to <code>cwSketch</code>'s stroke signals,
+and emits <code>pathsChanged()</code> — but its per-stroke build changes from "tessellate the centerline" to
+"run the layout and flatten it".</p>
+
+<pre><code>class cwDecoratedStrokePathSource : public QObject, public cwSketchPathSource {
+    // owns the engine
+    cwGlyphTessellationCache m_cache;
+    cwSketchDecorationLayout m_layout{&m_cache};   // const transform, reads m_cache
+
+    cwPaletteSnapshot m_snapshot;     // from cwSketch::paletteSnapshot(), NOT self-seeded
+    double m_mapScaleRatio = 1.0/250; // from cwSketch::mapScale()->scale()
+    int    m_activeStrokeIndex = -1;
+
+    // Internal batch: the public Path the painter draws, plus the source color
+    // pair so a theme toggle re-resolves without re-running layout (Decision D).
+    struct Batch { Path path; QColor srcLight, srcDark; };
+
+    QList&lt;Batch&gt; m_finished;          // finished strokes, batched by resolved style
+    Path         m_activePreview;     // plain neutral centerline (Decision C)
+public:
+    void setSnapshot(const cwPaletteSnapshot &snap);   // -> m_snapshot + m_cache.setSnapshot(); schedule rebuild
+    void setMapScaleRatio(double ratio);               // schedule rebuild (geometry changes)
+    QList&lt;Path&gt; paths() const override;                // active preview + finished, z-sorted
+
+private:
+    void scheduleRebuild();           // the single seam (Decision A) — sync today, async-swappable
+    void reResolveColors();          // theme toggle: flip each batch.path.strokeColor, no layout
+};</code></pre>
+
+<p class="small">Every trigger routes through <code>scheduleRebuild()</code> — the seam Decision&nbsp;A calls
+for, so the async follow-up swaps only this one method's body. A pure color-scheme change takes the cheaper
+<code>reResolveColors()</code> path instead (no layout).</p>
+
+<p>Per finished stroke the build is:</p>
+<ol>
+  <li>resolve the brush: <code>m_snapshot.findBrush(stroke.brushName)</code> — missing ⇒ no ink;</li>
+  <li>extract the world-metre centerline from <code>stroke.points</code> (drop pressure, see Decision&nbsp;F);</li>
+  <li><code>const auto geom = m_layout.layout(brush, world, m_mapScaleRatio);</code></li>
+  <li>for each <code>geom.layers[i]</code> (declaration order == paint order within the brush), fold each
+      <code>cwGlyphSubPath</code> (a Trace region, or a stamp's transformed sub-paths) into the matching
+      <strong>style batch</strong> (§3): Stroke ⇒ a pen batch; Polygon ⇒ a fill batch + a pen batch;
+      <code>penWidthMm</code> → world-m via <code>cwGlyphTessellationCache::paperMmToWorldM</code> with
+      <code>widthInWorldMetres = true</code>; stash the source <code>penColor{Light,Dark}</code> /
+      <code>fillColor{Light,Dark}</code> on the batch and set the resolved <code>path.strokeColor</code> for the
+      current scheme (Decision&nbsp;D); set <code>z = brush.zOrder</code> (per-layer order is the stable-sort
+      tiebreak — Decision&nbsp;12, "no per-glyph z").</li>
+</ol>
+
+<p>Glyph stamps already arrive transformed onto the stroke
+(<code>cwResolvedStamp::subPaths</code> are world-metre, placed), and trace regions are world-metre
+polylines/polygons — so the only work is the color pick and appending into the right batch's
+<code>QPainterPath</code>; no geometry math in the model.</p>
+
+<p class="small"><strong>Rebuild triggers (all via <code>scheduleRebuild()</code>).</strong> A new finished
+stroke folds into batches incrementally (cheap — one stroke's layout). A <strong>color-scheme change</strong>
+takes the <code>reResolveColors()</code> fast path — flip each batch's resolved color, no layout
+(Decision&nbsp;D). <code>setMapScaleRatio</code> (geometry truly changes) and <code>setSnapshot</code> rebuild
+all finished batches from the layout.</p>
+
+<p class="warnote"><strong>Known cost at scale (accepted for commit 5).</strong> Two cases re-run the full
+placement pipeline for <em>every</em> finished stroke synchronously: a <strong>scale switch</strong>
+(unavoidable — paper-mm→world-m means geometry changes) and a <strong>stroke erase</strong> (inherited from the
+prototype, which rebuilds all finished batches on remove because batches don't track their contributing
+strokes). At large sketch sizes both can stall the UI. Commit&nbsp;5 accepts the prototype's behaviour rather
+than gold-plating; the fixes — async layout (Decision&nbsp;A) for the scale case, incremental
+batch-contributor tracking for erase — are follow-ups, taken when a measurement shows they're needed.</p>
+
+<h2>5. Wiring changes</h2>
+
+<table>
+<thead><tr><th>Site</th><th>Today</th><th>Commit 5</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>cwSketchCanvas</code> ctor / <code>setSketch</code><br><span class="small">cwSketchCanvas.cpp:36,&nbsp;74</span></td>
+  <td><code>new cwSketchPainterPathModel</code>; <code>setSketch</code>.</td>
+  <td>construct the renamed model; after <code>setSketch</code>, call
+      <code>model-&gt;setSnapshot(sketch-&gt;paletteSnapshot())</code> and
+      <code>setMapScaleRatio(sketch-&gt;mapScale()-&gt;scale())</code>; connect
+      <code>cwScale::scaleChanged</code> → <code>setMapScaleRatio</code>.</td>
+</tr>
+<tr>
+  <td><code>SketchItem.qml</code><br><span class="small">:160–161</span></td>
+  <td>binds <code>wallStrokeColor</code> / <code>nonWallStrokeColor</code> from <code>Theme</code>.</td>
+  <td><strong>remove</strong> the two bindings — finished-stroke color now comes per-brush from the snapshot,
+      resolved for the active color scheme in the model (Decision&nbsp;D). One Theme token is still used for the
+      neutral active-stroke preview (Decision&nbsp;C).</td>
+</tr>
+<tr>
+  <td><code>cwSketchCanvasRenderer::synchronize/paint</code></td>
+  <td>snapshots <code>paths()</code>; sets <code>ctx.strokePenScale</code>.</td>
+  <td>unchanged structurally — the snapshot copy already carries whatever <code>Path</code> fields exist.
+      <code>strokePenScale</code> still applies to pixel-width items; <code>widthInWorldMetres</code> items
+      ignore it.</td>
+</tr>
+</tbody>
+</table>
+
+<p class="small"><code>cwSketch::paletteSnapshot()</code> already exists (cwSketch.h:140) and currently returns
+the seed; commit&nbsp;6 makes it vary by <code>activePaletteId</code> and (re)emit on change. Commit&nbsp;5
+reads it once at <code>setSketch</code> time and via <code>setSnapshot()</code>; a
+<code>paletteSnapshotChanged</code> hookup is a one-line follow-up when commit&nbsp;6 adds the signal.</p>
+
+<h2>6. Painter changes (<code>cwSketchPainter::paint</code> / <code>drawPaths</code>)</h2>
+<p>Color is already resolved in the model (Decision&nbsp;D), so the painter does <em>not</em> touch the
+color scheme — it only gains z ordering and per-item style:</p>
+<ul>
+  <li><strong>z sort.</strong> Sort the <code>Path</code> list by <code>z</code> (stable, so equal-z keeps
+      emission order = per-layer order) before drawing. Applies to the strokes layer only; grid/line-plot
+      keep their current fixed ordering.</li>
+  <li><strong>Per-item style.</strong> Use the item's <code>cap/join</code> instead of the hardcoded
+      round caps; honour <code>widthInWorldMetres</code> — pixel widths keep <code>width × strokePenScale</code>,
+      world widths draw as-is under <code>worldToItem</code> (the paper-mm→world-m bake already happened in the
+      model, so no per-element scale juggling — exactly the contract in plan §7). (Dash dropped — see §3.)</li>
+</ul>
+
+<blockquote class="small">Both <code>cwSketchDraw</code> backends already accept cap/join in <code>setStrokePen</code>, so per-item
+cap/join needs no interface change. Dash is <em>not</em> added: <code>cwSketchDrawCanvas</code> (RHI, via
+<code>QCanvasPainter</code>) cannot dash and would render solid regardless, so a <code>setStrokePen</code> dash
+arg is deferred until an export backend renders dashed strokes (see §3).</blockquote>
+
+<h2>7. Decisions for review</h2>
+<div class="keyq">
+
+<h3>A. Threading: sync now, async as a follow-up — but design the seam now <span class="tag rec">decided</span></h3>
+<p>Commit&nbsp;5 keeps the layout <strong>synchronous on the GUI thread</strong> — exactly where the prototype
+model already builds paths today. The cache is only ever touched from that one thread, so it is safe as-is, and
+the thread-safety work rides with the async follow-up where it is actually needed and actually testable.</p>
+<p><strong>Why sync-first is easier to get correct, not just smaller:</strong></p>
+<ul>
+  <li><strong>It separates two bug classes.</strong> The synchronous pipeline is the correctness reference —
+      deterministic tests, an eyeballable PNG, a proof that layout → flatten → batch → paint is right. Add
+      concurrency afterward and any discrepancy is isolated to the threading layer, instead of "is it the layout
+      or the threads?"</li>
+  <li><strong>The sync version is not throwaway.</strong> Async only changes <em>where</em>
+      <code>layout()</code> runs. The reactive model, the flatten/batch step, <code>paths()</code>, and the
+      painter all stay. The data flow is already async-ready by design — <code>cwPaletteSnapshot</code> is passed
+      by value with no lifetime entanglement, <code>layout()</code> is a <code>const</code> transform, returns
+      are by value — so <code>cwConcurrent::run</code> is additive, not a rewrite.</li>
+  <li><strong>We don't yet know we need it.</strong> Drawing new strokes is already incremental and cheap (only
+      that one stroke's layout runs). The heavy passes are erase / scale-switch (§4), unmeasured at real sketch
+      sizes. Async carries real cost — the cache-safety mechanism, cancellation on stroke change, partial-result
+      rendering, test complexity — best paid when a measurement demands it.</li>
+</ul>
+<p><strong>The one thing to do now (the seam):</strong> funnel every rebuild trigger
+(<code>setSnapshot</code>, <code>setMapScaleRatio</code>, stroke change, theme change) through a
+<em>single</em> "schedule rebuild" entry point, and make <code>paths()</code> tolerate a partially-built
+result. Then the async follow-up is a purely internal swap inside the model (dispatch the rebuild to a worker,
+update batches + emit <code>pathsChanged()</code> on completion) with no change to the
+<code>cwSketchPathSource</code> contract.</p>
+<p class="small"><strong>How to guard the cache later is open — not <code>QReadWriteLock</code> by default.</strong>
+The header note says "<code>QReadWriteLock</code>, it's read-mostly", but that's a shaky fit:
+<code>tessellate()</code> is a <em>lazy-insert</em> cache (a miss mutates), and <code>QReadWriteLock</code> has
+no atomic read→write upgrade, so it forces a release-reacquire double-check dance; its critical sections are
+nanosecond-scale <code>QHash</code> ops where a plain mutex is usually faster; and the expensive glyph
+tessellation must run <em>outside</em> any lock regardless. Better candidates, all decided with the async
+work: <strong>per-worker cache</strong> (zero locking — the CLAUDE.md-blessed "give each worker its own
+cache"; a palette's glyph working set is small, so per-worker re-tessellation is cheap);
+<strong>warm-then-freeze</strong> (pre-populate single-threaded — the snapshot is immutable and the map scale
+is fixed per pass — then the parallel section is pure reads against an immutable cache, no lock at all); or a
+plain <strong><code>QMutex</code></strong> with compute-outside-lock + double-check if one shared cache is
+wanted. <em>TBD with the async follow-up.</em></p>
+<p class="small"><strong>How to guard it later is open — not <code>QReadWriteLock</code> by default.</strong>
+The header note says "<code>QReadWriteLock</code>, it's read-mostly", but that's a shaky fit:
+<code>tessellate()</code> is a <em>lazy-insert</em> cache (a miss mutates), and <code>QReadWriteLock</code> has
+no atomic read→write upgrade, so it forces a release-reacquire double-check dance; its critical sections are
+nanosecond-scale <code>QHash</code> ops where a plain mutex is usually faster; and the expensive glyph
+tessellation must run <em>outside</em> any lock regardless. Better candidates, all decided with the async
+work: <strong>per-worker cache</strong> (zero locking — the CLAUDE.md-blessed "give each worker its own
+cache"; a palette's glyph working set is small, so per-worker re-tessellation is cheap);
+<strong>warm-then-freeze</strong> (pre-populate single-threaded — the snapshot is immutable and the map scale
+is fixed per pass — then the parallel section is pure reads against an immutable cache, no lock at all); or a
+plain <strong><code>QMutex</code></strong> with compute-outside-lock + double-check if one shared cache is
+wanted. <em>TBD with the async follow-up.</em></p>
+
+<h3>B. Class name: <code>cwDecoratedStrokePathSource</code> <span class="tag rec">decided</span></h3>
+<p>The master plan's <code>cwOffsetCurveBatches</code> lies post-collapse (no OffsetCurve mode; it renders
+stamps too). <code>cwDecoratedStrokePathSource</code> names what it is and emphasises the
+<code>cwSketchPathSource</code> interface it implements.</p>
+
+<h3>C. Active (in-progress) stroke: plain centerline preview <span class="tag rec">decided</span></h3>
+<p>Running the full layout on every pen-move would re-tessellate glyphs and re-place stamps mid-stroke —
+costly and visually noisy (ticks popping along a growing line). The active stroke renders as a <strong>plain
+centerline preview</strong>: the prototype's existing cheap path — <code>cwSketchStrokeGeometry::buildPath</code>
+at the current <code>kSketchStrokeRenderWidth</code> (a screen-pixel width, <code>widthInWorldMetres = false</code>),
+in one neutral Theme token. The full brush decoration runs only when the stroke is committed and becomes
+finished. <span class="small">(So <code>kSketchStrokeRenderWidth</code> survives as the preview width even though
+the decorated finished render no longer uses it.)</span></p>
+
+<h3>D. Light/dark: carry the pair per batch, re-resolve on toggle (no re-layout) <span class="tag rec">decided</span></h3>
+<p>The public draw item (<code>cwSketchPathSource::Path</code>) stays lean — <strong>one resolved
+<code>strokeColor</code></strong>, which is all the painter ever reads (it stays color-scheme-agnostic). But
+the model keeps each batch's <strong>source <code>(light, dark)</code> pair</strong> in its
+<em>internal</em> batch record. On <code>QStyleHints::colorSchemeChanged</code> the model walks its handful of
+batches and flips each <code>strokeColor = dark ? srcDark : srcLight</code> — a trivial loop, <strong>no
+re-layout, no geometry rebuild</strong> — then emits <code>pathsChanged()</code>. A theme toggle is instant
+even on a 100k-stroke map.</p>
+<p><strong>Why this, over the two alternatives</strong> (full comparison was reviewed; memory is a tie because
+batching collapses item count, so it is not the deciding axis):</p>
+<ul>
+  <li><strong>vs. "resolve at build, re-layout on toggle"</strong> (the earlier draft of D): that re-runs the
+      full placement pipeline for every finished stroke on a toggle — a multi-second UI freeze at scale, made
+      worse by the synchronous Decision&nbsp;A. It paid that to save ~16&nbsp;bytes per <em>batch</em> — savings
+      batching already made irrelevant. Wrong trade once E is in the design.</li>
+  <li><strong>vs. "painter picks at draw time"</strong>: that keeps the model simplest but makes the
+      <em>painter</em> query the color scheme — and the painter runs on the <strong>render thread</strong>, so
+      reading <code>QGuiApplication::styleHints()-&gt;colorScheme()</code> there is a cross-thread
+      <code>QObject</code> access; doing it correctly means capturing the scheme in <code>synchronize()</code> and
+      threading it through <code>PaintContext</code>. More render-path churn, and it couples the painter to the
+      global scheme. The chosen option keeps the scheme query on the GUI thread (where the model lives) and the
+      painter a pure geometry→draw transform.</li>
+</ul>
+<p class="small">Cost of the chosen option: a mild denormalization — each internal batch stores its resolved
+color next to the source pair, kept in sync by the one re-resolve loop. Contained, and the public interface
+stays minimal (the pair never leaks onto <code>Path</code>, so grid/line-plot producers are untouched). No
+per-stroke <code>cwBrushDecorationGeometry</code> intermediate is retained, so the four-<code>QColor</code>
+per-sub-path geometry never stays resident.</p>
+
+<h3>E. Pen-width unit + lean low-level item <span class="tag rec">decided</span></h3>
+<p>Symbology widths are paper-mm baked to world-m and ride <code>worldToItem</code> directly (plan §7: "does
+not use <code>strokePenScale</code>"); grid/line-plot widths are screen-pixels scaled by
+<code>strokePenScale</code>. A one-byte <code>widthInWorldMetres</code> flag lets both coexist in one draw
+list without the model needing the renderer's DPI/scale to pre-convert (pre-baking to pixels would need
+<code>strokePenScale</code> = DPI × mapScaleRatio at GUI-thread build time, which the model doesn't cleanly
+have).
+<br><strong>Minimise the low-level item (your steer):</strong> dash is <code>Qt::PenStyle</code> (a 4-byte
+enum, the layer's own <code>lineDash</code> type), not a heap-allocating <code>QVector&lt;double&gt;</code>
+custom pattern; color is the single resolved <code>QColor</code> from D; cap/join are small enums. And the
+model <strong>batches sub-paths by resolved style</strong> (§3) so these fields live once per batch, not once
+per stamp — the painter holds a handful of items, not one per glyph. That batching, plus not retaining the
+per-stroke intermediate, is what actually bounds memory at scale.</p>
+
+<h3>F. Trace-line pressure: uniform <code>lineWidthMm</code>, taper deferred <span class="tag rec">decided</span></h3>
+<p>The prototype renders a pressure-tapered ribbon; the layout signature
+(<code>layout(brush, QVector&lt;QPointF&gt;, mapScale)</code>) drops pressure, and Decision&nbsp;2 already
+removed <code>cwPenStroke::width</code> in favour of brush-defined width. So a finished stroke's traced line
+renders at the brush's uniform <code>lineWidthMm</code>. <strong>Accepted regression:</strong> pen pressure
+isn't standard across the input devices tested, so dropping the taper is fine; the layer's
+<code>lineAcceptsPressure</code> flag keeps the door open, but threading pressure through
+<code>cwStrokePath</code> / the layout signature is a deliberate follow-up, not commit&nbsp;5.</p>
+
+</div>
+
+<h2>8. Scope</h2>
+<p><strong>In:</strong> the new path source + layout wiring; single-snapshot source of truth; map-scale
+reactivity; the lean <code>Path</code> extension + style batching; the painter z-sort / per-item-style
+changes; both <code>cwSketchDraw</code> backends honouring dash; tests + a render check.</p>
+<p><strong>Out (later):</strong></p>
+<ul>
+  <li><span class="tag i2">iter 2</span> <strong>Scene-level collision</strong> — <code>MutateScene</code>
+      rules + <code>cwSceneContext</code> + R-tree (Try shift / shorten / Hide if colliding / Sort by
+      priority). Commit&nbsp;5 paints every stamp the per-layer pipeline produces, unarbitrated.</li>
+  <li><strong>Async layout</strong> (<code>cwConcurrent::run</code>) + making the cache safe for concurrent
+      use — the guard mechanism is TBD (per-worker cache / warm-then-freeze / <code>QMutex</code>, not
+      necessarily <code>QReadWriteLock</code>) — Decision&nbsp;A.</li>
+  <li><strong>Pressure-modulated trace width</strong> — Decision&nbsp;F.</li>
+  <li><span class="tag i2">iter 3</span> <strong>Scale-visibility windows</strong>
+      (<code>[minPaperScale, maxPaperScale]</code> per-layer skip).</li>
+  <li><strong>Commit&nbsp;6</strong> — per-sketch <code>activePaletteId</code> driving
+      <code>paletteSnapshot()</code> (and its change signal), region/settings palette selection wiring.</li>
+  <li><strong>Scrap detection</strong> still uses <code>kSketchStrokeRenderWidth</code>
+      (<code>cwScrapManager</code>, <code>cwSketch</code> outline threshold). Commit&nbsp;5 drops it from
+      <em>rendering</em> only; the rasterizer/threshold migration to per-brush width is its own change.</li>
+</ul>
+
+<h2>9. Seeing it in the app</h2>
+
+<p class="small">For how the work is split into commits, see <strong>§12 Commit sequence</strong> (5a groundwork
+→ 5b rename → 5c wire-in). This section is only about what's <em>visible</em> on the canvas afterward.</p>
+
+<h3>Is a test palette wired into <code>SketchItem.qml</code> in scope? <span class="tag rec">no</span></h3>
+<p>Important to be clear-eyed here, because it governs what you actually <em>see</em> after commit&nbsp;5. Two
+facts about the current app:</p>
+<ul>
+  <li>The shipped <strong>seed</strong> is post-collapse-correct: <code>wall</code> / <code>feature</code> /
+      <code>scrap-outline</code> carry an explicit <code>{Trace}</code> terminal, and <code>floor-step</code>
+      already carries a full stamp stack (<code>Uniform spacing → Align to tangent → Rigid stamp</code>). So no
+      blank-stroke regression — existing strokes still render — and the seed <em>does</em> contain a stamped
+      brush.</li>
+  <li>But the <strong>sketch toolbar</strong> (<code>SketchToolbar.qml</code>) only exposes
+      <code>wall</code>, <code>feature</code>, and <code>scrap-outline</code> — all Trace-only lines.
+      <code>floor-step</code> exists in the seed but is <strong>unreachable from the UI</strong>; brush
+      selection is commit&nbsp;6 work.</li>
+</ul>
+<p>So wiring the render path, by itself, changes the three toolbar brushes from the wall/non-wall two-color
+split to per-brush styled trace lines — and shows <strong>no stamps through the normal UI</strong>, not because
+the engine can't, but because the stamped brush isn't selectable yet. The richer 4.x demos (oriented stream
+arrows, ceiling channel, filled glyphs) likewise live only in the tests' <code>demoPalette()</code>.</p>
+<p>Three ways to bridge that, and the recommendation:</p>
+<ul>
+  <li><strong>(a) Verify headless only</strong> — the render check (below) drives <code>demoPalette()</code>
+      through the real painter and proves stamps/traces/fills all render. In-app look is ~unchanged. Honest,
+      but anticlimactic.</li>
+  <li><strong>(b) Inject a test palette into <code>SketchItem.qml</code> / the canvas</strong> — throwaway
+      scaffolding commit&nbsp;6 immediately rips out, and it risks shipping a demo palette. <strong>Keep out of
+      scope.</strong></li>
+  <li><strong>(c) Add one or two real decoration brushes to the seed</strong> — gives a visible in-app result,
+      but <em>what</em> those symbols are and look like is a cartography/product decision that deserves its own
+      change, not a rider on the render-mechanism commit.</li>
+</ul>
+<blockquote class="rec"><strong>Decided: option (a).</strong> No seed change and no test palette in
+<code>SketchItem.qml</code> — both out of commit&nbsp;5's scope. Commit&nbsp;5 ships the <em>mechanism</em> and
+reads the seed snapshot (the single-source-of-truth wiring); the committed proof is the headless render check
+(driving <code>demoPalette()</code> through the real painter). <strong>Visible in-app decoration waits for
+commit&nbsp;6</strong>, which brings palette <em>selection</em> (<code>activePaletteId</code> + a brush picker).
+To eyeball stamps on the canvas <em>while developing</em> commit&nbsp;5, the cheapest hack is a
+<strong>temporary <code>floor-step</code> toolbar button</strong> (the brush is already in the seed) — or point
+the snapshot at <code>demoPalette()</code> for the richer demos; either as an <strong>uncommitted local
+hack</strong>, reverted before committing.</blockquote>
+
+<h2>10. Tests</h2>
+<ul>
+  <li><strong><code>testcases/test_cwDecoratedStrokePathSource.cpp</code></strong> (new file, per the
+      one-feature-one-file convention; tag <code>[cwDecoratedStrokePathSource]</code>):
+    <ul>
+      <li>a <code>wall</code> stroke (Trace terminal) ⇒ one pen <code>Path</code>,
+          <code>widthInWorldMetres</code>, width == <code>lineWidthMm→world</code>, color resolved for the
+          active scheme, polyline == centerline;</li>
+      <li>a <code>floor-step</code> stroke ⇒ the traced edge <em>plus</em> N stamp items at the expected
+          spacing, all flattened (this is the headline "stamps now render" assertion);</li>
+      <li>a filled-glyph brush ⇒ a fill item + a pen item per Polygon sub-path;</li>
+      <li><code>scrap-outline</code> (no decoration ink) ⇒ no finished items;</li>
+      <li>brush missing from the snapshot ⇒ no items, no crash;</li>
+      <li><strong>theme toggle re-resolves, doesn't re-lay-out (Decision&nbsp;D):</strong> simulate a
+          <code>colorScheme</code> change ⇒ each batch's <code>strokeColor</code> flips to its dark/light source,
+          while the <code>painterPath</code> geometry is bit-for-bit unchanged (proves the fast path, not a
+          rebuild);</li>
+      <li><code>setMapScaleRatio</code> change re-runs layout (stamp spacing in world-m changes), and
+          <code>setSnapshot</code> swaps the resolved brush;</li>
+      <li>z ordering: items emitted sorted by <code>(zOrder, layerIndex)</code>.</li>
+    </ul>
+    <strong>Palette source:</strong> the seed (<code>cwSymbologyPaletteSeed::create().snapshot()</code>) covers
+    <code>wall</code> (trace), <code>floor-step</code> (stamps), and <code>scrap-outline</code> (no ink). The
+    filled-glyph case has no seed brush, so either add a synthetic filled brush in the test or extract
+    <code>demoPalette()</code> from <code>test_cwSketchDecorationLayout.cpp</code> into <code>testlib/</code> for
+    reuse. Pure compute, no temp files — safe under concurrent test processes.</li>
+  <li><strong>Painter render check</strong> — extend the existing offscreen-QPainter approach
+      (<code>cwSketchDrawQPainter</code>, <code>--platform offscreen</code>) with a panel that paints a
+      decorated stroke in <em>both</em> color schemes and asserts non-blank + that light vs dark differ.
+      <strong>Must use the same Y-flipped <code>worldToItem</code> the live canvas uses</strong>
+      (<code>determinant() &lt; 0</code>) — not a Y-down identity — so glyph chirality (Align-to-tangent's +Y =
+      left normal, stamp orientation) is validated against the real render, not a mirror of it. The 4.x
+      reference PNGs don't necessarily exercise that flip. Follows the "visualize headless output" convention;
+      PNG path overridable by env var.</li>
+  <li><strong>QML</strong> — a <code>tst_</code> smoke test that the canvas paints a decorated stroke without
+      error (offscreen), if a lightweight hook exists; otherwise rely on the C++ render check.</li>
+</ul>
+
+<h2>11. Files touched</h2>
+<table>
+<thead><tr><th>File</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td><code>cwSketchPainterPathModel.{h,cpp}</code></td><td>→ rename/rewrite to <code>cwDecoratedStrokePathSource</code>; own cache+layout; <code>setSnapshot</code>/<code>setMapScaleRatio</code>; one <code>scheduleRebuild()</code> seam (A); run layout + batch by style (internal <code>Batch</code> keeps the color pair); <code>reResolveColors()</code> on <code>colorSchemeChanged</code> — no re-layout (D); plain centerline active preview (C); drop self-seed, uniform width, wall/non-wall split.</td></tr>
+<tr><td><code>cwSketchPathSource.h</code></td><td>widen <code>Path</code> minimally: one resolved <code>strokeColor</code>, <code>widthInWorldMetres</code> bool, <code>cap</code>/<code>join</code>, <code>dash</code> (<code>Qt::PenStyle</code>); <code>z</code> already present.</td></tr>
+<tr><td><code>cwSketchPainter.cpp</code></td><td>z-sort + per-item style (cap/join/dash) + <code>widthInWorldMetres</code> branch. No color-scheme logic (resolved upstream).</td></tr>
+<tr><td><code>cwSketchDraw.h</code> + both backends</td><td>add dash to the pen path (<code>setStrokePen</code> gains a <code>Qt::PenStyle</code> arg, or a <code>setDashStyle</code>).</td></tr>
+<tr><td><code>cwSketchCanvas.{h,cpp}</code></td><td>construct renamed model; feed snapshot + map scale; connect <code>scaleChanged</code>.</td></tr>
+<tr><td><code>SketchItem.qml</code></td><td>remove the wall/non-wall color bindings; keep one Theme token for the active-stroke preview (C).</td></tr>
+<tr><td><code>cavewherelib/CMakeLists.txt</code> + QML module</td><td>rename the translation unit and the <code>QML_NAMED_ELEMENT</code> registration. First verify no QML instantiates <code>SketchPainterPathModel {}</code> by name (it is created in C++ at <code>cwSketchCanvas.cpp:36</code>, so likely none — but the rename breaks any that do).</td></tr>
+<tr><td><code>testcases/test_cwDecoratedStrokePathSource.cpp</code></td><td>new test file (auto-globbed).</td></tr>
+</tbody>
+</table>
+
+<h2>12. Commit sequence</h2>
+<p>Three commits, each building, test-green, and leaving the app working (bisectable; reviewable on its own).
+Collapses to 2 (fold the rename into the third) or 1 if preferred — the rename split is the cheapest
+reviewability win, so it is kept here. Pause for review at each boundary; no commit without an explicit ask.</p>
+
+<h3>Commit 5a — Path/painter groundwork <span class="tag">inert</span></h3>
+<p>Behaviour-preserving foundation no producer uses yet, so nothing changes on screen.</p>
+<ul>
+  <li><code>cwSketchPathSource.h</code> — widen <code>Path</code>: <code>widthInWorldMetres</code> (bool),
+      <code>cap</code>, <code>join</code>. Defaults match today exactly (<code>false</code> /
+      <code>RoundCap</code> / <code>RoundJoin</code>, <code>z = 0</code>), so the change is a no-op for existing
+      producers. (Dash dropped — §3.) Positional <code>Path{…}</code> producers
+      (<code>cwFixedGridModel</code>) converted to designated initializers so the inserted fields can't
+      misalign.</li>
+  <li><code>cwSketchPainter.cpp</code> — stable z-sort (strokes layer only), per-item cap/join, the
+      <code>widthInWorldMetres</code> branch.</li>
+  <li><strong>Done.</strong> Painter unit tests added (<code>[cwSketchPainter]</code>): stable z-sort +
+      per-item cap/join, and world-metre widths drawn unscaled. <code>cavewherelib</code> + targeted
+      <code>cavewhere-test</code> green (<code>[cwSketchPainter]</code>,
+      <code>[cwFixedGridModel][cwSketchPainterPathModel][cwGridTextModel]</code>); no
+      <code>cwSketchDraw</code> interface change was needed.</li>
+</ul>
+
+<h3>Commit 5b — Mechanical rename <span class="tag">no logic change</span></h3>
+<p><code>cwSketchPainterPathModel</code> → <code>cwDecoratedStrokePathSource</code>: files, class,
+<code>QML_NAMED_ELEMENT</code>, CMake, the <code>cwSketchCanvas</code> member/type, any QML reference (verify
+none instantiate it by name first). No behaviour change — leaves the working (still-prototype) class under a new
+name, so the real logic diff in 5c isn't buried under rename noise.</p>
+<ul><li><strong>Verify:</strong> builds, tests green, app visually unchanged.</li></ul>
+
+<h3>Commit 5c — Wire the decoration layout into the render path <span class="tag rec">the substance</span></h3>
+<p>Where 4.x reaches the canvas.</p>
+<ul>
+  <li><strong>Model internals:</strong> own <code>cwGlyphTessellationCache</code> +
+      <code>cwSketchDecorationLayout</code>; <code>setSnapshot</code>/<code>setMapScaleRatio</code>; the single
+      <code>scheduleRebuild()</code> seam (Decision&nbsp;A); batch by style with the internal
+      <code>Batch{path, srcLight, srcDark}</code>; <code>reResolveColors()</code> on
+      <code>colorSchemeChanged</code> (Decision&nbsp;D); plain-centerline active preview (Decision&nbsp;C); drop
+      self-seed / uniform width / wall-nonwall split.</li>
+  <li><strong>Canvas wiring:</strong> feed <code>cwSketch::paletteSnapshot()</code> +
+      <code>mapScale()-&gt;scale()</code>; connect <code>cwScale::scaleChanged</code>; remove the two
+      <code>SketchItem.qml</code> color bindings (keep one Theme token for the preview).</li>
+  <li><strong>Tests:</strong> <code>test_cwDecoratedStrokePathSource.cpp</code> (functional cases incl. the
+      theme-toggle-is-re-resolve-not-re-layout assertion) + the offscreen render check (both schemes, same
+      Y-flipped <code>worldToItem</code> as the canvas).</li>
+  <li><strong>Verify:</strong> new tests green; regression
+      <code>"[cwSketchDecorationLayout][cwSketchPainter]"</code>; eyeball the PNG; manual smoke (wall/feature
+      render; a temporary <em>uncommitted</em> <code>floor-step</code> button to confirm stamps).</li>
+</ul>
+
+<p class="small"><strong>Explicitly not in this sequence</strong> (all from §8 "Out"): async layout +
+cache-safety, incremental erase batching, scale-visibility windows, <code>activePaletteId</code> selection
+(commit&nbsp;6), seed-symbol / brush-picker UI work.</p>
+
+<h2>13. Verification</h2>
+<pre><code>cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test cavewherelib 2>&1 | tee /tmp/cw-build.log
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[cwDecoratedStrokePathSource]" -d yes 2>&1 | tee /tmp/cw-render-test.log
+# regression: the layout engine + existing sketch render path stay green
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[cwSketchDecorationLayout][cwSketchPainter]" -d yes 2>&1 | tee -a /tmp/cw-render-test.log
+# eyeball the decorated render (light + dark panels)
+open /tmp/cw-decoration-render.png
+</code></pre>
+<p class="small">No commit without an explicit ask; pause for review when commit&nbsp;5 is built, green, and the
+render check is eyeballed. As an engine-touching render change, a final on-canvas smoke (draw a
+<code>floor-step</code> and a filled-glyph brush, toggle dark mode) is worth a manual look before sign-off.</p>
+
+</body>
+</html>

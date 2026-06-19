@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Commit 6 — Palette selection: per-sketch active palette + palette/brush pickers</title>
+<style>
+  :root {
+    --fg: #1d1d1f; --muted: #555; --line: #e6e6e6; --soft: #fafafa;
+    --code-bg: #f4f4f5; --accent: #3949ab; --good: #1b7a3a; --warn: #a02a2a;
+  }
+  body { font: 15px/1.55 -apple-system, "SF Pro Text", system-ui, sans-serif; color: var(--fg);
+         max-width: 920px; margin: 0 auto; padding: 32px 24px 96px; background: #fff; }
+  h1 { font-size: 2em; margin-top: 0; }
+  h2 { margin-top: 2.4em; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { margin-top: 1.7em; }
+  p, ul, ol { margin: 0.6em 0 0.8em; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: 0.25em 0; }
+  code { font: 0.92em/1.4 "SF Mono", Menlo, Consolas, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 6px; overflow-x: auto; font: 0.85em/1.5 "SF Mono", Menlo, Consolas, monospace; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; margin: 14px 0; font-size: 0.93em; width: 100%; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  blockquote { border-left: 3px solid #c8c8cc; margin: 14px 0; padding: 4px 16px; color: #4a4a52; background: var(--soft); }
+  .rec { border-left-color: #9ccfb0; background: #f0faf4; color: #225c38; }
+  .warnote { border-left-color: #e6b8b8; background: #fdf3f3; color: #7a2a2a; }
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin: 18px 0; }
+  .node { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px 12px; font-size: 0.84em; min-width: 0; }
+  .node .h { font-weight: 600; font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 5px; }
+  .node code { background: #f0f1f4; font-size: 0.9em; }
+  .node.src { background: #eef2ff; border-color: #c8d4fb; }
+  .node.eng { background: #eafaf1; border-color: #b6e5c8; }
+  .node.out { background: #f4f1fb; border-color: #d3c8ef; }
+  .arrow { align-self: center; color: var(--muted); font-size: 1.3em; padding: 0 2px; }
+  .tag { display:inline-block; font-size:0.7em; text-transform:uppercase; letter-spacing:0.06em; padding:1px 7px; border-radius:999px; border:1px solid #d2dcfb; background:#eef2ff; color:var(--accent); vertical-align:middle; }
+  .tag.rec { background:#eafaf1; color:var(--good); border-color:#b6e5c8; }
+  .tag.del { background:#fdecec; color:var(--warn); border-color:#f0c4c4; }
+  .tag.i2 { background:#fff4e5; color:#8a5a00; border-color:#f0d9b0; }
+  .small { font-size: 0.88em; color: var(--muted); }
+  .keyq { background: #fbfbfd; border: 1px solid var(--line); border-radius: 8px; padding: 4px 16px 14px; margin: 18px 0; }
+  .keyq h3 { margin-top: 0.9em; }
+  ins { color: var(--good); text-decoration: none; background: #eafaf1; padding: 0 2px; border-radius: 2px; }
+  del { color: var(--warn); background: #fdecec; padding: 0 2px; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<h1>Commit 6 — Palette selection</h1>
+<p class="small">The payoff commit of the symbology-palette series. Commits&nbsp;1–5 built the data model,
+persistence, the decoration-layout engine, and the live render path — but the seed's only decorated brush
+(<code>floor-step</code>) is unreachable from the UI, and <code>cwSketch::paletteSnapshot()</code> still
+returns a fixed built-in seed regardless of project. Commit&nbsp;6 makes the active palette
+<strong>selectable per sketch</strong> (with region and app-wide defaults), recomputes the snapshot from the
+resolved palette and re-emits on change, and replaces the three hard-coded toolbar radio buttons with a real
+<strong>palette picker</strong> and <strong>brush picker</strong>. After this commit a cartographer can pick
+the <code>floor-step</code> brush and watch its ticks render on the canvas through normal use. See
+<em>SYMBOLOGY_PALETTE_PLAN.html</em> (Decision&nbsp;6 §730, UI integration §1868), the
+<em>SYMBOLOGY_PALETTE_RENDER_PATH_PLAN.html</em> follow-ups (§303, §460, §506), and
+<em>SYMBOLOGY_PALETTE_4X_ROADMAP.md</em>.</p>
+
+<blockquote class="rec">
+<strong>Bottom line.</strong> Three layers, one commit. <strong>(1) Model:</strong> a first-hit-wins resolver chain
+(region&nbsp;→&nbsp;settings&nbsp;→&nbsp;shipped&nbsp;default) on <code>cwSketch</code> — <strong>no per-sketch
+palette</strong> (§10.E) — making <code>paletteSnapshot()</code> recompute from the resolved
+<code>cwSymbologyPalette</code>, with the <code>paletteSnapshotChanged()</code> signal the render path has been
+waiting on (render-path plan §303). <strong>(2) Persistence:</strong> round-trip
+<code>CavingRegion.defaultPaletteId</code> through proto + save/load, plus
+<code>cwSketchSettings.defaultPaletteId</code> in <code>QSettings</code>.
+<strong>(3) UI:</strong> expose <code>cwSymbologyPaletteManager</code> to QML via <code>cwRootData</code> and
+replace <code>SketchToolbar.qml</code>'s radio row with a palette picker and a category-grouped brush picker
+(both backed by dedicated <code>QAbstractListModel</code>s), with missing-brush and missing-palette banners.
+No proto-version bump
+(the symbology format is unreleased on <code>fall2026</code>). Stays on the GUI thread; no async, no
+<code>MutateScene</code> collision. <strong>CaveWhere follows the OS color scheme — no in-app override</strong>
+(resolved §10.A).</blockquote>
+
+<h2>1. What exists today, and the gap</h2>
+
+<p>The pieces commit&nbsp;6 connects already exist independently:</p>
+
+<table>
+<thead><tr><th>Piece</th><th>State today</th><th>Reference</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>cwSymbologyPaletteManager</code></td>
+  <td>Fully implemented singleton: scans a palette directory, <code>palettes()</code> enumerates (seed first),
+      <code>paletteById(QUuid)</code> looks up, <code>seedPalette()</code> returns the built-in. Has an
+      <code>errorModel()</code>. <strong>Not yet exposed to QML / not on <code>cwRootData</code>.</strong></td>
+  <td><code>cwSymbologyPaletteManager.h:33–87</code></td>
+</tr>
+<tr>
+  <td><code>cwSymbologyPalette</code></td>
+  <td>Identified by <code>QUuid id</code>; <code>lineBrushes()</code> enumerates <code>cwLineBrush</code>
+      (each with <code>name</code> / <code>displayName</code> / <code>category</code> / <code>zOrder</code> /
+      <code>scrapOutline</code>); <code>snapshot()</code> returns a cheap implicitly-shared lookup surface.</td>
+  <td><code>cwSymbologyPalette.h:32–78</code>, <code>cwLineBrush.h:24–37</code></td>
+</tr>
+<tr>
+  <td><code>cwSketch::paletteSnapshot()</code></td>
+  <td>Returns <code>m_paletteSnapshot</code>, <strong>seeded once at construction</strong> from
+      <code>cwSymbologyPaletteSeed::create().snapshot()</code> — a fixed value. No
+      <code>activePaletteId</code>, no change signal.</td>
+  <td><code>cwSketch.h:140</code>, <code>cwSketch.cpp:268</code></td>
+</tr>
+<tr>
+  <td>Render path (commit&nbsp;5c)</td>
+  <td><code>cwSketchCanvas::setSketch</code> calls <code>m_pathModel->setSnapshot(sketch->paletteSnapshot())</code>
+      once. The model re-resolves colors/widths whenever <code>setSnapshot()</code> is called — it just needs
+      to be <em>told</em> when the snapshot changes.</td>
+  <td><code>cwSketchCanvas.cpp:81</code></td>
+</tr>
+<tr>
+  <td><code>SketchToolbar.qml</code></td>
+  <td>Three hard-coded radio buttons (Wall / Feature / Scrap Outline) set a
+      <code>property string brushName</code>; <code>SketchItem.qml</code> passes it into
+      <code>sketch.beginStroke(brushName)</code>. Comment: <em>"temporary fixed set until the brush picker
+      lands."</em></td>
+  <td><code>SketchToolbar.qml:21–82</code>, <code>SketchItem.qml:32,339</code></td>
+</tr>
+<tr>
+  <td>Proto</td>
+  <td><code>CavewhereCommonProto.Stroke</code> already carries <code>brushName</code> (field&nbsp;3).
+      <code>Sketch</code> has fields 1–8 (next free: <strong>9</strong>); no <code>activePaletteId</code>.
+      The region palette id lives on <code>ProjectMetadata.defaultPaletteId = 8</code> (the legacy
+      <code>CavingRegion</code> message is unused).</td>
+  <td><code>cavewhere.proto:504–518</code>, <code>cavewhere_common.proto:32–36</code></td>
+</tr>
+</tbody>
+</table>
+
+<p><strong>The gap is the wiring between them.</strong> Nothing today lets a project choose which palette a
+sketch resolves against, nothing recomputes the snapshot when that choice changes, and nothing in the UI lets
+the cartographer pick anything but the three legacy brushes.</p>
+
+<h2>2. Scope (settled with the user)</h2>
+<ul>
+  <li><span class="tag rec">in</span> <strong>Full scope:</strong> model + persistence backbone <em>and</em>
+      both pickers (palette picker + brush picker). This is the render-path plan's §506 framing — the commit
+      that makes decoration visible in-app — collapsing the master plan's separate "commit&nbsp;7 pickers" row
+      into this one.</li>
+  <li><span class="tag del">out</span> <strong>No <code>colorSchemeOverride</code> app setting.</strong>
+      CaveWhere follows the OS color scheme — <code>Theme.qml</code> already reads
+      <code>Qt.application.styleHints.colorScheme</code>, so light/dark ink tracks the system appearance with no
+      in-app toggle (resolved §10.A). A "force light/dark for print preview" control can be added later as an
+      additive setting if a need arises.</li>
+  <li><span class="tag del">out</span> Glyph editor (Decision&nbsp;9) — its own page, <strong>commit&nbsp;8</strong>.</li>
+  <li><span class="tag del">out</span> Rule <em>params</em> interpretation — <em>COMMIT_B_RULE_PARAMS_PLAN.md</em>.</li>
+  <li><span class="tag i2">later</span> Async layout + cache thread-safety, <code>MutateScene</code> collision,
+      scale-visibility windows — the deferred render-path follow-ups, unchanged by this commit.</li>
+  <li><strong>No <code>protoVersion()</code> bump.</strong> The symbology proto/format is unreleased on
+      <code>fall2026</code>; adding fields does not bump the version.</li>
+</ul>
+
+<h2>3. Decision&nbsp;6 — the resolver chain</h2>
+
+<p>Active palette is a <strong>project-wide (region) choice</strong>, with an app-wide default behind it. First
+hit wins:</p>
+
+<div class="flow">
+  <div class="node src"><div class="h">1 · per-project</div><code>cwCavingRegion::defaultPaletteId</code></div>
+  <div class="arrow">→</div>
+  <div class="node"><div class="h">2 · app-wide</div><code>cwSketchSettings::defaultPaletteId</code></div>
+  <div class="arrow">→</div>
+  <div class="node out"><div class="h">3 · shipped default</div><code>defaultPalette()</code></div>
+</div>
+
+<p>Each level holds a <code>QUuid</code> that is null/unset by default, meaning "fall through to the next
+level." Resolution walks the chain, takes the first non-null id that <code>paletteManager.paletteById()</code>
+actually resolves to a loaded palette, and falls back to <code>defaultPalette()</code> if none do (so a region
+that references a deleted/missing palette still renders against the shipped default rather than going blank).</p>
+
+<blockquote class="rec"><strong>No per-sketch palette</strong> (resolved §10.E). Cave maps use one consistent
+symbology standard, so the palette belongs to the <em>project</em>, not the individual sketch: the toolbar
+picker sets <code>cwCavingRegion::defaultPaletteId</code>, so one pick re-skins every sketch in the project, and
+a bulk re-palette is a single setter. A per-sketch override would only fight that bulk workflow; it can be added
+later as a cheap additive proto field if a concrete need (e.g. a one-off inset in a different style) appears.
+"Zen mode" (sketch with fewer symbols → switch to a detailed pack) is the same region-level switch — or, longer
+term, a view-level detail toggle — not a per-sketch palette.</blockquote>
+
+<p class="small"><strong>Depends on the prep commit</strong> (<em>SYMBOLOGY_PALETTE_DEFAULT_QRC_PLAN.html</em>):
+the chain bottoms on the qrc-embedded <code>defaultPalette()</code>, not the old in-code
+<code>seedPalette()</code>. Land that first.</p>
+
+<p>The resolver lives on <code>cwSketch</code> because it owns the snapshot the render path reads per frame.
+<code>cwSketch</code> reaches the region by walking up its parent chain
+(<code>m_parentTrip</code>&nbsp;→&nbsp;cave&nbsp;→&nbsp;region) and reads the app default from the
+<code>cwSketchSettings</code> singleton. The <code>cwSymbologyPaletteManager</code> singleton is the lookup
+oracle for both id levels.</p>
+
+<blockquote class="small"><strong>Why the resolver is read-through, not cached-by-copy.</strong> The snapshot
+is recomputed (and <code>paletteSnapshotChanged()</code> emitted) on any input change — see §5 — so we store
+the resolved <code>cwPaletteSnapshot</code> in <code>m_paletteSnapshot</code> and refresh it, rather than
+re-walking the chain on every <code>paletteSnapshot()</code> read. <code>paletteSnapshot()</code> stays a cheap
+member return, matching what the render path already calls per frame.</blockquote>
+
+<h2>4. C++ changes</h2>
+
+<table>
+<thead><tr><th>File</th><th>Change</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>cwSketch.{h,cpp}</code> <span class="tag rec">done (Phase&nbsp;1)</span></td>
+  <td>Add <code>void resolveSnapshot()</code> (private) implementing §3 and writing <code>m_paletteSnapshot</code>;
+      call it from the ctor (<strong>removing the <code>create().snapshot()</code> call</strong> carried over
+      from the prep commit — this is where <code>create()</code> finally leaves the runtime path), from
+      <code>setParentTrip</code> (region default may differ), and on the manager / settings / region change
+      signals it subscribes to. Add signal <code>void paletteSnapshotChanged()</code>; emit it from
+      <code>resolveSnapshot()</code> only when the resolved snapshot content actually changed
+      (dedup on <code>cwPaletteSnapshot::operator==</code>, added in Phase&nbsp;1 — handles a same-id reload
+      whose brushes changed). <strong>No <code>activePaletteId</code> on the sketch</strong> (§10.E). The
+      <code>cwSketch</code>→<code>cwSymbologyPaletteManager</code>-singleton dependency is handled by
+      initializing the manager at startup before any sketch is constructed (main.cpp / test main); a null
+      manager leaves an empty snapshot.</td>
+</tr>
+<tr>
+  <td><code>cwCavingRegion.{h,cpp}</code> <span class="tag rec">done (Phase&nbsp;1)</span></td>
+  <td>Add <code>Q_PROPERTY(QUuid defaultPaletteId READ ... WRITE ... NOTIFY defaultPaletteIdChanged)</code>
+      (plain member + setter; the class still uses a bindable for <code>name</code> — do <em>not</em> add a new
+      bindable, follow the plain-member convention). This is the <strong>primary</strong> palette selector the
+      toolbar picker writes.</td>
+</tr>
+<tr>
+  <td><code>cwSketchSettings.{h,cpp}</code> <span class="tag rec">done (Phase&nbsp;1)</span></td>
+  <td>Add <code>defaultPaletteId</code> (QUuid) (resolved §10.A/§10.E — it lives in <code>cwSketchSettings</code>,
+      not top-level <code>cwSettings</code>), following the existing <code>QSettings</code>-key pattern
+      (key fn → ctor read → setter writes + emits; null clears the key). No <code>colorSchemeOverride</code> —
+      CaveWhere follows the OS scheme (§7).</td>
+</tr>
+<tr>
+  <td><code>cwRootData.{h,cpp}</code></td>
+  <td>Add <code>Q_PROPERTY(cwSymbologyPaletteManager* paletteManager READ paletteManager CONSTANT)</code> so
+      QML pickers can enumerate palettes/brushes. Ensure the manager singleton is
+      <code>initialize()</code>-d at startup with the palette directory (mirrors how other managers are wired
+      in <code>cwRootData</code>'s ctor). Make <code>cwSymbologyPaletteManager::paletteById(QUuid)</code>
+      <code>Q_INVOKABLE</code> (it is already public) so the missing-palette banner can ask whether the active
+      id resolves without scanning the list model from QML.</td>
+</tr>
+<tr>
+  <td><code>cwSymbologyPaletteListModel.{h,cpp}</code> /<br><code>cwLineBrushListModel.{h,cpp}</code>
+      <span class="tag rec">new</span></td>
+  <td>Two dedicated <code>QAbstractListModel</code>s (resolved §10.B): one over the manager's
+      <code>palettes()</code> (roles: <code>name</code>, <code>id</code>); one over the active palette's
+      <code>lineBrushes()</code> with the §1881 grouping baked in (category by lowest member <code>zOrder</code>,
+      then <code>displayName</code> locale-aware). Keeping the sort in C++ makes it unit-testable and lets
+      <code>ComboBox</code>/grouped views bind cleanly. Register via <code>qt_add_qml_module</code>.</td>
+</tr>
+<tr>
+  <td><code>cwSketchCanvas.{h,cpp}</code></td>
+  <td>The render-path §303 one-liner: in <code>setSketch</code>, after the initial
+      <code>setSnapshot</code>, <code>connect(sketch, &cwSketch::paletteSnapshotChanged, ...)</code> →
+      <code>m_pathModel->setSnapshot(m_sketch->paletteSnapshot())</code> (store the
+      <code>QMetaObject::Connection</code>, disconnect the old one on sketch change — same pattern as the
+      existing <code>m_mapScaleConnection</code> from 5c).
+      <strong>Also</strong> add <code>Q_PROPERTY(QString currentBrushName ...)</code> (resolved §10.C): the
+      current drawing brush moves from the QML toolbar into the canvas as the single source of truth, so the
+      keyboard shortcuts and <code>beginStroke()</code> share it; the brush picker binds to it.</td>
+</tr>
+<tr>
+  <td><code>cavewhere.proto</code> <span class="tag rec">done (Phase&nbsp;2)</span></td>
+  <td><code>ProjectMetadata.defaultPaletteId = 8</code> (<code>optional string</code>, UUID text). The legacy
+      <code>CavingRegion</code> proto message is dead — the region's per-project data (<code>globalCoordinateSystem</code>)
+      already round-trips through <code>ProjectMetadata</code>, so the palette id lives there too. No <code>Sketch</code>
+      field — the palette is region-level (§10.E). No version bump.</td>
+</tr>
+<tr>
+  <td><code>cwSaveLoad.cpp</code> + region data struct <span class="tag rec">done (Phase&nbsp;2)</span></td>
+  <td>Round-trip happens in <code>cwSaveLoad.cpp</code> (not <code>cwProtoUtils.cpp</code> — that's the legacy path)
+      at the <code>ProjectMetadata</code> save/load sites, right beside <code>globalCoordinateSystem</code>: skip when
+      null on write (<code>uuidToProtoString</code>), <code>QUuid::fromString</code> on read into
+      <code>cwCavingRegionData::defaultPaletteId</code>, applied via <code>cwCavingRegion::setData/data()</code>. A
+      <code>defaultPaletteIdChanged → saveMetadata</code> connection (sibling of the CS one) makes a UI pick dirty the
+      project so it persists. No <code>cwSketch</code> / <code>cwSketchData</code> changes — sketches carry no palette id.</td>
+</tr>
+</tbody>
+</table>
+
+<h2>5. When the snapshot re-resolves</h2>
+<p><code>cwSketch::resolveSnapshot()</code> runs (and conditionally emits <code>paletteSnapshotChanged()</code>)
+on any of:</p>
+<ul>
+  <li><code>setParentTrip()</code> — the sketch was attached to a region whose default differs (re-wires the
+      region subscription too).</li>
+  <li><code>cwCavingRegion::defaultPaletteIdChanged</code> — the project's palette changed; subscribe via the
+      parent chain.</li>
+  <li><code>cwSketchSettings::defaultPaletteIdChanged</code> — only consulted when the region default is unset.</li>
+  <li><code>cwSymbologyPaletteManager::palettesChanged</code> reload (directory rescan) — a previously-missing
+      id may now resolve, or a loaded palette's brushes changed. Snapshot-content dedup
+      (<code>cwPaletteSnapshot::operator==</code>) makes both cases re-skin correctly while staying quiet on a
+      no-op rescan.</li>
+</ul>
+<p>The render path reacts for free: <code>cwSketchCanvas</code>'s new connection pushes the fresh snapshot into
+<code>cwDecoratedStrokePathSource::setSnapshot()</code>, which rebuilds every finished batch and re-skins the
+canvas — exactly the "switching the active palette re-skins every stroke" behavior in §1880.</p>
+
+<h2>6. UI — palette picker &amp; brush picker</h2>
+
+<p>Replace the radio row in <code>SketchToolbar.qml</code> with two pickers (Decision&nbsp;6 / §1870 layout):</p>
+<pre><code>[Palette: UIS Standard ▾]   [Brush: Wall ▾]        (+ Erase tool, unchanged)</code></pre>
+
+<h3>Palette picker</h3>
+<ul>
+  <li>A <code>QC.ComboBox</code> populated from <code>RootData.paletteManager.palettes()</code> (display
+      <code>palette.name</code>, value <code>palette.id</code>). <span class="small">A C++
+      <code>QAbstractListModel</code> over the manager may be cleaner than poking the
+      <code>QList&lt;cwSymbologyPalette*&gt;</code> from QML — open question §10.</span></li>
+  <li>Selecting a palette sets the current project's <code>cwCavingRegion::defaultPaletteId</code> (reached via
+      the sketch's parent chain / <code>RootData</code>). Because the palette is region-level, one pick re-skins
+      <strong>every sketch in the project</strong> — the resolver + render-path connection do it automatically
+      (§5). This is also the bulk re-palette path: a single setter.</li>
+  <li>Strokes whose <code>brushName</code> doesn't resolve in the new palette trigger the missing-brush banner
+      (below); they fall back to the no-ink missing-brush style from the snapshot resolver (already handled in
+      <code>cwPaletteSnapshot</code> / the layout's <code>findBrush</code> miss path).</li>
+</ul>
+
+<h3>Brush picker</h3>
+<ul>
+  <li>A picker over the <em>active</em> palette's <code>lineBrushes()</code>, showing
+      <code>displayName</code> <strong>grouped by <code>category</code></strong>. Per §1881: categories sort by
+      the lowest <code>zOrder</code> among their members (wall-ish groups float to the top); within a category,
+      brushes sort alphabetically by <code>displayName</code> (locale-aware). Stable across palette reloads
+      regardless of file order.</li>
+  <li>Selecting a brush sets the canvas's <em>current drawing brush name</em>, which is what the next
+      <code>beginStroke()</code> uses. This replaces the toolbar's hard-coded
+      <code>property string brushName</code> — the value now comes from the picker's selected brush
+      <code>name</code> rather than a literal.</li>
+  <li>Repopulates whenever <code>activePaletteId</code> changes (palette switch) or the manager reloads.</li>
+  <li><strong>Keyboard shortcuts preserved:</strong> W → <code>wall</code>, F → <code>feature</code> stay as
+      muscle-memory accelerators (§1893), implemented as shortcuts that set the picker's selection if those
+      brush names resolve in the active palette (no-op otherwise).</li>
+</ul>
+
+<h3>Missing-resolution banners</h3>
+<p>Two small inline warnings (using <code>Theme.qml</code> tokens, <code>QC.Label</code> / <code>BodyText</code>),
+both pointing the user at the palette picker:</p>
+<ul>
+  <li><strong>Missing brush.</strong> The current sketch has strokes whose <code>brushName</code> doesn't resolve
+      in the active palette — e.g. after switching to a palette that lacks <code>wall</code>. This is the §1880
+      "missing-brush banner" surface.</li>
+  <li><strong>Missing palette</strong> <span class="tag rec">review fold-in</span>. The region's
+      <code>defaultPaletteId</code> (or the app-wide default) points at a palette the manager doesn't have —
+      e.g. a project saved with a region <code>defaultPaletteId</code> and opened on a machine where that
+      palette isn't installed. The resolver silently falls through to the shipped default
+      (correct behavior — the sketch still renders), but the user is never told their chosen palette is missing
+      and that they're seeing substituted symbology. The banner makes that visible.
+      <br><span class="small"><strong>Why this is here:</strong> surfaced by the Phase&nbsp;1 qt-cpp-review
+      (error-handling agent). The <code>cwSymbologyPaletteManager</code> routes every <em>load-time</em> palette
+      problem (duplicate id, forward-incompatible, load failure) to its <code>cwErrorModel</code>, but a
+      dangling <em>reference</em> from a project/QSettings is invisible. This is a UI-level detection, not a
+      resolver change: the picker has both the sketch's <code>activePaletteId</code> and the manager's
+      <code>palettes()</code>, so it can tell whether the id resolves. Especially important for the region-level
+      id, which is persisted and meant to be portable/collaborative.</span></li>
+</ul>
+
+<blockquote class="small"><strong>QML conventions to honor:</strong> import <code>QtQuick</code> as <code>QQ</code>;
+strict typed properties; <code>QC.Label</code>/<code>BodyText</code> for all text (dark-mode safe); all colors
+and font sizes via <code>Theme.qml</code> tokens; prefer <code>TapHandler</code> in any new components; register
+any new QML component via <code>qt_add_qml_module</code>. The existing radio <code>MouseArea</code>/legacy bits
+are replaced wholesale, so the new pickers start clean.</blockquote>
+
+<h2>7. Color scheme — follow the OS</h2>
+<p>No in-app color-scheme override (resolved §10.A). CaveWhere follows the system light/dark appearance:
+<code>Theme.qml</code> already reads <code>Qt.application.styleHints.colorScheme</code>, and the painter / model
+(Decision&nbsp;D's <code>onColorSchemeChanged</code> in <code>cwDecoratedStrokePathSource</code>) consult the
+same <code>QStyleHints</code> source. Palettes ship both light/dark color pairs and the scheme selects at draw
+time, so changing the OS appearance re-skins the canvas with no per-sketch state. A future "force light/dark for
+print preview" control can be added as an additive setting if a need arises — out of scope here.</p>
+
+<h2>8. Save / load round-trip</h2>
+<ul>
+  <li><code>ProjectMetadata.defaultPaletteId</code> persists in the project file as UUID text
+      (null = unset = omitted on write). Sketches carry no palette id.</li>
+  <li><code>cwSketchSettings.defaultPaletteId</code> persists via <code>QSettings</code> (not the project file —
+      it's app-wide).</li>
+  <li>No legacy loader concerns: prototype-era projects predate the symbology format and aren't preserved
+      (per the master plan). A loaded project with no <code>ProjectMetadata.defaultPaletteId</code> resolves
+      through settings → shipped default as designed.</li>
+</ul>
+
+<h2>9. Tests</h2>
+<p>New files, one feature per file (repo convention); targeted tags so single-test runs stay fast.</p>
+<ul>
+  <li><strong><code>testcases/test_cwSketchPaletteResolution.cpp</code></strong>
+      (tag <code>[cwSketchPaletteResolution]</code>) <span class="tag rec">done (Phase&nbsp;1)</span> — uses a
+      region+cave+trip+sketch fixture; temp-dir palettes, concurrency-safe via a <code>SingletonGuard</code>:
+    <ul>
+      <li>Resolver precedence: region wins over settings over shipped default; null at a level falls through;
+          an id that doesn't resolve in the manager falls through (not blank).</li>
+      <li><strong>Cross-palette substitution</strong> (the §2075 case): a <code>wall</code> stroke against
+          palette&nbsp;A; switch the region default to palette&nbsp;B (same <code>wall</code> name, different
+          brush) → resolved brush is B's. Switch to a palette with no <code>wall</code> → missing-brush
+          fallback (no ink) fires.</li>
+      <li><code>paletteSnapshotChanged</code> emission: emitted when a region/settings change alters the
+          resolved <em>content</em>; <strong>not</strong> emitted when content is unchanged (no-op set); a
+          same-id manager reload that edited brushes <em>does</em> re-emit. Uses <code>QSignalSpy</code> — no
+          member counters (production stays free of test scaffolding).</li>
+    </ul>
+  </li>
+  <li><strong><code>testcases/test_cwCavingRegionPaletteRoundTrip.cpp</code></strong>
+      (tag <code>[cwCavingRegionPaletteRoundTrip]</code>) <span class="tag rec">done (Phase&nbsp;2)</span> — three
+      cases: a non-null <code>defaultPaletteId</code> survives save/reload; a null id loads back null; clearing a
+      previously-set id persists as null. Its own file, not piled into <code>test_cwSaveLoad.cpp</code> /
+      <code>test_cwProject.cpp</code>. Uses <code>QTemporaryDir</code> / PID-stamped paths. (No sketch palette
+      round-trip — sketches carry no id.)</li>
+  <li><strong><code>test-qml/tst_BrushPicker.qml</code></strong> — picker shows brushes grouped by category in
+      the documented order; selecting a brush sets the drawing brush name; switching the active palette
+      repopulates. (<code>tryVerify</code>/<code>tryCompare</code>, offscreen.)</li>
+  <li><strong><code>test-qml/tst_PalettePicker.qml</code></strong> — lists manager palettes; selecting sets the
+      region's <code>defaultPaletteId</code>; the canvas re-skins (assert a stroke's resolved style changes).
+      Also: a region <code>defaultPaletteId</code> the manager doesn't have shows the
+      <strong>missing-palette banner</strong>; selecting a resolvable palette hides it.</li>
+  <li>A small <code>cwSettings</code> persistence check for <code>defaultPaletteId</code> (round-trip through a
+      scoped <code>QSettings</code>). Plus a unit test for the brush list model's §1881 category/<code>zOrder</code>
+      sort (resolved §10.B — the sort lives in C++ precisely so it's testable).</li>
+</ul>
+<p class="small">Verification commands (build dir <code>build/Qt_6_11_1_for_macOS-Debug</code>):</p>
+<pre><code>cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test cavewhere-qml-test 2>&1 | tee /tmp/cw-build.log
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[cwSketchPaletteResolution],[cwSketchPaletteRoundTrip]" -d yes 2>&1 | tee /tmp/cw-c6-test.log
+# regression: the render path + symbology suites stay green
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[cwDecoratedStrokePathSource],[cwSketchExporter],[cwSymbologyPalette],[cwPaletteSnapshot]" -d yes 2>&1 | tee -a /tmp/cw-c6-test.log
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-qml-test --platform offscreen -input test-qml/tst_BrushPicker.qml 2>&1 | tee -a /tmp/cw-c6-test.log
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-qml-test --platform offscreen -input test-qml/tst_PalettePicker.qml 2>&1 | tee -a /tmp/cw-c6-test.log</code></pre>
+
+<h2>10. Decisions (resolved in review)</h2>
+<div class="keyq">
+<h3>A. No color-scheme override; <code>defaultPaletteId</code> → top-level <code>cwSettings</code></h3>
+<p><strong>Dropped <code>colorSchemeOverride</code>.</strong> CaveWhere follows the OS light/dark setting (§7) —
+the user changes appearance via the system and the app respects it. This removes the enum, its
+<code>QSettings</code> round-trip, and the segmented settings control. <code>cwSettings.defaultPaletteId</code>
+lives at top level (app-wide, not sketch-canvas-specific).</p>
+
+<h3>B. Palette/brush enumeration → dedicated <code>QAbstractListModel</code>s</h3>
+<p>Add two models: a palette list over the manager, and a brush list over the active palette with the §1881
+category/<code>zOrder</code> sort baked in. The sort rule lives in C++ where it gets a unit test, and
+<code>ComboBox</code>/grouped views bind cleanly.</p>
+
+<h3>C. Current drawing brush → <code>cwSketchCanvas::currentBrushName</code> (C++)</h3>
+<p>Promote the toolbar's <code>property string brushName</code> to a <code>currentBrushName</code> property on
+<code>cwSketchCanvas</code>, so the keyboard shortcuts, <code>beginStroke()</code>, and the picker share one
+testable source of truth. The brush picker binds to it.</p>
+
+<h3>D. Granularity → one commit</h3>
+<p>Land model + persistence + both pickers as a single commit, matching the "commit&nbsp;6" payoff framing.</p>
+
+<h3>E. Palette scope → region-primary, no per-sketch override</h3>
+<p>Dropped <code>cwSketch::activePaletteId</code>. A cave map uses one consistent symbology standard, so the
+palette is a <strong>project (region)</strong> choice: the chain is <code>region → settings → shipped default</code>
+and the toolbar picker writes <code>cwCavingRegion::defaultPaletteId</code>. This makes the use case that
+actually matters — re-palette a whole project, incl. a "zen → detailed" pack swap — a <em>single setter</em>
+that re-skins every sketch; a per-sketch override would only fight that bulk workflow. "Zen mode" is the same
+region-level switch (or, later, a view-level detail toggle), not per-sketch state. A per-sketch override can be
+re-added later as a cheap additive proto field (no version bump) if a concrete need appears. <strong>Palette
+inheritance</strong> (palette-extends-palette) is out: brush-name substitution across flat palettes already
+gives "same names, different rendering"; structural inheritance is an authoring optimization to revisit only if
+packs start duplicating heavily. Reverses the earlier "all three levels" lean after thinking through zen + bulk
+re-palette.</p>
+</div>
+
+<h2>11. Out of scope (later)</h2>
+<ul>
+  <li><strong>Shared testlib palette-writer helper</strong> <span class="tag rec">commit&nbsp;1.1</span>
+      <span class="small">(follow-up cleanup surfaced by the Phase&nbsp;1 <code>/simplify</code> reuse agent)</span>.
+      The one-brush <code>cwSymbologyPaletteData</code> + <code>cwSymbologyPaletteIO::save(palette, &lt;root&gt;/&lt;subdir&gt;)</code>
+      "dance" is open-coded across ~12 test files (e.g. <code>writePalette</code> in
+      <code>test_cwSymbologyPaletteManager.cpp</code>, <code>writeWallPalette</code> /
+      <code>writeFeatureOnlyPalette</code> in <code>test_cwSketchPaletteResolution.cpp</code>). Extract a single
+      <code>testlib</code> writer — e.g.
+      <code>writeOneBrushPalette(root, subdir, id, paletteName, brushName, brushDisplayName)</code> — alongside
+      the existing shared fixtures (<code>cwSketchTestHelpers.h</code>, <code>LazFixtureHelper</code>), and have
+      the palette tests call it instead of each rolling their own. Deliberately deferred out of commit&nbsp;6:
+      the fix touches <code>testlib/</code> plus a dozen test files, well outside the commit's diff, and the
+      local copies differ slightly (the resolution test sets <code>displayName</code> to make cross-palette
+      substitution observable; the manager test doesn't). Its own small commit so the consolidation is reviewable
+      in isolation and doesn't bloat the commit&nbsp;6 diff.</li>
+  <li>Glyph editor page (Decision&nbsp;9) → <strong>commit&nbsp;8</strong>.</li>
+  <li>Rule params interpretation → <em>COMMIT_B_RULE_PARAMS_PLAN.md</em>.</li>
+  <li>Async decoration layout + <code>cwGlyphTessellationCache</code> thread-safety; <code>MutateScene</code>
+      scene-collision (iter&nbsp;2); scale-visibility windows (iter&nbsp;3) → render-path follow-ups.</li>
+  <li>Per-stroke width/color overrides — Decision&nbsp;2 forbids them; the way to a thicker wall is a cloned
+      brush in the (future) palette editor.</li>
+  <li>Migrating scrap detection's <code>kSketchStrokeRenderWidth</code> threshold to per-brush width — its own
+      change (render-path §462).</li>
+</ul>
+
+<h2>12. Phase 3 — execution breakdown (UI: pickers &amp; models)</h2>
+<p class="small">Phases 1–2 are landed (<code>90df72cb</code> resolver, <code>f32129fe</code> persistence). The
+remaining work — the undone rows of §4, all of §6, and the UI rows of §9 — is the UI layer. It spans C++ models,
+a render-path edit, new QML, and three test files, so it is built as <strong>four gated sub-phases 3a–3d</strong>,
+bottom-up: each must build clean and pass its targeted tests before the next, and each stops at a
+<strong>phase boundary for review</strong> (per the standing pause-between-phases discipline). Nothing is
+committed unless you ask.</p>
+
+<blockquote class="rec"><strong>Why this order.</strong> 3a and 3b are pure C++ with no QML dependency, so they
+land and get unit-tested first; the QML pickers (3c) bind to the models and properties they expose; the banners
+(3d) are the smallest surface and reuse the <code>paletteById</code> probe, so they go last. Each sub-phase is
+independently green — if review stops the series midway, what landed still compiles and tests.</blockquote>
+
+<div class="keyq">
+<p class="small" style="margin-top:14px"><strong>Two integration unknowns, resolved against the code before 3a
+(so the model's shape is fixed up front):</strong></p>
+
+<h3>i. Brush model's data source → the resolved <code>cwSymbologyPalette*</code>, exposed by <code>cwSketch</code></h3>
+<p><code>cwPaletteSnapshot</code> is <strong>lookup-only</strong> (<code>findBrush(name)</code> /
+<code>brushCount()</code>; the brush hash is private) — it <strong>cannot enumerate brushes</strong>, so the
+picker can't source from it. The resolver chain is private inside
+<code>cwSketch::resolveSnapshot()</code> (<code>cwSketch.cpp</code> ~323-367). The only enumeration is
+<code>cwSymbologyPalette::lineBrushes()</code> → <code>QVector&lt;cwLineBrush&gt;</code>.
+<strong>Resolution:</strong> expose the palette <code>cwSketch</code> already resolves —
+<code>Q_PROPERTY(cwSymbologyPalette* resolvedPalette READ resolvedPalette NOTIFY paletteSnapshotChanged)</code>
+(cache the pointer <code>resolveSnapshot()</code> already derives). The brush model takes a settable
+<code>cwSymbologyPalette* palette</code> and <strong>copies <code>lineBrushes()</code> by value</strong> on set;
+QML binds <code>model.palette: sketch.resolvedPalette</code>. Keeps <strong>one resolver + one change-subscription
+hub</strong> (cwSketch already listens to region / settings / manager and emits a single deduped
+<code>paletteSnapshotChanged</code>); the model stays decoupled and unit-testable in isolation; the by-value copy
+avoids the dangling-pointer window when the manager reloads palettes. <em>Rejected:</em> re-running the resolver
+inside the model (would duplicate cwSketch's three-way subscription bookkeeping — wrong altitude).</p>
+
+<h3>ii. Category grouping → flat model, sorted + boundary-flagged in C++; grouped popup in QML</h3>
+<p>The codebase has <strong>no <code>ListView.section</code> / <code>DelegateModel</code> / grouped-ComboBox</strong>
+precedent; every existing combo (<code>MapOptions</code>, <code>CSComboBox</code>, <code>ComboBoxWithInfo</code>)
+is flat <code>textRole</code>. The one grouping precedent (<code>cwKeywordGroupByKeyModel</code> →
+<code>KeywordTab.qml</code>) is a heavier nested model built for a two-level filter, not a picker.
+<strong>Resolution:</strong> keep <code>cwLineBrushListModel</code> <strong>flat</strong>, pre-sorted in C++ by the
+§1881 rule (category by lowest member <code>zOrder</code>, then <code>displayName</code> locale-aware), with roles
+<code>name</code> / <code>displayName</code> / <code>category</code> / <code>isFirstInCategory</code> (a
+C++-computed group-boundary flag). The sort <em>and</em> the boundaries become the single C++-testable artifact
+(what §10.B intends). Since a bare <code>QC.ComboBox</code> can't render non-selectable section headers, the brush
+picker is a small grouped popup component (<code>BrushPicker.qml</code>) that shows a category header where
+<code>isFirstInCategory</code> is true; the palette picker stays a flat <code>QC.ComboBox</code> (no grouping
+needed). <em>Rejected:</em> the nested grouped-model pattern (buries the sort, complicates the unit test, overkill
+for a picker).</p>
+</div>
+
+<h3>3a — Models + <code>cwRootData</code> wiring <span class="tag rec">done</span></h3>
+<p class="small">Pure C++, unit-testable, no QML or render-path coupling. Maps to §4 rows
+<code>cwSketch</code> (the <code>resolvedPalette</code> getter from unknown&nbsp;i), <code>cwRootData</code>,
+<code>cwSymbologyPaletteListModel</code> / <code>cwLineBrushListModel</code>; §10.B.</p>
+<ul>
+  <li><code>cwSketch.{h,cpp}</code>: add
+      <code>Q_PROPERTY(cwSymbologyPalette* resolvedPalette READ resolvedPalette NOTIFY paletteSnapshotChanged)</code>
+      — cache the <code>cwSymbologyPalette*</code> that <code>resolveSnapshot()</code> already derives into
+      <code>m_resolvedPalette</code> and return it (unknown&nbsp;i). No new signal; reuses the existing deduped
+      <code>paletteSnapshotChanged</code>. The only change to the resolver: store the pointer it already computes.</li>
+  <li><code>cwRootData.{h,cpp}</code>: add
+      <code>Q_PROPERTY(cwSymbologyPaletteManager* paletteManager READ paletteManager CONSTANT)</code>; ensure the
+      manager singleton is <code>initialize()</code>-d at startup with the palette directory (mirror the other
+      managers wired in the ctor); make <code>cwSymbologyPaletteManager::paletteById(QUuid)</code>
+      <code>Q_INVOKABLE</code> (already public).</li>
+  <li><code>cwSymbologyPaletteListModel.{h,cpp}</code> (new): flat <code>QAbstractListModel</code> over
+      <code>manager-&gt;palettes()</code>, roles <code>name</code> / <code>id</code>; resets on the manager's
+      <code>palettesChanged</code>. <code>QML_NAMED_ELEMENT</code>.</li>
+  <li><code>cwLineBrushListModel.{h,cpp}</code> (new): flat <code>QAbstractListModel</code> with a settable
+      <code>Q_PROPERTY(cwSymbologyPalette* palette ...)</code> (unknown&nbsp;i). On set it <strong>copies
+      <code>palette-&gt;lineBrushes()</code> by value</strong>, sorts by §1881 (category by lowest member
+      <code>zOrder</code>, then <code>displayName</code> locale-aware), and resets. Roles: <code>name</code>,
+      <code>displayName</code>, <code>category</code>, <code>isFirstInCategory</code> (C++-computed group boundary,
+      unknown&nbsp;ii). Plain member + explicit setter (no bindable). <code>QML_NAMED_ELEMENT</code>.</li>
+  <li>Register both models via <code>QML_NAMED_ELEMENT</code> (auto-picked up by the existing
+      <code>qt_add_qml_module</code> globs in <code>cavewherelib/CMakeLists.txt</code>).</li>
+  <li><strong>Tests</strong> (own files, §10.B keeps the sort in C++ precisely so it's testable; pure compute,
+      concurrency-safe):
+    <ul>
+      <li><code>testcases/test_cwLineBrushListModel.cpp</code> (tag <code>[cwLineBrushListModel]</code>) — §1881
+          category/<code>zOrder</code> ordering and the <code>isFirstInCategory</code> boundary flag; setting
+          <code>palette</code> repopulates; null palette → empty.</li>
+      <li><code>testcases/test_cwSketchResolvedPalette.cpp</code> (tag <code>[cwSketchResolvedPalette]</code>) —
+          <code>resolvedPalette()</code> follows the same region→settings→default chain as the snapshot
+          (reuses the Phase&nbsp;1 fixture / <code>SingletonGuard</code>).</li>
+    </ul>
+  </li>
+</ul>
+<p class="small"><strong>Gate:</strong> build <code>cavewhere-test</code> green; run
+<code>[cwLineBrushListModel],[cwSketchResolvedPalette]</code> + the Phase&nbsp;1
+<code>[cwSketchPaletteResolution]</code> regression; pause.</p>
+
+<h3>3b — <code>cwSketchCanvas</code>: snapshot connection + <code>currentBrushName</code> <span class="tag rec">done</span></h3>
+<p class="small">The render-path one-liner (§5 / render-path §303) plus promoting the drawing brush into C++.
+Maps to §4 row <code>cwSketchCanvas</code>; §10.C.</p>
+<ul>
+  <li><code>setSketch</code>: after the initial <code>setSnapshot</code>, add
+      <code>connect(sketch, &amp;cwSketch::paletteSnapshotChanged, this, [...])</code> →
+      <code>m_pathModel-&gt;setSnapshot(m_sketch-&gt;paletteSnapshot())</code>. <em>No tracked
+      <code>QMetaObject::Connection</code> member needed</em> (unlike <code>m_mapScaleConnection</code>, whose
+      sender is <code>scale</code> not the sketch): the existing blanket
+      <code>disconnect(m_sketch, nullptr, this, nullptr)</code> at the top of <code>setSketch</code> tears down
+      the <code>this</code>-context lambda on the next sketch change.</li>
+  <li>Add <code>Q_PROPERTY(QString currentBrushName READ ... WRITE ... NOTIFY currentBrushNameChanged)</code>
+      (plain member + explicit setter, defaulting to the wall brush): the single source of truth for the
+      drawing brush, shared by <code>beginStroke()</code> and the keyboard shortcuts, bound by the brush picker.</li>
+  <li><strong>Test (own file <code>test_cwSketchCanvas.cpp</code>, tag <code>[cwSketchCanvas]</code>):</strong>
+      a <code>paletteSnapshotChanged</code> re-skin (re-point the region's <code>defaultPaletteId</code> →
+      assert one <code>cwDecoratedStrokePathSource::pathsChanged</code> via <code>QSignalSpy</code>);
+      <code>currentBrushName</code> default + get/set/notify. The "<code>currentBrushName</code> drives the next
+      <code>beginStroke()</code>" assertion is QML-level (<code>beginStroke</code> lives on <code>cwSketch</code>
+      and is called from QML) and lands in <strong>3c</strong> with the picker wiring. Real surface only, no
+      test scaffolding.</li>
+</ul>
+<p class="small"><strong>Gate:</strong> build green; run the canvas tag + <code>[cwDecoratedStrokePathSource]</code> regression; pause.</p>
+
+<h3>3c — QML pickers in <code>SketchToolbar.qml</code> <span class="tag rec">implemented — UI iteration pending</span></h3>
+<blockquote class="rec"><strong>Decisions made during implementation.</strong>
+(1) <code>cwSymbologyPalette</code> gained <code>QML_NAMED_ELEMENT(SymbologyPalette)</code> +
+<code>QML_UNCREATABLE</code> so <code>BrushPicker</code> can declare a strict-typed
+<code>property SymbologyPalette palette</code> (the manager still owns the objects).
+(2) Eraser is kept as a standalone <code>QC.CheckBox</code> toggle (it is a tool mode, not a brush),
+not folded into the brush picker; selecting a brush exits erase mode.
+(3) <code>BrushPicker.qml</code> is a button + <code>QC.Popup</code>/<code>ListView</code> (not a bare
+ComboBox) so it can draw <code>isFirstInCategory</code> headers; it exposes a <code>brushSelected(name)</code>
+signal and the toolbar writes <code>canvas.currentBrushName</code> in response (brushName stays a bound input).
+(4) The palette ComboBox <code>currentIndex</code> binding reads <code>count</code> as a dependency so it
+re-runs once the model populates — <code>indexOfValue()</code> alone is not reactive to model row changes.
+(5) W/F shortcuts use <code>QQ.Shortcut</code> (QtQuick, not Controls); they set the brush unconditionally
+for now — the &ldquo;no-op when the name doesn&rsquo;t resolve&rdquo; guard and Shortcut focus-context
+scoping are left for UI iteration.
+Tests: <code>tst_BrushPicker.qml</code> (4) + <code>tst_PalettePicker.qml</code> (4) green;
+<code>tst_SketchItem.qml</code> updated (brushName moved to the canvas) and green (5).</blockquote>
+<p class="small">Replace the radio row with the two pickers. Maps to §6 (palette picker, brush picker) and the
+two QML test rows of §9.</p>
+<ul>
+  <li>Palette picker: a flat <code>QC.ComboBox</code> bound to <code>cwSymbologyPaletteListModel</code>; selecting
+      writes the project's <code>cwCavingRegion::defaultPaletteId</code> (reached via the sketch's parent chain /
+      <code>RootData</code>) — one pick re-skins every sketch via the §5 resolver + 3b connection. Its
+      <code>currentIndex</code> reflects the resolved palette (match <code>sketch.resolvedPalette.id</code>), so an
+      id inherited from settings/default still shows the right name.</li>
+  <li>Brush picker: a small grouped popup component <code>BrushPicker.qml</code> (unknown&nbsp;ii — a bare
+      <code>ComboBox</code> can't render section headers) bound to <code>cwLineBrushListModel</code>, with
+      <code>model.palette: sketch.resolvedPalette</code> (declarative, auto-repopulates on palette switch / manager
+      reload via the <code>paletteSnapshotChanged</code> NOTIFY). Renders a category header where
+      <code>isFirstInCategory</code> is true; selecting a brush sets <code>cwSketchCanvas::currentBrushName</code>.
+      Replaces the hard-coded <code>property string brushName</code>. Register via
+      <code>qt_add_qml_module</code>; <code>TapHandler</code> for row selection.</li>
+  <li>Preserve W → <code>wall</code>, F → <code>feature</code> shortcuts as accelerators that set the picker
+      selection when those names resolve (no-op otherwise).</li>
+  <li>QML conventions: <code>import QtQuick as QQ</code>, strict typed properties,
+      <code>QC.Label</code> / <code>BodyText</code>, <code>Theme.qml</code> tokens, <code>TapHandler</code> in new
+      components; register any new component via <code>qt_add_qml_module</code>.</li>
+  <li><strong>Tests:</strong> <code>test-qml/tst_PalettePicker.qml</code> (lists palettes; selecting sets region
+      id; canvas re-skins) and <code>test-qml/tst_BrushPicker.qml</code> (grouped order; selecting sets drawing
+      brush; palette switch repopulates). <code>tryVerify</code>/<code>tryCompare</code>, offscreen.</li>
+</ul>
+<p class="small"><strong>Gate:</strong> build <code>cavewhere-qml-test</code> green; run both <code>tst_*.qml</code> offscreen; pause.</p>
+
+<h3>3d — Missing-resolution reporting <span class="tag out">DEFERRED — stashed 2026-06-17</span></h3>
+<p class="small"><strong>Status:</strong> the reactive-toolbar-banner approach was built, reviewed, then
+<strong>abandoned</strong>. A missing palette / missing brush is a <strong>load-time data-integrity
+condition</strong>, not a state a user can produce inside CaveWhere (the brush picker only offers resolvable
+brushes; the palette combo only offers installed palettes). Reactive toolbar banners that recompute on every
+stroke/palette signal are the wrong altitude for a condition that is fixed the moment load finishes. The work
+was <strong>stashed</strong> (<code>git stash</code>, message "symbology 3d missing-resolution banners
+(deferred)"): <code>cwSketch::unresolvedBrushNames()</code> accessor on <code>cwSketch.{h,cpp}</code> and two
+banner cases in <code>tst_PalettePicker.qml</code>. <code>SketchToolbar.qml</code> was reverted to the 3c state.</p>
+<p class="small"><strong>TODO (revisit later):</strong> report missing palette / missing brush as a load-time
+warning to <code>cwProject-&gt;errorModel()</code> (a <code>cwErrorListModel</code>), <em>not</em> inline UI.
+Add <code>MissingPalette</code> / <code>MissingBrush</code> codes to <code>cwSymbologyErrorCodes.h</code>. The
+stashed <code>cwSketch::unresolvedBrushNames()</code> is the per-sketch probe a post-load validation pass would
+reuse (drop the <code>Q_INVOKABLE</code> — no QML caller). Detection point: when load completes (region +
+palette manager both live). Test in its own round-trip file (save a project with a bogus
+<code>defaultPaletteId</code> + an unknown-brush stroke → load → assert the warnings land in the error model).</p>
+<p class="small"><strong>Why deferred now:</strong> how errors are surfaced to the user is unsettled (later
+commits define the error-presentation pattern); not worth investing in a one-off mechanism before that lands.</p>
+
+<p class="small">Per the standing process note: this is a planning artifact only — no implementation until you
+approve. I'll pause for review here, and once approved I'll work through commit&nbsp;6 in phases, stopping at
+each phase boundary.</p>
+
+</body>
+</html>

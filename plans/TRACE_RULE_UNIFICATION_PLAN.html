@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trace-rule unification — one traced terminal, fill optional</title>
+<style>
+  :root {
+    --fg: #1d1d1f; --muted: #555; --line: #e6e6e6; --soft: #fafafa;
+    --code-bg: #f4f4f5; --accent: #3949ab; --good: #1b7a3a; --warn: #a02a2a;
+  }
+  body { font: 15px/1.55 -apple-system, "SF Pro Text", system-ui, sans-serif; color: var(--fg);
+         max-width: 920px; margin: 0 auto; padding: 32px 24px 96px; background: #fff; }
+  h1 { font-size: 2em; margin-top: 0; }
+  h2 { margin-top: 2.4em; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { margin-top: 1.7em; }
+  p, ul, ol { margin: 0.6em 0 0.8em; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: 0.25em 0; }
+  code { font: 0.92em/1.4 "SF Mono", Menlo, Consolas, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 6px; overflow-x: auto; font: 0.85em/1.5 "SF Mono", Menlo, Consolas, monospace; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; margin: 14px 0; font-size: 0.93em; width: 100%; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  blockquote { border-left: 3px solid #c8c8cc; margin: 14px 0; padding: 4px 16px; color: #4a4a52; background: var(--soft); }
+  .rec { border-left-color: #9ccfb0; background: #f0faf4; color: #225c38; }
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin: 18px 0; }
+  .node { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px 12px; font-size: 0.84em; min-width: 0; }
+  .node .h { font-weight: 600; font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 5px; }
+  .node code { background: #f0f1f4; font-size: 0.9em; }
+  .node.store { background: #f6f7fb; border-color: #cdd6ef; }
+  .node.ctx { background: #fff7e9; border-color: #f0d9a3; }
+  .node.rule { background: #eafaf1; border-color: #b6e5c8; }
+  .node.out { background: #f4f1fb; border-color: #d3c8ef; }
+  .arrow { align-self: center; color: var(--muted); font-size: 1.3em; padding: 0 2px; }
+  .tag { display:inline-block; font-size:0.7em; text-transform:uppercase; letter-spacing:0.06em; padding:1px 7px; border-radius:999px; border:1px solid #d2dcfb; background:#eef2ff; color:var(--accent); vertical-align:middle; }
+  .tag.rec { background:#eafaf1; color:var(--good); border-color:#b6e5c8; }
+  .tag.del { background:#fdecec; color:var(--warn); border-color:#f0c4c4; }
+  .small { font-size: 0.88em; color: var(--muted); }
+  .keyq { background: #fbfbfd; border: 1px solid var(--line); border-radius: 8px; padding: 4px 16px 10px; margin: 16px 0; }
+  del { color: var(--warn); }
+  ins { color: var(--good); text-decoration: none; background: #eafaf1; padding: 0 2px; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<h1>Trace-rule unification</h1>
+<p class="small">One traced terminal rule; fill is an optional property of the layer, not a separate rule.
+Folds the uncommitted commit-4.2 work (the <code>Trace polygon</code> rule / <code>OutputKind::Polygons</code>)
+into the existing <code>Trace polyline</code> path. Supersedes the two-rule split — see
+<em>SYMBOLOGY_PALETTE_PLAN.html</em> Decisions&nbsp;10–12 and <em>CEILING_CHANNEL_DESIGN.html</em>.</p>
+
+<blockquote>
+<strong>Status of the tree.</strong> The 4.2 changes (filled stamped glyphs) are in the working tree but
+<em>will not be committed as-is</em>. This plan is the shape we actually want; the implementer can evolve the
+working tree or start from a clean checkout — the end state is identical either way. The pieces 4.2 added that
+this plan <strong>keeps</strong> are called out in "What 4.2 keeps" below.
+</blockquote>
+
+<h2>The realization: polyline and polygon are one concept</h2>
+
+<p>Reading the code rather than the design comments, the two terminal rules are not two concepts. They emit
+byte-identical geometry:</p>
+
+<pre>// cwTracePolylineRule::tracePolylines  AND  cwTracePolygonRule::tracePolylines — same line:
+return {QPolygonF(strokeWorld)};</pre>
+
+<p>And the layout never closes the path — <code>QPainterPath::addPolygon</code> appends an <em>open</em> subpath.
+So:</p>
+
+<ul>
+  <li>An <strong>unfilled polygon and a polyline render identically</strong> — the pen strokes the same authored points.</li>
+  <li><strong>Closure is not a property of "polygon."</strong> It happens only at paint time, because the fill rule
+      visually closes the path. A cartographer who wants a closed <em>outline</em> closes it in their own point list
+      (exactly what the demo's <code>kStreamTriangle</code> does — it repeats the first vertex).</li>
+  <li>The <em>only</em> thing "Polygon" adds over "Polyline" is that <strong>it carries a fill</strong> (and a per-region pen).</li>
+</ul>
+
+<p>So there is no second terminal. There is one operation — <em>trace the stroke</em> — and an optional fill. The
+user's mental model is the correct one: <em>draw a line, then fill it or don't.</em></p>
+
+<div class="flow">
+  <div class="node rule"><div class="h">today</div><b>Trace polyline</b><br><code>OutputKind::Polylines</code><br><span class="small">→ offsetPolylines (no fill)</span></div>
+  <div class="node rule"><div class="h">today</div><b>Trace polygon</b><br><code>OutputKind::Polygons</code><br><span class="small">→ polygons (pen + fill)</span></div>
+  <div class="arrow">⟹</div>
+  <div class="node out"><div class="h">target</div><b>Trace</b><br><code>OutputKind::Trace</code><br><span class="small">→ traced[] of cwGlyphSubPath<br>Stroke, or Polygon iff layer has a fill</span></div>
+</div>
+
+<h2>Target shape — four decisions</h2>
+
+<h3>1 · One rule: <code>cwTraceRule</code>, schema key <code>"Trace"</code> <span class="tag rec">recommended</span></h3>
+
+<p>Rename <code>cwTracePolylineRule</code> → <code>cwTraceRule</code> (file + class) and <strong>delete</strong>
+<code>cwTracePolygonRule.{h,cpp}</code>. Its <code>tracePolylines()</code> body is unchanged (verbatim trace; any
+lateral offset is still the earlier <code>Offset stroke</code> rule's job). Display name becomes <code>"Trace"</code>.</p>
+
+<p>The display name is the stable palette-schema key. Renaming <code>"Trace polyline"</code>/<code>"Trace polygon"</code>
+→ <code>"Trace"</code> would normally be a migration, but the format is <strong>unreleased on this branch</strong>
+(see memory <em>project_symbology_unreleased_no_protobump</em>), so we just rewrite the seed and tests. No
+<code>protoVersion()</code> bump.</p>
+
+<blockquote class="small">Naming alternatives considered: <code>"Trace line"</code> (reads well, but it fills too) and
+<code>"Trace region"</code> (implies always-filled). <code>"Trace"</code> is the most honest: it traces; fill is a
+layer property shown next to line colour in the editor. Bikeshed freely — it's one string in one place.</blockquote>
+
+<h3>2 · <code>OutputKind { None, Stamps, Trace }</code></h3>
+
+<pre>// cwPlacementRule.h
+enum class OutputKind { None, Stamps, <del>Polylines, Polygons</del> <ins>Trace</ins> };</pre>
+
+<p>Drop two values, add one. The <code>-Wswitch</code> guarantee still pays for itself across the three remaining
+switches (validator, cache, layout) — the compiler will walk you to each site. Keeping the enum (rather than the
+agent's "infer everything") preserves the rule's self-description and the validator's targeted message.</p>
+
+<h3>3 · Fill discriminator: infer from <code>fillColorLight.isValid()</code> <span class="tag rec">chosen</span></h3>
+
+<p>A traced region is filled <em>iff the layer carries a valid fill colour</em>. No new state, and it is exactly
+"set a fill or don't." This mirrors how <code>polygonPen()</code> already treats an invalid pen colour as "no
+outline." This is the path the rest of the plan assumes — there is no separate <code>filled</code> flag and no new
+proto field for it.</p>
+
+<div class="keyq">
+<p style="margin-top:8px"><strong>Decided: A.</strong> The rejected alternative (B) was an explicit
+<code>bool filled</code> on the layer plus a proto field, to let the editor un-check "fill" without losing the
+chosen colour. We are <em>not</em> doing that at the model level — when the editor (commit&nbsp;8/9) wants an
+off-toggle that remembers a colour, it can hold that in editor state and write an invalid <code>fill*</code> when
+off. Keeping the data model to "valid fill colour ⇒ filled" avoids a second source of truth.</p>
+</div>
+
+<h3>4 · One output container: <code>QVector&lt;cwGlyphSubPath&gt; traced</code></h3>
+
+<p>This is the structural payoff. Collapse the two Layer containers into one list of typed sub-paths; a traced
+region is a <code>Stroke</code> with no fill, or a <code>Polygon</code> when the layer has a fill.</p>
+
+<pre>// cwSketchDecorationLayout.h
+struct cwBrushDecorationGeometry {
+    struct Layer {
+        enum Kind { Stamps, <ins>Trace</ins> };               <span class="small">// was { Stamps, Polylines, Polygons }</span>
+        Kind                     kind = Stamps;
+        <ins>QVector&lt;cwGlyphSubPath&gt;  traced;</ins>          <span class="small">// kind == Trace; one per region (Stroke, or Polygon if filled)</span>
+        QVector&lt;cwResolvedStamp&gt; stamps;          <span class="small">// kind == Stamps</span>
+        <del>QVector&lt;QPolygonF&gt;       offsetPolylines;</del>
+        <del>QVector&lt;cwGlyphSubPath&gt;  polygons;</del>
+    };
+    QVector&lt;Layer&gt; layers;
+};</pre>
+
+<p>The two layout branches (lines ~154 and ~164 today) merge into one:</p>
+
+<pre>// cwSketchDecorationLayout::layout()
+if (terminal.rule-&gt;outputKind() == cwPlacementRule::OutputKind::Trace) {
+    out.kind = cwBrushDecorationGeometry::Layer::Trace;
+    const QVector&lt;QPolygonF&gt; regions = terminal.rule-&gt;tracePolylines(layerStroke, terminalCtx);
+    const bool filled = layer.fillColorLight.isValid();
+    out.traced.reserve(regions.size());
+    for (const QPolygonF &amp;region : regions) {
+        cwGlyphSubPath p;
+        p.kind = filled ? cwGlyphSubPath::Polygon : cwGlyphSubPath::Stroke;
+        p.path.addPolygon(region);
+        p.penColorLight = layer.lineColorLight;
+        p.penColorDark  = layer.lineColorDark;
+        p.penWidthMm    = layer.lineWidthMm;
+        if (filled) {
+            p.fillColorLight = layer.fillColorLight;
+            p.fillColorDark  = layer.fillColorDark;
+        }
+        out.traced.append(p);
+    }
+    geometry.layers.append(out);
+    continue;
+}</pre>
+
+<p>The eventual commit-5 painter then iterates a single list and asks each sub-path "filled?" — no branch on Layer
+kind, and the same <code>cwGlyphSubPath</code> drawing path serves traced lines, traced fills, and glyph stamps.
+A side benefit: each of a railroad's two rails is now its own <code>cwGlyphSubPath</code> and <em>could</em> carry
+an independent pen later, instead of all rails sharing one layer pen.</p>
+
+<h2>What 4.2 keeps</h2>
+
+<ul>
+  <li><code>cwDecorationLayer::fillColorLight/Dark</code> (the layer is the staging ground for brush appearance until
+      the commit-9 param migration — same altitude as the existing <code>line*</code> pen fields).</li>
+  <li>Proto fields <code>DecorationLayer.fillColorLight = 16</code> / <code>fillColorDark = 17</code> and their
+      <code>cwSymbologyPaletteIO</code> round-trip. No <code>protoVersion()</code> bump.</li>
+  <li>The <code>cwGlyphSubPath</code> value type and the typed <code>cwGlyphTessellationCache::tessellate()</code>
+      return (now returning <code>const&amp;</code> per the cleanup pass).</li>
+  <li>The <code>cwResolvedStamp::subPaths</code> shape and the per-sub-path stamp materialisation in the layout.</li>
+</ul>
+
+<h2>Production changes</h2>
+
+<table>
+<tr><th>File</th><th>Change</th></tr>
+<tr><td><code>cwPlacementRule.h</code></td><td>Enum → <code>{ None, Stamps, Trace }</code>; update the <code>OutputKind</code> doc comment.</td></tr>
+<tr><td><code>cwPlacementRules/cwTracePolylineRule.{h,cpp}</code></td><td>Rename to <code>cwTraceRule.{h,cpp}</code>; class <code>cwTraceRule</code>; <code>displayName()</code> → <code>"Trace"</code>; <code>outputKind()</code> → <code>OutputKind::Trace</code>; refresh the header doc to "traces a line; the layer's fill (if any) closes and fills it."</td></tr>
+<tr><td><code>cwPlacementRules/cwTracePolygonRule.{h,cpp}</code></td><td><span class="tag del">delete</span></td></tr>
+<tr><td><code>cwPlacementRuleRegistry.cpp</code></td><td>Drop the <code>cwTracePolygonRule</code> include + <code>add(...)</code>; rename the polyline include/registration to <code>cwTraceRule</code>.</td></tr>
+<tr><td><code>cwSketchDecorationLayout.h</code></td><td><code>Layer::Kind</code> → <code>{ Stamps, Trace }</code>; replace <code>offsetPolylines</code> + <code>polygons</code> with one <code>traced</code>.</td></tr>
+<tr><td><code>cwSketchDecorationLayout.cpp</code></td><td>Merge the Polylines/Polygons branches into the single Trace branch above.</td></tr>
+<tr><td><code>cwGlyphTessellationCache.cpp</code></td><td>In <code>resolveStrokeLook()</code>, replace the <code>outputKind()==Polygons</code> test with: terminal is <code>Trace</code> <em>and</em> <code>layer.fillColorLight.isValid()</code> → mark the sub-path <code>Polygon</code> and copy the fill. Pen copy is unchanged.</td></tr>
+<tr><td><code>cwDecorationLayerValidator.cpp</code></td><td>Replace the two <code>Polylines</code>/<code>Polygons</code> cases with one <code>Trace</code> case emitting <code>DeadRulesUnderTrace</code> ("traces a line but also has stamp-placement rules, which have no effect").</td></tr>
+<tr><td><code>cwSymbologyErrorCodes.h</code></td><td>Rename <code>DeadRulesUnderPolylines</code> → <code>DeadRulesUnderTrace</code> (keep value <code>+6</code> / 1030); <strong>remove</strong> <code>DeadRulesUnderPolygons</code> (1032). Unreleased, so the freed code is fine.</td></tr>
+<tr><td><code>cwSymbologyPaletteSeed.cpp</code></td><td>Rewrite the <code>"Trace polyline"</code> rule keys → <code>"Trace"</code>.</td></tr>
+</table>
+
+<h3>resolveStrokeLook — the corrected look resolution</h3>
+<pre>// cwGlyphTessellationCache.cpp, inside the first terminal-bearing layer:
+sub.penColorLight = layer.lineColorLight;
+sub.penColorDark  = layer.lineColorDark;
+sub.penWidthMm    = layer.lineWidthMm;
+if (terminal-&gt;outputKind() == cwPlacementRule::OutputKind::Trace
+        &amp;&amp; layer.fillColorLight.isValid()) {
+    sub.kind = cwGlyphSubPath::Polygon;
+    sub.fillColorLight = layer.fillColorLight;
+    sub.fillColorDark  = layer.fillColorDark;
+}
+return;</pre>
+<p class="small">This stays in the cache for the same reason as before: the cache already walks each glyph stroke's
+brush to detect ink (<code>strokeHasInk</code>), so resolving the look in the same pass is cohesive, not a second
+traversal. The "first terminal-bearing layer wins" policy is unchanged.</p>
+
+<h2>Schema-key rename (mechanical)</h2>
+
+<p>Global string rename across seed + tests: <code>"Trace polyline"</code> and <code>"Trace polygon"</code> →
+<code>"Trace"</code>. Source files carrying the literal today:</p>
+<ul>
+  <li><strong>Production:</strong> <code>cwSymbologyPaletteSeed.cpp</code> (the only non-comment use; the literals in
+      <code>cwDecorationLayer.h</code>, <code>cavewhere_symbology.proto</code>, <code>cwGlyphSubPath.h</code>,
+      <code>cwGlyphTessellationCache.h</code> are comments — update for accuracy).</li>
+  <li><strong>Tests:</strong> <code>test_cwSymbologyPalette.cpp</code>, <code>test_cwSymbologyPaletteManager.cpp</code>,
+      <code>test_cwSymbologyPaletteIO.cpp</code>, <code>test_cwPlacementRules.cpp</code>,
+      <code>test_cwPlacementRuleRegistry.cpp</code>, <code>test_cwDecorationLayerValidator.cpp</code>,
+      <code>test_cwGlyphTessellationCache.cpp</code>, <code>test_cwSketchDecorationLayout.cpp</code>,
+      <code>test_cwSymbologyPaletteFillIO.cpp</code>.</li>
+</ul>
+<p class="small">A blind find/replace is safe <em>except</em> where a test deliberately asserts two distinct rules
+(registry/validator) — handle those structurally, below.</p>
+
+<h2>Test changes (structural, beyond the rename)</h2>
+
+<table>
+<tr><th>File</th><th>Change</th></tr>
+<tr><td><code>test_cwPlacementRuleRegistry.cpp</code></td><td>Remove <code>"Trace polygon"</code> from the expected-names list, the stage check, and the outputKind check. Change the <code>"Trace polyline"</code> rows to <code>"Trace"</code> with <code>OutputKind::Trace</code>. Registry now has one fewer rule.</td></tr>
+<tr><td><code>test_cwDecorationLayerValidator.cpp</code></td><td>Merge "well-formed polyline stack" + "well-formed polygon stack" into one "well-formed <code>Trace</code> stack." Merge the two "dead rules under …" cases into one asserting <code>DeadRulesUnderTrace</code>. (Optionally add a "Trace stack with a fill is well-formed" case.)</td></tr>
+<tr><td><code>test_cwGlyphTessellationCache.cpp</code></td><td>The filled-polygon case now builds a <code>"Trace"</code> layer <em>with a fill</em> (drives the Polygon kind via fill-validity, not a separate rule). The seed floor-step case keeps asserting <code>Stroke</code> (its <code>Trace</code> layer has no fill). Update the "feature is a Trace polyline brush" comment.</td></tr>
+<tr><td><code>test_cwSketchDecorationLayout.cpp</code></td><td>Largest. See sub-list.</td></tr>
+<tr><td><code>test_cwSymbologyPaletteFillIO.cpp</code></td><td><code>polygonPalette()</code> builds a <code>"Trace"</code> layer with a fill; assertions unchanged (round-trip of <code>fill*</code> + <code>line*</code>). Rename helper/case wording off "polygon."</td></tr>
+</table>
+
+<h3>test_cwSketchDecorationLayout.cpp specifics</h3>
+<ul>
+  <li><strong>Containers:</strong> every <code>layer.offsetPolylines</code> and <code>layer.polygons</code> read becomes
+      <code>layer.traced</code>; elements are now <code>cwGlyphSubPath</code>, so geometry assertions read
+      <code>traced.first().path</code> (not a bare <code>QPolygonF</code>).</li>
+  <li><strong>Polyline equality:</strong> the offset-stroke tests currently do
+      <code>offsetPolylines.first() == QPolygonF(strokeWorld)</code> and
+      <code>...first().first().y() == offsetWorld</code>. Re-express against the sub-path: compare
+      <code>traced.first().path</code> to an expected <code>QPainterPath</code> built via <code>addPolygon</code>, or
+      assert on <code>traced.first().path.elementAt(0)</code> / <code>boundingRect()</code>. (A small
+      <code>pathToPolygon()</code> test helper keeps these readable.)</li>
+  <li><strong>Kind enums:</strong> <code>Layer::Polylines</code> and <code>Layer::Polygons</code> →
+      <code>Layer::Trace</code>; the filled cases additionally assert
+      <code>traced.first().kind == cwGlyphSubPath::Polygon</code> and the unfilled/centerline cases assert
+      <code>Stroke</code>.</li>
+  <li><strong>Painters &amp; bounds:</strong> the <code>offsetPolylines</code> loop and the <code>polygons</code> loop in
+      both <code>paintPanel</code> and <code>geometryBounds</code> collapse into one <code>traced</code> loop that
+      reuses <code>drawGlyphSubPath()</code> / <code>combined*</code> bounds — a Stroke sub-path keeps the layer pen,
+      a Polygon paints its own pen+fill. (<code>drawGlyphSubPath()</code> from the cleanup pass already handles both.)</li>
+  <li><strong>demoPalette / reference image:</strong> <code>makeStreamFillBrush</code> and the wall/feature/offset
+      brushes switch to the <code>"Trace"</code> key. The "fill only" panel keeps working (pen-less = invalid pen,
+      fill present). The headline demo still shows the blue arrowhead occluding the centerline by paint order.</li>
+</ul>
+
+<h2>Verification</h2>
+<pre>cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test 2&gt;&amp;1 | tee /tmp/cw-build.log
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test \
+  "[cwPlacementRuleRegistry],[cwSketchDecorationLayout],[cwGlyphTessellationCache],[cwDecorationLayerValidator],[cwSymbologyPaletteFillIO]" -d yes \
+  2&gt;&amp;1 | tee /tmp/cw-trace-test.log
+# regression: nothing else asserted the old rule names / kinds
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test \
+  "[cwSymbologyPalette],[cwSymbologyPaletteIO],[cwSymbologyPaletteManager],[cwPlacementRules]" -d yes \
+  2&gt;&amp;1 | tee -a /tmp/cw-trace-test.log
+open /tmp/claude-501/cavewhere-decoration-layout.png   # eyeball the reference image</pre>
+<p class="small">Catch2 ORs tags with commas; spaces are AND. No QML changed; a QML-suite run is only needed before a push.</p>
+
+<h2>Out of scope / future</h2>
+<ul>
+  <li><strong>Per-rail / per-region independent pens.</strong> The unified <code>traced</code> list makes this possible
+      (each region is its own sub-path) but this plan still copies the one layer pen to every region. Differentiated
+      pens are a later enhancement.</li>
+  <li><strong>Commit 5 — the RHI painter</strong> (<code>cwSketchPainter</code>) consumes <code>traced</code> +
+      <code>stamps</code>; it inherits the single-list simplification. Not built here.</li>
+  <li><strong>Commit 9 — param migration.</strong> <code>line*</code> and <code>fill*</code> move from the layer into
+      the <code>Trace</code> rule's params together; until then both live on <code>cwDecorationLayer</code>.</li>
+  <li><strong>Editor off-toggle that remembers a colour.</strong> Rejected at the model level (decision §3 = A).
+      If the editor later wants this UX, it lives in editor state and writes an invalid <code>fill*</code> when off —
+      no model/proto change.</li>
+</ul>
+
+</body>
+</html>

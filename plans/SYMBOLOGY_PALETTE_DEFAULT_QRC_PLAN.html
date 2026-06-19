@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Prep commit — Ship the default palette as a qrc resource (drop the in-code seed)</title>
+<style>
+  :root {
+    --fg: #1d1d1f; --muted: #555; --line: #e6e6e6; --soft: #fafafa;
+    --code-bg: #f4f4f5; --accent: #3949ab; --good: #1b7a3a; --warn: #a02a2a;
+  }
+  body { font: 15px/1.55 -apple-system, "SF Pro Text", system-ui, sans-serif; color: var(--fg);
+         max-width: 920px; margin: 0 auto; padding: 32px 24px 96px; background: #fff; }
+  h1 { font-size: 2em; margin-top: 0; }
+  h2 { margin-top: 2.4em; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { margin-top: 1.7em; }
+  p, ul, ol { margin: 0.6em 0 0.8em; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: 0.25em 0; }
+  code { font: 0.92em/1.4 "SF Mono", Menlo, Consolas, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 6px; overflow-x: auto; font: 0.85em/1.5 "SF Mono", Menlo, Consolas, monospace; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; margin: 14px 0; font-size: 0.93em; width: 100%; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  blockquote { border-left: 3px solid #c8c8cc; margin: 14px 0; padding: 4px 16px; color: #4a4a52; background: var(--soft); }
+  .rec { border-left-color: #9ccfb0; background: #f0faf4; color: #225c38; }
+  .warnote { border-left-color: #e6b8b8; background: #fdf3f3; color: #7a2a2a; }
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin: 18px 0; }
+  .node { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px 12px; font-size: 0.84em; min-width: 0; }
+  .node .h { font-weight: 600; font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 5px; }
+  .node code { background: #f0f1f4; font-size: 0.9em; }
+  .node.src { background: #eef2ff; border-color: #c8d4fb; }
+  .node.eng { background: #eafaf1; border-color: #b6e5c8; }
+  .node.out { background: #f4f1fb; border-color: #d3c8ef; }
+  .arrow { align-self: center; color: var(--muted); font-size: 1.3em; padding: 0 2px; }
+  .tag { display:inline-block; font-size:0.7em; text-transform:uppercase; letter-spacing:0.06em; padding:1px 7px; border-radius:999px; border:1px solid #d2dcfb; background:#eef2ff; color:var(--accent); vertical-align:middle; }
+  .tag.rec { background:#eafaf1; color:var(--good); border-color:#b6e5c8; }
+  .tag.del { background:#fdecec; color:var(--warn); border-color:#f0c4c4; }
+  .tag.i2 { background:#fff4e5; color:#8a5a00; border-color:#f0d9b0; }
+  .small { font-size: 0.88em; color: var(--muted); }
+  .keyq { background: #fbfbfd; border: 1px solid var(--line); border-radius: 8px; padding: 4px 16px 14px; margin: 18px 0; }
+  .keyq h3 { margin-top: 0.9em; }
+  ins { color: var(--good); text-decoration: none; background: #eafaf1; padding: 0 2px; border-radius: 2px; }
+  del { color: var(--warn); background: #fdecec; padding: 0 2px; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<h1>Prep commit — default palette as a qrc resource</h1>
+<p class="small">A small, self-contained refactor that lands <strong>before commit&nbsp;6</strong>. Today the
+shipped default palette is built in C++ by <code>cwSymbologyPaletteSeed::create()</code> and wrapped, read-only,
+straight into the manager — a parallel construction path that never touches the file format. This commit makes
+the default palette a <strong>real data palette compiled into the binary as a Qt resource</strong>, loaded
+through the normal <code>cwSymbologyPaletteIO</code> path like any disk palette. Commit&nbsp;6's resolver chain
+then bottoms out on a genuine palette id instead of a special-cased <code>seedPalette()</code>.</p>
+
+<blockquote class="rec">
+<strong>Bottom line.</strong> Generate the default palette files once from the existing
+<code>create()</code> generator, commit the directory, embed it via <code>qt_add_resources</code> at
+<code>:/palettes/cavewhere-default/</code>. The manager loads <em>that</em> through
+<code>cwSymbologyPaletteIO::load()</code> instead of wrapping <code>create()</code>; <code>seedPalette()</code>
+becomes <code>defaultPalette()</code>. <code>create()</code> is <strong>not deleted</strong> — it's demoted
+from "the runtime seed" to "the generator + test fixture," and a drift-guard test asserts the committed qrc
+files still equal what <code>create()</code> produces. The qrc palette is read-only; <em>cloning it to a
+writable disk palette</em> is a UI action that rides with commit&nbsp;6/8, but the architecture supports it
+now (stable id, enumerates alongside disk palettes). No proto/format-version change.</blockquote>
+
+<h2>1. Surgery is tiny — only two runtime callers</h2>
+<p>A full scan confirms <code>cwSymbologyPaletteSeed::create()</code> is called at runtime in exactly two
+places (other <code>::create()</code> hits are unrelated <code>QExplicitlySharedDataPointer::create()</code>):</p>
+<table>
+<thead><tr><th>Caller</th><th>Today</th><th>After</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>cwSymbologyPaletteManager::reload()</code><br><span class="small">cwSymbologyPaletteManager.cpp:73–80</span></td>
+  <td>Builds <code>m_seed</code> from <code>create()</code>, marks read-only, appends first.</td>
+  <td>Loads <code>:/palettes/cavewhere-default</code> via <code>cwSymbologyPaletteIO::load()</code>; the result
+      becomes <code>m_default</code> (read-only, appended first). Same duplicate-id / version-guard handling as
+      any palette.</td>
+</tr>
+<tr>
+  <td><code>cwSketch</code> ctor<br><span class="small">cwSketch.cpp:268</span></td>
+  <td><code>m_paletteSnapshot = create().snapshot();</code></td>
+  <td><span class="tag rec">unchanged this commit</span> Stays on <code>create()</code> as a stopgap.
+      Commit&nbsp;6 removes it when the resolver chain takes over (<code>m_paletteSnapshot</code> resolves via
+      the manager's <code>defaultPalette()</code>). See §6.</td>
+</tr>
+</tbody>
+</table>
+<p>The 10+ <strong>test</strong> files that call <code>create()</code> keep doing so — it remains the fast,
+deterministic, IO-free fixture. Nothing in this commit forces a test rewrite.</p>
+
+<h2>2. The qrc layout &amp; how the files get generated</h2>
+<p>The default palette is the directory format from <em>SYMBOLOGY_PALETTE_DIRECTORY_TRUTH_PLAN.md</em>
+(<code>palette.json</code> + <code>brushes/*.cwbrush</code> + <code>glyphs/*.cwglyph</code>), committed under
+the source tree and embedded:</p>
+<pre><code>cavewherelib/palettes/cavewhere-default/
+    palette.json
+    brushes/{wall,feature,scrap-outline,floor-step}.cwbrush
+    glyphs/floor-step-tick.cwglyph
+cavewherelib/cwPalettes.qrc        # &lt;qresource prefix="/palettes"&gt; ... maps to :/palettes/cavewhere-default/</code></pre>
+<p>Wired through the existing block at <code>cavewherelib/CMakeLists.txt:217</code>
+(<code>qt_add_resources(QT_RESOURCES …)</code>) — add <code>cwPalettes.qrc</code> next to
+<code>cwResources.qrc</code>.</p>
+
+<h3>Generation — programmatic, generate-then-commit</h3>
+<p>The files are produced <em>from</em> <code>create()</code> so nobody hand-edits serialized JSON, then
+committed and frozen (build-time generation is rejected — it needs a host tool that runs during the build,
+which fights cross-compilation and CI). The regeneration step is:</p>
+<pre><code>cwSymbologyPaletteIO::save(cwSymbologyPaletteSeed::create(), "&lt;repo&gt;/cavewherelib/palettes/cavewhere-default");</code></pre>
+<p>Exposed as a hidden, manually-run regenerator so it never writes the source tree during a normal test run —
+mirroring the repo's existing env-var-path convention (the decoration render PNG). A Catch2 case tagged
+<code>[.][regenerateDefaultPalette]</code> (the leading <code>.</code> hides it from default runs) writes to the
+path in a <code>CW_DEFAULT_PALETTE_DIR</code> env var; run it by hand after changing the generator, then
+<code>git add</code> the regenerated files. <span class="small">Alternative considered: a dedicated tool
+target. Heavier; the hidden-test path needs no new build target and reuses the test harness. Open question
+§7.A.</span></p>
+
+<h3>Drift guard — the committed files can't silently go stale</h3>
+<p>One new assertion keeps the frozen artifact honest against its generator: load the qrc palette and compare it
+to <code>create()</code>.</p>
+<pre><code>auto loaded = cwSymbologyPaletteIO::load(QStringLiteral(":/palettes/cavewhere-default"));
+REQUIRE_FALSE(loaded.hasError());
+CHECK(loaded.value().palette == cwSymbologyPaletteSeed::create());   // value-equality on cwSymbologyPaletteData</code></pre>
+<p>If someone edits <code>create()</code> and forgets to regenerate, this fails loudly with a clear message. (It
+also exercises the qrc read path through real IO.) <span class="small">Needs <code>operator==</code> on
+<code>cwSymbologyPaletteData</code> — verify it exists / is deep; add if missing.</span></p>
+
+<h2>3. Manager change</h2>
+<div class="flow">
+  <div class="node"><div class="h">before</div><code>create()</code> → wrap → <code>m_seed</code></div>
+  <div class="arrow">⇒</div>
+  <div class="node out"><div class="h">after</div><code>:/palettes/cavewhere-default</code> → <code>IO::load()</code> → <code>m_default</code></div>
+</div>
+<ul>
+  <li><code>reload()</code>: replace the <code>create()</code> block with an <code>IO::load()</code> of the qrc
+      path, routed through the <em>same</em> duplicate-id and forward-version checks the disk scan already
+      applies. A load error here is a <strong>build defect</strong> (corrupt embedded resource) — report it
+      through <code>errorModel()</code> and leave <code>m_default</code> null; do <em>not</em> fall back to a
+      code-built palette (the user's call: no code fallback).</li>
+  <li>Rename <code>m_seed</code> → <code>m_default</code>, <code>seedPalette()</code> →
+      <code>defaultPalette()</code>. Update the one comment ("The seed is always present and always wins its
+      id." → default).</li>
+  <li>Keep "default is listed first, wins its id on duplicates" — unchanged semantics, new source.</li>
+</ul>
+
+<h2>4. Cloneability (architecture now, button later)</h2>
+<p>qrc resources are read-only at runtime, so "the user can modify it" means <strong>clone the qrc palette into
+the writable palette directory</strong> (the disk dir the manager already scans), with a fresh <code>QUuid</code>
+and <code>writable = true</code>. After cloning it's an ordinary disk palette the editor can change.</p>
+<p>This commit does <strong>not</strong> add the clone button — that surfaces with the palette picker
+(commit&nbsp;6) or the editor (commit&nbsp;8). It only guarantees the preconditions: the default enumerates in
+<code>palettes()</code> alongside disk palettes, carries a stable id, and round-trips through the same
+<code>IO::save()</code> a clone would call. <span class="small">A natural home later is
+<code>cwSymbologyPaletteManager::clonePalette(QUuid source) → QUuid</code>; noted, not built here.</span></p>
+
+<h2>5. Naming — "seed" → "default"</h2>
+<p>The shipped palette is no longer a "seed" (a code generator's output); it's the <em>default palette</em>.
+Renames in scope:</p>
+<ul>
+  <li><code>cwSymbologyPaletteManager</code>: <code>seedPalette()</code>→<code>defaultPalette()</code>,
+      <code>m_seed</code>→<code>m_default</code> (+ test references in
+      <code>test_cwSymbologyPaletteManager.cpp</code>).</li>
+  <li>The generator namespace <code>cwSymbologyPaletteSeed</code> and <code>create()</code> — <strong>keep the
+      names</strong>. They now mean "the generator that <em>seeds</em> the default palette's data," which is
+      accurate, and renaming the namespace touches ~15 files for little gain. <span class="small">Open question
+      §7.B if you'd rather rename to <code>cwDefaultPaletteSource</code>.</span></li>
+  <li>The stable brush/glyph name + id accessors (<code>wallBrushName()</code> etc.) stay where they are — they
+      are the cross-palette substitution contract, not seed-specific.</li>
+</ul>
+
+<h2>6. Why <code>cwSketch</code> stays on <code>create()</code> this commit</h2>
+<p>It would be tempting to also swap <code>cwSketch</code>'s construction snapshot to
+<code>manager.defaultPalette()->snapshot()</code> here. But that introduces a <code>cwSketch</code>→manager
+singleton dependency that <strong>commit&nbsp;6 introduces anyway</strong> (the resolver chain needs the manager
+for the region/settings/default lookups), and doing it now would couple standalone <code>cwSketch</code> unit
+tests to a configured manager singleton for no immediate benefit. So:</p>
+<ul>
+  <li><strong>This commit:</strong> the <em>shipped default palette</em> (the manager's) is qrc data. The
+      momentary second copy in <code>cwSketch</code>'s ctor is identical to it (generated from the same
+      <code>create()</code>) and the drift guard proves it.</li>
+  <li><strong>Commit&nbsp;6:</strong> <code>cwSketch</code> stops calling <code>create()</code> entirely and
+      resolves through the chain → <code>defaultPalette()</code>. At that point <code>create()</code> is out of
+      the runtime path completely (generator + tests only).</li>
+</ul>
+<p class="small">If you'd prefer to pull that swap forward into this commit (so <code>create()</code> is runtime-free
+one commit sooner), it's a one-line change plus a manager-init guard in the affected <code>cwSketch</code> tests
+— flagged as §7.C.</p>
+
+<h2>7. Open questions <span class="tag rec">resolved</span></h2>
+<div class="keyq">
+<h3>A. Regeneration mechanism — hidden test vs. tool target?</h3>
+<p><span class="tag rec">decided</span> Hidden Catch2 case (<code>[.][regenerateDefaultPalette]</code> +
+<code>CW_DEFAULT_PALETTE_DIR</code> env-var path). No new build target, reuses the harness, matches the existing
+PNG-path convention.</p>
+
+<h3>B. Rename the <code>cwSymbologyPaletteSeed</code> namespace?</h3>
+<p><span class="tag rec">decided</span> No — keep <code>cwSymbologyPaletteSeed::create()</code> as the generator
+name; rename only the manager's <code>seedPalette()</code>→<code>defaultPalette()</code>.</p>
+
+<h3>C. Swap <code>cwSketch</code>'s ctor snapshot now, or in commit 6?</h3>
+<p><span class="tag rec">decided</span> Commit&nbsp;6 — keep this commit lean. A note is carried into the
+commit-6 plan to remove <code>cwSketch</code>'s <code>create()</code> call via the resolver and to
+<em>look into</em> the resulting <code>cwSketch</code>→manager-singleton coupling (test impact, init ordering)
+when we get there.</p>
+</div>
+
+<h2>8. Tests &amp; verification</h2>
+<ul>
+  <li><strong>New:</strong> drift-guard + qrc-load case (§2) — its own file
+      <code>testcases/test_cwDefaultPalette.cpp</code> (tag <code>[cwDefaultPalette]</code>), plus the hidden
+      regenerator case alongside it.</li>
+  <li><strong>Updated:</strong> <code>test_cwSymbologyPaletteManager.cpp</code> — <code>seedPalette()</code> →
+      <code>defaultPalette()</code>; assert the default loads from qrc, is read-only, is listed first, and that
+      its brushes match (<code>wall</code> / <code>feature</code> / <code>scrap-outline</code> /
+      <code>floor-step</code>).</li>
+  <li><strong>Unchanged:</strong> the ~10 in-memory <code>create()</code> fixtures.</li>
+</ul>
+<pre><code>cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test 2>&1 | tee /tmp/cw-build.log
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[cwDefaultPalette],[cwSymbologyPaletteManager]" -d yes 2>&1 | tee /tmp/cw-default-test.log
+# regression: the symbology + render-path suites stay green
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[cwSymbologyPalette],[cwSymbologyPaletteIO],[cwPaletteSnapshot],[cwDecoratedStrokePathSource]" -d yes 2>&1 | tee -a /tmp/cw-default-test.log</code></pre>
+<p class="small">One-time, before the above: build, then run the hidden regenerator
+(<code>CW_DEFAULT_PALETTE_DIR=&lt;repo&gt;/cavewherelib/palettes/cavewhere-default
+cavewhere-test "[regenerateDefaultPalette]"</code>) to emit the files, and <code>git add</code> them.</p>
+
+<h2>9. Out of scope</h2>
+<ul>
+  <li>Palette/brush pickers, <code>activePaletteId</code> resolver, settings/region defaults →
+      <strong>commit&nbsp;6</strong> (<em>SYMBOLOGY_PALETTE_COMMIT6_PLAN.html</em>).</li>
+  <li>The clone <em>button</em> / <code>clonePalette()</code> → commit&nbsp;6/8.</li>
+  <li>Glyph/palette editor → commit&nbsp;8.</li>
+  <li>Deleting <code>create()</code> — it stays as generator + fixture; it leaves the runtime path in
+      commit&nbsp;6.</li>
+</ul>
+
+<p class="small">Planning artifact only — no implementation until you approve. I'll pause for review, then work
+the commit in phases, stopping at each boundary.</p>
+
+</body>
+</html>

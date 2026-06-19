@@ -164,7 +164,7 @@ step on unrelated centerlines/decorations. Resolutions, in preference order:
 <ol>
   <li><strong>Shift</strong> along arclength up to ±½ spacing (snap to a free slot).</li>
   <li><strong>Shorten</strong> the decoration (e.g. 10 px → 4 px).</li>
-  <li><strong>Halo</strong> with a background-coloured buffer so a near-miss reads cleanly.</li>
+  <li><strong>Halo</strong> with a background-colored buffer so a near-miss reads cleanly.</li>
   <li><strong>Hide</strong> the offending instance entirely.</li>
 </ol>
 
@@ -286,8 +286,8 @@ so prototype-era sketches no longer load (no legacy loader — Decision&nbsp;2).
     </tr>
     <tr>
       <td>5</td>
-      <td>Offset-curve batching + painter</td>
-      <td><code>cwSketchPainterPathModel</code> → <code>cwOffsetCurveBatches</code>, batched by <code>(brushName, offset, width, color, dash, cap, join)</code>, reads <code>cwPaletteSnapshot</code> (offset=0 only). <code>cwSketchPainter</code> threads the snapshot through <code>PaintContext</code>, picks light/dark at draw time from <code>QStyleHints::colorScheme()</code>, and applies <code>zOrder</code> paint sort. <strong>Palette snapshot source of truth:</strong> the batcher stops self-seeding its own <code>cwSymbologyPaletteSeed::create().snapshot()</code> (the commit-2 stopgap) and instead <em>takes</em> the snapshot from the sketch — a <code>setSnapshot()</code> setter fed from <code>cwSketch::paletteSnapshot()</code> at the existing <code>cwSketchCanvas::setStrokeModel</code> call site. This collapses the two independent seed copies (one in <code>cwSketch</code>, one in the path model) into a single source so the painter and scrap detection resolve against the <em>same</em> palette once commit&nbsp;6 makes it vary by <code>activePaletteId</code>; also drops the temporary uniform <code>kSketchStrokeRenderWidth</code> and the wall/non-wall two-color split in favor of per-brush <code>OffsetCurve</code> width/color.</td>
+      <td>Render path — decoration layout on the canvas <strong>(detailed plan: <em>SYMBOLOGY_PALETTE_RENDER_PATH_PLAN.html</em>, which supersedes the post-4.x-collapse naming below)</strong></td>
+      <td><strong>Post-collapse reframe (see the linked plan):</strong> the new path source runs <code>cwSketchDecorationLayout</code> per stroke and flattens <code>cwBrushDecorationGeometry</code> — rendering <em>both</em> traced lines and stamped glyphs, not just offset curves; "OffsetCurve mode" no longer exists (offset is the <code>Offset stroke</code> transform). Recommended class name <code>cwSketchDecorationPathModel</code> (not <code>cwOffsetCurveBatches</code>); stays synchronous (cache guard rides with async); <code>MutateScene</code> collision deferred to iter 2. Original §8 framing: <code>cwSketchPainterPathModel</code> → <code>cwOffsetCurveBatches</code>, batched by <code>(brushName, offset, width, color, dash, cap, join)</code>, reads <code>cwPaletteSnapshot</code> (offset=0 only). <code>cwSketchPainter</code> threads the snapshot through <code>PaintContext</code>, picks light/dark at draw time from <code>QStyleHints::colorScheme()</code>, and applies <code>zOrder</code> paint sort. <strong>Palette snapshot source of truth:</strong> the batcher stops self-seeding its own <code>cwSymbologyPaletteSeed::create().snapshot()</code> (the commit-2 stopgap) and instead <em>takes</em> the snapshot from the sketch — a <code>setSnapshot()</code> setter fed from <code>cwSketch::paletteSnapshot()</code> at the existing <code>cwSketchCanvas::setStrokeModel</code> call site. This collapses the two independent seed copies (one in <code>cwSketch</code>, one in the path model) into a single source so the painter and scrap detection resolve against the <em>same</em> palette once commit&nbsp;6 makes it vary by <code>activePaletteId</code>; also drops the temporary uniform <code>kSketchStrokeRenderWidth</code> and the wall/non-wall two-color split in favor of per-brush <code>OffsetCurve</code> width/color.</td>
       <td></td>
     </tr>
     <tr>
@@ -662,7 +662,7 @@ uninstalled palette renders with a fallback brush. In the unified model
 there is no separate "centerline" to fall back to — the cartographer's
 polyline still exists, only its brush is missing — so the fallback is a
 synthetic in-memory brush with a single <code>OffsetCurve(offset=0)</code>
-layer in a flagged debug colour (no glyph layers), <code>scrapOutline =
+layer in a flagged debug color (no glyph layers), <code>scrapOutline =
 false</code> (a missing brush must not silently inject or remove scrap
 topology), and <code>zOrder = 0</code>. <code>findBrush</code> returning
 <code>nullopt</code> is the trigger; consumers substitute this fallback
@@ -670,6 +670,37 @@ rather than skipping the stroke. The UI surfaces a warning prompting the
 user to install the missing palette. Same coupling strategy as fonts in
 a word processor.
 </p>
+
+<blockquote>
+<strong>Revision (2026-06-18) — bundle project-used palettes for sync.</strong>
+The "no palette inside projects" stance above breaks collaboration the moment a
+cartographer authors a custom palette: a name-only reference can't be resolved on
+a teammate's machine where that palette was never installed, so project Git sync
+(<code>.cwproj</code>) would reproduce the survey but not its symbology. We need
+the palette(s) a project actually uses to travel <em>with</em> the project —
+included in the project save / load (and therefore in the synced repo), the same
+way notes and images are. The fallback brush stays as the last resort for a
+genuinely missing palette, but the common case — a custom palette made for this
+project — should round-trip through sync intact. Exactly where it lives (an
+embedded copy in the <code>.cw</code> bundle vs. a project-local palette directory
+in <code>.cwproj</code>, and how it reconciles with the user's installed
+palettes and the region-level <code>defaultPaletteId</code>) is a deferred
+refactor: settle the editor UX first, then wire palette persistence into the
+project I/O path.
+<br><br>
+<strong>Idea to work on (2026-06-18):</strong> give the project directory its own
+<code>palettes/</code> subdirectory (e.g. <code>&lt;project&gt;.cwproj/palettes/&lt;slug&gt;/</code>,
+same directory-as-truth layout as the user-global palette dir) that holds the
+custom palettes belonging to that project. The palette manager would scan the
+open project's <code>palettes/</code> in addition to the user's AppData location,
+so a forked/custom palette authored for a project lives <em>in</em> the project
+and Git sync carries it automatically. Open design questions: how project-local
+palettes reconcile with same-id user-installed ones (project wins?), what
+<code>cwSymbologyPalette::directory()</code> resolves to for a project-local
+palette (it likely becomes a location handle, not a bare path — see commit-8.1
+notes), and how the manager learns which project is open. Needs its own design
+pass before implementation.
+</blockquote>
 
 <h3>5. Seed palette is shipped, immutable, and minimal-but-complete</h3>
 
@@ -1874,7 +1905,7 @@ In the existing sketch toolbar (where the prototype's Wall / Feature
 buttons live today), replace the per-kind toggle row with:
 </p>
 
-<pre><code>[Palette: UIS Standard ▾]   [Brush: Wall ▾]   [Width: 2.0]   [Colour: ■]</code></pre>
+<pre><code>[Palette: UIS Standard ▾]   [Brush: Wall ▾]   [Width: 2.0]   [Color: ■]</code></pre>
 
 <ul>
   <li><strong>Palette picker</strong> — populated from <code>cwSymbologyPaletteManager</code>. Selecting a palette sets <code>cwSketch::activePaletteId</code>. Switching the active palette re-skins every stroke whose <code>brushName</code> resolves in the new palette; strokes whose name doesn't resolve trigger the missing-brush banner (below).</li>
@@ -1882,7 +1913,7 @@ buttons live today), replace the per-kind toggle row with:
 </ul>
 
 <p class="small">
-The width / colour fields from earlier drafts are gone — Decision 2's
+The width / color fields from earlier drafts are gone — Decision 2's
 "no per-stroke overrides" makes them dead controls. The way to get a
 thicker red wall is to clone the <code>wall</code> brush in the palette
 editor and assign the clone.
@@ -1926,6 +1957,21 @@ hand-authored JSON; the glyph editor then lets the cartographer modify
 or extend it by forking the seed.
 </p>
 
+<blockquote>
+<strong>Revision (2026-06-18) — auto-save palette elements; Save / Cancel likely
+to go.</strong> Palette elements (glyphs, and later brushes) should persist
+automatically as they're edited, the way the rest of CaveWhere autosaves — not
+behind an explicit Save / Cancel gesture. The Save / Cancel / rename chrome
+described above is a placeholder: the explicit <em>Save</em> and <em>Cancel</em>
+buttons will probably be removed once auto-save lands, leaving rename plus simple
+"done / back" navigation. This is a deferred refactor (the commit 8.0
+writable-palette write path — <code>cwSymbologyPaletteManager::saveGlyph</code> /
+<code>duplicatePalette</code> — already exists to build on): figure out the editor
+UX first, then move palette writes onto the autosave path. It pairs with the
+project-bundling revision in Decision 4 — once palettes live with the project,
+autosaving a glyph should mark the project dirty like any other edit.
+</blockquote>
+
 <h3>Missing-palette warning</h3>
 
 <p>
@@ -1962,7 +2008,7 @@ re-points the sketch to the seed palette and re-renders.
       <td>Decisions 4 + 6</td>
     </tr>
     <tr>
-      <td>Per-stroke width / colour overrides</td>
+      <td>Per-stroke width / color overrides</td>
       <td><strong>No overrides.</strong> Brush defines the look entirely. To vary a stroke, the cartographer clones the brush in the palette UI and edits the clone; the original strokes referencing the unchanged brush stay put. A typed override bag was considered and rejected — variants would be unnamed and un-bulk-editable. Brush inheritance is a future non-breaking addition if clone-and-tweak produces palette bloat.</td>
       <td>Decision 2</td>
     </tr>
@@ -2087,7 +2133,7 @@ re-points the sketch to the seed palette and re-renders.
   <li>Create a fresh sketch, draw a few <code>wall</code> and <code>feature</code> strokes, save, reopen — strokes round-trip and render correctly.</li>
   <li>Toggle the app color scheme (light ↔ dark); assert wall/feature colors flip without other state changes, and that switching <code>colorSchemeOverride</code> back to <code>FollowSystem</code> restores the OS-driven scheme.</li>
   <li>Drop a synthetic third palette into the palette directory, restart; it appears in the picker.</li>
-  <li>Switch a sketch's palette to one missing a referenced brush; the fallback banner appears and strokes render as flagged-colour centerlines.</li>
+  <li>Switch a sketch's palette to one missing a referenced brush; the fallback banner appears and strokes render as flagged-color centerlines.</li>
   <li>The seeded <code>floor-step</code> brush renders its ticks on a fresh sketch with no authoring (clean-install end-to-end check). Then, separately: fork the seed, open the glyph editor, draw a new small tick glyph, save into the writable fork; the glyph appears in the palette's glyph list and a new <code>.cwglyph</code> file appears under <code>glyphs/</code>. Reference it from a brush decoration layer; the custom glyph stamps along a centerline.</li>
 </ul>
 
@@ -2683,7 +2729,7 @@ stampCanvas("cv-stamp-point", (ctx, w, h) => {
   const bufferPx = 6;
 
   pairs.forEach(p => {
-    // baseline tick (paper-colour anchor dot)
+    // baseline tick (paper-color anchor dot)
     ctx.fillStyle = "#d0d0d4";
     ctx.beginPath();
     ctx.arc(p.x - p.dx / 2, baselineY, 2, 0, Math.PI * 2);

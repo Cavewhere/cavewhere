@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Symbology Palette — Glyph library (master-detail glyph manager)</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.55; color: #1a1a1a; }
+  h1 { font-size: 1.8rem; border-bottom: 2px solid #333; padding-bottom: .3rem; }
+  h2 { font-size: 1.35rem; margin-top: 2.2rem; border-bottom: 1px solid #ccc; padding-bottom: .2rem; }
+  h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+  code { background: #f2f2f2; padding: .1rem .3rem; border-radius: 3px; font-size: .9em; }
+  pre { background: #f6f8fa; border: 1px solid #ddd; border-radius: 6px; padding: .8rem 1rem; overflow-x: auto; font-size: .85rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
+  th, td { border: 1px solid #ccc; padding: .4rem .6rem; text-align: left; vertical-align: top; }
+  th { background: #f0f0f0; }
+  blockquote { border-left: 4px solid #4a90d9; background: #f0f6fc; margin: 1rem 0; padding: .6rem 1rem; }
+  .warn { border-left: 4px solid #d98a4a; background: #fcf6f0; padding: .6rem 1rem; }
+  .note { color: #555; font-size: .9rem; }
+  .tag { display: inline-block; background: #333; color: #fff; border-radius: 4px; padding: .05rem .4rem; font-size: .75rem; vertical-align: middle; }
+  .ascii { background: #f6f8fa; border: 1px solid #ddd; border-radius: 6px; padding: .8rem 1rem; white-space: pre; font-family: ui-monospace, Menlo, monospace; font-size: .8rem; overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<h1>Glyph library — master-detail glyph manager <span class="tag">draft</span></h1>
+
+<p class="note">Untracked planning doc, fall2026 branch. Drafted 2026-06-18.
+Builds directly on the shipped commit 8 (<code>cwSketchGlyphCanvas</code> +
+<code>GlyphEditorPage.qml</code>, see <code>SYMBOLOGY_PALETTE_COMMIT8_PLAN.html</code>
+§4). Not yet scheduled against the master plan — this is the "is this the right
+direction?" sketch.</p>
+
+<div class="warn">
+<strong>⛔ Blocked on a prerequisite — async project-level palette save/load.</strong>
+This library assumes glyph edits <strong>auto-save</strong> (no Save/Cancel
+buttons). That only makes sense once the palette is persisted like every other
+CaveWhere object: <strong>at the project level</strong>, serialized through
+<code>cwSaveLoad</code> <strong>asynchronously</strong> as you edit — not the
+current synchronous "write a <code>.cwglyph</code> file into
+<code>AppDataLocation/palettes/</code> + full reload" path. That is its own
+piece of work (problem framing in the companion draft
+<code>SYMBOLOGY_PALETTE_PROJECT_SAVELOAD_PLAN.html</code>) and <strong>must land
+first</strong>. Until then this plan's auto-save UX, Decision A (§5), and the
+re-skin/rebuild story are all gated on it.
+</div>
+
+<h2>0. Is this the right direction?</h2>
+
+<p>
+Short answer: <strong>yes</strong>, with the framing that this is "finish the
+symbology authoring surface", not "polish a one-glyph editor".
+</p>
+
+<p>
+The doubt is fair — raw glyph placement already works, so a standalone
+single-glyph editor buys little. But a glyph's value is <em>not</em> drawing it
+once; it is being a <strong>named, reusable unit</strong> that the decoration
+pipeline stamps along a line (the floor-step ticks every 2&nbsp;mm, dashed
+ceiling steps, etc.). The brush editor (commit 9) references glyphs <em>by
+name</em>; the glyph library is the surface that produces and curates those
+names. So the list-on-the-left / editor-on-the-right shape turns the page from
+"edit one glyph" into a <strong>glyph library manager</strong>, which is the
+correct companion to the brush editor and the natural home for add / select /
+remove.
+</p>
+
+<p>
+The master-detail layout itself is the right UX shape and low-risk. The genuine
+design risk is two decisions, both pinned below: <strong>unsaved-changes
+handling when switching rows</strong> (§5) and <strong>name rows vs. rendered
+thumbnails</strong> (§6). "See all the glyphs" leans toward thumbnails, which is
+the bigger piece — so the plan phases it.
+</p>
+
+<h2>1. Layout</h2>
+
+<div class="ascii">┌───────────────────────────────────────────────────────────────┐
+│  Palette: "My Cave Symbols"   (writable)            [Done]      │
+├──────────────────────┬────────────────────────────────────────┤
+│  Glyphs        [+]    │                                         │
+│ ┌──────────────────┐ │            +Y                           │
+│ │ ▣  floor-step-tick│ │             │      ╭─ paper extent      │
+│ │ ▣  ceiling-dash   │ │      ───────┼───────────►  +X tangent   │
+│ │ ▣  stream-arrow ◄─┼─┼ selected    │                           │
+│ │ ▢  (new glyph…)   │ │             │   (SketchGlyphCanvas)     │
+│ └──────────────────┘ │   (right-click a row → Duplicate/Remove)│
+│                       │  name: [stream-arrow ] display:[Stream] │
+│                       │  brush:[wall ▾]   Undo  Redo  Clear      │
+│                       │       (auto-saved — no Save/Cancel)      │
+└──────────────────────┴────────────────────────────────────────┘</div>
+
+<p>
+A single <code>GlyphEditorPage</code> becomes a master-detail page: a glyph
+<code>ListView</code> on the left, the existing canvas + chrome on the right.
+The page is still opened on a <strong>writable palette</strong> from
+<code>SketchToolbar.qml</code> ("Edit glyphs…" / "Duplicate to edit…"), reusing
+the commit-8 entry points and the URL-loaded-component navigation fix. The
+per-glyph <code>glyphName</code> page property is dropped — selection now lives
+in the list, and the page opens on the palette as a whole.
+</p>
+
+<h2>2. New type — <code>cwGlyphListModel</code> <span class="tag">C++</span></h2>
+
+<p>
+<code>cwSymbologyGlyph</code> is <em>not</em> a <code>Q_GADGET</code>, so QML
+cannot enumerate <code>palette.glyphs()</code> directly (this is exactly why
+commit 8 added <code>loadGlyphNamed</code>). A list needs a model exposing one
+row per glyph. Mirror <code>cwLineBrushListModel</code> almost verbatim:
+</p>
+
+<pre><code>class CAVEWHERE_LIB_EXPORT cwGlyphListModel : public QAbstractListModel {
+    Q_OBJECT
+    QML_NAMED_ELEMENT(GlyphListModel)
+    Q_PROPERTY(cwSymbologyPalette* palette READ palette WRITE setPalette NOTIFY paletteChanged)
+
+    enum Role {
+        NameRole = Qt::UserRole + 1,   // kebab-case machine id (the in-palette key)
+        DisplayNameRole,               // human label
+        StrokeCountRole                // cheap, for an empty-glyph hint
+        // (PreviewRole / thumbnail — see §6, phased)
+    };
+    // rowCount / data / roleNames / setPalette(copy glyphs by value) / refresh()
+};</code></pre>
+
+<ul>
+  <li>Binds <code>palette</code> to the page's writable palette; copies
+  <code>palette.glyphs()</code> <strong>by value</strong> on set and on the
+  palette's <code>dataChanged()</code> (same lifetime-safe pattern as
+  <code>cwLineBrushListModel</code> — never dereferences the pointer again, safe
+  across a manager reload that the reconciling reload (8.1) keeps stable
+  anyway).</li>
+  <li>Sort: alphabetical by <code>displayName</code> (locale-aware), or by
+  <code>name</code>. No category grouping (glyphs have no category field today),
+  so simpler than the brush model.</li>
+  <li><code>refresh()</code> does a full <code>beginResetModel</code>/<code>endResetModel</code>
+  — glyph add/remove/save all flow through <code>saveGlyph</code>/<code>removeGlyph</code>
+  → manager reload → <code>palette.dataChanged()</code> → refresh. Good enough;
+  per-row signals are a later optimization (already tracked as a follow-up).</li>
+  <li>Static <code>sortedForList(QVector&lt;cwSymbologyGlyph&gt;)</code> free
+  function so ordering is unit-testable without standing up a model.</li>
+</ul>
+
+<h2>3. <code>GlyphEditorPage.qml</code> restructure</h2>
+
+<p>A <code>RowLayout</code> (or <code>SplitView</code>) inside the existing
+<code>StandardPage</code>:</p>
+
+<ul>
+  <li><strong>Left — glyph list.</strong> <code>ListView</code> over
+  <code>GlyphListModel { palette: page.palette }</code>. Each delegate shows the
+  thumbnail (§6) + <code>displayName</code> + dimmed <code>name</code>. A
+  <code>TapHandler</code> selects (no <code>MouseArea</code>); <strong>duplicate
+  and remove are right-click</strong> (§4), matching the rest of CaveWhere.
+  Header row has a
+  <strong>[+] Add</strong>. Add (and the whole left rail's mutation) is disabled
+  when <code>!palette.writable</code>.</li>
+  <li><strong>Right — the editor.</strong> <code>SketchGlyphCanvas</code>
+  + <code>SketchInputArea</code> + overlays + name/display fields + BrushPicker +
+  Undo/Redo/Clear. <strong>No Save and no Cancel</strong> — edits auto-persist
+  (prerequisite plan). Selecting a row calls
+  <code>glyphCanvasId.loadGlyphNamed(name)</code> and fills the name fields.</li>
+  <li><strong>Page chrome.</strong> A single <strong>Done</strong> pops the page.
+  Because everything is auto-saved, leaving the editor is also the natural
+  boundary for the coarse project-wide re-skin (§5).</li>
+</ul>
+
+<h2>4. Flows</h2>
+
+<table>
+<tr><th>Action</th><th>Implementation</th></tr>
+<tr><td><strong>Select</strong></td><td>Tap a row → (dirty check, §5) →
+<code>canvas.loadGlyphNamed(row.name)</code>; name/display fields ← row values;
+<code>currentName</code> ← row.name.</td></tr>
+<tr><td><strong>Add</strong></td><td>[+] → (dirty check) →
+<code>canvas.clear()</code>; clear name/display fields; selection ← none. The
+glyph isn't in the palette until the first Save (membership = a file on disk —
+the directory-as-truth model). The list shows it only after Save.</td></tr>
+<tr><td><strong>Save (implicit)</strong></td><td>No Save button. Stroke edits
+and the name/display fields auto-commit the current glyph into the project-level
+palette through the async <code>cwSaveLoad</code> path (prerequisite plan),
+debounced so a pen drag isn't a write per sample. The list/preview refresh
+follows the same change signal. A name must still be valid kebab-case before the
+glyph is materialized (§7); an unnamed in-progress glyph is a draft until named.</td></tr>
+<tr><td><strong>Duplicate</strong></td><td><strong>Right-click → Duplicate</strong>
+in the same <code>GlyphContextMenu</code>. Copies the row's glyph into a new one
+with a derived unique name (<code>&lt;name&gt;-copy</code>, then
+<code>-copy-2</code>… against the existing glyph names — the slugify/uniquify
+helper the manager already uses for palette dirs) and
+<code>saveGlyph</code>s it → reload → the copy appears in the list and is
+selected for editing. Pure value-copy of the strokes, so it works on read-only
+seed glyphs too <em>if</em> the palette is writable; on a read-only palette the
+item is disabled (Duplicate-to-edit at the palette level remains the toolbar's
+job). A thin <code>cwSymbologyPaletteManager::duplicateGlyph(palette, name)</code>
+or an in-QML load→toGlyph(newName)→saveGlyph composition — decide in
+implementation; a manager method keeps name-uniquing in C++ where the slug
+helper lives.</td></tr>
+<tr><td><strong>Remove</strong></td><td><strong>Right-click → Remove</strong>, the
+CaveWhere way: a <code>GlyphContextMenu</code> (a <code>ContextMenuArea</code>
+subclass) holding the shared <code>RemoveMenuItem</code>, plus a page-level
+<code>RemoveAskBox</code> for the "Remove <b>&lt;name&gt;</b>?" confirmation
+positioned at the click. <code>RemoveMenuItem</code> sets
+<code>removeName</code> (the glyph name) / <code>indexToRemove</code> (the row)
+and calls <code>show()</code>; the box's <code>onRemove</code> handler runs
+<code>paletteManager.removeGlyph(palette, removeChallengeId.removeName)</code> →
+reload → list refreshes; selection falls back to the previous row or blank. The
+<code>GlyphContextMenu</code> (Duplicate + Remove) mirrors
+<code>LazLayerContextMenu</code> / <code>GeospatialLayerPage</code> verbatim — no
+bespoke buttons or confirm.</td></tr>
+<tr><td><strong>Rename</strong></td><td>Name is the identity key, so a rename is
+<code>saveGlyph(newGlyph)</code> + <code>removeGlyph(oldName)</code> (the IO layer
+already documents this). Phase-2: an explicit "Rename" that does both in one
+reload; phase-1 can skip it (edit name + Save creates a copy, then Remove the
+old — acceptable for a first cut, but call it out so it isn't a silent
+foot-gun).</td></tr>
+</table>
+
+<h2>5. Decision A — re-skin / rebuild policy <span class="tag warn">still open, gated on the prerequisite</span></h2>
+
+<p>
+Auto-save reframes this. With async project-level save, switching rows no longer
+risks losing edits — the current glyph is already persisted — so the old
+"Save / Discard / Cancel on dirty" question mostly dissolves (undo remains the
+in-session safety net). What replaces it is a <strong>performance</strong>
+question: <em>when does a glyph change force dependent geometry to rebuild?</em>
+</p>
+
+<p>The key move is to <strong>separate persistence from re-skin</strong>:</p>
+<ul>
+  <li><strong>Persistence</strong> — cheap, async, debounced; happens
+  continuously as you edit (prerequisite plan).</li>
+  <li><strong>Editor's own canvas</strong> — re-skins live; it's drawing the one
+  glyph, trivial cost.</li>
+  <li><strong>Project-wide re-skin</strong> — expensive: invalidate the glyph
+  tessellation cache and re-run the decoration layout for <em>every other
+  sketch</em> whose brushes stamp this glyph. This is what must NOT run on every
+  pen sample.</li>
+</ul>
+
+<p>
+So the open question is the <em>granularity and timing</em> of the project-wide
+rebuild, not whether to prompt:
+</p>
+<table>
+<tr><th>Option</th><th>Behavior</th><th>Trade-off</th></tr>
+<tr><td><strong>A1 — Rebuild on editor close</strong> (leaning this way)</td>
+<td>While editing, only the editor canvas updates. On <strong>Done</strong>,
+invalidate + re-skin the project once.</td>
+<td>Cleanest perf; other open sketches show stale stamps until you leave the
+editor (usually fine — you're not looking at them).</td></tr>
+<tr><td><strong>A2 — Debounced live rebuild</strong></td>
+<td>After N ms of edit idle, <code>invalidateGlyph(name)</code> + relayout
+affected sketches.</td>
+<td>Live feedback project-wide, but repeated relayout cost; needs the
+"which sketches use this glyph" dependency to be cheap to compute.</td></tr>
+<tr><td><strong>A3 — Manual "apply"</strong></td>
+<td>An explicit refresh action triggers the project-wide rebuild.</td>
+<td>Reintroduces a button we're trying to remove; rejected unless perf forces
+it.</td></tr>
+</table>
+
+<p>Recommendation: <strong>A1</strong> — rebuild scoped to the changed glyph, on
+editor close. <code>cwGlyphTessellationCache::invalidateGlyph(name)</code> already
+scopes the cache; the remaining work is relaying out the dependent sketches,
+which only matters once. Final call deferred until the save/load architecture
+(prerequisite) fixes how change signals propagate.</p>
+
+<h2>6. Decision B — list preview <span class="tag">DECIDED: B3 — live mini-canvas per row</span></h2>
+
+<p>
+<strong>Each row is a small live <code>SketchGlyphCanvas</code> with the glyph's
+name below it.</strong> No image-provider/cache plumbing and no name-only
+interim — the preview is the real renderer, so it always matches the editor
+exactly (same path source, palette snapshot, color scheme, dark mode) and needs
+no invalidation logic.
+</p>
+
+<ul>
+  <li>The delegate hosts a non-interactive <code>SketchGlyphCanvas</code>
+  (<code>palette: page.palette</code>, no <code>SketchInputArea</code>), sized to
+  the glyph's paper extent, that <code>loadGlyphNamed(row.name)</code>s its glyph;
+  the <code>displayName</code> (with dimmed <code>name</code>) sits below.</li>
+  <li><strong>Performance watch-item.</strong> One RHI-backed canvas per row is
+  the cost concern with many glyphs. Mitigations to validate: a fixed/auto-fit
+  view (no per-row pan/zoom state), and <code>ListView</code> delegate recycling
+  so only visible rows hold a canvas (cacheBuffer kept tight). If a large library
+  ever makes this janky, the image-provider approach (a rendered
+  <code>QImage</code> thumbnail) is the documented fallback — but start with the
+  live canvas per your call.</li>
+  <li>Bonus: gives the brush editor (commit 9) the same live glyph preview for
+  free.</li>
+</ul>
+
+<h2>7. Read-only palettes & validation</h2>
+<ul>
+  <li><strong>Read-only:</strong> the page can still <em>open</em> on a read-only
+  palette to browse, but Add / Duplicate / Remove / draw are disabled; the
+  toolbar's "Duplicate to edit…" remains the way to get an editable copy. Reuse
+  the existing <code>palette.writable</code> gate.</li>
+  <li><strong>Name validation:</strong> a glyph is only materialized (auto-saved)
+  once its name is valid kebab-case (<code>cwSymbology::isValidName</code>); an
+  invalid/empty name keeps it a draft. Inline field validation (red hint) is the
+  friendly version.</li>
+</ul>
+
+<h2>8. Files touched</h2>
+<table>
+<tr><th>File</th><th>Change</th></tr>
+<tr><td><code>cwGlyphListModel.{h,cpp}</code></td><td>new — mirrors cwLineBrushListModel</td></tr>
+<tr><td><code>cavewherelib/qml/GlyphEditorPage.qml</code></td><td>restructure to master-detail; drop the per-glyph <code>glyphName</code> page property</td></tr>
+<tr><td><code>cavewherelib/qml/GlyphListDelegate.qml</code></td><td>new — row delegate: live mini <code>SketchGlyphCanvas</code> + name below (B3)</td></tr>
+<tr><td><code>cavewherelib/qml/GlyphContextMenu.qml</code></td><td>new — ContextMenuArea with Duplicate + RemoveMenuItem (mirrors LazLayerContextMenu)</td></tr>
+<tr><td><code>cwSymbologyPaletteManager</code></td><td>optional — <code>duplicateGlyph(palette, name)</code> (unique-name copy), if not composed in QML</td></tr>
+<tr><td><code>cwSketchGlyphCanvas</code></td><td>likely unchanged (drops Save/Cancel wiring; auto-save comes from the prerequisite plan)</td></tr>
+<tr><td><code>testcases/test_cwGlyphListModel.cpp</code></td><td>new — rows/roles/sort/refresh-on-change</td></tr>
+<tr><td><code>test-qml/tst_GlyphEditor.qml</code></td><td>extend — add/select/duplicate(right-click)/remove(right-click) via the list</td></tr>
+</table>
+<p class="note">Fallback only (not built unless B3 perf forces it):
+<code>cwGlyphImageProvider.{h,cpp}</code> + registration for rendered-thumbnail
+rows.</p>
+
+<h2>9. Tests</h2>
+<ul>
+  <li><strong>C++ <code>[cwGlyphListModel]</code>:</strong> rows match the
+  palette's glyphs; roles return name/displayName/strokeCount; sort order; after
+  a <code>saveGlyph</code>/<code>removeGlyph</code>+reload the model reflects the
+  add/remove (drive via a manager pointed at a <code>QTemporaryDir</code>, per
+  the writable-palette test).</li>
+  <li><strong>QML <code>tst_GlyphEditor.qml</code>:</strong> open on a forked
+  palette → list shows the seed glyphs → select one loads its strokes → [+] →
+  draw → (auto-save) new row appears and is selected → right-click → Duplicate →
+  copy row appears → right-click → Remove → row gone. Reuse the PageView
+  navigation harness from <code>tst_GlyphEditorCrash.qml</code>.</li>
+</ul>
+
+<h2>10. Decisions &amp; open questions</h2>
+<ul>
+  <li><strong>Decided — Decision B</strong> (§6): live mini-canvas per row, name
+  below.</li>
+  <li><strong>Decided — no Save/Cancel</strong>: auto-save, gated on the
+  prerequisite save/load plan.</li>
+  <li><strong>Decided — Remove + Duplicate are right-click</strong> (§4) via
+  <code>GlyphContextMenu</code> + <code>RemoveAskBox</code>.</li>
+</ul>
+<ol>
+  <li><strong>Decision A</strong> (§5) — project-wide re-skin timing: rebuild on
+  editor close (A1, recommended) vs. debounced live (A2)? <em>Gated on the
+  prerequisite — final call once change-signal propagation is settled.</em></li>
+  <li>Rename as a first-class right-click action now, or defer (edit-name +
+  re-save + remove-old)?</li>
+  <li><code>duplicateGlyph</code> as a manager method (C++ name-uniquing) vs.
+  in-QML composition?</li>
+  <li>Does the page stay reachable only from the sketch toolbar, or also get a
+  top-level "Symbols" entry (it's becoming a library, not a per-sketch tool)?</li>
+</ol>
+
+</body>
+</html>

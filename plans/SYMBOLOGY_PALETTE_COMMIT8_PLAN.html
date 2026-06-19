@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Symbology Palette — Commit 8.0 (Writable palette) + Commit 8 (Glyph editor)</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.55; color: #1a1a1a; }
+  h1 { font-size: 1.8rem; border-bottom: 2px solid #333; padding-bottom: .3rem; }
+  h2 { font-size: 1.35rem; margin-top: 2.2rem; border-bottom: 1px solid #ccc; padding-bottom: .2rem; }
+  h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+  code { background: #f2f2f2; padding: .1rem .3rem; border-radius: 3px; font-size: .9em; }
+  pre { background: #f6f8fa; border: 1px solid #ddd; border-radius: 6px; padding: .8rem 1rem; overflow-x: auto; font-size: .85rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
+  th, td { border: 1px solid #ccc; padding: .4rem .6rem; text-align: left; vertical-align: top; }
+  th { background: #f0f0f0; }
+  blockquote { border-left: 4px solid #4a90d9; background: #f0f6fc; margin: 1rem 0; padding: .6rem 1rem; }
+  .warn { border-left: 4px solid #d98a4a; background: #fcf6f0; }
+  .note { color: #555; font-size: .9rem; }
+  .tag { display: inline-block; background: #333; color: #fff; border-radius: 4px; padding: .05rem .4rem; font-size: .75rem; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<h1>Commit 8.0 — Writable palette &nbsp;+&nbsp; Commit 8 — Glyph editor</h1>
+
+<p class="note">Untracked planning doc, fall2026 branch. Drafted 2026-06-17. Brush
+editor (commit 9) deliberately out of scope here — planned separately once 8.0/8
+land. This supersedes the stale commit-8 row in
+<code>SYMBOLOGY_PALETTE_PLAN.html</code> (see "What changed" below).</p>
+
+<h2>0. Why two commits</h2>
+
+<p>
+The glyph editor is <strong>not a hard prerequisite of the brush editor</strong> —
+the data dependency runs one way (<code>cwDecorationLayer.glyphName</code> →
+glyph), and the seed already ships three glyphs a brush editor could reference.
+But both editors share one prerequisite that <strong>does not exist anywhere in
+the code yet</strong>: a <em>writable palette</em>. The seed is hard read-only
+(<code>:/palettes/cavewhere-default</code>, <code>setWritable(false)</code>),
+<code>cwSymbologyPalette</code> mutates only wholesale via <code>setData()</code>,
+and user palettes are <em>discovered</em> by scanning
+<code>AppDataLocation/palettes</code> but there is <strong>no API to create or
+fork one</strong>. So we split:
+</p>
+
+<ul>
+  <li><span class="tag">8.0</span> <strong>Writable-palette foundation</strong> —
+  pure C++/model. Fork the seed (or any read-only palette) into a writable user
+  palette, plus glyph write-through. Fully unit-testable, no UI.</li>
+  <li><span class="tag">8</span> <strong>Glyph editor</strong> —
+  <code>cwSketchGlyphCanvas</code> + <code>GlyphEditorPage.qml</code> on top of
+  8.0.</li>
+</ul>
+
+<h2>1. What changed since the master plan was written</h2>
+
+<table>
+<tr><th>Master plan said</th><th>Reality now</th></tr>
+<tr>
+  <td>Glyph editor builds the save path.</td>
+  <td><strong>Glyph IO is done.</strong>
+  <code>cwSymbologyPaletteIO::saveGlyph()/loadGlyph()/glyphToJson()/glyphFromJson()</code>
+  exist (<code>cwSymbologyPaletteIO.h:74-87</code>); the directory-as-truth writer
+  reconciles stale files; load already runs the glyph→brush→glyph cycle check and
+  rule-stack validation. The editor just calls <code>saveGlyph</code> +
+  <code>reload</code>.</td>
+</tr>
+<tr>
+  <td><code>cwSymbologyGlyph { strokes; QRectF authoredBounds; }</code></td>
+  <td>Shipped as <code>{ name; displayName; QVector&lt;cwPenStroke&gt; strokes; }</code>
+  with <code>boundingBox()</code> <strong>computed on demand</strong>
+  (<code>cwSymbologyGlyph.h:32-49</code>). No stored bounds field — the "paper-mm
+  extent overlay" is a canvas affordance, not persisted data.</td>
+</tr>
+<tr>
+  <td>Tessellation cache work needed.</td>
+  <td><strong>Cache is editor-ready.</strong>
+  <code>cwGlyphTessellationCache::invalidateGlyph(name)</code> already exists for
+  live re-render after save. No cache changes.</td>
+</tr>
+<tr>
+  <td>Resolution step 1 is <code>cwSketch::activePaletteId</code> (per-sketch).</td>
+  <td>Dropped. Palette is <strong>region-level</strong> (region → settings → seed).
+  There is no per-sketch palette id; see
+  <code>project_symbology_palette_region_level</code>.</td>
+</tr>
+<tr>
+  <td>Missing-palette banner on the canvas.</td>
+  <td>That is the deferred <strong>3d</strong> — routed to
+  <code>cwProject-&gt;errorModel()</code>, not a reactive banner. Ignore here.</td>
+</tr>
+<tr>
+  <td>"Stripped-down <code>cwSketchCanvas</code> + the same brush picker."</td>
+  <td><strong>Still valid.</strong> <code>cwSketchCanvas</code> and
+  <code>BrushPicker</code> exist and are reusable — with one seam to add (§3.1).</td>
+</tr>
+</table>
+
+<h2 class="warn">2. The crux: palette injection (canvas decoupling)</h2>
+
+<p>
+<code>cwSketchCanvas</code> feeds its path source from
+<code>m_sketch-&gt;paletteSnapshot()</code>, and
+<code>cwSketch::resolvedPalette()</code> walks <code>parentTrip</code> →
+region → settings → seed (<code>cwSketch.h:95,143-157</code>). The glyph editor
+has <strong>no trip and no region</strong>; it must draw using exactly the
+palette being edited — and that palette may be a fresh writable fork that isn't
+any region's default. So the editor needs to inject a palette snapshot directly,
+bypassing the resolver chain.
+</p>
+
+<p>
+This is <em>not</em> a revival of the dropped per-sketch <code>activePaletteId</code>
+(which was about the persisted active-palette <em>choice</em> for normal sketches).
+This is a non-persisted <strong>authoring context</strong> override that lives on
+the new <code>cwSketchGlyphCanvas</code>, not on <code>cwSketch</code>. The
+production <code>cwSketch</code> API stays untouched.
+</p>
+
+<h2>3. Commit 8.0 — Writable palette foundation <span class="tag">C++ / model only</span></h2>
+
+<h3>3.1 New manager API (<code>cwSymbologyPaletteManager</code>)</h3>
+
+<p>All write to <code>paletteDirectory()</code> (default
+<code>QStandardPaths::AppDataLocation/palettes/&lt;slug&gt;</code>), then
+<code>reload()</code> so disk stays the source of truth (directory-as-truth).</p>
+
+<pre><code>// Fork an existing palette (seed or installed) into a new writable user palette.
+// Deep-copies brushes + glyphs, assigns a fresh QUuid, writes a new subdir,
+// reloads, returns the new (writable) palette. nullptr on failure (error pushed
+// to errorModel()).
+Q_INVOKABLE cwSymbologyPalette *duplicatePalette(cwSymbologyPalette *source,
+                                                 const QString &newName);
+
+// Write a single glyph into a writable palette's glyphs/ dir and reload it.
+// No-op + error if the palette is read-only. Used by the glyph editor's Save.
+Q_INVOKABLE bool saveGlyph(cwSymbologyPalette *palette,
+                           const cwSymbologyGlyph &glyph);
+
+// Remove a glyph file (rename in the editor = saveGlyph(new) + removeGlyph(old)).
+Q_INVOKABLE bool removeGlyph(cwSymbologyPalette *palette, const QString &glyphName);</code></pre>
+
+<ul>
+  <li><strong>Slug</strong>: kebab-case of <code>newName</code>, de-duplicated
+  against existing subdirs (<code>name</code>, <code>name-2</code>, …). The on-disk
+  directory name is cosmetic; identity is the new <code>QUuid</code> inside
+  <code>palette.json</code> (master plan line 1825).</li>
+  <li><strong>Writability</strong> already derives from file version
+  (<code>cwRegionIOTask::isVersionSupported</code>); a freshly-written fork is
+  current-version, so it loads back <code>writable = true</code> for free. No new
+  writability machinery.</li>
+  <li><strong>No granular palette mutators.</strong> <code>saveGlyph</code> goes
+  straight through <code>cwSymbologyPaletteIO::saveGlyph</code> (one
+  <code>.cwglyph</code> file) and reloads — honoring the "membership = files
+  present, mutate wholesale via setData" design. We do <em>not</em> add
+  <code>addGlyph</code>/<code>setGlyph</code> to <code>cwSymbologyPalette</code>.</li>
+</ul>
+
+<h3>3.2 Tests <span class="tag">own file</span></h3>
+
+<p><code>testcases/test_cwSymbologyPaletteWritable.cpp</code> (tag
+<code>[cwSymbologyPaletteWritable]</code>), manager pointed at a
+<code>QTemporaryDir</code> (concurrency-safe):</p>
+
+<ul>
+  <li><code>duplicatePalette(seed, "My Palette")</code> → a new subdir exists with
+  a <strong>different</strong> UUID, same brushes/glyphs by content, and the
+  returned palette is <code>writable</code>.</li>
+  <li>Fork name collision → second fork lands in <code>my-palette-2</code>, both
+  discoverable after reload.</li>
+  <li><code>saveGlyph</code> into the fork → a <code>glyphs/&lt;name&gt;.cwglyph</code>
+  file appears; reload surfaces the glyph in <code>glyphs()</code>; round-trip
+  equality (<code>cwSymbologyGlyph::operator==</code>).</li>
+  <li><code>saveGlyph</code> into the read-only seed → returns false, no file
+  written, error pushed to <code>errorModel()</code> (assert via the model, not a
+  counter).</li>
+  <li><code>removeGlyph</code> → file gone, absent after reload.</li>
+</ul>
+
+<h2 class="warn">3.5 Commit 8.1 — Reconciling reload <span class="tag">prerequisite for the editor</span></h2>
+
+<p>
+The review surfaced the keystone issue (§8.1): <code>reload()</code> calls
+<code>clearInstalled()</code>, which <strong>deletes every
+<code>cwSymbologyPalette*</code> and rebuilds the list</strong>, so runtime object
+identity is not stable across a reload even though a palette's identity is its
+UUID. <code>refreshPalette</code> (in-place glyph save) and
+<code>duplicatePalette</code>'s pointer-invalidation hazard are both workarounds
+for this. The editor will hold a palette pointer across user edits, so this must
+be fixed first — otherwise every write→reload either dangles the editor's pointer
+or needs yet another bespoke in-place path.
+</p>
+
+<h3>Plan</h3>
+<ul>
+  <li>Replace <code>clearInstalled()</code>-then-rebuild with a <strong>reconciling
+  reload</strong>: scan the directory into a <code>QHash&lt;QUuid, scanned-data&gt;</code>,
+  then diff against the live <code>m_palettes</code> keyed by <code>id()</code> —
+  <ul>
+    <li><em>survivor</em> (id in both): keep the existing <code>cwSymbologyPalette*</code>,
+    <code>setData()</code> it in place (only emits if content changed), refresh its
+    <code>directory()</code>/<code>writable</code> flags.</li>
+    <li><em>added</em> (id only in scan): <code>new cwSymbologyPalette</code>,
+    append.</li>
+    <li><em>removed</em> (id only in live set): delete that one object.</li>
+  </ul></li>
+  <li>The default (seed) palette is always a survivor (stable id), so it never
+  churns.</li>
+  <li>Keep the existing duplicate-id first-scanned-wins handling and the
+  forward-version read-only gate — they move into the scan/diff, not away.</li>
+  <li><code>duplicatePalette</code> then just calls the reconciling reload and
+  returns <code>paletteById(newId)</code> — <strong>no more "source pointer
+  dangles" hazard</strong>; drop that header caveat. <code>refreshPalette</code>
+  collapses into the reconciling reload (a single-palette case of it) or stays as
+  a thin shortcut; decide during implementation.</li>
+  <li><strong>Change signal:</strong> keep <code>palettesChanged()</code> for
+  list-shape changes (add/remove); per-palette content changes already emit
+  <code>cwSymbologyPalette::dataChanged()</code>. Only add a finer-grained signal
+  if a consumer actually needs add-vs-remove granularity.</li>
+</ul>
+
+<h3>Tests</h3>
+<ul>
+  <li>After a reload that adds one palette, pointers to the pre-existing palettes
+  (incl. the default) are <strong>unchanged</strong> (identity preserved) — the
+  test that currently documents "reload invalidates pointers" inverts.</li>
+  <li>Editing a file on disk and reloading updates the surviving palette's data in
+  place (same pointer, new content).</li>
+  <li>Removing a palette directory and reloading deletes only that object.</li>
+  <li><code>duplicatePalette</code> no longer invalidates <code>source</code>
+  (assert the passed-in pointer is still valid and unchanged afterward).</li>
+</ul>
+
+<p class="note">This is small and self-contained C++/model work — do it as its own
+green, reviewed commit before starting the editor (§4).</p>
+
+<h2>4. Commit 8 — Glyph editor <span class="tag">C++ + QML</span></h2>
+
+<p class="warn"><strong>DONE 2026-06-18.</strong> Shipped:
+<code>cwSketchGlyphCanvas.{h,cpp}</code> (palette injection via the new protected
+<code>cwSketchCanvas::snapshotForPathModel()</code>/<code>refreshPathSnapshot()</code>
+seam, <code>paperExtentMm</code> default 10×10 mm, <code>loadGlyph</code>/<code>toGlyph</code>/<code>clear</code>/<code>loadGlyphNamed</code>
+at 1:250 — lossless ×4/÷4), <code>test_cwSketchGlyphCanvas.cpp</code>
+(<code>[cwSketchGlyphCanvas]</code>, 4 cases incl. round-trip + injection +
+PNG). The input layer was <strong>extracted into <code>SketchInputArea.qml</code></strong>
+(shared by SketchItem and the editor — view matrix + grid + pan/zoom/pen/eraser);
+<code>SketchItem.qml</code> refactored onto it (regressions green).
+<code>GlyphEditorPage.qml</code> + entry points (<code>Duplicate to edit…</code> /
+<code>Edit glyphs…</code>) in <code>SketchToolbar.qml</code> (dynamic
+<code>registerPage</code> with the palette as a page property — the
+GitHistoryPage idiom, not static MainContent registration).
+<code>tst_GlyphEditor.qml</code> draws → saves → reopens through the real manager.
+<code>tst_GlyphEditorCrash.qml</code> guards the navigation regression below.</p>
+
+<p class="warn"><strong>Fix (navigation crash):</strong> the GlyphEditorPage
+component must NOT be declared inline in <code>SketchToolbar.qml</code> — that
+file is <code>pragma ComponentBehavior: Bound</code>, so the inline component
+binds to the toolbar's creation context and <code>cwPageView</code> aborts on
+<code>Q_ASSERT(dynamic_cast&lt;QQuickItem*&gt;(object))</code> with "Cannot
+instantiate bound component outside its creation context". The toolbar now loads
+it as a standalone component via
+<code>Qt.createComponent(Qt.resolvedUrl("GlyphEditorPage.qml"))</code> (free of
+the bound context), then <code>registerPage(..., {palette})</code>.
+<em>Known:</em> the canvas/page <code>palette</code> property shadows
+<code>QQuickItem::palette</code> (a runtime propertyCache warning, same as
+BrushPicker — harmless, the painter item doesn't use QQuickPalette theming).</p>
+
+<h3>4.1 <code>cwSketchGlyphCanvas</code> (C++)</h3>
+
+<p>
+A thin <strong>subclass of <code>cwSketchCanvas</code></strong> (reuses pen
+capture, RHI render, path source, undo) adding the editor seam and chrome data.
+It owns its own <code>cwSketch</code> internally (no trip/region).
+</p>
+
+<pre><code>class cwSketchGlyphCanvas : public cwSketchCanvas {
+    // Authoring palette, injected directly (bypasses the region resolver).
+    // Setting it feeds the snapshot to the inherited path source.
+    Q_PROPERTY(cwSymbologyPalette *palette READ palette WRITE setPalette NOTIFY paletteChanged)
+
+    // Fixed paper-mm authoring extent (default 10 x 10 mm); drives the overlay.
+    Q_PROPERTY(QSizeF paperExtentMm READ paperExtentMm WRITE setPaperExtentMm NOTIFY paperExtentMmChanged)
+
+    // Load an existing glyph for editing (paper-mm -> canvas world units), or
+    // start blank. Save serializes the current strokes back to a cwSymbologyGlyph.
+    Q_INVOKABLE void loadGlyph(const cwSymbologyGlyph &glyph);
+    Q_INVOKABLE cwSymbologyGlyph toGlyph(const QString &name, const QString &displayName) const;
+    Q_INVOKABLE void clear();
+};</code></pre>
+
+<h4>Coordinate model</h4>
+<p>
+A glyph stores <code>cwPenStroke</code> points in <strong>glyph-local paper-mm</strong>;
+the canvas stores points in <strong>world-m</strong>. The editor canvas uses the
+<strong>app-default <code>mapScale = 1:250</code></strong> (same as a normal
+sketch, so zoom/feel match). <code>toGlyph</code>/<code>loadGlyph</code> convert
+through the existing <code>cwGlyphTessellationCache::paperMmToWorldM</code> and its
+inverse (<code>world_m = paper_mm / (1000 · scaleRatio)</code>; at 1:250 that's a
+linear ×4 / ÷4 factor — lossless, no special-casing). Origin is canvas
+<code>(0,0)</code>; +X is the tangent (master plan §9). View zoom/pan handle
+on-screen sizing independently.
+</p>
+
+<h3>4.2 <code>GlyphEditorPage.qml</code></h3>
+
+<p>A <code>StandardPage</code> registered in <code>MainContent.qml</code>'s
+<code>onCompleted</code> and reached via
+<code>RootData.pageSelectionModel</code> (the established page pattern). Layout:</p>
+
+<ul>
+  <li><strong>Canvas</strong>: <code>SketchGlyphCanvas</code> filling the page,
+  <code>palette</code> bound to the writable palette being edited.</li>
+  <li><strong>Overlays</strong> (QML, drawn over the canvas): paper-mm extent
+  rectangle, origin crosshair at world (0,0), tangent arrow along +X. Positioned
+  via the canvas's world→item transform; <code>QC.Label</code> captions, Theme
+  tokens — no hardcoded colors/sizes.</li>
+  <li><strong>Brush picker</strong>: reuse <code>BrushPicker</code>, fed
+  <code>palette</code> directly (not <code>sketch.resolvedPalette</code>).</li>
+  <li><strong>Chrome</strong>: name / display-name fields, Save, Cancel, plus
+  Undo/Redo/Clear (the canvas already has an undo stack).</li>
+  <li><strong>Save</strong> →
+  <code>paletteManager.saveGlyph(palette, canvas.toGlyph(name, displayName))</code>
+  → <code>cache.invalidateGlyph(name)</code> happens via reload; Cancel pops the
+  page.</li>
+</ul>
+
+<h3>4.3 Entry points (commit-8 subset)</h3>
+
+<p>
+Master plan wires the editor from the palette picker ("Edit glyphs…") <em>and</em>
+the brush editor ("Add glyph…"). The brush editor is commit 9, so commit 8 ships
+only the palette-picker path, added near the palette combo in
+<code>SketchToolbar.qml</code>:
+</p>
+
+<ul>
+  <li><strong>"Duplicate to edit…"</strong> — visible when the resolved palette is
+  read-only; calls <code>duplicatePalette</code>, then opens the editor on the new
+  fork.</li>
+  <li><strong>"Edit glyphs…"</strong> — visible when a writable palette is
+  selected; opens <code>GlyphEditorPage</code> on it (glyph chooser = existing
+  glyphs + "New glyph").</li>
+</ul>
+
+<h3>4.4 Tests</h3>
+
+<ul>
+  <li><strong>C++</strong> — fold the canvas round-trip into the 8.0 file or a
+  sibling <code>test_cwSketchGlyphCanvas.cpp</code>: <code>loadGlyph</code> then
+  <code>toGlyph</code> returns equal strokes; the 1:1000 identity holds (points
+  unchanged); <code>palette</code> injection makes the path source resolve a
+  seed brush without any trip/region. Visualize one glyph to PNG (offscreen
+  <code>QPainter</code>) per the headless-output convention.</li>
+  <li><strong>QML</strong> — <code>test-qml/tst_GlyphEditor.qml</code>: open the
+  editor on a forked palette, draw a stroke, confirm origin/tangent overlays
+  exist, Save; reopen the same glyph and verify stroke count + bounds match
+  (<code>tryVerify</code>, offscreen). Collapse-overlay / z-order caveats per the
+  QML testing rules.</li>
+</ul>
+
+<h2>5. Files touched</h2>
+
+<table>
+<tr><th>File</th><th>Change</th><th>Commit</th></tr>
+<tr><td><code>cwSymbologyPaletteManager.{h,cpp}</code></td><td>duplicatePalette / saveGlyph / removeGlyph</td><td>8.0</td></tr>
+<tr><td><code>testcases/test_cwSymbologyPaletteWritable.cpp</code></td><td>new</td><td>8.0</td></tr>
+<tr><td><code>cwSketchGlyphCanvas.{h,cpp}</code></td><td>new subclass of cwSketchCanvas</td><td>8</td></tr>
+<tr><td><code>cwSketchCanvas.h</code></td><td>make snapshot seam / relevant members <code>protected</code> if needed for the subclass</td><td>8</td></tr>
+<tr><td><code>cavewherelib/qml/GlyphEditorPage.qml</code></td><td>new + qt_add_qml_module registration</td><td>8</td></tr>
+<tr><td><code>cavewherelib/qml/MainContent.qml</code></td><td>register the page</td><td>8</td></tr>
+<tr><td><code>cavewherelib/qml/SketchToolbar.qml</code></td><td>"Duplicate to edit…" / "Edit glyphs…" entry</td><td>8</td></tr>
+<tr><td><code>test-qml/tst_GlyphEditor.qml</code></td><td>new</td><td>8</td></tr>
+</table>
+
+<h2>6. Out of scope</h2>
+<ul>
+  <li>Brush editor and the "Add glyph…" entry from it → commit 9.</li>
+  <li>Rule-params editing / styling migration into Trace params → commit 9.</li>
+  <li>Missing-palette/brush load errors → deferred 3d (errorModel route).</li>
+  <li>No <code>protoVersion()</code> bump (symbology format unreleased on fall2026).</li>
+  <li>Recursive-glyph depth-cap tuning, "Add palette from URL" install (iter 4).</li>
+</ul>
+
+<h2>7. Open questions — resolved 2026-06-18</h2>
+<ol>
+  <li><strong>Editor scale.</strong> <em>Resolved:</em> default to the app-default
+  <code>1:250</code> (§4.1). Conversion via <code>paperMmToWorldM</code> is a
+  lossless linear factor.</li>
+  <li><strong>Subclass vs. composition.</strong> <em>Resolved:</em>
+  <code>cwSketchGlyphCanvas</code> is a <code>cwSketchCanvas</code> subclass.
+  Keep any new <code>protected</code> seams free of test-only scaffolding.</li>
+  <li><strong>Entry-point home.</strong> <em>Resolved:</em> buttons in
+  <code>SketchToolbar.qml</code> for now — the symbology UX is expected to be
+  redesigned as it's tested, so don't over-invest in a dedicated management
+  surface yet.</li>
+  <li><strong>Phasing.</strong> <em>Resolved:</em> land 8.0 (green, reviewed) and
+  pause before 8, per the per-phase-pause rule.</li>
+</ol>
+
+<h2>8. Review findings (qt-cpp-review + simplify, 2026-06-18)</h2>
+
+<p>Eight read-only review agents ran over the 8.0 diff. Consensus below.</p>
+
+<h3>Fixed in 8.0</h3>
+<ul>
+  <li><strong>Path-safety / layering (5-agent consensus).</strong>
+  <code>removeGlyph</code> originally hand-built <code>glyphs/&lt;name&gt;.cwglyph</code>
+  in the manager, bypassing the kebab-case <code>cwSymbology::isValidName</code>
+  guard every other glyph file op enforces — a <code>../</code> name could escape
+  the glyphs/ dir. Fixed: added <code>cwSymbologyPaletteIO::removeGlyph(dir, name)</code>
+  (validates the name, reuses the IO path builder); the manager now delegates to
+  it. New test <code>"Manager rejects a path-unsafe glyph name on remove"</code>.</li>
+  <li><strong>Warning parity.</strong> <code>refreshPalette</code> now forwards
+  <code>load()</code> warnings to <code>errorModel()</code>, matching
+  <code>reload()</code> (previously a glyph that introduced a rule-stack warning
+  stayed silent until the next full reload).</li>
+</ul>
+
+<h3 class="warn">Findings &amp; dispositions (decided 2026-06-18)</h3>
+<ol>
+  <li><strong>Keystone — <code>reload()</code> destroyed every palette object (no
+  stable identity across reload). → DONE in Commit 8.1 (§3.5).</strong> A palette's
+  identity is its UUID; the runtime <code>cwSymbologyPalette*</code> is now keyed on
+  UUID across a reload (reconciling reload — survivors updated in place, only deltas
+  created/deleted). <code>clearInstalled()</code> and <code>refreshPalette()</code>
+  were removed; <code>saveGlyph</code>/<code>removeGlyph</code>/<code>duplicatePalette</code>
+  all just call <code>reload()</code> and keep their pointers valid.</li>
+  <li><strong><code>m_directory</code> assumes one palette ↔ one filesystem
+  directory. → OK for prototyping; idea to work on.</strong> Fine as-is for now.
+  The idea to develop: a project (the <code>.cwproj</code> directory) gets its own
+  <code>palettes/</code> subdirectory holding that project's custom palettes, so
+  they travel with the project and Git sync carries them (ties into the Decision-4
+  "bundle project-used palettes for sync" revision in the main plan). This needs
+  design work — how a project-local <code>palettes/</code> dir is discovered,
+  reconciled with the user's AppData palettes, and addressed by
+  <code>directory()</code> (which will likely become a location handle rather than
+  a bare path). <strong>Tracked as an idea to work on, not yet scheduled.</strong></li>
+  <li><strong>Non-transactional write. → ADDRESS LATER.</strong> If a saved glyph
+  makes the palette fail validation (e.g. a glyph→brush→glyph cycle), the file is
+  written but the subsequent <code>reload()</code> drops the now-invalid palette,
+  leaving a bad file on disk. The editor can pre-validate (it holds the glyph),
+  and/or add manager-level rollback (delete the just-written file on post-write
+  load failure). <strong>Explicitly deferred — a known gap we need to come back to,
+  not fixed in 8.0/8.1.</strong> (8.1 made <code>reload()</code> itself
+  non-transactional too — see the 8.1 follow-ups below.)</li>
+  <li><strong>Commit-9 / autosave extraction. → ADDED to the plan.</strong> The
+  gate→IO-write→<code>refreshPalette</code> shape in <code>saveGlyph</code>/
+  <code>removeGlyph</code> will repeat for <code>saveBrush</code>/<code>removeBrush</code>
+  (brush editor); extract a private <code>mutatePalette(palette, op)</code> when the
+  third copy lands. And these synchronous main-thread writes should route through
+  <code>cwConcurrent::run</code> + <code>AsyncFuture::observe(...).context(...)</code>
+  once palette elements autosave (per the Decision-9 autosave revision in the main
+  plan).</li>
+</ol>
+
+<p class="note">Deliberately <em>not</em> changed (judged correct as-is): the
+<code>slugify</code> loop, the <code>m_directory</code> member choice (vs. a
+manager-side id→dir map), and <code>duplicatePalette</code>'s full reload (a cold,
+user-initiated path; cost is negligible at realistic palette counts). Minor
+optional cleanups left for later: relocating <code>slugify</code> next to
+<code>cwSymbology::isValidName</code> for testability, and hoisting the test
+<code>makeGlyph</code> helper into <code>testlib/cwSketchTestHelpers</code>.</p>
+
+<h3 class="warn">Commit 8.1 review — follow-ups (revisit after the brush editor)</h3>
+
+<p>The 8.1 reconciling-reload diff got its own read-only review pass (ownership /
+lifecycle + correctness, test-quality, architectural; 2026-06-18). No in-scope
+defects — the reconcile is sound, tests are correct, and the one simplify fix (drop
+the redundant <code>QSet</code> + second pass in favor of <code>QHash::take()</code>)
+was applied and is green. The pass surfaced four out-of-scope items. <strong>These
+are intentionally deferred: revisit as a batch once the brush editor (commit 9) is
+landed</strong>, because the editor is the client that makes the right design
+obvious, and several of these are about a signal/refresh contract best shaped
+against a real editing client rather than speculatively.</p>
+
+<ol>
+  <li><strong>Targeted single-palette refresh for glyph writes. → REVISIT AFTER
+  BRUSH EDITOR.</strong> <code>saveGlyph</code>/<code>removeGlyph</code> now route a
+  one-glyph write through full <code>reload()</code> (re-reads the qrc default plus
+  every on-disk subdir). The deleted <code>refreshPalette()</code> was exactly the
+  one-directory refresh this wants; the building block (<code>load(directory)</code>)
+  still exists. Each save currently fans out to a full
+  <code>cwSymbologyPaletteListModel</code> reset <em>and</em>
+  <code>cwSketch::resolveSnapshot()</code> for every open sketch — an
+  editor-responsiveness cost that scales with palette count and open sketches. Out
+  of scope now: 8.1's point was making the pointer survive reload so a targeted
+  refresh is <em>safe</em> to design later; there is no QML caller of
+  <code>saveGlyph</code> yet to tune against, and restoring it now re-introduces the
+  dual-path (reload vs refresh) parity burden 8.1 just removed.</li>
+
+  <li><strong>Add/remove-palette signal granularity. → REVISIT AFTER BRUSH
+  EDITOR.</strong> <code>palettesChanged()</code> is the manager's sole mutation
+  signal and <code>reload()</code> emits it unconditionally (even on a zero-delta
+  reload). The reconcile already computes the exact add/remove/survive sets and then
+  discards them. Finer signals (or at least a "no deltas → don't emit" guard plus
+  add/remove signals) would let the list model do
+  <code>beginInsertRows</code>/<code>beginRemoveRows</code> instead of a full reset,
+  and let consumers like <code>cwSketch::resolveSnapshot</code> skip work when their
+  resolved id didn't change. Out of scope now: it's a manager API-surface change
+  rippling into the list model and <code>cwSketch</code>, best designed once the
+  glyph/brush editor (the client that benefits) exists.</li>
+
+  <li><strong>Architectural — <code>reload()</code> is non-transactional. →
+  REVISIT AFTER BRUSH EDITOR.</strong> <code>reload()</code> clears the error model
+  and mutates live objects in place (<code>setData</code>/<code>setWritable</code>/
+  <code>setDirectory</code>) and <code>delete</code>s dropped palettes before
+  <code>m_palettes = rebuilt</code>. A mid-scan IO/parse failure leaves earlier
+  survivors updated and later ones not, with no rollback — and the in-place mutation
+  now reaches objects the editor holds. A "scan fully, then swap" guarantee (extend
+  phase-1's already-buffered scan so no live mutation happens until the whole scan
+  succeeds) would make a failed reload a no-op. Broader than the
+  identity-preservation goal of 8.1; ties into the per-write non-transactional gap
+  (item 3 above).</li>
+
+  <li><strong>Architectural — front/back split: list-model resets discard the
+  identity the backend preserves. → REVISIT AFTER BRUSH EDITOR.</strong> The backend
+  works to keep object identity stable, but
+  <code>cwSymbologyPaletteListModel::refresh()</code> collapses any change into a
+  full <code>beginResetModel</code>/<code>endResetModel</code> — dropping
+  selection/scroll state the identity preservation was meant to protect. By
+  contrast <code>cwLineBrushListModel</code> already binds to the per-palette
+  <code>cwSymbologyPalette::dataChanged</code> (which 8.1's surviving pointer now
+  keeps wired across reloads). Generalizable pattern: a model layer should react to
+  the finest signal the backend offers, and the backend should offer one matching
+  its mutation granularity. This is the architectural framing of item 2; blast
+  radius is the two list models plus whatever the editor adds.</li>
+</ol>
+
+</body>
+</html>

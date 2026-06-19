@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Placement-rule params — interpreting the bytes</title>
+<style>
+  :root {
+    --fg: #1d1d1f; --muted: #555; --line: #e6e6e6; --soft: #fafafa;
+    --code-bg: #f4f4f5; --accent: #3949ab; --good: #1b7a3a; --warn: #a02a2a;
+  }
+  body { font: 15px/1.55 -apple-system, "SF Pro Text", system-ui, sans-serif; color: var(--fg);
+         max-width: 920px; margin: 0 auto; padding: 32px 24px 96px; background: #fff; }
+  h1 { font-size: 2em; margin-top: 0; }
+  h2 { margin-top: 2.4em; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { margin-top: 1.7em; }
+  p, ul, ol { margin: 0.6em 0 0.8em; }
+  ul, ol { padding-left: 1.4em; }
+  code { font: 0.92em/1.4 "SF Mono", Menlo, Consolas, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 6px; overflow-x: auto; font: 0.85em/1.5 "SF Mono", Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; margin: 14px 0; font-size: 0.93em; width: 100%; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  blockquote { border-left: 3px solid #c8c8cc; margin: 14px 0; padding: 4px 16px; color: #4a4a52; background: var(--soft); }
+  .rec { border-left-color: #9ccfb0; background: #f0faf4; color: #225c38; }
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin: 18px 0; }
+  .node { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px 12px; font-size: 0.84em; min-width: 0; }
+  .node .h { font-weight: 600; font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 5px; }
+  .node code { background: #f0f1f4; font-size: 0.9em; }
+  .node.store { background: #f6f7fb; border-color: #cdd6ef; }
+  .node.ctx { background: #fff7e9; border-color: #f0d9a3; }
+  .node.rule { background: #eafaf1; border-color: #b6e5c8; }
+  .node.out { background: #f4f1fb; border-color: #d3c8ef; }
+  .arrow { align-self: center; color: var(--muted); font-size: 1.3em; padding: 0 2px; }
+  .tag { display:inline-block; font-size:0.7em; text-transform:uppercase; letter-spacing:0.06em; padding:1px 7px; border-radius:999px; border:1px solid #d2dcfb; background:#eef2ff; color:var(--accent); vertical-align:middle; }
+  .tag.rec { background:#eafaf1; color:var(--good); border-color:#b6e5c8; }
+  .small { font-size: 0.88em; color: var(--muted); }
+  .keyq { background: #fbfbfd; border: 1px solid var(--line); border-radius: 8px; padding: 4px 16px 10px; margin: 16px 0; }
+</style>
+</head>
+<body>
+
+<h1>Placement-rule params — interpreting the bytes</h1>
+<p class="small">Design note for the step before the <code>Offset stroke</code> rule (see
+<em>CEILING_CHANNEL_DESIGN.html</em>). Goal: let a placement rule read its own parameters, so a layer can say
+"space ticks every 3&nbsp;mm" or "offset this stroke by −1.2&nbsp;mm" instead of every rule running from a
+hard-coded constant.</p>
+
+<h2>What already exists (and what doesn't)</h2>
+
+<p>The <strong>storage and round-trip are already built.</strong> A rule is persisted as a name plus an opaque
+parameter blob, and unknown rules survive a load/save untouched:</p>
+
+<pre>// cavewhere_symbology.proto
+message PlacementRule {
+    string name   = 1;   // registry key: "Uniform spacing", "Offset stroke", …
+    bytes  params = 2;   // proto-encoded per-rule struct  ← already round-trips; NOT yet decoded
+}
+// cwPlacementRuleData mirrors it: { QString name; QByteArray params; }</pre>
+
+<p>What's missing is only <strong>interpretation</strong>: today the layout looks up <code>name → cwPlacementRule*</code>
+and <em>throws the bytes away</em>; every rule runs from a documented constant (<code>kDefaultStampSpacingMm = 2.0</code>,
+etc.). So this is not "add a parameter system" — it's "stop discarding the bytes, and give each rule a typed view
+of them." The persistence layer doesn't change at all.</p>
+
+<div class="flow">
+  <div class="node store"><div class="h">stored (today)</div><code>rules[i]</code><br>= { name, <b>params:bytes</b> }</div>
+  <div class="arrow">→</div>
+  <div class="node"><div class="h">resolve (today)</div>name → <code>cwPlacementRule*</code><br><span class="small">params dropped ✗</span></div>
+  <div class="arrow">→</div>
+  <div class="node rule"><div class="h">run (today)</div><code>rule.apply()</code><br><span class="small">uses constant default</span></div>
+</div>
+<div class="flow">
+  <div class="node store"><div class="h">stored (new)</div><code>rules[i]</code><br>= { name, <b>params:bytes</b> }</div>
+  <div class="arrow">→</div>
+  <div class="node"><div class="h">resolve (new)</div>keep <b>(rule, params)</b><br>paired through stage sort</div>
+  <div class="arrow">→</div>
+  <div class="node ctx"><div class="h">context (new)</div><code>cwPlacementContext</code><br>+ <b>ruleParams</b> (this rule's bytes)</div>
+  <div class="arrow">→</div>
+  <div class="node rule"><div class="h">run (new)</div><code>rule.apply()</code><br>decodes → typed struct<br>else falls back to constant</div>
+</div>
+
+<h2>The three decisions that matter</h2>
+
+<h3>1 · Encoding: a per-rule proto message <span class="tag rec">recommended</span></h3>
+
+<p>The proto comment already commits to "proto-encoded per-rule struct." Honour it: each rule that takes
+parameters gets a small message, serialized into <code>params</code>.</p>
+
+<pre>// cavewhere_symbology.proto  (new messages, near PlacementRule)
+message UniformSpacingParams { optional double spacingMm = 1; }   // unset → 2.0 mm
+message OffsetStrokeParams   { optional double offsetMm  = 1; }   // unset → 0 (on the line); sign = side</pre>
+
+<table>
+  <tr><th>&nbsp;</th><th>Per-rule message <span class="tag rec">rec</span></th><th>Generic key/value map</th></tr>
+  <tr><td>Type safety</td><td>typed fields, compile-checked</td><td>stringly-typed keys, variant values</td></tr>
+  <tr><td>Schema evolution</td><td>proto field numbers; unknown fields preserved</td><td>ad-hoc; easy to drift</td></tr>
+  <tr><td>Consistency</td><td>matches the rest of the codebase's proto serialization</td><td>a second, parallel convention</td></tr>
+  <tr><td>Cost</td><td>one message + a few lines of decode per param-bearing rule</td><td>one message total, no per-rule proto edits</td></tr>
+  <tr><td>Authoring typos</td><td>caught by the compiler</td><td>caught at runtime, maybe never</td></tr>
+</table>
+
+<p>The only real downside of per-rule messages — a proto edit per rule — is small and exactly the kind of change
+proto is good at. <strong>Recommend per-rule messages.</strong></p>
+
+<h3>2 · Plumbing: the bytes ride in a per-rule context <span class="tag rec">recommended</span></h3>
+
+<p>Rules are stateless singletons, so a rule's params must arrive at call time. We already follow the convention
+"read-only inputs go in a context struct; the mutable in/out stays a separate argument." Params are a read-only
+input, so they belong in the context — the layout just rebuilds the (tiny) context per rule:</p>
+
+<pre>struct cwPlacementContext {
+    const cwStrokePath &strokePath;
+    const cwDecorationLayer &layer;
+    double worldPerPaperMm = 0.0;
+    const QByteArray &ruleParams;     // ← NEW: this rule invocation's params (may be empty)
+    cwSceneContext *scene = nullptr;
+};
+
+// layout: keep (rule, params) paired, rebuild the context per rule
+for (const auto &step : resolvedStack) {                 // step = { const cwPlacementRule *rule; QByteArray params; }
+    const cwPlacementContext ctx{ strokePath, layer, worldPerPaperMm, step.params, nullptr };
+    step.rule->apply(positions, ctx);
+}</pre>
+
+<p>Rebuilding the context per rule is free (a handful of references + a double). The alternative — a third
+<code>apply(positions, context, params)</code> argument — works but splits the read-only inputs across two places,
+against the convention. <strong>Recommend params-in-context.</strong></p>
+
+<blockquote class="small"><strong>Scope note — terminals.</strong> <code>stampPath()</code> takes
+<code>cwStampGeometry</code>, not the context, so a <em>terminal</em> that needs a param (e.g. a future bending
+step size) would read it from <code>cwStampGeometry</code> instead. Our two first consumers don't need that:
+<code>Uniform spacing</code> is a Generate <code>apply()</code> and <code>Offset stroke</code> is a stroke-transform
+hook — both see the context. Adding a param to <code>cwStampGeometry</code> is a later, parallel extension; flagged,
+not built.</blockquote>
+
+<h3>3 · Presence &amp; defaults: <code>optional</code> fields + fall back to the documented constant</h3>
+
+<p>proto3 scalar defaults are <code>0</code>, which is indistinguishable from "deliberately set to 0" — and for
+<code>spacingMm</code>, <code>0</code> is a degenerate value, not a default. Use <code>optional</code> fields
+(explicit presence, exactly as <code>DecorationLayer.offsetCurveWidthMm</code> already does) so a rule can tell
+"unset → use my constant" from "set to 0 → honour it (and guard)":</p>
+
+<pre>// cwUniformSpacingRule::apply
+double spacingMm = kDefaultStampSpacingMm;                  // documented default survives as the fallback
+if (!context.ruleParams.isEmpty()) {
+    UniformSpacingParams p;
+    if (p.ParseFromArray(context.ruleParams.constData(), context.ruleParams.size()) && p.has_spacingmm()) {
+        spacingMm = p.spacingmm();
+    }
+}
+const double spacingWorld = spacingMm * context.worldPerPaperMm;
+if (spacingWorld &lt;= 0.0) { return; }                        // still guards a bad/zero value</pre>
+
+<p>Net effect: a layer with empty <code>params</code> behaves <em>byte-identically to today</em>; the hard-coded
+constants become the fallbacks, not dead code. A malformed blob also falls back rather than crashing.</p>
+
+<h2>Aside: why not just a <code>void*</code>?</h2>
+
+<p>The tempting shortcut is to drop the bytes-and-proto entirely and hang a <code>void*</code> (or a
+<code>cwPlacementRuleParams*</code>) off <code>cwPlacementRuleData</code>, then <code>static_cast</code> it back
+inside each rule. It fails on five hard requirements this data actually has:</p>
+
+<ol>
+  <li><strong>It has to persist.</strong> Params are written to a <code>.cw</code>/<code>.cwproj</code> and synced
+  over git to other people and machines. A <code>void*</code> is an address in <em>this</em> process's heap —
+  meaningless the moment it's saved or reopened elsewhere. The <strong>bytes are the durable form</strong>; the
+  typed message is only a decode of them. A pointer has no serialized form at all.</li>
+  <li><strong><code>cwLineBrush</code> is an implicitly-shared value type.</strong> It copies, compares with
+  <code>operator==</code>, and round-trips by value. A <code>void*</code> member breaks all three: copying
+  duplicates the pointer (aliasing, double-free), equality compares addresses instead of contents, and a copied
+  brush handed to a worker thread shares mutable state with the original. A <code>QByteArray</code> copies,
+  compares, and shares safely.</li>
+  <li><strong>Type safety.</strong> <code>void*</code> discards the type; every rule casts blind, and a wrong cast
+  (a rule rename, a struct-layout drift between builds) is undefined behaviour, not a parse error. The proto decode
+  fails cleanly and falls back to the documented default.</li>
+  <li><strong>Ownership &amp; lifetime.</strong> Who <code>new</code>s and <code>delete</code>s the struct, and
+  when? Rules are <code>const</code> singletons shared across threads; the layer data that owns the params is copied
+  freely. A <code>void*</code> has no answer; the owned <code>QByteArray</code> does.</li>
+  <li><strong>Unknown-rule round-trip &amp; evolution.</strong> The bytes let a rule this build doesn't recognise
+  survive a load/save intact, and let a param field added by a newer build be preserved by an older reader (proto
+  unknown fields). A <code>void*</code> can represent neither — there's no struct to point at for an unknown rule,
+  and no schema to evolve.</li>
+</ol>
+
+<p>In short, a <code>void*</code> conflates "typed in-memory access" with "the durable, shareable parameter data."
+We already hold the durable form — the bytes; the per-rule proto message is just the typed lens onto it, which is
+exactly the part a <code>void*</code> would throw away.</p>
+
+<h2>Worked example, end to end — <code>spacingMm</code> on <code>Uniform spacing</code></h2>
+
+<p>This is the proposed first consumer: low-risk (no new stroke machinery), independently useful, and it exercises
+every part of the mechanism.</p>
+
+<div class="flow">
+  <div class="node"><div class="h">1. proto</div><code>UniformSpacingParams<br>{ optional double spacingMm }</code></div>
+  <div class="arrow">→</div>
+  <div class="node store"><div class="h">2. author (seed/test, C++)</div>set <code>spacingMm = 3.0</code>,<br>serialize → <code>params</code> bytes,<br>store in <code>cwPlacementRuleData</code></div>
+  <div class="arrow">→</div>
+  <div class="node ctx"><div class="h">3. layout</div>pairs (rule, params),<br>puts bytes in <code>ctx.ruleParams</code></div>
+  <div class="arrow">→</div>
+  <div class="node rule"><div class="h">4. decode</div><code>apply()</code> parses,<br>reads <code>spacingMm</code>,<br>else 2.0 mm</div>
+  <div class="arrow">→</div>
+  <div class="node out"><div class="h">5. result</div>ticks at 3 mm</div>
+</div>
+
+<p>Authoring side (the same message the rule decodes — one source of truth):</p>
+<pre>UniformSpacingParams p;
+p.set_spacingmm(3.0);
+QByteArray bytes(int(p.ByteSizeLong()), Qt::Uninitialized);
+p.SerializeToArray(bytes.data(), bytes.size());
+layer.rules.append(cwPlacementRuleData{ QStringLiteral("Uniform spacing"), bytes });</pre>
+
+<p>A one-line <code>encodeParams(msg)</code> / <code>decodeParams&lt;T&gt;(bytes)</code> helper pair removes the
+boilerplate and keeps encode/decode symmetric.</p>
+
+<h2>Things the design deliberately keeps out</h2>
+
+<ul>
+  <li><strong>The registry stays dumb.</strong> It maps <code>name → rule</code> and knows nothing about param
+  types. Decode is each rule's private business — no generic "param schema" framework, no registry-level
+  validation. (If we ever want an editor to introspect a rule's params, that's a deliberate later addition.)</li>
+  <li><strong>No IO change.</strong> The persistence layer already treats <code>params</code> as opaque bytes;
+  interpretation lives entirely at the seed (encode) and layout (decode) edges.</li>
+  <li><strong>The <code>offsetCurve*</code> fields are not rule params.</strong> They're per-layer line styling for
+  the trace terminal and stay where they are for now (a later commit may fold <code>offsetCurveOffsetMm</code> into
+  the trace rule's params — out of scope here).</li>
+  <li><strong>No editor.</strong> Authoring is C++ (seed/tests) until commit 8.</li>
+</ul>
+
+<h2>Forward-compatibility</h2>
+
+<p>proto3 C++ preserves <strong>unknown fields</strong> through a parse + re-serialize, so a newer palette that adds
+a param field survives an older reader that only knows the old fields — provided the reader decodes and
+re-encodes the message. (If a reader never decodes a rule's params, the bytes round-trip trivially as the opaque
+blob they already are.) Renaming a rule is breaking (already documented); removing a param field uses
+<code>reserved</code>, same as the rest of the schema.</p>
+
+<h2>Proposed scope &amp; sequence</h2>
+
+<ol>
+  <li><strong>Param mechanism + first consumer.</strong> Add <code>ruleParams</code> to the context; make the layout
+  keep <code>(rule, params)</code> paired through the stage sort; add the <code>encode/decode</code> helpers and the
+  <code>UniformSpacingParams</code> message; make <code>Uniform spacing</code> read <code>spacingMm</code> (fallback
+  2.0&nbsp;mm). Tests: param drives spacing; empty params reproduces today; malformed blob falls back.</li>
+  <li><strong>Offset stroke rule</strong> (next doc). Now a rule <em>can</em> read a signed <code>offsetMm</code>, so
+  the channel's <code>+d</code>/<code>−d</code> sides are two instances of one rule with different params — the sign
+  problem dissolves. Adds the offset-polyline helper + stroke-transform stage + <code>ceiling-channel</code> demo;
+  absorbs commit 4.5.</li>
+  <li><strong>DAG</strong> (later). Brush references; the reference's transform ultimately carries the offset,
+  retiring the per-layer carrier entirely.</li>
+</ol>
+
+<div class="keyq">
+<h3 style="margin-top:0.6em;">Open questions for you</h3>
+<ul>
+  <li><strong>Helper shape:</strong> a free <code>encodeParams/decodeParams&lt;T&gt;</code> pair, or a tiny method on
+  each rule (<code>T paramsOr(defaults, bytes)</code>)? (Lean: free helpers — rules stay thin.)</li>
+  <li><strong>Decode timing:</strong> decode inline in <code>apply()</code> every layout (simplest; layout is an
+  edit-time pass, not per-frame), or decode once when the stack is resolved and carry a typed value? (Lean:
+  inline — re-layout is cheap and rare.)</li>
+  <li><strong>Message granularity:</strong> one message per rule (recommended), or shared messages for rules with
+  identical param shapes (e.g. several rules that only need a single <code>distanceMm</code>)? (Lean: per-rule —
+  clarity over DRY for tiny messages.)</li>
+  <li><strong>First consumer:</strong> confirm <code>Uniform spacing / spacingMm</code> is the right proving ground,
+  vs. picking a different existing constant.</li>
+</ul>
+</div>
+
+</body>
+</html>
