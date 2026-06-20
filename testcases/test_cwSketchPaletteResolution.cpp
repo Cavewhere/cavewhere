@@ -265,7 +265,10 @@ TEST_CASE("Editing the resolved palette's content re-skins without a reload (Tie
     REQUIRE(paletteA != nullptr);
     REQUIRE(paletteA->id() == idA);
 
+    // Disk-loaded palettes are read-only; editing one in place requires marking
+    // it writable first (palette mutation is writable-guarded).
     const auto editWall = [](cwSymbologyPalette *palette, const QString &displayName) {
+        palette->setWritable(true);
         cwLineBrush wall;
         wall.name = QStringLiteral("wall");
         wall.displayName = displayName;

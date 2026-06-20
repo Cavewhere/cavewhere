@@ -29,4 +29,37 @@ bool isValidName(QStringView name)
     return name.front() != u'-' && name.back() != u'-';
 }
 
+QString slugify(const QString &name)
+{
+    QString slug;
+    slug.reserve(name.size());
+    bool lastWasDash = false;
+    for (const QChar c : name) {
+        if (c.isLetterOrNumber()) {
+            slug.append(c.toLower());
+            lastWasDash = false;
+        } else if (!slug.isEmpty() && !lastWasDash) {
+            slug.append(QLatin1Char('-'));
+            lastWasDash = true;
+        }
+    }
+    while (slug.endsWith(QLatin1Char('-'))) {
+        slug.chop(1);
+    }
+    if (slug.isEmpty()) {
+        slug = QStringLiteral("palette");
+    }
+    return slug;
+}
+
+QString uniqueName(const QSet<QString> &taken, const QString &base)
+{
+    QString candidate = base;
+    int suffix = 2;
+    while (taken.contains(candidate)) {
+        candidate = QStringLiteral("%1-%2").arg(base).arg(suffix++);
+    }
+    return candidate;
+}
+
 }

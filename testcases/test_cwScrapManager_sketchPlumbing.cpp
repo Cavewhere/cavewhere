@@ -188,6 +188,10 @@ TEST_CASE("cwScrapManager re-derives scraps when the resolved palette changes (T
     REQUIRE(palette != nullptr);
     REQUIRE(palette->id() == idA);
 
+    // Disk-loaded palettes are read-only; editing one in place requires marking
+    // it writable first (palette mutation is writable-guarded).
+    palette->setWritable(true);
+
     QSignalSpy updatedSpy(&f.manager, &cwScrapManager::sketchDerivedScrapsUpdated);
 
     // An in-memory edit to the active palette re-resolves the snapshot (Tier 1),

@@ -354,5 +354,12 @@ cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test cavewhere-
   <li><strong>Category grouping in the graph</strong> (QuickQanava groups), node-layout persistence, cycle-prevention demo polish — graph follow-ups.</li>
 </ul>
 
+<h2>17. Rejected alternatives</h2>
+<table>
+<tr><th>Alternative</th><th>Why rejected</th></tr>
+<tr><td><strong>Gadget-ify the value structs</strong> — add <code>Q_GADGET</code> + <code>Q_PROPERTY</code> + <code>QML_FOREIGN</code> to <code>cwLineBrush</code> / <code>cwSymbologyGlyph</code> (/ <code>cwDecorationLayer</code> / <code>cwPlacementRuleData</code>) so QML reads/edits their fields directly, instead of the <code>cwBrushEditor</code> controller + list-model approach (Decision A).</td>
+<td>Wrong tool for an <em>editor</em>. (1) <strong>Gadget properties are value-copy in QML</strong>: <code>brush.decorations[0].glyphName = "x"</code> mutates a throwaway temporary, so the write never reaches the real brush — live-mutation, the whole point of commit 9, silently breaks. (2) Live preview needs change <em>signals</em> (<code>brushChanged</code> → rebuild preview snapshot); gadgets aren't QObjects and emit nothing, so the editable surface still has to be <code>cwBrushEditor</code> regardless. (3) Nested <code>QVector</code>s (brush→layers→rules) are read-only-awkward and uneditable as gadget collections; a model per level is idiomatic and is what the B-series already specs. (4) It couples a serialization/IO value type to the QML type system and invites the value-copy footgun. The only real win — reading a scalar like <code>displayName</code> — is already served by a getter (<code>brushDisplayName</code>/<code>glyphDisplayName</code>) or a model role. <em>Raised by the Phase-0 architectural review; recorded here so it isn't re-litigated.</em></td></tr>
+</table>
+
 </body>
 </html>

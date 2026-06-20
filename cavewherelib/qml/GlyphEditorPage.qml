@@ -16,7 +16,7 @@ import cavewherelib
 // or region). Reached via RootData.pageSelectionModel with `palette` set as a
 // page property (SketchToolbar's "Edit glyphs…"). Master-detail: the glyph list
 // on the left, the drawing editor on the right. Edits auto-save (no Save/Cancel)
-// — object-first through saveGlyph, persisted asynchronously by cwSaveLoad.
+// — object-first through palette.setGlyph, persisted asynchronously by cwSaveLoad.
 //
 // Wide-only for now: a SplitView side-by-side. Compact (isNarrow) behavior is a
 // follow-up; below the panel-collapse breakpoint the split is cramped.
@@ -77,17 +77,17 @@ StandardPage {
         page.needsName = false
         const oldName = page.currentName   // "" for a fresh Add / unnamed draft
         const newName = nameFieldId.text
-        // Set currentName before saving: saveGlyph fires glyphChanged synchronously,
+        // Set currentName before saving: setGlyph fires glyphChanged synchronously,
         // which resets the model and re-syncs the list selection off currentName.
         page.currentName = newName
         const glyph = glyphCanvasId.toGlyph(newName, displayFieldId.text)
-        RootData.paletteManager.saveGlyph(page.palette, glyph)
+        page.palette.setGlyph(glyph)
 
         // Rename = save-new + drop-old (name is the identity key). Save first so
         // the new row exists, then remove the orphan; currentName already equals
         // newName, so both resets re-anchor selection on the surviving row.
         if (oldName !== "" && oldName !== newName) {
-            RootData.paletteManager.removeGlyph(page.palette, oldName)
+            page.palette.removeGlyph(oldName)
         }
     }
 
@@ -147,7 +147,7 @@ StandardPage {
     RemoveAskBox {
         id: removeChallengeId
         onRemove: {
-            RootData.paletteManager.removeGlyph(page.palette, removeName)
+            page.palette.removeGlyph(removeName)
             // If the editor was on the removed glyph, drop back to a blank draft;
             // removing some other row leaves the current edit untouched.
             if (removeName === page.currentName) {
@@ -223,7 +223,7 @@ StandardPage {
                         name: glyphDelegateId.name
                         writable: page._writable
                         onDuplicateRequested: (sourceName) => {
-                            const newName = RootData.paletteManager.duplicateGlyph(page.palette, sourceName)
+                            const newName = page.palette.duplicateGlyph(sourceName)
                             if (newName.length > 0) {
                                 page._selectGlyphByName(newName)
                             }

@@ -209,7 +209,7 @@ TEST_CASE("Editing a glyph auto-saves it as a first-class file job",
     REQUIRE(fork != nullptr);
 
     const cwSymbologyGlyph glyph = makeGlyph(QStringLiteral("my-tick"));
-    REQUIRE(manager->saveGlyph(fork, glyph));
+    fork->setGlyph(glyph);
 
     // The edit marks the project modified (mirrors a cave/note edit).
     CHECK(project->modified());
@@ -241,13 +241,13 @@ TEST_CASE("Removing a glyph deletes its file via the save queue",
         manager->duplicatePalette(manager->defaultPalette(), QStringLiteral("Trimmed"));
     REQUIRE(fork != nullptr);
 
-    REQUIRE(manager->saveGlyph(fork, makeGlyph(QStringLiteral("doomed"))));
+    fork->setGlyph(makeGlyph(QStringLiteral("doomed")));
     const QString glyphFile =
         QDir(fork->directory()).absoluteFilePath(QStringLiteral("glyphs/doomed.cwglyph"));
     project->waitSaveToFinish();
     REQUIRE(QFile::exists(glyphFile));
 
-    REQUIRE(manager->removeGlyph(fork, QStringLiteral("doomed")));
+    fork->removeGlyph(QStringLiteral("doomed"));
     project->waitSaveToFinish();
     CHECK_FALSE(QFile::exists(glyphFile));
 }

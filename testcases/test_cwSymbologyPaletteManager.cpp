@@ -298,7 +298,7 @@ TEST_CASE("Manager de-duplicates fork directory names",
     CHECK(manager.palettes().size() == 3); // default + two forks
 }
 
-TEST_CASE("Manager saves a glyph into a writable palette",
+TEST_CASE("A forked palette accepts an object-first glyph edit",
           "[cwSymbologyPaletteManager]")
 {
     QTemporaryDir temp;
@@ -314,7 +314,7 @@ TEST_CASE("Manager saves a glyph into a writable palette",
     const int glyphsBefore = fork->glyphs().size();
 
     const cwSymbologyGlyph glyph = makeGlyph(QStringLiteral("my-tick"));
-    REQUIRE(manager.saveGlyph(fork, glyph));
+    fork->setGlyph(glyph);
 
     // Object-first: the live palette carries the glyph immediately, same pointer.
     // The bare manager does no disk I/O — persistence is cwSaveLoad's job and is
@@ -326,7 +326,7 @@ TEST_CASE("Manager saves a glyph into a writable palette",
     CHECK(saved.value() == glyph);
 }
 
-TEST_CASE("Manager refuses to save a glyph into a read-only palette",
+TEST_CASE("A read-only palette ignores a glyph edit",
           "[cwSymbologyPaletteManager]")
 {
     QTemporaryDir temp;
@@ -339,15 +339,14 @@ TEST_CASE("Manager refuses to save a glyph into a read-only palette",
     REQUIRE(seed != nullptr);
     REQUIRE_FALSE(seed->isWritable());
 
-    const int errorsBefore = manager.errorModel()->errors()->size();
-    CHECK_FALSE(manager.saveGlyph(seed, makeGlyph(QStringLiteral("nope"))));
-
-    // Nothing added, problem reported.
+    // The writable guard makes the mutation a silent no-op (the editor UI gates
+    // this; a direct caller hitting the guard is a programmer error, not a
+    // user-facing load problem).
+    seed->setGlyph(makeGlyph(QStringLiteral("nope")));
     CHECK_FALSE(seed->glyph(QStringLiteral("nope")).has_value());
-    CHECK(manager.errorModel()->errors()->size() > errorsBefore);
 }
 
-TEST_CASE("Manager removes a glyph from a writable palette",
+TEST_CASE("A forked palette removes a glyph",
           "[cwSymbologyPaletteManager]")
 {
     QTemporaryDir temp;
@@ -359,10 +358,10 @@ TEST_CASE("Manager removes a glyph from a writable palette",
     cwSymbologyPalette *fork =
         manager.duplicatePalette(manager.defaultPalette(), QStringLiteral("Trimmed"));
     REQUIRE(fork != nullptr);
-    REQUIRE(manager.saveGlyph(fork, makeGlyph(QStringLiteral("doomed"))));
+    fork->setGlyph(makeGlyph(QStringLiteral("doomed")));
     REQUIRE(fork->glyph(QStringLiteral("doomed")).has_value());
 
-    REQUIRE(manager.removeGlyph(fork, QStringLiteral("doomed")));
+    fork->removeGlyph(QStringLiteral("doomed"));
     CHECK_FALSE(fork->glyph(QStringLiteral("doomed")).has_value());
 }
 

@@ -11,6 +11,7 @@
 //Qt includes
 #include <QObject>
 #include <QQmlEngine>
+#include <QSet>
 #include <QString>
 #include <QStringView>
 
@@ -29,6 +30,16 @@ namespace cwSymbology {
 // Rejects path separators, "..", dots and uppercase, so a name read from an
 // untrusted palette cannot escape its directory.
 CAVEWHERE_LIB_EXPORT bool isValidName(QStringView name);
+
+// Turn an arbitrary human string into a path-safe kebab-case stem: lowercase
+// each letter/digit, collapse every other run into a single interior hyphen,
+// and trim leading/trailing hyphens. An empty or all-punctuation input yields
+// the fallback "palette" so the result is always a usable name/folder stem.
+CAVEWHERE_LIB_EXPORT QString slugify(const QString &name);
+
+// First "<base>", "<base>-2", "<base>-3"… not already in `taken`. Used to derive
+// a collision-free glyph/brush name (or directory stem) against an existing set.
+CAVEWHERE_LIB_EXPORT QString uniqueName(const QSet<QString> &taken, const QString &base);
 
 }
 

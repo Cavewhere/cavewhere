@@ -75,12 +75,18 @@ public:
     std::optional<cwLineBrush> brush(QStringView name) const { return m_data.brush(name); }
     std::optional<cwSymbologyGlyph> glyph(QStringView name) const { return m_data.glyph(name); }
 
-    // QML convenience for selecting a glyph by name alone (e.g. after Duplicate):
-    // the glyph's displayName, or an empty string if the name is not a member.
-    // cwSymbologyGlyph is not a QML gadget, so QML can't read it off glyph().
+    // QML convenience for selecting a member by name alone (e.g. after Duplicate):
+    // the glyph/brush displayName, or an empty string if the name is not a member.
+    // The value structs aren't QML gadgets, so QML can't read displayName off
+    // glyph()/brush().
     Q_INVOKABLE QString glyphDisplayName(const QString &name) const
     {
         const std::optional<cwSymbologyGlyph> found = m_data.glyph(name);
+        return found ? found->displayName : QString();
+    }
+    Q_INVOKABLE QString brushDisplayName(const QString &name) const
+    {
+        const std::optional<cwLineBrush> found = m_data.brush(name);
         return found ? found->displayName : QString();
     }
 
@@ -89,11 +95,21 @@ public:
     // the content is unchanged; removeGlyph/removeBrush drop the named member if
     // present. Each emits glyphChanged/brushChanged with the affected name only
     // when something actually changed — a removal emits it too, so a consumer's
-    // name-scoped invalidation covers a deleted member as well.
-    void setGlyph(const cwSymbologyGlyph &glyph);
-    void removeGlyph(QStringView name);
-    void setBrush(const cwLineBrush &brush);
-    void removeBrush(QStringView name);
+    // name-scoped invalidation covers a deleted member as well. All four are
+    // writable-guarded: a no-op on a read-only palette (the UI gates this; a
+    // direct caller hitting the guard is a programmer error and warns at most).
+    Q_INVOKABLE void setGlyph(const cwSymbologyGlyph &glyph);
+    Q_INVOKABLE void removeGlyph(const QString &name);
+    Q_INVOKABLE void setBrush(const cwLineBrush &brush);
+    Q_INVOKABLE void removeBrush(const QString &name);
+
+    // Copy an existing member into a new one with a derived unique name
+    // ("<name>-copy", then "<name>-copy-2"…) and a "<displayName> copy" label,
+    // then upsert it (→ glyphChanged/brushChanged → it appears in lists; cwSaveLoad
+    // persists it). Returns the new name so the caller can select it, or an empty
+    // QString on failure (read-only palette, or `name` is not a member).
+    Q_INVOKABLE QString duplicateGlyph(const QString &name);
+    Q_INVOKABLE QString duplicateBrush(const QString &name);
 
     // Cheap implicitly-shared lookup surface for the render path.
     cwPaletteSnapshot snapshot() const { return m_data.snapshot(); }

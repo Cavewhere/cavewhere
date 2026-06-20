@@ -17,7 +17,6 @@
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwError.h"
-#include "cwSymbologyGlyph.h"
 
 // moc needs the complete cwSymbologyPalette to register the paletteById return
 // metatype; Q_MOC_INCLUDE keeps it out of this header.
@@ -86,27 +85,6 @@ public:
     // palette pointers (including `source`) stay valid — no reload happens.
     Q_INVOKABLE cwSymbologyPalette *duplicatePalette(cwSymbologyPalette *source,
                                                      const QString &newName);
-
-    // Upsert a glyph on a writable palette (object-first): mutates the live
-    // palette and emits glyphChanged. Persistence is asynchronous — cwSaveLoad's
-    // connectPalette writes the glyph file as a first-class save job. No-op
-    // returning false if the palette is null or read-only. Used by the glyph
-    // editor's Save.
-    Q_INVOKABLE bool saveGlyph(cwSymbologyPalette *palette, const cwSymbologyGlyph &glyph);
-
-    // Drop a glyph from a writable palette (object-first, a no-op if absent).
-    // cwSaveLoad removes the glyph file asynchronously. A rename is
-    // saveGlyph(newGlyph) followed by removeGlyph(oldName).
-    Q_INVOKABLE bool removeGlyph(cwSymbologyPalette *palette, const QString &glyphName);
-
-    // Copy an existing glyph into a new one with a derived unique name
-    // ("<name>-copy", then "<name>-copy-2"…) and a "<displayName> copy" label.
-    // Object-first: deep-copies the strokes and setGlyph()s the copy (→
-    // glyphChanged → it appears in the list); cwSaveLoad persists it
-    // asynchronously. Returns the new glyph's name so the caller can select it,
-    // or an empty QString on failure (null/read-only palette, or `name` is not a
-    // member) with the reason pushed to errorModel().
-    Q_INVOKABLE QString duplicateGlyph(cwSymbologyPalette *palette, const QString &name);
 
     // Remove a writable palette from the project: drops it from the list,
     // deletes the object (so any QML binding to it must release), and emits
