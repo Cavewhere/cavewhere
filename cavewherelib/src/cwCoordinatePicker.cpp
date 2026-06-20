@@ -8,45 +8,16 @@
 #include "cwCoordinatePicker.h"
 
 //Our includes
-#include "cwCamera.h"
-#include "cwScene.h"
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
-#include "cwGeometryItersecter.h"
 #include "cwScenePick.h"
 
-namespace {
-    // Screen-space pick tolerance for line picking, in millimeters. The
-    // centerline is hit when the cursor is within this physical distance of it at
-    // any zoom. Millimeters (not pixels) so the tolerance covers the same size on
-    // screen regardless of display DPI or scaling.
-    constexpr double kPickRadiusMillimeters = 1.5;
-}
-
 cwCoordinatePicker::cwCoordinatePicker(QQuickItem* parent) :
-    cwInteraction(parent)
+    cwScenePicker(parent)
 {
 }
 
 cwCoordinatePicker::~cwCoordinatePicker() = default;
-
-void cwCoordinatePicker::setCamera(cwCamera* camera)
-{
-    if (m_camera == camera) {
-        return;
-    }
-    m_camera = camera;
-    emit cameraChanged();
-}
-
-void cwCoordinatePicker::setScene(cwScene* scene)
-{
-    if (m_scene == scene) {
-        return;
-    }
-    m_scene = scene;
-    emit sceneChanged();
-}
 
 void cwCoordinatePicker::setRegion(cwCavingRegion* region)
 {
@@ -87,17 +58,11 @@ void cwCoordinatePicker::rebuildWgs84Transform()
 
 void cwCoordinatePicker::pick(QPointF screenPoint)
 {
-    if (!m_camera || !m_scene || !m_region) {
+    if (!m_region) {
         return;
     }
 
-    cwGeometryItersecter* intersecter = m_scene->geometryItersecter();
-    if (!intersecter) {
-        return;
-    }
-
-    const cwScenePick::Result pick = cwScenePick::snappedPoint(
-                screenPoint, *m_camera, *intersecter, pixelsForMillimeters(kPickRadiusMillimeters));
+    const cwScenePick::Result pick = snapPick(screenPoint);
     if (!pick.hit) {
         return;
     }

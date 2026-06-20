@@ -9,10 +9,8 @@
 #define CWCOORDINATEPICKER_H
 
 //Our includes
-#include "cwInteraction.h"
+#include "cwScenePicker.h"
 #include "cwGeoPoint.h"
-class cwCamera;
-class cwScene;
 class cwCavingRegion;
 class cwCoordinateTransform;
 
@@ -34,13 +32,11 @@ class cwCoordinateTransform;
  * activate()/deactivate(); the manager's signal wiring restores the
  * default (turn-table) interaction when deactivated.
  */
-class cwCoordinatePicker : public cwInteraction
+class cwCoordinatePicker : public cwScenePicker
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(CoordinatePicker)
 
-    Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
-    Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
     Q_PROPERTY(cwCavingRegion* region READ region WRITE setRegion NOTIFY regionChanged)
 
     Q_PROPERTY(bool hasPick READ hasPick NOTIFY pickChanged)
@@ -58,12 +54,6 @@ class cwCoordinatePicker : public cwInteraction
 public:
     explicit cwCoordinatePicker(QQuickItem* parent = nullptr);
     ~cwCoordinatePicker() override;
-
-    cwCamera* camera() const { return m_camera; }
-    void setCamera(cwCamera* camera);
-
-    cwScene* scene() const { return m_scene; }
-    void setScene(cwScene* scene);
 
     cwCavingRegion* region() const { return m_region; }
     void setRegion(cwCavingRegion* region);
@@ -84,8 +74,6 @@ public:
     Q_INVOKABLE void clearPick();
 
 signals:
-    void cameraChanged();
-    void sceneChanged();
     void regionChanged();
     void pickChanged();
 
@@ -93,8 +81,6 @@ private slots:
     void rebuildWgs84Transform();
 
 private:
-    QPointer<cwCamera> m_camera;
-    QPointer<cwScene> m_scene;
     QPointer<cwCavingRegion> m_region;
 
     bool m_hasPick = false;

@@ -9,12 +9,9 @@
 #define CWMEASUREMENTINTERACTION_H
 
 //Our includes
-#include "cwInteraction.h"
-class cwCamera;
-class cwScene;
+#include "cwScenePicker.h"
 
 //Qt includes
-#include <QPointer>
 #include <QPointF>
 #include <QVector3D>
 
@@ -29,13 +26,11 @@ class cwScene;
  * The readout values (distance, azimuth, inclination, …) are exposed as
  * properties for the QML view; Esc-to-exit lives in QML.
  */
-class cwMeasurementInteraction : public cwInteraction
+class cwMeasurementInteraction : public cwScenePicker
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(MeasurementInteraction)
 
-    Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
-    Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
     Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
 
     Q_PROPERTY(QVector3D hoverPoint READ hoverPoint NOTIFY hoverChanged)
@@ -64,12 +59,6 @@ public:
 
     explicit cwMeasurementInteraction(QQuickItem* parent = nullptr);
     ~cwMeasurementInteraction() override;
-
-    cwCamera* camera() const { return m_camera; }
-    void setCamera(cwCamera* camera);
-
-    cwScene* scene() const { return m_scene; }
-    void setScene(cwScene* scene);
 
     Mode mode() const { return m_mode; }
     void setMode(Mode mode);
@@ -100,26 +89,15 @@ public:
     Q_INVOKABLE void copyToClipboard() const;
 
 signals:
-    void cameraChanged();
-    void sceneChanged();
     void modeChanged();
     void hoverChanged();
     void measurementChanged();
 
 private:
-    struct Pick {
-        QVector3D world;
-        bool hit = false;
-        bool snapped = false;
-    };
-
-    Pick pickAt(QPointF screenPoint) const;
-    bool isPlaceable(const Pick& pick) const;
+    bool isPlaceable(const cwScenePick::Result& pick) const;
     void updateMeasurement(QVector3D from, QVector3D to);
     void clearMeasurementValues();
 
-    QPointer<cwCamera> m_camera;
-    QPointer<cwScene> m_scene;
     Mode m_mode = Mode::Free;
 
     QVector3D m_hoverPoint;

@@ -8,11 +8,7 @@
 #include "cwMeasurementInteraction.h"
 
 //Our includes
-#include "cwCamera.h"
-#include "cwScene.h"
-#include "cwGeometryItersecter.h"
 #include "cwMeasurementMath.h"
-#include "cwScenePick.h"
 
 //Qt includes
 #include <QClipboard>
@@ -20,40 +16,17 @@
 #include <QString>
 
 namespace {
-    // Screen-space snap tolerance, in millimeters, matching cwCoordinatePicker.
-    // Millimeters (not pixels) so the snap covers the same physical size on
-    // screen regardless of display DPI or scaling.
-    constexpr double kPickRadiusMillimeters = 1.5;
-
     // Clipboard readout is canonical SI: metres for lengths, degrees for angles.
     constexpr int kLengthDecimals = 3;
     constexpr int kAngleDecimals = 1;
 }
 
 cwMeasurementInteraction::cwMeasurementInteraction(QQuickItem* parent) :
-    cwInteraction(parent)
+    cwScenePicker(parent)
 {
 }
 
 cwMeasurementInteraction::~cwMeasurementInteraction() = default;
-
-void cwMeasurementInteraction::setCamera(cwCamera* camera)
-{
-    if (m_camera == camera) {
-        return;
-    }
-    m_camera = camera;
-    emit cameraChanged();
-}
-
-void cwMeasurementInteraction::setScene(cwScene* scene)
-{
-    if (m_scene == scene) {
-        return;
-    }
-    m_scene = scene;
-    emit sceneChanged();
-}
 
 void cwMeasurementInteraction::setMode(Mode mode)
 {
@@ -66,28 +39,9 @@ void cwMeasurementInteraction::setMode(Mode mode)
     emit modeChanged();
 }
 
-cwMeasurementInteraction::Pick cwMeasurementInteraction::pickAt(QPointF screenPoint) const
+bool cwMeasurementInteraction::isPlaceable(const cwScenePick::Result& pick) const
 {
-    Pick pick;
-    if (!m_camera || !m_scene) {
-        return pick;
-    }
-    cwGeometryItersecter* intersecter = m_scene->geometryItersecter();
-    if (!intersecter) {
-        return pick;
-    }
-
-    const cwScenePick::Result result = cwScenePick::snappedPoint(
-                screenPoint, *m_camera, *intersecter, pixelsForMillimeters(kPickRadiusMillimeters));
-    pick.world = result.world;
-    pick.hit = result.hit;
-    pick.snapped = result.snappedToStation;
-    return pick;
-}
-
-bool cwMeasurementInteraction::isPlaceable(const Pick& pick) const
-{
-    return pick.hit && (m_mode == Mode::Free || pick.snapped);
+    return pick.hit && (m_mode == Mode::Free || pick.snappedToStation);
 }
 
 void cwMeasurementInteraction::updateMeasurement(QVector3D from, QVector3D to)
@@ -115,10 +69,10 @@ void cwMeasurementInteraction::clearMeasurementValues()
 
 void cwMeasurementInteraction::hover(QPointF screenPoint)
 {
-    const Pick pick = pickAt(screenPoint);
+    const cwScenePick::Result pick = snapPick(screenPoint);
 
     m_hoverScreenPoint = screenPoint;
-    m_hoverSnapped = pick.hit && pick.snapped;
+    m_hoverSnapped = pick.hit && pick.snappedToStation;
     m_hoverValid = isPlaceable(pick);
     if (pick.hit) {
         m_hoverPoint = pick.world;
