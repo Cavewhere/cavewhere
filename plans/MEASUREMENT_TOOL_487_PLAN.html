@@ -417,6 +417,33 @@ Tests use <code>QTemporaryDir</code>/<code>applicationPid()</code> for any temp 
     <code>cwPickQuery::Solid</code> (lines don't occlude a lead), and the turntable pivot uses
     <code>pickQuery(pixelsForMillimeters(...))</code> with <code>kinds = All</code> so it can orbit a bare
     centerline when the solid geometry is hidden.</li>
+  <li><b>Shared snapped-pick on a <code>ScenePicker</code> interaction base</b> —
+    <code>cwMeasurementInteraction::pickAt()</code> duplicates <code>cwCoordinatePicker</code>'s
+    camera/scene/<code>geometryItersecter()</code> preamble and re-declares
+    <code>kPickRadiusMillimeters = 1.5</code>; <code>cwLazClipInteraction</code> snaps too, so three
+    interactions now repeat it. Rather than bolt a <code>snapPick(QPointF)</code> helper directly onto
+    <code>cwInteraction</code> (which would bloat the shared base), promote a thin
+    <code>ScenePicker : cwInteraction</code> that owns the camera/scene <code>QPointer</code>s, the
+    null-checked accessors, one <code>snapPick()</code>, and a single shared pick-radius constant; the three
+    pickers extend it. Keeps <code>cwInteraction</code> clean and gives one definition of "snapped world pick"
+    so the radius / occlusion semantics can't drift. Its own commit; touches two already-shipped pickers.</li>
+  <li><b>Shared screen-space annotation-overlay base</b> for the <code>QCanvasPainterItem</code> overlays —
+    <code>cwMeasurementLineCanvas</code>/<code>Renderer</code> is a near-clone of
+    <code>cwLazClipPolygonCanvas</code>/<code>Renderer</code> (same <code>interaction</code> property, opaque
+    colour-fallback boilerplate, camera&rarr;<code>update()</code> wiring, and
+    <code>synchronize()</code>/<code>paint()</code> shape); <code>cwSketchCanvas</code> is a third instance. A
+    small base holding the interaction <code>QPointer</code>, the camera connect/<code>update()</code> wiring,
+    and the colour-fallback idiom would centralize the "always-on-top screen-space annotation" convention and the
+    QML-binds-Theme / C++-never-reaches-the-singleton seam. The overlays differ in payload (single segment +
+    rubber-band vs. closed polygon + vertex dots), so extracting the base means refactoring the shipped
+    Laz/Sketch overlays — its own commit + render-regression tests.</li>
+  <li><b>One geodesy home for azimuth / inclination / north-correction</b> — the natural endpoint of the
+    true-north correction and LiDAR-unification items above: instead of each feature computing grid-north
+    bearings and bolting on convergence ad hoc, keep the pure <code>atan2</code> primitive in
+    <code>cwMeasurementMath</code> and route all true-north correction through
+    <code>cwGridConvergence::computeAt()</code>, so the measurement tool, LiDAR-note georeferencing, and survey
+    readouts share one "scene vector &rarr; bearing in the user's chosen north." Data-model-adjacent (needs the
+    fix-station / CRS context the tool doesn't yet carry); deferred.</li>
 </ul>
 
 <h2 id="decisions">11. Decisions locked in</h2>

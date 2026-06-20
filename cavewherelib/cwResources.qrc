@@ -164,5 +164,6 @@
         <file>twbs-icons/icons/x-lg.svg</file>
         <file>twbs-icons/icons/crosshair.svg</file>
         <file>twbs-icons/icons/scissors.svg</file>
+        <file>twbs-icons/icons/rulers.svg</file>
     </qresource>
 </RCC>

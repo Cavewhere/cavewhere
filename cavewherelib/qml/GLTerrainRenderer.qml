@@ -16,6 +16,8 @@ Item {
 
     property alias turnTableInteraction: turnTableInteractionId
     property alias coordinatePickerInteraction: coordinatePickerId
+    property alias measurementInteraction: measurementInteractionId
+    property alias measurementReadoutPopup: measurementPopupId
     property alias interactionManager: interactionManagerId
     property alias leadView: leadViewId
     property alias renderer: rendererId
@@ -114,12 +116,21 @@ Item {
         turnTableInteraction: turnTableInteractionId
     }
 
+    MeasurementInteractionView {
+        id: measurementInteractionId
+        objectName: "measurementInteraction"
+        camera: rendererId.camera
+        scene: rendererId.scene
+        turnTableInteraction: turnTableInteractionId
+    }
+
     InteractionManager {
         id: interactionManagerId
         interactions: [
             turnTableInteractionId,
             coordinatePickerId,
-            lazClipInteractionId
+            lazClipInteractionId,
+            measurementInteractionId
         ]
         defaultInteraction: turnTableInteractionId
     }
@@ -229,6 +240,23 @@ Item {
                     }
                 }
             }
+
+            IconButton {
+                id: measureButtonId
+                objectName: "measurementButton"
+                iconSource: "qrc:/twbs-icons/icons/rulers.svg"
+                sourceSize: Qt.size(21, 21)
+                text: qsTr("Measure")
+                toolTip: qsTr("Measure distance and bearing")
+                selected: interactionManagerId.activeInteraction === measurementInteractionId
+                onClicked: {
+                    if (measureButtonId.selected) {
+                        measurementInteractionId.deactivate()
+                    } else {
+                        measurementInteractionId.activate()
+                    }
+                }
+            }
         }
     }
 
@@ -238,6 +266,16 @@ Item {
         parent: rendererId
         picker: coordinatePickerId
         visible: coordinatePickerId.hasPick && pickButtonId.selected
+    }
+
+    MeasurementReadoutPopup {
+        id: measurementPopupId
+        objectName: "measurementReadoutPopup"
+        parent: rendererId
+        interaction: measurementInteractionId
+        visible: measureButtonId.selected && measurementInteractionId.hasMeasurement
+        x: Math.max(0, parent.width - width - 20)
+        y: 20
     }
 }
 
