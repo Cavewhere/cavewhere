@@ -312,17 +312,18 @@ MainWindowTest {
 
             verify(leadPoint.selected === true)
 
-            //Make sure the popup box is showing the write data
-            let leadPointSizeWidth = null
-            let leadPointSizeHeight = null
+            //Make sure the popup box is showing the right data. In view mode the
+            //size renders as a single read-only label ("5 × 4 m").
+            let leadSize = null
             tryVerify(() => {
-                          leadPointSizeWidth = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0->leadQuoteBox->widthText")
-                          leadPointSizeHeight = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0->leadQuoteBox->heightText")
-                          return leadPointSizeWidth !== null && leadPointSizeHeight !== null
+                          leadSize = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0->leadQuoteBox->sizeText")
+                          return leadSize !== null
                       })
 
-            verify(leadPointSizeWidth.text === "5")
-            verify(leadPointSizeHeight.text === "4")
+            verify(leadSize.text.indexOf("5 ×") >= 0,
+                   "size label should show width 5, got: " + leadSize.text)
+            verify(leadSize.text.indexOf("× 4") >= 0,
+                   "size label should show height 4, got: " + leadSize.text)
 
             let description2 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0->leadQuoteBox->description")
             verify(description2.text === "Sauce")

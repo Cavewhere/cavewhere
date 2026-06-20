@@ -2,8 +2,8 @@ pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
 import QtQuick.Controls as QC
-import cavewherelib
 import QtQuick.Layouts
+import cavewherelib
 
 QQ.Item {
     id: pointId
@@ -84,51 +84,128 @@ QQ.Item {
         QuoteBox {
             id: quoteBoxId
             objectName: "leadQuoteBox"
+
+            property bool editMode: false
+
+            margin: Theme.sectionSpacing
             pointAtObject: questionImage
             pointAtObjectPosition: Qt.point(Math.floor(questionImage.width * .5),
                                             questionImage.height)
 
             QQ.Item {
-                width: columnLayout.width
-                height: columnLayout.height
+                id: popupContent
+
+                // Optical pad between an icon and its text label; tightSpacing
+                // alone reads too cramped at these small icon sizes.
+                readonly property int iconLabelSpacing: Theme.tightSpacing + 2
+
+                width: contentColumn.width
+                height: contentColumn.height
+
+                // Take the exclusive grab on any tap inside the popup so it can't
+                // bubble up to the LeadView's empty-space handler, which deselects
+                // (and closes) the popup. A DragThreshold (passive) handler would
+                // not stop propagation; WithinBounds grabs on press.
+                QQ.TapHandler {
+                    gesturePolicy: QQ.TapHandler.WithinBounds
+                }
 
                 ColumnLayout {
-                    id: columnLayout
+                    id: contentColumn
+                    spacing: Theme.sectionSpacing
 
-                    SizeEditor {
-                        readOnly: true
-                        widthText: lead.width
-                        heightText: lead.height
-                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.flowSpacing
 
-                    //This is too easy for the user to mark a lead as completed
-                    QC.CheckBox {
-                        id: checkBox
-                        text: "Completed"
-                        checked: lead.completed
-                        onCheckedChanged: lead.completed = checked
+                        QC.Label {
+                            Layout.fillWidth: true
+                            text: quoteBoxId.editMode ? "Edit Lead" : "Lead"
+                            font.bold: true
+                            font.pixelSize: Theme.fontSizeMedium
+                        }
 
-                        QQ.Connections {
-                            target: lead
-                            function onCompletedChanged() { checkBox.checked = lead.completed }
+                        QQ.Rectangle {
+                            objectName: "leadEditButton"
+                            radius: Theme.floatingWidgetRadius
+                            color: editHover.hovered ? Theme.hover : Theme.transparent
+                            implicitWidth: editToggleRow.implicitWidth + Theme.flowSpacing * 2
+                            implicitHeight: editToggleRow.implicitHeight + Theme.tightSpacing * 2
+
+                            RowLayout {
+                                id: editToggleRow
+                                anchors.centerIn: parent
+                                spacing: popupContent.iconLabelSpacing
+
+                                Icon {
+                                    sourceSize: Qt.size(13, 13)
+                                    colorizationColor: Theme.textLink
+                                    source: quoteBoxId.editMode
+                                        ? "qrc:/twbs-icons/icons/check-lg.svg"
+                                        : "qrc:/twbs-icons/icons/pencil.svg"
+                                }
+
+                                QC.Label {
+                                    text: quoteBoxId.editMode ? "Done" : "Edit"
+                                    color: Theme.textLink
+                                    font.pixelSize: Theme.fontSizeSmall
+                                }
+                            }
+
+                            QQ.HoverHandler {
+                                id: editHover
+                                cursorShape: Qt.PointingHandCursor
+                            }
+
+                            // ReleaseWithinBounds: button-style exclusive grab, so
+                            // the tap toggles edit mode without bubbling up to the
+                            // LeadView's deselect handler.
+                            QQ.TapHandler {
+                                gesturePolicy: QQ.TapHandler.ReleaseWithinBounds
+                                onTapped: quoteBoxId.editMode = !quoteBoxId.editMode
+                            }
                         }
                     }
 
-                    QC.Label {
-                        objectName: "description"
-                        visible: text.length > 0
-                        text: lead.description
+                    QQ.Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 1
+                        color: Theme.divider
                     }
 
-                    LinkText {
-                        objectName: "gotoNotes"
-                        text: "Notes"
-                        onClicked: linkGenerator.gotoScrap(pointId.scrap)
+                    LeadInfoForm {
+                        Layout.fillWidth: true
+                        scrap: pointId.scrap
+                        index: pointId.pointIndex
+                        editable: quoteBoxId.editMode
+                    }
 
+                    QQ.Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 1
+                        color: Theme.divider
+                        visible: !quoteBoxId.editMode
+                    }
 
-                        LinkGenerator {
-                            id: linkGenerator
-                            pageSelectionModel: RootData.pageSelectionModel
+                    RowLayout {
+                        visible: !quoteBoxId.editMode
+                        spacing: popupContent.iconLabelSpacing
+
+                        Icon {
+                            sourceSize: Qt.size(12, 12)
+                            colorizationColor: Theme.textLink
+                            source: "qrc:/twbs-icons/icons/arrow-up-right.svg"
+                        }
+
+                        LinkText {
+                            objectName: "gotoNotes"
+                            text: "Open in Notes"
+                            onClicked: linkGenerator.gotoScrap(pointId.scrap)
+
+                            LinkGenerator {
+                                id: linkGenerator
+                                pageSelectionModel: RootData.pageSelectionModel
+                            }
                         }
                     }
                 }

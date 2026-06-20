@@ -77,11 +77,12 @@ MainWindowTest {
             let description_obj1 = findChild(quoteBox, "description")
             tryVerify(() => {return description_obj1.text === "Walking"})
 
-            let width = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox->widthText")
-            tryCompare(width, "text", "2.5")
-
-            let height = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox->heightText")
-            tryCompare(height, "text", "2")
+            // View mode shows the size as a single read-only label ("2.5 × 2 m").
+            let sizeText = findChild(quoteBox, "sizeText")
+            tryVerify(() => sizeText !== null
+                            && sizeText.text.indexOf("2.5") >= 0
+                            && sizeText.text.indexOf("× 2") >= 0,
+                      5000, "size label should read the lead's width × height")
 
             //Make sure there's leads in the lead table
             let dataButton_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->dataButton")
@@ -352,13 +353,142 @@ MainWindowTest {
                           quoteBox = findChild(leadObj, "leadQuoteBox")
                           return quoteBox !== null
                       })
-            let widthDisplay = findChild(quoteBox, "widthText");
-            let heightDisplay = findChild(quoteBox, "heightText");
+            let sizeDisplay = findChild(quoteBox, "sizeText");
             let descriptionDisplay = findChild(quoteBox, "description");
 
-            compare(widthDisplay.text, "3");
-            compare(heightDisplay.text, "2");
+            verify(sizeDisplay.text.indexOf("3 ×") >= 0,
+                   "size label should show width 3, got: " + sizeDisplay.text);
+            verify(sizeDisplay.text.indexOf("× 2") >= 0,
+                   "size label should show height 2, got: " + sizeDisplay.text);
             compare(descriptionDisplay.text, "New lead");
+        }
+
+        // #516: the 3D lead popup is a read-only summary (size label + status pill)
+        // with an Edit button that flips it into the editable LeadInfoForm. The
+        // billboard/popup is not rendered under the offscreen platform, so this
+        // covers the view-mode chrome and the edit toggle; the field-editing and
+        // commit path is the shared LeadInfoForm, exercised in the 2D notes tests.
+        function test_editLeadInView3D() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            let leadPoint = null;
+            tryVerify(() => {
+                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
+                return leadPoint !== null;
+            });
+            mouseClick(leadPoint)
+
+            let quoteBox = null;
+            tryVerify(() => {
+                quoteBox = findChild(leadPoint, "leadQuoteBox")
+                return quoteBox !== null;
+            })
+
+            // View mode: read-only summary — size label, status pill, Notes link,
+            // and no editable controls.
+            verify(!quoteBox.editMode, "popup should start in view mode")
+            verify(findChild(quoteBox, "sizeText") !== null, "size label should show")
+            verify(findChild(quoteBox, "completedStatus") !== null, "status pill should show")
+            verify(findChild(quoteBox, "gotoNotes") !== null, "Notes link should show")
+            verify(findChild(quoteBox, "completed") === null,
+                   "no editable checkbox should exist in view mode")
+
+            // Flip into edit mode with the Edit button: the read-only summary is
+            // replaced by the editable LeadInfoForm controls.
+            let editButton = findChild(quoteBox, "leadEditButton")
+            verify(editButton !== null, "edit button should exist")
+            mouseClick(editButton)
+            tryVerify(() => quoteBox.editMode, 1000, "edit button should enter edit mode")
+
+            tryVerify(() => {
+                let completed = findChild(quoteBox, "completed")
+                return completed !== null && completed.enabled
+            }, 1000, "completed checkbox should appear and be editable in edit mode")
+            verify(findChild(quoteBox, "widthText") !== null, "width input should appear")
+            verify(findChild(quoteBox, "heightText") !== null, "height input should appear")
+        }
+
+        // #516: editing a lead's fields through the shared LeadInfoForm commits
+        // back to the scrap. Driven through the 2D notes editor, which renders as
+        // normal QML (the 3D popup uses the same form but needs the RHI billboard).
+        function test_editLeadFieldsCommit() {
+            let {scrap, leadIndex, widthText, heightText} = addNewLeadToScrap();
+
+            // Width and height.
+            clickToEdit(widthText);
+            keyClick(53, 0); // '5'
+            keyClick(Qt.Key_Return);
+            tryCompare(scrap.leadData(Scrap.LeadSize, leadIndex), "width", 5);
+
+            clickToEdit(heightText);
+            keyClick(55, 0); // '7'
+            keyClick(Qt.Key_Return);
+            tryCompare(scrap.leadData(Scrap.LeadSize, leadIndex), "height", 7);
+
+            // Description.
+            let description = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->description");
+            mouseClick(description);
+            tryVerify(() => description.activeFocus, 1000, "description should focus on click");
+            keyClick("G"); keyClick("o"); keyClick("e"); keyClick("s");
+            tryVerify(() => scrap.leadData(Scrap.LeadDesciption, leadIndex) === "Goes",
+                      1000, "description edit should commit to the scrap");
+
+            // Completed checkbox (new in the shared form).
+            let completed = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->completed");
+            verify(completed !== null, "completed checkbox should exist in the lead editor");
+            verify(!scrap.leadData(Scrap.LeadCompleted, leadIndex), "lead should start not completed");
+            mouseClick(completed);
+            tryVerify(() => scrap.leadData(Scrap.LeadCompleted, leadIndex) === true,
+                      1000, "checking the box should commit completed to the scrap");
+        }
+
+        // #516: the lead editor stays in two-way sync with the scrap — editing a
+        // field commits to the model (view -> model), and changing the model
+        // updates the field (model -> view). The model -> view checks run AFTER a
+        // UI edit to confirm the declarative bindings keep tracking the lead once
+        // the user has interacted with the controls. Driven through the 2D notes
+        // editor, which renders as normal QML offscreen.
+        function test_leadEditorTwoWaySync() {
+            let {scrap, leadIndex, widthText, heightText} = addNewLeadToScrap();
+
+            let description = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->description");
+            let completed = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->completed");
+            verify(description !== null, "description field should exist");
+            verify(completed !== null, "completed checkbox should exist");
+
+            // view -> model: edits commit to the scrap (and break the bindings).
+            mouseClick(description);
+            tryVerify(() => description.activeFocus, 1000, "description should focus on click");
+            keyClick("G"); keyClick("o");
+            tryVerify(() => scrap.leadData(Scrap.LeadDesciption, leadIndex) === "Go",
+                      1000, "typing should commit to the scrap");
+
+            verify(!scrap.leadData(Scrap.LeadCompleted, leadIndex), "lead should start not completed");
+            mouseClick(completed);
+            tryVerify(() => scrap.leadData(Scrap.LeadCompleted, leadIndex) === true,
+                      1000, "checking the box should commit to the scrap");
+
+            clickToEdit(widthText);
+            keyClick(53, 0); // '5'
+            keyClick(Qt.Key_Return);
+            tryCompare(scrap.leadData(Scrap.LeadSize, leadIndex), "width", 5);
+
+            // model -> view: changing the scrap directly updates the fields, even
+            // though the UI edits above broke their declarative bindings.
+            scrap.setLeadData(Scrap.LeadDesciption, leadIndex, "External edit");
+            tryCompare(description, "text", "External edit", 5000,
+                       "description should follow an external model change");
+
+            scrap.setLeadData(Scrap.LeadCompleted, leadIndex, false);
+            tryCompare(completed, "checked", false, 5000,
+                       "completed should follow an external model change");
+
+            scrap.setLeadData(Scrap.LeadSize, leadIndex, Qt.size(8, 9));
+            tryCompare(widthText, "text", "8", 5000,
+                       "width should follow an external model change");
+            tryCompare(heightText, "text", "9", 5000,
+                       "height should follow an external model change");
         }
 
         // Lead popups act like a dialog: tapping empty space closes the open popup.
