@@ -96,7 +96,8 @@ clamp-to-station seams delivered by
   <a href="#grid">8. The grid-azimuth caveat</a><br>
   <a href="#tests">9. Tests</a><br>
   <a href="#out">10. Out of scope / follow-ups</a><br>
-  <a href="#decisions">11. Decisions locked in</a>
+  <a href="#decisions">11. Decisions locked in</a><br>
+  <a href="#northref">12. Azimuth north reference (Grid / True / Magnetic)</a>
 </div>
 
 <h2 id="scope">2. Commit breakdown &amp; why multi-commit</h2>
@@ -362,7 +363,8 @@ two points and the current mode, drives hover, and exposes the readout as proper
 <p><b>v1 scope:</b> report grid azimuth relative to scene +Y and label it as such (e.g. "Azimuth (grid)").
 True-north correction — apply the CRS grid convergence at the measurement location via PROJ — is a documented
 follow-up, deliberately kept out of the pure math helper so <code>between()</code> stays a function of two
-points. (Consistent with the "ship the simple tier first" preference.)</p>
+points. (Consistent with the "ship the simple tier first" preference.) <b>The follow-up is now fully specced in
+§12</b> as a Grid / True / Magnetic azimuth selector.</p>
 <p><b>Cheaper than it looks:</b> the PROJ math already exists as the pure helper
 <code>cwGridConvergence::computeAt()</code> (<code>cwGridConvergence.h:89</code>), so the follow-up is mostly
 wiring, not new geodesy. Apply it in the <b>C3 interaction layer</b>
@@ -398,7 +400,10 @@ Tests use <code>QTemporaryDir</code>/<code>applicationPid()</code> for any temp 
 <ul>
   <li><b>True-north / grid-convergence correction</b> for azimuth (see §8) — PROJ-based, deferred, but
     cheaper than it looks: <code>cwGridConvergence::computeAt()</code> (<code>cwGridConvergence.h:89</code>)
-    already supplies the convergence; the C3 layer just adds it to the grid azimuth.</li>
+    already supplies the convergence; the C3 layer just adds it to the grid azimuth.
+    <b>Promoted to a full spec — see §12</b>, expanded to a Grid / True / <b>Magnetic</b> selector once it
+    surfaced that survex already ships the IGRF model behind <code>cwDeclination::compute()</code>, so magnetic
+    costs no new dependency.</li>
   <li><b>Station names in the readout</b> — needs the additive <code>cwLinePlotGeometry::Result</code> metadata
     flagged in #530 (vertex&rarr;station-name map was discarded). Snap currently yields position + vertex index
     only; "from STA12 to STA15" waits on that.</li>
@@ -430,16 +435,27 @@ Tests use <code>QTemporaryDir</code>/<code>applicationPid()</code> for any temp 
     <code>cwInteraction</code> and is intentionally left out. Keeps <code>cwInteraction</code> clean and gives one
     definition of "snapped world pick" so the radius / occlusion semantics can't drift across the two real
     snap-pickers.</li>
-  <li><b>Shared screen-space annotation-overlay base</b> for the <code>QCanvasPainterItem</code> overlays —
-    <code>cwMeasurementLineCanvas</code>/<code>Renderer</code> is a near-clone of
-    <code>cwLazClipPolygonCanvas</code>/<code>Renderer</code> (same <code>interaction</code> property, opaque
-    colour-fallback boilerplate, camera&rarr;<code>update()</code> wiring, and
-    <code>synchronize()</code>/<code>paint()</code> shape); <code>cwSketchCanvas</code> is a third instance. A
-    small base holding the interaction <code>QPointer</code>, the camera connect/<code>update()</code> wiring,
-    and the colour-fallback idiom would centralize the "always-on-top screen-space annotation" convention and the
-    QML-binds-Theme / C++-never-reaches-the-singleton seam. The overlays differ in payload (single segment +
-    rubber-band vs. closed polygon + vertex dots), so extracting the base means refactoring the shipped
-    Laz/Sketch overlays — its own commit + render-regression tests.</li>
+  <li><b>Shared screen-space annotation-overlay base</b> &mdash; <s>extract a <code>QCanvasPainterItem</code>
+    base shared by <code>cwMeasurementLineCanvas</code>, <code>cwLazClipPolygonCanvas</code>, and
+    <code>cwSketchCanvas</code>.</s> <b>Investigated 2026-06-20 &mdash; not worth doing; closed.</b> The
+    "three near-clones" premise was wrong: <code>cwSketchCanvas</code> is a 2D paper-space editor (zoom / pan /
+    <code>mapMatrix</code>, path/grid/line-plot models, sketch &amp; scrap managers, ~492 lines) with <i>no</i>
+    <code>interaction</code> <code>QPointer</code> and <i>no</i> camera&rarr;<code>update()</code> wiring &mdash;
+    it only shares the <code>QCanvasPainterItem</code> ancestor every custom-painted item shares. That leaves just
+    two real candidates, and Qt's per-class named-property requirement resists the dedup: their
+    <code>interaction</code> properties are differently typed (<code>cwMeasurementInteraction*</code> vs.
+    <code>cwLazClipInteraction*</code>) with different <code>connectInteraction()</code> signal sets, so the
+    property / typed getter / setter / connect must stay in the derived class; the colour-fallback properties have
+    entirely different names and counts (<code>lineColor</code>+<code>invalidColor</code> vs.
+    <code>polygonOutlineColor</code>+<code>polygonFillColor</code>+<code>polygonVertexBorderColor</code>) and can't
+    be hoisted without losing the names QML binds to; the camera&rarr;<code>update()</code> wiring exists only on
+    the measurement canvas (LazClip reaches the camera through its interaction). The two renderers share only the
+    <code>QCanvasPainterItemRenderer</code> interface skeleton &mdash; their <code>synchronize()</code> /
+    <code>paint()</code> bodies are wholly different. A base would save ~15&ndash;25 lines across two files while
+    adding a class, a virtual, downcasts, and a standing temptation to drag the unrelated
+    <code>cwSketchCanvas</code> under it. Unlike the ScenePicker base (identically-typed <code>camera</code>/<code>scene</code>
+    properties <i>and</i> shared ray-cast/tolerance logic), here only the structural <i>shape</i> is shared, not
+    types, names, or logic &mdash; correctly expressed as two parallel implementations, not a base class.</li>
   <li><b>One geodesy home for azimuth / inclination / north-correction</b> — the natural endpoint of the
     true-north correction and LiDAR-unification items above: instead of each feature computing grid-north
     bearings and bolting on convergence ad hoc, keep the pure <code>atan2</code> primitive in
@@ -462,6 +478,143 @@ Tests use <code>QTemporaryDir</code>/<code>applicationPid()</code> for any temp 
   <tr><td>Indicator rendering</td><td>always-on-top 2D overlay (<code>TransformUpdater</code>); occlusion handled by the snap, not by depth-occluded billboards</td></tr>
   <tr><td>Commits</td><td>4 (C1 refactor prerequisite; C2 math; C3 interaction; C4 QML) — C3+C4 may fold to 3 if preferred</td></tr>
 </table>
+
+<h2 id="northref">12. Azimuth north reference (Grid / True / Magnetic) — spec</h2>
+<p>Expands the §8 true-north follow-up into a user-facing feature: the readout's azimuth gains a
+<b>north-reference selector</b> so the bearing can be read against the map, the globe, or a compass. Replaces a
+fixed "Azimuth (grid)" label with <b>Azimuth (<i>reference</i>) ▾</b> plus a <b>"?"</b> help affordance.</p>
+
+<div class="callout">
+  <b>Why this is cheap now (the key discovery):</b> magnetic north does <i>not</i> need a new geomagnetic model
+  or coefficient bundle. Survex already vendors the IGRF model behind
+  <code>cwDeclination::compute(location, sourceCS, date) → Monad::Result&lt;double&gt;</code>
+  (<code>cwDeclination.h</code>), and true north is the existing pure
+  <code>cwGridConvergence::computeAt(location, sourceCS) → Monad::Result&lt;double&gt;</code>
+  (<code>cwGridConvergence.h:89</code>). Both return <b>east-positive degrees</b>. No new dependency, no
+  WMM-style 5-year coefficient maintenance — IGRF rides along with survex submodule bumps. This is the same
+  pair of primitives <code>cwTripCalibration</code> already uses to auto-resolve a trip's declination, so the
+  measurement tool joins an established path rather than inventing geodesy.</p>
+</div>
+
+<h3>The three references</h3>
+<table>
+  <tr><th>Reference</th><th>From grid azimuth</th><th>Plain-language use</th></tr>
+  <tr><td><b>Grid</b> (default)</td><td><code>azimuth</code> as today (scene +Y)</td>
+    <td>North of the map's coordinate grid (e.g. UTM). Matches the 3D view, the survey coordinates, and a printed
+    map. <i>Grid = the map.</i></td></tr>
+  <tr><td><b>True</b></td><td><code>+ convergence</code></td>
+    <td>Geographic north, toward the pole. Canonical bearing for sharing or comparing against true-north data.
+    Differs from grid by the projection's <b>grid convergence</b> (no date). <i>True = the globe.</i></td></tr>
+  <tr><td><b>Magnetic (today)</b></td><td><code>+ convergence &minus; declination</code></td>
+    <td>Where a compass points right now. Field use: walk a bearing with a compass, or check a survey shot against
+    a live compass reading. Differs from true by the <b>magnetic declination</b>, which drifts — so it's computed
+    for <b>today's date</b>. <i>Magnetic = your compass.</i></td></tr>
+</table>
+<p class="note">Sign care at implementation time: both helpers are east-positive. Grid&rarr;true adds convergence
+(positive = grid north east of true); true&rarr;magnetic subtracts declination (positive = magnetic north east of
+true). Net <code>magneticAzimuth = gridAzimuth + convergence &minus; declination</code>, wrapped to
+<code>[0,360)</code> by the same wrap <code>between()</code> already applies. Verify the two signs against a known
+location in tests rather than trusting the prose.</p>
+
+<h3>Location &amp; date sourcing</h3>
+<ul>
+  <li><b>Location = the first picked point.</b> The resolver passes the point as a <b>global</b>
+    <code>cwGeoPoint</code> — <code>firstPoint</code> (scene) + <code>region-&gt;worldOrigin()</code> — together with
+    <code>sourceCS = region-&gt;globalCoordinateSystem()</code>. <b>Scope-check finding (2026-06-20):</b> the tool
+    does <i>not</i> WGS84-transform anything itself. Both <code>cwGridConvergence::computeAt()</code> and
+    <code>cwDeclination::compute()</code> take <code>location</code> <i>in</i> <code>sourceCS</code> and convert to
+    WGS84 internally (verified in their <code>.cpp</code>: each builds a <code>cwCoordinateTransform(sourceCS &rarr;
+    Wgs84)</code>). So the tool only reads <code>worldOrigin()</code> + <code>globalCoordinateSystem()</code> — no
+    <code>cwCoordinateTransform</code> in the measurement path. Deterministic and self-contained: an azimuth only
+    exists once the first point is placed, so the location is always available when any bearing is shown — no
+    "which end?" ambiguity and no empty-location case. The two points are metres apart inside one cave, where
+    convergence/declination are effectively identical, so first-point is as good as midpoint and simpler.</li>
+  <li><b>Date = today</b> for magnetic (label literally reads <b>"Magnetic (today)"</b>). A field compass reads
+    today's field, so today's declination is the right comparison for both "navigate a bearing" and "check a
+    shot" — the survey-date declination only matters when auditing the original reduction, a data task outside
+    this tool. Editable date is a deferred nicety, not v1.</li>
+</ul>
+
+<h3>n/a handling &amp; transparency</h3>
+<ul>
+  <li>True and Magnetic can be unavailable — no region CRS, a geographic (non-grid) CS, or a PROJ/IGRF failure
+    (both helpers already return <code>Monad::Result</code> with those states; <code>cwGridConvergence::State</code>
+    enumerates <code>NoCoordinateSystem</code> / <code>Geographic</code> / <code>Error</code>). When the selected
+    reference can't be computed, the azimuth shows <b>n/a</b> with the reason, and the selector grays/footnotes
+    that entry rather than silently falling back to grid (a wrong number is worse than an honest n/a).</li>
+  <li><b>Transparency:</b> a detail/tooltip spells out the inputs actually used — e.g.
+    <code>"IGRF · 2026-06-20 · 13.0° E decl · 0.7° E conv · 38.5°N 110.2°W"</code> — mirroring
+    <code>cwGridConvergence::detailText()</code>, so the value is reproducible and the n/a wording has a home.</li>
+</ul>
+
+<h3>"?" help copy</h3>
+<div class="callout">
+  <p><b>Azimuth reference</b> — which north the bearing is measured from.
+  <b>Grid = the map, True = the globe, Magnetic = your compass.</b></p>
+  <ul>
+    <li><b>Grid</b> — north of the map's coordinate grid (e.g. UTM grid lines). Matches the 3D view, the survey's
+      coordinates, and a printed map.</li>
+    <li><b>True</b> — geographic north, toward the pole. Differs from grid by the grid convergence at this
+      location (a fixed property of the projection).</li>
+    <li><b>Magnetic (today)</b> — where a compass points right now. Differs from true by the magnetic declination,
+      which drifts over time, so it's computed for today's date at this location.</li>
+  </ul>
+</div>
+
+<h3>Plumbing the tool needs (scope-checked 2026-06-20)</h3>
+<p>The measurement interaction currently carries only camera + scene (via <code>cwScenePicker</code>) — it has
+<b>no region/CRS</b>. The one structural addition is a <code>cwCavingRegion* region</code> Q_PROPERTY + setter on
+<code>cwMeasurementInteraction</code> (mirroring the one <code>cwCoordinatePicker</code> already has), which
+provides <code>worldOrigin()</code> + <code>globalCoordinateSystem()</code>. That single dependency powers
+<b>both</b> true and magnetic; everything else is wiring existing pure helpers.</p>
+<p><b>Keep <code>region</code> off the <code>cwScenePicker</code> base.</b> The base stays camera+scene only —
+the genuinely shared, identically-behaving part. <code>cwCoordinatePicker</code>'s region setter does extra work
+(rebuilds a cached WGS84 transform, clears the pick on change) that the measurement tool doesn't want, so a shared
+base member would be false-DRY. Two independent <code>region</code> members, parallel to how camera/scene were the
+only things hoisted. Consistent with the ScenePicker scoping decision (§10).</p>
+<p><b>QML wiring is one line.</b> <code>MeasurementInteractionView.qml</code>'s root type <i>is</i>
+<code>MeasurementInteraction</code>, so the new inherited <code>region</code> Q_PROPERTY is settable directly on
+the instance — exactly like <code>camera</code>/<code>scene</code> are today
+(<code>MeasurementInteractionView.qml</code> sets neither; they're passed in at
+<code>GLTerrainRenderer.qml:119</code>). The only change is adding <code>region: RootData.region</code> beside the
+existing <code>camera</code>/<code>scene</code> at <code>GLTerrainRenderer.qml:119–125</code> — the same
+<code>RootData.region</code> the picker and LazClip views already receive (lines 106, 114). No pass-through
+property in the wrapper.</p>
+
+<h3>Commit breakdown</h3>
+<table>
+  <tr><th>Commit</th><th>Scope</th></tr>
+  <tr><td><span class="commit">N1</span> <b>✓ implemented</b></td>
+    <td><b>Azimuth-reference resolver (back end).</b> Done as the pure namespace
+      <code>cwAzimuthReference</code> (<code>cwAzimuthReference.h/.cpp</code>):
+      <code>Q_NAMESPACE_EXPORT</code> + <code>QML_NAMED_ELEMENT(AzimuthReference)</code> with
+      <code>enum class Reference { Grid, True, Magnetic }</code> (<code>Q_ENUM_NS</code>, so N2/QML reuse it) and
+      a free <code>resolve(gridAzimuth, reference, location, sourceCS, date) → Result</code>. The
+      <code>Result</code> carries <code>azimuth</code> ([0,360)), <code>available</code> (n/a first-class),
+      the raw <code>convergence</code> / <code>declination</code> folded in, and a <code>reason</code> string.
+      Grid passes through (no CRS/date, never n/a); True adds
+      <code>cwGridConvergence::computeAt()</code>; Magnetic also subtracts
+      <code>cwDeclination::compute()</code> (<code>az = grid + conv − decl</code>, wrapped). No coordinate
+      transform in the tool — the helpers take the location in <code>sourceCS</code>. Keeps CRS/IGRF knowledge out
+      of <code>cwMeasurementMath::between()</code>. <b>Tests:</b> <code>test_cwAzimuthReference.cpp</code>,
+      <code>[cwAzimuthReference]</code> — 9 cases / 38 assertions green (grid passthrough + wrap, True=+convergence,
+      Magnetic=+conv−decl asserted against the helpers directly, geographic-CRS, and the three n/a paths: empty CS,
+      unknown CS, invalid date).</td></tr>
+  <tr><td><span class="commit two">N2</span></td>
+    <td><b>Wire region into the interaction + expose the reference.</b> Add the <code>cwCavingRegion</code>
+      property/setter to <code>cwMeasurementInteraction</code> + the one-line <code>region: RootData.region</code>
+      at <code>GLTerrainRenderer.qml:119</code>, compute the first-point global <code>cwGeoPoint</code>, drive N1, and
+      expose an <code>azimuthReference</code> enum property (Grid/True/Magnetic) + the resolved azimuth + its
+      availability/detail to QML. Reference persists via <code>cwSettings</code>. <code>[cwMeasurementInteraction]</code>
+      tests for each reference + the n/a paths.</td></tr>
+  <tr><td><span class="commit three">N3</span></td>
+    <td><b>Readout UI.</b> Swap the fixed "Azimuth (grid)" row for <b>Azimuth (<i>reference</i>) ▾</b> selector +
+      "?" popover (help copy above), default Grid, magnetic row labeled "Magnetic (today)" with the detail
+      tooltip; gray/footnote unavailable references. QML test for selector switching + n/a display.</td></tr>
+</table>
+<p class="note">This feature is the concrete first delivery of the §10 "one geodesy home" item: measurement
+azimuth routes through <code>cwGridConvergence</code> + <code>cwDeclination</code> instead of bolting convergence
+on ad hoc, so LiDAR-note georeferencing and survey readouts can later share the same resolver.</p>
 
 </div>
 </body>
