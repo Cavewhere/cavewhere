@@ -31,3 +31,13 @@ TEST_CASE("Symbology names must be path-safe kebab-case", "[cwSymbologyName]")
     CHECK_FALSE(cwSymbology::isValidName(QStringLiteral("-lead")));
     CHECK_FALSE(cwSymbology::isValidName(QStringLiteral("trail-")));
 }
+
+TEST_CASE("SymbologyName QML facade delegates to the shared rule", "[cwSymbologyName]")
+{
+    // The singleton the editors call (SymbologyName.isValidName) must agree with
+    // the free function the IO layer enforces.
+    cwSymbologyName facade;
+    CHECK(facade.isValidName(QStringLiteral("floor-step-tick")));
+    CHECK_FALSE(facade.isValidName(QStringLiteral("Wall")));
+    CHECK_FALSE(facade.isValidName(QString()));
+}

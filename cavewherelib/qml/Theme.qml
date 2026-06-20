@@ -117,6 +117,10 @@ QtObject {
     readonly property int floatingToolbarPadding: 12
     readonly property int infoColumnMaxWidth: 200
 
+    // Glyph-library master-detail rail (the left list pane)
+    readonly property int glyphRailWidth: 220
+    readonly property int glyphRailMinWidth: 140
+
     // Utility
     readonly property color transparent: "#00000000"
     readonly property color shadow: dark ? "#33000000" : "#22000000"

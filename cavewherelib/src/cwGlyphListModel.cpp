@@ -83,6 +83,19 @@ QVariant cwGlyphListModel::data(const QModelIndex &index, int role) const
     }
 }
 
+int cwGlyphListModel::indexOfName(const QString &name) const
+{
+    if (name.isEmpty()) {
+        return -1;
+    }
+    for (int row = 0; row < m_glyphs.size(); ++row) {
+        if (m_glyphs.at(row).name == name) {
+            return row;
+        }
+    }
+    return -1;
+}
+
 QHash<int, QByteArray> cwGlyphListModel::roleNames() const
 {
     return {

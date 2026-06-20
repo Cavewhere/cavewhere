@@ -9,6 +9,9 @@
 #define CWSYMBOLOGYNAME_H
 
 //Qt includes
+#include <QObject>
+#include <QQmlEngine>
+#include <QString>
 #include <QStringView>
 
 //Our includes
@@ -28,5 +31,23 @@ namespace cwSymbology {
 CAVEWHERE_LIB_EXPORT bool isValidName(QStringView name);
 
 }
+
+// QML-accessible facade for the shared name rule, registered as the singleton
+// `SymbologyName`. Name-authoring editors (the glyph library, and the brush
+// editor to come) gate input through `SymbologyName.isValidName(...)` so they
+// validate on the exact rule cwSymbologyPaletteIO and cwSaveLoad enforce — one
+// validation surface, rather than each editor hanging a wrapper off whatever
+// canvas it owns or duplicating a kebab-case regex in QML.
+class CAVEWHERE_LIB_EXPORT cwSymbologyName : public QObject
+{
+    Q_OBJECT
+    QML_NAMED_ELEMENT(SymbologyName)
+    QML_SINGLETON
+
+public:
+    explicit cwSymbologyName(QObject *parent = nullptr) : QObject(parent) {}
+
+    Q_INVOKABLE bool isValidName(const QString &name) const { return cwSymbology::isValidName(name); }
+};
 
 #endif // CWSYMBOLOGYNAME_H

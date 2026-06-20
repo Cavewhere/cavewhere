@@ -372,7 +372,15 @@ no invalidation logic.
   <li><strong>Name validation:</strong> a glyph is only materialized (auto-saved)
   once its name is valid kebab-case (<code>cwSymbology::isValidName</code>); an
   invalid/empty name keeps it a draft. Inline field validation (red hint) is the
-  friendly version.</li>
+  friendly version.
+  <br><strong>✅ DONE (commit 2):</strong> the kebab-case rule is now exposed to
+  QML as a <code>SymbologyName</code> <code>QML_SINGLETON</code> (in
+  <code>cwSymbologyName.h</code>, delegating to the same
+  <code>cwSymbology::isValidName</code> free function the IO layer enforces) —
+  one validation surface for the glyph editor and the future brush editor, not a
+  per-canvas wrapper. The page gates auto-save on
+  <code>SymbologyName.isValidName(...)</code> and flags the name field with an
+  <code>ErrorHelpBox</code> (the "red hint") while a drawn draft is unnamed.</li>
 </ul>
 
 <h2>8. Files touched</h2>

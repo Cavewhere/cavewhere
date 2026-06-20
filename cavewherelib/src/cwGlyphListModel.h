@@ -60,6 +60,13 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
+    // The row of the glyph named `name` in the current (sorted) order, or -1 if
+    // absent or the name is empty. The view tracks selection by integer index,
+    // but refresh() re-sorts on every glyphChanged — so a consumer re-syncs its
+    // currentIndex through this after an edit to keep the highlight on the same
+    // glyph rather than whatever row slid into the old index.
+    Q_INVOKABLE int indexOfName(const QString &name) const;
+
     // The list ordering, exposed as a free function so it can be unit-tested
     // directly on a glyph vector without standing up a model + palette.
     static QVector<cwSymbologyGlyph> sortedForList(QVector<cwSymbologyGlyph> glyphs);

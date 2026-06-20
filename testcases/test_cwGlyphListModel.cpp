@@ -93,6 +93,29 @@ TEST_CASE("cwGlyphListModel exposes one sorted row per glyph", "[cwGlyphListMode
     CHECK(model.data(model.index(2), cwGlyphListModel::StrokeCountRole).toInt() == 3);
 }
 
+TEST_CASE("cwGlyphListModel indexOfName finds the row in sorted order", "[cwGlyphListModel]")
+{
+    QObject owner;
+    auto *palette = makePalette(&owner, {
+        makeGlyph(QStringLiteral("ceiling-step"), QStringLiteral("Ceiling Step"), 3),
+        makeGlyph(QStringLiteral("anchor"), QStringLiteral("Anchor"), 1)
+    });
+
+    cwGlyphListModel model;
+    model.setPalette(palette);
+
+    // Sorted: Anchor (row 0), Ceiling Step (row 1).
+    CHECK(model.indexOfName(QStringLiteral("anchor")) == 0);
+    CHECK(model.indexOfName(QStringLiteral("ceiling-step")) == 1);
+    CHECK(model.indexOfName(QStringLiteral("missing")) == -1);
+    CHECK(model.indexOfName(QString()) == -1);
+
+    // It tracks the row across a re-sorting edit, not a fixed position.
+    palette->setGlyph(makeGlyph(QStringLiteral("aaa"), QStringLiteral("Aaa"), 0));
+    CHECK(model.indexOfName(QStringLiteral("aaa")) == 0);
+    CHECK(model.indexOfName(QStringLiteral("anchor")) == 1);
+}
+
 TEST_CASE("cwGlyphListModel exposes the three role names", "[cwGlyphListModel]")
 {
     cwGlyphListModel model;
