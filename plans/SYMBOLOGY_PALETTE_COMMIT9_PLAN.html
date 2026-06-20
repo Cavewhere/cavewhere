@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Symbology Palette — Commit 9: In-app brush editor (phased)</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 64rem; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.55; color: #1a1a1a; }
+  h1 { font-size: 1.8rem; border-bottom: 2px solid #333; padding-bottom: .3rem; }
+  h2 { font-size: 1.35rem; margin-top: 2.2rem; border-bottom: 1px solid #ccc; padding-bottom: .2rem; }
+  h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+  code { background: #f2f2f2; padding: .1rem .3rem; border-radius: 3px; font-size: .9em; }
+  pre { background: #f6f8fa; border: 1px solid #ddd; border-radius: 6px; padding: .8rem 1rem; overflow-x: auto; font-size: .85rem; }
+  pre.mock { background: #fffdf7; border-color: #e6dcc0; line-height: 1.2; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .85rem; }
+  th, td { border: 1px solid #ccc; padding: .35rem .5rem; text-align: left; vertical-align: top; }
+  th { background: #f0f0f0; }
+  blockquote { border-left: 4px solid #4a90d9; background: #f0f6fc; margin: 1rem 0; padding: .6rem 1rem; }
+  .warn { border-left: 4px solid #d98a4a; background: #fcf6f0; }
+  .note { color: #555; font-size: .9rem; }
+  .tag { display: inline-block; background: #333; color: #fff; border-radius: 4px; padding: .05rem .4rem; font-size: .75rem; vertical-align: middle; }
+  .ship { background: #1a7f37; }
+  .ok  { color: #1a7f37; font-weight: 600; }
+  .new { color: #a4520e; font-weight: 600; }
+  .p { font-size:.62rem; padding:.02rem .35rem; border-radius:8px; color:#fff; vertical-align:middle; }
+  .p0{background:#555} .p1{background:#1a7f37} .p2{background:#3949ab} .p3{background:#8957e5} .p4{background:#b4690e} .p5{background:#7a3fb0} .p6{background:#a02a2a}
+</style>
+</head>
+<body>
+
+<h1>Commit 9 — In-app brush editor <span class="tag">phased feature</span></h1>
+
+<p class="note">Untracked planning doc, fall2026 branch. Drafted 2026-06-20. The
+make-or-break authoring feature: good brushes → good palettes → good cave maps,
+organized around <strong>immediate feedback while editing</strong>. The UX was
+prototyped interactively before writing this; the prototypes are the living spec:</p>
+<ul class="note">
+  <li><code>plans/BRUSH_EDITOR_PROTOTYPE.html</code> — the docked editor: working-copy
+  Discard/Apply, live preview, enable/disable rules, stack editing, the
+  <em>Used by</em> chip, scoped glyph editing, and a live dependents gallery.</li>
+  <li><code>plans/PALETTE_GRAPH_PROTOTYPE.html</code> — the independent symbol-DAG view
+  (modeled on QuickQanava): brush→glyph / glyph→glyph / brush→brush edges, shared/
+  orphan highlighting, navigate/open/delete.</li>
+</ul>
+
+<h2>0. Decisions settled (2026-06-20)</h2>
+<table>
+<tr><th>Decision</th><th>Choice</th></tr>
+<tr><td>Editor shape</td><td><strong>Docked panel beside the live sketch</strong> (cold start docks beside a built-in gallery sketch).</td></tr>
+<tr><td>Mutation model</td><td><strong>Working-copy + Discard / Apply</strong>; serialize only on Apply (overrides the glyph editor's autosave).</td></tr>
+<tr><td>Live preview</td><td><strong>The real sketch canvas</strong>, fed a <em>preview snapshot</em> (palette snapshot with the edited brush/glyph swapped). Palette untouched until Apply.</td></tr>
+<tr><td>First shippable slice</td><td><strong>Thin loop</strong> (Phase 1): docked panel + working-copy + live preview + enable/disable toggles + read-only structure.</td></tr>
+<tr><td>Palette mutation home</td><td><strong>On <code>cwSymbologyPalette</code></strong>; retire the manager glyph trio (one unified model).</td></tr>
+<tr><td>Rule enable/disable</td><td>Positive <code>enabled</code> flag on <code>cwPlacementRuleData</code>; layout + validator honor the effective stack. Additive proto field; no <code>protoVersion()</code> bump.</td></tr>
+<tr><td>Dependencies</td><td><strong>Both</strong> an inline <em>Used by</em> affordance + dependents gallery <strong>and</strong> an independent Palette Graph page, over one shared dependency index.</td></tr>
+<tr><td>Graph view tech</td><td><strong>QuickQanava</strong> (vendored submodule, <code>.gitmodules:28</code>) — <code>qan::Graph</code>/<code>Node</code>/<code>Edge</code>, <code>Qan.GraphView</code>.</td></tr>
+<tr><td>Brush→brush references</td><td>In scope as the deepest phase (symbol instancing / DAG); the graph displays them; the engine compose + cycle-spanning is the heavy lift.</td></tr>
+</table>
+
+<h2>1. The vision — a recursive symbol system</h2>
+<p>A brush is a node in a DAG: brush → ordered <strong>decoration layers</strong>; each
+layer has a <strong>rule stack</strong> (pipeline) and references a <strong>glyph</strong>;
+glyphs reference sub-glyphs; brushes reference brushes (instancing). Editing a node has
+<strong>blast radius</strong> — a shared glyph edit changes every dependent. The editor
+is the safety rail and the power tool for that: live feedback on your own sketch,
+visible dependents, and a navigable map of the whole palette.</p>
+
+<h2>2. Prerequisite audit <span class="ok">(verified 2026-06-20)</span></h2>
+<table>
+<tr><th>Prerequisite</th><th>State</th></tr>
+<tr><td>Palette brush mutation + persistence</td><td><span class="ok">Done</span> — <code>setBrush/removeBrush</code> emit <code>brushChanged</code>; <code>cwSaveLoad::connectPalette</code> wires <code>brushChanged → writePaletteBrush</code>. Zero new IO.</td></tr>
+<tr><td>Live re-skin path</td><td><span class="ok">Live</span> — <code>cwDecoratedStrokePathSource</code> drives <code>cwSketchCanvas</code> from a <code>cwPaletteSnapshot</code>; the snapshot is the preview-override seam.</td></tr>
+<tr><td>Decoration engine</td><td><span class="ok">In</span> — <code>cwSketchDecorationLayout::layout()</code>. Stepwise/explain output is a Phase-3 add.</td></tr>
+<tr><td>Validator / registry / list model / picker</td><td><span class="ok">Exist</span> — <code>cwDecorationLayerValidator::validate()</code>, <code>cwPlacementRuleRegistry</code> (needs <code>allRules()</code>), <code>cwLineBrushListModel</code> (needs <code>indexOfName</code>), <code>BrushPicker</code>.</td></tr>
+<tr><td>Glyph cycle check</td><td><span class="ok">Partial</span> — <code>findGlyphDependencyCycle</code> walks glyph→glyph at load. The dependency index generalizes + makes it live (§7).</td></tr>
+<tr><td>QuickQanava</td><td><span class="ok">Vendored</span> submodule, available; not yet used in app code — wiring is new (§8).</td></tr>
+<tr><td>Param interpretation</td><td><span class="ok">Done</span> (Commit B codec) — Phase 2 adds only the UI.</td></tr>
+</table>
+<p><strong>Nothing from commit 8 blocks this.</strong> The "revisit after the brush editor" items (#37, signal granularity) are follow-ups the editor informs (§16).</p>
+
+<h2>3. Architecture — the feedback loop</h2>
+<h3>3.1 <code>cwBrushEditor</code> — working-copy controller (QObject, QML element)</h3>
+<p>Holds one editable <code>cwLineBrush</code> working copy + (when scoped) a glyph
+working copy. Plain members + explicit setters (no <code>QBindable</code>). Ops:
+<code>loadBrushNamed</code>, <code>setRuleEnabled</code>, layer/rule mutators, scalar
+setters, <code>apply()</code> (= <code>palette-&gt;setBrush(working)</code> [+ <code>setGlyph</code>]),
+<code>discard()</code>, <code>dirty</code>; emits <code>brushChanged</code> → preview refresh.</p>
+<h3>3.2 Preview-snapshot override — live feedback, no mutation</h3>
+<p>Non-persisted authoring override on <code>cwSketch</code>/canvas
+(<code>setPreviewSnapshot</code>/<code>clearPreviewSnapshot</code>) — the same trick
+commit 8 used to inject a palette into the glyph canvas. On each edit, push
+<em>base snapshot with the edited brush/glyph swapped</em>. <code>cwPaletteSnapshot</code>
+is cheap implicitly-shared, so it's a copy-with-substitution. Discard → clear; Apply →
+real <code>setBrush</code> (real re-skin + async persist), then clear.</p>
+<h3>3.3 Discard / Apply</h3>
+<p>Closing dirty prompts (Apply / Discard / Keep). Disk is never written until Apply.
+The glyph editor converges on this working-copy model in Phase 4 (gives up autosave).</p>
+
+<h2>4. Palette-owned mutation <span class="p p0">Phase 0</span></h2>
+<p class="warn">Mutation lives on <code>cwSymbologyPalette</code> (persistence is wired to
+its <code>brushChanged</code> signal, not the manager; <code>duplicate</code> is
+palette-local). Retire the shipped manager glyph trio; drop the read-only-write
+error-model reporting (programmer-error path the UI gates; <code>qWarning</code> at most).</p>
+<pre>Q_INVOKABLE void setGlyph/removeGlyph/setBrush/removeBrush(...);   // writable-guarded, no-op if !writable
+Q_INVOKABLE QString duplicateGlyph/duplicateBrush(const QString &amp;name);  // palette-local; returns new name
+Q_INVOKABLE QString brushDisplayName(const QString &amp;name) const;</pre>
+<p>Relocate <code>slugify</code> next to <code>cwSymbology::isValidName</code>; rename
+<code>uniqueGlyphName → uniqueName</code>. Migrate callers (<code>GlyphEditorPage.qml</code>,
+<code>test_cwGlyphListModel.cpp</code>); existing glyph tests are the regression gate.
+The thin loop only strictly needs <code>setBrush</code> + the guard.</p>
+
+<h2>5. Data — <code>enabled</code> flag (and a note on brush refs)</h2>
+<pre>struct cwPlacementRuleData { QString name; QVariant parameters; bool enabled = true; ... };</pre>
+<p>Layout filters to the effective (enabled) stack before resolving terminal/transform;
+the validator validates the effective stack (a disabled terminal → the existing "no
+terminal" warning — exactly the feedback we want). Additive proto field, no version bump.
+<strong>Brush→brush references</strong> (Phase 6) add a reference construct to the data
+model (a layer/brush that instances another brush) — schema + engine compose; specced in
+its phase, not here.</p>
+
+<h2>6. Dependency system <span class="p p4">Phase 4</span></h2>
+<p>One shared index feeds the inline <em>Used by</em> affordance, the dependents gallery,
+and the Palette Graph.</p>
+<ul>
+  <li><strong><code>cwSymbologyDependencyGraph</code></strong> (new): forward
+  <em>uses</em> + reverse <em>dependents</em>, spanning <strong>brush→glyph</strong>,
+  <strong>glyph→glyph</strong>, and <strong>brush→brush</strong> uniformly. Built from a
+  palette snapshot.</li>
+  <li><strong>Transitive dependents</strong>: editing <code>floor-tick</code> must reach
+  <code>floor-step</code> <em>and</em> <code>passage</code> (which references it) — the
+  blast-radius query is transitive, not direct-only.</li>
+  <li><strong>Live cycle check</strong> spanning brushes + glyphs: setting a glyph or a
+  brush reference that would cycle is rejected on edit (generalizes
+  <code>findGlyphDependencyCycle</code> from load-time/glyph-only).</li>
+  <li><strong>Orphan detection</strong>: a glyph with zero dependents (deletion
+  candidate; the graph flags it).</li>
+  <li><strong>Reused brushes / glyphs are not freely deletable</strong>: delete/rename
+  must respect references (brush + glyph alike).</li>
+</ul>
+
+<h2>7. Palette Graph view <span class="p p5">Phase 5</span></h2>
+<p>An independent navigable DAG built on <strong>QuickQanava</strong>
+(<code>Qan.GraphView</code>): <code>qan::Node</code> per brush/glyph,
+<code>qan::Edge</code> per dependency (distinct styling for <em>uses-glyph</em> vs
+<em>references-brush</em>). Populated from <code>cwSymbologyDependencyGraph</code>.
+Pan/zoom/drag, select → detail (used-by / uses), <strong>Open in editor</strong>
+(routes to brush or glyph editor), <strong>Delete</strong> (orphans only), shared/orphan
+highlighting. Cross-editor navigation is shared with the inline <em>Used by</em> jump-list.</p>
+
+<h2>8. UI — docked panel beside the live sketch</h2>
+<pre class="mock">┌─ CaveWhere · sketching ──────────┬─ Edit Brush ─────────┐
+│   (your REAL sketch, live)       │ floor-step [working] │
+│    ╱╲___   the stroke you        │ ▼ floor-step         │
+│    ·· ·· ··  didn't like         │  ▾ edge  · Trace     │
+│   (ticks re-skin as you edit)    │    ☑ Offset / ☑ Trace│
+│                                  │  ▾ tick  · Stamp     │
+│                                  │    ☑ Uniform spacing │
+│                                  │    ☑ Align to tangent│
+│                                  │    ☐ Rotate (off)    │
+│                                  │    ☑ Rigid stamp     │
+│                                  │      ⤷ glyph floor-tick [used by 2 ⚠]│
+│                                  │  [+ Layer]  Uniform: 2.0mm│
+│                                  │ [Discard]   [Apply]  │
+└──────────────────────────────────┴──────────────────────┘</pre>
+<p>Host: a panel docked into the sketch view (not a separate page). Responsive: docked
+on wide, full-screen overlay on narrow (ties into commit-2.1 <code>isNarrow</code>, #44).
+House rules: <code>QC.Label</code>, <code>Theme</code> tokens, <code>QtQuick</code> as
+<code>QQ</code>, <code>TapHandler</code>, strict typed properties, item-body ordering.</p>
+
+<h2>9. Interaction inventory</h2>
+<p class="note">Derived from the prototypes. Each row traces a user action to the backend
+capability it requires — the contract that prevents a mid-build "we never built X."
+Phase tags: <span class="p p1">1</span><span class="p p2">2</span><span class="p p3">3</span><span class="p p4">4</span><span class="p p5">5</span><span class="p p6">6</span>.</p>
+
+<h3>Entry &amp; session</h3>
+<table>
+<tr><th>Interaction</th><th>Trigger</th><th>Response / state</th><th>Backend capability</th><th>Persists</th></tr>
+<tr><td><span class="p p1">1</span> Open editor on a stroke's brush</td><td>right-click stroke → "Edit brush X"</td><td>panel docks; working copy of X; preview override set</td><td>stroke→brush via <code>cwPenStroke::brushName</code> (exists); <code>loadBrushNamed</code>; preview-override seam</td><td>no</td></tr>
+<tr><td><span class="p p2">2</span> Open from brush picker / library rail</td><td>right-click brush row → Edit</td><td>same</td><td>picker context menu → <code>loadBrushNamed</code></td><td>no</td></tr>
+<tr><td><span class="p p1">1</span> Open cold (palette mgmt)</td><td>"Edit brushes" → pick</td><td>panel docks beside gallery sketch</td><td>gallery <code>cwSketch</code> factory; <code>loadBrushNamed</code></td><td>no</td></tr>
+<tr><td><span class="p p1">1</span> Close (clean / dirty)</td><td>×</td><td>closes / Apply-Discard-Keep prompt</td><td><code>dirty</code>; <code>clearPreviewSnapshot</code> on destroy</td><td>—</td></tr>
+</table>
+
+<h3>Thin loop <span class="p p1">Phase 1</span></h3>
+<table>
+<tr><th>Interaction</th><th>Trigger</th><th>Response / state</th><th>Backend capability</th><th>Persists</th></tr>
+<tr><td>Toggle a rule on/off</td><td>checkbox</td><td>preview re-skins; validator note may appear</td><td><code>setRuleEnabled</code>; <code>enabled</code> filter in layout; validator on working copy; rebuild preview snapshot</td><td>no</td></tr>
+<tr><td>Validator feedback (live)</td><td>auto on edit</td><td>"no generator → no stamps" etc.</td><td><code>cwDecorationLayerValidator</code> on the working (effective) stack</td><td>no</td></tr>
+<tr><td>Discard</td><td>Discard</td><td>preview reverts to palette</td><td><code>discard()</code>; <code>clearPreviewSnapshot</code></td><td>no</td></tr>
+<tr><td>Apply</td><td>Apply</td><td>sketch re-skins from real palette + persists</td><td><code>palette.setBrush</code> → <code>brushChanged</code> → <code>writePaletteBrush</code></td><td><b>yes</b></td></tr>
+</table>
+
+<h3>Full stack editing <span class="p p2">Phase 2</span></h3>
+<table>
+<tr><th>Interaction</th><th>Trigger</th><th>Response / state</th><th>Backend capability</th><th>Persists</th></tr>
+<tr><td>Select rule → edit param</td><td>row / slider</td><td>inspector; preview re-skins</td><td>param setter on working copy; codec at Apply (exists)</td><td>no</td></tr>
+<tr><td>Add / remove / reorder rule</td><td>+rule / ✕ / drag</td><td>preview</td><td><code>registry.allRules()</code> picker; validate; (layout stage-sorts)</td><td>no</td></tr>
+<tr><td>Add / remove / reorder layer</td><td>+Layer / ✕ / drag</td><td>preview (paint order = row order)</td><td>layer mutators on working copy</td><td>no</td></tr>
+<tr><td>Select a layer's glyph</td><td>glyph picker</td><td>preview</td><td>GlyphPicker; available glyph names; <b>live cycle check</b></td><td>no</td></tr>
+<tr><td>Brush library: add / duplicate / remove brush</td><td>rail context menu</td><td>list updates immediately</td><td><code>palette.duplicateBrush/removeBrush</code>; <code>brushDisplayName</code>; <code>LineBrushListModel.indexOfName</code></td><td><b>yes</b></td></tr>
+</table>
+
+<h3>Per-rule visualization <span class="p p3">Phase 3</span></h3>
+<table>
+<tr><th>Interaction</th><th>Trigger</th><th>Response / state</th><th>Backend capability</th><th>Persists</th></tr>
+<tr><td>See a rule's effect</td><td>select rule → before/after or "solo"</td><td>intermediate geometry shown</td><td><b><code>cwSketchDecorationLayout</code> stepwise/explain mode</b> (intermediate geometry per rule stage)</td><td>no</td></tr>
+</table>
+
+<h3>Dependencies + scoped glyph editing <span class="p p4">Phase 4</span></h3>
+<table>
+<tr><th>Interaction</th><th>Trigger</th><th>Response / state</th><th>Backend capability</th><th>Persists</th></tr>
+<tr><td>"Used by (N)" chip</td><td>rendered on glyph node</td><td>count; ⚠ if shared; click → jump-list</td><td><code>dependents(name)</code> (reverse index); navigation</td><td>no</td></tr>
+<tr><td>Drill into a layer's glyph</td><td>click ⤷ glyph</td><td>scope swaps to glyph editor pane; breadcrumb</td><td><b>reusable glyph editor pane</b>; scoped working-copy nested in the brush working copy</td><td>no</td></tr>
+<tr><td>Edit shared glyph (scope)</td><td>draw / slider</td><td>dependents gallery + main sketch re-skin live</td><td><b>transitive <code>dependents</code></b>; preview snapshot per dependent</td><td>no</td></tr>
+<tr><td>Apply with a glyph edit</td><td>Apply</td><td>all dependents persist</td><td>one Apply → <code>setGlyph</code> + <code>setBrush</code></td><td><b>yes</b></td></tr>
+<tr><td>Cycle prevented</td><td>set glyph/ref that would cycle</td><td>rejected + message</td><td><b>live cycle check spanning brushes + glyphs</b></td><td>no</td></tr>
+</table>
+
+<h3>Palette Graph <span class="p p5">Phase 5</span></h3>
+<table>
+<tr><th>Interaction</th><th>Trigger</th><th>Response / state</th><th>Backend capability</th><th>Persists</th></tr>
+<tr><td>Open graph; pan / zoom / drag</td><td>button; mouse/wheel</td><td>navigable DAG</td><td><b>QuickQanava <code>Qan.GraphView</code></b>; graph from index; node layout pref</td><td>layout pref</td></tr>
+<tr><td>Select node → details</td><td>click</td><td>used-by / uses lists</td><td><code>uses</code> / <code>dependents</code></td><td>no</td></tr>
+<tr><td>Open in editor from node</td><td>button</td><td>routes to brush/glyph editor</td><td>cross-editor navigation (shared with jump-list)</td><td>no</td></tr>
+<tr><td>Delete orphan glyph</td><td>button (orphan only)</td><td>node removed</td><td>orphan detection; <code>palette.removeGlyph</code></td><td><b>yes</b></td></tr>
+</table>
+
+<h3>Brush→brush references <span class="p p6">Phase 6</span></h3>
+<table>
+<tr><th>Interaction</th><th>Trigger</th><th>Response / state</th><th>Backend capability</th><th>Persists</th></tr>
+<tr><td>Reference another brush from a brush</td><td>editor: add brush-reference</td><td>composed decoration; graph shows dashed ref edge</td><td><b>brush-reference in data model + engine compose (instancing)</b>; cycle check; transitive index</td><td>on Apply</td></tr>
+</table>
+
+<h2>10. Backend needs — consolidated</h2>
+<table>
+<tr><th>#</th><th>Capability</th><th>Status</th><th>Phase</th></tr>
+<tr><td>B1</td><td>Resolve a sketch stroke → its brush name (right-click entry)</td><td><span class="ok">Exists</span> — <code>cwPenStroke::brushName</code> (set at <code>beginStroke</code>, persisted); look up via <code>cwSketch::strokes()[row].brushName</code> + <code>resolvedPalette()</code></td><td>1</td></tr>
+<tr><td>B2</td><td><code>cwBrushEditor</code> working-copy controller (load/dirty/discard/apply/setRuleEnabled/param+layer+rule mutators)</td><td class="new">NEW</td><td>1–2</td></tr>
+<tr><td>B3</td><td>Preview-snapshot override seam on <code>cwSketch</code>/canvas (non-persisted)</td><td class="new">NEW</td><td>1</td></tr>
+<tr><td>B4</td><td><code>enabled</code> flag + layout filter + validator honoring</td><td class="new">NEW (data+engine)</td><td>1</td></tr>
+<tr><td>B5</td><td>Palette-owned mutation (set/remove/duplicate brush+glyph; writable guard; retire manager trio)</td><td>Partial (set/remove exist); <span class="new">NEW</span> duplicate + unification</td><td>0</td></tr>
+<tr><td>B6</td><td><code>cwDecorationLayerValidator</code> run live on the working (effective) stack</td><td><span class="ok">Exists</span>; wire to editor</td><td>1–2</td></tr>
+<tr><td>B7</td><td><code>cwPlacementRuleRegistry::allRules()</code> enumeration for the rule picker</td><td class="new">NEW (small)</td><td>2</td></tr>
+<tr><td>B8</td><td>Rule param editing UI + codec round-trip at Apply</td><td>Codec <span class="ok">exists</span> (Commit B); UI <span class="new">new</span></td><td>2</td></tr>
+<tr><td>B9</td><td><code>cwSketchDecorationLayout</code> stepwise/explain mode (intermediate geometry)</td><td class="new">NEW</td><td>3</td></tr>
+<tr><td>B10</td><td><code>cwSymbologyDependencyGraph</code> — forward + reverse + transitive, spanning brush→glyph / glyph→glyph / brush→brush; orphan detection</td><td>Forward glyph→glyph partial (cycle check); <span class="new">NEW</span> reverse/transitive/spanning</td><td>4</td></tr>
+<tr><td>B11</td><td>Live cycle check spanning brushes + glyphs (on edit)</td><td>Load-time glyph-only <span class="ok">exists</span>; <span class="new">NEW</span> live + spanning</td><td>4</td></tr>
+<tr><td>B12</td><td>Reusable glyph editor pane (<code>GlyphEditorPage</code> → working-copy pane) + scoped nesting</td><td class="new">NEW (refactor; glyph editor drops autosave)</td><td>4</td></tr>
+<tr><td>B13</td><td>Gallery <code>cwSketch</code> factory (cold start + dependents gallery cells)</td><td class="new">NEW</td><td>1 / 4</td></tr>
+<tr><td>B14</td><td>QuickQanava graph view populated from the index; cross-editor navigation</td><td>Submodule <span class="ok">vendored</span>; app wiring <span class="new">new</span></td><td>5</td></tr>
+<tr><td>B15</td><td>Brush-reference in the data model + engine compose (symbol instancing / DAG)</td><td class="new">NEW (largest)</td><td>6</td></tr>
+<tr><td>B16</td><td><code>cwLineBrushListModel::indexOfName</code> + <code>brushDisplayName</code></td><td class="new">NEW (small)</td><td>2</td></tr>
+</table>
+
+<h2>11. Phasing</h2>
+<table>
+<tr><th>Phase</th><th>Delivers</th></tr>
+<tr><td><span class="p p0">0</span> palette mutation</td><td>Unify mutation onto <code>cwSymbologyPalette</code>; retire manager glyph trio. (B5)</td></tr>
+<tr><td><span class="p p1">1</span> <span class="tag ship">SHIP 1st</span> thin loop</td><td>Docked panel + working-copy Discard/Apply + live preview (snapshot override) + enable/disable + read-only structure + entry points + gallery cold start + <code>enabled</code> flag. (B1–B4, B6, B13)</td></tr>
+<tr><td><span class="p p2">2</span> stack editing</td><td>Add/remove/reorder layers &amp; rules; glyph selection; rule param editing; live validator; brush library add/dup/remove. (B7, B8, B16)</td></tr>
+<tr><td><span class="p p3">3</span> per-rule viz</td><td>Stepwise "explain" layout → before/after thumbnails / "solo this rule". (B9)</td></tr>
+<tr><td><span class="p p4">4</span> dependencies + scoped glyph</td><td>Dependency index; inline "Used by"; dependents gallery; transitive blast radius; live cycle check; scoped glyph editing (reusable pane). (B10–B12)</td></tr>
+<tr><td><span class="p p5">5</span> Palette Graph</td><td>QuickQanava DAG view; navigate / open / delete-orphan; shared/orphan/cycle highlighting. (B14)</td></tr>
+<tr><td><span class="p p6">6</span> brush→brush refs</td><td>Symbol instancing: reference a brush from a brush; engine compose; graph ref-edges. (B15)</td></tr>
+<tr><td>7 styling migration</td><td>Move <code>line*</code>/<code>fill*</code> off <code>cwDecorationLayer</code> into the <code>Trace</code> rule's params (proto), informed by the param UI.</td></tr>
+</table>
+
+<h2>12. Phase 1 — the thin loop, in detail</h2>
+<ol>
+  <li><strong>Backend</strong>: <code>cwBrushEditor</code> (load/dirty/discard/apply/setRuleEnabled);
+  preview-snapshot override seam; <code>enabled</code> flag + layout filter + validator;
+  stroke→brush lookup (B1, already exists — direct read); gallery sketch factory.
+  (Phase 0 lands first.)</li>
+  <li><strong>QML</strong>: <code>BrushEditorPanel.qml</code> docked into the sketch view;
+  read-only structure tree with enable checkboxes; Discard/Apply footer; entry points;
+  gallery cold start.</li>
+  <li><strong>Out of Phase 1</strong>: add/remove/reorder, param editing, glyph selection,
+  drill-down, dependencies, graph, per-rule viz.</li>
+</ol>
+
+<h2>13. Tests</h2>
+<ul>
+  <li><strong>C++ Phase 0</strong> — palette <code>duplicate*</code>/setters + writable guard; existing <code>[cwGlyphListModel]</code> green.</li>
+  <li><strong>C++ Phase 1</strong> — <code>cwBrushEditor</code>: toggle a rule → working copy reflects it, palette unchanged; discard restores; apply mutates + fires <code>brushChanged</code>; <code>enabled=false</code> changes <code>layout()</code> output; preview snapshot resolves the working brush without mutating the palette.</li>
+  <li><strong>C++ later phases</strong> — dependency graph (forward/reverse/transitive/orphan); live cycle rejection; stepwise layout output.</li>
+  <li><strong>QML</strong> — <code>tst_BrushEditor.qml</code> (mirror <code>tst_GlyphEditor</code>): open from entry point, toggle rule → <code>tryVerify</code> canvas changes, Discard reverts, Apply persists. PID/<code>QTemporaryDir</code> safe; no fixed waits; collapse note overlays before canvas clicks.</li>
+  <li><strong>Visual</strong> — PNG dev-aid of a rule toggled on vs off (<code>feedback_visualize_headless_output</code>).</li>
+</ul>
+
+<h2>14. Verification</h2>
+<pre>cd /Users/cave/Documents/projects/cavewhere_4
+cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test cavewhere-qml-test 2>&amp;1 | tee /tmp/cw-build.log
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[cwBrushEditor],[cwSymbologyPalette],[cwGlyphListModel],[cwSketchDecorationLayout],[cwSymbologyDependencyGraph]" -d yes 2>&amp;1 | tee /tmp/cw-9-test.log
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-qml-test --platform offscreen -input test-qml/tst_BrushEditor.qml 2>&amp;1 | tee -a /tmp/cw-9-test.log</pre>
+
+<h2>15. Out of scope / deferred</h2>
+<ul>
+  <li>Each phase is its own commit, paused for review (<code>feedback_pause_between_phases</code>).</li>
+  <li><strong>#37 targeted single-palette refresh</strong> — working-copy/preview-override keeps editing off the full-reskin path; the cost is only at Apply. The editor is the client that motivates the targeted refresh.</li>
+  <li><strong>Signal granularity / error-model aggregation</strong> (4.4 / commit-8 deferrals) — revisit with the editing client.</li>
+  <li><strong>Category grouping in the graph</strong> (QuickQanava groups), node-layout persistence, cycle-prevention demo polish — graph follow-ups.</li>
+</ul>
+
+</body>
+</html>

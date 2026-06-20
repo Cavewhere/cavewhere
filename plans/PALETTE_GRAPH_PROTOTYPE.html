@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Palette Graph — interactive prototype (QuickQanava-modeled)</title>
+<style>
+  :root{ --ink:#2a2a2e; --line:#d9d4c6; --accent:#3949ab; --panel:#f4f2ec; --chip:#ece8dd;
+         --muted:#6b6b6b; --shared:#b4690e; --orphan:#a02a2a; --glyph:#5a8f6b; --ref:#7a3fb0; }
+  *{box-sizing:border-box;}
+  body{font-family:-apple-system,system-ui,sans-serif;margin:0;color:var(--ink);background:#e8e6df;}
+  header{padding:.55rem 1rem;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}
+  header h1{font-size:1.05rem;margin:0;}
+  .hint{color:var(--muted);font-size:.8rem;}
+  .legend{font-size:.74rem;color:var(--muted);display:flex;gap:1rem;flex-wrap:wrap;align-items:center;}
+  .sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:middle;margin-right:.2rem;border:1px solid #999;}
+  .ln{display:inline-block;width:18px;border-top:2px solid #999;vertical-align:middle;margin-right:.2rem;}
+  .ln.ref{border-top:2px dashed var(--ref);}
+  .toggle{font-size:.8rem;display:flex;align-items:center;gap:.35rem;cursor:pointer;}
+  .wrap{display:flex;height:calc(100vh - 52px);min-height:520px;}
+  .gv{flex:1;position:relative;background:#f7f5ef;overflow:hidden;}
+  .gv svg{width:100%;height:100%;display:block;cursor:grab;}
+  .gv svg.panning{cursor:grabbing;}
+  .controls{position:absolute;top:10px;left:12px;display:flex;gap:.4rem;}
+  .controls button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:.25rem .55rem;cursor:pointer;font-size:.85rem;}
+
+  .node{cursor:pointer;} .node text{pointer-events:none;}
+  .n-brush rect{fill:#fff;stroke:var(--accent);stroke-width:1.5;}
+  .n-brush.reused rect{stroke-width:3;}
+  .n-glyph circle{fill:#fff;stroke:var(--glyph);stroke-width:1.5;}
+  .n-glyph.shared circle{stroke:var(--shared);stroke-width:3;}
+  .n-glyph.orphan circle{stroke:var(--orphan);stroke-width:1.5;stroke-dasharray:5 3;}
+  .nlabel{font-size:13px;fill:var(--ink);font-weight:600;}
+  .nsub{font-size:10px;fill:var(--muted);}
+  .dimmed{opacity:.20;}
+  .selring{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:3 3;}
+  .edge{fill:none;stroke:#b7b2a4;stroke-width:1.6;}
+  .edge.shared{stroke:var(--shared);}
+  .edge.ref{stroke:var(--ref);stroke-dasharray:6 4;}
+  .edge.hi{stroke:var(--accent);stroke-width:2.6;stroke-dasharray:none;}
+  .edge-arrow{fill:#b7b2a4;} .edge-arrow.ref{fill:var(--ref);} .edge-arrow.hi{fill:var(--accent);}
+
+  aside{width:312px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;}
+  .ahead{padding:.6rem .7rem;border-bottom:1px solid var(--line);background:#fff;font-weight:600;font-size:.95rem;display:flex;align-items:center;gap:.5rem;}
+  .pill{font-size:.66rem;padding:.05rem .45rem;border-radius:10px;background:var(--chip);color:var(--muted);}
+  .pill.shared{background:#fbeed6;color:var(--shared);} .pill.orphan{background:#f7dada;color:var(--orphan);}
+  .pill.reused{background:#efe6fa;color:var(--ref);}
+  .abody{flex:1;overflow:auto;padding:.6rem .7rem;font-size:.85rem;}
+  .abody h4{margin:.8rem 0 .3rem;font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+  .abody ul{margin:.2rem 0;padding-left:1.1rem;} .abody li{margin:.12rem 0;cursor:pointer;color:var(--accent);}
+  .abody li:hover{text-decoration:underline;} .abody li .ty{color:var(--muted);font-size:.72rem;}
+  .afoot{padding:.6rem .7rem;border-top:1px solid var(--line);background:#fff;display:flex;gap:.5rem;flex-wrap:wrap;}
+  .afoot button{flex:1;min-width:80px;padding:.4rem;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:.82rem;}
+  .afoot button.danger{color:var(--orphan);border-color:#e0b4b4;}
+  .afoot button:disabled{opacity:.4;cursor:default;}
+  .empty{color:var(--muted);font-size:.85rem;}
+  .hook{display:none;font-size:.68rem;color:#7a5;font-family:ui-monospace,monospace;}
+  body.hooks .hook{display:inline;}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:.5rem .9rem;border-radius:6px;font-size:.82rem;opacity:0;transition:opacity .25s;pointer-events:none;}
+  .toast.show{opacity:.95;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Palette Graph</h1>
+  <span class="hint">Drag nodes · pan · wheel-zoom · click for details. <b>Production: QuickQanava <code>Qan.GraphView</code></b>.</span>
+  <div class="legend" style="margin-left:auto">
+    <span><span class="sw" style="background:#fff;border-color:var(--accent)"></span>brush</span>
+    <span><span class="sw" style="background:#fff;border-color:var(--glyph)"></span>glyph</span>
+    <span><span class="sw" style="background:#fff;border-color:var(--shared)"></span>shared</span>
+    <span><span class="sw" style="background:#fff;border-color:var(--orphan)"></span>orphan</span>
+    <span><span class="ln"></span>uses glyph</span>
+    <span><span class="ln ref"></span>references brush</span>
+  </div>
+  <label class="toggle"><input type="checkbox" id="hooksToggle"> hooks</label>
+</header>
+
+<div class="wrap">
+  <div class="gv">
+    <svg id="svg" viewBox="0 0 1040 620"><g id="edges"></g><g id="nodes"></g></svg>
+    <div class="controls"><button id="zin">＋</button><button id="zout">－</button><button id="zfit">fit</button></div>
+  </div>
+
+  <aside>
+    <div class="ahead">Details <span class="pill" id="dpill" style="display:none"></span></div>
+    <div class="abody" id="abody"><div class="empty">Select a node to inspect its dependencies.</div></div>
+    <div class="afoot">
+      <button id="openBtn" disabled>Open in editor <span class="hook">→ BrushEditor / GlyphEditor</span></button>
+      <button id="delBtn" class="danger" disabled>Delete <span class="hook">palette.remove*</span></button>
+    </div>
+  </aside>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+// ---------- model: the symbol DAG (brushes + glyphs; brush->brush refs + sharing + recursion) ----------
+// Mirrors QuickQanava: nodes -> qan::Node, edges -> qan::Edge, view -> Qan.GraphView.
+let nodes = [
+  {id:"passage",      type:"brush", label:"Passage",      x:90,  y:120},  // composite: references other brushes
+  {id:"wall",         type:"brush", label:"Wall",         x:360, y:90 },
+  {id:"floor-step",   type:"brush", label:"Floor step",   x:360, y:250},
+  {id:"ceiling-step", type:"brush", label:"Ceiling step", x:360, y:400},
+  {id:"pit-edge",     type:"brush", label:"Pit edge",     x:360, y:540},
+  {id:"double-tick",  type:"glyph", label:"double-tick",  x:660, y:500},  // compound glyph (uses a glyph)
+  {id:"floor-tick",   type:"glyph", label:"floor-tick",   x:940, y:250},  // shared leaf glyph
+  {id:"pebble",       type:"glyph", label:"pebble",       x:940, y:540},  // orphan
+];
+let edges = [   // kind: "uses" (→glyph) | "ref" (brush→brush instancing)
+  {from:"passage",     to:"wall",       kind:"ref"},
+  {from:"passage",     to:"floor-step", kind:"ref"},
+  {from:"floor-step",  to:"floor-tick", kind:"uses"},
+  {from:"ceiling-step",to:"floor-tick", kind:"uses"},
+  {from:"pit-edge",    to:"double-tick",kind:"uses"},
+  {from:"double-tick", to:"floor-tick", kind:"uses"},   // glyph → glyph (recursion)
+];
+const node = id => nodes.find(n=>n.id===id);
+const usedBy = id => edges.filter(e=>e.to===id).map(e=>e.from);
+const uses   = id => edges.filter(e=>e.from===id).map(e=>e.to);
+function role(n){ if(n.type==="glyph"){ const d=usedBy(n.id).length; return d>1?"shared":d===0?"orphan":""; }
+  return usedBy(n.id).length>0 ? "reused" : ""; }   // brush referenced by another brush
+
+const svg=document.getElementById("svg"), gEdges=document.getElementById("edges"), gNodes=document.getElementById("nodes");
+let vb={x:0,y:0,w:1040,h:620};
+const setVB=()=>svg.setAttribute("viewBox",`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+const sx = ()=> vb.w / svg.clientWidth;
+let selected=null;
+const BW=130, BH=42, GR=30;
+function anchor(n,side){ if(n.type==="brush") return {x:n.x+(side==="out"?BW/2:-BW/2), y:n.y};
+  return {x:n.x+(side==="out"?GR:-GR), y:n.y}; }
+
+function draw(){
+  let es="";
+  edges.forEach(e=>{ const a=anchor(node(e.from),"out"), b=anchor(node(e.to),"in");
+    const hi = selected && (e.from===selected||e.to===selected);
+    const sh = e.kind==="uses" && role(node(e.to))==="shared";
+    const dim = selected && !hi ? " dimmed":"";
+    const cls = `edge ${e.kind==="ref"?"ref":""}${sh?" shared":""}${hi?" hi":""}${dim}`;
+    const mx=(a.x+b.x)/2;
+    es+=`<path class="${cls}" d="M${a.x},${a.y} C${mx},${a.y} ${mx},${b.y} ${b.x-7},${b.y}"/>`;
+    es+=`<path class="edge-arrow ${e.kind==="ref"?"ref":""}${hi?" hi":""}${dim}" d="M${b.x-7},${b.y-4} L${b.x},${b.y} L${b.x-7},${b.y+4} Z"/>`;
+  });
+  gEdges.innerHTML=es;
+
+  let ns="";
+  nodes.forEach(n=>{ const r=role(n);
+    let sub;
+    if(n.type==="brush"){ const u=uses(n.id).length, ub=usedBy(n.id).length;
+      sub = (ub?`used by ${ub} · `:"")+`uses ${u}`;
+    } else { sub = r==="orphan"?"orphan — unused":`used by ${usedBy(n.id).length}`+(uses(n.id).length?` · uses ${uses(n.id).length}`:""); }
+    const neighbor = selected && (n.id===selected || uses(selected).includes(n.id) || usedBy(selected).includes(n.id));
+    const dim = selected && !neighbor ? " dimmed":"";
+    const selr = n.id===selected ? (n.type==="brush"
+        ? `<rect class="selring" x="${n.x-BW/2-5}" y="${n.y-BH/2-5}" width="${BW+10}" height="${BH+10}" rx="9"/>`
+        : `<circle class="selring" cx="${n.x}" cy="${n.y}" r="${GR+6}"/>`) : "";
+    if(n.type==="brush"){
+      ns+=`<g class="node n-brush ${r}${dim}" data-id="${n.id}">${selr}
+        <rect x="${n.x-BW/2}" y="${n.y-BH/2}" width="${BW}" height="${BH}" rx="7"/>
+        <text class="nlabel" x="${n.x}" y="${n.y-2}" text-anchor="middle">${n.label}</text>
+        <text class="nsub" x="${n.x}" y="${n.y+13}" text-anchor="middle">${sub}</text></g>`;
+    } else {
+      ns+=`<g class="node n-glyph ${r}${dim}" data-id="${n.id}">${selr}
+        <circle cx="${n.x}" cy="${n.y}" r="${GR}"/>
+        <text class="nlabel" x="${n.x}" y="${n.y-1}" text-anchor="middle" style="font-size:11px">${n.label}</text>
+        <text class="nsub" x="${n.x}" y="${n.y+13}" text-anchor="middle">${sub}</text></g>`;
+    }
+  });
+  gNodes.innerHTML=ns; setVB();
+}
+
+function select(id){ selected=id; draw();
+  const n=node(id), abody=document.getElementById("abody"), pill=document.getElementById("dpill"), r=role(n);
+  pill.style.display="inline"; pill.className="pill"+(r?" "+r:""); pill.textContent = r||n.type;
+  const li = x => `<li onclick="select('${x}')">${x} <span class="ty">${node(x)?node(x).type:""}</span></li>`;
+  const list=(arr,empty)=> arr.length?`<ul>${arr.map(li).join("")}</ul>`:`<div class="empty">${empty}</div>`;
+  let h=`<div style="font-weight:600;font-size:.95rem">${n.label}</div><div class="hint">${n.type} · id <code>${n.id}</code></div>`;
+  h+=`<h4>Used by <span class="hook">dependents('${n.id}')</span></h4>`+list(usedBy(n.id), n.type==="glyph"?"nothing — orphan glyph":"top-level brush (not referenced)");
+  h+=`<h4>Uses</h4>`+list(uses(n.id), n.type==="glyph"?"leaf glyph":"draws directly (no refs)");
+  if(r==="shared") h+=`<div class="hint" style="color:var(--shared);margin-top:.5rem">⚠ editing changes ${usedBy(n.id).length} dependents</div>`;
+  if(r==="reused") h+=`<div class="hint" style="color:var(--ref);margin-top:.5rem">referenced by ${usedBy(n.id).length} brush — edits propagate</div>`;
+  if(r==="orphan") h+=`<div class="hint" style="color:var(--orphan);margin-top:.5rem">unused — safe to delete</div>`;
+  abody.innerHTML=h;
+  document.getElementById("openBtn").disabled=false;
+  document.getElementById("delBtn").disabled = !(r==="orphan");
+}
+document.getElementById("openBtn").onclick=()=>selected&&toast(`Open “${selected}” in ${node(selected).type==="brush"?"brush":"glyph"} editor`);
+document.getElementById("delBtn").onclick=()=>{ if(!selected)return; const id=selected;
+  nodes=nodes.filter(n=>n.id!==id); edges=edges.filter(e=>e.from!==id&&e.to!==id);
+  toast(`Deleted orphan “${id}” → palette.remove*`); selected=null;
+  document.getElementById("abody").innerHTML='<div class="empty">Select a node.</div>';
+  document.getElementById("dpill").style.display="none"; document.getElementById("openBtn").disabled=true; document.getElementById("delBtn").disabled=true; draw(); };
+
+// drag / pan / zoom
+let drag=null, pan=null;
+svg.addEventListener("mousedown",e=>{ const g=e.target.closest(".node");
+  if(g){ const n=node(g.dataset.id); drag={n,sx:e.clientX,sy:e.clientY,ox:n.x,oy:n.y,moved:false}; }
+  else { pan={sx:e.clientX,sy:e.clientY,vx:vb.x,vy:vb.y}; svg.classList.add("panning"); } });
+window.addEventListener("mousemove",e=>{ if(drag){ const k=sx(); drag.n.x=drag.ox+(e.clientX-drag.sx)*k; drag.n.y=drag.oy+(e.clientY-drag.sy)*k;
+    if(Math.abs(e.clientX-drag.sx)+Math.abs(e.clientY-drag.sy)>3)drag.moved=true; draw(); }
+  else if(pan){ const k=sx(); vb.x=pan.vx-(e.clientX-pan.sx)*k; vb.y=pan.vy-(e.clientY-pan.sy)*k; setVB(); } });
+window.addEventListener("mouseup",()=>{ if(drag&&!drag.moved) select(drag.n.id); drag=null; pan=null; svg.classList.remove("panning"); });
+svg.addEventListener("wheel",e=>{ e.preventDefault(); const k=sx(); const mx=vb.x+e.offsetX*k, my=vb.y+e.offsetY*k;
+  const f=e.deltaY>0?1.12:0.89; vb.w*=f; vb.h*=f; vb.x=mx-(mx-vb.x)*f; vb.y=my-(my-vb.y)*f; setVB(); },{passive:false});
+function fit(){ const xs=nodes.map(n=>n.x), ys=nodes.map(n=>n.y);
+  vb={x:Math.min(...xs)-100,y:Math.min(...ys)-50,w:Math.max(...xs)-Math.min(...xs)+200,h:Math.max(...ys)-Math.min(...ys)+100}; setVB(); }
+document.getElementById("zin").onclick=()=>{vb.w*=.85;vb.h*=.85;setVB();};
+document.getElementById("zout").onclick=()=>{vb.w/=.85;vb.h/=.85;setVB();};
+document.getElementById("zfit").onclick=fit;
+document.getElementById("hooksToggle").onchange=function(){document.body.classList.toggle("hooks",this.checked);};
+function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("show"),2000);}
+
+draw();
+</script>
+</body>
+</html>
