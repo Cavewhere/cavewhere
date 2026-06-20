@@ -149,5 +149,114 @@ Item {
 
             editor.destroy()
         }
+
+        // Right-click → Duplicate copies a row into "<name>-copy" and selects it.
+        function test_duplicateGlyphViaContextMenu() {
+            const editor = editorComponent.createObject(rootId, { palette: rootId.forkPalette })
+            verify(editor !== null)
+
+            const glyphList = findChild(editor, "glyphList")
+            tryVerify(() => glyphList.count > 0, 2000, "the fork ships seed glyphs")
+            tryVerify(() => glyphList.itemAtIndex(0) !== null, 2000, "first row realized")
+
+            // Reach a realized row's context menu and read the glyph it carries,
+            // so the assertion doesn't depend on which delegate findChild returns.
+            const ctxMenu = findChild(glyphList, "glyphContextMenu")
+            verify(ctxMenu !== null, "glyphContextMenu must exist")
+            const sourceName = ctxMenu.name
+            verify(sourceName.length > 0, "context menu carries a glyph name")
+            const copyName = sourceName + "-copy"
+
+            const baseline = glyphList.count
+            // Item 0 is Duplicate; trigger it directly (popup is flaky offscreen).
+            const duplicateItem = ctxMenu.menu.itemAt(0)
+            verify(duplicateItem !== null && duplicateItem.text === "Duplicate",
+                   "first item is Duplicate")
+            duplicateItem.triggered()
+
+            tryVerify(() => glyphList.count === baseline + 1, 2000,
+                      "the duplicate appears in the list")
+            verify(glyphList.model.indexOfName(copyName) >= 0,
+                   "the copy is named <source>-copy")
+            tryVerify(() => editor.currentName === copyName, 2000,
+                      "the duplicate is selected for editing")
+            // The original survives the copy.
+            verify(glyphList.model.indexOfName(sourceName) >= 0, "the original remains")
+
+            editor.destroy()
+        }
+
+        // Right-click → Remove → confirm drops the glyph from the palette.
+        function test_removeGlyphViaContextMenu() {
+            const editor = editorComponent.createObject(rootId, { palette: rootId.forkPalette })
+            verify(editor !== null)
+
+            const glyphList = findChild(editor, "glyphList")
+            tryVerify(() => glyphList.count > 0, 2000, "the fork ships seed glyphs")
+            tryVerify(() => glyphList.itemAtIndex(0) !== null, 2000, "first row realized")
+
+            const ctxMenu = findChild(glyphList, "glyphContextMenu")
+            verify(ctxMenu !== null, "glyphContextMenu must exist")
+            const removeName = ctxMenu.name
+            const baseline = glyphList.count
+
+            // Item 1 is "Remove <name>"; triggering it opens the confirmation box.
+            const removeItem = ctxMenu.menu.itemAt(1)
+            verify(removeItem !== null && removeItem.text.indexOf("Remove") === 0,
+                   "second item is Remove")
+            removeItem.triggered()
+
+            const removeAskBox = findChild(editor, "removeChallange")
+            verify(removeAskBox !== null, "RemoveAskBox must exist")
+            tryVerify(() => removeAskBox.visible, 2000, "Remove opens the confirmation")
+            compare(removeAskBox.removeName, removeName, "the box names the glyph")
+
+            mouseClick(findChild(removeAskBox, "removeButton"))
+            tryVerify(() => !removeAskBox.visible, 2000, "confirming closes the box")
+            tryVerify(() => glyphList.count === baseline - 1, 2000, "the glyph is removed")
+            compare(glyphList.model.indexOfName(removeName), -1, "its row is gone")
+
+            editor.destroy()
+        }
+
+        // Renaming a saved glyph saves the new name and drops the old one, so the
+        // palette never accumulates an orphaned copy (task #45).
+        function test_renameDoesNotOrphanOldGlyph() {
+            const editor = editorComponent.createObject(rootId, { palette: rootId.forkPalette })
+            verify(editor !== null)
+
+            const inputArea = findChild(editor, "glyphInputArea")
+            const glyphList = findChild(editor, "glyphList")
+            tryVerify(() => inputArea.width > 0 && inputArea.height > 0, 2000,
+                      "editor pane laid out")
+
+            // Draw and name a fresh glyph so the rename has a deterministic source.
+            drawStroke(inputArea, [Qt.point(120, 400), Qt.point(180, 410),
+                                   Qt.point(240, 400)])
+            tryVerify(() => findChild(editor, "glyphCanvas").sketch.strokeCount() === 1, 2000)
+
+            const nameField = findChild(editor, "glyphNameField")
+            nameField.forceActiveFocus()
+            nameField.text = "rename-src"
+            findChild(editor, "glyphDisplayNameField").text = "Zzz Rename"
+            keyClick(Qt.Key_Return)
+            tryVerify(() => glyphList.model.indexOfName("rename-src") >= 0, 2000,
+                      "the source glyph saved")
+            const afterSave = glyphList.count
+
+            // Rename: edit the name field and commit. Save-new + drop-old.
+            nameField.forceActiveFocus()
+            nameField.text = "rename-dst"
+            keyClick(Qt.Key_Return)
+
+            tryVerify(() => glyphList.model.indexOfName("rename-dst") >= 0, 2000,
+                      "the renamed glyph exists")
+            tryVerify(() => glyphList.model.indexOfName("rename-src") === -1, 2000,
+                      "the old name is not orphaned")
+            compare(glyphList.count, afterSave, "rename leaves the glyph count unchanged")
+            compare(editor.currentName, "rename-dst", "the editor follows the rename")
+
+            editor.destroy()
+        }
     }
 }

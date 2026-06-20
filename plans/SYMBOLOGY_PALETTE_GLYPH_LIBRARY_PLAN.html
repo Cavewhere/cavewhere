@@ -195,7 +195,7 @@ isn't built yet; commit 9 will hit the same correction.)</div>
   boundary for the coarse project-wide re-skin (§5).</li>
 </ul>
 
-<h2>4. Flows</h2>
+<h2>4. Flows <span class="tag">✅ DONE (commit 3) — Duplicate + Remove (GlyphContextMenu + RemoveAskBox), cwSymbologyPaletteManager::duplicateGlyph (returns the new name; cwSymbologyPalette::glyphDisplayName for select-by-name), and the rename-orphan fix in _autoSave</span></h2>
 
 <table>
 <tr><th>Action</th><th>Implementation</th></tr>
@@ -225,11 +225,28 @@ helper the manager already uses for palette dirs) and
 list and is selected for editing. Pure value-copy of the strokes, so it works on
 read-only seed glyphs too <em>if</em> the palette is writable; on a read-only
 palette the item is disabled (Duplicate-to-edit at the palette level remains the
-toolbar's job). <strong>Note: no <code>duplicateGlyph</code> exists yet</strong>
-— the manager has only <code>duplicatePalette</code>. Either add a thin
-<code>cwSymbologyPaletteManager::duplicateGlyph(palette, name)</code> (keeps
-name-uniquing in C++ where the slug helper lives — preferred) or compose in QML
-as <code>loadGlyphNamed(name) → toGlyph(uniqueName) → saveGlyph</code>.</td></tr>
+toolbar's job).
+<p><strong>📌 PINNED (commit 3) — <code>duplicateGlyph</code> contract.</strong> Add a thin
+C++ method (preferred over QML composition so name-uniquing stays in C++):</p>
+<pre>// Copy an existing glyph into a new one with a derived unique name. Object-first:
+// deep-copies the strokes, sets displayName to "&lt;displayName&gt; copy", saveGlyph()s
+// it (→ glyphChanged → the copy appears in the list). Returns the new glyph's name
+// so QML can re-select the row via page.currentName; returns an empty QString on
+// failure (palette null/read-only, or `name` absent), reason pushed to errorModel().
+Q_INVOKABLE QString duplicateGlyph(cwSymbologyPalette *palette, const QString &name);</pre>
+<p>QML: <code>page.currentName = paletteManager.duplicateGlyph(palette, row.name)</code> —
+the existing <code>modelReset</code> handler anchors <code>currentIndex</code> off
+<code>currentName</code>, so the copy is selected with no extra wiring. The toGlyph/QML
+compose path is rejected: it can't see the existing glyph-name set to uniquify against.</p>
+<p><strong>📌 PINNED — name uniquify (correction).</strong> The new name is
+<code>uniqueGlyphName(taken, slugify(name + "-copy"))</code> against the palette's
+existing glyph names → <code>&lt;name&gt;-copy</code>, then <code>&lt;name&gt;-copy-2</code>,
+<code>-copy-3</code>… This is a <em>new</em> anonymous-namespace helper over a
+<code>QSet&lt;QString&gt;</code> of glyph names, mirroring <code>uniqueSubdirName</code>'s
+<code>-2</code>/<code>-3</code> suffix scheme. The earlier "reuse the helper the manager
+uses for palette dirs" was inaccurate: <code>uniqueSubdirName</code> takes a
+<code>QDir</code> and tests directory existence, so it is <em>not</em> directly reusable
+here — only its suffix convention is.</p></td></tr>
 <tr><td><strong>Remove</strong></td><td><strong>Right-click → Remove</strong>, the
 CaveWhere way: a <code>GlyphContextMenu</code> (a <code>ContextMenuArea</code>
 subclass) holding the shared <code>RemoveMenuItem</code>, plus a page-level
@@ -245,10 +262,31 @@ row or blank. The
 bespoke buttons or confirm.</td></tr>
 <tr><td><strong>Rename</strong></td><td>Name is the identity key, so a rename is
 <code>saveGlyph(newGlyph)</code> + <code>removeGlyph(oldName)</code> (the IO layer
-already documents this). Phase-2: an explicit "Rename" that does both in one
-reload; phase-1 can skip it (edit name + Save creates a copy, then Remove the
-old — acceptable for a first cut, but call it out so it isn't a silent
-foot-gun).</td></tr>
+already documents this).
+<p><strong>📌 PINNED (commit 3, task #45) — close the orphan gap in
+<code>_autoSave</code>.</strong> No separate "Rename" button; the editor already
+auto-saves under the field's name. The only gap is that it never drops the old name,
+leaving a duplicate. Capture <code>currentName</code> (the persisted old name) before
+reassigning, then remove it after the save:</p>
+<pre>function _autoSave() {
+    if (!page._writable) { return }
+    if (glyphCanvasId.sketch.strokeCount() === 0) { page.needsName = false; return }
+    if (!SymbologyName.isValidName(nameFieldId.text)) { page.needsName = true; return }
+    page.needsName = false
+    const oldName = page.currentName        // "" for an unsaved draft / fresh Add
+    const newName = nameFieldId.text
+    page.currentName = newName              // BEFORE saveGlyph (reset re-syncs off currentName)
+    RootData.paletteManager.saveGlyph(page.palette,
+        glyphCanvasId.toGlyph(newName, displayFieldId.text))
+    if (oldName !== "" &amp;&amp; oldName !== newName) {
+        RootData.paletteManager.removeGlyph(page.palette, oldName)   // drop the orphan
+    }
+}</pre>
+<p>Order is safe: save first (new row exists), then remove the old row.
+<code>currentName</code> already equals <code>newName</code>, so both synchronous
+<code>modelReset</code>s re-anchor selection on the surviving row. <code>oldName == ""</code>
+on a fresh Add (no orphan to remove) and on an unnamed draft, so neither path mis-fires.
+An explicit "Rename" UI that does both in one reload stays a phase-2 nicety.</p></td></tr>
 </table>
 
 <h2>5. Decision A — re-skin / rebuild policy <span class="tag">DECIDED — A2 (already wired by §7); residual = preview refresh + perf watch</span></h2>
@@ -390,10 +428,10 @@ no invalidation logic.
 <tr><td><code>cavewherelib/qml/GlyphEditorPage.qml</code></td><td>restructure to master-detail; drop the per-glyph <code>glyphName</code> page property</td></tr>
 <tr><td><code>cavewherelib/qml/GlyphListDelegate.qml</code></td><td>new — row delegate: live mini <code>SketchGlyphCanvas</code> + name below (B3)</td></tr>
 <tr><td><code>cavewherelib/qml/GlyphContextMenu.qml</code></td><td>new — ContextMenuArea with Duplicate + RemoveMenuItem (mirrors LazLayerContextMenu)</td></tr>
-<tr><td><code>cwSymbologyPaletteManager</code></td><td>add <code>duplicateGlyph(palette, name)</code> (unique-name copy; does not exist today) — preferred over QML composition so name-uniquing stays in C++</td></tr>
+<tr><td><code>cwSymbologyPaletteManager</code></td><td>add <code>QString duplicateGlyph(palette, name)</code> (unique-name deep copy; returns the new name, "" on failure — does not exist today) — preferred over QML composition so name-uniquing stays in C++</td></tr>
 <tr><td><code>cwSketchGlyphCanvas</code></td><td>small change — also connect <code>glyphChanged(name)</code> → re-skin when it matches the loaded glyph (§5/§6 preview fix); Save/Cancel already lives in the page, not the canvas</td></tr>
-<tr><td><code>testcases/test_cwGlyphListModel.cpp</code></td><td>new — rows/roles/sort/refresh-on-change</td></tr>
-<tr><td><code>test-qml/tst_GlyphEditor.qml</code></td><td>extend — add/select/duplicate(right-click)/remove(right-click) via the list</td></tr>
+<tr><td><code>testcases/test_cwGlyphListModel.cpp</code></td><td>new — rows/roles/sort/refresh-on-change. Commit 3: <code>duplicateGlyph</code> uniquing (<code>&lt;name&gt;-copy</code>, <code>-copy-2</code>; original intact; read-only/unknown → "")</td></tr>
+<tr><td><code>test-qml/tst_GlyphEditor.qml</code></td><td>extend — add/select/duplicate(right-click)/remove(right-click) via the list, plus rename-doesn't-orphan (edit name → old row gone, count unchanged)</td></tr>
 </table>
 <p class="note">Fallback only (not built unless B3 perf forces it):
 <code>cwGlyphImageProvider.{h,cpp}</code> + registration for rendered-thumbnail

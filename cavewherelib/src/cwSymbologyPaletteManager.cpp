@@ -68,6 +68,19 @@ QString uniqueSubdirName(const QDir &root, const QString &slug, const QSet<QStri
     return candidate;
 }
 
+// First "<base>", "<base>-2", "<base>-3"… not already in `taken`. Used to derive
+// a collision-free glyph name when duplicating; mirrors uniqueSubdirName's suffix
+// scheme but tests an in-palette name set rather than on-disk directories.
+QString uniqueGlyphName(const QSet<QString> &taken, const QString &base)
+{
+    QString candidate = base;
+    int suffix = 2;
+    while (taken.contains(candidate)) {
+        candidate = QStringLiteral("%1-%2").arg(base).arg(suffix++);
+    }
+    return candidate;
+}
+
 }
 
 cwSymbologyPaletteManager *cwSymbologyPaletteManager::Singleton = nullptr;
@@ -352,6 +365,49 @@ bool cwSymbologyPaletteManager::removeGlyph(cwSymbologyPalette *palette, const Q
     // the name's path-safety is enforced there, before it becomes a path.
     palette->removeGlyph(glyphName);
     return true;
+}
+
+QString cwSymbologyPaletteManager::duplicateGlyph(cwSymbologyPalette *palette, const QString &name)
+{
+    if (palette == nullptr) {
+        reportLoadProblem(QStringLiteral("cannot duplicate a glyph on a null palette"));
+        return QString();
+    }
+    if (!palette->isWritable()) {
+        reportLoadProblem(QStringLiteral("palette \"%1\" is read-only; cannot duplicate glyph \"%2\"")
+                              .arg(palette->name(), name));
+        return QString();
+    }
+
+    const std::optional<cwSymbologyGlyph> source = palette->glyph(name);
+    if (!source) {
+        reportLoadProblem(QStringLiteral("palette \"%1\" has no glyph \"%2\" to duplicate")
+                              .arg(palette->name(), name));
+        return QString();
+    }
+
+    // Derive a collision-free name against the palette's existing glyph names —
+    // not the on-disk directories, so uniqueSubdirName doesn't apply here.
+    const QVector<cwSymbologyGlyph> glyphs = palette->glyphs();
+    QSet<QString> taken;
+    taken.reserve(glyphs.size());
+    for (const cwSymbologyGlyph &glyph : glyphs) {
+        taken.insert(glyph.name);
+    }
+    const QString copyName =
+        uniqueGlyphName(taken, slugify(name + QStringLiteral("-copy")));
+
+    // Deep value-copy of the strokes; the displayName mirrors the name's "copy"
+    // suffix so the two rows read distinctly in the list.
+    cwSymbologyGlyph copy = *source;
+    copy.name = copyName;
+    copy.displayName = source->displayName.isEmpty()
+                           ? QString()
+                           : source->displayName + QStringLiteral(" copy");
+
+    // Object-first: setGlyph emits glyphChanged; cwSaveLoad writes the file.
+    palette->setGlyph(copy);
+    return copyName;
 }
 
 bool cwSymbologyPaletteManager::removePalette(cwSymbologyPalette *palette)

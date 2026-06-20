@@ -99,6 +99,15 @@ public:
     // saveGlyph(newGlyph) followed by removeGlyph(oldName).
     Q_INVOKABLE bool removeGlyph(cwSymbologyPalette *palette, const QString &glyphName);
 
+    // Copy an existing glyph into a new one with a derived unique name
+    // ("<name>-copy", then "<name>-copy-2"…) and a "<displayName> copy" label.
+    // Object-first: deep-copies the strokes and setGlyph()s the copy (→
+    // glyphChanged → it appears in the list); cwSaveLoad persists it
+    // asynchronously. Returns the new glyph's name so the caller can select it,
+    // or an empty QString on failure (null/read-only palette, or `name` is not a
+    // member) with the reason pushed to errorModel().
+    Q_INVOKABLE QString duplicateGlyph(cwSymbologyPalette *palette, const QString &name);
+
     // Remove a writable palette from the project: drops it from the list,
     // deletes the object (so any QML binding to it must release), and emits
     // palettesChanged. The palette's whole on-disk directory is torn down

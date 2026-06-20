@@ -75,11 +75,20 @@ StandardPage {
             return
         }
         page.needsName = false
+        const oldName = page.currentName   // "" for a fresh Add / unnamed draft
+        const newName = nameFieldId.text
         // Set currentName before saving: saveGlyph fires glyphChanged synchronously,
         // which resets the model and re-syncs the list selection off currentName.
-        page.currentName = nameFieldId.text
-        const glyph = glyphCanvasId.toGlyph(nameFieldId.text, displayFieldId.text)
+        page.currentName = newName
+        const glyph = glyphCanvasId.toGlyph(newName, displayFieldId.text)
         RootData.paletteManager.saveGlyph(page.palette, glyph)
+
+        // Rename = save-new + drop-old (name is the identity key). Save first so
+        // the new row exists, then remove the orphan; currentName already equals
+        // newName, so both resets re-anchor selection on the surviving row.
+        if (oldName !== "" && oldName !== newName) {
+            RootData.paletteManager.removeGlyph(page.palette, oldName)
+        }
     }
 
     function _selectGlyph(name: string, displayName: string) {
@@ -88,6 +97,15 @@ StandardPage {
         glyphCanvasId.loadGlyphNamed(name)
         nameFieldId.text = name
         displayFieldId.text = displayName
+    }
+
+    // Select a glyph known only by name (e.g. a fresh duplicate): look its
+    // display name up on the palette, load it, then anchor the list highlight.
+    // The model is already reset by the time we're called, so indexOfName hits.
+    function _selectGlyphByName(name: string) {
+        const displayName = page.palette ? page.palette.glyphDisplayName(name) : ""
+        page._selectGlyph(name, displayName)
+        glyphListId.currentIndex = glyphModelId.indexOfName(name)
     }
 
     // Start a fresh unnamed draft: a blank sheet that only becomes a palette
@@ -121,6 +139,20 @@ StandardPage {
         target: glyphModelId
         function onModelReset() {
             glyphListId.currentIndex = glyphModelId.indexOfName(page.currentName)
+        }
+    }
+
+    // Right-click → Remove confirmation. The ListView has no proxy, so a
+    // delegate row maps straight to the glyph name carried by removeName.
+    RemoveAskBox {
+        id: removeChallengeId
+        onRemove: {
+            RootData.paletteManager.removeGlyph(page.palette, removeName)
+            // If the editor was on the removed glyph, drop back to a blank draft;
+            // removing some other row leaves the current edit untouched.
+            if (removeName === page.currentName) {
+                page._addGlyph()
+            }
         }
     }
 
@@ -176,11 +208,26 @@ StandardPage {
                 }
 
                 delegate: GlyphListDelegate {
+                    id: glyphDelegateId
                     width: glyphListId.width
                     highlighted: QQ.ListView.isCurrentItem
                     onClicked: {
-                        glyphListId.currentIndex = index
-                        page._selectGlyph(name, displayName)
+                        glyphListId.currentIndex = glyphDelegateId.index
+                        page._selectGlyph(glyphDelegateId.name, glyphDelegateId.displayName)
+                    }
+
+                    GlyphContextMenu {
+                        anchors.fill: parent
+                        removeChallenge: removeChallengeId
+                        row: glyphDelegateId.index
+                        name: glyphDelegateId.name
+                        writable: page._writable
+                        onDuplicateRequested: (sourceName) => {
+                            const newName = RootData.paletteManager.duplicateGlyph(page.palette, sourceName)
+                            if (newName.length > 0) {
+                                page._selectGlyphByName(newName)
+                            }
+                        }
                     }
                 }
 

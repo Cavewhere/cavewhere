@@ -209,3 +209,50 @@ TEST_CASE("cwGlyphListModel tracks manager saveGlyph/removeGlyph", "[cwGlyphList
     REQUIRE(manager->removeGlyph(palette, QStringLiteral("zzz-new")));
     CHECK(model.rowCount() == baseline);
 }
+
+TEST_CASE("cwSymbologyPaletteManager duplicateGlyph derives a unique name", "[cwGlyphListModel]")
+{
+    QObject owner;
+    auto *palette = makePalette(&owner, {
+        makeGlyph(QStringLiteral("floor-step"), QStringLiteral("Floor Step"), 4)
+    });
+
+    auto *manager = cwSymbologyPaletteManager::instance();
+
+    // First copy gets the "-copy" suffix; strokes and a "copy"-suffixed label
+    // carry over, leaving the original untouched.
+    const QString first = manager->duplicateGlyph(palette, QStringLiteral("floor-step"));
+    CHECK(first == QStringLiteral("floor-step-copy"));
+    const auto firstGlyph = palette->glyph(first);
+    REQUIRE(firstGlyph.has_value());
+    CHECK(firstGlyph->strokes.size() == 4);
+    CHECK(firstGlyph->displayName == QStringLiteral("Floor Step copy"));
+    CHECK(palette->glyph(QStringLiteral("floor-step")).has_value());
+
+    // A second copy of the same source bumps the numeric suffix rather than
+    // colliding with the first.
+    const QString second = manager->duplicateGlyph(palette, QStringLiteral("floor-step"));
+    CHECK(second == QStringLiteral("floor-step-copy-2"));
+}
+
+TEST_CASE("cwSymbologyPaletteManager duplicateGlyph rejects bad inputs", "[cwGlyphListModel]")
+{
+    QObject owner;
+    auto *palette = makePalette(&owner, {
+        makeGlyph(QStringLiteral("anchor"), QStringLiteral("Anchor"), 1)
+    });
+
+    auto *manager = cwSymbologyPaletteManager::instance();
+
+    // Unknown glyph name -> empty, palette unchanged.
+    CHECK(manager->duplicateGlyph(palette, QStringLiteral("missing")).isEmpty());
+    CHECK(palette->glyphs().size() == 1);
+
+    // Read-only palette -> empty.
+    palette->setWritable(false);
+    CHECK(manager->duplicateGlyph(palette, QStringLiteral("anchor")).isEmpty());
+    CHECK(palette->glyphs().size() == 1);
+
+    // Null palette -> empty.
+    CHECK(manager->duplicateGlyph(nullptr, QStringLiteral("anchor")).isEmpty());
+}

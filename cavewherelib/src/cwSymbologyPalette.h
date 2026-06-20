@@ -75,6 +75,15 @@ public:
     std::optional<cwLineBrush> brush(QStringView name) const { return m_data.brush(name); }
     std::optional<cwSymbologyGlyph> glyph(QStringView name) const { return m_data.glyph(name); }
 
+    // QML convenience for selecting a glyph by name alone (e.g. after Duplicate):
+    // the glyph's displayName, or an empty string if the name is not a member.
+    // cwSymbologyGlyph is not a QML gadget, so QML can't read it off glyph().
+    Q_INVOKABLE QString glyphDisplayName(const QString &name) const
+    {
+        const std::optional<cwSymbologyGlyph> found = m_data.glyph(name);
+        return found ? found->displayName : QString();
+    }
+
     // Single-member mutation, keyed by the unique name. setGlyph/setBrush upsert
     // (replace in place if the name exists, append otherwise) and are no-ops when
     // the content is unchanged; removeGlyph/removeBrush drop the named member if
