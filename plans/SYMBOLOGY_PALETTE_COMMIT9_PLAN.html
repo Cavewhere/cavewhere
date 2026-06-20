@@ -54,6 +54,8 @@ prototyped interactively before writing this; the prototypes are the living spec
 <tr><td>Dependencies</td><td><strong>Both</strong> an inline <em>Used by</em> affordance + dependents gallery <strong>and</strong> an independent Palette Graph page, over one shared dependency index.</td></tr>
 <tr><td>Graph view tech</td><td><strong>QuickQanava</strong> (vendored submodule, <code>.gitmodules:28</code>) — <code>qan::Graph</code>/<code>Node</code>/<code>Edge</code>, <code>Qan.GraphView</code>.</td></tr>
 <tr><td>Brush→brush references</td><td>In scope as the deepest phase (symbol instancing / DAG); the graph displays them; the engine compose + cycle-spanning is the heavy lift.</td></tr>
+<tr><td>Read-only palette editing</td><td><strong>Edit freely, fork on save.</strong> The editor always opens (even on the read-only shipped default) and is fully editable on its working copy with live preview; only the commit button differs — on a read-only palette it becomes <strong>Duplicate &amp; Save</strong> (fork → repoint region → write the working copy into the fork). No dead-end "view-only" state.</td></tr>
+<tr><td>Palette switching / management</td><td><strong>Both.</strong> A quick <em>Palette: [name ▾]</em> combo in the editor's library rail (switch active + Duplicate / New) <strong>and</strong> a fuller management page (rename / delete / import / export). Both drive <code>region.defaultPaletteId()</code> over the existing <code>PaletteListModel</code>.</td></tr>
 </table>
 
 <h2>1. The vision — a recursive symbol system</h2>
@@ -72,7 +74,8 @@ visible dependents, and a navigable map of the whole palette.</p>
 <tr><td>Decoration engine</td><td><span class="ok">In</span> — <code>cwSketchDecorationLayout::layout()</code>. Stepwise/explain output is a Phase-3 add.</td></tr>
 <tr><td>Validator / registry / list model / picker</td><td><span class="ok">Exist</span> — <code>cwDecorationLayerValidator::validate()</code>, <code>cwPlacementRuleRegistry</code> (needs <code>allRules()</code>), <code>cwLineBrushListModel</code> (needs <code>indexOfName</code>), <code>BrushPicker</code>.</td></tr>
 <tr><td>Glyph cycle check</td><td><span class="ok">Partial</span> — <code>findGlyphDependencyCycle</code> walks glyph→glyph at load. The dependency index generalizes + makes it live (§7).</td></tr>
-<tr><td>QuickQanava</td><td><span class="ok">Vendored</span> submodule, available; not yet used in app code — wiring is new (§8).</td></tr>
+<tr><td>QuickQanava</td><td><span class="ok">Proven in-app</span> — <code>PipelinePage.qml</code> imports <code>QuickQanava as Qan</code> and runs a live <code>Qan.GraphView</code>/<code>Qan.Graph</code>. Module, build wiring, and license are all already working; §7 only wires it to symbology data.</td></tr>
+<tr><td>Palette list / switching</td><td><span class="ok">Exists</span> — <code>PaletteListModel</code> (commit <code>d13d99c9</code>) + <code>region.defaultPaletteId()</code>; the switcher UI is new (§8.1).</td></tr>
 <tr><td>Param interpretation</td><td><span class="ok">Done</span> (Commit B codec) — Phase 2 adds only the UI.</td></tr>
 </table>
 <p><strong>Nothing from commit 8 blocks this.</strong> The "revisit after the brush editor" items (#37, signal granularity) are follow-ups the editor informs (§16).</p>
@@ -91,9 +94,31 @@ commit 8 used to inject a palette into the glyph canvas. On each edit, push
 <em>base snapshot with the edited brush/glyph swapped</em>. <code>cwPaletteSnapshot</code>
 is cheap implicitly-shared, so it's a copy-with-substitution. Discard → clear; Apply →
 real <code>setBrush</code> (real re-skin + async persist), then clear.</p>
-<h3>3.3 Discard / Apply</h3>
-<p>Closing dirty prompts (Apply / Discard / Keep). Disk is never written until Apply.
+<h3>3.3 Discard / Apply / Duplicate &amp; Save (fork-on-edit)</h3>
+<p>Closing dirty prompts (Apply / Discard / Keep). Disk is never written until commit.
 The glyph editor converges on this working-copy model in Phase 4 (gives up autosave).</p>
+<p><strong>Fork on save.</strong> A fresh region resolves to the <em>read-only</em> shipped
+default (<code>cwSketch::resolveSnapshot</code>, region→settings→shipped), and palette
+mutation is writable-guarded. Rather than block entry, the editor opens and is fully
+editable on its working copy regardless — only the commit button adapts:</p>
+<ul>
+  <li><strong>Writable palette</strong>: footer <code>[Discard] [Apply]</code> →
+  <code>palette.setBrush(working)</code>.</li>
+  <li><strong>Read-only palette</strong>: a banner (<em>"Editing a copy of 'X'
+  (read-only)"</em>) + footer <code>[Discard] [Duplicate &amp; Save…]</code>, which
+  <code>paletteManager.duplicatePalette(resolved)</code> (writable fork) →
+  <code>region.setDefaultPaletteId(fork.id)</code> → <code>fork.setBrush(working)</code>.
+  The working copy the user was experimenting with carries straight into the fork.</li>
+</ul>
+<p>This is feasible because the live preview already rides a non-resolved snapshot
+(§3.2), so the read-only palette is never mutated — the experiment lives entirely in the
+working copy until the fork materializes it.</p>
+<h3>3.4 Switching palettes</h3>
+<p>Two surfaces over the existing <code>PaletteListModel</code>, both setting
+<code>region.defaultPaletteId()</code> (switching while dirty fires the Apply/Discard/Keep
+prompt first): a <em>Palette: [name ▾]</em> combo in the editor's library rail
+(switch + Duplicate / New), and a fuller palette-management page (rename / delete /
+import / export). See §8.1.</p>
 
 <h2>4. Palette-owned mutation <span class="p p0">Phase 0</span></h2>
 <p class="warn">Mutation lives on <code>cwSymbologyPalette</code> (persistence is wired to
@@ -147,24 +172,36 @@ Pan/zoom/drag, select → detail (used-by / uses), <strong>Open in editor</stron
 highlighting. Cross-editor navigation is shared with the inline <em>Used by</em> jump-list.</p>
 
 <h2>8. UI — docked panel beside the live sketch</h2>
-<pre class="mock">┌─ CaveWhere · sketching ──────────┬─ Edit Brush ─────────┐
-│   (your REAL sketch, live)       │ floor-step [working] │
-│    ╱╲___   the stroke you        │ ▼ floor-step         │
-│    ·· ·· ··  didn't like         │  ▾ edge  · Trace     │
-│   (ticks re-skin as you edit)    │    ☑ Offset / ☑ Trace│
-│                                  │  ▾ tick  · Stamp     │
-│                                  │    ☑ Uniform spacing │
-│                                  │    ☑ Align to tangent│
-│                                  │    ☐ Rotate (off)    │
-│                                  │    ☑ Rigid stamp     │
+<pre class="mock">┌─ CaveWhere · sketching ──────────┬─ Edit Brush ──────────────────┐
+│   (your REAL sketch, live)       │ Palette: CaveWhere Default ▾   │
+│    ╱╲___   the stroke you        │ ⚠ Editing a copy (read-only)   │
+│    ·· ·· ··  didn't like         │ floor-step [working]           │
+│   (ticks re-skin as you edit)    │ ▼ floor-step                   │
+│                                  │  ▾ edge  · Trace               │
+│                                  │    ☑ Offset / ☑ Trace          │
+│                                  │  ▾ tick  · Stamp               │
+│                                  │    ☑ Uniform spacing           │
+│                                  │    ☑ Align to tangent          │
+│                                  │    ☐ Rotate (off)              │
+│                                  │    ☑ Rigid stamp               │
 │                                  │      ⤷ glyph floor-tick [used by 2 ⚠]│
-│                                  │  [+ Layer]  Uniform: 2.0mm│
-│                                  │ [Discard]   [Apply]  │
-└──────────────────────────────────┴──────────────────────┘</pre>
+│                                  │  [+ Layer]  Uniform: 2.0mm     │
+│                                  │ [Discard]  [Duplicate & Save…] │
+└──────────────────────────────────┴────────────────────────────────┘
+   (writable palette → the footer's right button is just [Apply])</pre>
 <p>Host: a panel docked into the sketch view (not a separate page). Responsive: docked
 on wide, full-screen overlay on narrow (ties into commit-2.1 <code>isNarrow</code>, #44).
 House rules: <code>QC.Label</code>, <code>Theme</code> tokens, <code>QtQuick</code> as
 <code>QQ</code>, <code>TapHandler</code>, strict typed properties, item-body ordering.</p>
+
+<h3>8.1 Palette switcher + management page</h3>
+<p><strong>Rail combo</strong> (<em>Palette: [name ▾]</em>): lists shipped + project forks
+from <code>PaletteListModel</code>; selecting one sets <code>region.defaultPaletteId()</code>;
+inline <em>Duplicate…</em> / <em>New…</em>. The read-only badge next to the name is the
+fork-on-save cue. <strong>Management page</strong>: full CRUD over palettes — set active,
+duplicate, rename, delete (writable only), import / export — for users who think in
+palettes rather than a single brush. Both are thin views over the manager + list model;
+no new persistence.</p>
 
 <h2>9. Interaction inventory</h2>
 <p class="note">Derived from the prototypes. Each row traces a user action to the backend
@@ -178,6 +215,9 @@ Phase tags: <span class="p p1">1</span><span class="p p2">2</span><span class="p
 <tr><td><span class="p p2">2</span> Open from brush picker / library rail</td><td>right-click brush row → Edit</td><td>same</td><td>picker context menu → <code>loadBrushNamed</code></td><td>no</td></tr>
 <tr><td><span class="p p1">1</span> Open cold (palette mgmt)</td><td>"Edit brushes" → pick</td><td>panel docks beside gallery sketch</td><td>gallery <code>cwSketch</code> factory; <code>loadBrushNamed</code></td><td>no</td></tr>
 <tr><td><span class="p p1">1</span> Close (clean / dirty)</td><td>×</td><td>closes / Apply-Discard-Keep prompt</td><td><code>dirty</code>; <code>clearPreviewSnapshot</code> on destroy</td><td>—</td></tr>
+<tr><td><span class="p p1">1</span> Save on a read-only palette (fork-on-edit)</td><td>Duplicate &amp; Save</td><td>forks, repoints region, writes working copy; banner shown while read-only</td><td><code>palette.isWritable</code>; <code>duplicatePalette</code>; <code>region.setDefaultPaletteId</code>; <code>fork.setBrush(working)</code></td><td><b>yes</b></td></tr>
+<tr><td><span class="p p1">1</span> Switch active palette</td><td>rail combo</td><td>editor + sketch rebind; dirty → prompt first</td><td><code>PaletteListModel</code>; <code>region.setDefaultPaletteId</code></td><td><b>yes</b></td></tr>
+<tr><td><span class="p p2">2</span> Manage palettes (dup / rename / delete / import-export)</td><td>management page</td><td>palette CRUD</td><td>manager CRUD over <code>PaletteListModel</code></td><td><b>yes</b></td></tr>
 </table>
 
 <h3>Thin loop <span class="p p1">Phase 1</span></h3>
@@ -197,6 +237,7 @@ Phase tags: <span class="p p1">1</span><span class="p p2">2</span><span class="p
 <tr><td>Add / remove / reorder layer</td><td>+Layer / ✕ / drag</td><td>preview (paint order = row order)</td><td>layer mutators on working copy</td><td>no</td></tr>
 <tr><td>Select a layer's glyph</td><td>glyph picker</td><td>preview</td><td>GlyphPicker; available glyph names; <b>live cycle check</b></td><td>no</td></tr>
 <tr><td>Brush library: add / duplicate / remove brush</td><td>rail context menu</td><td>list updates immediately</td><td><code>palette.duplicateBrush/removeBrush</code>; <code>brushDisplayName</code>; <code>LineBrushListModel.indexOfName</code></td><td><b>yes</b></td></tr>
+<tr><td>Rename a brush</td><td>edit name field / context menu</td><td>row re-keys; no orphaned old copy</td><td><b>save-new + drop-old</b> (<code>setBrush(new)</code> + <code>removeBrush(old)</code>), mirroring the glyph rename gate (<code>test_renameDoesNotOrphanOldGlyph</code>); references to the old name must be re-pointed (dependency index)</td><td><b>yes</b></td></tr>
 </table>
 
 <h3>Per-rule visualization <span class="p p3">Phase 3</span></h3>
@@ -246,17 +287,19 @@ Phase tags: <span class="p p1">1</span><span class="p p2">2</span><span class="p
 <tr><td>B11</td><td>Live cycle check spanning brushes + glyphs (on edit)</td><td>Load-time glyph-only <span class="ok">exists</span>; <span class="new">NEW</span> live + spanning</td><td>4</td></tr>
 <tr><td>B12</td><td>Reusable glyph editor pane (<code>GlyphEditorPage</code> → working-copy pane) + scoped nesting</td><td class="new">NEW (refactor; glyph editor drops autosave)</td><td>4</td></tr>
 <tr><td>B13</td><td>Gallery <code>cwSketch</code> factory (cold start + dependents gallery cells)</td><td class="new">NEW</td><td>1 / 4</td></tr>
-<tr><td>B14</td><td>QuickQanava graph view populated from the index; cross-editor navigation</td><td>Submodule <span class="ok">vendored</span>; app wiring <span class="new">new</span></td><td>5</td></tr>
+<tr><td>B14</td><td>QuickQanava graph view populated from the index; cross-editor navigation</td><td>Module <span class="ok">proven in-app</span> (<code>PipelinePage.qml</code>); only the symbology-data wiring is <span class="new">new</span></td><td>5</td></tr>
 <tr><td>B15</td><td>Brush-reference in the data model + engine compose (symbol instancing / DAG)</td><td class="new">NEW (largest)</td><td>6</td></tr>
-<tr><td>B16</td><td><code>cwLineBrushListModel::indexOfName</code> + <code>brushDisplayName</code></td><td class="new">NEW (small)</td><td>2</td></tr>
+<tr><td>B16</td><td><code>cwLineBrushListModel::indexOfName</code> + <code>brushDisplayName</code>; brush rename = save-new + drop-old (mirror glyph rename gate)</td><td class="new">NEW (small)</td><td>2</td></tr>
+<tr><td>B17</td><td>Fork-on-edit: read-only-aware commit (<code>isWritable</code> branch → <code>duplicatePalette</code> + <code>region.setDefaultPaletteId</code> + write working copy); writable-guard on <code>setBrush/setGlyph</code></td><td>Fork machinery <span class="ok">exists</span> (<code>duplicatePalette</code> sets writable); <span class="new">NEW</span> guard + commit branch + region repoint</td><td>1</td></tr>
+<tr><td>B18</td><td>Palette switcher (rail combo) + management page over <code>PaletteListModel</code> → <code>region.setDefaultPaletteId</code></td><td>Model <span class="ok">exists</span> (<code>d13d99c9</code>); switch UI <span class="new">new</span> (combo Phase 1; management page Phase 2)</td><td>1 / 2</td></tr>
 </table>
 
 <h2>11. Phasing</h2>
 <table>
 <tr><th>Phase</th><th>Delivers</th></tr>
 <tr><td><span class="p p0">0</span> palette mutation</td><td>Unify mutation onto <code>cwSymbologyPalette</code>; retire manager glyph trio. (B5)</td></tr>
-<tr><td><span class="p p1">1</span> <span class="tag ship">SHIP 1st</span> thin loop</td><td>Docked panel + working-copy Discard/Apply + live preview (snapshot override) + enable/disable + read-only structure + entry points + gallery cold start + <code>enabled</code> flag. (B1–B4, B6, B13)</td></tr>
-<tr><td><span class="p p2">2</span> stack editing</td><td>Add/remove/reorder layers &amp; rules; glyph selection; rule param editing; live validator; brush library add/dup/remove. (B7, B8, B16)</td></tr>
+<tr><td><span class="p p1">1</span> <span class="tag ship">SHIP 1st</span> thin loop</td><td>Docked panel + working-copy Discard/Apply + <strong>fork-on-save</strong> (read-only → Duplicate &amp; Save) + <strong>rail palette combo</strong> + live preview (snapshot override) + enable/disable + read-only structure + entry points + gallery cold start + <code>enabled</code> flag. (B1–B4, B6, B13, B17, B18-combo)</td></tr>
+<tr><td><span class="p p2">2</span> stack editing</td><td>Add/remove/reorder layers &amp; rules; glyph selection; rule param editing; live validator; brush library add/dup/remove/<strong>rename</strong>; <strong>palette management page</strong>. (B7, B8, B16, B18-page)</td></tr>
 <tr><td><span class="p p3">3</span> per-rule viz</td><td>Stepwise "explain" layout → before/after thumbnails / "solo this rule". (B9)</td></tr>
 <tr><td><span class="p p4">4</span> dependencies + scoped glyph</td><td>Dependency index; inline "Used by"; dependents gallery; transitive blast radius; live cycle check; scoped glyph editing (reusable pane). (B10–B12)</td></tr>
 <tr><td><span class="p p5">5</span> Palette Graph</td><td>QuickQanava DAG view; navigate / open / delete-orphan; shared/orphan/cycle highlighting. (B14)</td></tr>
@@ -268,11 +311,12 @@ Phase tags: <span class="p p1">1</span><span class="p p2">2</span><span class="p
 <ol>
   <li><strong>Backend</strong>: <code>cwBrushEditor</code> (load/dirty/discard/apply/setRuleEnabled);
   preview-snapshot override seam; <code>enabled</code> flag + layout filter + validator;
-  stroke→brush lookup (B1, already exists — direct read); gallery sketch factory.
-  (Phase 0 lands first.)</li>
+  stroke→brush lookup (B1, already exists — direct read); gallery sketch factory;
+  fork-on-save commit branch (B17) + writable-guarded setters. (Phase 0 lands first.)</li>
   <li><strong>QML</strong>: <code>BrushEditorPanel.qml</code> docked into the sketch view;
-  read-only structure tree with enable checkboxes; Discard/Apply footer; entry points;
-  gallery cold start.</li>
+  read-only structure tree with enable checkboxes; read-only banner + Discard/[Apply |
+  Duplicate&amp;Save] footer; rail palette combo (B18-combo); entry points; gallery cold
+  start.</li>
   <li><strong>Out of Phase 1</strong>: add/remove/reorder, param editing, glyph selection,
   drill-down, dependencies, graph, per-rule viz.</li>
 </ol>
@@ -292,7 +336,17 @@ cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test cavewhere-
 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test "[cwBrushEditor],[cwSymbologyPalette],[cwGlyphListModel],[cwSketchDecorationLayout],[cwSymbologyDependencyGraph]" -d yes 2>&amp;1 | tee /tmp/cw-9-test.log
 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-qml-test --platform offscreen -input test-qml/tst_BrushEditor.qml 2>&amp;1 | tee -a /tmp/cw-9-test.log</pre>
 
-<h2>15. Out of scope / deferred</h2>
+<h2>15. Risks &amp; open questions</h2>
+<table>
+<tr><th>Risk</th><th>Severity</th><th>Mitigation / note</th></tr>
+<tr><td>Preview seam <em>(snapshot vs palette-object)</em></td><td>Low</td><td>The virtual seam exists (<code>snapshotForPathModel</code>/<code>refreshPathSnapshot</code>); commit 8's glyph canvas injects a <em>palette object</em> (<code>setPalette</code> + <code>dataChanged</code> → free live refresh), not a snapshot. Injecting the working-copy palette object may reuse more machinery than pushing a swapped snapshot — decide at Phase 1 implementation.</td></tr>
+<tr><td>QuickQanava integration</td><td>Low (was the top unknown)</td><td>De-risked: <code>PipelinePage.qml</code> already runs <code>Qan.GraphView</code>/<code>Qan.Graph</code> in-app. Remaining work is data wiring + node/edge delegates, not build/module/license.</td></tr>
+<tr><td>Fork-on-save side effect</td><td>Low</td><td>Duplicate &amp; Save repoints <code>region.defaultPaletteId()</code> — a project-state change. The fork is a byte copy so the map looks identical immediately; surface it via the banner + the rail combo's new entry.</td></tr>
+<tr><td>Rename re-points references</td><td>Medium</td><td>Brush/glyph rename (save-new + drop-old) must re-point dependents or it orphans them. Direct renames are safe in Phase 2 (no refs yet); once the dependency index lands (Phase 4) rename routes through it. Until then, restrict rename to leaf names or block rename of referenced nodes.</td></tr>
+<tr><td>Phase-1 read-only structure model</td><td>Low</td><td>The structure tree needs a QML-visible model of layers/rules (plain structs aren't QML-readable). Covered by <code>cwBrushEditor</code> exposing list-model accessors (B2); call out as its own deliverable so it isn't lost.</td></tr>
+</table>
+
+<h2>16. Out of scope / deferred</h2>
 <ul>
   <li>Each phase is its own commit, paused for review (<code>feedback_pause_between_phases</code>).</li>
   <li><strong>#37 targeted single-palette refresh</strong> — working-copy/preview-override keeps editing off the full-reskin path; the cost is only at Apply. The editor is the client that motivates the targeted refresh.</li>
