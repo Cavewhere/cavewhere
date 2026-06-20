@@ -571,7 +571,9 @@ bool cwLeadView::isOccluded(const QVector3D& worldPosition,
         return false;
     }
 
-    const cwRayHit hit = intersecter->intersectsDetailed(ray);
+    // Occlusion is about solid geometry only — a lead behind the centerline is
+    // still visible, so exclude lines from the test.
+    const cwRayHit hit = intersecter->intersectsDetailed(ray, cwPickQuery{.kinds = cwPickQuery::Solid});
     if(!hit.hit()) {
         return false;
     }

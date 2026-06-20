@@ -13,22 +13,14 @@
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwGeometryItersecter.h"
-#include "cwLinePlotStationSnap.h"
-#include "cwPickQuery.h"
-#include "cwProjection.h"
-#include "cwRayHit.h"
-#include "cwRenderLinePlot.h"
-
-//Qt includes
-#include <QRect>
-
-//Qt 3D
-#include <qray3d.h>
+#include "cwScenePick.h"
 
 namespace {
-    // Screen-space pick tolerance for line picking, in pixels. The centerline
-    // is hit when the cursor is within this many pixels of it at any zoom.
-    constexpr double kPickPixelRadius = 6.0;
+    // Screen-space pick tolerance for line picking, in millimeters. The
+    // centerline is hit when the cursor is within this physical distance of it at
+    // any zoom. Millimeters (not pixels) so the tolerance covers the same size on
+    // screen regardless of display DPI or scaling.
+    constexpr double kPickRadiusMillimeters = 1.5;
 }
 
 cwCoordinatePicker::cwCoordinatePicker(QQuickItem* parent) :
@@ -104,53 +96,13 @@ void cwCoordinatePicker::pick(QPointF screenPoint)
         return;
     }
 
-    const QRay3D ray = m_camera->rayFromQtViewport(screenPoint);
-
-    // Derive a screen-space line pick tolerance from the camera. No fov
-    // accessor is needed: the perspective slope falls out of the projection
-    // matrix, and ortho uses pixelsPerMeter directly. kinds defaults to
-    // cwPickQuery::All — nearest of every kind by depth wins.
-    cwPickQuery query;
-    const QRect viewport = m_camera->viewport();
-    if (m_camera->projection().type() == cwProjection::Ortho) {
-        const double pixelsPerMeter = m_camera->pixelsPerMeter();
-        if (pixelsPerMeter > 0.0) {
-            query.tolerance.constant = kPickPixelRadius / pixelsPerMeter;
-        }
-    } else {
-        // Slope from projectionMatrix(1,1) is exact for a symmetric frustum
-        // (the only perspective the 3D view uses). An off-axis/asymmetric
-        // frustum would make the tolerance slightly anisotropic.
-        const double p11 = m_camera->projectionMatrix()(1, 1);
-        if (p11 > 0.0 && viewport.height() > 0) {
-            query.tolerance.slope = kPickPixelRadius * 2.0 / (p11 * viewport.height());
-        }
-    }
-
-    const cwRayHit hit = intersecter->intersectsDetailed(ray, query);
-    if (!hit.hit()) {
+    const cwScenePick::Result pick = cwScenePick::snappedPoint(
+                screenPoint, *m_camera, *intersecter, pixelsForMillimeters(kPickRadiusMillimeters));
+    if (!pick.hit) {
         return;
     }
 
-    m_scenePoint = hit.pointWorld();
-
-    // When the pick lands on the centerline, clamp it to the nearest survey
-    // station if the cursor is within the pick radius of one. Stations are the
-    // line vertices, so a line hit (and only a line hit) can snap — triangle and
-    // point hits cast to nullptr and keep their exact surface point.
-    if (auto* linePlot = qobject_cast<cwRenderLinePlot*>(hit.object())) {
-        if (const auto endpoints = linePlot->segmentEndpoints(hit.firstIndex())) {
-            const auto snap = cwLinePlotStationSnap::snapToStation(
-                        screenPoint,
-                        *m_camera,
-                        {endpoints->first, hit.firstIndex()},
-                        {endpoints->second, hit.firstIndex() + 1},
-                        hit.pointWorld(),
-                        kPickPixelRadius);
-            m_scenePoint = snap.worldPos;
-        }
-    }
-
+    m_scenePoint = pick.world;
     m_pickScreenPoint = screenPoint;
 
     const cwGeoPoint origin = m_region->worldOrigin();

@@ -8,6 +8,7 @@
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
 #include "cwGeometry.h"
+#include "cwRayHit.h"
 #include "cwTurnTableViewState.h"
 #include "ProjectionScaleTestHelpers.h"
 
@@ -27,6 +28,7 @@
 //Std
 #include <cmath>
 #include <limits>
+#include <numeric>
 
 using namespace Catch;
 
@@ -132,6 +134,34 @@ void addSmallGeometry(cwScene& scene, float extent, uint64_t id = 1)
 
     scene.geometryItersecter()->addObject(
         cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4(), 0.5f));
+    scene.geometryItersecter()->waitForFinish();
+}
+
+// Elevation of the test centerline above the z=0 grid plane. Lifting it lets a
+// test tell a line pivot (z≈kCenterlineZ) apart from the grid-plane fallback
+// (z≈0), and is well clear of kPixelTolerance so the two never blur together.
+constexpr float kCenterlineZ = 10.0f;
+
+// Adds a centerline (Type::Lines with iota indices, the way cwRenderLinePlot
+// registers it) at z = kCenterlineZ and blocks until the BVH is built. No solid
+// geometry is added, so the line is the only thing a pick can land on — the
+// "all the solid is hidden, still orbit the line plot" case.
+void addCenterline(cwScene& scene, uint64_t id = 2)
+{
+    cwGeometry geometry {
+        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
+    };
+    geometry.set(cwGeometry::Semantic::Position, QVector<QVector3D>{
+        QVector3D(-20.0f, 0.0f, kCenterlineZ),
+        QVector3D( 20.0f, 0.0f, kCenterlineZ),
+    });
+    QVector<uint32_t> indices(2);
+    std::iota(indices.begin(), indices.end(), 0u);
+    geometry.setIndices(std::move(indices));
+    geometry.setType(cwGeometry::Type::Lines);
+
+    scene.geometryItersecter()->addObject(
+        cwGeometryItersecter::Object({nullptr, id}, geometry));
     scene.geometryItersecter()->waitForFinish();
 }
 
@@ -807,6 +837,44 @@ TEST_CASE("cwBaseTurnTableInteraction startRotating with no geometry still uses 
     CHECK(f.interaction.center().x() == Approx(expected.x()));
     CHECK(f.interaction.center().y() == Approx(expected.y()));
     CHECK(f.interaction.center().z() == Approx(expected.z()));
+}
+
+// --- Pivoting on the centerline when the solid geometry is hidden ---
+
+TEST_CASE("cwBaseTurnTableInteraction pick snaps to the centerline with no solid geometry",
+          "[cwBaseTurnTableInteraction]")
+{
+    // The pivot pick carries a screen-space tolerance so the otherwise
+    // infinitely-thin centerline is hittable. Without it (a bare default query)
+    // the line would never be picked and pick() would miss.
+    Fixture f;
+    addCenterline(f.scene);
+
+    const cwRayHit hit = f.interaction.pick(screenCenter());
+    REQUIRE(hit.hit());
+    // The screen-center ray runs down -Z through the world origin and crosses
+    // the line at (0, 0, kCenterlineZ); the closest point on the segment is
+    // exactly that crossing — z≈kCenterlineZ proves it's the line, not the grid.
+    CHECK(hit.pointWorld().x() == Approx(0.0f).margin(kPixelTolerance));
+    CHECK(hit.pointWorld().y() == Approx(0.0f).margin(kPixelTolerance));
+    CHECK(hit.pointWorld().z() == Approx(kCenterlineZ).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction startRotating orbits the centerline with no solid geometry",
+          "[cwBaseTurnTableInteraction]")
+{
+    // startRotating() routes through unProject(). With only the centerline in
+    // the scene, the pivot must land on the line (z≈kCenterlineZ) rather than
+    // fall through to the z=0 grid plane — that's "orbit the line plot when the
+    // solid is hidden".
+    Fixture f;
+    addCenterline(f.scene);
+
+    f.interaction.startRotating(screenCenter().toPoint());
+
+    CHECK(f.interaction.center().x() == Approx(0.0f).margin(kPixelTolerance));
+    CHECK(f.interaction.center().y() == Approx(0.0f).margin(kPixelTolerance));
+    CHECK(f.interaction.center().z() == Approx(kCenterlineZ).margin(kPixelTolerance));
 }
 
 // --- Commit 2 cases ---

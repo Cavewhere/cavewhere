@@ -24,6 +24,12 @@
 Q_LOGGING_CATEGORY(lcInteract, "cw.interaction", QtWarningMsg)
 
 namespace {
+    // Screen-space radius, in millimeters, for snapping the pivot to geometry. A
+    // tolerance is what lets the otherwise infinitely-thin centerline be picked,
+    // so the view can orbit the line plot when the solid geometry is hidden.
+    // Millimeters (not pixels) so the grab feels the same size on every display.
+    constexpr double kPivotPickRadiusMillimeters = 4.0;
+
     // A non-geometry pick (grid plane) is only accepted as a pivot if it
     // lands inside the scene box grown by this fraction of the box diagonal.
     // Keeps a grazing grid hit kilometres away from the cave from becoming
@@ -131,13 +137,18 @@ std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point) con
     //Create a ray from the back projection front and back plane
     auto ray = Camera->frustrumRay(point);
 
-    //See if it hits any of the scraps or objects — always trust a real hit.
-    const double t = scene()->geometryItersecter()->intersects(ray);
-    if(!std::isnan(t)) {
-        const QVector3D world = ray.point(t);
+    //See if it hits any of the scraps or objects — always trust a real hit. The
+    //pick radius keeps the thin centerline grabbable, so the view can pivot on it
+    //when the solid geometry is hidden. The pivot is the hit's point on the
+    //geometry — for a line that's the closest point on the segment, so orbiting a
+    //picked line spins around the line itself, not a point floating beside it.
+    const cwRayHit hit = scene()->geometryItersecter()->intersectsDetailed(
+                ray, Camera->pickQuery(pixelsForMillimeters(kPivotPickRadiusMillimeters)));
+    if(hit.hit()) {
+        const QVector3D world = hit.pointWorld();
         qCDebug(lcInteract).nospace()
-            << "unProject(" << point << "): geometry t=" << t
-            << " world=" << world << " rayOrigin=" << ray.origin();
+            << "unProject(" << point << "): geometry world=" << world
+            << " rayOrigin=" << ray.origin();
         return world;
     }
 
@@ -1118,7 +1129,8 @@ cwRayHit cwBaseTurnTableInteraction::pick(QPointF qtViewPoint) const
 
     //Create a ray from the back projection front and back plane
     const auto ray = Camera->frustrumRay(mappedPos);
-    return scene()->geometryItersecter()->intersectsDetailed(ray);
+    return scene()->geometryItersecter()->intersectsDetailed(
+                ray, Camera->pickQuery(pixelsForMillimeters(kPivotPickRadiusMillimeters)));
 }
 
 void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)

@@ -62,6 +62,14 @@ struct cwPickQuery {
     //! Every pickable primitive kind.
     static constexpr Kinds All = Kinds(Kind::Triangles) | Kind::Lines | Kind::Points;
 
+    //! Solid scene geometry — surfaces and point clouds, but not the centerline
+    //! overlay. Occlusion tests (cwLeadView lead visibility) use this: a lead
+    //! behind only the centerline is still visible, so a line must not occlude
+    //! it. Note this is deliberately NOT used for the turntable pivot, which
+    //! orbits the centerline when the solid geometry is hidden and so keeps
+    //! cwPickQuery::All.
+    static constexpr Kinds Solid = Kinds(Kind::Triangles) | Kind::Points;
+
     Kinds kinds = All;
 };
 

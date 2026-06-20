@@ -11,6 +11,7 @@
 //Our includes
 #include "cwProjection.h"
 #include "cwGlobals.h"
+#include "cwPickQuery.h"
 
 //Math 3D
 #include <qray3d.h>
@@ -85,6 +86,12 @@ public:
 
     //Utility functions
     double pixelsPerMeter() const; //Only valid with ortho projection
+
+    //! Builds a pick query whose tolerance matches a screen-space radius of
+    //! pixelRadius pixels at the current projection — a perspective slope or an
+    //! ortho constant — with kinds left at cwPickQuery::All. Camera-agnostic
+    //! callers (the geometry intersecter) stay decoupled from the projection.
+    cwPickQuery pickQuery(double pixelRadius) const;
     cwProjection orthoProjectionDefault() const;
     cwProjection perspectiveProjectionDefault() const;
 
