@@ -93,7 +93,7 @@
 <header>
   <h1>Issue #517 — Parallel LFS downloads</h1>
   <div class="sub">CaveWhere · QQuickGit submodule · Git LFS object hydration after clone / reset</div>
-  <div class="tag">Stage 1 + Stage 2 implemented (uncommitted) · §10 follow-ups open</div>
+  <div class="tag">Stage 1 + Stage 2 + 1A committed in QQuickGit (7dcbae2, master) · cwCaptureManager leak fix committed in cavewhere (a1f1d7ab, dev_cavewhere) · main-repo gitlink bump + pushes pending · §10 follow-ups open</div>
   <div class="tag">Scope: QQuickGit only</div>
 </header>
 
@@ -584,6 +584,8 @@ GitFuture asyncPumpBounded(tasks, maxInFlight, perItem);</code></pre>
       <code>saveCaptures()</code> (queued because we're inside <code>*next</code>'s own body; nulling it
       inline is UB), mirroring the LFS cycle-break. Verified: compiles clean,
       <code>[cwCaptureManager]</code> passes, and the PNG/SVG export QML flow ran 6/6 clean.
+      Committed as <code>a1f1d7ab</code> on cavewhere <code>dev_cavewhere</code> (with this plan);
+      the QQuickGit submodule pointer was deliberately left un-bumped.
     </p>
     <p class="muted" style="color:var(--muted)">
       <strong>Discovered, unrelated:</strong> <code>tst_MapExportContent::test_pngExportContent</code>
