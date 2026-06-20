@@ -363,6 +363,11 @@ two points and the current mode, drives hover, and exposes the readout as proper
 True-north correction — apply the CRS grid convergence at the measurement location via PROJ — is a documented
 follow-up, deliberately kept out of the pure math helper so <code>between()</code> stays a function of two
 points. (Consistent with the "ship the simple tier first" preference.)</p>
+<p><b>Cheaper than it looks:</b> the PROJ math already exists as the pure helper
+<code>cwGridConvergence::computeAt()</code> (<code>cwGridConvergence.h:89</code>), so the follow-up is mostly
+wiring, not new geodesy. Apply it in the <b>C3 interaction layer</b>
+(<code>trueAzimuth = gridAzimuth + convergence</code>) rather than in <code>between()</code> — that keeps CRS
+knowledge out of the pure-math helper and preserves the front/back split.</p>
 
 <h2 id="tests">9. Tests</h2>
 <table>
@@ -391,11 +396,21 @@ Tests use <code>QTemporaryDir</code>/<code>applicationPid()</code> for any temp 
 
 <h2 id="out">10. Out of scope / follow-ups</h2>
 <ul>
-  <li><b>True-north / grid-convergence correction</b> for azimuth (see §8) — PROJ-based, deferred.</li>
+  <li><b>True-north / grid-convergence correction</b> for azimuth (see §8) — PROJ-based, deferred, but
+    cheaper than it looks: <code>cwGridConvergence::computeAt()</code> (<code>cwGridConvergence.h:89</code>)
+    already supplies the convergence; the C3 layer just adds it to the grid azimuth.</li>
   <li><b>Station names in the readout</b> — needs the additive <code>cwLinePlotGeometry::Result</code> metadata
     flagged in #530 (vertex&rarr;station-name map was discarded). Snap currently yields position + vertex index
     only; "from STA12 to STA15" waits on that.</li>
   <li><b>Multiple / persisted measurements</b> — v1 keeps exactly one live measurement.</li>
+  <li><b>Unify azimuth/inclination math with LiDAR note georeferencing</b> —
+    <code>cwMeasurementMath::between()</code> shares byte-identical bearing
+    (<code>atan2(dx, dy)</code> + <code>[0,360)</code> wrap) and clino (<code>atan2(dz, horizontal)</code>,
+    &plusmn;90 guard) math with <code>cwNoteLiDARTransformation::calculateNorth()</code> /
+    <code>calculateVerticalAngle()</code> (<code>cwNoteLiDARTransformation.cpp:102,123</code>). Once C2
+    lands, have the LiDAR path delegate to <code>between()</code> after its up-quaternion rotation so the
+    two stay in sync. Its own commit + tests; C2 ships as a dependency-free leaf first. (dewalls
+    <code>vector.cpp</code> is <i>not</i> a merge target — vendored, unit-typed, applies instrument corrections.)</li>
   <li><b>Explicit <code>cwPickQuery</code> in the other 3 BVH callers</b> (<code>cwLeadView</code>,
     <code>cwBaseTurnTableInteraction</code> ×2) — the standing #530 §11 item; unrelated to this tool but in the
     same neighbourhood. <b>Done alongside C1:</b> <code>cwLeadView</code> occlusion now uses
