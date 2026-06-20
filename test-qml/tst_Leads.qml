@@ -8,8 +8,15 @@ MainWindowTest {
     id: rootId
 
     TestCase {
+        id: leadsTestCase
         name: "Leads"
         when: windowShown
+
+        // Generous wait for click -> selection / popup-open round trips. The 3D
+        // lead path runs offscreen with no QRhi, and the nightly suite runs
+        // several test processes in parallel, so CPU starvation can stretch a
+        // single click->select cycle well past the usual 2-5s budgets.
+        readonly property int leadSelectTimeout: 10000
 
         function init() {
             // Dismiss any leftover text editor from a previous test
@@ -50,29 +57,46 @@ MainWindowTest {
             if(transformEditor) transformEditor.collapsed = collapse
         }
 
+        // Reliably open a 3D lead popup. A single tap on the marker can miss while
+        // the offscreen 3D view is still settling (no QRhi) or while several test
+        // processes contend for CPU, so retry the tap until the lead selects, then
+        // wait for the async QuoteBox Loader. The retry is guarded at the top so a
+        // tap that has already selected the lead is never repeated (which would
+        // toggle it back closed). Returns {leadPoint, quoteBox}.
+        function openLeadPopup(leadPointChain) {
+            let leadPoint = null;
+            tryVerify(() => {
+                leadPoint = ObjectFinder.findObjectByChain(mainWindow, leadPointChain);
+                return leadPoint !== null;
+            }, leadsTestCase.leadSelectTimeout, "lead marker should exist: " + leadPointChain);
+
+            tryVerify(() => {
+                if (leadPoint.selected) {
+                    return true
+                }
+                mouseClick(leadPoint)
+                return leadPoint.selected
+            }, leadsTestCase.leadSelectTimeout, "lead should select after tapping the marker");
+
+            let quoteBox = null;
+            tryVerify(() => {
+                quoteBox = findChild(leadPoint, "leadQuoteBox")
+                return quoteBox !== null;
+            }, leadsTestCase.leadSelectTimeout, "lead quote box should open after selecting the marker");
+
+            return {leadPoint: leadPoint, quoteBox: quoteBox};
+        }
+
         function test_leads() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
 
             //Click on the lead
-            let leadPoint0 = null;
-            tryVerify(() => {
-                leadPoint0 = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
-                return leadPoint0 !== null;
-            });
-            mouseClick(leadPoint0)
+            let {leadPoint: leadPoint0, quoteBox} = openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint2_1")
 
             verify(leadPoint0.scrap !== null )
             compare(leadPoint0.scrapId, 2)
             compare(leadPoint0.pointIndex, 1)
-
-            //This doesn't work be leadPoint0 doesn't have a consistant name between runs,
-
-            let quoteBox = null;
-                    tryVerify(() => {
-                                    quoteBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox")
-                                    return quoteBox !== null;
-                        })
 
             let description_obj1 = findChild(quoteBox, "description")
             tryVerify(() => {return description_obj1.text === "Walking"})
@@ -192,6 +216,9 @@ MainWindowTest {
         function addNewLeadToScrap() {
             // Returns {scrap, leadIndex, widthText, heightText} after adding a new lead
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            // Wait for the load + scrap morph to settle; otherwise the retry-click
+            // below hammers a scrap that isn't selectable yet and times out.
+            RootData.futureManagerModel.waitForFinished();
 
             let cave = RootData.region.cave(0);
             let trip = cave.trip(0);
@@ -220,7 +247,7 @@ MainWindowTest {
                               return false
                           }
                           return true
-                      }, 5000, "scrap should be selected after image click")
+                      }, leadsTestCase.leadSelectTimeout, "scrap should be selected after image click")
 
             // Click addLeads — retry if the click doesn't register
             // (can happen when QML is still processing the SELECT state transition)
@@ -232,7 +259,7 @@ MainWindowTest {
                     return false
                 }
                 return true
-            }, 5000, "noteArea should be in ADD-LEAD state")
+            }, leadsTestCase.leadSelectTimeout, "noteArea should be in ADD-LEAD state")
 
             // The ADD-LEAD transition uses ScriptAction which is async (fires
             // next frame after the state changes). Wait for the lead
@@ -242,16 +269,23 @@ MainWindowTest {
             tryVerify(() => addLeadInteraction !== null
                             && addLeadInteraction.enabled
                             && addLeadInteraction.scrapView !== null,
-                      5000, "lead interaction should be enabled with valid scrapView")
-
-            let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
-            mouseClick(imageId_obj2, 2429.22, 732.923)
+                      leadsTestCase.leadSelectTimeout, "lead interaction should be enabled with valid scrapView")
 
             let scrapView = findChild(noteArea, "scrapViewId");
             verify(scrapView)
-            tryVerify(() => scrapView.selectedScrapItem !== null);
+            tryVerify(() => scrapView.selectedScrapItem !== null,
+                      leadsTestCase.leadSelectTimeout, "a scrap should be selected before placing the lead");
 
             let scrap = scrapView.selectedScrapItem.scrap;
+            let leadCountBefore = scrap.numberOfLeads();
+
+            // Place the lead. Don't retry-click: every click in ADD-LEAD mode adds
+            // another lead, so just wait for the async add to register.
+            let imageId_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            mouseClick(imageId_obj2, 2429.22, 732.923)
+            tryVerify(() => scrap.numberOfLeads() === leadCountBefore + 1,
+                      leadsTestCase.leadSelectTimeout, "clicking the note in ADD-LEAD mode should add a lead")
+
             let leadIndex = scrap.numberOfLeads() - 1;
             let widthText = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->widthText");
             let heightText = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor->heightText");
@@ -341,18 +375,7 @@ MainWindowTest {
             mouseClick(viewButton);
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "viewPage");
 
-            let leadObj = null
-            tryVerify(() => {
-                          leadObj = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint1_2")
-                          return leadObj !== null
-                      })
-            mouseClick(leadObj)
-
-            let quoteBox = null
-            tryVerify(() => {
-                          quoteBox = findChild(leadObj, "leadQuoteBox")
-                          return quoteBox !== null
-                      })
+            let {quoteBox} = openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint1_2")
             let sizeDisplay = findChild(quoteBox, "sizeText");
             let descriptionDisplay = findChild(quoteBox, "description");
 
@@ -372,18 +395,7 @@ MainWindowTest {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
 
-            let leadPoint = null;
-            tryVerify(() => {
-                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
-                return leadPoint !== null;
-            });
-            mouseClick(leadPoint)
-
-            let quoteBox = null;
-            tryVerify(() => {
-                quoteBox = findChild(leadPoint, "leadQuoteBox")
-                return quoteBox !== null;
-            })
+            let {quoteBox} = openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint2_1")
 
             // View mode: read-only summary — size label, status pill, Notes link,
             // and no editable controls.
@@ -496,19 +508,7 @@ MainWindowTest {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
 
-            let leadPoint = null;
-            tryVerify(() => {
-                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
-                return leadPoint !== null;
-            });
-            mouseClick(leadPoint)
-
-            let quoteBox = null;
-            tryVerify(() => {
-                quoteBox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox")
-                return quoteBox !== null;
-            })
-            verify(leadPoint.selected, "lead should be selected after clicking it")
+            let {leadPoint} = openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint2_1")
 
             // Tap empty space — click the renderer corner opposite the lead so the
             // tap can't land on this (or, most likely, any) lead.
@@ -532,23 +532,16 @@ MainWindowTest {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
             RootData.futureManagerModel.waitForFinished();
 
-            let leadPoint = null;
-            tryVerify(() => {
-                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
-                return leadPoint !== null;
-            });
+            let {leadPoint} = openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint2_1")
 
+            // Second tap on the now-selected lead must toggle it closed. This is the
+            // behaviour under test, so it stays a single tap (no retry).
             mouseClick(leadPoint)
-            tryVerify(() => leadPoint.selected, 2000, "lead should select on first tap")
-            tryVerify(() => {
-                return ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox") !== null;
-            }, 2000, "popup should open on first tap")
-
-            mouseClick(leadPoint)
-            tryVerify(() => !leadPoint.selected, 2000, "tapping the selected lead again should close it")
+            tryVerify(() => !leadPoint.selected, leadsTestCase.leadSelectTimeout,
+                      "tapping the selected lead again should close it")
             tryVerify(() => {
                 return ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox") === null;
-            }, 2000, "popup should close on second tap")
+            }, leadsTestCase.leadSelectTimeout, "popup should close on second tap")
         }
 
         // 4a: a click on a lead hidden behind cave geometry must be ignored (the
@@ -659,17 +652,7 @@ MainWindowTest {
 
             RootData.pageSelectionModel.gotoPageByName(null, "View");
 
-            let leadPoint = null;
-            tryVerify(() => {
-                leadPoint = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1");
-                return leadPoint !== null;
-            });
-            mouseClick(leadPoint);
-
-            tryVerify(() => {
-                return ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1->leadQuoteBox") !== null;
-            }, 5000, "popup should open on tap");
-            verify(leadPoint.selected, "lead should be selected after clicking it");
+            let {leadPoint} = openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint2_1")
 
             let leadCheckbox = typeValueCheckbox("Lead");
             mouseClick(leadCheckbox);
