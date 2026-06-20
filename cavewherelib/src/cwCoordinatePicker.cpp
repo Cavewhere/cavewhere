@@ -13,9 +13,11 @@
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwGeometryItersecter.h"
+#include "cwLinePlotStationSnap.h"
 #include "cwPickQuery.h"
 #include "cwProjection.h"
 #include "cwRayHit.h"
+#include "cwRenderLinePlot.h"
 
 //Qt includes
 #include <QRect>
@@ -131,6 +133,24 @@ void cwCoordinatePicker::pick(QPointF screenPoint)
     }
 
     m_scenePoint = hit.pointWorld();
+
+    // When the pick lands on the centerline, clamp it to the nearest survey
+    // station if the cursor is within the pick radius of one. Stations are the
+    // line vertices, so a line hit (and only a line hit) can snap — triangle and
+    // point hits cast to nullptr and keep their exact surface point.
+    if (auto* linePlot = qobject_cast<cwRenderLinePlot*>(hit.object())) {
+        if (const auto endpoints = linePlot->segmentEndpoints(hit.firstIndex())) {
+            const auto snap = cwLinePlotStationSnap::snapToStation(
+                        screenPoint,
+                        *m_camera,
+                        {endpoints->first, hit.firstIndex()},
+                        {endpoints->second, hit.firstIndex() + 1},
+                        hit.pointWorld(),
+                        kPickPixelRadius);
+            m_scenePoint = snap.worldPos;
+        }
+    }
+
     m_pickScreenPoint = screenPoint;
 
     const cwGeoPoint origin = m_region->worldOrigin();

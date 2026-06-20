@@ -8,6 +8,10 @@
 #ifndef CWRENDERLINEPLOT_H
 #define CWRENDERLINEPLOT_H
 
+// Std includes
+#include <optional>
+#include <utility>
+
 // Our includes
 #include "cwRenderObject.h"
 #include "cwTracked.h"
@@ -46,6 +50,13 @@ public:
 
     QVector<QVector3D> points() const;
     QVector<quint8> visibility() const;
+
+    // Endpoints of the line segment whose first vertex is firstIndex — the value
+    // cwRayHit::firstIndex carries for a line hit (under the iota index list it is
+    // the from-vertex index). Returns {from, to} in model space, or nullopt when
+    // firstIndex is out of range. Stations ARE these vertices, so this is the seam
+    // clamp-to-station picking reads to snap a centerline hit onto a survey station.
+    std::optional<std::pair<QVector3D, QVector3D>> segmentEndpoints(int firstIndex) const;
 
 signals:
     // Emitted whenever setGeometry() replaces the vertex data (and therefore the

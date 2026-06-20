@@ -514,16 +514,33 @@ and proves the snap end-to-end.</p>
       — reads <code>points[firstIndex]</code> / <code>points[firstIndex+1]</code> from the live vertex
       buffer (bounds-checked; the §7 assert anchors the <code>iota</code> index == vertex identity).
       Keeping the accessor on the render object keeps the BVH generic.</td></tr>
-  <tr><td><code>cwLinePlotStationSnap</code> <span class="pill new">new</span> (free fn / small helper)</td>
-    <td>Given a line <code>cwRayHit</code>, the cursor point, the camera, and
-      <code>kPickPixelRadius</code>: fetch the segment's two endpoints, <em>project</em> them, and if the
-      nearer one is within the pixel radius of the cursor, return that endpoint's world position + its
-      vertex index (the station); else return the free point on the segment. Pure, camera-aware, no BVH
-      coupling — exactly the seam #487 plugs into.</td></tr>
+  <tr><td><code>cwLinePlotStationSnap</code> <span class="pill new">new</span> (pure free fn, own header)</td>
+    <td><b>Pure</b> — takes the two segment endpoints + their vertex indices, the cursor point, the camera,
+      and <code>kPickPixelRadius</code>; <em>not</em> a <code>cwRayHit</code> or a <code>cwRenderLinePlot*</code>.
+      Projects each endpoint to Qt viewport pixels (<code>cwCamera::project</code>), and if the endpoint
+      nearest the cursor <em>in screen-space pixels</em> is within the radius, returns that endpoint's world
+      position + its vertex index (the station); else returns the free point on the segment. Decoupling it
+      from both the BVH and the render object means it unit-tests with just a constructed <code>cwCamera</code>
+      and two points — exactly the seam #487 plugs into.
+      <br><br>Signature:
+      <code>struct StationSnap { QVector3D worldPos; int stationVertexIndex; bool snapped; };</code>
+      &nbsp;<code>StationSnap snapToStation(QPointF cursorPx, const cwCamera&amp; camera,
+      QVector3D endA, int indexA, QVector3D endB, int indexB, QVector3D freePointWorld, double pixelRadius);</code>
+      <code>stationVertexIndex</code> is <code>-1</code> when not snapped.
+      <br><br><b>Edge cases:</b> &ldquo;nearest&rdquo; = smaller pixel distance to the cursor (ties → lower
+      vertex index, deterministic). An endpoint that is clipped / behind the eye
+      (<code>cwCamera::isQtViewportCoordinateClipped</code>) is <em>ineligible</em> to snap — guard before
+      comparing, so a station behind the camera can&rsquo;t spuriously win. If both endpoints are clipped or
+      out of radius, fall through to the free point (<code>snapped = false</code>,
+      <code>worldPos = freePointWorld</code>).</td></tr>
   <tr><td><code>cwCoordinatePicker.cpp</code> <span class="pill edit">edit</span></td>
-    <td>After a line hit, run the snap so the reported coordinate is the exact station position when the
-      user clicks near a vertex. (A "snapped to station" <code>Q_PROPERTY</code> can wait for #487; not
-      required here.)</td></tr>
+    <td>Detect a line hit with <code>qobject_cast&lt;cwRenderLinePlot*&gt;(hit.object())</code> — non-null ⇒
+      line (the §7 &ldquo;no new <code>cwRayHit</code> fields&rdquo; decision holds; <code>object()</code>
+      already carries the kind). On a line hit, fetch <code>segmentEndpoints(hit.firstIndex())</code>, call
+      <code>snapToStation(...)</code> with <code>hit.pointWorld()</code> as the free point, and report the
+      result's <code>worldPos</code> so the coordinate is the exact station when the user clicks near a vertex.
+      Triangle/point hits cast to <code>nullptr</code> and skip the snap entirely. (A &ldquo;snapped to
+      station&rdquo; <code>Q_PROPERTY</code> can wait for #487; not required here.)</td></tr>
 </table>
 
 <div class="fig">
@@ -565,11 +582,17 @@ position. Otherwise the free point on the centerline stands.</div>
 </ul>
 <h3>Commit 2</h3>
 <ul>
-  <li><code>segmentEndpoints()</code> returns the right positions and rejects out-of-range indices.</li>
-  <li>Snap helper: cursor near a vertex snaps to it and reports the right vertex index; mid-segment
-    leaves the free point; an off-line cursor returns no hit.</li>
-  <li><code>cwCoordinatePicker</code> end-to-end: a click near a station yields exactly that station's
-    world coordinate.</li>
+  <li><code>segmentEndpoints()</code> returns the right positions and rejects out-of-range indices
+    (<code>std::nullopt</code> for negative / past-the-end / odd-vs-even boundary).</li>
+  <li><b>Snap helper (pure, the bulk of the coverage):</b> with a constructed <code>cwCamera</code> and two
+    endpoints — cursor near a vertex snaps to it and reports the right <code>stationVertexIndex</code>;
+    mid-segment cursor leaves the free point (<code>snapped == false</code>); tie at equal pixel distance
+    resolves to the lower vertex index; an endpoint behind the camera is ineligible and never wins even when
+    its projection lands near the cursor.</li>
+  <li><b>End-to-end</b> (C++, lightweight): construct a <code>cwCoordinatePicker</code> with a real
+    <code>cwCamera</code> + minimal scene/region; a click near a station yields exactly that station's world
+    coordinate, while a mid-segment click yields the on-line free point. Kept thin because the snap math is
+    already proven by the pure helper test above.</li>
 </ul>
 <p class="mono-note">Run both suites before pushing each commit:
 cavewhere-test (narrow tag <code>[cwGeometryItersecter]</code>) + cavewhere-qml-test offscreen.</p>

@@ -98,6 +98,15 @@ void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)
     update();
 }
 
+std::optional<std::pair<QVector3D, QVector3D>> cwRenderLinePlot::segmentEndpoints(int firstIndex) const
+{
+    const QVector<QVector3D>& points = m_data.value().points;
+    if (firstIndex < 0 || firstIndex + 1 >= points.size()) {
+        return std::nullopt;
+    }
+    return std::pair<QVector3D, QVector3D>(points.at(firstIndex), points.at(firstIndex + 1));
+}
+
 cwRHIObject* cwRenderLinePlot::createRHIObject()
 {
     return new cwRHILinePlot();
