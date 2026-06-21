@@ -27,28 +27,15 @@
 
 namespace {
 
-// A rule's pipeline stage, or a sentinel past every real stage for an unknown
-// rule, so unknowns sort to the end of a layer's stack (the layout drops them).
+// Past every real stage: an unknown rule sorts to the end of a layer's stack
+// (the layout drops it). Parenthesized so a min/max macro can't intercept it.
+constexpr int kUnknownStage = (std::numeric_limits<int>::max)();
+
+// A rule's pipeline stage, or kUnknownStage for a rule the registry doesn't know.
 int ruleStage(const QString &ruleName)
 {
     const cwPlacementRule *rule = cwPlacementRuleRegistry::instance().rule(ruleName);
-    return rule != nullptr ? static_cast<int>(rule->stage())
-                           : std::numeric_limits<int>::max();
-}
-
-// Reorder each layer's rules into pipeline (stage) order. The layout already
-// stage-sorts at render time, so this only makes the stored/displayed order match
-// what runs (the editor groups rules by category) — it never changes the result.
-// Stable, so the relative order within a stage (the only order the user controls)
-// is preserved.
-void normalizeRuleOrder(cwLineBrush &brush)
-{
-    for (cwDecorationLayer &layer : brush.decorations) {
-        std::stable_sort(layer.rules.begin(), layer.rules.end(),
-                         [](const cwPlacementRuleData &a, const cwPlacementRuleData &b) {
-                             return ruleStage(a.name) < ruleStage(b.name);
-                         });
-    }
+    return rule != nullptr ? static_cast<int>(rule->stage()) : kUnknownStage;
 }
 
 } // namespace
@@ -142,10 +129,12 @@ void cwBrushEditor::loadBrushNamed(const QString &name)
         return;
     }
 
-    cwLineBrush normalized = *brush;
-    normalizeRuleOrder(normalized);
-    m_baseline = normalized;
-    m_structureModel->setBrush(normalized);
+    // Loaded verbatim: a brush's rules are kept in their authored order so a
+    // load/save round-trips as identity. The display groups rules by stage and
+    // the layout re-sorts by stage at render time, so on-disk order never has to
+    // be pre-sorted here (and an unknown rule keeps its authored position).
+    m_baseline = *brush;
+    m_structureModel->setBrush(*brush);
     m_loaded = true;
     setDirty(false);
     emit brushLoaded();

@@ -56,13 +56,15 @@ int encodedCategory(const QModelIndex &index)
     return static_cast<int>((index.internalId() >> (kKindBits + kIndexBits)) & kIndexMask);
 }
 
-// A rule's pipeline stage, or a sentinel past every real stage for an unknown
-// rule, so unknowns group into a trailing block the layout drops.
+// Past every real stage: an unknown rule sorts into a trailing block the layout
+// drops. Parenthesized so a min/max macro can't intercept the call.
+constexpr int kUnknownStage = (std::numeric_limits<int>::max)();
+
+// A rule's pipeline stage, or kUnknownStage for a rule the registry doesn't know.
 int stageOf(const QString &name)
 {
     const cwPlacementRule *rule = cwPlacementRuleRegistry::instance().rule(name);
-    return rule != nullptr ? static_cast<int>(rule->stage())
-                           : std::numeric_limits<int>::max();
+    return rule != nullptr ? static_cast<int>(rule->stage()) : kUnknownStage;
 }
 
 } // namespace

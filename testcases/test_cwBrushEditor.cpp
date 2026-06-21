@@ -223,15 +223,16 @@ TEST_CASE("removeRule deletes a rule from a layer, dirtying it and removing one 
     CHECK_FALSE(editor.isDirty());
 }
 
-TEST_CASE("loadBrushNamed normalizes stored rule order to pipeline stage order",
+TEST_CASE("loadBrushNamed keeps rules in their authored order (faithful round-trip)",
           "[cwBrushEditor]")
 {
     cwSymbologyPalette palette;
     seedWritable(palette);
 
-    // A brush whose rules are stored out of stage order. The layout stage-sorts
-    // at render time; the editor mirrors that so the displayed order is the order
-    // that actually runs.
+    // A brush whose rules are authored out of pipeline-stage order. The editor
+    // must NOT re-sort on load: on-disk order round-trips as identity, the layout
+    // stage-sorts at render time, and an unknown rule keeps its authored position.
+    // (The display groups split here — the honest signal of a non-canonical file.)
     cwLineBrush brush;
     brush.name = QStringLiteral("scrambled");
     brush.displayName = QStringLiteral("Scrambled");
@@ -249,10 +250,10 @@ TEST_CASE("loadBrushNamed normalizes stored rule order to pipeline stage order",
     editor.loadBrushNamed(QStringLiteral("scrambled"));
 
     REQUIRE(editor.ruleCount(0) == 3);
-    CHECK(editor.ruleName(0, 0) == QStringLiteral("Uniform spacing"));
-    CHECK(editor.ruleName(0, 1) == QStringLiteral("Align to tangent"));
-    CHECK(editor.ruleName(0, 2) == QStringLiteral("Rigid stamp"));
-    CHECK_FALSE(editor.isDirty());   // reordering on load is not an edit
+    CHECK(editor.ruleName(0, 0) == QStringLiteral("Rigid stamp"));
+    CHECK(editor.ruleName(0, 1) == QStringLiteral("Uniform spacing"));
+    CHECK(editor.ruleName(0, 2) == QStringLiteral("Align to tangent"));
+    CHECK_FALSE(editor.isDirty());   // loading is never an edit
 }
 
 TEST_CASE("addRule inserts a rule into its stage block, keeping pipeline order",
