@@ -12,6 +12,7 @@
 #include <QPointer>
 #include <QQmlEngine>
 #include <QString>
+#include <QVariantList>
 
 //Our includes
 #include "CaveWhereLibExport.h"
@@ -75,8 +76,8 @@ public:
     cwCavingRegion *region() const { return m_region; }
     void setRegion(cwCavingRegion *region);
 
-    QString brushName() const { return m_loaded ? m_working.name : QString(); }
-    QString brushDisplayName() const { return m_loaded ? m_working.displayName : QString(); }
+    QString brushName() const;
+    QString brushDisplayName() const;
     bool isLoaded() const { return m_loaded; }
     bool isDirty() const { return m_dirty; }
     bool isPaletteWritable() const;
@@ -94,6 +95,18 @@ public:
     // Out-of-range indices are ignored.
     Q_INVOKABLE void setRuleEnabled(int layerIndex, int ruleIndex, bool enabled);
 
+    // Append a rule (by registry display name) to a layer, or remove one, then
+    // re-push the preview. Out-of-range / unknown requests are ignored. The
+    // structure model brackets the row insert/remove; this layer owns the
+    // dirty/preview side effects.
+    Q_INVOKABLE void addRule(int layerIndex, const QString &ruleName);
+    Q_INVOKABLE void removeRule(int layerIndex, int ruleIndex);
+
+    // The add-rule picker's data: rules grouped by category (derived from each
+    // rule's stage), in pipeline order. Each group is { "category": QString,
+    // "rules": [ { "name": QString, "description": QString }, ... ] }.
+    Q_INVOKABLE QVariantList availableRuleGroups() const;
+
     // Restore the working copy to the baseline and drop the preview override.
     Q_INVOKABLE void discard();
 
@@ -102,8 +115,9 @@ public:
     // and the preview override is dropped so the real re-skin shows.
     Q_INVOKABLE void apply();
 
-    // Read-only structure accessors for the QML tree (cwLineBrush isn't a gadget).
-    // structureChanged() fires whenever any of these would return a new value.
+    // Read-only structure accessors for the QML tree (cwLineBrush isn't a gadget),
+    // delegating to the structure model. The model's own row/data signals notify
+    // the view of changes.
     Q_INVOKABLE int layerCount() const;
     Q_INVOKABLE QString layerLabel(int layerIndex) const;
     Q_INVOKABLE int ruleCount(int layerIndex) const;
@@ -121,7 +135,6 @@ signals:
     void brushLoaded();
     void dirtyChanged();
     void paletteWritableChanged();
-    void structureChanged();
 
 private:
     void setDirty(bool dirty);
@@ -140,7 +153,8 @@ private:
     QPointer<cwCavingRegion> m_region;
     QMetaObject::Connection m_paletteWritableConnection;
 
-    cwLineBrush m_working;
+    // The working brush lives in m_structureModel (it is the mutation surface);
+    // m_baseline is the unedited copy load() captured, for dirty/discard.
     cwLineBrush m_baseline;
     bool m_loaded = false;
     bool m_dirty = false;

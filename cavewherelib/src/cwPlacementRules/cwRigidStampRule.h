@@ -18,6 +18,7 @@
 class cwRigidStampRule : public cwStampRuleBase {
 public:
     QString displayName() const override;
+    QString description() const override;
 };
 
 #endif // CWRIGIDSTAMPRULE_H

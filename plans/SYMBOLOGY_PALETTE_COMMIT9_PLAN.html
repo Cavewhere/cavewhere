@@ -307,8 +307,37 @@ Phase tags: <span class="p p1">1</span><span class="p p2">2</span><span class="p
 <tr><td>7 styling migration</td><td>Move <code>line*</code>/<code>fill*</code> off <code>cwDecorationLayer</code> into the <code>Trace</code> rule's params (proto), informed by the param UI.</td></tr>
 </table>
 
-<h3>Phase 2.2 — step 0: the model becomes the structure-mutation surface</h3>
-<p><strong>Decision (settled, 2026-06-20):</strong> do this as the <em>opening move of Phase 2.2</em>,
+<h3>Phase 2.2 — step 0: the model becomes the structure-mutation surface <span class="ok">DONE (2026-06-20)</span></h3>
+<p><strong>Landed (2026-06-20):</strong> step 0 + the first mutator (add/remove rule) shipped together as
+designed. <code>cwBrushStructureModel</code> now <em>owns</em> the working <code>cwLineBrush</code>
+(<code>brush()</code>/<code>setBrush()</code>) and is the mutation mechanism:
+<code>setRuleEnabled</code> (narrow <code>dataChanged</code>), <code>insertRule</code>/<code>removeRule</code>
+(each brackets <code>beginInsertRows</code>/<code>beginRemoveRows</code> internally). <code>cwBrushEditor</code>
+stays the public API + dirty/preview chokepoint: <code>addRule()</code>/<code>removeRule()</code>/<code>setRuleEnabled()</code>
+call the model then run <code>recomputeDirty()</code> + <code>pushPreview()</code>; its C++ accessors delegate
+to the model; <code>snapshot()</code>/<code>isDirty</code>/<code>apply()</code> read <code>model.brush()</code>;
+<code>loadBrushNamed</code>/<code>discard</code> call <code>setBrush()</code> (a reset). The vestigial
+<code>structureChanged</code> signal is <strong>removed</strong> (no QML consumer; the C++ test now spies the
+model's <code>dataChanged</code>/<code>rowsInserted</code>/<code>rowsRemoved</code>). Added
+<code>cwPlacementRuleRegistry::allRules()</code> (B7) and a per-rule <code>✕</code> remove button in
+<code>BrushEditorPanel.qml</code>. The per-layer <code>+</code> opens a <strong>descriptive picker</strong>
+(<code>AddRulePopup.qml</code>): each placement rule now carries a one-line <code>description()</code>
+(pure-virtual on <code>cwPlacementRule</code>, copy lifted from the class comments) and a category
+<em>derived</em> from its stage via <code>cwPlacementRule::categoryLabel(Stage)</code> (one source of truth —
+Stroke / Placement / Orientation / Output). <code>cwBrushEditor::availableRuleGroups()</code> returns the
+rules grouped by category in pipeline order; the custom popup (native menus can't do two lines) shows a
+section header per group with bold name + caption description. Drops down-left so it stays on-screen at the
+panel's right edge.
+<strong>Bonus — deferred sibling (review item B) resolved for free:</strong> because the model no longer
+references <code>cwBrushEditor</code> at all (its ctor takes a plain <code>QObject* parent</code> and
+<code>data()</code> reads <code>m_brush</code> directly), <code>cwBrushStructureModel.cpp</code> dropped all six
+editor-dependency includes — the inline-<code>QPointer</code>-getter include-leak is gone from that TU without
+touching the getters. Tests: <code>[cwBrushEditor]</code> + <code>[cwPlacementRuleRegistry]</code> green (81
+assertions); <code>tst_BrushEditor</code> 6/6 (added remove-via-✕ and add-inserts-row cases); symbology
+regression green (257 assertions). <em>Still to come in 2.2:</em> reorder rules (drag → <code>moveRows</code>);
+add/remove/reorder layers; glyph selection; rule param editing; live validator; brush library; palette page.</p>
+
+<p><strong>Original decision (settled, 2026-06-20):</strong> do this as the <em>opening move of Phase 2.2</em>,
 bundled with the first mutator (add/remove rule) — <em>not</em> as a standalone pre-commit.
 Surfaced by the 2.1 architecture review (item A, conf 82).</p>
 
@@ -403,6 +432,7 @@ cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test cavewhere-
   <li><strong>Category grouping in the graph</strong> (QuickQanava groups), node-layout persistence, cycle-prevention demo polish — graph follow-ups.</li>
   <li><strong>2D spatial index for stroke hit-testing</strong> — <code>cwSketch::brushNameNear()</code> (the phase-1 right-click entry, B1) does an O(n) linear scan over strokes with a bbox prefilter, as do <code>findContinuationTarget()</code> and the eraser. Fine for a one-shot right-click on today's sketches, but a large sketch will eventually want a quadtree / 2D-BVH over stroke bounding boxes shared by all three call sites. Not scoped to commit 9; flagged in a code comment on <code>brushNameNear</code> so a future profiler finds it.</li>
   <li><strong>Snapshot-source seam — keep <code>cwSketchCanvas</code> pure <span class="p p1">DONE</span></strong> — the phase-1 preview (§3.2) bolted mutable authoring state (<code>m_previewSnapshot</code> / <code>m_hasPreviewSnapshot</code> + a branch in <code>snapshotForPathModel()</code>) onto <code>cwSketchCanvas</code>. There were <em>three</em> snapshot sources reached two ways: sketch-resolved (base), a direct palette (<code>cwSketchGlyphCanvas</code> override), and the injected preview (base-class state). The preview had to live on the base because it re-skins the <em>live</em> canvas — subclassing can't reach it. <strong>Fix shipped:</strong> a small observed provider <code>cwPaletteSnapshotSource</code> (abstract: <code>snapshot()</code> + <code>snapshotChanged()</code>). The canvas holds one optional source (<code>setSnapshotSource</code> / <code>snapshotSource</code>): <code>currentSnapshot()</code> returns the source's snapshot if set, else the sketch's resolved palette, and the canvas re-pulls on <code>snapshotChanged()</code> (and on the source's <code>destroyed</code>, falling back to the sketch). <em>No virtual, no preview members</em>. As built, the design refined two of the bullet's guesses: (1) the sketch-resolved case stays <em>inline</em> in the canvas as the null-source fallback — no separate default-source class, since sketch resolution is the canvas's own job, not authoring; (2) the brush editor <em>is</em> the preview source (<code>cwBrushEditor : cwPaletteSnapshotSource</code>, <code>snapshot()</code> = the copy-with-substitution), so no separate preview-source class — it installs itself via <code>setSnapshotSource(this)</code> and clears on discard/apply/dispose. The glyph editor gets a tiny <code>cwPaletteBackedSnapshotSource</code> (deletes the <code>cwSketchGlyphCanvas::snapshotForPathModel</code> override). The old preview equality short-circuit moved into <code>cwDecoratedStrokePathSource::setSnapshot</code> — the right altitude (every caller skips the redundant glyph-cache wipe + re-tessellation). New files: <code>cwPaletteSnapshotSource.{h,cpp}</code>, <code>cwPaletteBackedSnapshotSource.{h,cpp}</code>. Verified: C++ 184 assertions; BrushEditor QML 4/4; GlyphEditor QML 7/7.</li>
+  <li><strong>Rule catalog onto the registry (review R1, 2026-06-20, conf 85)</strong> — Phase 2.2's add-rule picker is fed by <code>cwBrushEditor::availableRuleGroups()</code>, which sorts the registry's rules by stage, maps stage→category, and hand-assembles an untyped <code>QVariantList</code> of <code>{category, rules:[{name, description}]}</code> maps that the QML popup reaches into via <code>modelData.name</code>/<code>.description</code>/<code>.category</code> (hence <code>property var groups</code> in <code>AddRulePopup.qml</code>). But the editor is a <em>working-copy controller</em>; the rule catalog is intrinsic to <code>cwPlacementRuleRegistry</code>, not to any one editor instance. Move the catalog onto the registry as a reusable <em>typed</em> surface — a small gadget list or a dedicated <code>cwPlacementRuleCatalogModel</code> (name/description/category roles) — so a second consumer (a palette-wide rule-reference panel, the validator's error UI listing valid rules) doesn't duplicate the assembly, and QML stops reaching into stringly-typed maps. Naturally absorbs <strong>review D2</strong> (move <code>cwPlacementRule::categoryLabel(Stage)</code> — UI taxonomy currently on the back-end execution interface — next to the catalog). Best bundled with the rule-param-editing phase (B8), when the picker grows and gains a second reader anyway. Distinct from (and a prerequisite-free sibling of) <strong>review D1</strong> — splitting a stable <code>ruleId()</code> from the rewordable/translatable <code>displayName()</code> so the picker stops writing display strings to disk as the persisted rule key; do D1 before the palette format is released.</li>
   <li><strong>Fork-on-save policy out of the controller</strong> — <code>cwBrushEditor::apply()</code> orchestrates project policy (<code>cwSymbologyPaletteManager::instance()</code> → <code>duplicatePalette</code>, then <code>region-&gt;setDefaultPaletteId</code>, then re-target). Move it to the <em>consumer-reaches-provider</em> direction — e.g. <code>cwCavingRegion::adoptWritableCopyOf(palette)</code> (region already depends on the manager; it owns its own default) — <strong>not</strong> a <code>manager.forkForEdit(palette, region)</code>, which would invert the dependency by making the palette subsystem know about regions. Hold until a second editor (glyph/color) confirms the policy generalizes; today it's a single call site and bakes in "fork ⇒ becomes the region default," which is only true because the editor edits <code>sketch.resolvedPalette</code>.</li>
 </ul>
 

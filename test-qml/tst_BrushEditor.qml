@@ -109,5 +109,82 @@ Item {
             tryVerify(() => !editor.dirty, 2000, "Discard clears the dirty state")
             verify(editor.ruleEnabled(1, 0), "Discard restores the rule")
         }
+
+        function test_removeRuleViaButtonMarksDirtyThenDiscardReverts() {
+            const editor = openEditorOnFloorStep()
+
+            tryVerify(() => findChild(rootId, "removeRuleButton_1_0") !== null, 2000,
+                      "the first tick-layer rule's remove button exists")
+            const before = editor.ruleCount(1)
+            verify(!editor.dirty, "freshly loaded editor is clean")
+
+            mouseClick(findChild(rootId, "removeRuleButton_1_0"))
+
+            tryVerify(() => editor.ruleCount(1) === before - 1, 2000, "removing a rule drops one")
+            verify(editor.dirty, "removing a rule dirties the working copy")
+
+            const discardButton = findChild(rootId, "brushEditorDiscardButton")
+            mouseClick(discardButton)
+
+            tryVerify(() => editor.ruleCount(1) === before, 2000, "Discard restores the removed rule")
+            verify(!editor.dirty, "Discard clears the dirty state")
+        }
+
+        function test_addRuleInsertsTreeRow() {
+            const editor = openEditorOnFloorStep()
+
+            const tree = findChild(rootId, "brushStructureTree")
+            verify(tree !== null, "the structure tree exists")
+            tryVerify(() => tree.rows > 0, 2000, "the tree has expanded rows")
+            const beforeRows = tree.rows
+            const before = editor.ruleCount(1)
+            const groups = editor.availableRuleGroups()
+            verify(groups.length > 0, "the registry exposes rules to add")
+
+            // Drive the editor directly (the popup is exercised separately). The
+            // QML-relevant assertion is that the model's rowsInserted grows the
+            // view's expanded row set (checking tree.rows, not a delegate that may
+            // sit below the clipped viewport).
+            editor.addRule(1, groups[0].rules[0].name)
+
+            compare(editor.ruleCount(1), before + 1, "the rule is appended")
+            tryVerify(() => tree.rows === beforeRows + 1, 2000,
+                      "the inserted rule adds a row to the tree")
+            verify(editor.dirty, "adding a rule dirties the working copy")
+
+            editor.discard()
+        }
+
+        // The add-rule popup reparents to a popup layer outside rootId's subtree,
+        // so reach its rows by walking up to the item-tree root.
+        function sceneRoot() {
+            let item = rootId
+            while (item.parent) {
+                item = item.parent
+            }
+            return item
+        }
+
+        function test_addRuleViaPopupPicker() {
+            const editor = openEditorOnFloorStep()
+
+            const before = editor.ruleCount(1)
+            mouseClick(findChild(rootId, "addRuleButton_1"))
+
+            // Offset stroke is the only Stroke-stage rule, so availableRuleGroups()
+            // (sorted by stage) always lists it first; Repeater instantiates every
+            // row eagerly, so findChild reaches it regardless of scroll position.
+            const itemName = "addRuleItem_1_Offset stroke"
+            tryVerify(() => findChild(sceneRoot(), itemName) !== null, 2000,
+                      "the picker lists rules to add")
+            mouseClick(findChild(sceneRoot(), itemName))
+
+            tryVerify(() => editor.ruleCount(1) === before + 1, 2000,
+                      "picking a rule appends it to the layer")
+            compare(editor.ruleName(1, before), "Offset stroke", "the chosen rule is added")
+            verify(editor.dirty, "adding a rule dirties the working copy")
+
+            editor.discard()
+        }
     }
 }

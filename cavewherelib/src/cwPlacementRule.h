@@ -78,6 +78,25 @@ public:
     virtual QString displayName() const = 0;
     virtual Stage stage() const = 0;
 
+    // One-line, cartographer-facing summary of what the rule does, shown in the
+    // brush editor's add-rule picker. Plain prose, not schema — safe to reword.
+    virtual QString description() const = 0;
+
+    // Human-facing grouping for the picker, derived from the stage (one source of
+    // truth — a rule's stage already says what kind of step it is). The stage enum
+    // names are internal jargon; these are the labels the user sees.
+    static QString categoryLabel(Stage stage)
+    {
+        switch (stage) {
+        case TransformStroke: return QStringLiteral("Stroke");
+        case Generate:        return QStringLiteral("Placement");
+        case MutatePerLayer:  return QStringLiteral("Orientation");
+        case Terminal:        return QStringLiteral("Output");
+        case MutateScene:     return QStringLiteral("Scene");
+        }
+        return QString();
+    }
+
     // Per-layer rules read/write `positions` (the in/out stamp vector) using the
     // read-only `context`. Scene-stage rules read only context.scene (nullptr in
     // iter 1).

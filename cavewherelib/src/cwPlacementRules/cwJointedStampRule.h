@@ -20,6 +20,7 @@
 class cwJointedStampRule : public cwStampRuleBase {
 public:
     QString displayName() const override;
+    QString description() const override;
 
     // Warp each glyph vertex: glyph (x, y) maps to path(S + scale*x) +
     // scale*y * normal. Edges between warped vertices stay straight.

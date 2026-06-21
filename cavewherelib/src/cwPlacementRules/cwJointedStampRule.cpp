@@ -14,6 +14,12 @@ QString cwJointedStampRule::displayName() const
     return QStringLiteral("Jointed stamp");
 }
 
+QString cwJointedStampRule::description() const
+{
+    return QStringLiteral("Bends a glyph at its corners to follow the line, keeping "
+                          "its straight arms crisp (ticks, chevrons).");
+}
+
 QPainterPath cwJointedStampRule::stampPath(const cwStampPosition &position,
                                            const QPainterPath &glyphPath,
                                            const cwPlacementContext &context) const

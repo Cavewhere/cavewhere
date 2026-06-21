@@ -37,6 +37,10 @@ public:
     // unknown rule, so callers can skip-and-warn rather than crash.
     const cwPlacementRule *rule(const QString &name) const;
 
+    // Every registered rule, in registration order. Drives the brush editor's
+    // add-rule picker; the names are the stable palette-schema keys.
+    QVector<const cwPlacementRule *> allRules() const;
+
 private:
     cwPlacementRuleRegistry();
 

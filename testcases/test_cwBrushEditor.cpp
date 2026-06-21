@@ -10,6 +10,7 @@
 
 // Our
 #include "cwBrushEditor.h"
+#include "cwBrushStructureModel.h"
 #include "cwLineBrush.h"
 #include "cwSymbologyPalette.h"
 #include "cwSymbologyPaletteData.h"
@@ -91,7 +92,9 @@ TEST_CASE("setRuleEnabled edits the working copy only, marking it dirty",
     editor.loadBrushNamed(cwSymbologyPaletteSeed::floorStepBrushName());
 
     QSignalSpy dirtySpy(&editor, &cwBrushEditor::dirtyChanged);
-    QSignalSpy structureSpy(&editor, &cwBrushEditor::structureChanged);
+    // The structure model is authoritative for the view: a toggle is a narrow
+    // dataChanged on the touched rule (not a tree-collapsing reset).
+    QSignalSpy dataChangedSpy(editor.structureModel(), &QAbstractItemModel::dataChanged);
     QSignalSpy paletteBrushSpy(&palette, &cwSymbologyPalette::brushChanged);
 
     editor.setRuleEnabled(kTickLayer, kFirstTickRule, false);
@@ -99,7 +102,7 @@ TEST_CASE("setRuleEnabled edits the working copy only, marking it dirty",
     CHECK(editor.isDirty());
     CHECK_FALSE(editor.ruleEnabled(kTickLayer, kFirstTickRule));
     CHECK(dirtySpy.count() == 1);
-    CHECK(structureSpy.count() == 1);
+    CHECK(dataChangedSpy.count() == 1);
 
     // The palette is untouched until apply().
     CHECK(paletteBrushSpy.count() == 0);
@@ -109,7 +112,7 @@ TEST_CASE("setRuleEnabled edits the working copy only, marking it dirty",
 
     // An out-of-range toggle is ignored.
     editor.setRuleEnabled(99, 0, false);
-    CHECK(structureSpy.count() == 1);
+    CHECK(dataChangedSpy.count() == 1);
 }
 
 TEST_CASE("discard restores the baseline working copy",
@@ -155,6 +158,69 @@ TEST_CASE("apply on a writable palette commits the edit and clears dirty",
     const auto stored = palette.brush(cwSymbologyPaletteSeed::floorStepBrushName());
     REQUIRE(stored.has_value());
     CHECK_FALSE(stored->decorations.at(kTickLayer).rules.at(kFirstTickRule).enabled);
+}
+
+TEST_CASE("addRule appends a rule to a layer, dirtying it and inserting one row",
+          "[cwBrushEditor]")
+{
+    cwSymbologyPalette palette;
+    seedWritable(palette);
+
+    cwBrushEditor editor;
+    editor.setPalette(&palette);
+    editor.loadBrushNamed(cwSymbologyPaletteSeed::floorStepBrushName());
+
+    QSignalSpy insertSpy(editor.structureModel(), &QAbstractItemModel::rowsInserted);
+
+    const int before = editor.ruleCount(kTickLayer);
+    const QString newRule = QStringLiteral("Bending stamp");   // any registered rule name
+
+    editor.addRule(kTickLayer, newRule);
+
+    CHECK(editor.ruleCount(kTickLayer) == before + 1);
+    CHECK(editor.ruleName(kTickLayer, before) == newRule);   // appended at the end
+    CHECK(editor.isDirty());
+    CHECK(insertSpy.count() == 1);
+
+    // Discard removes the added rule.
+    editor.discard();
+    CHECK(editor.ruleCount(kTickLayer) == before);
+    CHECK_FALSE(editor.isDirty());
+
+    // An out-of-range layer is ignored.
+    editor.addRule(99, newRule);
+    CHECK(insertSpy.count() == 1);
+}
+
+TEST_CASE("removeRule deletes a rule from a layer, dirtying it and removing one row",
+          "[cwBrushEditor]")
+{
+    cwSymbologyPalette palette;
+    seedWritable(palette);
+
+    cwBrushEditor editor;
+    editor.setPalette(&palette);
+    editor.loadBrushNamed(cwSymbologyPaletteSeed::floorStepBrushName());
+
+    QSignalSpy removeSpy(editor.structureModel(), &QAbstractItemModel::rowsRemoved);
+
+    const int before = editor.ruleCount(kTickLayer);
+    const QString secondRule = editor.ruleName(kTickLayer, kFirstTickRule + 1);
+
+    editor.removeRule(kTickLayer, kFirstTickRule);
+
+    CHECK(editor.ruleCount(kTickLayer) == before - 1);
+    CHECK(editor.ruleName(kTickLayer, kFirstTickRule) == secondRule);   // successor shifts down
+    CHECK(editor.isDirty());
+    CHECK(removeSpy.count() == 1);
+
+    // An out-of-range rule is ignored.
+    editor.removeRule(kTickLayer, 99);
+    CHECK(removeSpy.count() == 1);
+
+    editor.discard();
+    CHECK(editor.ruleCount(kTickLayer) == before);
+    CHECK_FALSE(editor.isDirty());
 }
 
 TEST_CASE("apply on a read-only palette without a project leaves it untouched",

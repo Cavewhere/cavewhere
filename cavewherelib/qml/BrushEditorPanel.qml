@@ -234,6 +234,30 @@ QQ.Rectangle {
                         Layout.fillWidth: true
                     }
 
+                    // Add a rule to this layer, picked from the registry. The rule
+                    // set is static, so the grouped picker data is built once.
+                    QC.ToolButton {
+                        id: addRuleButtonId
+                        visible: treeDelegateId.isLayer
+                        objectName: "addRuleButton_" + treeDelegateId.layerIndex
+                        text: "+"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        onClicked: addRulePopupId.open()
+
+                        AddRulePopup {
+                            id: addRulePopupId
+                            // Drop down-left: the "+" sits at the panel's right edge,
+                            // so align the popup's right edge to the button to keep it
+                            // on-screen instead of overflowing to the right.
+                            x: addRuleButtonId.width - width
+                            y: addRuleButtonId.height
+                            layerIndex: treeDelegateId.layerIndex
+                            groups: editorId.availableRuleGroups()
+                            onRuleChosen: (ruleName) => editorId.addRule(treeDelegateId.layerIndex, ruleName)
+                        }
+                    }
+
                     QC.CheckBox {
                         visible: !treeDelegateId.isLayer
                         objectName: "ruleCheckBox_" + treeDelegateId.layerIndex + "_" + treeDelegateId.ruleIndex
@@ -250,6 +274,16 @@ QQ.Rectangle {
                                                     treeDelegateId.ruleIndex, checked)
                             checked = Qt.binding(() => treeDelegateId.ruleEnabled)
                         }
+                    }
+
+                    QC.ToolButton {
+                        visible: !treeDelegateId.isLayer
+                        objectName: "removeRuleButton_" + treeDelegateId.layerIndex + "_" + treeDelegateId.ruleIndex
+                        text: "✕"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeCaption
+                        onClicked: editorId.removeRule(treeDelegateId.layerIndex,
+                                                       treeDelegateId.ruleIndex)
                     }
                 }
             }

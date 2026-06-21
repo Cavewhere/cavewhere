@@ -14,6 +14,12 @@ QString cwExplicitPointRule::displayName() const
     return QStringLiteral("Explicit point");
 }
 
+QString cwExplicitPointRule::description() const
+{
+    return QStringLiteral("Places a single glyph at one spot — for a standalone "
+                          "point symbol.");
+}
+
 void cwExplicitPointRule::apply(QVector<cwStampPosition> &positions,
                                 const cwPlacementContext &context) const
 {

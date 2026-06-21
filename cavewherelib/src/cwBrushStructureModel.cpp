@@ -7,18 +7,9 @@
 
 //Our includes
 #include "cwBrushStructureModel.h"
-#include "cwBrushEditor.h"
-// cwBrushEditor exposes inline QPointer<...> getters over types it only
-// forward-declares; this TU instantiates them, so pull in the complete types.
-#include "cwSymbologyPalette.h"
-#include "cwSketchCanvas.h"
-#include "cwCavingRegion.h"
-#include "cwScrapManager.h"
-#include "cwTrip.h"
 
-cwBrushStructureModel::cwBrushStructureModel(cwBrushEditor *editor) :
-    QAbstractItemModel(editor),
-    m_editor(editor)
+cwBrushStructureModel::cwBrushStructureModel(QObject *parent) :
+    QAbstractItemModel(parent)
 {
 }
 
@@ -46,14 +37,11 @@ QModelIndex cwBrushStructureModel::parent(const QModelIndex &index) const
 
 int cwBrushStructureModel::rowCount(const QModelIndex &parent) const
 {
-    if (m_editor == nullptr) {
-        return 0;
-    }
     if (!parent.isValid()) {
-        return m_editor->layerCount();
+        return layerCount();
     }
     if (parent.internalId() == kLayerId) {
-        return m_editor->ruleCount(parent.row());
+        return ruleCount(parent.row());
     }
     return 0;   // rule rows are leaves
 }
@@ -66,7 +54,7 @@ int cwBrushStructureModel::columnCount(const QModelIndex &parent) const
 
 QVariant cwBrushStructureModel::data(const QModelIndex &index, int role) const
 {
-    if (m_editor == nullptr || !index.isValid()) {
+    if (!index.isValid()) {
         return {};
     }
 
@@ -77,10 +65,9 @@ QVariant cwBrushStructureModel::data(const QModelIndex &index, int role) const
     switch (role) {
     case Qt::DisplayRole:
     case LabelRole:
-        return isLayer ? m_editor->layerLabel(layerIndex)
-                       : m_editor->ruleName(layerIndex, ruleIndex);
+        return isLayer ? layerLabel(layerIndex) : ruleName(layerIndex, ruleIndex);
     case RuleEnabledRole:
-        return isLayer ? true : m_editor->ruleEnabled(layerIndex, ruleIndex);
+        return isLayer ? true : ruleEnabled(layerIndex, ruleIndex);
     case IsLayerRole:
         return isLayer;
     case LayerIndexRole:
@@ -104,20 +91,116 @@ QHash<int, QByteArray> cwBrushStructureModel::roleNames() const
     };
 }
 
-void cwBrushStructureModel::reset()
+void cwBrushStructureModel::setBrush(const cwLineBrush &brush)
 {
     beginResetModel();
+    m_brush = brush;
     endResetModel();
 }
 
-void cwBrushStructureModel::ruleChanged(int layerIndex, int ruleIndex)
+int cwBrushStructureModel::layerCount() const
 {
-    if (m_editor == nullptr) {
-        return;
+    return static_cast<int>(m_brush.decorations.size());
+}
+
+QString cwBrushStructureModel::layerLabel(int layerIndex) const
+{
+    if (!layerInRange(layerIndex)) {
+        return QString();
     }
-    const QModelIndex layer = index(layerIndex, 0, QModelIndex());
-    const QModelIndex rule = index(ruleIndex, 0, layer);
-    if (rule.isValid()) {
-        emit dataChanged(rule, rule, {RuleEnabledRole, Qt::DisplayRole, LabelRole});
+    return m_brush.decorations.at(layerIndex).glyphName;   // empty for a line layer
+}
+
+int cwBrushStructureModel::ruleCount(int layerIndex) const
+{
+    if (!layerInRange(layerIndex)) {
+        return 0;
     }
+    return static_cast<int>(m_brush.decorations.at(layerIndex).rules.size());
+}
+
+QString cwBrushStructureModel::ruleName(int layerIndex, int ruleIndex) const
+{
+    if (!layerInRange(layerIndex)) {
+        return QString();
+    }
+    const cwDecorationLayer &layer = m_brush.decorations.at(layerIndex);
+    if (ruleIndex < 0 || ruleIndex >= layer.rules.size()) {
+        return QString();
+    }
+    return layer.rules.at(ruleIndex).name;
+}
+
+bool cwBrushStructureModel::ruleEnabled(int layerIndex, int ruleIndex) const
+{
+    if (!layerInRange(layerIndex)) {
+        return false;
+    }
+    const cwDecorationLayer &layer = m_brush.decorations.at(layerIndex);
+    if (ruleIndex < 0 || ruleIndex >= layer.rules.size()) {
+        return false;
+    }
+    return layer.rules.at(ruleIndex).enabled;
+}
+
+bool cwBrushStructureModel::setRuleEnabled(int layerIndex, int ruleIndex, bool enabled)
+{
+    if (!layerInRange(layerIndex)) {
+        return false;
+    }
+    cwDecorationLayer layer = m_brush.decorations.at(layerIndex);
+    if (ruleIndex < 0 || ruleIndex >= layer.rules.size()) {
+        return false;
+    }
+    if (layer.rules.at(ruleIndex).enabled == enabled) {
+        return false;
+    }
+
+    cwPlacementRuleData rule = layer.rules.at(ruleIndex);
+    rule.enabled = enabled;
+    layer.rules.replace(ruleIndex, rule);
+    m_brush.decorations.replace(layerIndex, layer);
+
+    const QModelIndex ruleRow = index(ruleIndex, 0, index(layerIndex, 0, QModelIndex()));
+    emit dataChanged(ruleRow, ruleRow, {RuleEnabledRole, Qt::DisplayRole, LabelRole});
+    return true;
+}
+
+bool cwBrushStructureModel::insertRule(int layerIndex, int ruleIndex, const cwPlacementRuleData &rule)
+{
+    if (!layerInRange(layerIndex)) {
+        return false;
+    }
+    cwDecorationLayer layer = m_brush.decorations.at(layerIndex);
+    if (ruleIndex < 0 || ruleIndex > layer.rules.size()) {   // == size appends
+        return false;
+    }
+
+    beginInsertRows(index(layerIndex, 0, QModelIndex()), ruleIndex, ruleIndex);
+    layer.rules.insert(ruleIndex, rule);
+    m_brush.decorations.replace(layerIndex, layer);
+    endInsertRows();
+    return true;
+}
+
+bool cwBrushStructureModel::removeRule(int layerIndex, int ruleIndex)
+{
+    if (!layerInRange(layerIndex)) {
+        return false;
+    }
+    cwDecorationLayer layer = m_brush.decorations.at(layerIndex);
+    if (ruleIndex < 0 || ruleIndex >= layer.rules.size()) {
+        return false;
+    }
+
+    beginRemoveRows(index(layerIndex, 0, QModelIndex()), ruleIndex, ruleIndex);
+    layer.rules.removeAt(ruleIndex);
+    m_brush.decorations.replace(layerIndex, layer);
+    endRemoveRows();
+    return true;
+}
+
+bool cwBrushStructureModel::layerInRange(int layerIndex) const
+{
+    return layerIndex >= 0 && layerIndex < m_brush.decorations.size();
 }

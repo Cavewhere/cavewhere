@@ -13,6 +13,12 @@ QString cwTraceRule::displayName() const
     return QStringLiteral("Trace");
 }
 
+QString cwTraceRule::description() const
+{
+    return QStringLiteral("Draws the line itself as a stroked, optionally filled, "
+                          "path — a wall, edge, or filled region.");
+}
+
 void cwTraceRule::apply(QVector<cwStampPosition> &positions,
                         const cwPlacementContext &context) const
 {

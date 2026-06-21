@@ -26,6 +26,7 @@
 class cwTraceRule : public cwPlacementRule {
 public:
     QString displayName() const override;
+    QString description() const override;
     Stage stage() const override { return Terminal; }
     OutputKind outputKind() const override { return OutputKind::Trace; }
     void apply(QVector<cwStampPosition> &positions,

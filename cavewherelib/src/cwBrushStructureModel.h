@@ -10,22 +10,20 @@
 
 //Qt includes
 #include <QAbstractItemModel>
-#include <QPointer>
 #include <QQmlEngine>
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwLineBrush.h"
 
-class cwBrushEditor;
-
-// A 2-level tree projection (layers -> rules) of a cwBrushEditor's working brush,
-// driving the brush editor's TreeView. It owns no data: every data() call reads
-// the editor's structure accessors, and the editor drives change notifications
-// directly -- reset() on a wholesale load/discard, ruleChanged() on a single
-// toggle -- so a checkbox toggle emits a narrow dataChanged instead of resetting
-// (and collapsing) the tree. Replaces the phase-1 _structureRevision /
-// comma-operator stopgap; the incremental row signals add/remove/reorder needs
-// land in phase 2.2.
+// A 2-level tree projection (layers -> rules) of a brush's structure, driving the
+// brush editor's TreeView. It owns the editor's working cwLineBrush and is the
+// structure-mutation mechanism: setBrush() resets it wholesale (load/discard),
+// while setRuleEnabled()/insertRule()/removeRule() mutate in place and bracket the
+// matching QAbstractItemModel begin/end calls internally, so the tree stays in
+// sync without a collapsing reset. The editor wraps these as its public API and
+// owns the dirty/preview side effects (it is not the model's job to know about
+// them), so the mutators here are deliberately not Q_INVOKABLE.
 class CAVEWHERE_LIB_EXPORT cwBrushStructureModel : public QAbstractItemModel
 {
     Q_OBJECT
@@ -41,7 +39,7 @@ public:
     };
     Q_ENUM(Roles)
 
-    explicit cwBrushStructureModel(cwBrushEditor *editor);
+    explicit cwBrushStructureModel(QObject *parent = nullptr);
 
     QModelIndex index(int row, int column, const QModelIndex &parent = QModelIndex()) const override;
     QModelIndex parent(const QModelIndex &index) const override;
@@ -50,16 +48,32 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    // Editor-driven change notifications (the editor owns this model).
-    void reset();                                    // wholesale change (load/discard)
-    void ruleChanged(int layerIndex, int ruleIndex); // one rule's data changed
+    // The working brush this model owns and projects. The editor reads it back for
+    // snapshot()/dirty/apply().
+    const cwLineBrush &brush() const { return m_brush; }
+    void setBrush(const cwLineBrush &brush);   // wholesale change (load/discard) -> model reset
+
+    // Structure accessors the editor's invokables delegate to.
+    int layerCount() const;
+    QString layerLabel(int layerIndex) const;
+    int ruleCount(int layerIndex) const;
+    QString ruleName(int layerIndex, int ruleIndex) const;
+    bool ruleEnabled(int layerIndex, int ruleIndex) const;
+
+    // Structure mutators. Each brackets the matching QAIM begin/end internally;
+    // returns false (no change, no signal) on an out-of-range request.
+    bool setRuleEnabled(int layerIndex, int ruleIndex, bool enabled);            // narrow dataChanged
+    bool insertRule(int layerIndex, int ruleIndex, const cwPlacementRuleData &rule);
+    bool removeRule(int layerIndex, int ruleIndex);
 
 private:
     // Layer rows carry this sentinel as their QModelIndex internalId; rule rows
     // carry their owning layer's row instead (always small, never colliding).
     static constexpr quintptr kLayerId = ~quintptr(0);
 
-    QPointer<cwBrushEditor> m_editor;
+    bool layerInRange(int layerIndex) const;
+
+    cwLineBrush m_brush;
 };
 
 #endif // CWBRUSHSTRUCTUREMODEL_H

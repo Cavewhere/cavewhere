@@ -59,6 +59,31 @@ TEST_CASE("Each rule reports its stage", "[cwPlacementRuleRegistry]")
     CHECK(registry.rule(QStringLiteral("Offset stroke"))->stage() == cwPlacementRule::TransformStroke);
 }
 
+TEST_CASE("allRules returns every registered rule, each with picker metadata",
+          "[cwPlacementRuleRegistry]")
+{
+    const QVector<const cwPlacementRule *> rules =
+        cwPlacementRuleRegistry::instance().allRules();
+
+    CHECK(rules.size() == 8);
+    for (const cwPlacementRule *rule : rules) {
+        REQUIRE(rule != nullptr);
+        INFO("rule: " << rule->displayName().toStdString());
+        CHECK_FALSE(rule->displayName().isEmpty());
+        CHECK_FALSE(rule->description().isEmpty());
+        CHECK_FALSE(cwPlacementRule::categoryLabel(rule->stage()).isEmpty());
+    }
+}
+
+TEST_CASE("categoryLabel maps each stage to its human-facing group",
+          "[cwPlacementRuleRegistry]")
+{
+    CHECK(cwPlacementRule::categoryLabel(cwPlacementRule::TransformStroke) == QStringLiteral("Stroke"));
+    CHECK(cwPlacementRule::categoryLabel(cwPlacementRule::Generate) == QStringLiteral("Placement"));
+    CHECK(cwPlacementRule::categoryLabel(cwPlacementRule::MutatePerLayer) == QStringLiteral("Orientation"));
+    CHECK(cwPlacementRule::categoryLabel(cwPlacementRule::Terminal) == QStringLiteral("Output"));
+}
+
 TEST_CASE("Terminal rules report their output kind; others report none",
           "[cwPlacementRuleRegistry]")
 {

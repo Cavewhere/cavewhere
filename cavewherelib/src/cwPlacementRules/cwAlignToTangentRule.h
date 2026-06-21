@@ -18,6 +18,7 @@
 class cwAlignToTangentRule : public cwPlacementRule {
 public:
     QString displayName() const override;
+    QString description() const override;
     Stage stage() const override { return MutatePerLayer; }
     void apply(QVector<cwStampPosition> &positions,
                const cwPlacementContext &context) const override;

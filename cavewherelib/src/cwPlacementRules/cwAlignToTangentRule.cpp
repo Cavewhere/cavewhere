@@ -17,6 +17,12 @@ QString cwAlignToTangentRule::displayName() const
     return QStringLiteral("Align to tangent");
 }
 
+QString cwAlignToTangentRule::description() const
+{
+    return QStringLiteral("Turns each glyph to follow the line's direction so it "
+                          "rides the curve.");
+}
+
 void cwAlignToTangentRule::apply(QVector<cwStampPosition> &positions,
                                  const cwPlacementContext &context) const
 {

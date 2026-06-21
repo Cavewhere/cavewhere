@@ -18,6 +18,12 @@ QString cwUniformSpacingRule::displayName() const
     return cwUniformSpacingRuleName();
 }
 
+QString cwUniformSpacingRule::description() const
+{
+    return QStringLiteral("Drops a glyph at a fixed spacing along the line "
+                          "(e.g. floor-step ticks every 2 mm).");
+}
+
 void cwUniformSpacingRule::apply(QVector<cwStampPosition> &positions,
                                  const cwPlacementContext &context) const
 {

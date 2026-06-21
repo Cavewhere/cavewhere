@@ -45,3 +45,13 @@ const cwPlacementRule *cwPlacementRuleRegistry::rule(const QString &name) const
 {
     return m_byName.value(name, nullptr);
 }
+
+QVector<const cwPlacementRule *> cwPlacementRuleRegistry::allRules() const
+{
+    QVector<const cwPlacementRule *> rules;
+    rules.reserve(static_cast<int>(m_rules.size()));
+    for (const auto &rule : m_rules) {
+        rules.append(rule.get());
+    }
+    return rules;
+}

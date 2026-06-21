@@ -88,6 +88,12 @@ QString cwOffsetStrokeRule::displayName() const
     return cwOffsetStrokeRuleName();
 }
 
+QString cwOffsetStrokeRule::description() const
+{
+    return QStringLiteral("Shifts the line sideways before anything else runs — for "
+                          "parallel rails or a ceiling channel.");
+}
+
 void cwOffsetStrokeRule::apply(QVector<cwStampPosition> &positions,
                                const cwPlacementContext &context) const
 {

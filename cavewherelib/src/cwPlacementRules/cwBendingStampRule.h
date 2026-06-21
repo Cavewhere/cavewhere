@@ -20,6 +20,7 @@
 class cwBendingStampRule : public cwStampRuleBase {
 public:
     QString displayName() const override;
+    QString description() const override;
 
     // Warp the glyph onto the stroke arclength, subdividing each edge by its
     // along-arclength span so it follows the stroke's curvature rather than

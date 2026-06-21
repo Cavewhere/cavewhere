@@ -30,6 +30,12 @@ QString cwBendingStampRule::displayName() const
     return QStringLiteral("Bending stamp");
 }
 
+QString cwBendingStampRule::description() const
+{
+    return QStringLiteral("Curves the whole glyph smoothly along the line "
+                          "(long dashes, wavy decorations).");
+}
+
 QPainterPath cwBendingStampRule::stampPath(const cwStampPosition &position,
                                            const QPainterPath &glyphPath,
                                            const cwPlacementContext &context) const
