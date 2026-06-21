@@ -97,6 +97,7 @@ message PlacementRule {
     // one-shot warning. Renaming a registered rule is a breaking change.
     string name   = 1;
     bytes  params = 2;                      // proto-encoded per-rule struct
+    optional bool enabled = 3;              // unset -> true (cwPlacementRuleData default)
 }
 
 // Per-rule parameter messages. Serialized into PlacementRule.params (opaque

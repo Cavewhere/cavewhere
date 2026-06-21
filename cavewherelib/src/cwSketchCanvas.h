@@ -91,6 +91,16 @@ public:
     bool debugOverlayVisible() const;
     void setDebugOverlayVisible(bool visible);
 
+    // Authoring preview override (commit 9 brush editor). While a brush is being
+    // edited, the editor pushes a preview snapshot — the resolved palette with the
+    // working brush swapped in — so the live sketch re-skins on every edit without
+    // mutating the real palette. clearPreviewSnapshot() drops the override and
+    // re-resolves from the sketch (e.g. after Apply persisted the real brush, or
+    // on Discard). Not persisted; ignored by cwSketchGlyphCanvas, which fully
+    // overrides snapshotForPathModel().
+    void setPreviewSnapshot(const cwPaletteSnapshot &snapshot);
+    void clearPreviewSnapshot();
+
 protected:
     QCanvasPainterItemRenderer *createItemRenderer() const override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
@@ -124,6 +134,8 @@ private:
     cwSketch *m_sketch = nullptr;
     QString m_currentBrushName;
     cwDecoratedStrokePathSource *m_pathModel = nullptr;
+    cwPaletteSnapshot m_previewSnapshot;
+    bool m_hasPreviewSnapshot = false;
     cwInfiniteGridModel *m_grid = nullptr;
     double m_zoom = 1.0;
     QPointF m_pan;

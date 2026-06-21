@@ -42,6 +42,9 @@ QVector<ResolvedRule> resolveRuleStack(const cwDecorationLayer &layer)
     QVector<ResolvedRule> stack;
     stack.reserve(layer.rules.size());
     for (const cwPlacementRuleData &ruleData : layer.rules) {
+        if (!ruleData.enabled) {
+            continue;   // disabled in the editor: present on disk, but lays out nothing
+        }
         const cwPlacementRule *rule = registry.rule(ruleData.name);
         if (rule == nullptr) {
             continue;   // unknown rule already reported by the validator at load/edit

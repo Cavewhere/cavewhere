@@ -26,6 +26,7 @@
 struct CAVEWHERE_LIB_EXPORT cwPlacementRuleData {
     QString  name;
     QVariant parameters;
+    bool     enabled = true;   // false = present but skipped by layout + validator
 
     bool operator==(const cwPlacementRuleData &other) const = default;
 };

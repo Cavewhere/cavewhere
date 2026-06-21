@@ -41,6 +41,9 @@ QList<cwError> cwDecorationLayerValidator::validate(const cwDecorationLayer &lay
     const cwPlacementRule *terminal = nullptr; // the first terminal — the one the layout keeps
 
     for (const cwPlacementRuleData &ruleData : layer.rules) {
+        if (!ruleData.enabled) {
+            continue;   // validate the effective stack: a disabled rule is as if absent
+        }
         const cwPlacementRule *rule = registry.rule(ruleData.name);
         if (rule == nullptr) {
             errors.append(makeError(SymbologyErrorCode::UnknownRule, cwError::Warning,

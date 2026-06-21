@@ -201,12 +201,38 @@ void cwSketchCanvas::setGrid(cwInfiniteGridModel *grid)
 
 cwPaletteSnapshot cwSketchCanvas::snapshotForPathModel() const
 {
+    if (m_hasPreviewSnapshot) {
+        return m_previewSnapshot;
+    }
     return m_sketch != nullptr ? m_sketch->paletteSnapshot() : cwPaletteSnapshot();
 }
 
 void cwSketchCanvas::refreshPathSnapshot()
 {
     m_pathModel->setSnapshot(snapshotForPathModel());
+}
+
+void cwSketchCanvas::setPreviewSnapshot(const cwPaletteSnapshot &snapshot)
+{
+    // Comparing snapshots is far cheaper than the glyph-cache wipe + all-stroke
+    // re-tessellation refreshPathSnapshot() triggers, so skip identical pushes
+    // (e.g. the no-op preview on brush load / canvas attach).
+    if (m_hasPreviewSnapshot && m_previewSnapshot == snapshot) {
+        return;
+    }
+    m_previewSnapshot = snapshot;
+    m_hasPreviewSnapshot = true;
+    refreshPathSnapshot();
+}
+
+void cwSketchCanvas::clearPreviewSnapshot()
+{
+    if (!m_hasPreviewSnapshot) {
+        return;
+    }
+    m_hasPreviewSnapshot = false;
+    m_previewSnapshot = cwPaletteSnapshot();
+    refreshPathSnapshot();
 }
 
 QCanvasPainterItemRenderer *cwSketchCanvas::createItemRenderer() const

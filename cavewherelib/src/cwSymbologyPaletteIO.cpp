@@ -124,6 +124,11 @@ void layerToProto(CavewhereSymbologyProto::DecorationLayer *proto, const cwDecor
         protoRule->set_name(toStd(rule.name));
         const QByteArray bytes = cwPlacementRuleParamsCodec::encode(rule.name, rule.parameters);
         protoRule->set_params(bytes.constData(), static_cast<size_t>(bytes.size()));
+        // Persist only the non-default (disabled) state — an unset field reads
+        // back as enabled, matching the value-type default.
+        if (!rule.enabled) {
+            protoRule->set_enabled(false);
+        }
     }
     proto->set_buffermm(layer.bufferMm);
     proto->set_collisionpriority(layer.collisionPriority);
@@ -153,6 +158,9 @@ cwDecorationLayer layerFromProto(const CavewhereSymbologyProto::DecorationLayer 
         const std::string &params = protoRule.params();
         rule.parameters = cwPlacementRuleParamsCodec::decode(
             rule.name, QByteArray(params.data(), static_cast<int>(params.size())));
+        if (protoRule.has_enabled()) {
+            rule.enabled = protoRule.enabled();
+        }
         layer.rules.append(rule);
     }
     // optional fields fall back to the value-type default when absent.

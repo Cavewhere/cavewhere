@@ -60,6 +60,9 @@ QQ.Item {
     // draw. The same window doubles as the commit blend zone.
     readonly property real _probationWindowScreenPx: 10 * Screen.pixelDensity
 
+    // Screen-pixel pick tolerance for the right-click "Edit brush" hit-test.
+    readonly property real _editPickRadiusPx: 12
+
     property int _activeStrokeIndex: -1
 
     // Eraser mode state. _eraserCursor tracks the pen even while hovering so the
@@ -67,6 +70,11 @@ QQ.Item {
     property point _eraserCursor: Qt.point(0, 0)
     property point _eraserLastWorld: Qt.point(0, 0)
     property bool _eraserHasLastPoint: false
+
+    // Emitted on a right-click tap (not a drag — that pans) over a finished
+    // stroke, carrying that stroke's brush name. The host (SketchItem) opens the
+    // brush editor in response; the glyph editor host ignores it.
+    signal editBrushRequested(string brushName)
 
     // mapMatrix is diag(mapScale, -mapScale, mapScale) — the Y-flip makes world
     // Y-up while the item stays Y-down — so the forward/inverse transforms are
@@ -224,6 +232,27 @@ QQ.Item {
                 inputAreaId.pan.x + centroid.position.x - lastPosition.x,
                 inputAreaId.pan.y + centroid.position.y - lastPosition.y)
             lastPosition = centroid.position
+        }
+    }
+
+    // Right-click tap (no drag) → resolve the stroke under the cursor and ask the
+    // host to edit its brush. A right-click drag still pans (panHandler above);
+    // TapHandler only fires when the press releases without a drag.
+    QQ.TapHandler {
+        objectName: "editBrushTapHandler"
+        acceptedButtons: Qt.RightButton
+        acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
+
+        onTapped: (eventPoint) => {
+            if (!inputAreaId.sketch) {
+                return
+            }
+            const world = inputAreaId._worldPoint(eventPoint.position)
+            const radius = inputAreaId._editPickRadiusPx / Math.max(inputAreaId.pxPerMeter, 1e-6)
+            const name = inputAreaId.sketch.brushNameNear(world, radius)
+            if (name !== "") {
+                inputAreaId.editBrushRequested(name)
+            }
         }
     }
 

@@ -390,6 +390,34 @@ void cwSketch::resolveSnapshot()
     emit paletteSnapshotChanged();
 }
 
+QString cwSketch::brushNameNear(QPointF worldPoint, double maxWorldDistance) const
+{
+    // O(n) over strokes with a bbox prefilter — fine for a one-shot right-click,
+    // but it (like findContinuationTarget and the eraser) will need a 2D spatial
+    // index (quadtree / BVH) to stay fast on large sketches. See the commit-9 plan.
+    double bestDistSq = maxWorldDistance * maxWorldDistance;
+    QString bestBrush;
+    for (const cwPenStroke &stroke : m_strokes) {
+        if (stroke.points.size() < 2) {
+            continue;
+        }
+        const QRectF bbox = stroke.boundingBox().adjusted(
+            -maxWorldDistance, -maxWorldDistance, maxWorldDistance, maxWorldDistance);
+        if (!bbox.contains(worldPoint)) {
+            continue;
+        }
+        for (int i = 1; i < stroke.points.size(); ++i) {
+            const double dSq = distancePointToSegmentSquared(
+                worldPoint, stroke.points.at(i - 1).position, stroke.points.at(i).position);
+            if (dSq < bestDistSq) {
+                bestDistSq = dSq;
+                bestBrush = stroke.brushName;
+            }
+        }
+    }
+    return bestBrush;
+}
+
 void cwSketch::setName(const QString &name)
 {
     if (m_name == name) {

@@ -594,6 +594,34 @@ TEST_CASE("Layout stamps floor-step ticks at 2 mm spacing along the tangent",
     CHECK(geometry.layers.at(1).stamps.first().position.anchorWorld.x() == Approx(0.0).margin(1e-9));
 }
 
+TEST_CASE("A disabled rule is dropped from the effective layout stack",
+          "[cwSketchDecorationLayout]")
+{
+    cwGlyphTessellationCache cache;
+    cache.setSnapshot(cwSymbologyPaletteSeed::create().snapshot());
+    const cwSketchDecorationLayout layout(&cache);
+
+    auto brush = cwSymbologyPaletteSeed::create().snapshot()
+                     .findBrush(cwSymbologyPaletteSeed::floorStepBrushName());
+    REQUIRE(brush.has_value());
+
+    const double lengthWorld = 20.0 * kWorldPerPaperMm250;
+    const QVector<QPointF> strokeWorld = straightLine(lengthWorld, 1);
+
+    // Disable the tick layer's Generate rule (Uniform spacing) — with no rule to
+    // seed positions, the stamp layer produces nothing, while the edge trace is
+    // untouched.
+    cwDecorationLayer &tickLayer = brush->decorations[1];
+    REQUIRE(tickLayer.rules.at(0).name == QStringLiteral("Uniform spacing"));
+    tickLayer.rules[0].enabled = false;
+
+    const cwBrushDecorationGeometry geometry = layout.layout(*brush, strokeWorld, kScale250);
+
+    REQUIRE(geometry.layers.size() == 2);
+    CHECK(geometry.layers.at(0).kind == cwBrushDecorationGeometry::Layer::Trace);
+    CHECK(geometry.layers.at(1).stamps.isEmpty());
+}
+
 TEST_CASE("Rotate-by-tangent orients ticks to a diagonal stroke",
           "[cwSketchDecorationLayout]")
 {

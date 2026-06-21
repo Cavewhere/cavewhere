@@ -173,6 +173,12 @@ public:
 
     Q_INVOKABLE int  beginStroke(const QString &brushName);
 
+    // Hit-test for the brush-editor entry point (commit 9): the brushName of the
+    // finished stroke whose centerline passes closest to worldPoint within
+    // maxWorldDistance, or an empty string if none is that close. Drives the
+    // right-click "Edit brush" affordance.
+    Q_INVOKABLE QString brushNameNear(QPointF worldPoint, double maxWorldDistance) const;
+
     // Scans strokes sharing `brushName` for one whose centerline is within
     // 0.5×kSketchStrokeRenderWidth *screen pixels* (converted to world meters
     // via viewState->pixelsPerMeter()) of `worldPoint`. Returns the nearest

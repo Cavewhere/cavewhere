@@ -125,6 +125,23 @@ QQ.Item {
         brushName: sketchCanvasId.currentBrushName
         eraseActive: toolbarId.eraseActive
         eraserRadius: toolbarId.eraserRadius
+
+        onEditBrushRequested: (brushName) => {
+            brushEditorPanelId.openFor(brushName)
+        }
+    }
+
+    // Commit 9 phase 1 — the brush editor "thin loop", docked on the right and
+    // reachable by right-clicking a stroke. Hidden until then.
+    BrushEditorPanel {
+        id: brushEditorPanelId
+        objectName: "brushEditorPanel"
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        previewCanvas: sketchCanvasId
+        region: RootData.region
+        symbologyPalette: sketchItemId.sketch ? sketchItemId.sketch.resolvedPalette : null
     }
 
     SketchToolbar {
