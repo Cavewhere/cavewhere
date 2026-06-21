@@ -1834,7 +1834,7 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
     protoMetadata->set_syncenabled(metadata.syncEnabled);
 
     if (region != nullptr) {
-        if (!region->globalCoordinateSystem().isEmpty()) {
+        if (region->hasCoordinateSystem()) {
             cwProtoUtils::saveString(protoMetadata->mutable_globalcoordinatesystem(),
                                      region->globalCoordinateSystem());
         }

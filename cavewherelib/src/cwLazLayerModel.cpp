@@ -550,7 +550,7 @@ void cwLazLayerModel::maybeAdoptRegionDefaultsFromLaz(const QString& sourcePath)
         return;
     }
 
-    const bool needsCS = region->globalCoordinateSystem().isEmpty();
+    const bool needsCS = !region->hasCoordinateSystem();
     // Use the explicit-set flag, not value-equality with cwGeoPoint{}: a
     // user (or a test) can deliberately pin the origin to (0, 0, 0), and
     // that pin is indistinguishable from "never set" by value alone. The
