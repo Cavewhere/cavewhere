@@ -173,7 +173,7 @@ MainWindowTest {
             tryCompare(RootData.region.lazLayers, "count", 1)
             waitForLazLoadsToFinish()
 
-            compare(RootData.region.globalCoordinateSystem, "",
+            compare(RootData.region.geoReference.globalCoordinateSystem, "",
                     "globalCoordinateSystem must stay empty for a no-CS LAZ")
             tryVerify(() => noCSHelp.visible, 2000,
                       "no-CS hint should appear once a no-CS layer is present")

@@ -463,6 +463,19 @@ Tests use <code>QTemporaryDir</code>/<code>applicationPid()</code> for any temp 
     <code>cwGridConvergence::computeAt()</code>, so the measurement tool, LiDAR-note georeferencing, and survey
     readouts share one "scene vector &rarr; bearing in the user's chosen north." Data-model-adjacent (needs the
     fix-station / CRS context the tool doesn't yet carry); deferred.</li>
+  <li><b>Migrate <code>cwLazClipInteraction</code> to take <code>cwGeoReference*</code></b> instead of the whole
+    <code>cwCavingRegion</code> &mdash; enabled by the geoReference single-owner refactor (the region's CS/origin
+    forwarders were removed; consumers now go through <code>region.geoReference</code>).
+    <code>cwLazClipInteraction</code> holds a <code>cwCavingRegion*</code> Q_PROPERTY
+    (<code>cwLazClipInteraction.h:51,82,163</code>) purely to read
+    <code>m_region-&gt;geoReference()-&gt;worldOrigin()</code> / <code>globalCoordinateSystem()</code> at commit
+    (<code>cwLazClipInteraction.cpp:217-218</code>); it touches no caves, lazLayers, or undo. After the refactor it
+    is the last interaction still taking the whole region for a two-field read &mdash;
+    <code>cwMeasurementInteraction</code> and <code>cwCoordinatePicker</code> already take the
+    <code>cwGeoReference*</code> slice. Migrating it would finish unifying the interaction boundary on the slice.
+    Out of scope here: it is a QML-facing property change (the <code>region:</code> binding in the LAZ-clip QML)
+    plus its own test churn, unrelated to removing the region forwarders. (Distinct from the snapped-pick item
+    above, which is about picking model, not the geo slice.)</li>
 </ul>
 
 <h2 id="decisions">11. Decisions locked in</h2>

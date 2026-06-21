@@ -124,7 +124,7 @@ cwSurveyDataArtifact::Cave::Cave(const cwCave *cave) {
 }
 
 cwSurveyDataArtifact::Region::Region(const cwCavingRegion *region) {
-    globalCoordinateSystem = region->globalCoordinateSystem();
+    globalCoordinateSystem = region->geoReference()->globalCoordinateSystem();
     int caveCount = region->caveCount();
     caves.reserve(caveCount);
     for (int i = 0; i < caveCount; ++i) {

@@ -25,10 +25,11 @@
  * (the azimuth reference, the coordinate pick) can take a cwGeoReference*
  * instead of the whole region.
  *
- * cwCavingRegion owns one and delegates its globalCoordinateSystem / worldOrigin
- * API to it. The region-specific plumbing stays on the region: pushing changes
- * into the LAZ layer model and the cave-based recomputeWorldOrigin() both live
- * there and drive this slice through its public setters.
+ * cwCavingRegion owns one and exposes it as region.geoReference — it is the
+ * single home for this state, not a copy the region also mirrors. The
+ * region-specific plumbing stays on the region: pushing changes into the LAZ
+ * layer model and the cave-based recomputeWorldOrigin() both live there and
+ * drive this slice through its public setters.
  */
 class CAVEWHERE_LIB_EXPORT cwGeoReference : public QObject
 {

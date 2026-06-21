@@ -106,10 +106,10 @@ StandardPage {
 
                     CSComboBox {
                         objectName: "globalCoordinateSystemComboBox"
-                        value: RootData.region.globalCoordinateSystem
+                        value: RootData.region.geoReference.globalCoordinateSystem
                         allowGeographic: false
                         onCommitted: (newCS) => {
-                            RootData.region.globalCoordinateSystem = newCS
+                            RootData.region.geoReference.globalCoordinateSystem = newCS
                         }
                     }
 
@@ -144,7 +144,7 @@ StandardPage {
                 QC.MenuItem {
                     objectName: "recenterWorldOriginAction"
                     text: qsTr("Recenter world origin")
-                    enabled: RootData.region.globalCoordinateSystem !== ""
+                    enabled: RootData.region.geoReference.globalCoordinateSystem !== ""
                     onTriggered: RootData.region.recomputeWorldOrigin()
                 }
 

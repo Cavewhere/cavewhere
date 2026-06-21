@@ -19,6 +19,7 @@
 #include "cwCamera.h"
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
+#include "cwGeoReference.h"
 #include "cwGeoPoint.h"
 #include "cwGeometry.h"
 #include "cwGeometryItersecter.h"
@@ -197,8 +198,8 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
     const cwGeoPoint origin = geoToUtm.transform(cwGeoPoint(-104.0, 40.015, 1655.0));
 
     cwCavingRegion region;
-    region.setGlobalCoordinateSystem(cs);
-    region.setWorldOrigin(origin);
+    region.geoReference()->setGlobalCoordinateSystem(cs);
+    region.geoReference()->setWorldOrigin(origin);
 
     cwMeasurementInteraction interaction;
     interaction.setCamera(&camera);
@@ -289,7 +290,7 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
 
         // An invalid CRS leaves True selected but unresolvable: the line pastes
         // an honest n/a with the reason, never a silently-wrong grid number.
-        region.setGlobalCoordinateSystem(QStringLiteral("EPSG:999999"));
+        region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:999999"));
         REQUIRE(interaction.azimuthReference() == cwAzimuthReference::Reference::True);
         interaction.copyToClipboard();
         CHECK(clipboard->text().contains(QStringLiteral("Azimuth (true): n/a (")));
@@ -299,7 +300,7 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
         interaction.setAzimuthReference(cwAzimuthReference::Reference::True);
         REQUIRE(interaction.azimuthReference() == cwAzimuthReference::Reference::True);
 
-        region.setGlobalCoordinateSystem(QString());
+        region.geoReference()->setGlobalCoordinateSystem(QString());
         CHECK_FALSE(interaction.geoReferenced());
         CHECK(interaction.azimuthReference() == cwAzimuthReference::Reference::Grid);
         CHECK(interaction.referenceAvailable());
@@ -307,7 +308,7 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
     }
 
     SECTION("a local-only project can't select True or Magnetic") {
-        region.setGlobalCoordinateSystem(QString());
+        region.geoReference()->setGlobalCoordinateSystem(QString());
         REQUIRE_FALSE(interaction.geoReferenced());
 
         interaction.setAzimuthReference(cwAzimuthReference::Reference::True);
@@ -321,7 +322,7 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
     SECTION("a present but invalid coordinate system reports n/a") {
         // geoReferenced is true (the CRS is non-empty) so True stays selectable,
         // but the resolve fails and surfaces as n/a for the readout.
-        region.setGlobalCoordinateSystem(QStringLiteral("EPSG:999999"));
+        region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:999999"));
         REQUIRE(interaction.geoReferenced());
 
         interaction.setAzimuthReference(cwAzimuthReference::Reference::True);

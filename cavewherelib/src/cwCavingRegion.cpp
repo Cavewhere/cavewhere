@@ -26,18 +26,16 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
     m_geoReference(new cwGeoReference(this)),
     m_lazLayers(new cwLazLayerModel(this))
 {
-    // The geo-reference slice owns the CS + worldOrigin; mirror each change into
-    // the LAZ layer model and re-emit on the region so the existing region-level
-    // consumers (line plot, save/load) keep working. The worldOrigin push runs
+    // geoReference owns the CS + worldOrigin; the region only mirrors each change
+    // into the LAZ layer model (it owns lazLayers). Consumers that react to CS /
+    // worldOrigin connect to geoReference directly. The worldOrigin push runs
     // before the CS push for a CS-driven reset, matching the prior in-setter
     // ordering.
     connect(m_geoReference, &cwGeoReference::worldOriginChanged, this, [this] {
         m_lazLayers->setRegionWorldOrigin(m_geoReference->worldOrigin());
-        emit worldOriginChanged();
     });
     connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged, this, [this] {
         m_lazLayers->setRegionGlobalCS(m_geoReference->globalCoordinateSystem());
-        emit globalCoordinateSystemChanged();
     });
 }
 
@@ -327,13 +325,13 @@ void cwCavingRegion::recomputeWorldOrigin()
         sum.z += p.z;
     }
     const double n = double(candidates.size());
-    setWorldOrigin(cwGeoPoint{sum.x / n, sum.y / n, sum.z / n});
+    m_geoReference->setWorldOrigin(cwGeoPoint{sum.x / n, sum.y / n, sum.z / n});
 }
 
 void cwCavingRegion::setData(const cwCavingRegionData &data)
 {
     setName(data.name);
-    setGlobalCoordinateSystem(data.globalCoordinateSystem);
+    m_geoReference->setGlobalCoordinateSystem(data.globalCoordinateSystem);
     // worldOrigin is intentionally not persisted (see cavewhere.proto:
     // "reserved 5; // Removed: worldOrigin ... recomputed on load"). On
     // disk-load, data.worldOrigin is always default-constructed cwGeoPoint{},
@@ -344,7 +342,7 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
     // auto-adopt. (In-process data → setData round-trips still work because
     // a non-default value will be present.)
     if (data.worldOrigin != cwGeoPoint{}) {
-        setWorldOrigin(data.worldOrigin);
+        m_geoReference->setWorldOrigin(data.worldOrigin);
     }
 
     clearCaves();
@@ -430,7 +428,7 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
         // The cave's grid-convergence readout depends on the region's
         // globalCS when a fix station omits its own inputCS. UniqueConnection
         // keeps re-insert/undo paths from doubling up.
-        QObject::connect(regionPtr, &cwCavingRegion::globalCoordinateSystemChanged,
+        QObject::connect(regionPtr->geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
                          Caves.at(i), &cwCave::recomputeGridConvergence,
                          Qt::UniqueConnection);
         Caves.at(i)->recomputeGridConvergence();

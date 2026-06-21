@@ -8,6 +8,7 @@
 //Our includes
 #include "cwLinePlotManager.h"
 #include "cwCavingRegion.h"
+#include "cwGeoReference.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwShot.h"
@@ -143,11 +144,11 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     // globalCoordinateSystem feeds the *cs out / *cs lines on the survex
     // export, so the line plot needs to re-run when the user changes the
     // region's CS.
-    connect(Region, &cwCavingRegion::globalCoordinateSystemChanged, this, &cwLinePlotManager::runSurvex);
+    connect(Region->geoReference(), &cwGeoReference::globalCoordinateSystemChanged, this, &cwLinePlotManager::runSurvex);
 
     // worldOrigin is subtracted by cwLinePlotTask::applyWorldOriginOffset, so
     // the line plot must re-solve when it changes (auto-compute or manual recenter).
-    connect(Region, &cwCavingRegion::worldOriginChanged, this, &cwLinePlotManager::runSurvex);
+    connect(Region->geoReference(), &cwGeoReference::worldOriginChanged, this, &cwLinePlotManager::runSurvex);
 
     SurveySignaler->setRegion(Region);
 
@@ -683,7 +684,7 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     // because an explicit pin to (0,0,0) — e.g. sink-training tests that
     // align render-space with LAZ-source XY — is a valid origin that must
     // not be silently overwritten by the fix-station centroid.
-    if (!Region->hasExplicitWorldOrigin()) {
+    if (!Region->geoReference()->hasExplicitWorldOrigin()) {
         Region->recomputeWorldOrigin();
     }
 }

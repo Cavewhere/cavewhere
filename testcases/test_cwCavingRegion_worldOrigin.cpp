@@ -2,6 +2,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwFixStation.h"
+#include "cwGeoReference.h"
 #include "cwFixStationModel.h"
 #include "cwGeoPoint.h"
 
@@ -37,11 +38,11 @@ TEST_CASE("recomputeWorldOrigin is a no-op on an empty region",
           "[cwCavingRegion][worldOrigin]")
 {
     cwCavingRegion region;
-    QSignalSpy spy(&region, &cwCavingRegion::worldOriginChanged);
+    QSignalSpy spy(region.geoReference(), &cwGeoReference::worldOriginChanged);
 
     region.recomputeWorldOrigin();
 
-    CHECK(region.worldOrigin() == cwGeoPoint{});
+    CHECK(region.geoReference()->worldOrigin() == cwGeoPoint{});
     CHECK(spy.count() == 0);
 }
 
@@ -49,7 +50,7 @@ TEST_CASE("recomputeWorldOrigin sets worldOrigin to a single fix's coords",
           "[cwCavingRegion][worldOrigin]")
 {
     cwCavingRegion region;
-    region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -58,11 +59,11 @@ TEST_CASE("recomputeWorldOrigin sets worldOrigin to a single fix's coords",
         makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32612"),
                 500000.0, 4194000.0, 2700.0));
 
-    QSignalSpy spy(&region, &cwCavingRegion::worldOriginChanged);
+    QSignalSpy spy(region.geoReference(), &cwGeoReference::worldOriginChanged);
     region.recomputeWorldOrigin();
 
     REQUIRE(spy.count() == 1);
-    const cwGeoPoint origin = region.worldOrigin();
+    const cwGeoPoint origin = region.geoReference()->worldOrigin();
     CHECK_THAT(origin.x, WithinAbs(500000.0, 1e-6));
     CHECK_THAT(origin.y, WithinAbs(4194000.0, 1e-6));
     CHECK_THAT(origin.z, WithinAbs(2700.0, 1e-6));
@@ -72,7 +73,7 @@ TEST_CASE("recomputeWorldOrigin averages multiple fixes",
           "[cwCavingRegion][worldOrigin]")
 {
     cwCavingRegion region;
-    region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -86,7 +87,7 @@ TEST_CASE("recomputeWorldOrigin averages multiple fixes",
 
     region.recomputeWorldOrigin();
 
-    const cwGeoPoint origin = region.worldOrigin();
+    const cwGeoPoint origin = region.geoReference()->worldOrigin();
     CHECK_THAT(origin.x, WithinAbs(500100.0, 1e-6));
     CHECK_THAT(origin.y, WithinAbs(4194050.0, 1e-6));
     CHECK_THAT(origin.z, WithinAbs(2725.0, 1e-6));
@@ -96,7 +97,7 @@ TEST_CASE("recomputeWorldOrigin falls back to globalCS when fix inputCS is empty
           "[cwCavingRegion][worldOrigin]")
 {
     cwCavingRegion region;
-    region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -107,7 +108,7 @@ TEST_CASE("recomputeWorldOrigin falls back to globalCS when fix inputCS is empty
 
     region.recomputeWorldOrigin();
 
-    CHECK_THAT(region.worldOrigin().x, WithinAbs(500000.0, 1e-6));
+    CHECK_THAT(region.geoReference()->worldOrigin().x, WithinAbs(500000.0, 1e-6));
 }
 
 TEST_CASE("recomputeWorldOrigin skips fixes with no resolvable CS",
@@ -123,10 +124,10 @@ TEST_CASE("recomputeWorldOrigin skips fixes with no resolvable CS",
         makeFix(QStringLiteral("A1"), QString(),
                 500000.0, 4194000.0, 2700.0));
 
-    QSignalSpy spy(&region, &cwCavingRegion::worldOriginChanged);
+    QSignalSpy spy(region.geoReference(), &cwGeoReference::worldOriginChanged);
     region.recomputeWorldOrigin();
 
-    CHECK(region.worldOrigin() == cwGeoPoint{});
+    CHECK(region.geoReference()->worldOrigin() == cwGeoPoint{});
     CHECK(spy.count() == 0);
 }
 
@@ -134,7 +135,7 @@ TEST_CASE("recomputeWorldOrigin reprojects when fix inputCS differs from globalC
           "[cwCavingRegion][worldOrigin]")
 {
     cwCavingRegion region;
-    region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     region.addCave();
     auto* cave = region.cave(0);
@@ -146,7 +147,7 @@ TEST_CASE("recomputeWorldOrigin reprojects when fix inputCS differs from globalC
 
     region.recomputeWorldOrigin();
 
-    const cwGeoPoint origin = region.worldOrigin();
+    const cwGeoPoint origin = region.geoReference()->worldOrigin();
     // Sanity: UTM 12N origin near 500000 east, 4193000-ish north.
     CHECK_THAT(origin.x, WithinAbs(500000.0, 5000.0));
     CHECK_THAT(origin.y, WithinAbs(4193000.0, 5000.0));
@@ -156,13 +157,13 @@ TEST_CASE("setGlobalCS resets worldOrigin so the next solve re-arms auto-compute
           "[cwCavingRegion][worldOrigin]")
 {
     cwCavingRegion region;
-    region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
-    region.setWorldOrigin(cwGeoPoint{500000.0, 4194000.0, 2700.0});
-    REQUIRE(region.worldOrigin() != cwGeoPoint{});
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+    region.geoReference()->setWorldOrigin(cwGeoPoint{500000.0, 4194000.0, 2700.0});
+    REQUIRE(region.geoReference()->worldOrigin() != cwGeoPoint{});
 
-    QSignalSpy spy(&region, &cwCavingRegion::worldOriginChanged);
-    region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
+    QSignalSpy spy(region.geoReference(), &cwGeoReference::worldOriginChanged);
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
 
-    CHECK(region.worldOrigin() == cwGeoPoint{});
+    CHECK(region.geoReference()->worldOrigin() == cwGeoPoint{});
     CHECK(spy.count() == 1);
 }

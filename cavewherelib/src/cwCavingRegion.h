@@ -39,8 +39,6 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged BINDABLE bindableName)
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
-    Q_PROPERTY(QString globalCoordinateSystem READ globalCoordinateSystem WRITE setGlobalCoordinateSystem NOTIFY globalCoordinateSystemChanged)
-    Q_PROPERTY(cwGeoPoint worldOrigin READ worldOrigin WRITE setWorldOrigin NOTIFY worldOriginChanged)
     Q_PROPERTY(cwGeoReference* geoReference READ geoReference CONSTANT)
     Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)
 
@@ -59,22 +57,15 @@ public:
     void setName(const QString& name) { m_name = name; }
     QBindable<QString> bindableName() { return &m_name; }
 
-    // The geo-reference slice (CS + worldOrigin) lives in its own object so
-    // interactions that only need it can take a cwGeoReference* instead of the
-    // whole region. The region owns it and forwards its public CS / worldOrigin
-    // API; the LAZ push and cave-based recompute below stay region-side.
+    // The geo-reference (CS + worldOrigin) is owned here but is the single home
+    // for that state: consumers read and write it through region.geoReference,
+    // not through the region itself. The region only retains the responsibilities
+    // that genuinely need its other data — the LAZ push (it owns lazLayers) and
+    // the cave-based recomputeWorldOrigin() below.
     cwGeoReference* geoReference() const { return m_geoReference; }
 
-    QString globalCoordinateSystem() const { return m_geoReference->globalCoordinateSystem(); }
-    void setGlobalCoordinateSystem(const QString& cs) { m_geoReference->setGlobalCoordinateSystem(cs); }
-
-    bool hasCoordinateSystem() const { return m_geoReference->hasCoordinateSystem(); }
-
-    cwGeoPoint worldOrigin() const { return m_geoReference->worldOrigin(); }
-    void setWorldOrigin(const cwGeoPoint& origin) { m_geoReference->setWorldOrigin(origin); }
-
-    bool hasExplicitWorldOrigin() const { return m_geoReference->hasExplicitWorldOrigin(); }
-
+    //! Recompute the worldOrigin from the caves' fix stations and write it into
+    //! geoReference(). Lives here because it reads the region's caves.
     Q_INVOKABLE void recomputeWorldOrigin();
 
     cwLazLayerModel* lazLayers() const { return m_lazLayers; }
@@ -117,9 +108,6 @@ signals:
     void removedCaves(int begin, int end);
 
     void caveCountChanged();
-
-    void globalCoordinateSystemChanged();
-    void worldOriginChanged();
 
 public slots:
 

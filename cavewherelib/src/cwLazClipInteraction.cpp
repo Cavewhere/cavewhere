@@ -214,8 +214,8 @@ void cwLazClipInteraction::commit(Mode mode)
     if (!m_camera.isNull()) {
         req.viewMatrix = m_camera->viewMatrix();
     }
-    req.worldOrigin = m_region->worldOrigin();
-    req.outputWktCS = m_region->globalCoordinateSystem();
+    req.worldOrigin = m_region->geoReference()->worldOrigin();
+    req.outputWktCS = m_region->geoReference()->globalCoordinateSystem();
     // Two parallel Mode enums (QML-facing + operation-facing). Switch with
     // no default: so adding a new enumerator fails to compile here until
     // both sides are updated. Asserts also catch silent reordering.

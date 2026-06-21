@@ -271,7 +271,7 @@ void cwCave::recomputeGridConvergence()
     // current fix stations plus the region CS to fall back on when a fix
     // station omits its own input CS.
     const cwCavingRegion* region = parentRegion();
-    const QString fallbackCS = region ? region->globalCoordinateSystem() : QString();
+    const QString fallbackCS = region ? region->geoReference()->globalCoordinateSystem() : QString();
     m_gridConvergence->update(FixStations->fixStations(), fallbackCS);
 }
 

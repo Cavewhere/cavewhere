@@ -550,12 +550,12 @@ void cwLazLayerModel::maybeAdoptRegionDefaultsFromLaz(const QString& sourcePath)
         return;
     }
 
-    const bool needsCS = !region->hasCoordinateSystem();
+    const bool needsCS = !region->geoReference()->hasCoordinateSystem();
     // Use the explicit-set flag, not value-equality with cwGeoPoint{}: a
     // user (or a test) can deliberately pin the origin to (0, 0, 0), and
     // that pin is indistinguishable from "never set" by value alone. The
     // flag tracks intent.
-    const bool needsOrigin = !region->hasExplicitWorldOrigin();
+    const bool needsOrigin = !region->geoReference()->hasExplicitWorldOrigin();
 
     if (!needsCS && !needsOrigin) {
         return;
@@ -571,10 +571,10 @@ void cwLazLayerModel::maybeAdoptRegionDefaultsFromLaz(const QString& sourcePath)
     // center. Order matters — flip these and the origin gets wiped after we
     // set it.
     if (needsCS && !probe.sourceCS.isEmpty()) {
-        region->setGlobalCoordinateSystem(probe.sourceCS);
+        region->geoReference()->setGlobalCoordinateSystem(probe.sourceCS);
     }
     if (needsOrigin) {
-        region->setWorldOrigin(probe.bboxCenter);
+        region->geoReference()->setWorldOrigin(probe.bboxCenter);
     }
 }
 

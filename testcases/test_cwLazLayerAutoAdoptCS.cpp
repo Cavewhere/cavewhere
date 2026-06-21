@@ -13,6 +13,7 @@
 #include "cwCavingRegion.h"
 #include "cwFutureManagerModel.h"
 #include "cwGeoPoint.h"
+#include "cwGeoReference.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwProject.h"
@@ -51,11 +52,11 @@ TEST_CASE("Auto-adopt: empty project + LAZ with embedded CS adopts both",
 
     auto root = std::make_unique<cwRootData>();
     auto* region = root->project()->cavingRegion();
-    REQUIRE(region->globalCoordinateSystem().isEmpty());
-    REQUIRE(region->worldOrigin() == cwGeoPoint{});
+    REQUIRE(region->geoReference()->globalCoordinateSystem().isEmpty());
+    REQUIRE(region->geoReference()->worldOrigin() == cwGeoPoint{});
 
-    QSignalSpy csSpy(region, &cwCavingRegion::globalCoordinateSystemChanged);
-    QSignalSpy originSpy(region, &cwCavingRegion::worldOriginChanged);
+    QSignalSpy csSpy(region->geoReference(), &cwGeoReference::globalCoordinateSystemChanged);
+    QSignalSpy originSpy(region->geoReference(), &cwGeoReference::worldOriginChanged);
 
     const QString path = writeMinimalLaz(
         tempLazPath(tempDir, QStringLiteral("with-cs")),
@@ -64,12 +65,12 @@ TEST_CASE("Auto-adopt: empty project + LAZ with embedded CS adopts both",
 
     addLazAndWait(root.get(), QStringList{path});
 
-    REQUIRE(region->globalCoordinateSystem() == kUtmZone10N);
+    REQUIRE(region->geoReference()->globalCoordinateSystem() == kUtmZone10N);
     REQUIRE(csSpy.size() == 1);
 
     // bbox of minimalLazPoints() is (0,0,0)-(4,4,4) → center (2,2,2).
     const cwGeoPoint expectedCenter{2.0, 2.0, 2.0};
-    REQUIRE(region->worldOrigin() == expectedCenter);
+    REQUIRE(region->geoReference()->worldOrigin() == expectedCenter);
     REQUIRE(originSpy.size() >= 1);
 }
 
@@ -87,8 +88,8 @@ TEST_CASE("Auto-adopt: empty project + LAZ without embedded CS only sets worldOr
 
     addLazAndWait(root.get(), QStringList{path});
 
-    REQUIRE(region->globalCoordinateSystem().isEmpty());
-    REQUIRE(region->worldOrigin() == cwGeoPoint{2.0, 2.0, 2.0});
+    REQUIRE(region->geoReference()->globalCoordinateSystem().isEmpty());
+    REQUIRE(region->geoReference()->worldOrigin() == cwGeoPoint{2.0, 2.0, 2.0});
 }
 
 TEST_CASE("Auto-adopt: project with existing globalCoordinateSystem is left untouched",
@@ -100,8 +101,8 @@ TEST_CASE("Auto-adopt: project with existing globalCoordinateSystem is left unto
     auto* region = root->project()->cavingRegion();
     const QString existingCS = QStringLiteral("EPSG:32611");  // UTM 11N
     const cwGeoPoint existingOrigin{500000.0, 4000000.0, 100.0};
-    region->setGlobalCoordinateSystem(existingCS);    // resets worldOrigin to {}
-    region->setWorldOrigin(existingOrigin);
+    region->geoReference()->setGlobalCoordinateSystem(existingCS);    // resets worldOrigin to {}
+    region->geoReference()->setWorldOrigin(existingOrigin);
 
     const QString path = writeMinimalLaz(
         tempLazPath(tempDir, QStringLiteral("preset")),
@@ -110,8 +111,8 @@ TEST_CASE("Auto-adopt: project with existing globalCoordinateSystem is left unto
 
     addLazAndWait(root.get(), QStringList{path});
 
-    REQUIRE(region->globalCoordinateSystem() == existingCS);
-    REQUIRE(region->worldOrigin() == existingOrigin);
+    REQUIRE(region->geoReference()->globalCoordinateSystem() == existingCS);
+    REQUIRE(region->geoReference()->worldOrigin() == existingOrigin);
 }
 
 TEST_CASE("Auto-adopt: explicit setWorldOrigin(0,0,0) is honored, not overwritten",
@@ -130,9 +131,9 @@ TEST_CASE("Auto-adopt: explicit setWorldOrigin(0,0,0) is honored, not overwritte
     auto* region = root->project()->cavingRegion();
 
     const QString explicitCS = QStringLiteral("EPSG:32611");
-    region->setGlobalCoordinateSystem(explicitCS);
-    region->setWorldOrigin(cwGeoPoint{0.0, 0.0, 0.0});
-    REQUIRE(region->hasExplicitWorldOrigin());
+    region->geoReference()->setGlobalCoordinateSystem(explicitCS);
+    region->geoReference()->setWorldOrigin(cwGeoPoint{0.0, 0.0, 0.0});
+    REQUIRE(region->geoReference()->hasExplicitWorldOrigin());
 
     const QString path = writeMinimalLaz(
         tempLazPath(tempDir, QStringLiteral("zero-pin")),
@@ -141,9 +142,9 @@ TEST_CASE("Auto-adopt: explicit setWorldOrigin(0,0,0) is honored, not overwritte
 
     addLazAndWait(root.get(), QStringList{path});
 
-    REQUIRE(region->globalCoordinateSystem() == explicitCS);
-    REQUIRE(region->worldOrigin() == cwGeoPoint{0.0, 0.0, 0.0});
-    REQUIRE(region->hasExplicitWorldOrigin());
+    REQUIRE(region->geoReference()->globalCoordinateSystem() == explicitCS);
+    REQUIRE(region->geoReference()->worldOrigin() == cwGeoPoint{0.0, 0.0, 0.0});
+    REQUIRE(region->geoReference()->hasExplicitWorldOrigin());
 }
 
 TEST_CASE("Auto-adopt: setGlobalCoordinateSystem clears the explicit-set flag",
@@ -159,14 +160,14 @@ TEST_CASE("Auto-adopt: setGlobalCoordinateSystem clears the explicit-set flag",
     auto root = std::make_unique<cwRootData>();
     auto* region = root->project()->cavingRegion();
 
-    region->setGlobalCoordinateSystem(QStringLiteral("EPSG:32611"));
-    region->setWorldOrigin(cwGeoPoint{500000.0, 4000000.0, 100.0});
-    REQUIRE(region->hasExplicitWorldOrigin());
+    region->geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32611"));
+    region->geoReference()->setWorldOrigin(cwGeoPoint{500000.0, 4000000.0, 100.0});
+    REQUIRE(region->geoReference()->hasExplicitWorldOrigin());
 
     // Change CS → both the value and the flag are reset.
-    region->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
-    REQUIRE(region->worldOrigin() == cwGeoPoint{});
-    REQUIRE_FALSE(region->hasExplicitWorldOrigin());
+    region->geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+    REQUIRE(region->geoReference()->worldOrigin() == cwGeoPoint{});
+    REQUIRE_FALSE(region->geoReference()->hasExplicitWorldOrigin());
 
     // A LAZ added afterwards may seed the origin from its bbox center.
     const QString path = writeMinimalLaz(
@@ -174,8 +175,8 @@ TEST_CASE("Auto-adopt: setGlobalCoordinateSystem clears the explicit-set flag",
     REQUIRE(!path.isEmpty());
     addLazAndWait(root.get(), QStringList{path});
 
-    REQUIRE(region->worldOrigin() == cwGeoPoint{2.0, 2.0, 2.0});
-    REQUIRE(region->hasExplicitWorldOrigin());
+    REQUIRE(region->geoReference()->worldOrigin() == cwGeoPoint{2.0, 2.0, 2.0});
+    REQUIRE(region->geoReference()->hasExplicitWorldOrigin());
 }
 
 TEST_CASE("Auto-adopt: second add to fresh project leaves CS unchanged",
@@ -206,5 +207,5 @@ TEST_CASE("Auto-adopt: second add to fresh project leaves CS unchanged",
     addLazAndWait(root.get(), QStringList{second});
 
     // First add wins; subsequent adds skip auto-adopt because the CS is set.
-    REQUIRE(region->globalCoordinateSystem() == kUtmZone10N);
+    REQUIRE(region->geoReference()->globalCoordinateSystem() == kUtmZone10N);
 }

@@ -5,6 +5,7 @@
 #include "cavewhere.pb.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwGeoReference.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwGeoPoint.h"
@@ -122,7 +123,7 @@ TEST_CASE("cwFixStations and globalCS survive a project save/load",
     auto creatorProject = creatorRoot->project();
     auto creatorRegion = creatorProject->cavingRegion();
 
-    creatorRegion->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+    creatorRegion->geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
 
     creatorRegion->addCave();
     auto fixedCave = creatorRegion->cave(0);
@@ -176,7 +177,7 @@ TEST_CASE("cwFixStations and globalCS survive a project save/load",
     auto loadedRegion = loaderProject->cavingRegion();
     REQUIRE(loadedRegion != nullptr);
 
-    CHECK(loadedRegion->globalCoordinateSystem() == QStringLiteral("EPSG:32612"));
+    CHECK(loadedRegion->geoReference()->globalCoordinateSystem() == QStringLiteral("EPSG:32612"));
 
     REQUIRE(loadedRegion->caveCount() == 2);
 
@@ -251,7 +252,7 @@ TEST_CASE("Changing globalCS marks the project modified",
 
     REQUIRE(isProjectModified(project.get()) == false);
 
-    region->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
+    region->geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32612"));
     CHECK(isProjectModified(project.get()));
 }
 

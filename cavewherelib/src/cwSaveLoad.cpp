@@ -19,6 +19,7 @@
 #include "cwFutureManagerModel.h"
 #include "cwTeam.h"
 #include "cwCavingRegion.h"
+#include "cwGeoReference.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwProject.h"
@@ -1834,9 +1835,9 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
     protoMetadata->set_syncenabled(metadata.syncEnabled);
 
     if (region != nullptr) {
-        if (region->hasCoordinateSystem()) {
+        if (region->geoReference()->hasCoordinateSystem()) {
             cwProtoUtils::saveString(protoMetadata->mutable_globalcoordinatesystem(),
-                                     region->globalCoordinateSystem());
+                                     region->geoReference()->globalCoordinateSystem());
         }
 
     }
@@ -3502,7 +3503,7 @@ void cwSaveLoad::connectTreeModel()
         const auto saveMetadata = [this, region]() {
             saveProject(projectRootDir(), region);
         };
-        connect(region, &cwCavingRegion::globalCoordinateSystemChanged, this, saveMetadata);
+        connect(region->geoReference(), &cwGeoReference::globalCoordinateSystemChanged, this, saveMetadata);
 
         // LAZ layers live in "GIS Layers/" inside the project root and are
         // discovered by directory scan, so adds go through cwProject::addFiles

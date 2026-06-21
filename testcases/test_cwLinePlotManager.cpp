@@ -13,6 +13,7 @@
 //Cavewhere includes
 #include "cwLinePlotManager.h"
 #include "cwCavingRegion.h"
+#include "cwGeoReference.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
@@ -939,7 +940,7 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
 
     SECTION("region.setGlobalCS triggers a re-run") {
         REQUIRE(positionSpy.count() == 0);
-        region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
+        region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
         plotManager->waitToFinish();
         CHECK(positionSpy.count() >= 1);
     }
@@ -950,7 +951,7 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
         // Set globalCS first; the spy after that captures only fix-related
         // re-runs. We don't reset the spy between this and the parent
         // setRegion run, so we tally only what happens after this point.
-        region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
+        region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
 
         // Pre-set worldOrigin to a non-sentinel value so the first-solve
         // auto-compute branch in cwLinePlotManager::publishLinePlotResults
@@ -961,7 +962,7 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
         // intermittently see un-shifted positions. The value is arbitrary:
         // the auto-compute guard only checks against the default sentinel.
         const cwGeoPoint kAutoComputeSuppressor{1.0, 1.0, 1.0};
-        region.setWorldOrigin(kAutoComputeSuppressor);
+        region.geoReference()->setWorldOrigin(kAutoComputeSuppressor);
 
         plotManager->waitToFinish();
         const int spyAfterGlobalCS = positionSpy.count();
@@ -985,7 +986,7 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
         // current worldOrigin back to recover absolute projected coords.
         const auto absolutePosition = [&](const QString& station) {
             return cave->stationPositionLookup().position(station)
-                + region.worldOrigin().toVector3D();
+                + region.geoReference()->worldOrigin().toVector3D();
         };
 
         CHECK(positionSpy.count() > spyAfterGlobalCS);
