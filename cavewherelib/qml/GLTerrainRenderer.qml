@@ -121,6 +121,7 @@ Item {
         objectName: "measurementInteraction"
         camera: rendererId.camera
         scene: rendererId.scene
+        region: RootData.region
         turnTableInteraction: turnTableInteractionId
     }
 

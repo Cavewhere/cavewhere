@@ -60,6 +60,13 @@ public:
     QString globalCoordinateSystem() const { return m_globalCoordinateSystem; }
     void setGlobalCoordinateSystem(const QString& cs);
 
+    //! Single definition of "this region is georeferenced": it has a coordinate
+    //! system, so scene points can be placed in a real-world CRS (true/magnetic
+    //! north, WGS84, export). Consumers should ask this rather than re-deriving
+    //! the empty-CS rule. (When the geo-reference slice is extracted into its own
+    //! object this predicate moves with it.)
+    bool hasCoordinateSystem() const { return !m_globalCoordinateSystem.isEmpty(); }
+
     cwGeoPoint worldOrigin() const { return m_worldOrigin.value; }
     void setWorldOrigin(const cwGeoPoint& origin);
 

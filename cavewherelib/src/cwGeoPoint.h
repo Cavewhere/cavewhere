@@ -40,6 +40,16 @@ struct CAVEWHERE_LIB_EXPORT cwGeoPoint
                          float(z - worldOrigin.z));
     }
 
+    //! Inverse of toVector3D(worldOrigin): widens a worldOrigin-relative scene
+    //! point back to a global cwGeoPoint by adding the origin offset. Keeps the
+    //! add in one place so callers don't hand-roll the per-axis arithmetic.
+    static cwGeoPoint fromSceneLocal(const QVector3D& sceneLocal,
+                                     const cwGeoPoint& worldOrigin) {
+        return cwGeoPoint(double(sceneLocal.x()) + worldOrigin.x,
+                          double(sceneLocal.y()) + worldOrigin.y,
+                          double(sceneLocal.z()) + worldOrigin.z);
+    }
+
     bool operator==(const cwGeoPoint& other) const {
         return x == other.x && y == other.y && z == other.z;
     }

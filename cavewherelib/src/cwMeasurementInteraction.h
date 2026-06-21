@@ -10,9 +10,13 @@
 
 //Our includes
 #include "cwScenePicker.h"
+#include "cwAzimuthReference.h"
+class cwCavingRegion;
 
 //Qt includes
+#include <QPointer>
 #include <QPointF>
+#include <QString>
 #include <QVector3D>
 
 /**
@@ -32,6 +36,23 @@ class cwMeasurementInteraction : public cwScenePicker
     QML_NAMED_ELEMENT(MeasurementInteraction)
 
     Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
+
+    Q_PROPERTY(cwCavingRegion* region READ region WRITE setRegion NOTIFY regionChanged)
+
+    // The north reference the azimuth readout is reported against. Selectable by
+    // the user and persisted across sessions; the resolved bearing and whether it
+    // could be computed for the current location/CRS follow in the *reference*
+    // properties below.
+    Q_PROPERTY(cwAzimuthReference::Reference azimuthReference READ azimuthReference WRITE setAzimuthReference NOTIFY azimuthReferenceChanged)
+    // True/Magnetic need a coordinate system; a local-only project has none, so
+    // the selector disables them when this is false (and the active selection
+    // snaps back to Grid).
+    Q_PROPERTY(bool geoReferenced READ geoReferenced NOTIFY referenceChanged)
+    Q_PROPERTY(double referenceAzimuth READ referenceAzimuth NOTIFY referenceChanged)
+    Q_PROPERTY(bool referenceAvailable READ referenceAvailable NOTIFY referenceChanged)
+    Q_PROPERTY(QString referenceReason READ referenceReason NOTIFY referenceChanged)
+    Q_PROPERTY(double convergence READ convergence NOTIFY referenceChanged)
+    Q_PROPERTY(double declination READ declination NOTIFY referenceChanged)
 
     Q_PROPERTY(QVector3D hoverPoint READ hoverPoint NOTIFY hoverChanged)
     Q_PROPERTY(bool hoverSnapped READ hoverSnapped NOTIFY hoverChanged)
@@ -63,6 +84,18 @@ public:
     Mode mode() const { return m_mode; }
     void setMode(Mode mode);
 
+    cwCavingRegion* region() const;
+    void setRegion(cwCavingRegion* region);
+
+    cwAzimuthReference::Reference azimuthReference() const { return m_azimuthReference; }
+    void setAzimuthReference(cwAzimuthReference::Reference reference);
+    bool geoReferenced() const;
+    double referenceAzimuth() const { return m_referenceAzimuth; }
+    bool referenceAvailable() const { return m_referenceAvailable; }
+    QString referenceReason() const { return m_referenceReason; }
+    double convergence() const { return m_convergence; }
+    double declination() const { return m_declination; }
+
     QVector3D hoverPoint() const { return m_hoverPoint; }
     bool hoverSnapped() const { return m_hoverSnapped; }
     bool hoverValid() const { return m_hoverValid; }
@@ -90,6 +123,9 @@ public:
 
 signals:
     void modeChanged();
+    void regionChanged();
+    void azimuthReferenceChanged();
+    void referenceChanged();
     void hoverChanged();
     void measurementChanged();
 
@@ -97,8 +133,19 @@ private:
     bool isPlaceable(const cwScenePick::Result& pick) const;
     void updateMeasurement(QVector3D from, QVector3D to);
     void clearMeasurementValues();
+    void recomputeReference();
+    void syncReferenceToRegion();
 
     Mode m_mode = Mode::Free;
+
+    QPointer<cwCavingRegion> m_region;
+
+    cwAzimuthReference::Reference m_azimuthReference = cwAzimuthReference::Reference::Grid;
+    double m_referenceAzimuth = 0.0;
+    bool m_referenceAvailable = true;
+    QString m_referenceReason;
+    double m_convergence = 0.0;
+    double m_declination = 0.0;
 
     QVector3D m_hoverPoint;
     QPointF m_hoverScreenPoint;

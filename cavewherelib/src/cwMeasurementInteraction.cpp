@@ -8,22 +8,48 @@
 #include "cwMeasurementInteraction.h"
 
 //Our includes
+#include "cwCavingRegion.h"
+#include "cwGeoPoint.h"
 #include "cwMeasurementMath.h"
 
 //Qt includes
 #include <QClipboard>
+#include <QDateTime>
 #include <QGuiApplication>
+#include <QSettings>
 #include <QString>
 
 namespace {
     // Clipboard readout is canonical SI: metres for lengths, degrees for angles.
     constexpr int kLengthDecimals = 3;
     constexpr int kAngleDecimals = 1;
+
+    QString azimuthReferenceKey() { return QStringLiteral("measurement/azimuthReference"); }
+
+    // Persisted as an int; guard against an out-of-range value from a future or
+    // corrupt settings file by falling back to Grid.
+    cwAzimuthReference::Reference loadAzimuthReference()
+    {
+        using Reference = cwAzimuthReference::Reference;
+        QSettings settings;
+        const int stored = settings.value(azimuthReferenceKey(),
+                                           int(Reference::Grid)).toInt();
+        switch (stored) {
+        case int(Reference::True):     return Reference::True;
+        case int(Reference::Magnetic): return Reference::Magnetic;
+        default:                       return Reference::Grid;
+        }
+    }
 }
 
 cwMeasurementInteraction::cwMeasurementInteraction(QQuickItem* parent) :
-    cwScenePicker(parent)
+    cwScenePicker(parent),
+    m_azimuthReference(loadAzimuthReference())
 {
+    // Resolve once up front so the reference readout is self-consistent from
+    // construction — e.g. a persisted True/Magnetic with no region yet reports
+    // n/a rather than the default "available, azimuth 0".
+    recomputeReference();
 }
 
 cwMeasurementInteraction::~cwMeasurementInteraction() = default;
@@ -37,6 +63,99 @@ void cwMeasurementInteraction::setMode(Mode mode)
     // already-placed free point stays put.
     m_mode = mode;
     emit modeChanged();
+}
+
+cwCavingRegion* cwMeasurementInteraction::region() const
+{
+    return m_region;
+}
+
+bool cwMeasurementInteraction::geoReferenced() const
+{
+    return m_region && m_region->hasCoordinateSystem();
+}
+
+void cwMeasurementInteraction::setRegion(cwCavingRegion* region)
+{
+    if (m_region == region) {
+        return;
+    }
+    // The region supplies the worldOrigin and CRS that turn the grid azimuth
+    // into a true/magnetic bearing. A CRS change can also invalidate the current
+    // reference (a local-only project has none), so it routes through
+    // syncReferenceToRegion; an origin change only moves the location. Unlike
+    // cwCoordinatePicker we hold no WGS84 transform to rebuild and no pick to
+    // clear, so this stays off the cwScenePicker base.
+    if (m_region) {
+        disconnect(m_region, &cwCavingRegion::globalCoordinateSystemChanged,
+                   this, &cwMeasurementInteraction::syncReferenceToRegion);
+        disconnect(m_region, &cwCavingRegion::worldOriginChanged,
+                   this, &cwMeasurementInteraction::recomputeReference);
+    }
+    m_region = region;
+    if (m_region) {
+        connect(m_region, &cwCavingRegion::globalCoordinateSystemChanged,
+                this, &cwMeasurementInteraction::syncReferenceToRegion);
+        connect(m_region, &cwCavingRegion::worldOriginChanged,
+                this, &cwMeasurementInteraction::recomputeReference);
+    }
+    emit regionChanged();
+    syncReferenceToRegion();
+}
+
+void cwMeasurementInteraction::setAzimuthReference(cwAzimuthReference::Reference reference)
+{
+    // True/Magnetic need a coordinate system; without one a local-only project
+    // can only report grid north, so coerce the selection to Grid.
+    if (reference != cwAzimuthReference::Reference::Grid && !geoReferenced()) {
+        reference = cwAzimuthReference::Reference::Grid;
+    }
+    if (m_azimuthReference == reference) {
+        return;
+    }
+    m_azimuthReference = reference;
+    QSettings settings;
+    settings.setValue(azimuthReferenceKey(), int(reference));
+    emit azimuthReferenceChanged();
+    recomputeReference();
+}
+
+void cwMeasurementInteraction::syncReferenceToRegion()
+{
+    // A region/CRS change can leave True or Magnetic selected on a project that
+    // no longer supports them; snap the active selection back to Grid (persisted,
+    // per the chosen behavior). When the selection is still valid we just
+    // re-resolve for the new region's origin and CRS.
+    if (!geoReferenced() && m_azimuthReference != cwAzimuthReference::Reference::Grid) {
+        setAzimuthReference(cwAzimuthReference::Reference::Grid);
+    } else {
+        recomputeReference();
+    }
+}
+
+void cwMeasurementInteraction::recomputeReference()
+{
+    // Resolve against the first picked point (per spec); during a live preview
+    // that point is already placed, so the bearing tracks the moving second end.
+    cwGeoPoint location;
+    QString sourceCS;
+    if (m_region) {
+        location = cwGeoPoint::fromSceneLocal(m_firstPoint, m_region->worldOrigin());
+        sourceCS = m_region->globalCoordinateSystem();
+    }
+
+    // UTC is enough for IGRF (it keys on the decimal year) and is faster and
+    // DST-stable versus currentDateTime().
+    const cwAzimuthReference::Result resolved = cwAzimuthReference::resolve(
+                m_azimuth, m_azimuthReference, location, sourceCS,
+                QDateTime::currentDateTimeUtc());
+
+    m_referenceAzimuth = resolved.azimuth;
+    m_referenceAvailable = resolved.available;
+    m_referenceReason = resolved.reason;
+    m_convergence = resolved.convergence;
+    m_declination = resolved.declination;
+    emit referenceChanged();
 }
 
 bool cwMeasurementInteraction::isPlaceable(const cwScenePick::Result& pick) const
@@ -54,6 +173,7 @@ void cwMeasurementInteraction::updateMeasurement(QVector3D from, QVector3D to)
     m_vertical = m.vertical;
     m_deltaEast = m.deltaEast;
     m_deltaNorth = m.deltaNorth;
+    recomputeReference();
 }
 
 void cwMeasurementInteraction::clearMeasurementValues()
@@ -65,6 +185,7 @@ void cwMeasurementInteraction::clearMeasurementValues()
     m_vertical = 0.0;
     m_deltaEast = 0.0;
     m_deltaNorth = 0.0;
+    recomputeReference();
 }
 
 void cwMeasurementInteraction::hover(QPointF screenPoint)
