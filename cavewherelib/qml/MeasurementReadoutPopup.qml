@@ -35,6 +35,23 @@ QC.Popup {
         return qsTr("%1°").arg(Number(degrees).toFixed(root._anglePrecision))
     }
 
+    // The azimuth value's tooltip: the reason when n/a, otherwise the
+    // east-positive corrections folded into the displayed bearing (so the value
+    // is reproducible). Grid needs none, so its detail is empty.
+    function _azimuthDetail() {
+        if (!root.interaction.referenceAvailable) {
+            return root.interaction.referenceReason
+        }
+        if (root.interaction.azimuthReference === AzimuthReference.Grid) {
+            return ""
+        }
+        let parts = [qsTr("Convergence %1°").arg(Number(root.interaction.convergence).toFixed(root._anglePrecision))]
+        if (root.interaction.azimuthReference === AzimuthReference.Magnetic) {
+            parts.push(qsTr("Declination %1°").arg(Number(root.interaction.declination).toFixed(root._anglePrecision)))
+        }
+        return parts.join(qsTr(" · "))
+    }
+
     component ReadoutRow: RowLayout {
         id: rowId
         required property string label
@@ -96,6 +113,16 @@ QC.Popup {
         radius: Theme.floatingWidgetRadius
     }
 
+    // The detailed azimuth reference (PROJ grid convergence + IGRF) only resolves
+    // while this panel is expanded and on screen, so the per-hover live preview
+    // and the collapsed distance chip stay cheap.
+    QQ.Binding {
+        target: root.interaction
+        property: "calculateDetails"
+        value: root.visible && !root.collapsed
+        restoreMode: QQ.Binding.RestoreNone
+    }
+
     contentItem: ColumnLayout {
         spacing: 8
 
@@ -131,7 +158,80 @@ QC.Popup {
             spacing: 8
 
             ReadoutRow { label: qsTr("Distance"); value: root._length(root.interaction.distance); valueName: "measurementDistanceValue" }
-            ReadoutRow { label: qsTr("Azimuth (grid)"); value: root._angle(root.interaction.azimuth) }
+
+            // Azimuth gets a north-reference selector in place of a fixed label:
+            // Grid (the map) / True (the globe) / Magnetic (your compass). True
+            // and Magnetic need a coordinate system, so they disable — and the
+            // value reads n/a — on a local-only or invalid-CRS project.
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                // "Azimuth" stays flush-left with the other row labels; the "?"
+                // sits after the selector it explains rather than in a left gutter.
+                QC.Label {
+                    text: qsTr("Azimuth")
+                    color: Theme.textSecondary
+                }
+
+                QC.ComboBox {
+                    id: azimuthReferenceCombo
+                    objectName: "azimuthReferenceCombo"
+                    Layout.preferredWidth: implicitWidth
+
+                    // Rows are in enum order (Grid/True/Magnetic), so a row index
+                    // is its own AzimuthReference value. Driven by the property,
+                    // not the reverse, so a C++ coerce back to Grid (no CRS) shows.
+                    model: [qsTr("Grid"), qsTr("True"), qsTr("Magnetic (today)")]
+                    currentIndex: root.interaction.azimuthReference
+
+                    onActivated: (index) => { root.interaction.azimuthReference = index }
+
+                    delegate: QC.ItemDelegate {
+                        id: azimuthItemId
+                        required property string modelData
+                        required property int index
+
+                        width: azimuthReferenceCombo.width
+                        text: azimuthItemId.modelData
+                        // Row 0 (Grid) is always available; True/Magnetic need a CS.
+                        enabled: azimuthItemId.index === 0 || root.interaction.geoReferenced
+                        highlighted: azimuthReferenceCombo.highlightedIndex === azimuthItemId.index
+                    }
+                }
+
+                InformationButton {
+                    showItemOnClick: azimuthHelpId
+                }
+
+                QQ.Item { Layout.fillWidth: true }
+
+                QC.Label {
+                    objectName: "azimuthReferenceValue"
+                    text: root.interaction.referenceAvailable
+                          ? root._angle(root.interaction.referenceAzimuth)
+                          : qsTr("n/a")
+                    color: root.interaction.referenceAvailable ? Theme.text : Theme.textSecondary
+                    font.family: Theme.fontFamilyMono
+
+                    QQ.HoverHandler { id: azimuthValueHover }
+
+                    QC.ToolTip.visible: azimuthValueHover.hovered && root._azimuthDetail().length > 0
+                    QC.ToolTip.text: root._azimuthDetail()
+                }
+            }
+
+            HelpArea {
+                id: azimuthHelpId
+                Layout.fillWidth: true
+                // Each paragraph is its own qsTr() so it extracts as a complete,
+                // translatable sentence (a concatenated qsTr argument doesn't).
+                text: qsTr("<b>Azimuth reference</b> — which north the bearing is measured from. <b>Grid = the map, True = the globe, Magnetic = your compass.</b>")
+                      + "<br><br>" + qsTr("<b>Grid</b> — north of the map's coordinate grid (e.g. UTM grid lines). Matches the 3D view, the survey's coordinates, and a printed map.")
+                      + "<br>" + qsTr("<b>True</b> — geographic north, toward the pole. Differs from grid by the grid convergence at this location.")
+                      + "<br>" + qsTr("<b>Magnetic (today)</b> — where a compass points right now. Differs from true by the magnetic declination, which drifts over time, so it's computed for today's date at this location.")
+            }
+
             ReadoutRow { label: qsTr("Inclination"); value: root._angle(root.interaction.inclination) }
             ReadoutRow { label: qsTr("Horizontal"); value: root._length(root.interaction.horizontal) }
             ReadoutRow { label: qsTr("Vertical"); value: root._length(root.interaction.vertical) }

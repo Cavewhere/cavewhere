@@ -26,6 +26,19 @@ namespace {
 
     QString azimuthReferenceKey() { return QStringLiteral("measurement/azimuthReference"); }
 
+    // The parenthetical that tags the azimuth in the clipboard readout, so a
+    // pasted measurement says which north it is against (matching the on-screen
+    // selector). Magnetic carries "today" because it's the present-day field.
+    QString azimuthReferenceClipboardLabel(cwAzimuthReference::Reference reference)
+    {
+        switch (reference) {
+        case cwAzimuthReference::Reference::True:     return QStringLiteral("true");
+        case cwAzimuthReference::Reference::Magnetic: return QStringLiteral("magnetic, today");
+        case cwAzimuthReference::Reference::Grid:     break;
+        }
+        return QStringLiteral("grid");
+    }
+
     // Persisted as an int; guard against an out-of-range value from a future or
     // corrupt settings file by falling back to Grid.
     cwAzimuthReference::Reference loadAzimuthReference()
@@ -47,9 +60,9 @@ cwMeasurementInteraction::cwMeasurementInteraction(QQuickItem* parent) :
     m_azimuthReference(loadAzimuthReference())
 {
     // Resolve once up front so the reference readout is self-consistent from
-    // construction — e.g. a persisted True/Magnetic with no region yet reports
-    // n/a rather than the default "available, azimuth 0".
-    recomputeReference();
+    // construction. With no measurement yet this takes the cheap grid-passthrough
+    // path; the detailed resolve waits for a frozen, expanded readout.
+    refreshReference();
 }
 
 cwMeasurementInteraction::~cwMeasurementInteraction() = default;
@@ -88,17 +101,29 @@ void cwMeasurementInteraction::setGeoReference(cwGeoReference* geoReference)
         disconnect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
                    this, &cwMeasurementInteraction::syncReferenceToGeoReference);
         disconnect(m_geoReference, &cwGeoReference::worldOriginChanged,
-                   this, &cwMeasurementInteraction::recomputeReference);
+                   this, &cwMeasurementInteraction::refreshReference);
     }
     m_geoReference = geoReference;
     if (m_geoReference) {
         connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
                 this, &cwMeasurementInteraction::syncReferenceToGeoReference);
         connect(m_geoReference, &cwGeoReference::worldOriginChanged,
-                this, &cwMeasurementInteraction::recomputeReference);
+                this, &cwMeasurementInteraction::refreshReference);
     }
     emit geoReferenceChanged();
     syncReferenceToGeoReference();
+}
+
+void cwMeasurementInteraction::setCalculateDetails(bool calculateDetails)
+{
+    if (m_calculateDetails == calculateDetails) {
+        return;
+    }
+    m_calculateDetails = calculateDetails;
+    emit calculateDetailsChanged();
+    // Turning this on for a frozen measurement is the trigger that resolves the
+    // detailed reference; turning it off drops back to the cheap grid bearing.
+    refreshReference();
 }
 
 void cwMeasurementInteraction::setAzimuthReference(cwAzimuthReference::Reference reference)
@@ -115,7 +140,7 @@ void cwMeasurementInteraction::setAzimuthReference(cwAzimuthReference::Reference
     QSettings settings;
     settings.setValue(azimuthReferenceKey(), int(reference));
     emit azimuthReferenceChanged();
-    recomputeReference();
+    refreshReference();
 }
 
 void cwMeasurementInteraction::syncReferenceToGeoReference()
@@ -127,32 +152,53 @@ void cwMeasurementInteraction::syncReferenceToGeoReference()
     if (!geoReferenced() && m_azimuthReference != cwAzimuthReference::Reference::Grid) {
         setAzimuthReference(cwAzimuthReference::Reference::Grid);
     } else {
-        recomputeReference();
+        refreshReference();
     }
 }
 
-void cwMeasurementInteraction::recomputeReference()
+void cwMeasurementInteraction::refreshReference()
 {
-    // Resolve against the first picked point (per spec); during a live preview
-    // that point is already placed, so the bearing tracks the moving second end.
-    cwGeoPoint location;
-    QString sourceCS;
-    if (m_geoReference) {
-        location = m_geoReference->toGlobal(m_firstPoint);
-        sourceCS = m_geoReference->globalCoordinateSystem();
+    using Reference = cwAzimuthReference::Reference;
+
+    // The True/Magnetic resolve rebuilds a PROJ transform (grid convergence) and
+    // runs IGRF (declination) — too costly to repeat per hover. Run it only for a
+    // frozen measurement whose detailed readout is on screen; otherwise (live
+    // preview, collapsed chip, hidden panel, or the always-grid default) the
+    // azimuth row tracks the cheap grid bearing with no coordinate transform.
+    const bool resolveDetailed = m_hasMeasurement
+                                 && m_calculateDetails
+                                 && m_azimuthReference != Reference::Grid;
+    if (!resolveDetailed) {
+        applyReferenceResult(cwAzimuthReference::resolve(
+                m_azimuth, Reference::Grid, cwGeoPoint{}, QString{}, QDateTime{}));
+        return;
     }
 
-    // UTC is enough for IGRF (it keys on the decimal year) and is faster and
-    // DST-stable versus currentDateTime().
-    const cwAzimuthReference::Result resolved = cwAzimuthReference::resolve(
+    // Resolve against the first picked point (per spec). UTC is enough for IGRF
+    // (it keys on the decimal year) and is faster and DST-stable versus local.
+    const cwGeoPoint location = m_geoReference ? m_geoReference->toGlobal(m_firstPoint)
+                                               : cwGeoPoint{};
+    const QString sourceCS = m_geoReference ? m_geoReference->globalCoordinateSystem()
+                                            : QString{};
+    applyReferenceResult(cwAzimuthReference::resolve(
                 m_azimuth, m_azimuthReference, location, sourceCS,
-                QDateTime::currentDateTimeUtc());
+                QDateTime::currentDateTimeUtc()));
+}
 
-    m_referenceAzimuth = resolved.azimuth;
-    m_referenceAvailable = resolved.available;
-    m_referenceReason = resolved.reason;
-    m_convergence = resolved.convergence;
-    m_declination = resolved.declination;
+void cwMeasurementInteraction::applyReferenceResult(const cwAzimuthReference::Result& result)
+{
+    if (m_referenceAzimuth == result.azimuth
+            && m_referenceAvailable == result.available
+            && m_convergence == result.convergence
+            && m_declination == result.declination
+            && m_referenceReason == result.reason) {
+        return;
+    }
+    m_referenceAzimuth = result.azimuth;
+    m_referenceAvailable = result.available;
+    m_referenceReason = result.reason;
+    m_convergence = result.convergence;
+    m_declination = result.declination;
     emit referenceChanged();
 }
 
@@ -171,7 +217,7 @@ void cwMeasurementInteraction::updateMeasurement(QVector3D from, QVector3D to)
     m_vertical = m.vertical;
     m_deltaEast = m.deltaEast;
     m_deltaNorth = m.deltaNorth;
-    recomputeReference();
+    refreshReference();
 }
 
 void cwMeasurementInteraction::clearMeasurementValues()
@@ -183,7 +229,7 @@ void cwMeasurementInteraction::clearMeasurementValues()
     m_vertical = 0.0;
     m_deltaEast = 0.0;
     m_deltaNorth = 0.0;
-    recomputeReference();
+    refreshReference();
 }
 
 void cwMeasurementInteraction::hover(QPointF screenPoint)
@@ -232,8 +278,10 @@ void cwMeasurementInteraction::place(QPointF screenPoint)
     }
 
     m_secondPoint = m_hoverPoint;
-    updateMeasurement(m_firstPoint, m_secondPoint);
+    // Freeze before updating so refreshReference() sees a complete measurement
+    // and resolves the detailed reference when the panel is already expanded.
     m_hasMeasurement = true;
+    updateMeasurement(m_firstPoint, m_secondPoint);
     emit measurementChanged();
 }
 
@@ -256,22 +304,34 @@ void cwMeasurementInteraction::copyToClipboard() const
         return;
     }
 
-    // Vertical is the ΔZ component, so it is reported once (no separate ΔUp).
+    // The azimuth is reported against the selected reference so the pasted text
+    // matches the on-screen readout. An unavailable reference (no/invalid CRS)
+    // pastes "n/a (reason)" rather than a silently-wrong grid value. Grid always
+    // resolves, so m_referenceAzimuth is the grid azimuth in that case.
+    const QString azimuthValue = m_referenceAvailable
+            ? QStringLiteral("%1°").arg(m_referenceAzimuth, 0, 'f', kAngleDecimals)
+            : QStringLiteral("n/a (%1)").arg(m_referenceReason);
+    const QString azimuthLine =
+            QStringLiteral("Azimuth (%1): %2")
+            .arg(azimuthReferenceClipboardLabel(m_azimuthReference), azimuthValue);
+
+    // azimuthLine is concatenated, not fed through a numbered placeholder: it can
+    // carry referenceReason (a PROJ/IGRF error string), and an embedded %N there
+    // would be re-targeted by the later .arg() calls. Vertical is the ΔZ
+    // component, so it is reported once (no separate ΔUp).
     const QString text =
-            QStringLiteral("Distance: %1 m\n"
-                           "Azimuth (grid): %2°\n"
-                           "Inclination: %3°\n"
-                           "Horizontal: %4 m\n"
-                           "Vertical: %5 m\n"
-                           "ΔEast: %6 m\n"
-                           "ΔNorth: %7 m")
-            .arg(m_distance, 0, 'f', kLengthDecimals)
-            .arg(m_azimuth, 0, 'f', kAngleDecimals)
-            .arg(m_inclination, 0, 'f', kAngleDecimals)
-            .arg(m_horizontal, 0, 'f', kLengthDecimals)
-            .arg(m_vertical, 0, 'f', kLengthDecimals)
-            .arg(m_deltaEast, 0, 'f', kLengthDecimals)
-            .arg(m_deltaNorth, 0, 'f', kLengthDecimals);
+            QStringLiteral("Distance: %1 m\n").arg(m_distance, 0, 'f', kLengthDecimals)
+            + azimuthLine + QStringLiteral("\n")
+            + QStringLiteral("Inclination: %1°\n"
+                             "Horizontal: %2 m\n"
+                             "Vertical: %3 m\n"
+                             "ΔEast: %4 m\n"
+                             "ΔNorth: %5 m")
+              .arg(m_inclination, 0, 'f', kAngleDecimals)
+              .arg(m_horizontal, 0, 'f', kLengthDecimals)
+              .arg(m_vertical, 0, 'f', kLengthDecimals)
+              .arg(m_deltaEast, 0, 'f', kLengthDecimals)
+              .arg(m_deltaNorth, 0, 'f', kLengthDecimals);
 
     if (QClipboard* clipboard = QGuiApplication::clipboard()) {
         clipboard->setText(text);

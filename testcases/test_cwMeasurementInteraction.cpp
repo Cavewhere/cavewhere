@@ -6,6 +6,8 @@
 #include <numeric>
 
 // Qt
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QMatrix4x4>
 #include <QPointF>
 #include <QRect>
@@ -202,6 +204,10 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
     interaction.setCamera(&camera);
     interaction.setScene(&scene);
     interaction.setGeoReference(region.geoReference());
+    // The expensive grid-convergence/declination resolve only runs while the
+    // detailed readout is on screen; the view sets this. Enable it so the
+    // detailed-reference assertions below exercise the real resolve.
+    interaction.setCalculateDetails(true);
 
     // Place A then B: 60 m due east, so the grid azimuth is 90°.
     interaction.place(camera.project(a));
@@ -246,10 +252,47 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
         CHECK(interaction.declination() != 0.0);
     }
 
+    SECTION("a collapsed readout defers the detailed resolve to the grid bearing") {
+        // The performance contract: until the detailed readout is on screen the
+        // expensive True/Magnetic resolve is skipped and the azimuth row reads grid.
+        interaction.setCalculateDetails(false);
+        interaction.setAzimuthReference(cwAzimuthReference::Reference::True);
+        CHECK(interaction.referenceAvailable());
+        CHECK(interaction.convergence() == Approx(0.0));
+        CHECK(interaction.referenceAzimuth() == Approx(interaction.azimuth()));
+
+        // Enabling it resolves for real: a non-zero convergence shifts the bearing.
+        interaction.setCalculateDetails(true);
+        CHECK(interaction.convergence() > 0.0);
+        CHECK(interaction.referenceAzimuth()
+              != Approx(interaction.azimuth()));
+    }
+
     SECTION("switching the selection re-resolves the bearing") {
         const double gridBearing = interaction.referenceAzimuth();
         interaction.setAzimuthReference(cwAzimuthReference::Reference::True);
         CHECK(interaction.referenceAzimuth() != Approx(gridBearing));
+    }
+
+    SECTION("the clipboard azimuth line follows the selected reference") {
+        QClipboard* clipboard = QGuiApplication::clipboard();
+        REQUIRE(clipboard != nullptr);
+
+        interaction.copyToClipboard();
+        CHECK(clipboard->text().contains(QStringLiteral("Azimuth (grid): 90.0°")));
+
+        interaction.setAzimuthReference(cwAzimuthReference::Reference::True);
+        interaction.copyToClipboard();
+        const QString trueText = clipboard->text();
+        CHECK(trueText.contains(QStringLiteral("Azimuth (true): ")));
+        CHECK_FALSE(trueText.contains(QStringLiteral("n/a")));
+
+        // An invalid CRS leaves True selected but unresolvable: the line pastes
+        // an honest n/a with the reason, never a silently-wrong grid number.
+        region.setGlobalCoordinateSystem(QStringLiteral("EPSG:999999"));
+        REQUIRE(interaction.azimuthReference() == cwAzimuthReference::Reference::True);
+        interaction.copyToClipboard();
+        CHECK(clipboard->text().contains(QStringLiteral("Azimuth (true): n/a (")));
     }
 
     SECTION("losing the coordinate system snaps the selection back to Grid") {

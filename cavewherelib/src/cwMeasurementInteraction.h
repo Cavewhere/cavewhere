@@ -47,6 +47,14 @@ class cwMeasurementInteraction : public cwScenePicker
     // could be computed for the current location/CRS follow in the *reference*
     // properties below.
     Q_PROPERTY(cwAzimuthReference::Reference azimuthReference READ azimuthReference WRITE setAzimuthReference NOTIFY azimuthReferenceChanged)
+
+    // True/Magnetic resolution needs PROJ (grid convergence) and IGRF and is the
+    // expensive part of the readout. The view sets this true only while the
+    // detailed readout is on screen (expanded and visible), so the resolve is
+    // skipped during the live preview, when collapsed to the distance chip, or
+    // when the readout is hidden — there the azimuth row just tracks the cheap
+    // grid bearing.
+    Q_PROPERTY(bool calculateDetails READ calculateDetails WRITE setCalculateDetails NOTIFY calculateDetailsChanged)
     // True/Magnetic need a coordinate system; a local-only project has none, so
     // the selector disables them when this is false (and the active selection
     // snaps back to Grid).
@@ -92,6 +100,8 @@ public:
 
     cwAzimuthReference::Reference azimuthReference() const { return m_azimuthReference; }
     void setAzimuthReference(cwAzimuthReference::Reference reference);
+    bool calculateDetails() const { return m_calculateDetails; }
+    void setCalculateDetails(bool calculateDetails);
     bool geoReferenced() const;
     double referenceAzimuth() const { return m_referenceAzimuth; }
     bool referenceAvailable() const { return m_referenceAvailable; }
@@ -128,6 +138,7 @@ signals:
     void modeChanged();
     void geoReferenceChanged();
     void azimuthReferenceChanged();
+    void calculateDetailsChanged();
     void referenceChanged();
     void hoverChanged();
     void measurementChanged();
@@ -136,7 +147,8 @@ private:
     bool isPlaceable(const cwScenePick::Result& pick) const;
     void updateMeasurement(QVector3D from, QVector3D to);
     void clearMeasurementValues();
-    void recomputeReference();
+    void refreshReference();
+    void applyReferenceResult(const cwAzimuthReference::Result& result);
     void syncReferenceToGeoReference();
 
     Mode m_mode = Mode::Free;
@@ -144,6 +156,7 @@ private:
     QPointer<cwGeoReference> m_geoReference;
 
     cwAzimuthReference::Reference m_azimuthReference = cwAzimuthReference::Reference::Grid;
+    bool m_calculateDetails = false;
     double m_referenceAzimuth = 0.0;
     bool m_referenceAvailable = true;
     QString m_referenceReason;

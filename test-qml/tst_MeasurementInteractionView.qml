@@ -268,5 +268,60 @@ MainWindowTest {
                    "Chip background has no margin for its text: rect " + chip.parent.width
                    + " vs contentWidth " + chip.contentWidth)
         }
+
+        // The azimuth row carries a north-reference selector whose value tracks
+        // the resolved bearing, and the Copy text reflects the selection. The
+        // resolve numerics are covered by the [cwMeasurementInteraction] and
+        // [cwAzimuthReference] C++ tests; here we verify the view wiring: the
+        // combo reflects the property both ways and the value label binds.
+        function test_azimuthReferenceSelector() {
+            let renderer = _setupCompletedMeasurement()
+            let measurement = renderer.measurementInteraction
+
+            let popup = renderer.measurementReadoutPopup
+            verify(popup !== null, "Readout popup exposed")
+            popup.collapsed = false
+            tryVerify(() => popup.visible === true, 1000, "Readout popup visible")
+
+            let combo = _findByObjectName(popup.contentItem, "azimuthReferenceCombo")
+            verify(combo !== null, "Azimuth reference combo found")
+            let valueField = _findByObjectName(popup.contentItem, "azimuthReferenceValue")
+            verify(valueField !== null, "Azimuth reference value found")
+
+            // The expanded panel drives calculateDetails, which gates the detailed
+            // reference resolve (the per-hover perf fix).
+            tryVerify(() => measurement.calculateDetails === true, 1000,
+                      "Expanded readout enables the detailed resolve")
+
+            // Drive from a known reference (settings persist across runs, so don't
+            // assume the default). Grid always resolves and mirrors the grid azimuth.
+            measurement.azimuthReference = AzimuthReference.Grid
+            tryCompare(combo, "currentIndex", 0, 1000, "Grid selects row 0")
+            compare(valueField.text, qsTr("%1°").arg(Number(measurement.referenceAzimuth).toFixed(1)),
+                    "Grid value mirrors the resolved azimuth")
+
+            // The property drives the combo (a C++ coerce back to Grid must be
+            // reflected), so setting it must move the selection.
+            if (measurement.geoReferenced) {
+                measurement.azimuthReference = AzimuthReference.True
+                tryCompare(combo, "currentIndex", 1, 1000, "True selects row 1")
+                let expected = measurement.referenceAvailable
+                    ? qsTr("%1°").arg(Number(measurement.referenceAzimuth).toFixed(1))
+                    : qsTr("n/a")
+                compare(valueField.text, expected, "True value follows availability")
+
+                measurement.copyToClipboard()
+                verify(TestHelper.clipboardText().indexOf("Azimuth (true)") !== -1,
+                       "Clipboard reports the True reference")
+            } else {
+                // Local-only project: True/Magnetic aren't selectable, so the
+                // property snaps back to Grid and the combo stays on row 0.
+                measurement.azimuthReference = AzimuthReference.True
+                tryCompare(combo, "currentIndex", 0, 1000, "True coerces to Grid without a CRS")
+                measurement.copyToClipboard()
+                verify(TestHelper.clipboardText().indexOf("Azimuth (grid)") !== -1,
+                       "Clipboard reports the Grid reference")
+            }
+        }
     }
 }
