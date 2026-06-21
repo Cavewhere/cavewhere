@@ -103,7 +103,7 @@ Item {
         objectName: "coordinatePicker"
         camera: rendererId.camera
         scene: rendererId.scene
-        region: RootData.region
+        geoReference: RootData.region.geoReference
         turnTableInteraction: turnTableInteractionId
     }
 
@@ -121,7 +121,7 @@ Item {
         objectName: "measurementInteraction"
         camera: rendererId.camera
         scene: rendererId.scene
-        region: RootData.region
+        geoReference: RootData.region.geoReference
         turnTableInteraction: turnTableInteractionId
     }
 

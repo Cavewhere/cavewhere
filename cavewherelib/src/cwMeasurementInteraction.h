@@ -11,7 +11,7 @@
 //Our includes
 #include "cwScenePicker.h"
 #include "cwAzimuthReference.h"
-class cwCavingRegion;
+class cwGeoReference;
 
 //Qt includes
 #include <QPointer>
@@ -37,7 +37,10 @@ class cwMeasurementInteraction : public cwScenePicker
 
     Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
 
-    Q_PROPERTY(cwCavingRegion* region READ region WRITE setRegion NOTIFY regionChanged)
+    // The geo-reference slice (CS + worldOrigin) supplies what turns the grid
+    // azimuth into a true/magnetic bearing. Taking the slice rather than the
+    // whole region keeps this interaction's dependency to exactly what it reads.
+    Q_PROPERTY(cwGeoReference* geoReference READ geoReference WRITE setGeoReference NOTIFY geoReferenceChanged)
 
     // The north reference the azimuth readout is reported against. Selectable by
     // the user and persisted across sessions; the resolved bearing and whether it
@@ -84,8 +87,8 @@ public:
     Mode mode() const { return m_mode; }
     void setMode(Mode mode);
 
-    cwCavingRegion* region() const;
-    void setRegion(cwCavingRegion* region);
+    cwGeoReference* geoReference() const;
+    void setGeoReference(cwGeoReference* geoReference);
 
     cwAzimuthReference::Reference azimuthReference() const { return m_azimuthReference; }
     void setAzimuthReference(cwAzimuthReference::Reference reference);
@@ -123,7 +126,7 @@ public:
 
 signals:
     void modeChanged();
-    void regionChanged();
+    void geoReferenceChanged();
     void azimuthReferenceChanged();
     void referenceChanged();
     void hoverChanged();
@@ -134,11 +137,11 @@ private:
     void updateMeasurement(QVector3D from, QVector3D to);
     void clearMeasurementValues();
     void recomputeReference();
-    void syncReferenceToRegion();
+    void syncReferenceToGeoReference();
 
     Mode m_mode = Mode::Free;
 
-    QPointer<cwCavingRegion> m_region;
+    QPointer<cwGeoReference> m_geoReference;
 
     cwAzimuthReference::Reference m_azimuthReference = cwAzimuthReference::Reference::Grid;
     double m_referenceAzimuth = 0.0;

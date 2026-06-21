@@ -8,8 +8,8 @@
 #include "cwMeasurementInteraction.h"
 
 //Our includes
-#include "cwCavingRegion.h"
 #include "cwGeoPoint.h"
+#include "cwGeoReference.h"
 #include "cwMeasurementMath.h"
 
 //Qt includes
@@ -65,42 +65,40 @@ void cwMeasurementInteraction::setMode(Mode mode)
     emit modeChanged();
 }
 
-cwCavingRegion* cwMeasurementInteraction::region() const
+cwGeoReference* cwMeasurementInteraction::geoReference() const
 {
-    return m_region;
+    return m_geoReference;
 }
 
 bool cwMeasurementInteraction::geoReferenced() const
 {
-    return m_region && m_region->hasCoordinateSystem();
+    return m_geoReference && m_geoReference->hasCoordinateSystem();
 }
 
-void cwMeasurementInteraction::setRegion(cwCavingRegion* region)
+void cwMeasurementInteraction::setGeoReference(cwGeoReference* geoReference)
 {
-    if (m_region == region) {
+    if (m_geoReference == geoReference) {
         return;
     }
-    // The region supplies the worldOrigin and CRS that turn the grid azimuth
-    // into a true/magnetic bearing. A CRS change can also invalidate the current
-    // reference (a local-only project has none), so it routes through
-    // syncReferenceToRegion; an origin change only moves the location. Unlike
-    // cwCoordinatePicker we hold no WGS84 transform to rebuild and no pick to
-    // clear, so this stays off the cwScenePicker base.
-    if (m_region) {
-        disconnect(m_region, &cwCavingRegion::globalCoordinateSystemChanged,
-                   this, &cwMeasurementInteraction::syncReferenceToRegion);
-        disconnect(m_region, &cwCavingRegion::worldOriginChanged,
+    // The geo-reference supplies the worldOrigin and CRS that turn the grid
+    // azimuth into a true/magnetic bearing. A CRS change can also invalidate the
+    // current reference (a local-only project has none), so it routes through
+    // syncReferenceToGeoReference; an origin change only moves the location.
+    if (m_geoReference) {
+        disconnect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
+                   this, &cwMeasurementInteraction::syncReferenceToGeoReference);
+        disconnect(m_geoReference, &cwGeoReference::worldOriginChanged,
                    this, &cwMeasurementInteraction::recomputeReference);
     }
-    m_region = region;
-    if (m_region) {
-        connect(m_region, &cwCavingRegion::globalCoordinateSystemChanged,
-                this, &cwMeasurementInteraction::syncReferenceToRegion);
-        connect(m_region, &cwCavingRegion::worldOriginChanged,
+    m_geoReference = geoReference;
+    if (m_geoReference) {
+        connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
+                this, &cwMeasurementInteraction::syncReferenceToGeoReference);
+        connect(m_geoReference, &cwGeoReference::worldOriginChanged,
                 this, &cwMeasurementInteraction::recomputeReference);
     }
-    emit regionChanged();
-    syncReferenceToRegion();
+    emit geoReferenceChanged();
+    syncReferenceToGeoReference();
 }
 
 void cwMeasurementInteraction::setAzimuthReference(cwAzimuthReference::Reference reference)
@@ -120,12 +118,12 @@ void cwMeasurementInteraction::setAzimuthReference(cwAzimuthReference::Reference
     recomputeReference();
 }
 
-void cwMeasurementInteraction::syncReferenceToRegion()
+void cwMeasurementInteraction::syncReferenceToGeoReference()
 {
-    // A region/CRS change can leave True or Magnetic selected on a project that
-    // no longer supports them; snap the active selection back to Grid (persisted,
-    // per the chosen behavior). When the selection is still valid we just
-    // re-resolve for the new region's origin and CRS.
+    // A geo-reference/CRS change can leave True or Magnetic selected on a project
+    // that no longer supports them; snap the active selection back to Grid
+    // (persisted, per the chosen behavior). When the selection is still valid we
+    // just re-resolve for the new origin and CRS.
     if (!geoReferenced() && m_azimuthReference != cwAzimuthReference::Reference::Grid) {
         setAzimuthReference(cwAzimuthReference::Reference::Grid);
     } else {
@@ -139,9 +137,9 @@ void cwMeasurementInteraction::recomputeReference()
     // that point is already placed, so the bearing tracks the moving second end.
     cwGeoPoint location;
     QString sourceCS;
-    if (m_region) {
-        location = cwGeoPoint::fromSceneLocal(m_firstPoint, m_region->worldOrigin());
-        sourceCS = m_region->globalCoordinateSystem();
+    if (m_geoReference) {
+        location = m_geoReference->toGlobal(m_firstPoint);
+        sourceCS = m_geoReference->globalCoordinateSystem();
     }
 
     // UTC is enough for IGRF (it keys on the decimal year) and is faster and

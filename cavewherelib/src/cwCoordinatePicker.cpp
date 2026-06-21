@@ -8,8 +8,8 @@
 #include "cwCoordinatePicker.h"
 
 //Our includes
-#include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
+#include "cwGeoReference.h"
 #include "cwScenePick.h"
 
 cwCoordinatePicker::cwCoordinatePicker(QQuickItem* parent) :
@@ -19,30 +19,35 @@ cwCoordinatePicker::cwCoordinatePicker(QQuickItem* parent) :
 
 cwCoordinatePicker::~cwCoordinatePicker() = default;
 
-void cwCoordinatePicker::setRegion(cwCavingRegion* region)
+cwGeoReference* cwCoordinatePicker::geoReference() const
 {
-    if (m_region == region) {
+    return m_geoReference;
+}
+
+void cwCoordinatePicker::setGeoReference(cwGeoReference* geoReference)
+{
+    if (m_geoReference == geoReference) {
         return;
     }
-    if (m_region) {
-        disconnect(m_region, &cwCavingRegion::globalCoordinateSystemChanged,
+    if (m_geoReference) {
+        disconnect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
                    this, &cwCoordinatePicker::rebuildWgs84Transform);
     }
-    m_region = region;
-    if (m_region) {
-        connect(m_region, &cwCavingRegion::globalCoordinateSystemChanged,
+    m_geoReference = geoReference;
+    if (m_geoReference) {
+        connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
                 this, &cwCoordinatePicker::rebuildWgs84Transform);
     }
-    // A stale pick from the old region would silently misreport coordinates
-    // in the new CRS — clear it.
+    // A stale pick from the old geo-reference would silently misreport
+    // coordinates in the new CRS — clear it.
     clearPick();
     rebuildWgs84Transform();
-    emit regionChanged();
+    emit geoReferenceChanged();
 }
 
 void cwCoordinatePicker::rebuildWgs84Transform()
 {
-    const QString cs = m_region ? m_region->globalCoordinateSystem() : QString();
+    const QString cs = m_geoReference ? m_geoReference->globalCoordinateSystem() : QString();
     // Keep the cache in sync so the globalCoordinateSystem Q_PROPERTY reflects
     // the current region between picks (the getter reads this cache).
     m_globalCoordinateSystemCached = cs;
@@ -58,7 +63,7 @@ void cwCoordinatePicker::rebuildWgs84Transform()
 
 void cwCoordinatePicker::pick(QPointF screenPoint)
 {
-    if (!m_region) {
+    if (!m_geoReference) {
         return;
     }
 
@@ -70,12 +75,9 @@ void cwCoordinatePicker::pick(QPointF screenPoint)
     m_scenePoint = pick.world;
     m_pickScreenPoint = screenPoint;
 
-    const cwGeoPoint origin = m_region->worldOrigin();
-    m_globalPoint = cwGeoPoint(double(m_scenePoint.x()) + origin.x,
-                               double(m_scenePoint.y()) + origin.y,
-                               double(m_scenePoint.z()) + origin.z);
+    m_globalPoint = m_geoReference->toGlobal(m_scenePoint);
 
-    m_globalCoordinateSystemCached = m_region->globalCoordinateSystem();
+    m_globalCoordinateSystemCached = m_geoReference->globalCoordinateSystem();
     m_hasWgs84 = false;
     m_wgs84Lat = 0.0;
     m_wgs84Lon = 0.0;

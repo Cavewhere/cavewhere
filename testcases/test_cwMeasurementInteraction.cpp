@@ -201,7 +201,7 @@ TEST_CASE("cwMeasurementInteraction resolves the azimuth north reference",
     cwMeasurementInteraction interaction;
     interaction.setCamera(&camera);
     interaction.setScene(&scene);
-    interaction.setRegion(&region);
+    interaction.setGeoReference(region.geoReference());
 
     // Place A then B: 60 m due east, so the grid azimuth is 90°.
     interaction.place(camera.project(a));

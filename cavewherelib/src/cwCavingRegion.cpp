@@ -23,8 +23,22 @@
 
 cwCavingRegion::cwCavingRegion(QObject *parent) :
     QAbstractListModel(parent),
+    m_geoReference(new cwGeoReference(this)),
     m_lazLayers(new cwLazLayerModel(this))
 {
+    // The geo-reference slice owns the CS + worldOrigin; mirror each change into
+    // the LAZ layer model and re-emit on the region so the existing region-level
+    // consumers (line plot, save/load) keep working. The worldOrigin push runs
+    // before the CS push for a CS-driven reset, matching the prior in-setter
+    // ordering.
+    connect(m_geoReference, &cwGeoReference::worldOriginChanged, this, [this] {
+        m_lazLayers->setRegionWorldOrigin(m_geoReference->worldOrigin());
+        emit worldOriginChanged();
+    });
+    connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged, this, [this] {
+        m_lazLayers->setRegionGlobalCS(m_geoReference->globalCoordinateSystem());
+        emit globalCoordinateSystemChanged();
+    });
 }
 
 void cwCavingRegion::setFutureManagerToken(const cwFutureManagerToken& token)
@@ -269,45 +283,9 @@ cwProject *cwCavingRegion::parentProject() const
     return dynamic_cast<cwProject*>(parent());
 }
 
-void cwCavingRegion::setGlobalCoordinateSystem(const QString& cs)
-{
-    if (m_globalCoordinateSystem == cs) {
-        return;
-    }
-    m_globalCoordinateSystem = cs;
-    // The stored worldOrigin was computed in the old CS, so reset it.
-    // The next line-plot completion will auto-recompute against the new CS.
-    // Reset both value and explicitlySet directly (not via setWorldOrigin),
-    // since a CS-driven reset is not a user choice — leaving the flag false
-    // lets a freshly added LAZ seed the origin from its bbox center again.
-    if (m_worldOrigin.value != cwGeoPoint{} || m_worldOrigin.explicitlySet) {
-        m_worldOrigin = WorldOriginState{};
-        m_lazLayers->setRegionWorldOrigin(m_worldOrigin.value);
-        emit worldOriginChanged();
-    }
-    m_lazLayers->setRegionGlobalCS(cs);
-    emit globalCoordinateSystemChanged();
-}
-
-void cwCavingRegion::setWorldOrigin(const cwGeoPoint& origin)
-{
-    // Short-circuit only when both the value AND the explicit-set flag are
-    // already what we'd produce. An explicit setWorldOrigin(0,0,0) on a
-    // freshly-constructed region must still flip the flag — otherwise the
-    // user's intent is indistinguishable from "never set" and LAZ auto-adopt
-    // will silently overwrite it (see [cwSinkTrainingModel] failures).
-    if (m_worldOrigin.value == origin && m_worldOrigin.explicitlySet) {
-        return;
-    }
-    m_worldOrigin.value = origin;
-    m_worldOrigin.explicitlySet = true;
-    m_lazLayers->setRegionWorldOrigin(origin);
-    emit worldOriginChanged();
-}
-
 void cwCavingRegion::recomputeWorldOrigin()
 {
-    const QString globalCSTrimmed = m_globalCoordinateSystem.trimmed();
+    const QString globalCSTrimmed = m_geoReference->globalCoordinateSystem().trimmed();
 
     QList<cwGeoPoint> candidates;
     for (cwCave* cave : m_caves) {
@@ -386,8 +364,8 @@ cwCavingRegionData cwCavingRegion::data() const
     return {
         m_name.value(),
         cwData::toDataList<cwCaveData>(m_caves),
-        m_globalCoordinateSystem,
-        m_worldOrigin.value
+        m_geoReference->globalCoordinateSystem(),
+        m_geoReference->worldOrigin()
     };
 }
 

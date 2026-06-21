@@ -23,6 +23,7 @@
 class cwCave;
 class cwProject;
 #include "cwCavingRegionData.h"
+#include "cwGeoReference.h"
 #include "cwLazLayerModel.h"
 #include "cwSanitizedNameSet.h"
 #include "cwUndoer.h"
@@ -40,6 +41,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
     Q_PROPERTY(QString globalCoordinateSystem READ globalCoordinateSystem WRITE setGlobalCoordinateSystem NOTIFY globalCoordinateSystemChanged)
     Q_PROPERTY(cwGeoPoint worldOrigin READ worldOrigin WRITE setWorldOrigin NOTIFY worldOriginChanged)
+    Q_PROPERTY(cwGeoReference* geoReference READ geoReference CONSTANT)
     Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)
 
 public:
@@ -57,24 +59,21 @@ public:
     void setName(const QString& name) { m_name = name; }
     QBindable<QString> bindableName() { return &m_name; }
 
-    QString globalCoordinateSystem() const { return m_globalCoordinateSystem; }
-    void setGlobalCoordinateSystem(const QString& cs);
+    // The geo-reference slice (CS + worldOrigin) lives in its own object so
+    // interactions that only need it can take a cwGeoReference* instead of the
+    // whole region. The region owns it and forwards its public CS / worldOrigin
+    // API; the LAZ push and cave-based recompute below stay region-side.
+    cwGeoReference* geoReference() const { return m_geoReference; }
 
-    //! Single definition of "this region is georeferenced": it has a coordinate
-    //! system, so scene points can be placed in a real-world CRS (true/magnetic
-    //! north, WGS84, export). Consumers should ask this rather than re-deriving
-    //! the empty-CS rule. (When the geo-reference slice is extracted into its own
-    //! object this predicate moves with it.)
-    bool hasCoordinateSystem() const { return !m_globalCoordinateSystem.isEmpty(); }
+    QString globalCoordinateSystem() const { return m_geoReference->globalCoordinateSystem(); }
+    void setGlobalCoordinateSystem(const QString& cs) { m_geoReference->setGlobalCoordinateSystem(cs); }
 
-    cwGeoPoint worldOrigin() const { return m_worldOrigin.value; }
-    void setWorldOrigin(const cwGeoPoint& origin);
+    bool hasCoordinateSystem() const { return m_geoReference->hasCoordinateSystem(); }
 
-    // True iff worldOrigin was set explicitly (by the user, by load, by
-    // recompute) — distinct from the default-constructed (0,0,0) that a
-    // fresh region carries. Used by cwLazLayerModel to decide whether
-    // an incoming LAZ may auto-adopt its bbox center as the region origin.
-    bool hasExplicitWorldOrigin() const { return m_worldOrigin.explicitlySet; }
+    cwGeoPoint worldOrigin() const { return m_geoReference->worldOrigin(); }
+    void setWorldOrigin(const cwGeoPoint& origin) { m_geoReference->setWorldOrigin(origin); }
+
+    bool hasExplicitWorldOrigin() const { return m_geoReference->hasExplicitWorldOrigin(); }
 
     Q_INVOKABLE void recomputeWorldOrigin();
 
@@ -134,18 +133,7 @@ private:
 
     cwSanitizedNameSet m_caveNames;
 
-    QString m_globalCoordinateSystem;
-
-    // Bundles the origin value with a flag tracking whether anyone has
-    // explicitly chosen it. Glued together so the value and the flag can't
-    // drift: every code path that mutates the value also touches the flag,
-    // and the CS-change reset path (which is *not* a user choice) resets
-    // both atomically.
-    struct WorldOriginState {
-        cwGeoPoint value;
-        bool explicitlySet = false;
-    };
-    WorldOriginState m_worldOrigin;
+    cwGeoReference* m_geoReference = nullptr;
 
     cwLazLayerModel* m_lazLayers = nullptr;
 

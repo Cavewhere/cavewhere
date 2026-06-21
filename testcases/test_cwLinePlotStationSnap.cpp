@@ -205,7 +205,7 @@ TEST_CASE("cwCoordinatePicker: a click near a station reports the station coordi
     cwCoordinatePicker picker;
     picker.setCamera(&camera);
     picker.setScene(&scene);
-    picker.setRegion(&region);
+    picker.setGeoReference(region.geoReference());
 
     SECTION("click on a station snaps to its exact coordinate") {
         picker.pick(camera.project(a));
