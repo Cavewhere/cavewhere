@@ -18,11 +18,40 @@
 
 //Std includes
 #include <algorithm>
+#include <limits>
 // cwSketchCanvas exposes inline accessors over QPointer<cwScrapManager>/<cwTrip>
 // members it only forward-declares; pull the complete types in so this TU can
 // instantiate them.
 #include "cwScrapManager.h"
 #include "cwTrip.h"
+
+namespace {
+
+// A rule's pipeline stage, or a sentinel past every real stage for an unknown
+// rule, so unknowns sort to the end of a layer's stack (the layout drops them).
+int ruleStage(const QString &ruleName)
+{
+    const cwPlacementRule *rule = cwPlacementRuleRegistry::instance().rule(ruleName);
+    return rule != nullptr ? static_cast<int>(rule->stage())
+                           : std::numeric_limits<int>::max();
+}
+
+// Reorder each layer's rules into pipeline (stage) order. The layout already
+// stage-sorts at render time, so this only makes the stored/displayed order match
+// what runs (the editor groups rules by category) — it never changes the result.
+// Stable, so the relative order within a stage (the only order the user controls)
+// is preserved.
+void normalizeRuleOrder(cwLineBrush &brush)
+{
+    for (cwDecorationLayer &layer : brush.decorations) {
+        std::stable_sort(layer.rules.begin(), layer.rules.end(),
+                         [](const cwPlacementRuleData &a, const cwPlacementRuleData &b) {
+                             return ruleStage(a.name) < ruleStage(b.name);
+                         });
+    }
+}
+
+} // namespace
 
 cwBrushEditor::cwBrushEditor(QObject *parent) :
     cwPaletteSnapshotSource(parent)
@@ -113,8 +142,10 @@ void cwBrushEditor::loadBrushNamed(const QString &name)
         return;
     }
 
-    m_baseline = *brush;
-    m_structureModel->setBrush(*brush);
+    cwLineBrush normalized = *brush;
+    normalizeRuleOrder(normalized);
+    m_baseline = normalized;
+    m_structureModel->setBrush(normalized);
     m_loaded = true;
     setDirty(false);
     emit brushLoaded();
@@ -140,7 +171,17 @@ void cwBrushEditor::addRule(int layerIndex, const QString &ruleName)
     }
     cwPlacementRuleData rule;
     rule.name = ruleName;
-    const int at = m_structureModel->ruleCount(layerIndex);
+
+    // Insert at the end of the rule's own category block so the stored order
+    // stays stage-ordered (matching how the layout runs and how the tree groups);
+    // appending at the very end would misplace, e.g., a Placement rule after an
+    // Output rule.
+    const int newStage = ruleStage(ruleName);
+    const int count = m_structureModel->ruleCount(layerIndex);
+    int at = 0;
+    while (at < count && ruleStage(m_structureModel->ruleName(layerIndex, at)) <= newStage) {
+        ++at;
+    }
     if (!m_structureModel->insertRule(layerIndex, at, rule)) {
         return;
     }
@@ -154,6 +195,26 @@ void cwBrushEditor::removeRule(int layerIndex, int ruleIndex)
         return;
     }
     if (!m_structureModel->removeRule(layerIndex, ruleIndex)) {
+        return;
+    }
+    recomputeDirty();
+    pushPreview();
+}
+
+void cwBrushEditor::moveRule(int layerIndex, int fromRuleIndex, int toRuleIndex)
+{
+    if (!m_loaded) {
+        return;
+    }
+    // Reordering only matters within a stage block (the layout re-sorts rules by
+    // stage). Reject a move that would cross a category boundary so the stored
+    // order stays stage-grouped and the tree's category headers stay contiguous.
+    const QString fromName = m_structureModel->ruleName(layerIndex, fromRuleIndex);
+    const QString toName = m_structureModel->ruleName(layerIndex, toRuleIndex);
+    if (ruleStage(fromName) != ruleStage(toName)) {
+        return;
+    }
+    if (!m_structureModel->moveRule(layerIndex, fromRuleIndex, toRuleIndex)) {
         return;
     }
     recomputeDirty();

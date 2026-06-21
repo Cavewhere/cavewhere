@@ -102,6 +102,11 @@ public:
     Q_INVOKABLE void addRule(int layerIndex, const QString &ruleName);
     Q_INVOKABLE void removeRule(int layerIndex, int ruleIndex);
 
+    // Reorder a rule within its layer so it ends up at toRuleIndex, then re-push
+    // the preview. Out-of-range / no-op requests are ignored. The structure model
+    // brackets the row move; this layer owns the dirty/preview side effects.
+    Q_INVOKABLE void moveRule(int layerIndex, int fromRuleIndex, int toRuleIndex);
+
     // The add-rule picker's data: rules grouped by category (derived from each
     // rule's stage), in pipeline order. Each group is { "category": QString,
     // "rules": [ { "name": QString, "description": QString }, ... ] }.

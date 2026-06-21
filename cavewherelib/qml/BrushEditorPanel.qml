@@ -154,14 +154,32 @@ QQ.Rectangle {
             id: structureTreeId
             objectName: "brushStructureTree"
 
+            // Active rule-reorder drag (handle-driven). dragLayer == -1 when idle.
+            // dragTo is a flat insertion index in [0, ruleCount]; the drop-line and
+            // the source row read these. dragCategory confines the drop to the
+            // dragged rule's own pipeline stage (the layout re-sorts across stages).
+            // interactive is disabled mid-drag so the TableView doesn't scroll out
+            // from under the handle (and so the dragged delegate isn't recycled).
+            property int dragLayer: -1
+            property int dragFrom: -1
+            property int dragTo: -1
+            property string dragCategory: ""
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            interactive: dragLayer < 0
             model: editorId.structureModel
+            // Pooling strands a removed row's delegate (a structural edit on a
+            // nested parent can leave the recycled item painted at its old spot —
+            // e.g. a duplicate row after a reorder's remove+insert). The structure
+            // is tiny and always fully expanded, so destroying delegates instead of
+            // reusing them costs nothing and keeps the view honest.
+            reuseItems: false
 
-            // Layers and their rules are always shown expanded (mirrors the
-            // phase-1 always-open tree); re-expand whenever the model resets on a
-            // brush load or discard.
+            // Layers, their category groups, and the rules are always shown
+            // expanded (mirrors the phase-1 always-open tree); re-expand whenever
+            // the model resets on a brush load or discard.
             QQ.Component.onCompleted: expandRecursively()
 
             QQ.Connections {
@@ -174,6 +192,10 @@ QQ.Rectangle {
             // A plain Item delegate (not TreeViewDelegate) driven by TreeView's
             // attached properties: the native style forbids customizing a
             // TreeViewDelegate's contentItem, and a rule row needs a checkbox.
+            // Three node kinds share one fixed-height row: a layer, a category
+            // group header, or a rule. Category groups are real tree nodes (not a
+            // header smuggled into the first rule), so every row is the same height
+            // and the TableView's row-height cache has nothing to get wrong.
             delegate: QQ.Item {
                 id: treeDelegateId
 
@@ -187,13 +209,33 @@ QQ.Rectangle {
                 required property int layerIndex
                 required property int ruleIndex
                 required property bool isLayer
+                required property bool isCategory
                 required property bool ruleEnabled
                 required property string label
+                required property string category
+                required property int categorySize
+                required property bool categoryLast
 
+                readonly property bool isRule: !isLayer && !isCategory
                 readonly property real kIndent: Theme.sectionSpacing
+                // Fixed size for the per-row icon buttons (+ / ✕) and the drag-grip
+                // slot, so the row height never changes when hover-only controls
+                // appear.
+                readonly property real kRowButtonSize: Theme.iconSizeSmall
+                // This rule row is the one currently being dragged.
+                readonly property bool isDragSource: structureTreeId.dragLayer === layerIndex
+                                                     && structureTreeId.dragFrom === ruleIndex
 
                 implicitWidth: structureTreeId.width
-                implicitHeight: contentRowId.implicitHeight + 2 * Theme.tightSpacing
+                // Every row is the same fixed height — the whole point of making
+                // category groups their own nodes.
+                implicitHeight: kRowButtonSize + 2 * Theme.tightSpacing
+
+                // Hover drives the per-row affordances (drag handle + remove); a
+                // single handler over the whole row so they show together.
+                QQ.HoverHandler {
+                    id: rowHoverId
+                }
 
                 RowLayout {
                     id: contentRowId
@@ -202,13 +244,16 @@ QQ.Rectangle {
                         left: parent.left
                         right: parent.right
                         verticalCenter: parent.verticalCenter
-                        // Indent only the tree column, per the depth in the model.
-                        leftMargin: treeDelegateId.isTreeNode ? treeDelegateId.depth * treeDelegateId.kIndent : 0
                     }
+                    // Indent the tree column by the node's depth (layer -> category
+                    // -> rule).
+                    anchors.leftMargin: treeDelegateId.isTreeNode
+                                        ? treeDelegateId.depth * treeDelegateId.kIndent : 0
                     spacing: Theme.tightSpacing
 
                     // Expand/collapse indicator on tree-column rows that have
-                    // children; a same-width spacer keeps leaf rows aligned.
+                    // children (layers and category groups); a same-width spacer
+                    // keeps leaf rule rows aligned.
                     QC.Label {
                         Layout.preferredWidth: Theme.sectionSpacing
                         horizontalAlignment: QQ.Text.AlignHCenter
@@ -225,6 +270,7 @@ QQ.Rectangle {
                         }
                     }
 
+                    // --- Layer node: glyph/line name + add-rule button. ---
                     QC.Label {
                         visible: treeDelegateId.isLayer
                         text: treeDelegateId.label === "" ? "Line layer" : treeDelegateId.label
@@ -236,13 +282,21 @@ QQ.Rectangle {
 
                     // Add a rule to this layer, picked from the registry. The rule
                     // set is static, so the grouped picker data is built once.
+                    // Fixed size + zero padding so the row height matches the
+                    // other rows (the default ToolButton padding is taller).
                     QC.ToolButton {
                         id: addRuleButtonId
                         visible: treeDelegateId.isLayer
                         objectName: "addRuleButton_" + treeDelegateId.layerIndex
                         text: "+"
+                        padding: 0
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
+                        font.pixelSize: Theme.fontSizeMedium
+                        implicitWidth: treeDelegateId.kRowButtonSize
+                        implicitHeight: treeDelegateId.kRowButtonSize
+                        Layout.preferredWidth: treeDelegateId.kRowButtonSize
+                        Layout.preferredHeight: treeDelegateId.kRowButtonSize
+                        Layout.alignment: Qt.AlignVCenter
                         onClicked: addRulePopupId.open()
 
                         AddRulePopup {
@@ -258,11 +312,139 @@ QQ.Rectangle {
                         }
                     }
 
+                    // --- Category node: the pipeline-stage group header. ---
+                    QC.Label {
+                        visible: treeDelegateId.isCategory
+                        objectName: "brushCategory_" + treeDelegateId.layerIndex
+                                    + "_" + treeDelegateId.category
+                        text: treeDelegateId.category.toUpperCase()
+                        color: Theme.textSubtle
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeCaption
+                        font.bold: true
+                        Layout.fillWidth: true
+                    }
+
+                    // --- Rule node: drag grip + enable checkbox + remove. ---
+
+                    // Drag-to-reorder grip. Only meaningful within a category (the
+                    // layout re-sorts across stages), so it appears only when the
+                    // rule's category holds 2+ rules — and only on hover, or while
+                    // this row is the one being dragged.
+                    QC.Label {
+                        id: dragHandleId
+                        objectName: "dragHandle_" + treeDelegateId.layerIndex
+                                    + "_" + treeDelegateId.ruleIndex
+                        // Always laid out for rule rows (so checkboxes stay aligned
+                        // and the row height is fixed); only painted when the
+                        // category is reorderable and the row is hovered or dragged.
+                        visible: treeDelegateId.isRule
+                        opacity: treeDelegateId.categorySize >= 2
+                                 && (rowHoverId.hovered || treeDelegateId.isDragSource) ? 1 : 0
+                        text: "⠿"
+                        color: Theme.textSubtle
+                        horizontalAlignment: QQ.Text.AlignHCenter
+                        verticalAlignment: QQ.Text.AlignVCenter
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        Layout.preferredWidth: treeDelegateId.kRowButtonSize
+                        Layout.preferredHeight: treeDelegateId.kRowButtonSize
+                        Layout.alignment: Qt.AlignVCenter
+
+                        QQ.DragHandler {
+                            id: dragHandlerId
+                            // We don't move the handle itself; we track the pointer
+                            // and reorder on release. Disabled when the grip is
+                            // hidden so an invisible (opacity 0) slot can't start a
+                            // drag.
+                            target: null
+                            enabled: treeDelegateId.categorySize >= 2
+                            // The TreeView's Flickable scrolls on the same
+                            // (vertical) axis we drag, and by default a DragHandler
+                            // approves takeover by anything — so the Flickable steals
+                            // the grab the instant you move and the reorder never
+                            // starts. Allow taking the grab FROM the Flickable, but
+                            // refuse giving it back.
+                            grabPermissions: QQ.PointerHandler.CanTakeOverFromItems
+                                             | QQ.PointerHandler.CanTakeOverFromHandlersOfDifferentType
+
+                            onActiveChanged: {
+                                if (active) {
+                                    structureTreeId.dragLayer = treeDelegateId.layerIndex
+                                    structureTreeId.dragCategory = treeDelegateId.category
+                                    structureTreeId.dragFrom = treeDelegateId.ruleIndex
+                                    structureTreeId.dragTo = treeDelegateId.ruleIndex
+                                    dragHandlerId.updateDropTarget()
+                                } else {
+                                    const layer = structureTreeId.dragLayer
+                                    const from = structureTreeId.dragFrom
+                                    const slot = structureTreeId.dragTo
+                                    let to = slot
+                                    // dragTo is an insertion slot in [0, count];
+                                    // collapse to a final index for moveRule.
+                                    if (to > from) {
+                                        to = to - 1
+                                    }
+                                    structureTreeId.dragLayer = -1
+                                    structureTreeId.dragFrom = -1
+                                    structureTreeId.dragTo = -1
+                                    structureTreeId.dragCategory = ""
+                                    const willMove = layer >= 0 && to >= 0 && to !== from
+                                    if (willMove) {
+                                        editorId.moveRule(layer, from, to)
+                                    }
+                                }
+                            }
+                            onCentroidChanged: if (active) { dragHandlerId.updateDropTarget() }
+
+                            // Resolve which rule row the pointer is over and set the
+                            // drop slot. We can't rely on a synthetic Drag + DropArea
+                            // (internal drag events don't reach the DropAreas here),
+                            // so hit-test the TableView directly: cellAtPosition wants
+                            // contentItem coordinates, and modelIndex maps the cell
+                            // back to a rule.
+                            function updateDropTarget() {
+                                const tree = structureTreeId
+                                const pt = dragHandleId.mapToItem(tree.contentItem,
+                                                                  centroid.position.x,
+                                                                  centroid.position.y)
+                                const cell = tree.cellAtPosition(pt.x, pt.y, true)
+                                if (cell.y < 0) {
+                                    return   // off the table; keep the last slot
+                                }
+                                const model = editorId.structureModel
+                                const idx = tree.modelIndex(cell)
+                                const layer = model.layerIndexOf(idx)
+                                const rule = model.ruleIndexOf(idx)
+                                const ruleCat = rule >= 0 ? model.ruleCategory(layer, rule) : ""
+                                // Confine drops to the dragged rule's own category
+                                // (the layout re-sorts across stages).
+                                if (layer !== tree.dragLayer || rule < 0
+                                        || ruleCat !== tree.dragCategory) {
+                                    return
+                                }
+                                const rowItem = tree.itemAtCell(cell)
+                                if (rowItem === null) {
+                                    return
+                                }
+                                // Insert above when in the row's top half, below in
+                                // the bottom half -> an insertion slot.
+                                const local = dragHandleId.mapToItem(rowItem,
+                                                                     centroid.position.x,
+                                                                     centroid.position.y)
+                                const bottomHalf = local.y > rowItem.height / 2
+                                tree.dragTo = rule + (bottomHalf ? 1 : 0)
+                            }
+                        }
+                    }
+
                     QC.CheckBox {
-                        visible: !treeDelegateId.isLayer
-                        objectName: "ruleCheckBox_" + treeDelegateId.layerIndex + "_" + treeDelegateId.ruleIndex
+                        visible: treeDelegateId.isRule
+                        objectName: "ruleCheckBox_" + treeDelegateId.layerIndex
+                                    + "_" + treeDelegateId.ruleIndex
                         text: treeDelegateId.label
                         checked: treeDelegateId.ruleEnabled
+                        opacity: treeDelegateId.isDragSource ? 0.4 : 1.0
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
                         Layout.fillWidth: true
@@ -276,15 +458,63 @@ QQ.Rectangle {
                         }
                     }
 
+                    // Always laid out for rule rows (so the row height is fixed);
+                    // shown and clickable only on hover or while dragging. Fixed
+                    // size + zero padding to match the row height.
                     QC.ToolButton {
-                        visible: !treeDelegateId.isLayer
-                        objectName: "removeRuleButton_" + treeDelegateId.layerIndex + "_" + treeDelegateId.ruleIndex
+                        visible: treeDelegateId.isRule
+                        opacity: rowHoverId.hovered || treeDelegateId.isDragSource ? 1 : 0
+                        enabled: rowHoverId.hovered || treeDelegateId.isDragSource
+                        objectName: "removeRuleButton_" + treeDelegateId.layerIndex
+                                    + "_" + treeDelegateId.ruleIndex
                         text: "✕"
+                        padding: 0
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeCaption
+                        font.pixelSize: Theme.fontSizeBody
+                        implicitWidth: treeDelegateId.kRowButtonSize
+                        implicitHeight: treeDelegateId.kRowButtonSize
+                        Layout.preferredWidth: treeDelegateId.kRowButtonSize
+                        Layout.preferredHeight: treeDelegateId.kRowButtonSize
+                        Layout.alignment: Qt.AlignVCenter
                         onClicked: editorId.removeRule(treeDelegateId.layerIndex,
                                                        treeDelegateId.ruleIndex)
                     }
+                }
+
+                // Drop-line between rule rows during a reorder. Rows are fixed
+                // height with the content vertically centered, so the row's top
+                // edge (y = 0) is the gap above it and its bottom edge the gap
+                // below.
+                QQ.Rectangle {
+                    height: 2
+                    color: Theme.accent
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                    }
+                    y: 0
+                    visible: treeDelegateId.isRule
+                             && structureTreeId.dragLayer === treeDelegateId.layerIndex
+                             && structureTreeId.dragCategory === treeDelegateId.category
+                             && structureTreeId.dragTo === treeDelegateId.ruleIndex
+                }
+
+                // Insert-below: only on the category's last rule, so an
+                // end-of-block drop has somewhere to show (the next row is another
+                // category group or layer).
+                QQ.Rectangle {
+                    height: 2
+                    color: Theme.accent
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                    }
+                    y: treeDelegateId.height - height
+                    visible: treeDelegateId.isRule
+                             && structureTreeId.dragLayer === treeDelegateId.layerIndex
+                             && structureTreeId.dragCategory === treeDelegateId.category
+                             && treeDelegateId.categoryLast
+                             && structureTreeId.dragTo === treeDelegateId.ruleIndex + 1
                 }
             }
         }

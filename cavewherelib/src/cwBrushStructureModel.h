@@ -11,19 +11,32 @@
 //Qt includes
 #include <QAbstractItemModel>
 #include <QQmlEngine>
+#include <QVector>
 
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwLineBrush.h"
 
-// A 2-level tree projection (layers -> rules) of a brush's structure, driving the
-// brush editor's TreeView. It owns the editor's working cwLineBrush and is the
-// structure-mutation mechanism: setBrush() resets it wholesale (load/discard),
-// while setRuleEnabled()/insertRule()/removeRule() mutate in place and bracket the
-// matching QAbstractItemModel begin/end calls internally, so the tree stays in
-// sync without a collapsing reset. The editor wraps these as its public API and
-// owns the dirty/preview side effects (it is not the model's job to know about
-// them), so the mutators here are deliberately not Q_INVOKABLE.
+// A 3-level tree projection (layers -> categories -> rules) of a brush's
+// structure, driving the brush editor's TreeView. Category nodes are real tree
+// items derived from each layer's contiguous pipeline-stage blocks (the rules
+// are kept stage-normalized, so each stage forms one contiguous block), giving
+// the view fixed-height rule delegates instead of rule rows that smuggle a
+// variable-height header.
+//
+// It owns the editor's working cwLineBrush and is the structure-mutation
+// mechanism: setBrush() resets it wholesale (load/discard), while
+// setRuleEnabled()/insertRule()/removeRule()/moveRule() mutate in place and
+// bracket the matching QAbstractItemModel begin/end calls internally (inserting
+// or removing the category node when a stage block appears or empties), so the
+// tree stays in sync without a collapsing reset. The editor wraps these as its
+// public API and owns the dirty/preview side effects (it is not the model's job
+// to know about them), so the mutators here are deliberately not Q_INVOKABLE.
+//
+// The editor and the mutators address rules by a flat (layerIndex, ruleIndex)
+// pair — the index into the layer's stored rule list. The category nesting is a
+// view concern only; data() maps a rule node's (category, localRow) back to that
+// flat index, and RuleIndexRole always reports it.
 class CAVEWHERE_LIB_EXPORT cwBrushStructureModel : public QAbstractItemModel
 {
     Q_OBJECT
@@ -31,11 +44,15 @@ class CAVEWHERE_LIB_EXPORT cwBrushStructureModel : public QAbstractItemModel
 
 public:
     enum Roles : int {
-        LabelRole = Qt::UserRole + 1,   // layer glyph name, or rule name
-        RuleEnabledRole,                // rule's enabled flag (true for layer rows)
-        IsLayerRole,                    // true for a layer row, false for a rule row
-        LayerIndexRole,                 // owning layer index (both row kinds)
-        RuleIndexRole,                  // rule index within the layer (-1 for layer rows)
+        LabelRole = Qt::UserRole + 1,   // layer glyph name, category label, or rule name
+        RuleEnabledRole,                // rule's enabled flag (true for layer/category rows)
+        IsLayerRole,                    // true for a layer row
+        IsCategoryRole,                 // true for a category row
+        LayerIndexRole,                 // owning layer index (all row kinds)
+        RuleIndexRole,                  // flat rule index within the layer (-1 for layer/category rows)
+        CategoryRole,                   // pipeline category label (category and rule rows); "" for layers
+        CategorySizeRole,               // number of rules in this row's category (0 for layers)
+        CategoryLastRole,               // true if this rule is the last in its category (drop-line gate); false otherwise
     };
     Q_ENUM(Roles)
 
@@ -53,25 +70,56 @@ public:
     const cwLineBrush &brush() const { return m_brush; }
     void setBrush(const cwLineBrush &brush);   // wholesale change (load/discard) -> model reset
 
-    // Structure accessors the editor's invokables delegate to.
+    // Structure accessors the editor's invokables delegate to. All rule indices
+    // here are flat indices into the layer's stored rule list.
     int layerCount() const;
     QString layerLabel(int layerIndex) const;
     int ruleCount(int layerIndex) const;
     QString ruleName(int layerIndex, int ruleIndex) const;
     bool ruleEnabled(int layerIndex, int ruleIndex) const;
+    // The rule's pipeline category, derived from its registered stage (the same
+    // labels the add-rule picker groups by); empty for an unknown rule.
+    Q_INVOKABLE QString ruleCategory(int layerIndex, int ruleIndex) const;
+    // Map a view QModelIndex (e.g. from TableView::modelIndex/cellAtPosition)
+    // back to the layer/rule coordinates the editor's mutators use. layerIndexOf
+    // returns -1 for an invalid index; ruleIndexOf returns -1 for a non-rule row
+    // (a flat rule index otherwise).
+    Q_INVOKABLE int layerIndexOf(const QModelIndex &index) const;
+    Q_INVOKABLE int ruleIndexOf(const QModelIndex &index) const;
 
     // Structure mutators. Each brackets the matching QAIM begin/end internally;
     // returns false (no change, no signal) on an out-of-range request.
     bool setRuleEnabled(int layerIndex, int ruleIndex, bool enabled);            // narrow dataChanged
     bool insertRule(int layerIndex, int ruleIndex, const cwPlacementRuleData &rule);
     bool removeRule(int layerIndex, int ruleIndex);
+    // Move a rule within its category so it ends up at toRuleIndex; brackets
+    // beginMoveRows/endMoveRows. Returns false on an out-of-range, no-op, or
+    // cross-category request (the layout re-sorts across stages, so a move only
+    // means anything within a single category node).
+    bool moveRule(int layerIndex, int fromRuleIndex, int toRuleIndex);
 
 private:
-    // Layer rows carry this sentinel as their QModelIndex internalId; rule rows
-    // carry their owning layer's row instead (always small, never colliding).
-    static constexpr quintptr kLayerId = ~quintptr(0);
+    // One contiguous pipeline-stage block within a layer's rule list: the rules
+    // sharing a stage, which the view renders as one category node.
+    struct CategoryBlock {
+        int stage = 0;       // cwPlacementRule::Stage value (or a past-the-end sentinel for unknowns)
+        int firstRule = 0;   // flat index of the block's first rule
+        int count = 0;       // number of rules in the block
+    };
+    // The layer's stage blocks in display (stage) order. Cheap to recompute (a
+    // single pass over a handful of rules), so it isn't cached — a cache would be
+    // mutable state that must invalidate on every edit.
+    QVector<CategoryBlock> categoryBlocks(int layerIndex) const;
+    // Locate a flat rule index within its category block. Returns false if the
+    // index isn't a real rule; otherwise fills the category index and the rule's
+    // row within that category.
+    bool ruleLocation(int layerIndex, int ruleIndex, int *categoryIndex, int *localRow) const;
 
     bool layerInRange(int layerIndex) const;
+    // After an insert/remove, the flat positional roles (RuleIndexRole) of rules
+    // in LATER category blocks shift, but the view only re-reads the rows it was
+    // told changed; refresh every rule row in the layer so those stay correct.
+    void emitLayerRuleRolesChanged(int layerIndex);
 
     cwLineBrush m_brush;
 };
