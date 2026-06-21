@@ -10,6 +10,7 @@
 #include "cwSketch.h"
 #include "cwScale.h"
 #include "cwSymbologyPalette.h"
+#include "cwPaletteBackedSnapshotSource.h"
 #include "cwGlyphTessellationCache.h"
 
 namespace {
@@ -22,37 +23,29 @@ constexpr double kDefaultPaperExtentMm = 10.0;
 cwSketchGlyphCanvas::cwSketchGlyphCanvas(QQuickItem *parent) :
     cwSketchCanvas(parent),
     m_glyphSketch(new cwSketch(this)),
+    m_paletteSource(new cwPaletteBackedSnapshotSource(this)),
     m_paperExtentMm(kDefaultPaperExtentMm, kDefaultPaperExtentMm)
 {
     // The internal sketch defaults to 1:250 and has no trip/region; the palette
-    // it draws against is injected via setPalette(), not the resolver chain.
+    // it draws against is injected via setPalette() and fed straight to the path
+    // source through m_paletteSource, not the resolver chain.
     setSketch(m_glyphSketch);
+    setSnapshotSource(m_paletteSource);
 }
 
 cwSketchGlyphCanvas::~cwSketchGlyphCanvas() = default;
 
+cwSymbologyPalette *cwSketchGlyphCanvas::palette() const
+{
+    return m_paletteSource->palette();
+}
+
 void cwSketchGlyphCanvas::setPalette(cwSymbologyPalette *palette)
 {
-    if (m_palette == palette) {
+    if (m_paletteSource->palette() == palette) {
         return;
     }
-
-    if (m_paletteDataConnection) {
-        QObject::disconnect(m_paletteDataConnection);
-        m_paletteDataConnection = {};
-    }
-
-    m_palette = palette;
-
-    if (m_palette != nullptr) {
-        // Re-skin whenever the edited palette's content changes — a brush edit,
-        // or a glyph saved through the manager (which reloads it in place).
-        m_paletteDataConnection =
-            connect(m_palette, &cwSymbologyPalette::dataChanged,
-                    this, [this]() { refreshPathSnapshot(); });
-    }
-
-    refreshPathSnapshot();
+    m_paletteSource->setPalette(palette);
     emit paletteChanged();
 }
 
@@ -63,14 +56,6 @@ void cwSketchGlyphCanvas::setPaperExtentMm(const QSizeF &extent)
     }
     m_paperExtentMm = extent;
     emit paperExtentMmChanged();
-}
-
-cwPaletteSnapshot cwSketchGlyphCanvas::snapshotForPathModel() const
-{
-    if (m_palette != nullptr) {
-        return m_palette->snapshot();
-    }
-    return cwSketchCanvas::snapshotForPathModel();
 }
 
 double cwSketchGlyphCanvas::paperMmToWorldM() const
@@ -124,8 +109,9 @@ void cwSketchGlyphCanvas::clear()
 
 void cwSketchGlyphCanvas::loadGlyphNamed(const QString &name)
 {
+    cwSymbologyPalette *palette = m_paletteSource->palette();
     const std::optional<cwSymbologyGlyph> glyph =
-        m_palette != nullptr ? m_palette->glyph(name) : std::nullopt;
+        palette != nullptr ? palette->glyph(name) : std::nullopt;
     if (glyph) {
         loadGlyph(*glyph);
     } else {

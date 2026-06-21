@@ -13,6 +13,7 @@
 #include "cwSketchManager.h"
 #include "cwScrapManager.h"
 #include "cwDecoratedStrokePathSource.h"
+#include "cwPaletteSnapshotSource.h"
 #include "cwInfiniteGridModel.h"
 #include "cwFixedGridModel.h"
 #include "cwGridTextModel.h"
@@ -199,39 +200,45 @@ void cwSketchCanvas::setGrid(cwInfiniteGridModel *grid)
     update();
 }
 
-cwPaletteSnapshot cwSketchCanvas::snapshotForPathModel() const
+cwPaletteSnapshot cwSketchCanvas::currentSnapshot() const
 {
-    if (m_hasPreviewSnapshot) {
-        return m_previewSnapshot;
+    if (m_snapshotSource != nullptr) {
+        return m_snapshotSource->snapshot();
     }
     return m_sketch != nullptr ? m_sketch->paletteSnapshot() : cwPaletteSnapshot();
 }
 
 void cwSketchCanvas::refreshPathSnapshot()
 {
-    m_pathModel->setSnapshot(snapshotForPathModel());
+    m_pathModel->setSnapshot(currentSnapshot());
 }
 
-void cwSketchCanvas::setPreviewSnapshot(const cwPaletteSnapshot &snapshot)
+cwPaletteSnapshotSource *cwSketchCanvas::snapshotSource() const
 {
-    // Comparing snapshots is far cheaper than the glyph-cache wipe + all-stroke
-    // re-tessellation refreshPathSnapshot() triggers, so skip identical pushes
-    // (e.g. the no-op preview on brush load / canvas attach).
-    if (m_hasPreviewSnapshot && m_previewSnapshot == snapshot) {
-        return;
-    }
-    m_previewSnapshot = snapshot;
-    m_hasPreviewSnapshot = true;
-    refreshPathSnapshot();
+    return m_snapshotSource;
 }
 
-void cwSketchCanvas::clearPreviewSnapshot()
+void cwSketchCanvas::setSnapshotSource(cwPaletteSnapshotSource *source)
 {
-    if (!m_hasPreviewSnapshot) {
+    if (m_snapshotSource == source) {
         return;
     }
-    m_hasPreviewSnapshot = false;
-    m_previewSnapshot = cwPaletteSnapshot();
+
+    if (m_snapshotSource != nullptr) {
+        disconnect(m_snapshotSource, nullptr, this, nullptr);
+    }
+
+    m_snapshotSource = source;
+
+    if (m_snapshotSource != nullptr) {
+        connect(m_snapshotSource, &cwPaletteSnapshotSource::snapshotChanged,
+                this, [this]() { refreshPathSnapshot(); });
+        // If the source is destroyed while installed, m_snapshotSource auto-nulls
+        // (QPointer); re-push so we fall back to the sketch's resolved palette.
+        connect(m_snapshotSource, &QObject::destroyed,
+                this, [this]() { refreshPathSnapshot(); });
+    }
+
     refreshPathSnapshot();
 }
 

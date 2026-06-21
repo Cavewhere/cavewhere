@@ -9,7 +9,6 @@
 #define CWBRUSHEDITOR_H
 
 //Qt includes
-#include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
 #include <QString>
@@ -17,6 +16,7 @@
 //Our includes
 #include "CaveWhereLibExport.h"
 #include "cwLineBrush.h"
+#include "cwPaletteSnapshotSource.h"
 
 // moc needs the complete types to register the QObject* property metatypes;
 // Q_MOC_INCLUDE keeps the heavy includes out of this header.
@@ -31,9 +31,13 @@ class cwCavingRegion;
 // Working-copy controller for the in-app brush editor (commit 9, phase 1). Holds
 // one editable cwLineBrush working copy plus the unedited baseline it was loaded
 // from; every mutation touches only the working copy, so the real palette is
-// never written until apply(). On each edit it pushes a preview snapshot (the
-// resolved palette with the working brush swapped) into previewCanvas, so the
-// live sketch re-skins immediately without mutating the palette.
+// never written until apply().
+//
+// It is itself the live preview's cwPaletteSnapshotSource: snapshot() returns the
+// resolved palette with the working brush swapped in, and each edit installs the
+// editor as previewCanvas's source and re-pushes, so the live sketch re-skins
+// immediately without mutating the palette. discard()/apply() clear the source so
+// the canvas falls back to its sketch-resolved snapshot.
 //
 // apply() commits: on a writable palette it is palette->setBrush(working); on a
 // read-only palette (e.g. the shipped default a fresh region resolves to) it
@@ -41,7 +45,7 @@ class cwCavingRegion;
 // fork, and write the working copy into it ("Duplicate & Save"). discard()
 // restores the baseline. The brush structure is exposed through plain invokable
 // accessors (cwLineBrush is not a QML gadget) for the read-only structure tree.
-class CAVEWHERE_LIB_EXPORT cwBrushEditor : public QObject
+class CAVEWHERE_LIB_EXPORT cwBrushEditor : public cwPaletteSnapshotSource
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(BrushEditor)
@@ -99,6 +103,10 @@ public:
     Q_INVOKABLE QString ruleName(int layerIndex, int ruleIndex) const;
     Q_INVOKABLE bool ruleEnabled(int layerIndex, int ruleIndex) const;
 
+    // cwPaletteSnapshotSource: the resolved palette with the working brush swapped
+    // in. Returns the unmodified palette snapshot when no brush is loaded.
+    cwPaletteSnapshot snapshot() const override;
+
 signals:
     void paletteChanged();
     void previewCanvasChanged();
@@ -111,7 +119,13 @@ signals:
 private:
     void setDirty(bool dirty);
     void recomputeDirty();
+
+    // Install the editor as previewCanvas's snapshot source and re-push, so the
+    // working copy re-skins the live sketch. No-op until a brush is loaded.
     void pushPreview();
+    // Drop the editor as previewCanvas's source (falling the canvas back to its
+    // sketch-resolved snapshot), but only if we are still the active source.
+    void clearPreview();
 
     QPointer<cwSymbologyPalette> m_palette;
     QPointer<cwSketchCanvas> m_previewCanvas;

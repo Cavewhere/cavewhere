@@ -28,6 +28,7 @@ class cwInfiniteGridModel;
 class cwFixedGridModel;
 class cwCenterlineSketchPainterModel;
 class cwSurvey2DGeometryArtifact;
+class cwPaletteSnapshotSource;
 class cwTrip;
 class cwScrapManager;
 class QAbstractItemModel;
@@ -91,26 +92,18 @@ public:
     bool debugOverlayVisible() const;
     void setDebugOverlayVisible(bool visible);
 
-    // Authoring preview override (commit 9 brush editor). While a brush is being
-    // edited, the editor pushes a preview snapshot — the resolved palette with the
-    // working brush swapped in — so the live sketch re-skins on every edit without
-    // mutating the real palette. clearPreviewSnapshot() drops the override and
-    // re-resolves from the sketch (e.g. after Apply persisted the real brush, or
-    // on Discard). Not persisted; ignored by cwSketchGlyphCanvas, which fully
-    // overrides snapshotForPathModel().
-    void setPreviewSnapshot(const cwPaletteSnapshot &snapshot);
-    void clearPreviewSnapshot();
+    // The snapshot source the canvas skins finished strokes with. Setting one
+    // overrides the default (the sketch's region-resolved palette): the canvas
+    // pulls snapshot() and re-pulls on snapshotChanged(). Pass nullptr to fall
+    // back to the sketch. The canvas does not own the source. The glyph editor
+    // points it at a palette-backed source and the brush editor at a live-preview
+    // source, so authoring re-skins the live sketch without mutating the palette.
+    void setSnapshotSource(cwPaletteSnapshotSource *source);
+    cwPaletteSnapshotSource *snapshotSource() const;
 
 protected:
     QCanvasPainterItemRenderer *createItemRenderer() const override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
-
-    // The palette snapshot pushed into the path model. The base resolves it from
-    // the sketch's region-resolved palette; cwSketchGlyphCanvas overrides it to
-    // inject an authoring palette directly, bypassing the resolver. Call
-    // refreshPathSnapshot() to re-push after the source changes.
-    virtual cwPaletteSnapshot snapshotForPathModel() const;
-    void refreshPathSnapshot();
 
 signals:
     void sketchChanged();
@@ -134,8 +127,7 @@ private:
     cwSketch *m_sketch = nullptr;
     QString m_currentBrushName;
     cwDecoratedStrokePathSource *m_pathModel = nullptr;
-    cwPaletteSnapshot m_previewSnapshot;
-    bool m_hasPreviewSnapshot = false;
+    QPointer<cwPaletteSnapshotSource> m_snapshotSource;
     cwInfiniteGridModel *m_grid = nullptr;
     double m_zoom = 1.0;
     QPointF m_pan;
@@ -151,6 +143,12 @@ private:
     QPointer<cwTrip> m_acquiredTrip;
     QMetaObject::Connection m_linePlotUpdatedConnection;
     QMetaObject::Connection m_anchorStationChangedConnection;
+
+    // Resolve the snapshot to skin strokes with: the active source if one is set,
+    // else the sketch's region-resolved palette. refreshPathSnapshot() re-pushes
+    // it into the path model after the source or the sketch's palette changes.
+    cwPaletteSnapshot currentSnapshot() const;
+    void refreshPathSnapshot();
 
     void connectPathModelSignals();
     void connectModelForUpdate(QAbstractItemModel *model);

@@ -19,15 +19,13 @@
 #include "cwTrip.h"
 
 cwBrushEditor::cwBrushEditor(QObject *parent) :
-    QObject(parent)
+    cwPaletteSnapshotSource(parent)
 {
 }
 
 cwBrushEditor::~cwBrushEditor()
 {
-    if (m_previewCanvas != nullptr) {
-        m_previewCanvas->clearPreviewSnapshot();
-    }
+    clearPreview();
 }
 
 void cwBrushEditor::setPalette(cwSymbologyPalette *palette)
@@ -59,11 +57,9 @@ void cwBrushEditor::setPreviewCanvas(cwSketchCanvas *canvas)
         return;
     }
 
-    // Drop any override on the canvas we're leaving so a stale preview doesn't
+    // Drop our source on the canvas we're leaving so a stale preview doesn't
     // linger on it.
-    if (m_previewCanvas != nullptr) {
-        m_previewCanvas->clearPreviewSnapshot();
-    }
+    clearPreview();
 
     m_previewCanvas = canvas;
     emit previewCanvasChanged();
@@ -97,9 +93,7 @@ void cwBrushEditor::loadBrushNamed(const QString &name)
         setDirty(false);
         emit brushLoaded();
         emit structureChanged();
-        if (m_previewCanvas != nullptr) {
-            m_previewCanvas->clearPreviewSnapshot();
-        }
+        clearPreview();
         return;
     }
 
@@ -144,9 +138,7 @@ void cwBrushEditor::discard()
     m_working = m_baseline;
     setDirty(false);
     emit structureChanged();
-    if (m_previewCanvas != nullptr) {
-        m_previewCanvas->clearPreviewSnapshot();
-    }
+    clearPreview();
 }
 
 void cwBrushEditor::apply()
@@ -180,11 +172,9 @@ void cwBrushEditor::apply()
     m_baseline = m_working;
     setDirty(false);
 
-    // The real palette now carries the edit; drop the override so the sketch's
+    // The real palette now carries the edit; drop the source so the sketch's
     // resolved snapshot (now including it) is what renders.
-    if (m_previewCanvas != nullptr) {
-        m_previewCanvas->clearPreviewSnapshot();
-    }
+    clearPreview();
 }
 
 int cwBrushEditor::layerCount() const
@@ -247,10 +237,13 @@ void cwBrushEditor::recomputeDirty()
     setDirty(m_working != m_baseline);
 }
 
-void cwBrushEditor::pushPreview()
+cwPaletteSnapshot cwBrushEditor::snapshot() const
 {
-    if (m_previewCanvas == nullptr || m_palette == nullptr || !m_loaded) {
-        return;
+    if (m_palette == nullptr) {
+        return cwPaletteSnapshot();
+    }
+    if (!m_loaded) {
+        return m_palette->snapshot();
     }
 
     // The resolved palette's data with the working brush swapped in — a
@@ -269,6 +262,25 @@ void cwBrushEditor::pushPreview()
     } else {
         data.lineBrushes.append(m_working);
     }
+    return data.snapshot();
+}
 
-    m_previewCanvas->setPreviewSnapshot(data.snapshot());
+void cwBrushEditor::pushPreview()
+{
+    if (m_previewCanvas == nullptr || m_palette == nullptr || !m_loaded) {
+        return;
+    }
+
+    if (m_previewCanvas->snapshotSource() != this) {
+        m_previewCanvas->setSnapshotSource(this);   // installs and re-pulls snapshot()
+    } else {
+        emit snapshotChanged();                      // already ours; re-pull
+    }
+}
+
+void cwBrushEditor::clearPreview()
+{
+    if (m_previewCanvas != nullptr && m_previewCanvas->snapshotSource() == this) {
+        m_previewCanvas->setSnapshotSource(nullptr);
+    }
 }

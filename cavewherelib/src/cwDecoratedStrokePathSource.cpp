@@ -101,6 +101,13 @@ void cwDecoratedStrokePathSource::setActiveStrokeColor(const QColor &color)
 
 void cwDecoratedStrokePathSource::setSnapshot(const cwPaletteSnapshot &snapshot)
 {
+    // Comparing snapshots is far cheaper than the glyph-cache wipe + all-stroke
+    // re-tessellation scheduleRebuild() triggers, so skip identical pushes (e.g.
+    // a snapshot source re-pulling the same resolved palette, or the no-op
+    // preview on brush load / canvas attach).
+    if (m_snapshot == snapshot) {
+        return;
+    }
     m_snapshot = snapshot;
     m_cache.setSnapshot(snapshot);
     scheduleRebuild();

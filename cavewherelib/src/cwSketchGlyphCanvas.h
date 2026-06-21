@@ -29,6 +29,7 @@ Q_MOC_INCLUDE("cwSymbologyPalette.h")
 
 class cwSketch;
 class cwSymbologyPalette;
+class cwPaletteBackedSnapshotSource;
 
 // A cwSketchCanvas specialized for authoring a single glyph in isolation. It
 // owns its own cwSketch (no trip, no region) and draws against a palette
@@ -59,7 +60,7 @@ public:
     // base's heavy includes out of every consumer TU.
     ~cwSketchGlyphCanvas() override;
 
-    cwSymbologyPalette *palette() const { return m_palette; }
+    cwSymbologyPalette *palette() const;
     void setPalette(cwSymbologyPalette *palette);
 
     QSizeF paperExtentMm() const { return m_paperExtentMm; }
@@ -78,9 +79,6 @@ public:
     // of the palette itself.
     Q_INVOKABLE void loadGlyphNamed(const QString &name);
 
-protected:
-    cwPaletteSnapshot snapshotForPathModel() const override;
-
 signals:
     void paletteChanged();
     void paperExtentMmChanged();
@@ -90,8 +88,9 @@ private:
     double paperMmToWorldM() const;
 
     cwSketch *m_glyphSketch = nullptr;
-    QPointer<cwSymbologyPalette> m_palette;
-    QMetaObject::Connection m_paletteDataConnection;
+    // Feeds the inherited path source straight from the authoring palette,
+    // bypassing the region resolver; installed as the canvas's snapshot source.
+    cwPaletteBackedSnapshotSource *m_paletteSource = nullptr;
     QSizeF m_paperExtentMm;
 };
 
