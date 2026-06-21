@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwBrushEditor.h"
+#include "cwBrushStructureModel.h"
 #include "cwSymbologyPalette.h"
 #include "cwSymbologyPaletteManager.h"
 #include "cwSketchCanvas.h"
@@ -21,6 +22,7 @@
 cwBrushEditor::cwBrushEditor(QObject *parent) :
     cwPaletteSnapshotSource(parent)
 {
+    m_structureModel = new cwBrushStructureModel(this);
 }
 
 cwBrushEditor::~cwBrushEditor()
@@ -91,6 +93,7 @@ void cwBrushEditor::loadBrushNamed(const QString &name)
         m_baseline = cwLineBrush();
         m_loaded = false;
         setDirty(false);
+        m_structureModel->reset();
         emit brushLoaded();
         emit structureChanged();
         clearPreview();
@@ -101,6 +104,7 @@ void cwBrushEditor::loadBrushNamed(const QString &name)
     m_baseline = *brush;
     m_loaded = true;
     setDirty(false);
+    m_structureModel->reset();
     emit brushLoaded();
     emit structureChanged();
     pushPreview();
@@ -126,6 +130,7 @@ void cwBrushEditor::setRuleEnabled(int layerIndex, int ruleIndex, bool enabled)
     m_working.decorations.replace(layerIndex, layer);
 
     recomputeDirty();
+    m_structureModel->ruleChanged(layerIndex, ruleIndex);
     emit structureChanged();
     pushPreview();
 }
@@ -137,6 +142,7 @@ void cwBrushEditor::discard()
     }
     m_working = m_baseline;
     setDirty(false);
+    m_structureModel->reset();
     emit structureChanged();
     clearPreview();
 }

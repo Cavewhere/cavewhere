@@ -89,12 +89,15 @@ Item {
         function test_toggleRuleViaCheckboxMarksDirtyThenDiscardReverts() {
             const editor = openEditorOnFloorStep()
 
-            const checkBox = findChild(rootId, "ruleCheckBox_1_0")
-            verify(checkBox !== null, "the first tick-layer rule checkbox exists")
-            verify(checkBox.checked, "rule starts enabled")
+            // The TreeView instantiates rule rows lazily once its layers expand.
+            tryVerify(() => findChild(rootId, "ruleCheckBox_1_0") !== null, 2000,
+                      "the first tick-layer rule checkbox exists")
+            // Re-fetch before each use: TreeView pools/reuses delegates, so a
+            // captured handle could go stale.
+            verify(findChild(rootId, "ruleCheckBox_1_0").checked, "rule starts enabled")
             verify(!editor.dirty, "freshly loaded editor is clean")
 
-            mouseClick(checkBox)
+            mouseClick(findChild(rootId, "ruleCheckBox_1_0"))
 
             tryVerify(() => editor.dirty, 2000, "toggling a rule dirties the working copy")
             verify(!editor.ruleEnabled(1, 0), "the rule is now disabled on the working copy")

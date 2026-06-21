@@ -299,13 +299,61 @@ Phase tags: <span class="p p1">1</span><span class="p p2">2</span><span class="p
 <tr><th>Phase</th><th>Delivers</th></tr>
 <tr><td><span class="p p0">0</span> palette mutation</td><td>Unify mutation onto <code>cwSymbologyPalette</code>; retire manager glyph trio. (B5)</td></tr>
 <tr><td><span class="p p1">1</span> <span class="tag ship">SHIP 1st</span> thin loop</td><td>Docked panel + working-copy Discard/Apply + <strong>fork-on-save</strong> (read-only → Duplicate &amp; Save) + <strong>rail palette combo</strong> + live preview (snapshot override) + enable/disable + read-only structure + entry points + gallery cold start + <code>enabled</code> flag. (B1–B4, B6, B13, B17, B18-combo)</td></tr>
-<tr><td><span class="p p2">2</span> stack editing</td><td>Add/remove/reorder layers &amp; rules; glyph selection; rule param editing; live validator; brush library add/dup/remove/<strong>rename</strong>; <strong>palette management page</strong>; <strong>replace the phase-1 structure-tree stopgap</strong> (nested Repeaters + <code>_structureRevision</code> comma-operator hack) <strong>with a <code>TreeView</code> + real <code>QAbstractItemModel</code></strong> on <code>cwBrushEditor</code> (incremental row signals for the new add/remove/reorder). (B7, B8, B16, B18-page)</td></tr>
+<tr><td><span class="p p2">2</span> stack editing</td><td><strong>2.1 <span class="ok">DONE</span>:</strong> replaced the phase-1 structure-tree stopgap (nested Repeaters + <code>_structureRevision</code> comma-operator hack) with a <code>TreeView</code> + real <code>QAbstractItemModel</code> (<code>cwBrushStructureModel</code>) on <code>cwBrushEditor</code> — read-only projection + enable/disable toggle, behavior-preserving. <strong>2.2+ (next):</strong> add/remove/reorder layers &amp; rules; glyph selection; rule param editing; live validator; brush library add/dup/remove/<strong>rename</strong>; <strong>palette management page</strong>. <strong>Phase 2.2 opens with <em>step 0</em> below (model becomes the structure-mutation surface) so incremental <code>rowsInserted/Removed/moveRows</code> bracket correctly.</strong> (B7, B8, B16, B18-page)</td></tr>
 <tr><td><span class="p p3">3</span> per-rule viz</td><td>Stepwise "explain" layout → before/after thumbnails / "solo this rule". (B9)</td></tr>
 <tr><td><span class="p p4">4</span> dependencies + scoped glyph</td><td>Dependency index; inline "Used by"; dependents gallery; transitive blast radius; live cycle check; scoped glyph editing (reusable pane). (B10–B12)</td></tr>
 <tr><td><span class="p p5">5</span> Palette Graph</td><td>QuickQanava DAG view; navigate / open / delete-orphan; shared/orphan/cycle highlighting. (B14)</td></tr>
 <tr><td><span class="p p6">6</span> brush→brush refs</td><td>Symbol instancing: reference a brush from a brush; engine compose; graph ref-edges. (B15)</td></tr>
 <tr><td>7 styling migration</td><td>Move <code>line*</code>/<code>fill*</code> off <code>cwDecorationLayer</code> into the <code>Trace</code> rule's params (proto), informed by the param UI.</td></tr>
 </table>
+
+<h3>Phase 2.2 — step 0: the model becomes the structure-mutation surface</h3>
+<p><strong>Decision (settled, 2026-06-20):</strong> do this as the <em>opening move of Phase 2.2</em>,
+bundled with the first mutator (add/remove rule) — <em>not</em> as a standalone pre-commit.
+Surfaced by the 2.1 architecture review (item A, conf 82).</p>
+
+<p><strong>Why.</strong> Phase 2.1 ships a <em>read-only</em> projection: <code>cwBrushEditor</code> owns the
+working <code>cwLineBrush</code> (<code>m_working</code>) and is the sole mutator; <code>cwBrushStructureModel</code>
+owns no data and reads back through the editor's accessors, and the editor pokes the model
+(<code>reset()</code> on load/discard, <code>ruleChanged()</code> on toggle). That "editor mutates,
+<em>then</em> tells the model" handshake is fine for toggles (a <code>dataChanged</code>) but
+<strong>cannot honor QAIM's insert/remove/move contract</strong>, where <code>beginInsertRows()</code>
+must be called <em>before</em> the row exists and <code>endInsertRows()</code> <em>after</em>. With the
+2.1 split, every future mutator must remember to call a matching model notifier; the first one
+that forgets <strong>silently desyncs the tree</strong> (stale rows). For editing, that split is the
+wrong seam.</p>
+
+<p><strong>Why bundle with the first mutator (not a separate commit).</strong> Moving <code>m_working</code>
+into the model with no mutators yet is a pure ownership shuffle with zero observable behavior change
+and nothing to exercise the new <code>begin/end</code> paths — an untestable refactor. Landing it
+<em>with</em> add/remove rule means the new bracketing is exercised and tested the moment it's written.</p>
+
+<p><strong>Target shape</strong> (reconciles review items A + E):</p>
+<ul>
+  <li><strong>Model owns the working <code>cwLineBrush</code></strong> and is the mutation <em>mechanism</em>:
+  <code>insertRule/removeRule/moveRule/insertLayer/removeLayer/moveLayer</code> each bracket
+  <code>beginInsertRows</code>/splice/<code>endInsertRows</code> (etc.) internally. <code>setRuleEnabled</code>
+  stays a narrow <code>dataChanged</code>.</li>
+  <li><strong>Editor stays the public API + the dirty/preview chokepoint.</strong> QML calls
+  <code>editor.addRule(...)</code> → editor invokes the model mechanism → editor runs
+  <code>recomputeDirty()</code> + <code>pushPreview()</code>. Mutation entry points do <strong>not</strong>
+  become <code>Q_INVOKABLE</code> on the model (that would bypass dirty/preview — review item E).</li>
+  <li><strong>Editor reads working through the model</strong> for <code>snapshot()</code>,
+  <code>isDirty</code> (<code>model.brush() != m_baseline</code>), and <code>apply()</code>;
+  <code>loadBrushNamed</code>/<code>discard</code> set the model's brush (a <code>reset()</code>).</li>
+  <li><strong>C++ accessors</strong> (<code>layerCount()/ruleCount()/ruleName()/ruleEnabled()/layerLabel()</code>)
+  stay on the editor, delegating to the model, so existing tests keep passing.</li>
+  <li><strong>Retire the vestigial <code>structureChanged</code> signal</strong> (review item C) here — once
+  the model is authoritative for the view it has no remaining QML consumer; update the C++ test to spy on
+  the model's <code>dataChanged</code>/<code>modelReset</code> (or the editor's <code>dirtyChanged</code>)
+  instead. Do a repo-wide consumer check first.</li>
+</ul>
+
+<p><strong>Deferred sibling (review item B, conf 68):</strong> <code>cwBrushStructureModel.cpp</code> includes
+five editor-dependency headers purely because <code>cwBrushEditor.h</code> has inline <code>QPointer</code>
+getters (<code>palette()/previewCanvas()/region()</code>) — the same leak <code>cwBrushEditor.cpp</code>
+already carries. Moving those getters out-of-line is header-hygiene worth doing, but it's an independent
+pass, not part of step 0.</p>
 
 <h2>12. Phase 1 — the thin loop, in detail</h2>
 <ol>
@@ -344,7 +392,7 @@ cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test cavewhere-
 <tr><td>Fork-on-save side effect</td><td>Low</td><td>Duplicate &amp; Save repoints <code>region.defaultPaletteId()</code> — a project-state change. The fork is a byte copy so the map looks identical immediately; surface it via the banner + the rail combo's new entry.</td></tr>
 <tr><td>Rename re-points references</td><td>Medium</td><td>Brush/glyph rename (save-new + drop-old) must re-point dependents or it orphans them. Direct renames are safe in Phase 2 (no refs yet); once the dependency index lands (Phase 4) rename routes through it. Until then, restrict rename to leaf names or block rename of referenced nodes.</td></tr>
 <tr><td>Phase-1 read-only structure model</td><td>Low</td><td>The structure tree needs a QML-visible model of layers/rules (plain structs aren't QML-readable). Covered by <code>cwBrushEditor</code> exposing list-model accessors (B2); call out as its own deliverable so it isn't lost.</td></tr>
-<tr><td><strong>Phase-1 structure-tree STOPGAP (shipped — replace in phase 2)</strong></td><td>Low</td><td><strong>What shipped:</strong> <code>BrushEditorPanel.qml</code> renders the layer/rule tree with <em>nested Repeaters</em> bound to <code>cwBrushEditor</code>'s invokable accessors (<code>layerCount()/layerLabel()/ruleCount()/ruleName()/ruleEnabled()</code>). Because those are function calls (not bindable properties), QML can't track them as dependencies, so the panel bumps a <code>_structureRevision</code> counter on <code>structureChanged</code> and smuggles it into each binding via the comma operator (<code>(_structureRevision, editor.ruleEnabled(l, r))</code>) to force re-evaluation. It works for the read-only-plus-toggle thin loop (no row insert/remove/reorder), but the comma-operator trick is obscure and a flat-accessor view doesn't scale to drag-reorder/add/remove. <strong>Phase 2 replacement:</strong> add a real <code>QAbstractItemModel</code> on <code>cwBrushEditor</code> (a 2-level layers→rules tree) and drive the panel with a <code>TreeView</code> + role-based delegates. That deletes <code>_structureRevision</code> and the comma-operator bindings, and gives incremental <code>rowsInserted/rowsRemoved/moveRows</code> (with animations) that stack editing needs anyway. The invokable accessors can then be retired (or kept only for point queries/tests). <em>(A simpler interim — a notifying <code>QVariantList layers</code> snapshot property — was considered and rejected in favor of going straight to the real tree model in phase 2.)</em></td></tr>
+<tr><td><strong>Phase-1 structure-tree STOPGAP <span class="ok">RESOLVED</span> (phase 2.1)</strong></td><td>Low</td><td><strong>What shipped (phase 1):</strong> <code>BrushEditorPanel.qml</code> rendered the layer/rule tree with <em>nested Repeaters</em> bound to <code>cwBrushEditor</code>'s invokable accessors, bumping a <code>_structureRevision</code> counter on <code>structureChanged</code> and smuggling it into each binding via the comma operator to force re-evaluation. <strong>Phase 2.1 replacement (DONE):</strong> added <code>cwBrushStructureModel</code> (a <code>QAbstractItemModel</code> 2-level layers→rules tree, <code>QML_ANONYMOUS</code>, exposed via <code>cwBrushEditor::structureModel</code>) and rewrote the panel as a <code>TreeView</code> with a plain custom <code>Item</code> delegate (the native macOS style forbids customizing a <code>TreeViewDelegate</code>'s <code>contentItem</code>; required props <code>row/depth/expanded/hasChildren</code> + model-role props drive it). The model owns no data — it reads the editor's accessors — and the editor drives notifications directly: <code>reset()</code> on a wholesale load/discard, <code>ruleChanged()</code> on a single toggle, so a checkbox toggle emits a narrow <code>dataChanged</code> instead of resetting (and collapsing) the tree. The view re-expands on <code>modelReset</code> via <code>Qt.callLater(expandRecursively)</code> (rows build async). <code>_structureRevision</code> and the comma-operator bindings are deleted; the public <code>structureChanged</code> signal and invokable accessors are kept (the model and C++ tests read through them). The incremental <code>rowsInserted/rowsRemoved/moveRows</code> protocol lands its mutators in phase 2.2 (add/remove/reorder).</td></tr>
 </table>
 
 <h2>16. Out of scope / deferred</h2>

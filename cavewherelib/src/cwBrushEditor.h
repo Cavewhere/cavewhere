@@ -23,10 +23,12 @@
 Q_MOC_INCLUDE("cwSymbologyPalette.h")
 Q_MOC_INCLUDE("cwSketchCanvas.h")
 Q_MOC_INCLUDE("cwCavingRegion.h")
+Q_MOC_INCLUDE("cwBrushStructureModel.h")
 
 class cwSymbologyPalette;
 class cwSketchCanvas;
 class cwCavingRegion;
+class cwBrushStructureModel;
 
 // Working-copy controller for the in-app brush editor (commit 9, phase 1). Holds
 // one editable cwLineBrush working copy plus the unedited baseline it was loaded
@@ -58,6 +60,7 @@ class CAVEWHERE_LIB_EXPORT cwBrushEditor : public cwPaletteSnapshotSource
     Q_PROPERTY(bool loaded READ isLoaded NOTIFY brushLoaded)
     Q_PROPERTY(bool dirty READ isDirty NOTIFY dirtyChanged)
     Q_PROPERTY(bool paletteWritable READ isPaletteWritable NOTIFY paletteWritableChanged)
+    Q_PROPERTY(cwBrushStructureModel* structureModel READ structureModel CONSTANT)
 
 public:
     explicit cwBrushEditor(QObject *parent = nullptr);
@@ -77,6 +80,10 @@ public:
     bool isLoaded() const { return m_loaded; }
     bool isDirty() const { return m_dirty; }
     bool isPaletteWritable() const;
+
+    // The tree model (layers -> rules) driving the editor's TreeView. Owned by
+    // the editor; the editor drives its change notifications.
+    cwBrushStructureModel *structureModel() const { return m_structureModel; }
 
     // Load the named brush from the current palette into a fresh working copy and
     // baseline (clears dirty). An empty or unknown name unloads the editor. Pushes
@@ -127,6 +134,7 @@ private:
     // sketch-resolved snapshot), but only if we are still the active source.
     void clearPreview();
 
+    cwBrushStructureModel *m_structureModel = nullptr;
     QPointer<cwSymbologyPalette> m_palette;
     QPointer<cwSketchCanvas> m_previewCanvas;
     QPointer<cwCavingRegion> m_region;

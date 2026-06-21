@@ -37,14 +37,6 @@ QQ.Rectangle {
 
     property bool open: false
 
-    // STOPGAP (phase 1): the structure tree is built from invokable accessors
-    // (layerCount/ruleCount/...) which QML can't track as binding dependencies,
-    // so this counter is bumped on structureChanged and smuggled into each
-    // binding via the comma operator to force re-evaluation. Phase 2 replaces the
-    // whole nested-Repeater + revision-counter scheme with a TreeView backed by a
-    // real QAbstractItemModel on cwBrushEditor. See SYMBOLOGY_PALETTE_COMMIT9_PLAN.
-    property int _structureRevision: 0
-
     readonly property int kPanelWidth: 280
 
     // Open the panel on the named brush, snapshotting the current resolved
@@ -87,13 +79,6 @@ QQ.Rectangle {
     SymbologyPaletteListModel {
         id: paletteListModelId
         manager: RootData.paletteManager
-    }
-
-    QQ.Connections {
-        target: editorId
-
-        function onStructureChanged() { panel._structureRevision++ }
-        function onBrushLoaded() { panel._structureRevision++ }
     }
 
     ColumnLayout {
@@ -165,56 +150,105 @@ QQ.Rectangle {
             }
         }
 
-        QC.ScrollView {
+        QQ.TreeView {
+            id: structureTreeId
+            objectName: "brushStructureTree"
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            model: editorId.structureModel
 
-            ColumnLayout {
-                width: panel.width - 2 * Theme.pageMargin
-                spacing: Theme.flowSpacing
+            // Layers and their rules are always shown expanded (mirrors the
+            // phase-1 always-open tree); re-expand whenever the model resets on a
+            // brush load or discard.
+            QQ.Component.onCompleted: expandRecursively()
 
-                QQ.Repeater {
-                    model: (panel._structureRevision, editorId.loaded ? editorId.layerCount() : 0)
+            QQ.Connections {
+                target: editorId.structureModel
+                // The view rebuilds its rows asynchronously after a reset, so
+                // defer the expand until those rows exist.
+                function onModelReset() { Qt.callLater(structureTreeId.expandRecursively) }
+            }
 
-                    delegate: ColumnLayout {
-                        id: layerDelegateId
+            // A plain Item delegate (not TreeViewDelegate) driven by TreeView's
+            // attached properties: the native style forbids customizing a
+            // TreeViewDelegate's contentItem, and a rule row needs a checkbox.
+            delegate: QQ.Item {
+                id: treeDelegateId
 
-                        required property int index
+                // Assigned by TreeView (required properties, not attached props).
+                required property int row
+                required property int depth
+                required property bool expanded
+                required property bool hasChildren
+                required property bool isTreeNode
+                // Model roles.
+                required property int layerIndex
+                required property int ruleIndex
+                required property bool isLayer
+                required property bool ruleEnabled
+                required property string label
 
-                        readonly property string label: (panel._structureRevision, editorId.layerLabel(index))
+                readonly property real kIndent: Theme.sectionSpacing
 
-                        Layout.fillWidth: true
-                        spacing: Theme.tightSpacing
+                implicitWidth: structureTreeId.width
+                implicitHeight: contentRowId.implicitHeight + 2 * Theme.tightSpacing
 
-                        QC.Label {
-                            text: layerDelegateId.label === "" ? "Line layer" : layerDelegateId.label
-                            color: Theme.textSubtle
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeCaption
-                            topPadding: Theme.tightSpacing
+                RowLayout {
+                    id: contentRowId
+
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        verticalCenter: parent.verticalCenter
+                        // Indent only the tree column, per the depth in the model.
+                        leftMargin: treeDelegateId.isTreeNode ? treeDelegateId.depth * treeDelegateId.kIndent : 0
+                    }
+                    spacing: Theme.tightSpacing
+
+                    // Expand/collapse indicator on tree-column rows that have
+                    // children; a same-width spacer keeps leaf rows aligned.
+                    QC.Label {
+                        Layout.preferredWidth: Theme.sectionSpacing
+                        horizontalAlignment: QQ.Text.AlignHCenter
+                        visible: treeDelegateId.isTreeNode
+                        text: !treeDelegateId.hasChildren ? ""
+                              : treeDelegateId.expanded ? "▾" : "▸"
+                        color: Theme.textSubtle
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeCaption
+
+                        QQ.TapHandler {
+                            enabled: treeDelegateId.hasChildren
+                            onSingleTapped: structureTreeId.toggleExpanded(treeDelegateId.row)
                         }
+                    }
 
-                        QQ.Repeater {
-                            model: (panel._structureRevision, editorId.ruleCount(layerDelegateId.index))
+                    QC.Label {
+                        visible: treeDelegateId.isLayer
+                        text: treeDelegateId.label === "" ? "Line layer" : treeDelegateId.label
+                        color: Theme.textSubtle
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeCaption
+                        Layout.fillWidth: true
+                    }
 
-                            delegate: QC.CheckBox {
-                                id: ruleCheckId
+                    QC.CheckBox {
+                        visible: !treeDelegateId.isLayer
+                        objectName: "ruleCheckBox_" + treeDelegateId.layerIndex + "_" + treeDelegateId.ruleIndex
+                        text: treeDelegateId.label
+                        checked: treeDelegateId.ruleEnabled
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        Layout.fillWidth: true
 
-                                required property int index
-
-                                readonly property int layerIndex: layerDelegateId.index
-
-                                objectName: "ruleCheckBox_" + layerIndex + "_" + index
-                                Layout.fillWidth: true
-                                Layout.leftMargin: Theme.sectionSpacing
-                                text: (panel._structureRevision, editorId.ruleName(layerIndex, index))
-                                checked: (panel._structureRevision, editorId.ruleEnabled(layerIndex, index))
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeBody
-
-                                onToggled: editorId.setRuleEnabled(layerIndex, index, checked)
-                            }
+                        // setRuleEnabled drives the model back (dataChanged), so
+                        // rebind checked to the authoritative value the click broke.
+                        onToggled: {
+                            editorId.setRuleEnabled(treeDelegateId.layerIndex,
+                                                    treeDelegateId.ruleIndex, checked)
+                            checked = Qt.binding(() => treeDelegateId.ruleEnabled)
                         }
                     }
                 }
