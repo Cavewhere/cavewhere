@@ -19,6 +19,9 @@
 //Std includes
 #include <algorithm>
 #include <limits>
+
+//Qt includes
+#include <QSet>
 // cwSketchCanvas exposes inline accessors over QPointer<cwScrapManager>/<cwTrip>
 // members it only forward-declares; pull the complete types in so this TU can
 // instantiate them.
@@ -70,6 +73,8 @@ void cwBrushEditor::setPalette(cwSymbologyPalette *palette)
                     this, &cwBrushEditor::paletteWritableChanged);
     }
 
+    pushAvailableGlyphNames();   // the validator resolves glyph references against this palette
+
     emit paletteChanged();
     emit paletteWritableChanged();
 }
@@ -116,6 +121,8 @@ QString cwBrushEditor::brushDisplayName() const
 
 void cwBrushEditor::loadBrushNamed(const QString &name)
 {
+    pushAvailableGlyphNames();   // keep the validator's glyph set current before setBrush validates
+
     const std::optional<cwLineBrush> brush =
         m_palette != nullptr ? m_palette->brush(name) : std::nullopt;
 
@@ -381,4 +388,17 @@ void cwBrushEditor::clearPreview()
     if (m_previewCanvas != nullptr && m_previewCanvas->snapshotSource() == this) {
         m_previewCanvas->setSnapshotSource(nullptr);
     }
+}
+
+void cwBrushEditor::pushAvailableGlyphNames()
+{
+    QSet<QString> names;
+    if (m_palette != nullptr) {
+        const QVector<cwSymbologyGlyph> glyphs = m_palette->glyphs();
+        names.reserve(glyphs.size());
+        for (const cwSymbologyGlyph &glyph : glyphs) {
+            names.insert(glyph.name);
+        }
+    }
+    m_structureModel->setAvailableGlyphNames(names);
 }

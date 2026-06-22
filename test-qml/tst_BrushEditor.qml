@@ -463,5 +463,46 @@ Item {
 
             editor.discard()
         }
+
+        // A malformed rule stack surfaces an inline error icon on the offending
+        // row, and the icon clears once the stack is well-formed again. This is
+        // model-driven delegate visibility, so it's reliable offscreen.
+        function test_inlineWarningIconShowsForDeadTerminalAndClearsAfterFix() {
+            const editor = openEditorOnFloorStep()
+
+            // tick layer ships Uniform(0), Align(1), Rigid stamp(2 — the Output
+            // terminal). Adding a second terminal (Trace) joins the Output stage,
+            // so the extra terminal is dead (fatal) and its row shows the icon.
+            editor.addRule(1, "Trace")
+            compare(editor.ruleName(1, 3), "Trace", "the second terminal sits in the Output stage")
+
+            tryVerify(() => {
+                const icon = findChild(rootId, "ruleErrorIcon_1_3")
+                return icon !== null && icon.visible
+            }, 2000, "the dead terminal row shows an inline error icon")
+
+            // The well-formed terminal above it stays clean.
+            const goodIcon = findChild(rootId, "ruleErrorIcon_1_2")
+            verify(goodIcon !== null && !goodIcon.visible,
+                   "the in-order terminal row shows no icon")
+
+            // Removing the dead terminal makes the stack well-formed; the remaining
+            // terminal's row has no icon.
+            editor.removeRule(1, 3)
+            tryVerify(() => {
+                const icon = findChild(rootId, "ruleErrorIcon_1_2")
+                return icon !== null && !icon.visible
+            }, 2000, "fixing the stack clears the inline error icon")
+
+            editor.discard()
+        }
+
+        function test_symbologyErrorEnumExposedToQml() {
+            // The validation codes the model puts in ruleErrorCodes are exposed as
+            // a named QML enum so a fix-it UI can dispatch on problem kind without
+            // comparing against magic numbers.
+            compare(SymbologyError.TwoTerminals, 1024, "TwoTerminals code is stable")
+            compare(SymbologyError.RulesOutOfOrder, 1032, "RulesOutOfOrder code is stable")
+        }
     }
 }

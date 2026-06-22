@@ -215,6 +215,11 @@ QQ.Rectangle {
                 required property string category
                 required property int categorySize
                 required property bool categoryLast
+                // Worst severity for this row (CwError.NoError when clean) and the
+                // validation messages behind it. Category rows always report
+                // NoError, so the indicator never shows on them.
+                required property int ruleErrorSeverity
+                required property list<string> ruleErrorMessages
 
                 readonly property bool isRule: !isLayer && !isCategory
                 readonly property real kIndent: Theme.sectionSpacing
@@ -478,6 +483,35 @@ QQ.Rectangle {
                         Layout.alignment: Qt.AlignVCenter
                         onClicked: editorId.removeRule(treeDelegateId.layerIndex,
                                                        treeDelegateId.ruleIndex)
+                    }
+
+                    // Inline validation indicator: a warning/error icon (with the
+                    // messages as a tooltip) on a layer or rule row whose stack is
+                    // malformed. Fixed size so the row height never changes; shown
+                    // only when severity rises above NoError (no clean-state icon).
+                    QQ.Image {
+                        id: errorIconId
+                        objectName: "ruleErrorIcon_" + treeDelegateId.layerIndex
+                                    + "_" + treeDelegateId.ruleIndex
+                        visible: treeDelegateId.ruleErrorSeverity !== CwError.NoError
+                        source: treeDelegateId.ruleErrorSeverity === CwError.Fatal
+                                ? "qrc:icons/svg/stopSignError.svg"
+                                : "qrc:icons/svg/warning.svg"
+                        sourceSize.width: treeDelegateId.kRowButtonSize
+                        sourceSize.height: treeDelegateId.kRowButtonSize
+                        Layout.preferredWidth: treeDelegateId.kRowButtonSize
+                        Layout.preferredHeight: treeDelegateId.kRowButtonSize
+                        Layout.alignment: Qt.AlignVCenter
+
+                        QQ.HoverHandler {
+                            id: errorHoverId
+                        }
+
+                        QC.ToolTip {
+                            visible: errorIconId.visible && errorHoverId.hovered
+                            text: treeDelegateId.ruleErrorMessages.join("\n")
+                            delay: Theme.toolTipDelay
+                        }
                     }
                 }
 

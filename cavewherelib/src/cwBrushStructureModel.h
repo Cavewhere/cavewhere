@@ -11,10 +11,13 @@
 //Qt includes
 #include <QAbstractItemModel>
 #include <QQmlEngine>
+#include <QSet>
+#include <QStringList>
 #include <QVector>
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwDecorationLayerValidator.h"
 #include "cwLineBrush.h"
 
 // A 3-level tree projection (layers -> categories -> rules) of a brush's
@@ -53,6 +56,9 @@ public:
         CategoryRole,                   // pipeline category label (category and rule rows); "" for layers
         CategorySizeRole,               // number of rules in this row's category (0 for layers)
         CategoryLastRole,               // true if this rule is the last in its category (drop-line gate); false otherwise
+        RuleErrorSeverityRole,          // worst cwError::ErrorType for this row (NoError = clean); category rows are always NoError
+        RuleErrorMessagesRole,          // QStringList of this row's validation messages (empty when clean)
+        RuleErrorCodesRole,             // QList<int> of SymbologyError codes, one per message (parallel to RuleErrorMessagesRole)
     };
     Q_ENUM(Roles)
 
@@ -69,6 +75,11 @@ public:
     // snapshot()/dirty/apply().
     const cwLineBrush &brush() const { return m_brush; }
     void setBrush(const cwLineBrush &brush);   // wholesale change (load/discard) -> model reset
+
+    // The glyph names the resolved palette offers, so the validator can flag a
+    // layer that references a glyph the palette doesn't have. Setting it
+    // re-validates and refreshes the per-row error roles.
+    void setAvailableGlyphNames(const QSet<QString> &names);
 
     // Structure accessors the editor's invokables delegate to. All rule indices
     // here are flat indices into the layer's stored rule list.
@@ -121,7 +132,21 @@ private:
     // told changed; refresh every rule row in the layer so those stay correct.
     void emitLayerRuleRolesChanged(int layerIndex);
 
+    // Recompute m_layerErrors for the whole brush. Cheap (a handful of layers,
+    // each a handful of rules); kept as an explicit member, not a static, so its
+    // lifetime is the model's.
+    void revalidate();
+    // After revalidate(), refresh the error roles on a layer's rows (the layer row
+    // and every rule row under it), since a single edit can change errors anywhere
+    // in the layer's stack.
+    void emitLayerErrorRolesChanged(int layerIndex);
+    // The validation errors attached to one row: rule row by its flat index, or
+    // the layer row when flatRuleIndex == -1.
+    QList<cwError> rowErrors(int layerIndex, int flatRuleIndex) const;
+
     cwLineBrush m_brush;
+    QSet<QString> m_availableGlyphNames;
+    QVector<QList<cwDecorationLayerError>> m_layerErrors;   // one entry per decoration layer
 };
 
 #endif // CWBRUSHSTRUCTUREMODEL_H

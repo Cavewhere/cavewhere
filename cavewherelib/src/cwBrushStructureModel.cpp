@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwBrushStructureModel.h"
+#include "cwError.h"
 #include "cwPlacementRule.h"
 #include "cwPlacementRuleRegistry.h"
 
@@ -65,6 +66,45 @@ int stageOf(const QString &name)
 {
     const cwPlacementRule *rule = cwPlacementRuleRegistry::instance().rule(name);
     return rule != nullptr ? static_cast<int>(rule->stage()) : kUnknownStage;
+}
+
+// The worst severity in a row's error list: Fatal beats Warning beats NoError
+// (the "clean" sentinel). Returned as the cwError::ErrorType value so QML can
+// compare it against the CwError enum.
+int worstSeverity(const QList<cwError> &errors)
+{
+    bool hasWarning = false;
+    for (const cwError &error : errors) {
+        if (error.type() == cwError::Fatal) {
+            return cwError::Fatal;
+        }
+        if (error.type() == cwError::Warning) {
+            hasWarning = true;
+        }
+    }
+    return hasWarning ? cwError::Warning : cwError::NoError;
+}
+
+QStringList errorMessages(const QList<cwError> &errors)
+{
+    QStringList messages;
+    messages.reserve(errors.size());
+    for (const cwError &error : errors) {
+        messages.append(error.message());
+    }
+    return messages;
+}
+
+// The SymbologyError code per error, in the same order as errorMessages(), so QML
+// can pair a message with its code for fix-it dispatch.
+QList<int> errorCodes(const QList<cwError> &errors)
+{
+    QList<int> codes;
+    codes.reserve(errors.size());
+    for (const cwError &error : errors) {
+        codes.append(error.errorTypeId());
+    }
+    return codes;
 }
 
 } // namespace
@@ -148,6 +188,9 @@ QVariant cwBrushStructureModel::data(const QModelIndex &index, int role) const
         case RuleIndexRole:    return -1;
         case CategoryRole:     return QString();
         case CategorySizeRole: return 0;
+        case RuleErrorSeverityRole: return worstSeverity(rowErrors(layerIndex, -1));
+        case RuleErrorMessagesRole: return errorMessages(rowErrors(layerIndex, -1));
+        case RuleErrorCodesRole:    return QVariant::fromValue(errorCodes(rowErrors(layerIndex, -1)));
         default:               return {};
         }
     }
@@ -173,6 +216,10 @@ QVariant cwBrushStructureModel::data(const QModelIndex &index, int role) const
         case RuleIndexRole:    return -1;
         case CategorySizeRole: return block.count;
         case CategoryLastRole: return false;
+        // Errors attach to rule rows and the layer row, never to a category row.
+        case RuleErrorSeverityRole: return static_cast<int>(cwError::NoError);
+        case RuleErrorMessagesRole: return QStringList();
+        case RuleErrorCodesRole:    return QVariant::fromValue(QList<int>());
         default:               return {};
         }
     }
@@ -197,6 +244,9 @@ QVariant cwBrushStructureModel::data(const QModelIndex &index, int role) const
     case CategoryRole:     return ruleCategory(layerIndex, ruleIndex);
     case CategorySizeRole: return block.count;
     case CategoryLastRole: return index.row() == block.count - 1;
+    case RuleErrorSeverityRole: return worstSeverity(rowErrors(layerIndex, ruleIndex));
+    case RuleErrorMessagesRole: return errorMessages(rowErrors(layerIndex, ruleIndex));
+    case RuleErrorCodesRole:    return QVariant::fromValue(errorCodes(rowErrors(layerIndex, ruleIndex)));
     default:               return {};
     }
 }
@@ -214,6 +264,9 @@ QHash<int, QByteArray> cwBrushStructureModel::roleNames() const
         {CategoryRole, "category"},
         {CategorySizeRole, "categorySize"},
         {CategoryLastRole, "categoryLast"},
+        {RuleErrorSeverityRole, "ruleErrorSeverity"},
+        {RuleErrorMessagesRole, "ruleErrorMessages"},
+        {RuleErrorCodesRole, "ruleErrorCodes"},
     };
 }
 
@@ -221,7 +274,20 @@ void cwBrushStructureModel::setBrush(const cwLineBrush &brush)
 {
     beginResetModel();
     m_brush = brush;
+    revalidate();   // the reset refreshes every role, so no extra dataChanged needed
     endResetModel();
+}
+
+void cwBrushStructureModel::setAvailableGlyphNames(const QSet<QString> &names)
+{
+    if (m_availableGlyphNames == names) {
+        return;
+    }
+    m_availableGlyphNames = names;
+    revalidate();
+    for (int i = 0; i < layerCount(); ++i) {
+        emitLayerErrorRolesChanged(i);
+    }
 }
 
 int cwBrushStructureModel::layerCount() const
@@ -356,6 +422,50 @@ void cwBrushStructureModel::emitLayerRuleRolesChanged(int layerIndex)
     }
 }
 
+void cwBrushStructureModel::revalidate()
+{
+    const cwPlacementRuleRegistry &registry = cwPlacementRuleRegistry::instance();
+    QVector<QList<cwDecorationLayerError>> layerErrors;
+    layerErrors.reserve(static_cast<int>(m_brush.decorations.size()));
+    for (const cwDecorationLayer &layer : m_brush.decorations) {
+        layerErrors.append(
+            cwDecorationLayerValidator::validate(layer, registry, m_availableGlyphNames));
+    }
+    m_layerErrors = layerErrors;
+}
+
+void cwBrushStructureModel::emitLayerErrorRolesChanged(int layerIndex)
+{
+    if (!layerInRange(layerIndex)) {
+        return;
+    }
+    const QList<int> roles{RuleErrorSeverityRole, RuleErrorMessagesRole, RuleErrorCodesRole};
+    const QModelIndex layerRow = index(layerIndex, 0, QModelIndex());
+    emit dataChanged(layerRow, layerRow, roles);
+    const int categoryRows = rowCount(layerRow);
+    for (int c = 0; c < categoryRows; ++c) {
+        const QModelIndex categoryRow = index(c, 0, layerRow);
+        const int n = rowCount(categoryRow);
+        if (n > 0) {
+            emit dataChanged(index(0, 0, categoryRow), index(n - 1, 0, categoryRow), roles);
+        }
+    }
+}
+
+QList<cwError> cwBrushStructureModel::rowErrors(int layerIndex, int flatRuleIndex) const
+{
+    QList<cwError> result;
+    if (layerIndex < 0 || layerIndex >= m_layerErrors.size()) {
+        return result;
+    }
+    for (const cwDecorationLayerError &error : m_layerErrors.at(layerIndex)) {
+        if (error.ruleIndex == flatRuleIndex) {
+            result.append(error.error);
+        }
+    }
+    return result;
+}
+
 bool cwBrushStructureModel::setRuleEnabled(int layerIndex, int ruleIndex, bool enabled)
 {
     if (!layerInRange(layerIndex)) {
@@ -381,6 +491,10 @@ bool cwBrushStructureModel::setRuleEnabled(int layerIndex, int ruleIndex, bool e
         const QModelIndex ruleRow = index(localRow, 0, index(categoryIndex, 0, layerRow));
         emit dataChanged(ruleRow, ruleRow, {RuleEnabledRole, Qt::DisplayRole, LabelRole});
     }
+    // Toggling a rule changes the effective stack, so errors anywhere in the layer
+    // can change.
+    revalidate();
+    emitLayerErrorRolesChanged(layerIndex);
     return true;
 }
 
@@ -427,6 +541,8 @@ bool cwBrushStructureModel::insertRule(int layerIndex, int ruleIndex, const cwPl
         endInsertRows();
     }
     emitLayerRuleRolesChanged(layerIndex);
+    revalidate();
+    emitLayerErrorRolesChanged(layerIndex);
     return true;
 }
 
@@ -461,6 +577,8 @@ bool cwBrushStructureModel::removeRule(int layerIndex, int ruleIndex)
         endRemoveRows();
     }
     emitLayerRuleRolesChanged(layerIndex);
+    revalidate();
+    emitLayerErrorRolesChanged(layerIndex);
     return true;
 }
 
@@ -502,6 +620,8 @@ bool cwBrushStructureModel::moveRule(int layerIndex, int fromRuleIndex, int toRu
     // The rows the moved rule shifted past keep stale flat RuleIndexRole values
     // until refreshed.
     emitLayerRuleRolesChanged(layerIndex);
+    revalidate();
+    emitLayerErrorRolesChanged(layerIndex);
     return true;
 }
 

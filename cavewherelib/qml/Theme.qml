@@ -102,6 +102,9 @@ QtObject {
     readonly property int iconSizeSmall: 24
     readonly property int iconSizeMedium: 32
 
+    // Delay (ms) before a hover tooltip appears
+    readonly property int toolTipDelay: 500
+
     // Touch target sizing — scale up hit points on mobile builds
     readonly property real pointSizeFactor: RootData.mobileBuild ? 2.0 : 1.0
 

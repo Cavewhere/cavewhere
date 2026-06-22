@@ -11,7 +11,11 @@
 // Our
 #include "cwBrushEditor.h"
 #include "cwBrushStructureModel.h"
+#include "cwDecorationLayer.h"
+#include "cwError.h"
 #include "cwLineBrush.h"
+#include "cwPlacementRuleData.h"
+#include "cwSymbologyErrorCodes.h"
 #include "cwSymbologyPalette.h"
 #include "cwSymbologyPaletteData.h"
 #include "cwSymbologyPaletteSeed.h"
@@ -39,6 +43,40 @@ void seedWritable(cwSymbologyPalette &palette)
 // floor-step's tick layer (index 1) and its first rule (Uniform spacing).
 constexpr int kTickLayer = 1;
 constexpr int kFirstTickRule = 0;
+
+// A one-layer brush whose single decoration layer carries the given rules (in the
+// given authored order) and glyph, for driving the structure model's validation
+// directly.
+cwLineBrush makeBrush(const QStringList &ruleNames, const QString &glyphName = {})
+{
+    cwDecorationLayer layer;
+    layer.glyphName = glyphName;
+    for (const QString &name : ruleNames) {
+        cwPlacementRuleData ruleData;
+        ruleData.name = name;
+        layer.rules.append(ruleData);
+    }
+    cwLineBrush brush;
+    brush.decorations.append(layer);
+    return brush;
+}
+
+// The rule row whose flat rule index is flatRuleIndex, walking the layer's
+// category nodes (the tree nests rules under per-stage categories).
+QModelIndex findRuleRow(cwBrushStructureModel *model, int layerIndex, int flatRuleIndex)
+{
+    const QModelIndex layer = model->index(layerIndex, 0);
+    for (int c = 0; c < model->rowCount(layer); ++c) {
+        const QModelIndex category = model->index(c, 0, layer);
+        for (int r = 0; r < model->rowCount(category); ++r) {
+            const QModelIndex rule = model->index(r, 0, category);
+            if (model->ruleIndexOf(rule) == flatRuleIndex) {
+                return rule;
+            }
+        }
+    }
+    return {};
+}
 
 } // namespace
 
@@ -92,9 +130,11 @@ TEST_CASE("setRuleEnabled edits the working copy only, marking it dirty",
     editor.loadBrushNamed(cwSymbologyPaletteSeed::floorStepBrushName());
 
     QSignalSpy dirtySpy(&editor, &cwBrushEditor::dirtyChanged);
-    // The structure model is authoritative for the view: a toggle is a narrow
-    // dataChanged on the touched rule (not a tree-collapsing reset).
+    // The structure model is authoritative for the view: a toggle emits targeted
+    // dataChanged (the touched rule's enabled flag, plus the error roles a changed
+    // effective stack can shift), never a tree-collapsing reset.
     QSignalSpy dataChangedSpy(editor.structureModel(), &QAbstractItemModel::dataChanged);
+    QSignalSpy resetSpy(editor.structureModel(), &QAbstractItemModel::modelReset);
     QSignalSpy paletteBrushSpy(&palette, &cwSymbologyPalette::brushChanged);
 
     editor.setRuleEnabled(kTickLayer, kFirstTickRule, false);
@@ -102,7 +142,8 @@ TEST_CASE("setRuleEnabled edits the working copy only, marking it dirty",
     CHECK(editor.isDirty());
     CHECK_FALSE(editor.ruleEnabled(kTickLayer, kFirstTickRule));
     CHECK(dirtySpy.count() == 1);
-    CHECK(dataChangedSpy.count() == 1);
+    CHECK(dataChangedSpy.count() >= 1);
+    CHECK(resetSpy.count() == 0);
 
     // The palette is untouched until apply().
     CHECK(paletteBrushSpy.count() == 0);
@@ -111,8 +152,9 @@ TEST_CASE("setRuleEnabled edits the working copy only, marking it dirty",
     CHECK(stored->decorations.at(kTickLayer).rules.at(kFirstTickRule).enabled);
 
     // An out-of-range toggle is ignored.
+    const int afterToggle = dataChangedSpy.count();
     editor.setRuleEnabled(99, 0, false);
-    CHECK(dataChangedSpy.count() == 1);
+    CHECK(dataChangedSpy.count() == afterToggle);
 }
 
 TEST_CASE("discard restores the baseline working copy",
@@ -452,4 +494,99 @@ TEST_CASE("apply on a read-only palette without a project leaves it untouched",
     const auto stored = palette.brush(cwSymbologyPaletteSeed::floorStepBrushName());
     REQUIRE(stored.has_value());
     CHECK(stored->decorations.at(kTickLayer).rules.at(kFirstTickRule).enabled);
+}
+
+TEST_CASE("structure model reports no error roles on a well-formed stack",
+          "[cwBrushEditor]")
+{
+    cwBrushStructureModel model;
+    model.setAvailableGlyphNames({QStringLiteral("tick")});
+    model.setBrush(makeBrush({QStringLiteral("Uniform spacing"),
+                              QStringLiteral("Align to tangent"),
+                              QStringLiteral("Rigid stamp")},
+                             QStringLiteral("tick")));
+
+    for (int i = 0; i < 3; ++i) {
+        const QModelIndex rule = findRuleRow(&model, 0, i);
+        REQUIRE(rule.isValid());
+        CHECK(model.data(rule, cwBrushStructureModel::RuleErrorSeverityRole).toInt()
+              == cwError::NoError);
+        CHECK(model.data(rule, cwBrushStructureModel::RuleErrorMessagesRole)
+                  .toStringList().isEmpty());
+    }
+    const QModelIndex layer = model.index(0, 0);
+    CHECK(model.data(layer, cwBrushStructureModel::RuleErrorSeverityRole).toInt()
+          == cwError::NoError);
+}
+
+TEST_CASE("structure model flags an out-of-order rule on its row as a warning",
+          "[cwBrushEditor]")
+{
+    cwBrushStructureModel model;
+    model.setAvailableGlyphNames({QStringLiteral("tick")});
+    // Terminal first, then its placement/orientation rules: each later rule runs
+    // before the higher-stage terminal above it.
+    model.setBrush(makeBrush({QStringLiteral("Rigid stamp"),
+                              QStringLiteral("Uniform spacing"),
+                              QStringLiteral("Align to tangent")},
+                             QStringLiteral("tick")));
+
+    const QModelIndex outOfOrder = findRuleRow(&model, 0, 1);   // Uniform spacing
+    REQUIRE(outOfOrder.isValid());
+    CHECK(model.data(outOfOrder, cwBrushStructureModel::RuleErrorSeverityRole).toInt()
+          == cwError::Warning);
+    CHECK_FALSE(model.data(outOfOrder, cwBrushStructureModel::RuleErrorMessagesRole)
+                    .toStringList().isEmpty());
+    CHECK(model.data(outOfOrder, cwBrushStructureModel::RuleErrorCodesRole)
+              .value<QList<int>>()
+              .contains(static_cast<int>(SymbologyError::RulesOutOfOrder)));
+
+    // The terminal at flat index 0 is in order, so its row is clean.
+    const QModelIndex terminal = findRuleRow(&model, 0, 0);
+    CHECK(model.data(terminal, cwBrushStructureModel::RuleErrorSeverityRole).toInt()
+          == cwError::NoError);
+}
+
+TEST_CASE("structure model flags an extra terminal as fatal on its row",
+          "[cwBrushEditor]")
+{
+    cwBrushStructureModel model;
+    model.setAvailableGlyphNames({QStringLiteral("tick")});
+    // Uniform spacing (Generate), then two terminals: the second is dead.
+    model.setBrush(makeBrush({QStringLiteral("Uniform spacing"),
+                              QStringLiteral("Rigid stamp"),
+                              QStringLiteral("Trace")},
+                             QStringLiteral("tick")));
+
+    const QModelIndex deadTerminal = findRuleRow(&model, 0, 2);   // Trace
+    REQUIRE(deadTerminal.isValid());
+    CHECK(model.data(deadTerminal, cwBrushStructureModel::RuleErrorSeverityRole).toInt()
+          == cwError::Fatal);
+    CHECK(model.data(deadTerminal, cwBrushStructureModel::RuleErrorCodesRole)
+              .value<QList<int>>()
+              .contains(static_cast<int>(SymbologyError::TwoTerminals)));
+}
+
+TEST_CASE("disabling a duplicate terminal clears its error (revalidation fires)",
+          "[cwBrushEditor]")
+{
+    cwBrushStructureModel model;
+    model.setAvailableGlyphNames({QStringLiteral("tick")});
+    model.setBrush(makeBrush({QStringLiteral("Uniform spacing"),
+                              QStringLiteral("Rigid stamp"),
+                              QStringLiteral("Trace")},
+                             QStringLiteral("tick")));
+
+    const QModelIndex dead = findRuleRow(&model, 0, 2);
+    REQUIRE(dead.isValid());
+    CHECK(model.data(dead, cwBrushStructureModel::RuleErrorSeverityRole).toInt()
+          == cwError::Fatal);
+
+    // Disabling the dead terminal removes it from the effective stack, so the
+    // layer becomes well-formed and the fatal clears.
+    REQUIRE(model.setRuleEnabled(0, 2, false));
+    const QModelIndex healed = findRuleRow(&model, 0, 2);
+    REQUIRE(healed.isValid());
+    CHECK(model.data(healed, cwBrushStructureModel::RuleErrorSeverityRole).toInt()
+          == cwError::NoError);
 }

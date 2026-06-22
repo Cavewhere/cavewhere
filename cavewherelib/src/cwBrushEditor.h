@@ -152,6 +152,11 @@ private:
     // sketch-resolved snapshot), but only if we are still the active source.
     void clearPreview();
 
+    // Push the resolved palette's glyph names into the structure model so its
+    // validator can flag a layer naming a glyph the palette doesn't have. Empty
+    // when no palette is set.
+    void pushAvailableGlyphNames();
+
     cwBrushStructureModel *m_structureModel = nullptr;
     QPointer<cwSymbologyPalette> m_palette;
     QPointer<cwSketchCanvas> m_previewCanvas;
