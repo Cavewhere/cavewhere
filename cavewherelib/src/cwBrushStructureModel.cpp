@@ -21,14 +21,20 @@ namespace {
 // parent()/data() need to resolve it without walking the tree:
 //   bits [0, 1]   node kind (layer / category / rule)
 //   bits [2, 32]  owning layer STABLE id  (not a position)
-//   bits [33, 63] owning category index (rule nodes only)
+//   bits [33, 63] owning category STAGE   (rule nodes only; not a position)
 // A node's own row lives in QModelIndex::row(); the id only carries what its row
 // can't (the ancestry above it).
 //
-// The owning-layer field is a position-independent stable id (m_layerIds), so a
-// layer insert/remove/move keeps every descendant's internalId valid — Qt leaves
-// grandchildren untouched on a root-level edit, and naming the layer by id rather
-// than position makes that correct. layerRowForId() maps an id back to a position.
+// Both ancestry fields are position-independent, so the whole internalId survives
+// a structural edit and Qt's default of leaving descendants untouched is correct:
+//   - The owning-layer field is a stable id (m_layerIds); a layer insert/remove/
+//     move keeps every descendant valid. layerRowForId() maps an id to a position.
+//   - The owning-category field is the block's pipeline STAGE, not its row. A
+//     category is one contiguous stage block (rules are kept stage-normalized, so
+//     each stage forms exactly one block within a layer), making the stage a
+//     stable key: inserting a new category block above shifts later blocks' rows
+//     but not their stages, so a held rule index still resolves to the right
+//     category. blockIndexForStage() maps a stage back to a position.
 constexpr quintptr kKindBits = 2;
 constexpr quintptr kKindMask = (quintptr(1) << kKindBits) - 1;
 constexpr quintptr kIndexBits = 31;
@@ -40,11 +46,11 @@ enum NodeKind : quintptr {
     RuleKind = 2,
 };
 
-quintptr encodeId(NodeKind kind, quintptr layerId, int categoryIndex)
+quintptr encodeId(NodeKind kind, quintptr layerId, int categoryStage)
 {
     return static_cast<quintptr>(kind)
            | ((layerId & kIndexMask) << kKindBits)
-           | (static_cast<quintptr>(categoryIndex) << (kKindBits + kIndexBits));
+           | ((static_cast<quintptr>(categoryStage) & kIndexMask) << (kKindBits + kIndexBits));
 }
 
 NodeKind kindOf(const QModelIndex &index)
@@ -57,7 +63,9 @@ quintptr encodedLayerId(const QModelIndex &index)
     return (index.internalId() >> kKindBits) & kIndexMask;
 }
 
-int encodedCategory(const QModelIndex &index)
+// The owning category's pipeline stage (rule nodes only), the stable key naming
+// which stage block the rule belongs to. blockIndexForStage() maps it to a row.
+int encodedCategoryStage(const QModelIndex &index)
 {
     return static_cast<int>((index.internalId() >> (kKindBits + kIndexBits)) & kIndexMask);
 }
@@ -133,7 +141,13 @@ QModelIndex cwBrushStructureModel::index(int row, int column, const QModelIndex 
         return createIndex(row, column, encodeId(CategoryKind, m_layerIds.at(parent.row()), 0));
     }
     if (kindOf(parent) == CategoryKind) {
-        return createIndex(row, column, encodeId(RuleKind, encodedLayerId(parent), parent.row())); // a rule row
+        // Name the owning category by its stage, not its row, so the index survives
+        // a sibling category being inserted/removed above it.
+        const QVector<CategoryBlock> blocks = categoryBlocks(layerRowForId(encodedLayerId(parent)));
+        const int parentRow = parent.row();
+        const int stage = parentRow >= 0 && parentRow < blocks.size()
+                          ? blocks.at(parentRow).stage : kUnknownStage;
+        return createIndex(row, column, encodeId(RuleKind, encodedLayerId(parent), stage)); // a rule row
     }
     return {};   // rule rows are leaves
 }
@@ -150,9 +164,15 @@ QModelIndex cwBrushStructureModel::parent(const QModelIndex &index) const
         const int layerRow = layerRowForId(encodedLayerId(index));
         return layerRow >= 0 ? createIndex(layerRow, 0, encodeId(LayerKind, 0, 0)) : QModelIndex();
     }
-    case RuleKind:
-        return createIndex(encodedCategory(index), 0,
-                           encodeId(CategoryKind, encodedLayerId(index), 0));
+    case RuleKind: {
+        // The owning category may have been removed (its stage block emptied) out
+        // from under a stale index; -1 would corrupt the parent's row.
+        const int layerRow = layerRowForId(encodedLayerId(index));
+        const int categoryRow = blockIndexForStage(categoryBlocks(layerRow), encodedCategoryStage(index));
+        return categoryRow >= 0
+            ? createIndex(categoryRow, 0, encodeId(CategoryKind, encodedLayerId(index), 0))
+            : QModelIndex();
+    }
     case LayerKind:
         break;
     }
@@ -235,11 +255,11 @@ QVariant cwBrushStructureModel::data(const QModelIndex &index, int role) const
         }
     }
 
-    // A rule row: map (category, localRow) back to the flat rule index.
+    // A rule row: map (category stage, localRow) back to the flat rule index.
     const int layerIndex = layerRowForId(encodedLayerId(index));
-    const int categoryIndex = encodedCategory(index);
     const QVector<CategoryBlock> blocks = categoryBlocks(layerIndex);
-    if (categoryIndex < 0 || categoryIndex >= blocks.size()) {
+    const int categoryIndex = blockIndexForStage(blocks, encodedCategoryStage(index));
+    if (categoryIndex < 0) {
         return {};
     }
     const CategoryBlock &block = blocks.at(categoryIndex);
@@ -387,8 +407,8 @@ int cwBrushStructureModel::ruleIndexOf(const QModelIndex &index) const
         return -1;
     }
     const QVector<CategoryBlock> blocks = categoryBlocks(layerRowForId(encodedLayerId(index)));
-    const int categoryIndex = encodedCategory(index);
-    if (categoryIndex < 0 || categoryIndex >= blocks.size()) {
+    const int categoryIndex = blockIndexForStage(blocks, encodedCategoryStage(index));
+    if (categoryIndex < 0) {
         return -1;
     }
     return blocks.at(categoryIndex).firstRule + index.row();
@@ -701,6 +721,16 @@ bool cwBrushStructureModel::moveLayer(int fromLayerIndex, int toLayerIndex)
 int cwBrushStructureModel::layerRowForId(quintptr id) const
 {
     return static_cast<int>(m_layerIds.indexOf(id));
+}
+
+int cwBrushStructureModel::blockIndexForStage(const QVector<CategoryBlock> &blocks, int stage)
+{
+    for (int c = 0; c < blocks.size(); ++c) {
+        if (blocks.at(c).stage == stage) {
+            return c;   // each stage forms one block, so the first match is the only one
+        }
+    }
+    return -1;
 }
 
 bool cwBrushStructureModel::layerInRange(int layerIndex) const

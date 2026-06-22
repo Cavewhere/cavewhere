@@ -166,3 +166,44 @@ TEST_CASE("Persistent indexes into a layer's subtree survive layer edits",
 
     CHECK(resetSpy.count() == 0);
 }
+
+TEST_CASE("A rule index survives a new category block inserted above it",
+          "[cwBrushStructureModel]")
+{
+    // The latent stranding Phase B closes: a category is keyed by its pipeline
+    // stage, not its row, so a new category block appearing above a held rule
+    // shifts that rule's category position without invalidating the rule's index.
+    cwBrushStructureModel model;
+    cwLineBrush brush;
+    // One layer whose only rule is a Terminal-stage rule ("Rigid stamp"), so it
+    // sits in the single (last) category block.
+    brush.decorations.append(makeLayer(QStringLiteral("tick"), {QStringLiteral("Rigid stamp")}));
+    model.setBrush(brush);
+
+    const QPersistentModelIndex rule(findRuleRow(model, 0, 0));
+    REQUIRE(rule.isValid());
+    REQUIRE(model.data(rule, cwBrushStructureModel::LabelRole).toString()
+            == QStringLiteral("Rigid stamp"));
+    REQUIRE(model.parent(rule).row() == 0);   // first (only) category block
+
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+
+    // Insert a Generate-stage rule at flat index 0: a brand-new category block
+    // appears ABOVE the Terminal block, sliding it from category row 0 to 1.
+    cwPlacementRuleData generate;
+    generate.name = QStringLiteral("Uniform spacing");
+    REQUIRE(model.insertRule(0, 0, generate));
+
+    CHECK(rule.isValid());
+    // Still the same rule: "Rigid stamp" is now flat index 1 (Uniform spacing took
+    // index 0), and its category parent tracked the shift down to row 1 rather than
+    // stranding at the new block in row 0.
+    CHECK(model.data(rule, cwBrushStructureModel::LabelRole).toString()
+          == QStringLiteral("Rigid stamp"));
+    CHECK(model.ruleIndexOf(rule) == 1);
+    CHECK(model.layerIndexOf(rule) == 0);
+    CHECK(model.parent(rule).row() == 1);
+
+    // A mid-stack rule insert emits row signals, never a reset.
+    CHECK(resetSpy.count() == 0);
+}

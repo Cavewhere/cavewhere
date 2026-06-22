@@ -7,8 +7,9 @@ edit. Replace the positional `internalId` ancestry with **stable identity** so
 proper `beginInsertRows` / `beginRemoveRows` / `beginMoveRows` are safe and
 `QPersistentModelIndex` survives across edits.
 
-Status: **Phase A done** (stable layer ids + reactive `layerCount`, green).
-Phase B and the `reuseItems` verification remain. Pause for review between phases.
+Status: **Phase A + B done** (stable layer ids + reactive `layerCount`; stage-keyed
+category encoding — internalId is now fully position-free, green). The `reuseItems`
+verification remains. Pause for review between phases.
 
 ---
 

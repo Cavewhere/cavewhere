@@ -154,6 +154,10 @@ private:
     // Map a layer's stable id (carried in a category/rule internalId) back to its
     // current row. n is a handful, so a linear scan beats a hash member to sync.
     int layerRowForId(quintptr id) const;
+    // The position of the block carrying this stage within an already-built block
+    // list, or -1 if none does. Each stage forms one contiguous block (the rules
+    // are stage-normalized), so the stage is a position-independent category key.
+    static int blockIndexForStage(const QVector<CategoryBlock> &blocks, int stage);
     // After an insert/remove, the flat positional roles (RuleIndexRole) of rules
     // in LATER category blocks shift, but the view only re-reads the rows it was
     // told changed; refresh every rule row in the layer so those stay correct.
