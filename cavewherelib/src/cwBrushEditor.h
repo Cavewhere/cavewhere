@@ -107,6 +107,15 @@ public:
     // brackets the row move; this layer owns the dirty/preview side effects.
     Q_INVOKABLE void moveRule(int layerIndex, int fromRuleIndex, int toRuleIndex);
 
+    // Append an empty decoration layer, remove a layer, or reorder a layer within
+    // the brush, then re-push the preview. Paint order == layer order, so a layer
+    // move reorders what paints on top across the whole brush. Out-of-range /
+    // no-op requests are ignored. The structure model rebuilds (see its header);
+    // this layer owns the dirty/preview side effects.
+    Q_INVOKABLE void addLayer();
+    Q_INVOKABLE void removeLayer(int layerIndex);
+    Q_INVOKABLE void moveLayer(int fromLayerIndex, int toLayerIndex);
+
     // The add-rule picker's data: rules grouped by category (derived from each
     // rule's stage), in pipeline order. Each group is { "category": QString,
     // "rules": [ { "name": QString, "description": QString }, ... ] }.

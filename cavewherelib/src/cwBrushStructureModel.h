@@ -45,6 +45,11 @@ class CAVEWHERE_LIB_EXPORT cwBrushStructureModel : public QAbstractItemModel
     Q_OBJECT
     QML_ANONYMOUS
 
+    // Root row count == layer count. A read-only computed property (the standard
+    // getter + NOTIFY pattern, not a QBindable) so QML grip bindings react when a
+    // layer is added/removed without the model reset that used to force a rebuild.
+    Q_PROPERTY(int layerCount READ layerCount NOTIFY layerCountChanged)
+
 public:
     enum Roles : int {
         LabelRole = Qt::UserRole + 1,   // layer glyph name, category label, or rule name
@@ -109,6 +114,25 @@ public:
     // means anything within a single category node).
     bool moveRule(int layerIndex, int fromRuleIndex, int toRuleIndex);
 
+    // Layer (top-level row) mutators. Like the rule mutators these bracket the
+    // matching QAIM begin/end (beginInsertRows / beginRemoveRows / beginMoveRows),
+    // not a reset: a category/rule QModelIndex names its owning layer by a STABLE
+    // id (m_layerIds), not a position, so shifting later layers' rows leaves every
+    // descendant's internalId valid (it resolves via layerRowForId). Qt leaves
+    // grandchildren untouched on a root-level edit, which is correct here, so
+    // QPersistentModelIndex survives and scroll/expansion/selection are preserved.
+    // layerIndex == layerCount() appends. Returns false (no change, no signal) on
+    // an out-of-range or no-op request.
+    bool insertLayer(int layerIndex, const cwDecorationLayer &layer);
+    bool removeLayer(int layerIndex);
+    // Reorder a layer so it ends up at toLayerIndex. Paint order == layer order
+    // (Decision 12), so a layer move is meaningful across the whole brush (unlike
+    // a rule move, which only matters within its stage).
+    bool moveLayer(int fromLayerIndex, int toLayerIndex);
+
+signals:
+    void layerCountChanged();
+
 private:
     // One contiguous pipeline-stage block within a layer's rule list: the rules
     // sharing a stage, which the view renders as one category node.
@@ -127,6 +151,9 @@ private:
     bool ruleLocation(int layerIndex, int ruleIndex, int *categoryIndex, int *localRow) const;
 
     bool layerInRange(int layerIndex) const;
+    // Map a layer's stable id (carried in a category/rule internalId) back to its
+    // current row. n is a handful, so a linear scan beats a hash member to sync.
+    int layerRowForId(quintptr id) const;
     // After an insert/remove, the flat positional roles (RuleIndexRole) of rules
     // in LATER category blocks shift, but the view only re-reads the rows it was
     // told changed; refresh every rule row in the layer so those stay correct.
@@ -145,6 +172,12 @@ private:
     QList<cwError> rowErrors(int layerIndex, int flatRuleIndex) const;
 
     cwLineBrush m_brush;
+    // A stable id per decoration layer, aligned 1:1 with m_brush.decorations.
+    // Category/rule internalIds carry the id instead of a position, so structural
+    // layer edits don't strand descendants. Maintained by every layer mutator and
+    // setBrush().
+    QList<quintptr> m_layerIds;
+    quintptr m_nextLayerId = 0;   // monotonic; 31-bit id field = ~2B edits, ample
     QSet<QString> m_availableGlyphNames;
     QVector<QList<cwDecorationLayerError>> m_layerErrors;   // one entry per decoration layer
 };

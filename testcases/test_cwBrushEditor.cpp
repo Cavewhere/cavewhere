@@ -471,6 +471,69 @@ TEST_CASE("moveRule reorders rules within a category but rejects cross-category 
     CHECK(moveSpy.count() == 1);
 }
 
+TEST_CASE("addLayer/removeLayer/moveLayer edit the layer stack, dirtying the copy",
+          "[cwBrushEditor]")
+{
+    cwSymbologyPalette palette;
+    seedWritable(palette);
+
+    cwBrushEditor editor;
+    editor.setPalette(&palette);
+    editor.loadBrushNamed(cwSymbologyPaletteSeed::floorStepBrushName());
+
+    // Stable layer ids mean layer ops emit proper row signals, never a reset:
+    // descendants name their owning layer by id, so shifting rows can't strand
+    // them. modelReset must stay silent through all in-place edits.
+    QSignalSpy resetSpy(editor.structureModel(), &QAbstractItemModel::modelReset);
+    QSignalSpy insertSpy(editor.structureModel(), &QAbstractItemModel::rowsInserted);
+    QSignalSpy removeSpy(editor.structureModel(), &QAbstractItemModel::rowsRemoved);
+    QSignalSpy moveSpy(editor.structureModel(), &QAbstractItemModel::rowsMoved);
+
+    REQUIRE(editor.layerCount() == 2);
+    const QString lineLabel = editor.layerLabel(0);            // line layer (empty)
+    const QString tickLabel = editor.layerLabel(kTickLayer);   // tick glyph
+    REQUIRE(lineLabel.isEmpty());
+    REQUIRE_FALSE(tickLabel.isEmpty());
+
+    // Add: a fresh empty layer is appended (no glyph, no rules).
+    editor.addLayer();
+    CHECK(editor.layerCount() == 3);
+    CHECK(editor.layerLabel(2).isEmpty());
+    CHECK(editor.ruleCount(2) == 0);
+    CHECK(editor.isDirty());
+    CHECK(insertSpy.count() == 1);
+
+    // Move: swap the original two layers so paint order flips.
+    editor.moveLayer(0, 1);
+    CHECK(editor.layerLabel(0) == tickLabel);
+    CHECK(editor.layerLabel(1) == lineLabel);
+    CHECK(moveSpy.count() == 1);
+
+    // Remove: drop the appended empty layer, back to two.
+    editor.removeLayer(2);
+    CHECK(editor.layerCount() == 2);
+    CHECK(removeSpy.count() == 1);
+
+    // No-op and out-of-range requests are ignored (no signal, no change).
+    editor.moveLayer(0, 0);
+    editor.moveLayer(5, 0);
+    editor.removeLayer(99);
+    editor.addLayer();   // dirties further but is a real op; undo via discard below
+    CHECK(insertSpy.count() == 2);   // only the second addLayer fired
+    CHECK(moveSpy.count() == 1);     // the no-op move emitted nothing
+    CHECK(removeSpy.count() == 1);   // the out-of-range remove emitted nothing
+
+    // The whole sequence of in-place edits never reset the model.
+    CHECK(resetSpy.count() == 0);
+
+    // Discard restores the loaded layer order and clears dirty.
+    editor.discard();
+    CHECK_FALSE(editor.isDirty());
+    REQUIRE(editor.layerCount() == 2);
+    CHECK(editor.layerLabel(0).isEmpty());
+    CHECK(editor.layerLabel(kTickLayer) == tickLabel);
+}
+
 TEST_CASE("apply on a read-only palette without a project leaves it untouched",
           "[cwBrushEditor]")
 {

@@ -217,6 +217,42 @@ void cwBrushEditor::moveRule(int layerIndex, int fromRuleIndex, int toRuleIndex)
     pushPreview();
 }
 
+void cwBrushEditor::addLayer()
+{
+    if (!m_loaded) {
+        return;
+    }
+    if (!m_structureModel->insertLayer(m_structureModel->layerCount(), cwDecorationLayer())) {
+        return;
+    }
+    recomputeDirty();
+    pushPreview();
+}
+
+void cwBrushEditor::removeLayer(int layerIndex)
+{
+    if (!m_loaded) {
+        return;
+    }
+    if (!m_structureModel->removeLayer(layerIndex)) {
+        return;
+    }
+    recomputeDirty();
+    pushPreview();
+}
+
+void cwBrushEditor::moveLayer(int fromLayerIndex, int toLayerIndex)
+{
+    if (!m_loaded) {
+        return;
+    }
+    if (!m_structureModel->moveLayer(fromLayerIndex, toLayerIndex)) {
+        return;
+    }
+    recomputeDirty();
+    pushPreview();
+}
+
 QVariantList cwBrushEditor::availableRuleGroups() const
 {
     // Sort by stage so each category is contiguous and the groups come out in

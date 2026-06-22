@@ -133,6 +133,16 @@ Item {
             return checkBox
         }
 
+        // Move the mouse over a layer row so its hover-gated controls (move
+        // up/down, remove) appear. The add-rule "+" button is always present on a
+        // layer row, so hovering it triggers the row's HoverHandler.
+        function hoverLayerRow(layerIndex) {
+            const addButton = findChild(rootId, "addRuleButton_" + layerIndex)
+            verify(addButton !== null, "layer row add-rule button exists")
+            mouseMove(addButton, addButton.width / 2, addButton.height / 2)
+            return addButton
+        }
+
         function test_removeRuleViaButtonMarksDirtyThenDiscardReverts() {
             const editor = openEditorOnFloorStep()
 
@@ -493,6 +503,142 @@ Item {
                 const icon = findChild(rootId, "ruleErrorIcon_1_2")
                 return icon !== null && !icon.visible
             }, 2000, "fixing the stack clears the inline error icon")
+
+            editor.discard()
+        }
+
+        // Named test_layer* (not test_addLayer*) so it sorts AFTER
+        // test_addRuleInsertsTreeRow: that test asserts an exact +1 row delta and
+        // must run first on a pristine TreeView. Asserts row existence (findChild),
+        // not an exact count, so it is itself robust to expansion timing.
+        function test_layerAddAppendsRow() {
+            const editor = openEditorOnFloorStep()
+
+            compare(editor.layerCount(), 2, "floor-step starts with two layers")
+            verify(findChild(rootId, "addRuleButton_2") === null, "no third layer row yet")
+
+            mouseClick(findChild(rootId, "addLayerButton"))
+
+            tryVerify(() => editor.layerCount() === 3, 2000, "a layer is appended")
+            // The appended layer materializes its own row (its add-rule button appears).
+            tryVerify(() => findChild(rootId, "addRuleButton_2") !== null, 2000,
+                      "the appended layer shows a tree row")
+            verify(editor.dirty, "adding a layer dirties the working copy")
+
+            editor.discard()
+            tryVerify(() => editor.layerCount() === 2, 2000, "Discard restores the layer count")
+            tryVerify(() => findChild(rootId, "addRuleButton_2") === null, 2000,
+                      "Discard removes the appended layer row")
+        }
+
+        function test_layerRemoveViaButtonMarksDirty() {
+            const editor = openEditorOnFloorStep()
+            compare(editor.layerCount(), 2, "floor-step starts with two layers")
+
+            tryVerify(() => findChild(rootId, "removeLayerButton_0") !== null, 2000,
+                      "the line layer's remove button exists")
+            verify(findChild(rootId, "removeLayerButton_0").opacity === 0,
+                   "remove button hidden without hover")
+            hoverLayerRow(0)
+            tryVerify(() => findChild(rootId, "removeLayerButton_0").enabled, 2000,
+                      "the remove button enables on hover")
+            mouseClick(findChild(rootId, "removeLayerButton_0"))
+
+            tryVerify(() => editor.layerCount() === 1, 2000, "removing drops the layer")
+            verify(editor.dirty, "removing a layer dirties the working copy")
+
+            editor.discard()
+            tryVerify(() => editor.layerCount() === 2, 2000, "Discard restores the layer")
+        }
+
+        // Stable layer ids let add/remove emit row signals instead of a model
+        // reset, so the pre-existing layer 0 delegate is NOT rebuilt. Its grip
+        // visibility must still track the layer count — proof the binding rides
+        // the layerCount NOTIFY property, not a delegate recreation. Before the
+        // NOTIFY property this binding went stale (the surviving delegate kept its
+        // old value across the 2->1 / 1->2 threshold).
+        function test_layerGripReactsToCountWithoutReset() {
+            const editor = openEditorOnFloorStep()
+            compare(editor.layerCount(), 2, "floor-step starts with two layers")
+
+            const grip0 = () => findChild(rootId, "layerDragHandle_0")
+            hoverLayerRow(0)
+            tryVerify(() => grip0() !== null && grip0().opacity === 1, 2000,
+                      "layer 0 grip is visible on hover with two layers")
+
+            // Drop to one layer: layer 0 survives in place (no reset), so its grip
+            // can only hide if the binding re-evaluated against the new count.
+            hoverLayerRow(1)
+            tryVerify(() => findChild(rootId, "removeLayerButton_1").enabled, 2000,
+                      "the tick layer's remove button enables on hover")
+            mouseClick(findChild(rootId, "removeLayerButton_1"))
+            tryVerify(() => editor.layerCount() === 1, 2000, "removing drops to one layer")
+            hoverLayerRow(0)
+            tryVerify(() => grip0().opacity === 0, 2000,
+                      "layer 0 grip hides at one layer (not reorderable)")
+
+            // Back to two layers: the same surviving delegate's grip reappears.
+            mouseClick(findChild(rootId, "addLayerButton"))
+            tryVerify(() => editor.layerCount() === 2, 2000, "a layer is appended")
+            hoverLayerRow(0)
+            tryVerify(() => grip0().opacity === 1, 2000,
+                      "layer 0 grip is visible again with two layers")
+
+            editor.discard()
+        }
+
+        // The live layer-header delegate for a layer index, found by walking the
+        // view's rows. null if it isn't currently realized.
+        function layerDelegate(layerIndex) {
+            const tree = findChild(rootId, "brushStructureTree")
+            for (let r = 0; r < tree.rows; r++) {
+                const item = tree.itemAtCell(Qt.point(0, r))
+                if (item !== null && item.isLayer && item.layerIndex === layerIndex) {
+                    return item
+                }
+            }
+            return null
+        }
+
+        // Drive the real layer drag-to-reorder: grab a layer's ⠿ handle and drag
+        // the pointer over another layer header's top quarter, then release —
+        // exercising the QML drop-slot hit-testing, like dragRuleAbove does for
+        // rules.
+        function dragLayerAbove(fromLayerIndex, targetLayerIndex) {
+            const tree = findChild(rootId, "brushStructureTree")
+            tryVerify(() => layerDelegate(fromLayerIndex) !== null, 2000, "source layer realized")
+            tryVerify(() => layerDelegate(targetLayerIndex) !== null, 2000, "target layer realized")
+            const sourceRow = layerDelegate(fromLayerIndex)
+            const handle = findChild(sourceRow, "layerDragHandle_" + fromLayerIndex)
+            verify(handle !== null, "source layer has a drag handle")
+
+            const start = handle.mapToItem(tree, handle.width / 2, handle.height / 2)
+            const targetRow = layerDelegate(targetLayerIndex)
+            const drop = targetRow.mapToItem(tree, targetRow.width / 2, targetRow.height * 0.25)
+
+            mousePress(tree, start.x, start.y, Qt.LeftButton)
+            mouseMove(tree, start.x, start.y - 12)
+            mouseMove(tree, drop.x, Math.round((start.y + drop.y) / 2))
+            mouseMove(tree, drop.x, drop.y)
+            mouseMove(tree, drop.x, drop.y)
+            mouseRelease(tree, drop.x, drop.y, Qt.LeftButton)
+        }
+
+        function test_layerDragReordersPaintOrder() {
+            const editor = openEditorOnFloorStep()
+
+            // floor-step: layer 0 = line (empty label), layer 1 = tick glyph.
+            const tickLabel = editor.layerLabel(1)
+            verify(editor.layerLabel(0) === "", "layer 0 is the line layer")
+            verify(tickLabel !== "", "layer 1 is the tick glyph layer")
+
+            // Drag the tick layer (1) up above the line layer (0).
+            dragLayerAbove(1, 0)
+
+            tryVerify(() => editor.layerLabel(0) === tickLabel, 2000,
+                      "the tick layer dragged to the top")
+            compare(editor.layerLabel(1), "", "the line layer moved down")
+            verify(editor.dirty, "reordering dirties the working copy")
 
             editor.discard()
         }

@@ -20,10 +20,15 @@ namespace {
 // A QModelIndex's internalId packs which kind of node it is and the coordinates
 // parent()/data() need to resolve it without walking the tree:
 //   bits [0, 1]   node kind (layer / category / rule)
-//   bits [2, 32]  owning layer index
+//   bits [2, 32]  owning layer STABLE id  (not a position)
 //   bits [33, 63] owning category index (rule nodes only)
 // A node's own row lives in QModelIndex::row(); the id only carries what its row
 // can't (the ancestry above it).
+//
+// The owning-layer field is a position-independent stable id (m_layerIds), so a
+// layer insert/remove/move keeps every descendant's internalId valid — Qt leaves
+// grandchildren untouched on a root-level edit, and naming the layer by id rather
+// than position makes that correct. layerRowForId() maps an id back to a position.
 constexpr quintptr kKindBits = 2;
 constexpr quintptr kKindMask = (quintptr(1) << kKindBits) - 1;
 constexpr quintptr kIndexBits = 31;
@@ -35,10 +40,10 @@ enum NodeKind : quintptr {
     RuleKind = 2,
 };
 
-quintptr encodeId(NodeKind kind, int layerIndex, int categoryIndex)
+quintptr encodeId(NodeKind kind, quintptr layerId, int categoryIndex)
 {
     return static_cast<quintptr>(kind)
-           | (static_cast<quintptr>(layerIndex) << kKindBits)
+           | ((layerId & kIndexMask) << kKindBits)
            | (static_cast<quintptr>(categoryIndex) << (kKindBits + kIndexBits));
 }
 
@@ -47,9 +52,9 @@ NodeKind kindOf(const QModelIndex &index)
     return static_cast<NodeKind>(index.internalId() & kKindMask);
 }
 
-int encodedLayer(const QModelIndex &index)
+quintptr encodedLayerId(const QModelIndex &index)
 {
-    return static_cast<int>((index.internalId() >> kKindBits) & kIndexMask);
+    return (index.internalId() >> kKindBits) & kIndexMask;
 }
 
 int encodedCategory(const QModelIndex &index)
@@ -123,10 +128,12 @@ QModelIndex cwBrushStructureModel::index(int row, int column, const QModelIndex 
         return createIndex(row, column, encodeId(LayerKind, 0, 0));   // a layer row
     }
     if (kindOf(parent) == LayerKind) {
-        return createIndex(row, column, encodeId(CategoryKind, parent.row(), 0)); // a category row
+        // Name the owning layer by its stable id, not its row, so the index
+        // survives a later layer reorder.
+        return createIndex(row, column, encodeId(CategoryKind, m_layerIds.at(parent.row()), 0));
     }
     if (kindOf(parent) == CategoryKind) {
-        return createIndex(row, column, encodeId(RuleKind, encodedLayer(parent), parent.row())); // a rule row
+        return createIndex(row, column, encodeId(RuleKind, encodedLayerId(parent), parent.row())); // a rule row
     }
     return {};   // rule rows are leaves
 }
@@ -137,11 +144,15 @@ QModelIndex cwBrushStructureModel::parent(const QModelIndex &index) const
         return {};
     }
     switch (kindOf(index)) {
-    case CategoryKind:
-        return createIndex(encodedLayer(index), 0, encodeId(LayerKind, 0, 0));
+    case CategoryKind: {
+        // The owning layer may have been removed out from under a stale index;
+        // -1 would corrupt the parent's row (data()/rowCount() guard the same way).
+        const int layerRow = layerRowForId(encodedLayerId(index));
+        return layerRow >= 0 ? createIndex(layerRow, 0, encodeId(LayerKind, 0, 0)) : QModelIndex();
+    }
     case RuleKind:
         return createIndex(encodedCategory(index), 0,
-                           encodeId(CategoryKind, encodedLayer(index), 0));
+                           encodeId(CategoryKind, encodedLayerId(index), 0));
     case LayerKind:
         break;
     }
@@ -157,7 +168,7 @@ int cwBrushStructureModel::rowCount(const QModelIndex &parent) const
         return static_cast<int>(categoryBlocks(parent.row()).size());
     }
     if (kindOf(parent) == CategoryKind) {
-        const QVector<CategoryBlock> blocks = categoryBlocks(encodedLayer(parent));
+        const QVector<CategoryBlock> blocks = categoryBlocks(layerRowForId(encodedLayerId(parent)));
         const int c = parent.row();
         return c >= 0 && c < blocks.size() ? blocks.at(c).count : 0;
     }
@@ -196,7 +207,7 @@ QVariant cwBrushStructureModel::data(const QModelIndex &index, int role) const
     }
 
     if (kindOf(index) == CategoryKind) {
-        const int layerIndex = encodedLayer(index);
+        const int layerIndex = layerRowForId(encodedLayerId(index));
         const QVector<CategoryBlock> blocks = categoryBlocks(layerIndex);
         const int c = index.row();
         if (c < 0 || c >= blocks.size()) {
@@ -225,7 +236,7 @@ QVariant cwBrushStructureModel::data(const QModelIndex &index, int role) const
     }
 
     // A rule row: map (category, localRow) back to the flat rule index.
-    const int layerIndex = encodedLayer(index);
+    const int layerIndex = layerRowForId(encodedLayerId(index));
     const int categoryIndex = encodedCategory(index);
     const QVector<CategoryBlock> blocks = categoryBlocks(layerIndex);
     if (categoryIndex < 0 || categoryIndex >= blocks.size()) {
@@ -272,10 +283,22 @@ QHash<int, QByteArray> cwBrushStructureModel::roleNames() const
 
 void cwBrushStructureModel::setBrush(const cwLineBrush &brush)
 {
+    const int oldCount = layerCount();
     beginResetModel();
     m_brush = brush;
+    // Fresh stable ids for the loaded layers; the counter stays monotonic across
+    // the session so no id is ever reused (persistent indexes are dropped by the
+    // reset anyway, but monotonic ids keep the invariant trivial).
+    m_layerIds.clear();
+    m_layerIds.reserve(static_cast<int>(m_brush.decorations.size()));
+    for (qsizetype i = 0; i < m_brush.decorations.size(); ++i) {
+        m_layerIds.append(m_nextLayerId++);
+    }
     revalidate();   // the reset refreshes every role, so no extra dataChanged needed
     endResetModel();
+    if (layerCount() != oldCount) {
+        emit layerCountChanged();
+    }
 }
 
 void cwBrushStructureModel::setAvailableGlyphNames(const QSet<QString> &names)
@@ -353,7 +376,7 @@ int cwBrushStructureModel::layerIndexOf(const QModelIndex &index) const
     switch (kindOf(index)) {
     case LayerKind:    return index.row();
     case CategoryKind:
-    case RuleKind:     return encodedLayer(index);
+    case RuleKind:     return layerRowForId(encodedLayerId(index));
     }
     return -1;
 }
@@ -363,7 +386,7 @@ int cwBrushStructureModel::ruleIndexOf(const QModelIndex &index) const
     if (!index.isValid() || kindOf(index) != RuleKind) {
         return -1;
     }
-    const QVector<CategoryBlock> blocks = categoryBlocks(encodedLayer(index));
+    const QVector<CategoryBlock> blocks = categoryBlocks(layerRowForId(encodedLayerId(index)));
     const int categoryIndex = encodedCategory(index);
     if (categoryIndex < 0 || categoryIndex >= blocks.size()) {
         return -1;
@@ -623,6 +646,61 @@ bool cwBrushStructureModel::moveRule(int layerIndex, int fromRuleIndex, int toRu
     revalidate();
     emitLayerErrorRolesChanged(layerIndex);
     return true;
+}
+
+bool cwBrushStructureModel::insertLayer(int layerIndex, const cwDecorationLayer &layer)
+{
+    const int count = static_cast<int>(m_brush.decorations.size());
+    if (layerIndex < 0 || layerIndex > count) {   // == count appends
+        return false;
+    }
+    const quintptr id = m_nextLayerId++;
+    beginInsertRows(QModelIndex(), layerIndex, layerIndex);
+    m_brush.decorations.insert(layerIndex, layer);
+    m_layerIds.insert(layerIndex, id);
+    revalidate();
+    endInsertRows();
+    emit layerCountChanged();
+    return true;
+}
+
+bool cwBrushStructureModel::removeLayer(int layerIndex)
+{
+    if (!layerInRange(layerIndex)) {
+        return false;
+    }
+    beginRemoveRows(QModelIndex(), layerIndex, layerIndex);
+    m_brush.decorations.removeAt(layerIndex);
+    m_layerIds.removeAt(layerIndex);
+    revalidate();
+    endRemoveRows();
+    emit layerCountChanged();
+    return true;
+}
+
+bool cwBrushStructureModel::moveLayer(int fromLayerIndex, int toLayerIndex)
+{
+    const int count = static_cast<int>(m_brush.decorations.size());
+    if (fromLayerIndex < 0 || fromLayerIndex >= count
+        || toLayerIndex < 0 || toLayerIndex >= count
+        || fromLayerIndex == toLayerIndex) {
+        return false;
+    }
+    // beginMoveRows wants the pre-move insert-before position: a downward move
+    // lands after the target (toLayerIndex + 1), an upward move lands at it.
+    const int destinationChild = fromLayerIndex < toLayerIndex ? toLayerIndex + 1 : toLayerIndex;
+    beginMoveRows(QModelIndex(), fromLayerIndex, fromLayerIndex, QModelIndex(), destinationChild);
+    m_brush.decorations.move(fromLayerIndex, toLayerIndex);
+    m_layerIds.move(fromLayerIndex, toLayerIndex);
+    revalidate();
+    endMoveRows();
+    // Count is unchanged, so no layerCountChanged().
+    return true;
+}
+
+int cwBrushStructureModel::layerRowForId(quintptr id) const
+{
+    return static_cast<int>(m_layerIds.indexOf(id));
 }
 
 bool cwBrushStructureModel::layerInRange(int layerIndex) const

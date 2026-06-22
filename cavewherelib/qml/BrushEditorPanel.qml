@@ -150,6 +150,21 @@ QQ.Rectangle {
             }
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.flowSpacing
+
+            QC.Button {
+                objectName: "addLayerButton"
+                text: "＋ Layer"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeBody
+                onClicked: editorId.addLayer()
+            }
+
+            QQ.Item { Layout.fillWidth: true }
+        }
+
         QQ.TreeView {
             id: structureTreeId
             objectName: "brushStructureTree"
@@ -165,11 +180,39 @@ QQ.Rectangle {
             property int dragTo: -1
             property string dragCategory: ""
 
+            // Active layer-reorder drag (handle-driven), parallel to the rule drag
+            // above. layerDragFrom == -1 when idle. layerDragTo is an insertion slot
+            // in [0, layerCount]. Layers interleave with their subtrees in the
+            // flattened view, so a per-row top/bottom edge can't mark a between-layer
+            // gap; layerDropLineY is the content-y of a single overlay indicator
+            // positioned at the target boundary instead.
+            property int layerDragFrom: -1
+            property int layerDragTo: -1
+            property real layerDropLineY: 0
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            interactive: dragLayer < 0
+            interactive: dragLayer < 0 && layerDragFrom < 0
             model: editorId.structureModel
+
+            // Content-y of the boundary for a layer insertion slot: the top of slot's
+            // header row, or the bottom of the last row for the past-the-end slot.
+            function layerBoundaryY(slot) {
+                const count = editorId.layerCount()
+                if (slot >= count) {
+                    const last = structureTreeId.itemAtCell(Qt.point(0, structureTreeId.rows - 1))
+                    return last === null ? 0
+                        : last.mapToItem(structureTreeId.contentItem, 0, 0).y + last.height
+                }
+                for (let r = 0; r < structureTreeId.rows; r++) {
+                    const it = structureTreeId.itemAtCell(Qt.point(0, r))
+                    if (it !== null && it.isLayer && it.layerIndex === slot) {
+                        return it.mapToItem(structureTreeId.contentItem, 0, 0).y
+                    }
+                }
+                return 0
+            }
             // Pooling strands a removed row's delegate (a structural edit on a
             // nested parent can leave the recycled item painted at its old spot —
             // e.g. a duplicate row after a reorder's remove+insert). The structure
@@ -187,6 +230,19 @@ QQ.Rectangle {
                 // The view rebuilds its rows asynchronously after a reset, so
                 // defer the expand until those rows exist.
                 function onModelReset() { Qt.callLater(structureTreeId.expandRecursively) }
+            }
+
+            // Single overlay drop indicator for a layer reorder, parented into the
+            // content so it tracks the rows. One line (not per-row edges) because a
+            // layer boundary falls between whole subtrees, not at one row's edge.
+            QQ.Rectangle {
+                parent: structureTreeId.contentItem
+                height: 2
+                width: structureTreeId.width
+                color: Theme.accent
+                y: structureTreeId.layerDropLineY
+                z: 10
+                visible: structureTreeId.layerDragFrom >= 0 && structureTreeId.layerDragTo >= 0
             }
 
             // A plain Item delegate (not TreeViewDelegate) driven by TreeView's
@@ -230,6 +286,9 @@ QQ.Rectangle {
                 // This rule row is the one currently being dragged.
                 readonly property bool isDragSource: structureTreeId.dragLayer === layerIndex
                                                      && structureTreeId.dragFrom === ruleIndex
+                // This layer row is the one currently being dragged (layer reorder).
+                readonly property bool isLayerDragSource: isLayer
+                                                          && structureTreeId.layerDragFrom === layerIndex
 
                 implicitWidth: structureTreeId.width
                 // Every row is the same fixed height — the whole point of making
@@ -275,10 +334,103 @@ QQ.Rectangle {
                         }
                     }
 
-                    // --- Layer node: glyph/line name + add-rule button. ---
+                    // --- Layer node: drag grip + glyph/line name + add/remove. ---
+
+                    // Drag-to-reorder grip for the whole layer (paint order == layer
+                    // order, so a layer move is brush-wide — no stage confinement
+                    // like a rule move). Mirrors the rule grip: always laid out (so
+                    // the row height is fixed), painted only when reorderable (2+
+                    // layers) and hovered or dragged. structureModel.layerCount is a
+                    // NOTIFY property, so this re-evaluates on add/remove without a
+                    // model reset (delegates persist across structural layer edits).
+                    QC.Label {
+                        id: layerDragHandleId
+                        objectName: "layerDragHandle_" + treeDelegateId.layerIndex
+                        visible: treeDelegateId.isLayer
+                        opacity: editorId.structureModel.layerCount >= 2
+                                 && (rowHoverId.hovered || treeDelegateId.isLayerDragSource) ? 1 : 0
+                        text: "⠿"
+                        color: Theme.textSubtle
+                        horizontalAlignment: QQ.Text.AlignHCenter
+                        verticalAlignment: QQ.Text.AlignVCenter
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        Layout.preferredWidth: treeDelegateId.kRowButtonSize
+                        Layout.preferredHeight: treeDelegateId.kRowButtonSize
+                        Layout.alignment: Qt.AlignVCenter
+
+                        QQ.DragHandler {
+                            id: layerDragHandlerId
+                            // Track the pointer and reorder on release (the handle
+                            // itself doesn't move). Same grab dance as the rule grip:
+                            // take the grab from the Flickable but never hand it back.
+                            target: null
+                            enabled: editorId.structureModel.layerCount >= 2
+                            grabPermissions: QQ.PointerHandler.CanTakeOverFromItems
+                                             | QQ.PointerHandler.CanTakeOverFromHandlersOfDifferentType
+
+                            onActiveChanged: {
+                                if (active) {
+                                    structureTreeId.layerDragFrom = treeDelegateId.layerIndex
+                                    structureTreeId.layerDragTo = treeDelegateId.layerIndex
+                                    layerDragHandlerId.updateDropTarget()
+                                } else {
+                                    const from = structureTreeId.layerDragFrom
+                                    let to = structureTreeId.layerDragTo
+                                    structureTreeId.layerDragFrom = -1
+                                    structureTreeId.layerDragTo = -1
+                                    structureTreeId.layerDropLineY = 0
+                                    // layerDragTo is an insertion slot in [0, count];
+                                    // removing the source first shifts a later slot
+                                    // down by one. Collapse to a final index.
+                                    if (from >= 0 && to >= 0) {
+                                        if (to > from) {
+                                            to = to - 1
+                                        }
+                                        if (to !== from) {
+                                            editorId.moveLayer(from, to)
+                                        }
+                                    }
+                                }
+                            }
+                            onCentroidChanged: if (active) { layerDragHandlerId.updateDropTarget() }
+
+                            // Resolve which layer boundary the pointer is over and set
+                            // the drop slot + the overlay line's y. A layer header's
+                            // top/bottom half picks before/after it; any descendant
+                            // row counts as "after its layer".
+                            function updateDropTarget() {
+                                const tree = structureTreeId
+                                const pt = layerDragHandleId.mapToItem(tree.contentItem,
+                                                                       centroid.position.x,
+                                                                       centroid.position.y)
+                                const cell = tree.cellAtPosition(pt.x, pt.y, true)
+                                if (cell.y < 0) {
+                                    return   // off the table; keep the last slot
+                                }
+                                const rowItem = tree.itemAtCell(cell)
+                                if (rowItem === null) {
+                                    return
+                                }
+                                let slot
+                                if (rowItem.isLayer) {
+                                    const local = layerDragHandleId.mapToItem(rowItem,
+                                                                              centroid.position.x,
+                                                                              centroid.position.y)
+                                    slot = rowItem.layerIndex + (local.y > rowItem.height / 2 ? 1 : 0)
+                                } else {
+                                    slot = rowItem.layerIndex + 1
+                                }
+                                tree.layerDragTo = slot
+                                tree.layerDropLineY = tree.layerBoundaryY(slot)
+                            }
+                        }
+                    }
+
                     QC.Label {
                         visible: treeDelegateId.isLayer
                         text: treeDelegateId.label === "" ? "Line layer" : treeDelegateId.label
+                        opacity: treeDelegateId.isLayerDragSource ? 0.4 : 1.0
                         color: Theme.textSubtle
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeCaption
@@ -315,6 +467,25 @@ QQ.Rectangle {
                             groups: editorId.availableRuleGroups()
                             onRuleChosen: (ruleName) => editorId.addRule(treeDelegateId.layerIndex, ruleName)
                         }
+                    }
+
+                    // Remove this whole layer. Hover-revealed like the rule remove
+                    // button so an idle row stays uncluttered.
+                    QC.ToolButton {
+                        visible: treeDelegateId.isLayer
+                        opacity: rowHoverId.hovered ? 1 : 0
+                        enabled: rowHoverId.hovered
+                        objectName: "removeLayerButton_" + treeDelegateId.layerIndex
+                        text: "✕"
+                        padding: 0
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        implicitWidth: treeDelegateId.kRowButtonSize
+                        implicitHeight: treeDelegateId.kRowButtonSize
+                        Layout.preferredWidth: treeDelegateId.kRowButtonSize
+                        Layout.preferredHeight: treeDelegateId.kRowButtonSize
+                        Layout.alignment: Qt.AlignVCenter
+                        onClicked: editorId.removeLayer(treeDelegateId.layerIndex)
                     }
 
                     // --- Category node: the pipeline-stage group header. ---

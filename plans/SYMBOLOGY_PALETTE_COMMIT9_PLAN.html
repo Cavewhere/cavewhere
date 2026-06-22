@@ -337,6 +337,30 @@ assertions); <code>tst_BrushEditor</code> 6/6 (added remove-via-✕ and add-inse
 regression green (257 assertions). <em>Still to come in 2.2:</em> reorder rules (drag → <code>moveRows</code>);
 add/remove/reorder layers; glyph selection; rule param editing; live validator; brush library; palette page.</p>
 
+<h3>Phase 2.2 — add/remove/reorder layers <span class="ok">DONE (2026-06-21)</span></h3>
+<p><strong>Landed (2026-06-21):</strong> <code>cwBrushStructureModel</code> gained
+<code>insertLayer</code>/<code>removeLayer</code>/<code>moveLayer</code> and <code>cwBrushEditor</code> the public
+<code>addLayer()</code> (append empty) / <code>removeLayer(i)</code> / <code>moveLayer(from,to)</code> invokables
+(dirty + preview chokepoint, same as the rule mutators). <code>BrushEditorPanel.qml</code>: a layer row now
+carries a hover-revealed ⠿ drag-to-reorder grip (mirroring the rule grip) and a ✕ remove, plus a panel-footer
+<em>＋ Layer</em> button. Paint order == layer order (Decision 12), so a layer move reorders what paints on top
+across the whole brush (no stage confinement, unlike a rule move). The layer drop indicator is a <em>single
+overlay line</em> at the computed layer boundary, not the rule grip's per-row top/bottom edges: a layer
+boundary falls between whole subtrees (layers interleave with their category/rule descendants in the flattened
+view), so no one row's edge marks it.</p>
+<p><strong>Deviation from the target shape — layer mutators reset, they do NOT bracket
+<code>beginInsertRows</code>.</strong> A category/rule <code>QModelIndex</code> encodes its owning layer index in
+<code>internalId</code>; Qt only re-homes a change parent's <em>direct</em> children on insert/remove/move, so an
+incremental layer-row shift would strand every later layer's descendants on a stale layer index (a corrupt
+tree). The rule mutators never hit this (they never shift a <em>layer</em> index). The structure is tiny and
+always fully expanded (re-expanded via the existing <code>onModelReset</code> handler), so
+<code>beginResetModel</code> is correct and visually seamless. Tests: <code>[cwBrushEditor]</code> green (139
+assertions, 18 cases — added a layer add/remove/move case asserting reset count, order, and dirty);
+<code>tst_BrushEditor</code> 17/17 (added <code>test_layerAddAppendsRow</code> / <code>…RemoveViaButtonMarksDirty</code>
+/ <code>…MoveReordersPaintOrder</code>; named <code>test_layer*</code> so the row-count-exact
+<code>test_addRuleInsertsTreeRow</code> keeps its pristine-first slot). <em>Still to come in 2.2:</em> glyph
+selection; rule param editing; brush library; palette page.</p>
+
 <p><strong>Original decision (settled, 2026-06-20):</strong> do this as the <em>opening move of Phase 2.2</em>,
 bundled with the first mutator (add/remove rule) — <em>not</em> as a standalone pre-commit.
 Surfaced by the 2.1 architecture review (item A, conf 82).</p>
