@@ -31,22 +31,34 @@ cwPlacementRuleData rule(const QString &name)
     return data;
 }
 
-cwError::ErrorType severityOf(const QList<cwError> &errors, SymbologyErrorCode code)
+cwError::ErrorType severityOf(const QList<cwDecorationLayerError> &errors, SymbologyErrorCode code)
 {
-    for (const cwError &error : errors) {
-        if (error.errorTypeId() == static_cast<int>(code)) {
-            return error.type();
+    for (const cwDecorationLayerError &e : errors) {
+        if (e.error.errorTypeId() == static_cast<int>(code)) {
+            return e.error.type();
         }
     }
     return cwError::NoError;
 }
 
-bool hasCode(const QList<cwError> &errors, SymbologyErrorCode code)
+bool hasCode(const QList<cwDecorationLayerError> &errors, SymbologyErrorCode code)
 {
     return severityOf(errors, code) != cwError::NoError;
 }
 
-QList<cwError> validate(const cwDecorationLayer &layer, const QSet<QString> &glyphs = {})
+// Flat rule index of the first error carrying `code`; -2 (distinct from the
+// layer-level -1) when no such error is present.
+int ruleIndexOf(const QList<cwDecorationLayerError> &errors, SymbologyErrorCode code)
+{
+    for (const cwDecorationLayerError &e : errors) {
+        if (e.error.errorTypeId() == static_cast<int>(code)) {
+            return e.ruleIndex;
+        }
+    }
+    return -2;
+}
+
+QList<cwDecorationLayerError> validate(const cwDecorationLayer &layer, const QSet<QString> &glyphs = {})
 {
     return cwDecorationLayerValidator::validate(layer, cwPlacementRuleRegistry::instance(), glyphs);
 }
@@ -98,7 +110,7 @@ TEST_CASE("Two terminal rules is fatal", "[cwDecorationLayerValidator]")
     cwDecorationLayer layer;
     layer.rules = {rule(QStringLiteral("Rigid stamp")),
                    rule(QStringLiteral("Trace"))};
-    const QList<cwError> errors = validate(layer);
+    const QList<cwDecorationLayerError> errors = validate(layer);
     REQUIRE(hasCode(errors, SymbologyErrorCode::TwoTerminals));
     CHECK(severityOf(errors, SymbologyErrorCode::TwoTerminals) == cwError::Fatal);
 }
@@ -109,7 +121,7 @@ TEST_CASE("Two Offset stroke rules is fatal", "[cwDecorationLayerValidator]")
     layer.rules = {rule(QStringLiteral("Offset stroke")),
                    rule(QStringLiteral("Offset stroke")),
                    rule(QStringLiteral("Trace"))};
-    const QList<cwError> errors = validate(layer);
+    const QList<cwDecorationLayerError> errors = validate(layer);
     REQUIRE(hasCode(errors, SymbologyErrorCode::TwoTransformStrokes));
     CHECK(severityOf(errors, SymbologyErrorCode::TwoTransformStrokes) == cwError::Fatal);
 }
@@ -118,7 +130,7 @@ TEST_CASE("Rules without a terminal warn", "[cwDecorationLayerValidator]")
 {
     cwDecorationLayer layer;
     layer.rules = {rule(QStringLiteral("Uniform spacing"))};
-    const QList<cwError> errors = validate(layer);
+    const QList<cwDecorationLayerError> errors = validate(layer);
     REQUIRE(hasCode(errors, SymbologyErrorCode::NoTerminalForRules));
     CHECK(severityOf(errors, SymbologyErrorCode::NoTerminalForRules) == cwError::Warning);
 }
@@ -128,7 +140,7 @@ TEST_CASE("A stamp terminal with no Generate rule warns", "[cwDecorationLayerVal
     cwDecorationLayer layer;
     layer.glyphName = QStringLiteral("tick");
     layer.rules = {rule(QStringLiteral("Rigid stamp"))};
-    const QList<cwError> errors = validate(layer, {QStringLiteral("tick")});
+    const QList<cwDecorationLayerError> errors = validate(layer, {QStringLiteral("tick")});
     REQUIRE(hasCode(errors, SymbologyErrorCode::StampsWithoutGenerate));
     CHECK(severityOf(errors, SymbologyErrorCode::StampsWithoutGenerate) == cwError::Warning);
 }
@@ -138,7 +150,7 @@ TEST_CASE("A stamp terminal with no glyph name warns", "[cwDecorationLayerValida
     cwDecorationLayer layer;
     layer.rules = {rule(QStringLiteral("Uniform spacing")),
                    rule(QStringLiteral("Rigid stamp"))};
-    const QList<cwError> errors = validate(layer);
+    const QList<cwDecorationLayerError> errors = validate(layer);
     REQUIRE(hasCode(errors, SymbologyErrorCode::StampsWithoutGlyph));
     CHECK_FALSE(hasCode(errors, SymbologyErrorCode::MissingGlyph));
 }
@@ -150,7 +162,7 @@ TEST_CASE("A stamp terminal naming a glyph absent from the palette warns",
     layer.glyphName = QStringLiteral("missing");
     layer.rules = {rule(QStringLiteral("Uniform spacing")),
                    rule(QStringLiteral("Rigid stamp"))};
-    const QList<cwError> errors = validate(layer, {QStringLiteral("tick")});
+    const QList<cwDecorationLayerError> errors = validate(layer, {QStringLiteral("tick")});
     REQUIRE(hasCode(errors, SymbologyErrorCode::MissingGlyph));
     CHECK(severityOf(errors, SymbologyErrorCode::MissingGlyph) == cwError::Warning);
     CHECK_FALSE(hasCode(errors, SymbologyErrorCode::StampsWithoutGlyph));
@@ -162,7 +174,7 @@ TEST_CASE("Placement rules under a trace terminal are dead and warn",
     cwDecorationLayer layer;
     layer.rules = {rule(QStringLiteral("Uniform spacing")),
                    rule(QStringLiteral("Trace"))};
-    const QList<cwError> errors = validate(layer);
+    const QList<cwDecorationLayerError> errors = validate(layer);
     REQUIRE(hasCode(errors, SymbologyErrorCode::DeadRulesUnderTrace));
     CHECK(severityOf(errors, SymbologyErrorCode::DeadRulesUnderTrace) == cwError::Warning);
 }
@@ -172,7 +184,61 @@ TEST_CASE("An unknown rule name warns", "[cwDecorationLayerValidator]")
     cwDecorationLayer layer;
     layer.rules = {rule(QStringLiteral("No Such Rule")),
                    rule(QStringLiteral("Trace"))};
-    const QList<cwError> errors = validate(layer);
+    const QList<cwDecorationLayerError> errors = validate(layer);
     REQUIRE(hasCode(errors, SymbologyErrorCode::UnknownRule));
     CHECK(severityOf(errors, SymbologyErrorCode::UnknownRule) == cwError::Warning);
+    CHECK(ruleIndexOf(errors, SymbologyErrorCode::UnknownRule) == 0);
+}
+
+TEST_CASE("A rule out of pipeline order warns at its flat index",
+          "[cwDecorationLayerValidator]")
+{
+    cwDecorationLayer layer;
+    layer.glyphName = QStringLiteral("tick");
+    // Terminal first, then its placement/orientation rules: each later rule runs
+    // before the higher-stage terminal already above it.
+    layer.rules = {rule(QStringLiteral("Rigid stamp")),
+                   rule(QStringLiteral("Uniform spacing")),
+                   rule(QStringLiteral("Align to tangent"))};
+    const QList<cwDecorationLayerError> errors = validate(layer, {QStringLiteral("tick")});
+    REQUIRE(hasCode(errors, SymbologyErrorCode::RulesOutOfOrder));
+    CHECK(severityOf(errors, SymbologyErrorCode::RulesOutOfOrder) == cwError::Warning);
+    // The first out-of-order rule is "Uniform spacing" at flat index 1.
+    CHECK(ruleIndexOf(errors, SymbologyErrorCode::RulesOutOfOrder) == 1);
+}
+
+TEST_CASE("A well-ordered stamp stack reports no out-of-order problem",
+          "[cwDecorationLayerValidator]")
+{
+    cwDecorationLayer layer;
+    layer.glyphName = QStringLiteral("tick");
+    layer.rules = {rule(QStringLiteral("Uniform spacing")),
+                   rule(QStringLiteral("Align to tangent")),
+                   rule(QStringLiteral("Rigid stamp"))};
+    CHECK_FALSE(hasCode(validate(layer, {QStringLiteral("tick")}),
+                        SymbologyErrorCode::RulesOutOfOrder));
+}
+
+TEST_CASE("An extra terminal rule is fatal at its flat index",
+          "[cwDecorationLayerValidator]")
+{
+    cwDecorationLayer layer;
+    layer.rules = {rule(QStringLiteral("Rigid stamp")),
+                   rule(QStringLiteral("Trace"))};
+    const QList<cwDecorationLayerError> errors = validate(layer);
+    REQUIRE(hasCode(errors, SymbologyErrorCode::TwoTerminals));
+    // Attributed to the second (dead) terminal, not the layer.
+    CHECK(ruleIndexOf(errors, SymbologyErrorCode::TwoTerminals) == 1);
+}
+
+TEST_CASE("An extra stroke-transform rule is fatal at its flat index",
+          "[cwDecorationLayerValidator]")
+{
+    cwDecorationLayer layer;
+    layer.rules = {rule(QStringLiteral("Offset stroke")),
+                   rule(QStringLiteral("Offset stroke")),
+                   rule(QStringLiteral("Trace"))};
+    const QList<cwDecorationLayerError> errors = validate(layer);
+    REQUIRE(hasCode(errors, SymbologyErrorCode::TwoTransformStrokes));
+    CHECK(ruleIndexOf(errors, SymbologyErrorCode::TwoTransformStrokes) == 1);
 }

@@ -20,10 +20,19 @@
 struct cwDecorationLayer;
 class cwPlacementRuleRegistry;
 
+// One validation problem located within a layer's rule stack. ruleIndex is the
+// flat authored index into cwDecorationLayer::rules (the same index the brush
+// structure model addresses rules by, disabled rules included); -1 means the
+// problem is about the layer as a whole, not one rule.
+struct cwDecorationLayerError {
+    cwError error;
+    int ruleIndex = -1;
+};
+
 // Load- and edit-time well-formedness check for a decoration layer's rule stack.
 // Pure, synchronous, thread-safe (no QObject state): returns the layer's
-// problems as typed cwErrors, and an empty list for a well-formed (or empty)
-// stack.
+// problems as typed cwErrors, each located by flat rule index (or -1 for a
+// layer-level problem), and an empty list for a well-formed (or empty) stack.
 //
 // Severity (cwError::ErrorType):
 //  - Fatal   — the engine would resolve an ambiguity arbitrarily (two rules
@@ -40,9 +49,9 @@ class cwPlacementRuleRegistry;
 // caller can prefix the brush/layer; the editor groups by layer and uses them as-is.
 namespace cwDecorationLayerValidator {
 
-CAVEWHERE_LIB_EXPORT QList<cwError> validate(const cwDecorationLayer &layer,
-                                            const cwPlacementRuleRegistry &registry,
-                                            const QSet<QString> &availableGlyphNames);
+CAVEWHERE_LIB_EXPORT QList<cwDecorationLayerError> validate(const cwDecorationLayer &layer,
+                                                           const cwPlacementRuleRegistry &registry,
+                                                           const QSet<QString> &availableGlyphNames);
 
 }
 

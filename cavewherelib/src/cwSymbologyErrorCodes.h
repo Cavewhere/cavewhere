@@ -10,12 +10,20 @@
 
 #include "Monad/Result.h"
 
+//Qt includes
+#include <QQmlEngine>
+
 // Stable error-type ids for symbology palette validation, stored in
 // cwError::errorTypeId. Numbered off Monad::ResultBase::CustomError so they
 // never collide with the generic result codes (mirrors cwLinePlotErrorCodes.h).
 // Tests assert on these codes, not message prose, so messages stay editable; the
-// brush editor (commit 9) keys fix-its and suppression off them.
-enum class SymbologyErrorCode : int {
+// brush editor (commit 9) keys fix-its and suppression off them. Exposed to QML
+// as SymbologyError.<Name> so a row's error code can drive fix-it dispatch
+// without comparing against magic numbers.
+namespace SymbologyError {
+Q_NAMESPACE
+
+enum Code : int {
     TwoTerminals            = Monad::ResultBase::CustomError,       // 1024
     TwoTransformStrokes     = Monad::ResultBase::CustomError + 1,   // 1025
     NoTerminalForRules      = Monad::ResultBase::CustomError + 2,   // 1026
@@ -24,6 +32,13 @@ enum class SymbologyErrorCode : int {
     MissingGlyph            = Monad::ResultBase::CustomError + 5,   // 1029
     DeadRulesUnderTrace     = Monad::ResultBase::CustomError + 6,   // 1030
     UnknownRule             = Monad::ResultBase::CustomError + 7,   // 1031
+    RulesOutOfOrder         = Monad::ResultBase::CustomError + 8,   // 1032
 };
+Q_ENUM_NS(Code)
+QML_NAMED_ELEMENT(SymbologyError)
+}
+
+// Backwards-compatible C++ spelling: existing code writes SymbologyErrorCode::Name.
+using SymbologyErrorCode = SymbologyError::Code;
 
 #endif // CWSYMBOLOGYERRORCODES_H

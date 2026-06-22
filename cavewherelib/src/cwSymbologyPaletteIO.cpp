@@ -766,9 +766,10 @@ Monad::Result<cwSymbologyPaletteLoadResult> load(const QString &directory)
     QStringList fatalMessages;
     for (const cwLineBrush &brush : palette.lineBrushes) {
         for (int i = 0; i < brush.decorations.size(); ++i) {
-            const QList<cwError> layerErrors =
+            const QList<cwDecorationLayerError> layerErrors =
                 cwDecorationLayerValidator::validate(brush.decorations.at(i), registry, glyphNames);
-            for (const cwError &error : layerErrors) {
+            for (const cwDecorationLayerError &layerError : layerErrors) {
+                const cwError &error = layerError.error;
                 const QString located = QStringLiteral("brush \"%1\" layer %2 %3")
                                             .arg(brush.name).arg(i).arg(error.message());
                 if (error.type() == cwError::Fatal) {
