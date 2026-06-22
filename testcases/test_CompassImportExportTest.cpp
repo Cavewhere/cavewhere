@@ -31,7 +31,7 @@
 #include <QDir>
 #include <QMap>
 #include <QTemporaryDir>
-#include "cwSignalSpy.h"
+#include <QFuture>
 
 TEST_CASE("Export/Import Compass", "[Compass]") {
 
@@ -61,24 +61,17 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
     REQUIRE(QFileInfo::exists(exportFile) == true);
 
 
-    auto importFromCompass = std::make_unique<cwCompassImporter>();
-    cwSignalSpy messageSpy(importFromCompass.get(), SIGNAL(statusMessage(QString)));
-    importFromCompass->setCompassDataFiles(QStringList() << exportFile);
-    importFromCompass->start();
-    importFromCompass->waitToFinish();
+    auto importFuture = cwCompassImporter::run(QStringList() << exportFile);
+    importFuture.waitForFinished();
+    const auto importResult = importFuture.result();
 
-    if(!messageSpy.isEmpty()) {
-        for(int i = 0; i < messageSpy.size(); i++) {
-            QList<QVariant> messageArgs = messageSpy.at(i);
-            foreach(QVariant arg, messageArgs) {
-                INFO("Spy Arg:" << arg.toString().toStdString());
-            }
-        }
+    for(const auto& message : importResult.messages) {
+        INFO("Import message:" << message.toStdString());
     }
 
-    CHECK(messageSpy.isEmpty());
+    CHECK(importResult.messages.isEmpty());
 
-    QList<cwCaveData> caves = importFromCompass->caves();
+    QList<cwCaveData> caves = importResult.caves;
     REQUIRE(caves.size() == 1);
 
     auto importedRegion = std::make_unique<cwCavingRegion>();
@@ -139,12 +132,11 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
     CHECK(validatedFile.atEnd() == true);
     CHECK(exportedFile.atEnd() == true);
 
-    auto importFromCompass = std::make_unique<cwCompassImporter>();
-    importFromCompass->setCompassDataFiles(QStringList() << exportFile);
-    importFromCompass->start();
-    importFromCompass->waitToFinish();
+    auto importFuture = cwCompassImporter::run(QStringList() << exportFile);
+    importFuture.waitForFinished();
+    const auto importResult = importFuture.result();
 
-    QList<cwCaveData> caves = importFromCompass->caves();
+    QList<cwCaveData> caves = importResult.caves;
     REQUIRE(caves.size() == 1);
 
     // cwCave* importedCaves = &caves[0];
@@ -283,48 +275,34 @@ TEST_CASE("Export compass handles UP/DOWN clino values - ISSUE #121", "[Compass]
 TEST_CASE("Test 15 char format is okay", "[Compass]") {
     QString datasetFile = copyToTempFolder(testcasesDatasetPath("compass/calibrationToLong.dat"));
 
-    auto importFromCompass = std::make_unique<cwCompassImporter>();
+    auto future = cwCompassImporter::run({datasetFile});
+    future.waitForFinished();
+    const auto result = future.result();
 
-    cwSignalSpy messageSpy(importFromCompass.get(), &cwCompassImporter::statusMessage);
-
-    importFromCompass->setCompassDataFiles({datasetFile});
-    importFromCompass->start();
-    importFromCompass->waitToFinish();
-
-    CHECK(messageSpy.size() == 0);
-
-    for(const auto& signal : messageSpy) {
-        for(const auto& arg : signal) {
-            qDebug() << "Arg:" << arg;
-        }
+    for(const auto& message : result.messages) {
+        qDebug() << "Message:" << message;
     }
 
-    QList<cwCaveData> caves = importFromCompass->caves();
+    CHECK(result.messages.size() == 0);
+
+    QList<cwCaveData> caves = result.caves;
     REQUIRE(caves.size() == 1);
 }
 
 TEST_CASE("Compass importer enables backsights and reads data - ISSUE #249", "[Compass]") {
     QString datasetFile = copyToTempFolder(testcasesDatasetPath("compass/A.dat"));
 
-    auto importFromCompass = std::make_unique<cwCompassImporter>();
-    cwSignalSpy messageSpy(importFromCompass.get(), &cwCompassImporter::statusMessage);
+    auto future = cwCompassImporter::run(QStringList() << datasetFile);
+    future.waitForFinished();
+    const auto result = future.result();
 
-    importFromCompass->setCompassDataFiles(QStringList() << datasetFile);
-    importFromCompass->start();
-    importFromCompass->waitToFinish();
-
-    if(!messageSpy.isEmpty()) {
-        for(int i = 0; i < messageSpy.size(); i++) {
-            QList<QVariant> messageArgs = messageSpy.at(i);
-            foreach(QVariant arg, messageArgs) {
-                INFO("Spy Arg:" << arg.toString().toStdString());
-            }
-        }
+    for(const auto& message : result.messages) {
+        INFO("Import message:" << message.toStdString());
     }
 
-    CHECK(messageSpy.isEmpty());
+    CHECK(result.messages.isEmpty());
 
-    QList<cwCaveData> caves = importFromCompass->caves();
+    QList<cwCaveData> caves = result.caves;
     REQUIRE(caves.size() == 1);
 
     auto importedCave = std::make_unique<cwCave>();
@@ -366,25 +344,17 @@ TEST_CASE("Compass importer enables backsights and reads data - ISSUE #249", "[C
 TEST_CASE("Compass importer ignores -9.90 LRUD values - ISSUE #248", "[Compass]") {
     QString datasetFile = copyToTempFolder(testcasesDatasetPath("compass/A.dat"));
 
-    auto importFromCompass = std::make_unique<cwCompassImporter>();
-    cwSignalSpy messageSpy(importFromCompass.get(), &cwCompassImporter::statusMessage);
+    auto future = cwCompassImporter::run(QStringList() << datasetFile);
+    future.waitForFinished();
+    const auto result = future.result();
 
-    importFromCompass->setCompassDataFiles(QStringList() << datasetFile);
-    importFromCompass->start();
-    importFromCompass->waitToFinish();
-
-    if(!messageSpy.isEmpty()) {
-        for(int i = 0; i < messageSpy.size(); i++) {
-            QList<QVariant> messageArgs = messageSpy.at(i);
-            foreach(QVariant arg, messageArgs) {
-                INFO("Spy Arg:" << arg.toString().toStdString());
-            }
-        }
+    for(const auto& message : result.messages) {
+        INFO("Import message:" << message.toStdString());
     }
 
-    CHECK(messageSpy.isEmpty());
+    CHECK(result.messages.isEmpty());
 
-    QList<cwCaveData> caves = importFromCompass->caves();
+    QList<cwCaveData> caves = result.caves;
     REQUIRE(caves.size() == 1);
 
     auto importedCave = std::make_unique<cwCave>();
@@ -420,4 +390,49 @@ TEST_CASE("Compass importer ignores -9.90 LRUD values - ISSUE #248", "[Compass]"
     CHECK(a4FromStation.up().value().isEmpty());
     CHECK(a4FromStation.down().value().toDouble() == Catch::Approx(5.00));
     CHECK(a4FromStation.right().value().toDouble() == Catch::Approx(6.40));
+}
+
+TEST_CASE("Compass import cancellation produces no caves", "[Compass]") {
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString datFile = dir.filePath("cancel.dat");
+
+    //Build a large multi-survey file so the parse is still running when we
+    //cancel: a tiny file would finish before cancel() lands and the future
+    //would never enter the canceled state.
+    constexpr int surveyCount = 40;
+    constexpr int shotsPerSurvey = 500;
+
+    QString contents;
+    for(int s = 0; s < surveyCount; s++) {
+        contents += QStringLiteral(
+            "Big Cave\n"
+            "SURVEY NAME: S%1\n"
+            "SURVEY DATE: 1 1 2024\n"
+            "SURVEY TEAM:\n"
+            "Tester\n"
+            "DECLINATION: 0.00  FORMAT: DDDDLRUDLADadBT\n"
+            "\n"
+            "FROM TO LEN BEAR INC LEFT UP DOWN RIGHT AZM2 INC2 FLAGS COMMENTS\n"
+            "\n").arg(s);
+        for(int i = 0; i < shotsPerSurvey; i++) {
+            contents += QStringLiteral("A%1 A%2 10.00 90.00 0.00 1.00 1.00 1.00 1.00 270.00 0.00\n")
+                            .arg(i).arg(i + 1);
+        }
+        contents += QStringLiteral("\f\n");
+    }
+
+    QFile file(datFile);
+    REQUIRE(file.open(QFile::WriteOnly));
+    file.write(contents.toLocal8Bit());
+    file.close();
+
+    auto future = cwCompassImporter::run(QStringList() << datFile);
+    future.cancel();
+    future.waitForFinished();
+
+    //A canceled import must hand back nothing so no partial caves are added to
+    //the caving region.
+    CHECK(future.isCanceled());
+    CHECK(future.resultCount() == 0);
 }

@@ -9,94 +9,34 @@
 #define CWCOMPASSIMPORTER_H
 
 //Our includes
-#include "cwTask.h"
 #include "cwCave.h"
-#include "cwStationRenamer.h"
 #include "cwGlobals.h"
 
 //Qt include
-#include <QRegularExpression>
+#include <QFuture>
 #include <QStringList>
-class QFile;
 
 
 /**
  * @brief The cwCompassImporter class
  *
- * This allow cavewhere to import a compass dat file.
+ * This allows cavewhere to import a compass dat file. The import runs on a
+ * background thread through cwConcurrent::run() and reports determinate
+ * progress and cancellation through the QPromise it is given. Warnings and
+ * errors are collected into Result::messages instead of being emitted, so the
+ * worker has no thread affinity or signal/slot surface.
  */
-class CAVEWHERE_LIB_EXPORT cwCompassImporter : public cwTask
+class CAVEWHERE_LIB_EXPORT cwCompassImporter
 {
-    Q_OBJECT
 public:
-    explicit cwCompassImporter(QObject *parent = 0);
+    struct Result {
+        QList<cwCaveData> caves;
+        QStringList messages; //!< Warnings/errors collected during the parse
+    };
 
-    void setCompassDataFiles(QStringList filename);
+    static QFuture<Result> run(QStringList compassDataFiles);
 
-    QList<cwCaveData> caves() const;
-
-protected:
-    void runTask();
-    
-signals:
-    
-public slots:
-
-private:
-    //Input
-    QStringList CompassDataFiles;
-
-    //Output
-    QList<cwCaveData> m_cavesData;
-
-    //Status info
-    QList<cwCave*> Caves;
-    int LineCount;
-    QString CurrentFilename;
-    cwCave* CurrentCave;
-    cwTrip* CurrentTrip;
-    bool CurrentFileGood;
-
-    //Regex
-    QRegularExpression SurveyNameRegExp;
-    QRegularExpression DateRegExp;
-    QRegularExpression CalibrationRegExp;
-    cwStationRenamer StationRenamer;
-
-    void verifyCompassDataFileExists();
-    void parseFile();
-    void parseSurvey(QFile* file);
-    bool isFileGood(QFile* file, QString infoHelp);
-
-    void parseCaveName(QFile* file);
-    void parseTripName(QFile* file);
-    void parseTripDate(QFile* file);
-    void parseSurveyTeam(QFile* file);
-    void parseSurveyFormatAndCalibration(QFile* file);
-    void parseSurveyData(QFile* file);
-
-    bool convertNumber(QString numberString, QString field, double* value);
-
+    struct Worker;
 };
-
-
-/**
- * @brief cwCompassImporter::cave
- * @return Returns the resulting cave.
- */
-inline QList<cwCaveData> cwCompassImporter::caves() const
-{
-    return m_cavesData;
-}
-
-/**
- * @brief cwCompassImporter::setCompassDataFiles
- * @param filenames - Sets the compass data file list
- */
-inline void cwCompassImporter::setCompassDataFiles(QStringList filenames)
-{
-    CompassDataFiles = filenames;
-}
-
 
 #endif // CWCOMPASSIMPORTER_H

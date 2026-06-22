@@ -363,7 +363,7 @@ QString cwSurvexExporterRule::toSupportedLength(const cwSurveyDataArtifact::Trip
     case cwUnits::Meters:
     case cwUnits::Feet:
     case cwUnits::Yards:
-        return reading.value();
+        return cwSurvexExporterUtils::toSurvexNumber(reading.value());
     default:
         return QString("%1").arg(cwUnits::convert(reading.toDouble(), unit, cwUnits::Meters));
     }
@@ -434,6 +434,17 @@ ResultBase cwSurvexExporterRule::writeChunk(QTextStream& stream,
         cwShot shot = chunk.shots.at(i);
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
+
+        // Compass attaches passage dimensions to a dead-end station with a
+        // synthetic zero-length shot that has no compass/clino (e.g.
+        // "ALT13LRUD ALT13 0 - - - -"). Survex rejects that as a leg, so
+        // equate the carrier station to its neighbor: same position, and the
+        // *data passage cross section can still reference it.
+        if(cwSurvexExporterUtils::isLrudOnlyShot(shot)) {
+            stream << QStringLiteral("*equate ")
+                   << fromStation.name() << QLatin1Char(' ') << toStation.name() << Qt::endl;
+            continue;
+        }
 
         // Stub "from to - - -" lines make cavern fail with "Tape reading may
         // not be omitted". The chunk's errorModel already warns the user.

@@ -159,6 +159,7 @@ cwRootData::cwRootData(QObject *parent) :
     SurveyImportManager->setCavingRegion(Region);
     SurveyImportManager->setUndoStack(undoStack());
     SurveyImportManager->setErrorModel(Project->errorModel());
+    SurveyImportManager->setFutureManagerToken(FutureManagerModel->token());
 
     //Save account settings to QSetting
     m_accountWatcher->setPerson(m_account);

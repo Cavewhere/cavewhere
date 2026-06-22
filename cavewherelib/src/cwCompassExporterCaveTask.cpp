@@ -205,40 +205,32 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream,
 /**
   Extracts the data from the station's LRUD field
 
-  This will convert the value into decimal feet
+  The value is written in the survey's distance unit (matching the FORMAT
+  string), so no unit conversion is applied here.
   */
 double cwCompassExportCaveTask::convertField(cwStation station,
-                                             StationLRUDField field,
-                                             cwUnits::LengthUnit unit) {
+                                             StationLRUDField field) {
 
-    double value = -999.0;
+    cwDistanceReading reading;
     switch(field) {
     case Left:
-        if(station.left().state() == cwDistanceReading::State::Valid) {
-            value = station.left().toDouble();
-            return cwUnits::convert(value, unit, cwUnits::Feet);
-        }
+        reading = station.left();
         break;
     case Right:
-        if(station.right().state() == cwDistanceReading::State::Valid) {
-            value = station.right().toDouble();
-            return cwUnits::convert(value, unit, cwUnits::Feet);
-        }
+        reading = station.right();
         break;
     case Up:
-        if(station.up().state() == cwDistanceReading::State::Valid) {
-            value = station.up().toDouble();
-            return cwUnits::convert(value, unit, cwUnits::Feet);
-        }
+        reading = station.up();
         break;
     case Down:
-        if(station.down().state() == cwDistanceReading::State::Valid) {
-            value = station.down().toDouble();
-            return cwUnits::convert(value, unit, cwUnits::Feet);
-        }
+        reading = station.down();
         break;
     }
-    return value;
+
+    if(reading.state() == cwDistanceReading::State::Valid) {
+        return reading.toDouble();
+    }
+    return -999.0;
 }
 
 /**
@@ -423,9 +415,9 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
         stream << formatDouble(-999) << " ";
         stream << formatDouble(-999) << " ";
     } else {
-        double shotLength = cwUnits::convert(shot.distance().toDouble(),
-                                             calibrations->distanceUnit(),
-                                             cwUnits::Feet);
+        //The length is written in the survey's distance unit (matching the
+        //FORMAT string), so no unit conversion is applied here.
+        double shotLength = shot.distance().toDouble();
 
         if(!calibrations->hasFrontSights()) {
             shot.setCompass(cwCompassReading(fmod(convertField(calibrations, shot, BackCompass) + 180.0, 360.0)));
@@ -439,10 +431,10 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
         stream << formatDouble(convertField(calibrations, shot, Clino)) << " ";
     }
 
-    stream << formatDouble(convertField(fromStation, Left, calibrations->distanceUnit())) << " ";
-    stream << formatDouble(convertField(fromStation, Up, calibrations->distanceUnit())) << " ";
-    stream << formatDouble(convertField(fromStation, Down, calibrations->distanceUnit())) << " ";
-    stream << formatDouble(convertField(fromStation, Right, calibrations->distanceUnit())) << " ";
+    stream << formatDouble(convertField(fromStation, Left)) << " ";
+    stream << formatDouble(convertField(fromStation, Up)) << " ";
+    stream << formatDouble(convertField(fromStation, Down)) << " ";
+    stream << formatDouble(convertField(fromStation, Right)) << " ";
 
     //Write out backsight
     if(calibrations->hasBackSights()) {
@@ -478,9 +470,9 @@ void cwCompassExportCaveTask::writeCorrections(QTextStream &stream, cwTripCalibr
         clinoCorrections = calibrations->frontClinoCalibration();
     }
 
-    double tapeCorrections = cwUnits::convert(calibrations->tapeCalibration(),
-                                              calibrations->distanceUnit(),
-                                              cwUnits::Feet);
+    //The tape correction is written in the survey's distance unit (matching the
+    //FORMAT string); the importer reads it back in the same unit.
+    double tapeCorrections = calibrations->tapeCalibration();
     stream << "CORRECTIONS: " << QString("%1 %2 %3")
               .arg(compassCorrections, 0, 'f', 2)
               .arg(clinoCorrections, 0, 'f', 2)

@@ -1218,7 +1218,12 @@ QList<cwError> cwSurveyChunk::checkDataError(DataRole role, int index) const
         //Data should have a value
         cwError error;
 
-        if(role != ShotDistanceRole) {
+        if(isLrudOnlyShot(index)) {
+            //Zero-length LRUD-only shot (e.g. Compass attaches passage
+            //dimensions to a hanging station with a fake zero-length shot).
+            //Missing compass/clino is expected, so warn instead of failing.
+            error.setType(cwError::Warning);
+        } else if(role != ShotDistanceRole) {
             Q_ASSERT(!backSightValue.isNull());
             Q_ASSERT(backSightValue.canConvert<cwReading>());
             cwReading backSightReading = backSightValue.value<cwReading>();
@@ -1401,10 +1406,50 @@ bool cwSurveyChunk::isShotDataEmpty(int index) const
     const auto& shot = d.shots.at(index);
 
     return shot.distance().state() == cwDistanceReading::State::Empty
-           && shot.compass().state() == cwCompassReading::State::Empty
+           && allDirectionReadingsEmpty(shot);
+}
+
+/**
+ * @brief cwSurveyChunk::allDirectionReadingsEmpty
+ * @param shot
+ * @return True if the shot has no compass and no clino (neither front nor back).
+ */
+bool cwSurveyChunk::allDirectionReadingsEmpty(const cwShot& shot)
+{
+    return shot.compass().state() == cwCompassReading::State::Empty
            && shot.backCompass().state() == cwCompassReading::State::Empty
            && shot.clino().state() == cwClinoReading::State::Empty
            && shot.backClino().state() == cwClinoReading::State::Empty;
+}
+
+/**
+ * @brief cwSurveyChunk::isLrudOnlyShot
+ * @param index
+ * @return True if the shot is an explicit zero-length shot that carries no
+ * direction - its distance is a valid zero and it has no compass and no clino
+ * (front or back).
+ *
+ * Some survey formats (e.g. Compass) attach LRUD passage dimensions to an
+ * otherwise hanging station by inserting an explicit zero-length shot to a
+ * synthetic station. Such a shot isn't a real measurement, so a missing
+ * compass or clino is expected and should be reported as a warning rather than
+ * a fatal error.
+ *
+ * Note: an empty distance (no value entered) does NOT qualify - that is an
+ * incomplete shot the user still needs to fill in, so it stays fatal. Only an
+ * explicitly entered zero length is treated as an LRUD-only shot.
+ */
+bool cwSurveyChunk::isLrudOnlyShot(int index) const
+{
+    Q_ASSERT(index >= 0);
+    Q_ASSERT(index < d.shots.size());
+    const auto& shot = d.shots.at(index);
+
+    const cwDistanceReading distance = shot.distance();
+    const bool distanceIsZero = distance.state() == cwDistanceReading::State::Valid
+                                && qFuzzyIsNull(distance.toDouble());
+
+    return distanceIsZero && allDirectionReadingsEmpty(shot);
 }
 
 /**
