@@ -215,9 +215,14 @@ QQ.Rectangle {
             }
             // Pooling strands a removed row's delegate (a structural edit on a
             // nested parent can leave the recycled item painted at its old spot —
-            // e.g. a duplicate row after a reorder's remove+insert). The structure
-            // is tiny and always fully expanded, so destroying delegates instead of
-            // reusing them costs nothing and keeps the view honest.
+            // e.g. a duplicate row after a reorder's remove+insert). This is a
+            // genuine Qt Metal scene-graph pooling bug, NOT the old positional
+            // internalId: it still reproduces under interactive Metal drag after the
+            // structure model's internalId was made fully position-free (stable layer
+            // ids + stage-keyed categories), so don't retry reuseItems:true on that
+            // basis. (Offscreen never reproduces it.) The structure is tiny and
+            // always fully expanded, so destroying delegates instead of reusing them
+            // costs nothing and keeps the view honest.
             reuseItems: false
 
             // Layers, their category groups, and the rules are always shown

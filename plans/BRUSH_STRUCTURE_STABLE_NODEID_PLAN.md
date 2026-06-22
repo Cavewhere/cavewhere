@@ -7,9 +7,12 @@ edit. Replace the positional `internalId` ancestry with **stable identity** so
 proper `beginInsertRows` / `beginRemoveRows` / `beginMoveRows` are safe and
 `QPersistentModelIndex` survives across edits.
 
-Status: **Phase A + B done** (stable layer ids + reactive `layerCount`; stage-keyed
-category encoding — internalId is now fully position-free, green). The `reuseItems`
-verification remains. Pause for review between phases.
+Status: **Phase A + B done; `reuseItems` verification resolved — stays `false`**
+(stable layer ids + reactive `layerCount`; stage-keyed category encoding — internalId
+is now fully position-free, green). The `reuseItems: true` hypothesis was **disproved**
+by manual Metal testing: the stranding still reproduces, so it is a genuine Qt Metal
+scene-graph pooling bug independent of the encoding (see below). Pause for review
+between phases.
 
 ---
 
@@ -186,6 +189,22 @@ rather than a pure model-index logic error. So treat this as a verification step
    load/discard). If it persists → it's a genuine Qt Metal pooling bug; keep the
    workaround and update the comment to say so (and that the encoding is no
    longer the reason).
+
+**Outcome (resolved — stays `false`):** the hypothesis was **disproved**. The
+automated suite was misleading: `test_reorderUpdatesPaintedRowOrder` (synthetic
+`moveRule`) and `test_dragReordersRuleWithinGroup` both pass under
+`QSG_RHI_BACKEND=metal` with `reuseItems: true`, but **manual interactive drag under
+Metal still reproduces the stranding**. So the synthetic-move path does not exercise
+whatever the real interactive drag does to Qt's Metal scene-graph delegate pooling,
+and the glitch is a **genuine Qt Metal pooling bug, not the positional `internalId`**
+— the position-free encoding (Phase A/B) does **not** fix it. `reuseItems: false`
+stays, and `BrushEditorPanel.qml`'s comment now records that it was re-verified
+necessary after the encoding change so no one retries `true` on that basis. The
+hypothesized synergy between the workaround and the internalId fragility was wrong;
+the two are independent. (Aside: a Metal *windowed* run also fails
+`test_layerRemoveViaButtonMarksDirty`'s "hidden without hover" check regardless of
+`reuseItems` — the real mouse cursor drives the row's `HoverHandler`; harmless,
+offscreen is 18/18.)
 
 ---
 
