@@ -155,10 +155,6 @@ public:
     // would duplicate or strand ownership, so forbid both explicitly.
     Q_DISABLE_COPY_MOVE(cwRhiFrameRenderer)
 
-    QMatrix4x4 viewMatrix() const { return m_viewMatrix; }
-    QMatrix4x4 projectionMatrix() const { return m_projectionCorrectedMatrix; }
-    QMatrix4x4 viewProjectionMatrix() const { return m_viewProjectionMatrix; }
-    float devicePixelRatio() const { return m_devicePixelRatio; }
     QRhiBuffer* globalUniformBuffer() const { return m_globalUniformBuffer; }
 
     // Byte stride between camera slots in the global UBO (an aligned
@@ -233,11 +229,40 @@ public:
     // a pipeline so the pass routing is fixed for the frame.
     bool anyCloudVisible() const;
 
+    // The ids of currently-visible objects that can't be drawn in an atlas batch
+    // (cwRHIObject::precludesAtlasBatching) — billboards, whose inline MVP UBO would
+    // collapse across batched tiles. The offscreen renderer batches a job only when
+    // the job suppresses all of these (hiddenObjectIds), so a billboard-free job
+    // (e.g. a thumbnail) still atlases while a billboard-drawing one renders alone.
+    // Empty in the common no-billboard case.
+    QSet<cwRenderObjectId> atlasIncompatibleVisibleObjectIds() const;
+
     // Copy @a base into one RenderData per pass, stamping each with the rpDesc +
     // sample count that pass routes into this frame (from setupPassRouting).
     // gather() reads those when building pipeline keys.
     std::array<cwRHIObject::RenderData, kPassCount> buildPerPassRenderData(
         const cwRHIObject::RenderData& base) const;
+
+    // Derive one clip-space camera from @a projection / @a view and stamp it into
+    // both places a render job reads its camera: global-UBO camera slot @a cameraSlot
+    // (read by geometry on the GPU at draw time) and the CPU-side camera fields of
+    // @a renderData (read by CPU draws such as cwRenderBillboards, which build their
+    // own MVP). Deriving both from a single source is what keeps the GPU and CPU
+    // cameras from drifting — the offscreen-billboard misplacement bug. Also stamps
+    // renderData.renderTarget / devicePixelRatio; the caller fills renderData's
+    // rpDesc + sample count. @a batch carries the UBO write (consumed by the draw).
+    // Returns the clip-space camera for callers that still need the corrected
+    // projection (the EDL frame context). Shared by the live frame (slot 0) and each
+    // offscreen tile (its own slot), so the two paths can't diverge.
+    ClipSpaceCamera stampCamera(QRhiResourceUpdateBatch* batch,
+                                QRhi* rhi,
+                                cwRHIObject::RenderData& renderData,
+                                int cameraSlot,
+                                QRhiRenderTarget* renderTarget,
+                                const QMatrix4x4& projection,
+                                const QMatrix4x4& view,
+                                float devicePixelRatio,
+                                QSize viewportSize);
 
     // Build the per-pass pipeline batches for every visible object, using the
     // supplied per-pass render data (which carries the target rpDesc + sample
@@ -327,7 +352,6 @@ private:
                              const cwRHIObject::RenderData& passRenderData,
                              quint32 cameraUniformOffset);
 
-    void updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi);
     bool needsUpdate(cwSceneUpdate::Flag flag) const { return (m_updateFlags & flag) == flag; }
 
     QList<cwRHIObject*> m_rhiObjectsToInitilize;
@@ -343,8 +367,6 @@ private:
 
     cwSceneUpdate::Flag m_updateFlags = cwSceneUpdate::Flag::None;
     QMatrix4x4 m_projectionMatrix;
-    QMatrix4x4 m_projectionCorrectedMatrix;
-    QMatrix4x4 m_viewProjectionMatrix;
     QMatrix4x4 m_viewMatrix;
     float m_devicePixelRatio = 1.0f;
     QSize m_viewportSize;

@@ -444,16 +444,18 @@ void cwRhiTexturedItems::Item::ensurePipeline(const RenderData& renderData,
     // that pass renders into changes when the cloud composite engages (Opaque
     // routes to the 1x EDL offscreen then, the swap chain otherwise). Resolve
     // the target from the scene's per-frame routing so the pipeline — keyed on
-    // rpDesc + sampleCount — rebuilds itself when the routing flips.
-    auto* renderTarget = renderer->renderTarget();
+    // rpDesc + sampleCount — rebuilds itself when the routing flips. The fallback
+    // (routing not set up yet) keys on this job's own routed rpDesc + sample count
+    // from RenderData — never the live render target, which during an offscreen
+    // render can carry a different sample count than this job draws into.
     const cwRHIObject::RenderPass pass = cwRhiTexturedItems::toRenderPass(material.renderPass);
     QRhiRenderPassDescriptor* currentPass =
         owner->m_frame ? owner->m_frame->passRenderPassDescriptor(pass) : nullptr;
     int currentSampleCount =
         owner->m_frame ? owner->m_frame->passSampleCount(pass) : 0;
     if (!currentPass) {
-        currentPass = renderTarget->renderPassDescriptor();
-        currentSampleCount = renderTarget->sampleCount();
+        currentPass = renderData.renderPassDescriptor;
+        currentSampleCount = renderData.sampleCount;
     }
 
     const cwRhiPipelineKey key = owner->makePipelineKey(currentPass, currentSampleCount, material);

@@ -22,6 +22,15 @@ MainWindowTest {
         readonly property int tileSize: 128
         readonly property int batchCount: 8
 
+        // RootData is a session singleton shared across the whole QML suite (one
+        // process). loadAndShow() hides the station/lead billboards; restore them
+        // after each test so the default-visible state doesn't leak into the
+        // alphabetically-later render tests.
+        function cleanup() {
+            RootData.stationsVisible = true;
+            RootData.leadsVisible = true;
+        }
+
         function regionViewer() {
             let glTerrain = ObjectFinder.findObjectByChain(rootId.mainWindow,
                 "rootId->viewPage->SplitView->renderer");
@@ -45,6 +54,12 @@ MainWindowTest {
         function loadAndShow() {
             TestHelper.loadProjectFromFile(RootData.project,
                 TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            // Hide the station-label / lead billboards: they can't be atlas-batched
+            // (their inline MVP UBO collapses across tiles), so a job that draws them
+            // renders single-tile. This test exercises the multi-tile atlas path, whose
+            // real consumer (thumbnails) suppresses billboards too — so hide them here.
+            RootData.stationsVisible = false;
+            RootData.leadsVisible = false;
             // Non-uniform background so even camera-independent pixels differ under a pan.
             RootData.regionSceneManager.background.color1 = "#203050";
             RootData.regionSceneManager.background.color2 = "#000000";

@@ -305,7 +305,25 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
         cwOffscreenAtlasGrid::choose(size, rhi->resourceLimit(QRhi::TextureSizeMax),
                                      kAtlasByteBudget, cwRhiFrameRenderer::kOffscreenBatchCameraSlots,
                                      kScratchDepthBytesPerPixel);
-    const int cap = grid.isValid() ? grid.capacity() : 1;
+    // Billboards can't be atlas-batched: their inline cwItem2DRenderer reuses one MVP
+    // UBO per gather, so K tiles in one command buffer would all render the last
+    // tile's pose. A job can still atlas as long as it suppresses every visible
+    // billboard (hiddenObjectIds) — then no billboard is drawn, so nothing collapses.
+    // A job that does draw a billboard renders alone (one tile per command buffer /
+    // frame), so each gets its own camera. Thumbnails hide billboards (oversized in a
+    // small icon anyway) and batch; a full frame that shows them renders single-tile.
+    const QSet<cwRenderObjectId> mustHideToBatch = m_frame.atlasIncompatibleVisibleObjectIds();
+    const auto jobCanBatch = [&mustHideToBatch](const cwOffscreenRenderParameters& p) {
+        for (cwRenderObjectId id : mustHideToBatch) {
+            if (!p.hiddenObjectIds.contains(id)) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    const int cap = (grid.isValid() && jobCanBatch(m_queue.first()->parameters))
+                        ? grid.capacity() : 1;
 
     // Peel a compatible run off the front, bounded by one atlas-full. Spillover and the
     // first incompatible job stay queued; render() re-arms another frame while
@@ -317,8 +335,12 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
             break;
         }
         const cwOffscreenRenderParameters& fp = m_queue.first()->parameters;
+        // The leading job (batch empty) is always taken — cap is already 1 when it
+        // draws billboards, so it renders single-tile. A later job that draws
+        // billboards can't join, so it breaks the run and leads the next one.
         if (fp.outputSize != size || fp.backgroundColor != background
-            || m_frame.effectiveEdlSampleCount(rhi, fp.sampleCount) != sampleCount) {
+            || m_frame.effectiveEdlSampleCount(rhi, fp.sampleCount) != sampleCount
+            || (!batch.isEmpty() && !jobCanBatch(fp))) {
             break; // incompatible: it starts the next batch on a later frame
         }
         batch.append(m_queue.takeFirst());
@@ -374,9 +396,21 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
     // and the next live render() resets it at its top.
     m_frame.setupPassRouting(m_target.target.get(), offscreenEdlActive ? &m_edl : nullptr);
 
-    const cwRHIObject::RenderData offscreenRenderData{
+    cwRHIObject::RenderData offscreenRenderData{
         cb, renderer, cwSceneUpdate::Flag::None, m_target.rpDesc.get(), sampleCount
     };
+
+    // Stamp this tile's camera into both the global UBO (slot @a cameraSlot, read by
+    // geometry on the GPU) and offscreenRenderData (read by CPU draws like
+    // cwRenderBillboards), from one clip-space derivation — so billboards and geometry
+    // share the offscreen camera/target/DPR rather than the live frame's. Batched
+    // tiles each take a distinct slot so the K passes in one command buffer don't
+    // collapse onto one camera. cameraBatch is consumed by drawScene below.
+    QRhiResourceUpdateBatch* cameraBatch = rhi->nextResourceUpdateBatch();
+    const cwRhiFrameRenderer::ClipSpaceCamera clipCamera = m_frame.stampCamera(
+        cameraBatch, rhi, offscreenRenderData, cameraSlot, m_target.target.get(),
+        p.projectionMatrix, p.viewMatrix, p.devicePixelRatio, size);
+
     const std::array<cwRHIObject::RenderData, cwRhiFrameRenderer::kPassCount> perPassRenderData =
         m_frame.buildPerPassRenderData(offscreenRenderData);
 
@@ -395,34 +429,11 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
     m_frame.gatherScene(passBatches, perPassRenderData,
                          {p.hiddenObjectIds, appearanceSlotForObject});
 
-    // This tile's camera lives in global-UBO slot @a cameraSlot; write it (and the
-    // offscreen viewport metrics) so the pass reads it at that slot's dynamic offset.
-    // Batched tiles each take a distinct slot so the K passes in one command buffer don't
-    // collapse onto one camera.
-    const quint32 cameraOffset = m_frame.globalUniformBufferStride() * quint32(cameraSlot);
-    const cwRhiFrameRenderer::ClipSpaceCamera clipCamera =
-        cwRhiFrameRenderer::clipSpaceCorrectedCamera(rhi, p.projectionMatrix, p.viewMatrix);
-
-    cwRhiFrameRenderer::GlobalUniform camera;
-    std::memcpy(camera.viewProjectionMatrix, clipCamera.viewProjection.constData(),
-                sizeof(camera.viewProjectionMatrix));
-    std::memcpy(camera.viewMatrix, p.viewMatrix.constData(),
-                sizeof(camera.viewMatrix));
-    std::memcpy(camera.projectionMatrix, clipCamera.projectionCorrected.constData(),
-                sizeof(camera.projectionMatrix));
-    camera.devicePixelRatio = p.devicePixelRatio;
-    camera._pad0 = 0.0f;
-    camera.viewportSize[0] = float(size.width());
-    camera.viewportSize[1] = float(size.height());
-
-    QRhiResourceUpdateBatch* cameraBatch = rhi->nextResourceUpdateBatch();
-    cameraBatch->updateDynamicBuffer(m_frame.globalUniformBuffer(), cameraOffset,
-                                     sizeof(cwRhiFrameRenderer::GlobalUniform), &camera);
-
     const cwRhiPostProcessEffect::FrameUniformContext offscreenFrameContext{
         clipCamera.projectionCorrected, size, p.devicePixelRatio
     };
 
+    const quint32 cameraOffset = m_frame.globalUniformBufferStride() * quint32(cameraSlot);
     m_frame.drawScene(cb, m_target.target.get(),
                        offscreenEdlActive ? &m_edl : nullptr,
                        passBatches, perPassRenderData, cameraBatch, offscreenFrameContext,

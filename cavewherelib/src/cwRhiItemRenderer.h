@@ -40,13 +40,11 @@ public:
         return QQuickRhiItemRenderer::rhi();
     }
 
-    // Camera/UBO accessors used by render objects and cwRenderBillboards. They read
-    // the composed draw engine directly (cwRhiItemRenderer is a friend of cwRhiScene),
-    // so they no longer pass through cwRhiScene's own surface.
-    QMatrix4x4 viewMatrix() const { return m_sceneRenderer->m_frame.viewMatrix(); }
-    QMatrix4x4 projectionMatrix() const { return m_sceneRenderer->m_frame.projectionMatrix(); }
-    QMatrix4x4 viewProjectionMatrix() const { return m_sceneRenderer->m_frame.viewProjectionMatrix(); }
-    float devicePixelRatio() const { return m_sceneRenderer->m_frame.devicePixelRatio(); }
+    // The global camera UBO and its per-slot stride. Render objects bind the UBO and
+    // select a camera slot via the stride; the per-job camera itself reaches CPU-side
+    // draws (cwRenderBillboards) through cwRHIObject::RenderData, not the renderer —
+    // the live frame renderer deliberately no longer exposes its on-screen camera, so
+    // an offscreen render can't pick up the wrong camera.
     QRhiBuffer* globalUniformBuffer() const { return m_sceneRenderer->m_frame.globalUniformBuffer(); }
     quint32 globalUniformBufferStride() const { return m_sceneRenderer->m_frame.globalUniformBufferStride(); }
 

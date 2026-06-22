@@ -87,6 +87,13 @@ public:
     void updateResources(const ResourceUpdateData&) override {}
     void render(const RenderData&) override {}
 
+    // The inline 2D renderers reuse one MVP UBO per gather, so the offscreen
+    // renderer must not atlas-batch a scene that draws billboards (every tile would
+    // render the last tile's pose). True whenever a slot survived the visibility
+    // filter in buildRenderSlots; a job that suppresses this object (hidden id) can
+    // still batch, since then no billboard is drawn.
+    bool precludesAtlasBatching() const override { return !m_slots.isEmpty(); }
+
     void synchronize(const SynchronizeData& data) override
     {
         auto* renderObject = static_cast<cwRenderBillboards*>(data.object);
@@ -127,24 +134,29 @@ public:
 
         const RenderData& renderData = *context.renderData;
         cwRhiItemRenderer* renderer = renderData.renderer;
-        if (!renderer) {
+        if (!renderer || !renderer->rhi()) {
             return false;
         }
 
-        QRhiRenderTarget* target = renderer->renderTarget();
-        if (!renderer->rhi() || !target) {
+        // Read the camera, target, and DPR from the render job, NOT from the
+        // renderer's live-frame accessors: the latter always describe the on-screen
+        // camera, so an offscreen render (export/thumbnail) would project these
+        // billboards with the wrong camera, target, and DPR while the rest of the
+        // scene uses the offscreen job's camera from its UBO slot.
+        QRhiRenderTarget* target = renderData.renderTarget;
+        if (!target) {
             return false;
         }
 
-        const QMatrix4x4 view = renderer->viewMatrix();
-        const QMatrix4x4 projection = renderer->projectionMatrix();
-        const QMatrix4x4 viewProjection = renderer->viewProjectionMatrix();
+        const QMatrix4x4 view = renderData.viewMatrix;
+        const QMatrix4x4 projection = renderData.projectionMatrix;
+        const QMatrix4x4 viewProjection = renderData.viewProjectionMatrix;
         const QVector3D eye = view.inverted().column(3).toVector3D();
         const QSize pixelSize = target->pixelSize();
-        // The scene's device pixel ratio (camera/cwRhiScene), NOT the
-        // QRhiRenderTarget's — the latter defaults to 1.0, which would size
-        // ScreenConstant billboards at half their pixels on a retina display.
-        const float devicePixelRatio = renderer->devicePixelRatio();
+        // The job's device pixel ratio, NOT the QRhiRenderTarget's — the latter
+        // defaults to 1.0, which would size ScreenConstant billboards at half their
+        // pixels on a retina display.
+        const float devicePixelRatio = renderData.devicePixelRatio;
         const QSizeF logicalViewport(pixelSize.width() / devicePixelRatio,
                                      pixelSize.height() / devicePixelRatio);
 

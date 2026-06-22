@@ -116,8 +116,7 @@ void cwRhiFrameRenderer::initialize(QRhiCommandBuffer *cb)
         // Aligned per-slot stride (portable UBO size + valid dynamic-offset
         // granularity). The buffer holds kGlobalCameraSlotCount such slots; render
         // objects bind it with a dynamic offset that selects the live or offscreen
-        // camera. Slot 0 (live) lives at offset 0, so the existing per-field writes
-        // in updateGlobalUniformBuffer target it unchanged.
+        // camera. Slot 0 (live) lives at offset 0; stampCamera writes each slot.
         m_globalUniformStride = rhi->ubufAligned(sizeof(GlobalUniform));
         m_globalUniformBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer,
                                                m_globalUniformStride * kGlobalCameraSlotCount);
@@ -253,10 +252,19 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
     cwRHIObject::RenderData renderData{cb, renderer, m_updateFlags, swapchainRPDesc, swapchainSampleCount};
 
     QRhiResourceUpdateBatch* resources = rhi->nextResourceUpdateBatch();
-    cwRHIObject::ResourceUpdateData resourceUpdateData{resources, renderData};
 
-    //Upate uniforms for all the objects
-    updateGlobalUniformBuffer(resources, rhi);
+    // Derive the live camera once and stamp it into both the global UBO (slot 0,
+    // read by geometry on the GPU) and renderData (read by CPU draws such as
+    // cwRenderBillboards). renderData already captured this frame's dirty flags
+    // above (the snapshot objects consume), so clear them for the next frame.
+    constexpr int kLiveCameraSlot = 0;
+    const ClipSpaceCamera liveCamera = stampCamera(
+        resources, rhi, renderData, kLiveCameraSlot,
+        renderer ? renderer->renderTarget() : nullptr,
+        m_projectionMatrix, m_viewMatrix, m_devicePixelRatio, m_viewportSize);
+    m_updateFlags = cwSceneUpdate::Flag::None;
+
+    cwRHIObject::ResourceUpdateData resourceUpdateData{resources, renderData};
 
     if(!m_rhiObjectsToInitilize.isEmpty()) {
         for(auto object : std::as_const(m_rhiObjectsToInitilize)) {
@@ -282,10 +290,10 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
     const QColor clearColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0);
 
     // The live frame always reads camera slot 0 of the global UBO.
-    constexpr quint32 kLiveCameraOffset = 0;
+    const quint32 kLiveCameraOffset = m_globalUniformStride * quint32(kLiveCameraSlot);
 
     const cwRhiPostProcessEffect::FrameUniformContext liveFrameContext{
-        m_projectionCorrectedMatrix, m_viewportSize, m_devicePixelRatio
+        liveCamera.projectionCorrected, m_viewportSize, m_devicePixelRatio
     };
 
     drawScene(cb, renderer->renderTarget(), edlActive ? &m_edlOffscreen : nullptr,
@@ -293,65 +301,39 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
               kLiveCameraOffset, clearColor);
 }
 
-void cwRhiFrameRenderer::updateGlobalUniformBuffer(QRhiResourceUpdateBatch* batch, QRhi* rhi)
+cwRhiFrameRenderer::ClipSpaceCamera cwRhiFrameRenderer::stampCamera(
+    QRhiResourceUpdateBatch* batch, QRhi* rhi, cwRHIObject::RenderData& renderData,
+    int cameraSlot, QRhiRenderTarget* renderTarget,
+    const QMatrix4x4& projection, const QMatrix4x4& view,
+    float devicePixelRatio, QSize viewportSize)
 {
-    const bool projectionChanged = needsUpdate(cwSceneUpdate::Flag::ProjectionMatrix);
-    const bool viewChanged = needsUpdate(cwSceneUpdate::Flag::ViewMatrix);
+    const ClipSpaceCamera clip = clipSpaceCorrectedCamera(rhi, projection, view);
 
-    if (projectionChanged || viewChanged) {
-        const ClipSpaceCamera camera = clipSpaceCorrectedCamera(rhi, m_projectionMatrix, m_viewMatrix);
-        m_projectionCorrectedMatrix = camera.projectionCorrected;
-        m_viewProjectionMatrix = camera.viewProjection;
+    // CPU-side copy for draws that build their own MVP (cwRenderBillboards).
+    renderData.renderTarget = renderTarget;
+    renderData.viewMatrix = view;
+    renderData.projectionMatrix = clip.projectionCorrected;
+    renderData.viewProjectionMatrix = clip.viewProjection;
+    renderData.devicePixelRatio = devicePixelRatio;
 
-        batch->updateDynamicBuffer(
-            m_globalUniformBuffer,
-            offsetof(GlobalUniform, viewProjectionMatrix),
-            sizeof(GlobalUniform::viewProjectionMatrix),
-            m_viewProjectionMatrix.constData()
-            );
-    }
+    // The same camera into the global-UBO slot geometry binds on the GPU. One full
+    // struct write per slot (the UBO is tiny); the per-field dirty-flag gating the
+    // live frame once used saved nothing against the full scene draw it always runs.
+    GlobalUniform uniform;
+    std::memcpy(uniform.viewProjectionMatrix, clip.viewProjection.constData(),
+                sizeof(uniform.viewProjectionMatrix));
+    std::memcpy(uniform.viewMatrix, view.constData(), sizeof(uniform.viewMatrix));
+    std::memcpy(uniform.projectionMatrix, clip.projectionCorrected.constData(),
+                sizeof(uniform.projectionMatrix));
+    uniform.devicePixelRatio = devicePixelRatio;
+    uniform._pad0 = 0.0f;
+    uniform.viewportSize[0] = float(viewportSize.width());
+    uniform.viewportSize[1] = float(viewportSize.height());
 
-    if (projectionChanged) {
-        batch->updateDynamicBuffer(
-            m_globalUniformBuffer,
-            offsetof(GlobalUniform, projectionMatrix),
-            sizeof(GlobalUniform::projectionMatrix),
-            m_projectionCorrectedMatrix.constData()
-            );
-    }
-
-    if (viewChanged) {
-        batch->updateDynamicBuffer(
-            m_globalUniformBuffer,
-            offsetof(GlobalUniform, viewMatrix),
-            sizeof(GlobalUniform::viewMatrix),
-            m_viewMatrix.constData()
-            );
-    }
-
-    if (needsUpdate(cwSceneUpdate::Flag::DevicePixelRatio)) {
-        batch->updateDynamicBuffer(
-            m_globalUniformBuffer,
-            offsetof(GlobalUniform, devicePixelRatio),
-            sizeof(GlobalUniform::devicePixelRatio),
-            &m_devicePixelRatio
-            );
-    }
-
-    if (needsUpdate(cwSceneUpdate::Flag::ViewportSize)) {
-        const float viewportSize[2] = {
-            float(m_viewportSize.width()),
-            float(m_viewportSize.height()),
-        };
-        batch->updateDynamicBuffer(
-            m_globalUniformBuffer,
-            offsetof(GlobalUniform, viewportSize),
-            sizeof(GlobalUniform::viewportSize),
-            viewportSize
-            );
-    }
-
-    m_updateFlags = cwSceneUpdate::Flag::None;
+    batch->updateDynamicBuffer(m_globalUniformBuffer,
+                               m_globalUniformStride * quint32(cameraSlot),
+                               sizeof(GlobalUniform), &uniform);
+    return clip;
 }
 
 int cwRhiFrameRenderer::effectiveEdlSampleCount(QRhi* rhi, int requestedSampleCount) const
@@ -533,6 +515,18 @@ bool cwRhiFrameRenderer::anyCloudVisible() const
         [](const cwRHIObject* object) {
             return object->isVisible() && object->usesPointCloudPass();
         });
+}
+
+QSet<cwRenderObjectId> cwRhiFrameRenderer::atlasIncompatibleVisibleObjectIds() const
+{
+    QSet<cwRenderObjectId> ids;
+    for (auto it = m_rhiObjectLookup.cbegin(); it != m_rhiObjectLookup.cend(); ++it) {
+        const cwRHIObject* object = it.value();
+        if (object && object->isVisible() && object->precludesAtlasBatching()) {
+            ids.insert(it.key());
+        }
+    }
+    return ids;
 }
 
 std::array<cwRHIObject::RenderData, cwRhiFrameRenderer::kPassCount> cwRhiFrameRenderer::buildPerPassRenderData(

@@ -37,6 +37,22 @@ public:
         // 1x pipeline. Back-ends key their pipelines on this; it must match the
         // sample count of the render target the pass actually draws into.
         int sampleCount = 1;
+
+        // The camera and target this render job draws with. Objects that bind the
+        // global camera UBO read the camera from the GPU at draw time, so they
+        // ignore these — but objects that build their own MVP on the CPU
+        // (cwRenderBillboards) MUST read these. They are the offscreen job's camera
+        // for an offscreen render and the live camera for the live frame; the live
+        // frame renderer no longer exposes its on-screen camera, so a CPU MVP can't
+        // accidentally pick up the wrong (on-screen) camera during an offscreen
+        // render and place billboards off-position. cwRhiFrameRenderer::stampCamera
+        // fills these and the matching global-UBO slot from one derivation, in the
+        // clip-space-corrected form the UBO carries.
+        QRhiRenderTarget* renderTarget = nullptr;
+        QMatrix4x4 viewMatrix;
+        QMatrix4x4 projectionMatrix;       //!< clip-space corrected
+        QMatrix4x4 viewProjectionMatrix;   //!< clip-space corrected
+        float devicePixelRatio = 1.0f;
     };
 
     struct ResourceUpdateData {
@@ -177,6 +193,15 @@ public:
     // a shared-depth offscreen so the cloud silhouette can darken against the
     // scene). Default false; cwRHIPointCloud overrides.
     virtual bool usesPointCloudPass() const { return false; }
+
+    // True when this object cannot be drawn in an atlas batch — it records draws
+    // through per-frame GPU state (cwItem2DRenderer's inline MVP UBO) that is
+    // rewritten per gather(), and several tiles sharing one command buffer collapse
+    // to the last tile's value (the same hazard the global camera UBO sidesteps with
+    // one slot per tile). The offscreen renderer falls back to one tile per command
+    // buffer (one per frame) whenever a visible object reports true, so each tile
+    // renders with its own camera. Default false; cwRenderBillboards overrides.
+    virtual bool precludesAtlasBatching() const { return false; }
 
     // The appearance-slot pool backing this object's per-job override slots, or
     // nullptr if the object doesn't support appearance overrides. Slotted objects
