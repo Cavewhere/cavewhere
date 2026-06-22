@@ -46,9 +46,11 @@ struct cwOffscreenAtlasGrid {
     // row-major by columns alone, so a shorter atlas holds the same cells — letting a
     // partial batch allocate and read back only the rows it fills instead of atlasSize().
     // Clamped to [1, rows]; equals atlasSize() once count reaches capacity().
+    // An invalid grid (columns or rows <= 0) returns atlasSize() (an empty QSize),
+    // guarding the ceil-divide against /0 and std::clamp against a low > high range.
     QSize atlasSizeForCount(int count) const
     {
-        if (columns <= 0) {
+        if (columns <= 0 || rows <= 0) {
             return atlasSize();
         }
         const int neededRows = (count + columns - 1) / columns;

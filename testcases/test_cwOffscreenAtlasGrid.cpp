@@ -78,6 +78,20 @@ TEST_CASE("cwOffscreenAtlasGrid maps tile indices to row-major sub-rects", "[Off
         // A count at/over capacity never exceeds the full atlas (clamped).
         CHECK(grid.atlasSizeForCount(512) == grid.atlasSize());
     }
+
+    SECTION("atlasSizeForCount is safe on an invalid grid") {
+        // A default/invalid grid (columns or rows == 0) must not divide by zero or
+        // call std::clamp with low > high — it returns atlasSize() (an empty size).
+        cwOffscreenAtlasGrid invalid;
+        invalid.tileSize = QSize(kTile224, kTile224);
+        CHECK(invalid.atlasSizeForCount(10) == invalid.atlasSize());
+
+        cwOffscreenAtlasGrid noRows;
+        noRows.tileSize = QSize(kTile224, kTile224);
+        noRows.columns = 16;
+        noRows.rows = 0;
+        CHECK(noRows.atlasSizeForCount(10) == noRows.atlasSize());
+    }
 }
 
 TEST_CASE("cwOffscreenAtlasGrid::choose honours the binding cap", "[OffscreenAtlasGrid]")
