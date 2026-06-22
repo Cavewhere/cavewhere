@@ -79,6 +79,10 @@ public:
         float m_pickRadius = 0.0f;
     };
 
+    // Immutable, thread-safe handle to a built BVH (see snapshotForQuery).
+    // Defined below, after the private BvhData it wraps.
+    class QuerySnapshot;
+
     explicit cwGeometryItersecter(QObject* parent = nullptr);
     ~cwGeometryItersecter() override = default;
 
@@ -103,6 +107,22 @@ public:
     // radius by that depth — a non-normalized direction mis-sizes both.
     double intersects(const QRay3D& ray, const cwPickQuery& query = {}) const;
     cwRayHit intersectsDetailed(const QRay3D& ray, const cwPickQuery& query = {}) const;
+
+    // Capture the current built BVH as an immutable snapshot. Call on the
+    // thread that owns this object (the main thread); the returned snapshot
+    // can then be read from any thread and keeps the point data alive for its
+    // lifetime. isNull() until the first async build completes.
+    QuerySnapshot snapshotForQuery() const;
+
+    // World-space point-in-box query against a snapshot: returns every vertex
+    // of the point-cloud object `key` whose world position lies inside `box`.
+    // A BVH broad-phase — O(log n + k) for k hits rather than a full O(n)
+    // scan of the cloud. Reads only the snapshot, so it is safe to run off
+    // the main thread. Empty when the key isn't a built point cloud, its slot
+    // was invalidated mid-rebuild, the box is null, or the snapshot is null.
+    static QList<QVector3D> pointsInBox(const QuerySnapshot& snapshot,
+                                        const QBox3D& box,
+                                        const Key& key);
 
     // Escape hatch for the BVH-tube fallback that snaps to a sphere-miss
     // within kTubeFactor * pickRadius of the ray. Disabling reverts to
@@ -224,12 +244,13 @@ private:
     // is model-space; traversal transforms the world ray to model space
     // once per Object root.
     //
-    // Single-owner invariant: m_bvh is the only shared_ptr<BvhData> that
-    // exists at steady state — invalidatePublishedSlot mutates subBvhs
-    // via non-const operator[] and relies on refcount==1 to avoid a
-    // QVector detach (deep copy of the whole parallel-arrays buffer).
-    // Don't snapshot a BvhData; snapshot individual SubBvhs by their
-    // shared_ptr instead.
+    // Immutable once published: m_bvh is a shared_ptr<const BvhData> and is
+    // only ever replaced wholesale — by the build swap, or by
+    // invalidatePublishedSlot copying-on-write a fresh BvhData with one slot
+    // nulled. No published BvhData is edited in place, so snapshotForQuery can
+    // hand the whole shared_ptr to another thread safely: the copy is
+    // O(objects) shared_ptr/array bumps and the heavy sub-BVHs and point
+    // buffers stay shared and refcount-pinned for the snapshot's lifetime.
     struct BvhData {
         QList<Node> nodesSnapshot;
         QVector<BvhNode> topLevel;
@@ -254,6 +275,26 @@ private:
         QHash<Key, int> keyToSlot;
     };
 
+public:
+    // Immutable handle to a built BVH (see snapshotForQuery / pointsInBox).
+    // Copying is a shared_ptr refcount bump; it never aliases m_bvh's mutable
+    // identity (m_bvh is replaced wholesale, never edited in place), so a
+    // snapshot taken on the main thread can be read from a worker while the
+    // main thread publishes a newer BVH. Default-constructed snapshots are
+    // isNull(); so are snapshots taken before the first build completes.
+    class QuerySnapshot {
+    public:
+        QuerySnapshot() = default;
+        bool isNull() const { return m_data == nullptr; }
+
+    private:
+        friend class cwGeometryItersecter;
+        explicit QuerySnapshot(std::shared_ptr<const BvhData> data) :
+            m_data(std::move(data)) {}
+        std::shared_ptr<const BvhData> m_data;
+    };
+
+private:
     bool m_tubePickEnabled = true;
 
     // Live BVH. nullptr until the first async build completes. Only
@@ -264,7 +305,7 @@ private:
     // Nodes. The worker thread never touches m_bvh directly — it writes
     // into a side channel (resultSlot, see launchBuildJob) that the
     // .context() callback drains on the main thread.
-    std::shared_ptr<BvhData> m_bvh;
+    std::shared_ptr<const BvhData> m_bvh;
 
     // Cache of per-Object sub-BVHs, keyed by source Node identity. Kept
     // alive across rebuilds — only entries whose geometry actually changed

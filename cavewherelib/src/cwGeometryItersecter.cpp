@@ -1724,7 +1724,101 @@ void cwGeometryItersecter::invalidatePublishedSlot(const Key& key)
     if (it == m_bvh->keyToSlot.constEnd()) {
         return;
     }
-    m_bvh->subBvhs[*it].reset();
+    // m_bvh is immutable and may be shared with in-flight query snapshots or
+    // worker threads, so don't edit it in place: copy-on-write a fresh
+    // BvhData with the dirty Key's slot nulled, then publish it. The copy is
+    // cheap (O(objects) — the heavy sub-BVHs stay shared by shared_ptr), and
+    // readers holding the old snapshot keep seeing consistent old data.
+    auto next = std::make_shared<BvhData>(*m_bvh);
+    next->subBvhs[*it].reset();
+    m_bvh = std::move(next);
+}
+
+cwGeometryItersecter::QuerySnapshot cwGeometryItersecter::snapshotForQuery() const
+{
+    return QuerySnapshot(m_bvh);
+}
+
+QList<QVector3D> cwGeometryItersecter::pointsInBox(const QuerySnapshot& snapshot,
+                                                  const QBox3D& box,
+                                                  const Key& key)
+{
+    QList<QVector3D> result;
+
+    const std::shared_ptr<const BvhData>& bvh = snapshot.m_data;
+    if (!bvh || box.isNull()) {
+        return result;
+    }
+
+    const auto slotIt = bvh->keyToSlot.constFind(key);
+    if (slotIt == bvh->keyToSlot.constEnd()) {
+        return result;
+    }
+    const int slot = *slotIt;
+
+    const std::shared_ptr<const SubBvh>& subPtr = bvh->subBvhs.at(slot);
+    if (!subPtr) {                         // slot nulled mid-rebuild
+        return result;
+    }
+    const SubBvh& sub = *subPtr;
+
+    // Only point clouds answer a point-in-box query.
+    const cwGeometry& geometry = sub.object.geometry();
+    if (geometry.type() != cwGeometry::Type::Points) {
+        return result;
+    }
+    const auto* positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+    if (positionAttribute == nullptr) {
+        return result;
+    }
+
+    const QMatrix4x4& worldFromModel = bvh->modelMatrices.at(slot);
+    const QMatrix4x4& modelToWorld = bvh->inverseModelMatrices.at(slot);
+    // Point clouds register with an identity matrix; skip the per-point
+    // model->world map in that common case (it runs once per surviving point).
+    const bool identity = worldFromModel.isIdentity();
+
+    // The sub-BVH boxes are model space; bring the world query box into model
+    // space (conservative corner AABB) so node pruning is in the same frame.
+    // Leaf points are still tested exactly against the world box, so the
+    // conservative model box never admits a false positive.
+    const QBox3D modelBox = box.transformed(modelToWorld);
+    if (modelBox.isNull()) {
+        return result;
+    }
+
+    const PointPositionReader reader(geometry, positionAttribute);
+
+    QVarLengthArray<uint32_t, kBvhTraversalStackInline> stack;
+    stack.append(0);
+    while (!stack.isEmpty()) {
+        const uint32_t idx = stack.last();
+        stack.removeLast();
+
+        const BvhNode& node = sub.bvhNodes[idx];
+        if (!node.bbox.intersects(modelBox)) {
+            continue;
+        }
+
+        if (node.isLeaf) {
+            const uint32_t first = node.left;
+            const uint32_t primCount = node.right;
+            for (uint32_t p = first; p < first + primCount; ++p) {
+                const Primitive& prim = sub.primitives.at(p);
+                const QVector3D modelPos = reader.at(prim.primitiveIndex);
+                const QVector3D worldPos = identity ? modelPos
+                                                    : mapPoint(worldFromModel, modelPos);
+                if (box.contains(worldPos)) {
+                    result.append(worldPos);
+                }
+            }
+        } else {
+            stack.append(node.left);
+            stack.append(node.right);
+        }
+    }
+
+    return result;
 }
 
 std::shared_ptr<cwGeometryItersecter::SubBvh>
