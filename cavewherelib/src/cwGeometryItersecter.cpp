@@ -210,6 +210,29 @@ namespace {
         }
     }
 
+    // Stride-aware reader for a geometry's position attribute. Hoists the
+    // buffer base pointer and stride once, then fetches positions by vertex
+    // index — the raw-buffer access shared by the point-cloud paths (AABB
+    // union, BVH point enumeration, the sphere pick, per-point boxes). index
+    // is qsizetype so the byte offset can't overflow on clouds past ~200M
+    // points.
+    struct PointPositionReader {
+        const char* base = nullptr;
+        int stride = 0;
+
+        PointPositionReader(const cwGeometry& geometry,
+                            const cwGeometry::VertexAttribute* positionAttribute) :
+            base(geometry.vertexBuffer(positionAttribute->bufferIndex)->constData()
+                 + positionAttribute->byteOffsetInBuffer),
+            stride(positionAttribute->bufferStride)
+        {}
+
+        QVector3D at(qsizetype index) const {
+            const float* p = reinterpret_cast<const float*>(base + index * stride);
+            return QVector3D(p[0], p[1], p[2]);
+        }
+    };
+
     struct RaySphereHit {
         bool hit;
         double tNear;    // sphere-entry depth (valid only when hit)
@@ -779,14 +802,10 @@ void cwGeometryItersecter::addPoints(const cwGeometryItersecter::Object &object)
     const Key key{object.parent(), object.id()};
     eraseNodeIfPresent(key);
 
-    const char* base = geometry.vertexBuffer(positionAttribute->bufferIndex)->constData()
-                       + positionAttribute->byteOffsetInBuffer;
-    const int stride = positionAttribute->bufferStride;
-
+    const PointPositionReader reader(geometry, positionAttribute);
     QBox3D box;
     for (qsizetype i = 0; i < vertexCount; ++i) {
-        const float* p = reinterpret_cast<const float*>(base + i * stride);
-        box.unite(QVector3D(p[0], p[1], p[2]));
+        box.unite(reader.at(i));
     }
 
     const float pad = object.pickRadius() * kPointAabbPadScale;
@@ -1207,11 +1226,8 @@ void cwGeometryItersecter::testPrimitive(const Object& object,
         return;
     }
 
-    const char* base = geometry.vertexBuffer(positionAttribute->bufferIndex)->constData()
-                       + positionAttribute->byteOffsetInBuffer;
-    const int stride = positionAttribute->bufferStride;
-    const float* p = reinterpret_cast<const float*>(base + prim.primitiveIndex * stride);
-    const QVector3D center(p[0], p[1], p[2]);
+    const PointPositionReader reader(geometry, positionAttribute);
+    const QVector3D center = reader.at(prim.primitiveIndex);
 
     const RaySphereHit sphere = raySphereIntersectDouble(rayModel, center, radius);
     if (!sphere.hit) {
@@ -1412,11 +1428,8 @@ void cwGeometryItersecter::dumpLeafPrimitive(const Object& object,
         : "(null)";
 
     if (prim.kind == Primitive::Kind::Point) {
-        const char* base = geometry.vertexBuffer(positionAttribute->bufferIndex)->constData()
-                           + positionAttribute->byteOffsetInBuffer;
-        const int stride = positionAttribute->bufferStride;
-        const float* p = reinterpret_cast<const float*>(base + prim.primitiveIndex * stride);
-        const QVector3D centerModel(p[0], p[1], p[2]);
+        const QVector3D centerModel =
+            PointPositionReader(geometry, positionAttribute).at(prim.primitiveIndex);
         const QVector3D centerWorld = mapPoint(worldFromModel, centerModel);
 
         const float radius = object.pickRadius();
@@ -1489,11 +1502,8 @@ QBox3D cwGeometryItersecter::primitiveModelBox(const Object& object,
     }
 
     // Point primitive — pad the vertex by pickRadius on each axis (model space).
-    const char* base = geometry.vertexBuffer(positionAttribute->bufferIndex)->constData()
-                       + positionAttribute->byteOffsetInBuffer;
-    const int stride = positionAttribute->bufferStride;
-    const float* p = reinterpret_cast<const float*>(base + prim.primitiveIndex * stride);
-    const QVector3D centerModel(p[0], p[1], p[2]);
+    const QVector3D centerModel =
+        PointPositionReader(geometry, positionAttribute).at(prim.primitiveIndex);
     const float radius = object.pickRadius();
     const QVector3D padVec(radius, radius, radius);
     return QBox3D(centerModel - padVec, centerModel + padVec);
@@ -1637,15 +1647,12 @@ void cwGeometryItersecter::enumeratePointsChunk(const Object& object,
 {
     const cwGeometry& geometry = object.geometry();
     auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
-    const char* base = geometry.vertexBuffer(positionAttribute->bufferIndex)->constData()
-                       + positionAttribute->byteOffsetInBuffer;
-    const int stride = positionAttribute->bufferStride;
+    const PointPositionReader reader(geometry, positionAttribute);
 
     for (uint32_t i = 0; i < chunk.count; ++i) {
         const uint32_t vertIdx = chunk.inputBegin + i;
-        const float* p = reinterpret_cast<const float*>(base + vertIdx * stride);
         // Model space — see comment in enumerateTrianglesChunk.
-        const QVector3D centerModel(p[0], p[1], p[2]);
+        const QVector3D centerModel = reader.at(vertIdx);
 
         BuildPrim& bp = prims[chunk.outBegin + i];
         bp.prim.kind = Primitive::Kind::Point;
