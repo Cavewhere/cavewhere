@@ -462,7 +462,11 @@ void cwRhiOffscreenRenderer::renderAtlasBatch(QRhiCommandBuffer* cb, cwRhiItemRe
     QRhi* rhi = cb->rhi();
     const QSize tileSize = grid.tileSize;
 
-    ensureAtlas(rhi, grid.atlasSize());
+    // Size the atlas to the rows this batch actually fills, not the grid's full capacity:
+    // tileRect() positions cells by column count alone, so a shorter atlas holds the same
+    // tiles while the single read-back covers only filled rows (a half-full 256-cell grid
+    // reads back 128 cells, not 256). atlasSizeForCount clamps to the full atlasSize().
+    ensureAtlas(rhi, grid.atlasSizeForCount(batch.size()));
     if (!m_atlas.valid()) {
         // Atlas allocation failed; fall back to the proven single-tile path per job.
         for (const auto& job : std::as_const(batch)) {

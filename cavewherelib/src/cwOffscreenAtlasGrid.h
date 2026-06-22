@@ -6,6 +6,9 @@
 #include <QSize>
 #include <QtTypes>
 
+//Std includes
+#include <algorithm>
+
 /**
  * @brief Regular grid layout for packing uniform offscreen tiles into one atlas texture.
  *
@@ -36,6 +39,21 @@ struct cwOffscreenAtlasGrid {
     QSize atlasSize() const
     {
         return { columns * tileSize.width(), rows * tileSize.height() };
+    }
+
+    // Atlas size needed to hold exactly @a count tiles using this grid's column count:
+    // full width, but only ceil(count/columns) rows tall. tileRect() lays tiles out
+    // row-major by columns alone, so a shorter atlas holds the same cells — letting a
+    // partial batch allocate and read back only the rows it fills instead of atlasSize().
+    // Clamped to [1, rows]; equals atlasSize() once count reaches capacity().
+    QSize atlasSizeForCount(int count) const
+    {
+        if (columns <= 0) {
+            return atlasSize();
+        }
+        const int neededRows = (count + columns - 1) / columns;
+        const int usedRows = std::clamp(neededRows, 1, rows);
+        return { columns * tileSize.width(), usedRows * tileSize.height() };
     }
 
     // Sub-rectangle (in atlas pixels) for tile @a index, laid out row-major from the

@@ -57,6 +57,27 @@ TEST_CASE("cwOffscreenAtlasGrid maps tile indices to row-major sub-rects", "[Off
         // distinct top-left per cell -> no two cells share a position
         CHECK(origins.size() == grid.capacity());
     }
+
+    SECTION("atlasSizeForCount shrinks to the rows a partial batch fills") {
+        // Full width is kept (tileRect lays cells out by column), only the row count
+        // tracks the batch — so a partial batch reads back fewer rows, not fewer columns.
+        CHECK(grid.atlasSizeForCount(256) == grid.atlasSize());      // full -> full atlas
+        CHECK(grid.atlasSizeForCount(128) == QSize(16 * kTile224, 8 * kTile224));
+        CHECK(grid.atlasSizeForCount(16) == QSize(16 * kTile224, 1 * kTile224)); // exactly one row
+        CHECK(grid.atlasSizeForCount(17) == QSize(16 * kTile224, 2 * kTile224)); // spills to a 2nd row
+        CHECK(grid.atlasSizeForCount(1) == QSize(16 * kTile224, 1 * kTile224));  // >=1 row
+
+        // Every cell of a partial batch stays within its shrunk atlas.
+        const QSize partial = grid.atlasSizeForCount(128);
+        for (int i = 0; i < 128; ++i) {
+            const QRect r = grid.tileRect(i);
+            CHECK(r.right() < partial.width());
+            CHECK(r.bottom() < partial.height());
+        }
+
+        // A count at/over capacity never exceeds the full atlas (clamped).
+        CHECK(grid.atlasSizeForCount(512) == grid.atlasSize());
+    }
 }
 
 TEST_CASE("cwOffscreenAtlasGrid::choose honours the binding cap", "[OffscreenAtlasGrid]")
