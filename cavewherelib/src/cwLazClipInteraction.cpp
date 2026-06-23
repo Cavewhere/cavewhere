@@ -203,10 +203,10 @@ void cwLazClipInteraction::commit(Mode mode)
         if (layer == nullptr) {
             continue;
         }
-        // cwGeometry is implicitly shared — this is a header copy + refcount
-        // bump, not a buffer clone. Main-thread mutation of layer->geometry()
-        // after this point would detach into a new buffer.
-        req.sources.append(layer->geometry());
+        // Pass the on-disk path, not the in-memory geometry: the worker
+        // re-streams each file so a multi-GB cloud never has a second full
+        // copy on the heap, and every source attribute survives the clip.
+        req.sources.append({ layer->sourcePath(), layer->sourceCSOverride() });
     }
     req.polygonWorldXYZ = m_polygonWorldXYZ;
     // Freeze the view at commit time — pan between commit and worker run

@@ -12,6 +12,7 @@
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
+#include <QList>
 #include <QPointF>
 #include <QPolygonF>
 #include <QPromise>
@@ -21,42 +22,125 @@
 //Std includes
 #include <atomic>
 #include <cmath>
-#include <cstring>
 #include <limits>
+#include <vector>
 
 //Our includes
 #include "cwConcurrent.h"
+#include "cwCoordinateTransform.h"
+#include "cwLazLoader.h"
 
 // LAStools / LASlib
+#include <LASlib/lasreader.hpp>
 #include <LASlib/laswriter.hpp>
 
 namespace {
 
-constexpr qsizetype kCancelCheckStride = 64 * 1024;
+constexpr qsizetype kChunkSize = 64 * 1024;
 constexpr double kOutputScale = 0.001; // mm precision for encoded coords
-constexpr U8 kLasPointFormat = 0;
-constexpr U16 kLasFormat0RecordLength = 20;
 
-// Per-source validated cursors into the geometry's vertex buffers. Built in
-// preflight so the hot loop reads each attribute by stride without
-// re-validating. Position and Classification may be packed (each in its own
-// buffer, stride == element size) or interleaved (a shared PointRecord
-// stride): cwLazLoader emits the interleaved {Position, Classification,
-// SinkDepth} layout, the unit tests the packed one. Both reduce to
-// base + i * stride here, so the clip is layout-agnostic.
-struct PointSlice {
-    const char* positionBase = nullptr;
-    const char* classificationBase = nullptr; // null when the source has no class
-    int positionStride = 0;
-    int classificationStride = 0;
-    qsizetype count = 0;
+// Standard LAS point-record byte lengths by point_data_format. Used when
+// several sources of differing formats merge into one output: the chosen
+// merge format carries only its standard fields (no source extra bytes), so
+// the output record is exactly the standard length. A single source (or
+// uniform-format set) instead reuses the source's own record length so any
+// extra bytes pass straight through.
+U16 standardRecordLength(U8 format) noexcept
+{
+    switch (format) {
+    case 0: return 20;
+    case 1: return 28;
+    case 2: return 26;
+    case 3: return 34;
+    case 4: return 57;
+    case 5: return 63;
+    case 6: return 30;
+    case 7: return 36;
+    case 8: return 38;
+    case 9: return 59;
+    case 10: return 67;
+    default: return 0;
+    }
+}
+
+bool formatHasGpsTime(U8 f) noexcept
+{
+    return f == 1 || f == 3 || f == 4 || f == 5 || f >= 6;
+}
+
+bool formatHasRgb(U8 f) noexcept
+{
+    return f == 2 || f == 3 || f == 5 || f == 7 || f == 8 || f == 10;
+}
+
+bool formatHasNir(U8 f) noexcept
+{
+    return f == 8 || f == 10;
+}
+
+bool formatIsExtended(U8 f) noexcept
+{
+    return f >= 6;
+}
+
+struct OutputFormat {
+    U8 format = 0;
+    U16 recordLength = standardRecordLength(0);
 };
 
-const char* attributeBase(const cwGeometry& geom,
-                          const cwGeometry::VertexAttribute* attr)
+// Pick one output point format that is a superset of every source's standard
+// attributes, so each source upconverts into it via LASpoint::operator= with
+// no loss. A uniform-format set keeps the exact source record length (extra
+// bytes survive); a mixed set falls back to the richest *standard* format.
+// Wavepacket-only fields (formats 4/5/9/10) are not specifically merged —
+// their gps/rgb content is preserved, the waveform payload is dropped on a
+// mixed merge (it survives the uniform case unchanged).
+OutputFormat chooseOutputFormat(const QList<U8>& formats,
+                                const QList<U16>& recordLengths) noexcept
 {
-    const QByteArray* buf = geom.vertexBuffer(attr->bufferIndex);
-    return buf->constData() + attr->byteOffsetInBuffer;
+    OutputFormat out;
+    if (formats.isEmpty()) {
+        return out;
+    }
+
+    bool uniform = true;
+    for (int i = 1; i < formats.size(); ++i) {
+        if (formats.at(i) != formats.at(0)
+            || recordLengths.at(i) != recordLengths.at(0)) {
+            uniform = false;
+            break;
+        }
+    }
+    if (uniform) {
+        out.format = formats.at(0);
+        out.recordLength = recordLengths.at(0);
+        return out;
+    }
+
+    bool anyExtended = false;
+    bool needGps = false;
+    bool needRgb = false;
+    bool needNir = false;
+    for (U8 f : formats) {
+        anyExtended = anyExtended || formatIsExtended(f);
+        needGps = needGps || formatHasGpsTime(f);
+        needRgb = needRgb || formatHasRgb(f);
+        needNir = needNir || formatHasNir(f);
+    }
+
+    if (anyExtended) {
+        out.format = needRgb ? (needNir ? U8(8) : U8(7)) : U8(6);
+    } else if (needGps && needRgb) {
+        out.format = 3;
+    } else if (needRgb) {
+        out.format = 2;
+    } else if (needGps) {
+        out.format = 1;
+    } else {
+        out.format = 0;
+    }
+    out.recordLength = standardRecordLength(out.format);
+    return out;
 }
 
 bool isFinite(const cwGeoPoint& p)
@@ -97,16 +181,38 @@ QPolygonF projectPolygonToEyeXY(const QList<QVector3D>& worldXYZ,
     return result;
 }
 
-Monad::Result<qint64> clipOneSlice(const PointSlice& slice,
-                                   const cwLazClipOperation::Request& request,
-                                   const QPolygonF& polygonEyeXY,
-                                   const QRectF& polygonBBox,
-                                   LASwriter* writer,
-                                   LASpoint& point,
-                                   std::atomic<qint64>& pointsDone,
-                                   QPromise<cwLazClipOperation::Result>& promise,
-                                   int progressMax)
+// Streams one source LAZ from disk, reprojects to the output CS, tests each
+// point in eye XY, and writes the kept points with their full attribute record
+// intact. Returns the number of points written, or a Result-with-ErrorCode on
+// open/write failure.
+Monad::Result<qint64> clipOneSource(const cwLazClipSource& src,
+                                    int sourceIndex,
+                                    int sourceCount,
+                                    const cwLazClipOperation::Request& request,
+                                    const QPolygonF& polygonEyeXY,
+                                    const QRectF& polygonBBox,
+                                    LASwriter* writer,
+                                    LASpoint& outPoint,
+                                    std::atomic<qint64>& pointsDone,
+                                    QPromise<cwLazClipOperation::Result>& promise,
+                                    int progressMax)
 {
+    const QByteArray pathBytes = src.sourcePath.toUtf8();
+    LASreadOpener opener;
+    opener.set_file_name(pathBytes.constData(), FALSE);
+    LASreader* reader = opener.open();
+    if (reader == nullptr) {
+        return Monad::Result<qint64>(
+            QStringLiteral("Could not open source %1 of %2 for read: %3")
+                .arg(sourceIndex + 1).arg(sourceCount).arg(src.sourcePath),
+            cwLazClipOperation::SourceOpenFailed);
+    }
+
+    const QString sourceCS =
+        cwLazLoader::resolveSourceCS(src.sourceCSOverride, reader->header);
+    cwCoordinateTransform transform(sourceCS, request.outputWktCS);
+    const bool hasTransform = !transform.isIdentity();
+
     const double ox = request.worldOrigin.x;
     const double oy = request.worldOrigin.y;
     const double oz = request.worldOrigin.z;
@@ -115,6 +221,7 @@ Monad::Result<qint64> clipOneSlice(const PointSlice& slice,
 
     qint64 written = 0;
     qsizetype sinceReport = 0;
+    bool writeFailed = false;
 
     auto publishProgress = [&](qsizetype delta) {
         if (delta <= 0) {
@@ -127,19 +234,12 @@ Monad::Result<qint64> clipOneSlice(const PointSlice& slice,
         promise.setProgressValue(int((std::min<qint64>)(done, qint64(progressMax))));
     };
 
-    for (qsizetype i = 0; i < slice.count; ++i) {
-        if (sinceReport >= kCancelCheckStride) {
-            publishProgress(sinceReport);
-            sinceReport = 0;
-            if (promise.isCanceled()) {
-                break;
-            }
-        }
-        QVector3D v;
-        std::memcpy(&v, slice.positionBase + i * slice.positionStride, sizeof(QVector3D));
-        const double vx = double(v.x());
-        const double vy = double(v.y());
-        const double vz = double(v.z());
+    // global == output-CS coords (post-transform); writes the kept point.
+    // srcPoint carries the full source attribute record into outPoint;
+    // LASpoint::operator= bridges legacy↔extended formats, then only XYZ is
+    // re-encoded against the output header (reprojected + worldOrigin-anchored).
+    auto testAndWrite = [&](double gx, double gy, double gz, const LASpoint& srcPoint) {
+        const QVector3D v(float(gx - ox), float(gy - oy), float(gz - oz));
         const QVector3D eye = view.map(v);
         const QPointF eyeXY(double(eye.x()), double(eye.y()));
         // BBox prefilter — 4 comparisons vs O(V) containsPoint. Big win
@@ -147,47 +247,152 @@ Monad::Result<qint64> clipOneSlice(const PointSlice& slice,
         const bool inside = polygonBBox.contains(eyeXY)
                             && polygonEyeXY.containsPoint(eyeXY, Qt::OddEvenFill);
         if (keep ? inside : !inside) {
-            // Geometry vertices are worldOrigin-relative; the LAS writer
-            // wants absolute coords so downstream tools see geographic
-            // values. header.x_offset == worldOrigin so the encoded int
-            // lands back on the same scale floor.
-            point.set_x(vx + ox);
-            point.set_y(vy + oy);
-            point.set_z(vz + oz);
-            // Preserve the source LAS classification (ground=2, etc.) so the
-            // clipped cloud keeps its ground/feature classes. Sources without
-            // a Classification attribute write 0 (unclassified), the LAS
-            // format-0 default.
-            U8 classification = 0;
-            if (slice.classificationBase != nullptr) {
-                quint32 raw = 0;
-                std::memcpy(&raw,
-                            slice.classificationBase + i * slice.classificationStride,
-                            sizeof(quint32));
-                classification = U8(raw & 0xFFu);
+            outPoint = srcPoint;
+            // operator= copies the optional attributes only when the source
+            // carries them, and outPoint is reused across points and sources.
+            // When a richer merged output format carries an attribute this
+            // source lacks, clear it so the point doesn't inherit the previous
+            // point's value (e.g. a format-0 point merged after a format-3 one).
+            if (!srcPoint.have_gps_time) {
+                outPoint.gps_time = 0.0;
             }
-            point.set_classification(classification);
-            if (!writer->write_point(&point)) {
-                publishProgress(sinceReport);
-                return Monad::Result<qint64>(
-                    QStringLiteral("Failed to write LAZ point (disk full or I/O error)."),
-                    cwLazClipOperation::WritePointFailed);
+            if (!srcPoint.have_rgb) {
+                outPoint.rgb[0] = 0;
+                outPoint.rgb[1] = 0;
+                outPoint.rgb[2] = 0;
+                outPoint.rgb[3] = 0;
+            } else if (!srcPoint.have_nir) {
+                outPoint.rgb[3] = 0;
             }
+            outPoint.set_x(gx);
+            outPoint.set_y(gy);
+            outPoint.set_z(gz);
+            if (!writer->write_point(&outPoint)) {
+                writeFailed = true;
+                return;
+            }
+            // Feed the inventory so update_header(TRUE) at finalize stamps a
+            // correct point count and bounding box into the output header.
+            writer->update_inventory(&outPoint);
             ++written;
         }
-        ++sinceReport;
+    };
+
+    if (hasTransform) {
+        // Batch a chunk through transformInPlace to amortize PROJ's per-call
+        // overhead (same pattern as cwLazLoader). Each point's full record is
+        // serialized into recordBytes so its attributes can be paired with the
+        // transformed coordinate after the batch — reader->point is clobbered
+        // on the next read.
+        const U16 recordLen = reader->header.point_data_record_length;
+        LASpoint scratchSource;
+        scratchSource.init(&reader->header, reader->header.point_data_format,
+                           recordLen, &reader->header);
+
+        QVector<cwGeoPoint> coords;
+        coords.reserve(int(kChunkSize));
+        std::vector<U8> recordBytes;
+        recordBytes.resize(size_t(kChunkSize) * recordLen);
+
+        auto flushChunk = [&]() {
+            if (coords.isEmpty()) {
+                return;
+            }
+            transform.transformInPlace(coords.data(), coords.size());
+            for (qsizetype k = 0; k < coords.size() && !writeFailed; ++k) {
+                scratchSource.copy_from(recordBytes.data() + size_t(k) * recordLen);
+                const cwGeoPoint& gp = coords.at(k);
+                testAndWrite(gp.x, gp.y, gp.z, scratchSource);
+            }
+            publishProgress(coords.size());
+            coords.clear();
+        };
+
+        while (reader->read_point()) {
+            if (coords.isEmpty() && promise.isCanceled()) {
+                break;
+            }
+            reader->point.copy_to(recordBytes.data()
+                                  + size_t(coords.size()) * recordLen);
+            coords.append(cwGeoPoint(reader->point.get_x(),
+                                     reader->point.get_y(),
+                                     reader->point.get_z()));
+            if (coords.size() >= kChunkSize) {
+                flushChunk();
+                if (writeFailed) {
+                    break;
+                }
+            }
+        }
+        if (!writeFailed) {
+            flushChunk();
+        }
+    } else {
+        // Identity CS: source coords already match the output CS, so each
+        // point is tested and written in the read loop with no batching.
+        while (reader->read_point()) {
+            if (sinceReport == 0 && promise.isCanceled()) {
+                break;
+            }
+            testAndWrite(reader->point.get_x(),
+                         reader->point.get_y(),
+                         reader->point.get_z(),
+                         reader->point);
+            if (writeFailed) {
+                break;
+            }
+            ++sinceReport;
+            if (sinceReport >= kChunkSize) {
+                publishProgress(sinceReport);
+                sinceReport = 0;
+            }
+        }
+        publishProgress(sinceReport);
     }
-    publishProgress(sinceReport);
+
+    reader->close();
+    delete reader;
+
+    if (writeFailed) {
+        return Monad::Result<qint64>(
+            QStringLiteral("Failed to write LAZ point (disk full or I/O error)."),
+            cwLazClipOperation::WritePointFailed);
+    }
     return Monad::Result<qint64>(written);
 }
 
-qint64 totalPointsFor(const QList<PointSlice>& slices) noexcept
+// Opens each source header to sum point counts (for the progress range) and
+// collect point formats (to choose the output format). Reopening for the data
+// pass is intentional — the same independent-reader pattern cwLazLoader uses.
+struct SourceProbe {
+    qint64 totalPoints = 0;
+    QList<U8> formats;
+    QList<U16> recordLengths;
+};
+
+Monad::Result<SourceProbe> probeSources(const QList<cwLazClipSource>& sources)
 {
-    qint64 total = 0;
-    for (const PointSlice& s : slices) {
-        total += qint64(s.count);
+    SourceProbe probe;
+    probe.formats.reserve(sources.size());
+    probe.recordLengths.reserve(sources.size());
+    for (int i = 0; i < sources.size(); ++i) {
+        const QByteArray pathBytes = sources.at(i).sourcePath.toUtf8();
+        LASreadOpener opener;
+        opener.set_file_name(pathBytes.constData(), FALSE);
+        LASreader* reader = opener.open();
+        if (reader == nullptr) {
+            return Monad::Result<SourceProbe>(
+                QStringLiteral("Could not open source %1 of %2 for read: %3")
+                    .arg(i + 1).arg(sources.size()).arg(sources.at(i).sourcePath),
+                cwLazClipOperation::SourceOpenFailed);
+        }
+        probe.totalPoints += qint64(reader->npoints);
+        probe.formats.append(reader->header.point_data_format);
+        probe.recordLengths.append(reader->header.point_data_record_length);
+        reader->close();
+        delete reader;
     }
-    return total;
+    return Monad::Result<SourceProbe>(probe);
 }
 
 } // namespace
@@ -224,40 +429,16 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
                 return;
             }
 
-            // Build validated cursors once. clipOneSlice can then read each
-            // attribute by stride without re-resolving attributes per point.
-            QList<PointSlice> slices;
-            slices.reserve(request.sources.size());
-            for (int i = 0; i < request.sources.size(); ++i) {
-                const cwGeometry& geom = request.sources.at(i);
-                const cwGeometry::VertexAttribute* posAttr =
-                    geom.attribute(cwGeometry::Semantic::Position);
-                if (posAttr == nullptr
-                    || posAttr->format != cwGeometry::AttributeFormat::Vec3) {
-                    promise.addResult(Result(
-                        QStringLiteral("Source %1 of %2 has no Vec3 Position attribute.")
-                            .arg(i + 1).arg(request.sources.size()),
-                        MissingPosition));
-                    return;
-                }
-                PointSlice slice;
-                slice.count = geom.vertexCount();
-                slice.positionBase = attributeBase(geom, posAttr);
-                slice.positionStride = posAttr->bufferStride;
-                // Classification is optional: real LAZ sources carry it
-                // (ground=2, etc.) and the clip preserves it; synthetic
-                // Position-only geometry simply writes class 0.
-                const cwGeometry::VertexAttribute* classAttr =
-                    geom.attribute(cwGeometry::Semantic::Classification);
-                if (classAttr != nullptr
-                    && classAttr->format == cwGeometry::AttributeFormat::UInt) {
-                    slice.classificationBase = attributeBase(geom, classAttr);
-                    slice.classificationStride = classAttr->bufferStride;
-                }
-                slices.append(slice);
+            const Monad::Result<SourceProbe> probeResult =
+                probeSources(request.sources);
+            if (probeResult.hasError()) {
+                promise.addResult(Result(probeResult.errorMessage(),
+                                         probeResult.errorCode()));
+                return;
             }
+            const SourceProbe& probe = probeResult.value();
 
-            const qint64 totalPoints = totalPointsFor(slices);
+            const qint64 totalPoints = probe.totalPoints;
             // Progress range is int. For sources >INT_MAX the bar caps at full
             // before the run actually finishes; the clip itself still
             // completes.
@@ -267,6 +448,9 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
                     : int(totalPoints > 0 ? totalPoints : 1);
             promise.setProgressRange(0, progressMax);
             promise.setProgressValue(0);
+
+            const OutputFormat outputFormat =
+                chooseOutputFormat(probe.formats, probe.recordLengths);
 
             LASheader header;
             header.clean_las_header();
@@ -279,8 +463,8 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
             header.x_offset = request.worldOrigin.x;
             header.y_offset = request.worldOrigin.y;
             header.z_offset = request.worldOrigin.z;
-            header.point_data_format = kLasPointFormat;
-            header.point_data_record_length = kLasFormat0RecordLength;
+            header.point_data_format = outputFormat.format;
+            header.point_data_record_length = outputFormat.recordLength;
 
             QByteArray wktBytes;
             if (!request.outputWktCS.isEmpty()) {
@@ -314,13 +498,14 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
             QString failureMessage;
             int failureCode = Monad::ResultBase::NoError;
 
-            for (const PointSlice& slice : slices) {
+            for (int i = 0; i < request.sources.size(); ++i) {
                 if (promise.isCanceled()) {
                     break;
                 }
                 Monad::Result<qint64> sliceResult =
-                    clipOneSlice(slice, request, polygonEyeXY, polygonBBox, writer,
-                                 pointTemplate, pointsDone, promise, progressMax);
+                    clipOneSource(request.sources.at(i), i, request.sources.size(),
+                                  request, polygonEyeXY, polygonBBox, writer,
+                                  pointTemplate, pointsDone, promise, progressMax);
                 if (sliceResult.hasError()) {
                     failureMessage = sliceResult.errorMessage();
                     failureCode = sliceResult.errorCode();
