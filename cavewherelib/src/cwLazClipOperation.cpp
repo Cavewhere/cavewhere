@@ -39,6 +39,14 @@ namespace {
 constexpr qsizetype kChunkSize = 64 * 1024;
 constexpr double kOutputScale = 0.001; // mm precision for encoded coords
 
+// Point formats 6–10 are LAS 1.4 only. A 1.2 header has no 64-bit
+// extended_number_of_point_records field and a format-6+ writer leaves the
+// legacy 32-bit count at 0, so the on-disk point count is lost (readers see an
+// empty cloud). Stamp the header as 1.4 with its larger size whenever the
+// chosen output format is extended.
+constexpr U8 kLas14VersionMinor = 4;
+constexpr U16 kLas14HeaderSize = 375;
+
 // Standard LAS point-record byte lengths by point_data_format. Used when
 // several sources of differing formats merge into one output: the chosen
 // merge format carries only its standard fields (no source extra bytes), so
@@ -465,6 +473,14 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
             header.z_offset = request.worldOrigin.z;
             header.point_data_format = outputFormat.format;
             header.point_data_record_length = outputFormat.recordLength;
+            // Must precede set_geo_ogc_wkt below: that call grows
+            // offset_to_point_data by the WKT VLR size, so the 1.4 header size
+            // has to be in place first or the point data offset lands short.
+            if (formatIsExtended(outputFormat.format)) {
+                header.version_minor = kLas14VersionMinor;
+                header.header_size = kLas14HeaderSize;
+                header.offset_to_point_data = kLas14HeaderSize;
+            }
 
             QByteArray wktBytes;
             if (!request.outputWktCS.isEmpty()) {

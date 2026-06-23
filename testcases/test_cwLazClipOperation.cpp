@@ -469,6 +469,61 @@ TEST_CASE("cwLazClipOperation: kept points preserve their source attributes",
     CHECK(kept[1].pointSourceId == 9);
 }
 
+// Point formats 6–10 are LAS 1.4 only. The output header must be stamped 1.4
+// so the 64-bit extended point count is written — a 1.2 header drops it, and
+// every reader (cwLazLoader, CloudCompare) then sees an empty cloud even though
+// the point records are on disk.
+TEST_CASE("cwLazClipOperation: extended (1.4) format output records its point count",
+          "[cwLazClipOperation]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    QVector<LazAttributePoint> input;
+    LazAttributePoint a;
+    a.position = QVector3D(1.0f, 1.0f, 0.0f); // inside
+    a.classification = 2;
+    a.gpsTime = 86400.5;
+    input.append(a);
+
+    LazAttributePoint b;
+    b.position = QVector3D(-2.0f, 3.0f, 0.0f); // inside
+    b.classification = 5;
+    b.gpsTime = 90000.25;
+    input.append(b);
+
+    LazAttributePoint outside;
+    outside.position = QVector3D(500.0f, 500.0f, 0.0f); // outside
+    input.append(outside);
+
+    const QString srcPath = tempLazPath(tempDir, QStringLiteral("ext-in"));
+    REQUIRE(writeAttributedLazFile(srcPath, input, 6));
+
+    const QString outPath = outputPath(tempDir, QStringLiteral("ext-out"));
+    cwLazClipOperation::Request req;
+    req.sources.append({ srcPath, QString() });
+    req.polygonWorldXYZ = squareInWorldXY(0.0, 0.0, 10.0);
+    req.viewMatrix = topDownView();
+    req.mode = cwLazClipOperation::Mode::Keep;
+    req.outputPath = outPath;
+
+    auto future = cwLazClipOperation::run(req);
+    future.waitForFinished();
+    REQUIRE_FALSE(future.result().hasError());
+    REQUIRE(future.result().value().pointsWritten == 2);
+
+    const LazFileContents out = readLazFile(outPath);
+    CHECK(out.pointDataFormat == 6);
+    CHECK(out.points.size() == 2);
+
+    // The real regression: cwLazLoader reads the header point count. A 1.2
+    // header would report 0 here despite the records existing on disk.
+    auto loadFuture = cwLazLoader::load({.path = outPath});
+    loadFuture.waitForFinished();
+    REQUIRE(loadFuture.resultCount() == 1);
+    CHECK(loadFuture.result().geometry.vertexCount() == 2);
+}
+
 // Mixed source formats merge into the richest format (here 3): the format-0
 // source upconverts (its missing attributes default to 0) and the format-3
 // source's attributes survive.

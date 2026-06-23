@@ -73,6 +73,7 @@ bool writeAttributedLazFile(const QString& outPath,
     case 1: recordLength = 28; break;
     case 2: recordLength = 26; break;
     case 3: recordLength = 34; break;
+    case 6: recordLength = 30; break;
     default: return false;
     }
 
@@ -83,6 +84,12 @@ bool writeAttributedLazFile(const QString& outPath,
     header.z_scale_factor = 0.001;
     header.point_data_format = pointDataFormat;
     header.point_data_record_length = recordLength;
+    // Formats 6+ are LAS 1.4 only; a 1.2 header can't store their point count.
+    if (pointDataFormat >= 6) {
+        header.version_minor = 4;
+        header.header_size = 375;
+        header.offset_to_point_data = 375;
+    }
 
     QByteArray wktBytes;
     if (!wktCS.isEmpty()) {
@@ -102,7 +109,7 @@ bool writeAttributedLazFile(const QString& outPath,
         return false;
     }
 
-    const bool hasGps = (pointDataFormat == 1 || pointDataFormat == 3);
+    const bool hasGps = (pointDataFormat == 1 || pointDataFormat == 3 || pointDataFormat == 6);
     const bool hasRgb = (pointDataFormat == 2 || pointDataFormat == 3);
 
     for (const LazAttributePoint& p : points) {
