@@ -23,6 +23,21 @@ Item {
         turnTableInteraction: turnTableId
     }
 
+    // Mimics the always-on, full-fill tap-away overlay (LeadView) that sits
+    // ABOVE the clip view in GLTerrainRenderer: a bare TapHandler covering the
+    // whole viewport. Reproduces the real composition so the clip toolbar's
+    // buttons are clicked through a higher overlay, not in isolation.
+    Item {
+        id: tapAwayOverlayId
+        anchors.fill: parent
+
+        property int tapAwayCount: 0
+
+        TapHandler {
+            onTapped: tapAwayOverlayId.tapAwayCount++
+        }
+    }
+
     InteractionManager {
         id: interactionManagerId
         interactions: [turnTableId, clipViewId]
@@ -98,8 +113,13 @@ Item {
 
             let cancelButton = findChild(clipViewId, "lazClipCancelButton")
             verify(cancelButton !== null, "Cancel button should be findable")
+            tapAwayOverlayId.tapAwayCount = 0
             mouseClick(cancelButton)
 
+            // The button must win the tap over the higher full-fill tap-away
+            // overlay — otherwise the overlay swallows it and Cancel is dead.
+            compare(tapAwayOverlayId.tapAwayCount, 0,
+                    "tap-away overlay must not steal the Cancel button tap")
             compare(deactivatedSpy.count, 1)
             tryVerify(() => interactionManagerId.activeInteraction === turnTableId, 2000)
             compare(clipViewId.state, LazClipInteraction.Idle)

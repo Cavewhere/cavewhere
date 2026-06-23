@@ -22,6 +22,12 @@ LazClipInteraction {
     visible: false
     enabled: false
     focus: visible
+    // While the tool is active, sit above the always-on map overlays
+    // (LeadView, LinePlotLabelView) that are declared after this view in
+    // GLTerrainRenderer. Those overlays have full-fill tap-away handlers; left
+    // below them, they grab taps meant for this tool's Crop/Erase/Cancel
+    // buttons. z beats sibling declaration order, so this reclaims input.
+    z: visible ? 1 : 0
 
     onActivated: {
         // Freeze the camera at whatever angle the user is currently at —
