@@ -31,6 +31,7 @@
 #include "cwTrip.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
+#include "cwPDFConverter.h"
 #include "CaveWhereTestLibExport.h"
 #include "cwFutureManagerModel.h"
 #include "cwRootData.h"
@@ -297,6 +298,11 @@ public:
 
     Q_INVOKABLE QUrl toLocalUrl(const QString& path) {
         return QUrl::fromLocalFile(path);
+    }
+
+    //! True when the build links Qt Pdf; PDF note import is a no-op otherwise.
+    Q_INVOKABLE bool pdfSupported() const {
+        return cwPDFConverter::isSupported();
     }
 
     /**
