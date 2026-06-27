@@ -16,17 +16,25 @@ cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
 
     m_remoteStatusRestarter.onFutureChanged([this]() {
         const auto future = m_remoteStatusRestarter.future();
-        const int requestId = m_activeRequestId;
-        const bool localChanges = m_pendingLocalChanges;
-        const bool usesTokenAuth = m_pendingUsesTokenAuth;
-        const QString remoteName = m_pendingRemoteName;
-        const QString branchName = m_pendingBranchName;
+        // The Restarter coalesces a burst of refresh() calls into a single run
+        // and fires onFutureChanged once per run (when a fresh future is
+        // installed). Tag this run with a generation so a delivery superseded by
+        // a newer run — which fires onFutureChanged again — is dropped. The
+        // request context (remote/branch/local-changes) is read at delivery
+        // time: within a burst the latest scheduleRemoteStatusRefresh wins, and
+        // that is exactly the run the coalesced future ends up delivering.
+        const int generation = ++m_remoteStatusGeneration;
 
         AsyncFuture::observe(future)
-            .context(this, [this, future, requestId, localChanges, usesTokenAuth, remoteName, branchName]() {
-                if (future.isCanceled() || requestId != m_activeRequestId) {
+            .context(this, [this, future, generation]() {
+                if (future.isCanceled() || generation != m_remoteStatusGeneration) {
                     return;
                 }
+
+                const bool localChanges = m_pendingLocalChanges;
+                const bool usesTokenAuth = m_pendingUsesTokenAuth;
+                const QString remoteName = m_pendingRemoteName;
+                const QString branchName = m_pendingBranchName;
 
                 const auto aheadBehindResult = future.result();
                 if (aheadBehindResult.hasError()) {
@@ -245,7 +253,6 @@ void cwProjectSyncHealth::scheduleRemoteStatusRefresh(bool hasLocalChanges,
     m_pendingRemoteName = remoteName;
     m_pendingBranchName = branchName;
     m_pendingUsesTokenAuth = usesTokenAuth;
-    ++m_activeRequestId;
 
     QPointer<QQuickGit::GitRepository> repoPtr = repo;
     m_remoteStatusRestarter.restart([repoPtr, remoteName, branchName]() -> QQuickGit::GitRepository::AheadBehindFuture {
