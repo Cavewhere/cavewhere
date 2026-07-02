@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Label Placement Scaling Plan — cwCaptureLabelPlacer</title>
+<style>
+  :root{
+    --bg:#1b1e24; --panel:#242830; --ink:#e7eaf0; --muted:#9aa4b2;
+    --accent:#5aa9e6; --good:#54c98a; --bad:#e2686f; --warn:#e0b04a;
+    --grid:#39404b; --code:#12151a;
+    --font: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);line-height:1.55;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:40px 28px 96px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.3px}
+  h2{font-size:22px;margin:44px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--grid)}
+  h3{font-size:17px;margin:26px 0 8px;color:#cdd5e0}
+  .sub{color:var(--muted);font-size:15px;margin-top:0}
+  p{margin:10px 0}
+  code{font-family:var(--mono);font-size:.92em;background:var(--code);padding:1px 6px;border-radius:5px;color:#d9e2ee}
+  pre{background:var(--code);border:1px solid var(--grid);border-radius:10px;padding:14px 16px;overflow:auto;font-family:var(--mono);font-size:13px;color:#d9e2ee}
+  .panel{background:var(--panel);border:1px solid var(--grid);border-radius:12px;padding:18px 20px;margin:16px 0}
+  .fig{background:var(--panel);border:1px solid var(--grid);border-radius:12px;padding:16px;margin:20px 0}
+  .fig svg{display:block;width:100%;height:auto}
+  .cap{color:var(--muted);font-size:13.5px;margin-top:10px;padding-left:2px}
+  .cap b{color:#cdd5e0}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--grid);padding:8px 11px;text-align:left}
+  th{background:#2b303a;color:#cdd5e0;font-weight:600}
+  td.num{text-align:right;font-family:var(--mono)}
+  .tag{display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.4px;padding:2px 9px;border-radius:20px;vertical-align:middle}
+  .tag.bad{background:rgba(226,104,111,.16);color:#f3969b;border:1px solid rgba(226,104,111,.4)}
+  .tag.good{background:rgba(84,201,138,.16);color:#82dcaa;border:1px solid rgba(84,201,138,.4)}
+  .tag.warn{background:rgba(224,176,74,.16);color:#e9c877;border:1px solid rgba(224,176,74,.4)}
+  ul,ol{margin:10px 0;padding-left:22px}
+  li{margin:5px 0}
+  .kbd{font-family:var(--mono);font-size:12.5px;color:var(--accent)}
+  .lead{font-size:16px;color:#d3dae4}
+  .callout{border-left:3px solid var(--accent);background:#20262f;border-radius:0 10px 10px 0;padding:12px 16px;margin:16px 0}
+  .callout.win{border-left-color:var(--good)}
+  .callout.warn{border-left-color:var(--warn)}
+  .pill{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .toc a{color:var(--accent);text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle;margin-right:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Label Placement Scaling Plan</h1>
+<p class="sub"><code>cwCaptureLabelPlacer</code> · export hang on large surveys · <span class="pill">2026-07-02</span></p>
+
+<div class="panel">
+  <b>TL;DR.</b> Station-label placement during export is <b>O(n²)</b>. On a 150-mile cave
+  (Fisher&nbsp;Ridge, tens of thousands of stations) it never finishes — the UI thread hangs inside
+  <code>cwCaptureLabelPlacer::placeLabel</code>. A new benchmark
+  (<code>testcases/test_cwCaptureLabelPlacerBenchmark.cpp</code>, run with <span class="kbd">./cavewhere-test "[benchmark]"</span>)
+  measures the curve. The fix has layers, cheapest first:
+  <b>(1)</b> cull off-viewport stations, <b>(2)</b> cap the failed-search spiral,
+  <b>(3)</b> replace the three brute-force linear scans with a <b>spatial-hash grid</b>
+  (memory-proportional, because cave plots are <em>sparse curves on a mostly-empty page</em>), and
+  <b>(4)</b> move the whole pass off the main thread with <code>cwConcurrent</code>&nbsp;+&nbsp;AsyncFuture.
+  A separate scaling wall — the distance-transform grid and tile images cost <b>O(page&nbsp;area)</b>,
+  which explodes on a huge single-surface export — is addressed by <b>tile-local placement with
+  obstacle halos</b> (§5).
+</div>
+
+<p class="toc">
+  <b>Contents:</b>
+  <a href="#bench">1. Benchmark</a> ·
+  <a href="#current">2. How it works today</a> ·
+  <a href="#cost">3. Where the O(n²) is</a> ·
+  <a href="#index">4. Spatial-index research</a> ·
+  <a href="#tiling">5. Huge pages: memory &amp; tiling</a> ·
+  <a href="#fixes">6. Proposed fixes</a> ·
+  <a href="#thread">7. Threading</a> ·
+  <a href="#phases">8. Phases &amp; tests</a>
+</p>
+
+<!-- ================================================================ -->
+<h2 id="bench">1. The benchmark &amp; baseline</h2>
+<p>
+  The benchmark drives <code>cwCaptureLabelPlacer</code> directly (no camera / RHI needed) with a
+  synthetic serpentine cave, seeding obstacles exactly the way
+  <code>cwCaptureViewport::placeLabelsAfterTiles</code> does: station dots as hard obstacles before
+  <code>finalize()</code>, legs as soft obstacles after, one label placed per station.
+</p>
+
+<table>
+  <thead><tr><th>Stations</th><th>Time (Release)</th><th>µs / station</th><th>Growth vs&nbsp;½ size</th></tr></thead>
+  <tbody>
+    <tr><td class="num">500</td>  <td class="num">78 ms</td>    <td class="num">156</td>  <td>—</td></tr>
+    <tr><td class="num">1&nbsp;000</td> <td class="num">317 ms</td>   <td class="num">317</td>  <td>×4.1</td></tr>
+    <tr><td class="num">2&nbsp;000</td> <td class="num">1.17 s</td>   <td class="num">586</td>  <td>×3.7</td></tr>
+    <tr><td class="num">4&nbsp;000</td> <td class="num">4.56 s</td>   <td class="num">1&nbsp;141</td><td>×3.9</td></tr>
+    <tr><td class="num">10&nbsp;000</td><td class="num">27.2 s</td>   <td class="num">2&nbsp;720</td><td>×6.0 (×2.5 size)</td></tr>
+  </tbody>
+</table>
+<p>
+  Doubling the station count roughly <b>quadruples</b> the time, and per-station cost grows
+  linearly (156 → 2720 µs) — the signature of an O(n²) algorithm. And this is the <em>easy</em> case
+  where every label finds a home; the real file adds failed-spiral blow-ups and lead-leader
+  obstacles on top.
+</p>
+
+<div class="fig">
+  <svg viewBox="0 0 900 300" role="img" aria-label="Runtime scaling chart">
+    <!-- axes -->
+    <line x1="70" y1="250" x2="860" y2="250" stroke="#4a515c" stroke-width="1.5"/>
+    <line x1="70" y1="30"  x2="70"  y2="250" stroke="#4a515c" stroke-width="1.5"/>
+    <text x="60" y="255" fill="#9aa4b2" font-size="11" text-anchor="end">0s</text>
+    <text x="60" y="150" fill="#9aa4b2" font-size="11" text-anchor="end">14s</text>
+    <text x="60" y="45"  fill="#9aa4b2" font-size="11" text-anchor="end">28s</text>
+    <!-- x labels -->
+    <text x="130" y="268" fill="#9aa4b2" font-size="11" text-anchor="middle">500</text>
+    <text x="290" y="268" fill="#9aa4b2" font-size="11" text-anchor="middle">1k</text>
+    <text x="450" y="268" fill="#9aa4b2" font-size="11" text-anchor="middle">2k</text>
+    <text x="610" y="268" fill="#9aa4b2" font-size="11" text-anchor="middle">4k</text>
+    <text x="800" y="268" fill="#9aa4b2" font-size="11" text-anchor="middle">10k</text>
+    <!-- current O(n^2) curve: points at (x, y) using 28s=full height 220px from y=250 -->
+    <!-- 78ms->~249.4, 317->247.5, 1171->240.8, 4564->214, 27200->35.2 -->
+    <polyline points="130,249.4 290,247.5 450,240.8 610,214 800,35.2"
+              fill="none" stroke="#e2686f" stroke-width="2.5"/>
+    <g fill="#e2686f">
+      <circle cx="130" cy="249.4" r="4"/><circle cx="290" cy="247.5" r="4"/>
+      <circle cx="450" cy="240.8" r="4"/><circle cx="610" cy="214" r="4"/>
+      <circle cx="800" cy="35.2" r="5"/>
+    </g>
+    <text x="800" y="26" fill="#f3969b" font-size="12" text-anchor="middle">27.2s</text>
+    <!-- projected linear-ish curve (target): assume ~ n * 30us -> 10k=0.3s ~ near axis -->
+    <polyline points="130,249.8 290,249.6 450,249.1 610,248.2 800,245.7"
+              fill="none" stroke="#54c98a" stroke-width="2.5" stroke-dasharray="6 4"/>
+    <text x="805" y="243" fill="#82dcaa" font-size="12" text-anchor="start">target ≈ O(n)</text>
+    <!-- legend -->
+    <rect x="600" y="55" width="12" height="12" fill="#e2686f" rx="2"/>
+    <text x="618" y="65" fill="#cdd5e0" font-size="12">current  O(n²)</text>
+    <rect x="600" y="76" width="12" height="12" fill="#54c98a" rx="2"/>
+    <text x="618" y="86" fill="#cdd5e0" font-size="12">after fixes  ≈ O(n·k)</text>
+  </svg>
+  <div class="cap"><b>Figure 1.</b> Measured runtime vs. station count. Red is today's placement; green
+  is the target once local queries replace global scans.</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="current">2. How placement works today</h2>
+
+<p>
+  After all tiles are grabbed, <code>placeLabelsAfterTiles()</code> (main thread) builds a distance
+  transform of passage ink, seeds obstacles, and then calls <code>placeStationLabels()</code>, which
+  invokes <code>placeLabel()</code> once per station.
+</p>
+
+<div class="fig">
+  <svg viewBox="0 0 900 210" role="img" aria-label="Placement pipeline">
+    <defs>
+      <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="#5aa9e6"/>
+      </marker>
+    </defs>
+    <g font-size="12.5" fill="#e7eaf0" text-anchor="middle">
+      <rect x="20"  y="60" width="120" height="54" rx="8" fill="#2b303a" stroke="#39404b"/>
+      <text x="80" y="82">grab tiles</text><text x="80" y="99" fill="#9aa4b2" font-size="11">QImage[]</text>
+
+      <rect x="180" y="60" width="140" height="54" rx="8" fill="#2b303a" stroke="#39404b"/>
+      <text x="250" y="82">build DT grid</text><text x="250" y="99" fill="#9aa4b2" font-size="11">addTileAlpha → finalize</text>
+
+      <rect x="360" y="60" width="150" height="54" rx="8" fill="#2b303a" stroke="#39404b"/>
+      <text x="435" y="82">seed obstacles</text><text x="435" y="99" fill="#9aa4b2" font-size="11">dots (hard) + legs (soft)</text>
+
+      <rect x="550" y="35" width="150" height="104" rx="8" fill="#3a2b2f" stroke="#e2686f"/>
+      <text x="625" y="60">placeStationLabels</text>
+      <text x="625" y="80" fill="#f3969b" font-size="11">for each of n stations</text>
+      <text x="625" y="99" fill="#f3969b" font-size="11">placeLabel()  ← hot</text>
+      <text x="625" y="122" fill="#9aa4b2" font-size="10.5">the O(n²) loop</text>
+
+      <rect x="740" y="60" width="140" height="54" rx="8" fill="#2b303a" stroke="#39404b"/>
+      <text x="810" y="82">paint overlay</text><text x="810" y="99" fill="#9aa4b2" font-size="11">drawText per label</text>
+
+      <line x1="140" y1="87" x2="176" y2="87" stroke="#5aa9e6" stroke-width="2" marker-end="url(#arr)"/>
+      <line x1="320" y1="87" x2="356" y2="87" stroke="#5aa9e6" stroke-width="2" marker-end="url(#arr)"/>
+      <line x1="510" y1="87" x2="546" y2="87" stroke="#5aa9e6" stroke-width="2" marker-end="url(#arr)"/>
+      <line x1="700" y1="87" x2="736" y2="87" stroke="#5aa9e6" stroke-width="2" marker-end="url(#arr)"/>
+    </g>
+  </svg>
+  <div class="cap"><b>Figure 2.</b> The export label pipeline. Everything runs on the main thread; the
+  red box is where the hang lives.</div>
+</div>
+
+<h3>Inside <code>placeLabel()</code>: spiral search + brute-force scans</h3>
+<p>
+  For one station, the placer spirals outward through DT cells looking for the first cell with enough
+  clearance to seat the label, collects a few more candidates, scores them, and commits the winner.
+  The problem is what happens <em>at every candidate cell</em>.
+</p>
+
+<div class="fig">
+  <svg viewBox="0 0 900 340" role="img" aria-label="Spiral search and per-candidate scans">
+    <!-- left: spiral -->
+    <g>
+      <text x="150" y="24" fill="#cdd5e0" font-size="13" text-anchor="middle" font-weight="600">spiral out from anchor</text>
+      <!-- grid -->
+      <g stroke="#2f353f" stroke-width="1">
+        <!-- draw 9x9 grid -->
+        <!-- vertical -->
+        <line x1="40" y1="40" x2="40" y2="292"/><line x1="68" y1="40" x2="68" y2="292"/>
+        <line x1="96" y1="40" x2="96" y2="292"/><line x1="124" y1="40" x2="124" y2="292"/>
+        <line x1="152" y1="40" x2="152" y2="292"/><line x1="180" y1="40" x2="180" y2="292"/>
+        <line x1="208" y1="40" x2="208" y2="292"/><line x1="236" y1="40" x2="236" y2="292"/>
+        <line x1="264" y1="40" x2="264" y2="292"/>
+        <!-- horizontal -->
+        <line x1="40" y1="40"  x2="264" y2="40"/><line x1="40" y1="68"  x2="264" y2="68"/>
+        <line x1="40" y1="96"  x2="264" y2="96"/><line x1="40" y1="124" x2="264" y2="124"/>
+        <line x1="40" y1="152" x2="264" y2="152"/><line x1="40" y1="180" x2="264" y2="180"/>
+        <line x1="40" y1="208" x2="264" y2="208"/><line x1="40" y1="236" x2="264" y2="236"/>
+        <line x1="40" y1="264" x2="264" y2="264"/><line x1="40" y1="292" x2="264" y2="292"/>
+      </g>
+      <!-- anchor at center cell (152,166) -->
+      <rect x="138" y="152" width="28" height="28" fill="#5aa9e6" opacity=".9"/>
+      <!-- ring r=1 -->
+      <rect x="110" y="124" width="84" height="84" fill="none" stroke="#e0b04a" stroke-width="2"/>
+      <!-- ring r=2 -->
+      <rect x="82" y="96" width="140" height="140" fill="none" stroke="#e0b04a" stroke-width="1.6" opacity=".7"/>
+      <!-- ring r=3 -->
+      <rect x="54" y="68" width="196" height="196" fill="none" stroke="#e0b04a" stroke-width="1.3" opacity=".5"/>
+      <text x="152" y="171" fill="#0e1116" font-size="11" text-anchor="middle" font-weight="700">A</text>
+      <text x="150" y="312" fill="#9aa4b2" font-size="11.5" text-anchor="middle">each ring = candidate cells tested</text>
+    </g>
+
+    <!-- arrow -->
+    <line x1="290" y1="166" x2="330" y2="166" stroke="#5aa9e6" stroke-width="2.5" marker-end="url(#arr)"/>
+
+    <!-- right: per-candidate cost -->
+    <g>
+      <text x="620" y="24" fill="#cdd5e0" font-size="13" text-anchor="middle" font-weight="600">every candidate cell runs THREE full scans</text>
+
+      <rect x="360" y="44" width="510" height="66" rx="8" fill="#3a2b2f" stroke="#e2686f"/>
+      <text x="376" y="66" fill="#f3969b" font-size="12.5" font-weight="600">1 · hard line-obstacles (lead leaders)</text>
+      <text x="376" y="86" fill="#c9d2dd" font-size="11.5">for each L: segmentIntersectsRect + segmentsCross</text>
+      <text x="376" y="102" fill="#9aa4b2" font-size="11">← the exact frame in the hang stack trace</text>
+
+      <rect x="360" y="120" width="510" height="60" rx="8" fill="#3a2b2f" stroke="#e2686f"/>
+      <text x="376" y="142" fill="#f3969b" font-size="12.5" font-weight="600">2 · placed labels (grows toward n)</text>
+      <text x="376" y="162" fill="#c9d2dd" font-size="11.5">for each placed rect: rect.intersects(candidate)</text>
+
+      <rect x="360" y="190" width="510" height="60" rx="8" fill="#33313a" stroke="#e0b04a"/>
+      <text x="376" y="212" fill="#e9c877" font-size="12.5" font-weight="600">3 · soft obstacles = every centerline leg (n of them)</text>
+      <text x="376" y="232" fill="#c9d2dd" font-size="11.5">scoreCandidate: for each leg: segmentsCross(leader, leg)</text>
+
+      <text x="360" y="278" fill="#9aa4b2" font-size="11.5">No spatial structure — all three are linear over the whole set,</text>
+      <text x="360" y="296" fill="#9aa4b2" font-size="11.5">re-run for every candidate of every station.</text>
+    </g>
+  </svg>
+  <div class="cap"><b>Figure 3.</b> Left: the spiral visits candidate cells ring by ring. Right: at each
+  candidate it linearly scans <em>all</em> hard obstacles, <em>all</em> placed labels, and (when
+  scoring) <em>all</em> soft centerline legs. Nothing is indexed.</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="cost">3. Where the O(n²) actually comes from</h2>
+
+<p>Four independent multipliers stack up. The first two are the dominant quadratics; the last two turn
+a bad case into a catastrophic one on real data.</p>
+
+<table>
+  <thead><tr><th>Source</th><th>Code</th><th>Per label</th><th>Over n labels</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Placed-label rescan</td>
+      <td><code>cwCaptureLabelPlacer.cpp:405</code></td>
+      <td>O(labels placed so far)</td>
+      <td><span class="tag bad">O(n²)</span></td>
+    </tr>
+    <tr>
+      <td>Soft-obstacle scoring</td>
+      <td><code>:449</code> (per candidate × every leg)</td>
+      <td>O(n) legs</td>
+      <td><span class="tag bad">O(n²)</span></td>
+    </tr>
+    <tr>
+      <td>Hard line-obstacle scan</td>
+      <td><code>:385</code> (the hang frame)</td>
+      <td>O(L) × cells visited</td>
+      <td>O(n·L·cells)</td>
+    </tr>
+    <tr>
+      <td>Unbounded failed spiral</td>
+      <td><code>:425</code>, <code>maxRadius = maskW+maskH</code></td>
+      <td>scans the whole grid when no cell fits</td>
+      <td><span class="tag warn">amplifier</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <b>The failed-spiral trap.</b> <code>windowExhausted()</code> only starts limiting the search
+  <em>after</em> the first successful candidate (<code>firstHitRadius &gt;= 0</code>). When a label
+  can't be placed — routine in a dense plot — the spiral runs all the way to
+  <code>maxRadius</code>, and every clear cell it touches pays the full three-scan cost above. Plus
+  there is <b>no viewport cull</b>: <code>placeStationLabels()</code> loops <em>all</em> stations,
+  including ones entirely off the exported page, each running a full max-radius spiral that finds
+  nothing.
+</div>
+
+<div class="callout">
+  The code even documents the broken assumption at <code>cwCaptureLabelPlacer.cpp:401</code>:
+  <em>"Brute-force scan — N is small (~30 labels per export)."</em> Fisher Ridge has on the order of
+  <b>50,000</b> stations.
+</div>
+
+<!-- ================================================================ -->
+<h2 id="index">4. Which spatial index? (research)</h2>
+
+<p>
+  The three hot scans reduce to two query shapes over a mostly-static set: <b>rect-vs-rect overlap</b>
+  (placed labels) and <b>segment-vs-region</b> (hard + soft obstacles). Queries are always
+  <em>local</em> — a leader is a short segment, a label is a small rect — so we never need a global
+  search, only "what's near here." The second decisive fact is the <b>shape of the data</b>.
+</p>
+
+<div class="callout warn">
+  <b>Cave plots are sparse.</b> A centerline is a 1-D curve (thin passages) winding through a large,
+  mostly-empty 2-D page — and a whole-cave export at 300&nbsp;DPI makes that page <em>enormous</em>.
+  So the deciding axis is not raw query speed (all indexes localize well) but <b>how memory scales
+  when the page is huge and empty</b>. That is exactly where a <em>dense</em> uniform grid falls down.
+</div>
+
+<div class="fig">
+  <svg viewBox="0 0 900 250" role="img" aria-label="Sparse cave curve on a large empty page">
+    <rect x="20" y="20" width="500" height="210" rx="8" fill="#20242c" stroke="#39404b"/>
+    <text x="270" y="14" fill="#9aa4b2" font-size="11" text-anchor="middle">huge page — mostly empty</text>
+    <!-- faint dense grid to show wasted cells -->
+    <g stroke="#2b313b" stroke-width="1">
+      <line x1="20" y1="55" x2="520" y2="55"/><line x1="20" y1="90" x2="520" y2="90"/>
+      <line x1="20" y1="125" x2="520" y2="125"/><line x1="20" y1="160" x2="520" y2="160"/>
+      <line x1="20" y1="195" x2="520" y2="195"/>
+      <line x1="90" y1="20" x2="90" y2="230"/><line x1="160" y1="20" x2="160" y2="230"/>
+      <line x1="230" y1="20" x2="230" y2="230"/><line x1="300" y1="20" x2="300" y2="230"/>
+      <line x1="370" y1="20" x2="370" y2="230"/><line x1="440" y1="20" x2="440" y2="230"/>
+    </g>
+    <!-- passage curve -->
+    <path d="M60,205 C120,120 150,180 210,120 S300,60 340,110 S430,150 470,70"
+          fill="none" stroke="#5aa9e6" stroke-width="3"/>
+    <path d="M210,120 C230,160 200,210 260,205" fill="none" stroke="#5aa9e6" stroke-width="3"/>
+    <!-- stations -->
+    <g fill="#e7eaf0"><circle cx="60" cy="205" r="2.6"/><circle cx="150" cy="150" r="2.6"/>
+      <circle cx="210" cy="120" r="2.6"/><circle cx="270" cy="88" r="2.6"/>
+      <circle cx="340" cy="110" r="2.6"/><circle cx="410" cy="118" r="2.6"/>
+      <circle cx="470" cy="70" r="2.6"/><circle cx="260" cy="205" r="2.6"/></g>
+    <text x="270" y="246" fill="#9aa4b2" font-size="11.5" text-anchor="middle">the blue curve is all the data; every empty cell still costs a bucket header in a dense grid</text>
+
+    <!-- arrow -->
+    <line x1="540" y1="125" x2="580" y2="125" stroke="#5aa9e6" stroke-width="2.5" marker-end="url(#arr)"/>
+
+    <!-- occupied-only representation -->
+    <g transform="translate(600,20)">
+      <rect x="0" y="0" width="280" height="210" rx="8" fill="#20242c" stroke="#39404b"/>
+      <text x="140" y="-6" fill="#82dcaa" font-size="11" text-anchor="middle">store only occupied cells</text>
+      <!-- only cells along the curve -->
+      <g fill="#54c98a" opacity=".28">
+        <rect x="20" y="150" width="35" height="30"/><rect x="55" y="120" width="35" height="30"/>
+        <rect x="90" y="120" width="35" height="30"/><rect x="120" y="90" width="35" height="30"/>
+        <rect x="155" y="60" width="35" height="30"/><rect x="190" y="60" width="35" height="30"/>
+        <rect x="225" y="30" width="35" height="30"/><rect x="90" y="150" width="35" height="30"/>
+        <rect x="120" y="180" width="35" height="30"/>
+      </g>
+      <path d="M35,175 C75,110 105,160 150,95 S220,45 255,60"
+            fill="none" stroke="#5aa9e6" stroke-width="3"/>
+      <text x="140" y="200" fill="#82dcaa" font-size="11.5" text-anchor="middle">memory ∝ data, not page area</text>
+    </g>
+  </svg>
+  <div class="cap"><b>Figure 4.</b> The workload that actually matters: a sparse passage curve on a giant
+  page. A dense grid pays for every empty cell (left); a spatial-hash grid stores only the cells the
+  curve touches (right).</div>
+</div>
+
+<table>
+  <thead><tr><th>Structure</th><th>Memory on a huge sparse page</th><th>Local query</th><th>Dynamic insert</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Dense uniform grid</b> (array of buckets)</td>
+      <td>O((page/cell)²) — empty cells still cost headers</td>
+      <td>O(1)+k</td>
+      <td>trivial</td>
+      <td><span class="tag bad">fails</span> ~1.8M cells → 40+ MB of <em>empty</em> headers on a 47k×31k page; grows with page²</td>
+    </tr>
+    <tr>
+      <td><b>Spatial-hash grid</b> (hash of occupied cells)</td>
+      <td>O(occupied cells + memberships) ≈ O(n)</td>
+      <td>O(1)+k</td>
+      <td>trivial</td>
+      <td><span class="tag good">best</span> keeps every grid win; memory follows the data, not the page</td>
+    </tr>
+    <tr>
+      <td>Quadtree</td>
+      <td>O(nodes), adaptive — big voids stay one node</td>
+      <td>O(log n + k)</td>
+      <td>node splits</td>
+      <td><span class="tag warn">runner-up</span> good memory, but pointer-chasing, ~10–11 levels deep on this page, harder insert</td>
+    </tr>
+    <tr>
+      <td>kd-tree (existing <code>cwCollisionRectKdTree</code>)</td>
+      <td>O(n)</td>
+      <td>O(log n + k) typ., O(n) worst</td>
+      <td>unbalanced ⇒ degrades</td>
+      <td><span class="tag warn">tension</span> balanced=static (bad for growing labels); the existing one degrades on our top-to-bottom insert order. Rect-only.</td>
+    </tr>
+    <tr>
+      <td>R-tree / BVH</td>
+      <td>O(n)</td>
+      <td>O(log n + k)</td>
+      <td>bulk-load</td>
+      <td><span class="tag warn">overkill</span> extra dependency / 3D tool; no local-query edge over a hash grid</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout win">
+  <b>The correction from the first draft:</b> the right move is <b>dense-array → spatial hash</b>, not
+  grid → quadtree. The hash variant delivers the memory-proportionality you'd want a quadtree for,
+  <em>without</em> giving up O(1) insert, contiguous bucket scans, or implementation simplicity. A
+  quadtree only pays off if page density varied over many orders of magnitude <em>and</em> we needed
+  the tree for other queries (nearest-neighbour, ray march) — we don't.
+</div>
+
+<h3>Recommendation: <code>cwSpatialHashGrid2D</code></h3>
+<p>
+  Bucket 2D space into square cells sized to a few label-diagonals, keyed by
+  <code>hash(cellX, cellY) → bucket</code> so only non-empty cells exist. Each bucket holds indices of
+  items whose bbox overlaps it; a query rasterizes the query region to cells and tests only those
+  buckets. Every O(n) scan becomes <b>O(k)</b> local, and memory is <b>O(n)</b> regardless of page
+  size. Three instances:
+</p>
+<ul>
+  <li><span class="swatch" style="background:#e2686f"></span><b>Hard obstacles</b> (lead leaders) — inserted as registered; segment-bbox buckets.</li>
+  <li><span class="swatch" style="background:#e0b04a"></span><b>Soft obstacles</b> (centerline legs) — built once after <code>finalize()</code>. Biggest set, clearest win.</li>
+  <li><span class="swatch" style="background:#54c98a"></span><b>Placed labels</b> — dynamic; insert on commit. Non-overlap bounds per-bucket count, so lookups stay O(1) with cell ≈ label size.</li>
+</ul>
+<p>
+  Keep the existing <code>cwCollisionRectKdTree</code> in mind only as a lower-effort drop-in for the
+  placed-labels rect set if we want to touch less code first — but it doesn't help the two segment
+  scans and degrades on sorted inserts, so it isn't the primary choice.
+</p>
+
+<div class="fig">
+  <svg viewBox="0 0 900 330" role="img" aria-label="Grid query vs full scan">
+    <text x="225" y="22" fill="#f3969b" font-size="13" text-anchor="middle" font-weight="600">before — scan every segment</text>
+    <text x="675" y="22" fill="#82dcaa" font-size="13" text-anchor="middle" font-weight="600">after — only buckets the leader crosses</text>
+
+    <!-- BEFORE: many segments, leader tests all -->
+    <g transform="translate(30,40)">
+      <rect x="0" y="0" width="390" height="260" rx="8" fill="#20242c" stroke="#39404b"/>
+      <!-- scattered legs -->
+      <g stroke="#7b828e" stroke-width="2" opacity=".8">
+        <line x1="30" y1="40" x2="90" y2="70"/><line x1="120" y1="30" x2="160" y2="90"/>
+        <line x1="200" y1="50" x2="250" y2="40"/><line x1="290" y1="35" x2="350" y2="80"/>
+        <line x1="40" y1="120" x2="110" y2="140"/><line x1="150" y1="110" x2="210" y2="160"/>
+        <line x1="250" y1="130" x2="320" y2="120"/><line x1="60" y1="200" x2="120" y2="230"/>
+        <line x1="170" y1="210" x2="230" y2="200"/><line x1="270" y1="220" x2="340" y2="235"/>
+        <line x1="100" y1="90" x2="150" y2="180"/><line x1="300" y1="160" x2="360" y2="210"/>
+      </g>
+      <!-- leader -->
+      <line x1="170" y1="150" x2="210" y2="90" stroke="#5aa9e6" stroke-width="3.5"/>
+      <circle cx="170" cy="150" r="4" fill="#5aa9e6"/>
+      <!-- test rays to every segment (faint) -->
+      <g stroke="#e2686f" stroke-width="1" opacity=".35">
+        <line x1="190" y1="120" x2="60" y2="55"/><line x1="190" y1="120" x2="140" y2="60"/>
+        <line x1="190" y1="120" x2="225" y2="45"/><line x1="190" y1="120" x2="320" y2="57"/>
+        <line x1="190" y1="120" x2="75" y2="130"/><line x1="190" y1="120" x2="285" y2="125"/>
+        <line x1="190" y1="120" x2="90" y2="215"/><line x1="190" y1="120" x2="305" y2="227"/>
+      </g>
+      <text x="195" y="252" fill="#9aa4b2" font-size="11.5" text-anchor="middle">O(n) crossings tested per candidate</text>
+    </g>
+
+    <!-- AFTER: grid, leader touches 3 buckets -->
+    <g transform="translate(480,40)">
+      <rect x="0" y="0" width="390" height="260" rx="8" fill="#20242c" stroke="#39404b"/>
+      <!-- grid lines 5x4 -->
+      <g stroke="#2f353f" stroke-width="1">
+        <line x1="78" y1="0" x2="78" y2="260"/><line x1="156" y1="0" x2="156" y2="260"/>
+        <line x1="234" y1="0" x2="234" y2="260"/><line x1="312" y1="0" x2="312" y2="260"/>
+        <line x1="0" y1="65" x2="390" y2="65"/><line x1="0" y1="130" x2="390" y2="130"/>
+        <line x1="0" y1="195" x2="390" y2="195"/>
+      </g>
+      <!-- highlight the 2 buckets the leader passes through -->
+      <rect x="156" y="65" width="78" height="65" fill="#54c98a" opacity=".14"/>
+      <rect x="156" y="130" width="78" height="65" fill="#54c98a" opacity=".14"/>
+      <!-- same segments, greyed except local -->
+      <g stroke="#4a515c" stroke-width="2" opacity=".55">
+        <line x1="30" y1="40" x2="90" y2="70"/><line x1="120" y1="30" x2="160" y2="90"/>
+        <line x1="200" y1="50" x2="250" y2="40"/><line x1="290" y1="35" x2="350" y2="80"/>
+        <line x1="40" y1="120" x2="110" y2="140"/>
+        <line x1="250" y1="130" x2="320" y2="120"/><line x1="60" y1="200" x2="120" y2="230"/>
+        <line x1="170" y1="210" x2="230" y2="200"/><line x1="270" y1="220" x2="340" y2="235"/>
+        <line x1="300" y1="160" x2="360" y2="210"/>
+      </g>
+      <!-- local segments highlighted -->
+      <g stroke="#e0b04a" stroke-width="2.5">
+        <line x1="150" y1="110" x2="210" y2="160"/><line x1="170" y1="150" x2="205" y2="120"/>
+      </g>
+      <!-- leader -->
+      <line x1="170" y1="150" x2="210" y2="90" stroke="#5aa9e6" stroke-width="3.5"/>
+      <circle cx="170" cy="150" r="4" fill="#5aa9e6"/>
+      <text x="195" y="252" fill="#82dcaa" font-size="11.5" text-anchor="middle">only ~k local segments tested</text>
+    </g>
+  </svg>
+  <div class="cap"><b>Figure 5.</b> The soft-obstacle score for one candidate. Today every leader is
+  tested against every leg (left). With a grid, the leader only visits the buckets it actually passes
+  through and tests the few segments there (right).</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="tiling">5. The other scaling wall: page-area memory &amp; tiling</h2>
+
+<p>
+  A fast index fixes the O(n²) <em>time</em>. But a whole-cave single-surface export at 300&nbsp;DPI
+  hits a second wall that has nothing to do with the label index: several data structures cost
+  <b>O(page&nbsp;area)</b>, and the page is gigantic.
+</p>
+
+<div class="callout warn">
+  <b>The distance-transform grid already blows up.</b> <code>placeLabelsAfterTiles</code> unites every
+  tile into one <code>parentBounds</code> and builds a single <code>QVector&lt;float&gt; m_dt</code> at
+  <code>maskW × maskH</code>. On a ~47k×31k-px plot at 2-px cells that is
+  <b>~376&nbsp;M cells × 4&nbsp;B ≈ 1.5&nbsp;GB</b> — before a single label is placed. The summed tile
+  <code>QImage</code>s are gigapixels on top. So "whole huge cave on one page" is memory-infeasible in
+  the current architecture <em>regardless</em> of which label index we choose. The O(n²) time is the
+  hang you hit; this page² memory is the wall right behind it.
+</div>
+
+<h3>Tile-local placement (invisible seams)</h3>
+<p>
+  The export already tiles for the GPU grab (<code>Rows × Columns</code> of <code>grabToImage</code>).
+  The regression is that placement then <em>re-assembles</em> everything into one global DT and one
+  global pass. The fix is to keep placement <b>per-tile</b>, streaming: build the DT and the spatial
+  grids for one tile (plus a halo), place that tile's labels, emit the overlay, release the memory,
+  move on. Target artifact is <b>one giant image/PDF</b>, so seams must be invisible — which sets the
+  requirements below.
+</p>
+
+<div class="fig">
+  <svg viewBox="0 0 900 300" role="img" aria-label="Tile with halo and seam reconciliation">
+    <!-- full page tiled -->
+    <g stroke="#39404b" stroke-width="1.5" fill="none">
+      <rect x="40" y="30" width="360" height="240" rx="4"/>
+      <line x1="160" y1="30" x2="160" y2="270"/><line x1="280" y1="30" x2="280" y2="270"/>
+      <line x1="40" y1="110" x2="400" y2="110"/><line x1="40" y1="190" x2="400" y2="190"/>
+    </g>
+    <!-- active tile -->
+    <rect x="160" y="110" width="120" height="80" fill="#5aa9e6" opacity=".12" stroke="#5aa9e6" stroke-width="2"/>
+    <text x="220" y="105" fill="#5aa9e6" font-size="11" text-anchor="middle">active tile</text>
+    <!-- halo -->
+    <rect x="140" y="90" width="160" height="120" fill="none" stroke="#54c98a" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <text x="220" y="224" fill="#82dcaa" font-size="11" text-anchor="middle">+halo (≈1 label-diagonal)</text>
+    <!-- passage crossing the seam -->
+    <path d="M120,150 C180,130 230,175 320,140" fill="none" stroke="#c9d2dd" stroke-width="2.5"/>
+    <!-- a label near the seam -->
+    <rect x="255" y="150" width="40" height="16" fill="#e0b04a" opacity=".85"/>
+    <text x="275" y="162" fill="#0e1116" font-size="10" text-anchor="middle">A7</text>
+
+    <!-- right: requirements -->
+    <g font-size="12.5">
+      <text x="470" y="46" fill="#cdd5e0" font-weight="600">what "invisible seams" needs</text>
+      <text x="470" y="74" fill="#c9d2dd">• <tspan fill="#82dcaa">Halo:</tspan> each tile ingests obstacles + placed</text>
+      <text x="484" y="92" fill="#9aa4b2">labels within ~1 label-diagonal beyond its edge</text>
+      <text x="470" y="118" fill="#c9d2dd">• <tspan fill="#82dcaa">Border ledger:</tspan> labels placed near a seam are</text>
+      <text x="484" y="136" fill="#9aa4b2">shared so neighbours don't double-claim a cell</text>
+      <text x="470" y="162" fill="#c9d2dd">• <tspan fill="#82dcaa">Deterministic order:</tspan> fixed tile sequence (or</text>
+      <text x="484" y="180" fill="#9aa4b2">border arbitration) keeps output reproducible</text>
+      <text x="470" y="206" fill="#c9d2dd">• <tspan fill="#82dcaa">Leader clamp:</tspan> a leader may cross into a</text>
+      <text x="484" y="224" fill="#9aa4b2">neighbour — resolve in the overlap, not per-tile</text>
+    </g>
+  </svg>
+  <div class="cap"><b>Figure 6.</b> Tile-local placement. Each tile places within its bounds but reads a
+  halo of neighbouring obstacles and border labels so seams are invisible in the final single surface.</div>
+</div>
+
+<div class="grid2">
+  <div class="panel">
+    <h3 style="margin-top:2px">Why tiling</h3>
+    <ul>
+      <li><b>Bounds memory</b> for the DT, tile images, <em>and</em> the index — the only way a huge single-surface export fits in RAM at all.</li>
+      <li><b>Parallelism</b> — tiles place concurrently (<code>cwConcurrent::mapped</code>), folding into Fix&nbsp;5.</li>
+      <li><b>Streaming</b> — never hold the whole page's obstacle mask at once.</li>
+    </ul>
+  </div>
+  <div class="panel">
+    <h3 style="margin-top:2px">Costs / caveats</h3>
+    <ul>
+      <li><b>Seam handling</b> (halo + border ledger + leader clamp) is the real complexity — required because the target is one seamless surface.</li>
+      <li><b>Asymptotics unchanged:</b> with a spatial-hash grid we're already ≈O(n·k); tiling buys memory + parallelism + feasibility, not a better big-O.</li>
+      <li>Bigger structural change than Fixes 1–3, so it lands after them.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="fixes">6. Proposed fixes</h2>
+
+<div class="grid2">
+  <div class="panel">
+    <h3 style="margin-top:2px">Fix 1 · Cull off-viewport stations <span class="tag good">cheap</span></h3>
+    <p>Before spiraling, skip any station whose anchor lies outside <code>clampRect</code> (plus a
+    label-diagonal margin). Off-page stations can never seat a label anyway, and each one currently
+    burns a full max-radius spiral. Biggest win for the least code.</p>
+  </div>
+  <div class="panel">
+    <h3 style="margin-top:2px">Fix 2 · Bound the failed spiral <span class="tag good">cheap</span></h3>
+    <p>Cap <code>maxRadius</code> at a sane multiple of the label size (a label that has to travel a
+    third of the page isn't useful). Make the search-window logic apply to the
+    <em>no-hit-yet</em> case too, so a hopeless anchor gives up early instead of scanning the whole
+    grid.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top:2px">Fix 3 · Spatial grid for the three scans <span class="tag warn">the real fix</span></h3>
+  <p>Introduce <code>cwSpatialGrid2D</code> and route the three hot loops through it. Each turns from
+  O(n) into O(k) local. This is what flips the benchmark curve from red to green.</p>
+</div>
+
+<div class="fig">
+  <svg viewBox="0 0 900 250" role="img" aria-label="Combined effect of fixes">
+    <!-- viewport -->
+    <rect x="250" y="30" width="400" height="190" rx="6" fill="#20242c" stroke="#5aa9e6" stroke-width="2"/>
+    <text x="450" y="20" fill="#5aa9e6" font-size="12" text-anchor="middle">exported page (clampRect)</text>
+
+    <!-- in-view stations (kept) -->
+    <g fill="#54c98a">
+      <circle cx="320" cy="80" r="4"/><circle cx="400" cy="110" r="4"/>
+      <circle cx="480" cy="90" r="4"/><circle cx="560" cy="150" r="4"/>
+      <circle cx="360" cy="170" r="4"/><circle cx="520" cy="60" r="4"/>
+    </g>
+    <!-- out-of-view stations (culled) -->
+    <g fill="#e2686f" opacity=".8">
+      <circle cx="120" cy="70" r="4"/><circle cx="160" cy="180" r="4"/>
+      <circle cx="760" cy="90" r="4"/><circle cx="800" cy="170" r="4"/>
+      <circle cx="90" cy="130" r="4"/>
+    </g>
+    <g stroke="#e2686f" stroke-width="1.5" opacity=".7">
+      <line x1="112" y1="62" x2="128" y2="78"/><line x1="128" y1="62" x2="112" y2="78"/>
+    </g>
+    <text x="120" y="46" fill="#f3969b" font-size="11" text-anchor="middle">Fix 1: culled</text>
+
+    <!-- capped spiral on one station -->
+    <circle cx="400" cy="110" r="4" fill="#e0b04a"/>
+    <rect x="378" y="88" width="44" height="44" fill="none" stroke="#e0b04a" stroke-width="1.6"/>
+    <rect x="366" y="76" width="68" height="68" fill="none" stroke="#e0b04a" stroke-width="1.2" opacity=".6"/>
+    <text x="400" y="160" fill="#e9c877" font-size="10.5" text-anchor="middle">Fix 2: capped radius</text>
+
+    <!-- grid buckets hint -->
+    <g stroke="#39404b" stroke-width="1" opacity=".6">
+      <line x1="383" y1="30" x2="383" y2="220"/><line x1="516" y1="30" x2="516" y2="220"/>
+      <line x1="250" y1="93" x2="650" y2="93"/><line x1="250" y1="156" x2="650" y2="156"/>
+    </g>
+    <text x="583" y="210" fill="#9aa4b2" font-size="10.5" text-anchor="middle">Fix 3: bucketed obstacles</text>
+  </svg>
+  <div class="cap"><b>Figure 7.</b> The three algorithmic fixes composed: off-page anchors (red) never
+  enter the loop, each remaining spiral is radius-capped, and all obstacle/label queries hit only
+  local grid buckets.</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="thread">7. Fix 5 · Get it off the main thread <span class="tag warn">last</span></h2>
+<p>
+  Even at O(n·k), a huge export takes real time; it must not freeze the UI. Today the whole placement
+  pass runs synchronously inside the final <code>grabToImage</code> <code>ready</code> callback on the
+  main thread. The port mirrors the Compass-importer pattern (commit <code>c76ee6de</code>):
+</p>
+<ol>
+  <li><b>Extract a pure worker.</b> Placement input is already value-typed (tile <code>QImage</code>s,
+      station positions, leg segments). <code>cwCaptureLabelPlacer</code> touches no QObject/GUI
+      state, so it runs safely off-thread. Split "compute placements" (worker) from "own &amp; paint
+      the placed rects" (main-thread items).</li>
+  <li><b>Dispatch</b> with <code>cwConcurrent::run([in = std::move(in)](QPromise&lt;Result&gt;&amp; p){…})</code>
+      → returns <code>QFuture&lt;Result&gt;</code>. The <code>QPromise&amp;</code> overload unlocks
+      <code>setProgressValue</code> (one step per label) and cooperative <code>isCanceled()</code>.</li>
+  <li><b>Deliver back on the main thread</b> with
+      <code>AsyncFuture::observe(future).context(this, […]{ buildOverlayItems(future.result()); emit finishedCapture(); })</code>
+      — auto-disconnects if the viewport dies; the destructor just calls <code>future.cancel()</code>.</li>
+  <li><b>Progress bar</b> for free by handing the future to <code>cwFutureManagerToken::addJob(...)</code>.</li>
+</ol>
+<div class="callout warn">
+  <b>Ordering matters.</b> Do the algorithmic fixes (1–3) first — they make it <em>fast</em>; the
+  benchmark proves each step. Threading only stops the UI from freezing; layering it on an O(n²)
+  core would just hang a background thread instead.
+</div>
+
+<!-- ================================================================ -->
+<h2 id="phases">8. Implementation phases &amp; tests</h2>
+<table>
+  <thead><tr><th>#</th><th>Change</th><th>Fixes</th><th>Expected effect</th><th>Test</th></tr></thead>
+  <tbody>
+    <tr><td>0</td><td><b>Done:</b> benchmark + baseline</td><td>—</td><td>establishes the red curve</td><td><code>test_cwCaptureLabelPlacerBenchmark.cpp</code></td></tr>
+    <tr><td>1</td><td>Viewport cull</td><td>1</td><td>drops off-page work; big constant cut on real files</td><td>benchmark variant with stations spilling off-page; assert only in-view placed</td></tr>
+    <tr><td>2</td><td>Spiral radius cap</td><td>2</td><td>kills the failed-spiral blow-up</td><td>unit test: an unplaceable anchor returns quickly, <code>placed=false</code></td></tr>
+    <tr><td>3</td><td><code>cwSpatialHashGrid2D</code> + reroute 3 scans</td><td>3</td><td>curve flattens toward O(n·k); 10k ≪ 1s; memory ∝ data</td><td>grid unit tests; re-run <span class="kbd">[benchmark]</span>, assert sub-quadratic growth ratio</td></tr>
+    <tr><td>4</td><td>Tile-local placement + halo + seam reconciliation</td><td>tiling</td><td>bounds DT/image/index memory; makes whole-cave single-surface export feasible</td><td>seam test: labels on a tiled vs untiled placement match &amp; don't overlap across seams</td></tr>
+    <tr><td>5</td><td>Threading + progress (per-tile <code>cwConcurrent::mapped</code>)</td><td>5</td><td>UI stays responsive; cancelable</td><td>QML/integration test that export completes &amp; is cancelable</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <b>Invariant to protect:</b> placement <em>output</em> must not change from the fixes — the grid is
+  a query accelerator, not a policy change. The existing <code>[cwCaptureLabelPlacer]</code> tests
+  (leader-crossing, obstacle rejection, deterministic order) must keep passing at every phase, so a
+  before/after placement-equivalence check on a mid-size cave is worth adding in Phase&nbsp;3.
+</div>
+
+<p class="cap" style="margin-top:30px">
+  Files: <code>cavewherelib/src/cwCaptureLabelPlacer.{h,cpp}</code> ·
+  <code>cwCaptureCenterline.cpp</code> · <code>cwCaptureViewport.cpp</code> ·
+  existing <code>cwCollisionRectKdTree.{h,cpp}</code> ·
+  benchmark <code>testcases/test_cwCaptureLabelPlacerBenchmark.cpp</code>.
+</p>
+
+</div>
+</body>
+</html>
