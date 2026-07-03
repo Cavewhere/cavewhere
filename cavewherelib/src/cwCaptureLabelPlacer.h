@@ -46,6 +46,22 @@ public:
         QPointF leaderEnd;
     };
 
+    // Lightweight aggregate counters for profiling the placement hot path,
+    // read via stats() (opt-in: cwCaptureViewport logs them when the
+    // CW_PROFILE_CAPTURE env var is set). Every field is a plain accumulator
+    // incremented during placeLabel(), so they cost nothing beyond an integer
+    // add in the inner loops and reading them is free.
+    struct Stats {
+        int    placeCalls         = 0; // placeLabel() invocations
+        int    placed             = 0; // placements that succeeded
+        int    culledByViewport   = 0; // dropped by the viewport cull, pre-spiral
+        int    noCandidate        = 0; // spiral finished with no viable cell
+        qint64 gridCells          = 0; // m_maskW * m_maskH (distance-transform size)
+        qint64 cellsTried         = 0; // in-bounds spiral cells visited, all calls
+        qint64 placedLabelChecks  = 0; // m_placedLabels comparisons (the O(n^2) scan)
+        qint64 softObstacleChecks = 0; // soft-obstacle scoring comparisons
+    };
+
     // Helper: when the placer returns a rect tightly sized to glyph ink and
     // the painter has rendered the same text into a path at origin (with
     // `tightBoundingRect` returning a rect rooted at the baseline), this maps
@@ -93,6 +109,10 @@ public:
     void clearPlacements();
     Placement placeLabel(const LabelRequest& request);
 
+    // Profiling counters accumulated across placeLabel() calls (see Stats).
+    const Stats& stats() const { return m_stats; }
+    void resetStats() { m_stats = Stats(); }
+
     // Registers a line segment as a post-finalize obstacle. Subsequent
     // placeLabel() calls reject candidates whose rect intersects the
     // segment expanded by half the thickness plus the standard label
@@ -124,6 +144,7 @@ private:
     QVector<QRectF>       m_placedLabels;
     QVector<LineObstacle> m_lineObstacles;
     QVector<LineObstacle> m_softLineObstacles;
+    Stats                 m_stats;
 };
 
 #endif // CWCAPTURELABELPLACER_H

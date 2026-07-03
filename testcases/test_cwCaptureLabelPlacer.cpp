@@ -304,4 +304,9 @@ TEST_CASE("placeLabel gives up quickly for a buried anchor on a huge page",
 
     CHECK_FALSE(placement.placed);
     CHECK(elapsedMs < 5000);
+
+    // Deterministic proof the cap held: the spiral visits ~(2*cap)^2 ≈ 10k
+    // cells with the cap, versus ~(2*(maskW+maskH))^2 ≈ 1.6e9 without it. This
+    // counter is the non-flaky companion to the wall-clock guard above.
+    CHECK(placer.stats().cellsTried < 100000);
 }

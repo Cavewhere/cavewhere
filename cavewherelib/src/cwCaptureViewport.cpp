@@ -9,6 +9,7 @@
 #include <QPen>
 #include <QUuid>
 #include <QQuickItemGrabResult>
+#include <QElapsedTimer>
 
 //Our includes
 #include "cwCaptureViewport.h"
@@ -36,6 +37,11 @@
 #endif
 
 namespace {
+// Set this env var to log a one-shot per-export breakdown of the (main-thread)
+// label-placement stages — see placeLabelsAfterTiles. Off by default; when
+// unset the profiling timers never start, so there is no cost.
+constexpr const char* ProfileCaptureEnvVar = "CW_PROFILE_CAPTURE";
+
 // Z-values define stacking order of overlays drawn on top of the rendered map tiles.
 // LeadLeaders sits below the tiles (z = 0) so it shows through transparent
 // regions and is hidden behind opaque cave-passage ink.
@@ -586,6 +592,14 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         return;
     }
 
+    // Opt-in profiling of the label-placement stages (all main-thread). The
+    // timers only run when CW_PROFILE_CAPTURE is set; otherwise this is free.
+    const bool profile = qEnvironmentVariableIsSet(ProfileCaptureEnvVar);
+    QElapsedTimer stageTimer;
+    qint64 tileAlphaMs = 0;
+    qint64 finalizeMs = 0;
+    qint64 placeMs = 0;
+
     // The parent item's setScale value (inches-per-local-pixel). Driving the
     // font and placer off this — instead of a fixed preview DPI — keeps the
     // rendered glyph the same scene-inch size on both paths.
@@ -631,12 +645,18 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
     placer.setLabelMarginPaperPx(PlacerLabelMarginPaperPx * paperPxToLocal);
     placer.setAlphaThreshold(cwCaptureLabelPlacer::DefaultAlphaThreshold);
 
+    if(profile) {
+        stageTimer.start();
+    }
     for(cwGraphicsImageItem* tile : std::as_const(tiles)) {
         const QImage img = tile->image();
         if(img.isNull()) {
             continue;
         }
         placer.addTileAlpha(img, tile->pos(), tile->scale());
+    }
+    if(profile) {
+        tileAlphaMs = stageTimer.elapsed();
     }
 
     // Build label items now; we hand them the placer + DPI so they can compute
@@ -672,7 +692,13 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         }
     }
 
+    if(profile) {
+        stageTimer.restart();
+    }
     placer.finalize();
+    if(profile) {
+        finalizeMs = stageTimer.elapsed();
+    }
 
     // Register centerline legs as soft obstacles so leaders prefer routes
     // that don't visually cut across them. Soft = scoring penalty, not a
@@ -687,16 +713,41 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
 
     // Place leads first so each placement registers its leader line into
     // the placer; stations placed afterwards then avoid those leaders.
+    if(profile) {
+        stageTimer.restart();
+    }
     if(LeadsItem != nullptr) {
         LeadsItem->placeLeadLabels();
     }
     if(CenterlineItem != nullptr) {
         CenterlineItem->placeStationLabels();
     }
+    if(profile) {
+        placeMs = stageTimer.elapsed();
+    }
 
     LeadLinesItem = createLeadLinesItem(parent, imageScale, LeadsItem);
     if(LeadLinesItem != nullptr) {
         LeadLinesItem->setVisible(m_leadsVisible);
+    }
+
+    if(profile) {
+        const cwCaptureLabelPlacer::Stats& s = placer.stats();
+        qDebug() << "[cwCaptureViewport profile] export label placement —"
+                 << "tiles" << tiles.size()
+                 << "bounds" << parentBounds.size()
+                 << "gridCells" << s.gridCells
+                 << "| addTileAlpha(ms)" << tileAlphaMs
+                 << "finalize(ms)" << finalizeMs
+                 << "placement(ms)" << placeMs
+                 << "| placeCalls" << s.placeCalls
+                 << "placed" << s.placed
+                 << "culled" << s.culledByViewport
+                 << "noCandidate" << s.noCandidate
+                 << "cellsTried" << s.cellsTried
+                 << "placedLabelChecks" << s.placedLabelChecks
+                 << "softObstacleChecks" << s.softObstacleChecks
+                 << LOCATION;
     }
 }
 

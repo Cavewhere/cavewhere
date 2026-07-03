@@ -288,6 +288,7 @@ void cwCaptureLabelPlacer::addObstacleRect(const QRectF& rectParent)
 
 void cwCaptureLabelPlacer::finalize()
 {
+    m_stats.gridCells = qint64(m_maskW) * qint64(m_maskH);
     if(m_maskW <= 0 || m_maskH <= 0) {
         m_finalized = true;
         return;
@@ -322,6 +323,7 @@ void cwCaptureLabelPlacer::addSoftLineObstacle(const QLineF& segment, qreal thic
 cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequest& request)
 {
     Placement result;
+    m_stats.placeCalls++;
 
     if(!m_finalized || m_maskW <= 0 || m_maskH <= 0) {
         return result;
@@ -359,6 +361,7 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
                                                 requiredClearanceParent,
                                                 requiredClearanceParent);
     if(!cullRect.contains(request.anchorPos)) {
+        m_stats.culledByViewport++;
         return result;
     }
 
@@ -391,6 +394,7 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
         if(cx < 0 || cy < 0 || cx >= m_maskW || cy >= m_maskH) {
             return false;
         }
+        m_stats.cellsTried++;
         if(m_dt[cellIndex(cx, cy, m_maskW)] < requiredClearanceCells) {
             return false;
         }
@@ -435,6 +439,7 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
         const QRectF collisionRect = candidate.adjusted(-collisionPad, -collisionPad,
                                                          collisionPad,  collisionPad);
         for(const QRectF& placed : std::as_const(m_placedLabels)) {
+            m_stats.placedLabelChecks++;
             if(placed.intersects(collisionRect)) {
                 return false;
             }
@@ -472,6 +477,7 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
     }
 
     if(candidates.isEmpty()) {
+        m_stats.noCandidate++;
         return result;
     }
 
@@ -479,6 +485,7 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
         int softCrossings = 0;
         const QLineF leader(c.leaderStart, request.anchorPos);
         for(const LineObstacle& line : std::as_const(m_softLineObstacles)) {
+            m_stats.softObstacleChecks++;
             if(cwCaptureLabelPlacer::segmentsCross(leader, line.segment)) {
                 softCrossings++;
             }
@@ -513,6 +520,7 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
                                                          collisionPad,  collisionPad);
     m_placedLabels.append(committed);
 
+    m_stats.placed++;
     result.placed      = true;
     result.labelRect   = winner.labelRect;
     result.leaderEnd   = request.anchorPos;
