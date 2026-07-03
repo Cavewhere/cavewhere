@@ -128,6 +128,16 @@ constexpr qreal kDirectionPenalty = 80.0;  // paper-px per radian
 // (~24 cells) while giving the scorer enough diversity to find a winner.
 constexpr int   kCandidateWindow = 3;
 
+// Cap for the failed-placement spiral. Without a cap the spiral runs to the
+// full page diagonal (m_maskW + m_maskH cells); on a whole-cave export that is
+// hundreds of thousands of cells per hopeless anchor, each ring rescanning the
+// obstacle lists — this is the export hang (150-mile Fisher Ridge). A label is
+// only useful near its anchor, so bound the search to this many required-
+// clearance radii out. Large enough to clear typical passage-width obstacle
+// bands, small enough that a buried anchor gives up in O(label size), not
+// O(page size).
+constexpr int   kMaxSearchClearanceMultiple = 8;
+
 } // anonymous namespace
 
 bool cwCaptureLabelPlacer::segmentsCross(const QLineF& a, const QLineF& b,
@@ -328,10 +338,29 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
 
     const int anchorCellX = qFloor((request.anchorPos.x() - m_bounds.left()) / m_cellSize);
     const int anchorCellY = qFloor((request.anchorPos.y() - m_bounds.top())  / m_cellSize);
-    const int maxRadius = m_maskW + m_maskH;
+
+    // Bound the spiral so a hopeless anchor gives up in O(label size) rather
+    // than spiraling across the whole page. The full-page radius is kept as a
+    // hard ceiling for small pages where it is already smaller than the cap.
+    const int cappedRadius = qCeil(requiredClearanceParent * kMaxSearchClearanceMultiple
+                                   / m_cellSize) + 1;
+    const int maxRadius = qMin(m_maskW + m_maskH, cappedRadius);
 
     const QRectF clampRect = m_viewportBounds.isEmpty() ? m_bounds : m_viewportBounds;
     const qreal collisionPad = m_labelMargin;
+
+    // Viewport cull: an anchor outside the export viewport (plus a label-
+    // diagonal margin, for anchors sitting right on the edge) cannot be given a
+    // readable in-viewport label, so skip it before the spiral search. On a
+    // whole-cave export viewportBounds == bounds so nothing is culled; this only
+    // bites when exporting a zoomed sub-region.
+    const QRectF cullRect = clampRect.adjusted(-requiredClearanceParent,
+                                               -requiredClearanceParent,
+                                                requiredClearanceParent,
+                                                requiredClearanceParent);
+    if(!cullRect.contains(request.anchorPos)) {
+        return result;
+    }
 
     // Preferred leader direction = DT gradient at the anchor. Points along
     // the direction of fastest growth: perpendicular to nearby passage walls
@@ -397,9 +426,12 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
             }
         }
 
-        // Avoid previously placed labels. Brute-force scan — N is small
-        // (~30 labels per export) and we need a read-only test that doesn't
-        // commit, since later candidates may score better than this one.
+        // Avoid previously placed labels. This must be a read-only test that
+        // doesn't commit, since later candidates may score better than this one.
+        // NOTE: this brute-force scan is O(placed) per candidate, so overall
+        // O(n^2) across an export — fine for small pages but the dominant cost
+        // on large caves (tens of thousands of labels). A spatial index over
+        // m_placedLabels is the planned fix (see LABEL_PLACER_SCALING_PLAN).
         const QRectF collisionRect = candidate.adjusted(-collisionPad, -collisionPad,
                                                          collisionPad,  collisionPad);
         for(const QRectF& placed : std::as_const(m_placedLabels)) {
