@@ -701,11 +701,36 @@ a bad case into a catastrophic one on real data.</p>
     <tr><td>1</td><td><b>Done:</b> Viewport cull</td><td>1</td><td>anchor outside <code>clampRect</code> (+ label-diagonal margin) drops before the spiral; no-op on whole-cave export, big cut on sub-region exports</td><td><code>placeLabel culls anchors outside the viewport</code> (in/out sections)</td></tr>
     <tr><td>1.1</td><td>Caller-side viewport cull in <code>placeStationLabels()</code></td><td>1</td><td>the Phase-1 cull lives <em>inside</em> <code>placeLabel</code> (early return), so every station — even off-viewport ones — still pays a full <code>LabelRequest</code> build (<code>QPainterPath::addText</code> + <code>boundingRect</code>, <code>cwCaptureCenterline.cpp:277-288</code>) before the placer bails. On a zoomed sub-region export of a huge cave that painter-path construction for tens of thousands of discarded stations dominates. Cull at the caller loop <em>before</em> building the request. Needs the caller to know <code>viewportBounds</code> (small API/data-flow change: expose it or pass it in), so it's a follow-up to Phase&nbsp;1, not part of it.</td><td>spy/counter test: <code>placeStationLabels()</code> builds no <code>QPainterPath</code> for stations outside the viewport (or timing on a large off-viewport set)</td></tr>
     <tr><td>2</td><td><b>Done:</b> Spiral radius cap</td><td>2</td><td>kills the failed-spiral blow-up: buried-anchor path drops from <b>~182,000&nbsp;µs/station</b> (uncapped) to <b>~62&nbsp;µs/station</b> (~1000–3000× per anchor); 10k buried anchors 10s+&nbsp;→&nbsp;0.6&nbsp;s</td><td><code>buried-anchor scaling</code> benchmark + <code>gives up quickly for a buried anchor on a huge page</code> unit test</td></tr>
-    <tr><td>3</td><td><code>cwSpatialHashGrid2D</code> + reroute 3 scans</td><td>3</td><td>curve flattens toward O(n·k); 10k ≪ 1s; memory ∝ data</td><td>grid unit tests; re-run <span class="kbd">[benchmark]</span>, assert sub-quadratic growth ratio</td></tr>
-    <tr><td>4</td><td>Tile-local placement + halo + seam reconciliation</td><td>tiling</td><td>bounds DT/image/index memory; makes whole-cave single-surface export feasible</td><td>seam test: labels on a tiled vs untiled placement match &amp; don't overlap across seams</td></tr>
+    <tr><td>P</td><td><b>Done:</b> opt-in profiling (<code>CW_PROFILE_CAPTURE</code> env var + <code>cwCaptureLabelPlacer::Stats</code>)</td><td>diagnostic</td><td>times addTileAlpha / finalize / placement and counts the O(n²) scans; drove the Phase-3 priority below. <b>Temporary — remove in Phase&nbsp;6.</b></td><td>emits a one-shot breakdown line from <code>placeLabelsAfterTiles</code></td></tr>
+    <tr><td>3</td><td><b>NEXT:</b> <code>cwSpatialHashGrid2D</code> — index <em>both</em> <code>m_placedLabels</code> <em>and</em> <code>m_softLineObstacles</code>, reroute their per-candidate scans</td><td>3</td><td>the real-file profile (see callout) is <b>placement=44.5&nbsp;s</b>, split across <b>1.65&nbsp;B</b> placed-label comparisons + <b>1.2&nbsp;B</b> soft-obstacle comparisons — the soft-obstacle scan is <em>co-equal</em>, not secondary, so both must be indexed. Converts both linear scans to local neighbourhood queries → curve flattens toward O(n·k); 10k ≪ 1s; memory ∝ data</td><td>grid unit tests; re-run <span class="kbd">[benchmark]</span> (serpentine should finally flatten); re-profile with <code>CW_PROFILE_CAPTURE</code> and confirm the two check counts collapse</td></tr>
+    <tr><td>4</td><td>Tile-local placement + halo + seam reconciliation</td><td>tiling</td><td><b>needed for the full whole-cave export</b> (the profile below was a small <em>preview</em> render — 671×612 page, DT only 104&nbsp;ms). At full-cave page size the DT is O(page&nbsp;area) in both time <em>and</em> memory, and even 104&nbsp;ms already drops frames on the GUI thread. Investigate right after Phase&nbsp;3. Bounds DT/image/index memory; makes whole-cave single-surface export feasible</td><td>seam test: labels on a tiled vs untiled placement match &amp; don't overlap across seams; profile a full-cave export</td></tr>
     <tr><td>5</td><td>Threading + progress (per-tile <code>cwConcurrent::mapped</code>)</td><td>5</td><td>UI stays responsive; cancelable</td><td>QML/integration test that export completes &amp; is cancelable</td></tr>
+    <tr><td>6</td><td>Remove the Phase-P profiling instrumentation</td><td>cleanup</td><td>the <code>CW_PROFILE_CAPTURE</code> timers, the <code>Stats</code> struct + its inner-loop counters, and the summary log are diagnostic scaffolding; strip them once Phases 3–4 are validated so the hot loops carry no counter overhead and the API stays lean. (Keep the <code>cellsTried</code>-based cap assertion only if it is re-expressed without the <code>Stats</code> struct.)</td><td>full suite still green after removal</td></tr>
   </tbody>
 </table>
+
+<div class="callout">
+  <b>Real-file profile (Fisher Ridge, <em>preview</em> render — 2026-07-03).</b> One
+  <code>CW_PROFILE_CAPTURE</code> line, decisive for sequencing:
+  <pre style="white-space:pre-wrap">tiles 1  bounds 671×612  gridCells 854744
+addTileAlpha 3 ms   finalize 104 ms   placement 44560 ms
+placeCalls 32132   culled 31397 (97.7%)   placed 556   noCandidate 179
+cellsTried 27,051,285   placedLabelChecks 1,652,722,811   softObstacleChecks 1,200,369,584</pre>
+  Reading:
+  <ul>
+    <li><b>Placement (44.5&nbsp;s) is the entire bottleneck</b>; the distance transform (104&nbsp;ms) is
+      <em>not</em> — the earlier "DT dominates" note was an artifact of a tiny test cave.</li>
+    <li>The cost is <b>1.65&nbsp;B + 1.2&nbsp;B linear comparisons</b> — Phase&nbsp;3 must index <em>both</em>
+      the placed-label and soft-obstacle scans.</li>
+    <li>The <b>Phase-1 viewport cull culled 97.7%</b> of calls in O(1); the whole 44.5&nbsp;s is the 735
+      non-culled stations. Without the cull this would be ~30&nbsp;min.</li>
+    <li><b>Caveat: this was the preview render, not a full export.</b> The page was small (671×612), so the
+      DT and memory were cheap. A full whole-cave single-surface export has a huge page → the DT
+      (O(page&nbsp;area)) and its memory become significant, and even 104&nbsp;ms drops frames on the GUI
+      thread. Hence Phase&nbsp;4 (tiling) is expected to matter for the full export and should be
+      investigated right after Phase&nbsp;3 — re-profile a full-cave export to confirm.</li>
+  </ul>
+</div>
 
 <div class="callout">
   <b>Invariant to protect:</b> placement <em>output</em> must not change from the fixes — the grid is
