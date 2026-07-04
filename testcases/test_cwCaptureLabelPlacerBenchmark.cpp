@@ -86,8 +86,10 @@ SyntheticCave makeSerpentineCave(int stationCount)
 
 // Drives the full placement path once and returns how many labels were placed.
 // This is the code under benchmark: it mirrors the obstacle-seeding order and
-// per-station placeLabel loop of cwCaptureViewport::placeLabelsAfterTiles.
-int placeAllLabels(const SyntheticCave& cave)
+// per-station placeLabel loop of cwCaptureViewport::placeLabelsAfterTiles. When
+// `placedRects` is non-null, each placed label's rect is appended to it (used by
+// the overlap-invariant test) — a benchmark run passes nullptr and just counts.
+int placeAllLabels(const SyntheticCave& cave, QVector<QRectF>* placedRects = nullptr)
 {
     cwCaptureLabelPlacer placer;
     placer.setObstacleBounds(cave.bounds, CellSizePaperPx);
@@ -118,6 +120,9 @@ int placeAllLabels(const SyntheticCave& cave)
         const cwCaptureLabelPlacer::Placement placement = placer.placeLabel(request);
         if(placement.placed) {
             placed++;
+            if(placedRects != nullptr) {
+                placedRects->append(placement.labelRect);
+            }
             // Register every placed leader as a hard obstacle so later
             // placements avoid crossing it. This is what exercises the
             // leader-obstacle scan — without it the benchmark would never
@@ -216,6 +221,40 @@ TEST_CASE("cwCaptureLabelPlacer places labels for a modest survey",
     // Generous ceiling — this is a smoke check, not a timing assertion. If a
     // 200-station cave takes seconds, something has regressed badly.
     CHECK(elapsedMs < 5000);
+}
+
+// Coarsening the candidate step (Phase 3.1) changes *where* labels land, but
+// must never let two placed labels overlap and must keep placing the vast
+// majority of a well-spaced survey's labels. Both are checked here on a modest
+// cave so a coarsening regression (steps clean over feasible bands, or admits
+// overlaps) fails loudly in the normal suite.
+TEST_CASE("cwCaptureLabelPlacer coarsened placement stays non-overlapping",
+          "[cwCaptureLabelPlacer]")
+{
+    const SyntheticCave cave = makeSerpentineCave(200);
+
+    // Same placement path as the benchmark, collecting each placed rect so the
+    // invariant can be checked on the exact geometry the real export produces.
+    QVector<QRectF> placedRects;
+    const int placed = placeAllLabels(cave, &placedRects);
+    CHECK(placed == placedRects.size());
+
+    // No two placed labels may overlap. The placer commits each label padded by
+    // the collision margin and rejects a candidate whose padded rect intersects
+    // any placed padded rect, so the raw rects must be clear with margin to
+    // spare regardless of how coarse the candidate step became.
+    for(int i = 0; i < placedRects.size(); i++) {
+        for(int j = i + 1; j < placedRects.size(); j++) {
+            INFO("labels " << i << " and " << j << " overlap");
+            CHECK_FALSE(placedRects.at(i).intersects(placedRects.at(j)));
+        }
+    }
+
+    // Coarsening drops at most a rare marginal label, so a well-spaced survey
+    // must still place nearly all of its labels — a low fraction here would mean
+    // the step stepped over feasible positions wholesale.
+    constexpr qreal kMinPlacedFraction = 0.9;
+    CHECK(qreal(placedRects.size()) >= kMinPlacedFraction * cave.stations.size());
 }
 
 // Opt-in scaling benchmark. Hidden ([.]) so it never runs in the default suite

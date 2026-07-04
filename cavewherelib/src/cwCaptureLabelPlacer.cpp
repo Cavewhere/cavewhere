@@ -138,6 +138,22 @@ constexpr int   kCandidateWindow = 3;
 // O(page size).
 constexpr int   kMaxSearchClearanceMultiple = 8;
 
+// Candidate-spiral coarsening. The spiral samples one candidate per DT cell
+// (~2 paper-px) — far finer than placement needs, since a label is many cells
+// across and nudging it a couple of cells is imperceptible. Stepping the spiral
+// coarsens the candidate grid and cuts the candidate cells (cellsTried) and the
+// exact tests behind them by ~stepX*stepY. The step is set per axis to a fixed
+// fraction of the label's extent on that axis, so a wide text label coarsens
+// more along its long (horizontal) axis while its short axis — the one that
+// actually has to fit inside a gap — stays finely sampled. Floored at 1 (a tiny
+// label gets no coarsening) and capped so a very large label can't step clean
+// over a narrow feasible band. DT clearance and every collision test stay exact
+// on whichever cells are sampled, so no placed label ever overlaps another;
+// coarsening can only shift a label within a step or, rarely, drop a marginal
+// one whose only feasible position fell between samples.
+constexpr qreal kCandidateStepLabelFraction = 0.35;
+constexpr int   kMaxCandidateStep = 8;
+
 // Floor for the broad-phase grid cell, in distance-transform cells. Keeps a
 // degenerate (tiny) label from producing an absurdly fine grid whose cells hold
 // almost nothing; 4 DT cells is still far below a typical label, so it only
@@ -405,6 +421,22 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
                                    / m_cellSize) + 1;
     const int maxRadius = qMin(m_maskW + m_maskH, cappedRadius);
 
+    // Coarsen candidate spacing per axis (see kCandidateStepLabelFraction).
+    // Candidate centers step by candidateStepX/Y cells, but each sampled cell's
+    // DT clearance and collision tests remain exact, so this only thins the
+    // sampling — it never relaxes a placement's correctness.
+    auto candidateStep = [this](qreal labelExtent) {
+        return qBound(1,
+                      qRound(labelExtent / m_cellSize * kCandidateStepLabelFraction),
+                      kMaxCandidateStep);
+    };
+    const int candidateStepX = candidateStep(request.size.width());
+    const int candidateStepY = candidateStep(request.size.height());
+    // Spiral radius in coarse rings: divide by the smaller step so both axes
+    // still reach at least the full (capped) fine-cell search radius.
+    const int minStep = qMin(candidateStepX, candidateStepY);
+    const int maxRing = (maxRadius + minStep - 1) / minStep;
+
     const QRectF clampRect = m_viewportBounds.isEmpty() ? m_bounds : m_viewportBounds;
     const qreal collisionPad = m_labelMargin;
 
@@ -536,17 +568,21 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
         firstHitRadius = 0;
     }
 
-    for(int r = 1; r <= maxRadius; r++) {
+    for(int r = 1; r <= maxRing; r++) {
         if(windowExhausted(r)) {
             break;
         }
+        const int offX = r * candidateStepX;
+        const int offY = r * candidateStepY;
         for(int dx = -r; dx <= r; dx++) {
-            tryCell(anchorCellX + dx, anchorCellY - r);
-            tryCell(anchorCellX + dx, anchorCellY + r);
+            const int cx = anchorCellX + dx * candidateStepX;
+            tryCell(cx, anchorCellY - offY);
+            tryCell(cx, anchorCellY + offY);
         }
         for(int dy = -r + 1; dy <= r - 1; dy++) {
-            tryCell(anchorCellX - r, anchorCellY + dy);
-            tryCell(anchorCellX + r, anchorCellY + dy);
+            const int cy = anchorCellY + dy * candidateStepY;
+            tryCell(anchorCellX - offX, cy);
+            tryCell(anchorCellX + offX, cy);
         }
         if(firstHitRadius < 0 && !candidates.isEmpty()) {
             firstHitRadius = r;
