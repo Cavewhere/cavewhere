@@ -745,8 +745,13 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
                  << "culled" << s.culledByViewport
                  << "noCandidate" << s.noCandidate
                  << "cellsTried" << s.cellsTried
+                 << "dtClearedCells" << s.dtClearedCells
                  << "placedLabelChecks" << s.placedLabelChecks
                  << "softObstacleChecks" << s.softObstacleChecks
+                 << "lineObstacleChecks" << s.lineObstacleChecks
+                 << "| gridCellsVisited placed" << placer.placedGridCellsVisited()
+                 << "line" << placer.lineGridCellsVisited()
+                 << "soft" << placer.softGridCellsVisited()
                  << LOCATION;
     }
 }

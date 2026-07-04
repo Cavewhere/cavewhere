@@ -138,6 +138,12 @@ constexpr int   kCandidateWindow = 3;
 // O(page size).
 constexpr int   kMaxSearchClearanceMultiple = 8;
 
+// Floor for the broad-phase grid cell, in distance-transform cells. Keeps a
+// degenerate (tiny) label from producing an absurdly fine grid whose cells hold
+// almost nothing; 4 DT cells is still far below a typical label, so it only
+// bites the degenerate case.
+constexpr qreal kMinGridCellDtCells = 4.0;
+
 } // anonymous namespace
 
 bool cwCaptureLabelPlacer::segmentsCross(const QLineF& a, const QLineF& b,
@@ -302,6 +308,49 @@ void cwCaptureLabelPlacer::clearPlacements()
     m_placedLabels.clear();
     m_lineObstacles.clear();
     m_softLineObstacles.clear();
+    m_placedLabelGrid.reset();
+    m_softObstacleGrid.reset();
+    m_lineObstacleGrid.reset();
+    m_maxLineObstacleThickness = 0.0;
+    m_gridsBuilt = false;
+}
+
+void cwCaptureLabelPlacer::ensureGridsBuilt(const QSizeF& labelSize)
+{
+    if(m_gridsBuilt) {
+        return;
+    }
+
+    // Size cells on the scale of a query region — roughly a label. Both queries
+    // (placed-label collision and soft-obstacle scoring) probe a region on the
+    // order of the label plus its margins, so a cell that size keeps each query
+    // to a handful of cells while holding few items per cell. Floor at a small
+    // multiple of the distance-transform cell so a degenerate label can't
+    // produce an absurdly fine grid.
+    const qreal gridCellSize = qMax(qMax(labelSize.width(), labelSize.height()),
+                                    kMinGridCellDtCells * m_cellSize);
+
+    m_placedLabelGrid = std::make_unique<cwSpatialHashGrid2D>(gridCellSize);
+    m_softObstacleGrid = std::make_unique<cwSpatialHashGrid2D>(gridCellSize);
+    m_lineObstacleGrid = std::make_unique<cwSpatialHashGrid2D>(gridCellSize);
+
+    // All soft obstacles are registered before the first placement, so the
+    // soft grid is complete once built.
+    m_softObstacleGrid->reserve(m_softLineObstacles.size());
+    for(int i = 0; i < m_softLineObstacles.size(); i++) {
+        m_softObstacleGrid->insert(i, m_softLineObstacles.at(i).segment);
+    }
+
+    // Defensive: normally nothing is placed yet, but re-index anything that is
+    // so the grids mirror m_placedLabels / m_lineObstacles exactly.
+    for(int i = 0; i < m_placedLabels.size(); i++) {
+        m_placedLabelGrid->insert(i, m_placedLabels.at(i));
+    }
+    for(int i = 0; i < m_lineObstacles.size(); i++) {
+        m_lineObstacleGrid->insert(i, m_lineObstacles.at(i).segment);
+    }
+
+    m_gridsBuilt = true;
 }
 
 void cwCaptureLabelPlacer::addLineObstacle(const QLineF& segment, qreal thicknessPaperPx)
@@ -309,7 +358,15 @@ void cwCaptureLabelPlacer::addLineObstacle(const QLineF& segment, qreal thicknes
     if(segment.p1() == segment.p2()) {
         return;
     }
+    m_maxLineObstacleThickness = qMax(m_maxLineObstacleThickness, thicknessPaperPx);
+    const int index = m_lineObstacles.size();
     m_lineObstacles.append({segment, thicknessPaperPx});
+    // Leaders are registered between placements (after the grids are built), so
+    // index incrementally. If a leader is somehow added before the first
+    // placeLabel(), ensureGridsBuilt() indexes the backlog instead.
+    if(m_lineObstacleGrid) {
+        m_lineObstacleGrid->insert(index, segment);
+    }
 }
 
 void cwCaptureLabelPlacer::addSoftLineObstacle(const QLineF& segment, qreal thicknessPaperPx)
@@ -365,6 +422,10 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
         return result;
     }
 
+    // Build the broad-phase grids now that a representative label size is known
+    // (deferred past the cull so fully-culled exports never build them).
+    ensureGridsBuilt(request.size);
+
     // Preferred leader direction = DT gradient at the anchor. Points along
     // the direction of fastest growth: perpendicular to nearby passage walls
     // for a mid-passage anchor, along the passage axis at a passage end.
@@ -398,6 +459,7 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
         if(m_dt[cellIndex(cx, cy, m_maskW)] < requiredClearanceCells) {
             return false;
         }
+        m_stats.dtClearedCells++;
 
         const QPointF center(m_bounds.left() + (cx + 0.5) * m_cellSize,
                              m_bounds.top()  + (cy + 0.5) * m_cellSize);
@@ -415,34 +477,49 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
         // thickness".
         const QPointF candidateLeaderStart = closestPointOnRect(candidate, request.anchorPos);
         const QLineF  candidateLeader(candidateLeaderStart, request.anchorPos);
-        for(const LineObstacle& line : m_lineObstacles) {
-            const qreal expand = line.thickness * 0.5 + m_labelMargin;
-            const QRectF expandedCandidate = candidate.adjusted(-expand, -expand,
-                                                                 expand,  expand);
-            if(cwCaptureLabelPlacer::segmentIntersectsRect(line.segment, expandedCandidate)) {
-                return false;
-            }
-            // The label rect can be clear of the existing leader while the
-            // new leader still crosses it. Reject that case so leaders
-            // don't visually intersect each other in the export.
-            if(cwCaptureLabelPlacer::segmentsCross(candidateLeader, line.segment)) {
-                return false;
-            }
+        // Broad-phase region: the candidate padded by the largest possible
+        // per-line expand (covers segmentIntersectsRect for every line) united
+        // with the leader's bounds (covers segmentsCross, whose crossing point
+        // lies on the leader). Any line that could reject this cell has cells
+        // inside this region, so the exact per-line tests below stay identical.
+        const qreal maxLineExpand = m_maxLineObstacleThickness * 0.5 + m_labelMargin;
+        const QRectF lineQueryRegion =
+            candidate.adjusted(-maxLineExpand, -maxLineExpand, maxLineExpand, maxLineExpand)
+                .united(QRectF(candidateLeader.p1(), candidateLeader.p2()).normalized());
+        const bool hitsLineObstacle =
+            m_lineObstacleGrid->anyOf(lineQueryRegion, [&](int lineId) {
+                m_stats.lineObstacleChecks++;
+                const LineObstacle& line = m_lineObstacles.at(lineId);
+                const qreal expand = line.thickness * 0.5 + m_labelMargin;
+                const QRectF expandedCandidate = candidate.adjusted(-expand, -expand,
+                                                                     expand,  expand);
+                if(cwCaptureLabelPlacer::segmentIntersectsRect(line.segment, expandedCandidate)) {
+                    return true;
+                }
+                // The label rect can be clear of the existing leader while the
+                // new leader still crosses it. Reject that case so leaders
+                // don't visually intersect each other in the export.
+                return cwCaptureLabelPlacer::segmentsCross(candidateLeader, line.segment);
+            });
+        if(hitsLineObstacle) {
+            return false;
         }
 
         // Avoid previously placed labels. This must be a read-only test that
         // doesn't commit, since later candidates may score better than this one.
-        // NOTE: this brute-force scan is O(placed) per candidate, so overall
-        // O(n^2) across an export — fine for small pages but the dominant cost
-        // on large caves (tens of thousands of labels). A spatial index over
-        // m_placedLabels is the planned fix (see LABEL_PLACER_SCALING_PLAN).
+        // The spatial hash reduces this from an O(placed) scan per candidate to
+        // the few placed labels whose cells overlap the candidate; the exact
+        // intersects() test below is identical to the old brute-force one, so
+        // placement output is unchanged (see LABEL_PLACER_SCALING_PLAN).
         const QRectF collisionRect = candidate.adjusted(-collisionPad, -collisionPad,
                                                          collisionPad,  collisionPad);
-        for(const QRectF& placed : std::as_const(m_placedLabels)) {
-            m_stats.placedLabelChecks++;
-            if(placed.intersects(collisionRect)) {
-                return false;
-            }
+        const bool collidesWithPlaced =
+            m_placedLabelGrid->anyOf(collisionRect, [&](int placedId) {
+                m_stats.placedLabelChecks++;
+                return m_placedLabels.at(placedId).intersects(collisionRect);
+            });
+        if(collidesWithPlaced) {
+            return false;
         }
 
         candidates.append({candidate, candidateLeaderStart});
@@ -484,12 +561,17 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
     auto scoreCandidate = [&](const Candidate& c) -> qreal {
         int softCrossings = 0;
         const QLineF leader(c.leaderStart, request.anchorPos);
-        for(const LineObstacle& line : std::as_const(m_softLineObstacles)) {
+        // Only soft obstacles whose cells overlap the leader's bounds can cross
+        // it. query() dedups, so each obstacle is counted at most once — the
+        // count matches the old full scan exactly (a genuine crossing point
+        // lies on the leader, so its cell is always in range).
+        const QRectF leaderBounds = QRectF(leader.p1(), leader.p2()).normalized();
+        m_softObstacleGrid->query(leaderBounds, [&](int softId) {
             m_stats.softObstacleChecks++;
-            if(cwCaptureLabelPlacer::segmentsCross(leader, line.segment)) {
+            if(cwCaptureLabelPlacer::segmentsCross(leader, m_softLineObstacles.at(softId).segment)) {
                 softCrossings++;
             }
-        }
+        });
 
         const QPointF delta = c.labelRect.center() - request.anchorPos;
         const qreal   mag   = std::hypot(delta.x(), delta.y());
@@ -518,6 +600,7 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
     const Candidate& winner = candidates[bestIndex];
     const QRectF committed = winner.labelRect.adjusted(-collisionPad, -collisionPad,
                                                          collisionPad,  collisionPad);
+    m_placedLabelGrid->insert(m_placedLabels.size(), committed);
     m_placedLabels.append(committed);
 
     m_stats.placed++;

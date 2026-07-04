@@ -21,12 +21,14 @@
 // This file reproduces the export hang on very large surveys (e.g. the
 // 150-mile Fisher Ridge file, ~tens of thousands of stations). Label
 // placement in cwCaptureLabelPlacer::placeLabel is at least O(n^2): every
-// candidate cell rescans the growing m_placedLabels list, and every candidate
-// is scored against every soft centerline obstacle. The benchmark below drives
-// the placer exactly as cwCaptureViewport::placeLabelsAfterTiles does — station
+// candidate cell rescans the growing m_placedLabels list, every candidate is
+// scored against every soft centerline obstacle, and every candidate is tested
+// against every previously placed leader line. The benchmark below drives the
+// placer exactly as cwCaptureViewport::placeLabelsAfterTiles does — station
 // dots seeded as hard obstacles before finalize(), legs registered as soft
-// obstacles after, then one label placed per station in sorted order — so the
-// measured cost matches the real export path without needing a camera or RHI.
+// obstacles after, then one label placed per station in sorted order with each
+// placed leader fed back as a hard obstacle — so the measured cost matches the
+// real export path (all three scans) without needing a camera or RHI.
 
 namespace {
 
@@ -37,6 +39,7 @@ constexpr qreal CellSizePaperPx          = 2.0;
 constexpr qreal LabelMarginPaperPx       = 1.0;
 constexpr qreal StationDotHalfPaperPx    = 3.0;
 constexpr qreal SoftLegThicknessPaperPx  = 1.0;
+constexpr qreal LeaderThicknessPaperPx   = 1.0;
 constexpr qreal LabelWidthPaperPx        = 24.0;
 constexpr qreal LabelHeightPaperPx       = 10.0;
 constexpr qreal PageMarginPaperPx        = StationSpacingPaperPx;
@@ -112,8 +115,17 @@ int placeAllLabels(const SyntheticCave& cave)
     for(int i = 0; i < cave.stations.size(); i++) {
         const cwCaptureLabelPlacer::LabelRequest request{
             QString::number(i), cave.stations.at(i), labelSize};
-        if(placer.placeLabel(request).placed) {
+        const cwCaptureLabelPlacer::Placement placement = placer.placeLabel(request);
+        if(placement.placed) {
             placed++;
+            // Register every placed leader as a hard obstacle so later
+            // placements avoid crossing it. This is what exercises the
+            // leader-obstacle scan — without it the benchmark would never
+            // populate m_lineObstacles. (Production only registers leaders for
+            // placed *leads* in cwCaptureLeads, and conditionally; feeding one
+            // per station here is a deliberately heavier stress of that scan.)
+            placer.addLineObstacle(QLineF(placement.leaderStart, placement.leaderEnd),
+                                   LeaderThicknessPaperPx);
         }
     }
     return placed;

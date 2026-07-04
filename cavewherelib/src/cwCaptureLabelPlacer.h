@@ -18,8 +18,12 @@
 #include <QString>
 #include <QVector>
 
+// Std includes
+#include <memory>
+
 // Our includes
 #include "cwGlobals.h"
+#include "cwSpatialHashGrid2D.h"
 
 class CAVEWHERE_LIB_EXPORT cwCaptureLabelPlacer
 {
@@ -58,8 +62,10 @@ public:
         int    noCandidate        = 0; // spiral finished with no viable cell
         qint64 gridCells          = 0; // m_maskW * m_maskH (distance-transform size)
         qint64 cellsTried         = 0; // in-bounds spiral cells visited, all calls
+        qint64 dtClearedCells     = 0; // cells passing the DT clearance (reach grid queries)
         qint64 placedLabelChecks  = 0; // m_placedLabels comparisons (the O(n^2) scan)
         qint64 softObstacleChecks = 0; // soft-obstacle scoring comparisons
+        qint64 lineObstacleChecks = 0; // hard leader-obstacle comparisons
     };
 
     // Helper: when the placer returns a rect tightly sized to glyph ink and
@@ -113,6 +119,19 @@ public:
     const Stats& stats() const { return m_stats; }
     void resetStats() { m_stats = Stats(); }
 
+    // Profiling: cells walked by each broad-phase grid's queries (hash-probe /
+    // iteration cost, separate from the exact-test counts in Stats). Zero until
+    // the grids are built (first placeLabel).
+    qint64 placedGridCellsVisited() const {
+        return m_placedLabelGrid ? m_placedLabelGrid->cellsVisited() : 0;
+    }
+    qint64 lineGridCellsVisited() const {
+        return m_lineObstacleGrid ? m_lineObstacleGrid->cellsVisited() : 0;
+    }
+    qint64 softGridCellsVisited() const {
+        return m_softObstacleGrid ? m_softObstacleGrid->cellsVisited() : 0;
+    }
+
     // Registers a line segment as a post-finalize obstacle. Subsequent
     // placeLabel() calls reject candidates whose rect intersects the
     // segment expanded by half the thickness plus the standard label
@@ -145,6 +164,22 @@ private:
     QVector<LineObstacle> m_lineObstacles;
     QVector<LineObstacle> m_softLineObstacles;
     Stats                 m_stats;
+
+    // Broad-phase accelerators built lazily on the first placeLabel() (once a
+    // representative label size is known for cell sizing). m_placedLabelGrid and
+    // m_lineObstacleGrid grow as placements commit and leaders are registered;
+    // m_softObstacleGrid is static after the build because all soft obstacles
+    // are registered before placement begins.
+    std::unique_ptr<cwSpatialHashGrid2D> m_placedLabelGrid;
+    std::unique_ptr<cwSpatialHashGrid2D> m_softObstacleGrid;
+    std::unique_ptr<cwSpatialHashGrid2D> m_lineObstacleGrid;
+    bool                                 m_gridsBuilt = false;
+    // Largest hard-obstacle thickness seen so far; the line-obstacle query pads
+    // the candidate by half of this (plus the label margin) so the broad-phase
+    // region conservatively covers every per-line expanded test.
+    qreal                                m_maxLineObstacleThickness = 0.0;
+
+    void ensureGridsBuilt(const QSizeF& labelSize);
 };
 
 #endif // CWCAPTURELABELPLACER_H
