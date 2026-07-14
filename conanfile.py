@@ -20,7 +20,7 @@ class CaveWhereConan(ConanFile):
     ("libssh2/[>=1.11]"),
     ("openssl/3.5.0"),
     ("xxhash/[>=0.8.3]"),
-    ("tinygltf/[>=2.9.0]"),
+    ("tinygltf/[>=2.9.0 <2.10]"),
     ("minizip-ng/[>=4.0.7]"),
     ("laslib/[>=2.0.2]")
     ]
@@ -40,6 +40,10 @@ class CaveWhereConan(ConanFile):
     def requirements(self):
         # PROJ is needed by survex (cavernlib/survex_core) on all platforms
         self.requires("proj/[=9.3.1]")
+
+        # tinygltf 2.9.7 pulls nlohmann_json/3.12.0 while proj/9.3.1 pins
+        # 3.11.3; force a single (header-only) version to resolve the conflict.
+        self.requires("nlohmann_json/3.11.3", override=True)
 
         if not self.options.mobile:
             # libtiff is pulled in by PROJ (with_tiff); pin it here for the desktop build.
