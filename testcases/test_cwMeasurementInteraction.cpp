@@ -120,6 +120,40 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
         CHECK(interaction.deltaNorth() == Approx(0.0).margin(1e-6));
     }
 
+    SECTION("the clipboard readout matches the on-screen popup labels and signs") {
+        // Regression for #565: the copied text must read like the panel — grouped
+        // labels, signed by-axis components, and two-decimal lengths — not the old
+        // flat "Distance:/ΔEast:", unsigned, three-decimal form.
+        QClipboard* clipboard = QGuiApplication::clipboard();
+        REQUIRE(clipboard != nullptr);
+
+        interaction.place(camera.project(a));
+        interaction.place(camera.project(b));
+        REQUIRE(interaction.hasMeasurement());
+
+        interaction.copyToClipboard();
+        const QString text = clipboard->text();
+
+        // Grouped section headers and per-row labels mirror the popup.
+        CHECK(text.contains(QStringLiteral("Distance\n")));
+        CHECK(text.contains(QStringLiteral("Direction\n")));
+        CHECK(text.contains(QStringLiteral("By Axis\n")));
+        CHECK(text.contains(QStringLiteral("Straight-line (3D): 60.00 m")));
+        CHECK(text.contains(QStringLiteral("Horizontal (2D): 60.00 m")));
+        CHECK(text.contains(QStringLiteral("Inclination: 0.0°")));
+
+        // By-axis components carry their sign; a component that rounds to zero
+        // shows none (never "-0.00 m").
+        CHECK(text.contains(QStringLiteral("Easting (X): +60.00 m")));
+        CHECK(text.contains(QStringLiteral("Northing (Y): 0.00 m")));
+        CHECK(text.contains(QStringLiteral("Vertical (Z): 0.00 m")));
+
+        // The retired flat labels and three-decimal lengths must be gone.
+        CHECK_FALSE(text.contains(QStringLiteral("ΔEast")));
+        CHECK_FALSE(text.contains(QStringLiteral("ΔNorth")));
+        CHECK_FALSE(text.contains(QStringLiteral("60.000 m")));
+    }
+
     SECTION("awaiting-second hover previews the live measurement") {
         interaction.place(camera.project(a));
         interaction.hover(camera.project(b));

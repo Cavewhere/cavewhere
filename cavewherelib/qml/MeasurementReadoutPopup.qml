@@ -191,7 +191,7 @@ QC.Popup {
                     spacing: 4
 
                     ReadoutRow { label: qsTr("Straight-line (3D)"); value: root._length(root.interaction.distance); valueName: "measurementDistanceValue" }
-                    ReadoutRow { label: qsTr("Horizontal (2D)"); value: root._length(root.interaction.horizontal) }
+                    ReadoutRow { label: qsTr("Horizontal (2D)"); value: root._length(root.interaction.horizontal); valueName: "measurementHorizontalValue" }
                 }
             }
 
@@ -272,7 +272,7 @@ QC.Popup {
                               + "<br>" + qsTr("<b>Magnetic (today)</b> — where a compass points right now. Differs from true by the magnetic declination, which drifts over time, so it's computed for today's date at this location.")
                     }
 
-                    ReadoutRow { label: qsTr("Inclination"); value: root._angle(root.interaction.inclination) }
+                    ReadoutRow { label: qsTr("Inclination"); value: root._angle(root.interaction.inclination); valueName: "measurementInclinationValue" }
                 }
             }
 
@@ -286,9 +286,9 @@ QC.Popup {
                     width: parent.width
                     spacing: 4
 
-                    ReadoutRow { label: qsTr("Easting (X)"); value: root._signedLength(root.interaction.deltaEast) }
-                    ReadoutRow { label: qsTr("Northing (Y)"); value: root._signedLength(root.interaction.deltaNorth) }
-                    ReadoutRow { label: qsTr("Vertical (Z)"); value: root._signedLength(root.interaction.vertical) }
+                    ReadoutRow { label: qsTr("Easting (X)"); value: root._signedLength(root.interaction.deltaEast); valueName: "measurementEastingValue" }
+                    ReadoutRow { label: qsTr("Northing (Y)"); value: root._signedLength(root.interaction.deltaNorth); valueName: "measurementNorthingValue" }
+                    ReadoutRow { label: qsTr("Vertical (Z)"); value: root._signedLength(root.interaction.vertical); valueName: "measurementVerticalValue" }
                 }
             }
 

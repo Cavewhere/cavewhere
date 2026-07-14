@@ -12,6 +12,9 @@
 #include "cwGeoReference.h"
 #include "cwMeasurementMath.h"
 
+//Std includes
+#include <cmath>
+
 //Qt includes
 #include <QClipboard>
 #include <QDateTime>
@@ -20,9 +23,25 @@
 #include <QString>
 
 namespace {
-    // Clipboard readout is canonical SI: metres for lengths, degrees for angles.
-    constexpr int kLengthDecimals = 3;
+    // Clipboard readout mirrors the on-screen popup: metres for lengths, degrees
+    // for angles, at the same precision the panel shows.
+    constexpr int kLengthDecimals = 2;
     constexpr int kAngleDecimals = 1;
+
+    // Signed metres at display precision for the by-axis components; the sign is
+    // the direction (east/west, north/south, up/down). Mirrors the popup's
+    // _signedLength: a positive value gets an explicit '+', and a value that
+    // rounds to zero shows no sign (a rounded -0 renders a clean "0.00 m").
+    QString formatSignedLength(double meters)
+    {
+        const double scale = std::pow(10.0, kLengthDecimals);
+        double rounded = std::round(meters * scale) / scale;
+        if (rounded == 0.0) {
+            rounded = 0.0; // collapse -0.0 so a rounds-to-zero component shows no sign
+        }
+        const QString sign = rounded > 0.0 ? QStringLiteral("+") : QString();
+        return sign + QStringLiteral("%1 m").arg(rounded, 0, 'f', kLengthDecimals);
+    }
 
     QString azimuthReferenceKey() { return QStringLiteral("measurement/azimuthReference"); }
 
@@ -315,23 +334,31 @@ void cwMeasurementInteraction::copyToClipboard() const
             QStringLiteral("Azimuth (%1): %2")
             .arg(azimuthReferenceClipboardLabel(m_azimuthReference), azimuthValue);
 
-    // azimuthLine is concatenated, not fed through a numbered placeholder: it can
-    // carry referenceReason (a PROJ/IGRF error string), and an embedded %N there
-    // would be re-targeted by the later .arg() calls. Vertical is the ΔZ
-    // component, so it is reported once (no separate ΔUp).
+    // Mirrors the on-screen readout (MeasurementReadoutPopup): the same grouped
+    // labels, the same signed by-axis components, and the same precision, so a
+    // pasted measurement reads exactly like the panel. azimuthLine is
+    // concatenated, not fed through a numbered placeholder: it can carry
+    // referenceReason (a PROJ/IGRF error string) whose embedded %N would be
+    // re-targeted by the later .arg() calls. Vertical is the ΔZ component, so it
+    // is reported once, under By Axis (no separate ΔUp).
     const QString text =
-            QStringLiteral("Distance: %1 m\n").arg(m_distance, 0, 'f', kLengthDecimals)
-            + azimuthLine + QStringLiteral("\n")
-            + QStringLiteral("Inclination: %1°\n"
-                             "Horizontal: %2 m\n"
-                             "Vertical: %3 m\n"
-                             "ΔEast: %4 m\n"
-                             "ΔNorth: %5 m")
-              .arg(m_inclination, 0, 'f', kAngleDecimals)
+            QStringLiteral("Distance\n"
+                           "  Straight-line (3D): %1 m\n"
+                           "  Horizontal (2D): %2 m\n"
+                           "Direction\n  ")
+              .arg(m_distance, 0, 'f', kLengthDecimals)
               .arg(m_horizontal, 0, 'f', kLengthDecimals)
-              .arg(m_vertical, 0, 'f', kLengthDecimals)
-              .arg(m_deltaEast, 0, 'f', kLengthDecimals)
-              .arg(m_deltaNorth, 0, 'f', kLengthDecimals);
+            + azimuthLine
+            + QStringLiteral("\n"
+                             "  Inclination: %1°\n"
+                             "By Axis\n"
+                             "  Easting (X): %2\n"
+                             "  Northing (Y): %3\n"
+                             "  Vertical (Z): %4")
+              .arg(m_inclination, 0, 'f', kAngleDecimals)
+              .arg(formatSignedLength(m_deltaEast),
+                   formatSignedLength(m_deltaNorth),
+                   formatSignedLength(m_vertical));
 
     if (QClipboard* clipboard = QGuiApplication::clipboard()) {
         clipboard->setText(text);

@@ -323,5 +323,68 @@ MainWindowTest {
                        "Clipboard reports the Grid reference")
             }
         }
+
+        // The Copy button must reproduce the on-screen readout (#565). Before the
+        // fix the clipboard used its own flat labels ("Distance"/"ΔEast"), unsigned
+        // by-axis components, and three-decimal lengths, so the pasted text diverged
+        // from what the panel showed. This snapshots each on-screen value field and
+        // its grouped label, then asserts both appear verbatim in the copied text.
+        function test_copyMatchesOnScreenReadout() {
+            let renderer = _setupCompletedMeasurement()
+            let measurement = renderer.measurementInteraction
+
+            let popup = renderer.measurementReadoutPopup
+            verify(popup !== null, "Readout popup exposed")
+            popup.collapsed = false
+            tryVerify(() => popup.visible === true, 1000, "Readout popup visible")
+            tryVerify(() => measurement.calculateDetails === true, 1000,
+                      "Expanded readout enables the detailed resolve")
+
+            // Grid always resolves, so the azimuth is deterministic regardless of
+            // the project's CRS (settings persist across runs; don't assume default).
+            measurement.azimuthReference = AzimuthReference.Grid
+            tryVerify(() => measurement.referenceAvailable === true, 1000,
+                      "Grid reference resolves")
+
+            // objectName -> the label prefix exactly as the copied text renders
+            // it. The azimuth row inlines its reference tag (forced to Grid above)
+            // between the label and the value, where the panel shows it in a combo.
+            let rows = {
+                "measurementDistanceValue":    "Straight-line (3D): ",
+                "measurementHorizontalValue":  "Horizontal (2D): ",
+                "azimuthReferenceValue":       "Azimuth (grid): ",
+                "measurementInclinationValue": "Inclination: ",
+                "measurementEastingValue":     "Easting (X): ",
+                "measurementNorthingValue":    "Northing (Y): ",
+                "measurementVerticalValue":    "Vertical (Z): "
+            }
+
+            let values = {}
+            for (let name in rows) {
+                let field = _findByObjectName(popup.contentItem, name)
+                verify(field !== null, "Readout field '" + name + "' found")
+                values[name] = field.text
+            }
+
+            measurement.copyToClipboard()
+            let clip = TestHelper.clipboardText()
+
+            // The grouped structure carries into the paste.
+            let groups = ["Distance", "Direction", "By Axis"]
+            for (let g = 0; g < groups.length; g++) {
+                verify(clip.indexOf(groups[g]) !== -1,
+                       "Clipboard missing group '" + groups[g] + "'\n" + clip)
+            }
+
+            // Each on-screen value must appear on its own labelled line, so a
+            // mis-paired label/value can't pass as two unrelated substrings (e.g.
+            // a swapped Northing and Vertical, which can share the same string).
+            for (let name in rows) {
+                let line = rows[name] + values[name]
+                verify(clip.indexOf(line) !== -1,
+                       "Clipboard line '" + line
+                       + "' diverges from the on-screen readout\n" + clip)
+            }
+        }
     }
 }
