@@ -220,6 +220,8 @@ if(BUILD_TESTING)
             testlib/SvgOverlapAnalyzer.h
             testlib/OffscreenRenderTester.cpp
             testlib/OffscreenRenderTester.h
+            testlib/WindowGrabber.cpp
+            testlib/WindowGrabber.h
             QQuickGit/tests/lfs/LfsServer.cpp
             QQuickGit/tests/lfs/LfsServer.h
         QML_FILES

@@ -7,6 +7,7 @@
 #include <QGuiApplication>
 #include <QApplication>
 #include <QFont>
+#include <QStyleHints>
 
 //Our inculdes
 #include "cwQmlImageProviderBinder.h"
@@ -70,6 +71,15 @@ int main(int argc, char **argv) \
 
     //This allows use to create a QGraphicsScene, without QApplication, this crashes
     QApplication app(argc, argv);
+
+    // Manual-screenshot generation (CW_MANUAL_IMAGE_DIR set by
+    // scripts/gen-manual-screenshots.sh): pin a light color scheme so the images
+    // are deterministic and match CaveWhere's paper-first look regardless of the
+    // host's system appearance. Only when generating images — normal test runs
+    // keep the system scheme.
+    if (qEnvironmentVariableIsSet("CW_MANUAL_IMAGE_DIR")) {
+        QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Light);
+    }
 
     cwMetaTypeSystem::registerTypes();
 
