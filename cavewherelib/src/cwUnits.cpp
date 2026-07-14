@@ -13,6 +13,9 @@
 #include <QStringList>
 #include <QDebug>
 
+//Std includes
+#include <cmath>
+
 /**
   Converts value to the 'to' LengthUnit
 
@@ -58,6 +61,22 @@ QString cwUnits::unitName(cwUnits::LengthUnit unit)
     default:
         return "error";
     }
+}
+
+QString cwUnits::formatLength(double meters, cwUnits::LengthUnit unit,
+                              bool signedValue, int decimals)
+{
+    // Round to display precision first so the sign decision and the -0 collapse
+    // both act on the value the user will actually see (a tiny 0.001 must not
+    // print "+0.00").
+    const double scale = std::pow(10.0, decimals);
+    double value = std::round(convert(meters, Meters, unit) * scale) / scale;
+    value += 0.0; // IEEE: -0.0 + 0.0 == +0.0, so a rounds-to-zero value shows no sign
+    const QString sign = (signedValue && value > 0.0) ? QStringLiteral("+") : QString();
+    return QStringLiteral("%1%2 %3")
+            .arg(sign)
+            .arg(value, 0, 'f', decimals)
+            .arg(unitName(unit));
 }
 
 /**

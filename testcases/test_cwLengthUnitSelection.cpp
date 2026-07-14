@@ -67,6 +67,40 @@ TEST_CASE("cwLengthUnitSelection exposes the curated set", "[cwLengthUnitSelecti
     }
 }
 
+TEST_CASE("cwLengthUnitSelection formats a length in the selected unit",
+          "[cwLengthUnitSelection]")
+{
+    cwLengthUnitSelection selection;
+
+    SECTION("metres at two decimals with the unit suffix") {
+        CHECK(selection.format(60.0) == QStringLiteral("60.00 m"));
+    }
+
+    SECTION("converts to the selected unit before formatting") {
+        selection.setUnit(cwUnits::Feet);
+        CHECK(selection.format(60.0) == QStringLiteral("196.85 ft"));
+    }
+
+    SECTION("the signed variant marks a positive value with a plus") {
+        selection.setUnit(cwUnits::Feet);
+        CHECK(selection.format(60.0, true) == QStringLiteral("+196.85 ft"));
+        CHECK(selection.format(-60.0, true) == QStringLiteral("-196.85 ft"));
+    }
+
+    SECTION("a value that rounds to zero carries no sign") {
+        // Both a true zero and a tiny magnitude that rounds down must render a
+        // clean "0.00" — never "+0.00" or "-0.00".
+        CHECK(selection.format(0.0, true) == QStringLiteral("0.00 m"));
+        CHECK(selection.format(0.001, true) == QStringLiteral("0.00 m"));
+        CHECK(selection.format(-0.001, true) == QStringLiteral("0.00 m"));
+    }
+
+    SECTION("the unsigned variant never adds a plus") {
+        CHECK(selection.format(60.0) == QStringLiteral("60.00 m"));
+        CHECK(selection.format(0.0) == QStringLiteral("0.00 m"));
+    }
+}
+
 TEST_CASE("cwLengthUnitSelection persists to its settings key",
           "[cwLengthUnitSelection]")
 {

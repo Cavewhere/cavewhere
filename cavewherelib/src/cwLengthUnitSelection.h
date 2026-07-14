@@ -75,6 +75,14 @@ public:
     //! The inverse: a magnitude in the selected unit back to canonical metres.
     Q_INVOKABLE double toMeters(double value) const;
 
+    //! A canonical-metre length rendered in the selected unit, at display
+    //! precision, with the unit suffix (e.g. "196.85 ft") — the QML-facing entry
+    //! to cwUnits::formatLength, so the on-screen panel, the on-line chip, and
+    //! the clipboard share one format. When \a signedValue is true, a positive
+    //! value gets an explicit '+' (the by-axis direction); a value that rounds to
+    //! zero carries no sign.
+    Q_INVOKABLE QString format(double meters, bool signedValue = false) const;
+
 signals:
     void unitChanged();
     void settingsKeyChanged();
