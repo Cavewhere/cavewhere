@@ -35,6 +35,15 @@ QC.Popup {
         return qsTr("%1°").arg(Number(degrees).toFixed(root._anglePrecision))
     }
 
+    // Signed metres for the by-axis components, where the sign carries the
+    // direction (east/west, north/south, up/down). Positive gets an explicit
+    // '+'; a value that rounds to zero shows no sign — parseFloat collapses a
+    // "-0.00" round-down to -0, which _length then renders as a clean "0.00".
+    function _signedLength(meters) {
+        let rounded = parseFloat(Number(meters).toFixed(root._lengthPrecision))
+        return (rounded > 0 ? "+" : "") + root._length(rounded)
+    }
+
     // The azimuth value's tooltip: the reason when n/a, otherwise the
     // east-positive corrections folded into the displayed bearing (so the value
     // is reproducible). Grid needs none, so its detail is empty.
@@ -52,11 +61,14 @@ QC.Popup {
         return parts.join(qsTr(" · "))
     }
 
-    component ReadoutRow: RowLayout {
-        id: rowId
-        required property string label
-        required property string value
-        property string valueName: ""
+    // Read-only TextField (not Label) so the value can be selected and copied
+    // with the mouse. Styled flat so it reads as text, not an input. Shared by
+    // ReadoutRow and the azimuth row so every readout value is copyable.
+    component ReadoutValue: QC.TextField {
+        id: valueId
+
+        // Hover tooltip text; empty means no tooltip (the plain rows).
+        property string detailText: ""
 
         // A little inner padding plus a content margin so the right-aligned text
         // is never sized flush to its glyphs: on a HiDPI display, a field exactly
@@ -64,6 +76,34 @@ QC.Popup {
         // (14.2 -> 4.2). The slack absorbs that rounding.
         readonly property int _valuePadding: 4
         readonly property int _valueClipMargin: 6
+
+        readOnly: true
+        selectByMouse: true
+        font.family: Theme.fontFamilyMono
+        color: Theme.text
+        horizontalAlignment: QQ.TextInput.AlignRight
+        topPadding: 0
+        bottomPadding: 0
+        leftPadding: valueId._valuePadding
+        rightPadding: valueId._valuePadding
+        implicitWidth: contentWidth + leftPadding + rightPadding + valueId._valueClipMargin
+        // A fillWidth sibling (the label or a spacer) would otherwise shrink this
+        // field below its text and clip the leading digit. Pin the minimum to the
+        // content-fitting width.
+        Layout.minimumWidth: implicitWidth
+        background: QQ.Rectangle { color: "transparent" }
+
+        QQ.HoverHandler { id: valueHover }
+
+        QC.ToolTip.visible: valueHover.hovered && valueId.detailText.length > 0
+        QC.ToolTip.text: valueId.detailText
+    }
+
+    component ReadoutRow: RowLayout {
+        id: rowId
+        required property string label
+        required property string value
+        property string valueName: ""
 
         Layout.fillWidth: true
         spacing: 8
@@ -74,26 +114,9 @@ QC.Popup {
             Layout.fillWidth: true
         }
 
-        // Read-only TextField (not Label) so the value can be selected and
-        // copied with the mouse. Styled flat so it reads as text, not an input.
-        QC.TextField {
+        ReadoutValue {
             objectName: rowId.valueName
             text: rowId.value
-            readOnly: true
-            selectByMouse: true
-            font.family: Theme.fontFamilyMono
-            color: Theme.text
-            horizontalAlignment: QQ.TextInput.AlignRight
-            topPadding: 0
-            bottomPadding: 0
-            leftPadding: rowId._valuePadding
-            rightPadding: rowId._valuePadding
-            implicitWidth: contentWidth + leftPadding + rightPadding + rowId._valueClipMargin
-            // The sibling label has fillWidth, so without a minimum the layout
-            // shrinks this field below its text and the leading digit is clipped.
-            // Pin the minimum to the content-fitting width.
-            Layout.minimumWidth: implicitWidth
-            background: QQ.Rectangle { color: "transparent" }
         }
     }
 
@@ -157,86 +180,117 @@ QC.Popup {
             Layout.fillWidth: true
             spacing: 8
 
-            ReadoutRow { label: qsTr("Distance"); value: root._length(root.interaction.distance); valueName: "measurementDistanceValue" }
-
-            // Azimuth gets a north-reference selector in place of a fixed label:
-            // Grid (the map) / True (the globe) / Magnetic (your compass). True
-            // and Magnetic need a coordinate system, so they disable — and the
-            // value reads n/a — on a local-only or invalid-CRS project.
-            RowLayout {
+            // Distance — the straight-line span vs its map-plane projection.
+            // Both are unsigned magnitudes; adjacency teaches 3D = 2D + vertical.
+            QC.GroupBox {
+                title: qsTr("Distance")
                 Layout.fillWidth: true
-                spacing: 8
 
-                // "Azimuth" stays flush-left with the other row labels; the "?"
-                // sits after the selector it explains rather than in a left gutter.
-                QC.Label {
-                    text: qsTr("Azimuth")
-                    color: Theme.textSecondary
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 4
+
+                    ReadoutRow { label: qsTr("Straight-line (3D)"); value: root._length(root.interaction.distance); valueName: "measurementDistanceValue" }
+                    ReadoutRow { label: qsTr("Horizontal (2D)"); value: root._length(root.interaction.horizontal) }
                 }
+            }
 
-                QC.ComboBox {
-                    id: azimuthReferenceCombo
-                    objectName: "azimuthReferenceCombo"
-                    Layout.preferredWidth: implicitWidth
+            // Direction — the bearing (with its north-reference selector) and dip.
+            QC.GroupBox {
+                title: qsTr("Direction")
+                Layout.fillWidth: true
 
-                    // Rows are in enum order (Grid/True/Magnetic), so a row index
-                    // is its own AzimuthReference value. Driven by the property,
-                    // not the reverse, so a C++ coerce back to Grid (no CRS) shows.
-                    model: [qsTr("Grid"), qsTr("True"), qsTr("Magnetic (today)")]
-                    currentIndex: root.interaction.azimuthReference
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 4
 
-                    onActivated: (index) => { root.interaction.azimuthReference = index }
+                    // Azimuth gets a north-reference selector in place of a fixed label:
+                    // Grid (the map) / True (the globe) / Magnetic (your compass). True
+                    // and Magnetic need a coordinate system, so they disable — and the
+                    // value reads n/a — on a local-only or invalid-CRS project.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
 
-                    delegate: QC.ItemDelegate {
-                        id: azimuthItemId
-                        required property string modelData
-                        required property int index
+                        // "Azimuth" stays flush-left with the other row labels; the "?"
+                        // sits after the selector it explains rather than in a left gutter.
+                        QC.Label {
+                            text: qsTr("Azimuth")
+                            color: Theme.textSecondary
+                        }
 
-                        width: azimuthReferenceCombo.width
-                        text: azimuthItemId.modelData
-                        // Row 0 (Grid) is always available; True/Magnetic need a CS.
-                        enabled: azimuthItemId.index === 0 || root.interaction.geoReferenced
-                        highlighted: azimuthReferenceCombo.highlightedIndex === azimuthItemId.index
+                        QC.ComboBox {
+                            id: azimuthReferenceCombo
+                            objectName: "azimuthReferenceCombo"
+                            Layout.preferredWidth: implicitWidth
+
+                            // Rows are in enum order (Grid/True/Magnetic), so a row index
+                            // is its own AzimuthReference value. Driven by the property,
+                            // not the reverse, so a C++ coerce back to Grid (no CRS) shows.
+                            model: [qsTr("Grid"), qsTr("True"), qsTr("Magnetic (today)")]
+                            currentIndex: root.interaction.azimuthReference
+
+                            onActivated: (index) => { root.interaction.azimuthReference = index }
+
+                            delegate: QC.ItemDelegate {
+                                id: azimuthItemId
+                                required property string modelData
+                                required property int index
+
+                                width: azimuthReferenceCombo.width
+                                text: azimuthItemId.modelData
+                                // Row 0 (Grid) is always available; True/Magnetic need a CS.
+                                enabled: azimuthItemId.index === 0 || root.interaction.geoReferenced
+                                highlighted: azimuthReferenceCombo.highlightedIndex === azimuthItemId.index
+                            }
+                        }
+
+                        InformationButton {
+                            showItemOnClick: azimuthHelpId
+                        }
+
+                        QQ.Item { Layout.fillWidth: true }
+
+                        ReadoutValue {
+                            objectName: "azimuthReferenceValue"
+                            text: root.interaction.referenceAvailable
+                                  ? root._angle(root.interaction.referenceAzimuth)
+                                  : qsTr("n/a")
+                            color: root.interaction.referenceAvailable ? Theme.text : Theme.textSecondary
+                            detailText: root._azimuthDetail()
+                        }
                     }
-                }
 
-                InformationButton {
-                    showItemOnClick: azimuthHelpId
-                }
+                    HelpArea {
+                        id: azimuthHelpId
+                        Layout.fillWidth: true
+                        // Each paragraph is its own qsTr() so it extracts as a complete,
+                        // translatable sentence (a concatenated qsTr argument doesn't).
+                        text: qsTr("<b>Azimuth reference</b> — which north the bearing is measured from. <b>Grid = the map, True = the globe, Magnetic = your compass.</b>")
+                              + "<br><br>" + qsTr("<b>Grid</b> — north of the map's coordinate grid (e.g. UTM grid lines). Matches the 3D view, the survey's coordinates, and a printed map.")
+                              + "<br>" + qsTr("<b>True</b> — geographic north, toward the pole. Differs from grid by the grid convergence at this location.")
+                              + "<br>" + qsTr("<b>Magnetic (today)</b> — where a compass points right now. Differs from true by the magnetic declination, which drifts over time, so it's computed for today's date at this location.")
+                    }
 
-                QQ.Item { Layout.fillWidth: true }
-
-                QC.Label {
-                    objectName: "azimuthReferenceValue"
-                    text: root.interaction.referenceAvailable
-                          ? root._angle(root.interaction.referenceAzimuth)
-                          : qsTr("n/a")
-                    color: root.interaction.referenceAvailable ? Theme.text : Theme.textSecondary
-                    font.family: Theme.fontFamilyMono
-
-                    QQ.HoverHandler { id: azimuthValueHover }
-
-                    QC.ToolTip.visible: azimuthValueHover.hovered && root._azimuthDetail().length > 0
-                    QC.ToolTip.text: root._azimuthDetail()
+                    ReadoutRow { label: qsTr("Inclination"); value: root._angle(root.interaction.inclination) }
                 }
             }
 
-            HelpArea {
-                id: azimuthHelpId
+            // By Axis — the vector between the two points split into its signed
+            // coordinate components. The sign is the direction (east/west, etc.).
+            QC.GroupBox {
+                title: qsTr("By Axis")
                 Layout.fillWidth: true
-                // Each paragraph is its own qsTr() so it extracts as a complete,
-                // translatable sentence (a concatenated qsTr argument doesn't).
-                text: qsTr("<b>Azimuth reference</b> — which north the bearing is measured from. <b>Grid = the map, True = the globe, Magnetic = your compass.</b>")
-                      + "<br><br>" + qsTr("<b>Grid</b> — north of the map's coordinate grid (e.g. UTM grid lines). Matches the 3D view, the survey's coordinates, and a printed map.")
-                      + "<br>" + qsTr("<b>True</b> — geographic north, toward the pole. Differs from grid by the grid convergence at this location.")
-                      + "<br>" + qsTr("<b>Magnetic (today)</b> — where a compass points right now. Differs from true by the magnetic declination, which drifts over time, so it's computed for today's date at this location.")
-            }
 
-            ReadoutRow { label: qsTr("Inclination"); value: root._angle(root.interaction.inclination) }
-            ReadoutRow { label: qsTr("Horizontal"); value: root._length(root.interaction.horizontal) }
-            ReadoutRow { label: qsTr("Vertical"); value: root._length(root.interaction.vertical) }
-            ReadoutRow { label: qsTr("ΔEast"); value: root._length(root.interaction.deltaEast) }
-            ReadoutRow { label: qsTr("ΔNorth"); value: root._length(root.interaction.deltaNorth) }
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 4
+
+                    ReadoutRow { label: qsTr("Easting (X)"); value: root._signedLength(root.interaction.deltaEast) }
+                    ReadoutRow { label: qsTr("Northing (Y)"); value: root._signedLength(root.interaction.deltaNorth) }
+                    ReadoutRow { label: qsTr("Vertical (Z)"); value: root._signedLength(root.interaction.vertical) }
+                }
+            }
 
             QQ.Rectangle {
                 Layout.fillWidth: true
