@@ -15,6 +15,10 @@ follow.
 - [Why CaveWhere](concepts/why-cavewhere.md): The problems CaveWhere solves for cave surveyors (2D→3D morphing, loop closure, Git sync, LiDAR, keywords, project format) and how features map to them.
 - [Glossary](concepts/glossary.md): Definitions of cave-surveying and CaveWhere terms — station, shot, LRUD, scrap, declination, grid convergence, loop closure, backsight, trip, lead, morphing.
 
+## Chapters
+
+- [The 3D View](view-3d/the-3d-view.md): Navigate the 3D cave model — orbit/pan/zoom (turntable), aim the camera by exact angle (azimuth, plan/profile vertical angle, orthogonal/perspective projection), read the compass and scale bar, and filter the scene with keyword layers.
+
 ## Meta
 
 - [Authoring guide](AUTHORING.md): Conventions for writing manual pages — problem-first structure, front matter, links, and image rules. For contributors, not end users.

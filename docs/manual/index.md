@@ -20,6 +20,10 @@ the problems CaveWhere solves — then keep the
 - [Why CaveWhere](concepts/why-cavewhere.md) — the problems CaveWhere solves.
 - [Glossary](concepts/glossary.md) — survey and CaveWhere terms.
 
+### 3D View
+- [The 3D View](view-3d/the-3d-view.md) — navigate the model, aim the camera,
+  and filter with layers.
+
 ## Planned chapters
 
 These directories exist and will be filled in as the manual is built out. Each
@@ -39,9 +43,8 @@ chapter is task-oriented and problem-first (see
 - **Scraps** — the sketch tool, outlines, scrap types (plan / running profile /
   projected profile), tying stations, warping settings, computing scraps, the
   carpet view.
-- **3D View** — turntable navigation, the camera (azimuth, vertical,
-  projection, FOV, compass), keyword layers, labels, scale bar, leads, and
-  rendering settings (MSAA, EDL).
+- **3D View (more)** — field of view, labels, leads, and rendering settings
+  (MSAA, EDL) build on [The 3D View](view-3d/the-3d-view.md).
 - **Georeferencing** — fixing stations, coordinate systems, grid convergence.
 - **Point Clouds** — adding LAZ/LAS, coordinate systems, clipping, EDL.
 - **Measurement** — distance, azimuth (grid / true / magnetic), inclination.
