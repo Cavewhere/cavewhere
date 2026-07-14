@@ -1458,6 +1458,25 @@ void cwGeometryItersecter::dumpLeafPrimitive(const Object& object,
         return;
     }
 
+    if (prim.kind == Primitive::Kind::Line) {
+        // A line segment is two indices (indices[primitiveIndex] and +1), the
+        // same layout primitiveModelBox reads. Do NOT fall through to the
+        // triangle path below: that reads a third index and overruns the
+        // buffer for the last segment (issue: crash in dumpLeafPrimitive).
+        const QVector<uint32_t>& indices = geometry.indices();
+        const int i = static_cast<int>(prim.primitiveIndex);
+        const QVector3D a = mapPoint(worldFromModel,
+            geometry.value<QVector3D>(positionAttribute, indices.at(i + 0)));
+        const QVector3D b = mapPoint(worldFromModel,
+            geometry.value<QVector3D>(positionAttribute, indices.at(i + 1)));
+        qCDebug(lcPick).nospace()
+            << "  leaf " << leafIdx << " [" << localIdx << "] LINE"
+            << " " << QLatin1String(parentClass) << "@" << parent
+            << " idx0=" << i
+            << " a=" << a << " b=" << b;
+        return;
+    }
+
     // Triangle
     const QVector<uint32_t>& indices = geometry.indices();
     const int i = static_cast<int>(prim.primitiveIndex);

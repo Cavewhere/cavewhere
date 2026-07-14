@@ -10,6 +10,7 @@
 #include <QMatrix4x4>
 #include <QVector3D>
 #include <QRay3D>
+#include <QLoggingCategory>
 
 // SUT
 #include "cwGeometryItersecter.h"
@@ -404,4 +405,34 @@ TEST_CASE("Line pick: nearer of two lines wins by depth",
 
     CHECK(pickNearestId(true) == 1u);   // near added first
     CHECK(pickNearestId(false) == 1u);  // near added last — still wins
+}
+
+// Regression: with cw.picking debug logging on, intersectsDetailed dumps every
+// primitive in the hit leaf through dumpLeafPrimitive. That helper had no Line
+// branch and read a segment as a triangle (three indices), overrunning the
+// two-index buffer and aborting in QList::at (SIGABRT while loading + picking).
+// Picking a single-segment line under the debug filter reproduces the crash on
+// unfixed code; the fix reads the two endpoints instead.
+TEST_CASE("Line pick: dumping a line leaf with picking debug on does not overrun the index buffer",
+          "[cwGeometryItersecter][linePick]")
+{
+    QLoggingCategory::setFilterRules(QStringLiteral("cw.picking.debug=true"));
+
+    const QVector3D a(1000.0f, 2000.0f, -500.0f);
+    const QVector3D b(1020.0f, 2000.0f, -500.0f);
+
+    cwGeometryItersecter intersector;
+    intersector.addObject(makeLineObject(1, {a, b}));
+    intersector.waitForFinish();
+
+    // Straight through the segment so the leaf is visited and dumped. Before
+    // the fix this aborts inside dumpLeafPrimitive; reaching the assertions
+    // below means it no longer overruns.
+    const QRay3D ray(QVector3D(1010.0f, 2000.0f, -200.0f), QVector3D(0.0f, 0.0f, -1.0f));
+    const cwRayHit hit = intersector.intersectsDetailed(ray, ortho(0.5));
+
+    CHECK(hit.hit());
+    CHECK(hit.objectId() == 1u);
+
+    QLoggingCategory::setFilterRules(QString());
 }
