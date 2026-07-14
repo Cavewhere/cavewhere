@@ -701,3 +701,6 @@ cavewherelib/icons/Thumbs.db
 test-qml/Thumbs.db
 .claude/settings.local.json
 clone-test/
+
+# Generated manual HTML view (source of truth is the .md files)
+docs/manual/_site/
