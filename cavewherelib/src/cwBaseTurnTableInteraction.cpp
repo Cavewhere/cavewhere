@@ -29,28 +29,6 @@ namespace {
     // so the view can orbit the line plot when the solid geometry is hidden.
     // Millimeters (not pixels) so the grab feels the same size on every display.
     constexpr double kPivotPickRadiusMillimeters = 4.0;
-
-    // A non-geometry pick (grid plane) is only accepted as a pivot if it
-    // lands inside the scene box grown by this fraction of the box diagonal.
-    // Keeps a grazing grid hit kilometres away from the cave from becoming
-    // the orbit center and teleporting the view (issue #527).
-    constexpr float kFallbackBoxMargin = 1.0f;
-
-    bool acceptFallbackPoint(const QVector3D& point, const QBox3D& sceneBox)
-    {
-        if(sceneBox.isNull() || !sceneBox.isFinite()) {
-            // No finite geometry to anchor against (empty/unloaded project):
-            // the grid plane is the only reference, so accept it. There's
-            // nothing on screen to teleport away from. The #527 teleport only
-            // happens once real geometry exists and the grid hit lands far
-            // from it — handled by the box test below.
-            return true;
-        }
-        const float pad = sceneBox.size().length() * kFallbackBoxMargin;
-        const QBox3D grown(sceneBox.minimum() - QVector3D(pad, pad, pad),
-                           sceneBox.maximum() + QVector3D(pad, pad, pad));
-        return grown.contains(point);
-    }
 }
 
 cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
@@ -124,10 +102,11 @@ void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
  * @param point - screen point in GL viewport coordinates
  * @return World point under the cursor, or nullopt on a miss
  *
- * Returns a geometry hit when one is under the cursor; otherwise a grid-plane
- * hit, but only if it lands near the scene bounding box. Returns nullopt when
- * nothing usable is under the cursor so callers keep the current pivot rather
- * than teleporting the view (issue #527).
+ * Returns a geometry hit when one is under the cursor. Otherwise the grid plane
+ * is used, but only when the scene has no geometry to anchor against (an
+ * empty/unloaded project). Returns nullopt when nothing usable is under the
+ * cursor: once geometry exists an off-geometry click keeps the current pivot
+ * rather than teleporting the view to a grid point (issues #562, #527).
  */
 std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point) const {
     Q_ASSERT(Camera);
@@ -152,26 +131,30 @@ std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point) con
         return world;
     }
 
-    //No geometry under the cursor. Fall back to the grid plane, but only if
-    //the hit lands near the cave — an infinite grid plane hit at a grazing
-    //angle can be kilometres away and would teleport the view (issue #527).
-    const double gridT = m_gridPlane.intersection(ray);
-    if(!std::isnan(gridT)) {
-        const QVector3D gridHit = ray.point(gridT);
-        if(acceptFallbackPoint(gridHit, scene()->geometryItersecter()->boundingBox())) {
+    //No geometry under the cursor. The grid plane is a fallback pivot, but only
+    //when there's no geometry to anchor against (an empty/unloaded project). Once
+    //survey geometry exists, an off-geometry click must not pivot on the grid:
+    //the infinite grid plane sits at the cave floor (min Z), so a grazing hit
+    //lands far out in X/Y and teleports the view, losing the rotation context
+    //(issues #562, #527). In that case return nullopt so the caller keeps the
+    //current pivot instead.
+    const QBox3D sceneBox = scene()->geometryItersecter()->boundingBox();
+    const bool hasGeometry = !sceneBox.isNull() && sceneBox.isFinite();
+    if(!hasGeometry) {
+        const double gridT = m_gridPlane.intersection(ray);
+        if(!std::isnan(gridT)) {
+            const QVector3D gridHit = ray.point(gridT);
             qCDebug(lcInteract).nospace()
                 << "unProject(" << point << "): gridPlane t=" << gridT
                 << " world=" << gridHit << " rayOrigin=" << ray.origin();
             return gridHit;
         }
-        qCDebug(lcInteract).nospace()
-            << "unProject(" << point << "): grid hit " << gridHit
-            << " rejected (outside scene box) -> miss";
-    } else {
-        qCDebug(lcInteract).nospace()
-            << "unProject(" << point << "): no geometry hit, no grid hit -> miss"
-            << " rayOrigin=" << ray.origin() << " rayDir=" << ray.direction();
     }
+
+    qCDebug(lcInteract).nospace()
+        << "unProject(" << point << "): no geometry pivot"
+        << " (hasGeometry=" << hasGeometry << ") -> miss"
+        << " rayOrigin=" << ray.origin() << " rayDir=" << ray.direction();
 
     return std::nullopt;
 }

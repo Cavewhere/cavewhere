@@ -866,7 +866,8 @@ TEST_CASE("cwBaseTurnTableInteraction startRotating on empty space far from geom
     // Geometry sits in a tiny box near the origin. The grid plane is infinite,
     // so an off-center click misses the geometry but still hits the grid plane
     // far away. The old code teleported the pivot there; now it must keep the
-    // current center because the far grid hit is outside the scene box.
+    // current center: once geometry exists the grid plane is not a pivot source
+    // (#562), so a missed click leaves the pivot where it was (#527).
     Fixture f;
     addSmallGeometry(f.scene, 1.0f);
 
@@ -876,6 +877,33 @@ TEST_CASE("cwBaseTurnTableInteraction startRotating on empty space far from geom
     // so it is the teleport the fix must suppress.
     const QVector3D farGridHit = unprojectClickOntoGrid(f.camera, kOffCenterClick);
     REQUIRE(farGridHit.length() > 10.0f);
+
+    f.interaction.startRotating(kOffCenterClick);
+
+    CHECK(f.interaction.center().x() == Approx(centerBefore.x()));
+    CHECK(f.interaction.center().y() == Approx(centerBefore.y()));
+    CHECK(f.interaction.center().z() == Approx(centerBefore.z()));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction startRotating on empty space near geometry keeps the pivot",
+          "[cwBaseTurnTableInteraction]")
+{
+    // #562: once survey geometry exists, an off-geometry click must never pivot
+    // on the grid plane — not even when the grid hit lands close to the cave,
+    // inside the scene box. The grid rides at the cave floor, so pivoting there
+    // swings the view and loses the rotation context. Distinct from the #527
+    // "far" case above: here the grid hit is well inside the scene bounds, so
+    // the old box-margin gate would have accepted it.
+    Fixture f;
+
+    // Size the geometry so the grid hit for this click lands inside the scene
+    // box (the case the old gate accepted), without sitting on a geometry point.
+    const QVector3D gridHit = unprojectClickOntoGrid(f.camera, kOffCenterClick);
+    const float extent = std::max(std::abs(gridHit.x()), std::abs(gridHit.y())) + 5.0f;
+    addSmallGeometry(f.scene, extent);
+
+    const QVector3D centerBefore = f.interaction.center();
+    REQUIRE(f.scene.geometryItersecter()->boundingBox().contains(gridHit));
 
     f.interaction.startRotating(kOffCenterClick);
 
