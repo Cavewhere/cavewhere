@@ -189,17 +189,49 @@ QC.Menu {
             }
         }
 
-        QC.MenuItem {
-            text: "Resize to 1080p"
-            onTriggered: {
-                resizeTo(16, 9, 1920)
-            }
-        }
+        QC.Menu {
+            title: "Resize"
 
-        QC.MenuItem {
-            text: "Resize to 1080p - Vertical"
-            onTriggered: {
-                resizeTo(9, 16, 1920)
+            QC.MenuItem {
+                text: "1080p"
+                onTriggered: {
+                    resizeTo(16, 9, 1920)
+                }
+            }
+
+            QC.MenuItem {
+                text: "1080p - Vertical"
+                onTriggered: {
+                    resizeTo(9, 16, 1920)
+                }
+            }
+
+            QC.MenuItem {
+                text: "2k"
+                onTriggered: {
+                    resizeTo(16, 9, 2880)
+                }
+            }
+
+            QC.MenuItem {
+                text: "2k - Vertical"
+                onTriggered: {
+                    resizeTo(9, 16, 2880)
+                }
+            }
+
+            QC.MenuItem {
+                text: "4k"
+                onTriggered: {
+                    resizeTo(16, 9, 3840)
+                }
+            }
+
+            QC.MenuItem {
+                text: "4k - Vertical"
+                onTriggered: {
+                    resizeTo(9, 16, 3840)
+                }
             }
         }
 
