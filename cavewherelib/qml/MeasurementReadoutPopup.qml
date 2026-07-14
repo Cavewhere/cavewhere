@@ -61,10 +61,12 @@ QC.Popup {
         return parts.join(qsTr(" · "))
     }
 
-    // Read-only TextField (not Label) so the value can be selected and copied
-    // with the mouse. Styled flat so it reads as text, not an input. Shared by
-    // ReadoutRow and the azimuth row so every readout value is copyable.
-    component ReadoutValue: QC.TextField {
+    // Read-only TextInput (not a Label, not a TextField) so the value can be
+    // selected and copied with the mouse and reads as flat text, not an input.
+    // A QC.TextField would need a background override, which the native style
+    // forbids; TextInput has none — matching the app's SelectableCaveStat. Shared
+    // by ReadoutRow and the azimuth row so every readout value is copyable.
+    component ReadoutValue: QQ.TextInput {
         id: valueId
 
         // Hover tooltip text; empty means no tooltip (the plain rows).
@@ -77,6 +79,11 @@ QC.Popup {
         readonly property int _valuePadding: 4
         readonly property int _valueClipMargin: 6
 
+        // TextInput derives its own (read-only) implicitWidth from content and
+        // padding; size the layout slot to that plus the clip margin instead.
+        readonly property real _slotWidth: valueId.contentWidth + valueId.leftPadding
+                                           + valueId.rightPadding + valueId._valueClipMargin
+
         readOnly: true
         selectByMouse: true
         font.family: Theme.fontFamilyMono
@@ -86,12 +93,11 @@ QC.Popup {
         bottomPadding: 0
         leftPadding: valueId._valuePadding
         rightPadding: valueId._valuePadding
-        implicitWidth: contentWidth + leftPadding + rightPadding + valueId._valueClipMargin
         // A fillWidth sibling (the label or a spacer) would otherwise shrink this
-        // field below its text and clip the leading digit. Pin the minimum to the
-        // content-fitting width.
-        Layout.minimumWidth: implicitWidth
-        background: QQ.Rectangle { color: "transparent" }
+        // field below its text and clip the leading digit. Pin both the preferred
+        // and the minimum width to the content-fitting slot.
+        Layout.preferredWidth: valueId._slotWidth
+        Layout.minimumWidth: valueId._slotWidth
 
         QQ.HoverHandler { id: valueHover }
 
