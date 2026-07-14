@@ -42,6 +42,7 @@ QQ.Item {
     CaptureManager {
         id: screenCaptureManagerId
         objectName: "screenCaptureManager"
+        futureManagerToken: RootData.futureManagerModel.token
         view: mapPageId.view.renderer
         viewport: Qt.rect(paperSizeInteractionId.captureRectangle.x,
                           paperSizeInteractionId.captureRectangle.y,

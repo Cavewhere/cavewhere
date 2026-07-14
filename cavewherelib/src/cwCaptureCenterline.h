@@ -18,6 +18,7 @@
 
 // Our includes
 #include "cwGlobals.h"
+#include "cwLabelPlacementControl.h"
 #include "cwSurveyNetwork.h"
 
 class cwCamera;
@@ -45,7 +46,10 @@ public:
     // same scene-inch size in both preview and full-res paths.
     void setPaperPxToLocal(double scale);
 
-    void placeStationLabels();
+    // Places one label per station. Runs on the export worker thread; the
+    // optional control lets the caller cancel mid-run and track progress
+    // (see cwLabelPlacementControl). A default control runs to completion.
+    void placeStationLabels(const cwLabelPlacementControl& control = {});
 
     QVector<QPointF> stationPositions() const;
     qreal stationDotRadius() const;

@@ -297,7 +297,7 @@ void cwCaptureLeads::rebuildGeometry()
     update();
 }
 
-void cwCaptureLeads::placeLeadLabels()
+void cwCaptureLeads::placeLeadLabels(const cwLabelPlacementControl& control)
 {
     if(m_placer == nullptr || m_leads.isEmpty()) {
         return;
@@ -308,6 +308,16 @@ void cwCaptureLeads::placeLeadLabels()
     const QFont placementLabelFont = scaledLabelFont();
 
     for(LeadDrawData& entry : m_leads) {
+        // Poll for cancelation and report progress once per lead, before its
+        // placement, so a canceled export bails promptly and the progress
+        // count covers skipped (empty-text) leads too.
+        if(control.isCanceled && control.isCanceled()) {
+            return;
+        }
+        if(control.labelProcessed) {
+            control.labelProcessed();
+        }
+
         if(entry.text.isEmpty()) {
             entry.labelRect = QRectF();
             entry.hasLeader = false;

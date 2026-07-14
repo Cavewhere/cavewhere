@@ -10,6 +10,10 @@
 #include <QUuid>
 #include <QQuickItemGrabResult>
 #include <QElapsedTimer>
+#include <QPromise>
+
+//Std includes
+#include <memory>
 
 //Our includes
 #include "cwCaptureViewport.h"
@@ -29,6 +33,8 @@
 #include "cwCave.h"
 #include "cwSurveyNetwork.h"
 #include "cwStationPositionLookup.h"
+#include "cwConcurrent.h"
+#include "cwLabelPlacementControl.h"
 
 //undef these because micrsoft is fucking retarded...
 #ifdef Q_OS_WIN
@@ -37,10 +43,43 @@
 #endif
 
 namespace {
-// Set this env var to log a one-shot per-export breakdown of the (main-thread)
-// label-placement stages — see placeLabelsAfterTiles. Off by default; when
-// unset the profiling timers never start, so there is no cost.
+// Set this env var to log a one-shot per-export breakdown of the label-
+// placement stages — see placeLabelsAfterTiles. Off by default; when unset the
+// profiling timers never start, so there is no cost.
 constexpr const char* ProfileCaptureEnvVar = "CW_PROFILE_CAPTURE";
+
+// A rendered tile's alpha channel, snapshotted on the GUI thread and fed to the
+// placer on the worker thread. QImage is implicitly shared, so this copies only
+// a handle; the worker reads the pixels but never mutates them.
+struct TileAlphaInput {
+    QImage  image;
+    QPointF pos;
+    qreal   scale = 1.0;
+};
+
+// Everything the worker thread needs to build the distance transform and place
+// every label, gathered on the GUI thread (all GUI-item construction and
+// geometry reads happen there) so the worker touches no GUI state except the
+// two label items it mutates in place. That in-place mutation is safe because
+// nothing on the GUI thread paints or deletes those items while the worker
+// runs: they are hidden until the continuation reveals them (previews live in
+// the rendered scene, so painting them mid-run would race), and the
+// CapturingImages guard — cleared only once the worker has unwound — blocks
+// re-entrant capture() from deleting them.
+// See cwCaptureViewport::placeLabelsAfterTiles.
+struct LabelPlacementInput {
+    cwCaptureLabelPlacer placer;
+    QRectF  parentBounds;
+    qreal   cellSizeLocal    = 0.0;
+    qreal   labelMarginLocal = 0.0;
+    QVector<TileAlphaInput>       tiles;
+    QVector<QRectF>               obstacleRects; // station dots + lead markers, before finalize()
+    QVector<QPair<QLineF, qreal>> softSegments;  // centerline legs, after finalize()
+    cwCaptureCenterline* centerline = nullptr;
+    cwCaptureLeads*      leads      = nullptr;
+    int  totalLabels = 0; // leads + stations, for progress reporting
+    bool profile     = false;
+};
 
 // Z-values define stacking order of overlays drawn on top of the rendered map tiles.
 // LeadLeaders sits below the tiles (z = 0) so it shows through transparent
@@ -144,11 +183,32 @@ void cwCaptureViewport::setViewport(QRect viewport) {
  */
 void cwCaptureViewport::capture()
 {
-    if(CapturingImages) { return; }
+    if(CapturingImages) {
+        if(m_runIsPreview) {
+            // A preview run is still in flight (its label placement is async)
+            // and its worker owns the label items, so we can't tear it down
+            // here. Cancel it and restart capture() — in the caller's
+            // now-current mode — once it has fully stopped. Silently dropping
+            // the request would leave an export run waiting on tiles that
+            // were never captured.
+            cancelCapture();
+            m_captureAgainWhenDone = true;
+        }
+        return;
+    }
     CapturingImages = true;
+    m_cancelRequested = false;
+    m_runIsPreview = previewCapture();
 
-    if(!viewport().size().isValid()) {
+    //QRect::isEmpty() (unlike QSize::isValid(), which accepts 0x0) rejects a
+    //zero-area viewport — which would otherwise build an empty tile-job list
+    //and crash dereferencing its first job.
+    if(viewport().isEmpty()) {
         qWarning() << "Viewport isn't valid for export:" << viewport();
+        //Abort as a canceled run so neither this viewport nor a manager run
+        //driving it is left waiting on a signal that would never come.
+        CapturingImages = false;
+        emit captureCanceled();
         return;
     }
 
@@ -163,7 +223,7 @@ void cwCaptureViewport::capture()
     viewport.moveTop(cameraViewport.height() - viewport.bottom());
 
     double imageScale;
-    if(previewCapture()) {
+    if(m_runIsPreview) {
         if(PreviewItem != NULL) {
             delete PreviewItem;
             PreviewItem = nullptr;
@@ -253,7 +313,29 @@ void cwCaptureViewport::capture()
     *capturedImage = [runData, nextJob, imageScale, this](const CaptureJob& job, const QImage& image) {
         Q_ASSERT(CapturingImages);
 
-        QGraphicsItemGroup* parent = previewCapture() ? PreviewItem : Item;
+        if(m_cancelRequested) {
+            // Canceled during the tile phase (there is no placement future to
+            // cancel yet). End the run at this tile boundary: restore the
+            // scene, drop the remaining tiles, and skip label placement.
+            NumberOfImagesProcessed = 0;
+            Rows = 0;
+            Columns = 0;
+            m_sceneManager->setCapturing(false);
+            view()->scene()->setCamera(runData->oldCamera);
+            CapturingImages = false;
+            if(m_captureAgainWhenDone) {
+                // This run was superseded (typically an export superseding
+                // the initial preview); start the new run instead of
+                // announcing a cancel nobody asked for.
+                m_captureAgainWhenDone = false;
+                capture();
+                return;
+            }
+            emit captureCanceled();
+            return;
+        }
+
+        QGraphicsItemGroup* parent = m_runIsPreview ? PreviewItem : Item;
 
         cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
         QImage correctedImage = image;
@@ -279,25 +361,29 @@ void cwCaptureViewport::capture()
         NumberOfImagesProcessed++;
 
         if(NumberOfImagesProcessed == Rows * Columns) {
-            //Finished capturing images
+            //Finished capturing tiles. CapturingImages stays true through the
+            //async label placement below so re-entrant capture() calls are
+            //blocked until it finishes — its continuation clears the flag.
             NumberOfImagesProcessed = 0;
             Rows = 0;
             Columns = 0;
-            CapturingImages = false;
 
-            if(previewCapture()) {
+            if(m_runIsPreview) {
                 updateBoundingBox();
             }
 
-            // Lay out and create the label overlays now that the tile alpha is
-            // available as an obstacle source.
-            placeLabelsAfterTiles(parent, imageScale);
-
-            //Clean up
+            // Tile rendering is done, so restore the scene/camera now. Label
+            // placement uses the snapshotted tile images and CaptureCamera, not
+            // the live scene, so the 3D view is interactive again while the
+            // placement runs on a worker thread.
             m_sceneManager->setCapturing(false);
             view()->scene()->setCamera(runData->oldCamera);
 
-            emit finishedCapture();
+            // Lay out the label overlays on a worker thread now that the tile
+            // alpha is available as an obstacle source. This emits
+            // finishedCapture() (or captureCanceled()) from its GUI-thread
+            // continuation — it does NOT block here.
+            placeLabelsAfterTiles(parent, imageScale);
         } else {
             //Next image to capture
             nextJob();
@@ -488,6 +574,18 @@ void cwCaptureViewport::setPositionAfterScale(QPointF position)
  */
 void cwCaptureViewport::deleteSceneItems()
 {
+    // A worker-thread label placement may still be touching CenterlineItem /
+    // LeadsItem (owned by the Item / PreviewItem groups deleted below). Cancel
+    // it and wait for the worker to unwind before freeing those items, or it
+    // would use-after-free. QFuture::waitForFinished() blocks this thread
+    // WITHOUT spinning a nested event loop (unlike AsyncFuture::waitForFinished),
+    // so there is no re-entrancy risk. The placement loops poll the cancel once
+    // per label, but finalize() (the distance-transform build) is not
+    // cancelable, so this wait can still block for the remainder of that stage
+    // on a large export.
+    m_labelPlacementFuture.cancel();
+    m_labelPlacementFuture.waitForFinished();
+
     if(PreviewItem != nullptr) {
         delete PreviewItem;
         PreviewItem = nullptr;
@@ -589,23 +687,23 @@ cwCaptureLeads* cwCaptureViewport::createLeadsItem(QGraphicsItemGroup* parent, d
 void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double imageScale)
 {
     if(parent == nullptr) {
+        // Nothing to place, but the capture still has to finish so the manager
+        // can move on and save.
+        CapturingImages = false;
+        emit finishedCapture();
         return;
     }
 
-    // Opt-in profiling of the label-placement stages (all main-thread). The
-    // timers only run when CW_PROFILE_CAPTURE is set; otherwise this is free.
+    // Opt-in profiling of the label-placement stages. The timers only run when
+    // CW_PROFILE_CAPTURE is set; otherwise this is free.
     const bool profile = qEnvironmentVariableIsSet(ProfileCaptureEnvVar);
-    QElapsedTimer stageTimer;
-    qint64 tileAlphaMs = 0;
-    qint64 finalizeMs = 0;
-    qint64 placeMs = 0;
 
     // The parent item's setScale value (inches-per-local-pixel). Driving the
     // font and placer off this — instead of a fixed preview DPI — keeps the
     // rendered glyph the same scene-inch size on both paths.
     const double hiResScale = paperSizeOfItem().width()
                               / (ItemScale * resolution() * viewport().width());
-    const double itemSetScale = previewCapture() ? ItemScale : hiResScale;
+    const double itemSetScale = m_runIsPreview ? ItemScale : hiResScale;
     const int exportDpi = qMax(1, qRound(1.0 / itemSetScale));
 
     // Find the parent-coord bounds covering every tile. Each cwGraphicsImageItem
@@ -639,121 +737,248 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
     // all reserve the same scene-inch span in preview and export.
     const double paperPxToLocal = 1.0 / (resolution() * itemSetScale);
 
-    cwCaptureLabelPlacer placer;
-    placer.setObstacleBounds(parentBounds, PlacerMaskCellPaperPx * paperPxToLocal);
-    placer.setViewportBounds(parentBounds);
-    placer.setLabelMarginPaperPx(PlacerLabelMarginPaperPx * paperPxToLocal);
-    placer.setAlphaThreshold(cwCaptureLabelPlacer::DefaultAlphaThreshold);
+    // Gather everything the worker thread needs. The input (and the placer it
+    // owns by value) outlives this call; the worker and the continuation both
+    // hold the input.
+    auto input = std::make_shared<LabelPlacementInput>();
+    input->parentBounds     = parentBounds;
+    input->cellSizeLocal    = PlacerMaskCellPaperPx * paperPxToLocal;
+    input->labelMarginLocal = PlacerLabelMarginPaperPx * paperPxToLocal;
+    input->profile          = profile;
 
-    if(profile) {
-        stageTimer.start();
-    }
+    // Snapshot the tile alpha on the GUI thread (implicitly shared; cheap).
+    input->tiles.reserve(tiles.size());
     for(cwGraphicsImageItem* tile : std::as_const(tiles)) {
         const QImage img = tile->image();
         if(img.isNull()) {
             continue;
         }
-        placer.addTileAlpha(img, tile->pos(), tile->scale());
-    }
-    if(profile) {
-        tileAlphaMs = stageTimer.elapsed();
+        input->tiles.append(TileAlphaInput{img, tile->pos(), tile->scale()});
     }
 
-    // Build label items now; we hand them the placer + DPI so they can compute
-    // glyph rects that match the painter's eventual render.
+    cwCaptureLabelPlacer* placer = &input->placer;
+
+    // Build label items on the GUI thread — QGraphicsItem construction must not
+    // happen on the worker. We hand them the placer + DPI so they can compute
+    // glyph rects that match the painter's eventual render; their placement
+    // loops run later on the worker, mutating only their own data. Both items
+    // stay HIDDEN until the continuation reveals them: for previews the parent
+    // group is already in the rendered scene, and painting an item while the
+    // worker sorts/writes its data vectors would be a data race.
     CenterlineItem = createCenterlineItem(parent, imageScale);
     if(CenterlineItem != nullptr) {
         CenterlineItem->setExportDpi(exportDpi);
         CenterlineItem->setPaperPxToLocal(paperPxToLocal);
-        CenterlineItem->setPlacer(&placer);
+        CenterlineItem->setPlacer(placer);
+        CenterlineItem->setVisible(false);
     }
     LeadsItem = createLeadsItem(parent, imageScale);
     if(LeadsItem != nullptr) {
         LeadsItem->setExportDpi(exportDpi);
         LeadsItem->setPaperPxToLocal(paperPxToLocal);
-        LeadsItem->setPlacer(&placer);
-        LeadsItem->setVisible(m_leadsVisible);
+        LeadsItem->setPlacer(placer);
+        LeadsItem->setVisible(false);
     }
+    input->centerline = CenterlineItem;
+    input->leads      = LeadsItem;
 
-    // Seed static dot/marker obstacles BEFORE finalize so labels avoid them.
+    // Gather static dot/marker obstacles (seeded before finalize) from the
+    // items' geometry — cheap GUI-thread reads, so the worker needs no GUI
+    // access to build them.
     if(CenterlineItem != nullptr) {
         const qreal dotHalf = CenterlineItem->stationDotRadius()
                               + StationDotObstacleMarginPaperPx * paperPxToLocal;
-        for(const QPointF& pos : CenterlineItem->stationPositions()) {
-            placer.addObstacleRect(QRectF(pos.x() - dotHalf, pos.y() - dotHalf,
-                                           dotHalf * 2.0, dotHalf * 2.0));
+        const QVector<QPointF> stationPositions = CenterlineItem->stationPositions();
+        input->obstacleRects.reserve(input->obstacleRects.size() + stationPositions.size());
+        for(const QPointF& pos : stationPositions) {
+            input->obstacleRects.append(QRectF(pos.x() - dotHalf, pos.y() - dotHalf,
+                                               dotHalf * 2.0, dotHalf * 2.0));
         }
+        input->totalLabels += stationPositions.size();
     }
     if(LeadsItem != nullptr) {
         const qreal markerRadius = LeadsItem->markerRadius();
-        for(const QPointF& pos : LeadsItem->leadMarkerPositions()) {
-            placer.addObstacleRect(QRectF(pos.x() - markerRadius, pos.y() - markerRadius,
-                                           markerRadius * 2.0, markerRadius * 2.0));
+        const QVector<QPointF> markerPositions = LeadsItem->leadMarkerPositions();
+        input->obstacleRects.reserve(input->obstacleRects.size() + markerPositions.size());
+        for(const QPointF& pos : markerPositions) {
+            input->obstacleRects.append(QRectF(pos.x() - markerRadius, pos.y() - markerRadius,
+                                               markerRadius * 2.0, markerRadius * 2.0));
         }
+        input->totalLabels += markerPositions.size();
     }
 
-    if(profile) {
-        stageTimer.restart();
-    }
-    placer.finalize();
-    if(profile) {
-        finalizeMs = stageTimer.elapsed();
-    }
-
-    // Register centerline legs as soft obstacles so leaders prefer routes
-    // that don't visually cut across them. Soft = scoring penalty, not a
-    // hard rejection — better to ship a slightly-crossed leader than drop.
+    // Gather centerline legs as soft obstacles (registered after finalize) so
+    // leaders prefer routes that don't visually cut across them.
     if(CenterlineItem != nullptr) {
         const qreal centerlineThickness =
             cwCaptureCenterline::LinePenWidthPaperPx * paperPxToLocal;
-        for(const QLineF& seg : CenterlineItem->lines()) {
-            placer.addSoftLineObstacle(seg, centerlineThickness);
+        const QVector<QLineF> legs = CenterlineItem->lines();
+        input->softSegments.reserve(legs.size());
+        for(const QLineF& seg : legs) {
+            input->softSegments.append({seg, centerlineThickness});
         }
     }
 
-    // Place leads first so each placement registers its leader line into
-    // the placer; stations placed afterwards then avoid those leaders.
-    if(profile) {
-        stageTimer.restart();
-    }
-    if(LeadsItem != nullptr) {
-        LeadsItem->placeLeadLabels();
-    }
-    if(CenterlineItem != nullptr) {
-        CenterlineItem->placeStationLabels();
-    }
-    if(profile) {
-        placeMs = stageTimer.elapsed();
+    // Run the distance-transform build + per-label placement on a worker
+    // thread. The placer is CPU-only and its grids are reentrant, so a single
+    // worker needs no locking. Progress + cancel flow through the QPromise.
+    m_labelPlacementFuture = cwConcurrent::run([input](QPromise<void>& promise) {
+        cwCaptureLabelPlacer& placer = input->placer;
+        promise.setProgressRange(0, qMax(1, input->totalLabels));
+
+        QElapsedTimer stageTimer;
+        qint64 tileAlphaMs = 0;
+        qint64 finalizeMs = 0;
+        qint64 placeMs = 0;
+
+        placer.setObstacleBounds(input->parentBounds, input->cellSizeLocal);
+        placer.setViewportBounds(input->parentBounds);
+        placer.setLabelMarginPaperPx(input->labelMarginLocal);
+        placer.setAlphaThreshold(cwCaptureLabelPlacer::DefaultAlphaThreshold);
+
+        if(input->profile) { stageTimer.start(); }
+        for(const TileAlphaInput& tile : std::as_const(input->tiles)) {
+            // Poll per tile so a cancel lands within one tile's rasterization
+            // instead of only after the whole alpha mask is built. finalize()
+            // below remains the uncancelable gap until Phase 4 tiles it.
+            if(promise.isCanceled()) { return; }
+            placer.addTileAlpha(tile.image, tile.pos, tile.scale);
+        }
+        if(input->profile) { tileAlphaMs = stageTimer.elapsed(); }
+
+        for(const QRectF& rect : std::as_const(input->obstacleRects)) {
+            placer.addObstacleRect(rect);
+        }
+
+        if(promise.isCanceled()) { return; }
+
+        if(input->profile) { stageTimer.restart(); }
+        placer.finalize();
+        if(input->profile) { finalizeMs = stageTimer.elapsed(); }
+
+        for(const QPair<QLineF, qreal>& soft : std::as_const(input->softSegments)) {
+            placer.addSoftLineObstacle(soft.first, soft.second);
+        }
+
+        // Cancel + progress hooks the placement loops poll (once per label), so
+        // a canceled export bails mid-run instead of only between passes.
+        int processed = 0;
+        cwLabelPlacementControl control;
+        control.isCanceled = [&promise]() { return promise.isCanceled(); };
+        control.labelProcessed = [&promise, &processed]() {
+            processed++;
+            promise.setProgressValue(processed);
+        };
+
+        // Place leads first so each placement registers its leader line into
+        // the placer; stations placed afterwards then avoid those leaders.
+        if(input->profile) { stageTimer.restart(); }
+        if(input->leads != nullptr) {
+            input->leads->placeLeadLabels(control);
+        }
+        if(input->centerline != nullptr) {
+            input->centerline->placeStationLabels(control);
+        }
+        if(input->profile) {
+            placeMs = stageTimer.elapsed();
+            const cwCaptureLabelPlacer::Stats& s = placer.stats();
+            qDebug() << "[cwCaptureViewport profile] export label placement (worker) —"
+                     << "tiles" << input->tiles.size()
+                     << "bounds" << input->parentBounds.size()
+                     << "gridCells" << s.gridCells
+                     << "| addTileAlpha(ms)" << tileAlphaMs
+                     << "finalize(ms)" << finalizeMs
+                     << "placement(ms)" << placeMs
+                     << "| placeCalls" << s.placeCalls
+                     << "placed" << s.placed
+                     << "culled" << s.culledByViewport
+                     << "noCandidate" << s.noCandidate
+                     << "cellsTried" << s.cellsTried
+                     << "dtClearedCells" << s.dtClearedCells
+                     << "placedLabelChecks" << s.placedLabelChecks
+                     << "softObstacleChecks" << s.softObstacleChecks
+                     << "lineObstacleChecks" << s.lineObstacleChecks
+                     << "| gridCellsVisited placed" << placer.placedGridCellsVisited()
+                     << "line" << placer.lineGridCellsVisited()
+                     << "soft" << placer.softGridCellsVisited()
+                     << LOCATION;
+        }
+    });
+
+    // Surface the export placement as a job (progress + a cancel affordance) in
+    // the app's job list. Previews run off-thread too, but silently — they fire
+    // rapidly and would spam the job list.
+    if(!m_runIsPreview && m_futureManagerToken.isValid()) {
+        m_futureManagerToken.addJob({m_labelPlacementFuture,
+                                     QStringLiteral("Placing export labels")});
     }
 
-    LeadLinesItem = createLeadLinesItem(parent, imageScale, LeadsItem);
-    if(LeadLinesItem != nullptr) {
-        LeadLinesItem->setVisible(m_leadsVisible);
-    }
+    // Back on the GUI thread when the worker has actually unwound: reveal the
+    // now-placed label items, build the leader lines (they depend on the
+    // placed leads), and finish the capture. This keys off
+    // QFutureWatcher::finished — NOT an AsyncFuture cancel callback, whose
+    // canceled notification fires the moment cancel() is called, while the
+    // worker may still be mutating the items; clearing CapturingImages then
+    // would let a re-entrant capture() delete those items under the worker.
+    // `input` is captured to keep the placer alive until the results are
+    // applied here.
+    connect(&m_labelPlacementWatcher, &QFutureWatcher<void>::finished, this,
+            [this, input, parent, imageScale]() {
+        CapturingImages = false;
 
-    if(profile) {
-        const cwCaptureLabelPlacer::Stats& s = placer.stats();
-        qDebug() << "[cwCaptureViewport profile] export label placement —"
-                 << "tiles" << tiles.size()
-                 << "bounds" << parentBounds.size()
-                 << "gridCells" << s.gridCells
-                 << "| addTileAlpha(ms)" << tileAlphaMs
-                 << "finalize(ms)" << finalizeMs
-                 << "placement(ms)" << placeMs
-                 << "| placeCalls" << s.placeCalls
-                 << "placed" << s.placed
-                 << "culled" << s.culledByViewport
-                 << "noCandidate" << s.noCandidate
-                 << "cellsTried" << s.cellsTried
-                 << "dtClearedCells" << s.dtClearedCells
-                 << "placedLabelChecks" << s.placedLabelChecks
-                 << "softObstacleChecks" << s.softObstacleChecks
-                 << "lineObstacleChecks" << s.lineObstacleChecks
-                 << "| gridCellsVisited placed" << placer.placedGridCellsVisited()
-                 << "line" << placer.lineGridCellsVisited()
-                 << "soft" << placer.softGridCellsVisited()
-                 << LOCATION;
+        // The items' placer pointer dies with `input` after this continuation;
+        // clear it so nothing retains a dangling placer.
+        if(CenterlineItem != nullptr) { CenterlineItem->setPlacer(nullptr); }
+        if(LeadsItem != nullptr)      { LeadsItem->setPlacer(nullptr); }
+
+        if(m_captureAgainWhenDone) {
+            // This run was superseded (typically an export superseding the
+            // initial preview). The worker has unwound, so the restarted
+            // capture() may safely rebuild the items; the superseded run
+            // emits no signals — the caller is waiting on the new run's.
+            m_captureAgainWhenDone = false;
+            capture();
+            return;
+        }
+
+        if(m_labelPlacementFuture.isCanceled()) {
+            // Canceled: leave the partially placed items hidden; the run's
+            // output is discarded by the manager.
+            emit captureCanceled();
+            return;
+        }
+
+        if(CenterlineItem != nullptr) {
+            CenterlineItem->setVisible(true);
+        }
+        if(LeadsItem != nullptr) {
+            LeadsItem->setVisible(m_leadsVisible);
+        }
+        LeadLinesItem = createLeadLinesItem(parent, imageScale, LeadsItem);
+        if(LeadLinesItem != nullptr) {
+            LeadLinesItem->setVisible(m_leadsVisible);
+        }
+        emit finishedCapture();
+    }, Qt::SingleShotConnection);
+    m_labelPlacementWatcher.setFuture(m_labelPlacementFuture);
+}
+
+void cwCaptureViewport::setFutureManagerToken(cwFutureManagerToken token)
+{
+    m_futureManagerToken = token;
+}
+
+void cwCaptureViewport::cancelCapture()
+{
+    if(!CapturingImages) {
+        // Nothing in flight; don't latch a cancel against a future run.
+        return;
     }
+    // An explicit cancel also drops any queued restart (capture() re-latches
+    // m_captureAgainWhenDone after calling this when it supersedes a preview).
+    m_captureAgainWhenDone = false;
+    m_cancelRequested = true;
+    m_labelPlacementFuture.cancel();
 }
 
 cwCaptureLeadLines* cwCaptureViewport::createLeadLinesItem(QGraphicsItemGroup* parent, double imageScale, cwCaptureLeads* leadsPeer) const
@@ -1003,10 +1228,13 @@ void cwCaptureViewport::setLeadsVisible(bool visible)
 
     m_leadsVisible = visible;
 
-    if(LeadsItem != nullptr) {
+    // While a capture is in flight the label items are deliberately hidden
+    // (the worker is mutating their data — see placeLabelsAfterTiles); the
+    // continuation applies the current m_leadsVisible when it reveals them.
+    if(LeadsItem != nullptr && !CapturingImages) {
         LeadsItem->setVisible(visible);
     }
-    if(LeadLinesItem != nullptr) {
+    if(LeadLinesItem != nullptr && !CapturingImages) {
         LeadLinesItem->setVisible(visible);
     }
 

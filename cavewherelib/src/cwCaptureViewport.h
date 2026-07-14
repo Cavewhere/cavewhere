@@ -11,6 +11,8 @@
 
 //Qt includes
 #include <QObject>
+#include <QFuture>
+#include <QFutureWatcher>
 #include <QGraphicsItemGroup>
 #include <QPointer>
 #include <QSizeF>
@@ -23,6 +25,7 @@ class cwCaptureCenterline;
 class cwCaptureLeads;
 class cwCaptureLeadLines;
 class cwSurveyNetwork;
+#include "cwFutureManagerToken.h"
 #include "cwScaleBarItem.h"
 #include "cwScale.h"
 #include "cw3dRegionViewer.h"
@@ -58,6 +61,17 @@ public:
 
     cwRegionSceneManager *sceneManager() const;
     void setSceneManager(cwRegionSceneManager *newSceneManager);
+
+    // Handle the export label-placement job registers with, so the app's job
+    // list surfaces its progress and offers a cancel. Set by cwCaptureManager.
+    void setFutureManagerToken(cwFutureManagerToken token);
+
+    // Cancels an in-flight capture run. During the tile phase the tile chain
+    // notices the request at the next tile boundary; during label placement
+    // the worker-thread future is canceled. Either way the run ends by
+    // emitting captureCanceled() instead of finishedCapture(). Does nothing
+    // when no capture is running.
+    void cancelCapture();
 
     int resolution() const;
     void setResolution(int resolution);
@@ -102,6 +116,7 @@ signals:
     void viewportChanged();
     void viewChanged();
     void finishedCapture();
+    void captureCanceled();
     void previewItemChanged();
     void fullResolutionItemChanged();
     void transformOriginChanged();
@@ -155,8 +170,37 @@ private:
     cwCaptureCenterline* createCenterlineItem(QGraphicsItemGroup* parent, double imageScale) const;
     cwCaptureLeads* createLeadsItem(QGraphicsItemGroup* parent, double imageScale) const;
     cwCaptureLeadLines* createLeadLinesItem(QGraphicsItemGroup* parent, double imageScale, cwCaptureLeads* leadsPeer) const;
+    // Runs the label-placement stage (distance-transform build + per-label
+    // placement) on a worker thread and, on the GUI thread when it finishes,
+    // builds the leader lines and emits finishedCapture() (or captureCanceled()
+    // if it was aborted). Returns immediately; does not block the GUI.
     void placeLabelsAfterTiles(QGraphicsItemGroup* parent, double imageScale);
 
+    // In-flight worker-thread label placement (see placeLabelsAfterTiles).
+    // Held so it can be canceled on cancelCapture()/destruction. Canceling a
+    // finished/default future is a no-op.
+    QFuture<void> m_labelPlacementFuture;
+    // Drives the GUI-thread continuation off QFutureWatcher::finished, which
+    // fires only once the worker has actually unwound. Its canceled signal
+    // fires as soon as cancel() is called — while the worker is still running
+    // — so nothing may key off it (see the continuation-contract test in
+    // test_cwLabelPlacementThreading.cpp).
+    QFutureWatcher<void> m_labelPlacementWatcher;
+    // Set by cancelCapture() so the tile-grab chain (which has no future to
+    // cancel yet) can end the run at the next tile boundary. Reset by
+    // capture().
+    bool m_cancelRequested = false;
+    // Whether the in-flight run is a preview, snapshotted when the run starts.
+    // The live previewCapture() flag can be flipped mid-run (the manager sets
+    // it to false right before requesting the export), so mid-run code must
+    // use this snapshot, not the live flag.
+    bool m_runIsPreview = false;
+    // Set when capture() is requested while a preview run is still in flight:
+    // the preview is canceled and, once it has fully stopped, capture() is
+    // re-run in the caller's mode. Cleared by cancelCapture() so an explicit
+    // cancel also drops the queued restart.
+    bool m_captureAgainWhenDone = false;
+    cwFutureManagerToken m_futureManagerToken;
 
 private slots:
     // void capturedImage(QImage image, int id);

@@ -19,6 +19,7 @@
 
 // Our includes
 #include "cwGlobals.h"
+#include "cwLabelPlacementControl.h"
 
 class cwCamera;
 class cwCavingRegion;
@@ -53,7 +54,10 @@ public:
     qreal markerRadius() const;
     QVector<QPointF> leadMarkerPositions() const;
 
-    void placeLeadLabels();
+    // Places one label per lead. Runs on the export worker thread; the
+    // optional control lets the caller cancel mid-run and track progress
+    // (see cwLabelPlacementControl). A default control runs to completion.
+    void placeLeadLabels(const cwLabelPlacementControl& control = {});
 
     const QVector<LeadDrawData>& layout() const { return m_leads; }
 

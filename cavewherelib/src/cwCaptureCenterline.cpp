@@ -245,7 +245,7 @@ void cwCaptureCenterline::rebuildGeometry()
     update();
 }
 
-void cwCaptureCenterline::placeStationLabels()
+void cwCaptureCenterline::placeStationLabels(const cwLabelPlacementControl& control)
 {
     if(m_placer == nullptr || m_stationData.isEmpty()) {
         return;
@@ -270,6 +270,16 @@ void cwCaptureCenterline::placeStationLabels()
     // NOT call addObstacleRect or finalize.
 
     for(StationDrawData& station : m_stationData) {
+        // Poll for cancelation and report progress once per station, before
+        // its (potentially expensive) placement, so a canceled export bails
+        // promptly and the progress count covers skipped stations too.
+        if(control.isCanceled && control.isCanceled()) {
+            return;
+        }
+        if(control.labelProcessed) {
+            control.labelProcessed();
+        }
+
         if(station.name.isEmpty()) {
             continue;
         }

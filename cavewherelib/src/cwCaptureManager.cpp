@@ -233,27 +233,74 @@ void cwCaptureManager::setFileType(FileType fileType) {
 /**
  * @brief cwCaptureManager::capture
  *
- * Executes the screen capture
+ * Executes the screen capture, running each capture viewport in sequence and
+ * saving the result once all have finished.
  *
- * If the screen screen capture is already running, this does nothing
+ * If a capture run is already in flight, this does nothing — starting a
+ * second run would stack duplicate handlers on the same viewport.
  */
 void cwCaptureManager::capture()
 {
+    if(m_capturing) { return; }
+    m_capturing = true;
+
     NumberOfImagesProcessed = 0;
+    m_canceled = false;
 
     //Lamba needs to be a shared pointer because it's recursive
     auto next = std::make_shared<std::function<void ()>>();
 
     //Because capturing in async, we need to call this in steps
     *next = [this, next]() {
+        if(m_canceled) {
+            //Aborted mid-run (see cancel()); stop without saving. The
+            //in-flight viewport has fully stopped (this runs from its final
+            //signal), so a new run may start.
+            m_capturing = false;
+            return;
+        }
+
         if(NumberOfImagesProcessed < Captures.size()) {
             auto capture = Captures.at(NumberOfImagesProcessed);
-            connect(capture, &cwCaptureViewport::finishedCapture, this, [this, next]() {
+
+            //A capture emits exactly one of finishedCapture / captureCanceled
+            //— unless it is deleted mid-run, which emits destroyed instead.
+            //All three are single-shot and clear each other so no stale
+            //handler survives into the next capture() run.
+            connect(capture, &cwCaptureViewport::finishedCapture, this, [this, next, capture]() {
+                disconnect(capture, &cwCaptureViewport::captureCanceled, this, nullptr);
+                disconnect(capture, &QObject::destroyed, this, nullptr);
                 NumberOfImagesProcessed++;
 
                 //Call the next capture, recursive (sorta)
                 (*next)();
             }, Qt::SingleShotConnection);
+            connect(capture, &cwCaptureViewport::captureCanceled, this, [this, capture]() {
+                disconnect(capture, &cwCaptureViewport::finishedCapture, this, nullptr);
+                disconnect(capture, &QObject::destroyed, this, nullptr);
+                //Reached either via cancel() (m_canceled already set) or a
+                //direct future-manager-UI cancel of the placement job. Only
+                //announce the abort once. The viewport has fully stopped, so
+                //a new run may start.
+                m_capturing = false;
+                if(!m_canceled) {
+                    m_canceled = true;
+                    emit canceledCapture();
+                }
+            }, Qt::SingleShotConnection);
+            connect(capture, &QObject::destroyed, this, [this]() {
+                //The in-flight capture was deleted mid-run (e.g. the user
+                //removed the layer while exporting; removeCaptureViewport
+                //doesn't block that). It can never emit a terminal signal now
+                //— unwind the run here or m_capturing would latch true
+                //forever, silently disabling every later capture().
+                m_capturing = false;
+                if(!m_canceled) {
+                    m_canceled = true;
+                    emit canceledCapture();
+                }
+            }, Qt::SingleShotConnection);
+
             capture->setPreviewCapture(false);
             capture->capture();
         } else if(NumberOfImagesProcessed == Captures.size()) {
@@ -264,6 +311,44 @@ void cwCaptureManager::capture()
 
     //Queue the first capture
     (*next)();
+}
+
+void cwCaptureManager::cancel()
+{
+    if(!m_capturing || m_canceled) {
+        //Nothing in flight (or already canceled) — stay silent rather than
+        //announcing a canceled capture that never existed.
+        return;
+    }
+    m_canceled = true;
+
+    //Cancel the in-flight capture's worker-thread placement (if any). Canceling
+    //an idle/finished capture is a no-op, so canceling them all is safe.
+    for(cwCaptureViewport* capture : std::as_const(Captures)) {
+        capture->cancelCapture();
+    }
+
+    emit canceledCapture();
+}
+
+cwFutureManagerToken cwCaptureManager::futureManagerToken() const
+{
+    return m_futureManagerToken;
+}
+
+void cwCaptureManager::setFutureManagerToken(cwFutureManagerToken token)
+{
+    if(m_futureManagerToken == token) {
+        return;
+    }
+    m_futureManagerToken = token;
+
+    //Propagate to every capture so each registers its own placement job.
+    for(cwCaptureViewport* capture : std::as_const(Captures)) {
+        capture->setFutureManagerToken(token);
+    }
+
+    emit futureManagerTokenChanged();
 }
 
 /**
@@ -287,6 +372,7 @@ void cwCaptureManager::addCaptureViewport(cwCaptureViewport *capture)
 
     capture->setName(QString("Capture %1").arg(Captures.size() + 1));
     capture->setParent(this);
+    capture->setFutureManagerToken(m_futureManagerToken);
     QQmlEngine::setObjectOwnership(capture, QQmlEngine::CppOwnership);
 
     beginInsertRows(QModelIndex(), rowCount(), rowCount());
@@ -331,6 +417,11 @@ void cwCaptureManager::removeCaptureViewport(cwCaptureViewport *capture)
 
     groupModel()->removeCapture(capture);
 
+    //Start unwinding any in-flight run now so the viewport's destructor —
+    //which blocks on the placement worker — waits as briefly as possible.
+    //If this was the manager's in-flight capture, its destroyed signal (hooked
+    //single-shot in capture()) unwinds the manager run.
+    capture->cancelCapture();
     capture->deleteLater();
 }
 
@@ -468,6 +559,10 @@ void cwCaptureManager::saveCaptures()
  */
 void cwCaptureManager::saveScene()
 {
+    //The capture queue is done; whatever the save outcome (including the
+    //error paths below), the run is over and a new capture() may start.
+    m_capturing = false;
+
     QSizeF imageSize = paperSize() * resolution();
     QRectF imageRect = QRectF(QPointF(), imageSize);
     QRectF sceneRect = QRectF(QPointF(), paperSize()); //Scene->itemsBoundingRect();
