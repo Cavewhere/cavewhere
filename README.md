@@ -8,6 +8,13 @@
 Using its advanced 3D engine, CaveWhere automatically morphs your 2D cave notes in 3D.
 Loop closures re-morph affected scan scraps automatically so your map is always up-to-date.
 
+## User Manual
+
+The user manual lives in [`docs/manual/`](docs/manual/index.md). Start with
+[Why CaveWhere](docs/manual/concepts/why-cavewhere.md) for the problems it
+solves. AI agents should read [`docs/manual/llms.txt`](docs/manual/llms.txt)
+first — it's the machine-readable index of every manual page.
+
 ## Download Binaries
 
 [CaveWhere Downloads](https://cavewhere.com/downloads/)
