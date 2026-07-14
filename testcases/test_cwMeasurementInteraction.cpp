@@ -123,7 +123,9 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
     SECTION("the clipboard readout matches the on-screen popup labels and signs") {
         // Regression for #565: the copied text must read like the panel — grouped
         // labels, signed by-axis components, and two-decimal lengths — not the old
-        // flat "Distance:/ΔEast:", unsigned, three-decimal form.
+        // flat "Distance:/ΔEast:", unsigned, three-decimal form. Clear so the
+        // asserted metre suffixes don't depend on a sibling section's persisted unit.
+        QSettings().clear();
         QClipboard* clipboard = QGuiApplication::clipboard();
         REQUIRE(clipboard != nullptr);
 
@@ -152,6 +154,53 @@ TEST_CASE("cwMeasurementInteraction measures between two stations", "[cwMeasurem
         CHECK_FALSE(text.contains(QStringLiteral("ΔEast")));
         CHECK_FALSE(text.contains(QStringLiteral("ΔNorth")));
         CHECK_FALSE(text.contains(QStringLiteral("60.000 m")));
+    }
+
+    SECTION("the clipboard reports lengths in the selected unit") {
+        // #564: the interaction routes every clipboard length through its shared
+        // cwLengthUnitSelection. Clear/restore settings so this Feet choice can't
+        // leak into sibling sections (the unit persists via QSettings). The unit
+        // mapping/conversion itself is covered by [cwLengthUnitSelection].
+        QSettings().clear();
+        QClipboard* clipboard = QGuiApplication::clipboard();
+        REQUIRE(clipboard != nullptr);
+
+        cwLengthUnitSelection* lengthUnit = interaction.lengthUnitSelection();
+        REQUIRE(lengthUnit != nullptr);
+        lengthUnit->setUnit(cwUnits::Feet);
+
+        interaction.place(camera.project(a));
+        interaction.place(camera.project(b));
+        REQUIRE(interaction.hasMeasurement());
+
+        interaction.copyToClipboard();
+        const QString text = clipboard->text();
+
+        // 60 m == 196.85 ft; the suffix and signed by-axis form follow the unit.
+        CHECK(text.contains(QStringLiteral("Straight-line (3D): 196.85 ft")));
+        CHECK(text.contains(QStringLiteral("Horizontal (2D): 196.85 ft")));
+        CHECK(text.contains(QStringLiteral("Easting (X): +196.85 ft")));
+        CHECK(text.contains(QStringLiteral("Northing (Y): 0.00 ft")));
+        CHECK(text.contains(QStringLiteral("Vertical (Z): 0.00 ft")));
+        CHECK_FALSE(text.contains(QStringLiteral(" m\n")));
+
+        // Angles are unit-independent and stay in degrees.
+        CHECK(text.contains(QStringLiteral("Inclination: 0.0°")));
+
+        lengthUnit->setUnit(cwUnits::Meters);
+    }
+
+    SECTION("the length unit persists across interaction instances") {
+        // The interaction wires its selection to a shared QSettings key, so the
+        // choice survives into a fresh interaction (and a new session).
+        QSettings().clear();
+        {
+            cwMeasurementInteraction first;
+            first.lengthUnitSelection()->setUnit(cwUnits::Feet);
+        }
+        cwMeasurementInteraction second;
+        CHECK(second.lengthUnitSelection()->unit() == cwUnits::Feet);
+        second.lengthUnitSelection()->setUnit(cwUnits::Meters);
     }
 
     SECTION("awaiting-second hover previews the live measurement") {

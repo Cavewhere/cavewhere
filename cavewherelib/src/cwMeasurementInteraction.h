@@ -11,6 +11,7 @@
 //Our includes
 #include "cwScenePicker.h"
 #include "cwAzimuthReference.h"
+#include "cwLengthUnitSelection.h"
 class cwGeoReference;
 
 //Qt includes
@@ -47,6 +48,13 @@ class cwMeasurementInteraction : public cwScenePicker
     // could be computed for the current location/CRS follow in the *reference*
     // properties below.
     Q_PROPERTY(cwAzimuthReference::Reference azimuthReference READ azimuthReference WRITE setAzimuthReference NOTIFY azimuthReferenceChanged)
+
+    // The shared length-unit selection every length readout (distance,
+    // horizontal, the by-axis components) and the clipboard report in. Owned by
+    // this interaction and persisted across sessions; the pointer is stable,
+    // hence CONSTANT. QML drives it as interaction.lengthUnit.index / .names /
+    // .name / .fromMeters().
+    Q_PROPERTY(cwLengthUnitSelection* lengthUnit READ lengthUnitSelection CONSTANT)
 
     // True/Magnetic resolution needs PROJ (grid convergence) and IGRF and is the
     // expensive part of the readout. The view sets this true only while the
@@ -100,6 +108,8 @@ public:
 
     cwAzimuthReference::Reference azimuthReference() const { return m_azimuthReference; }
     void setAzimuthReference(cwAzimuthReference::Reference reference);
+
+    cwLengthUnitSelection* lengthUnitSelection() const { return m_lengthUnit; }
     bool calculateDetails() const { return m_calculateDetails; }
     void setCalculateDetails(bool calculateDetails);
     bool geoReferenced() const;
@@ -156,6 +166,7 @@ private:
     QPointer<cwGeoReference> m_geoReference;
 
     cwAzimuthReference::Reference m_azimuthReference = cwAzimuthReference::Reference::Grid;
+    cwLengthUnitSelection* m_lengthUnit = nullptr;
     bool m_calculateDetails = false;
     double m_referenceAzimuth = 0.0;
     bool m_referenceAvailable = true;

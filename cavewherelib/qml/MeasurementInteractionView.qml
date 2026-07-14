@@ -166,7 +166,11 @@ MeasurementInteraction {
                     id: distanceLabelId
                     objectName: "measurementLineDistanceLabel"
                     anchors.centerIn: parent
-                    text: qsTr("%1 m").arg(Number(measurementId.distance).toFixed(1))
+                    // Routed through the tool's selected length unit so the chip,
+                    // the readout panel, and the clipboard agree. Reading the
+                    // lengthUnit.name property re-evaluates this on a unit change.
+                    text: qsTr("%1 %2").arg(Number(measurementId.lengthUnit.fromMeters(measurementId.distance)).toFixed(2))
+                                        .arg(measurementId.lengthUnit.name)
                     color: Theme.text
                     font.family: Theme.fontFamilyMono
                 }

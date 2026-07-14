@@ -23,27 +23,33 @@
 #include <QString>
 
 namespace {
-    // Clipboard readout mirrors the on-screen popup: metres for lengths, degrees
-    // for angles, at the same precision the panel shows.
+    // Clipboard readout mirrors the on-screen popup: lengths in the selected unit,
+    // degrees for angles, at the same precision the panel shows.
     constexpr int kLengthDecimals = 2;
     constexpr int kAngleDecimals = 1;
 
-    // Signed metres at display precision for the by-axis components; the sign is
+    QString formatLength(double value, const QString& unitName)
+    {
+        return QStringLiteral("%1 %2").arg(value, 0, 'f', kLengthDecimals).arg(unitName);
+    }
+
+    // Signed length at display precision for the by-axis components; the sign is
     // the direction (east/west, north/south, up/down). Mirrors the popup's
     // _signedLength: a positive value gets an explicit '+', and a value that
     // rounds to zero shows no sign (a rounded -0 renders a clean "0.00 m").
-    QString formatSignedLength(double meters)
+    QString formatSignedLength(double value, const QString& unitName)
     {
         const double scale = std::pow(10.0, kLengthDecimals);
-        double rounded = std::round(meters * scale) / scale;
+        double rounded = std::round(value * scale) / scale;
         if (rounded == 0.0) {
             rounded = 0.0; // collapse -0.0 so a rounds-to-zero component shows no sign
         }
         const QString sign = rounded > 0.0 ? QStringLiteral("+") : QString();
-        return sign + QStringLiteral("%1 m").arg(rounded, 0, 'f', kLengthDecimals);
+        return sign + formatLength(rounded, unitName);
     }
 
     QString azimuthReferenceKey() { return QStringLiteral("measurement/azimuthReference"); }
+    QString lengthUnitKey() { return QStringLiteral("measurement/lengthUnit"); }
 
     // The parenthetical that tags the azimuth in the clipboard readout, so a
     // pasted measurement says which north it is against (matching the on-screen
@@ -76,8 +82,13 @@ namespace {
 
 cwMeasurementInteraction::cwMeasurementInteraction(QQuickItem* parent) :
     cwScenePicker(parent),
-    m_azimuthReference(loadAzimuthReference())
+    m_azimuthReference(loadAzimuthReference()),
+    m_lengthUnit(new cwLengthUnitSelection(this))
 {
+    // Persist the length-unit choice under the measurement key; setting the key
+    // also loads any previously stored choice.
+    m_lengthUnit->setSettingsKey(lengthUnitKey());
+
     // Resolve once up front so the reference readout is self-consistent from
     // construction. With no measurement yet this takes the cheap grid-passthrough
     // path; the detailed resolve waits for a frozen, expanded readout.
@@ -335,19 +346,21 @@ void cwMeasurementInteraction::copyToClipboard() const
             .arg(azimuthReferenceClipboardLabel(m_azimuthReference), azimuthValue);
 
     // Mirrors the on-screen readout (MeasurementReadoutPopup): the same grouped
-    // labels, the same signed by-axis components, and the same precision, so a
-    // pasted measurement reads exactly like the panel. azimuthLine is
-    // concatenated, not fed through a numbered placeholder: it can carry
-    // referenceReason (a PROJ/IGRF error string) whose embedded %N would be
+    // labels, the same signed by-axis components, the selected length unit, and
+    // the same precision, so a pasted measurement reads exactly like the panel.
+    // azimuthLine is concatenated, not fed through a numbered placeholder: it can
+    // carry referenceReason (a PROJ/IGRF error string) whose embedded %N would be
     // re-targeted by the later .arg() calls. Vertical is the ΔZ component, so it
     // is reported once, under By Axis (no separate ΔUp).
+    const QString unitName = m_lengthUnit->name();
+    const auto inUnit = [this](double meters) { return m_lengthUnit->fromMeters(meters); };
     const QString text =
             QStringLiteral("Distance\n"
-                           "  Straight-line (3D): %1 m\n"
-                           "  Horizontal (2D): %2 m\n"
+                           "  Straight-line (3D): %1\n"
+                           "  Horizontal (2D): %2\n"
                            "Direction\n  ")
-              .arg(m_distance, 0, 'f', kLengthDecimals)
-              .arg(m_horizontal, 0, 'f', kLengthDecimals)
+              .arg(formatLength(inUnit(m_distance), unitName),
+                   formatLength(inUnit(m_horizontal), unitName))
             + azimuthLine
             + QStringLiteral("\n"
                              "  Inclination: %1°\n"
@@ -355,10 +368,10 @@ void cwMeasurementInteraction::copyToClipboard() const
                              "  Easting (X): %2\n"
                              "  Northing (Y): %3\n"
                              "  Vertical (Z): %4")
-              .arg(m_inclination, 0, 'f', kAngleDecimals)
-              .arg(formatSignedLength(m_deltaEast),
-                   formatSignedLength(m_deltaNorth),
-                   formatSignedLength(m_vertical));
+              .arg(QString::number(m_inclination, 'f', kAngleDecimals),
+                   formatSignedLength(inUnit(m_deltaEast), unitName),
+                   formatSignedLength(inUnit(m_deltaNorth), unitName),
+                   formatSignedLength(inUnit(m_vertical), unitName));
 
     if (QClipboard* clipboard = QGuiApplication::clipboard()) {
         clipboard->setText(text);

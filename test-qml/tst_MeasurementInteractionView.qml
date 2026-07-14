@@ -16,9 +16,13 @@ MainWindowTest {
         function cleanup() {
             let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow,
                 "rootId->viewPage->SplitView->renderer")
-            if (renderer && renderer.measurementInteraction
-                && renderer.measurementInteraction.enabled) {
-                renderer.measurementInteraction.deactivate()
+            if (renderer && renderer.measurementInteraction) {
+                // Reset the persisted length unit unconditionally so a unit-mutating
+                // test can't leak metres/feet into the next one (or the next run).
+                renderer.measurementInteraction.lengthUnit.index = 0
+                if (renderer.measurementInteraction.enabled) {
+                    renderer.measurementInteraction.deactivate()
+                }
             }
         }
 
@@ -228,6 +232,10 @@ MainWindowTest {
             let renderer = _setupCompletedMeasurement()
             let measurement = renderer.measurementInteraction
 
+            // Pin the unit to metres so the expected strings are deterministic
+            // (the selection persists across runs via QSettings).
+            measurement.lengthUnit.index = 0
+
             verify(measurement.distance >= 10.0,
                    "Need a >=10 m measurement to exercise the bug (got "
                    + measurement.distance + " m)")
@@ -257,13 +265,13 @@ MainWindowTest {
                      + " padding " + distField.leftPadding + "/" + distField.rightPadding
                      + " vs contentWidth " + distField.contentWidth)
 
-            // The on-line chip uses one decimal — this is the readout in the
-            // user's report ("14.2" -> "4.2"). Its label and background must both
-            // be comfortably wider than the text.
+            // The on-line chip mirrors the panel: the selected unit at two
+            // decimals. Its label and background must both be comfortably wider
+            // than the text (the original "14.2" -> "4.2" truncation report).
             let chip = _findByObjectName(renderer, "measurementLineDistanceLabel")
             verify(chip !== null, "On-line distance chip found")
-            compare(chip.text, qsTr("%1 m").arg(Number(measurement.distance).toFixed(1)),
-                    "Chip shows the full distance string")
+            tryCompare(chip, "text", qsTr("%1 m").arg(Number(measurement.distance).toFixed(2)),
+                       1000, "Chip shows the full distance string in the selected unit")
             verify(chip.parent.width >= chip.contentWidth + 2.0,
                    "Chip background has no margin for its text: rect " + chip.parent.width
                    + " vs contentWidth " + chip.contentWidth)
@@ -385,6 +393,50 @@ MainWindowTest {
                        "Clipboard line '" + line
                        + "' diverges from the on-screen readout\n" + clip)
             }
+        }
+
+        // #564: the readout carries a length-unit selector shared by every length
+        // row, the on-line chip, and the clipboard. Switching it reconverts the
+        // displayed values in place, and the selector reflects the property both
+        // ways. The conversion numerics are covered by the [cwMeasurementInteraction]
+        // C++ test; here we verify the view wiring.
+        function test_lengthUnitSelector() {
+            let renderer = _setupCompletedMeasurement()
+            let measurement = renderer.measurementInteraction
+
+            let popup = renderer.measurementReadoutPopup
+            verify(popup !== null, "Readout popup exposed")
+            popup.collapsed = false
+            tryVerify(() => popup.visible === true, 1000, "Readout popup visible")
+
+            let combo = _findByObjectName(popup.contentItem, "measurementLengthUnitCombo")
+            verify(combo !== null, "Length unit selector found")
+            let distField = _findByObjectName(popup.contentItem, "measurementDistanceValue")
+            verify(distField !== null, "Distance value field found")
+
+            // Metres: the selector reflects the property and the value is the raw
+            // metres (settings persist across runs, so drive from a known unit).
+            measurement.lengthUnit.index = 0
+            tryCompare(combo, "unit", 0, 1000, "Selector reflects metres")
+            let metersText = qsTr("%1 m").arg(Number(measurement.distance).toFixed(2))
+            tryCompare(distField, "text", metersText, 1000, "Distance shows metres")
+
+            // Switching to feet reconverts every length row in place.
+            measurement.lengthUnit.index = 2
+            tryCompare(combo, "unit", 2, 1000, "Selector reflects feet")
+            let feetText = qsTr("%1 ft").arg(Number(measurement.lengthUnit.fromMeters(measurement.distance)).toFixed(2))
+            tryCompare(distField, "text", feetText, 1000, "Distance reconverts to feet")
+            // The magnitude actually grew (feet < metre), proving a real
+            // reconversion rather than just a swapped suffix.
+            verify(parseFloat(feetText) > parseFloat(metersText),
+                   "Feet magnitude should exceed metres for the same distance")
+
+            // The clipboard follows the same selection, so a paste agrees with the
+            // panel regardless of the chosen unit.
+            measurement.copyToClipboard()
+            let clip = TestHelper.clipboardText()
+            verify(clip.indexOf("Straight-line (3D): " + feetText) !== -1,
+                   "Clipboard distance uses the selected unit\n" + clip)
         }
     }
 }

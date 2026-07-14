@@ -25,23 +25,30 @@ QC.Popup {
     // header button overrides (assigning here breaks this binding, as intended).
     property bool collapsed: root.parent ? root.parent.width < root._narrowWidth : false
 
-    // v1 reports canonical SI (metres, degrees), matching copyToClipboard();
-    // user-unit formatting is a documented follow-up.
+    // Lengths render in the user-selected unit (shared with the clipboard via
+    // cwMeasurementInteraction). Reading the lengthUnit.name property re-evaluates
+    // these bindings when the unit selector changes; fromMeters() is a plain
+    // invokable QML can't track, but it re-runs on that re-evaluation.
     function _length(meters) {
-        return qsTr("%1 m").arg(Number(meters).toFixed(root._lengthPrecision))
+        let value = root.interaction.lengthUnit.fromMeters(meters)
+        return qsTr("%1 %2").arg(Number(value).toFixed(root._lengthPrecision))
+                            .arg(root.interaction.lengthUnit.name)
     }
 
     function _angle(degrees) {
         return qsTr("%1°").arg(Number(degrees).toFixed(root._anglePrecision))
     }
 
-    // Signed metres for the by-axis components, where the sign carries the
+    // Signed length for the by-axis components, where the sign carries the
     // direction (east/west, north/south, up/down). Positive gets an explicit
     // '+'; a value that rounds to zero shows no sign — parseFloat collapses a
-    // "-0.00" round-down to -0, which _length then renders as a clean "0.00".
+    // "-0.00" round-down to -0, which toFixed then renders as a clean "0.00".
     function _signedLength(meters) {
-        let rounded = parseFloat(Number(meters).toFixed(root._lengthPrecision))
-        return (rounded > 0 ? "+" : "") + root._length(rounded)
+        let value = root.interaction.lengthUnit.fromMeters(meters)
+        let rounded = parseFloat(Number(value).toFixed(root._lengthPrecision))
+        return (rounded > 0 ? "+" : "")
+               + qsTr("%1 %2").arg(Number(rounded).toFixed(root._lengthPrecision))
+                              .arg(root.interaction.lengthUnit.name)
     }
 
     // The azimuth value's tooltip: the reason when n/a, otherwise the
@@ -164,6 +171,16 @@ QC.Popup {
                 color: Theme.text
                 font.bold: true
                 Layout.fillWidth: true
+            }
+
+            // One length unit for every length readout (and the clipboard). Hidden
+            // when collapsed to keep the distance chip minimal.
+            UnitCombo {
+                objectName: "measurementLengthUnitCombo"
+                visible: !root.collapsed
+                unitModel: root.interaction.lengthUnit.names
+                unit: root.interaction.lengthUnit.index
+                onNewUnit: (unit) => { root.interaction.lengthUnit.index = unit }
             }
 
             QC.ToolButton {
