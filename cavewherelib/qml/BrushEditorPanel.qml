@@ -12,12 +12,13 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// Commit 9, phase 1 — the brush editor "thin loop". A panel docked beside the
-// live sketch: it owns a BrushEditor working copy, shows the brush's layer/rule
-// structure with enable/disable checkboxes, and feeds a preview snapshot into
-// the real SketchCanvas so toggles re-skin the sketch immediately. Discard
-// reverts; Apply commits (Duplicate & Save on a read-only palette). Read-only
-// structure only — add/remove/reorder and param editing are phase 2.
+// Commit 9 — the brush editor. A panel docked beside the live sketch: it owns a
+// BrushEditor working copy, shows the brush's layer/rule structure, and feeds a
+// preview snapshot into the real SketchCanvas so edits re-skin the sketch
+// immediately. The structure is editable (enable/disable, add/remove/reorder
+// rules and layers, per-layer glyph selection); Discard reverts and Apply
+// commits (Duplicate & Save on a read-only palette). Rule param editing is the
+// remaining phase-2 piece.
 QQ.Rectangle {
     id: panel
 
@@ -432,14 +433,19 @@ QQ.Rectangle {
                         }
                     }
 
-                    QC.Label {
+                    // The layer's glyph: a stamp layer names a glyph, a line
+                    // layer names none. Tapping opens a picker that swaps the
+                    // glyph or clears it back to a line layer (the label IS the
+                    // glyph machine name, so the row re-reads on change).
+                    GlyphPicker {
                         visible: treeDelegateId.isLayer
-                        text: treeDelegateId.label === "" ? "Line layer" : treeDelegateId.label
+                        objectName: "layerGlyphPicker_" + treeDelegateId.layerIndex
+                        palette: editorId.palette
+                        currentGlyphName: treeDelegateId.label
                         opacity: treeDelegateId.isLayerDragSource ? 0.4 : 1.0
-                        color: Theme.textSubtle
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeCaption
                         Layout.fillWidth: true
+
+                        onGlyphSelected: (name) => editorId.setLayerGlyph(treeDelegateId.layerIndex, name)
                     }
 
                     // Add a rule to this layer, picked from the registry. The rule

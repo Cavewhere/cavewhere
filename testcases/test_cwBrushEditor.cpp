@@ -534,6 +534,101 @@ TEST_CASE("addLayer/removeLayer/moveLayer edit the layer stack, dirtying the cop
     CHECK(editor.layerLabel(kTickLayer) == tickLabel);
 }
 
+TEST_CASE("setLayerGlyph edits a layer's glyph on the working copy only, marking it dirty",
+          "[cwBrushEditor]")
+{
+    cwSymbologyPalette palette;
+    seedWritable(palette);
+
+    cwBrushEditor editor;
+    editor.setPalette(&palette);
+    editor.loadBrushNamed(cwSymbologyPaletteSeed::floorStepBrushName());
+
+    // A glyph swap is a content change on the layer row: a targeted dataChanged,
+    // never a row insert/remove or a tree-collapsing reset.
+    QSignalSpy dataChangedSpy(editor.structureModel(), &QAbstractItemModel::dataChanged);
+    QSignalSpy resetSpy(editor.structureModel(), &QAbstractItemModel::modelReset);
+    QSignalSpy insertSpy(editor.structureModel(), &QAbstractItemModel::rowsInserted);
+    QSignalSpy removeSpy(editor.structureModel(), &QAbstractItemModel::rowsRemoved);
+    QSignalSpy paletteBrushSpy(&palette, &cwSymbologyPalette::brushChanged);
+
+    const QString glyph = cwSymbologyPaletteSeed::floorStepTickGlyphName();
+    REQUIRE(editor.layerLabel(0).isEmpty());            // layer 0 ships as a line layer
+    const QString tick = editor.layerLabel(kTickLayer); // layer 1 names the tick glyph
+    REQUIRE_FALSE(tick.isEmpty());
+
+    editor.setLayerGlyph(0, glyph);
+
+    CHECK(editor.isDirty());
+    CHECK(editor.layerLabel(0) == glyph);
+    CHECK(dataChangedSpy.count() >= 1);
+    CHECK(resetSpy.count() == 0);
+    CHECK(insertSpy.count() == 0);
+    CHECK(removeSpy.count() == 0);
+
+    // The palette is untouched until apply().
+    CHECK(paletteBrushSpy.count() == 0);
+    const auto stored = palette.brush(cwSymbologyPaletteSeed::floorStepBrushName());
+    REQUIRE(stored.has_value());
+    CHECK(stored->decorations.at(0).glyphName.isEmpty());
+
+    // A no-op (same glyph) and an out-of-range layer emit nothing.
+    const int afterSet = dataChangedSpy.count();
+    editor.setLayerGlyph(0, glyph);
+    editor.setLayerGlyph(99, glyph);
+    CHECK(dataChangedSpy.count() == afterSet);
+
+    // Clearing a stamp layer's glyph turns it back into a line layer (an edit).
+    editor.setLayerGlyph(kTickLayer, QString());
+    CHECK(editor.layerLabel(kTickLayer).isEmpty());
+    CHECK(editor.isDirty());
+
+    // Discard restores both layers' loaded glyphs.
+    editor.discard();
+    CHECK_FALSE(editor.isDirty());
+    CHECK(editor.layerLabel(0).isEmpty());
+    CHECK(editor.layerLabel(kTickLayer) == tick);
+}
+
+TEST_CASE("setLayerGlyph updates the glyph validation on the layer row",
+          "[cwBrushEditor]")
+{
+    cwBrushStructureModel model;
+    model.setAvailableGlyphNames({QStringLiteral("tick")});
+    // A stamp-terminal layer (Rigid stamp) naming the available glyph is clean.
+    model.setBrush(makeBrush({QStringLiteral("Uniform spacing"),
+                              QStringLiteral("Align to tangent"),
+                              QStringLiteral("Rigid stamp")},
+                             QStringLiteral("tick")));
+
+    const QModelIndex layer = model.index(0, 0);
+    REQUIRE(model.data(layer, cwBrushStructureModel::RuleErrorSeverityRole).toInt()
+            == cwError::NoError);
+
+    // Clearing the glyph: a stamp layer with no glyph draws nothing (warning).
+    REQUIRE(model.setLayerGlyph(0, QString()));
+    CHECK(model.data(layer, cwBrushStructureModel::RuleErrorSeverityRole).toInt()
+          == cwError::Warning);
+    CHECK(model.data(layer, cwBrushStructureModel::RuleErrorCodesRole)
+              .value<QList<int>>()
+              .contains(static_cast<int>(SymbologyError::StampsWithoutGlyph)));
+
+    // Naming a glyph the palette doesn't have: missing-glyph (warning).
+    REQUIRE(model.setLayerGlyph(0, QStringLiteral("ghost")));
+    CHECK(model.data(layer, cwBrushStructureModel::RuleErrorCodesRole)
+              .value<QList<int>>()
+              .contains(static_cast<int>(SymbologyError::MissingGlyph)));
+
+    // Back to the available glyph: clean again (revalidation fires on each set).
+    REQUIRE(model.setLayerGlyph(0, QStringLiteral("tick")));
+    CHECK(model.data(layer, cwBrushStructureModel::RuleErrorSeverityRole).toInt()
+          == cwError::NoError);
+
+    // A no-op set and an out-of-range layer change nothing.
+    CHECK_FALSE(model.setLayerGlyph(0, QStringLiteral("tick")));
+    CHECK_FALSE(model.setLayerGlyph(99, QStringLiteral("tick")));
+}
+
 TEST_CASE("apply on a read-only palette without a project leaves it untouched",
           "[cwBrushEditor]")
 {

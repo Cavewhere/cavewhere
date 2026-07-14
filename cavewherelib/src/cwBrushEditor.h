@@ -116,6 +116,12 @@ public:
     Q_INVOKABLE void removeLayer(int layerIndex);
     Q_INVOKABLE void moveLayer(int fromLayerIndex, int toLayerIndex);
 
+    // Set a decoration layer's glyph reference (empty clears it back to a line
+    // layer), then re-push the preview. Out-of-range / no-op requests are
+    // ignored. The structure model emits the layer row's content change; this
+    // layer owns the dirty/preview side effects.
+    Q_INVOKABLE void setLayerGlyph(int layerIndex, const QString &glyphName);
+
     // The add-rule picker's data: rules grouped by category (derived from each
     // rule's stage), in pipeline order. Each group is { "category": QString,
     // "rules": [ { "name": QString, "description": QString }, ... ] }.

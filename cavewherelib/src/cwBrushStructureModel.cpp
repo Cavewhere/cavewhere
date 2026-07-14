@@ -718,6 +718,30 @@ bool cwBrushStructureModel::moveLayer(int fromLayerIndex, int toLayerIndex)
     return true;
 }
 
+bool cwBrushStructureModel::setLayerGlyph(int layerIndex, const QString &glyphName)
+{
+    if (!layerInRange(layerIndex)) {
+        return false;
+    }
+    if (m_brush.decorations.at(layerIndex).glyphName == glyphName) {
+        return false;
+    }
+
+    cwDecorationLayer layer = m_brush.decorations.at(layerIndex);
+    layer.glyphName = glyphName;
+    m_brush.decorations.replace(layerIndex, layer);
+
+    // The layer label is its glyph name, so the layer row's label changes; the
+    // tree shape does not (a glyph swap adds/removes no rows).
+    const QModelIndex layerRow = index(layerIndex, 0, QModelIndex());
+    emit dataChanged(layerRow, layerRow, {LabelRole, Qt::DisplayRole});
+    // The glyph reference feeds the validator (missing-glyph / stamps-without-
+    // glyph), so an error can appear or clear anywhere in the layer.
+    revalidate();
+    emitLayerErrorRolesChanged(layerIndex);
+    return true;
+}
+
 int cwBrushStructureModel::layerRowForId(quintptr id) const
 {
     return static_cast<int>(m_layerIds.indexOf(id));

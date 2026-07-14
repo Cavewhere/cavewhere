@@ -253,6 +253,18 @@ void cwBrushEditor::moveLayer(int fromLayerIndex, int toLayerIndex)
     pushPreview();
 }
 
+void cwBrushEditor::setLayerGlyph(int layerIndex, const QString &glyphName)
+{
+    if (!m_loaded) {
+        return;
+    }
+    if (!m_structureModel->setLayerGlyph(layerIndex, glyphName)) {
+        return;
+    }
+    recomputeDirty();
+    pushPreview();
+}
+
 QVariantList cwBrushEditor::availableRuleGroups() const
 {
     // Sort by stage so each category is contiguous and the groups come out in

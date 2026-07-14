@@ -643,6 +643,33 @@ Item {
             editor.discard()
         }
 
+        // A layer's glyph picker swaps or clears the layer's glyph. The popup's
+        // always-present "Line layer (no glyph)" header row clears it
+        // deterministically (no scrolling to an off-screen glyph row needed).
+        function test_layerGlyphPickerClearsGlyphToLineLayer() {
+            const editor = openEditorOnFloorStep()
+
+            // Layer 1 is the tick (stamp) layer; it ships naming a glyph.
+            verify(editor.layerLabel(1) !== "", "the tick layer starts with a glyph")
+
+            tryVerify(() => findChild(rootId, "layerGlyphPicker_1") !== null, 2000,
+                      "the tick layer's glyph picker exists")
+            mouseClick(findChild(rootId, "layerGlyphPicker_1"))
+
+            // The clear row is the popup's header (always present); the popup
+            // reparents to a popup layer, so reach it from the scene root.
+            tryVerify(() => findChild(sceneRoot(), "layerGlyphClearRow") !== null, 2000,
+                      "the glyph picker popup opens with a clear row")
+            mouseClick(findChild(sceneRoot(), "layerGlyphClearRow"))
+
+            tryVerify(() => editor.layerLabel(1) === "", 2000,
+                      "clearing the glyph turns the layer into a line layer")
+            verify(editor.dirty, "changing a layer's glyph dirties the working copy")
+
+            editor.discard()
+            tryVerify(() => editor.layerLabel(1) !== "", 2000, "Discard restores the glyph")
+        }
+
         function test_symbologyErrorEnumExposedToQml() {
             // The validation codes the model puts in ruleErrorCodes are exposed as
             // a named QML enum so a fix-it UI can dispatch on problem kind without

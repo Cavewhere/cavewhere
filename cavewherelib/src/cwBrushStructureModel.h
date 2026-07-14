@@ -130,6 +130,14 @@ public:
     // a rule move, which only matters within its stage).
     bool moveLayer(int fromLayerIndex, int toLayerIndex);
 
+    // Set a layer's glyph reference (empty == a line layer). A content change
+    // only, not a structural one: it emits a narrow dataChanged on the layer
+    // row's label (the layer label is its glyph name) plus the error roles a
+    // changed glyph reference can shift (missing-glyph / stamps-without-glyph),
+    // never a row insert/remove. Returns false (no change, no signal) on an
+    // out-of-range or no-op request.
+    bool setLayerGlyph(int layerIndex, const QString &glyphName);
+
 signals:
     void layerCountChanged();
 
