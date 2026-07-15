@@ -24,6 +24,7 @@
 
 // Our includes
 #include "cwGlobals.h"
+#include "cwCompressedImage.h"
 #include "cwLabelPlacementControl.h"
 #include "cwSpatialHashGrid2D.h"
 
@@ -65,8 +66,9 @@ public:
     // Lightweight aggregate counters for profiling the placement hot path,
     // read via stats() (opt-in: cwCaptureViewport logs them when the
     // CW_PROFILE_CAPTURE env var is set). Every field is a plain accumulator
-    // incremented during placeLabel(), so they cost nothing beyond an integer
-    // add in the inner loops and reading them is free.
+    // incremented during placeLabel(), window builds, and tile-mask builds,
+    // so they cost nothing beyond an integer add (or one QElapsedTimer read
+    // per window build) and reading them is free.
     struct Stats {
         int    placeCalls         = 0; // placeLabel() invocations
         int    placed             = 0; // placements that succeeded
@@ -81,6 +83,10 @@ public:
         int    windowsBuilt       = 0; // DT window (re)builds — thrash detector
         qint64 windowCellsBuilt   = 0; // total cells rasterized + transformed
         qint64 maxWindowCells     = 0; // largest single window DT allocation
+        int    tileMasksBuilt     = 0; // tiles whose inked-cell mask was materialized
+        qint64 tileMaskBytes      = 0; // total compressed mask bytes retained
+        qint64 windowRasterMs     = 0; // buildWindow: fill + mask/rect rasterization
+        qint64 windowDtMs         = 0; // buildWindow: the distance transform itself
     };
 
     // Helper: when the placer returns a rect tightly sized to glyph ink and
@@ -135,6 +141,14 @@ public:
     void addTileAlpha(const QImage& tileImage,
                       const QPointF& tilePosParent,
                       qreal tileScale);
+    // Same obstacle source as addTileAlpha, but fed a zlib-compressed image
+    // (see cwCompressedImageItem) so export tiles never have to exist raw on
+    // this side. The pixels are decompressed exactly once — the first time a
+    // DT window overlapping the tile is built — to derive the tile's
+    // inked-cell mask, then dropped.
+    void addCompressedTileAlpha(const cwCompressedImage& tileImage,
+                                const QPointF& tilePosParent,
+                                qreal tileScale);
     void addObstacleRect(const QRectF& rectParent);
 
     void finalize();
@@ -191,13 +205,29 @@ private:
         qreal  thickness;
     };
 
-    // A rendered tile's alpha, recorded by addTileAlpha and rasterized into
-    // each DT window it overlaps when that window is built. QImage is
-    // implicitly shared, so this holds a handle, not a pixel copy.
+    // A rendered tile's alpha, recorded by addTileAlpha (raw QImage handle,
+    // implicitly shared) or addCompressedTileAlpha (cwCompressedImage). The pixels are
+    // read once, lazily: the first DT window build that overlaps the tile's
+    // cell bbox scans them into `maskBits` — a qCompress'd bitmap of the
+    // tile's inked cells, row-major over its clamped cell bbox — and releases both pixel
+    // sources. Later window builds OR the mask straight into the DT, so no
+    // tile's pixels are ever decompressed or scanned twice, and tiles no
+    // window touches (fully culled regions) are never materialized at all.
     struct TileAlphaSource {
-        QImage  image;
+        QImage            image;      // raw source (empty on the compressed path)
+        cwCompressedImage compressed; // compressed source (null on the raw path)
+        QSize   sizePixels;
         QPointF pos;
         qreal   scale = 1.0;
+        // Cell-space bbox of the tile, clamped to the page (computed on add).
+        int cellX0 = 0;
+        int cellY0 = 0;
+        int cellX1 = 0;
+        int cellY1 = 0;
+        // Lazily built inked-cell bitmap over the bbox (row-major, bit set =
+        // cell contains alpha above the threshold), qCompress'd.
+        bool       maskBuilt = false;
+        QByteArray maskBits;
     };
 
     QRectF              m_bounds;
@@ -270,7 +300,9 @@ private:
     int spiralReachCells(const QSizeF& labelSize) const;
     void ensureWindowFor(int anchorCellX, int anchorCellY, int reachCells);
     void buildWindow(int x0, int y0, int x1, int y1);
-    void rasterizeTileAlpha(const TileAlphaSource& tile);
+    void appendTileSource(TileAlphaSource&& tile);
+    void ensureTileMask(TileAlphaSource& tile);
+    void rasterizeTileMask(const TileAlphaSource& tile);
     void rasterizeObstacleRect(const QRectF& rectParent);
 };
 

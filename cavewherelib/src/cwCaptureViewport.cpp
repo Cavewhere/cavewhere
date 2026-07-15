@@ -14,6 +14,7 @@
 
 //Std includes
 #include <memory>
+#include <cstring>
 
 //Our includes
 #include "cwCaptureViewport.h"
@@ -26,6 +27,9 @@
 #include "cwCaptureLabelPlacer.h"
 #include "cwCaptureLeadLines.h"
 #include "cwGraphicsImageItem.h"
+#include "cwCompressedImage.h"
+#include "cwCompressedImageItem.h"
+#include "cwMemoryUsage.h"
 #include "cwDebug.h"
 #include "cwGlobals.h"
 #include "cwScaleBarItem.h"
@@ -48,11 +52,14 @@ namespace {
 // profiling timers never start, so there is no cost.
 constexpr const char* ProfileCaptureEnvVar = "CW_PROFILE_CAPTURE";
 
-// A rendered tile's alpha channel, snapshotted on the GUI thread and fed to the
-// placer on the worker thread. QImage is implicitly shared, so this copies only
-// a handle; the worker reads the pixels but never mutates them.
+// A rendered tile's alpha channel, snapshotted on the GUI thread and fed to
+// the placer on the worker thread. Preview tiles arrive as a raw QImage;
+// export tiles as the cwCompressedImage their cwCompressedImageItem holds.
+// Both are implicitly shared, so this copies handles; the worker reads but
+// never mutates them.
 struct TileAlphaInput {
-    QImage  image;
+    QImage            image;      // preview tiles
+    cwCompressedImage compressed; // export tiles
     QPointF pos;
     qreal   scale = 1.0;
 };
@@ -78,6 +85,10 @@ struct LabelPlacementInput {
     cwCaptureCenterline* centerline = nullptr;
     cwCaptureLeads*      leads      = nullptr;
     bool profile     = false;
+    // Grab-phase tile compression totals, copied in for the profile log so a
+    // real export reports its actual compression ratio.
+    qint64 rawTileBytes        = 0;
+    qint64 compressedTileBytes = 0;
 };
 
 // Z-values define stacking order of overlays drawn on top of the rendered map tiles.
@@ -95,6 +106,14 @@ constexpr qreal ScaleBarZValue = 2000.0;
 constexpr qreal PlacerMaskCellPaperPx = 2.0;
 constexpr qreal PlacerLabelMarginPaperPx = 3.0;
 constexpr qreal StationDotObstacleMarginPaperPx = 1.0;
+
+// CW_PROFILE_CAPTURE memory-trace cadence: log the process footprint every
+// this many grabbed tiles / placed labels, so an export that dies of memory
+// still shows WHICH phase was climbing and what it was proportional to.
+constexpr int ProfileTileLogInterval  = 100;
+constexpr int ProfileLabelLogInterval = 5000;
+
+double toMB(qint64 bytes) { return bytes / (1024.0 * 1024.0); }
 }
 
 cwCaptureViewport::cwCaptureViewport(QObject *parent) :
@@ -198,6 +217,8 @@ void cwCaptureViewport::capture()
     CapturingImages = true;
     m_cancelRequested = false;
     m_runIsPreview = previewCapture();
+    m_rawTileBytes = 0;
+    m_compressedTileBytes = 0;
 
     //QRect::isEmpty() (unlike QSize::isValid(), which accepts 0x0) rejects a
     //zero-area viewport — which would otherwise build an empty tile-job list
@@ -303,9 +324,25 @@ void cwCaptureViewport::capture()
         runData->captureCamera->setViewport(job.viewport);
 
         auto grabResult = view()->grabToImage(job.viewport.size());
-        connect(grabResult.get(), &QQuickItemGrabResult::ready, this, [capturedImage, job, grabResult, this](){
-            //Call CaptureImage
-            (*capturedImage)(job, grabResult->image());
+        connect(grabResult.get(), &QQuickItemGrabResult::ready, this,
+                [capturedImage, job, grabResult, this]() mutable {
+            const QImage image = grabResult->image();
+
+            // Release the grab result NOW instead of letting this connection's
+            // closure retain it until the viewport is destroyed — that
+            // retention held every tile's ~17 MB result alive and leaked
+            // ~18 MB per tile across an export (hundreds of GB on a
+            // whole-page run, regardless of tile discard/compression). We are
+            // inside the result's own ready() emission and its shared pointer
+            // deletes with a plain `delete` (qquickitemgrabresult.cpp), so
+            // dropping the last reference here would destroy the signal
+            // sender mid-emit: park it in a queued no-op instead — the event
+            // loop drops it (and with it this connection, whose sender dies)
+            // on the next pass. `image` stays valid; it shares the pixel data.
+            QMetaObject::invokeMethod(this, [result = std::move(grabResult)]() {},
+                                      Qt::QueuedConnection);
+
+            (*capturedImage)(job, image);
         });
     };
 
@@ -336,29 +373,10 @@ void cwCaptureViewport::capture()
 
         QGraphicsItemGroup* parent = m_runIsPreview ? PreviewItem : Item;
 
-        // A fully transparent tile renders nothing and seeds no obstacle
-        // alpha, so keeping it only wastes memory — and on a sparse whole-cave
-        // export MOST tiles are empty, so dropping them bounds tile RAM to the
-        // ink instead of the page area. An inked tile exits the scan at its
-        // first opaque pixel, so the common case costs almost nothing. Export
-        // only: the preview's bounding box is derived from its tile items, so
-        // preview tiles (few, screen-sized) are always kept.
-        auto tileHasInk = [](const QImage& img) {
-            if(img.format() != QImage::Format_ARGB32
-               && img.format() != QImage::Format_ARGB32_Premultiplied) {
-                return true; // not a QRgb-alpha format — keep rather than guess
-            }
-            for(int y = 0; y < img.height(); y++) {
-                const QRgb* row = reinterpret_cast<const QRgb*>(img.constScanLine(y));
-                for(int x = 0; x < img.width(); x++) {
-                    if(qAlpha(row[x]) != 0) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        };
-        if(m_runIsPreview || tileHasInk(image)) {
+        if(m_runIsPreview) {
+            // Preview tiles are few and screen-sized, and repaint interactively
+            // in the layout scene, so they stay raw. (They are also always
+            // kept: the preview's bounding box derives from its tile items.)
             cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
             QImage correctedImage = image;
             correctedImage.setDevicePixelRatio(1.0);
@@ -366,6 +384,59 @@ void cwCaptureViewport::capture()
             graphicsImage->setPos(job.origin);
             graphicsImage->setScale(1.0 / image.devicePixelRatio());
             parent->addToGroup(graphicsImage);
+        } else {
+            // Export tiles are what ran whole-page exports out of application
+            // memory: O(page area) of raw pixels held until saveScene renders
+            // them, exactly once. So: normalize to a known QRgb format (the
+            // RHI readback behind grabToImage is already ARGB32_Premultiplied
+            // on Metal — the conversion only fires on foreign backends whose
+            // byte order a raw QRgb scan would misread), drop fully
+            // transparent tiles (on a sparse whole-cave page that is MOST of
+            // them — the ink scan exits at the first opaque pixel), and store
+            // the survivors zlib-compressed. Transparent premultiplied pixels
+            // are zero runs, so inked tiles shrink by orders of magnitude.
+            const QImage normalized =
+                (image.format() == QImage::Format_ARGB32
+                 || image.format() == QImage::Format_ARGB32_Premultiplied)
+                    ? image
+                    : image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+            auto tileHasInk = [](const QImage& img) {
+                if(img.format() == QImage::Format_ARGB32_Premultiplied) {
+                    // Premultiplied guarantees alpha 0 ⟹ an all-zero pixel
+                    // word, so the overwhelmingly common case on a sparse
+                    // page — a fully transparent tile — reduces to comparing
+                    // each row against a zero row instead of per-pixel alpha
+                    // reads on the GUI thread.
+                    const qsizetype rowBytes = qsizetype(img.width())
+                                               * qsizetype(sizeof(QRgb));
+                    const QByteArray zeroRow(rowBytes, '\0');
+                    for(int y = 0; y < img.height(); y++) {
+                        if(memcmp(img.constScanLine(y), zeroRow.constData(),
+                                  size_t(rowBytes)) != 0) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                for(int y = 0; y < img.height(); y++) {
+                    const QRgb* row = reinterpret_cast<const QRgb*>(img.constScanLine(y));
+                    for(int x = 0; x < img.width(); x++) {
+                        if(qAlpha(row[x]) != 0) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+            if(tileHasInk(normalized)) {
+                auto* tileItem = new cwCompressedImageItem(parent);
+                tileItem->setImage(normalized);
+                tileItem->setPos(job.origin);
+                tileItem->setScale(1.0 / image.devicePixelRatio());
+                parent->addToGroup(tileItem);
+                m_rawTileBytes        += tileItem->compressedImage().rawSizeInBytes();
+                m_compressedTileBytes += tileItem->compressedImage().compressedData().size();
+            }
         }
 
         //For debugging tiles
@@ -380,6 +451,22 @@ void cwCaptureViewport::capture()
         // textItem->setPos(tileRect.center());
 
         NumberOfImagesProcessed++;
+
+        // Memory trace for whole-page export debugging: a run that dies of
+        // memory never reaches the end-of-run profile line, so emit the
+        // trajectory as the grab progresses — footprint should stay flat
+        // while the compressed total grows slowly; whichever counter climbs
+        // with it is the leak.
+        if(!m_runIsPreview
+           && NumberOfImagesProcessed % ProfileTileLogInterval == 0
+           && qEnvironmentVariableIsSet(ProfileCaptureEnvVar)) {
+            qDebug() << "[cwCaptureViewport profile] tile grab —"
+                     << "processed" << NumberOfImagesProcessed << "/" << (Rows * Columns)
+                     << "kept" << parent->childItems().size()
+                     << "tileRawMB" << toMB(m_rawTileBytes)
+                     << "tileCompressedMB" << toMB(m_compressedTileBytes)
+                     << "footprintMB" << cwMemoryUsage::physFootprintMB();
+        }
 
         if(NumberOfImagesProcessed == Rows * Columns) {
             //Finished capturing tiles. CapturingImages stays true through the
@@ -727,26 +814,42 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
     const double itemSetScale = m_runIsPreview ? ItemScale : hiResScale;
     const int exportDpi = qMax(1, qRound(1.0 / itemSetScale));
 
-    // Find the parent-coord bounds covering every tile. Each cwGraphicsImageItem
-    // has pos() in parent coords and scale() that maps its pixel size to its
-    // parent-coord extent (typically 1.0 / devicePixelRatio).
+    // Snapshot every tile (both go to the worker as implicitly shared
+    // handles) and find the parent-coord bounds covering them. Previews hold
+    // raw cwGraphicsImageItem tiles; exports hold cwCompressedImageItem tiles
+    // whose zlib blob the placer decompresses once, lazily. Each item's pos()
+    // is in parent coords and scale() maps its pixel size to its parent-coord
+    // extent (typically 1.0 / devicePixelRatio).
     QRectF parentBounds;
-    QList<cwGraphicsImageItem*> tiles;
+    QVector<TileAlphaInput> tileInputs;
     const QList<QGraphicsItem*> children = parent->childItems();
+    tileInputs.reserve(children.size());
     for(QGraphicsItem* child : children) {
-        auto* tile = dynamic_cast<cwGraphicsImageItem*>(child);
-        if(tile == nullptr) {
+        TileAlphaInput tileInput;
+        if(auto* rawTile = dynamic_cast<cwGraphicsImageItem*>(child)) {
+            const QImage img = rawTile->image();
+            if(img.isNull()) {
+                continue;
+            }
+            tileInput.image = img;
+        } else if(auto* compressedTile = dynamic_cast<cwCompressedImageItem*>(child)) {
+            const cwCompressedImage compressed = compressedTile->compressedImage();
+            if(compressed.isNull()) {
+                continue;
+            }
+            tileInput.compressed = compressed;
+        } else {
             continue;
         }
-        tiles.append(tile);
-        const qreal tileScale = tile->scale();
-        const QImage img = tile->image();
-        if(img.isNull()) {
-            continue;
-        }
-        const QRectF tileRect(tile->pos(),
-                              QSizeF(img.width() * tileScale, img.height() * tileScale));
+        tileInput.pos   = child->pos();
+        tileInput.scale = child->scale();
+        const QSize sizePixels = tileInput.image.isNull()
+                                     ? tileInput.compressed.size()
+                                     : tileInput.image.size();
+        const QRectF tileRect(tileInput.pos,
+                              QSizeF(sizePixels) * tileInput.scale);
         parentBounds = parentBounds.isEmpty() ? tileRect : parentBounds.united(tileRect);
+        tileInputs.append(tileInput);
     }
     // Anchor the bounds to the full page rect: empty (fully transparent)
     // tiles are discarded at capture time, so the tile union alone could
@@ -772,14 +875,16 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
     input->labelMarginLocal = PlacerLabelMarginPaperPx * paperPxToLocal;
     input->profile          = profile;
 
-    // Snapshot the tile alpha on the GUI thread (implicitly shared; cheap).
-    input->tiles.reserve(tiles.size());
-    for(cwGraphicsImageItem* tile : std::as_const(tiles)) {
-        const QImage img = tile->image();
-        if(img.isNull()) {
-            continue;
-        }
-        input->tiles.append(TileAlphaInput{img, tile->pos(), tile->scale()});
+    input->tiles = std::move(tileInputs);
+    input->rawTileBytes        = m_rawTileBytes;
+    input->compressedTileBytes = m_compressedTileBytes;
+
+    if(profile && !m_runIsPreview) {
+        qDebug() << "[cwCaptureViewport profile] tile grab done —"
+                 << "tiles kept" << input->tiles.size()
+                 << "tileRawMB" << toMB(input->rawTileBytes)
+                 << "tileCompressedMB" << toMB(input->compressedTileBytes)
+                 << "footprintMB" << cwMemoryUsage::physFootprintMB();
     }
 
     // Build label items on the GUI thread — QGraphicsItem construction must not
@@ -859,7 +964,11 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         // built lazily per placement window inside placeAll, so its memory is
         // bounded by one window (plus halo) — never the whole page.
         for(const TileAlphaInput& tile : std::as_const(input->tiles)) {
-            placer.addTileAlpha(tile.image, tile.pos, tile.scale);
+            if(!tile.image.isNull()) {
+                placer.addTileAlpha(tile.image, tile.pos, tile.scale);
+            } else {
+                placer.addCompressedTileAlpha(tile.compressed, tile.pos, tile.scale);
+            }
         }
         for(const QRectF& rect : std::as_const(input->obstacleRects)) {
             placer.addObstacleRect(rect);
@@ -879,9 +988,25 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         int processed = 0;
         cwLabelPlacementControl control;
         control.isCanceled = [&promise]() { return promise.isCanceled(); };
-        control.labelProcessed = [&promise, &processed]() {
+        control.labelProcessed = [&promise, &processed, &placer,
+                                  profile = input->profile]() {
             processed++;
             promise.setProgressValue(processed);
+            // Placement-phase memory trace: window builds and tile masks are
+            // the phase's only growing allocations — if the footprint climbs
+            // faster than maskMB, the leak is elsewhere.
+            if(profile && processed % ProfileLabelLogInterval == 0) {
+                const cwCaptureLabelPlacer::Stats& s = placer.stats();
+                qDebug() << "[cwCaptureViewport profile] placing —"
+                         << "labels" << processed
+                         << "windowsBuilt" << s.windowsBuilt
+                         << "windowCellsBuilt" << s.windowCellsBuilt
+                         << "windowRasterMs" << s.windowRasterMs
+                         << "windowDtMs" << s.windowDtMs
+                         << "tileMasksBuilt" << s.tileMasksBuilt
+                         << "tileMaskMB" << toMB(s.tileMaskBytes)
+                         << "footprintMB" << cwMemoryUsage::physFootprintMB();
+            }
         };
 
         // Measure every label up front, leads first: within each DT window
@@ -897,7 +1022,13 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         if(input->centerline != nullptr) {
             requests += input->centerline->buildLabelRequests(control);
         }
-        if(input->profile) { measureMs = stageTimer.elapsed(); }
+        if(input->profile) {
+            measureMs = stageTimer.elapsed();
+            qDebug() << "[cwCaptureViewport profile] labels measured —"
+                     << "requests" << requests.size()
+                     << "measure(ms)" << measureMs
+                     << "footprintMB" << cwMemoryUsage::physFootprintMB();
+        }
 
         if(promise.isCanceled()) { return; }
 
@@ -917,6 +1048,10 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
             const cwCaptureLabelPlacer::Stats& s = placer.stats();
             qDebug() << "[cwCaptureViewport profile] export label placement (worker) —"
                      << "tiles" << input->tiles.size()
+                     << "tileRawMB" << toMB(input->rawTileBytes)
+                     << "tileCompressedMB" << toMB(input->compressedTileBytes)
+                     << "tileMasksBuilt" << s.tileMasksBuilt
+                     << "tileMaskMB" << toMB(s.tileMaskBytes)
                      << "bounds" << input->parentBounds.size()
                      << "gridCells" << s.gridCells
                      << "| measure(ms)" << measureMs
@@ -924,6 +1059,8 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
                      << "| windowsBuilt" << s.windowsBuilt
                      << "windowCellsBuilt" << s.windowCellsBuilt
                      << "maxWindowCells" << s.maxWindowCells
+                     << "windowRasterMs" << s.windowRasterMs
+                     << "windowDtMs" << s.windowDtMs
                      << "| placeCalls" << s.placeCalls
                      << "placed" << s.placed
                      << "culled" << s.culledByViewport
@@ -936,6 +1073,7 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
                      << "| gridCellsVisited placed" << placer.placedGridCellsVisited()
                      << "line" << placer.lineGridCellsVisited()
                      << "soft" << placer.softGridCellsVisited()
+                     << "| footprintMB" << cwMemoryUsage::physFootprintMB()
                      << LOCATION;
         }
     });

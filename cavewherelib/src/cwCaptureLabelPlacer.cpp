@@ -7,9 +7,11 @@
 
 // Our includes
 #include "cwCaptureLabelPlacer.h"
+#include "cwDebug.h"
 
 // Qt includes
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QHash>
 #include <QtMath>
 
@@ -172,6 +174,11 @@ constexpr qreal kMinGridCellDtCells = 4.0;
 // DT stays tens of MB instead of the page's hundreds of GB.
 constexpr int kDefaultPlacementWindowCells = 2048;
 
+// zlib's fastest level, for the per-tile inked-cell masks. Cave ink is sparse,
+// so the bitmaps are dominated by zero runs — higher levels only add CPU on
+// the placement worker for the same order of shrinkage.
+constexpr int kMaskCompressionLevel = 1;
+
 // Coarsened candidate step along one axis, from the label's extent on that
 // axis. Shared by the placeLabel spiral and spiralReachCells so the window
 // halo always covers the spiral's true footprint.
@@ -290,16 +297,59 @@ void cwCaptureLabelPlacer::addTileAlpha(const QImage& tileImage,
         return;
     }
 
-    // Normalize the format once at record time; window builds then read scan
-    // lines directly however many windows the tile spans. Tiles from
-    // grabToImage are already ARGB32_Premultiplied, so this conversion (a deep
-    // copy) only fires for foreign formats.
+    // Normalize the format once at record time so the mask scan reads QRgb
+    // scan lines directly. Tiles from grabToImage are already
+    // ARGB32_Premultiplied, so this conversion (a deep copy) only fires for
+    // foreign formats.
     const QImage img = (tileImage.format() == QImage::Format_ARGB32
                         || tileImage.format() == QImage::Format_ARGB32_Premultiplied)
                            ? tileImage
                            : tileImage.convertToFormat(QImage::Format_ARGB32);
 
-    m_tileSources.append(TileAlphaSource{img, tilePosParent, tileScale});
+    TileAlphaSource tile;
+    tile.image      = img;
+    tile.sizePixels = img.size();
+    tile.pos        = tilePosParent;
+    tile.scale      = tileScale;
+    appendTileSource(std::move(tile));
+}
+
+void cwCaptureLabelPlacer::addCompressedTileAlpha(const cwCompressedImage& tileImage,
+                                                  const QPointF& tilePosParent,
+                                                  qreal tileScale)
+{
+    if(m_maskW <= 0 || m_maskH <= 0) {
+        return;
+    }
+    if(tileImage.isNull() || tileImage.size().isEmpty() || tileScale <= 0.0) {
+        return;
+    }
+
+    TileAlphaSource tile;
+    tile.compressed = tileImage;
+    tile.sizePixels = tileImage.size();
+    tile.pos        = tilePosParent;
+    tile.scale      = tileScale;
+    appendTileSource(std::move(tile));
+}
+
+void cwCaptureLabelPlacer::appendTileSource(TileAlphaSource&& tile)
+{
+    // Cell-space bbox of the tile, clamped to the page: the min/max cells any
+    // of its pixels can map to (pixel px lands at pos + px * scale, so the
+    // extremes are px = 0 and px = width-1). Window builds use it to skip
+    // non-overlapping tiles without touching their pixels or mask.
+    const qreal invCell = 1.0 / m_cellSize;
+    const qreal left = m_bounds.left();
+    const qreal top  = m_bounds.top();
+    tile.cellX0 = qBound(0, qFloor((tile.pos.x() - left) * invCell), m_maskW);
+    tile.cellY0 = qBound(0, qFloor((tile.pos.y() - top)  * invCell), m_maskH);
+    tile.cellX1 = qBound(0, qFloor((tile.pos.x() + (tile.sizePixels.width()  - 1) * tile.scale
+                                    - left) * invCell) + 1, m_maskW);
+    tile.cellY1 = qBound(0, qFloor((tile.pos.y() + (tile.sizePixels.height() - 1) * tile.scale
+                                    - top)  * invCell) + 1, m_maskH);
+
+    m_tileSources.append(std::move(tile));
     m_windowLoaded = false;
 }
 
@@ -451,18 +501,31 @@ void cwCaptureLabelPlacer::buildWindow(int x0, int y0, int x1, int y1)
     const int h = y1 - y0;
     Q_ASSERT(w > 0 && h > 0);
 
+    QElapsedTimer buildTimer;
+    buildTimer.start();
+
     // fill() only reallocates when the window outgrows the vector's capacity,
     // so consecutive same-shaped windows reuse the buffer.
     m_dt.fill(kLargeSquaredDist, w * h);
 
-    for(const TileAlphaSource& tile : std::as_const(m_tileSources)) {
-        rasterizeTileAlpha(tile);
+    for(TileAlphaSource& tile : m_tileSources) {
+        // Bbox rejection first: tiles that never intersect a built window are
+        // never scanned or decompressed at all (zoomed exports build only the
+        // viewport's windows).
+        if(tile.cellX1 <= x0 || tile.cellX0 >= x1
+           || tile.cellY1 <= y0 || tile.cellY0 >= y1) {
+            continue;
+        }
+        ensureTileMask(tile);
+        rasterizeTileMask(tile);
     }
     for(const QRectF& rect : std::as_const(m_obstacleRects)) {
         rasterizeObstacleRect(rect);
     }
+    m_stats.windowRasterMs += buildTimer.restart();
 
     distanceTransform2D(m_dt, w, h);
+    m_stats.windowDtMs += buildTimer.elapsed();
     m_windowLoaded = true;
 
     const qint64 cells = qint64(w) * qint64(h);
@@ -471,47 +534,127 @@ void cwCaptureLabelPlacer::buildWindow(int x0, int y0, int x1, int y1)
     m_stats.maxWindowCells = qMax(m_stats.maxWindowCells, cells);
 }
 
-void cwCaptureLabelPlacer::rasterizeTileAlpha(const TileAlphaSource& tile)
+void cwCaptureLabelPlacer::ensureTileMask(TileAlphaSource& tile)
 {
-    const QImage& img = tile.image;
-    const int iw = img.width();
-    const int ih = img.height();
-    const int dtW = m_dtX1 - m_dtX0;
+    if(tile.maskBuilt) {
+        return;
+    }
+    tile.maskBuilt = true;
+
+    const int maskW = tile.cellX1 - tile.cellX0;
+    const int maskH = tile.cellY1 - tile.cellY0;
+
+    // Materialize a pixel view: the raw handle when present, otherwise the
+    // decompressed image (decompress() warns and returns null on a corrupt
+    // payload). Both are scoped to this scan; only the (compressed) cell mask
+    // survives it.
+    QImage view = tile.image;
+    if(view.isNull() && !tile.compressed.isNull()) {
+        view = tile.compressed.decompress();
+    }
+    if(view.format() != QImage::Format_ARGB32
+       && view.format() != QImage::Format_ARGB32_Premultiplied
+       && !view.isNull()) {
+        // Foreign format on the compressed path (addTileAlpha normalizes the
+        // raw path on record): convert so the alpha scan can read QRgb rows.
+        view = view.convertToFormat(QImage::Format_ARGB32);
+    }
+
+    if(view.isNull() || maskW <= 0 || maskH <= 0) {
+        tile.image = QImage();
+        tile.compressed = cwCompressedImage();
+        return;
+    }
+
+    QByteArray bits((qsizetype(maskW) * maskH + 7) / 8, '\0');
+    uchar* bitData = reinterpret_cast<uchar*>(bits.data());
+
+    // Local copies of every loop invariant: the store through bitData (a
+    // uchar*, which aliases everything) would otherwise force the compiler to
+    // reload the members each iteration of this every-pixel-of-every-tile scan.
     const qreal invCell = 1.0 / m_cellSize;
     const qreal boundsLeft = m_bounds.left();
     const qreal boundsTop  = m_bounds.top();
-
-    // Clamp the pixel loops to the rows/columns that can land inside the
-    // window's cell range, so building a window only pays for the overlap —
-    // tiles elsewhere on the page cost a bounds computation and nothing more.
-    const qreal winLeft   = boundsLeft + m_dtX0 * m_cellSize;
-    const qreal winTop    = boundsTop  + m_dtY0 * m_cellSize;
-    const qreal winRight  = boundsLeft + m_dtX1 * m_cellSize;
-    const qreal winBottom = boundsTop  + m_dtY1 * m_cellSize;
-    const qreal invScale = 1.0 / tile.scale;
-    const int pyStart = qBound(0, qFloor((winTop    - tile.pos.y()) * invScale),     ih);
-    const int pyEnd   = qBound(0, qCeil ((winBottom - tile.pos.y()) * invScale) + 1, ih);
-    const int pxStart = qBound(0, qFloor((winLeft   - tile.pos.x()) * invScale),     iw);
-    const int pxEnd   = qBound(0, qCeil ((winRight  - tile.pos.x()) * invScale) + 1, iw);
-
-    for(int py = pyStart; py < pyEnd; py++) {
-        const qreal parentY = tile.pos.y() + py * tile.scale;
+    const int alphaThreshold = m_alphaThreshold;
+    const int cellX0 = tile.cellX0;
+    const int cellX1 = tile.cellX1;
+    const int cellY0 = tile.cellY0;
+    const int cellY1 = tile.cellY1;
+    const qreal posX = tile.pos.x();
+    const qreal posY = tile.pos.y();
+    const qreal scale = tile.scale;
+    const int iw = view.width();
+    const int ih = view.height();
+    for(int py = 0; py < ih; py++) {
+        const qreal parentY = posY + py * scale;
         const int cellY = qFloor((parentY - boundsTop) * invCell);
-        if(cellY < m_dtY0 || cellY >= m_dtY1) {
+        if(cellY < cellY0 || cellY >= cellY1) {
             continue;
         }
-        const QRgb* row = reinterpret_cast<const QRgb*>(img.constScanLine(py));
-        const int rowBase = (cellY - m_dtY0) * dtW;
-        for(int px = pxStart; px < pxEnd; px++) {
-            if(qAlpha(row[px]) <= m_alphaThreshold) {
+        const QRgb* row = reinterpret_cast<const QRgb*>(view.constScanLine(py));
+        const qint64 rowBase = qint64(cellY - cellY0) * maskW;
+        for(int px = 0; px < iw; px++) {
+            if(qAlpha(row[px]) <= alphaThreshold) {
                 continue;
             }
-            const qreal parentX = tile.pos.x() + px * tile.scale;
+            const qreal parentX = posX + px * scale;
             const int cellX = qFloor((parentX - boundsLeft) * invCell);
-            if(cellX < m_dtX0 || cellX >= m_dtX1) {
+            if(cellX < cellX0 || cellX >= cellX1) {
                 continue;
             }
-            m_dt[rowBase + (cellX - m_dtX0)] = 0.0f;
+            const qint64 bit = rowBase + (cellX - cellX0);
+            bitData[bit >> 3] |= uchar(1u << (bit & 7));
+        }
+    }
+
+    tile.maskBits = qCompress(bits, kMaskCompressionLevel);
+
+    // The mask replaces the pixels; release both sources (implicitly shared —
+    // an export scene item may still hold the compressed blob for painting).
+    tile.image = QImage();
+    tile.compressed = cwCompressedImage();
+
+    m_stats.tileMasksBuilt++;
+    m_stats.tileMaskBytes += tile.maskBits.size();
+}
+
+void cwCaptureLabelPlacer::rasterizeTileMask(const TileAlphaSource& tile)
+{
+    // Window ∩ tile bbox, in global cell coords.
+    const int x0 = qMax(m_dtX0, tile.cellX0);
+    const int x1 = qMin(m_dtX1, tile.cellX1);
+    const int y0 = qMax(m_dtY0, tile.cellY0);
+    const int y1 = qMin(m_dtY1, tile.cellY1);
+    if(x0 >= x1 || y0 >= y1 || tile.maskBits.isEmpty()) {
+        return;
+    }
+
+    const int maskW = tile.cellX1 - tile.cellX0;
+    const int maskH = tile.cellY1 - tile.cellY0;
+    const QByteArray bits = qUncompress(tile.maskBits);
+    if(bits.size() != (qsizetype(maskW) * maskH + 7) / 8) {
+        return;
+    }
+    const uchar* bitData = reinterpret_cast<const uchar*>(bits.constData());
+    // Write through a raw pointer: QVector::operator[] re-checks for a detach
+    // on every store, and this loop runs over every window ∩ tile cell.
+    float* dt = m_dt.data();
+
+    const int dtW = m_dtX1 - m_dtX0;
+    for(int y = y0; y < y1; y++) {
+        const qint64 rowBase = qint64(y - tile.cellY0) * maskW;
+        const int dtRow = (y - m_dtY0) * dtW;
+        for(int x = x0; x < x1; x++) {
+            const qint64 bit = rowBase + (x - tile.cellX0);
+            const uchar byte = bitData[bit >> 3];
+            if(byte == 0) {
+                // Masks are sparse: skip the rest of this all-clear byte.
+                x += 7 - int(bit & 7);
+                continue;
+            }
+            if(byte & (1u << (bit & 7))) {
+                dt[dtRow + (x - m_dtX0)] = 0.0f;
+            }
         }
     }
 }

@@ -478,11 +478,19 @@ TEST_CASE("tile-alpha obstacles rasterize like rect obstacles across windows",
     const QSizeF labelSize(24.0, 10.0);
     constexpr qreal windowSize = 300.0;
     constexpr qreal cellSize = 2.0;
-    constexpr qreal tileScale = 2.0;
     // Anchors sit on even coordinates, so a +/-4 dot has edges on cell AND
-    // tile-pixel boundaries — the two rasterization paths must mark exactly
-    // the same cells, making the bit-exact comparison below legitimate.
+    // tile-pixel boundaries at both scales below — the two rasterization
+    // paths must mark exactly the same cells, making the bit-exact comparison
+    // below legitimate.
     constexpr qreal dotHalf = 4.0;
+
+    // Real export tiles render several pixels per DT cell (item scale =
+    // 1/devicePixelRatio <= 1); the coarse 2x section is the opposite,
+    // one-cell-per-pixel regime. The pixel→cell binning must agree with the
+    // rect rasterizer in both.
+    qreal tileScale = 2.0;
+    SECTION("one cell per tile pixel (2x tile scale)") { tileScale = 2.0; }
+    SECTION("multiple tile pixels per cell (0.5x tile scale)") { tileScale = 0.5; }
 
     auto makeBarePlacer = [&cave]() {
         cwCaptureLabelPlacer placer;
@@ -538,6 +546,85 @@ TEST_CASE("tile-alpha obstacles rasterize like rect obstacles across windows",
             // Non-vacuity: the ink must have registered — a buried anchor
             // can't hold a zero-leader (label centered on the dot) placement.
             CHECK(QLineF(fromTile.leaderStart, fromTile.leaderEnd).length() > 0.0);
+        }
+    }
+    CHECK(placedCount > 0);
+}
+
+TEST_CASE("compressed tile alpha places identically to raw tile alpha",
+          "[cwCaptureLabelPlacer]")
+{
+    // Export tiles reach the placer as qCompress'd pixel blobs (see
+    // cwCompressedImageItem); previews and the test above feed raw QImages.
+    // Both paths must derive the exact same inked-cell mask, so a many-window
+    // run over the same ink must place bit-identically.
+    const GridCave cave = makeGridCave(QRectF(0, 0, 1200, 1200),
+                                       QPointF(60.0, 60.0), 21, 21, 52.0);
+    const QSizeF labelSize(24.0, 10.0);
+    constexpr qreal windowSize = 300.0;
+    constexpr qreal cellSize = 2.0;
+    constexpr qreal tileScale = 2.0;
+    constexpr qreal dotHalf = 4.0;
+
+    auto makeBarePlacer = [&cave]() {
+        cwCaptureLabelPlacer placer;
+        placer.setObstacleBounds(cave.bounds, cellSize);
+        placer.setViewportBounds(cave.bounds);
+        placer.setLabelMarginPaperPx(1.0);
+        placer.setPlacementWindowSize(windowSize);
+        return placer;
+    };
+
+    QImage tile(qRound(cave.bounds.width() / tileScale),
+                qRound(cave.bounds.height() / tileScale),
+                QImage::Format_ARGB32_Premultiplied);
+    tile.fill(Qt::transparent);
+    {
+        QPainter painter(&tile);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(Qt::black);
+        for(const QPointF& anchor : cave.anchors) {
+            painter.drawRect(QRectF((anchor.x() - dotHalf) / tileScale,
+                                    (anchor.y() - dotHalf) / tileScale,
+                                    dotHalf * 2.0 / tileScale,
+                                    dotHalf * 2.0 / tileScale));
+        }
+    }
+
+    cwCaptureLabelPlacer rawPlacer = makeBarePlacer();
+    rawPlacer.addTileAlpha(tile, cave.bounds.topLeft(), tileScale);
+    rawPlacer.finalize();
+    const auto rawPlacements = rawPlacer.placeAll(makeGridRequests(cave, labelSize));
+    REQUIRE(rawPlacer.stats().windowsBuilt > 1);
+
+    const cwCompressedImage compressed(tile);
+    REQUIRE(compressed.compressedData().size() < tile.sizeInBytes()); // sparse ink must shrink
+
+    cwCaptureLabelPlacer compressedPlacer = makeBarePlacer();
+    compressedPlacer.addCompressedTileAlpha(compressed, cave.bounds.topLeft(), tileScale);
+    compressedPlacer.finalize();
+    const auto compressedPlacements =
+        compressedPlacer.placeAll(makeGridRequests(cave, labelSize));
+
+    // The one page-sized tile overlaps every window, but its mask must be
+    // materialized (and the blob decompressed) exactly once.
+    CHECK(compressedPlacer.stats().tileMasksBuilt == 1);
+    CHECK(compressedPlacer.stats().tileMaskBytes > 0);
+
+    REQUIRE(compressedPlacements.size() == rawPlacements.size());
+    int placedCount = 0;
+    for(int i = 0; i < compressedPlacements.size(); i++) {
+        const auto& fromCompressed = compressedPlacements.at(i);
+        const auto& fromRaw = rawPlacements.at(i);
+        REQUIRE(fromCompressed.placed == fromRaw.placed);
+        if(fromCompressed.placed) {
+            placedCount++;
+            CHECK(fromCompressed.labelRect == fromRaw.labelRect);
+            CHECK(fromCompressed.leaderStart == fromRaw.leaderStart);
+            CHECK(fromCompressed.leaderEnd == fromRaw.leaderEnd);
+            // Non-vacuity: the ink must have registered — parity alone would
+            // also pass if BOTH paths regressed to scanning no alpha at all.
+            CHECK(QLineF(fromCompressed.leaderStart, fromCompressed.leaderEnd).length() > 0.0);
         }
     }
     CHECK(placedCount > 0);
