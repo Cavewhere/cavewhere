@@ -19,6 +19,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 //Our includes
 #include "cwRayHit.h"
@@ -100,13 +101,46 @@ public:
     QBox3D boundingBox(const QList<Key>& keys) const;
 
     //! World-space union of every object's bounding box. Null box when empty.
+    //! Counts hidden objects — use isPickableEmpty() to ask what the pick
+    //! paths can actually reach.
     QBox3D boundingBox() const;
+
+    //! True when no pick can ever hit anything: no objects, every object
+    //! hidden, or only degenerate bounds. Mirrors the visibility rule the
+    //! traversals apply, so callers gating a fallback on "is there geometry to
+    //! anchor against?" agree with what a pick returns.
+    //!
+    //! isFinite() here is QBox3D's null/finite/infinite *type* flag, not a
+    //! NaN check: a box with NaN corners still reports Finite. Nothing in the
+    //! codebase builds an Infinite box, so that arm is unreachable today.
+    //!
+    //! Reads the authoring object list, not the built BVH: during an async
+    //! build the objects exist and will become pickable, so this reports
+    //! non-empty and a caller keeps its fallback suppressed rather than
+    //! acting on a temporary emptiness.
+    bool isPickableEmpty() const;
 
     // `ray` direction must be unit length: ray-depth (projectedDistance)
     // divides by |dir|^2, and the screen-space line tolerance scales its
     // radius by that depth — a non-normalized direction mis-sizes both.
     double intersects(const QRay3D& ray, const cwPickQuery& query = {}) const;
     cwRayHit intersectsDetailed(const QRay3D& ray, const cwPickQuery& query = {}) const;
+
+    // Geometry-anchored rotation-pivot fallback (issue #562). Returns the
+    // world-space point ON real geometry closest to `ray`: a cloud point, the
+    // nearest spot on a shot segment, or a spot on a scrap triangle (exact
+    // hit, else its nearest edge). Candidates must lie within the query's
+    // screen-space tolerance radius at their depth; among accepted candidates
+    // the front-most wins, matching intersectsDetailed's nearest-by-depth
+    // rule. Unlike intersectsDetailed, points and triangles are reachable at
+    // the full tolerance radius (not just pickRadius / exact intersection),
+    // so a near-miss on any kind still lands the pivot on the geometry the
+    // user aimed at. Hidden objects are skipped. Returns nullopt when nothing
+    // is inside the tolerance (or the tolerance is disabled), letting the
+    // caller keep the current pivot. Reads the built BVH on the owning
+    // thread, like intersectsDetailed.
+    std::optional<QVector3D> nearestGeometryPoint(const QRay3D& ray,
+                                                  const cwPickQuery& query) const;
 
     // Capture the current built BVH as an immutable snapshot. Call on the
     // thread that owns this object (the main thread); the returned snapshot

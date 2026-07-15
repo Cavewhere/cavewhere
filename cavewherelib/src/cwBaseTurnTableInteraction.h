@@ -66,6 +66,15 @@ public:
     // value without duplicating the literal.
     static constexpr float FramingPad = 1.08f;
 
+    // Screen-space reach (physical millimeters) of the rotation pivot's
+    // nearest-geometry anchor (issue #562): when a rotation click misses the
+    // exact pick, the pivot snaps to the closest geometry point within this
+    // radius of the cursor; farther clicks keep the current pivot. Much wider
+    // than the exact pick radius — it's a "grab what I'm looking at" reach,
+    // not a selection. Exposed so tests can derive the same world-space
+    // radius through cwCamera::pickQuery.
+    static constexpr double PivotAnchorRadiusMillimeters = 20.0;
+
     explicit cwBaseTurnTableInteraction(QQuickItem *parent = 0);
 
     QQuaternion cameraRotation() const;
@@ -240,11 +249,25 @@ private:
     double clampAzimuth(double azimuth) const;
     double clampPitch(double pitch) const;
 
-    //! Picks a world point under @a point (in GL viewport coords). Returns
-    //! a geometry hit, else a grid-plane hit that lies near the scene's
-    //! bounding box. Returns nullopt when nothing usable is under the cursor
-    //! so callers keep the current pivot instead of teleporting (issue #527).
-    std::optional<QVector3D> unProject(QPoint point) const;
+    //! Picks a world point under @a point (in GL viewport coords). Returns an
+    //! exact geometry hit, else a grid-plane hit (only when the scene has no
+    //! geometry), else nullopt so callers keep the current pivot instead of
+    //! teleporting (issues #527, #562).
+    //!
+    //! Only a triangle hit is strictly on the cursor ray. A line hit returns
+    //! the closest point on the segment and a point hit returns the vertex
+    //! center, so an exact hit can sit off-ray by up to the pick radius
+    //! (~kPivotPickRadiusMillimeters of screen). Callers doing delta math
+    //! against the result (pan, zoom) inherit that as a small mouse-down step.
+    //!
+    //! When @a anchorToNearestGeometry is true, a near-miss instead resolves to
+    //! the closest geometry point within PivotAnchorRadiusMillimeters of the
+    //! cursor (issue #562) — a pivot on real geometry near what's on screen,
+    //! used by rotation. That widens the off-ray error by 5x, which orbits
+    //! fine but would visibly jerk a pan or drift a zoom. Only rotation opts
+    //! in: pan and zoom keep the tighter exact-hit error.
+    std::optional<QVector3D> unProject(QPoint point,
+                                       bool anchorToNearestGeometry = false) const;
 
     //! World point on the cursor ray at the depth of the current orbit center.
     //! Used as the pan anchor when unProject misses, so panning stays attached

@@ -11,9 +11,11 @@
 #include <QVector3D>
 #include <QRay3D>
 #include <QLoggingCategory>
+#include <QScopeGuard>
 
 // SUT
 #include "cwGeometryItersecter.h"
+#include "cwPickingLog.h"
 #include "cwPickQuery.h"
 #include "cwRayHit.h"
 
@@ -416,7 +418,18 @@ TEST_CASE("Line pick: nearer of two lines wins by depth",
 TEST_CASE("Line pick: dumping a line leaf with picking debug on does not overrun the index buffer",
           "[cwGeometryItersecter][linePick]")
 {
-    QLoggingCategory::setFilterRules(QStringLiteral("cw.picking.debug=true"));
+    // Flip the category's enabled flag rather than calling setFilterRules:
+    // that clobbers any global rules a sibling test or QT_LOGGING_RULES
+    // installed, and restoring it means wiping every rule rather than putting
+    // the old ones back. The scope guard also survives an early REQUIRE exit,
+    // which matters because a leaked cw.picking.debug=true would silently skew
+    // the [performance] test's exact-pick baseline in a later file.
+    QLoggingCategory& category = const_cast<QLoggingCategory&>(lcPick());
+    const bool wasEnabled = category.isDebugEnabled();
+    category.setEnabled(QtDebugMsg, true);
+    auto restoreCategory = qScopeGuard([&category, wasEnabled]() {
+        category.setEnabled(QtDebugMsg, wasEnabled);
+    });
 
     const QVector3D a(1000.0f, 2000.0f, -500.0f);
     const QVector3D b(1020.0f, 2000.0f, -500.0f);
@@ -433,6 +446,4 @@ TEST_CASE("Line pick: dumping a line leaf with picking debug on does not overrun
 
     CHECK(hit.hit());
     CHECK(hit.objectId() == 1u);
-
-    QLoggingCategory::setFilterRules(QString());
 }

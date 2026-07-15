@@ -102,13 +102,12 @@ void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
  * @param point - screen point in GL viewport coordinates
  * @return World point under the cursor, or nullopt on a miss
  *
- * Returns a geometry hit when one is under the cursor. Otherwise the grid plane
- * is used, but only when the scene has no geometry to anchor against (an
- * empty/unloaded project). Returns nullopt when nothing usable is under the
- * cursor: once geometry exists an off-geometry click keeps the current pivot
- * rather than teleporting the view to a grid point (issues #562, #527).
+ * See the declaration for the full ladder. The constraint that shapes it: step
+ * (2) returns a point OFF the cursor ray, so only rotation opts in — an off-ray
+ * anchor would jerk the pan and drift the zoom.
  */
-std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point) const {
+std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point,
+                                                               bool anchorToNearestGeometry) const {
     Q_ASSERT(Camera);
     Q_ASSERT(scene());
     Q_ASSERT(scene()->geometryItersecter());
@@ -131,15 +130,32 @@ std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point) con
         return world;
     }
 
-    //No geometry under the cursor. The grid plane is a fallback pivot, but only
-    //when there's no geometry to anchor against (an empty/unloaded project). Once
-    //survey geometry exists, an off-geometry click must not pivot on the grid:
-    //the infinite grid plane sits at the cave floor (min Z), so a grazing hit
-    //lands far out in X/Y and teleports the view, losing the rotation context
+    //No exact hit. For rotation, fall back to the closest point ON geometry
+    //within a much wider screen-space reach, so a near-miss pivots on the
+    //geometry the user aimed at instead of teleporting (issue #562).
+    if(anchorToNearestGeometry) {
+        if(const std::optional<QVector3D> anchor =
+                scene()->geometryItersecter()->nearestGeometryPoint(
+                    ray, Camera->pickQuery(pixelsForMillimeters(PivotAnchorRadiusMillimeters)))) {
+            qCDebug(lcInteract).nospace()
+                << "unProject(" << point << "): geometry anchor=" << *anchor
+                << " rayOrigin=" << ray.origin();
+            return anchor;
+        }
+    }
+
+    //The ray reached no geometry at all. The grid plane is a last-resort pivot,
+    //but only when there's nothing to anchor against (an empty/unloaded project).
+    //Once survey geometry exists, an off-geometry click must not pivot on the
+    //grid: the infinite grid plane sits at the cave floor (min Z), so a grazing
+    //hit lands far out in X/Y and teleports the view, losing the rotation context
     //(issues #562, #527). In that case return nullopt so the caller keeps the
     //current pivot instead.
-    const QBox3D sceneBox = scene()->geometryItersecter()->boundingBox();
-    const bool hasGeometry = !sceneBox.isNull() && sceneBox.isFinite();
+    //
+    //This asks the intersecter what a pick can actually reach, not merely what
+    //exists: hiding every object leaves the picks with nothing, so the grid has
+    //to come back or the pivot would be stuck with no way to recover.
+    const bool hasGeometry = !scene()->geometryItersecter()->isPickableEmpty();
     if(!hasGeometry) {
         const double gridT = m_gridPlane.intersection(ray);
         if(!std::isnan(gridT)) {
@@ -262,8 +278,11 @@ void cwBaseTurnTableInteraction::startRotating(QPoint position) {
     position = Camera->mapToGLViewport(position);
     if(!m_centerLocked) {
         // Only re-center on a real pick. On a miss keep m_center so the view
-        // orbits the existing pivot instead of teleporting (issue #527).
-        if(const std::optional<QVector3D> picked = unProject(position)) {
+        // orbits the existing pivot instead of teleporting (issue #527). The
+        // anchor's off-ray error is harmless to orbit around, but m_center is
+        // also bindPerspectiveIntersection's miss fallback, so it reaches zoom
+        // as a target — bounded by PivotAnchorRadiusMillimeters, not zero.
+        if(const std::optional<QVector3D> picked = unProject(position, true)) {
             setCenter(*picked);
         }
     }

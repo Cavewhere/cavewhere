@@ -167,6 +167,13 @@ namespace {
     // BVH build is running.
     constexpr auto kAcceleratingPickingJobName = QLatin1StringView("Accelerating picking");
 
+    // An axis-aligned box has 8 corners; bit i of the corner index selects
+    // the maximum along axis i.
+    constexpr int kBoxCornerCount = 8;
+    constexpr int kCornerMaskX = 1;
+    constexpr int kCornerMaskY = 2;
+    constexpr int kCornerMaskZ = 4;
+
     // Fixed progress resolution: per-mille (0..1000). Decouples the
     // setProgressValue range (int) from absolute primitive counts so
     // multi-billion-point clouds can still report monotonic progress
@@ -338,6 +345,56 @@ namespace {
 
         return {diffX*diffX + diffY*diffY + diffZ*diffZ,
                 QVector3D(float(spx), float(spy), float(spz))};
+    }
+
+    // Ray parameter at which `box` is entered, clamped to 0 when the origin is
+    // already inside it. NaN when the box is missed, is entirely behind the
+    // origin, or is not finite.
+    //
+    // QBox3D::intersection(ray) cannot serve here: it returns the ENTRY
+    // parameter only while that is positive, and silently switches to the EXIT
+    // parameter once the origin is inside the box. A depth prune needs a lower
+    // bound on the candidates inside the node, and the exit parameter is an
+    // upper one — using it skips nodes that hold the nearest candidate.
+    double boxEntryDistance(const QBox3D& box, const QRay3D& ray)
+    {
+        float minimumT = 0.0f;
+        float maximumT = 0.0f;
+        if (!box.intersection(ray, &minimumT, &maximumT) || maximumT < 0.0f) {
+            return std::numeric_limits<double>::quiet_NaN();
+        }
+        return std::max(0.0f, minimumT);
+    }
+
+    // A screen-space accept radius grows with depth, so no single scalar pad
+    // fits every AABB test. The radius at `box`'s farthest depth bounds every
+    // candidate inside it: projectedDistance is affine, so its maximum over
+    // the box is at a corner, and radiusAt() is non-decreasing (for the
+    // slope >= 0 every cwCamera::pickQuery produces). The fine test still
+    // applies the exact radiusAt(candidate depth). Zero when no tolerance is
+    // supplied, collapsing the pads to their tolerance-free values.
+    //
+    // Pass the tightest box the caller can justify. Handed the BVH root it
+    // yields one scene-global pad, which is conservative but prunes almost
+    // nothing in a deep scene; handed each node's own box it prunes properly.
+    float conservativeTolerancePad(const QRay3D& ray,
+                                   const QBox3D& box,
+                                   const cwPickTolerance& tolerance)
+    {
+        if (!tolerance.enabled()) {
+            return 0.0f;
+        }
+
+        const QVector3D mn = box.minimum();
+        const QVector3D mx = box.maximum();
+        double farDepth = 0.0;
+        for (int corner = 0; corner < kBoxCornerCount; ++corner) {
+            const QVector3D c((corner & kCornerMaskX) ? mx.x() : mn.x(),
+                              (corner & kCornerMaskY) ? mx.y() : mn.y(),
+                              (corner & kCornerMaskZ) ? mx.z() : mn.z());
+            farDepth = std::max(farDepth, double(ray.projectedDistance(c)));
+        }
+        return float(tolerance.radiusAt(farDepth));
     }
 }
 
@@ -658,6 +715,18 @@ QBox3D cwGeometryItersecter::boundingBox() const
     return box;
 }
 
+bool cwGeometryItersecter::isPickableEmpty() const
+{
+    QBox3D box;
+    for (const Node& node : Nodes) {
+        if (!isPickable(node.Object)) {
+            continue;
+        }
+        box.unite(node.BoundingBox.transformed(node.Object.modelMatrix()));
+    }
+    return box.isNull() || !box.isFinite();
+}
+
 /**
  * @brief cwGeometryItersecter::intersects
  * @param ray
@@ -862,20 +931,8 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
     // no tolerance is supplied, so the box pads collapse to the pre-line tube
     // values and the AABB fast path is byte-for-byte the old one (line sub-BVHs
     // are skipped entirely in that case — see the kind-filter block below).
-    float linePad = 0.0f;
-    if (query.tolerance.enabled()) {
-        const QBox3D& rootBox = topLevel.at(0).bbox;
-        const QVector3D mn = rootBox.minimum();
-        const QVector3D mx = rootBox.maximum();
-        double farDepth = 0.0;
-        for (int corner = 0; corner < 8; ++corner) {
-            const QVector3D c((corner & 1) ? mx.x() : mn.x(),
-                              (corner & 2) ? mx.y() : mn.y(),
-                              (corner & 4) ? mx.z() : mn.z());
-            farDepth = std::max(farDepth, double(ray.projectedDistance(c)));
-        }
-        linePad = float(query.tolerance.radiusAt(farDepth));
-    }
+    const float linePad =
+        conservativeTolerancePad(ray, topLevel.at(0).bbox, query.tolerance);
 
     const float topPad = std::max(topTubeDist, linePad);
     const QVector3D topTubePad(topPad, topPad, topPad);
@@ -1083,7 +1140,13 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
             qCDebug(lcPick).nospace()
                 << "  live BVH sources: " << subBvhs.size() << " sub-BVHs";
             for (qsizetype i = 0; i < subBvhs.size(); ++i) {
-                const SubBvh& sb = *subBvhs[i];
+                const std::shared_ptr<const SubBvh>& subPtr = subBvhs.at(i);
+                if (!subPtr) {
+                    // Slot nulled mid-rebuild — see invalidatePublishedSlot.
+                    qCDebug(lcPick).nospace() << "    [" << i << "] <rebuilding>";
+                    continue;
+                }
+                const SubBvh& sb = *subPtr;
                 const cwRenderObject* parent = sb.object.parent();
                 const char* parentClass = parent != nullptr
                     ? parent->metaObject()->className()
@@ -1099,6 +1162,193 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
     }
 
     return best;
+}
+
+std::optional<QVector3D> cwGeometryItersecter::nearestGeometryPoint(const QRay3D& ray,
+                                                                    const cwPickQuery& query) const
+{
+    if (!m_bvh || m_bvh->topLevel.isEmpty() || !query.tolerance.enabled()) {
+        return std::nullopt;
+    }
+
+    const QVector<BvhNode>& topLevel = m_bvh->topLevel;
+    const QVector<std::shared_ptr<const SubBvh>>& subBvhs = m_bvh->subBvhs;
+
+    // The anchor is a real point ON geometry: the closest point on a
+    // primitive to the ray — a cloud point, a spot on a shot segment, a spot
+    // on a scrap triangle (its exact hit, else its nearest edge). Candidates
+    // must lie within the screen-space tolerance radius at their depth; the
+    // front-most accepted candidate wins, matching every other pick's
+    // nearest-by-depth rule. Distances are measured in model space against
+    // the world-space radius — exact for the identity model matrices the
+    // line plot and point clouds use (the same assumption as testPrimitive).
+    bool found = false;
+    double bestT = (std::numeric_limits<double>::max)();
+    QVector3D bestPoint;
+
+    // Each box test derives its own pad from that node's far corner, rather
+    // than one scene-global radiusAt(root far depth). Same conservative
+    // guarantee — radiusAt() is non-decreasing, so the radius at a node's far
+    // corner bounds every candidate inside it — but a node near the camera is
+    // no longer inflated by the radius belonging to the far end of the scene,
+    // which is what collapsed this traversal into a linear scan.
+
+    QVarLengthArray<uint32_t, kBvhTraversalStackInline> topStack;
+    topStack.append(0);
+
+    while (!topStack.isEmpty()) {
+        const BvhNode& bn = topLevel[topStack.last()];
+        topStack.removeLast();
+
+        const float nodePad = conservativeTolerancePad(ray, bn.bbox, query.tolerance);
+        const QVector3D nodePadVec(nodePad, nodePad, nodePad);
+        const double tBox = boxEntryDistance(QBox3D(bn.bbox.minimum() - nodePadVec,
+                                                    bn.bbox.maximum() + nodePadVec), ray);
+        if (qIsNaN(tBox)) {
+            continue;
+        }
+        if (found && tBox >= bestT) {
+            continue;
+        }
+
+        if (!bn.isLeaf) {
+            uint32_t nearChild = bn.left;
+            uint32_t farChild = bn.right;
+            if (ray.direction()[bn.splitAxis] < 0.0f) {
+                std::swap(nearChild, farChild);
+            }
+            topStack.append(farChild);
+            topStack.append(nearChild);
+            continue;
+        }
+
+        // Top-level leaf — one Object. Descend its model-space sub-BVH.
+        const uint32_t slot = bn.left;
+        const std::shared_ptr<const SubBvh>& subPtr = subBvhs.at(slot);
+        if (!subPtr) {
+            continue;  // slot nulled mid-rebuild — see invalidatePublishedSlot.
+        }
+        const SubBvh& sub = *subPtr;
+        if (!isPickable(sub.object)) {
+            continue;  // hidden objects never anchor the pivot.
+        }
+        const cwGeometry& geometry = sub.object.geometry();
+        if (!(query.kinds & pickKindOf(geometry.type()))) {
+            continue;
+        }
+        auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+        Q_ASSERT(positionAttribute);
+
+        const QMatrix4x4& worldFromModel = m_bvh->modelMatrices.at(slot);
+        const QRay3D rayModel =
+            transformRayWithInverse(m_bvh->inverseModelMatrices.at(slot), ray);
+
+        const auto considerCandidate = [&](const QVector3D& pointModel, double dSq) {
+            const QVector3D pWorld = mapPoint(worldFromModel, pointModel);
+            const double tWorld = ray.projectedDistance(pWorld);
+            if (tWorld <= 0.0) {
+                return;  // behind the camera.
+            }
+            if (found && tWorld >= bestT) {
+                return;
+            }
+            const double radius = query.tolerance.radiusAt(tWorld);
+            if (dSq > radius * radius) {
+                return;
+            }
+            found = true;
+            bestT = tWorld;
+            bestPoint = pWorld;
+        };
+
+        QVarLengthArray<uint32_t, kBvhTraversalStackInline> subStack;
+        subStack.append(0);
+
+        while (!subStack.isEmpty()) {
+            const BvhNode& sbn = sub.bvhNodes[subStack.last()];
+            subStack.removeLast();
+
+            const float subPad =
+                conservativeTolerancePad(rayModel, sbn.bbox, query.tolerance);
+            const QVector3D subPadVec(subPad, subPad, subPad);
+            const double tSubBox = boxEntryDistance(QBox3D(sbn.bbox.minimum() - subPadVec,
+                                                          sbn.bbox.maximum() + subPadVec),
+                                                   rayModel);
+            if (qIsNaN(tSubBox)) {
+                continue;
+            }
+            if (found && tSubBox >= bestT) {
+                continue;
+            }
+
+            if (!sbn.isLeaf) {
+                uint32_t nearChild = sbn.left;
+                uint32_t farChild = sbn.right;
+                if (rayModel.direction()[sbn.splitAxis] < 0.0f) {
+                    std::swap(nearChild, farChild);
+                }
+                subStack.append(farChild);
+                subStack.append(nearChild);
+                continue;
+            }
+
+            const uint32_t first = sbn.left;
+            const uint32_t primCount = sbn.right;
+            for (uint32_t p = first; p < first + primCount; ++p) {
+                const Primitive& prim = sub.primitives.at(p);
+
+                if (prim.kind == Primitive::Kind::Triangle) {
+                    const QVector<uint32_t>& indices = geometry.indices();
+                    const int i = static_cast<int>(prim.primitiveIndex);
+                    const QVector3D a = geometry.value<QVector3D>(positionAttribute, indices.at(i + 0));
+                    const QVector3D b = geometry.value<QVector3D>(positionAttribute, indices.at(i + 1));
+                    const QVector3D c = geometry.value<QVector3D>(positionAttribute, indices.at(i + 2));
+
+                    // Anchoring is orientation-agnostic (never cull): a pivot
+                    // on the back side of a scrap is still on the scrap.
+                    const cwRayHit local = rayTriangleMT(rayModel, a, b, c, false);
+                    if (local.hit()) {
+                        considerCandidate(local.pointModel(), 0.0);
+                    } else {
+                        // A ray that misses a triangle's interior is closest
+                        // to its boundary: take the nearest of the 3 edges.
+                        RaySegmentHit edge = raySegmentClosest(rayModel, a, b);
+                        const RaySegmentHit bc = raySegmentClosest(rayModel, b, c);
+                        if (bc.dSq < edge.dSq) {
+                            edge = bc;
+                        }
+                        const RaySegmentHit ca = raySegmentClosest(rayModel, c, a);
+                        if (ca.dSq < edge.dSq) {
+                            edge = ca;
+                        }
+                        considerCandidate(edge.segPoint, edge.dSq);
+                    }
+                } else if (prim.kind == Primitive::Kind::Line) {
+                    const QVector<uint32_t>& indices = geometry.indices();
+                    const int i = static_cast<int>(prim.primitiveIndex);
+                    const QVector3D a = geometry.value<QVector3D>(positionAttribute, indices.at(i + 0));
+                    const QVector3D b = geometry.value<QVector3D>(positionAttribute, indices.at(i + 1));
+
+                    const RaySegmentHit seg = raySegmentClosest(rayModel, a, b);
+                    considerCandidate(seg.segPoint, seg.dSq);
+                } else {
+                    const PointPositionReader reader(geometry, positionAttribute);
+                    const QVector3D center = reader.at(prim.primitiveIndex);
+
+                    // Radius 0 never reports a hit, but dSq (double-precision
+                    // perpendicular distance to the ray) is always filled.
+                    const RaySphereHit sphere =
+                        raySphereIntersectDouble(rayModel, center, 0.0f);
+                    considerCandidate(center, sphere.dSq);
+                }
+            }
+        }
+    }
+
+    if (!found) {
+        return std::nullopt;
+    }
+    return bestPoint;
 }
 
 void cwGeometryItersecter::testPrimitive(const Object& object,

@@ -8,6 +8,7 @@
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
 #include "cwGeometry.h"
+#include "cwRenderObject.h"
 #include "cwRayHit.h"
 #include "cwTurnTableViewState.h"
 #include "ProjectionScaleTestHelpers.h"
@@ -186,6 +187,38 @@ void addGeometryAt(cwScene& scene, const QVector3D& center, float extent, uint64
     scene.geometryItersecter()->addObject(
         cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4(), 0.5f));
     scene.geometryItersecter()->waitForFinish();
+}
+
+// Adds one cloud point at `position` and blocks until the BVH is built. Placed
+// beyond the exact pick's reach but inside the anchor radius, it exercises the
+// geometry-anchored pivot fallback (#562) rather than an exact hit.
+void addSinglePoint(cwScene& scene, const QVector3D& position,
+                    cwRenderObject* parent = nullptr, uint64_t id = 3)
+{
+    cwGeometry geometry {
+        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
+    };
+    geometry.set(cwGeometry::Semantic::Position, QVector<QVector3D>{position});
+    geometry.setType(cwGeometry::Type::Points);
+
+    scene.geometryItersecter()->addObject(
+        cwGeometryItersecter::Object({parent, id}, geometry, QMatrix4x4(), 0.5f));
+    scene.geometryItersecter()->waitForFinish();
+}
+
+// World-space radius of the rotation pivot's nearest-geometry anchor under
+// this fixture's ortho camera, derived through the same pixelsForMillimeters
+// + pickQuery pipeline unProject uses. Tests bound this against the offsets
+// they hardcode, so a retuned PivotAnchorRadiusMillimeters fails loudly
+// instead of silently making a test vacuous. Ortho only: pickQuery fills
+// tolerance.constant for ortho and tolerance.slope for perspective, so this
+// returns 0.0 under a perspective camera.
+double anchorRadiusWorld(const Fixture& f)
+{
+    return f.camera.pickQuery(
+        f.interaction.pixelsForMillimeters(
+            cwBaseTurnTableInteraction::PivotAnchorRadiusMillimeters))
+        .tolerance.constant;
 }
 
 bool matricesNearlyEqual(const QMatrix4x4& a, const QMatrix4x4& b, float eps = kMatrixEps)
@@ -866,11 +899,17 @@ TEST_CASE("cwBaseTurnTableInteraction startRotating on empty space far from geom
     // Geometry sits in a tiny box near the origin. The grid plane is infinite,
     // so an off-center click misses the geometry but still hits the grid plane
     // far away. The old code teleported the pivot there; now it must keep the
-    // current center: once geometry exists the grid plane is not a pivot source
-    // (#562), so a missed click leaves the pivot where it was (#527).
+    // current center. Every point is far outside the #562 anchor radius, so
+    // the nearest-geometry fallback finds nothing, and once geometry exists
+    // the grid is not a pivot source: the missed click leaves the pivot where
+    // it was (#527). (Contrast the near case below, where a point inside the
+    // anchor radius re-anchors the pivot.)
     Fixture f;
     addSmallGeometry(f.scene, 1.0f);
 
+    // Move the pivot off the origin first: a default-constructed m_center is
+    // (0,0,0), so "kept" and "reset to the origin" would be the same assertion.
+    f.interaction.setCenter(QVector3D(5.0f, 6.0f, 7.0f));
     const QVector3D centerBefore = f.interaction.center();
 
     // Precondition: the grid hit this click produces is far from the geometry,
@@ -885,31 +924,190 @@ TEST_CASE("cwBaseTurnTableInteraction startRotating on empty space far from geom
     CHECK(f.interaction.center().z() == Approx(centerBefore.z()));
 }
 
-TEST_CASE("cwBaseTurnTableInteraction startRotating on empty space near geometry keeps the pivot",
+TEST_CASE("cwBaseTurnTableInteraction startRotating near geometry anchors the pivot to the nearest geometry point",
           "[cwBaseTurnTableInteraction]")
 {
-    // #562: once survey geometry exists, an off-geometry click must never pivot
-    // on the grid plane — not even when the grid hit lands close to the cave,
-    // inside the scene box. The grid rides at the cave floor, so pivoting there
-    // swings the view and loses the rotation context. Distinct from the #527
-    // "far" case above: here the grid hit is well inside the scene bounds, so
-    // the old box-margin gate would have accepted it.
+    // #562: once survey geometry exists, a near-miss click no longer holds the
+    // old pivot — it re-anchors to the closest point ON geometry within the
+    // anchor radius, so the rotate keeps its context. It must still never fall
+    // to the grid.
+    //
+    // One cloud point sits beyond the exact pick's reach (its pick tube spans
+    // 5x the 0.5 pick radius = 2.5 units) but inside the anchor radius. The
+    // screen-center click misses it exactly, yet the pivot snaps to the point
+    // itself — the z proves it landed on the geometry, not the z = 0 grid
+    // plane and not the z = 0 default pivot it would have held before.
     Fixture f;
 
-    // Size the geometry so the grid hit for this click lands inside the scene
-    // box (the case the old gate accepted), without sitting on a geometry point.
-    const QVector3D gridHit = unprojectClickOntoGrid(f.camera, kOffCenterClick);
-    const float extent = std::max(std::abs(gridHit.x()), std::abs(gridHit.y())) + 5.0f;
-    addSmallGeometry(f.scene, extent);
+    const double anchorRadius = anchorRadiusWorld(f);
+    REQUIRE(anchorRadius > 12.0);  // the 10-unit offset must be inside reach
 
-    const QVector3D centerBefore = f.interaction.center();
-    REQUIRE(f.scene.geometryItersecter()->boundingBox().contains(gridHit));
+    const QVector3D cloudPoint(10.0f, 0.0f, kCenterlineZ);
+    addSinglePoint(f.scene, cloudPoint);
 
-    f.interaction.startRotating(kOffCenterClick);
+    f.interaction.startRotating(screenCenter().toPoint());
+
+    CHECK(f.interaction.center().x() == Approx(cloudPoint.x()).margin(kPixelTolerance));
+    CHECK(f.interaction.center().y() == Approx(cloudPoint.y()).margin(kPixelTolerance));
+    CHECK(f.interaction.center().z() == Approx(cloudPoint.z()).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction startRotating in a point-cloud gap keeps the pivot",
+          "[cwBaseTurnTableInteraction]")
+{
+    // The point-cloud regression on #562's original node-center anchor: a
+    // LiDAR cloud is ONE intersecter Object, so a click down the gap between
+    // two far-apart clusters used to anchor the whole-cloud centroid — a point
+    // in empty space at the wrong depth — teleporting the view ("can't rotate
+    // around a point cloud point"). The nearest-point anchor has no aggregate
+    // candidates: with every real point outside the anchor radius, the gap
+    // click keeps the pivot.
+    Fixture f;
+    REQUIRE(anchorRadiusWorld(f) < 60.0);  // clusters sit ~70 units off the ray
+
+    QVector<QVector3D> points;
+    const auto addCluster = [&points](const QVector3D& center) {
+        for (int zi = 0; zi < 2; ++zi) {
+            for (int yi = -1; yi <= 1; ++yi) {
+                for (int xi = -1; xi <= 1; ++xi) {
+                    points.append(center
+                                  + QVector3D(2.0f * xi, 2.0f * yi, 2.0f * zi));
+                }
+            }
+        }
+    };
+    addCluster(QVector3D(-50.0f, -50.0f, 40.0f));
+    addCluster(QVector3D(50.0f, 50.0f, -40.0f));
+
+    cwGeometry geometry {
+        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
+    };
+    geometry.set(cwGeometry::Semantic::Position, points);
+    geometry.setType(cwGeometry::Type::Points);
+    f.scene.geometryItersecter()->addObject(
+        cwGeometryItersecter::Object({nullptr, 4}, geometry, QMatrix4x4(), 0.5f));
+    f.scene.geometryItersecter()->waitForFinish();
+
+    const QVector3D pivotBefore(5.0f, 6.0f, 7.0f);
+    f.interaction.setCenter(pivotBefore);
+
+    f.interaction.startRotating(screenCenter().toPoint());
+
+    CHECK(f.interaction.center().x() == Approx(pivotBefore.x()));
+    CHECK(f.interaction.center().y() == Approx(pivotBefore.y()));
+    CHECK(f.interaction.center().z() == Approx(pivotBefore.z()));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction startRotating does not anchor the pivot to a hidden object",
+          "[cwBaseTurnTableInteraction]")
+{
+    // The nearest-point fallback skips hidden objects (isPickable guard): a
+    // hidden cloud must never anchor the pivot. Same click and point as the
+    // anchor test above, but the point's parent is invisible.
+    //
+    // Every object here is hidden, so nothing is pickable and the scene reads
+    // as empty — the grid comes back as the last-resort pivot (isPickableEmpty),
+    // which is the only way out: with the grid gated off the pivot could never
+    // be moved again while the geometry stays hidden. What must NOT happen is
+    // the pivot landing on the hidden point.
+    //
+    // `hidden` outlives the fixture so the intersecter never holds a key to a
+    // destroyed object.
+    cwRenderObject hidden;
+    Fixture f;
+    hidden.setVisible(false);
+    addSinglePoint(f.scene, QVector3D(10.0f, 0.0f, kCenterlineZ), &hidden);
+
+    f.interaction.setCenter(QVector3D(5.0f, 6.0f, 7.0f));
+    f.interaction.startRotating(screenCenter().toPoint());
+
+    // The grid plane is z = 0 through the origin and the click is dead centre,
+    // so the rescue lands on the origin — distinct from both the prior pivot
+    // and the hidden point at (10, 0, 10).
+    CHECK(f.interaction.center().x() == Approx(0.0f).margin(1e-3));
+    CHECK(f.interaction.center().y() == Approx(0.0f).margin(1e-3));
+    CHECK(f.interaction.center().z() == Approx(0.0f).margin(1e-3));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction startRotating keeps the grid gated off while any object stays visible",
+          "[cwBaseTurnTableInteraction]")
+{
+    // The counterpart to the all-hidden rescue above: hiding SOME geometry
+    // must not re-open the grid. A visible object exists, so a click that
+    // reaches nothing keeps the pivot rather than teleporting to the grid
+    // (#562) — the grid only returns when nothing at all is pickable.
+    cwRenderObject hidden;
+    Fixture f;
+    hidden.setVisible(false);
+    addSinglePoint(f.scene, QVector3D(10.0f, 0.0f, kCenterlineZ), &hidden);
+
+    // A visible object far outside the anchor's reach of the centre click.
+    addSinglePoint(f.scene, QVector3D(400.0f, 400.0f, kCenterlineZ), nullptr, 4);
+
+    const QVector3D centerBefore(5.0f, 6.0f, 7.0f);
+    f.interaction.setCenter(centerBefore);
+    f.interaction.startRotating(screenCenter().toPoint());
 
     CHECK(f.interaction.center().x() == Approx(centerBefore.x()));
     CHECK(f.interaction.center().y() == Approx(centerBefore.y()));
     CHECK(f.interaction.center().z() == Approx(centerBefore.z()));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction startRotating on a long shot's far end pivots on the exact hit, not the node center",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Exact-hit stays primary over the #562 nearest-geometry fallback:
+    // clicking the far end of a long survey shot must pivot on the point under
+    // the cursor, not any aggregate of the segment (a bbox-center-first policy
+    // would swing the pivot ~half the shot length to the midpoint).
+    Fixture f;
+    addCenterline(f.scene);   // (-20,0,z) .. (20,0,z), one long segment
+
+    // Click the projected far end of the segment.
+    const QVector3D farEnd(18.0f, 0.0f, kCenterlineZ);
+    const QPoint click = f.camera.project(farEnd).toPoint();
+
+    f.interaction.startRotating(click);
+
+    // Lands on the exact closest point (~farEnd), not the midpoint (0, 0, z).
+    CHECK(f.interaction.center().x() == Approx(18.0f).margin(kPixelTolerance));
+    CHECK(f.interaction.center().y() == Approx(0.0f).margin(kPixelTolerance));
+    CHECK(f.interaction.center().z() == Approx(kCenterlineZ).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction startPanning on a near-miss does not jump the view",
+          "[cwBaseTurnTableInteraction]")
+{
+    // #562 regression: the nearest-geometry pivot anchor is OFF the cursor ray,
+    // so it must not become the pan anchor — startPanning would build the pan
+    // plane through an off-ray point and the initial pan tick would lurch the
+    // view. Pan uses the on-ray unProject (exact hit / gated grid / nullopt);
+    // on a near-miss with geometry present the anchor resolves to the cursor
+    // ray at the current center depth, so the view does not move when panning
+    // begins.
+    //
+    // The cloud spans the off-center click's ray but has no point directly under
+    // it, so the click misses geometry while the rotation-only anchor path
+    // would have produced an off-ray anchor. startPanning runs the first pan
+    // tick synchronously (translateLastPosition), so any jump shows up here.
+    const float extent = 105.0f;
+
+    SECTION("ortho") {
+        Fixture f;
+        addSmallGeometry(f.scene, extent);
+        const QMatrix4x4 before = f.camera.viewMatrix();
+        f.interaction.startPanning(kOffCenterClick);
+        CHECK(matricesNearlyEqual(f.camera.viewMatrix(), before));
+    }
+
+    SECTION("perspective") {
+        Fixture f;
+        f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+        addSmallGeometry(f.scene, extent);
+        const QMatrix4x4 before = f.camera.viewMatrix();
+        f.interaction.startPanning(kOffCenterClick);
+        CHECK(matricesNearlyEqual(f.camera.viewMatrix(), before));
+    }
 }
 
 TEST_CASE("cwBaseTurnTableInteraction startRotating that hits geometry re-centers on the hit",
