@@ -170,11 +170,14 @@ MainWindowTest {
         }
 
         // Drain any jobs the navigation/tab-switch queued, then give the scene
-        // graph a couple of frames to present the page (and any highlight overlay)
-        // before grabbing.
+        // graph a couple of frames to present the page (and any highlight
+        // overlay) before grabbing. Re-aims the highlight ring last: its rect is
+        // computed from the target's position, which only means anything once the
+        // page has finished laying out.
         function settle() {
             RootData.futureManagerModel.waitForFinished();
             wait(150);
+            highlightOverlayId.refresh();
         }
 
         // Wait up to ~2s for a live QRhi on the given item's window; on a headless
@@ -548,6 +551,24 @@ MainWindowTest {
             return gallery;
         }
 
+        // Park the trip page's survey editor at its header, so a grab of that
+        // page shows the trip's name and calibration rather than a mid-scroll
+        // position. Nothing in the app sets this: the editor opens wherever the
+        // previous test left it, which made every trip-page shot depend on run
+        // order — and come out scrolled to Front Sights when run alone.
+        //
+        // Call this LAST, right before the grab. The note image decodes a beat
+        // after the page appears, and its arrival relayouts the editor's header,
+        // which moves originY and re-scrolls the view out from under an earlier
+        // positioning call.
+        function parkSurveyEditorAtTop() {
+            let view = ObjectFinder.findObjectByChain(rootId.mainWindow,
+                "rootId->tripPage->surveyEditor->view");
+            verify(view, "found the survey editor's list view");
+            view.positionViewAtBeginning();
+            settle();
+        }
+
         // The Carpet button on the TRIP page — how you actually enter Carpet
         // mode. Highlighted here rather than on the note page because the note
         // page's compact layout hides the toolbar button. Backs the "Enter
@@ -565,6 +586,7 @@ MainWindowTest {
             highlightOverlayId.target = carpetButton;
             waitForNoteRendered();
             settle();
+            parkSurveyEditorAtTop();
 
             let path = WindowGrabber.grabToFile(rootId.mainWindow, "scraps-enter-carpet");
             verify(path.length > 0, "grabToFile wrote the enter-carpet screenshot");
@@ -592,6 +614,7 @@ MainWindowTest {
             highlightOverlayId.target = button;
             waitForNoteRendered();
             settle();
+            parkSurveyEditorAtTop();
 
             let path = WindowGrabber.grabToFile(rootId.mainWindow, shotName);
             verify(path.length > 0, "grabToFile wrote " + shotName);
@@ -738,6 +761,7 @@ MainWindowTest {
             highlightOverlayId.target = addButton;
             waitForNoteRendered();
             settle();
+            parkSurveyEditorAtTop();
 
             let path = WindowGrabber.grabToFile(rootId.mainWindow, "notes-add-button");
             verify(path.length > 0, "grabToFile wrote the add-note screenshot");
@@ -776,6 +800,7 @@ MainWindowTest {
 
             highlightOverlayId.target = rotateButton;
             settle();
+            parkSurveyEditorAtTop();
 
             let path = WindowGrabber.grabToFile(rootId.mainWindow, "notes-rotate");
             verify(path.length > 0, "grabToFile wrote the rotate screenshot");
@@ -1302,6 +1327,18 @@ MainWindowTest {
                    "the demo trip has a team to shoot (state is " + teamTable.state + ")");
 
             scrollSurveyEditorTo(view, teamTable);
+
+            // Select the first member. The row's remove button, its outline and
+            // the green "+ Role" button all bind `visible: rowDelegate.selected`,
+            // so an unselected row shows none of them — and caves-and-trips.md
+            // describes the "+ Role" button by name. TeamTable resets
+            // currentIndex to -1 on every model change, so which state the grab
+            // caught used to depend on what ran before it.
+            let teamRow = findVisibleByName(teamTable, "teamRow.0");
+            verify(teamRow, "found the first team row");
+            mouseClick(teamRow);
+            tryVerify(() => teamRow.selected, 5000, "the first team member is selected");
+
             highlightOverlayId.target = null;
             settle();
 

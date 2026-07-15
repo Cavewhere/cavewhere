@@ -15,9 +15,27 @@ QQ.Item {
     property real ringThickness: 3
     property real cornerRadius: 8
 
-    readonly property rect targetRect: target
-        ? target.mapToItem(overlayId, 0, 0, target.width, target.height)
-        : Qt.rect(0, 0, 0, 0)
+    // Recomputed on demand rather than bound: mapToItem() reads the whole
+    // ancestor chain's transforms, but a binding only re-evaluates when a
+    // property it *references* changes. Scrolling a ListView or relayouting a
+    // parent moves the target without touching target/width/height, so a bound
+    // rect silently keeps a stale position — which put the ring hundreds of
+    // pixels from its target whenever a page was still laying out.
+    //
+    // Callers must refresh() once the layout has settled and before grabbing;
+    // the harness does this from its settle(), which every grab already goes
+    // through. Deliberately not a per-frame FrameAnimation: that pins the render
+    // loop at full rate, and re-rendering the 3D scene every frame tripled the
+    // generator's runtime.
+    property rect targetRect: Qt.rect(0, 0, 0, 0)
+
+    function refresh() {
+        targetRect = target
+            ? target.mapToItem(overlayId, 0, 0, target.width, target.height)
+            : Qt.rect(0, 0, 0, 0);
+    }
+
+    onTargetChanged: refresh()
 
     // Clamp the ring inside the window, insetting by the stroke so the full
     // border stays visible even when the target is flush against an edge (the

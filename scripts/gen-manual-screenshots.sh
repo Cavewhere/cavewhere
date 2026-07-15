@@ -9,11 +9,41 @@
 # this runs the qml-test target on the native platform (cocoa on macOS).
 #
 # Usage:
-#   scripts/gen-manual-screenshots.sh [build-dir]
+#   scripts/gen-manual-screenshots.sh [-t test_function]... [build-dir]
 #
 # build-dir defaults to the newest build/ preset directory.
+#
+# -t restricts the run to one harness test function, and may be repeated. Only
+# the images that function grabs are rewritten, so it is the way to iterate on a
+# single shot: a whole run is ~45s, one shot ~1.5s. List the names with
+#   cavewhere-qml-test -input test-qml/tst_ManualScreenshots.qml -functions
+#
+#   scripts/gen-manual-screenshots.sh -t test_surveyTeam
+#   scripts/gen-manual-screenshots.sh -t test_addCaveButton -t test_addTripButton
+#
+# Every shot sets up its own state, so a filtered run produces the same image as
+# a full one — but run the whole thing before committing, to prove the shots you
+# did not touch still generate.
 
 set -euo pipefail
+
+# Print this file's leading comment block (everything after the shebang, up to
+# the first non-comment line) as the help text.
+usage() {
+    awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' \
+        "${BASH_SOURCE[0]}"
+}
+
+tests=""
+while getopts ":t:h" opt; do
+    case "$opt" in
+        t) tests="$tests ManualScreenshots::$OPTARG" ;;
+        h) usage; exit 0 ;;
+        \?) echo "error: unknown option -$OPTARG" >&2; usage >&2; exit 1 ;;
+        :) echo "error: -$OPTARG needs a test function name" >&2; exit 1 ;;
+    esac
+done
+shift $((OPTIND - 1))
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
@@ -37,14 +67,22 @@ cmake --build "$build_dir" --target cavewhere-qml-test
 image_dir="$repo_root/docs/manual/images"
 mkdir -p "$image_dir"
 
-echo "==> Generating manual screenshots into $image_dir"
+if [[ -n "$tests" ]]; then
+    echo "==> Generating a SUBSET of the manual screenshots into $image_dir"
+    echo "    only:$tests"
+else
+    echo "==> Generating manual screenshots into $image_dir"
+fi
 # CW_MANUAL_IMAGE_DIR redirects WindowGrabber's output at the manual's images/.
 # QT_QUICK_CONTROLS_STYLE=Fusion matches the real desktop app (the Windows/Linux
 # look, with the sidebar File button) rather than the macOS native style.
 # No --platform flag: use the native (GPU-backed) QPA so the 3D view renders.
+# $tests is deliberately unquoted: empty means "run everything", and the test
+# names it holds never contain spaces.
 CW_MANUAL_IMAGE_DIR="$image_dir" \
 QT_QUICK_CONTROLS_STYLE="Fusion" \
     "$test_bin" -input "$repo_root/test-qml/tst_ManualScreenshots.qml" \
+    $tests \
     2>&1 | tee /tmp/cavewhere-manual-screenshots.log
 
 # Assemble the carpet-orbit frames (scraps-carpet-orbit-NN.png) into an animated
@@ -92,5 +130,14 @@ if [[ -e "${orbit_frames[0]}" ]]; then
     fi
 fi
 
-echo "==> Done. Screenshots written to $image_dir:"
-ls -1 "$image_dir"/*.png "$image_dir"/*.gif 2>/dev/null || echo "  (no images written — check the log above)"
+if [[ -n "$tests" ]]; then
+    # A subset run rewrites only some images, so listing the whole directory
+    # would imply more than it did. Show what differs from HEAD instead — which
+    # is what decides what to commit. Note this is every modified image, not
+    # only the ones this run touched.
+    echo "==> Done. Images now differing from HEAD:"
+    git status --porcelain -- "$image_dir" || true
+else
+    echo "==> Done. Screenshots written to $image_dir:"
+    ls -1 "$image_dir"/*.png "$image_dir"/*.gif 2>/dev/null || echo "  (no images written — check the log above)"
+fi

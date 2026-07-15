@@ -136,6 +136,19 @@ The pieces:
   a GPU-backed platform (native cocoa on macOS) — the headless `offscreen`
   platform has no live 3D and the harness *skips* there, so `offscreen` is safe
   for the normal test suite but produces no images.
+- **Regenerate one shot** while iterating on it: `-t` restricts the run to a
+  single test function and rewrites only the images that function grabs. A whole
+  run is ~45s; one shot is ~1.5s.
+
+  ```bash
+  scripts/gen-manual-screenshots.sh -t test_surveyTeam     # repeatable
+  ```
+
+  Run the whole thing once before committing, to prove the shots you didn't
+  touch still generate. A re-render that only differs by antialiasing is not
+  worth committing — it costs a full blob per image — so commit new and
+  genuinely-changed images only, and revert the rest with
+  `git checkout -- docs/manual/images/`.
 - **Add a screenshot:** add a `test_<shotName>()` function to
   `tst_ManualScreenshots.qml` that navigates to the page
   (`RootData.pageSelectionModel.currentPageAddress = "…"`), optionally sets
@@ -147,6 +160,18 @@ The pieces:
   in its QML file (a small, low-risk edit following the existing convention).
 - Keep shots deterministic: reuse the curated demo fixture, and pin anything
   that would otherwise vary (theme, background) as the harness already does.
+- **Set every piece of state your shot depends on, in the shot itself.** Test
+  functions run in alphabetical order and share one process, one `RootData` and
+  one mouse cursor, so anything you don't set is inherited from whatever ran
+  before — scroll position, selection, hover, mode. Shots that leaned on
+  inherited state used to come out right in a full run and *wrong* when
+  generated alone (a ring on the wrong control, an editor scrolled to the middle
+  of itself, a team row whose buttons only appear when selected). If a shot
+  can't be reproduced by `-t` on its own, it is not reproducible at all — it
+  just happens to agree with the last full run.
+- Set that state **last, right before the grab.** A note image decodes a beat
+  after its page appears and relayouts the editor around it, so state
+  established earlier gets moved out from under you.
 
 ## Keeping the indexes in sync
 
