@@ -27,6 +27,7 @@
 #include "cwCaptureLabelPlacer.h"
 #include "cwCaptureLeadLines.h"
 #include "cwGraphicsImageItem.h"
+#include "cwPhaseJob.h"
 #include "cwCompressedImage.h"
 #include "cwCompressedImageItem.h"
 #include "cwMemoryUsage.h"
@@ -309,10 +310,30 @@ void cwCaptureViewport::capture()
         cwCamera* oldCamera;
         cwCamera* captureCamera = new cwCamera();
         QList<CaptureJob> CaptureJobs;
+        // Backs the tile-rendering job-list entry. GUI-thread only: started,
+        // ticked per grabbed tile, and finished EXPLICITLY by both exit
+        // branches of the grab chain (completion and cancel). cwPhaseJob's
+        // destructor safety net never fires here: the recursive grab lambdas
+        // keep this run data alive through a shared_ptr self-reference, so it
+        // is never destroyed.
+        cwPhaseJob tileGrabJob;
     };
 
     auto runData = std::make_shared<CaptuteRunData>();
     runData->oldCamera = scene->camera();
+
+    // Surface the tile-rendering phase as a job (name + progress + runtime) in
+    // the app's job list — on a whole-page export it is thousands of
+    // sequential grabToImage calls and usually the longest visible wait. The
+    // job runs for every capture so the completion/cancel paths below stay
+    // unconditional, but previews pass an invalid token so they don't register
+    // (same rationale as the placement job: they fire rapidly and would spam
+    // the job list).
+    runData->tileGrabJob.start(QStringLiteral("Rendering map tiles"),
+                               rows * columns,
+                               m_runIsPreview ? cwFutureManagerToken()
+                                              : m_futureManagerToken);
+    m_tileGrabFuture = runData->tileGrabJob.future();
 
     //These are recursive lambdas, so we need to put this in a shared pointer
     auto capturedImage = std::make_shared<std::function<void (const CaptureJob& data, const QImage& image)>>();
@@ -353,6 +374,9 @@ void cwCaptureViewport::capture()
             // Canceled during the tile phase (there is no placement future to
             // cancel yet). End the run at this tile boundary: restore the
             // scene, drop the remaining tiles, and skip label placement.
+            // cancelCapture() already canceled the tile-grab future (which
+            // resolves its job-list entry); finishing the job settles it.
+            runData->tileGrabJob.finish();
             NumberOfImagesProcessed = 0;
             Rows = 0;
             Columns = 0;
@@ -451,6 +475,7 @@ void cwCaptureViewport::capture()
         // textItem->setPos(tileRect.center());
 
         NumberOfImagesProcessed++;
+        runData->tileGrabJob.setProgressValue(NumberOfImagesProcessed);
 
         // Memory trace for whole-page export debugging: a run that dies of
         // memory never reaches the end-of-run profile line, so emit the
@@ -472,6 +497,9 @@ void cwCaptureViewport::capture()
             //Finished capturing tiles. CapturingImages stays true through the
             //async label placement below so re-entrant capture() calls are
             //blocked until it finishes — its continuation clears the flag.
+            //Settle the tile-rendering job; the placement job takes over from
+            //here (placeLabelsAfterTiles registers it).
+            runData->tileGrabJob.finish();
             NumberOfImagesProcessed = 0;
             Rows = 0;
             Columns = 0;
@@ -693,6 +721,13 @@ void cwCaptureViewport::deleteSceneItems()
     // page.
     m_labelPlacementFuture.cancel();
     m_labelPlacementFuture.waitForFinished();
+
+    // Also resolve a tile-phase job-list row. The grab chain's shared_ptr
+    // self-reference means its cwPhaseJob is never destroyed, so a viewport
+    // destroyed mid-grab (e.g. ~cwCaptureManager deleting its layers without
+    // cancelCapture()) would otherwise leave a stuck "Rendering map tiles"
+    // row forever — the job list removes rows on the future's cancel.
+    m_tileGrabFuture.cancel();
 
     if(PreviewItem != nullptr) {
         delete PreviewItem;
@@ -1146,6 +1181,10 @@ void cwCaptureViewport::cancelCapture()
     // m_captureAgainWhenDone after calling this when it supersedes a preview).
     m_captureAgainWhenDone = false;
     m_cancelRequested = true;
+    // Resolve the tile-rendering job-list entry right away; the run itself
+    // still ends at the next tile boundary (the grab chain polls
+    // m_cancelRequested), which also finishes the promise.
+    m_tileGrabFuture.cancel();
     m_labelPlacementFuture.cancel();
 }
 

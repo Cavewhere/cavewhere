@@ -186,9 +186,14 @@ private:
     // — so nothing may key off it (see the continuation-contract test in
     // test_cwLabelPlacementThreading.cpp).
     QFutureWatcher<void> m_labelPlacementWatcher;
-    // Set by cancelCapture() so the tile-grab chain (which has no future to
-    // cancel yet) can end the run at the next tile boundary. Reset by
-    // capture().
+    // The tile-rendering phase's job-list future (see capture()). Backed by a
+    // GUI-thread cwPhaseJob owned by the run; held here so cancelCapture()
+    // can resolve the job-list entry immediately instead of at the next tile
+    // boundary, and so deleteSceneItems() can resolve it on destruction.
+    // Canceling a finished/default future is a no-op.
+    QFuture<void> m_tileGrabFuture;
+    // Set by cancelCapture() so the tile-grab chain (which polls it per tile)
+    // can end the run at the next tile boundary. Reset by capture().
     bool m_cancelRequested = false;
     // Whether the in-flight run is a preview, snapshotted when the run starts.
     // The live previewCapture() flag can be flipped mid-run (the manager sets
