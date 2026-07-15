@@ -90,6 +90,21 @@ related: [../survey-data/calibration.md, ../survey-data/survey-errors.md]
   be regenerated as the UI changes. Never commit a hand-captured screenshot.
 - Files live in `docs/manual/images/` with **deterministic, kebab-case
   filenames** matching the shot name (`set-declination.png`).
+- **Illustrations are the exception, and live apart.** Diagrams, cave photos, and
+  hand-drawn figures teach concepts that exist outside the UI (what a plan view
+  *is*), so no harness can produce them and no UI change dates them. They are
+  committed by hand into `docs/manual/images/illustrations/`, which the generator
+  never writes to or cleans. Keep the split honest: if it shows the app, generate
+  it; if it shows the domain, illustrate it. Record each file's origin in that
+  directory's `README.md`.
+- **Size illustrations to fit a 512×420 box before committing them.** The reading
+  column is ~512px wide and images are capped at `max-width: 100%`, so a
+  wide screenshot lands at ~512×299 no matter its pixel size — but a *portrait*
+  illustration hits the same cap and renders ~830px tall, dwarfing every
+  screenshot around it. Since anything narrower than the column renders at its
+  natural size, the file's own dimensions are the only control over how big an
+  illustration looks. Fit it to the box (`sips -z <h> <w>`) rather than shipping
+  the original.
 - Every image needs **descriptive alt-text and a caption**:
   ```markdown
   ![The Declination field in the calibration editor, highlighted](../images/set-declination.png)

@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 312" width="512" height="312" role="img" aria-label="Two copies of the same scrap outline filled with a triangulation grid: a coarse grid at 1.0 metre spacing on the left with few large triangles, and a fine grid at 0.25 metre spacing on the right with many small triangles.">
+  <defs>
+    <style>
+      .card   { fill: #ffffff; }
+      .title  { font: 600 13px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .label  { font: 600 12px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .note   { font: 11px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5c656e; }
+      .dim    { font: 600 10px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #d6552b; }
+      .outline{ fill: none; stroke: #171b20; stroke-width: 2; stroke-linejoin: round; }
+      .measure{ stroke: #d6552b; stroke-width: 1.25; }
+    </style>
+
+    <!-- One passage outline, reused by both panels. -->
+    <path id="blob" d="M 24 118 C 18 82 44 52 84 48 C 122 44 148 62 178 54 C 204 47 218 72 210 102
+                       C 202 132 208 160 180 172 C 142 188 96 182 62 170 C 34 160 30 152 24 118 Z"/>
+
+    <!-- Grid cells split by a diagonal: the quads the morph turns into triangles. -->
+    <pattern id="coarse" width="26" height="26" patternUnits="userSpaceOnUse">
+      <path d="M 26 0 L 0 0 L 0 26 M 0 0 L 26 26" fill="none" stroke="#17618f" stroke-width="0.9" opacity="0.75"/>
+    </pattern>
+    <pattern id="fine" width="10" height="10" patternUnits="userSpaceOnUse">
+      <path d="M 10 0 L 0 0 L 0 10 M 0 0 L 10 10" fill="none" stroke="#17618f" stroke-width="0.6" opacity="0.75"/>
+    </pattern>
+
+    <marker id="arrowL" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M 7 0 L 0 3.5 L 7 7 Z" fill="#d6552b"/>
+    </marker>
+    <marker id="arrowR" markerWidth="7" markerHeight="7" refX="1" refY="3.5" orient="auto">
+      <path d="M 0 0 L 7 3.5 L 0 7 Z" fill="#d6552b"/>
+    </marker>
+  </defs>
+
+  <rect class="card" width="512" height="312"/>
+  <text class="title" x="16" y="22">Grid resolution — how finely the scrap is meshed</text>
+
+  <!-- Left panel: coarse -->
+  <g transform="translate(16,44)">
+    <use href="#blob" fill="url(#coarse)"/>
+    <use href="#blob" class="outline"/>
+
+    <!-- one cell measured -->
+    <g transform="translate(96,196)">
+      <line class="measure" x1="0" y1="0" x2="26" y2="0"/>
+      <line class="measure" x1="0" y1="-5" x2="0" y2="5"/>
+      <line class="measure" x1="26" y1="-5" x2="26" y2="5"/>
+      <text class="dim" x="13" y="-8" text-anchor="middle">1.0 m</text>
+    </g>
+  </g>
+  <text class="label" x="16" y="272">Coarse — 1.0 m</text>
+  <text class="note"  x="16" y="290">Fewer triangles. Fast, but blocky</text>
+  <text class="note"  x="16" y="302">against a detailed drawing.</text>
+
+  <!-- Right panel: fine -->
+  <g transform="translate(266,44)">
+    <use href="#blob" fill="url(#fine)"/>
+    <use href="#blob" class="outline"/>
+
+    <g transform="translate(96,196)">
+      <line class="measure" x1="0" y1="0" x2="10" y2="0"/>
+      <line class="measure" x1="0" y1="-5" x2="0" y2="5"/>
+      <line class="measure" x1="10" y1="-5" x2="10" y2="5"/>
+      <text class="dim" x="5" y="-8" text-anchor="middle">0.25 m</text>
+    </g>
+  </g>
+  <text class="label" x="266" y="272">Fine — 0.25 m</text>
+  <text class="note"  x="266" y="290">More triangles follow the sketch</text>
+  <text class="note"  x="266" y="302">closely. Slower to compute.</text>
+</svg>

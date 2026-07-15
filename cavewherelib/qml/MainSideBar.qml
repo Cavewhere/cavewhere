@@ -211,6 +211,7 @@ QQ.Rectangle {
 
     QQ.Rectangle {
         id: autoSwitchId
+        objectName: "autoUpdateContainer"
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

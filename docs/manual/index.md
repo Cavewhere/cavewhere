@@ -24,6 +24,18 @@ the problems CaveWhere solves — then keep the
 - [The 3D View](view-3d/the-3d-view.md) — navigate the model, aim the camera,
   and filter with layers.
 
+### Scraps and Carpeting
+- [Scraps and Carpeting](scraps/carpeting.md) — what a scrap is and how
+  carpeting morphs a sketch onto the 3D survey.
+- [Digitize a Scrap](scraps/digitize-a-scrap.md) — trace an outline, place
+  stations, and mark leads in Carpet mode.
+- [Choose the Scrap Type](scraps/scrap-types.md) — plan, running profile, or
+  projected profile, plus north/up, scale, and azimuth.
+- [Troubleshoot the Carpet](scraps/troubleshoot-carpeting.md) — find and fix a
+  distorted carpet.
+- [Tune the Warping Settings](scraps/warping-settings.md) — grid, interpolation,
+  stations, and smoothing.
+
 ## Planned chapters
 
 These directories exist and will be filled in as the manual is built out. Each
@@ -40,9 +52,6 @@ chapter is task-oriented and problem-first (see
   (tape / front sight / back sight / declination), team, units, survey errors.
 - **Notes** — importing images and PDFs, georeferencing a note (DPI, scale,
   north, up), stations and leads on notes, LiDAR notes.
-- **Scraps** — the sketch tool, outlines, scrap types (plan / running profile /
-  projected profile), tying stations, warping settings, computing scraps, the
-  carpet view.
 - **3D View (more)** — field of view, labels, leads, and rendering settings
   (MSAA, EDL) build on [The 3D View](view-3d/the-3d-view.md).
 - **Georeferencing** — fixing stations, coordinate systems, grid convergence.

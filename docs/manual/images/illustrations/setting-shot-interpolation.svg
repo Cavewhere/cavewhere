@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 292" width="512" height="292" role="img" aria-label="A bent survey line through stations A1, A2 and A3. With interpolation off, only the three surveyed stations act as control points. With interpolation on, evenly spaced hollow dummy stations are added along each shot at the spacing distance, so control points follow the whole line.">
+  <defs>
+    <style>
+      .card    { fill: #ffffff; }
+      .title   { font: 600 13px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .label   { font: 600 12px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .note    { font: 11px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5c656e; }
+      .sname   { font: 600 10px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5c656e; }
+      .dim     { font: 600 10px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #d6552b; }
+      .shot    { fill: none; stroke: #171b20; stroke-width: 1.75; }
+      .real    { fill: #d6552b; }
+      .dummy   { fill: #ffffff; stroke: #17618f; stroke-width: 1.5; }
+      .measure { stroke: #d6552b; stroke-width: 1.25; }
+      .rule    { stroke: #dbe1e6; stroke-width: 1; }
+    </style>
+    <!-- The survey line: A1 -> A2 -> A3, bending at A2. -->
+    <path id="line" d="M 0 44 L 150 14 L 300 52"/>
+  </defs>
+
+  <rect class="card" width="512" height="292"/>
+  <text class="title" x="16" y="22">Shot interpolation spacing — extra control points along each shot</text>
+
+  <!-- Row 1: interpolation off -->
+  <g transform="translate(24,44)">
+    <use href="#line" class="shot"/>
+    <circle class="real" cx="0"   cy="44" r="4.5"/>
+    <circle class="real" cx="150" cy="14" r="4.5"/>
+    <circle class="real" cx="300" cy="52" r="4.5"/>
+    <text class="sname" x="0"   y="62" text-anchor="middle">A1</text>
+    <text class="sname" x="150" y="6"  text-anchor="middle">A2</text>
+    <text class="sname" x="300" y="70" text-anchor="middle">A3</text>
+  </g>
+  <text class="label" x="352" y="66">Off</text>
+  <text class="note"  x="352" y="84">3 control points. The</text>
+  <text class="note"  x="352" y="98">morph has little to follow</text>
+  <text class="note"  x="352" y="112">between the stations.</text>
+
+  <line class="rule" x1="16" y1="140" x2="496" y2="140"/>
+
+  <!-- Row 2: interpolation on — a dummy every `spacing` along each shot -->
+  <g transform="translate(24,160)">
+    <use href="#line" class="shot"/>
+
+    <!-- A1 -> A2 -->
+    <circle class="dummy" cx="30"  cy="38" r="3.2"/>
+    <circle class="dummy" cx="60"  cy="32" r="3.2"/>
+    <circle class="dummy" cx="90"  cy="26" r="3.2"/>
+    <circle class="dummy" cx="120" cy="20" r="3.2"/>
+    <!-- A2 -> A3 -->
+    <circle class="dummy" cx="180" cy="21.6" r="3.2"/>
+    <circle class="dummy" cx="210" cy="29.2" r="3.2"/>
+    <circle class="dummy" cx="240" cy="36.8" r="3.2"/>
+    <circle class="dummy" cx="270" cy="44.4" r="3.2"/>
+
+    <circle class="real" cx="0"   cy="44" r="4.5"/>
+    <circle class="real" cx="150" cy="14" r="4.5"/>
+    <circle class="real" cx="300" cy="52" r="4.5"/>
+
+    <text class="sname" x="0"   y="62" text-anchor="middle">A1</text>
+    <text class="sname" x="150" y="6"  text-anchor="middle">A2</text>
+    <text class="sname" x="300" y="70" text-anchor="middle">A3</text>
+
+    <!-- the spacing itself, between two neighbouring dummies -->
+    <g transform="translate(30,78)">
+      <line class="measure" x1="0" y1="0" x2="30" y2="0"/>
+      <line class="measure" x1="0" y1="-4" x2="0" y2="4"/>
+      <line class="measure" x1="30" y1="-4" x2="30" y2="4"/>
+      <text class="dim" x="15" y="16" text-anchor="middle">0.5 m</text>
+    </g>
+  </g>
+  <text class="label" x="352" y="182">On — 0.5 m</text>
+  <text class="note"  x="352" y="200">A point every 0.5 m along</text>
+  <text class="note"  x="352" y="214">the shot, so the warp tracks</text>
+  <text class="note"  x="352" y="228">the passage between them.</text>
+
+  <!-- legend -->
+  <g transform="translate(24,282)">
+    <circle class="real" cx="5" cy="-4" r="4.5"/>
+    <text class="note" x="17" y="0">Surveyed station</text>
+    <circle class="dummy" cx="134" cy="-4" r="3.2"/>
+    <text class="note" x="145" y="0">Interpolated (&#8220;dummy&#8221;) station</text>
+  </g>
+</svg>

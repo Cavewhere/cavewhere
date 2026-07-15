@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 300" width="512" height="300" role="img" aria-label="A side view of a carpet surface. The raw surface is a noisy grey line over a broad arch; the smoothed surface is a calm black line that keeps the arch but drops the noise. A bell curve spans the smoothing radius around one point, showing that near neighbours count most, and that points beyond the radius are excluded entirely.">
+  <defs>
+    <style>
+      .card    { fill: #ffffff; }
+      .title   { font: 600 13px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .note    { font: 11px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5c656e; }
+      .dim     { font: 600 10px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #d6552b; }
+      .axis    { font: 600 10px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5c656e; }
+      .tag     { font: 600 10px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .raw     { fill: none; stroke: #b9c2ca; stroke-width: 1.6; stroke-linejoin: round; }
+      .smooth  { fill: none; stroke: #171b20; stroke-width: 2.2; stroke-linejoin: round; }
+      .bell    { fill: #17618f; fill-opacity: 0.12; stroke: #17618f; stroke-width: 1.2; }
+      .band    { fill: #17618f; fill-opacity: 0.05; }
+      .measure { stroke: #d6552b; stroke-width: 1.25; }
+      .guide   { stroke: #d6552b; stroke-width: 1; stroke-dasharray: 3 3; }
+      .rawpt   { fill: #ffffff; stroke: #8d979f; stroke-width: 1.6; }
+      .smpt    { fill: #d6552b; }
+      .move    { stroke: #d6552b; stroke-width: 1.6; }
+    </style>
+  </defs>
+
+  <rect class="card" width="512" height="300"/>
+  <text class="title" x="16" y="22">Smoothing radius — a weighted average of nearby heights</text>
+
+  <g transform="translate(58,34)">
+    <text class="axis" x="-30" y="70" transform="rotate(-90 -30 70)" text-anchor="middle">height (Z)</text>
+
+    <!-- Everything within one radius of the sample point contributes. -->
+    <rect class="band" x="102" y="0" width="132" height="134"/>
+
+    <!-- Gaussian weights, sigma = radius/2, cut off hard at the radius: the
+         curve is still at ~14% where it stops, it does not fade to nothing. -->
+    <path class="bell" d="M 102 45.5 L 113 40.0 L 124 32.3 L 135 22.9 L 146 13.6 L 157 6.6 L 168 4.0
+                          L 179 6.6 L 190 13.6 L 201 22.9 L 212 32.3 L 223 40.0 L 234 45.5
+                          L 234 52 L 102 52 Z"/>
+    <text class="note" x="240" y="20">weight</text>
+    <text class="note" x="240" y="34">of each</text>
+    <text class="note" x="240" y="48">neighbour</text>
+
+    <!-- Raw, noisy surface over a broad arch of genuine relief. -->
+    <path class="raw" d="M 0 114.8 L 8 115.4 L 16 122.7 L 24 108.6 L 32 107.6 L 40 107.6 L 48 95.0 L 56 101.6
+                         L 64 102.7 L 72 105.1 L 80 85.1 L 88 88.8 L 96 81.7 L 104 98.9 L 112 94.4 L 120 76.2
+                         L 128 99.5 L 136 97.9 L 144 88.9 L 152 87.1 L 160 74.5 L 168 70.2 L 176 83.2 L 184 70.7
+                         L 192 74.0 L 200 75.3 L 208 69.9 L 216 81.5 L 224 81.3 L 232 92.3 L 240 84.6 L 248 88.6
+                         L 256 85.8 L 264 91.1 L 272 87.0 L 280 83.6 L 288 103.8 L 296 105.2 L 304 102.8 L 312 101.1
+                         L 320 92.6 L 328 92.3 L 336 95.8 L 344 92.1 L 352 112.2 L 360 104.8 L 368 118.5 L 376 108.7
+                         L 384 125.7 L 392 125.0"/>
+
+    <!-- The same surface after smoothing: noise gone, the arch still there. -->
+    <path class="smooth" d="M 0 111.7 L 8 110.8 L 16 109.4 L 24 108.0 L 32 106.3 L 40 104.7 L 48 102.9 L 56 100.9
+                            L 64 99.2 L 72 97.4 L 80 95.7 L 88 94.1 L 96 92.8 L 104 91.6 L 112 90.5 L 120 89.4
+                            L 128 88.1 L 136 86.6 L 144 85.0 L 152 83.6 L 160 82.1 L 168 80.9 L 176 79.7 L 184 79.0
+                            L 192 78.9 L 200 79.1 L 208 79.6 L 216 80.5 L 224 81.9 L 232 83.5 L 240 85.3 L 248 86.9
+                            L 256 88.6 L 264 90.2 L 272 91.6 L 280 93.0 L 288 94.3 L 296 95.5 L 304 96.6 L 312 97.8
+                            L 320 99.1 L 328 100.6 L 336 102.0 L 344 103.6 L 352 105.4 L 360 107.0 L 368 108.7
+                            L 376 110.4 L 384 112.1 L 392 113.9"/>
+
+    <!-- One point: its raw height is replaced by the weighted average. -->
+    <line class="guide" x1="168" y1="0" x2="168" y2="134"/>
+    <line class="move" x1="168" y1="70.2" x2="168" y2="80.9"/>
+    <circle class="rawpt" cx="168" cy="70.2" r="3.6"/>
+    <circle class="smpt"  cx="168" cy="80.9" r="4"/>
+    <text class="tag" x="176" y="67">raw</text>
+    <text class="tag" x="176" y="93">smoothed</text>
+
+    <!-- radius: centre of the window out to its edge -->
+    <g transform="translate(168,148)">
+      <line class="measure" x1="0" y1="0" x2="66" y2="0"/>
+      <line class="measure" x1="0" y1="-5" x2="0" y2="5"/>
+      <line class="measure" x1="66" y1="-5" x2="66" y2="5"/>
+      <text class="dim" x="33" y="-8" text-anchor="middle">radius 2.0 m</text>
+    </g>
+  </g>
+
+  <text class="note" x="16" y="222">Each point&#8217;s height becomes the average of every point within the radius, weighted so near</text>
+  <text class="note" x="16" y="238">neighbours count most. The broad rise survives; the noise on top of it does not.</text>
+  <text class="note" x="16" y="260">Raise the radius to calm a bumpy carpet — too far, and it flattens genuine relief too.</text>
+  <text class="note" x="16" y="282">Only height moves; a point never shifts across the plan. Running profiles are never smoothed.</text>
+</svg>

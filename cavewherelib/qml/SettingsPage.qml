@@ -11,6 +11,7 @@ StandardPage {
 
         TabViewVertical {
             id: tabBarId
+            objectName: "settingsTabBar"
 
             Layout.fillHeight: true
             Layout.maximumWidth: 200
@@ -32,6 +33,7 @@ StandardPage {
                 }
 
                 WarpingSettingsItem {
+                    objectName: "warpingSettingsItem"
                     warpingSettings: RootData.scrapManager.warpingSettings
                 }
 

@@ -47,5 +47,50 @@ QT_QUICK_CONTROLS_STYLE="Fusion" \
     "$test_bin" -input "$repo_root/test-qml/tst_ManualScreenshots.qml" \
     2>&1 | tee /tmp/cavewhere-manual-screenshots.log
 
+# Assemble the carpet-orbit frames (scraps-carpet-orbit-NN.png) into an animated
+# GIF for the Scraps / Carpeting overview, plus a static poster (frame 0) shown by
+# default so the animation only plays when the reader expands the <details> in
+# carpeting.md. Then drop the frames — they're an intermediate, not a manual
+# asset. Needs ffmpeg; skipped with a warning if the frames or ffmpeg are missing.
+orbit_frames=("$image_dir"/scraps-carpet-orbit-[0-9][0-9].png)
+if [[ -e "${orbit_frames[0]}" ]]; then
+    if command -v ffmpeg >/dev/null 2>&1; then
+        echo "==> Assembling scraps-carpet-orbit.gif from ${#orbit_frames[@]} frames"
+        # Read the frames as a numbered sequence rather than a glob: ffmpeg's
+        # -pattern_type glob rejects a bracket expression like [0-9][0-9] ("Error
+        # opening input"), and a plain * would sweep -poster.png into the
+        # animation. %02d matches frames 00..NN exactly and excludes the poster.
+        #
+        # Two-pass palette (generate + apply) for clean GIF colors; scale to a
+        # doc-friendly width with a light dither to keep the gradient smooth.
+        if ! ffmpeg -y -framerate 12 -start_number 0 \
+            -i "$image_dir/scraps-carpet-orbit-%02d.png" \
+            -vf "scale=1000:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=3" \
+            -loop 0 "$image_dir/scraps-carpet-orbit.gif" \
+            >>/tmp/cavewhere-manual-screenshots.log 2>&1
+        then
+            # Be loud: a silent failure here leaves the previous run's GIF in
+            # place, which looks correct but is stale.
+            echo "    error: ffmpeg failed to assemble the GIF;" \
+                 "see /tmp/cavewhere-manual-screenshots.log" >&2
+            exit 1
+        fi
+        # The harness writes scraps-carpet-orbit-poster.png (a dedicated low-angle
+        # perspective still) at native crop size; scale it down to the doc width.
+        if [[ -e "$image_dir/scraps-carpet-orbit-poster.png" ]]; then
+            ffmpeg -y -i "$image_dir/scraps-carpet-orbit-poster.png" \
+                -vf "scale=1000:-1:flags=lanczos" \
+                "$image_dir/scraps-carpet-orbit-poster.tmp.png" \
+                >>/tmp/cavewhere-manual-screenshots.log 2>&1 \
+                && mv "$image_dir/scraps-carpet-orbit-poster.tmp.png" \
+                      "$image_dir/scraps-carpet-orbit-poster.png"
+        fi
+        rm -f "$image_dir"/scraps-carpet-orbit-[0-9][0-9].png
+        echo "    wrote $image_dir/scraps-carpet-orbit.gif + poster"
+    else
+        echo "    warning: ffmpeg not found — leaving orbit frames, no GIF built" >&2
+    fi
+fi
+
 echo "==> Done. Screenshots written to $image_dir:"
-ls -1 "$image_dir"/*.png 2>/dev/null || echo "  (no PNGs written — check the log above)"
+ls -1 "$image_dir"/*.png "$image_dir"/*.gif 2>/dev/null || echo "  (no images written — check the log above)"

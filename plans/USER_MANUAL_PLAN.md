@@ -72,7 +72,39 @@ docs/manual/
   settings/
   appendix/             # small screens, shortcuts, troubleshooting, advanced
   images/               # generated PNG screenshots (deterministic filenames)
+    illustrations/      # hand-committed diagrams/photos; generator never touches
 ```
+
+**Generated screenshots vs. hand-authored illustrations.** The harness can only
+photograph the app, but some pages must teach domain concepts that exist outside
+the UI — what a plan view *is*, how a projected profile differs from a running
+profile. Those illustrations are committed by hand under
+`images/illustrations/`, with provenance recorded in that directory's
+`README.md`. The split: **if it shows the app, generate it; if it shows the
+domain, illustrate it.** Generated screenshots go stale when the UI changes and
+so must be regenerable; a cave photo never does.
+
+**objectName trap — do NOT add objectNames to intermediate QML items just to
+highlight them.** `ObjectFinder::toChain` (`qml-test-recorder/src/ObjectFinder.cpp`)
+builds an object's chain from **every named ancestor** and `findObjectByChain`
+requires an *exact* match, so naming a previously-unnamed item silently
+invalidates every recorded chain that passes through it — the lookups return
+null and the failures surface far away as `mouseClick requires an Item` /
+`Cannot read property 'text' of null`. Naming `NoteUpInput`/`PaperScaleInput`/
+the azimuth `RowLayout` in `NoteTransformEditor.qml` broke 8 chains across
+`tst_NoteNorthInteraction`, `tst_NoteScaleInteraction`, `tst_ScrapInteraction`
+and `tst_ScrapSync` (`autoCalculate->setNorthButton`, `->coreTextInput`,
+`->setLengthButton`, `->directionComboBox`, `->azimuthTextInput`). Instead, reach
+a row from a child that is *already* named and highlight `anchor.parent` — the
+RowLayout that is the visible row. See `grabScrapInfoShot()`.
+
+**Sizing trap:** the HTML reading column is ~512px (`.page` is `74ch` with
+`border-box` and 40px side padding), and `.page img` is `max-width: 100%`. So a
+2400×1400 screenshot renders ~512×299 regardless of its pixel size, while a
+*portrait* illustration hits the same width cap and renders ~830px tall — 2.4×
+any screenshot. Because images narrower than the column render at natural size,
+an illustration's own dimensions are the only lever on its rendered size. Fit
+illustrations to a **512×420** box before committing.
 
 **AI-friendly conventions (define in `AUTHORING.md`, apply everywhere):**
 - One topic per file; short, descriptive kebab-case filenames.
@@ -249,6 +281,131 @@ Because this is a large, repetitive body of work, execute it in grouped batches
 by feature area (optionally fanned out across subagents), each batch adding its
 `.md` files, its `images/*.png`, and its `llms.txt` entries. Keep `index.md`
 and `llms.txt` in sync as pages land.
+
+### Chapter progress
+
+- **3D View** (`view-3d/the-3d-view.md`) — done (commit `fcd47008`). Deferred:
+  split the 3D Layers & Keywords section out into its own chapter.
+- **Scraps / Carpeting** (`scraps/`) — in progress; page breakdown below.
+
+#### Scraps / Carpeting chapter breakdown
+
+**Scope decision (locked with user):** document the **classic click-to-trace
+scrap workflow only** — trace an outline on a note image, place stations, pick a
+scrap type, and let CaveWhere warp it onto the 3D line plot. The newer
+freehand **digital-sketch → derived-scrap** workflow (pen `Wall`/`Feature`
+strokes on `trip.notesSketch`, `sketchDerivedScrapsUpdated`) is **deferred to its
+own follow-up chapter** — it is active development and would date quickly. Note
+the UI labels the mode **"Carpet"** (pencil toolbar button); internally it is
+"Scraps". Introduce it as *Carpet mode* and explain a carpet is built from one
+or more *scraps*.
+
+**Commit granularity (locked with user):** one commit per page — each commit is
+self-contained (its `.md`, its `images/*.png`, its `llms.txt` + `index.md`
+entries, and any harness/QML edits that page needs).
+
+Five pages, in `docs/manual/scraps/`:
+
+| # | File | Content | Primary sources |
+|---|------|---------|-----------------|
+| 1 | `carpeting.md` | Chapter landing / overview. *Why* carpeting exists (flat sketch vs. 3D passage), the scale→grid→morph pipeline, that recompute is **automatic** (marks scraps dirty on edit, re-morphs on loop closure), and the advanced **Debug ▸ Compute Scraps** manual trigger + **Scraps Visible** toggle. Points to the four workflow pages. | `why-cavewhere.md#from-a-2d-sketch-to-a-3d-cave`, glossary, `cwTriangulateTask.{h,cpp}` pipeline, blog: *sketch-carpeting-behavior*, `FileMenu.qml:142,147` |
+| 2 | `digitize-a-scrap.md` | Enter Carpet mode; **trace** an outline (click points, snap to close, `Delete` to remove a point — "Trace a cave section by clicking points around it"); **place stations** inside the scrap ("Click to add new station"; "Stations must be placed inside a scrap") and *why* stations are the morph control points. | `ScrapInteraction.qml`, `ScrapOutlinePoint.qml`, `NoteStationInteraction.qml`, `NotesGallery.qml` toolbar (`addScrapButton`, `addStationButton`, Carpet button), `cwScrap` |
+| 3 | `scrap-types.md` | **DONE.** Opens by showing the **views** surveyors draw — plan, projected profile, running profile, cross-section — all rendered from *one* passage (stations A1→A2→A3) using the blog's illustrations, committed by hand to `images/illustrations/projection-*`. The teaching pair is plan-with-slice-line + resulting sketch: the projected profile **shortens** A1→A2 (single plane), the running profile **keeps** it (plane turns per shot). Then the **Type** picker, north-vs-up by type, and the projected-profile **azimuth** control (Auto Calculate vs. "Looking At" / "Left → Right" / reversed). **Corrected framing:** passage shape does *not* dictate the view (an earlier draft claimed "a crawl gets a plan, a canyon gets a profile") — surveyors draw the same passage in several views, and the type says which projection a scrap is. **Cross-section = partially supported:** verified `cwScrap.h:67-72` has only 3 enum values (Plan/RunningProfile/ProjectedProfile), so a cross-section is digitized as a Projected Profile; the blog's cross-section sketch holds exactly **one** station, and Auto Calculate needs ≥2, so its azimuth/scale/up are entered by hand. | `NoteTransformEditor.qml:69-236` (verbatim help, cleaned of typos), `cwScrap.h:67-72` (enum), `cw*ScrapViewMatrix`, blogs: *cave-mapping-sketch-projections* (illustration source), *projected-profiles-support* |
+| 4 | `troubleshoot-carpeting.md` | *Why* a carpet distorts and the fixes: wrong scale (thin/fat passages) & rotation (>10° misalign); mislabeled stations (CaveWhere references **all** cave stations, not just the trip's); plan "localized vertical bumps"; running-profile creases/seesaw on stacked/overlapping vertical scraps; subdivide into multiple scraps; use Running Profile for horizontal, Projected for vertical shafts. | blog: *sketch-carpeting-behavior-and-troubleshooting*, `cwTriangulateTask.cpp` morph (`stationsVisibleToPoint`, `sortScrapStations`) |
+| 5 | `warping-settings.md` | The **Warping and Morphing** settings: **Grid resolution** (0.5 m), **Shot interpolation spacing** (0.5 m), **Max closest stations** (10), **Smoothing radius** (2.0 m) — each control's rationale + trade-off, that settings are **global** (app-level `QSettings`, not per-project), and Restore Defaults. | `WarpingSettingsItem.qml` (verbatim help), `cwTriangulateWarping.{h,cpp}`, `cwTriangulateWarpingData.h` defaults |
+
+**Screenshots (harness work):** The **Enter Carpet mode** shot
+(`scraps-enter-carpet.png`) highlights the **Carpet** button (`carpetButtonId`,
+pencil icon) on the **trip page** — the real way in. It must be the trip page, not
+the note page: the note page sets the gallery `isNarrow: true` (compact layout,
+`mainButtonArea` hidden), whereas the trip page leaves `isNarrow` false so the
+toolbar button shows. `test_enterCarpetMode` opens
+`…/Trip=Release 0.08`, selects note index 0, waits for the note to render
+(`waitForNoteRendered`, generalized to any page with a `noteArea`, not just
+notePage), highlights the button, and grabs the full window. The three Add-group
+shots — **Trace the outline** (`scraps-trace-outline.png`, `addScrapButton`),
+**Place the stations** (`scraps-place-stations.png`, `addScrapStation`) and
+**Mark leads** (`scraps-add-lead.png`, `addLeads`) — all go through
+`grabCarpetToolbarShot(buttonName, shotName)`, which enters Carpet mode
+(`setMode("CARPET")`) and rings the named button; `scraps-digitize.png` (the
+traced-outline close-up) follows the Scrap shot as the result. All share
+`openTripNoteGallery()` (returns the trip gallery, not the page). GOTCHA: the note
+gallery carries a hidden duplicate toolbar (`narrowToolbar`) whose buttons reuse
+the same objectNames as `carpetButtonArea`, so a plain `findByName` returns the
+hidden copy — the shots use `findVisibleByName` (first match with
+`visible === true`) to grab the shown one.
+
+**Leads section** (new, on digitize-a-scrap.md) is code-verified: `cwLead` carries
+`positionOnNote` / `description` / `size` / `completed`; lead points are morphed
+with the carpet (`cwTriangulateTask::morphPoints` on `scrap.leads()`), so they land
+in 3D (`LeadView`, question-mark markers); a lead must sit inside a scrap (the
+"Create a scrap first, then add stations or leads" prompt); `CaveLeadPage` lists
+Done / Goto / Nearest / Size / Distance / Trip / Description with line-of-sight
+distance from a chosen station and **Export CSV**. `index.md` + `llms.txt` updated
+to mention leads.
+
+For the note-detail shots, extend `tst_ManualScreenshots.qml` to open a
+note full-screen (the `Note=…` **notePage**, not the trip's data page, which is
+too narrow to show the drawing) and enter **Carpet mode** programmatically
+(`noteGallery.setMode("CARPET")` — the toolbar button is hidden in the note
+page's narrow layout). Use **`test_cwProject/Phake Cave 3000.cw`** (cave
+`Phake Cave 3000`, trip `Release 0.08`, note `001`) — its clean geometric scraps
+read far better than a real field sketch. Note 001 has two Plan scraps; scrap 1
+(lower passage) backs the digitize shot, scrap 0 (upper passage) backs the
+scrap-type shot. Both note shots are grabbed in **one** test from a **single**
+note-page visit — the note page renders its image only on the first visit in a
+process, so a second visit grabs a blank note area — and each grab waits for the
+note area to render non-uniform first (`grabItemToFile` + `imageIsNonUniform`
+probe). The Automatic Update shot (`scraps-automatic-update.png`) highlights the
+lower-left sidebar checkbox (added `objectName` `autoUpdateContainer` to the
+`MainSideBar` wrapper) and crops to it; the prose notes the switch
+(`jobSettings.automaticUpdate`) gates BOTH the survey solve / loop closure
+(`cwLinePlotManager::runSurvex` early-returns when off) and carpet re-morphing
+(`cwScrapManager`), and that re-enabling recomputes both. The warping-settings
+shot navigates to the Settings page (added
+`objectName`s `settingsTabBar`/`warpingSettingsItem`), selects the Warping tab,
+and pins the shipping 0.5 m defaults so the image matches the docs regardless of
+build type. Keep the existing determinism knobs (light theme, Fusion,
+`futureManagerModel.waitForFinished()`).
+
+**Carpet-orbit hero GIF (`scraps-carpet-orbit.gif`, overview "why"):**
+`test_carpetOrbit()` loads Phake, turns carpets on
+(`regionSceneManager.scraps.visible`) and survey chrome off (`leadsVisible`,
+`stationsVisible`), then orbits the finished carpeted cave — one grab per azimuth
+(48 frames / 7.5°). Framing is computed ONCE via
+`turnTableInteraction.framingViewState(box, azimuth, 55°)` and applied with
+`setViewState`; the orbit then changes **azimuth only**, so center + zoom stay
+fixed and the cave holds the same size in every frame (framing per frame made the
+view pulse). The fit is taken from the **widest** half-turn orientation (max ortho
+`zoomScale` over sampled azimuths) so the fixed zoom never clips as it rotates.
+The whole-scene `QBox3D` isn't exposed on production `cwScene`, so the harness
+reads it through a **test-lib** accessor
+`OffscreenRenderTester.sceneBoundingBox(scene)` (delegates to
+`scene.geometryItersecter()->boundingBox()`) — production API stays free of the
+accessor. `gen-manual-screenshots.sh` assembles the numbered frames into the GIF
+with **ffmpeg** (two-pass palette, 1000 px, 12 fps → a ~4 s loop) and deletes the
+frames (intermediate, not committed). The GIF is ~3.3 MB and adds ~4.5 MB to the
+base64-embedded standalone HTML.
+
+**Distraction control + perspective poster.** The GIF auto-loops (no native
+pause), so the overview shows a **static poster by default** and hides the
+animation behind a collapsed `<details><summary>` the reader opts into — portable
+(pandoc HTML + GitHub), no JS. (Use the native disclosure triangle only — don't
+add a `▶`, it doubles the marker.) The poster is a dedicated **low-angle
+perspective** still (not orbit frame 0): the harness sets
+`projectionTransition.progress = 1.0` (0 ortho, 1 perspective), tilts to pitch 30°
+so the ground grid recedes to a vanishing point, frames with `framingViewState`
+then pulls the eye in (`distance ×0.62`, since the perspective fit frames loosely
+at low pitch), and grabs one PNG. The orbit itself stays ortho (a perspective
+turntable swims in scale). `gen-manual-screenshots.sh` scales the poster to the
+doc width (~326 KB).
+
+**Verify-in-code before asserting** (per user preference — no unsupported
+assumptions): confirmed scrap types & help text in `NoteTransformEditor.qml`,
+warping defaults in `cwTriangulateWarpingData.h`, the automatic-recompute path
+in `cwScrapManager`, and that Compute Scraps / Scraps Visible live under the
+**Debug** submenu (advanced, not primary UI). Clean the source typos
+("interperate", "vertial", malformed `<\b>`) when harvesting.
 
 ---
 

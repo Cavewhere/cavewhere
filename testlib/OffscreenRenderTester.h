@@ -9,6 +9,7 @@
 #include <QPointF>
 #include <QSize>
 #include <QString>
+#include <QBox3D>
 #include <qqmlintegration.h>
 class QQuickItem;
 class cwScene;
@@ -67,6 +68,13 @@ public:
     // headless `offscreen` QPA, which provides none — the readback path then
     // can't run, so the test skips rather than fails.
     Q_INVOKABLE bool windowHasRhi(QQuickItem* item) const;
+
+    // Whole-scene world-space AABB (the union of every rendered object's box).
+    // Production cwScene exposes no QML accessor for this, so the manual's
+    // orbit harness gets it here and feeds it straight into
+    // turnTableInteraction.framingViewState() to frame the entire cave. Returns
+    // a null box when @a scene or its intersecter is absent.
+    Q_INVOKABLE QBox3D sceneBoundingBox(cwScene* scene) const;
 
     // Render the viewer's resident scene through the offscreen path with its
     // current camera and save the result to filePath as a PNG. This is the test

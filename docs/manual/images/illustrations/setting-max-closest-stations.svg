@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 300" width="512" height="300" role="img" aria-label="A survey line whose control points sit every 0.5 metres: three surveyed stations A1, A2 and A3 plus twenty interpolated ones. With Max equals 3, the three points chosen to warp a grid point are all interpolated. With Max equals 10, the ten chosen are nine interpolated points plus the surveyed station A2, covering about five metres of line.">
+  <defs>
+    <style>
+      .card    { fill: #ffffff; }
+      .title   { font: 600 13px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .label   { font: 600 12px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .note    { font: 11px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5c656e; }
+      .sname   { font: 600 10px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5c656e; }
+      .dim     { font: 600 10px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #d6552b; }
+      .shot    { fill: none; stroke: #171b20; stroke-width: 1.5; }
+      .real    { fill: #ffffff; stroke: #171b20; stroke-width: 1.6; }
+      .realUsed{ fill: #d6552b; stroke: #171b20; stroke-width: 1.6; }
+      .virt    { fill: #ffffff; stroke: #b9c2ca; stroke-width: 1.4; }
+      .virtUsed{ fill: #d6552b; stroke: #b9c2ca; stroke-width: 1.4; }
+      .pull    { stroke: #d6552b; stroke-width: 0.9; opacity: 0.55; }
+      .pt      { stroke: #171b20; stroke-width: 1.9; fill: none; }
+      .measure { stroke: #d6552b; stroke-width: 1.25; }
+      .rule    { stroke: #dbe1e6; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect class="card" width="512" height="300"/>
+  <text class="title" x="16" y="22">Max closest stations — counted over interpolated points too</text>
+  <text class="note"  x="16" y="40">Control points every 0.5 m: 3 surveyed stations, 20 interpolated.</text>
+
+  <g transform="translate(28,96)">
+    <line class="shot" x1="0" y1="0" x2="308" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="98" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="112" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="126" y2="0"/>
+    <circle class="real" cx="0" cy="0" r="4.4"/>
+    <circle class="virt" cx="14" cy="0" r="3.2"/>
+    <circle class="virt" cx="28" cy="0" r="3.2"/>
+    <circle class="virt" cx="42" cy="0" r="3.2"/>
+    <circle class="virt" cx="56" cy="0" r="3.2"/>
+    <circle class="virt" cx="70" cy="0" r="3.2"/>
+    <circle class="virt" cx="84" cy="0" r="3.2"/>
+    <circle class="virtUsed" cx="98" cy="0" r="3.2"/>
+    <circle class="virtUsed" cx="112" cy="0" r="3.2"/>
+    <circle class="virtUsed" cx="126" cy="0" r="3.2"/>
+    <circle class="virt" cx="140" cy="0" r="3.2"/>
+    <circle class="real" cx="154" cy="0" r="4.4"/>
+    <circle class="virt" cx="168" cy="0" r="3.2"/>
+    <circle class="virt" cx="182" cy="0" r="3.2"/>
+    <circle class="virt" cx="196" cy="0" r="3.2"/>
+    <circle class="virt" cx="210" cy="0" r="3.2"/>
+    <circle class="virt" cx="224" cy="0" r="3.2"/>
+    <circle class="virt" cx="238" cy="0" r="3.2"/>
+    <circle class="virt" cx="252" cy="0" r="3.2"/>
+    <circle class="virt" cx="266" cy="0" r="3.2"/>
+    <circle class="virt" cx="280" cy="0" r="3.2"/>
+    <circle class="virt" cx="294" cy="0" r="3.2"/>
+    <circle class="real" cx="308" cy="0" r="4.4"/>
+    <text class="sname" x="0" y="17" text-anchor="middle">A1</text>
+    <text class="sname" x="154" y="17" text-anchor="middle">A2</text>
+    <text class="sname" x="308" y="17" text-anchor="middle">A3</text>
+    <path class="pt" d="M 110 -46 L 122 -34 M 122 -46 L 110 -34"/>
+    <g transform="translate(0,30)">
+      <line class="measure" x1="98" y1="0" x2="126" y2="0"/>
+      <line class="measure" x1="98" y1="-4" x2="98" y2="4"/>
+      <line class="measure" x1="126" y1="-4" x2="126" y2="4"/>
+      <text class="dim" x="112" y="15" text-anchor="middle">≈ 1 m of line</text>
+    </g>
+  </g>
+  <text class="label" x="356" y="72">Max = 3</text>
+  <text class="note"  x="356" y="90">All three are interpolated</text>
+  <text class="note"  x="356" y="104">points — not one surveyed</text>
+  <text class="note"  x="356" y="118">station among them.</text>
+
+  <line class="rule" x1="16" y1="166" x2="496" y2="166"/>
+
+  <g transform="translate(28,216)">
+    <line class="shot" x1="0" y1="0" x2="308" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="56" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="70" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="84" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="98" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="112" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="126" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="140" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="154" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="168" y2="0"/>
+    <line class="pull" x1="116" y1="-40" x2="182" y2="0"/>
+    <circle class="real" cx="0" cy="0" r="4.4"/>
+    <circle class="virt" cx="14" cy="0" r="3.2"/>
+    <circle class="virt" cx="28" cy="0" r="3.2"/>
+    <circle class="virt" cx="42" cy="0" r="3.2"/>
+    <circle class="virtUsed" cx="56" cy="0" r="3.2"/>
+    <circle class="virtUsed" cx="70" cy="0" r="3.2"/>
+    <circle class="virtUsed" cx="84" cy="0" r="3.2"/>
+    <circle class="virtUsed" cx="98" cy="0" r="3.2"/>
+    <circle class="virtUsed" cx="112" cy="0" r="3.2"/>
+    <circle class="virtUsed" cx="126" cy="0" r="3.2"/>
+    <circle class="virtUsed" cx="140" cy="0" r="3.2"/>
+    <circle class="realUsed" cx="154" cy="0" r="4.4"/>
+    <circle class="virtUsed" cx="168" cy="0" r="3.2"/>
+    <circle class="virtUsed" cx="182" cy="0" r="3.2"/>
+    <circle class="virt" cx="196" cy="0" r="3.2"/>
+    <circle class="virt" cx="210" cy="0" r="3.2"/>
+    <circle class="virt" cx="224" cy="0" r="3.2"/>
+    <circle class="virt" cx="238" cy="0" r="3.2"/>
+    <circle class="virt" cx="252" cy="0" r="3.2"/>
+    <circle class="virt" cx="266" cy="0" r="3.2"/>
+    <circle class="virt" cx="280" cy="0" r="3.2"/>
+    <circle class="virt" cx="294" cy="0" r="3.2"/>
+    <circle class="real" cx="308" cy="0" r="4.4"/>
+    <text class="sname" x="0" y="17" text-anchor="middle">A1</text>
+    <text class="sname" x="154" y="17" text-anchor="middle">A2</text>
+    <text class="sname" x="308" y="17" text-anchor="middle">A3</text>
+    <path class="pt" d="M 110 -46 L 122 -34 M 122 -46 L 110 -34"/>
+    <g transform="translate(0,30)">
+      <line class="measure" x1="56" y1="0" x2="182" y2="0"/>
+      <line class="measure" x1="56" y1="-4" x2="56" y2="4"/>
+      <line class="measure" x1="182" y1="-4" x2="182" y2="4"/>
+      <text class="dim" x="119" y="15" text-anchor="middle">≈ 5 m of line</text>
+    </g>
+  </g>
+  <text class="label" x="356" y="192">Max = 10 (default)</text>
+  <text class="note"  x="356" y="210">Nine interpolated points</text>
+  <text class="note"  x="356" y="224">plus one surveyed station</text>
+  <text class="note"  x="356" y="238">(A2). Halving the spacing</text>
+  <text class="note"  x="356" y="252">halves the reach.</text>
+
+  <g transform="translate(28,288)">
+    <circle class="real" cx="5" cy="-4" r="4.4"/>
+    <text class="note" x="16" y="0">Surveyed station</text>
+    <circle class="virt" cx="122" cy="-4" r="3.2"/>
+    <text class="note" x="133" y="0">Interpolated station</text>
+    <circle class="virtUsed" cx="256" cy="-4" r="3.2"/>
+    <text class="note" x="267" y="0">Used to warp the point (&#10005;)</text>
+  </g>
+</svg>

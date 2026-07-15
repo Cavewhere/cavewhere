@@ -3,6 +3,7 @@
 #include "cwRootData.h"
 #include "cwRhiViewer.h"
 #include "cwScene.h"
+#include "cwGeometryItersecter.h"
 #include "cwCamera.h"
 #include "cwOffscreenRenderParameters.h"
 #include "cwAppearanceOverride.h"
@@ -306,6 +307,14 @@ bool OffscreenRenderTester::windowHasRhi(QQuickItem* item) const
         return false;
     }
     return renderer->getResource(item->window(), QSGRendererInterface::RhiResource) != nullptr;
+}
+
+QBox3D OffscreenRenderTester::sceneBoundingBox(cwScene* scene) const
+{
+    if (!scene || !scene->geometryItersecter()) {
+        return QBox3D();
+    }
+    return scene->geometryItersecter()->boundingBox();
 }
 
 void OffscreenRenderTester::renderToImage(QQuickItem* viewer, const QString& filePath,

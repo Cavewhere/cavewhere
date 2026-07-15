@@ -70,7 +70,10 @@ def embed_images(html, page_dir):
             print(f"  warning: missing image {src} -> {img_path}", file=sys.stderr)
             return match.group(0)
         ext = os.path.splitext(img_path)[1].lstrip(".").lower()
-        mime = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
+        # "image/svg" is not a real type — browsers reject the data URI and show
+        # a broken image, so SVG needs its +xml suffix spelled out.
+        mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
+                "svg": "image/svg+xml"}.get(ext, f"image/{ext}")
         with open(img_path, "rb") as handle:
             data = base64.b64encode(handle.read()).decode("ascii")
         return f'src="data:{mime};base64,{data}"'
