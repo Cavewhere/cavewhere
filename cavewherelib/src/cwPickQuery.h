@@ -65,9 +65,11 @@ struct cwPickQuery {
     //! Solid scene geometry — surfaces and point clouds, but not the centerline
     //! overlay. Occlusion tests (cwLeadView lead visibility) use this: a lead
     //! behind only the centerline is still visible, so a line must not occlude
-    //! it. Note this is deliberately NOT used for the turntable pivot, which
-    //! orbits the centerline when the solid geometry is hidden and so keeps
-    //! cwPickQuery::All.
+    //! it. Note this is deliberately NOT used for the turntable pivot, whose
+    //! rotation path wants the opposite split — it picks Triangles|Lines and
+    //! Points separately and ranks the two by depth, so that a near-missed
+    //! scrap outranks the cloud unless the cloud occludes it (see
+    //! cwBaseTurnTableInteraction::unProject).
     static constexpr Kinds Solid = Kinds(Kind::Triangles) | Kind::Points;
 
     Kinds kinds = All;

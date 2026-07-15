@@ -111,9 +111,9 @@ TEST_CASE("Ray within pickRadius of a point still hits", "[cwGeometryItersecter]
 
 TEST_CASE("Ray well beyond the tube range does not hit the point", "[cwGeometryItersecter][points]")
 {
-    // Offset well past the tube-pick range (kTubeFactor=5 * pickRadius)
+    // Offset well past the tube-pick range (kTubeFactor=2.5 * pickRadius)
     // so neither the sphere intersection nor the near-miss fallback
-    // fires. Rays in the (1x, 5x) band are expected to snap to the
+    // fires. Rays in the (1x, 2.5x) band are expected to snap to the
     // point via the tube fallback (see test_cwGeometryItersecter_tubePick).
     const float offset = kPickRadius * 10.0f;
     const QVector3D origin(offset, 0.0f, 10.0f);

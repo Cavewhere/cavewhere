@@ -249,23 +249,38 @@ private:
     double clampAzimuth(double azimuth) const;
     double clampPitch(double pitch) const;
 
-    //! Picks a world point under @a point (in GL viewport coords). Returns an
-    //! exact geometry hit, else a grid-plane hit (only when the scene has no
-    //! geometry), else nullopt so callers keep the current pivot instead of
-    //! teleporting (issues #527, #562).
+    //! Picks a world point under @a point (in GL viewport coords), else a
+    //! grid-plane hit (only when the scene has no geometry), else nullopt so
+    //! callers keep the current pivot instead of teleporting (issues #527,
+    //! #562).
+    //!
+    //! With @a anchorToNearestGeometry false (pan, zoom) this is the nearest
+    //! exact hit of any kind: those callers track whatever is under the cursor.
+    //!
+    //! With it true (rotation) the pick sorts by kind, because a user orbits
+    //! what they authored, not the LiDAR cloud that happens to be behind it.
+    //! Survey geometry (scraps, LiDAR notes, centerline) competes with BOTH an
+    //! exact hit and a near-miss anchor within PivotAnchorRadiusMillimeters.
+    //! The cloud competes with an exact hit, which carries the intersecter's
+    //! own tube fallback (kTubeFactor * pickRadius of world-space reach) — far
+    //! tighter than the screen-space anchor, but not nothing, so this is a
+    //! demotion rather than an exact-only rule. Depth then decides between the
+    //! two winners: a near-missed scrap beats a far cloud point, while a cloud
+    //! genuinely occluding the scrap still takes the pivot — orbiting geometry
+    //! hidden behind a LiDAR wall would just trade one teleport for another.
+    //!
+    //! If BOTH miss, the cloud gets the wide anchor too, as a last rung. A
+    //! LiDAR-only project has no survey geometry to lose to and still has to be
+    //! orbitable (#562's "can't rotate around a point cloud point").
     //!
     //! Only a triangle hit is strictly on the cursor ray. A line hit returns
     //! the closest point on the segment and a point hit returns the vertex
     //! center, so an exact hit can sit off-ray by up to the pick radius
     //! (~kPivotPickRadiusMillimeters of screen). Callers doing delta math
     //! against the result (pan, zoom) inherit that as a small mouse-down step.
-    //!
-    //! When @a anchorToNearestGeometry is true, a near-miss instead resolves to
-    //! the closest geometry point within PivotAnchorRadiusMillimeters of the
-    //! cursor (issue #562) — a pivot on real geometry near what's on screen,
-    //! used by rotation. That widens the off-ray error by 5x, which orbits
-    //! fine but would visibly jerk a pan or drift a zoom. Only rotation opts
-    //! in: pan and zoom keep the tighter exact-hit error.
+    //! The anchor widens that error to PivotAnchorRadiusMillimeters, which
+    //! orbits fine but would visibly jerk a pan or drift a zoom — the other
+    //! reason only rotation opts in.
     std::optional<QVector3D> unProject(QPoint point,
                                        bool anchorToNearestGeometry = false) const;
 

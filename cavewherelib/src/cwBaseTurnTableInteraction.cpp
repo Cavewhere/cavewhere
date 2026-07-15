@@ -13,6 +13,7 @@
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
 #include "cwMath.h"
+#include "cwRayHit.h"
 
 //Std includes
 #include "math.h"
@@ -29,6 +30,14 @@ namespace {
     // so the view can orbit the line plot when the solid geometry is hidden.
     // Millimeters (not pixels) so the grab feels the same size on every display.
     constexpr double kPivotPickRadiusMillimeters = 4.0;
+
+    // Everything a user authors or surveys: scrap carpets, LiDAR notes (which
+    // render as triangles through the same path as scraps) and the centerline.
+    // Deliberately excludes Kind::Points — the LiDAR cloud — which the rotation
+    // pivot treats as a second-class citizen. See unProject().
+    constexpr cwPickQuery::Kinds kSurveyGeometryKinds =
+        cwPickQuery::Kinds(cwPickQuery::Kind::Triangles) | cwPickQuery::Kind::Lines;
+
 }
 
 cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
@@ -102,9 +111,9 @@ void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
  * @param point - screen point in GL viewport coordinates
  * @return World point under the cursor, or nullopt on a miss
  *
- * See the declaration for the full ladder. The constraint that shapes it: step
- * (2) returns a point OFF the cursor ray, so only rotation opts in — an off-ray
- * anchor would jerk the pan and drift the zoom.
+ * See the declaration for the full ladder. The constraint that shapes it: the
+ * anchor returns a point OFF the cursor ray, so only rotation opts in — an
+ * off-ray anchor would jerk the pan and drift the zoom.
  */
 std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point,
                                                                bool anchorToNearestGeometry) const {
@@ -113,66 +122,148 @@ std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point,
     Q_ASSERT(scene()->geometryItersecter());
 
     //Create a ray from the back projection front and back plane
-    auto ray = Camera->frustrumRay(point);
+    const QRay3D ray = Camera->frustrumRay(point);
+    const cwGeometryItersecter* intersecter = scene()->geometryItersecter();
 
-    //See if it hits any of the scraps or objects — always trust a real hit. The
-    //pick radius keeps the thin centerline grabbable, so the view can pivot on it
-    //when the solid geometry is hidden. The pivot is the hit's point on the
-    //geometry — for a line that's the closest point on the segment, so orbiting a
-    //picked line spins around the line itself, not a point floating beside it.
-    const cwRayHit hit = scene()->geometryItersecter()->intersectsDetailed(
-                ray, Camera->pickQuery(pixelsForMillimeters(kPivotPickRadiusMillimeters)));
-    if(hit.hit()) {
-        const QVector3D world = hit.pointWorld();
-        qCDebug(lcInteract).nospace()
-            << "unProject(" << point << "): geometry world=" << world
-            << " rayOrigin=" << ray.origin();
-        return world;
-    }
+    const cwPickQuery pivotQuery =
+            Camera->pickQuery(pixelsForMillimeters(kPivotPickRadiusMillimeters));
 
-    //No exact hit. For rotation, fall back to the closest point ON geometry
-    //within a much wider screen-space reach, so a near-miss pivots on the
-    //geometry the user aimed at instead of teleporting (issue #562).
-    if(anchorToNearestGeometry) {
-        if(const std::optional<QVector3D> anchor =
-                scene()->geometryItersecter()->nearestGeometryPoint(
-                    ray, Camera->pickQuery(pixelsForMillimeters(PivotAnchorRadiusMillimeters)))) {
-            qCDebug(lcInteract).nospace()
-                << "unProject(" << point << "): geometry anchor=" << *anchor
-                << " rayOrigin=" << ray.origin();
-            return anchor;
-        }
-    }
-
-    //The ray reached no geometry at all. The grid plane is a last-resort pivot,
-    //but only when there's nothing to anchor against (an empty/unloaded project).
-    //Once survey geometry exists, an off-geometry click must not pivot on the
-    //grid: the infinite grid plane sits at the cave floor (min Z), so a grazing
-    //hit lands far out in X/Y and teleports the view, losing the rotation context
-    //(issues #562, #527). In that case return nullopt so the caller keeps the
-    //current pivot instead.
+    //The grid plane is a last-resort pivot, but only when there's nothing to
+    //anchor against (an empty/unloaded project). Once survey geometry exists, an
+    //off-geometry click must not pivot on the grid: the infinite grid plane sits
+    //at the cave floor (min Z), so a grazing hit lands far out in X/Y and
+    //teleports the view, losing the rotation context (issues #562, #527). In
+    //that case return nullopt so the caller keeps the current pivot instead.
     //
     //This asks the intersecter what a pick can actually reach, not merely what
     //exists: hiding every object leaves the picks with nothing, so the grid has
     //to come back or the pivot would be stuck with no way to recover.
-    const bool hasGeometry = !scene()->geometryItersecter()->isPickableEmpty();
-    if(!hasGeometry) {
-        const double gridT = m_gridPlane.intersection(ray);
-        if(!std::isnan(gridT)) {
-            const QVector3D gridHit = ray.point(gridT);
+    const auto gridPivot = [&]() -> std::optional<QVector3D> {
+        const bool hasGeometry = !intersecter->isPickableEmpty();
+        if(!hasGeometry) {
+            const double gridT = m_gridPlane.intersection(ray);
+            if(!std::isnan(gridT)) {
+                const QVector3D gridHit = ray.point(gridT);
+                qCDebug(lcInteract).nospace()
+                    << "unProject(" << point << "): gridPlane t=" << gridT
+                    << " world=" << gridHit << " rayOrigin=" << ray.origin();
+                return gridHit;
+            }
+        }
+        qCDebug(lcInteract).nospace()
+            << "unProject(" << point << "): no geometry pivot"
+            << " (hasGeometry=" << hasGeometry << ") -> miss"
+            << " rayOrigin=" << ray.origin() << " rayDir=" << ray.direction();
+        return std::nullopt;
+    };
+
+    //Pan and zoom want the point under the cursor, whatever it belongs to, so
+    //they take the nearest exact hit of any kind. Only rotation sorts by kind
+    //below — it is choosing something to orbit, not something to track.
+    if(!anchorToNearestGeometry) {
+        const cwRayHit hit = intersecter->intersectsDetailed(ray, pivotQuery);
+        if(hit.hit()) {
+            const QVector3D world = hit.pointWorld();
             qCDebug(lcInteract).nospace()
-                << "unProject(" << point << "): gridPlane t=" << gridT
-                << " world=" << gridHit << " rayOrigin=" << ray.origin();
-            return gridHit;
+                << "unProject(" << point << "): geometry world=" << world
+                << " rayOrigin=" << ray.origin();
+            return world;
+        }
+        return gridPivot();
+    }
+
+    //Rotation. Survey geometry — scraps, LiDAR notes, the centerline — is what
+    //a user means to orbit, so it competes with BOTH an exact hit and the wider
+    //near-miss anchor, while the point cloud competes only with an exact hit
+    //(which still carries the intersecter's world-space tube fallback — much
+    //tighter than this anchor, so the demotion holds, but it is not literally
+    //exact-only). Depth then picks the winner between the two, with no priority
+    //rule: that yields "geometry first" (a near-missed scrap beats a far cloud
+    //point, issue #562) while still letting a cloud that genuinely occludes the
+    //geometry take the pivot, rather than orbiting something out of sight.
+    //
+    //Splitting the kinds costs up to four top-level descents per press (two
+    //here, plus an anchor each). The kind filter rejects a whole Object before
+    //its sub-BVH is entered, so the cloud's 100M+ points are skipped outright
+    //by the geometry query; the extra cost is top-level only, and this runs per
+    //mouse-down. Deliberately NOT merged into one traversal: a shared best-depth
+    //prune would let a near cloud hit discard the farther geometry hit that the
+    //comparison below needs computed independently.
+    cwPickQuery geometryQuery = pivotQuery;
+    geometryQuery.kinds = kSurveyGeometryKinds;
+    cwPickQuery cloudQuery = pivotQuery;
+    cloudQuery.kinds = cwPickQuery::Kinds(cwPickQuery::Kind::Points);
+
+    const cwRayHit geometryHit = intersecter->intersectsDetailed(ray, geometryQuery);
+    const cwRayHit cloudHit = intersecter->intersectsDetailed(ray, cloudQuery);
+
+    //The exact hit is on the ray; the anchor is the closest point ON geometry
+    //within a much wider reach, so a near-miss still pivots on the geometry the
+    //user aimed at instead of teleporting. Triangles are picked by an exact
+    //ray-triangle test that never consults the tolerance, so for a scrap the
+    //anchor is the ONLY thing that can catch a near-miss.
+    std::optional<QVector3D> geometryPivot;
+    double geometryDepth = 0.0;
+    if(geometryHit.hit()) {
+        geometryPivot = geometryHit.pointWorld();
+        geometryDepth = geometryHit.tWorld();
+    } else {
+        cwPickQuery anchorQuery =
+                Camera->pickQuery(pixelsForMillimeters(PivotAnchorRadiusMillimeters));
+        anchorQuery.kinds = kSurveyGeometryKinds;
+        if(const std::optional<QVector3D> anchor =
+                intersecter->nearestGeometryPoint(ray, anchorQuery)) {
+            geometryPivot = anchor;
+            //The same measure nearestGeometryPoint ranks its own candidates by.
+            geometryDepth = ray.projectedDistance(*anchor);
         }
     }
 
-    qCDebug(lcInteract).nospace()
-        << "unProject(" << point << "): no geometry pivot"
-        << " (hasGeometry=" << hasGeometry << ") -> miss"
-        << " rayOrigin=" << ray.origin() << " rayDir=" << ray.direction();
+    //Not quite like-for-like, and knowingly so: geometryDepth is the depth of
+    //the point returned, while a cloud exact hit reports its SPHERE-ENTRY depth
+    //(fillPointHit ranks by tNear, deliberately, so a head-on point beats a
+    //grazing one) even though the pivot it returns is the sphere CENTRE. So the
+    //cloud is favoured by up to one pickRadius — one mean point spacing, a few
+    //cm in a real cave. That is well under what a pivot shift needs to be for
+    //an orbit to look wrong, and erring toward the thing that visually occludes
+    //is the right direction to err, so it is left alone. Comparing centre depth
+    //instead (ray.projectedDistance(cloudHit.pointWorld())) would remove the
+    //bias if this ever matters.
+    if(geometryPivot && (!cloudHit.hit() || geometryDepth < cloudHit.tWorld())) {
+        qCDebug(lcInteract).nospace()
+            << "unProject(" << point << "): survey geometry=" << *geometryPivot
+            << " depth=" << geometryDepth
+            << " (cloudHit=" << cloudHit.hit() << " cloudDepth=" << cloudHit.tWorld() << ")"
+            << " rayOrigin=" << ray.origin();
+        return geometryPivot;
+    }
 
-    return std::nullopt;
+    if(cloudHit.hit()) {
+        const QVector3D world = cloudHit.pointWorld();
+        qCDebug(lcInteract).nospace()
+            << "unProject(" << point << "): point cloud occludes=" << world
+            << " depth=" << cloudHit.tWorld()
+            << " rayOrigin=" << ray.origin();
+        return world;
+    }
+
+    //Nothing under the cursor at all. Second-class is not last-resort-less: a
+    //LiDAR-only project (a scan with no scraps drawn yet) still has to be
+    //orbitable, so the cloud gets the wide anchor too — but only here, after
+    //survey geometry has had both of its chances. This is #562's original
+    //"can't rotate around a point cloud point".
+    cwPickQuery cloudAnchorQuery =
+            Camera->pickQuery(pixelsForMillimeters(PivotAnchorRadiusMillimeters));
+    cloudAnchorQuery.kinds = cwPickQuery::Kinds(cwPickQuery::Kind::Points);
+    if(const std::optional<QVector3D> cloudAnchor =
+            intersecter->nearestGeometryPoint(ray, cloudAnchorQuery)) {
+        qCDebug(lcInteract).nospace()
+            << "unProject(" << point << "): point cloud anchor=" << *cloudAnchor
+            << " rayOrigin=" << ray.origin();
+        return cloudAnchor;
+    }
+
+    return gridPivot();
 }
 
 QVector3D cwBaseTurnTableInteraction::rayPointAtCenterDepth(QPoint mappedPoint) const {

@@ -254,13 +254,13 @@ TEST_CASE("Tube-pick fallback works through the two-level path",
 {
     cwGeometryItersecter intersector;
 
-    // A point at (1, 0, 0) with pickRadius=0.1; the ray's X offset of 0.3
-    // is outside the strict sphere (0.3 > 0.1) but within tube range
-    // (kTubeFactor * pickRadius = 5 * 0.1 = 0.5).
+    // A point at (1, 0, 0) with pickRadius=0.1; the ray's X offset of 0.2
+    // is outside the strict sphere (0.2 > 0.1) but within tube range
+    // (kTubeFactor * pickRadius = 2.5 * 0.1 = 0.25).
     intersector.addObject(makePointObject(1, {QVector3D(1.0f, 0.0f, 0.0f)}));
     intersector.waitForFinish();
 
-    const QRay3D ray(QVector3D(1.3f, 0.0f, 100.0f),
+    const QRay3D ray(QVector3D(1.2f, 0.0f, 100.0f),
                      QVector3D(0.0f, 0.0f, -1.0f));
 
     // With tube-pick on (default), the pick should land on the point.

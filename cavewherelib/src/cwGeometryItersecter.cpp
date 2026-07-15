@@ -139,7 +139,15 @@ namespace {
 
     // Tube-pick fallback radius as a multiplier of pickRadius. Lets the
     // user clicking near a point in a sub-pixel gap still pivot on it.
-    constexpr float kTubeFactor = 5.0f;
+    //
+    // Held at 2.5 world-spacings of reach. This was 5.0 back when a cloud's
+    // pickRadius was half its point spacing; cwRenderPointCloud::
+    // PointPickRadiusScale is now a full spacing, so the same 5.0 would have
+    // silently doubled the reach to ~3x the drawn splat and made the fallback
+    // grab points the user is plainly not over. The gaps this compensated for
+    // are gone anyway — a watertight radius yields an exact hit on the near
+    // surface — so the tube is now only for genuinely sparse clouds.
+    constexpr float kTubeFactor = 2.5f;
 
     // Leaf threshold — the largest count of primitives we'll let stop
     // subdivision. Bigger leaves trade a slightly longer per-leaf linear
