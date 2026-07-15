@@ -831,6 +831,16 @@ MainWindowTest {
             // null until the delegate is created, so the selection can be missed
             // entirely. Clicking the delegate is what tst_LiDARNotes does.
             let index = galleryView.count - 1;
+
+            // Scroll the new note into view before looking for its delegate.
+            // galleryView is a clipped ListView, so it only creates the delegate
+            // for a note that is actually in the viewport — the new note is
+            // appended last, and whether it landed in view depended on how many
+            // notes the trip already had and on layout timing. That made the
+            // search below fail about one full generator run in five, always
+            // here. Positioning first makes the delegate exist deterministically.
+            galleryView.positionViewAtIndex(index, QQ.ListView.Contain);
+
             let thumb = null;
             tryVerify(() => {
                 thumb = findByName(RootData.pageView.currentPageItem, "noteImage" + index);
@@ -971,6 +981,335 @@ MainWindowTest {
             verify(path.length > 0, "grabToFile wrote the warping-settings screenshot");
             verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
                    "warping-settings screenshot is not blank");
+        }
+
+        // ---------------------------------------------------------------------
+        // Survey Data chapter (docs/manual/survey-data/)
+        // ---------------------------------------------------------------------
+
+        // The visible button labelled `label` under `item`. AddAndSearchBar's
+        // button is objectName "addButton", and so are AddButton and KeywordTab's
+        // — so on a page with more than one add-bar the name alone is ambiguous.
+        // The label is what the manual tells the reader to click, so match on it.
+        function findAddButtonWithText(item, label) {
+            let all = findAllByName(item, "addButton", []);
+            for (let i = 0; i < all.length; ++i) {
+                if (all[i].visible && all[i].text === label) { return all[i]; }
+            }
+            return null;
+        }
+
+        // Load the demo project and navigate to `address`, asserting the page that
+        // comes up is `pageName`. Returns the page item, or null after skip() when
+        // the platform has no QRhi (the caller must return).
+        function openDataPage(address, pageName) {
+            TestHelper.loadProjectFromFile(RootData.project,
+                TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            // Neutral page first so a stale page is torn down.
+            RootData.pageSelectionModel.currentPageAddress = "View";
+            RootData.futureManagerModel.waitForFinished();
+            RootData.pageSelectionModel.currentPageAddress = address;
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === pageName,
+                      5000, "the " + pageName + " is current");
+
+            let fileLoader = findByName(rootId.mainWindow, "fileMenuButtonLoader");
+            if (fileLoader) { fileLoader.active = true; }
+
+            let page = RootData.pageView.currentPageItem;
+            if (!requireRhi(page)) { return null; }
+            settle();
+            return page;
+        }
+
+        // The Add Cave button on the cave list, highlighted. Grabbed whole-window
+        // rather than cropped: the cave list around it is the project's dashboard
+        // (each cave's length and depth), which the page describes.
+        // Backs the "Add a cave" section of survey-data/caves-and-trips.md.
+        function test_addCaveButton() {
+            let page = openDataPage("Source/Data", "dataMainPage");
+            if (!page) { return; }
+
+            let addCave = findAddButtonWithText(page, "Add Cave");
+            verify(addCave, "found the Add Cave button");
+
+            highlightOverlayId.target = addCave;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "survey-add-cave");
+            verify(path.length > 0, "grabToFile wrote the add-cave screenshot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   "survey-add-cave is not blank");
+        }
+
+        // The Add Trip button on a cave page, highlighted. The trip table beside
+        // it (Name, Date, Stations, Length, Decl) is the point of the shot, so
+        // this is whole-window too.
+        // Backs the "Add a trip" section of survey-data/caves-and-trips.md.
+        function test_addTripButton() {
+            let page = openDataPage("Source/Data/Cave=Phake Cave 3000", "cavePage");
+            if (!page) { return; }
+
+            // CavePage builds a wide (table) and a narrow (flow) layout, both
+            // carrying objectName "addTrip"; only one is shown at a time.
+            let addTripBar = findVisibleByName(page, "addTrip");
+            verify(addTripBar, "found the visible Add Trip bar");
+
+            let addTrip = findAddButtonWithText(addTripBar, "Add Trip");
+            verify(addTrip, "found the Add Trip button");
+
+            highlightOverlayId.target = addTrip;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "survey-add-trip");
+            verify(path.length > 0, "grabToFile wrote the add-trip screenshot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   "survey-add-trip is not blank");
+        }
+
+        // Open the demo trip and return its SurveyEditor's ListView — the whole
+        // editor (trip header, calibration, team, then the data rows) is one
+        // scrolling list, so `view` is both the viewport and the thing to scroll.
+        // The chain mirrors tst_TripSync/tst_NoteNorthInteraction, which proves
+        // there are no named items between the editor and its controls.
+        function openSurveyEditorView() {
+            TestHelper.loadProjectFromFile(RootData.project,
+                TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            // Neutral page first so a stale trip page is torn down.
+            RootData.pageSelectionModel.currentPageAddress = "View";
+            RootData.futureManagerModel.waitForFinished();
+            RootData.pageSelectionModel.currentPageAddress =
+                "Source/Data/Cave=Phake Cave 3000/Trip=Release 0.08";
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "tripPage",
+                      5000, "the trip page is current");
+
+            let fileLoader = findByName(rootId.mainWindow, "fileMenuButtonLoader");
+            if (fileLoader) { fileLoader.active = true; }
+
+            let view = ObjectFinder.findObjectByChain(rootId.mainWindow,
+                "rootId->tripPage->surveyEditor->view");
+            verify(view, "found the survey editor's list view");
+            if (!requireRhi(view)) { return null; }
+
+            // The editor's header (trip, calibration, team) lays out over several
+            // frames; grabbing before it settles crops a half-built rectangle.
+            settle();
+            return view;
+        }
+
+        // Scroll `item` to the top of the survey editor's viewport. Nothing in
+        // this editor is grabbable until it has been scrolled to: grabItemToFile
+        // crops the item's sceneRect out of a full-window grab, so an item that
+        // is scrolled off is cropped to an empty rect and the grab fails.
+        //
+        // The trip/calibration/team controls live in the ListView's *header*, and
+        // a header sits ABOVE content y 0 — here originY is -664 for a 664-tall
+        // header. So contentY is legitimately negative over the whole header, and
+        // clamping the target to 0 scrolls the header away instead of to it.
+        function scrollSurveyEditorTo(view, item) {
+            let pos = item.mapToItem(view.contentItem, 0, 0);
+            let minY = view.originY;
+            let maxY = Math.max(minY, view.originY + view.contentHeight - view.height);
+            view.contentY = Math.max(minY, Math.min(pos.y - 8, maxY));
+            settle();
+        }
+
+        // The whole trip page with the survey editor ringed, so the reader can
+        // place the survey table on the page before the chapter dissects it.
+        // Whole-window: the point is where the editor sits relative to the note
+        // gallery beside it. Backs the "Why" of survey-data/enter-survey-data.md.
+        function test_tripPage() {
+            let view = openSurveyEditorView();
+            if (!view) { return; }
+
+            // Park the list at its header so the ringed editor shows the trip's
+            // name and calibration rather than a mid-scroll position.
+            view.positionViewAtBeginning();
+
+            let editor = ObjectFinder.findObjectByChain(rootId.mainWindow,
+                "rootId->tripPage->surveyEditor");
+            verify(editor, "found the survey editor");
+
+            highlightOverlayId.target = editor;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "survey-trip-page");
+            verify(path.length > 0, "grabToFile wrote the trip-page screenshot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   "survey-trip-page is not blank");
+        }
+
+        // The trip's name and date row, ringed inside the editor's Trip section.
+        // Backs the "Name and date a trip" section of
+        // docs/manual/survey-data/caves-and-trips.md.
+        function test_tripNameAndDate() {
+            let view = openSurveyEditorView();
+            if (!view) { return; }
+
+            let nameText = findVisibleByName(view, "tripNameText");
+            verify(nameText, "found the trip name input");
+            verify(findVisibleByName(view, "tripDate"), "found the trip date input");
+
+            // tripNameText -> the name/date RowLayout -> the Trip section's
+            // ColumnLayout (the "Trip" label, this row, and the error banner).
+            let row = nameText.parent;
+            let tripSection = row.parent;
+            verify(tripSection, "found the Trip section");
+
+            scrollSurveyEditorTo(view, tripSection);
+            highlightOverlayId.target = row;
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(tripSection, "survey-trip-name-date",
+                                                    panelCropMargin);
+            verify(path.length > 0, "grabItemToFile wrote the trip name/date screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "survey-trip-name-date is not blank");
+        }
+
+        // The interleaved station/shot table. Scrolls the trip header off so the
+        // grab is the data rows and their column titles — the layout that
+        // docs/manual/survey-data/enter-survey-data.md has to explain.
+        function test_surveyShotTable() {
+            let view = openSurveyEditorView();
+            if (!view) { return; }
+
+            // Index 0 is the first row below the header, so this parks the data
+            // rows (and the sticky column titles) at the top of the viewport.
+            view.positionViewAtIndex(0, QQ.ListView.Beginning);
+            highlightOverlayId.target = null;
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(view, "survey-shot-table", 0);
+            verify(path.length > 0, "grabItemToFile wrote the shot-table screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "survey-shot-table is not blank");
+        }
+
+        // The "Press Space to add another data block" bar, ringed in the editor's
+        // footer. Backs the "Start a new data block" section of
+        // docs/manual/survey-data/enter-survey-data.md.
+        function test_addDataBlock() {
+            let view = openSurveyEditorView();
+            if (!view) { return; }
+
+            // The bar is in the ListView's footer, below every data row.
+            // positionViewAtEnd() aligns the last *item*, not the footer, and
+            // leaves the footer hanging ~18px past the window's bottom edge —
+            // grabItemToFile then clips the crop there and cuts the button in
+            // half. Scroll to the true maximum instead.
+            // Applied twice: the first scroll can change the header's layout,
+            // which moves originY/contentHeight, leaving the target stale.
+            view.contentY = view.originY + view.contentHeight - view.height;
+            settle();
+            view.contentY = view.originY + view.contentHeight - view.height;
+            settle();
+
+            let spaceBar = findVisibleByName(view, "spaceAddBar");
+            verify(spaceBar, "found the add-data-block bar");
+
+            // spaceAddBar -> the footer ColumnLayout, which also carries the
+            // trip's Total Length. Cropping the footer keeps the shot readable;
+            // cropping the whole viewport would be mostly survey rows.
+            let footer = spaceBar.parent;
+            verify(footer, "found the editor footer");
+
+            highlightOverlayId.target = spaceBar;
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(footer, "survey-add-data-block",
+                                                    panelCropMargin);
+            verify(path.length > 0, "grabItemToFile wrote the add-data-block screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "survey-add-data-block is not blank");
+        }
+
+        // The Calibration section whole: declination, tape, and the front/back
+        // sight boxes. Reached through frontSightCalibrationEditor's parents
+        // rather than by naming CalibrationEditor's root — an objectName there
+        // would insert a link into "…->view->declinationEdit" and break the
+        // chains tst_TripSync and tst_NoteNorthInteraction already record.
+        function test_surveyCalibration() {
+            let view = openSurveyEditorView();
+            if (!view) { return; }
+
+            let frontSights = findVisibleByName(view, "frontSightCalibrationEditor");
+            verify(frontSights, "found the front-sight calibration editor");
+
+            // frontSightCalibrationEditor -> sights Flow -> CalibrationEditor's
+            // ColumnLayout, which also holds the "Calibration" label and the
+            // declination/tape row.
+            let section = frontSights.parent.parent;
+            verify(section, "found the calibration section");
+
+            scrollSurveyEditorTo(view, section);
+            highlightOverlayId.target = null;
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(section, "survey-calibration",
+                                                    panelCropMargin);
+            verify(path.length > 0, "grabItemToFile wrote the calibration screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "survey-calibration is not blank");
+        }
+
+        // The Declination row, highlighted inside the calibration section.
+        //
+        // The demo cave has no fix station, so autoDeclinationAvailable is false
+        // and the Auto/Manual picker is hidden by design — the value stands
+        // alone. That is the state declination.md describes for a cave that
+        // hasn't been georeferenced yet, so the shot is left that way rather
+        // than fabricating a fix station to force the picker into view.
+        function test_surveyDeclination() {
+            let view = openSurveyEditorView();
+            if (!view) { return; }
+
+            let declinationEdit = findVisibleByName(view, "declinationEdit");
+            verify(declinationEdit, "found the declination edit");
+
+            let frontSights = findVisibleByName(view, "frontSightCalibrationEditor");
+            verify(frontSights, "found the front-sight calibration editor");
+            let section = frontSights.parent.parent;
+
+            scrollSurveyEditorTo(view, section);
+            // The row (label + optional picker + value), not the bare value: a
+            // ring around "0" alone reads as a highlight of nothing.
+            highlightOverlayId.target = declinationEdit.parent;
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(section, "survey-declination",
+                                                    panelCropMargin);
+            verify(path.length > 0, "grabItemToFile wrote the declination screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "survey-declination is not blank");
+        }
+
+        // The Team section. TeamTable collapses to a "NoTeam" state when the
+        // trip has no members, so this asserts the demo trip actually has one
+        // rather than silently shooting an empty box.
+        function test_surveyTeam() {
+            let view = openSurveyEditorView();
+            if (!view) { return; }
+
+            let teamTable = findVisibleByName(view, "teamTable");
+            verify(teamTable, "found the team table");
+            verify(teamTable.state !== "NoTeam",
+                   "the demo trip has a team to shoot (state is " + teamTable.state + ")");
+
+            scrollSurveyEditorTo(view, teamTable);
+            highlightOverlayId.target = null;
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(teamTable, "survey-team",
+                                                    panelCropMargin);
+            verify(path.length > 0, "grabItemToFile wrote the team screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "survey-team is not blank");
         }
     }
 }

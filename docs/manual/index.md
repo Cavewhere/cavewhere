@@ -24,6 +24,18 @@ the problems CaveWhere solves — then keep the
 - [The 3D View](view-3d/the-3d-view.md) — navigate the model, aim the camera,
   and filter with layers.
 
+### Survey Data
+- [Organize Caves and Trips](survey-data/caves-and-trips.md) — the region → cave
+  → trip structure, and why the trip is the unit that matters.
+- [Enter Survey Data](survey-data/enter-survey-data.md) — the survey table,
+  data blocks, and the keyboard shortcuts that make entry fast.
+- [Calibrate the Instruments](survey-data/calibration.md) — tape, compass and
+  clino corrections, foresights and backsights, and units.
+- [Set the Declination](survey-data/declination.md) — magnetic north to true
+  north, automatically or by hand.
+- [Fix Survey Errors](survey-data/survey-errors.md) — what each error and
+  warning means, and how to clear it.
+
 ### Notes
 - [Add Notes to a Trip](notes/add-a-note.md) — import scans, PDFs, and 3D
   scans, and rotate or remove them.
@@ -56,8 +68,6 @@ chapter is task-oriented and problem-first (see
   responsive layout.
 - **Projects & Files** — new/open/save; the `.cw` legacy, bundled `.cw`, and
   `.cwproj` formats; recent projects; save on exit.
-- **Survey Data** — regions and caves, trips, the shot table, calibration
-  (tape / front sight / back sight / declination), team, units, survey errors.
 - **Notes (more)** — note keywords build on the [Notes](notes/add-a-note.md)
   pages above.
 - **3D View (more)** — field of view, labels, leads, and rendering settings
