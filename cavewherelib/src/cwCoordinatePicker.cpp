@@ -45,6 +45,11 @@ void cwCoordinatePicker::setGeoReference(cwGeoReference* geoReference)
     emit geoReferenceChanged();
 }
 
+bool cwCoordinatePicker::hasCoordinateSystem() const
+{
+    return m_geoReference && m_geoReference->hasCoordinateSystem();
+}
+
 void cwCoordinatePicker::rebuildWgs84Transform()
 {
     const QString cs = m_geoReference ? m_geoReference->globalCoordinateSystem() : QString();
@@ -53,12 +58,17 @@ void cwCoordinatePicker::rebuildWgs84Transform()
     m_globalCoordinateSystemCached = cs;
     if (cs.isEmpty()) {
         m_wgs84Transform.reset();
-        return;
+    } else {
+        m_wgs84Transform = std::make_unique<cwCoordinateTransform>(cs, cwCoordinateTransform::Wgs84);
+        if (!m_wgs84Transform->isValid()) {
+            m_wgs84Transform.reset();
+        }
     }
-    m_wgs84Transform = std::make_unique<cwCoordinateTransform>(cs, cwCoordinateTransform::Wgs84);
-    if (!m_wgs84Transform->isValid()) {
-        m_wgs84Transform.reset();
-    }
+
+    // A CS change without a new pick must still refresh the CS-derived readouts
+    // (globalCoordinateSystem, hasCoordinateSystem) so an open popup reflects the
+    // current geo-reference.
+    emit coordinateSystemChanged();
 }
 
 void cwCoordinatePicker::pick(QPointF screenPoint)
@@ -77,7 +87,6 @@ void cwCoordinatePicker::pick(QPointF screenPoint)
 
     m_globalPoint = m_geoReference->toGlobal(m_scenePoint);
 
-    m_globalCoordinateSystemCached = m_geoReference->globalCoordinateSystem();
     m_hasWgs84 = false;
     m_wgs84Lat = 0.0;
     m_wgs84Lon = 0.0;

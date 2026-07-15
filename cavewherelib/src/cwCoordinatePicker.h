@@ -48,7 +48,8 @@ class cwCoordinatePicker : public cwScenePicker
     Q_PROPERTY(double wgs84Latitude  READ wgs84Latitude  NOTIFY pickChanged)
     Q_PROPERTY(double wgs84Longitude READ wgs84Longitude NOTIFY pickChanged)
     Q_PROPERTY(double elevation READ elevation NOTIFY pickChanged)
-    Q_PROPERTY(QString globalCoordinateSystem READ globalCoordinateSystem NOTIFY pickChanged)
+    Q_PROPERTY(QString globalCoordinateSystem READ globalCoordinateSystem NOTIFY coordinateSystemChanged)
+    Q_PROPERTY(bool hasCoordinateSystem READ hasCoordinateSystem NOTIFY coordinateSystemChanged)
     Q_PROPERTY(bool hasWgs84 READ hasWgs84 NOTIFY pickChanged)
 
 public:
@@ -68,6 +69,12 @@ public:
     double wgs84Longitude() const { return m_wgs84Lon; }
     double elevation() const { return m_globalPoint.z; }
     QString globalCoordinateSystem() const { return m_globalCoordinateSystemCached; }
+
+    //! Whether the pick can be placed in a real-world CRS. Delegates to the
+    //! geo-reference's single definition (cwGeoReference::hasCoordinateSystem)
+    //! so consumers don't re-derive the empty-CS rule.
+    bool hasCoordinateSystem() const;
+
     bool hasWgs84() const { return m_hasWgs84; }
 
     Q_INVOKABLE void pick(QPointF screenPoint);
@@ -76,6 +83,7 @@ public:
 signals:
     void geoReferenceChanged();
     void pickChanged();
+    void coordinateSystemChanged();
 
 private slots:
     void rebuildWgs84Transform();
