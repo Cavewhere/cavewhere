@@ -86,11 +86,6 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     borderPen.setWidthF(.05);
     borderPen.setJoinStyle(Qt::MiterJoin);
     BorderRectangle->setPen(borderPen);
-
-    connect(this, &cwCaptureManager::paperSizeChanged,
-            this, &cwCaptureManager::memoryRequiredChanged);
-    connect(this, &cwCaptureManager::resolutionChanged,
-            this, &cwCaptureManager::memoryRequiredChanged);
 }
 
 /**
@@ -876,13 +871,6 @@ QStringList cwCaptureManager::fileTypes() const {
 }
 
 /**
-* Returns the memory required by the capture manager
-*/
-double cwCaptureManager::memoryRequired() const {
-    return requiredSizeInBytes() / (1024.0 * 1024.0);
-}
-
-/**
  * Returns the require image size in bytes
  */
 qint64 cwCaptureManager::requiredSizeInBytes() const
@@ -928,21 +916,3 @@ QString cwCaptureManager::fileTypeToExtention(cwCaptureManager::FileType type) c
     return QString("");
 }
 
-/**
-* Return the memory limit in MB
-*
-* For 32Bit systems this is 2.0GB
-* For 64bit systems this returns -1, no limit
-*/
-double cwCaptureManager::memoryLimit() const {
-
-    auto isBuild32Bit = []() {
-        static bool b = !QSysInfo::buildCpuArchitecture().contains(QLatin1String("64"));
-        return b;
-    };
-
-    if(isBuild32Bit()) {
-        return 1.0 * 1024.0;
-    }
-    return -1.0;
-}

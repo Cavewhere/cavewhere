@@ -51,9 +51,6 @@ class CAVEWHERE_LIB_EXPORT cwCaptureManager : public QAbstractListModel
     Q_PROPERTY(int numberOfCaptures READ numberOfCaptures NOTIFY numberOfCapturesChanged)
     Q_PROPERTY(cwCaptureGroupModel* groupModel READ groupModel CONSTANT)
 
-    Q_PROPERTY(double memoryRequired READ memoryRequired NOTIFY memoryRequiredChanged)
-    Q_PROPERTY(double memoryLimit READ memoryLimit CONSTANT)
-
     // The future-manager handle used to surface each capture's label-placement
     // job (progress + cancel) in the app's job list. Set from QML, e.g.
     // futureManagerToken: RootData.futureManagerModel.token
@@ -138,9 +135,6 @@ public:
     Q_INVOKABLE FileType typeNameToFileType(QString fileType) const;
     Q_INVOKABLE QString fileTypeToExtention(FileType type) const;
 
-    double memoryRequired() const;
-    double memoryLimit() const;
-
     cwErrorListModel* errorModel() const;
 
 signals:
@@ -159,7 +153,6 @@ signals:
     void canceledCapture();
     void numberOfCapturesChanged();
     void aboutToDestoryManager();
-    void memoryRequiredChanged();
     void futureManagerTokenChanged();
 
 public slots:
