@@ -11,7 +11,6 @@
 #include "cw3dRegionViewer.h"
 #include "cwScene.h"
 #include "cwGraphicsImageItem.h"
-#include "cwMemoryUsage.h"
 #include "cwDebug.h"
 #include "cwImageResolution.h"
 #include "cwCaptureItem.h"
@@ -46,10 +45,6 @@ namespace {
 // map is mostly transparent zeros — and classic TIFF (the only flavor Qt
 // writes) caps the file at 4 GB, which an uncompressed whole-cave page blows.
 constexpr int TiffLzwCompression = 1;
-
-// Same opt-in profile switch as cwCaptureViewport's placement stages, so one
-// env var traces an export end to end.
-constexpr const char* ProfileCaptureEnvVar = "CW_PROFILE_CAPTURE";
 }
 
 cwCaptureManager::cwCaptureManager(QObject *parent) :
@@ -575,19 +570,6 @@ void cwCaptureManager::saveScene()
     QRectF imageRect = QRectF(QPointF(), imageSize);
     QRectF sceneRect = QRectF(QPointF(), paperSize()); //Scene->itemsBoundingRect();
 
-    // Memory trace for whole-page export debugging (same env var as
-    // cwCaptureViewport's placement profile). The save is the last phase that
-    // touches page-sized data, so stamp the footprint at each stage.
-    const bool profile = qEnvironmentVariableIsSet(ProfileCaptureEnvVar);
-    auto logStage = [profile, &imageSize](const char* stage) {
-        if(profile) {
-            qDebug() << "[cwCaptureManager profile] saveScene" << stage
-                     << "— imageSize" << imageSize
-                     << "footprintMB" << cwMemoryUsage::physFootprintMB();
-        }
-    };
-    logStage("start");
-
     auto saveToImage = [&](FileType type, const QColor& backgroundFill) {
         auto size = imageSize.toSize();
 
@@ -596,7 +578,6 @@ void cwCaptureManager::saveScene()
         qint64 imageSizeBytes = requiredSizeInBytes();
         Q_ASSERT(outputImage.sizeInBytes() == imageSizeBytes);
         outputImage.fill(backgroundFill);
-        logStage("mapped image filled");
 
         cwImageResolution resolutionDPI(resolution(), cwUnits::DotsPerInch);
         cwImageResolution::Data resolutionDPM = resolutionDPI.convertTo(cwUnits::DotsPerMeter);
@@ -606,7 +587,6 @@ void cwCaptureManager::saveScene()
 
         QPainter painter(&outputImage);
         Scene->render(&painter, imageRect, sceneRect);
-        logStage("scene rendered");
 
         //QImageWriter streams from the mapped image — PNG passes ARGB32 scan
         //lines straight to libpng, TIFF/JPEG convert in bounded chunks — so
@@ -619,7 +599,6 @@ void cwCaptureManager::saveScene()
             imageWriter.setCompression(TiffLzwCompression);
         }
         bool success = imageWriter.write(outputImage);
-        logStage("image written");
         if(!success) {
             throw std::runtime_error(QString("%1 driver had an issue saving the final image and had the following error:\"%2\"").arg(type).arg(imageWriter.errorString()).toStdString());
         }
@@ -636,7 +615,6 @@ void cwCaptureManager::saveScene()
         painter.begin(&generator);
         Scene->render(&painter, imageRect, sceneRect);
         painter.end();
-        logStage("svg written");
     };
 
     auto saveToPDF = [&]() {
@@ -648,7 +626,6 @@ void cwCaptureManager::saveScene()
         painter.begin(&pdfWriter);
         Scene->render(&painter, imageRect, sceneRect);
         painter.end();
-        logStage("pdf written");
     };
 
     try {

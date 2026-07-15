@@ -11,7 +11,6 @@
 
 // Qt includes
 #include <QDebug>
-#include <QElapsedTimer>
 #include <QHash>
 #include <QtMath>
 
@@ -136,6 +135,15 @@ QPointF closestPointOnRect(const QRectF& rect, const QPointF& p)
 constexpr qreal kSoftCrossPenalty = 200.0; // paper-px per crossing
 constexpr qreal kDirectionPenalty = 80.0;  // paper-px per radian
 
+// labelSizeUpperBound slack: glyph ink can overhang the summed advances at
+// both ends (bearings, italic swashes), and stacked diacritics can exceed
+// the nominal ascent+descent. Two extra max-advance glyph widths and a
+// doubled line height stay comfortably above any real font's overhang while
+// remaining tiny relative to the viewport the bound is culled against —
+// over-estimating only shrinks the cull's savings, never its correctness.
+constexpr qsizetype kSizeBoundSlackGlyphs = 2;
+constexpr qreal     kSizeBoundHeightFactor = 2.0;
+
 // How many extra spiral rings to scan after the first hit. Bigger = more
 // candidates compared, more time. 3 rings keeps the candidate list small
 // (~24 cells) while giving the scorer enough diversity to find a winner.
@@ -255,6 +263,30 @@ QFont cwCaptureLabelPlacer::scaledFont(const QFont& base, int dpi)
     const int px = qMax(1, qRound(base.pointSizeF() * dpi * PointsToPixelsAt72Dpi));
     f.setPixelSize(px);
     return f;
+}
+
+QRectF cwCaptureLabelPlacer::viewportCullRect(const QRectF& viewportBounds,
+                                              const QSizeF& labelSize,
+                                              qreal labelMargin)
+{
+    // Clamp like setLabelMarginPaperPx does: a negative margin would shrink a
+    // caller-side cull rect below the placer's own (clamped) cull rect and
+    // silently drop anchors the placer would keep.
+    const qreal clearance = std::hypot(labelSize.width() * 0.5,
+                                       labelSize.height() * 0.5)
+                            + qMax(0.0, labelMargin);
+    return viewportBounds.adjusted(-clearance, -clearance, clearance, clearance);
+}
+
+QSizeF cwCaptureLabelPlacer::labelSizeUpperBound(const QFontMetricsF& metrics,
+                                                 qsizetype textLength)
+{
+    // Guard against a degenerate maxWidth() (broken/bitmap-less font): the
+    // line height is always positive for a usable font and no glyph's advance
+    // meaningfully exceeds it by more than the slack already allows.
+    const qreal glyphWidth = qMax(metrics.maxWidth(), metrics.height());
+    return QSizeF(glyphWidth * qreal(textLength + kSizeBoundSlackGlyphs),
+                  metrics.height() * kSizeBoundHeightFactor);
 }
 
 void cwCaptureLabelPlacer::setObstacleBounds(const QRectF& parentBounds, qreal cellSizePaperPx)
@@ -510,9 +542,6 @@ void cwCaptureLabelPlacer::buildWindow(int x0, int y0, int x1, int y1)
     const int h = y1 - y0;
     Q_ASSERT(w > 0 && h > 0);
 
-    QElapsedTimer buildTimer;
-    buildTimer.start();
-
     // fill() only reallocates when the window outgrows the vector's capacity,
     // so consecutive same-shaped windows reuse the buffer.
     m_dt.fill(kLargeSquaredDist, w * h);
@@ -531,10 +560,8 @@ void cwCaptureLabelPlacer::buildWindow(int x0, int y0, int x1, int y1)
     for(const QRectF& rect : std::as_const(m_obstacleRects)) {
         rasterizeObstacleRect(rect);
     }
-    m_stats.windowRasterMs += buildTimer.restart();
 
     distanceTransform2D(m_dt, w, h);
-    m_stats.windowDtMs += buildTimer.elapsed();
     m_windowLoaded = true;
 
     const qint64 cells = qint64(w) * qint64(h);
@@ -730,11 +757,10 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
     // diagonal margin, for anchors sitting right on the edge) cannot be given a
     // readable in-viewport label, so skip it before the spiral search. On a
     // whole-cave export viewportBounds == bounds so nothing is culled; this only
-    // bites when exporting a zoomed sub-region.
-    const QRectF cullRect = clampRect.adjusted(-requiredClearanceParent,
-                                               -requiredClearanceParent,
-                                                requiredClearanceParent,
-                                                requiredClearanceParent);
+    // bites when exporting a zoomed sub-region. buildLabelRequests applies the
+    // same rect (via a conservative size bound) before measuring, so most
+    // culled anchors never even reach here.
+    const QRectF cullRect = viewportCullRect(clampRect, request.size, m_labelMargin);
     if(!cullRect.contains(request.anchorPos)) {
         m_stats.culledByViewport++;
         return result;

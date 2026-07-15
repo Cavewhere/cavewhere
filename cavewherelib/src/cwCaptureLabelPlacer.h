@@ -10,6 +10,7 @@
 
 // Qt includes
 #include <QFont>
+#include <QFontMetrics>
 #include <QImage>
 #include <QLineF>
 #include <QPointF>
@@ -63,12 +64,26 @@ public:
         bool    hasLeader = false;
     };
 
-    // Lightweight aggregate counters for profiling the placement hot path,
-    // read via stats() (opt-in: cwCaptureViewport logs them when the
-    // CW_PROFILE_CAPTURE env var is set). Every field is a plain accumulator
-    // incremented during placeLabel(), window builds, and tile-mask builds,
-    // so they cost nothing beyond an integer add (or one QElapsedTimer read
-    // per window build) and reading them is free.
+    // Couples the two values the caller-side pre-measure cull
+    // (cwCaptureLabelItem::buildRequests) must share with the placer's own
+    // viewport cull. Construct ONE of these and hand the same instance to
+    // setPlacementViewport() and to each buildLabelRequests() call — that
+    // makes the "placements are bit-identical with or without the caller
+    // cull" invariant structural instead of a multi-call-site convention (a
+    // smaller rect or margin on the caller side would silently cull labels
+    // the placer would have placed). An empty bounds disables the caller-side
+    // cull and clamps the placer's cull to the obstacle bounds.
+    struct PlacementViewport {
+        QRectF bounds;
+        qreal  labelMargin = 0.0;
+    };
+
+    // Lightweight aggregate counters over the placement hot path, read via
+    // stats(). The tests pin scaling behavior through them (spiral cap,
+    // window thrash, mask reuse) that has no other observable. Every field is
+    // a plain accumulator incremented during placeLabel(), window builds, and
+    // tile-mask builds, so they cost nothing beyond an integer add and
+    // reading them is free.
     struct Stats {
         int    placeCalls         = 0; // placeLabel() invocations
         int    placed             = 0; // placements that succeeded
@@ -85,8 +100,6 @@ public:
         qint64 maxWindowCells     = 0; // largest single window DT allocation
         int    tileMasksBuilt     = 0; // tiles whose inked-cell mask was materialized
         qint64 tileMaskBytes      = 0; // total compressed mask bytes retained
-        qint64 windowRasterMs     = 0; // buildWindow: fill + mask/rect rasterization
-        qint64 windowDtMs         = 0; // buildWindow: the distance transform itself
     };
 
     // Helper: when the placer returns a rect tightly sized to glyph ink and
@@ -119,11 +132,40 @@ public:
     // return paper-pixel-aligned bounds at the export resolution.
     static QFont scaledFont(const QFont& base, int dpi);
 
+    // The viewport-cull geometry shared by placeLabel() and the caller-side
+    // pre-measure cull in cwCaptureCenterline/cwCaptureLeads
+    // ::buildLabelRequests: an anchor outside `viewportBounds` expanded by
+    // the label's half-diagonal plus the label margin cannot be given a
+    // readable in-viewport label. One definition keeps the two culls from
+    // drifting apart.
+    static QRectF viewportCullRect(const QRectF& viewportBounds,
+                                   const QSizeF& labelSize,
+                                   qreal labelMargin);
+
+    // A cheap upper bound on the tight glyph-ink size that
+    // QPainterPath::addText + boundingRect() would measure for a
+    // `textLength`-character string — pure metrics arithmetic, no shaping and
+    // no path build. buildLabelRequests culls with this bound BEFORE paying
+    // the per-label path measurement; because it always dominates the real
+    // ink size, the caller-side cull rect contains placeLabel()'s exact cull
+    // rect, so caller-culled and unculled runs place identically.
+    static QSizeF labelSizeUpperBound(const QFontMetricsF& metrics,
+                                      qsizetype textLength);
+
     cwCaptureLabelPlacer();
 
     void setObstacleBounds(const QRectF& parentBounds, qreal cellSizePaperPx);
     void setViewportBounds(const QRectF& viewportBounds);
     void setLabelMarginPaperPx(qreal margin);
+
+    // Bundled form of setViewportBounds + setLabelMarginPaperPx: apply the
+    // same PlacementViewport instance that the buildLabelRequests callers
+    // receive (see the struct's comment).
+    void setPlacementViewport(const PlacementViewport& viewport)
+    {
+        setViewportBounds(viewport.bounds);
+        setLabelMarginPaperPx(viewport.labelMargin);
+    }
     void setAlphaThreshold(int threshold);
 
     // Side length of the square DT placement windows, in the same units as
@@ -169,22 +211,9 @@ public:
     QVector<Placement> placeAll(const QVector<LabelRequest>& requests,
                                 const cwLabelPlacementControl& control = {});
 
-    // Profiling counters accumulated across placeLabel() calls (see Stats).
+    // Counters accumulated across placeLabel() calls (see Stats).
     const Stats& stats() const { return m_stats; }
     void resetStats() { m_stats = Stats(); }
-
-    // Profiling: cells walked by each broad-phase grid's queries (hash-probe /
-    // iteration cost, separate from the exact-test counts in Stats). Zero until
-    // the grids are built (first placeLabel).
-    qint64 placedGridCellsVisited() const {
-        return m_placedLabelGrid ? m_placedLabelGrid->cellsVisited() : 0;
-    }
-    qint64 lineGridCellsVisited() const {
-        return m_lineObstacleGrid ? m_lineObstacleGrid->cellsVisited() : 0;
-    }
-    qint64 softGridCellsVisited() const {
-        return m_softObstacleGrid ? m_softObstacleGrid->cellsVisited() : 0;
-    }
 
     // Registers a line segment as a post-finalize obstacle. Subsequent
     // placeLabel() calls reject candidates whose rect intersects the

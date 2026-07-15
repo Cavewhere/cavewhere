@@ -6,9 +6,12 @@
 
 // Qt includes
 #include <QElapsedTimer>
+#include <QFont>
+#include <QFontMetrics>
 #include <QImage>
 #include <QLineF>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPointF>
 #include <QRectF>
 #include <QSizeF>
@@ -830,4 +833,60 @@ TEST_CASE("placeLabel gives up quickly for a buried anchor on a huge page",
     // cells with the cap, versus ~(2*(maskW+maskH))^2 ≈ 1.6e9 without it. This
     // counter is the non-flaky companion to the wall-clock guard above.
     CHECK(placer.stats().cellsTried < 100000);
+}
+
+TEST_CASE("viewportCullRect expands the viewport by half-diagonal plus margin",
+          "[cwCaptureLabelPlacer]")
+{
+    const QRectF viewport(100.0, 200.0, 400.0, 300.0);
+    const QSizeF labelSize(30.0, 40.0);
+    const qreal margin = 3.0;
+
+    // clearance = hypot(15, 20) + 3 = 25 + 3 = 28
+    const QRectF cullRect =
+        cwCaptureLabelPlacer::viewportCullRect(viewport, labelSize, margin);
+    CHECK(cullRect == viewport.adjusted(-28.0, -28.0, 28.0, 28.0));
+
+    // An anchor just inside the expanded rect survives; just outside is culled.
+    CHECK(cullRect.contains(QPointF(72.5, 350.0)));
+    CHECK_FALSE(cullRect.contains(QPointF(71.5, 350.0)));
+}
+
+TEST_CASE("labelSizeUpperBound dominates the measured tight glyph ink",
+          "[cwCaptureLabelPlacer]")
+{
+    // The caller-side pre-measure cull in buildLabelRequests is only allowed
+    // to drop what placeLabel's exact cull would drop; that holds iff this
+    // bound never under-estimates QPainterPath::addText's tight ink size.
+    const QVector<QString> texts = {
+        QStringLiteral("A"),
+        QStringLiteral("a1"),
+        QStringLiteral("W@W@W@W@"),
+        QStringLiteral("station-name-42"),
+        QStringLiteral("ÄÖÜ éàç ñ"),
+        QStringLiteral("going lead 2.5 x 1.3 (continues, strong airflow)"),
+        QStringLiteral("...___...")
+    };
+    const QVector<int> dpis = {96, 300};
+
+    QFont baseFont;
+    baseFont.setPointSizeF(8.0);
+
+    for(const int dpi : dpis) {
+        const QFont font = cwCaptureLabelPlacer::scaledFont(baseFont, dpi);
+        const QFontMetricsF metrics(font);
+
+        for(const QString& text : texts) {
+            QPainterPath path;
+            path.addText(QPointF(0.0, 0.0), font, text);
+            const QRectF tightInk = path.boundingRect();
+
+            const QSizeF bound =
+                cwCaptureLabelPlacer::labelSizeUpperBound(metrics, text.length());
+
+            INFO("dpi " << dpi << " text \"" << text.toStdString() << "\"");
+            CHECK(bound.width() >= tightInk.width());
+            CHECK(bound.height() >= tightInk.height());
+        }
+    }
 }

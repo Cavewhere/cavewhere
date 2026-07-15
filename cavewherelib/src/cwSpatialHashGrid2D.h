@@ -56,13 +56,6 @@ public:
     qreal cellSize() const { return m_cellSize; }
     bool isEmpty() const { return m_buckets.isEmpty(); }
 
-    // Profiling: total cell coordinates walked across all query()/anyOf() calls
-    // (i.e. hash probes, whether or not the cell is occupied). Comparing this to
-    // the caller's exact-test count reveals whether query cost is dominated by
-    // iterating the region's cells or by the exact tests on found items.
-    qint64 cellsVisited() const { return m_cellsVisited; }
-    void resetCellsVisited() { m_cellsVisited = 0; }
-
     // Empties all buckets but keeps the hash and per-bucket capacity, so a
     // rebuilt grid (e.g. a per-frame declutter) avoids re-growing. Stale visit
     // stamps stay valid because every query bumps the generation counter.
@@ -110,7 +103,6 @@ public:
         const int y1 = cellCoord(region.bottom());
         for(int cellY = y0; cellY <= y1; ++cellY) {
             for(int cellX = x0; cellX <= x1; ++cellX) {
-                ++m_cellsVisited;
                 const auto it = m_buckets.constFind(cellKey(cellX, cellY));
                 if(it == m_buckets.constEnd()) {
                     continue;
@@ -154,7 +146,6 @@ private:
         const int y1 = cellCoord(region.bottom());
         for(int cellY = y0; cellY <= y1; ++cellY) {
             for(int cellX = x0; cellX <= x1; ++cellX) {
-                ++m_cellsVisited;
                 const auto it = m_buckets.constFind(cellKey(cellX, cellY));
                 if(it == m_buckets.constEnd()) {
                     continue;
@@ -173,7 +164,6 @@ private:
     // practice (a grid is rebuilt per export and sees millions, not billions,
     // of queries).
     mutable quint32            m_queryGeneration = 0;
-    mutable qint64             m_cellsVisited = 0; // profiling: cells walked by queries
 };
 
 #endif // CWSPATIALHASHGRID2D_H

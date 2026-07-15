@@ -9,7 +9,6 @@
 #include <QPen>
 #include <QUuid>
 #include <QQuickItemGrabResult>
-#include <QElapsedTimer>
 #include <QPromise>
 
 //Std includes
@@ -30,7 +29,6 @@
 #include "cwPhaseJob.h"
 #include "cwCompressedImage.h"
 #include "cwCompressedImageItem.h"
-#include "cwMemoryUsage.h"
 #include "cwDebug.h"
 #include "cwGlobals.h"
 #include "cwScaleBarItem.h"
@@ -48,11 +46,6 @@
 #endif
 
 namespace {
-// Set this env var to log a one-shot per-export breakdown of the label-
-// placement stages — see placeLabelsAfterTiles. Off by default; when unset the
-// profiling timers never start, so there is no cost.
-constexpr const char* ProfileCaptureEnvVar = "CW_PROFILE_CAPTURE";
-
 // A rendered tile's alpha channel, snapshotted on the GUI thread and fed to
 // the placer on the worker thread. Preview tiles arrive as a raw QImage;
 // export tiles as the cwCompressedImage their cwCompressedImageItem holds.
@@ -77,19 +70,17 @@ struct TileAlphaInput {
 // See cwCaptureViewport::placeLabelsAfterTiles.
 struct LabelPlacementInput {
     cwCaptureLabelPlacer placer;
-    QRectF  parentBounds;
+    // One instance feeds the placer (setPlacementViewport) AND both items'
+    // buildLabelRequests, which is what keeps the caller-side pre-measure
+    // cull a strict subset of the placer's cull (see PlacementViewport).
+    // Its bounds double as the placer's obstacle bounds.
+    cwCaptureLabelPlacer::PlacementViewport viewport;
     qreal   cellSizeLocal    = 0.0;
-    qreal   labelMarginLocal = 0.0;
     QVector<TileAlphaInput>       tiles;
     QVector<QRectF>               obstacleRects; // station dots + lead markers, before finalize()
     QVector<QPair<QLineF, qreal>> softSegments;  // centerline legs, after finalize()
     cwCaptureCenterline* centerline = nullptr;
     cwCaptureLeads*      leads      = nullptr;
-    bool profile     = false;
-    // Grab-phase tile compression totals, copied in for the profile log so a
-    // real export reports its actual compression ratio.
-    qint64 rawTileBytes        = 0;
-    qint64 compressedTileBytes = 0;
 };
 
 // Z-values define stacking order of overlays drawn on top of the rendered map tiles.
@@ -107,14 +98,6 @@ constexpr qreal ScaleBarZValue = 2000.0;
 constexpr qreal PlacerMaskCellPaperPx = 2.0;
 constexpr qreal PlacerLabelMarginPaperPx = 3.0;
 constexpr qreal StationDotObstacleMarginPaperPx = 1.0;
-
-// CW_PROFILE_CAPTURE memory-trace cadence: log the process footprint every
-// this many grabbed tiles / placed labels, so an export that dies of memory
-// still shows WHICH phase was climbing and what it was proportional to.
-constexpr int ProfileTileLogInterval  = 100;
-constexpr int ProfileLabelLogInterval = 5000;
-
-double toMB(qint64 bytes) { return bytes / (1024.0 * 1024.0); }
 }
 
 cwCaptureViewport::cwCaptureViewport(QObject *parent) :
@@ -218,8 +201,6 @@ void cwCaptureViewport::capture()
     CapturingImages = true;
     m_cancelRequested = false;
     m_runIsPreview = previewCapture();
-    m_rawTileBytes = 0;
-    m_compressedTileBytes = 0;
 
     //QRect::isEmpty() (unlike QSize::isValid(), which accepts 0x0) rejects a
     //zero-area viewport — which would otherwise build an empty tile-job list
@@ -458,8 +439,6 @@ void cwCaptureViewport::capture()
                 tileItem->setPos(job.origin);
                 tileItem->setScale(1.0 / image.devicePixelRatio());
                 parent->addToGroup(tileItem);
-                m_rawTileBytes        += tileItem->compressedImage().rawSizeInBytes();
-                m_compressedTileBytes += tileItem->compressedImage().compressedData().size();
             }
         }
 
@@ -476,22 +455,6 @@ void cwCaptureViewport::capture()
 
         NumberOfImagesProcessed++;
         runData->tileGrabJob.setProgressValue(NumberOfImagesProcessed);
-
-        // Memory trace for whole-page export debugging: a run that dies of
-        // memory never reaches the end-of-run profile line, so emit the
-        // trajectory as the grab progresses — footprint should stay flat
-        // while the compressed total grows slowly; whichever counter climbs
-        // with it is the leak.
-        if(!m_runIsPreview
-           && NumberOfImagesProcessed % ProfileTileLogInterval == 0
-           && qEnvironmentVariableIsSet(ProfileCaptureEnvVar)) {
-            qDebug() << "[cwCaptureViewport profile] tile grab —"
-                     << "processed" << NumberOfImagesProcessed << "/" << (Rows * Columns)
-                     << "kept" << parent->childItems().size()
-                     << "tileRawMB" << toMB(m_rawTileBytes)
-                     << "tileCompressedMB" << toMB(m_compressedTileBytes)
-                     << "footprintMB" << cwMemoryUsage::physFootprintMB();
-        }
 
         if(NumberOfImagesProcessed == Rows * Columns) {
             //Finished capturing tiles. CapturingImages stays true through the
@@ -837,10 +800,6 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         return;
     }
 
-    // Opt-in profiling of the label-placement stages. The timers only run when
-    // CW_PROFILE_CAPTURE is set; otherwise this is free.
-    const bool profile = qEnvironmentVariableIsSet(ProfileCaptureEnvVar);
-
     // The parent item's setScale value (inches-per-local-pixel). Driving the
     // font and placer off this — instead of a fixed preview DPI — keeps the
     // rendered glyph the same scene-inch size on both paths.
@@ -905,22 +864,11 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
     // owns by value) outlives this call; the worker and the continuation both
     // hold the input.
     auto input = std::make_shared<LabelPlacementInput>();
-    input->parentBounds     = parentBounds;
-    input->cellSizeLocal    = PlacerMaskCellPaperPx * paperPxToLocal;
-    input->labelMarginLocal = PlacerLabelMarginPaperPx * paperPxToLocal;
-    input->profile          = profile;
+    input->viewport.bounds      = parentBounds;
+    input->viewport.labelMargin = PlacerLabelMarginPaperPx * paperPxToLocal;
+    input->cellSizeLocal        = PlacerMaskCellPaperPx * paperPxToLocal;
 
     input->tiles = std::move(tileInputs);
-    input->rawTileBytes        = m_rawTileBytes;
-    input->compressedTileBytes = m_compressedTileBytes;
-
-    if(profile && !m_runIsPreview) {
-        qDebug() << "[cwCaptureViewport profile] tile grab done —"
-                 << "tiles kept" << input->tiles.size()
-                 << "tileRawMB" << toMB(input->rawTileBytes)
-                 << "tileCompressedMB" << toMB(input->compressedTileBytes)
-                 << "footprintMB" << cwMemoryUsage::physFootprintMB();
-    }
 
     // Build label items on the GUI thread — QGraphicsItem construction must not
     // happen on the worker. We hand them the DPI + scale so they can compute
@@ -986,13 +934,8 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
     m_labelPlacementFuture = cwConcurrent::run([input](QPromise<void>& promise) {
         cwCaptureLabelPlacer& placer = input->placer;
 
-        QElapsedTimer stageTimer;
-        qint64 measureMs = 0;
-        qint64 placeMs = 0;
-
-        placer.setObstacleBounds(input->parentBounds, input->cellSizeLocal);
-        placer.setViewportBounds(input->parentBounds);
-        placer.setLabelMarginPaperPx(input->labelMarginLocal);
+        placer.setObstacleBounds(input->viewport.bounds, input->cellSizeLocal);
+        placer.setPlacementViewport(input->viewport);
         placer.setAlphaThreshold(cwCaptureLabelPlacer::DefaultAlphaThreshold);
 
         // These record obstacle sources; the distance transform itself is
@@ -1023,53 +966,27 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         int processed = 0;
         cwLabelPlacementControl control;
         control.isCanceled = [&promise]() { return promise.isCanceled(); };
-        control.labelProcessed = [&promise, &processed, &placer,
-                                  profile = input->profile]() {
+        control.labelProcessed = [&promise, &processed]() {
             processed++;
             promise.setProgressValue(processed);
-            // Placement-phase memory trace: window builds and tile masks are
-            // the phase's only growing allocations — if the footprint climbs
-            // faster than maskMB, the leak is elsewhere.
-            if(profile && processed % ProfileLabelLogInterval == 0) {
-                const cwCaptureLabelPlacer::Stats& s = placer.stats();
-                qDebug() << "[cwCaptureViewport profile] placing —"
-                         << "labels" << processed
-                         << "windowsBuilt" << s.windowsBuilt
-                         << "windowCellsBuilt" << s.windowCellsBuilt
-                         << "windowRasterMs" << s.windowRasterMs
-                         << "windowDtMs" << s.windowDtMs
-                         << "tileMasksBuilt" << s.tileMasksBuilt
-                         << "tileMaskMB" << toMB(s.tileMaskBytes)
-                         << "footprintMB" << cwMemoryUsage::physFootprintMB();
-            }
         };
 
         // Measure every label up front, leads first: within each DT window
         // placeAll keeps request order, so a window's leads place before its
         // stations and register their leaders as obstacles for them.
-        if(input->profile) { stageTimer.start(); }
         QVector<cwCaptureLabelPlacer::LabelRequest> requests;
         int leadRequestCount = 0;
         if(input->leads != nullptr) {
-            requests = input->leads->buildLabelRequests(control);
+            requests = input->leads->buildLabelRequests(control, input->viewport);
             leadRequestCount = requests.size();
         }
         if(input->centerline != nullptr) {
-            requests += input->centerline->buildLabelRequests(control);
+            requests += input->centerline->buildLabelRequests(control, input->viewport);
         }
-        if(input->profile) {
-            measureMs = stageTimer.elapsed();
-            qDebug() << "[cwCaptureViewport profile] labels measured —"
-                     << "requests" << requests.size()
-                     << "measure(ms)" << measureMs
-                     << "footprintMB" << cwMemoryUsage::physFootprintMB();
-        }
-
         if(promise.isCanceled()) { return; }
 
         promise.setProgressRange(0, qMax(1, int(requests.size())));
 
-        if(input->profile) { stageTimer.restart(); }
         const QVector<cwCaptureLabelPlacer::Placement> placements =
             placer.placeAll(requests, control);
         if(input->leads != nullptr) {
@@ -1077,39 +994,6 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         }
         if(input->centerline != nullptr) {
             input->centerline->applyPlacements(placements.mid(leadRequestCount));
-        }
-        if(input->profile) {
-            placeMs = stageTimer.elapsed();
-            const cwCaptureLabelPlacer::Stats& s = placer.stats();
-            qDebug() << "[cwCaptureViewport profile] export label placement (worker) —"
-                     << "tiles" << input->tiles.size()
-                     << "tileRawMB" << toMB(input->rawTileBytes)
-                     << "tileCompressedMB" << toMB(input->compressedTileBytes)
-                     << "tileMasksBuilt" << s.tileMasksBuilt
-                     << "tileMaskMB" << toMB(s.tileMaskBytes)
-                     << "bounds" << input->parentBounds.size()
-                     << "gridCells" << s.gridCells
-                     << "| measure(ms)" << measureMs
-                     << "placement(ms)" << placeMs
-                     << "| windowsBuilt" << s.windowsBuilt
-                     << "windowCellsBuilt" << s.windowCellsBuilt
-                     << "maxWindowCells" << s.maxWindowCells
-                     << "windowRasterMs" << s.windowRasterMs
-                     << "windowDtMs" << s.windowDtMs
-                     << "| placeCalls" << s.placeCalls
-                     << "placed" << s.placed
-                     << "culled" << s.culledByViewport
-                     << "noCandidate" << s.noCandidate
-                     << "cellsTried" << s.cellsTried
-                     << "dtClearedCells" << s.dtClearedCells
-                     << "placedLabelChecks" << s.placedLabelChecks
-                     << "softObstacleChecks" << s.softObstacleChecks
-                     << "lineObstacleChecks" << s.lineObstacleChecks
-                     << "| gridCellsVisited placed" << placer.placedGridCellsVisited()
-                     << "line" << placer.lineGridCellsVisited()
-                     << "soft" << placer.softGridCellsVisited()
-                     << "| footprintMB" << cwMemoryUsage::physFootprintMB()
-                     << LOCATION;
         }
     });
 

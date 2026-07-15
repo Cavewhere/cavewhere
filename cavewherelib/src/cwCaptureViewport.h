@@ -206,11 +206,6 @@ private:
     // cancel also drops the queued restart.
     bool m_captureAgainWhenDone = false;
     cwFutureManagerToken m_futureManagerToken;
-    // Grab-phase totals for the kept (inked) export tiles, before and after
-    // zlib compression. Reset by capture(); reported by the opt-in
-    // CW_PROFILE_CAPTURE log so real exports show their compression ratio.
-    qint64 m_rawTileBytes = 0;
-    qint64 m_compressedTileBytes = 0;
 
 private slots:
     // void capturedImage(QImage image, int id);
