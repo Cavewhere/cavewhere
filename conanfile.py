@@ -47,6 +47,10 @@ class CaveWhereConan(ConanFile):
             self.requires("libpng/[>=1.6.44]", override=True)
             self.requires("proj/[>=9.3.1]")
             self.requires("nlohmann_json/[>=3.12.0]", override=True)
+            # gdal/3.13+ pulls giflib/5.2.1, whose flat SourceForge tarball URL
+            # (giflib-5.2.1.tar.gz) was removed and now 404s. 5.2.2 is hosted
+            # under the valid giflib-5.x/ folder and is API-compatible.
+            self.requires("giflib/[>=5.2.2]", override=True)
 
         if self.settings.os == "Linux":
             self.requires("xorg-proto/[=2024.1]", override=True)
