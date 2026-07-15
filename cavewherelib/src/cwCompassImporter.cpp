@@ -34,6 +34,12 @@ namespace {
     //Bytes parsed are mapped onto this range so the determinate bar moves
     //smoothly regardless of file size.
     constexpr int kProgressSteps = 1000;
+
+    //In a 15-char Compass FORMAT string the 14th character controls the
+    //redundant backsight columns: 'B' (raw) or 'C' (corrected) means AZM2/INC2
+    //are present, 'N' means none.
+    constexpr int kBacksightFlagIndex = 13;
+    constexpr QChar kNoBacksightsFlag = u'N';
 }
 
 /**
@@ -247,7 +253,10 @@ void cwCompassImporter::Worker::parseFile()
         return;
     }
 
-    while (!file.atEnd()) {
+    //A survey that errors stops consuming input, so keep looping only while the
+    //file is still good; otherwise parseSurvey would spin without advancing the
+    //read position.
+    while (!file.atEnd() && m_currentFileGood) {
         if(m_promise.isCanceled()) { return; }
         parseSurvey(&file);
         updateProgress(m_bytesFromCompletedFiles + file.pos());
@@ -570,11 +579,12 @@ void cwCompassImporter::Worker::parseSurveyFormatAndCalibration(QFile *file)
 
             if(fileFormatString.size() >= 11) {
                 bool hasBackSights = false;
-                if(fileFormatString.contains('B') || fileFormatString.contains('b')) {
-                    hasBackSights = true;
-                }
-                // 15-char Compass formats use lowercase a/d to indicate backsight azimuth/inclination.
-                if(fileFormatString.contains('a') || fileFormatString.contains('d')) {
+                if(fileFormatString.size() >= 15) {
+                    //The lowercase a/d in a 15-char format's shot-order section
+                    //are always present and don't imply recorded backsights;
+                    //the 14th character is what marks the AZM2/INC2 columns.
+                    hasBackSights = fileFormatString.at(kBacksightFlagIndex) != kNoBacksightsFlag;
+                } else if(fileFormatString.contains('B') || fileFormatString.contains('b')) {
                     hasBackSights = true;
                 }
                 m_currentTrip->calibrations()->setBackSights(hasBackSights);
