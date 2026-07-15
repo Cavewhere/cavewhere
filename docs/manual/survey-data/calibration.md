@@ -1,8 +1,8 @@
 ---
 title: Calibrate the Instruments
-summary: Correct a trip's tape, compass and clino readings, choose foresights or backsights, and set the trip's units.
+summary: Correct a trip's distance, compass and clino readings, choose foresights or backsights, and set the trip's units.
 problem: Make readings from your team's specific instruments come out as true measurements, so different teams' data lines up.
-keywords: [calibration, tape, compass, clino, front sight, back sight, backsight, foresight, backwards, corrected, units, meters, feet]
+keywords: [calibration, distance, tape, compass, clino, front sight, back sight, backsight, foresight, backwards, corrected, units, meters, feet]
 related: [enter-survey-data.md, declination.md, survey-errors.md, ../concepts/glossary.md]
 ---
 
@@ -18,11 +18,6 @@ they are the same on every shot of the trip.
 That makes them correctable, and **calibration is where you record the
 correction once instead of doing arithmetic on every reading in your book.** You
 type what you actually read off the instrument; CaveWhere applies the offset.
-
-It matters most when data from several teams meets in one cave. Two teams with
-two compasses produce two slightly different versions of the same passage, and
-loops between them won't close. Calibrated, both teams' raw readings resolve to
-the same true measurements and the surveys line up.
 
 **Calibration is per trip**, which is the right grain: one team, one day, one set
 of instruments. It lives in the **Calibration** section of the trip page, under
@@ -65,16 +60,16 @@ the two readings must agree, and CaveWhere warns you when they disagree by more
 than **2°**. A misread compass has nowhere to hide. See
 [Survey Errors](survey-errors.md#frontsight-and-backsight-differs-by-x).
 
-## Set the tape calibration
+## Set the distance calibration
 
-The **Distance** box holds one number: what to add to every tape reading in the
-trip, in the trip's units.
+The **Distance** box holds one number: what to add to every distance reading in
+the trip, in the trip's units.
 
-Leave it at `0` unless you know your tape is off. If you do know, measure it
-against something trustworthy and enter the difference — negative for a short
-tape, positive for a long one.
+Leave it at `0` unless you know your instrument reads off. If you do know,
+measure it against something trustworthy and enter the difference — negative if
+it reads long, positive if it reads short.
 
-### Set the tape units
+### Set the distance units
 
 The **Units** dropdown sets whether the trip's distances are **meters (m)** or
 **feet (ft)**. Those are the only two choices, and it applies to the whole
@@ -116,6 +111,20 @@ than any instrument error.
 Both say the same thing: *the reading in this column points the opposite way to
 what the column normally means.* CaveWhere reverses it for you — subtracting
 180° from a compass reading, or multiplying a clino reading by −1.
+
+A worked example: one shot, from `A1` to `A2`. Stand at `A1`, sight `A2`, and
+the compass reads **60°**. Walk to `A2`, sight back at `A1`, and the same shot
+reads **240°**. The two numbers always differ by 180°, and neither one, on its
+own, says which end you were standing at.
+
+The column you type it into is what says that — and the checkbox is how you tell
+CaveWhere the column is wrong. Type `240` into the **Front Sights** column with
+**Backwards *Compass*** ticked and CaveWhere uses 60°: the same direction it
+would have used if you had typed `60` and left the box clear.
+
+![A plan view of one shot between stations A1 and A2, north up. A blue arrow running from A1 to A2 is labelled "60° foresight, stand at A1, sight A2"; an orange arrow running back from A2 to A1 is labelled "240° backsight, stand at A2, sight A1". A table below lists the four combinations of column and typed reading, which box each needs ticked, and the direction CaveWhere ends up using.](../images/illustrations/calibration-reading-direction.svg)
+*The four cases. Whichever of the two numbers you typed, the box is what makes it
+mean the direction you actually shot.*
 
 This exists because reading conventions genuinely differ between teams and
 instruments. Some teams shoot every reading from the same end of the tape. Some

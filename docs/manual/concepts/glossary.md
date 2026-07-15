@@ -44,7 +44,7 @@ and anchor [scraps](#scrap) and [leads](#lead).
 
 ### Shot
 A measured leg between two stations: a *from* station and a *to* station, with a
-**distance** (tape), a **compass** bearing, and a **clino** (inclination) angle.
+**distance**, a **compass** bearing, and a **clino** (inclination) angle.
 Shots are the skeleton of the cave.
 
 ### Backsight
@@ -66,7 +66,7 @@ shape beyond the LRUDs. CaveWhere ignores splay shots on import of some formats.
 
 ### Calibration
 The set of corrections applied to raw instrument readings before they're used:
-tape (distance) offset, front-sight and back-sight compass/clino corrections,
+distance offset, front-sight and back-sight compass/clino corrections,
 and [declination](#declination). Calibration accounts for the specific
 instruments a team used so different teams' data lines up.
 

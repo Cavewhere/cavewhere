@@ -72,8 +72,8 @@ The columns are:
 
 - **Station** — the station's name, e.g. `A1`. Letters, numbers, hyphens and
   underscores.
-- **Distance** — the tape reading, in the trip's units (see
-  [Calibration](calibration.md#set-the-tape-units)).
+- **Distance** — the distance reading, in the trip's units (see
+  [Calibration](calibration.md#set-the-distance-units)).
 - **Compass** — the bearing, always in degrees, `0`–`360`.
 - **Vertical Angle** — the inclination, `-90` to `90` degrees. This is the one
   column whose name won't match your book, which almost certainly says *clino*.
@@ -199,8 +199,15 @@ grey out at that point. To get rid of the last of it, remove the chunk.
 
 ## Exclude a distance from the total
 
-The caret menu on a Distance cell offers **Exclude Distance**, and an excluded
-shot shows an **Excluded** badge.
+Select a Distance cell and a small caret button appears in its top-right corner.
+It is only there while that cell is selected, so if you go looking for it on a
+cell you haven't clicked into, it won't be there. Its menu holds a single item:
+**Exclude Distance** on a shot that is being counted, and **Include Distance** on
+one that isn't — the same item both ways, so it is also how you put a length
+back. An excluded shot shows an **Excluded** badge in its Distance cell.
+
+![The Distance column of the survey table. The first shot's Distance cell, reading 14.52, is selected and ringed; a caret button sits in its top-right corner, and the menu open beneath it reads "Exclude Distance".](../images/survey-exclude-distance.png)
+*The caret button, and the menu it opens, on the first shot's Distance cell.*
 
 This does **not** remove the shot from the cave. The leg still positions the
 stations exactly as before — it is dropped from the cave's **total length**

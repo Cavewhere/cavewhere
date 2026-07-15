@@ -20,6 +20,11 @@ badge** in its corner, carrying a stop sign if it's an error or a triangle if
 it's a warning. Click the badge to read the message; clicking another one closes
 the first, so you read them one at a time.
 
+![Part of the survey table. The first shot's Distance cell is empty and outlined in red, with a small square stop-sign badge in its bottom-right corner. An open message box points up at the badge and reads: Missing "distance" from shot "a1" to "a2".](../images/survey-error.png)
+*A shot whose distance never got entered. The message names the reading that is
+missing and the shot it belongs to, so you know which line of the book to go
+back to.*
+
 ## Errors versus warnings
 
 The distinction is exact, and it tells you how urgently to care:

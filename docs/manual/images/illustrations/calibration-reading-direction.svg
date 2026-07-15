@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 420" width="512" height="420" role="img" aria-label="One shot between stations A1 and A2, drawn in plan with north up. A blue arrow from A1 to A2 is the foresight, read standing at A1 sighting A2, and reads 60 degrees. An orange arrow from A2 back to A1 is the backsight, read standing at A2 sighting A1, and reads 240 degrees — the same shot, 180 degrees apart. A table below gives the four cases: 60 degrees typed into the Front Sights column needs no box ticked and means 60 degrees; 240 degrees typed into the Front Sights column needs Backwards Compass ticked and also means 60 degrees; 240 degrees typed into the Back Sights column needs no box ticked and means 240 degrees; 60 degrees typed into the Back Sights column needs Corrected Compass ticked and also means 240 degrees.">
+  <defs>
+    <style>
+      .card  { fill: #ffffff; }
+      .title { font: 600 13px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .head  { font: 600 11px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5c656e; }
+      .cell  { font: 11px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .note  { font: 11px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5c656e; }
+      .sname { font: 600 10px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5c656e; }
+      .fsval { font: 600 12px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #17618f; }
+      .bsval { font: 600 12px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #d6552b; }
+      .shot  { fill: none; stroke: #171b20; stroke-width: 1.75; }
+      .stn   { fill: #171b20; }
+      .north { fill: none; stroke: #5c656e; stroke-width: 1.25; stroke-dasharray: 4 3; }
+      .fsarr { fill: none; stroke: #17618f; stroke-width: 2; }
+      .bsarr { fill: none; stroke: #d6552b; stroke-width: 2; }
+      .rule  { stroke: #dbe1e6; stroke-width: 1; }
+      .box   { fill: #ffffff; stroke: #5c656e; stroke-width: 1.2; }
+      .tick  { fill: none; stroke: #17618f; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <marker id="fsHead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#17618f"/>
+    </marker>
+    <marker id="bsHead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#d6552b"/>
+    </marker>
+    <marker id="nHead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5c656e"/>
+    </marker>
+  </defs>
+
+  <rect class="card" width="512" height="420"/>
+  <text class="title" x="16" y="22">One shot, two possible numbers &#8212; which way was it read?</text>
+
+  <!-- Plan view, north up. A1 (140,192) -> A2 (370,60): dx 230, dy -132,
+       so atan2(230,132) = 60 deg from north — the bearing the labels quote. -->
+  <line class="north" x1="44" y1="118" x2="44" y2="62" marker-end="url(#nHead)"/>
+  <text class="sname" x="44" y="52" text-anchor="middle">N</text>
+
+  <line class="shot" x1="140" y1="192" x2="370" y2="60"/>
+  <circle class="stn" cx="140" cy="192" r="5"/>
+  <circle class="stn" cx="370" cy="60" r="5"/>
+  <text class="sname" x="136" y="210" text-anchor="middle">A1</text>
+  <text class="sname" x="374" y="47"  text-anchor="middle">A2</text>
+
+  <!-- Foresight: offset to the upper-left of the shot, arrowhead at A2.
+       Labels sit left of centre so their right edge clears the rising shot line. -->
+  <line class="fsarr" x1="158" y1="167" x2="339" y2="63" marker-end="url(#fsHead)"/>
+  <text class="fsval" x="200" y="92"  text-anchor="middle">60&#176; foresight</text>
+  <text class="note"  x="200" y="106" text-anchor="middle">stand at A1, sight A2</text>
+
+  <!-- Backsight: offset to the lower-right, arrowhead at A1. -->
+  <line class="bsarr" x1="352" y1="85" x2="171" y2="189" marker-end="url(#bsHead)"/>
+  <text class="bsval" x="270" y="172" text-anchor="middle">240&#176; backsight</text>
+  <text class="note"  x="270" y="186" text-anchor="middle">stand at A2, sight A1</text>
+
+  <text class="note" x="16" y="230">The same shot, read from both ends. The two numbers always differ by 180&#176;.</text>
+  <text class="note" x="16" y="244">The number alone cannot say which way it was read.</text>
+
+  <line class="rule" x1="16" y1="258" x2="496" y2="258"/>
+
+  <!-- Which box to tick -->
+  <text class="head" x="16"  y="278">COLUMN</text>
+  <text class="head" x="130" y="278">YOU TYPED</text>
+  <text class="head" x="212" y="278">TICK</text>
+  <text class="head" x="380" y="278">CAVEWHERE USES</text>
+
+  <text class="cell"  x="16"  y="304">Front Sights</text>
+  <text class="fsval" x="130" y="304">60&#176;</text>
+  <rect class="box"   x="212" y="295" width="11" height="11" rx="2"/>
+  <text class="note"  x="230" y="304">nothing</text>
+  <text class="fsval" x="380" y="304">60&#176;</text>
+
+  <text class="cell"  x="16"  y="328">Front Sights</text>
+  <text class="bsval" x="130" y="328">240&#176;</text>
+  <rect class="box"   x="212" y="319" width="11" height="11" rx="2"/>
+  <path class="tick"  d="M 214.5 324.5 L 217.3 327.3 L 220.8 321.4"/>
+  <text class="cell"  x="230" y="328">Backwards <tspan font-style="italic">Compass</tspan></text>
+  <text class="fsval" x="380" y="328">60&#176;</text>
+
+  <line class="rule" x1="16" y1="342" x2="496" y2="342"/>
+
+  <text class="cell"  x="16"  y="366">Back Sights</text>
+  <text class="bsval" x="130" y="366">240&#176;</text>
+  <rect class="box"   x="212" y="357" width="11" height="11" rx="2"/>
+  <text class="note"  x="230" y="366">nothing</text>
+  <text class="bsval" x="380" y="366">240&#176;</text>
+
+  <text class="cell"  x="16"  y="390">Back Sights</text>
+  <text class="fsval" x="130" y="390">60&#176;</text>
+  <rect class="box"   x="212" y="381" width="11" height="11" rx="2"/>
+  <path class="tick"  d="M 214.5 386.5 L 217.3 389.3 L 220.8 383.4"/>
+  <text class="cell"  x="230" y="390">Corrected <tspan font-style="italic">Compass</tspan></text>
+  <text class="bsval" x="380" y="390">240&#176;</text>
+
+  <text class="note" x="16" y="412">The box reverses the reading by 180&#176;, so either number means the way you shot it.</text>
+</svg>

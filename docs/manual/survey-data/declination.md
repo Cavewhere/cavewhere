@@ -2,7 +2,7 @@
 title: Set the Declination
 summary: Correct magnetic bearings to true north, automatically from the IGRF model or by hand.
 problem: Stop the whole cave being rotated off true north, so it lines up with the surface world and with other trips.
-keywords: [declination, magnetic north, true north, igrf, auto declination, manual declination, bearing, compass]
+keywords: [declination, magnetic north, true north, igrf, noaa, auto declination, manual declination, bearing, compass, east positive]
 related: [calibration.md, enter-survey-data.md, ../concepts/glossary.md]
 ---
 
@@ -47,6 +47,14 @@ CaveWhere states the arithmetic itself:
 So a positive (east) declination rotates your bearings clockwise. You enter what
 the compass read; CaveWhere adds the declination and plots true.
 
+> **Looking the value up?** The
+> [NOAA magnetic field calculator](https://www.ngdc.noaa.gov/geomag/calculators/magcalc.shtml)
+> already reports declination the way CaveWhere wants it — **east positive, west
+> negative** — so **enter what it gives you as-is, sign and all.** A west
+> declination of `-3.2°` goes in as `-3.2`; don't drop the minus and don't flip
+> it. Set the calculator's date to the date of the *trip*, not today, since
+> declination drifts.
+
 ## Let CaveWhere work it out (Auto)
 
 Declination is not something you should be looking up by hand, and by default
@@ -57,8 +65,8 @@ using two things it already knows:
 - **the trip's date**, because declination drifts, and
 - **the cave's location**, from its fixed station.
 
-This is the right default. The model is more accurate than a value copied off a
-website, it uses the date of *that* trip rather than today, and it costs you
+This is the right default. It uses the date of *that* trip rather than today,
+there is nothing to look up, mistype, or forget to update, and it costs you
 nothing.
 
 Auto needs both facts, so it needs the cave to have a **fixed station** — a
@@ -102,7 +110,7 @@ A warning icon appears beside the field when CaveWhere has something to say:
 
 ## Next steps
 
-- [Calibration](calibration.md) covers the rest of the box — tape, compass and
-  clino corrections, which fix the *instrument* rather than the world.
+- [Calibration](calibration.md) covers the rest of the box — distance, compass
+  and clino corrections, which fix the *instrument* rather than the world.
 - Auto declination depends on a fixed station. Georeferencing has its own
   chapter, still to be written.

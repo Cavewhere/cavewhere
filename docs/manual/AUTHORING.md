@@ -145,10 +145,26 @@ The pieces:
   ```
 
   Run the whole thing once before committing, to prove the shots you didn't
-  touch still generate. A re-render that only differs by antialiasing is not
-  worth committing — it costs a full blob per image — so commit new and
-  genuinely-changed images only, and revert the rest with
-  `git checkout -- docs/manual/images/`.
+  touch still generate — but treat that as a smoke test, not a diff gate: a full
+  run only agrees with the committed images about half the time (see below). A
+  re-render that only differs by antialiasing is not worth committing — it costs
+  a full blob per image — so commit new and genuinely-changed images only, and
+  revert the rest with:
+
+  ```bash
+  git checkout -- docs/manual/images/*.png docs/manual/images/*.gif
+  ```
+
+  **Scope that revert to the globs.** `git checkout -- docs/manual/images/` also
+  reverts `images/illustrations/` — the hand-authored figures and their README,
+  which the generator never writes — silently undoing work you just did.
+- **A full run is not reproducible, so don't judge a shot by one.** Two known
+  causes, both pre-existing: when `test_lidarNoteShots` hits its intermittent
+  failure it aborts mid-test and corrupts the shots *after* it alphabetically,
+  and the note's `PanZoomInteraction.refit()` occasionally leaves a note page a
+  toolbar-height too large. Verify a shot by generating it **alone** and diffing
+  that against a full run *of that shot's own image* — not by diffing the whole
+  directory.
 - **Add a screenshot:** add a `test_<shotName>()` function to
   `tst_ManualScreenshots.qml` that navigates to the page
   (`RootData.pageSelectionModel.currentPageAddress = "…"`), optionally sets
@@ -169,9 +185,26 @@ The pieces:
   of itself, a team row whose buttons only appear when selected). If a shot
   can't be reproduced by `-t` on its own, it is not reproducible at all — it
   just happens to agree with the last full run.
-- Set that state **last, right before the grab.** A note image decodes a beat
-  after its page appears and relayouts the editor around it, so state
-  established earlier gets moved out from under you.
+- Set that state **last, right before the grab** — and check that it stuck.
+  Scroll position is the trap: the survey editor's header keeps growing after the
+  fact (the note thumbnail decodes, the trip's warning banner appears once the
+  error model has run), and anything that grows *above* the viewport moves
+  `originY` without moving `contentY`, sliding the rows out from under a
+  one-shot `positionViewAtIndex`. `parkSurveyEditorAtTop` / `parkSurveyEditorAtRow`
+  re-park until the view stays put; use them rather than positioning by hand.
+- **Don't lean on a control scrolling itself into view.** The editor reveals a
+  focused cell with `ListView.Contain`, which does nothing when the cell is
+  already visible — so the cell lands wherever the last shot left the editor
+  scrolled, and the shot frames differently alone than in a full run. Park the
+  row you want, then focus.
+- **Grabbing an open `QC.Menu` needs `popupType: Popup.Item`.** A menu's type is
+  the style's choice and Fusion sets none, so it defaults to `Popup.Window` — a
+  separate top-level window that `grabWindow(mainWindow)` cannot see. Override it
+  on the menu instance *from the test* (never in the app's QML) and `popup()` it
+  at explicit coordinates; the no-argument `popup()` opens at the mouse cursor,
+  which a test doesn't control. `Popup.Item` uses the same QML delegates, so the
+  menu in the shot is the one users see. `test_excludeDistance` is the worked
+  example.
 
 ## Keeping the indexes in sync
 

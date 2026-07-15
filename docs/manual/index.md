@@ -29,7 +29,7 @@ the problems CaveWhere solves — then keep the
   → trip structure, and why the trip is the unit that matters.
 - [Enter Survey Data](survey-data/enter-survey-data.md) — the survey table,
   data blocks, and the keyboard shortcuts that make entry fast.
-- [Calibrate the Instruments](survey-data/calibration.md) — tape, compass and
+- [Calibrate the Instruments](survey-data/calibration.md) — distance, compass and
   clino corrections, foresights and backsights, and units.
 - [Set the Declination](survey-data/declination.md) — magnetic north to true
   north, automatically or by hand.

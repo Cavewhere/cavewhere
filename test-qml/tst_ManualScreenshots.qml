@@ -1,4 +1,5 @@
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import QtTest
 import cavewherelib
 import cw.TestLib
@@ -39,6 +40,29 @@ MainWindowTest {
         // Wider margin for the LiDAR transform panel, so the crop keeps enough of
         // the scan behind it to read as a 3D view rather than a floating form.
         readonly property int lidarPanelCropMargin: 60
+
+        // How many times parkSurveyEditorAtTop re-parks the survey editor before
+        // giving up, and how far the view may sit from its header and still count
+        // as parked. Each attempt costs a settle(), and in practice the header has
+        // stopped growing by the second.
+        readonly property int maxParkAttempts: 5
+        readonly property real parkTolerance: 0.5
+
+        // Margin around an open error message, whose crop is anchored on the
+        // message's text. Like the caret menu below, the message hangs off the
+        // cell it belongs to, so padding the text reaches back over the cell and
+        // frames both without dragging in the whole editor.
+        readonly property int errorQuoteCropMargin: 100
+
+        // Margin around the open caret menu, whose crop is anchored on the menu
+        // rather than on the Distance cell it belongs to. The menu opens down and
+        // to the right and is twice the cell's width, so a cell-anchored crop
+        // needs a ~180px margin to clear the menu's far corner — and that same
+        // margin applied leftward and upward drags in the sidebar and the note
+        // gallery. Anchored on the menu, this reaches back over the cell and keeps
+        // the shot to the table. Sized to land just past the column titles: wider
+        // starts slicing the Data heading above them in half.
+        readonly property int excludeMenuCropMargin: 80
 
         // Load the demo cave, navigate to the 3D view, and wait for a live QRhi.
         // Returns the region viewer, or null after calling skip() when the
@@ -557,16 +581,47 @@ MainWindowTest {
         // previous test left it, which made every trip-page shot depend on run
         // order — and come out scrolled to Front Sights when run alone.
         //
-        // Call this LAST, right before the grab. The note image decodes a beat
-        // after the page appears, and its arrival relayouts the editor's header,
-        // which moves originY and re-scrolls the view out from under an earlier
-        // positioning call.
+        // Call this LAST, right before the grab, and note that one call does not
+        // settle it. positionViewAtBeginning() parks the view by setting contentY
+        // to originY, but the editor's header keeps growing afterwards: the note
+        // thumbnail decodes, and the trip's warning banner appears once the error
+        // model has run. Anything that grows ABOVE the viewport moves originY
+        // without moving contentY, so the view silently ends up ~190px below the
+        // top it was just sent to — with the trip's name and banner scrolled off.
+        // Re-park until it stays put; once the header stops growing, one park
+        // sticks and the loop exits on the check rather than the retry.
         function parkSurveyEditorAtTop() {
             let view = ObjectFinder.findObjectByChain(rootId.mainWindow,
                 "rootId->tripPage->surveyEditor->view");
             verify(view, "found the survey editor's list view");
-            view.positionViewAtBeginning();
-            settle();
+
+            let parked = false;
+            for (let i = 0; i < maxParkAttempts && !parked; ++i) {
+                view.positionViewAtBeginning();
+                settle();
+                parked = Math.abs(view.contentY - view.originY) < parkTolerance;
+            }
+            verify(parked, "the survey editor stayed parked at its header");
+        }
+
+        // Park `view` with data row `index` at the top of the viewport. Same
+        // re-assert loop, and the same reason for it, as parkSurveyEditorAtTop:
+        // positionViewAtIndex parks the row by setting contentY to the row's y,
+        // and a header that grows afterwards moves the row without moving
+        // contentY. Use this instead of relying on where a cell happens to sit —
+        // the editor scrolls a focused cell into view with ListView.Contain, which
+        // does nothing at all when the cell is already visible, so an unparked
+        // cell lands wherever the previous shot left the editor scrolled.
+        function parkSurveyEditorAtRow(view, index) {
+            let parked = false;
+            for (let i = 0; i < maxParkAttempts && !parked; ++i) {
+                view.positionViewAtIndex(index, QQ.ListView.Beginning);
+                settle();
+                let row = view.itemAtIndex(index);
+                parked = row !== null
+                    && Math.abs(row.y - view.contentY) < parkTolerance;
+            }
+            verify(parked, "the survey editor parked row " + index + " at the top");
         }
 
         // The Carpet button on the TRIP page — how you actually enter Carpet
@@ -1252,6 +1307,154 @@ MainWindowTest {
             verify(path.length > 0, "grabItemToFile wrote the add-data-block screenshot");
             verify(OffscreenRenderTester.imageIsNonUniform(path),
                    "survey-add-data-block is not blank");
+        }
+
+        // The Distance cell's caret menu, open on "Exclude Distance". Backs the
+        // "Exclude a distance from the total" section of
+        // docs/manual/survey-data/enter-survey-data.md.
+        //
+        // The menu is forced to popupType Item for the grab. A QC.Menu's type is
+        // the style's choice, and Fusion sets none, so it defaults to
+        // Popup.Window — a separate top-level window that grabWindow(mainWindow)
+        // cannot see. Popup.Item draws the menu into this window's overlay from
+        // the same QML delegates Popup.Window would use, so the menu a reader
+        // sees here is pixel-for-pixel the one the app shows; only the windowing
+        // differs. Overridden here rather than in ShotDistanceDataBox.qml: it is
+        // the screenshot that needs this, not the app.
+        function test_excludeDistance() {
+            let view = openSurveyEditorView();
+            if (!view) { return; }
+
+            let model = view.model;
+            verify(model, "found the survey editor model");
+
+            let chunk = model.chunkForRow(0);
+            verify(chunk, "found the trip's first data block");
+
+            let row = model.modelRowForChunkRole(chunk, 0,
+                                                 SurveyChunk.ShotDistanceRole);
+            verify(row >= 0, "found the model row of the first shot's Distance");
+
+            // Focus the cell rather than clicking it: the caret button's Loader is
+            // gated on the box holding focus.
+            model.setFocusedCell(model.cellIndex(row, SurveyChunk.ShotDistanceRole));
+            settle();
+
+            // Park the data rows at the top of the viewport, which fixes where the
+            // cell — and so the crop taken around its menu — lands. Focusing alone
+            // does not: the editor only scrolls a focused cell into view when it is
+            // off-screen, so on its own this shot came out framed differently in a
+            // full run than it did on its own.
+            parkSurveyEditorAtRow(view, 0);
+
+            let box = null;
+            tryVerify(() => {
+                box = findVisibleByName(view, "dataBox." + row + "."
+                                        + SurveyChunk.ShotDistanceRole);
+                return box !== null && box.focus;
+            }, 5000, "the first shot's Distance cell has focus");
+
+            let caret = null;
+            tryVerify(() => {
+                caret = findVisibleByName(box, "excludeMenuButton");
+                return caret !== null;
+            }, 5000, "the Distance cell's caret button is visible");
+            settle();
+
+            let menuLoader = findByName(caret, "menuLoader");
+            verify(menuLoader, "found the caret button's menu loader");
+            menuLoader.active = true;
+            let menu = menuLoader.item;
+            verify(menu, "the caret menu loaded");
+            menu.popupType = QC.Popup.Item;
+
+            // Anchor the menu under the caret button. The button's own handler
+            // calls popup() with no coordinates, which lands the menu at the mouse
+            // cursor — a position a test doesn't control.
+            menu.popup(caret, 0, caret.height);
+            tryVerify(() => menu.opened, 5000, "the caret menu is open");
+
+            highlightOverlayId.target = box;
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(menu.contentItem,
+                                                    "survey-exclude-distance",
+                                                    excludeMenuCropMargin);
+            verify(path.length > 0, "grabItemToFile wrote the exclude-distance shot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "survey-exclude-distance is not blank");
+
+            menu.close();
+            highlightOverlayId.target = null;
+        }
+
+        // A cell carrying a fatal error: red border, stop-sign badge, and the
+        // badge's message open beside it. Backs the "Why" of
+        // docs/manual/survey-data/survey-errors.md.
+        //
+        // The error is made here rather than borrowed from the fixture. Phake's
+        // own errors are four warnings, and a shot documenting what an *error*
+        // looks like should not depend on which incidental warning the demo data
+        // happens to carry. Blanking a shot's Distance is the app's own fatal
+        // case — cwSurveyChunk rates an empty distance on a normal shot Fatal,
+        // and only warns on an LRUD-only one — and it is what a skipped reading
+        // actually looks like. Safe to mutate: every shot reloads the project
+        // from the dataset into a fresh temp dir.
+        function test_surveyError() {
+            let view = openSurveyEditorView();
+            if (!view) { return; }
+
+            let model = view.model;
+            verify(model, "found the survey editor model");
+
+            let chunk = model.chunkForRow(0);
+            verify(chunk, "found the trip's first data block");
+            let row = model.modelRowForChunkRole(chunk, 0,
+                                                 SurveyChunk.ShotDistanceRole);
+            verify(row >= 0, "found the model row of the first shot's Distance");
+
+            chunk.setData(SurveyChunk.ShotDistanceRole, 0, "");
+            settle();
+
+            parkSurveyEditorAtRow(view, 0);
+
+            let box = findVisibleByName(view, "dataBox." + row + "."
+                                        + SurveyChunk.ShotDistanceRole);
+            verify(box, "found the first shot's Distance cell");
+
+            // Open the message. The badge is a checkable button, and the box it
+            // shows is a plain in-scene item (QuoteBox reparented to
+            // RootPopupItem), so grabWindow captures it — no popupType override
+            // like test_excludeDistance needs.
+            let badge = null;
+            tryVerify(() => {
+                badge = findVisibleByName(box, "errorIcon");
+                return badge !== null;
+            }, 5000, "the Distance cell shows an error badge");
+            badge.checked = true;
+
+            // Crop around the message's own text rather than the QuoteBox that
+            // frames it. QuoteBox is a ZERO-SIZED Item parked at the triangle's
+            // tip that draws its body around itself, partly at negative
+            // coordinates — so its rect is empty, and grabItemToFile (which crops
+            // an item's sceneRect) would fail on it outright. errorText is the
+            // innermost named item, and padding it reaches back over the cell.
+            let quote = null;
+            tryVerify(() => {
+                let root = findVisibleByName(rootId.mainWindow,
+                                             "errorBox" + box.objectName);
+                quote = root ? findVisibleByName(root, "errorText") : null;
+                return quote !== null && quote.width > 0;
+            }, 5000, "the error message is open");
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(quote, "survey-error",
+                                                    errorQuoteCropMargin);
+            verify(path.length > 0, "grabItemToFile wrote the survey-error shot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "survey-error is not blank");
+
+            badge.checked = false;
         }
 
         // The Calibration section whole: declination, tape, and the front/back
