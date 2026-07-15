@@ -18,12 +18,12 @@
 #include <QVector>
 
 // Our includes
+#include "cwCaptureLabelPlacer.h"
 #include "cwGlobals.h"
 #include "cwLabelPlacementControl.h"
 
 class cwCamera;
 class cwCavingRegion;
-class cwCaptureLabelPlacer;
 
 class CAVEWHERE_LIB_EXPORT cwCaptureLeads : public QGraphicsItem
 {
@@ -44,7 +44,6 @@ public:
     void setViewport(const QRect& viewport);
     void setImageScale(double scale);
     void setExportDpi(int dpi);
-    void setPlacer(cwCaptureLabelPlacer* placer);
 
     // Scale factor for converting paper-pixels-at-export-DPI into the item's
     // local coord system. Lets a single 300-DPI-paper-px constant produce the
@@ -54,10 +53,19 @@ public:
     qreal markerRadius() const;
     QVector<QPointF> leadMarkerPositions() const;
 
-    // Places one label per lead. Runs on the export worker thread; the
-    // optional control lets the caller cancel mid-run and track progress
-    // (see cwLabelPlacementControl). A default control runs to completion.
-    void placeLeadLabels(const cwLabelPlacementControl& control = {});
+    // Builds one placement request per lead with text (sorted top-to-bottom,
+    // left-to-right by rebuildGeometry; text measured with the scaled label
+    // font). Each request carries the leader-obstacle thickness and minimum
+    // leader length so cwCaptureLabelPlacer::placeAll registers accepted
+    // leaders as hard obstacles for every later label. Runs on the export
+    // worker thread; the optional control's isCanceled() is polled per lead.
+    // Hand the matching slice of placeAll's results to applyPlacements.
+    QVector<cwCaptureLabelPlacer::LabelRequest> buildLabelRequests(
+        const cwLabelPlacementControl& control = {});
+
+    // Applies placeAll's results for the requests built by the last
+    // buildLabelRequests call, in the same order.
+    void applyPlacements(const QVector<cwCaptureLabelPlacer::Placement>& placements);
 
     const QVector<LeadDrawData>& layout() const { return m_leads; }
 
@@ -77,8 +85,10 @@ private:
     QRectF m_boundingRect;
     qreal m_imageScale;
     int m_exportDpi = 96;
-    cwCaptureLabelPlacer* m_placer = nullptr;
     QVector<LeadDrawData> m_leads;
+    // Maps each request from the last buildLabelRequests() call back to its
+    // m_leads index (empty-text leads produce no request).
+    QVector<int> m_requestLeadIndex;
     QPen m_glyphPen;
     QFont m_glyphFont;
     QPen m_labelPen;

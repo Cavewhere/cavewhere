@@ -10,12 +10,14 @@
 
 // Qt includes
 #include <QDebug>
+#include <QHash>
 #include <QtMath>
 
 // Std includes
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
 
 namespace {
 
@@ -160,6 +162,26 @@ constexpr int   kMaxCandidateStep = 8;
 // bites the degenerate case.
 constexpr qreal kMinGridCellDtCells = 4.0;
 
+// Default side length of a DT placement window, in DT *cells* (see
+// setPlacementWindowSize). Cells are anchored to paper px (2 paper px each),
+// so this is scale- and coordinate-space-independent — a preview, whose local
+// unit spans many paper px, gets the same paper-space window as an export.
+// 2048 cells = 4096 paper px ≈ 13.7 in at 300 DPI: big enough that a typical
+// single-sheet export fits in ONE window (placement is then identical to the
+// unwindowed algorithm), small enough that a whole-cave export's per-window
+// DT stays tens of MB instead of the page's hundreds of GB.
+constexpr int kDefaultPlacementWindowCells = 2048;
+
+// Coarsened candidate step along one axis, from the label's extent on that
+// axis. Shared by the placeLabel spiral and spiralReachCells so the window
+// halo always covers the spiral's true footprint.
+inline int candidateStepForExtent(qreal labelExtent, qreal cellSize)
+{
+    return qBound(1,
+                  qRound(labelExtent / cellSize * kCandidateStepLabelFraction),
+                  kMaxCandidateStep);
+}
+
 } // anonymous namespace
 
 bool cwCaptureLabelPlacer::segmentsCross(const QLineF& a, const QLineF& b,
@@ -225,10 +247,15 @@ void cwCaptureLabelPlacer::setObstacleBounds(const QRectF& parentBounds, qreal c
     m_cellSize = cellSizePaperPx > 0.0 ? cellSizePaperPx : 2.0;
     m_maskW = qMax(1, qCeil(parentBounds.width()  / m_cellSize));
     m_maskH = qMax(1, qCeil(parentBounds.height() / m_cellSize));
-    // Clear cells start at a large finite "no obstacle" sentinel; addTileAlpha
-    // and addObstacleRect drop entries to 0 before finalize() runs the DT.
-    m_dt.fill(kLargeSquaredDist, m_maskW * m_maskH);
+    // No page-sized allocation happens here (or anywhere): obstacle sources
+    // are recorded and rasterized into window-sized DT grids on demand — see
+    // ensureWindowFor. m_maskW/H only define the logical cell space.
+    m_dt.clear();
+    m_tileSources.clear();
+    m_obstacleRects.clear();
+    m_windowLoaded = false;
     m_finalized = false;
+    m_gridCellSizeHint = 0.0;
 }
 
 void cwCaptureLabelPlacer::setViewportBounds(const QRectF& viewportBounds)
@@ -246,6 +273,12 @@ void cwCaptureLabelPlacer::setAlphaThreshold(int threshold)
     m_alphaThreshold = threshold;
 }
 
+void cwCaptureLabelPlacer::setPlacementWindowSize(qreal windowBoundsUnits)
+{
+    m_windowSize = windowBoundsUnits;
+    m_windowLoaded = false;
+}
+
 void cwCaptureLabelPlacer::addTileAlpha(const QImage& tileImage,
                                         const QPointF& tilePosParent,
                                         qreal tileScale)
@@ -257,37 +290,17 @@ void cwCaptureLabelPlacer::addTileAlpha(const QImage& tileImage,
         return;
     }
 
+    // Normalize the format once at record time; window builds then read scan
+    // lines directly however many windows the tile spans. Tiles from
+    // grabToImage are already ARGB32_Premultiplied, so this conversion (a deep
+    // copy) only fires for foreign formats.
     const QImage img = (tileImage.format() == QImage::Format_ARGB32
                         || tileImage.format() == QImage::Format_ARGB32_Premultiplied)
                            ? tileImage
                            : tileImage.convertToFormat(QImage::Format_ARGB32);
 
-    const int iw = img.width();
-    const int ih = img.height();
-    const qreal invCell = 1.0 / m_cellSize;
-    const qreal boundsLeft = m_bounds.left();
-    const qreal boundsTop  = m_bounds.top();
-
-    for(int py = 0; py < ih; py++) {
-        const qreal parentY = tilePosParent.y() + py * tileScale;
-        const int cellY = qFloor((parentY - boundsTop) * invCell);
-        if(cellY < 0 || cellY >= m_maskH) {
-            continue;
-        }
-        const QRgb* row = reinterpret_cast<const QRgb*>(img.constScanLine(py));
-        const int rowBase = cellY * m_maskW;
-        for(int px = 0; px < iw; px++) {
-            if(qAlpha(row[px]) <= m_alphaThreshold) {
-                continue;
-            }
-            const qreal parentX = tilePosParent.x() + px * tileScale;
-            const int cellX = qFloor((parentX - boundsLeft) * invCell);
-            if(cellX < 0 || cellX >= m_maskW) {
-                continue;
-            }
-            m_dt[rowBase + cellX] = 0.0f;
-        }
-    }
+    m_tileSources.append(TileAlphaSource{img, tilePosParent, tileScale});
+    m_windowLoaded = false;
 }
 
 void cwCaptureLabelPlacer::addObstacleRect(const QRectF& rectParent)
@@ -295,27 +308,15 @@ void cwCaptureLabelPlacer::addObstacleRect(const QRectF& rectParent)
     if(m_maskW <= 0 || m_maskH <= 0) {
         return;
     }
-    const qreal invCell = 1.0 / m_cellSize;
-    const int x0 = qBound(0, qFloor((rectParent.left()   - m_bounds.left()) * invCell), m_maskW);
-    const int y0 = qBound(0, qFloor((rectParent.top()    - m_bounds.top())  * invCell), m_maskH);
-    const int x1 = qBound(0, qCeil ((rectParent.right()  - m_bounds.left()) * invCell), m_maskW);
-    const int y1 = qBound(0, qCeil ((rectParent.bottom() - m_bounds.top())  * invCell), m_maskH);
-    for(int y = y0; y < y1; y++) {
-        const int rowBase = y * m_maskW;
-        for(int x = x0; x < x1; x++) {
-            m_dt[rowBase + x] = 0.0f;
-        }
-    }
+    m_obstacleRects.append(rectParent);
+    m_windowLoaded = false;
 }
 
 void cwCaptureLabelPlacer::finalize()
 {
     m_stats.gridCells = qint64(m_maskW) * qint64(m_maskH);
-    if(m_maskW <= 0 || m_maskH <= 0) {
-        m_finalized = true;
-        return;
-    }
-    distanceTransform2D(m_dt, m_maskW, m_maskH);
+    // The distance transform is built lazily per placement window (see
+    // ensureWindowFor); finalize just marks the obstacle sources complete.
     m_finalized = true;
 }
 
@@ -329,6 +330,7 @@ void cwCaptureLabelPlacer::clearPlacements()
     m_lineObstacleGrid.reset();
     m_maxLineObstacleThickness = 0.0;
     m_gridsBuilt = false;
+    m_gridCellSizeHint = 0.0;
 }
 
 void cwCaptureLabelPlacer::ensureGridsBuilt(const QSizeF& labelSize)
@@ -340,10 +342,16 @@ void cwCaptureLabelPlacer::ensureGridsBuilt(const QSizeF& labelSize)
     // Size cells on the scale of a query region — roughly a label. Both queries
     // (placed-label collision and soft-obstacle scoring) probe a region on the
     // order of the label plus its margins, so a cell that size keeps each query
-    // to a handful of cells while holding few items per cell. Floor at a small
-    // multiple of the distance-transform cell so a degenerate label can't
-    // produce an absurdly fine grid.
-    const qreal gridCellSize = qMax(qMax(labelSize.width(), labelSize.height()),
+    // to a handful of cells while holding few items per cell. Prefer the batch
+    // median from placeAll: the fallback (the first placed request) is biased
+    // large because leads — the largest labels — place first, and oversized
+    // cells make every station-label query wade through dozens of neighbors.
+    // Floor at a small multiple of the distance-transform cell so a degenerate
+    // label can't produce an absurdly fine grid.
+    const qreal representativeExtent = m_gridCellSizeHint > 0.0
+        ? m_gridCellSizeHint
+        : qMax(labelSize.width(), labelSize.height());
+    const qreal gridCellSize = qMax(representativeExtent,
                                     kMinGridCellDtCells * m_cellSize);
 
     m_placedLabelGrid = std::make_unique<cwSpatialHashGrid2D>(gridCellSize);
@@ -369,28 +377,159 @@ void cwCaptureLabelPlacer::ensureGridsBuilt(const QSizeF& labelSize)
     m_gridsBuilt = true;
 }
 
-void cwCaptureLabelPlacer::addLineObstacle(const QLineF& segment, qreal thicknessPaperPx)
+int cwCaptureLabelPlacer::windowCellSpan() const
 {
-    if(segment.p1() == segment.p2()) {
+    if(!m_windowSize.has_value()) {
+        // Default: a fixed span in cells, scale-independent (see the constant).
+        return kDefaultPlacementWindowCells;
+    }
+    if(*m_windowSize <= 0.0) {
+        // Windowing disabled: one window spans the whole page.
+        return qMax(1, qMax(m_maskW, m_maskH));
+    }
+    return qMax(1, qCeil(*m_windowSize / m_cellSize));
+}
+
+int cwCaptureLabelPlacer::spiralReachCells(const QSizeF& labelSize) const
+{
+    // Mirror of placeLabel's spiral geometry. The farthest cell the spiral can
+    // sample is maxRing coarse rings out, and each ring's offset on an axis is
+    // ring * candidateStep on that axis — so on the coarser axis the reach
+    // overshoots the fine-cell radius by up to maxStep/minStep. The DT read at
+    // any sampled cell must additionally be exact up to the label's required
+    // clearance, so obstacles that far beyond the sample must be ingested too.
+    const qreal halfDiag = std::hypot(labelSize.width() * 0.5,
+                                      labelSize.height() * 0.5);
+    const qreal requiredClearanceParent = halfDiag + m_labelMargin;
+    const int cappedRadius = qCeil(requiredClearanceParent * kMaxSearchClearanceMultiple
+                                   / m_cellSize) + 1;
+    const int maxRadius = qMin(m_maskW + m_maskH, cappedRadius);
+
+    const int stepX = candidateStepForExtent(labelSize.width(), m_cellSize);
+    const int stepY = candidateStepForExtent(labelSize.height(), m_cellSize);
+    const int minStep = qMin(stepX, stepY);
+    const int maxRing = (maxRadius + minStep - 1) / minStep;
+    const int spiralCells = maxRing * qMax(stepX, stepY);
+
+    const int clearanceCells = qCeil(requiredClearanceParent / m_cellSize);
+    return spiralCells + clearanceCells + 1;
+}
+
+void cwCaptureLabelPlacer::ensureWindowFor(int anchorCellX, int anchorCellY, int reachCells)
+{
+    const int span = windowCellSpan();
+    const int maxCol = qMax(0, (m_maskW - 1) / span);
+    const int maxRow = qMax(0, (m_maskH - 1) / span);
+    const int col = qBound(0, anchorCellX / span, maxCol);
+    const int row = qBound(0, anchorCellY / span, maxRow);
+
+    // The window is its core cell range plus a halo covering the spiral reach
+    // (and, during placeAll, the whole batch's largest reach, so one build
+    // serves every label routed to this window).
+    const int halo = qMax(reachCells, m_batchHaloCells);
+    const int needX0 = qBound(0, col * span - halo,       m_maskW);
+    const int needX1 = qBound(0, (col + 1) * span + halo, m_maskW);
+    const int needY0 = qBound(0, row * span - halo,       m_maskH);
+    const int needY1 = qBound(0, (row + 1) * span + halo, m_maskH);
+
+    if(m_windowLoaded
+       && needX0 >= m_dtX0 && needX1 <= m_dtX1
+       && needY0 >= m_dtY0 && needY1 <= m_dtY1) {
         return;
     }
-    m_maxLineObstacleThickness = qMax(m_maxLineObstacleThickness, thicknessPaperPx);
-    const int index = m_lineObstacles.size();
-    m_lineObstacles.append({segment, thicknessPaperPx});
-    // Leaders are registered between placements (after the grids are built), so
-    // index incrementally. If a leader is somehow added before the first
-    // placeLabel(), ensureGridsBuilt() indexes the backlog instead.
-    if(m_lineObstacleGrid) {
-        m_lineObstacleGrid->insert(index, segment);
+    buildWindow(needX0, needY0, needX1, needY1);
+}
+
+void cwCaptureLabelPlacer::buildWindow(int x0, int y0, int x1, int y1)
+{
+    m_dtX0 = x0;
+    m_dtY0 = y0;
+    m_dtX1 = x1;
+    m_dtY1 = y1;
+
+    const int w = x1 - x0;
+    const int h = y1 - y0;
+    Q_ASSERT(w > 0 && h > 0);
+
+    // fill() only reallocates when the window outgrows the vector's capacity,
+    // so consecutive same-shaped windows reuse the buffer.
+    m_dt.fill(kLargeSquaredDist, w * h);
+
+    for(const TileAlphaSource& tile : std::as_const(m_tileSources)) {
+        rasterizeTileAlpha(tile);
+    }
+    for(const QRectF& rect : std::as_const(m_obstacleRects)) {
+        rasterizeObstacleRect(rect);
+    }
+
+    distanceTransform2D(m_dt, w, h);
+    m_windowLoaded = true;
+
+    const qint64 cells = qint64(w) * qint64(h);
+    m_stats.windowsBuilt++;
+    m_stats.windowCellsBuilt += cells;
+    m_stats.maxWindowCells = qMax(m_stats.maxWindowCells, cells);
+}
+
+void cwCaptureLabelPlacer::rasterizeTileAlpha(const TileAlphaSource& tile)
+{
+    const QImage& img = tile.image;
+    const int iw = img.width();
+    const int ih = img.height();
+    const int dtW = m_dtX1 - m_dtX0;
+    const qreal invCell = 1.0 / m_cellSize;
+    const qreal boundsLeft = m_bounds.left();
+    const qreal boundsTop  = m_bounds.top();
+
+    // Clamp the pixel loops to the rows/columns that can land inside the
+    // window's cell range, so building a window only pays for the overlap —
+    // tiles elsewhere on the page cost a bounds computation and nothing more.
+    const qreal winLeft   = boundsLeft + m_dtX0 * m_cellSize;
+    const qreal winTop    = boundsTop  + m_dtY0 * m_cellSize;
+    const qreal winRight  = boundsLeft + m_dtX1 * m_cellSize;
+    const qreal winBottom = boundsTop  + m_dtY1 * m_cellSize;
+    const qreal invScale = 1.0 / tile.scale;
+    const int pyStart = qBound(0, qFloor((winTop    - tile.pos.y()) * invScale),     ih);
+    const int pyEnd   = qBound(0, qCeil ((winBottom - tile.pos.y()) * invScale) + 1, ih);
+    const int pxStart = qBound(0, qFloor((winLeft   - tile.pos.x()) * invScale),     iw);
+    const int pxEnd   = qBound(0, qCeil ((winRight  - tile.pos.x()) * invScale) + 1, iw);
+
+    for(int py = pyStart; py < pyEnd; py++) {
+        const qreal parentY = tile.pos.y() + py * tile.scale;
+        const int cellY = qFloor((parentY - boundsTop) * invCell);
+        if(cellY < m_dtY0 || cellY >= m_dtY1) {
+            continue;
+        }
+        const QRgb* row = reinterpret_cast<const QRgb*>(img.constScanLine(py));
+        const int rowBase = (cellY - m_dtY0) * dtW;
+        for(int px = pxStart; px < pxEnd; px++) {
+            if(qAlpha(row[px]) <= m_alphaThreshold) {
+                continue;
+            }
+            const qreal parentX = tile.pos.x() + px * tile.scale;
+            const int cellX = qFloor((parentX - boundsLeft) * invCell);
+            if(cellX < m_dtX0 || cellX >= m_dtX1) {
+                continue;
+            }
+            m_dt[rowBase + (cellX - m_dtX0)] = 0.0f;
+        }
     }
 }
 
-void cwCaptureLabelPlacer::addSoftLineObstacle(const QLineF& segment, qreal thicknessPaperPx)
+void cwCaptureLabelPlacer::rasterizeObstacleRect(const QRectF& rectParent)
 {
-    if(segment.p1() == segment.p2()) {
-        return;
+    const int dtW = m_dtX1 - m_dtX0;
+    const qreal invCell = 1.0 / m_cellSize;
+    const int x0 = qBound(m_dtX0, qFloor((rectParent.left()   - m_bounds.left()) * invCell), m_dtX1);
+    const int y0 = qBound(m_dtY0, qFloor((rectParent.top()    - m_bounds.top())  * invCell), m_dtY1);
+    const int x1 = qBound(m_dtX0, qCeil ((rectParent.right()  - m_bounds.left()) * invCell), m_dtX1);
+    const int y1 = qBound(m_dtY0, qCeil ((rectParent.bottom() - m_bounds.top())  * invCell), m_dtY1);
+    for(int y = y0; y < y1; y++) {
+        const int rowBase = (y - m_dtY0) * dtW;
+        for(int x = x0; x < x1; x++) {
+            m_dt[rowBase + (x - m_dtX0)] = 0.0f;
+        }
     }
-    m_softLineObstacles.append({segment, thicknessPaperPx});
 }
 
 cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequest& request)
@@ -425,13 +564,8 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
     // Candidate centers step by candidateStepX/Y cells, but each sampled cell's
     // DT clearance and collision tests remain exact, so this only thins the
     // sampling — it never relaxes a placement's correctness.
-    auto candidateStep = [this](qreal labelExtent) {
-        return qBound(1,
-                      qRound(labelExtent / m_cellSize * kCandidateStepLabelFraction),
-                      kMaxCandidateStep);
-    };
-    const int candidateStepX = candidateStep(request.size.width());
-    const int candidateStepY = candidateStep(request.size.height());
+    const int candidateStepX = candidateStepForExtent(request.size.width(), m_cellSize);
+    const int candidateStepY = candidateStepForExtent(request.size.height(), m_cellSize);
     // Spiral radius in coarse rings: divide by the smaller step so both axes
     // still reach at least the full (capped) fine-cell search radius.
     const int minStep = qMin(candidateStepX, candidateStepY);
@@ -458,17 +592,23 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
     // (deferred past the cull so fully-culled exports never build them).
     ensureGridsBuilt(request.size);
 
+    // Make sure the DT window covering this anchor (plus the spiral's reach)
+    // is loaded. Deferred past the cull so culled anchors — which on a zoomed
+    // export are scattered across the whole page — never trigger a build.
+    ensureWindowFor(anchorCellX, anchorCellY, spiralReachCells(request.size));
+    const int dtW = m_dtX1 - m_dtX0;
+
     // Preferred leader direction = DT gradient at the anchor. Points along
     // the direction of fastest growth: perpendicular to nearby passage walls
     // for a mid-passage anchor, along the passage axis at a passage end.
     auto dtAt = [&](int x, int y) -> float {
-        x = qBound(0, x, m_maskW - 1);
-        y = qBound(0, y, m_maskH - 1);
-        return m_dt[cellIndex(x, y, m_maskW)];
+        x = qBound(m_dtX0, x, m_dtX1 - 1);
+        y = qBound(m_dtY0, y, m_dtY1 - 1);
+        return m_dt[cellIndex(x - m_dtX0, y - m_dtY0, dtW)];
     };
     QPointF preferredDir(0.0, -1.0);
-    if(anchorCellX >= 0 && anchorCellX < m_maskW
-       && anchorCellY >= 0 && anchorCellY < m_maskH) {
+    if(anchorCellX >= m_dtX0 && anchorCellX < m_dtX1
+       && anchorCellY >= m_dtY0 && anchorCellY < m_dtY1) {
         const float gx = dtAt(anchorCellX + 1, anchorCellY) - dtAt(anchorCellX - 1, anchorCellY);
         const float gy = dtAt(anchorCellX, anchorCellY + 1) - dtAt(anchorCellX, anchorCellY - 1);
         const qreal gmag = std::hypot(qreal(gx), qreal(gy));
@@ -484,11 +624,14 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
     QVector<Candidate> candidates;
 
     auto tryCell = [&](int cx, int cy) -> bool {
-        if(cx < 0 || cy < 0 || cx >= m_maskW || cy >= m_maskH) {
+        // The window's halo covers the whole spiral, so any cell outside it is
+        // also outside the page bounds — the same cells the unwindowed
+        // placement rejected here.
+        if(cx < m_dtX0 || cy < m_dtY0 || cx >= m_dtX1 || cy >= m_dtY1) {
             return false;
         }
         m_stats.cellsTried++;
-        if(m_dt[cellIndex(cx, cy, m_maskW)] < requiredClearanceCells) {
+        if(m_dt[cellIndex(cx - m_dtX0, cy - m_dtY0, dtW)] < requiredClearanceCells) {
             return false;
         }
         m_stats.dtClearedCells++;
@@ -645,4 +788,120 @@ cwCaptureLabelPlacer::Placement cwCaptureLabelPlacer::placeLabel(const LabelRequ
     result.leaderEnd   = request.anchorPos;
     result.leaderStart = winner.leaderStart;
     return result;
+}
+
+QVector<cwCaptureLabelPlacer::Placement> cwCaptureLabelPlacer::placeAll(
+    const QVector<LabelRequest>& requests,
+    const cwLabelPlacementControl& control)
+{
+    QVector<Placement> results(requests.size());
+    if(requests.isEmpty() || m_maskW <= 0 || m_maskH <= 0) {
+        return results;
+    }
+
+    // Window-major processing order (stable, so a single-window page places in
+    // exactly the caller's order). Collision state is global, so reordering
+    // across windows can shift which of two competing labels wins a spot, but
+    // can never let placements overlap.
+    const int span = windowCellSpan();
+    const int windowCols = qMax(1, (m_maskW + span - 1) / span);
+    const int maxCol = qMax(0, (m_maskW - 1) / span);
+    const int maxRow = qMax(0, (m_maskH - 1) / span);
+    auto windowIndexFor = [&](const QPointF& anchor) {
+        const int cellX = qFloor((anchor.x() - m_bounds.left()) / m_cellSize);
+        const int cellY = qFloor((anchor.y() - m_bounds.top())  / m_cellSize);
+        const int col = qBound(0, cellX / span, maxCol);
+        const int row = qBound(0, cellY / span, maxRow);
+        return row * windowCols + col;
+    };
+    QVector<int> windowOfRequest(requests.size());
+    for(int i = 0; i < requests.size(); i++) {
+        windowOfRequest[i] = windowIndexFor(requests.at(i).anchorPos);
+    }
+    QVector<int> order(requests.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+        return windowOfRequest.at(a) < windowOfRequest.at(b);
+    });
+
+    // One halo per WINDOW — the largest spiral reach among the requests routed
+    // to it — so each window is built once even though label sizes vary. Per
+    // window rather than per batch: a single long lead label's reach is many
+    // times a station's, and a batch-wide halo made every window on a
+    // whole-cave export mostly halo (6x the page area of DT built, measured).
+    QHash<int, int> windowHaloCells;
+    QVector<qreal> labelExtents;
+    labelExtents.reserve(requests.size());
+    for(int i = 0; i < requests.size(); i++) {
+        const QSizeF size = requests.at(i).size;
+        if(size.width() <= 0.0 || size.height() <= 0.0) {
+            continue;
+        }
+        int& halo = windowHaloCells[windowOfRequest.at(i)];
+        halo = qMax(halo, spiralReachCells(size));
+        labelExtents.append(qMax(size.width(), size.height()));
+    }
+
+    // Median label extent sizes the broad-phase grid cells (see
+    // ensureGridsBuilt) — representative of the many stations rather than the
+    // few oversized leads that happen to place first.
+    if(!labelExtents.isEmpty()) {
+        const int mid = labelExtents.size() / 2;
+        std::nth_element(labelExtents.begin(), labelExtents.begin() + mid,
+                         labelExtents.end());
+        m_gridCellSizeHint = labelExtents.at(mid);
+    }
+
+    for(int requestIndex : std::as_const(order)) {
+        // Poll for cancelation and report progress once per label, before its
+        // (potentially expensive) placement, so a canceled export bails
+        // promptly and the progress count covers skipped labels too.
+        if(control.isCanceled && control.isCanceled()) {
+            break;
+        }
+        if(control.labelProcessed) {
+            control.labelProcessed();
+        }
+
+        const LabelRequest& request = requests.at(requestIndex);
+        m_batchHaloCells = windowHaloCells.value(windowOfRequest.at(requestIndex), 0);
+        Placement placement = placeLabel(request);
+        if(placement.placed && request.leaderObstacleThickness > 0.0) {
+            const QLineF leader(placement.leaderStart, placement.leaderEnd);
+            if(leader.length() >= request.leaderMinLength) {
+                // Register the leader so every later placement — in this
+                // window or any other — avoids sitting on the drawn line.
+                placement.hasLeader = true;
+                addLineObstacle(leader, request.leaderObstacleThickness);
+            }
+        }
+        results[requestIndex] = placement;
+    }
+    m_batchHaloCells = 0;
+
+    return results;
+}
+
+void cwCaptureLabelPlacer::addLineObstacle(const QLineF& segment, qreal thicknessPaperPx)
+{
+    if(segment.p1() == segment.p2()) {
+        return;
+    }
+    m_maxLineObstacleThickness = qMax(m_maxLineObstacleThickness, thicknessPaperPx);
+    const int index = m_lineObstacles.size();
+    m_lineObstacles.append({segment, thicknessPaperPx});
+    // Leaders are registered between placements (after the grids are built), so
+    // index incrementally. If a leader is somehow added before the first
+    // placeLabel(), ensureGridsBuilt() indexes the backlog instead.
+    if(m_lineObstacleGrid) {
+        m_lineObstacleGrid->insert(index, segment);
+    }
+}
+
+void cwCaptureLabelPlacer::addSoftLineObstacle(const QLineF& segment, qreal thicknessPaperPx)
+{
+    if(segment.p1() == segment.p2()) {
+        return;
+    }
+    m_softLineObstacles.append({segment, thicknessPaperPx});
 }

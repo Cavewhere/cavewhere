@@ -97,11 +97,6 @@ void cwCaptureLeads::setExportDpi(int dpi)
     m_exportDpi = qMax(1, dpi);
 }
 
-void cwCaptureLeads::setPlacer(cwCaptureLabelPlacer* placer)
-{
-    m_placer = placer;
-}
-
 void cwCaptureLeads::setPaperPxToLocal(double scale)
 {
     m_paperPxToLocal = qMax(0.0, scale);
@@ -200,6 +195,10 @@ void cwCaptureLeads::paint(QPainter* painter, const QStyleOptionGraphicsItem* op
 void cwCaptureLeads::rebuildGeometry()
 {
     m_leads.clear();
+    // Indices from a previous buildLabelRequests() point into the old m_leads;
+    // applying placements through them after a rebuild would write the wrong
+    // leads' label rects.
+    m_requestLeadIndex.clear();
 
     if(m_camera == nullptr
        || m_viewport.width() <= 0 || m_viewport.height() <= 0
@@ -297,30 +296,33 @@ void cwCaptureLeads::rebuildGeometry()
     update();
 }
 
-void cwCaptureLeads::placeLeadLabels(const cwLabelPlacementControl& control)
+QVector<cwCaptureLabelPlacer::LabelRequest> cwCaptureLeads::buildLabelRequests(
+    const cwLabelPlacementControl& control)
 {
-    if(m_placer == nullptr || m_leads.isEmpty()) {
-        return;
+    m_requestLeadIndex.clear();
+
+    QVector<cwCaptureLabelPlacer::LabelRequest> requests;
+    if(m_leads.isEmpty()) {
+        return requests;
     }
 
-    // Use the same scaled font for placement that paint() uses, so the
+    // Use the same scaled font for measurement that paint() uses, so the
     // placer's reserved rect matches the painter's rendered glyph rect.
     const QFont placementLabelFont = scaledLabelFont();
 
-    for(LeadDrawData& entry : m_leads) {
-        // Poll for cancelation and report progress once per lead, before its
-        // placement, so a canceled export bails promptly and the progress
-        // count covers skipped (empty-text) leads too.
+    requests.reserve(m_leads.size());
+    m_requestLeadIndex.reserve(m_leads.size());
+    for(int i = 0; i < m_leads.size(); i++) {
+        // Poll for cancelation once per lead so a canceled export bails
+        // during measurement too.
         if(control.isCanceled && control.isCanceled()) {
-            return;
-        }
-        if(control.labelProcessed) {
-            control.labelProcessed();
+            break;
         }
 
+        LeadDrawData& entry = m_leads[i];
+        entry.labelRect = QRectF();
+        entry.hasLeader = false;
         if(entry.text.isEmpty()) {
-            entry.labelRect = QRectF();
-            entry.hasLeader = false;
             continue;
         }
 
@@ -332,8 +334,6 @@ void cwCaptureLeads::placeLeadLabels(const cwLabelPlacementControl& control)
         path.addText(QPointF(0.0, 0.0), placementLabelFont, entry.text);
         const QRectF tightInk = path.boundingRect();
         if(tightInk.isEmpty()) {
-            entry.labelRect = QRectF();
-            entry.hasLeader = false;
             continue;
         }
 
@@ -342,23 +342,35 @@ void cwCaptureLeads::placeLeadLabels(const cwLabelPlacementControl& control)
             entry.markerPos,
             tightInk.size()
         };
-        const cwCaptureLabelPlacer::Placement p = m_placer->placeLabel(req);
-        if(p.placed) {
-            entry.labelRect = p.labelRect;
-            entry.leaderStart = p.leaderStart;
-            entry.leaderEnd = p.leaderEnd;
-            const qreal leaderLength = QLineF(entry.leaderStart, entry.leaderEnd).length();
-            entry.hasLeader = leaderLength >= MinLeaderLengthPaperPx;
-            if(entry.hasLeader) {
-                // Register the leader so subsequent label placements (later
-                // leads + all stations) avoid sitting on the drawn line.
-                m_placer->addLineObstacle(
-                    QLineF(entry.leaderStart, entry.leaderEnd),
-                    cwCaptureLeadLines::LeaderPenWidthPaperPx * m_paperPxToLocal);
-            }
-        } else {
-            entry.labelRect = QRectF();
-            entry.hasLeader = false;
+        // placeAll registers each accepted leader as a hard line obstacle so
+        // every later label (remaining leads + all stations, in any DT
+        // window) avoids sitting on the drawn line. Leaders shorter than
+        // MinLeaderLengthPaperPx aren't drawn, so they aren't registered.
+        req.leaderObstacleThickness =
+            cwCaptureLeadLines::LeaderPenWidthPaperPx * m_paperPxToLocal;
+        req.leaderMinLength = MinLeaderLengthPaperPx;
+        requests.append(req);
+        m_requestLeadIndex.append(i);
+    }
+    return requests;
+}
+
+void cwCaptureLeads::applyPlacements(
+    const QVector<cwCaptureLabelPlacer::Placement>& placements)
+{
+    Q_ASSERT(placements.size() == m_requestLeadIndex.size());
+    const int count = qMin(placements.size(), m_requestLeadIndex.size());
+    for(int i = 0; i < count; i++) {
+        const cwCaptureLabelPlacer::Placement& p = placements.at(i);
+        if(!p.placed) {
+            continue;
         }
+        LeadDrawData& entry = m_leads[m_requestLeadIndex.at(i)];
+        entry.labelRect   = p.labelRect;
+        entry.leaderStart = p.leaderStart;
+        entry.leaderEnd   = p.leaderEnd;
+        // hasLeader mirrors the placer's registration rule: the leader met
+        // the request's minimum drawable length.
+        entry.hasLeader   = p.hasLeader;
     }
 }

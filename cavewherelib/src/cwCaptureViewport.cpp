@@ -77,7 +77,6 @@ struct LabelPlacementInput {
     QVector<QPair<QLineF, qreal>> softSegments;  // centerline legs, after finalize()
     cwCaptureCenterline* centerline = nullptr;
     cwCaptureLeads*      leads      = nullptr;
-    int  totalLabels = 0; // leads + stations, for progress reporting
     bool profile     = false;
 };
 
@@ -337,15 +336,37 @@ void cwCaptureViewport::capture()
 
         QGraphicsItemGroup* parent = m_runIsPreview ? PreviewItem : Item;
 
-        cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
-        QImage correctedImage = image;
-        correctedImage.setDevicePixelRatio(1.0);
-        graphicsImage->setImage(correctedImage);
-        graphicsImage->setPos(job.origin);
-        graphicsImage->setScale(1.0 / image.devicePixelRatio());
-
-        // graphicsImage->setScale(1.0/image.devicePixelRatio());
-        parent->addToGroup(graphicsImage);
+        // A fully transparent tile renders nothing and seeds no obstacle
+        // alpha, so keeping it only wastes memory — and on a sparse whole-cave
+        // export MOST tiles are empty, so dropping them bounds tile RAM to the
+        // ink instead of the page area. An inked tile exits the scan at its
+        // first opaque pixel, so the common case costs almost nothing. Export
+        // only: the preview's bounding box is derived from its tile items, so
+        // preview tiles (few, screen-sized) are always kept.
+        auto tileHasInk = [](const QImage& img) {
+            if(img.format() != QImage::Format_ARGB32
+               && img.format() != QImage::Format_ARGB32_Premultiplied) {
+                return true; // not a QRgb-alpha format — keep rather than guess
+            }
+            for(int y = 0; y < img.height(); y++) {
+                const QRgb* row = reinterpret_cast<const QRgb*>(img.constScanLine(y));
+                for(int x = 0; x < img.width(); x++) {
+                    if(qAlpha(row[x]) != 0) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        if(m_runIsPreview || tileHasInk(image)) {
+            cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
+            QImage correctedImage = image;
+            correctedImage.setDevicePixelRatio(1.0);
+            graphicsImage->setImage(correctedImage);
+            graphicsImage->setPos(job.origin);
+            graphicsImage->setScale(1.0 / image.devicePixelRatio());
+            parent->addToGroup(graphicsImage);
+        }
 
         //For debugging tiles
         // double scale = 1.0  / image.devicePixelRatio();
@@ -579,10 +600,10 @@ void cwCaptureViewport::deleteSceneItems()
     // it and wait for the worker to unwind before freeing those items, or it
     // would use-after-free. QFuture::waitForFinished() blocks this thread
     // WITHOUT spinning a nested event loop (unlike AsyncFuture::waitForFinished),
-    // so there is no re-entrancy risk. The placement loops poll the cancel once
-    // per label, but finalize() (the distance-transform build) is not
-    // cancelable, so this wait can still block for the remainder of that stage
-    // on a large export.
+    // so there is no re-entrancy risk. The placement loop polls the cancel once
+    // per label; the longest uncancelable stretch is a single window's
+    // distance-transform build, so this wait is bounded by one window, not the
+    // page.
     m_labelPlacementFuture.cancel();
     m_labelPlacementFuture.waitForFinished();
 
@@ -727,10 +748,15 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
                               QSizeF(img.width() * tileScale, img.height() * tileScale));
         parentBounds = parentBounds.isEmpty() ? tileRect : parentBounds.united(tileRect);
     }
-    if(parentBounds.isEmpty()) {
-        parentBounds = QRectF(QPointF(0.0, 0.0),
+    // Anchor the bounds to the full page rect: empty (fully transparent)
+    // tiles are discarded at capture time, so the tile union alone could
+    // shrink to the inked region and silently change the placement grid,
+    // viewport clamp, and cull. United with the tiles it also tolerates
+    // sub-pixel tile overhang from edge-tile crop rounding.
+    const QRectF fullPageRect(QPointF(0.0, 0.0),
                               QSizeF(viewport().size()) * imageScale);
-    }
+    parentBounds = parentBounds.isEmpty() ? fullPageRect
+                                          : parentBounds.united(fullPageRect);
 
     // Convert 300-DPI-paper-px constants into the active path's local
     // coords, so cell discretization, label margin, and dot/marker radii
@@ -756,27 +782,24 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         input->tiles.append(TileAlphaInput{img, tile->pos(), tile->scale()});
     }
 
-    cwCaptureLabelPlacer* placer = &input->placer;
-
     // Build label items on the GUI thread — QGraphicsItem construction must not
-    // happen on the worker. We hand them the placer + DPI so they can compute
-    // glyph rects that match the painter's eventual render; their placement
-    // loops run later on the worker, mutating only their own data. Both items
-    // stay HIDDEN until the continuation reveals them: for previews the parent
-    // group is already in the rendered scene, and painting an item while the
-    // worker sorts/writes its data vectors would be a data race.
+    // happen on the worker. We hand them the DPI + scale so they can compute
+    // glyph rects that match the painter's eventual render; their request
+    // building / placement application runs later on the worker, mutating only
+    // their own data. Both items stay HIDDEN until the continuation reveals
+    // them: for previews the parent group is already in the rendered scene, and
+    // painting an item while the worker sorts/writes its data vectors would be
+    // a data race.
     CenterlineItem = createCenterlineItem(parent, imageScale);
     if(CenterlineItem != nullptr) {
         CenterlineItem->setExportDpi(exportDpi);
         CenterlineItem->setPaperPxToLocal(paperPxToLocal);
-        CenterlineItem->setPlacer(placer);
         CenterlineItem->setVisible(false);
     }
     LeadsItem = createLeadsItem(parent, imageScale);
     if(LeadsItem != nullptr) {
         LeadsItem->setExportDpi(exportDpi);
         LeadsItem->setPaperPxToLocal(paperPxToLocal);
-        LeadsItem->setPlacer(placer);
         LeadsItem->setVisible(false);
     }
     input->centerline = CenterlineItem;
@@ -794,7 +817,6 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
             input->obstacleRects.append(QRectF(pos.x() - dotHalf, pos.y() - dotHalf,
                                                dotHalf * 2.0, dotHalf * 2.0));
         }
-        input->totalLabels += stationPositions.size();
     }
     if(LeadsItem != nullptr) {
         const qreal markerRadius = LeadsItem->markerRadius();
@@ -804,7 +826,6 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
             input->obstacleRects.append(QRectF(pos.x() - markerRadius, pos.y() - markerRadius,
                                                markerRadius * 2.0, markerRadius * 2.0));
         }
-        input->totalLabels += markerPositions.size();
     }
 
     // Gather centerline legs as soft obstacles (registered after finalize) so
@@ -824,11 +845,9 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
     // worker needs no locking. Progress + cancel flow through the QPromise.
     m_labelPlacementFuture = cwConcurrent::run([input](QPromise<void>& promise) {
         cwCaptureLabelPlacer& placer = input->placer;
-        promise.setProgressRange(0, qMax(1, input->totalLabels));
 
         QElapsedTimer stageTimer;
-        qint64 tileAlphaMs = 0;
-        qint64 finalizeMs = 0;
+        qint64 measureMs = 0;
         qint64 placeMs = 0;
 
         placer.setObstacleBounds(input->parentBounds, input->cellSizeLocal);
@@ -836,32 +855,27 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         placer.setLabelMarginPaperPx(input->labelMarginLocal);
         placer.setAlphaThreshold(cwCaptureLabelPlacer::DefaultAlphaThreshold);
 
-        if(input->profile) { stageTimer.start(); }
+        // These record obstacle sources; the distance transform itself is
+        // built lazily per placement window inside placeAll, so its memory is
+        // bounded by one window (plus halo) — never the whole page.
         for(const TileAlphaInput& tile : std::as_const(input->tiles)) {
-            // Poll per tile so a cancel lands within one tile's rasterization
-            // instead of only after the whole alpha mask is built. finalize()
-            // below remains the uncancelable gap until Phase 4 tiles it.
-            if(promise.isCanceled()) { return; }
             placer.addTileAlpha(tile.image, tile.pos, tile.scale);
         }
-        if(input->profile) { tileAlphaMs = stageTimer.elapsed(); }
-
         for(const QRectF& rect : std::as_const(input->obstacleRects)) {
             placer.addObstacleRect(rect);
         }
-
-        if(promise.isCanceled()) { return; }
-
-        if(input->profile) { stageTimer.restart(); }
         placer.finalize();
-        if(input->profile) { finalizeMs = stageTimer.elapsed(); }
 
         for(const QPair<QLineF, qreal>& soft : std::as_const(input->softSegments)) {
             placer.addSoftLineObstacle(soft.first, soft.second);
         }
 
-        // Cancel + progress hooks the placement loops poll (once per label), so
-        // a canceled export bails mid-run instead of only between passes.
+        if(promise.isCanceled()) { return; }
+
+        // Cancel + progress hooks: request building polls the cancel (text
+        // measurement over tens of thousands of stations takes real time) and
+        // placeAll additionally ticks progress once per label, so a canceled
+        // export bails mid-run.
         int processed = 0;
         cwLabelPlacementControl control;
         control.isCanceled = [&promise]() { return promise.isCanceled(); };
@@ -870,14 +884,33 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
             promise.setProgressValue(processed);
         };
 
-        // Place leads first so each placement registers its leader line into
-        // the placer; stations placed afterwards then avoid those leaders.
-        if(input->profile) { stageTimer.restart(); }
+        // Measure every label up front, leads first: within each DT window
+        // placeAll keeps request order, so a window's leads place before its
+        // stations and register their leaders as obstacles for them.
+        if(input->profile) { stageTimer.start(); }
+        QVector<cwCaptureLabelPlacer::LabelRequest> requests;
+        int leadRequestCount = 0;
         if(input->leads != nullptr) {
-            input->leads->placeLeadLabels(control);
+            requests = input->leads->buildLabelRequests(control);
+            leadRequestCount = requests.size();
         }
         if(input->centerline != nullptr) {
-            input->centerline->placeStationLabels(control);
+            requests += input->centerline->buildLabelRequests(control);
+        }
+        if(input->profile) { measureMs = stageTimer.elapsed(); }
+
+        if(promise.isCanceled()) { return; }
+
+        promise.setProgressRange(0, qMax(1, int(requests.size())));
+
+        if(input->profile) { stageTimer.restart(); }
+        const QVector<cwCaptureLabelPlacer::Placement> placements =
+            placer.placeAll(requests, control);
+        if(input->leads != nullptr) {
+            input->leads->applyPlacements(placements.mid(0, leadRequestCount));
+        }
+        if(input->centerline != nullptr) {
+            input->centerline->applyPlacements(placements.mid(leadRequestCount));
         }
         if(input->profile) {
             placeMs = stageTimer.elapsed();
@@ -886,9 +919,11 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
                      << "tiles" << input->tiles.size()
                      << "bounds" << input->parentBounds.size()
                      << "gridCells" << s.gridCells
-                     << "| addTileAlpha(ms)" << tileAlphaMs
-                     << "finalize(ms)" << finalizeMs
+                     << "| measure(ms)" << measureMs
                      << "placement(ms)" << placeMs
+                     << "| windowsBuilt" << s.windowsBuilt
+                     << "windowCellsBuilt" << s.windowCellsBuilt
+                     << "maxWindowCells" << s.maxWindowCells
                      << "| placeCalls" << s.placeCalls
                      << "placed" << s.placed
                      << "culled" << s.culledByViewport
@@ -925,11 +960,6 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
     connect(&m_labelPlacementWatcher, &QFutureWatcher<void>::finished, this,
             [this, input, parent, imageScale]() {
         CapturingImages = false;
-
-        // The items' placer pointer dies with `input` after this continuation;
-        // clear it so nothing retains a dangling placer.
-        if(CenterlineItem != nullptr) { CenterlineItem->setPlacer(nullptr); }
-        if(LeadsItem != nullptr)      { LeadsItem->setPlacer(nullptr); }
 
         if(m_captureAgainWhenDone) {
             // This run was superseded (typically an export superseding the

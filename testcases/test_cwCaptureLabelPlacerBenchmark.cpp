@@ -113,24 +113,32 @@ int placeAllLabels(const SyntheticCave& cave, QVector<QRectF>* placedRects = nul
     }
 
     const QSizeF labelSize(LabelWidthPaperPx, LabelHeightPaperPx);
-    int placed = 0;
+    QVector<cwCaptureLabelPlacer::LabelRequest> requests;
+    requests.reserve(cave.stations.size());
     for(int i = 0; i < cave.stations.size(); i++) {
-        const cwCaptureLabelPlacer::LabelRequest request{
+        cwCaptureLabelPlacer::LabelRequest request{
             QString::number(i), cave.stations.at(i), labelSize};
-        const cwCaptureLabelPlacer::Placement placement = placer.placeLabel(request);
+        // Register every placed leader as a hard obstacle so later placements
+        // avoid crossing it. This is what exercises the leader-obstacle scan —
+        // without it the benchmark would never populate m_lineObstacles.
+        // (Production only registers leaders for placed *leads* in
+        // cwCaptureLeads, and conditionally; feeding one per station here is a
+        // deliberately heavier stress of that scan.)
+        request.leaderObstacleThickness = LeaderThicknessPaperPx;
+        requests.append(request);
+    }
+
+    // placeAll is the production placement loop (window-batched DT builds;
+    // see cwCaptureViewport's export worker).
+    const QVector<cwCaptureLabelPlacer::Placement> placements = placer.placeAll(requests);
+
+    int placed = 0;
+    for(const cwCaptureLabelPlacer::Placement& placement : placements) {
         if(placement.placed) {
             placed++;
             if(placedRects != nullptr) {
                 placedRects->append(placement.labelRect);
             }
-            // Register every placed leader as a hard obstacle so later
-            // placements avoid crossing it. This is what exercises the
-            // leader-obstacle scan — without it the benchmark would never
-            // populate m_lineObstacles. (Production only registers leaders for
-            // placed *leads* in cwCaptureLeads, and conditionally; feeding one
-            // per station here is a deliberately heavier stress of that scan.)
-            placer.addLineObstacle(QLineF(placement.leaderStart, placement.leaderEnd),
-                                   LeaderThicknessPaperPx);
         }
     }
     return placed;
@@ -191,11 +199,17 @@ int placeAllBuriedLabels(const SyntheticCave& cave)
     placer.finalize();
 
     const QSizeF labelSize(LabelWidthPaperPx, LabelHeightPaperPx);
-    int placed = 0;
+    QVector<cwCaptureLabelPlacer::LabelRequest> requests;
+    requests.reserve(cave.stations.size());
     for(int i = 0; i < cave.stations.size(); i++) {
-        const cwCaptureLabelPlacer::LabelRequest request{
-            QString::number(i), cave.stations.at(i), labelSize};
-        if(placer.placeLabel(request).placed) {
+        requests.append(cwCaptureLabelPlacer::LabelRequest{
+            QString::number(i), cave.stations.at(i), labelSize});
+    }
+
+    int placed = 0;
+    const QVector<cwCaptureLabelPlacer::Placement> placements = placer.placeAll(requests);
+    for(const cwCaptureLabelPlacer::Placement& placement : placements) {
+        if(placement.placed) {
             placed++;
         }
     }
@@ -269,6 +283,11 @@ TEST_CASE("cwCaptureLabelPlacer coarsened placement stays non-overlapping",
 TEST_CASE("cwCaptureLabelPlacer placement scaling",
           "[.][benchmark]")
 {
+    // Every count below happens to stay single-window: the 10k serpentine
+    // page is ~2040 DT cells across, just under the 2048-cell default window
+    // span. Counts beyond that start timing per-window DT builds too —
+    // production-realistic, but a kink at the top point would then be a
+    // window-mode flip, not a placement-scaling regression.
     const QVector<int> stationCounts = {500, 1000, 2000, 4000, 10000};
 
     std::cout << "\n  cwCaptureLabelPlacer placement scaling\n"

@@ -87,11 +87,6 @@ void cwCaptureCenterline::setExportDpi(int dpi)
     m_exportDpi = qMax(1, dpi);
 }
 
-void cwCaptureCenterline::setPlacer(cwCaptureLabelPlacer* placer)
-{
-    m_placer = placer;
-}
-
 void cwCaptureCenterline::setPaperPxToLocal(double scale)
 {
     m_paperPxToLocal = qMax(0.0, scale);
@@ -196,6 +191,10 @@ void cwCaptureCenterline::rebuildGeometry()
 {
     m_lines.clear();
     m_stationData.clear();
+    // Indices from a previous buildLabelRequests() point into the old
+    // m_stationData; applying placements through them after a rebuild would
+    // write the wrong stations' label rects.
+    m_requestStationIndex.clear();
 
     if(m_camera == nullptr
        || m_viewport.width() <= 0 || m_viewport.height() <= 0
@@ -245,13 +244,17 @@ void cwCaptureCenterline::rebuildGeometry()
     update();
 }
 
-void cwCaptureCenterline::placeStationLabels(const cwLabelPlacementControl& control)
+QVector<cwCaptureLabelPlacer::LabelRequest> cwCaptureCenterline::buildLabelRequests(
+    const cwLabelPlacementControl& control)
 {
-    if(m_placer == nullptr || m_stationData.isEmpty()) {
-        return;
+    m_requestStationIndex.clear();
+
+    QVector<cwCaptureLabelPlacer::LabelRequest> requests;
+    if(m_stationData.isEmpty()) {
+        return requests;
     }
 
-    // Use the same scaled font for placement that paint() uses, so the
+    // Use the same scaled font for measurement that paint() uses, so the
     // placer's reserved rect matches the painter's rendered glyph rect.
     const QFont placementFont = scaledLabelFont();
 
@@ -269,17 +272,18 @@ void cwCaptureCenterline::placeStationLabels(const cwLabelPlacementControl& cont
     // cwCaptureViewport before the placer is finalized, so this method does
     // NOT call addObstacleRect or finalize.
 
-    for(StationDrawData& station : m_stationData) {
-        // Poll for cancelation and report progress once per station, before
-        // its (potentially expensive) placement, so a canceled export bails
-        // promptly and the progress count covers skipped stations too.
+    requests.reserve(m_stationData.size());
+    m_requestStationIndex.reserve(m_stationData.size());
+    for(int i = 0; i < m_stationData.size(); i++) {
+        // Poll for cancelation once per station: measuring tens of thousands
+        // of names (QPainterPath::addText) takes real time on a whole-cave
+        // export, and a canceled run should bail here too.
         if(control.isCanceled && control.isCanceled()) {
-            return;
-        }
-        if(control.labelProcessed) {
-            control.labelProcessed();
+            break;
         }
 
+        StationDrawData& station = m_stationData[i];
+        station.labelRect = QRectF();
         if(station.name.isEmpty()) {
             continue;
         }
@@ -291,19 +295,28 @@ void cwCaptureCenterline::placeStationLabels(const cwLabelPlacementControl& cont
             continue;
         }
 
-        cwCaptureLabelPlacer::LabelRequest req{
+        requests.append(cwCaptureLabelPlacer::LabelRequest{
             station.name,
             station.position,
             tightInk.size()
-        };
-        const cwCaptureLabelPlacer::Placement p = m_placer->placeLabel(req);
+        });
+        m_requestStationIndex.append(i);
+    }
+    return requests;
+}
+
+void cwCaptureCenterline::applyPlacements(
+    const QVector<cwCaptureLabelPlacer::Placement>& placements)
+{
+    Q_ASSERT(placements.size() == m_requestStationIndex.size());
+    const int count = qMin(placements.size(), m_requestStationIndex.size());
+    for(int i = 0; i < count; i++) {
+        const cwCaptureLabelPlacer::Placement& p = placements.at(i);
         if(p.placed) {
-            // Painter draws at labelRect.topLeft() with AlignLeft|AlignTop;
-            // its glyph baseline lands at top + ascent. Adjust the rect so
-            // that the rect's TOP is the glyph's ink top (not baseline-
-            // ascent). Specifically: placer returned a rect tightly sized to
-            // glyph ink; that already matches what the painter renders.
-            station.labelRect = p.labelRect;
+            // The placer returned a rect tightly sized to glyph ink; paint()
+            // maps it back to the baseline-left draw point, so storing it
+            // as-is reproduces exactly what the placer reserved.
+            m_stationData[m_requestStationIndex.at(i)].labelRect = p.labelRect;
         }
     }
 }

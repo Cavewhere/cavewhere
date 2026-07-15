@@ -31,11 +31,12 @@
 // distance-transform build and the per-label placement loop run on a worker
 // thread (cwConcurrent::run), reporting progress and honoring cancelation
 // through a cwLabelPlacementControl backed by the run's QPromise. The
-// production placement loops live in cwCaptureCenterline::placeStationLabels /
-// cwCaptureLeads::placeLeadLabels, which need a camera + survey network + RHI
-// tiles to drive; this test exercises the same control contract and the same
-// cwConcurrent/QPromise machinery directly against the placer, so the
-// off-thread/progress/cancel behavior is verified without that harness.
+// production loop is cwCaptureLabelPlacer::placeAll, fed by
+// cwCaptureCenterline/cwCaptureLeads::buildLabelRequests — which need a
+// camera + survey network + RHI tiles to drive; this test exercises the same
+// control contract and the same cwConcurrent/QPromise machinery directly
+// against the placer, so the off-thread/progress/cancel behavior is verified
+// without that harness.
 
 namespace {
 

@@ -17,12 +17,12 @@
 #include <QVector>
 
 // Our includes
+#include "cwCaptureLabelPlacer.h"
 #include "cwGlobals.h"
 #include "cwLabelPlacementControl.h"
 #include "cwSurveyNetwork.h"
 
 class cwCamera;
-class cwCaptureLabelPlacer;
 
 class CAVEWHERE_LIB_EXPORT cwCaptureCenterline : public QGraphicsItem
 {
@@ -39,17 +39,25 @@ public:
     void setViewport(const QRect& viewport);
     void setImageScale(double scale);
     void setExportDpi(int dpi);
-    void setPlacer(cwCaptureLabelPlacer* placer);
 
     // Scale factor for converting paper-pixels-at-export-DPI into the item's
     // local coord system. Lets a single 300-DPI-paper-px constant produce the
     // same scene-inch size in both preview and full-res paths.
     void setPaperPxToLocal(double scale);
 
-    // Places one label per station. Runs on the export worker thread; the
-    // optional control lets the caller cancel mid-run and track progress
-    // (see cwLabelPlacementControl). A default control runs to completion.
-    void placeStationLabels(const cwLabelPlacementControl& control = {});
+    // Builds one placement request per named station (sorted top-to-bottom,
+    // left-to-right; text measured with the scaled label font). Runs on the
+    // export worker thread. The optional control's isCanceled() is polled per
+    // station so a canceled export bails during measurement too; progress
+    // ticks happen later, in the placer's placeAll. Feed the returned requests
+    // to cwCaptureLabelPlacer::placeAll and hand the matching slice of its
+    // results to applyPlacements.
+    QVector<cwCaptureLabelPlacer::LabelRequest> buildLabelRequests(
+        const cwLabelPlacementControl& control = {});
+
+    // Applies placeAll's results for the requests built by the last
+    // buildLabelRequests call, in the same order.
+    void applyPlacements(const QVector<cwCaptureLabelPlacer::Placement>& placements);
 
     QVector<QPointF> stationPositions() const;
     qreal stationDotRadius() const;
@@ -79,9 +87,11 @@ private:
     QRectF m_boundingRect;
     qreal m_imageScale;
     int m_exportDpi = 96;
-    cwCaptureLabelPlacer* m_placer = nullptr;
     QVector<QLineF> m_lines;
     QVector<StationDrawData> m_stationData;
+    // Maps each request from the last buildLabelRequests() call back to its
+    // m_stationData index (empty-named stations produce no request).
+    QVector<int> m_requestStationIndex;
     QPen m_linePen;
     QPen m_stationPen;
     QBrush m_stationBrush;
