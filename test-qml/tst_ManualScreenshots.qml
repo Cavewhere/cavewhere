@@ -13,10 +13,11 @@ import QmlTestRecorder
 // CW_MANUAL_IMAGE_DIR at docs/manual/images/. Without that variable the grabs
 // land in a temp dir, so a plain test run never writes into the source tree.
 //
-// Shots here back the 3D View chapter (docs/manual/view-3d/) and the Scraps /
-// Carpeting chapter (docs/manual/scraps/) — the sharpest test of grabWindow(),
-// since each grab must contain the QML UI chrome and the live RHI scene together,
-// which the offscreen renderer cannot produce.
+// Shots here back the 3D View chapter (docs/manual/view-3d/), the Scraps /
+// Carpeting chapter (docs/manual/scraps/), and the Notes chapter
+// (docs/manual/notes/) — the sharpest test of grabWindow(), since each grab must
+// contain the QML UI chrome and the live RHI scene together, which the offscreen
+// renderer cannot produce.
 MainWindowTest {
     id: rootId
 
@@ -31,9 +32,13 @@ MainWindowTest {
         name: "ManualScreenshots"
         when: windowShown
 
-        // Breathing room left around the Scrap Info panel when cropping a
-        // control shot out of the full-window grab.
-        readonly property int scrapInfoCropMargin: 12
+        // Breathing room left around a floating panel (Scrap Info, Image Info)
+        // when cropping a control shot out of the full-window grab.
+        readonly property int panelCropMargin: 12
+
+        // Wider margin for the LiDAR transform panel, so the crop keeps enough of
+        // the scan behind it to read as a 3D view rather than a floating form.
+        readonly property int lidarPanelCropMargin: 60
 
         // Load the demo cave, navigate to the 3D view, and wait for a live QRhi.
         // Returns the region viewer, or null after calling skip() when the
@@ -127,11 +132,12 @@ MainWindowTest {
             return findByName(rootId.mainWindow, "renderingTabBar");
         }
 
-        // Highlight one control row inside the Scrap Info panel and grab the panel
-        // cropped tight around it. The panel is a small floating box in a
-        // 2400x1400 window, so a full-window grab renders it too small to read in
-        // the manual; grabItemToFile grabs the whole window and *then* crops, so
-        // the highlight ring and its dim scrim still land in the crop.
+        // Highlight one control row inside a floating panel (Scrap Info, Image
+        // Info) and grab the panel cropped tight around it. The panel is a small
+        // floating box in a 2400x1400 window, so a full-window grab renders it too
+        // small to read in the manual; grabItemToFile grabs the whole window and
+        // *then* crops, so the highlight ring and its dim scrim still land in the
+        // crop.
         //
         // Each row is reached through a child that is already named (`anchorName`)
         // and highlighted via that child's parent — the RowLayout that *is* the
@@ -142,16 +148,22 @@ MainWindowTest {
         // chains other tests depend on (autoCalculate->setNorthButton and friends
         // in tst_NoteNorthInteraction, tst_NoteScaleInteraction, tst_ScrapInteraction
         // and tst_ScrapSync). A screenshot is not worth that.
-        function grabScrapInfoShot(scrapInfo, anchorName, shotName) {
-            let anchor = findVisibleByName(scrapInfo, anchorName);
-            verify(anchor, "found " + anchorName + " in the Scrap Info panel");
+        function grabPanelRowShot(panel, anchorName, shotName) {
+            let anchor = findVisibleByName(panel, anchorName);
+            verify(anchor, "found " + anchorName + " in the panel");
             let row = anchor.parent;
             verify(row, anchorName + " has a parent row to highlight");
-            highlightOverlayId.target = row;
+            grabPanelItemShot(panel, row, shotName);
+        }
+
+        // Ring `item` and grab `panel` cropped around it. Use directly to point at
+        // a single control; grabPanelRowShot wraps it to point at a whole row.
+        function grabPanelItemShot(panel, item, shotName) {
+            highlightOverlayId.target = item;
             settle();
 
-            let path = WindowGrabber.grabItemToFile(scrapInfo, shotName,
-                                                    scrapInfoCropMargin);
+            let path = WindowGrabber.grabItemToFile(panel, shotName,
+                                                    panelCropMargin);
             verify(path.length > 0, "grabItemToFile wrote " + shotName);
             verify(OffscreenRenderTester.imageIsNonUniform(path),
                    shotName + " is not blank");
@@ -259,21 +271,27 @@ MainWindowTest {
             return selected;
         }
 
-        // The note is a large scanned photo that renders a beat after the page
-        // appears; a grab taken too early captures a blank note area. Poll until a
-        // crop of the note area is non-uniform (has drawn content) before grabbing.
-        // The probe image is written to the output dir and immediately removed.
+        // The note is a large scanned photo loaded through the image provider, so
+        // it decodes a beat after the page appears and a grab taken too early
+        // captures a blank note area.
+        //
+        // Wait on the Image's own status rather than probing pixels. An earlier
+        // version cropped the note area and waited for it to be "non-uniform",
+        // which silently reported success as soon as ANY content was in the crop —
+        // the floating toolbar sitting over the note area is enough — so the grab
+        // could still race a decoding scan. That made whichever note shot happened
+        // to lose the race come out blank, varying from run to run.
+        // ImageBackground binds `visible: status === Image.Ready`, so Ready is
+        // exactly the point the note becomes paintable; callers settle() afterwards
+        // to give it a frame.
         function waitForNoteRendered() {
             tryVerify(() => {
                 let page = RootData.pageView.currentPageItem;
                 if (!page) { return false; }
-                let noteArea = findByName(page, "noteArea");
-                if (!noteArea) { return false; }
-                let probe = WindowGrabber.grabItemToFile(noteArea, "cw-note-render-probe", 0);
-                let rendered = probe.length > 0 && OffscreenRenderTester.imageIsNonUniform(probe);
-                if (probe.length > 0) { WindowGrabber.removeFile(probe); }
-                return rendered;
-            }, 10000, "the note image has rendered");
+                let noteArea = findVisibleByName(page, "noteArea");
+                if (!noteArea || !noteArea.image) { return false; }
+                return noteArea.image.status === QQ.Image.Ready;
+            }, 20000, "the note image finished loading");
         }
 
         function cleanup() {
@@ -599,10 +617,10 @@ MainWindowTest {
             grabCarpetToolbarShot("addLeads", "scraps-add-lead");
         }
 
-        // Both scrap note shots from a SINGLE note-page visit. Grabbing them in
+        // Every note-page shot from a SINGLE note-page visit. Grabbing them in
         // one function is deliberate: the note page renders its image only on the
         // first visit within a process — a second visit (a separate test that
-        // re-opens a note page) grabs a blank note area — so both grabs must share
+        // re-opens a note page) grabs a blank note area — so all grabs must share
         // one visit. Uses Phake Cave 3000, whose clean geometric scraps read more
         // clearly than a real field sketch.
         //   - scraps-digitize.png: scrap 1 (the lower passage) selected, Scrap Info
@@ -610,6 +628,11 @@ MainWindowTest {
         //     Backs docs/manual/scraps/digitize-a-scrap.md.
         //   - scraps-type-editor.png: scrap 0 (the upper passage) selected, Scrap
         //     Info expanded + highlighted. Backs docs/manual/scraps/scrap-types.md.
+        //   - scraps-north-up / scraps-scale / scraps-azimuth: one Scrap Info row
+        //     each. Back docs/manual/scraps/scrap-types.md.
+        //   - notes-image-info.png: the Image Info (DPI) row. Backs
+        //     docs/manual/notes/note-resolution.md — and has to live here rather
+        //     than in its own Notes test for the first-visit reason above.
         function test_scrapNoteShots() {
             let page = loadCarpetNote("test_cwProject/Phake Cave 3000.cw", false,
                 "Source/Data/Cave=Phake Cave 3000/Trip=Release 0.08/Note=001");
@@ -653,8 +676,8 @@ MainWindowTest {
             scrap.calculateNoteTransform = false;
             settle();
 
-            grabScrapInfoShot(scrapInfo, "setNorthButton", "scraps-north-up");
-            grabScrapInfoShot(scrapInfo, "setLengthButton", "scraps-scale");
+            grabPanelRowShot(scrapInfo, "setNorthButton", "scraps-north-up");
+            grabPanelRowShot(scrapInfo, "setLengthButton", "scraps-scale");
 
             // The azimuth row is a projected-profile-only control
             // (`visible: upInputId.scrapType == Scrap.ProjectedProfile`), so the
@@ -662,8 +685,228 @@ MainWindowTest {
             scrap.type = Scrap.ProjectedProfile;
             tryVerify(() => findVisibleByName(scrapInfo, "directionComboBox") !== null,
                       5000, "the azimuth row is visible on a projected profile");
-            grabScrapInfoShot(scrapInfo, "directionComboBox", "scraps-azimuth");
+            grabPanelRowShot(scrapInfo, "directionComboBox", "scraps-azimuth");
 
+            // --- Image Info / DPI shot (same visit) ---
+            // NoteResolution only renders while the note is in carpet mode
+            // (`visible: noteArea.scrapsVisible`), which loadCarpetNote has already
+            // entered. The note page is a narrow layout, and the panel binds
+            // `collapsed: noteArea.isNarrow`, so it arrives collapsed to its title
+            // bar and has to be opened before the row exists to highlight.
+            let noteResolution = findVisibleByName(RootData.pageView.currentPageItem,
+                                                   "noteResolution");
+            verify(noteResolution, "found the Image Info panel");
+            noteResolution.collapsed = false;
+            tryVerify(() => findVisibleByName(noteResolution, "setResolution") !== null,
+                      5000, "the Image Resolution row is visible once expanded");
+            grabPanelRowShot(noteResolution, "setResolution", "notes-image-info");
+
+            // The resolution tool button on its own, for the "Measure the
+            // resolution off the page" section of note-resolution.md — the row
+            // shot above rings the whole row, which doesn't say which control
+            // starts the tool.
+            let measureButton = findVisibleByName(noteResolution, "setResolution");
+            verify(measureButton, "found the resolution tool button");
+            grabPanelItemShot(noteResolution, measureButton, "notes-measure-resolution");
+
+            highlightOverlayId.target = null;
+        }
+
+        // The Add (+) button on the trip's Notes section, highlighted. Backs the
+        // "Add a note" section of docs/manual/notes/add-a-note.md.
+        //
+        // The button is ringed *closed* rather than with its menu open: the menu is
+        // a QC.Menu, whose popup type is chosen by the style and defaults to a
+        // separate window (Popup.Window) when the style doesn't set one — which
+        // grabWindow(mainWindow) cannot capture — and popup() positions it at the
+        // mouse cursor, which a test doesn't control. The two menu items are
+        // spelled out in the page's prose instead, per AUTHORING.md's rule that
+        // the text carries the content.
+        function test_addNoteButton() {
+            let gallery = openTripNoteGallery();
+            if (!gallery) { return; }
+
+            // The button lives in the SurveyEditor's Notes SectionHeader, not in
+            // the gallery, so search the whole trip page.
+            let addButton = null;
+            tryVerify(() => {
+                addButton = findVisibleByName(RootData.pageView.currentPageItem,
+                                              "addNoteMenuButton");
+                return addButton !== null;
+            }, 3000, "the Add note button is visible");
+
+            highlightOverlayId.target = addButton;
+            waitForNoteRendered();
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "notes-add-button");
+            verify(path.length > 0, "grabToFile wrote the add-note screenshot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.5,
+                   "add-note screenshot is not blank");
+            highlightOverlayId.target = null;
+        }
+
+        // The Rotate button, ringed, with the note showing one 90° turn. Backs the
+        // "Rotate a note" section of docs/manual/notes/add-a-note.md.
+        //
+        // Rotates for real (a click, not a poked property) so the shot shows what
+        // the button actually does — and waits out the 90° PropertyAnimation, since
+        // a grab taken on the click captures the note mid-spin at a meaningless
+        // angle. The wide toolbar's Rotate button shares the objectName with the
+        // narrow toolbar's, hence findVisibleByName.
+        function test_rotateNote() {
+            let gallery = openTripNoteGallery();
+            if (!gallery) { return; }
+
+            waitForNoteRendered();
+
+            let rotateButton = null;
+            tryVerify(() => {
+                rotateButton = findVisibleByName(gallery, "rotateButton");
+                return rotateButton !== null;
+            }, 3000, "the Rotate button is visible");
+
+            let note = gallery.currentNote;
+            verify(note, "the gallery has a current note");
+            compare(note.rotate, 0, "the demo note starts unrotated");
+
+            mouseClick(rotateButton);
+            tryVerify(() => Math.abs(note.rotate - 90) < 0.01, 5000,
+                      "the rotation animation finished on 90 degrees");
+
+            highlightOverlayId.target = rotateButton;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "notes-rotate");
+            verify(path.length > 0, "grabToFile wrote the rotate screenshot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.5,
+                   "rotate screenshot is not blank");
+            highlightOverlayId.target = null;
+        }
+
+        // Every LiDAR shot, from ONE import. Backs docs/manual/notes/lidar-notes.md.
+        // Grouped because importing and loading the .glb costs seconds; each shot
+        // is a different state of the same note.
+        //   - notes-lidar-note.png: the scan alone, transform panel collapsed —
+        //     the chapter's opening "this is what a LiDAR note is" image.
+        //   - notes-lidar-transform.png: the panel expanded, cropped tight.
+        //   - notes-lidar-station.png: the carpet toolbar's Station button ringed.
+        //
+        // Imports the .glb at runtime (the fixture project ships without one) the
+        // same way tst_LiDARNotes does: copy it to a temp dir, then emit the
+        // gallery's imagesAdded. Uses the trip page — the LiDAR viewer needs the
+        // room, and unlike a sketched note there's no first-visit render quirk.
+        function test_lidarNoteShots() {
+            TestHelper.loadProjectFromZip(RootData.project,
+                TestHelper.testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
+            RootData.futureManagerModel.waitForFinished();
+
+            RootData.pageSelectionModel.currentPageAddress = "View";
+            RootData.futureManagerModel.waitForFinished();
+            RootData.pageSelectionModel.currentPageAddress =
+                "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault";
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                && RootData.pageView.currentPageItem.objectName === "tripPage");
+
+            let fileLoader = findByName(rootId.mainWindow, "fileMenuButtonLoader");
+            if (fileLoader) { fileLoader.active = true; }
+
+            let gallery = findByName(RootData.pageView.currentPageItem, "noteGallery");
+            verify(gallery, "found the trip page note gallery");
+            if (!requireRhi(gallery)) { return; }
+
+            let galleryView = findByName(RootData.pageView.currentPageItem, "galleryView");
+            verify(galleryView, "found the gallery view");
+            let notesBefore = galleryView.count;
+
+            let lidarPath = TestHelper.copyToTempDirUrl(
+                TestHelper.testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
+            gallery.imagesAdded([lidarPath]);
+            tryVerify(() => galleryView.count === notesBefore + 1, 15000,
+                      "the .glb was added as a note");
+
+            // Select by clicking the new thumbnail rather than trusting the note to
+            // auto-select: the gallery only refreshes currentNoteLiDAR from the
+            // ListView's currentItem on an index/count change, and currentItem is
+            // null until the delegate is created, so the selection can be missed
+            // entirely. Clicking the delegate is what tst_LiDARNotes does.
+            let index = galleryView.count - 1;
+            let thumb = null;
+            tryVerify(() => {
+                thumb = findByName(RootData.pageView.currentPageItem, "noteImage" + index);
+                return thumb !== null;
+            }, 10000, "the LiDAR note's thumbnail exists");
+            mouseClick(thumb);
+            tryVerify(() => gallery.currentNoteLiDAR !== null, 15000,
+                      "the LiDAR note is current");
+
+            let viewer = findByName(RootData.pageView.currentPageItem, "rhiViewerId");
+            verify(viewer, "found the LiDAR viewer");
+            tryVerify(() => viewer.scene.gltf.status === RenderGLTF.Ready, 20000,
+                      "the glTF scan finished loading");
+            RootData.futureManagerModel.waitForFinished();
+
+            // Wait for the editor rather than grabbing as soon as the glTF is
+            // Ready: on Ready the viewer captures a gallery thumbnail of itself,
+            // and that CAPTURE_ICON state deliberately hides the transform editor
+            // and the stations. The state is only restored by grabToImage's async
+            // callback, so a grab taken on Ready alone catches the panel mid-hide.
+            let editor = null;
+            tryVerify(() => {
+                editor = findVisibleByName(RootData.pageView.currentPageItem,
+                                           "noteLiDARTransformEditor");
+                return editor !== null;
+            }, 10000, "the LiDAR Note Transform editor is visible again after the icon capture");
+
+            // Nothing is ringed in either of the next two shots — the subject is the
+            // scan and its panel, and a highlight would only dim what the crop is
+            // meant to show.
+            highlightOverlayId.target = null;
+
+            // --- "What a LiDAR note is" shot: the scan, unobstructed ---
+            // Collapse the transform panel to its title bar (a real state — the
+            // panel's chevron does this, and narrow layouts start collapsed) so the
+            // opening image is the scan rather than a form over a scan.
+            editor.collapsed = true;
+            settle();
+            let notePath = WindowGrabber.grabItemToFile(viewer, "notes-lidar-note", 0);
+            verify(notePath.length > 0, "grabItemToFile wrote the lidar-note screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(notePath),
+                   "lidar-note screenshot is not blank");
+
+            // --- Transform panel shot ---
+            editor.collapsed = false;
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(editor, "notes-lidar-transform",
+                                                    lidarPanelCropMargin);
+            verify(path.length > 0, "grabItemToFile wrote the lidar-transform screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "lidar-transform screenshot is not blank");
+
+            // --- Station tool shot ---
+            // The Station button lives on the carpet toolbar, so enter that mode
+            // first. On a LiDAR note the Add group holds Station alone: the Scrap
+            // and Lead buttons bind `visible: currentNote !== null`, and a LiDAR
+            // note sets currentNoteLiDAR instead, so they hide themselves. Grabbed
+            // full-window to show the button in the toolbar over the scan.
+            gallery.setMode("CARPET");
+            RootData.futureManagerModel.waitForFinished();
+
+            let stationButton = null;
+            tryVerify(() => {
+                stationButton = findVisibleByName(gallery, "addScrapStation");
+                return stationButton !== null;
+            }, 5000, "the Station button is visible on a LiDAR note");
+
+            highlightOverlayId.target = stationButton;
+            settle();
+
+            let stationPath = WindowGrabber.grabToFile(rootId.mainWindow,
+                                                       "notes-lidar-station");
+            verify(stationPath.length > 0, "grabToFile wrote the lidar-station screenshot");
+            verify(OffscreenRenderTester.nonBlackFraction(stationPath) > 0.3,
+                   "lidar-station screenshot is not blank");
             highlightOverlayId.target = null;
         }
 

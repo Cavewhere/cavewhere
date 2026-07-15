@@ -24,6 +24,14 @@ the problems CaveWhere solves — then keep the
 - [The 3D View](view-3d/the-3d-view.md) — navigate the model, aim the camera,
   and filter with layers.
 
+### Notes
+- [Add Notes to a Trip](notes/add-a-note.md) — import scans, PDFs, and 3D
+  scans, and rotate or remove them.
+- [Set the Image Resolution](notes/note-resolution.md) — a note's DPI, and the
+  "check DPI" errors it explains.
+- [Work with LiDAR Notes](notes/lidar-notes.md) — import a `.glb` scan and set
+  its up, north, and scale.
+
 ### Scraps and Carpeting
 - [Scraps and Carpeting](scraps/carpeting.md) — what a scrap is and how
   carpeting morphs a sketch onto the 3D survey.
@@ -50,8 +58,8 @@ chapter is task-oriented and problem-first (see
   `.cwproj` formats; recent projects; save on exit.
 - **Survey Data** — regions and caves, trips, the shot table, calibration
   (tape / front sight / back sight / declination), team, units, survey errors.
-- **Notes** — importing images and PDFs, georeferencing a note (DPI, scale,
-  north, up), stations and leads on notes, LiDAR notes.
+- **Notes (more)** — note keywords build on the [Notes](notes/add-a-note.md)
+  pages above.
 - **3D View (more)** — field of view, labels, leads, and rendering settings
   (MSAA, EDL) build on [The 3D View](view-3d/the-3d-view.md).
 - **Georeferencing** — fixing stations, coordinate systems, grid convergence.
@@ -63,5 +71,5 @@ chapter is task-oriented and problem-first (see
   layout to PNG/PDF/SVG.
 - **Collaboration** — why Git and `.cwproj`, GitHub sign-in, the Sync button and
   health, remotes, history and diffs, sharing and deep links.
-- **Settings** — Jobs, Warping, PDF/SVG, Git, Appearance, Rendering, Sketch.
+- **Settings** — Jobs, Warping, PDF/SVG, Git, Appearance, Rendering.
 - **Appendix** — small screens, keyboard shortcuts, troubleshooting.

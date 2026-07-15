@@ -523,6 +523,7 @@ QQ.Rectangle {
 
             NeutralIconButton {
                 id: rotateIconButtonId
+                objectName: "rotateButton"
                 iconSource: "qrc:/twbs-icons/icons/arrow-repeat.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Rotate"
