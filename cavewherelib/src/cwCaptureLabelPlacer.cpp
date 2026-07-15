@@ -18,6 +18,7 @@
 // Std includes
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <limits>
 #include <numeric>
 
@@ -87,31 +88,39 @@ void distanceTransform2D(QVector<float>& dt, int w, int h)
     QVector<int>   v(maxDim);
     QVector<float> z(maxDim + 1);
 
-    // Rows
+    // Billions of cells pass through here per export; QVector::operator[]'s
+    // per-access detach check is too expensive at that scale, so the loops
+    // below stay on raw pointers.
+    float* dtData = dt.data();
+    float* tmpData = tmp.data();
+    float* outData = out.data();
+    int* vData = v.data();
+    float* zData = z.data();
+
+    // Rows (contiguous in memory)
     for(int y = 0; y < h; y++) {
-        for(int x = 0; x < w; x++) {
-            tmp[x] = dt[cellIndex(x, y, w)];
-        }
-        felzenszwalb1D(tmp.constData(), out.data(), w, v.data(), z.data());
-        for(int x = 0; x < w; x++) {
-            dt[cellIndex(x, y, w)] = out[x];
-        }
+        float* row = dtData + qsizetype(y) * w;
+        std::memcpy(tmpData, row, size_t(w) * sizeof(float));
+        felzenszwalb1D(tmpData, outData, w, vData, zData);
+        std::memcpy(row, outData, size_t(w) * sizeof(float));
     }
 
-    // Columns
+    // Columns (stride of one row)
     for(int x = 0; x < w; x++) {
-        for(int y = 0; y < h; y++) {
-            tmp[y] = dt[cellIndex(x, y, w)];
+        const float* src = dtData + x;
+        for(int y = 0; y < h; y++, src += w) {
+            tmpData[y] = *src;
         }
-        felzenszwalb1D(tmp.constData(), out.data(), h, v.data(), z.data());
-        for(int y = 0; y < h; y++) {
-            dt[cellIndex(x, y, w)] = out[y];
+        felzenszwalb1D(tmpData, outData, h, vData, zData);
+        float* dst = dtData + x;
+        for(int y = 0; y < h; y++, dst += w) {
+            *dst = outData[y];
         }
     }
 
     // Take sqrt to convert squared distance to Euclidean.
-    for(int i = 0, n = dt.size(); i < n; i++) {
-        dt[i] = std::sqrt(dt[i]);
+    for(qsizetype i = 0, n = dt.size(); i < n; i++) {
+        dtData[i] = std::sqrt(dtData[i]);
     }
 }
 
