@@ -42,6 +42,50 @@
 #include <QFuture>
 #include <QSet>
 
+namespace {
+
+// The worker identifies changed caves/trips/scraps by UUID. Resolve those
+// UUIDs back to the live objects in `region`, dropping any that were deleted
+// while the solve was running. Walking the live hierarchy (rather than a flat
+// id->object map) also guarantees a trip/scrap is only kept when its owning
+// cave survived.
+struct ResolvedResults {
+    QHash<cwCave*, cwLinePlotTask::LinePlotCaveData> caves;
+    QSet<cwTrip*> trips;
+    QSet<cwScrap*> scraps;
+};
+
+ResolvedResults resolveResultsToLive(const cwCavingRegion* region,
+                                     const cwLinePlotTask::LinePlotResultData& results)
+{
+    ResolvedResults resolved;
+    for (cwCave* cave : region->caves()) {
+        const auto caveIt = results.Caves.constFind(cave->id());
+        if (caveIt == results.Caves.constEnd()) {
+            continue;
+        }
+        resolved.caves.insert(cave, caveIt.value());
+
+        for (cwTrip* trip : cave->trips()) {
+            if (!results.Trips.contains(trip->id())) {
+                continue;
+            }
+            resolved.trips.insert(trip);
+
+            for (cwNote* note : trip->notes()->notes()) {
+                for (cwScrap* scrap : note->scraps()) {
+                    if (results.Scraps.contains(scrap->id())) {
+                        resolved.scraps.insert(scrap);
+                    }
+                }
+            }
+        }
+    }
+    return resolved;
+}
+
+} // namespace
+
 
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     QObject(parent),
@@ -364,50 +408,6 @@ void cwLinePlotManager::connectCaves(cwCavingRegion* region) {
 }
 
 /**
- * @brief cwLinePlotManager::validateResultsData
- * @param results
- *
- * This goes through the results and removes
- */
-void cwLinePlotManager::validateResultsData(cwLinePlotTask::LinePlotResultData &results)
-{
-    QMap<cwCave*, cwLinePlotTask::LinePlotCaveData> validCaves;
-    QSet<cwTrip*> validTrips;
-    QSet<cwScrap*> validScraps;
-
-    //Update all the positions for all the caves
-    foreach(cwCave* cave, Region->caves()) {
-        if(results.caveData().contains(cave)) {
-
-            //Add this cave to the valid, needs to be updated list
-            validCaves.insert(cave, results.caveData().value(cave));
-
-            foreach(cwTrip* trip, cave->trips()) {
-                if(results.trips().contains(trip)) {
-
-                    //Add this trip to the valid trips
-                    validTrips.insert(trip);
-
-                    foreach(cwNote* note, trip->notes()->notes()) {
-                        foreach(cwScrap* scrap, note->scraps()) {
-                            if(results.scraps().contains(scrap)) {
-
-                                //Add this scrap to the valid scrap
-                                validScraps.insert(scrap);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    results.setCaveData(validCaves);
-    results.setTrip(validTrips);
-    results.setScraps(validScraps);
-}
-
-/**
  * @brief cwLinePlotManager::markCaveStationsAsStale
  *
  * This will go through all the caves in the region and mark them as stale
@@ -595,12 +595,11 @@ void cwLinePlotManager::publishPerCaveErrors(const cwLinePlotTask::LinePlotResul
     // Clear stale entries from the previous run before re-publishing the
     // current set; the unconnected-chunk error list is per-pipeline-run.
     clearUnconnectedChunkErrors();
-    // Snapshot the live cave list once: cwCavingRegion::caves() returns by
-    // value, so calling it inside the loop would deep-copy per iteration.
-    const QList<cwCave*> liveCaves = Region->caves();
-    for (auto it = results.Caves.constBegin(); it != results.Caves.constEnd(); ++it) {
-        cwCave* cave = it.key();
-        if (!liveCaves.contains(cave)) {
+    // Walk the live caves and resolve each by id() to the worker's UUID-keyed
+    // result, skipping any cave deleted while the solve was running.
+    for (cwCave* cave : Region->caves()) {
+        const auto it = results.Caves.constFind(cave->id());
+        if (it == results.Caves.constEnd()) {
             continue;
         }
         updateUnconnectedChunkErrors(cave, it.value());
@@ -616,13 +615,13 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     // we get here. This function is only responsible for applying the
     // computed geometry / station positions / depth-length to the live caves.)
 
-    //Validate all the objects in resultData, remove any that were delete before the task was over
-    validateResultsData(results); //Modifies resultData inplace
+    // Resolve the worker's UUID-keyed result back to live objects, dropping
+    // any cave/trip/scrap deleted before the task finished.
+    const ResolvedResults resolved = resolveResultsToLive(Region, results);
 
     //Update all the positions for all the caves that need to be updated
     //Also update the length and depth information
-    const QMap<cwCave*, cwLinePlotTask::LinePlotCaveData> caveDataMap = results.caveData();
-    for(const auto& [cave, caveData] : caveDataMap.asKeyValueRange()) {
+    for(const auto& [cave, caveData] : resolved.caves.asKeyValueRange()) {
         if(caveData.hasStationPositionsChanged()) {
             cave->setStationPositionLookup(caveData.stationPositions());
         }
@@ -668,9 +667,9 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     //Mark all caves as up todate
     setCaveStationLookupAsStale(false);
 
-    emit stationPositionInCavesChanged(results.caveData().keys());
-    emit stationPositionInTripsChanged(cw::toList(results.trips()));
-    emit stationPositionInScrapsChanged(cw::toList(results.scraps()));
+    emit stationPositionInCavesChanged(resolved.caves.keys());
+    emit stationPositionInTripsChanged(cw::toList(resolved.trips));
+    emit stationPositionInScrapsChanged(cw::toList(resolved.scraps));
 
     // First-time auto-compute of worldOrigin: when nobody has explicitly
     // picked one yet and we now have at least one valid fix, recenter the

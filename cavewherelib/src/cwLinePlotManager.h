@@ -202,8 +202,6 @@ private:
     void connectCaves(cwCavingRegion* region);
     void connectFixStations(cwCave* cave);
 
-    void validateResultsData(cwLinePlotTask::LinePlotResultData& results);
-
     void setCaveStationLookupAsStale(bool isStale);
     void updateUnconnectedChunkErrors(cwCave *cave, const cwLinePlotTask::LinePlotCaveData& caveData);
     void clearUnconnectedChunkErrors();
