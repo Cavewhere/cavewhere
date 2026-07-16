@@ -249,9 +249,15 @@ figure, .page img { margin: 0; }
   display: block; max-width: 100%; height: auto; margin: 1.6em auto .4em;
   border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow);
 }
-/* italic-only paragraph right under an image reads as a caption */
-.page p:has(> em:only-child) {
-  font-size: .86rem; color: var(--muted); text-align: center; margin: 0 auto 1.6em; max-width: 60ch;
+/* The italic caption that follows a block image. A caption is authored with no
+   blank line under its image, so pandoc keeps the img and the emphasis in one
+   <p>: `<p><img><em>caption</em></p>`. Style the em by its image sibling —
+   NOT `p:has(> em:only-child)`, which (because :only-child ignores text nodes)
+   skips real captions and instead hits any body paragraph whose one child
+   element happens to be an <em>. */
+.page p:has(> img) > em {
+  display: block; font-size: .86rem; color: var(--muted);
+  text-align: center; margin: 0 auto 1.6em; max-width: 60ch;
 }
 
 blockquote {

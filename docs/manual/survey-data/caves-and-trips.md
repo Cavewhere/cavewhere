@@ -48,7 +48,8 @@ up on a backlog, so check it.
 *A cave page. **Add Trip** and **Import Survex** sit above the trip table.*
 
 **Import Survex** sits beside it, and brings a trip in from an existing Survex
-file rather than typing it. Import has its own chapter, still to be written.
+file rather than typing it — see
+[Import a Survex file as a new trip](../import-export/import-surveys.md#import-a-survex-file-as-a-new-trip).
 
 The cave's trip table is the overview worth knowing:
 

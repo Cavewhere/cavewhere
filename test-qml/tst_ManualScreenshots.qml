@@ -108,6 +108,12 @@ MainWindowTest {
         // starts slicing the Data heading above them in half.
         readonly property int excludeMenuCropMargin: 80
 
+        // Margin around the open Import / Export menu, anchored on the menu's
+        // content. These are simple dropdowns near the top of the page, not hung
+        // off a table cell, so a small even margin frames them without dragging in
+        // the page behind.
+        readonly property int importExportMenuCropMargin: 40
+
         // The identity the Git History shot commits under. The demo trip's surveyor,
         // so the author column agrees with survey-team.png.
         readonly property string gitHistoryShotAuthor: "Philip Schuchardt"
@@ -1410,6 +1416,211 @@ MainWindowTest {
             verify(path.length > 0, "grabToFile wrote the add-trip screenshot");
             verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
                    "survey-add-trip is not blank");
+        }
+
+        // The Import menu on the Data page, open, showing the survey formats.
+        // Backs docs/manual/import-export/import-surveys.md.
+        //
+        // The menu is grabbed with Popup.Item for the reason test_excludeDistance
+        // is: Fusion gives a QC.Menu no popupType, so it defaults to Popup.Window
+        // — a separate top-level window grabWindow(mainWindow) cannot see. Set from
+        // the test, never in the app's QML. importMenu is a flat list (no
+        // submenus), so a single grab shows every format.
+        function test_importMenu() {
+            let page = openDataPage("Source/Data", "dataMainPage");
+            if (!page) { return; }
+
+            // findChild, not findByName: a QC.Menu is a QObject child of its
+            // button, not a visual child, so the visual-tree walk can't see it.
+            // Scoped to the page so a stale Data/Cave page's copy can't be picked.
+            let menu = findChild(page, "importMenu");
+            verify(menu, "found the import menu");
+            menu.popupType = QC.Popup.Item;
+            menu.popup(menu.parent, 0, menu.parent.height);
+            tryVerify(() => menu.opened, 5000, "the import menu is open");
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(menu.contentItem, "import-menu",
+                                                    importExportMenuCropMargin);
+            verify(path.length > 0, "grabItemToFile wrote the import-menu shot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "import-menu is not blank");
+
+            menu.close();
+        }
+
+        // The Export menu on a cave page, open, showing the three formats.
+        // Backs docs/manual/import-export/export-surveys.md.
+        //
+        // On the cave page rather than the Data page: there currentCave is always
+        // set (cavePageArea.currentCave), so the Compass and Chipdata items — which
+        // disable on an empty cave — read enabled. The top level (Survex / Compass /
+        // Chipdata) is what's grabbed; its submenus expand on hover, one at a time,
+        // and the format list is the point.
+        function test_exportMenu() {
+            let page = openDataPage("Source/Data/Cave=Phake Cave 3000", "cavePage");
+            if (!page) { return; }
+
+            let menu = findChild(page, "exportMenu");
+            verify(menu, "found the export menu");
+            menu.popupType = QC.Popup.Item;
+            menu.popup(menu.parent, 0, menu.parent.height);
+            tryVerify(() => menu.opened, 5000, "the export menu is open");
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(menu.contentItem, "export-menu",
+                                                    importExportMenuCropMargin);
+            verify(path.length > 0, "grabItemToFile wrote the export-menu shot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "export-menu is not blank");
+
+            menu.close();
+        }
+
+        // The CSV importer page with a file loaded and mapped, at Success.
+        // Backs docs/manual/import-export/import-csv.md.
+        //
+        // defaultColumns.txt's columns are exactly the importer's default Used
+        // Columns (From, To, Length, Compass, Clino), so it parses cleanly with no
+        // remapping — the shot shows a working mapping and a green Status rather
+        // than an error the reader would have to discount.
+        function test_importCsvPage() {
+            let page = openDataPage("Source/Data", "dataMainPage");
+            if (!page) { return; }
+
+            let menu = findChild(page, "importMenu");
+            verify(menu, "found the import menu");
+            menu.popupType = QC.Popup.Item;
+            menu.popup(menu.parent, 0, menu.parent.height);
+            tryVerify(() => menu.opened, 5000, "the import menu is open");
+
+            let csvItem = findChild(menu, "csvMenuItem");
+            verify(csvItem, "found the CSV menu item");
+            csvItem.triggered();
+
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "csvImporterPage",
+                      5000, "the CSV importer page is current");
+            let csvPage = RootData.pageView.currentPageItem;
+
+            let csvManager = findChild(csvPage, "csvManager");
+            verify(csvManager, "found the CSV manager");
+            csvManager.filename = TestHelper.testcasesDatasetPath(
+                "test_cwCSVImporterManager/defaultColumns.txt");
+            tryVerify(() => csvManager.errorModel.fatalCount === 0
+                      && csvManager.filename.length > 0,
+                      5000, "the CSV file loaded and parsed without fatal errors");
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "import-csv");
+            verify(path.length > 0, "grabToFile wrote the import-csv shot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   "import-csv is not blank");
+
+            restoreDemoProject();
+        }
+
+        // The Map page — the paper-layout tool — with its options panel.
+        // Backs docs/manual/import-export/export-a-map.md.
+        //
+        // Grabbed with no layers added: adding one means drawing a rectangle on the
+        // live 3D view, which this shot doesn't need — the paper preview and the
+        // paper-size / resolution / file-type / Export options are what the page
+        // documents. Needs a live QRhi for the QuickSceneView that draws the sheet.
+        function test_mapPage() {
+            TestHelper.loadProjectFromFile(RootData.project,
+                TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            RootData.pageSelectionModel.gotoPageByName(null, "Map");
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "mapPage",
+                      5000, "the Map page is current");
+            let page = RootData.pageView.currentPageItem;
+            if (!requireRhi(page)) { return; }
+
+            highlightOverlayId.target = null;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "export-map");
+            verify(path.length > 0, "grabToFile wrote the export-map shot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   "export-map is not blank");
+
+            restoreDemoProject();
+        }
+
+        // The Add Layer interaction: after Add Layer the app is on the View page
+        // with the area-select tool over the 3D cave. Backs the "Add a layer"
+        // section of docs/manual/import-export/export-a-map.md.
+        //
+        // Driven through the real button, which both activates the tool and
+        // navigates to View — the tool is parented to the View page's renderer
+        // (MapPage.view = mainContentId.renderer), so it overlays the live scene.
+        // MUST deactivate the tool before returning: this runs alphabetically
+        // before the test_view3d* shots, and a left-active tool would leave its
+        // "Select Area" button in every one of them.
+        function test_mapAddLayer() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            RootData.pageSelectionModel.gotoPageByName(null, "Map");
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "mapPage",
+                      5000, "the Map page is current");
+            let mapPage = RootData.pageView.currentPageItem;
+            settle();
+
+            let addLayer = findByName(mapPage, "addLayerButton");
+            verify(addLayer, "found the Add Layer button");
+            addLayer.clicked();
+
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "viewPage",
+                      5000, "Add Layer returned to the View page");
+
+            let tool = findVisibleByName(rootId.mainWindow, "selectionToolButton");
+            verify(tool, "the Select Area tool is visible over the 3D view");
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "map-add-layer");
+
+            // Reset the tool BEFORE asserting the grab, so a failed verify can't
+            // skip the cleanup and poison the View shots that run after this.
+            tool.state = "DEACTIVE";
+            highlightOverlayId.target = null;
+            restoreDemoProject();
+
+            verify(path.length > 0, "grabToFile wrote the map-add-layer shot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   "map-add-layer is not blank");
+        }
+
+        // The cave page's Import Survex button, highlighted — the path that brings
+        // a .svx (e.g. a TopoDroid centerline export) in as a new trip.
+        // Backs the "Import a Survex file as a new trip" section of
+        // docs/manual/import-export/import-surveys.md.
+        //
+        // Its own shot rather than reusing survey-add-trip.png, which rings Add
+        // Trip; the section is about Import Survex, so the ring has to be on it.
+        // CavePage builds a wide (table) and a narrow (flow) layout, both carrying
+        // objectName "importSurvexButton" — findVisibleByName picks the shown one.
+        function test_importSurvexTrip() {
+            let page = openDataPage("Source/Data/Cave=Phake Cave 3000", "cavePage");
+            if (!page) { return; }
+
+            let importSurvex = findVisibleByName(page, "importSurvexButton");
+            verify(importSurvex, "found the visible Import Survex button");
+
+            highlightOverlayId.target = importSurvex;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "import-survex-trip");
+            verify(path.length > 0, "grabToFile wrote the import-survex-trip shot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   "import-survex-trip is not blank");
+
+            highlightOverlayId.target = null;
         }
 
         // Open the demo trip and return its SurveyEditor's ListView — the whole

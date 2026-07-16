@@ -45,8 +45,8 @@ The sidebar has three buttons:
   with layers, measure it.
 - **Data** — the [caves and trips](../survey-data/caves-and-trips.md) the model is
   built from: survey tables, calibration, notes, scraps.
-- **Map** — composing a map image to export as a PNG, PDF or SVG. Exporting has
-  its own chapter, still to be written.
+- **Map** — composing a map image to
+  [export as a PNG, PDF or SVG](../import-export/export-a-map.md).
 
 **Each button remembers where you were.** Click **Data**, drill down to a trip's
 notes, click **View** to see what changed, then click **Data** again and you land

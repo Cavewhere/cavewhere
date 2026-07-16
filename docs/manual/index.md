@@ -72,6 +72,16 @@ the problems CaveWhere solves — then keep the
 - [Tune the Warping Settings](scraps/warping-settings.md) — grid, interpolation,
   stations, and smoothing.
 
+### Import & Export
+- [Import Surveys from Other Programs](import-export/import-surveys.md) — bring
+  Survex, Compass, and Walls surveys in as new caves.
+- [Import a CSV or Spreadsheet](import-export/import-csv.md) — map columns to
+  stations, distance, compass, clino, and LRUD.
+- [Export Surveys to Other Programs](import-export/export-surveys.md) — write
+  out to Survex, Compass, or Chipdata, and what each keeps.
+- [Export a Map Image](import-export/export-a-map.md) — compose a map on paper
+  and export it to PNG, PDF, or SVG.
+
 ## Planned chapters
 
 These directories exist and will be filled in as the manual is built out. Each
@@ -89,8 +99,6 @@ chapter is task-oriented and problem-first (see
 - **Measurement** — distance, azimuth (grid / true / magnetic), inclination.
 - **Loop Closure** — closure errors and reviewing blunders.
 - **Leads** — the lead list, editing, CSV export.
-- **Import/Export** — Survex, Compass, Walls, and CSV import; export; map
-  layout to PNG/PDF/SVG.
 - **Collaboration** — why Git and `.cwproj`, GitHub sign-in, the Sync button and
   health, remotes, history and diffs, sharing and deep links.
 - **Settings** — Jobs, Warping, PDF/SVG, Git, Appearance, Rendering.
