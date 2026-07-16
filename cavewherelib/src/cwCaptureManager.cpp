@@ -450,9 +450,18 @@ void cwCaptureManager::saveCaptures()
         //to the scene.
 
         foreach(cwCaptureViewport* capture, Captures) {
-            scene()->addItem(capture->fullResolutionItem());
+            // Defensive: a capture whose full-resolution render never completed has a
+            // null Item. Skipping it yields an incomplete export rather than a crash;
+            // the capture()/finishCapture() coordination should keep this from happening.
+            if(capture->fullResolutionItem() == nullptr) {
+                qWarning() << "cwCaptureManager::saveCaptures: capture has no full-resolution item; skipping export layer" << LOCATION;
+                continue;
+            }
+            addFullResultionCaptureItemHelper(capture);
             capture->setResolution(resolution());
-            capture->previewItem()->setVisible(false);
+            if(QGraphicsItem* preview = capture->previewItem()) {
+                preview->setVisible(false);
+            }
             capture->setPreviewCapture(false);
         }
 
@@ -461,8 +470,12 @@ void cwCaptureManager::saveCaptures()
         saveScene();
 
         foreach(cwCaptureViewport* capture, Captures) {
-            capture->previewItem()->setVisible(true);
-            capture->fullResolutionItem()->setVisible(false);
+            if(QGraphicsItem* preview = capture->previewItem()) {
+                preview->setVisible(true);
+            }
+            if(QGraphicsItem* item = capture->fullResolutionItem()) {
+                item->setVisible(false);
+            }
             disconnect(capture, &cwCaptureViewport::finishedCapture, this, &cwCaptureManager::saveCaptures);
         }
     }

@@ -128,6 +128,7 @@ private:
     double CameraPitch; //!<
 
     bool CapturingImages;
+    bool CaptureRequested; //A capture() arrived while one was in flight; re-run when it finishes
     QSize TileSize;
 
     //Scene state information
@@ -145,6 +146,7 @@ private:
     QSize calcCroppedTileSize(QSize tileSize, QSize imageSize, int row, int column) const;
 
     void setImageScale(double scale);
+    void finishCapture();
     void updateTransformForItem(QGraphicsItem* item, double scale) const;
     void updateBoundingBox();
     void deleteSceneItems();
