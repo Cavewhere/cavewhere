@@ -16,7 +16,6 @@
 #include <QBox3D>
 #include <QHash>
 #include <QSet>
-#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -396,46 +395,43 @@ private:
     // Per-primitive bounding box in the Object's **model space**. Used
     // when constructing leaf bboxes for a sub-BVH.
     static QBox3D primitiveModelBox(const Object& object, const Primitive& prim);
-    // Per-primitive ray test. rayModel/worldFromModel/modelToWorld are
-    // computed once per top-level leaf by intersectsDetailed and passed
-    // through so this hot-path function never re-inverts the matrix.
-    // `object` comes from the SubBvh — decoupling from BvhData::
-    // nodesSnapshot ordering, which is not stable across rebuilds.
-    static void testPrimitive(const Object& object,
-                              const Primitive& prim,
-                              const QRay3D& ray,
-                              const QRay3D& rayModel,
-                              const QMatrix4x4& worldFromModel,
-                              const QMatrix4x4& modelToWorld,
-                              const cwPickTolerance& tolerance,
-                              cwRayHit& best,
-                              PickStats* stats);
+    // The read-only inputs every primitive test within one top-level leaf
+    // shares: the Object, both rays, both matrices, and the position
+    // attribute. traverseBvh hoists them once per leaf, so the hot path
+    // never re-inverts a matrix or re-looks-up an attribute. `object` comes
+    // from the SubBvh — decoupling from BvhData::nodesSnapshot ordering,
+    // which is not stable across rebuilds. Defined in the .cpp beside the
+    // policies that consume it.
+    struct LeafContext;
 
-    // cwRayHit field fill for a Point primitive. The analogue of
-    // fillLineHit: pointWorld is the vertex centre (so a readout snaps to
-    // the data point), while tModel/tWorld are the sphere-entry depths the
-    // caller computed.
-    static void fillPointHit(cwRayHit& best,
-                             const Object& object,
-                             const Primitive& prim,
-                             const QRay3D& ray,
-                             const QRay3D& rayModel,
-                             const QVector3D& centerModel,
-                             const QVector3D& centerWorld,
-                             double tModel,
-                             double tWorld);
+    // The two policies traverseBvh is instantiated with. They answer
+    // different questions — ExactPick "what did the ray hit?", AnchorPick
+    // "what lies nearest the ray?" — so each names the kinds it lets consult
+    // the screen-space tolerance. See cwPickTolerance for why they disagree
+    // on purpose.
+    //
+    // ToleranceKinds is what traverseBvh reads: it decides which nodes get a
+    // tolerance pad and which sub-BVHs are skipped outright when no tolerance
+    // is supplied. The per-primitive accept rule is the policy's own
+    // testPrimitive — the constant does not enforce it. What keeps the two in
+    // step is that they now sit together in one struct, so a policy's reach
+    // and the broad phase that must not prune inside it are read as a unit
+    // rather than 200 lines apart in two near-identical traversals (which is
+    // exactly how their pads drifted apart in the first place).
+    //
+    // Defined in the .cpp; both instantiations live in that TU.
+    struct ExactPick;
+    struct AnchorPick;
 
-    // cwRayHit field fill for a Line primitive (the §7 contract). The
-    // analogue of fillPointHit: pointWorld lies on the segment, firstIndex
-    // is the segment's first index, u/v stay NaN, normal is camera-facing.
-    static void fillLineHit(cwRayHit& best,
-                            const Object& object,
-                            const Primitive& prim,
+    // Front-to-back descent: the top-level BVH in world space, then each
+    // Object's sub-BVH in model space. Hands every leaf primitive surviving
+    // visibility, the kind filter, and the depth prune to `policy`. What
+    // counts as a hit lives entirely in the policy, never here.
+    template <typename Policy>
+    static void traverseBvh(const BvhData& bvh,
                             const QRay3D& ray,
-                            const QRay3D& rayModel,
-                            const QVector3D& segPointModel,
-                            const QVector3D& segPointWorld,
-                            double tWorld);
+                            const cwPickQuery& query,
+                            Policy& policy);
 
     // Debug-only per-primitive diagnostic; gated on lcPick debug.
     static void dumpLeafPrimitive(const Object& object,

@@ -219,7 +219,7 @@ std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point,
 
     //Not quite like-for-like, and knowingly so: geometryDepth is the depth of
     //the point returned, while a cloud exact hit reports its SPHERE-ENTRY depth
-    //(fillPointHit ranks by tNear, deliberately, so a head-on point beats a
+    //(the exact point pick ranks by tNear, deliberately, so a head-on point beats a
     //grazing one) even though the pivot it returns is the sphere CENTRE. So the
     //cloud is favoured by up to one pickRadius — one mean point spacing, a few
     //cm in a real cave. That is well under what a pivot shift needs to be for

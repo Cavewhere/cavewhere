@@ -139,6 +139,73 @@ TEST_CASE("nearestGeometryPoint: anchors the exact cloud point within tolerance"
     }
 }
 
+// The two entry points share one traversal (traverseBvh) but deliberately
+// disagree about which kinds consult the screen-space tolerance, so the same
+// scene, ray and query must answer differently on each. This is the assertion
+// that fails if the split is ever collapsed:
+//
+//   - Widen the exact pick to accept points at the tolerance radius and the
+//     off-ray snap deleted in d28581a0 comes back — picks landing on points
+//     the ray never touched, which made leads silently unclickable (see
+//     test_cwLeadView_occlusion).
+//   - Narrow the anchor's reach to lines and the pivot stops finding cloud
+//     points at all (verified: dropping Points from
+//     AnchorPick::ToleranceKinds un-pads the point nodes and this test's
+//     off-ray section fails).
+//
+// See cwPickTolerance, which documents the split this pins.
+TEST_CASE("Points: the tolerance widens the anchor but never the exact pick",
+          "[cwGeometryItersecter][nearestPoint]")
+{
+    const QVector3D point(10.0f, 20.0f, -5.0f);
+
+    cwGeometryItersecter intersecter;
+    intersecter.addObject(makePointCloudObject(1, {point}));
+    intersecter.waitForFinish();
+
+    // A 5-unit tolerance the point sits well inside, while staying 2 units
+    // outside its own 0.5 pickRadius sphere.
+    const cwPickQuery query = ortho(5.0);
+
+    SECTION("off-ray: only the anchor reaches it") {
+        const QRay3D ray = rayDownAt(10.0f, 22.0f);
+        CHECK_FALSE(intersecter.intersectsDetailed(ray, query).hit());
+        CHECK(intersecter.nearestGeometryPoint(ray, query).has_value());
+    }
+
+    SECTION("head-on: the ray touches the sphere, so both reach it") {
+        const QRay3D ray = rayDownAt(point.x(), point.y());
+        CHECK(intersecter.intersectsDetailed(ray, query).hit());
+        CHECK(intersecter.nearestGeometryPoint(ray, query).has_value());
+    }
+}
+
+// Lines are the one kind in BOTH policies' ToleranceKinds, so an off-ray
+// segment inside the radius is reachable from either entry point. The mirror
+// of the points case above: it fails if lines ever leave either set.
+TEST_CASE("Lines: the tolerance widens the anchor and the exact pick alike",
+          "[cwGeometryItersecter][nearestPoint]")
+{
+    cwGeometryItersecter intersecter;
+    intersecter.addObject(makeLineObject(1, {QVector3D(10.0f, 20.0f, 0.0f),
+                                             QVector3D(10.0f, 20.0f, -10.0f)}));
+    intersecter.waitForFinish();
+
+    // 2 units off the segment in y — no ray ever exactly intersects a line,
+    // so the tolerance is the only thing that can accept it.
+    const QRay3D ray = rayDownAt(10.0f, 22.0f);
+
+    SECTION("inside the radius both reach it") {
+        CHECK(intersecter.intersectsDetailed(ray, ortho(5.0)).hit());
+        CHECK(intersecter.nearestGeometryPoint(ray, ortho(5.0)).has_value());
+    }
+
+    SECTION("outside the radius neither does") {
+        CHECK_FALSE(intersecter.intersectsDetailed(ray, ortho(1.0)).hit());
+        CHECK_FALSE(intersecter.nearestGeometryPoint(ray, ortho(1.0)).has_value());
+    }
+}
+
 // Among candidates inside the tolerance the front-most wins — the same
 // nearest-by-depth rule as every other pick — even when a deeper candidate
 // passes closer to the ray.

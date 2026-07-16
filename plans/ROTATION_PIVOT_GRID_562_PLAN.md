@@ -384,15 +384,23 @@ repeated verbatim at the target, so grep that if the number has drifted.
 
 **Correctness / latency — earn their way in first**
 
-- [ ] **`intersectsDetailed`'s scene-global line pad** — the per-node fix already written next door,
-  applied to the path that runs *per mouse-move* instead of once per press. The centerline is padded
-  by the radius at the scene's far corner (`pickRadius = 0.0f` means nothing competes with it).
-  Needs a **line-object** perf test; the existing point-cloud control is structurally blind to it.
-  *Size: small fix, real test.* ▸ line 478
-- [ ] **Exit-t prune pattern in `intersectsDetailed`** (`:921`, `:1064`) — same one-line
-  `boxEntryDistance()` helper fixes it. Latent (small pads rarely swallow the camera), but it touches
-  leads / `cwScenePick` / measurement, so it wants its own regression test and a full pick-suite run.
-  *Size: one line + test + broad re-run.* ▸ line 504
+- [x] **`intersectsDetailed`'s scene-global line pad** — **DONE (2026-07-15, `81255925`).** Each node
+  now derives its pad from its own far corner via the shared `paddedBox()` helper. The line-object
+  perf test the point-cloud control was structurally blind to is in place and measured: the regressed
+  pad scans at **679x** the fixed one (414.65 ms vs 0.61 ms), so it fails loudly rather than
+  vacuously. ▸ line 478
+- [x] **Exit-t prune pattern in `intersectsDetailed`** — **DONE (2026-07-15, `1fd94ed2`).** The
+  `boxEntryDistance()` helper now serves both traversals. Reachable, not merely latent: sibling BVH
+  boxes overlap, so a node containing the camera can be visited after a hit exists and be pruned on
+  its exit parameter — and the camera sits *inside* the cave in CaveWhere's core case. Regression test
+  added; full pick suite re-run. ▸ line 504
+
+  **These two were prerequisites of the unification below, not follow-ups of it — the plan had that
+  backwards.** `nearestGeometryPoint` already carried both fixes while `intersectsDetailed` kept both
+  originals. Unifying first would have forced the shared traversal to pick one box test and one pad
+  strategy, shipping a correctness fix *and* a hot-path perf change inside a refactor — the exact
+  unbisectable outcome this plan warns against. Fixing them first made the traversals converge, so the
+  refactor had only genuine policy left to abstract.
 - [ ] **Pan lurch on a line or point grab** — rung 1 returns an off-ray point, `startPanning` uses it
   as `m_panAnchor`, and the first tick translates by the miss distance (~15px at 4mm). Pre-existing
   and byte-identical on `@{upstream}`. A triangle hit gives exactly 0, so 0 is the intent. Fix =
@@ -436,24 +444,48 @@ repeated verbatim at the target, so grep that if the number has drifted.
 - [ ] **Consolidate the pivot ladder into `resolvePivot`** — moves product policy out of a low-level
   input handler. Also gives the two tuning knobs one home (today `kPivotPickRadiusMillimeters` is
   anon-namespace in the `.cpp` and `PivotAnchorRadiusMillimeters` is public in the `.h`). ▸ line 529
-- [ ] **Unify the two BVH traversals behind a per-kind accept policy** — **next up (2026-07-15).**
-  ~340 lines, ~80% shared. The tube-promote deletion made this the strongest item on the list: the
-  fallback was a *third* variant of the same traversal, and removing it states the architecture
-  cleanly — exact picking and off-ray anchoring are two policies, off-ray is opt-in via a separate
-  entry point. Keep that split; delete only the copy-paste. Not blocked on the picking service.
-  *Size: large; hot path, wants its own commit + profiling.* ▸ line 459
+- [x] **Unify the two BVH traversals behind a per-kind accept policy** — **DONE (2026-07-15).** One
+  `traverseBvh<Policy>` now serves both; `nearestGeometryPoint` went from ~180 lines to 16. The split
+  survived: `ExactPick::ToleranceKinds = Lines` vs `AnchorPick::ToleranceKinds = All`, which
+  traverseBvh reads to decide node pads and the no-tolerance skip.
+  - **Profiled, not assumed** (100k-point cloud, 50 picks, median of 5): **Release 0.00338 ms vs
+    0.00347 ms baseline** — neutral to marginally faster, because `LeafContext` hoists the position
+    attribute once per leaf where the old `testPrimitive` re-fetched it per primitive. Debug is ~5%
+    slower (unoptimized abstraction; 1400x headroom against that test's own threshold).
+  - **The policy split is now pinned by tests, and the pins were verified by sabotage**, not by
+    reasoning: collapsing `ExactPick` → All-kinds fails 30 assertions; collapsing `AnchorPick` →
+    Lines-only fails 8. Both directions are real bugs, so both needed a tripwire.
+  - **Correction to the design note above:** `ToleranceKinds` drives the *box pads and the skip*, not
+    the per-primitive accepts — those stay hand-coded in each policy's `testPrimitive` (the sabotage
+    run disproved the stronger claim). The win is co-location: a policy's reach and the broad phase
+    that must not prune inside it are now read as a unit, instead of 200 lines apart in two
+    near-identical traversals — which is exactly how their pads drifted apart to begin with.
+  - **`cwRayHit` now owns its own construction; the `cwGeometryItersecter` friendship is gone.**
+    The unification first exposed the problem: hit-building was four host statics
+    (`rayTriangleMT` + three `fill*Hit`) reaching into `cwRayHit`'s privates, because the friendship
+    didn't extend to the nested `ExactPick`/`AnchorPick` policies — the natural home for "what counts
+    as a hit." Rather than leave that as a follow-up (the review flagged it), it's folded in: three
+    named factories on `cwRayHit` — `triangleModelHit` (model-space solve), `completedToWorld` (adds
+    the world/object fields to a model hit), and `pointLikeHit` (point or line: no parametric
+    surface, camera-facing normal) — are the only writers of the fields, so a hit is fully built or
+    not built at all. `friend class cwGeometryItersecter` deleted from `cwRayHit.h`; the policies now
+    build hits directly; behavior-neutral (352/61 unchanged, verified). ▸ line 459
 - [x] **Reconcile the two radius systems — a naming fix, NOT a behavior fix** — **DONE (2026-07-15).**
   Documented `cwPickTolerance` with the per-entry-point split it actually has, and renamed
   `cwScenePick`'s `pixelRadius` → `linePixelRadius`. No behavior change; picking tests green.
   ▸ line 471
 - [ ] **Make the queries static-on-`QuerySnapshot`**, like `pointsInBox` already is — they read nothing
   but `BvhData`. Drops the main-thread constraint, lets a picking service hold a *value* instead of a
-  back-reference to a mutable subsystem, and removes the `waitForFinish()` test hazard. Natural
-  prerequisite: the traversal unification. *Size: ~6 mechanical call sites.* ▸ line 665
+  back-reference to a mutable subsystem, and removes the `waitForFinish()` test hazard. Its
+  prerequisite (the traversal unification) is **now done** — `traverseBvh` already takes `BvhData&`
+  rather than reading `m_bvh`, so both entry points are a `*m_bvh` deref away from static.
+  *Size: ~6 mechanical call sites.* ▸ line 665
 - [ ] **Make the debug dumper a consumer of the shared traversal, not a copy of it** — both crashes on
   this branch came out of it; it re-derives index layouts and null-slot rules independently and nothing
-  exercises it. Two for two is a defect shape. *Size: large; wants the snapshot + unification first.*
-  ▸ line 669
+  exercises it. Two for two is a defect shape. The unification half of its prerequisite is **done**:
+  `dumpLeafPrimitive` is now called from `traverseBvh` itself, so it sees exactly the primitives the
+  real descent reaches — but it still re-derives the index layout internally, which is the actual
+  crash surface. *Size: large; wants the snapshot first.* ▸ line 669
 - [ ] **Pick queries can't express "BVH not ready"** — plus the hide-until-ready proposal and its 4 open
   questions ▸ line 536
 - [ ] **Back-end scene-picking service** (four consumers) ▸ line 567
