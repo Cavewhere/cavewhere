@@ -911,25 +911,29 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
     const QVector<std::shared_ptr<const SubBvh>>& subBvhs = m_bvh->subBvhs;
 
     // Line picking grows its accept radius with depth (screen-space), so a
-    // fixed baked AABB pad can't bound it. Derive one conservative scalar —
-    // the radius at the farthest scene depth — and fold it into the box-test
-    // pads; the fine test still uses the exact radiusAt(hitDepth). Zero when
-    // no tolerance is supplied, in which case the box tests run unpadded and
-    // line sub-BVHs are skipped entirely (see the kind-filter block below).
+    // fixed baked AABB pad can't bound it. Each box test derives its own pad
+    // from that node's own far corner — radiusAt() is non-decreasing, so the
+    // radius at a node's far corner bounds every candidate inside it — while
+    // the fine test still applies the exact radiusAt(hitDepth). A scene-global
+    // pad taken from the BVH root is equally conservative but inflates every
+    // near node by the radius belonging to the far end of the scene, which
+    // collapses the descent into a linear scan (measured on the anchor path
+    // next door at ~40x on a million points).
     //
     // This is the only pad in the traversal. Points need none: their leaf
     // boxes are baked with a pickRadius pad already (primitiveModelBox), so
     // an unpadded box test still reaches every leaf whose sphere the ray can
-    // hit. Triangles are exact and need none either.
-    const float linePad =
-        conservativeTolerancePad(ray, topLevel.at(0).bbox, query.tolerance);
+    // hit. Triangles are exact and need none either. So a query that cannot
+    // reach a line object pays nothing for padding at all.
+    const bool padForLines = query.tolerance.enabled()
+                             && (query.kinds & cwPickQuery::Kind::Lines);
 
     if (debug) {
         qCDebug(lcPick).nospace()
             << "intersectsDetailed: topLevel=" << topLevel.size()
             << ", subBvhs=" << subBvhs.size()
             << ", source nodes=" << m_bvh->nodesSnapshot.size()
-            << ", linePad=" << linePad
+            << ", padForLines=" << padForLines
             << ", ray.origin=" << ray.origin()
             << ", ray.dir=" << ray.direction();
     }
@@ -948,7 +952,10 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
             ++stats.nodesVisited;
         }
 
-        const double tBox = boxEntryDistance(paddedBox(bn.bbox, linePad), ray);
+        const float nodePad = padForLines
+            ? conservativeTolerancePad(ray, bn.bbox, query.tolerance)
+            : 0.0f;
+        const double tBox = boxEntryDistance(paddedBox(bn.bbox, nodePad), ray);
         if (qIsNaN(tBox)) {
             if (debug) {
                 ++stats.nodesBoxMiss;
@@ -1012,14 +1019,6 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
         const QMatrix4x4& modelToWorld = m_bvh->inverseModelMatrices.at(slot);
         const QRay3D rayModel = transformRayWithInverse(modelToWorld, ray);
 
-        // Only line objects pad their model-space boxes: the conservative
-        // linePad lets a grazing ray reach the leaf where the exact distance
-        // test decides the hit. (Model-space pad against a world-space radius
-        // — exact for the identity model matrix the line plot uses.) Points
-        // and triangles bake whatever pad they need into the leaf box at
-        // build time, so their boxes are tested as-is.
-        const float subPad = isLineObject ? linePad : 0.0f;
-
         // tModel and tWorld parameterize the same point — transformRayToModel
         // applies the inverse model matrix uniformly to direction so the
         // parameter scalar is preserved (see math derivation in design doc).
@@ -1037,6 +1036,14 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
                 ++stats.nodesVisited;
             }
 
+            // Only line objects pad their model-space boxes, and each by the
+            // radius at its own far corner. (Model-space pad against a
+            // world-space radius — exact for the identity model matrix the line
+            // plot uses.) Points and triangles bake whatever pad they need into
+            // the leaf box at build time, so their boxes are tested as-is.
+            const float subPad = isLineObject
+                ? conservativeTolerancePad(rayModel, sbn.bbox, query.tolerance)
+                : 0.0f;
             const double tSubBox =
                 boxEntryDistance(paddedBox(sbn.bbox, subPad), rayModel);
             if (qIsNaN(tSubBox)) {

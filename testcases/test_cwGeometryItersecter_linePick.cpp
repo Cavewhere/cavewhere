@@ -3,10 +3,14 @@
 #include <catch2/catch_approx.hpp>
 
 // Std
+#include <algorithm>
 #include <cmath>
+#include <functional>
 #include <numeric>
 
 // Qt
+#include <QElapsedTimer>
+#include <QList>
 #include <QMatrix4x4>
 #include <QVector3D>
 #include <QRay3D>
@@ -486,5 +490,117 @@ TEST_CASE("Line pick: a node containing the ray origin is not pruned away",
     CHECK(hit.objectId() == 2u);
     CHECK(hit.tWorld() == Approx(5.0).margin(1e-2));
     CHECK(hit.pointWorld().z() == Approx(nearSpot.z()).margin(1e-3));
+}
+
+// The exact pick's BVH has to prune, not scan — and unlike the anchor next
+// door, this path runs once per mouse-move rather than once per press. This is
+// a performance contract with no behavioural signature to test instead: the
+// scene-global tolerance pad this path originally shipped with returned exactly
+// the same answers, but padded every node by the accept radius at the far
+// corner of the WHOLE scene. A centerline near the camera was then inflated by
+// a radius belonging to the far end of the survey, the ray crossed every leaf,
+// and the descent degenerated into a linear scan.
+//
+// Absolute timings mean nothing across machines, build configs, or a CI box
+// running several test processes at once, so this measures intersectsDetailed
+// against nearestGeometryPoint on the SAME centerline with the SAME query in
+// the SAME run. The anchor is the control: on a line-only scene the two paths
+// apply an identical accept rule to every segment, so once their pads agree
+// they do the same work and the ratio is ~1. The anchor's per-node pad is
+// already pinned by its own [performance] test.
+//
+// The existing point-cloud control could not catch this: the exact path folds
+// the pad in only for line objects, so a cloud scene never exercises it.
+TEST_CASE("Line pick: the exact pick prunes instead of scanning the whole centerline",
+          "[cwGeometryItersecter][linePick][performance]")
+{
+    // Only intersectsDetailed dumps per-primitive debug output — an inherited
+    // cw.picking.debug=true would inflate the measured path alone and turn the
+    // ratio below into a guaranteed failure.
+    QLoggingCategory& category = const_cast<QLoggingCategory&>(lcPick());
+    const bool wasEnabled = category.isDebugEnabled();
+    category.setEnabled(QtDebugMsg, false);
+    auto restoreCategory = qScopeGuard([&category, wasEnabled]() {
+        category.setEnabled(QtDebugMsg, wasEnabled);
+    });
+
+    // A dense centerline beside the ray and close to the camera (depth 10-20),
+    // plus one far shot that drags the scene's far corner out to depth ~5000.
+    // The gap between those depths is the whole lever: a scene-global pad is
+    // radiusAt(farDepth) ~ 79, which is ~250x the radius the cluster's own
+    // depth earns and swallows a ray that misses it by 8 units.
+    // An EVEN vertex count: the line plot lists shots as disjoint vertex pairs,
+    // and addLines rejects an odd index list outright.
+    constexpr int kVertices = 5000;
+    constexpr float kMeanderRadius = 1.75f;
+    constexpr float kMeanderCenterX = 10.0f;
+
+    QVector<QVector3D> centerline;
+    centerline.reserve(kVertices);
+    for (int i = 0; i < kVertices; ++i) {
+        const float t = float(i) / float(kVertices);
+        const float angle = t * 40.0f * float(M_PI);
+        centerline.append(QVector3D(kMeanderCenterX + kMeanderRadius * std::cos(angle),
+                                    kMeanderRadius * std::sin(angle),
+                                    -10.0f * t));
+    }
+
+    cwGeometryItersecter intersecter;
+    intersecter.addObject(makeLineObject(1, centerline));
+    intersecter.addObject(makeLineObject(2, {QVector3D(100.0f, 0.0f, -5000.0f),
+                                             QVector3D(100.0f, 0.0f, -4990.0f)}));
+    intersecter.waitForFinish();
+
+    // A 4mm perspective tolerance derived exactly as cwCamera::pickQuery does:
+    // slope = pixelRadius * 2 / (p11 * viewportHeight), with the 96dpi headless
+    // fallback (3.78 px/mm), p11 = 1.921 for a 55 degree fov and a 1000px
+    // viewport.
+    const double pixelRadius = 4.0 * (96.0 / 25.4);
+    const cwPickQuery query = perspective(pixelRadius * 2.0 / (1.921 * 1000.0));
+
+    // Straight down the z axis, missing both objects by far more than the
+    // radius either one's depth earns. A miss is the case that matters: it is
+    // what every mouse-move over empty space costs, and it leaves the
+    // prune-by-best path out of the measurement so only the pads decide.
+    const QRay3D ray(QVector3D(0.0f, 0.0f, 10.0f), QVector3D(0.0f, 0.0f, -1.0f));
+
+    // Preconditions — without these the timings measure the wrong thing and the
+    // test would pass vacuously. Assert what the BVH actually holds, not what
+    // was handed to addObject: addLines drops a malformed object with only a
+    // qDebug, and a scene that silently lost its centerline still misses the ray
+    // and still times fast, which reads exactly like a pass.
+    const cwGeometryItersecter::DebugStatistics stats = intersecter.debugStatistics();
+    REQUIRE(stats.lineSourceNodes == 2);
+    REQUIRE(stats.totalPrimitives > 1000);
+    REQUIRE_FALSE(intersecter.intersectsDetailed(ray, query).hit());
+    REQUIRE_FALSE(intersecter.nearestGeometryPoint(ray, query).has_value());
+
+    constexpr int kPicksPerSample = 500;
+    const auto medianMs = [](const std::function<void()>& work) {
+        constexpr int kRuns = 5;
+        QList<double> samples;
+        for (int i = 0; i < kRuns; ++i) {
+            QElapsedTimer timer;
+            timer.start();
+            for (int pick = 0; pick < kPicksPerSample; ++pick) {
+                work();
+            }
+            samples.append(double(timer.nsecsElapsed()) / 1e6);
+        }
+        std::sort(samples.begin(), samples.end());
+        return samples.at(samples.size() / 2);
+    };
+
+    const double exactMs = medianMs([&]{ intersecter.intersectsDetailed(ray, query); });
+    const double anchorMs = medianMs([&]{ intersecter.nearestGeometryPoint(ray, query); });
+
+    // Guard against a degenerate control: if the anchor is too fast to time,
+    // the ratio is noise rather than signal.
+    REQUIRE(anchorMs > 0.0);
+
+    INFO("exact " << exactMs << " ms, anchor " << anchorMs << " ms, ratio "
+         << (exactMs / anchorMs) << "x over " << centerline.size()
+         << " vertices, " << stats.totalPrimitives << " segments, " << kPicksPerSample << " picks per sample");
+    CHECK(exactMs < anchorMs * 10.0);
 }
 
