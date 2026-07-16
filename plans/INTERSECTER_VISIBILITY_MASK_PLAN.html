@@ -377,7 +377,7 @@ const QVector&lt;quint8&gt;&amp; visibility() const { return m_visibility; }
 
 <h2 id="followups">Follow-ups <span class="tag p1">post-implementation review, July 2026</span></h2>
 <p>Surfaced by the pre-commit reviews of the implemented phases. <strong>1 and 2 landed together</strong> (they touch the same mask path); neither is blocked by what follows.</p>
-<p><strong>Read 6 first.</strong> It is the only open item that is a live defect rather than a structural improvement — removing a LAZ layer leaves the intersecter dereferencing a deleted render object on every pick — and it is also the smallest. 3, 4 and 5 are architecture and belong with issue #579: 5 is its natural first phase, 4 is how the authoring/built split gets expressed (not a precursor to it), and 3 is the belt-and-braces once 6 supplies the belt.</p>
+<p><strong>6 landed</strong> (the use-after-free: removing a LAZ layer left the intersecter dereferencing a deleted render object on every pick). Implementing it surfaced <strong>7</strong>, which is now the only open item here that is a live defect rather than a structural improvement — and, like 6 was, the smallest. 3, 4 and 5 are architecture and belong with issue #579: 5 is its natural first phase, 4 is how the authoring/built split gets expressed (not a precursor to it), and 3 is the belt-and-braces now that 6 supplies the belt.</p>
 
 <h3>1 · Masked <code>visibleBoundingBox()</code> walk runs at interaction rate, not reset-only <span class="tag done">implemented</span></h3>
 <p><code>isPickableEmpty()</code> delegates to <code>visibleBoundingBox()</code> and is called from <code>cwBaseTurnTableInteraction</code>'s pivot fallback (<span class="fileref">cwBaseTurnTableInteraction.cpp:136</span>) — reached on every pan mouse-down over background and on the zoom <code>m_perspectiveIntersection</code> re-evaluation. With a line plot partially hidden, each of those pays the O(vertices) <code>visibleNodeBox</code> walk (~1–3&nbsp;ms at 500&nbsp;k vertices) — the perf table's "reset only" row was wrong about the caller set. Fix per the table's own escape hatch: <strong>cache the visible box per Node, invalidate in <code>setRangeVisible</code></strong> (mask changes at user rate), or give <code>isPickableEmpty()</code> an any-visible early exit. Headers already document the corrected caller set.</p>
@@ -412,7 +412,16 @@ const QVector&lt;quint8&gt;&amp; visibility() const { return m_visibility; }
 <p>Second, the front-end/back-end split stops being "each renderer remembers the protocol", and the intersecter stops needing a raw back-pointer to a QObject it dereferences mid-traversal.</p>
 <p><span class="muted">Blast radius: <code>cwRenderObject</code>, the four renderers above, <code>cwScene</code>, and their tests. Out of scope for the follow-up commit — this is the natural Phase 1 of issue #579's "first-class scene visibility model", and doing it there would swamp it.</span></p>
 
-<h3>6 · Nothing purges the intersecter when a render object dies — a live use-after-free <span class="tag p0">bug, land first</span></h3>
+<h3>6 · Nothing purges the intersecter when a render object dies — a live use-after-free <span class="tag p0">bug, land first</span> <span class="tag done">implemented</span></h3>
+
+<p><strong>Landed (July 2026).</strong> Fix is the one prescribed below: <code>cwScene::removeItem()</code> now calls <code>GeometryItersecter-&gt;clear(item)</code>, giving <code>clear(parentObject)</code> its first production caller. Confirmed under ASAN before the fix — <code>heap-use-after-free READ of size 1</code> in <code>cwRenderObject::isVisible()</code> ← <code>isPickable()</code> ← <code>visibleBoundingBox()</code>, freed by <code>cwLazLayersSceneNode::dematerialize()</code> ← <code>removeLayer()</code> ← <code>cwLazLayerModel::removeAt()</code> — and green after. Regression tests in <span class="fileref">testcases/test_cwGeometryItersecterObjectLifetime.cpp</span> cover both the direct <code>setScene(nullptr); delete</code> sequence and the real LAZ remove path.</p>
+
+<p><strong>Two things the implementation pinned down that this section didn't anticipate:</strong></p>
+<ul>
+<li>The purge must sit <em>above</em> <code>removeItem()</code>'s <code>removedCount == 0</code> early return. Once <code>cwRhiScene::synchroize()</code> has drained <code>m_newRenderObjects</code> and <code>m_toUpdateRenderObjects</code> — i.e. every steady-state removal in the running app — <code>removedCount</code> is 0 for an item that is still registered with the picker, so a purge below the return would no-op in exactly the case that matters. No test can pin this: reaching that path needs a real sync, which needs a live RHI. Comment-guarded instead.</li>
+<li>That same early return appears to strand the RHI object on every steady-state removal — a separate live bug, split out as <a href="#followup7">follow-up 7</a>.</li>
+</ul>
+
 <p>Three facts that only bite when combined:</p>
 <ul>
   <li><code>cwScene::removeItem</code> (<span class="fileref">cwScene.cpp:84</span>) drops render-side references only — it never touches <code>geometryItersecter()</code>.</li>
@@ -429,6 +438,29 @@ delete renderObject;               // → default dtor: no purge</pre>
 <p><strong>Fix:</strong> the cheap version is <code>cwScene::removeItem</code> → <code>geometryItersecter()-&gt;clear(item)</code>, which is presumably what <code>clear(parentObject)</code> was written for and would give it its first caller. Better, fold it into follow-up 5's seam so registration and release are symmetric and a renderer cannot have one without the other. Note <code>cwScene::removeItem</code> already captures <code>renderObjectId()</code> "while <code>item</code> is still alive … without ever dereferencing a dangling pointer" for the RHI side (issue #491/#512) — the scene learned this lesson once already; the intersecter side was never done.</p>
 <p><strong>Test:</strong> materialize a cloud, dematerialize it, then pick — under the macOS Debug Address Sanitizer that should fail loudly today. Worth writing the failing test first to confirm the path before fixing.</p>
 <p><span class="muted">Blast radius: small — one call site plus a regression test. Land ahead of 3, 4 and 5: it is the only item here that is a live defect rather than a structural improvement, and each of those three is wide. Splitting it out of follow-up 3 is what lets it go now, since 3's re-key is mechanical but touches every registration call site.</span></p>
+
+<h3 id="followup7">7 · <code>removeItem()</code>'s early return strands the RHI object on every steady-state removal <span class="tag p0">suspected live bug</span></h3>
+
+<p>Surfaced while placing 6's purge, in the same function. <span class="fileref">cwScene::removeItem</span> (<span class="fileref">cwScene.cpp:93</span>) computes:</p>
+
+<pre><code>const qsizetype removedCount = m_newRenderObjects.removeAll(item)
+                               + (m_toUpdateRenderObjects.remove(item) ? 1 : 0);
+if (removedCount == 0) {
+    return;                       // ← skips the m_toDeleteRenderObjects append below
+}
+
+const cwRenderObjectId id = item-&gt;renderObjectId();
+if (!m_toDeleteRenderObjects.contains(id)) {
+    m_toDeleteRenderObjects.append(id);
+}</code></pre>
+
+<p><code>cwRhiScene::synchroize()</code> drains <em>both</em> queues in a single pass — <code>m_newRenderObjects.clear()</code> (<span class="fileref">cwRhiScene.cpp:56</span>) after re-inserting each into <code>m_toUpdateRenderObjects</code>, then <code>m_toUpdateRenderObjects.clear()</code> (<span class="fileref">cwRhiScene.cpp:76</span>) at the end. So for any object that has been synced and not touched since — <strong>every steady-state removal in a running app</strong> — both removals miss, <code>removedCount</code> is 0, and the function returns before queueing the id. <code>m_frame.destroyRenderObject(id)</code> (<span class="fileref">cwRhiScene.cpp:62</span>) is then never called for it.</p>
+
+<p>If that reading holds, a removed LAZ layer's <code>cwRHIPointCloud</code> — and its GPU vertex buffer, potentially gigabytes — is never destroyed, and may keep drawing. The bug is invisible to the existing tests for the same reason 6's placement is untestable: reaching the path needs a real sync, so every headless test leaves the item in a queue and takes the non-early-return path.</p>
+
+<p><strong>Why it looks unintended rather than deliberate:</strong> the commit that introduced the return (<code>21c5d8df</code>, issue #491) describes it as only <em>"Skip the <code>update()</code> signal if nothing was removed"</em> — the intent was to gate <code>update()</code>, but the return placement gates the delete-queue append too. The obvious shape is to gate only the <code>update()</code> call and always queue the id.</p>
+
+<p><strong>Caveats — verify before fixing.</strong> This is read off the code, <em>not observed at runtime</em>, and a removed layer visibly disappearing today would be evidence against it (the visible flag may be doing that work). Check <code>destroyRenderObject</code>'s behaviour for an unknown id, and whether anything else reaps <code>m_rhiObjectLookup</code>, before concluding. Not filed as an issue yet. Wants a runtime check (does removing a rendered LAZ layer free its GPU memory?) more than it wants a patch.</p>
 
 <p class="muted" style="margin-top:40px;font-size:13px;">Related render-side plans (Phase 0 background): <span class="fileref">CENTERLINE_KEYWORD_VISIBILITY_PLAN.html</span>, <span class="fileref">CENTERLINE_PER_SHOT_VISIBILITY_PLAN.html</span>. This plan is their intersecter-side counterpart.</p>
 

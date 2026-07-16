@@ -677,7 +677,13 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
     qCDebug(lcPick).nospace()
         << "clear(parent=" << parentObject << ") — erased " << erased
         << " Nodes; remaining=" << Nodes.size();
-    scheduleTopLevelRebuild();
+    // Every render object leaving the scene reaches here (cwScene::removeItem),
+    // most having registered no pick geometry at all — and a rebuild that would
+    // find nothing changed still cancels and relaunches the in-flight one
+    // through the restarter. Same guard removeObject() applies.
+    if (erased > 0) {
+        scheduleTopLevelRebuild();
+    }
 }
 
 /**

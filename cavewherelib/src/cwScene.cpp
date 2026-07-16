@@ -87,6 +87,15 @@ void cwScene::removeItem(cwRenderObject *item)
         return;
     }
 
+    // Drop the picker's entries before the caller deletes `item`: the
+    // intersecter keys geometry by raw cwRenderObject* and dereferences it on
+    // every pick, so a Node outliving its render object is a use-after-free.
+    // Here rather than ~cwRenderObject(), which is too late — callers arrive
+    // via setScene(nullptr), so geometryItersecter() is already null by then.
+    // Above the early return: a synced item has empty queues, making
+    // removedCount 0 for exactly the steady-state removals that need purging.
+    GeometryItersecter->clear(item);
+
     // Drop live references before the caller deletes `item` (issue #491);
     // synchroize() dereferences entries in m_newRenderObjects and
     // m_toUpdateRenderObjects.
