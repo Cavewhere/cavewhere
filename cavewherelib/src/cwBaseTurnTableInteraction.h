@@ -66,6 +66,14 @@ public:
     // value without duplicating the literal.
     static constexpr float FramingPad = 1.08f;
 
+    // Screen-space radius (physical millimeters) of the pivot's exact pick. A
+    // tolerance is what lets the otherwise infinitely-thin centerline be picked,
+    // so the view can orbit the line plot when the solid geometry is hidden.
+    // Millimeters (not pixels) so the grab feels the same size on every display.
+    // Exposed so tests can derive the same world-space radius through
+    // cwCamera::pickQuery.
+    static constexpr double PivotPickRadiusMillimeters = 4.0;
+
     // Screen-space reach (physical millimeters) of the rotation pivot's
     // nearest-geometry anchor (issue #562): when a rotation click misses the
     // exact pick, the pivot snaps to the closest geometry point within this
@@ -276,11 +284,12 @@ private:
     //! Only a triangle hit is strictly on the cursor ray. A line hit returns
     //! the closest point on the segment and a point hit returns the vertex
     //! center, so an exact hit can sit off-ray by up to the pick radius
-    //! (~kPivotPickRadiusMillimeters of screen). Callers doing delta math
-    //! against the result (pan, zoom) inherit that as a small mouse-down step.
-    //! The anchor widens that error to PivotAnchorRadiusMillimeters, which
-    //! orbits fine but would visibly jerk a pan or drift a zoom — the other
-    //! reason only rotation opts in.
+    //! (~PivotPickRadiusMillimeters of screen). The on-ray callers (pan, zoom)
+    //! do delta math against the result, so this path projects the hit back
+    //! onto the cursor ray before returning — an off-ray anchor would lurch the
+    //! first pan tick and drift a zoom. Rotation keeps the raw point: it opts
+    //! into the wider PivotAnchorRadiusMillimeters anchor too, and an off-ray
+    //! pivot orbits fine.
     std::optional<QVector3D> unProject(QPoint point,
                                        bool anchorToNearestGeometry = false) const;
 

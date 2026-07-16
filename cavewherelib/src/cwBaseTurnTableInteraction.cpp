@@ -25,12 +25,6 @@
 Q_LOGGING_CATEGORY(lcInteract, "cw.interaction", QtWarningMsg)
 
 namespace {
-    // Screen-space radius, in millimeters, for snapping the pivot to geometry. A
-    // tolerance is what lets the otherwise infinitely-thin centerline be picked,
-    // so the view can orbit the line plot when the solid geometry is hidden.
-    // Millimeters (not pixels) so the grab feels the same size on every display.
-    constexpr double kPivotPickRadiusMillimeters = 4.0;
-
     // Everything a user authors or surveys: scrap carpets, LiDAR notes (which
     // render as triangles through the same path as scraps) and the centerline.
     // Deliberately excludes Kind::Points — the LiDAR cloud — which the rotation
@@ -126,7 +120,7 @@ std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point,
     const cwGeometryItersecter* intersecter = scene()->geometryItersecter();
 
     const cwPickQuery pivotQuery =
-            Camera->pickQuery(pixelsForMillimeters(kPivotPickRadiusMillimeters));
+            Camera->pickQuery(pixelsForMillimeters(PivotPickRadiusMillimeters));
 
     //The grid plane is a last-resort pivot, but only when there's nothing to
     //anchor against (an empty/unloaded project). Once survey geometry exists, an
@@ -163,7 +157,15 @@ std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point,
     if(!anchorToNearestGeometry) {
         const cwRayHit hit = intersecter->intersectsDetailed(ray, pivotQuery);
         if(hit.hit()) {
-            const QVector3D world = hit.pointWorld();
+            // Project the hit onto the cursor ray. A line hit returns the
+            // closest point on the segment and a point hit returns the vertex
+            // center, so an exact hit can sit off the ray by up to the pick
+            // radius. Pan and zoom do delta math against this point, so an
+            // off-ray anchor would lurch the first pan tick (and drift zoom) by
+            // the miss distance. Projecting keeps the geometry's depth while
+            // placing the anchor exactly under the cursor; a triangle hit is
+            // already on-ray, so this is a no-op for it.
+            const QVector3D world = ray.point(ray.projectedDistance(hit.pointWorld()));
             qCDebug(lcInteract).nospace()
                 << "unProject(" << point << "): geometry world=" << world
                 << " rayOrigin=" << ray.origin();
@@ -1258,7 +1260,7 @@ cwRayHit cwBaseTurnTableInteraction::pick(QPointF qtViewPoint) const
     //Create a ray from the back projection front and back plane
     const auto ray = Camera->frustrumRay(mappedPos);
     return scene()->geometryItersecter()->intersectsDetailed(
-                ray, Camera->pickQuery(pixelsForMillimeters(kPivotPickRadiusMillimeters)));
+                ray, Camera->pickQuery(pixelsForMillimeters(PivotPickRadiusMillimeters)));
 }
 
 void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)

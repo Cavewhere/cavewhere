@@ -251,6 +251,45 @@ QVector3D unprojectClickOntoGrid(const cwCamera& cam, QPoint qtViewportPoint)
     return ray.point(t);
 }
 
+// The cursor ray for a Qt-viewport click, built the same way cwCamera::frustrumRay
+// does (front/back unproject), so a test can measure how far a pick sits off it.
+QRay3D clickRay(const cwCamera& cam, QPoint qtViewportPoint)
+{
+    QPoint mapped = cam.mapToGLViewport(qtViewportPoint);
+    QVector3D front = cam.unProject(mapped, 0.0);
+    QVector3D back = cam.unProject(mapped, 1.0);
+    return QRay3D(front, (back - front).normalized());
+}
+
+// Pan-lurch regression body, run for whichever projection `f` is set to. Grabs
+// the centerline half a pick-radius off to the side so the click still lands an
+// exact hit, asserts the grab really is an OFF-ray hit (the path that used to
+// lurch), then checks that startPanning leaves the view matrix untouched.
+void checkNoPanLurchOnOffRayLineGrab(Fixture& f)
+{
+    // Aim half a pick-radius to the side of the line's screen position: close
+    // enough to score an exact hit, far enough that the closest point on the
+    // segment is off the cursor ray.
+    const double pickRadiusPixels = f.interaction.pixelsForMillimeters(
+            cwBaseTurnTableInteraction::PivotPickRadiusMillimeters);
+    const QPointF onLine = f.camera.project(QVector3D(5.0f, 0.0f, kCenterlineZ));
+    const QPoint click = (onLine + QPointF(0.0, pickRadiusPixels * 0.5)).toPoint();
+
+    // Precondition: an exact hit fired, on the line, and genuinely off the ray.
+    // Without this the test would be vacuous — exactly the gap the old near-miss
+    // version had (a MISS anchors on-ray by construction, so it never lurched).
+    const cwRayHit hit = f.interaction.pick(click);
+    REQUIRE(hit.hit());
+    REQUIRE(hit.pointWorld().z() == Approx(kCenterlineZ).margin(kPixelTolerance));
+    const QRay3D ray = clickRay(f.camera, click);
+    const QVector3D rayFoot = ray.point(ray.projectedDistance(hit.pointWorld()));
+    REQUIRE((hit.pointWorld() - rayFoot).length() > kMatrixEps);
+
+    const QMatrix4x4 before = f.camera.viewMatrix();
+    f.interaction.startPanning(click);
+    CHECK(matricesNearlyEqual(f.camera.viewMatrix(), before));
+}
+
 } // namespace
 
 TEST_CASE("cwBaseTurnTableInteraction default state after setCamera",
@@ -1075,38 +1114,28 @@ TEST_CASE("cwBaseTurnTableInteraction startRotating on a long shot's far end piv
     CHECK(f.interaction.center().z() == Approx(kCenterlineZ).margin(kPixelTolerance));
 }
 
-TEST_CASE("cwBaseTurnTableInteraction startPanning on a near-miss does not jump the view",
+TEST_CASE("cwBaseTurnTableInteraction startPanning on an off-ray line grab does not lurch the view",
           "[cwBaseTurnTableInteraction]")
 {
-    // #562 regression: the nearest-geometry pivot anchor is OFF the cursor ray,
-    // so it must not become the pan anchor — startPanning would build the pan
-    // plane through an off-ray point and the initial pan tick would lurch the
-    // view. Pan uses the on-ray unProject (exact hit / gated grid / nullopt);
-    // on a near-miss with geometry present the anchor resolves to the cursor
-    // ray at the current center depth, so the view does not move when panning
-    // begins.
-    //
-    // The cloud spans the off-center click's ray but has no point directly under
-    // it, so the click misses geometry while the rotation-only anchor path
-    // would have produced an off-ray anchor. startPanning runs the first pan
-    // tick synchronously (translateLastPosition), so any jump shows up here.
-    const float extent = 105.0f;
-
+    // Pan-lurch regression. An exact pick on a line returns the closest point on
+    // the segment, and a point pick returns the vertex center — both sit OFF the
+    // cursor ray by up to the pick radius. If that point became the pan anchor,
+    // startPanning would build PanPlane through it and the first (synchronous)
+    // pan tick would translate by the miss distance. unProject projects the
+    // on-ray callers' hit back onto the cursor ray, so the anchor lands under the
+    // cursor and the view holds still. A triangle hit is already on-ray, so only
+    // lines and points could ever trip this.
     SECTION("ortho") {
         Fixture f;
-        addSmallGeometry(f.scene, extent);
-        const QMatrix4x4 before = f.camera.viewMatrix();
-        f.interaction.startPanning(kOffCenterClick);
-        CHECK(matricesNearlyEqual(f.camera.viewMatrix(), before));
+        addCenterline(f.scene);
+        checkNoPanLurchOnOffRayLineGrab(f);
     }
 
     SECTION("perspective") {
         Fixture f;
         f.camera.setProjection(f.camera.perspectiveProjectionDefault());
-        addSmallGeometry(f.scene, extent);
-        const QMatrix4x4 before = f.camera.viewMatrix();
-        f.interaction.startPanning(kOffCenterClick);
-        CHECK(matricesNearlyEqual(f.camera.viewMatrix(), before));
+        addCenterline(f.scene);
+        checkNoPanLurchOnOffRayLineGrab(f);
     }
 }
 

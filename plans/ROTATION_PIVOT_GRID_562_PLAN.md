@@ -401,18 +401,24 @@ repeated verbatim at the target, so grep that if the number has drifted.
   strategy, shipping a correctness fix *and* a hot-path perf change inside a refactor — the exact
   unbisectable outcome this plan warns against. Fixing them first made the traversals converge, so the
   refactor had only genuine policy left to abstract.
-- [ ] **Pan lurch on a line or point grab** — rung 1 returns an off-ray point, `startPanning` uses it
-  as `m_panAnchor`, and the first tick translates by the miss distance (~15px at 4mm). Pre-existing
-  and byte-identical on `@{upstream}`. A triangle hit gives exactly 0, so 0 is the intent. Fix =
-  project the rung-1 hit onto the ray for on-ray callers. *Size: small, but a behavior change.*
-  ▸ line 636
+- [x] **Pan lurch on a line or point grab** — rung 1 returned an off-ray point, `startPanning` used it
+  as `m_panAnchor`, and the first tick translated by the miss distance (~15px at 4mm). **Done:**
+  `unProject`'s on-ray branch (`!anchorToNearestGeometry`) now projects the exact hit onto the cursor
+  ray via `ray.point(ray.projectedDistance(hit.pointWorld()))` before returning — a no-op for a
+  triangle hit, snaps a line/point hit under the cursor. Rotation keeps the raw off-ray point (orbits
+  fine). Also lifted `kPivotPickRadiusMillimeters` (4.0) out of the `.cpp` anon namespace to the header
+  as the public `PivotPickRadiusMillimeters`, symmetric with `PivotAnchorRadiusMillimeters`, so the
+  regression test derives the world radius the same way.
 
 **Test integrity**
 
-- [ ] **`startPanning on a near-miss…` can't catch its own invariant** — its click misses, so the
-  anchor is on-ray by construction and `translateAmount ≈ 0` trivially. The path that *can* violate it
-  (a rung-1 hit on a point or line) is never exercised. A test that did would fail today — so this is
-  really the pan-lurch item's regression test. *Size: small, blocked on the decision above.* ▸ line 644
+- [x] **`startPanning on a near-miss…` can't catch its own invariant** — its click missed, so the
+  anchor was on-ray by construction and `translateAmount ≈ 0` trivially. **Done:** rewritten as
+  `startPanning on an off-ray line grab does not lurch the view` — grabs the centerline half a
+  pick-radius off to the side (an exact line hit whose closest-point-on-segment is off the ray),
+  asserts the precondition (exact hit fired, on the line, genuinely off-ray) so it can't go vacuous,
+  then checks the view matrix is unchanged. Runs ortho + perspective. Sabotage-verified: reverting the
+  projection fix fails both sections on the lurch check while all 6 precondition assertions still pass.
 - [ ] **Coverage gaps in the anchor tests** — each ships a green suite while the behaviour breaks.
   ▸ line 516
 - [ ] **Hoist duplicated test helpers to `testlib/`** — `makeLineObject` is byte-identical across two
