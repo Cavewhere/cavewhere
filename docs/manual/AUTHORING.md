@@ -152,12 +152,17 @@ The pieces:
   revert the rest with:
 
   ```bash
-  git checkout -- docs/manual/images/*.png docs/manual/images/*.gif
+  git diff --name-only -- docs/manual/images ':!docs/manual/images/illustrations' \
+    | xargs -r git checkout --
   ```
 
-  **Scope that revert to the globs.** `git checkout -- docs/manual/images/` also
-  reverts `images/illustrations/` — the hand-authored figures and their README,
-  which the generator never writes — silently undoing work you just did.
+  Both halves of that are load-bearing. **The exclude**: `images/illustrations/`
+  sits under `images/`, so *any* revert scoped to `images/` also throws away the
+  hand-authored figures and their README, which the generator never writes —
+  silently undoing work you just did. **Listing what differs** rather than globbing
+  `images/*.png`: the moment you add a shot, the shell expands that glob onto your
+  new *untracked* file and git refuses the whole command (`did not match any
+  file(s) known to git`).
 - **A full run is not reproducible, so don't judge a shot by one.** Two known
   causes, both pre-existing: when `test_lidarNoteShots` hits its intermittent
   failure it aborts mid-test and corrupts the shots *after* it alphabetically,
@@ -197,6 +202,49 @@ The pieces:
   already visible — so the cell lands wherever the last shot left the editor
   scrolled, and the shot frames differently alone than in a full run. Park the
   row you want, then focus.
+- **Some shots cannot be byte-reproducible, and that's allowed — say so in the
+  test.** `project-git-history.png` shows real commit hashes and clock times, so
+  every regeneration differs from the last no matter how much state you pin. Don't
+  treat its diff as a failure and don't re-render it without a reason. This is a
+  narrow exception, not a licence: it applies only where the *content itself* is
+  inherently unique, never to a shot that merely inherited state it should have set.
+- **A shot that swaps the project out or parks on an unusual page should call
+  `restoreDemoProject()` last.** Hygiene, in the same spirit as setting your own
+  state: hand the next shot the demo project on a neutral page rather than whatever
+  you happened to leave behind. `test_saveAsDialog`, `test_gitHistory` and
+  `test_recentProjects` all do.
+- **Reach for the live page via `findInTripPage()`, never
+  `ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->…")`.** A
+  page you navigate away from is not destroyed at once, so the window can hold two
+  items called `tripPage`. `findObjectByChain` collects candidates in a `QSet`, so
+  with both in the tree it returns an *arbitrary* one — pointer-hash order, a coin
+  flip per run. Get the stale one and everything inside it is `visible: false`, so
+  every `findVisibleByName` under it returns null and the `survey*`/`trip*` shots
+  fail as a group. This is the standing explanation for that group-failure; prefer
+  it over any new theory until you have disproved it.
+- **Never diagnose a flake from a single run — that failure mode is a ~50% coin
+  flip.** The identical commit gives 26/5 then 31/0 back to back, so one green run
+  proves nothing and one red run indicts nothing. Loop the suite (8+ runs) and
+  compare *rates*, before and after. Every wrong conclusion this harness has
+  produced came from trusting a single run: a bisect "proving" an innocent line
+  guilty, and a CPU-contention theory that survived only until the suite was run on
+  an idle box and failed 4/8 anyway.
+- **Don't read a slow run as the cause of a failure — it's usually the effect.** A
+  failing `tryVerify` burns its full timeout, so 7 shots × a 10s timeout *is* the
+  extra 70s. Read the timing as a symptom of the failures, not an explanation for
+  them.
+- **A shot that can show an error state must assert it isn't showing one.** A
+  dialog whose content depends on the filesystem will happily render its own red
+  validation error, and a grab of that is still a valid PNG that passes a
+  not-blank check. `test_saveAsDialog` shows the Save As dialog at its default
+  Location — the Desktop — so it depends on the Desktop of whoever regenerates it,
+  and asserts that the conflict label is hidden before grabbing. Anything a shot
+  assumes about the machine belongs in a `verify()` with a comment saying what to
+  do when it fails, not in a reviewer's memory.
+- **A `QC.Dialog` is a Popup, so `findByName` can't reach it** — popups aren't in
+  the window's child tree. `MainWindowTest.qml` exposes the shared one as
+  `rootId.saveAsDialog`; add an alias there rather than searching for it. Crop on
+  the dialog's `background`, which spans the title, content and buttons.
 - **Grabbing an open `QC.Menu` needs `popupType: Popup.Item`.** A menu's type is
   the style's choice and Fusion sets none, so it defaults to `Popup.Window` — a
   separate top-level window that `grabWindow(mainWindow)` cannot see. Override it

@@ -64,6 +64,23 @@ MainWindowTest {
         // starts slicing the Data heading above them in half.
         readonly property int excludeMenuCropMargin: 80
 
+        // The identity the Git History shot commits under. The demo trip's surveyor,
+        // so the author column agrees with survey-team.png.
+        readonly property string gitHistoryShotAuthor: "Philip Schuchardt"
+        readonly property string gitHistoryShotEmail: "philip@cavewhere.com"
+
+        // The Save As dialog is grabbed on its own background, which already spans
+        // the whole dialog (title, content and buttons), so this only needs to keep
+        // the frame off the edge of the crop.
+        readonly property int saveAsCropMargin: 12
+
+        // Stands in for the random placeholder name a new project gets, so the Save
+        // As shot reads the same every run. The demo cave's name, matching the rest
+        // of the manual — and it must be a name that does NOT already exist in the
+        // dialog's default Location (the Desktop), or the shot captures the red
+        // "a folder already exists" error instead. test_saveAsDialog asserts that.
+        readonly property string saveAsShotProjectName: "Phake Cave 3000"
+
         // Load the demo cave, navigate to the 3D view, and wait for a live QRhi.
         // Returns the region viewer, or null after calling skip() when the
         // platform has no QRhi (headless `offscreen`) — callers must return on null.
@@ -590,9 +607,25 @@ MainWindowTest {
         // top it was just sent to — with the trip's name and banner scrolled off.
         // Re-park until it stays put; once the header stops growing, one park
         // sticks and the loop exits on the check rather than the retry.
+        // Resolve something inside the *live* trip page. A page the tests have
+        // navigated away from is not destroyed at once, so the window can briefly
+        // hold two items called "tripPage" — the outgoing one and the current one.
+        // findObjectByChain gathers its matches in a QSet, so with both in the tree
+        // it returns an arbitrary one; take the stale one and everything inside it
+        // is invisible, and every findVisibleByName below it returns null. Searching
+        // from currentPageItem — by definition the live page — puts the stale one out
+        // of scope. The chain stays absolute: findObjectByChain matches it against
+        // each candidate's path from the root, so it must start at rootId no matter
+        // where the search begins.
+        function findInTripPage(chain) {
+            let tripPage = RootData.pageView.currentPageItem;
+            verify(tripPage && tripPage.objectName === "tripPage",
+                   "the trip page is the current page");
+            return ObjectFinder.findObjectByChain(tripPage, chain);
+        }
+
         function parkSurveyEditorAtTop() {
-            let view = ObjectFinder.findObjectByChain(rootId.mainWindow,
-                "rootId->tripPage->surveyEditor->view");
+            let view = findInTripPage("rootId->tripPage->surveyEditor->view");
             verify(view, "found the survey editor's list view");
 
             let parked = false;
@@ -862,6 +895,192 @@ MainWindowTest {
             verify(OffscreenRenderTester.nonBlackFraction(path) > 0.5,
                    "rotate screenshot is not blank");
             highlightOverlayId.target = null;
+        }
+
+        // Put the demo project and a neutral page back, for the shots that run after.
+        // Hygiene, not a fix for anything: a shot that swaps the project out
+        // (test_saveAsDialog, test_gitHistory) or parks on a page outside the
+        // View/Data flow (test_recentProjects) should hand the next shot the same
+        // app state it inherited, rather than making it depend on run order.
+        function restoreDemoProject() {
+            TestHelper.loadProjectFromFile(RootData.project,
+                TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.pageSelectionModel.currentPageAddress = "View";
+            RootData.futureManagerModel.waitForFinished();
+        }
+
+        // Save the project and wait for the commit to land. Save is asynchronous and
+        // clears `modified` only once the commit is written, so that flag is the
+        // signal — waitForFinished alone returns before the queued commit is done.
+        function saveAndCommit() {
+            verify(RootData.project.canSaveDirectly,
+                   "the project can be saved without a Save As dialog");
+            verify(RootData.project.save(), "save() was accepted");
+            RootData.futureManagerModel.waitForFinished();
+            tryVerify(() => !RootData.project.modified, 10000,
+                      "the save finished and committed");
+        }
+
+        // Add a trip to `cave` at `index` and name it. cwCave exposes no tripCount to
+        // QML, so the index is asserted against the pinned demo fixture instead.
+        function addTripNamed(cave, index, name) {
+            cave.addTrip();
+            let trip = cave.trip(index);
+            verify(trip, "the new trip landed at index " + index);
+            trip.name = name;
+        }
+
+        // The Git History page — the versions that Save creates. Backs "What Save
+        // actually does" in docs/manual/projects-and-files/save-a-project.md.
+        //
+        // NOT byte-reproducible, and cannot be: the page shows real commit hashes
+        // and real clock times, so every regeneration differs from the last. Don't
+        // treat a diff here as a failure, and don't re-render it without a reason.
+        function test_gitHistory() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            // A commit needs an identity and the harness starts from cleared
+            // settings, so without this every save fails with "Git account is not
+            // configured". The demo trip's own surveyor, matching survey-team.png.
+            RootData.account.name = gitHistoryShotAuthor;
+            RootData.account.email = gitHistoryShotEmail;
+
+            // A one-row history illustrates nothing about versions accumulating, and
+            // the freshly-converted demo has only its first save. So do a little work
+            // between saves, the way an evening of data entry would. The commits all
+            // share a second, which doesn't show: the list column is date-only, and
+            // the graph is ordered by parentage rather than clock.
+            saveAndCommit();
+
+            let cave = RootData.region.cave(0);
+            verify(cave, "the demo cave is loaded");
+            compare(cave.name, "Phake Cave 3000", "the demo cave is the expected one");
+
+            addTripNamed(cave, 1, "Release 0.09");
+            saveAndCommit();
+            addTripNamed(cave, 2, "Release 0.10");
+            saveAndCommit();
+
+            RootData.pageSelectionModel.gotoPageByName(null, "History");
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "gitHistoryPage",
+                      5000, "the Git History page is current");
+            RootData.futureManagerModel.waitForFinished();
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "project-git-history");
+            verify(path.length > 0, "grabToFile wrote the git-history screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "git-history screenshot is not blank");
+
+            restoreDemoProject();
+        }
+
+        // The Source page — the recent projects list, and the breadcrumb that is the
+        // only way to reach it. Backs "Reopen a recent project" in
+        // docs/manual/projects-and-files/open-a-project.md.
+        //
+        // The list is inherited state twice over: it is restored from QSettings, and
+        // every save auto-adds its project (so test_gitHistory, which runs earlier,
+        // puts a temp path in it). Clear it and put back exactly what the shot should
+        // show.
+        function test_recentProjects() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            RootData.recentProjectModel.clear();
+
+            // testcasesDatasetPath already copies the fixture into the shared temp
+            // root, so this is a real file that exists — which is all
+            // addRepositoryFromProjectFile needs. It only records the path (unlike
+            // addRepository, it never writes a git repo there), so the fixture is
+            // never at risk. No need to wrap it in copyToTempDirUrl and copy a copy.
+            let result = RootData.recentProjectModel.addRepositoryFromProjectFile(
+                TestHelper.toLocalUrl(
+                    TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw")));
+            verify(!result.hasError,
+                   "the demo project was added to the recent list: " + result.errorMessage);
+
+            RootData.pageSelectionModel.currentPageAddress = "Source";
+            tryVerify(() => RootData.pageView.currentPageItem !== null, 5000,
+                      "the Source page is current");
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "project-recent-projects");
+            verify(path.length > 0, "grabToFile wrote the recent-projects screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "recent-projects screenshot is not blank");
+
+            restoreDemoProject();
+        }
+
+        // The Save As dialog as it looks on a project's FIRST save. Backs "Save it
+        // for the first time" in docs/manual/projects-and-files/save-a-project.md.
+        //
+        // Unlike every other shot, this one makes its own project instead of using
+        // the demo cave: the dialog reads the project's name, file type and last
+        // directory as it opens, and only a never-saved project produces the
+        // first-save layout — the Project Name field is hidden once a project has
+        // been saved, and the format only defaults to Directory while the file type
+        // is still a git directory. Like test_gitHistory it must call
+        // restoreDemoProject() before it returns — see that function.
+        function test_saveAsDialog() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            RootData.newProject();
+            RootData.futureManagerModel.waitForFinished();
+            tryVerify(() => RootData.project.isTemporaryProject, 5000,
+                      "the new project is temporary (the first-save layout)");
+
+            // newProject() names the region with a random placeholder (Misty
+            // Cavern, Thunder Ridge, ...). Pin it, or the shot reads differently
+            // every run — the name drives the Project Name field AND the derived
+            // path below it.
+            RootData.region.name = saveAsShotProjectName;
+
+            let dialog = rootId.saveAsDialog;
+            verify(dialog, "found the Save As dialog");
+
+            // Same reason as the caret menu in test_excludeDistance: draw the popup
+            // into the window overlay so grabWindow() can see it. Set here, never in
+            // the app's QML.
+            dialog.popupType = QC.Popup.Item;
+            dialog.open();
+            tryVerify(() => dialog.opened, 5000, "the Save As dialog is open");
+
+            // Location is left at the app's own default so the shot shows what a
+            // user sees: RootData.lastDirectory, which is the Desktop in a fresh
+            // process (the test main clears settings, and no manual shot saves).
+            //
+            // That makes the shot depend on the Desktop of whoever regenerates it:
+            // if it already holds a folder named saveAsShotProjectName the dialog
+            // shows a red "a folder already exists" error and disables Save, and if
+            // the Desktop itself is missing it shows "destination folder does not
+            // exist". Both are caught here rather than shipped as a screenshot of an
+            // error — if this fails, move the offending folder or rename the shot's
+            // project.
+            verify(dialog.destinationFolder.length > 0,
+                   "the Save As dialog defaulted to a Location");
+            let conflict = findByName(dialog.contentItem, "saveAsConflictLabel");
+            verify(conflict, "found the Save As validation label");
+            verify(!conflict.visible,
+                   "the Save As dialog has no conflict or error to show (see comment)");
+
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(dialog.background, "project-save-as",
+                                                    saveAsCropMargin);
+            verify(path.length > 0, "grabItemToFile wrote the save-as screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "save-as screenshot is not blank");
+
+            // Leave no modal behind for the shots that run after this one.
+            dialog.close();
+            tryVerify(() => !dialog.visible, 5000, "the Save As dialog closed");
+
+            restoreDemoProject();
         }
 
         // Every LiDAR shot, from ONE import. Backs docs/manual/notes/lidar-notes.md.
@@ -1171,10 +1390,15 @@ MainWindowTest {
             let fileLoader = findByName(rootId.mainWindow, "fileMenuButtonLoader");
             if (fileLoader) { fileLoader.active = true; }
 
-            let view = ObjectFinder.findObjectByChain(rootId.mainWindow,
-                "rootId->tripPage->surveyEditor->view");
+            let view = findInTripPage("rootId->tripPage->surveyEditor->view");
             verify(view, "found the survey editor's list view");
             if (!requireRhi(view)) { return null; }
+
+            // The editor fills in asynchronously after the trip page becomes
+            // current, so settle()'s fixed 150ms is a guess about when the model
+            // has its rows. Wait for the rows themselves instead.
+            tryVerify(() => view.count > 0, 10000,
+                      "the survey editor's rows appeared");
 
             // The editor's header (trip, calibration, team) lays out over several
             // frames; grabbing before it settles crops a half-built rectangle.
@@ -1211,8 +1435,7 @@ MainWindowTest {
             // name and calibration rather than a mid-scroll position.
             view.positionViewAtBeginning();
 
-            let editor = ObjectFinder.findObjectByChain(rootId.mainWindow,
-                "rootId->tripPage->surveyEditor");
+            let editor = findInTripPage("rootId->tripPage->surveyEditor");
             verify(editor, "found the survey editor");
 
             highlightOverlayId.target = editor;

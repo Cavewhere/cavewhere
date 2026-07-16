@@ -47,10 +47,18 @@ in `../../AUTHORING.md`. The `projection-*` files were fit to that box from the
 blog's 1024px-tall originals.
 
 **Reverting generated screenshots will not touch this directory — but only if you
-scope the command.** `git checkout -- docs/manual/images/` reverts *this README
-and any illustration edits* along with the re-rendered PNGs, silently undoing
-hand-authored work. Revert only what the generator writes:
+exclude it explicitly.** This directory lives *under* `docs/manual/images/`, so
+anything scoped to that path reverts *this README and any illustration edits*
+along with the re-rendered PNGs, silently undoing hand-authored work. That trap
+catches `git checkout -- docs/manual/images/` and equally
+`git diff --name-only -- docs/manual/images/ | xargs git checkout --`. Exclude
+this directory by name:
 
 ```bash
-git checkout -- docs/manual/images/*.png docs/manual/images/*.gif
+git diff --name-only -- docs/manual/images ':!docs/manual/images/illustrations' \
+  | xargs -r git checkout --
 ```
+
+(A `*.png` glob dodges the README by luck, but breaks as soon as a new, untracked
+screenshot exists — the shell hands git a path it doesn't know and it refuses the
+whole command.)

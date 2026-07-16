@@ -20,6 +20,14 @@ the problems CaveWhere solves — then keep the
 - [Why CaveWhere](concepts/why-cavewhere.md) — the problems CaveWhere solves.
 - [Glossary](concepts/glossary.md) — survey and CaveWhere terms.
 
+### Projects & Files
+- [Save a Project](projects-and-files/save-a-project.md) — what Save really does,
+  the temporary folder a new project starts in, and the prompt on the way out.
+- [Choose a Project Format](projects-and-files/project-formats.md) — the
+  `.cwproj` directory, the bundled `.cw`, and what happens to a legacy `.cw`.
+- [Open a Project](projects-and-files/open-a-project.md) — new, open, and the
+  recent projects list.
+
 ### 3D View
 - [The 3D View](view-3d/the-3d-view.md) — navigate the model, aim the camera,
   and filter with layers.
@@ -66,8 +74,6 @@ chapter is task-oriented and problem-first (see
   Shot/Note → Scrap), coordinate systems.
 - **Getting Started** — download, first-run identity, a tour of the UI,
   responsive layout.
-- **Projects & Files** — new/open/save; the `.cw` legacy, bundled `.cw`, and
-  `.cwproj` formats; recent projects; save on exit.
 - **Notes (more)** — note keywords build on the [Notes](notes/add-a-note.md)
   pages above.
 - **3D View (more)** — field of view, labels, leads, and rendering settings

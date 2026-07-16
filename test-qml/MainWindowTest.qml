@@ -9,6 +9,9 @@ Rectangle {
 
     property alias mainWindow: mainWindow
     property alias recorder: recorderId
+    // The Save As dialog is a Popup, so it is not in mainWindow's child tree and
+    // an objectName search can't reach it. Expose it for tests that drive it.
+    property alias saveAsDialog: testSaveAsDialogId
 
     color: Theme.background
 

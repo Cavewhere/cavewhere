@@ -48,11 +48,14 @@ def find_pages(root):
     return sorted(pages)
 
 
-def iter_prose_lines(path):
-    """Yield (lineno, line) outside fenced code blocks, with inline code stripped.
+def iter_prose_lines(path, strip_code=True):
+    """Yield (lineno, line) outside fenced code blocks.
 
     Fences and inline code hold example markdown (AUTHORING.md documents the
-    link syntax by showing it), which must not be checked as real links.
+    link syntax by showing it), which must not be checked as real links, so
+    inline code is stripped by default. Anchors are the exception: a heading's
+    slug is built from its *rendered* text, so `` ## Directory (`.cwproj`) ``
+    anchors at `directory-cwproj` and must keep the code span's text.
     """
     in_fence = False
     with open(path, encoding="utf-8") as handle:
@@ -62,7 +65,7 @@ def iter_prose_lines(path):
                 continue
             if in_fence:
                 continue
-            yield lineno, INLINE_CODE_RE.sub("", line)
+            yield lineno, INLINE_CODE_RE.sub("", line) if strip_code else line
 
 
 def anchors_of(path, _cache={}):
@@ -70,7 +73,7 @@ def anchors_of(path, _cache={}):
     if path in _cache:
         return _cache[path]
     anchors = set()
-    for _, line in iter_prose_lines(path):
+    for _, line in iter_prose_lines(path, strip_code=False):
         match = HEADING_RE.match(line)
         if match:
             slug = match.group(1).strip().lower()

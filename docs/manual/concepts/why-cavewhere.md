@@ -119,14 +119,19 @@ on multiple devices and merge on the surface.
 ## Not losing the data: the project format
 
 **The problem:** Cave survey data takes enormous time and money to collect —
-often years of trips into remote caves. Losing it is not an option.
+often years of trips into remote caves. Losing it is not an option. Yet the normal
+way software treats a document is to hold your work in memory until you remember to
+save, which puts an evening of data entry one crash, flat battery, or power cut away
+from being gone.
 
 **What CaveWhere does:** CaveWhere's project formats are built around safety,
-readability, and portability. The `.cwproj` directory format is human-readable,
-machine-parseable, and Git-backed, with atomic saves and full version history so
-you can roll back to any previous state. A bundled `.cw` file packs the same
-data (with history) into one file for easy sharing. You can inspect or recover
-raw data without needing CaveWhere at all.
+readability, and portability. **Your work is written to disk as you type it**, so
+there is no unsaved window to lose — which frees [Save](../projects-and-files/save-a-project.md)
+to mean something more useful: it marks a version you can return to. The `.cwproj`
+directory format is human-readable, machine-parseable, and Git-backed, with atomic
+saves and full version history so you can roll back to any previous state. A
+bundled `.cw` file packs the same data (with history) into one file for easy
+sharing. You can inspect or recover raw data without needing CaveWhere at all.
 
 ## Capturing passage shape faster: LiDAR notes
 
