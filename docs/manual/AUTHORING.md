@@ -179,6 +179,16 @@ The pieces:
   kebab-case shot name as the PNG filename referenced from the page.
 - **Highlight a control that has no `objectName`:** add one to that leaf control
   in its QML file (a small, low-risk edit following the existing convention).
+- **Grab a mostly-empty page at the app's own window size, not the harness's.**
+  `MainWindowTest` is 1200×700, but a page that centers a fixed-width column in
+  whatever space it's given (the first-run setup page) fills a third of that and
+  leaves the rest white. Scaled into the manual's ~512px column, the text stops
+  being readable — the shot is nearly all margin. `test_gettingStartedWelcome`
+  hosts the page in a loader sized to `CavewhereMainWindow.qml`'s own default
+  (1024×576) and grabs *that item* with `grabItemToFile`, which is both tighter
+  and more honest: it's the window a user actually opens on. Prefer this to
+  cropping to the content, which yields a portrait image that renders taller than
+  every screenshot around it (see the illustration sizing note above).
 - Keep shots deterministic: reuse the curated demo fixture, and pin anything
   that would otherwise vary (theme, background) as the harness already does.
 - **Set every piece of state your shot depends on, in the shot itself.** Test

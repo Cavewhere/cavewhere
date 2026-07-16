@@ -20,6 +20,14 @@ the problems CaveWhere solves — then keep the
 - [Why CaveWhere](concepts/why-cavewhere.md) — the problems CaveWhere solves.
 - [Glossary](concepts/glossary.md) — survey and CaveWhere terms.
 
+### Getting Started
+- [Install CaveWhere](getting-started/install-cavewhere.md) — where to download
+  it, and what installing registers on your system.
+- [Set Up Your Identity](getting-started/set-up-your-identity.md) — the name and
+  email CaveWhere asks for before anything else, and why.
+- [Find Your Way Around](getting-started/find-your-way-around.md) — the sidebar,
+  the breadcrumb, and how the window adapts to its size.
+
 ### Projects & Files
 - [Save a Project](projects-and-files/save-a-project.md) — what Save really does,
   the temporary folder a new project starts in, and the prompt on the way out.
@@ -72,8 +80,6 @@ chapter is task-oriented and problem-first (see
 
 - **Concepts** — the data model (Region → Cave → Trip → Survey chunk →
   Shot/Note → Scrap), coordinate systems.
-- **Getting Started** — download, first-run identity, a tour of the UI,
-  responsive layout.
 - **Notes (more)** — note keywords build on the [Notes](notes/add-a-note.md)
   pages above.
 - **3D View (more)** — field of view, labels, leads, and rendering settings

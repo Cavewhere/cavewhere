@@ -4,6 +4,7 @@ import QtTest
 import cavewherelib
 import cw.TestLib
 import QmlTestRecorder
+import QQuickGit
 
 // User-manual screenshot harness (Deliverable B). Doubles as a regression test:
 // under the headless `offscreen` QPA it skips (no live QRhi, so grabWindow()
@@ -27,6 +28,49 @@ MainWindowTest {
         anchors.fill: parent
         z: 1000
         target: null
+    }
+
+    // The first-run setup page, which this harness cannot reach the way a user
+    // does. The real app swaps MainContent out for WelcomePage while
+    // RootData.account is invalid (CavewhereMainWindow.qml), but MainWindowTest
+    // hosts MainContent directly, so that gate isn't here. Stage the page over the
+    // window instead and grab the loader itself.
+    //
+    // The account is a private, empty Person rather than RootData.account: the
+    // page is only shown when the account is invalid, and clearing the shared one
+    // to stage that would change what every later shot is looking at (a commit
+    // needs an identity — see test_gitHistory).
+    //
+    // Sized to CavewhereMainWindow.qml's own default window rather than filling
+    // this larger one. The page centers a fixed-width column in whatever space it
+    // is given, so at 1200x700 it is a third of a screen of content in a field of
+    // white — scaled into the manual's ~512px column, the text stops being
+    // readable. At the app's default size the shot is the window a user opens on.
+    //
+    // The Rectangle is what keeps the grab clean. WelcomePage draws no background
+    // of its own — in the app it sits on the window's — and grabItemToFile crops
+    // out of a whole-window grab, so without an opaque one beneath it MainContent
+    // shows through inside the crop. It also carries the palette that
+    // CavewhereMainWindow.qml sets and MainWindowTest.qml does not, which the name
+    // and email placeholders are drawn with; Fusion's default placeholder color is
+    // not the one users see, and those two fields are the point of the shot.
+    QQ.Loader {
+        id: welcomePageLoaderId
+        anchors.centerIn: parent
+        width: 1024
+        height: 576
+        active: false
+        z: 999
+        sourceComponent: QQ.Rectangle {
+            color: Theme.background
+            palette.placeholderText: Theme.textSubtle
+
+            WelcomePage {
+                objectName: "welcomePage"
+                anchors.fill: parent
+                account: Person {}
+            }
+        }
     }
 
     TestCase {
@@ -1445,6 +1489,66 @@ MainWindowTest {
             verify(path.length > 0, "grabToFile wrote the trip-page screenshot");
             verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
                    "survey-trip-page is not blank");
+        }
+
+        // The whole window with nothing ringed — the frame the UI tour names: the
+        // sidebar, the breadcrumb bar, and the page between them.
+        // Backs docs/manual/getting-started/find-your-way-around.md.
+        //
+        // On the trip page rather than the View page the app actually opens on,
+        // because the trip page is the one that fills the breadcrumb in. The tour
+        // teaches reading and clicking a trail like
+        // "Source / Data / Cave=... / Trip=...", and on the View page that trail
+        // is a single crumb reading "View".
+        function test_gettingStartedTour() {
+            let view = openSurveyEditorView();
+            if (!view) { return; }
+
+            parkSurveyEditorAtTop();
+
+            // The previous shot rings a control and the ring is baked into the
+            // grab, so a tour of the plain window has to clear it — alphabetically
+            // test_gitHistory runs next, but nothing guarantees that.
+            highlightOverlayId.target = null;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "getting-started-tour");
+            verify(path.length > 0, "grabToFile wrote the tour screenshot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   "getting-started-tour is not blank");
+        }
+
+        // The first-run setup page — "Let's set you up!" with its two empty fields.
+        // Backs docs/manual/getting-started/set-up-your-identity.md.
+        //
+        // Staged with welcomePageLoaderId (see its comment) rather than by clearing
+        // RootData.account, so this shot neither depends on nor disturbs the shared
+        // account. The loader is switched off again at the end: left active it
+        // covers the window, and every grab after this one is of the whole window.
+        function test_gettingStartedWelcome() {
+            if (!requireRhi(rootId.mainWindow)) { return; }
+
+            welcomePageLoaderId.active = true;
+            highlightOverlayId.target = null;
+            settle();
+
+            let welcome = findByName(rootId, "welcomePage");
+            verify(welcome, "the setup page loaded");
+
+            // The empty fields are the subject: they carry the placeholder text the
+            // page quotes. A Person with a name and a valid email is what the real
+            // app treats as set up, so an account that leaked in here would show
+            // filled fields and silently document the wrong thing.
+            verify(!welcome.account.isValid,
+                   "the setup page's account is empty, so the fields show placeholders");
+
+            let path = WindowGrabber.grabItemToFile(welcomePageLoaderId.item,
+                                                    "getting-started-welcome", 0);
+            welcomePageLoaderId.active = false;
+
+            verify(path.length > 0, "grabToFile wrote the welcome screenshot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   "getting-started-welcome is not blank");
         }
 
         // The trip's name and date row, ringed inside the editor's Trip section.
