@@ -106,8 +106,10 @@ void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
  * @return World point under the cursor, or nullopt on a miss
  *
  * See the declaration for the full ladder. The constraint that shapes it: the
- * anchor returns a point OFF the cursor ray, so only rotation opts in — an
- * off-ray anchor would jerk the pan and drift the zoom.
+ * anchor returns a point OFF the cursor ray. Rotation and zoom both opt in —
+ * rotation orbits the point directly, and zoom (issue #578) uses only its depth
+ * along the cursor ray, so the off-ray offset is harmless; pan keeps the
+ * exact-hit path.
  */
 std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point,
                                                                bool anchorToNearestGeometry) const {
@@ -300,8 +302,13 @@ void cwBaseTurnTableInteraction::bindPerspectiveIntersection()
 {
     if(Camera && Scene) {
         m_perspectiveIntersection.setBinding([this]() -> QVector3D {
-            // On a miss, zoom toward the current center rather than (0,0,0).
-            return unProject(m_perspectiveMappedPos).value_or(m_center);
+            // The zoom target: the nearest geometry within the wide anchor reach
+            // (issue #578) so a cursor near — not exactly on — a wall still zooms
+            // toward it, falling back to the pivot when nothing is near. This may
+            // sit off the cursor ray, but zoomPerspective consumes only its depth
+            // along that ray (cursorRay.projectedDistance), which ignores the
+            // off-ray offset, so the raw point needs no on-axis projection here.
+            return unProject(m_perspectiveMappedPos, true).value_or(m_center);
         });
     } else {
         m_perspectiveIntersection.setValue(QVector3D());
@@ -369,10 +376,9 @@ void cwBaseTurnTableInteraction::startRotating(QPoint position) {
     position = Camera->mapToGLViewport(position);
     if(!m_centerLocked) {
         // Only re-center on a real pick. On a miss keep m_center so the view
-        // orbits the existing pivot instead of teleporting (issue #527). The
-        // anchor's off-ray error is harmless to orbit around, but m_center is
-        // also bindPerspectiveIntersection's miss fallback, so it reaches zoom
-        // as a target — bounded by PivotAnchorRadiusMillimeters, not zero.
+        // orbits the existing pivot instead of teleporting (issue #527).
+        // m_center is also zoom's miss target: zoomPerspective zooms along the
+        // cursor ray at m_center's depth when nothing is under the cursor.
         if(const std::optional<QVector3D> picked = unProject(position, true)) {
             setCenter(*picked);
         }
@@ -671,36 +677,40 @@ void cwBaseTurnTableInteraction::zoomPerspective()
 {
     if(Camera.isNull()) { return; }
 
-    double delta = ZoomDelta;
-    QPoint position = ZoomPosition;
+    const double delta = ZoomDelta;
 
     //Make the event position into gl viewport
-    QPoint mappedPos = Camera->mapToGLViewport(position);
+    const QPoint mappedPos = Camera->mapToGLViewport(ZoomPosition);
     m_perspectiveMappedPos = mappedPos; //Update the mapped position
 
-    //Get the ray from the front of the screen to the back of the screen
-    QVector3D front = Camera->unProject(mappedPos, 0.0);
+    //Cursor ray: origin on the near plane, direction into the scene. The zoom
+    //target (m_perspectiveIntersection) is a point on this ray — the near
+    //geometry's depth on a hit, the pivot's depth on a miss. Recomputed by the
+    //binding whenever m_perspectiveMappedPos changed above.
+    const QRay3D cursorRay = Camera->frustrumRay(mappedPos);
+    const QVector3D target = m_perspectiveIntersection.value();
 
-    //Find the intsection on the plane, this is only updated if the
-    //mouse position changed because of the property bindings
-    QVector3D intersection = m_perspectiveIntersection.value(); //unProject(mappedPos);
+    //Signed distance from the near plane to the target along the ray: positive
+    //while the target is still ahead, <= 0 once the near plane reaches its depth.
+    const double aheadDistance = cursorRay.projectedDistance(target);
 
-    //Smallray
-    QVector3D ray = intersection - front;
-    float rayLength = ray.length();
-    ray.normalize();
+    const double t = qBound(-1.0, delta, 1.0);
 
-    // double t =  delta;
-    double t = qMax(-1.0, qMin(1.0, delta));
-    t = rayLength * t;
-
-    QVector3D newPositionDelta = ray * t;
+    //Zoom in only while the target is ahead. Clamping the ahead-distance at 0
+    //makes the zoom stall once it reaches the target instead of letting the
+    //direction flip and run the zoom backward when the near plane passes the
+    //target depth (issue #578) — the perspective analogue of ortho zoom
+    //asymptotically approaching the cursor point. For a target still ahead this
+    //is identical to moving t of the way toward it. Zoom out is unconstrained.
+    const double step = (t >= 0.0) ? qMax(0.0, aheadDistance) * t
+                                   : aheadDistance * t;
+    const QVector3D newPositionDelta = cursorRay.direction() * step;
 
     qCDebug(lcInteract).nospace()
         << "zoomPerspective mapped=" << mappedPos
-        << " front=" << front
-        << " intersection=" << intersection
-        << " rayLength=" << rayLength
+        << " origin=" << cursorRay.origin()
+        << " target=" << target
+        << " aheadDistance=" << aheadDistance
         << " delta=" << delta
         << " translate=" << newPositionDelta;
 

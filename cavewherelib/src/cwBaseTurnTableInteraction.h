@@ -225,7 +225,7 @@ private:
 
     //For zoom perspective
     QProperty<QPoint> m_perspectiveMappedPos;
-    QProperty<QVector3D> m_perspectiveIntersection; //The intersection with geometry under the mouse
+    QProperty<QVector3D> m_perspectiveIntersection; //Zoom target: nearest geometry under the mouse, else the pivot
 
     QPointer<cwCamera> Camera; //!<
     QPointer<cwScene> Scene; //!<
@@ -262,10 +262,10 @@ private:
     //! callers keep the current pivot instead of teleporting (issues #527,
     //! #562).
     //!
-    //! With @a anchorToNearestGeometry false (pan, zoom) this is the nearest
-    //! exact hit of any kind: those callers track whatever is under the cursor.
+    //! With @a anchorToNearestGeometry false (pan) this is the nearest exact
+    //! hit of any kind: the caller tracks whatever is under the cursor.
     //!
-    //! With it true (rotation) the pick sorts by kind, because a user orbits
+    //! With it true (rotation, zoom) the pick sorts by kind, because a user orbits
     //! what they authored, not the LiDAR cloud that happens to be behind it.
     //! Survey geometry (scraps, LiDAR notes, centerline) competes with BOTH an
     //! exact hit and a near-miss anchor within PivotAnchorRadiusMillimeters.
@@ -284,12 +284,13 @@ private:
     //! Only a triangle hit is strictly on the cursor ray. A line hit returns
     //! the closest point on the segment and a point hit returns the vertex
     //! center, so an exact hit can sit off-ray by up to the pick radius
-    //! (~PivotPickRadiusMillimeters of screen). The on-ray callers (pan, zoom)
-    //! do delta math against the result, so this path projects the hit back
-    //! onto the cursor ray before returning — an off-ray anchor would lurch the
-    //! first pan tick and drift a zoom. Rotation keeps the raw point: it opts
-    //! into the wider PivotAnchorRadiusMillimeters anchor too, and an off-ray
-    //! pivot orbits fine.
+    //! (~PivotPickRadiusMillimeters of screen). The false path (pan) does delta
+    //! math against the result, so it projects the exact hit back onto the
+    //! cursor ray before returning — an off-ray anchor would lurch the first pan
+    //! tick. The true path returns the raw off-ray point: rotation orbits it
+    //! directly (an off-ray pivot orbits fine), and zoom (issue #578) uses only
+    //! its depth along the cursor ray, so the off-ray offset never reaches the
+    //! view.
     std::optional<QVector3D> unProject(QPoint point,
                                        bool anchorToNearestGeometry = false) const;
 
