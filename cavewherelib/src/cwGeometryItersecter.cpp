@@ -184,6 +184,24 @@ namespace {
         return parent == nullptr || parent->isVisible();
     }
 
+    // Visibility bytes, shared by the per-vertex mask (Object::visibility /
+    // BvhData::visibilityMasks) and the per-slot flag (BvhData::slotVisible).
+    // Any nonzero byte reads as visible; these are what setRangeVisible and
+    // the publish paths write.
+    constexpr quint8 kVertexHidden = 0;
+    constexpr quint8 kVertexVisible = 1;
+
+    // Mask read shared by every per-vertex visibility consumer. Out-of-range
+    // reads as visible on purpose: an empty/short mask must never hide
+    // geometry (the mask's absence means "all visible", and a stale-size
+    // mask racing a geometry replacement degrades to permissive, never to
+    // out-of-bounds).
+    bool vertexIsVisible(const QVector<quint8>& mask, uint32_t vertex)
+    {
+        return vertex >= static_cast<uint32_t>(mask.size())
+               || mask.at(vertex) != kVertexHidden;
+    }
+
     // Map a geometry type to the pick-query flag it satisfies. Returns 0 for
     // types that never enter the BVH (they contribute no primitives), so the
     // kind filter rejects them.
@@ -612,6 +630,7 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
         Nodes.clear();
         m_subBvhs.clear();
         m_dirtyKeys.clear();
+        m_hiddenKeys.clear();
         // Total wipe: drop the published BVH entirely so every pick goes
         // no-hit immediately. No retention benefit here — there's no Key
         // left we'd want picks to still hit.
@@ -619,6 +638,12 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
         scheduleTopLevelRebuild();
         return;
     }
+
+    // Set-wide (not per-Node) so a Key hidden before it was ever
+    // registered is forgotten too.
+    erase_if(m_hiddenKeys, [parentObject](const Key& key) {
+        return key.parentObject == parentObject;
+    });
 
     int erased = 0;
     QList<Node>::iterator iter = Nodes.begin();
@@ -655,6 +680,9 @@ void cwGeometryItersecter::removeObject(cwRenderObject *parentObject, uint64_t i
 
 void cwGeometryItersecter::removeObject(const Key &objectKey)
 {
+    // The per-Key hide is identity state that survives geometry replacement
+    // (addObject), so only an actual removal forgets it.
+    m_hiddenKeys.remove(objectKey);
     if (eraseNodeIfPresent(objectKey)) {
         qCDebug(lcPick).nospace()
             << "removeObject {parent=" << objectKey.parentObject
@@ -686,6 +714,75 @@ void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4
     // No sub-BVH invalidation — sub-BVHs are model-space and unaffected
     // by modelMatrix changes. Only the top-level needs refreshing.
     scheduleTopLevelRebuild();
+}
+
+void cwGeometryItersecter::setVisible(const Key& objectKey, bool visible)
+{
+    const bool hidden = m_hiddenKeys.contains(objectKey);
+    if (hidden == !visible) {
+        return;
+    }
+    if (visible) {
+        m_hiddenKeys.remove(objectKey);
+    } else {
+        m_hiddenKeys.insert(objectKey);
+    }
+    qCDebug(lcPick).nospace()
+        << "setVisible {parent=" << objectKey.parentObject
+        << ", id=" << objectKey.id << "} visible=" << visible
+        << " — no rebuild, republish only";
+    republishSlotVisibility(objectKey);
+}
+
+void cwGeometryItersecter::setRangeVisible(const Key& objectKey, int start, int count, bool visible)
+{
+    auto iter = findNode(objectKey);
+    if (iter == Nodes.end()) {
+        return;
+    }
+
+    // count > vertexCount - start rather than start + count > vertexCount:
+    // the subtraction can't overflow once start is known non-negative and
+    // in range, while the addition can.
+    const qsizetype vertexCount = iter->Object.geometry().vertexCount();
+    if (start < 0 || count <= 0 || start > vertexCount
+        || count > vertexCount - start) {
+        return;
+    }
+
+    QVector<quint8> mask = iter->Object.visibility();
+    if (mask.isEmpty()) {
+        if (visible) {
+            return; // empty mask already means all-visible
+        }
+        mask = QVector<quint8>(vertexCount, kVertexVisible);
+    }
+
+    const quint8 flag = visible ? kVertexVisible : kVertexHidden;
+    bool changed = false;
+    for (int i = start; i < start + count; ++i) {
+        if (mask.at(i) != flag) {
+            mask[i] = flag;
+            changed = true;
+        }
+    }
+    if (!changed) {
+        return;
+    }
+
+    // Collapse an all-visible mask back to empty so the unmasked fast
+    // paths (cached whole-node box, zero per-primitive checks) return
+    // once everything is shown again.
+    if (visible && !mask.contains(kVertexHidden)) {
+        mask = QVector<quint8>();
+    }
+
+    iter->Object.setVisibility(std::move(mask));
+    qCDebug(lcPick).nospace()
+        << "setRangeVisible {parent=" << objectKey.parentObject
+        << ", id=" << objectKey.id << "} [" << start << ", " << (start + count)
+        << ") visible=" << visible << " — no rebuild, republish only";
+    republishSlotVisibility(objectKey);
 }
 
 QBox3D cwGeometryItersecter::boundingBox(const Key &objectKey) const
@@ -723,9 +820,80 @@ QBox3D cwGeometryItersecter::visibleBoundingBox() const
         if (!isPickable(node.Object)) {
             continue;
         }
-        box.unite(node.BoundingBox.transformed(node.Object.modelMatrix()));
+        if (m_hiddenKeys.contains(node.Object.key())) {
+            continue;
+        }
+        box.unite(visibleNodeBox(node));
     }
     return box;
+}
+
+QBox3D cwGeometryItersecter::visibleNodeBox(const Node& node)
+{
+    const QVector<quint8>& mask = node.Object.visibility();
+    if (mask.isEmpty()) {
+        return node.BoundingBox.transformed(node.Object.modelMatrix());
+    }
+
+    const cwGeometry& geometry = node.Object.geometry();
+    const auto* positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+    if (positionAttribute == nullptr) {
+        return QBox3D();
+    }
+
+    // Union per visible primitive, not per visible vertex, so a visible
+    // vertex whose every primitive is hidden doesn't inflate the box —
+    // matching what the pick traversal can actually reach.
+    const QVector<uint32_t>& indices = geometry.indices();
+    QBox3D modelBox;
+    switch (geometry.type()) {
+    case cwGeometry::Type::Lines:
+        for (qsizetype i = 0; i + 1 < indices.size(); i += 2) {
+            const uint32_t a = indices.at(i);
+            const uint32_t b = indices.at(i + 1);
+            if (vertexIsVisible(mask, a) && vertexIsVisible(mask, b)) {
+                modelBox.unite(geometry.value<QVector3D>(positionAttribute, a));
+                modelBox.unite(geometry.value<QVector3D>(positionAttribute, b));
+            }
+        }
+        break;
+    case cwGeometry::Type::Triangles:
+        for (qsizetype i = 0; i + 2 < indices.size(); i += 3) {
+            const uint32_t a = indices.at(i);
+            const uint32_t b = indices.at(i + 1);
+            const uint32_t c = indices.at(i + 2);
+            if (vertexIsVisible(mask, a) && vertexIsVisible(mask, b)
+                && vertexIsVisible(mask, c)) {
+                modelBox.unite(geometry.value<QVector3D>(positionAttribute, a));
+                modelBox.unite(geometry.value<QVector3D>(positionAttribute, b));
+                modelBox.unite(geometry.value<QVector3D>(positionAttribute, c));
+            }
+        }
+        break;
+    case cwGeometry::Type::Points: {
+        const PointPositionReader reader(geometry, positionAttribute);
+        const qsizetype vertexCount = geometry.vertexCount();
+        for (qsizetype i = 0; i < vertexCount; ++i) {
+            if (vertexIsVisible(mask, static_cast<uint32_t>(i))) {
+                modelBox.unite(reader.at(i));
+            }
+        }
+        if (!modelBox.isNull()) {
+            const float pad = node.Object.pickRadius() * kPointAabbPadScale;
+            const QVector3D padVec(pad, pad, pad);
+            modelBox = QBox3D(modelBox.minimum() - padVec,
+                              modelBox.maximum() + padVec);
+        }
+        break;
+    }
+    default:
+        return node.BoundingBox.transformed(node.Object.modelMatrix());
+    }
+
+    if (modelBox.isNull()) {
+        return QBox3D();
+    }
+    return modelBox.transformed(node.Object.modelMatrix());
 }
 
 bool cwGeometryItersecter::isPickableEmpty() const
@@ -1018,6 +1186,12 @@ void cwGeometryItersecter::traverseBvh(const BvhData& bvh,
             continue;
         }
 
+        // Per-Key hide (setVisible(Key, false)) — the same hoist for
+        // sub-object visibility: one byte skips the whole descent.
+        if (!bvh.slotVisible.at(slot)) {
+            continue;
+        }
+
         // Runtime kind filter (§5): priority lives in the caller as a cheap
         // skip beside isPickable(), never as a depth bias inside traversal.
         // Every primitive in this sub-BVH shares the Object's geometry type,
@@ -1044,6 +1218,11 @@ void cwGeometryItersecter::traverseBvh(const BvhData& bvh,
         const QMatrix4x4& worldFromModel = bvh.modelMatrices.at(slot);
         const QMatrix4x4& modelFromWorld = bvh.inverseModelMatrices.at(slot);
         const QRay3D rayModel = transformRayWithInverse(modelFromWorld, ray);
+
+        // Per-vertex mask (setRangeVisible). Unmasked objects — clouds,
+        // scraps, triangles — pay this one pointer load plus a predictable
+        // null compare per tested leaf primitive.
+        const QVector<quint8>* visibilityMask = bvh.visibilityMasks.at(slot).get();
 
         const LeafContext ctx{sub.object, geometry, positionAttribute,
                               ray, rayModel, worldFromModel, modelFromWorld,
@@ -1113,6 +1292,10 @@ void cwGeometryItersecter::traverseBvh(const BvhData& bvh,
             }
             for (uint32_t p = first; p < first + primCount; ++p) {
                 const Primitive& prim = sub.primitives.at(p);
+                if (visibilityMask != nullptr
+                    && !isPrimitiveVisible(*visibilityMask, geometry, prim)) {
+                    continue;
+                }
                 if (stats != nullptr) {
                     dumpLeafPrimitive(sub.object, prim, ray, sidx, p - first);
                 }
@@ -1853,6 +2036,77 @@ void cwGeometryItersecter::invalidatePublishedSlot(const Key& key)
     m_bvh = std::move(next);
 }
 
+void cwGeometryItersecter::republishSlotVisibility(const Key& key)
+{
+    if (!m_bvh) {
+        // No published BVH to patch; the install callback refreshes the
+        // in-flight build's arrays from live state (refreshPublishedVisibility).
+        return;
+    }
+    auto it = m_bvh->keyToSlot.constFind(key);
+    if (it == m_bvh->keyToSlot.constEnd()) {
+        return;
+    }
+    // Same copy-on-write discipline as invalidatePublishedSlot: a published
+    // BvhData is never edited in place, so readers holding the old snapshot
+    // keep seeing their captured visibility.
+    auto next = std::make_shared<BvhData>(*m_bvh);
+    const int slot = *it;
+    next->slotVisible[slot] = m_hiddenKeys.contains(key) ? kVertexHidden
+                                                         : kVertexVisible;
+    const auto nodeIter = findNode(key);
+    const bool hasMask = nodeIter != Nodes.cend()
+                         && !nodeIter->Object.visibility().isEmpty();
+    next->visibilityMasks[slot] = hasMask
+        ? std::make_shared<const QVector<quint8>>(nodeIter->Object.visibility())
+        : nullptr;
+    m_bvh = std::move(next);
+}
+
+void cwGeometryItersecter::refreshPublishedVisibility(BvhData& bvh) const
+{
+    const qsizetype slotCount = bvh.subBvhs.size();
+    bvh.slotVisible = QVector<quint8>(slotCount, kVertexVisible);
+    bvh.visibilityMasks =
+        QVector<std::shared_ptr<const QVector<quint8>>>(slotCount);
+    for (const Node& node : Nodes) {
+        const auto it = bvh.keyToSlot.constFind(node.Object.key());
+        if (it == bvh.keyToSlot.constEnd()) {
+            continue;
+        }
+        const int slot = *it;
+        if (m_hiddenKeys.contains(node.Object.key())) {
+            bvh.slotVisible[slot] = kVertexHidden;
+        }
+        if (!node.Object.visibility().isEmpty()) {
+            bvh.visibilityMasks[slot] =
+                std::make_shared<const QVector<quint8>>(node.Object.visibility());
+        }
+    }
+}
+
+bool cwGeometryItersecter::isPrimitiveVisible(const QVector<quint8>& mask,
+                                              const cwGeometry& geometry,
+                                              const Primitive& prim)
+{
+    switch (prim.kind) {
+    case Primitive::Kind::Point:
+        return vertexIsVisible(mask, prim.primitiveIndex);
+    case Primitive::Kind::Line: {
+        const QVector<uint32_t>& indices = geometry.indices();
+        return vertexIsVisible(mask, indices.at(prim.primitiveIndex))
+               && vertexIsVisible(mask, indices.at(prim.primitiveIndex + 1));
+    }
+    case Primitive::Kind::Triangle: {
+        const QVector<uint32_t>& indices = geometry.indices();
+        return vertexIsVisible(mask, indices.at(prim.primitiveIndex))
+               && vertexIsVisible(mask, indices.at(prim.primitiveIndex + 1))
+               && vertexIsVisible(mask, indices.at(prim.primitiveIndex + 2));
+    }
+    }
+    return true;
+}
+
 cwGeometryItersecter::QuerySnapshot cwGeometryItersecter::snapshotForQuery() const
 {
     return QuerySnapshot(m_bvh);
@@ -2395,6 +2649,12 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
                             << "(canceled or zero prims)";
             return;
         }
+        // Stamp the per-slot visibility from live state on this side of the
+        // swap — the worker's snapshot predates any setVisible /
+        // setRangeVisible that raced the build. *resultSlot is not yet
+        // published, so mutating it here doesn't violate the
+        // immutable-once-published rule.
+        refreshPublishedVisibility(**resultSlot);
         m_bvh = *resultSlot;
         // A worker that finished computing just before cancel still
         // publishes here. Re-apply the dirty filter on this side of the

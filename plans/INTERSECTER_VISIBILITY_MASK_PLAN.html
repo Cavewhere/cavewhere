@@ -29,6 +29,7 @@
   .tag.p0 { background:#37414d; color:var(--accent); }
   .tag.p1 { background:#3a3722; color:var(--warn); }
   .tag.p2 { background:#233a2a; color:var(--good); }
+  .tag.done { background:#1f3a26; color:#8bc98b; border:1px solid #8bc98b; }
   .bad { color:var(--bad); } .good { color:var(--good); } .warn { color:var(--warn); }
   .muted { color:var(--muted); }
   ul { padding-left:22px; } li { margin:5px 0; }
@@ -73,6 +74,7 @@
     <a href="#files">File-by-file changes</a><br>
     <a href="#alt">Alternatives considered</a><br>
     <a href="#tests">Test plan</a><br>
+    <a href="#followups">Follow-ups (July 2026 review)</a><br>
   </div>
 </div>
 
@@ -98,7 +100,7 @@
   </tr>
 </table>
 
-<p><strong>Design goal.</strong> Make the intersecter return correct <em>visible-only</em> results, so consumers (reset-view, Distance tool, rotation pivot, lead occlusion) are written as if <code>cwGeometryItersecter</code> is simply correct — no visibility logic duplicated into each consumer. Two committed failing tests (tagged <code>[!shouldfail]</code>) pin the bugs: <span class="fileref">testcases/test_cwRenderLinePlotPickVisibility.cpp</span> (#575, per-shot) and <span class="fileref">testcases/test_cwRenderTexturedItemsPickVisibility.cpp</span> (per-id pick + framing bounds).</p>
+<p><strong>Design goal.</strong> Make the intersecter return correct <em>visible-only</em> results, so consumers (reset-view, Distance tool, rotation pivot, lead occlusion) are written as if <code>cwGeometryItersecter</code> is simply correct — no visibility logic duplicated into each consumer. The failing tests that pinned the bugs (<span class="fileref">testcases/test_cwRenderLinePlotPickVisibility.cpp</span> #575 per-shot; <span class="fileref">testcases/test_cwRenderTexturedItemsPickVisibility.cpp</span> per-id pick + framing bounds) have been flipped to regression tests — all phases below are implemented (July 2026): Phase 1 + the framing-bounds seam, Phase 2a (per-Key flag: <code>setVisible(Key, bool)</code>, live <code>m_hiddenKeys</code> that survives geometry replacement, per-slot <code>slotVisible</code> in the published snapshot), and Phase 2b (per-vertex mask: <code>setRangeVisible(Key, start, count, bool)</code>, mask on the live Object, per-slot shared array in the snapshot; collapses to empty when fully re-shown). Both republish copy-on-write like <code>invalidatePublishedSlot()</code>, and the build-install callback re-stamps visibility from live state so a toggle can't race the worker.</p>
 
 <h2 id="phase0">Phase 0 · How it works today <span class="tag p0">current</span></h2>
 <p>Three layers, wired end-to-end. Visibility flows left→right; the intersecter is the one box the flow skips.</p>
@@ -224,7 +226,7 @@
   <li>Key type is <code>Key{cwRenderObject* parentObject, uint64_t id}</code>; the published BVH keeps a <code>keyToSlot</code> reverse index, so per-Key state can be republished with a direct lookup.</li>
 </ul>
 
-<h2 id="phase1">Phase 1 · Whole-object <code>visibleBoundingBox()</code> <span class="tag p1">interim</span></h2>
+<h2 id="phase1">Phase 1 · Whole-object <code>visibleBoundingBox()</code> <span class="tag p1">interim</span> <span class="tag done">implemented</span></h2>
 <p>Ship the reset-view API immediately, before the deeper work. The body already exists: <code>isPickableEmpty()</code> unions boxes over <code>isPickable</code>-filtered live Nodes and discards the box. Phase 1 is an extraction, not new logic.</p>
 <ul>
   <li>Extract that loop into <code>cwGeometryItersecter::visibleBoundingBox()</code>; reimplement <code>isPickableEmpty()</code> as <code>{ const auto box = visibleBoundingBox(); return box.isNull() || !box.isFinite(); }</code>. Main-thread only (computed against live <code>Nodes</code>), flat loop over cached per-Node boxes — O(#Keys), no BVH or vertex traversal.</li>
@@ -240,7 +242,7 @@
   <span class="muted">Blast radius: moderate — one new scene-level accessor, re-point <code>resetView</code> (and the Phase 1/2 work) at it; no data-model changes. Tracked as the architectural follow-up from the #549 review; can land before or alongside Phase 1.</span>
 </div>
 
-<h2 id="phase2a">Phase 2a · Per-Key visible flag <span class="tag p2">scraps + glTF</span></h2>
+<h2 id="phase2a">Phase 2a · Per-Key visible flag <span class="tag p2">scraps + glTF</span> <span class="tag done">implemented</span></h2>
 <p>Textured items don't need the mask: each item id is already its own intersecter Key with its own Node and sub-BVH slot. They need one bit.</p>
 <ul>
   <li>Add <code>cwGeometryItersecter::setVisible(const Key&amp;, bool visible)</code> — a per-Key flag on the live <code>Node</code>, republished into the snapshot slot (the <code>keyToSlot</code> index makes this a direct lookup). No geometry change, no BVH rebuild.</li>
@@ -251,7 +253,7 @@
 </ul>
 <div class="callout"><strong>Snapshot subtlety.</strong> <code>sub.object</code> inside a published snapshot is a <em>copy</em> of the Object, so a plain member on the live Object won't be seen by held snapshots. The whole-object gate gets away with this because it dereferences the live <code>parent-&gt;isVisible()</code>; the per-Key flag instead follows the same discipline as the Phase 2b mask — per-slot shared state, republished on change. Ray queries run on the main thread, so a simpler live-read is also defensible; decide at implementation time, but keep it consistent with the mask.</div>
 
-<h2 id="phase2">Phase 2b · The per-primitive mask <span class="tag p2">line plot</span></h2>
+<h2 id="phase2">Phase 2b · The per-primitive mask <span class="tag p2">line plot</span> <span class="tag done">implemented</span></h2>
 <p>Give the intersecter its own visibility channel, fed from the same <code>setRangeVisible</code> calls the renderer already makes. Both picking and bounding box consult it. One mechanism → both #575 and per-trip #549 fall out. Only the line plot needs this — it is one Key whose visibility varies per vertex.</p>
 
 <figure>
@@ -371,6 +373,18 @@ const QVector&lt;quint8&gt;&amp; visibility() const { return m_visibility; }
   <li><strong>Threading</strong> — toggle <code>setRangeVisible</code> while a pick snapshot is held; the held snapshot returns its captured visibility, the next pick sees the update.</li>
   <li><strong>QML</strong> — Distance tool over a keyword-hidden trip does not snap to it.</li>
 </ul>
+
+<h2 id="followups">Follow-ups <span class="tag p1">post-implementation review, July 2026</span></h2>
+<p>Surfaced by the pre-commit review of the implemented phases. None block the landed work; ordered by expected value.</p>
+
+<h3>1 · Masked <code>visibleBoundingBox()</code> walk runs at interaction rate, not reset-only</h3>
+<p><code>isPickableEmpty()</code> delegates to <code>visibleBoundingBox()</code> and is called from <code>cwBaseTurnTableInteraction</code>'s pivot fallback (<span class="fileref">cwBaseTurnTableInteraction.cpp:136</span>) — reached on every pan mouse-down over background and on the zoom <code>m_perspectiveIntersection</code> re-evaluation. With a line plot partially hidden, each of those pays the O(vertices) <code>visibleNodeBox</code> walk (~1–3&nbsp;ms at 500&nbsp;k vertices) — the perf table's "reset only" row was wrong about the caller set. Fix per the table's own escape hatch: <strong>cache the visible box per Node, invalidate in <code>setRangeVisible</code></strong> (mask changes at user rate), or give <code>isPickableEmpty()</code> an any-visible early exit. Headers already document the corrected caller set.</p>
+
+<h3>2 · Producer-published immutable mask (third option, replaces the twin)</h3>
+<p>The implemented twin keeps two byte-for-byte copies of the same mask — <span class="fileref">cwRenderLinePlot::m_visibility</span> and <code>Object::m_visibility</code> — synchronized by convention ("both reset on setGeometry, same ranges applied") across two files, plus an O(vertices) copy per <code>republishSlotVisibility</code>. The plan's rejected alternative was a <em>live read</em> (races off-thread picks); the implementation surfaced a third option it never weighed: <strong>the render object publishes the mask as <code>std::shared_ptr&lt;const QVector&lt;quint8&gt;&gt;</code> copy-on-write, and the intersecter (live Object and snapshot slot) holds only the pointer</strong>. Kills the duplicate buffer, the parallel range-write/validation loops, the per-call copy, and the comment-only sync invariant — while keeping snapshot immutability. Out of scope for the landed commit because it changes <code>m_visibility</code>'s type, which the RHI upload path (<span class="fileref">cwRHILinePlot</span>) consumes.</p>
+
+<h3>3 · Stable identity in <code>Key</code> + a destruction lifetime hook</h3>
+<p><code>Key</code> holds a raw <code>cwRenderObject*</code> as identity, and <code>clear(parentObject)</code> has <strong>zero production callers</strong> — nothing purges a destroyed render object's entries. <code>m_hiddenKeys</code> raises the stakes: it is deliberately long-lived identity state (survives geometry replacement, may be seeded pre-registration), so an address-reused new object could be born spuriously hidden — the same failure family as the issue #512 fix in <span class="fileref">cwScene.cpp</span>. Mitigated in the landed commit by <code>addItem</code>'s unconditional visibility seed, but the real fix is <strong><code>Key{cwRenderObjectId, uint64_t}</code></strong> (precedent: <span class="fileref">cwRenderObject::renderObjectId()</span>) plus <code>cwScene::removeItem</code> → <code>GeometryItersecter-&gt;clear(item)</code>. Wide but mechanical: every registration call site (<span class="fileref">cwRenderTexturedItems</span>, <span class="fileref">cwRenderLinePlot</span>, <span class="fileref">cwRenderPointCloud</span>, <span class="fileref">cwRenderGLTF</span>, tests). Pairs well with folding the whole-object <code>isPickable()</code> gate into the snapshot (prerequisite for off-thread picks — the sink-scan BVH broad-phase wants this).</p>
 
 <p class="muted" style="margin-top:40px;font-size:13px;">Related render-side plans (Phase 0 background): <span class="fileref">CENTERLINE_KEYWORD_VISIBILITY_PLAN.html</span>, <span class="fileref">CENTERLINE_PER_SHOT_VISIBILITY_PLAN.html</span>. This plan is their intersecter-side counterpart.</p>
 

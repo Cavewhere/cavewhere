@@ -153,6 +153,14 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
             << " (later updateGeometry(id, nonEmpty) would still register it)";
     }
 
+    // Seed the intersecter's per-Key flag unconditionally: a born-hidden
+    // item needs it before its geometry registers (empty-geometry branch
+    // above), and an affirmative visible write clears any stale flag a
+    // reused key could otherwise inherit.
+    if (auto* intersector = geometryItersecter()) {
+        intersector->setVisible({this, id}, item.visible);
+    }
+
     return id;
 }
 
@@ -195,6 +203,10 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
     if (intersector != nullptr) {
         if (!payload.geometry.isEmpty()) {
             intersector->addObject(cwGeometryItersecter::Object({this, id}, payload.geometry, modelMatrix));
+            // Re-seed the per-Key flag: if a prior update went empty, the
+            // removeObject below forgot it, and this re-registration would
+            // otherwise resurrect a render-hidden item in picking/framing.
+            intersector->setVisible({this, id}, entry->visible);
         } else {
             intersector->removeObject({this, id});
         }
@@ -231,6 +243,12 @@ void cwRenderTexturedItems::setVisible(uint32_t id, bool visible)
     addCommand(PendingCommand(PendingCommand::UpdateVisiblity, id, payload));
 
     entry->visible = visible;
+
+    // Keep picking and framing in step with rendering: a hidden item must
+    // not take picks or inflate the reset-view bounds (issues #575/#549).
+    if (auto* intersector = geometryItersecter()) {
+        intersector->setVisible({this, id}, visible);
+    }
 }
 
 void cwRenderTexturedItems::setCulling(uint32_t id, CullMode culling)

@@ -71,12 +71,22 @@ public:
 
         float pickRadius() const { return m_pickRadius; }
 
+        // Per-vertex visibility mask, one byte per vertex (0 = hidden,
+        // nonzero = visible). Empty = all visible — the fast path every
+        // object except a partially hidden line plot stays on. Indexed by
+        // geometry vertex index, so replacing the geometry (addObject)
+        // resets it; callers re-apply ranges afterwards. Mutated only via
+        // cwGeometryItersecter::setRangeVisible.
+        const QVector<quint8>& visibility() const { return m_visibility; }
+        void setVisibility(QVector<quint8> visibility) { m_visibility = std::move(visibility); }
+
     private:
 
         Key m_key;
         cwGeometry m_geometry;
         QMatrix4x4 m_modelMatrix;
         float m_pickRadius = 0.0f;
+        QVector<quint8> m_visibility;
     };
 
     // Immutable, thread-safe handle to a built BVH (see snapshotForQuery).
@@ -94,6 +104,28 @@ public:
     void setModelMatrix(cwRenderObject* parentObject, uint64_t id, const QMatrix4x4& modelMatrix);
     void setModelMatrix(const Key& objectKey, const QMatrix4x4& modelMatrix);
 
+    //! Per-Key visibility: a hidden Key is skipped by every pick traversal
+    //! (exact pick and pivot anchor) and by visibleBoundingBox() /
+    //! isPickableEmpty() — the sub-object analogue of the whole-object
+    //! parent->isVisible() gate. This is identity state, not geometry state:
+    //! it survives addObject() replacing the Key's geometry (a hidden scrap
+    //! whose triangulation updates stays hidden) and may be set before the
+    //! Key is registered. removeObject()/clear() forget it. No BVH rebuild —
+    //! the published snapshot is republished copy-on-write. Main thread only.
+    void setVisible(const Key& objectKey, bool visible);
+
+    //! Per-vertex visibility for vertices [start, start + count) of one Key
+    //! — for objects like the line plot where one Key's visibility varies
+    //! per primitive. A primitive is visible iff every vertex it references
+    //! is visible (a Lines segment: both endpoints). Hidden primitives are
+    //! skipped by the pick traversals and excluded from
+    //! visibleBoundingBox(). Mask indices are geometry vertex indices, so
+    //! addObject() resets the mask to all-visible; callers re-apply ranges
+    //! after pushing new geometry (mirrors cwRenderLinePlot's own buffer).
+    //! Out-of-range calls and no-op changes are ignored. No BVH rebuild.
+    //! Main thread only.
+    void setRangeVisible(const Key& objectKey, int start, int count, bool visible);
+
     QBox3D boundingBox(const Key& objectKey) const;
 
     //! World-space union of the bounding boxes for the given keys. Null box when empty.
@@ -104,12 +136,16 @@ public:
     //! pick paths can actually reach.
     QBox3D boundingBox() const;
 
-    //! Like boundingBox(), but skips objects the pick traversals skip (a
-    //! hidden parent render object) — the box a camera should frame. Same
-    //! flat O(#Keys) loop over cached per-Node boxes; no BVH or vertex
-    //! traversal. Main-thread only: reads the authoring object list, so
-    //! during an async build it already reflects objects that will become
-    //! pickable.
+    //! Like boundingBox(), but skips geometry the pick traversals skip — a
+    //! hidden parent render object, a per-Key-hidden Object (setVisible),
+    //! and per-vertex-masked primitives (setRangeVisible) — the box a
+    //! camera should frame. Flat O(#Keys) loop over cached per-Node boxes;
+    //! only an Object with a live mask pays an O(vertices) walk (the line
+    //! plot while partially hidden). Callers run at interaction rate — reset
+    //! view, and isPickableEmpty() on the pivot-fallback path — never per
+    //! frame. Main-thread only: reads
+    //! the authoring object list, so during an async build it already
+    //! reflects objects that will become pickable.
     QBox3D visibleBoundingBox() const;
 
     //! True when no pick can ever hit anything: no objects, every object
@@ -300,6 +336,16 @@ private:
         // rebuild is in flight. A null entry in subBvhs is the in-flight
         // marker; traversal skips it. See invalidatePublishedSlot().
         QHash<Key, int> keyToSlot;
+
+        // Per-slot visibility, parallel to subBvhs. slotVisible is the
+        // per-Key flag (0 = hidden, see setVisible); visibilityMasks the
+        // per-vertex mask (null = all visible, see setRangeVisible). Sized
+        // by refreshPublishedVisibility() before every publish; toggles
+        // republish copy-on-write (republishSlotVisibility) so held query
+        // snapshots keep their captured view — same discipline as
+        // invalidatePublishedSlot().
+        QVector<quint8> slotVisible;
+        QVector<std::shared_ptr<const QVector<quint8>>> visibilityMasks;
     };
 
 public:
@@ -345,6 +391,11 @@ private:
     // for the same Key before the first build observed it).
     QSet<Key> m_dirtyKeys;
 
+    // Keys hidden via setVisible(Key, false). Lives beside Nodes rather
+    // than on the Object so the flag survives addObject() replacing the
+    // Key's geometry; removeObject()/clear() erase entries.
+    QSet<Key> m_hiddenKeys;
+
     // Coalesces rapid mutations into a single rebuild and cancels the
     // in-flight build when a new mutation arrives.
     AsyncFuture::Restarter<void> m_bvhRestarter;
@@ -372,6 +423,33 @@ private:
     // model-space geometry intact) and removeObject (which only shrinks
     // the set of objects).
     void scheduleTopLevelRebuild();
+
+    // Copy-on-write republish of one Key's visibility (flag + mask) into
+    // the published BVH, mirroring the live state. No-op when there is no
+    // published BVH (the install callback refreshes from live state) or
+    // the Key has no slot. Never edits a published BvhData in place.
+    void republishSlotVisibility(const Key& key);
+
+    // Fill bvh's per-slot visibility arrays from the live m_hiddenKeys /
+    // Node masks. Called on the main thread on a not-yet-published BvhData,
+    // right before the install swap — so a toggle that raced the build
+    // worker is never lost.
+    void refreshPublishedVisibility(BvhData& bvh) const;
+
+    // World-space box of one Node honoring its per-vertex mask: unmasked
+    // Nodes return the cached whole-node box; masked Nodes pay an
+    // O(vertices) walk over visible primitives (line plot while partially
+    // hidden; interaction rate via visibleBoundingBox()'s callers). If that
+    // walk ever shows up in a profile, cache the visible box per Node and
+    // invalidate in setRangeVisible.
+    static QBox3D visibleNodeBox(const Node& node);
+
+    // True when every vertex `prim` references is visible in the
+    // per-vertex mask. Points index vertices directly; Lines and
+    // Triangles go through the index buffer.
+    static bool isPrimitiveVisible(const QVector<quint8>& mask,
+                                   const cwGeometry& geometry,
+                                   const Primitive& prim);
 
     // Release the published sub-BVH for one Key while a rebuild is in
     // flight. Leaves the rest of m_bvh intact so unrelated Objects keep

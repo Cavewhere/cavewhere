@@ -47,6 +47,13 @@ QRay3D rayThroughSecondShot()
                   QVector3D(0.0f, 0.0f, -1.0f));
 }
 
+// Ray straight down -Z through the middle of shot 0, at the origin.
+QRay3D rayThroughFirstShot()
+{
+    return QRay3D(QVector3D(0.0f, 0.0f, 50.0f),
+                  QVector3D(0.0f, 0.0f, -1.0f));
+}
+
 cwPickQuery linePickQuery()
 {
     cwPickQuery query;
@@ -57,19 +64,15 @@ cwPickQuery linePickQuery()
 
 } // namespace
 
-// KNOWN BUG (issue #575). Per-shot visibility (cwRenderLinePlot::setRangeVisible)
-// is render-side only and never reaches cwGeometryItersecter — the full
-// centerline (every shot) is registered once in setGeometry(), and the
-// intersecter's only visibility gate is whole render-object
-// (isPickable -> parent->isVisible()). So a pick aimed at a HIDDEN shot still
-// returns a hit, which the Distance measurement tool (a Kind::Lines pre-pick)
-// wrongly snaps to.
-//
-// This test asserts the DESIRED behavior and is tagged [!shouldfail]: Catch2
-// keeps the run green while it fails, and flags it (unexpected pass) once the
-// bug is fixed so the tag can be removed.
-TEST_CASE("cwRenderLinePlot hidden shot must not be pickable",
-          "[cwRenderLinePlot][!shouldfail]")
+// Issue #575. The full centerline (every shot) is one intersecter Key,
+// registered once in setGeometry(), so per-shot visibility can't use the
+// whole-object gate. cwRenderLinePlot::setRangeVisible now twins the change
+// into the intersecter's per-vertex mask: a segment whose endpoint vertex is
+// hidden is skipped by the pick traversal, so the Distance measurement tool
+// (a Kind::Lines pre-pick) no longer snaps to a keyword-hidden shot. No BVH
+// rebuild — the toggle is synchronous.
+TEST_CASE("cwRenderLinePlot hidden shot is not pickable",
+          "[cwRenderLinePlot]")
 {
     cwScene scene;
 
@@ -85,16 +88,165 @@ TEST_CASE("cwRenderLinePlot hidden shot must not be pickable",
     // Hide shot 1 via the real per-shot visibility path.
     linePlot.setRangeVisible(2, 2, false);
 
-    // Desired: the hidden shot is no longer pickable. Currently fails — the hit
-    // still lands on shot 1 at y == kSecondShotY.
-    const cwRayHit hit = scene.geometryItersecter()->intersectsDetailed(
-        rayThroughSecondShot(), linePickQuery());
-    CHECK_FALSE(hit.hit());
+    CHECK_FALSE(scene.geometryItersecter()->intersectsDetailed(
+        rayThroughSecondShot(), linePickQuery()).hit());
+
+    // Shot 0 stays pickable — the mask hides segments, not the object.
+    CHECK(scene.geometryItersecter()->intersectsDetailed(
+        rayThroughFirstShot(), linePickQuery()).hit());
+
+    // Re-showing restores pickability.
+    linePlot.setRangeVisible(2, 2, true);
+    CHECK(scene.geometryItersecter()->intersectsDetailed(
+        rayThroughSecondShot(), linePickQuery()).hit());
 }
 
-// Contrast: whole render-object visibility IS the gate the intersecter honors,
-// so hiding the entire line plot makes the same ray miss. This is the mechanism
-// per-shot hiding is missing (issue #575).
+// Issue #549 (per-trip flavor). A hidden shot is excluded from
+// cwScene::visibleFramingBounds(), so reset view frames only what is drawn.
+// The masked object pays an O(vertices) walk only while partially hidden;
+// re-showing everything collapses the mask back to the cached-box fast path.
+TEST_CASE("cwRenderLinePlot hidden shot does not inflate framing bounds",
+          "[cwRenderLinePlot]")
+{
+    cwScene scene;
+
+    cwRenderLinePlot linePlot;
+    linePlot.setScene(&scene);
+    linePlot.setGeometry(twoShots());
+
+    // Baseline: both shots contribute — the box reaches shot 1.
+    REQUIRE(scene.visibleFramingBounds().maximum().y() >= kSecondShotY);
+
+    linePlot.setRangeVisible(2, 2, false);
+
+    // The framing box tightens to shot 0 (y == 0) while the raw registered
+    // box keeps counting the hidden geometry.
+    const QBox3D box = scene.visibleFramingBounds();
+    CHECK(box.maximum().y() < kSecondShotY);
+    CHECK_FALSE(box.isNull());
+    CHECK(scene.geometryItersecter()->boundingBox().maximum().y() >= kSecondShotY);
+
+    // Hiding every shot leaves nothing to frame. Derive the count — an
+    // out-of-range range is a silent no-op, so a hardcoded literal that
+    // drifted from twoShots() would quietly test nothing.
+    const int vertexCount = static_cast<int>(twoShots().size());
+    linePlot.setRangeVisible(0, vertexCount, false);
+    CHECK(scene.visibleFramingBounds().isNull());
+
+    // Re-showing everything restores the full framing box.
+    linePlot.setRangeVisible(0, vertexCount, true);
+    CHECK(scene.visibleFramingBounds().maximum().y() >= kSecondShotY);
+}
+
+// Out-of-range ranges are a silent no-op on both sides of the twin — nothing
+// hides, nothing crashes. Exercises the intersecter's guard directly (the
+// render-side guard would otherwise short-circuit the forward).
+TEST_CASE("cwRenderLinePlot out-of-range visibility ranges are ignored",
+          "[cwRenderLinePlot]")
+{
+    cwScene scene;
+
+    cwRenderLinePlot linePlot;
+    linePlot.setScene(&scene);
+    linePlot.setGeometry(twoShots());
+    scene.geometryItersecter()->waitForFinish();
+
+    const cwGeometryItersecter::Key key{&linePlot, 0};
+    const int vertexCount = static_cast<int>(twoShots().size());
+    scene.geometryItersecter()->setRangeVisible(key, -1, 2, false);
+    scene.geometryItersecter()->setRangeVisible(key, 0, 0, false);
+    scene.geometryItersecter()->setRangeVisible(key, 0, -2, false);
+    scene.geometryItersecter()->setRangeVisible(key, vertexCount - 1, 2, false);
+    scene.geometryItersecter()->setRangeVisible(key, 0, vertexCount + 1, false);
+
+    CHECK(scene.geometryItersecter()->intersectsDetailed(
+        rayThroughFirstShot(), linePickQuery()).hit());
+    CHECK(scene.geometryItersecter()->intersectsDetailed(
+        rayThroughSecondShot(), linePickQuery()).hit());
+    CHECK(scene.visibleFramingBounds().maximum().y() >= kSecondShotY);
+}
+
+// Hiding both shots through separate range calls, then re-showing them one
+// at a time: each partial show restores exactly its own shot, and the final
+// show restores the full framing box (the mask collapses back to the
+// all-visible fast path only once BOTH ranges are shown).
+TEST_CASE("cwRenderLinePlot partial ranges hide and show independently",
+          "[cwRenderLinePlot]")
+{
+    cwScene scene;
+
+    cwRenderLinePlot linePlot;
+    linePlot.setScene(&scene);
+    linePlot.setGeometry(twoShots());
+    scene.geometryItersecter()->waitForFinish();
+
+    linePlot.setRangeVisible(0, 2, false);
+    linePlot.setRangeVisible(2, 2, false);
+    CHECK(scene.visibleFramingBounds().isNull());
+
+    linePlot.setRangeVisible(0, 2, true);
+    CHECK(scene.geometryItersecter()->intersectsDetailed(
+        rayThroughFirstShot(), linePickQuery()).hit());
+    CHECK_FALSE(scene.geometryItersecter()->intersectsDetailed(
+        rayThroughSecondShot(), linePickQuery()).hit());
+
+    linePlot.setRangeVisible(2, 2, true);
+    CHECK(scene.geometryItersecter()->intersectsDetailed(
+        rayThroughSecondShot(), linePickQuery()).hit());
+    CHECK(scene.visibleFramingBounds().maximum().y() >= kSecondShotY);
+}
+
+// The rotation-pivot anchor (AnchorPick) shares the leaf-loop mask gate with
+// the exact pick, so a hidden shot can't capture the pivot either.
+TEST_CASE("cwRenderLinePlot hidden shot does not anchor the rotation pivot",
+          "[cwRenderLinePlot]")
+{
+    cwScene scene;
+
+    cwRenderLinePlot linePlot;
+    linePlot.setScene(&scene);
+    linePlot.setGeometry(twoShots());
+    scene.geometryItersecter()->waitForFinish();
+
+    REQUIRE(scene.geometryItersecter()->nearestGeometryPoint(
+                rayThroughSecondShot(), linePickQuery()).has_value());
+
+    linePlot.setRangeVisible(2, 2, false);
+
+    CHECK_FALSE(scene.geometryItersecter()->nearestGeometryPoint(
+        rayThroughSecondShot(), linePickQuery()).has_value());
+}
+
+// Replacing the geometry resets the mask to all-visible on BOTH sides of the
+// twin — new vertex indices mean the old ranges no longer apply, and the
+// owner (cwLinePlotManager::reconcileTripKeywordItems) re-applies hidden
+// ranges right after. This pins that contract: after setGeometry, a
+// previously hidden shot is pickable again until ranges are re-applied.
+TEST_CASE("cwRenderLinePlot geometry replacement resets the visibility mask",
+          "[cwRenderLinePlot]")
+{
+    cwScene scene;
+
+    cwRenderLinePlot linePlot;
+    linePlot.setScene(&scene);
+    linePlot.setGeometry(twoShots());
+    scene.geometryItersecter()->waitForFinish();
+
+    linePlot.setRangeVisible(2, 2, false);
+    REQUIRE_FALSE(scene.geometryItersecter()->intersectsDetailed(
+        rayThroughSecondShot(), linePickQuery()).hit());
+
+    linePlot.setGeometry(twoShots());
+    scene.geometryItersecter()->waitForFinish();
+
+    CHECK(scene.geometryItersecter()->intersectsDetailed(
+        rayThroughSecondShot(), linePickQuery()).hit());
+    CHECK(scene.visibleFramingBounds().maximum().y() >= kSecondShotY);
+}
+
+// Contrast: whole render-object visibility is its own gate, independent of
+// the per-vertex mask — hiding the entire line plot makes the same ray miss
+// with no mask involved.
 TEST_CASE("cwRenderLinePlot whole-object hide removes it from intersecter picks",
           "[cwRenderLinePlot]")
 {

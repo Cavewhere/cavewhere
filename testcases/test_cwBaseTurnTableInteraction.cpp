@@ -866,7 +866,8 @@ TEST_CASE("cwBaseTurnTableInteraction resetView frames the whole scene at the de
 {
     // Issue #549: a model whose datum places it far from the origin must be
     // brought back into view by reset, not left off-screen. resetView() frames
-    // the geometry intersecter's root bounding box, animating there.
+    // the scene's visibleFramingBounds(), animating there (everything here is
+    // visible, so that box equals the whole scene).
     Fixture f;
     const QVector3D sceneCenter(500.0f, -300.0f, 0.0f);
     addGeometryAt(f.scene, sceneCenter, 20.0f);

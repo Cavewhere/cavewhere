@@ -95,6 +95,16 @@ void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)
     }
 
     m_visibility.setValue(std::move(visibility));
+
+    // Twin the change into the intersecter's own mask so hidden shots stop
+    // taking picks and inflating the reset-view bounds (issues #575/#549).
+    // Both masks reset to all-visible on setGeometry, so applying the same
+    // ranges keeps them in step.
+    if (auto* intersecter = geometryItersecter()) {
+        intersecter->setRangeVisible(cwGeometryItersecter::Key{this, 0},
+                                     start, count, visible);
+    }
+
     update();
 }
 
