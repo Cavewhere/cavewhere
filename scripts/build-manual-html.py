@@ -132,6 +132,19 @@ def rewrite_links(html, relpath, key_by_relpath):
     return re.sub(r'href="([^"#]+\.md)(#[^"]*)?"', repl, html)
 
 
+# The manual's first page opens with the CaveWhere app icon as a title mark.
+LOGO_PAGE = "concepts/why-cavewhere.md"
+
+
+def logo_html(css_class="page-logo"):
+    """The CaveWhere app icon (cavewherelib/icons/svg/cave.svg) as a data-URI
+    <img>, used both as the sidebar brand mark and the opening page's title mark."""
+    path = os.path.join(ROOT, "assets", "cave.svg")
+    with open(path, "rb") as handle:
+        data = base64.b64encode(handle.read()).decode("ascii")
+    return f'<img class="{css_class}" src="data:image/svg+xml;base64,{data}" alt="CaveWhere logo">'
+
+
 def font_face_css():
     """Embed the Yanone Kaffeesatz heading font (the face cavewhere.com uses) as a
     data URI, so the manual renders with the brand font offline and with no
@@ -163,6 +176,8 @@ def build():
         frag = pandoc_fragment(body, key)
         frag = rewrite_links(frag, relpath, key_by_relpath)
         frag = embed_images(frag, os.path.dirname(relpath))
+        if relpath == LOGO_PAGE:
+            frag = logo_html() + "\n" + frag
         pages_html.append(f'<section id="{key}" class="page">\n{frag}\n</section>')
 
         chapter = chapter_title(relpath)
@@ -182,7 +197,10 @@ def build():
     nav = "\n".join(nav_html)
     main = "\n\n".join(pages_html)
 
-    return PAGE_TEMPLATE.format(css=font_face_css() + CSS, nav=nav, main=main, script=SCRIPT)
+    return PAGE_TEMPLATE.format(
+        css=font_face_css() + CSS, brand_logo=logo_html("brand-logo"),
+        nav=nav, main=main, script=SCRIPT,
+    )
 
 
 CSS = """
@@ -248,13 +266,17 @@ body {
   padding: 28px 22px 40px;
 }
 .brand { display: block; margin-bottom: 26px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
-.brand .mark-rule { width: 34px; height: 3px; background: var(--mark); border-radius: 2px; margin-bottom: 12px; }
+.brand-head { display: flex; align-items: center; gap: 12px; }
+.brand-logo {
+  flex: 0 0 auto; width: 34px; height: 34px; padding: 6px;
+  background: #ffffff; border: 1px solid var(--border); border-radius: 9px;
+}
 .brand h1 {
   font-family: var(--font-head); font-weight: 700;
-  font-size: 1.72rem; line-height: 1.05; margin: 0; letter-spacing: .01em;
+  font-size: 1.42rem; line-height: 1.04; margin: 0; letter-spacing: .01em;
   text-wrap: balance; color: var(--heading);
 }
-.brand p { margin: 8px 0 0; font-size: .82rem; color: var(--muted); line-height: 1.5; }
+.brand p { margin: 14px 0 0; font-size: .82rem; color: var(--muted); line-height: 1.5; }
 
 .nav-group { margin-bottom: 22px; }
 .nav-label {
@@ -303,6 +325,14 @@ figure, .page img { margin: 0; }
 .page img {
   display: block; max-width: 100%; height: auto; margin: 1.6em auto .4em;
   border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow);
+}
+/* The CaveWhere app icon as a title mark above the first page's heading. Its
+   formations are black, so it sits on a fixed white tile to stay legible on the
+   dark navy theme too. */
+.page img.page-logo {
+  width: 180px; height: 180px; padding: 30px; margin: 0 auto 28px;
+  background: #ffffff; border: 1px solid var(--border);
+  border-radius: 36px; box-shadow: var(--shadow);
 }
 /* The italic caption that follows a block image. A caption is authored with no
    blank line under its image, so pandoc keeps the img and the emphasis in one
@@ -374,8 +404,10 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <div class="layout">
   <aside class="sidebar">
     <div class="brand">
-      <div class="mark-rule"></div>
-      <h1>CaveWhere User Manual</h1>
+      <div class="brand-head">
+        {brand_logo}
+        <h1>CaveWhere User Manual</h1>
+      </div>
       <p>Turning underground sketches and instrument readings into an accurate, shareable 3D cave map.</p>
     </div>
     <nav>
