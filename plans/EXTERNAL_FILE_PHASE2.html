@@ -67,19 +67,19 @@
     <td>Panel mode selection; attach orchestrator; TripPage left-pane swap</td>
   </tr>
   <tr>
-    <td><code>cwLocalSettings</code> value class + JSON IO, <code>sourcePathFor(QUuid)</code>, <code>isLiveLink(QUuid)</code></td>
-    <td>Commit 3</td>
+    <td><code>cwLocalSettings</code> value class + JSON IO, <code>sourcePathFor(QUuid)</code>. Phase 1 shipped it backed by <code>.cwproj/local_settings.json</code> and without <code>isLiveLink(QUuid)</code>; Phase 2 commit 2 reworks storage to the per-machine app-data file (master &sect;5.3, no migration &mdash; unreleased dev code) and adds the <code>isLiveLink</code> convenience</td>
+    <td>Commit 3 (+ Phase 2 commit 2 rework)</td>
     <td>Attach dialog (live-link toggle); MissingSourceBanner; AttachedHeader source-mode line</td>
   </tr>
   <tr>
     <td><code>cwExternalCenterlineScanner::scan(QString entryFile)</code> &rarr; <code>Monad::Result&lt;ScanResult&gt;</code></td>
     <td>Commits 4&ndash;5</td>
-    <td>Attach orchestrator (Phase 2 commit 2); attach-dialog error preview</td>
+    <td>Attach orchestrator (Phase 2 commit 5); attach-dialog error preview</td>
   </tr>
   <tr>
     <td><code>cwExternalCenterlineSync::reconcile(saveLoad, scan, attachmentDir)</code> &rarr; <code>QFuture&lt;ResultBase&gt;</code></td>
     <td>Commit 6</td>
-    <td>Attach orchestrator (Phase 2 commit 2); detach path</td>
+    <td>Attach orchestrator (Phase 2 commit 5); detach path</td>
   </tr>
   <tr>
     <td><code>cwLinePlotManager</code>: <code>hasSolveError</code>, <code>solveErrorMessage</code>, <code>cavernLog</code>, <code>loopClosureStats</code>, <code>watchedFiles()</code>, <code>missingSourceOwners()</code>, <code>rerunSurvex()</code></td>
@@ -172,18 +172,26 @@
     <code>cwExternalCenterlineScanner.h/.cpp</code> &mdash;
     <code>ScanResult</code> grows a
     <code>SeededTripMetadata { std::optional&lt;QDate&gt; date;
-    std::optional&lt;double&gt; declination; QString team; }</code> sub-struct
-    populated from the entry file's
-    <code>*date</code> / <code>*team</code> /
-    <code>*calibrate declination</code> Survex directives (and equivalents
+    std::optional&lt;double&gt; declination; bool declinationIsAuto;
+    QStringList team; }</code> sub-struct populated from the entry
+    file's <code>*date</code> / <code>*team</code> /
+    <code>*calibrate declination</code> /
+    <code>*declination</code> Survex directives (and equivalents
     for Compass <code>SURVEY DATE</code> /
-    <code>CORRECTIONS</code> and Walls
+    <code>DECLINATION:</code> and Walls
     <code>#DATE</code> / <code>#UNITS DECL</code>). When absent, fields
     stay default-constructed and the orchestrator leaves
     <code>cwTripCalibration</code> untouched
-    (<code>autoDeclination = true</code> remains the default). Phase 1
-    deliberately scoped this out; per &sect;8.8 question 4 it is a
-    Phase-2 requirement.
+    (<code>autoDeclination = true</code> remains the default).
+    <code>fileOwnsDeclination()</code> (a set <code>declination</code>
+    or <code>declinationIsAuto</code> from Survex's
+    <code>*declination auto</code>) is the file-owns-declination flag
+    (master &sect;8.8 q7, cavern-verified): the panel shows the value
+    read-only and the driver emits no declination for that trip.
+    <code>team</code> is a list, one entry per person, so the
+    orchestrator can map it onto <code>cwTeamMember</code> without
+    lossily re-splitting a joined string. Phase 1 deliberately scoped
+    this out; per &sect;8.8 question 4 it is a Phase-2 requirement.
   </li>
   <li>
     <code>cwLinePlotManager.h/.cpp</code> &mdash; grow two accessors used
@@ -205,6 +213,45 @@
     manager copies it into its cache on result-publish. No new threading,
     no new copying outside the existing
     <code>Monad::Result&lt;LinePlotResultData&gt;</code> boundary.
+  </li>
+  <li>
+    <code>cwLocalSettings.h/.cpp</code> &mdash; storage rework (master
+    &sect;5.3): the backing file moves from
+    <code>.cwproj/local_settings.json</code> to the single per-machine
+    <code>&lt;QStandardPaths::AppDataLocation&gt;/local_settings.json</code>,
+    keyed by owner UUID, so live-link entries survive bundled
+    <code>.cw</code> open/close cycles (the extraction dir is a fresh
+    temp path every session and the bundle zip applies git-exclude
+    patterns). Same class, same proto JSON codec, same API; adds the
+    <code>isLiveLink(QUuid)</code> convenience
+    (<code>!sourcePathFor(id).isEmpty()</code>). <strong>No
+    migration</strong> &mdash; unreleased dev code; Phase 1's tests are
+    updated in place.
+  </li>
+  <li>
+    <code>cwSurvexExporterCaveTask.cpp</code> (+ the worker input
+    snapshot) &mdash; declination emission for external trips (master
+    &sect;8.8 q7): when the per-solve scan reports the file carries
+    <em>no</em> declination of its own, emit the CaveWhere-resolved
+    <code>*calibrate declination</code> inside the
+    <code>*begin trip_&lt;uuid&gt;</code> block before
+    <code>*include</code> (today Phase 1 emits nothing, so an external
+    TopoDroid file gets no declination at all). When the file carries
+    its own, emit nothing &mdash; cavern-verified that an injected
+    value would be dead text. The flag rides the per-solve scan result
+    into the export step (the pipeline scans on every solve), so no
+    proto/persistence change; the manager caches it per owner for the
+    panel's read-only binding.
+  </li>
+  <li>
+    <code>cwExternalCenterlineSync.cpp</code> /
+    <code>cwSaveLoad</code> &mdash; verify (and wire if missing) that
+    reconcile's copy/remove jobs emit
+    <code>localMutationOccurred</code> so
+    <code>cwProject::modified()</code> flips (master &sect;5.4).
+    Without it, a live-link refresh landing mid-session in a bundled
+    <code>.cw</code> is silently lost on quit-without-save. Precedent:
+    commit <code>50595738</code> (GIS-layer rescan).
   </li>
 </ul>
 
@@ -342,6 +389,25 @@
     from a Survex fixture with <code>*date 2025-06-01</code>, populates
     declination from a fixture with <code>*calibrate declination 7.2</code>,
     and leaves both unset when the fixture has neither.</li>
+  <li>C++ test: driver emission &mdash; external trip whose file carries
+    <em>no</em> declination &rarr; the driver contains the
+    CaveWhere-resolved <code>*calibrate declination</code> inside the
+    <code>trip_&lt;uuid&gt;</code> block before <code>*include</code>;
+    file <em>with</em> its own declination &rarr; the driver emits no
+    declination for that trip (cavern-verified precedence, master
+    &sect;8.8 q7).</li>
+  <li>C++ test: <code>cwLocalSettings</code> entries persist in the
+    per-machine app-data file across a project close + reopen &mdash;
+    including a bundled <code>.cw</code> round-trip (save, close, reopen
+    from the zip) where the extraction path changes but
+    <code>sourcePathFor(ownerId)</code> still resolves.</li>
+  <li>C++ test: a reconcile that copies an updated live-link source into
+    the project flips <code>cwProject::modified()</code> (master
+    &sect;5.4), so a bundled <code>.cw</code> prompts to save.</li>
+  <li>QML test: <code>ExternalCenterlineTripMetadata</code> shows
+    declination read-only with the "set by your survey file" hint when
+    the file carries its own declination, and editable (IGRF auto
+    default) when it doesn't.</li>
   <li>Manual: full round-trip on a real Survex project &mdash; attach,
     note one station, edit the source <code>.svx</code> outside the app,
     verify the note's station reference still resolves after the
@@ -418,17 +484,15 @@ struct AttachOptions {
     QString sourcePath;          // absolute path; ignored when liveLink is false
 };
 
-struct SeededTripMetadata {
-    std::optional&lt;QDate&gt; date;
-    std::optional&lt;double&gt; declination;  // degrees, positive east
-    QString team;
-};
+// SeededTripMetadata lives on the scanner (see section 7):
+// cwExternalCenterlineScanner::SeededTripMetadata - the orchestrator
+// reuses it rather than defining its own copy.
 
 struct AttachReport {
     cwExternalCenterlineScanner::ScanResult scan;  // copy of scanner result
     cwExternalCenterline persisted;                 // entryFile that landed on the trip
     QStringList warnings;                           // scanner warnings + reconcile warnings
-    SeededTripMetadata metadata;                    // applied to cwTripCalibration on success
+    cwExternalCenterlineScanner::SeededTripMetadata metadata;  // applied to cwTripCalibration on success
 };
 
 // Trip-level attach: scan source -&gt; reconcile into trip's attachment dir
@@ -488,7 +552,14 @@ detach(cwTrip* trip,
     orchestrator applies it to <code>cwTripCalibration</code> only when
     each field is set <em>and</em> the trip's existing value is empty
     (so re-attach over user-edited metadata never clobbers). Per
-    &sect;8.8 question 4.
+    &sect;8.8 question 4. Declination is special (master &sect;8.8 q7):
+    <code>fileOwnsDeclination()</code> means the file owns it &mdash;
+    the seeded value is display-only (panel renders it read-only, or
+    "automatic (IGRF)" for <code>declinationIsAuto</code>, with
+    <code>autoDeclination = false</code>) and the driver emits no
+    declination for the trip; otherwise the trip stays
+    CaveWhere-owned (editable, IGRF auto default, injected into the
+    driver).
   </li>
   <li>
     <strong>Detach on a Native trip is a no-op.</strong> Idempotent so
@@ -500,7 +571,7 @@ detach(cwTrip* trip,
     bool liveLink, QString sourcePath)</code> wrapper on
     <code>cwRootData</code> (or on a new
     <code>cwExternalCenterlineManager</code> singleton &mdash; decide
-    during commit 2 based on cwRootData bloat) exposes the orchestrator
+    during commit 5 based on cwRootData bloat) exposes the orchestrator
     to QML. The wrapper resolves the <code>cwSaveLoad</code> and
     <code>cwLocalSettings</code> dependencies from the root singleton
     and forwards.
@@ -517,7 +588,12 @@ detach(cwTrip* trip,
   entry file <em>only</em> &mdash; nested
   <code>*include</code>d files are not consulted because their
   directives would scope to a child block, not the trip the user is
-  attaching.
+  attaching. Two container-format exceptions: a Compass
+  <code>.mak</code> entry carries no survey header itself, so the
+  first referenced <code>.dat</code>'s header is consulted instead;
+  a Walls <code>.wpj</code> seeds nothing (its leaf <code>.srv</code>
+  files each carry their own dates, so a project-level seed would be
+  ambiguous).
 </p>
 
 <table>
@@ -529,25 +605,69 @@ detach(cwTrip* trip,
     <td><code>#DATE YYYY-MM-DD</code></td>
   </tr>
   <tr>
-    <td><code>declination</code></td>
-    <td><code>*calibrate declination &lt;degrees&gt;</code></td>
-    <td><code>CORRECTIONS: &lt;decl&gt; &lt;tape&gt; &lt;clino&gt;</code></td>
+    <td><code>declination</code> /
+      <code>declinationIsAuto</code></td>
+    <td><code>*calibrate declination &lt;degrees&gt;</code>, or the
+      modern <code>*declination &lt;degrees&gt; degrees</code>;
+      <code>*declination auto &hellip;</code> sets
+      <code>declinationIsAuto</code> (file-owned, cavern computes the
+      value via IGRF, no number to show)</td>
+    <td><code>DECLINATION: &lt;degrees&gt;</code> header field
+      (<em>not</em> <code>CORRECTIONS:</code>, which cavern reads as
+      compass/clino/tape instrument corrections &mdash; see
+      <code>survex/src/datain.c</code>)</td>
     <td><code>#UNITS DECL=&lt;degrees&gt;</code></td>
   </tr>
   <tr>
-    <td><code>team</code></td>
-    <td><code>*team &lt;name&gt;</code> (multiple lines joined with ", ")</td>
-    <td><code>SURVEY TEAM:</code> line</td>
-    <td><code>#NOTE</code> entries containing "team" (best-effort, may be empty)</td>
+    <td><code>team</code> (list, one entry per person)</td>
+    <td><code>*team &lt;name&gt;</code> (one entry per line; quoted
+      names supported)</td>
+    <td><code>SURVEY TEAM:</code> names line, split with the same
+      delimiter rule as <code>cwCompassImporter</code> (';' when
+      present, else commas / runs of whitespace)</td>
+    <td><code>#NOTE</code> entries containing "team", split on
+      commas (best-effort, may be empty)</td>
   </tr>
 </table>
 
 <p>
-  Missing or unparseable values leave the corresponding
-  <code>std::optional</code> empty and the team string empty. Per
-  &sect;8.8 question 4, this is best-effort seeding &mdash; the source
-  of truth after first attach is the CaveWhere trip record.
+  Missing values leave the corresponding <code>std::optional</code>
+  empty and the team list empty; a present-but-unparseable date or
+  declination additionally appends a warning to
+  <code>ScanResult.warnings</code> in every format (e.g.
+  <code>*date xyzzy</code>, <code>DECLINATION: N/A</code>, Walls'
+  degree:minute <code>DECL=7:30</code> form). Per &sect;8.8
+  question 4, this is best-effort seeding &mdash; the source of truth
+  after first attach is the CaveWhere trip record for date and team.
+  Declination is the exception:
+  <code>fileOwnsDeclination()</code> is the file-owns-declination
+  signal (master &sect;8.8 q7) &mdash; the file remains the source of
+  truth, the panel shows the value read-only (or "automatic (IGRF)"
+  for <code>declinationIsAuto</code>), and the driver emits no
+  declination for that trip. Since the pipeline re-scans on every
+  solve, an edit that adds or removes the file's declination
+  directive flips ownership on the next solve without any persisted
+  flag.
 </p>
+
+<div class="note">
+  <strong>Deferred refactor &mdash; split the metadata pass from the
+  dependency walk.</strong> <code>scan()</code> runs per-solve
+  (<code>cwLinePlotManager::recomputeWatchSetAndProbeSources</code>
+  calls it up to twice per owner, <code>onWatchedFileChanged</code>
+  again), but of the metadata trio only the
+  <code>fileOwnsDeclination()</code> flag is needed per-solve
+  (commit 3's driver emission); date/team are attach-time-only, and
+  the metadata pass re-reads the entry file the walk already decoded.
+  When commit 3's per-owner scan cache lands, revisit the seam:
+  either thread the decoded entry text through the walk state, or
+  split the API into <code>scanDependencies()</code> +
+  <code>scanMetadata()</code> so the per-solve path stops paying for
+  attach-time parsing. The main-thread half of this is no longer
+  deferred: commit 8 moves the closure scan into a worker outright
+  &mdash; disk I/O of this shape always runs off the GUI thread &mdash;
+  so this note's remaining scope is the metadata/dependency API seam.
+</div>
 
 <h2 id="scope-model">8. Per-scope station-list model</h2>
 
@@ -651,7 +771,7 @@ public:
     existing <code>RootData.pageSelectionModel.gotoPageByName(null,
     "Cavern")</code> (already wired by <code>29bcd026</code>) and then
     scrolls the page's <code>attachedCenterlinesSection</code> &mdash;
-    the <code>objectName</code> locked in commit 5 &mdash; into view via
+    the <code>objectName</code> locked in commit 9 &mdash; into view via
     a direct <code>QQ.ItemViewport</code>/<code>ScrollView</code>
     ensure-visible call on the section item. No new anchor IDs in
     <code>cwPageSelectionModel</code>; routing is page-level.
@@ -668,6 +788,14 @@ public:
     <code>StationValidator.external</code> to
     <code>trip.externalCenterline.entryFile.length &gt; 0</code>. The
     QML changes are one binding per input; no new components.
+  </li>
+  <li>
+    <strong>Declination ownership in TripMetadata.</strong>
+    <code>ExternalCenterlineTripMetadata</code> renders declination in
+    two modes (master &sect;8.8 q7): read-only with a "set by your
+    survey file" hint when the file carries its own declination
+    directive (flag exposed by the manager per commit 3), editable with
+    IGRF auto-declination otherwise. Date stays editable in both modes.
   </li>
 </ul>
 
@@ -706,6 +834,10 @@ public:
     <td>Model swaps back to <code>cwTrip::stations()</code> on
       <code>externalCenterlineChanged</code>; no special case.</td>
   </tr>
+  <tr>
+    <td>Live-link refresh lands mid-session in a bundled <code>.cw</code>, user quits without saving</td>
+    <td>Reconcile flips <code>cwProject::modified()</code> (master &sect;5.4, commit 4), so the standard save prompt appears on close; declining it discards the refresh, which re-applies on next open + solve since the source still differs.</td>
+  </tr>
 </table>
 
 <h2 id="commit-sequence">11. Suggested commit sequence</h2>
@@ -720,9 +852,50 @@ public:
   <li>
     <strong>Scanner <code>SeededTripMetadata</code>.</strong> Extend
     <code>ScanResult</code> with the sub-struct; parse the four Survex
-    directives + Compass <code>SURVEY DATE</code> / <code>CORRECTIONS</code>
-    + Walls <code>#DATE</code> / <code>#UNITS DECL</code>. Test the parser
-    in isolation. Tests: <code>[Scanner][Metadata]</code>.
+    directives (<code>*date</code> / <code>*team</code> /
+    <code>*calibrate declination</code> / <code>*declination</code>)
+    + Compass <code>SURVEY DATE</code> / <code>DECLINATION:</code>
+    + Walls <code>#DATE</code> / <code>#UNITS DECL</code>.
+    <code>fileOwnsDeclination()</code> is the file-owns-declination
+    signal (&sect;7). Test the parser in isolation. Tests:
+    <code>[Scanner][Metadata]</code>.
+  </li>
+  <li>
+    <strong><code>cwLocalSettings</code> app-data rework.</strong> Move
+    the backing file from <code>.cwproj/local_settings.json</code> to
+    the per-machine
+    <code>&lt;QStandardPaths::AppDataLocation&gt;/local_settings.json</code>
+    keyed by owner UUID (master &sect;5.3); add
+    <code>isLiveLink(QUuid)</code>. No migration &mdash; unreleased dev
+    code; update the Phase 1 <code>[LocalSettings]</code> tests in
+    place. Tests: <code>[LocalSettings]</code> extended with app-data
+    persistence + bundled-<code>.cw</code> reopen coverage.
+  </li>
+  <li>
+    <strong>External-trip declination emission.</strong>
+    <code>cwSurvexExporterCaveTask</code> emits the CaveWhere-resolved
+    <code>*calibrate declination</code> inside the
+    <code>*begin trip_&lt;uuid&gt;</code> block before
+    <code>*include</code> <em>only when</em> the per-solve scan reports
+    <code>fileOwnsDeclination()</code> false (master &sect;8.8 q7 —
+    cavern-verified that the file's own directive wins otherwise;
+    <code>declinationIsAuto</code> counts as file-owned). The
+    flag rides the scan result through the worker input; the manager
+    caches it per owner for the panel's read-only binding. When that
+    per-owner cache lands, revisit the &sect;7 deferred refactor
+    (split <code>scanMetadata()</code> from the dependency walk so
+    the per-solve path stops re-parsing attach-time metadata). Tests:
+    <code>[Attach][Declination]</code> asserting driver text for both
+    file-with-decl and file-without-decl fixtures.
+  </li>
+  <li>
+    <strong>Reconcile dirty-bit wiring.</strong> Verify (and wire if
+    missing) that reconcile copy/remove jobs emit
+    <code>localMutationOccurred</code> so
+    <code>cwProject::modified()</code> flips (master &sect;5.4;
+    precedent <code>50595738</code>). Tests:
+    <code>[Sync][Reconcile]</code> extended with a modified-bit
+    assertion.
   </li>
   <li>
     <strong>Attach orchestrator.</strong>
@@ -743,6 +916,29 @@ public:
     worker writes <code>driverSource</code> on every solve. Tests:
     <code>[LinePlotManager][AttachedCenterlinesModel]</code> covering
     attach/detach round-trip + multi-attach ordering.
+  </li>
+  <li>
+    <strong>Async scan pipeline.</strong> Move the per-owner
+    dependency-closure scan off the main thread &mdash; disk I/O of
+    this shape always runs in a worker.
+    <code>recomputeWatchSetAndProbeSources()</code> becomes: gather
+    the owner list on the main thread (cheap, no I/O), run
+    <code>cwExternalCenterlineScanner::scan()</code> per owner via
+    <code>cwConcurrent</code> (the scanner is stateless and
+    thread-safe &mdash; function-local <code>static const</code>
+    regexes + const <code>match()</code> only), then apply the watch
+    set, <code>missingSourceOwners</code>, and source-owner routing
+    table back on the main thread through
+    <code>AsyncFuture::observe(&hellip;).context(this, &hellip;)</code>
+    (never <code>waitForFinished</code> in production).
+    <code>onWatchedFileChanged</code> routes through the same async
+    path, coalesced Restarter-style so an editor save burst triggers
+    one rescan, not one per file event. This closes the main-thread
+    stall risk for large attached projects and cloud-synced/network
+    volumes (a single cold <code>read()</code> on a Dropbox
+    placeholder can block for seconds). Rationale and the related
+    metadata-split seam live in the &sect;7 deferred-refactor note.
+    Tests: <code>[LinePlotManager][AsyncScan]</code>.
   </li>
   <li>
     <strong><code>CavernOutputPage</code> extension + DataMainPage
@@ -780,7 +976,7 @@ public:
     &sect;8.5.1</a> skeleton with the Phase-2 deltas in
     &sect;<a class="anchor" href="#panel">9</a>. Tests:
     <code>tst_ExternalCenterlineTripPanel.qml</code> with a programmatic
-    attach (orchestrator from commit 2).
+    attach (orchestrator from commit 5).
   </li>
   <li>
     <strong><code>AttachExternalCenterlineDialog.qml</code>.</strong>
@@ -803,8 +999,8 @@ public:
 </ol>
 
 <p>
-  Total: 9 commits. Commits 1&ndash;4 are pure C++ (testable headless,
-  no UI yet); commits 5&ndash;9 are QML on top of that foundation.
+  Total: 13 commits. Commits 1&ndash;8 are pure C++ (testable headless,
+  no UI yet); commits 9&ndash;13 are QML on top of that foundation.
   Splitting along this line means the C++ surface stabilises first and
   the QML commits can use Catch2-driven setup
   (<code>cwExternalCenterlineAttach::attach</code> directly from a test
@@ -838,13 +1034,70 @@ public:
 <ul>
   <li>Survex fixture with <code>*date 2025-06-01</code>, <code>*team Alice</code>, <code>*calibrate declination 7.2</code> &rarr; populated trio.</li>
   <li>Survex fixture with neither date nor decl &rarr; both <code>std::nullopt</code>.</li>
-  <li>Survex fixture with multiple <code>*team</code> lines &rarr; joined with ", ".</li>
-  <li>Compass <code>.dat</code> with header <code>SURVEY DATE: 6 1 2025</code> + <code>CORRECTIONS: 7.2 0 0</code> &rarr; populated date + decl.</li>
+  <li>Survex fixture with multiple <code>*team</code> lines &rarr; one list entry per line (quoted names kept whole).</li>
+  <li>Survex <code>*declination 7.2 degrees</code> &rarr; declination populated, <code>fileOwnsDeclination()</code> true.</li>
+  <li>Survex <code>*declination auto &hellip;</code> &rarr; declination <code>std::nullopt</code>, <code>declinationIsAuto</code> true, <code>fileOwnsDeclination()</code> true.</li>
+  <li>Compass <code>.dat</code> with header <code>SURVEY DATE: 6 1 2025</code> + <code>DECLINATION: 7.20</code> &rarr; populated date + decl (the fixture's <code>CORRECTIONS: 0.00 0.00 0.00</code> is deliberately ignored).</li>
+  <li>Compass <code>.mak</code> entry &rarr; metadata consulted from the first referenced <code>.dat</code> (a <code>.mak</code> carries no survey header of its own).</li>
   <li>Walls <code>.srv</code> with <code>#DATE 2025-06-01</code> + <code>#UNITS DECL=7.2</code> &rarr; populated.</li>
   <li>Malformed date (<code>*date xyzzy</code>) &rarr; <code>std::nullopt</code>, warning appended to <code>ScanResult.warnings</code>.</li>
+  <li>Malformed declination warns in every format: Survex <code>*calibrate declination auto</code>, Compass <code>DECLINATION: N/A</code>, Walls <code>DECL=7:30</code> &rarr; declination <code>std::nullopt</code> + warning (never a silent "CaveWhere owns it").</li>
+  <li>Multi-survey Compass <code>.dat</code> &rarr; only the first survey's header (before the form-feed separator) seeds metadata.</li>
+  <li>Walls <code>.wpj</code> entry &rarr; seeds nothing, even when its first leaf <code>.srv</code> carries <code>decl=</code>.</li>
+  <li>CRLF-terminated files parse identically (real Compass/Walls files are DOS-formatted).</li>
 </ul>
 
-<h3>Commit 2 &mdash; attach orchestrator</h3>
+<h3>Commit 2 &mdash; cwLocalSettings app-data rework</h3>
+<p><strong>Tag:</strong> <code>[LocalSettings]</code> (extends Phase 1's suite in place)</p>
+<ul>
+  <li>Write an entry; construct a fresh <code>cwLocalSettings</code>
+    (new instance, same machine) &rarr; <code>sourcePathFor(ownerId)</code>
+    resolves &mdash; persistence is app-data-backed, not project-backed.
+    Tests point the app-data root at a <code>QTemporaryDir</code>
+    (PID-safe) rather than the real location.</li>
+  <li>Bundled <code>.cw</code> round-trip: save a bundle, close, reopen
+    (fresh extraction path) &rarr; entry still resolves by owner UUID.</li>
+  <li><code>isLiveLink(ownerId)</code> true iff
+    <code>sourcePathFor</code> is non-empty.</li>
+  <li>Entries for unknown owner UUIDs (deleted projects) are returned
+    as-is and harmless &mdash; no GC.</li>
+  <li>No <code>local_settings.json</code> is created inside the project
+    tree.</li>
+</ul>
+
+<h3>Commit 3 &mdash; external-trip declination emission</h3>
+<p><strong>New tag:</strong> <code>[Attach][Declination]</code></p>
+<ul>
+  <li>External trip, fixture <em>without</em> declination, trip has
+    <code>autoDeclination = true</code> &rarr; driver contains
+    <code>*calibrate declination &lt;igrf-value&gt;</code> inside the
+    <code>trip_&lt;uuid&gt;</code> block, before <code>*include</code>.</li>
+  <li>Same fixture, user-set manual declination &rarr; driver contains
+    the manual value.</li>
+  <li>External trip, fixture <em>with</em> its own
+    <code>*calibrate declination</code> &rarr; driver emits no
+    declination line for that trip.</li>
+  <li>End-to-end position check (the cavern-verified precedence):
+    file-without-decl + injected 90&deg; &rarr; resolved station position
+    reflects the rotation; file-with-decl &rarr; position matches the
+    file's own value regardless of the trip's CaveWhere setting.</li>
+  <li>Native trips' declination emission unchanged (existing
+    <code>[LinePlot]</code> tests stay green).</li>
+</ul>
+
+<h3>Commit 4 &mdash; reconcile dirty-bit wiring</h3>
+<p><strong>Tag:</strong> <code>[Sync][Reconcile]</code> (extends Phase 1's suite)</p>
+<ul>
+  <li>Reconcile that copies at least one file &rarr;
+    <code>cwProject::modified()</code> flips true (or
+    <code>localMutationOccurred</code> observed via signal spy).</li>
+  <li>No-op reconcile (source == dest, matching mtime/size) &rarr;
+    modified bit untouched.</li>
+  <li>GC-only reconcile (file removed from closure) &rarr; modified
+    flips.</li>
+</ul>
+
+<h3>Commit 5 &mdash; attach orchestrator</h3>
 <p><strong>New tag:</strong> <code>[Attach][Orchestrator]</code></p>
 <ul>
   <li>Happy path: <code>survex_simple.svx</code> &rarr;
@@ -872,7 +1125,7 @@ public:
     seeded declination is silently ignored.</li>
 </ul>
 
-<h3>Commit 3 &mdash; cwScopeStationListModel</h3>
+<h3>Commit 6 &mdash; cwScopeStationListModel</h3>
 <p><strong>New tag:</strong> <code>[Model][ScopeStations]</code></p>
 <ul>
   <li>Prefix strip: <code>scopePrefix = "cave_X.trip_Y."</code>; lookup
@@ -889,7 +1142,7 @@ public:
   <li>Out-of-scope stations (different cave/trip prefix) are skipped.</li>
 </ul>
 
-<h3>Commit 4 &mdash; cwLinePlotManager attached-centerlines model + driver source</h3>
+<h3>Commit 7 &mdash; cwLinePlotManager attached-centerlines model + driver source</h3>
 <p><strong>New tag:</strong> <code>[LinePlotManager][AttachedCenterlinesModel]</code></p>
 <ul>
   <li>Native region &rarr; <code>attachedCenterlinesModel</code> has
@@ -907,7 +1160,28 @@ public:
     Phase 1 commit 8's format (absolute forward-slash quoted).</li>
 </ul>
 
-<h3>Commit 5 &mdash; CavernOutputPage extension + DataMainPage summary text + FileMenu export-disable wire-up</h3>
+<h3>Commit 8 &mdash; async scan pipeline</h3>
+<p><strong>New tag:</strong> <code>[LinePlotManager][AsyncScan]</code></p>
+<ul>
+  <li>Attach an owner &rarr; <code>watchedFiles()</code> and the
+    source-owner routing table populate after the async scan resolves
+    (assert via the manager's existing wait helper, not a fixed
+    sleep); results identical to the previous synchronous behavior.</li>
+  <li>Live-link source missing at recompute &rarr;
+    <code>missingSourceOwners()</code> populates asynchronously; the
+    startup-probe test from Phase 1 commit 9 stays green.</li>
+  <li>Burst-coalescing: touch several files in the closure in quick
+    succession &rarr; one rescan (observable as a single
+    watch-set/solve update, Restarter-style), not one per event.</li>
+  <li>Owner detached (or region destroyed) while a scan is in flight
+    &rarr; no crash, stale result dropped
+    (<code>AsyncFuture</code> context auto-disconnect).</li>
+  <li>No <code>waitForFinished</code> in the production path; the
+    main thread performs no file I/O during recompute (owner-list
+    gathering only).</li>
+</ul>
+
+<h3>Commit 9 &mdash; CavernOutputPage extension + DataMainPage summary text + FileMenu export-disable wire-up</h3>
 <p><strong>New QML tests:</strong>
   <code>tst_CavernOutputPageExternal.qml</code>,
   <code>tst_DataMainPageExternal.qml</code>,
@@ -975,7 +1249,7 @@ public:
     sibling actions.)</li>
 </ul>
 
-<h3>Commit 6 &mdash; panel sub-components</h3>
+<h3>Commit 10 &mdash; panel sub-components</h3>
 <p><strong>New QML test:</strong>
   <code>tst_ExternalCenterlinePanelComponents.qml</code></p>
 <ul>
@@ -997,7 +1271,7 @@ public:
     <code>autoDeclination</code> to false.</li>
 </ul>
 
-<h3>Commit 7 &mdash; ExternalCenterlineTripPanel assembly</h3>
+<h3>Commit 11 &mdash; ExternalCenterlineTripPanel assembly</h3>
 <p><strong>New QML test:</strong>
   <code>tst_ExternalCenterlineTripPanel.qml</code></p>
 <ul>
@@ -1015,7 +1289,7 @@ public:
     click.</li>
 </ul>
 
-<h3>Commit 8 &mdash; AttachExternalCenterlineDialog</h3>
+<h3>Commit 12 &mdash; AttachExternalCenterlineDialog</h3>
 <p><strong>New QML test:</strong>
   <code>tst_AttachExternalCenterlineDialog.qml</code></p>
 <ul>
@@ -1031,7 +1305,7 @@ public:
     picked path.</li>
 </ul>
 
-<h3>Commit 9 &mdash; TripPage swap + Add-Trip menu + notes regex + carpet picker</h3>
+<h3>Commit 13 &mdash; TripPage swap + Add-Trip menu + notes regex + carpet picker</h3>
 <p><strong>New QML test:</strong>
   <code>tst_TripPageExternalAttach.qml</code></p>
 <ul>
@@ -1063,18 +1337,18 @@ public:
   <tr><th>Fixture</th><th>Used by</th><th>Notes</th></tr>
   <tr>
     <td><code>survex_with_metadata.svx</code></td>
-    <td><code>[Scanner][Metadata]</code>, <code>[Attach][Orchestrator]</code></td>
-    <td>Two stations, <code>*date 2025-06-01</code>, <code>*team Alice</code>, <code>*team Bob</code>, <code>*calibrate declination 7.2</code>.</td>
+    <td><code>[Scanner][Metadata]</code>, <code>[Attach][Orchestrator]</code>, <code>[Attach][Declination]</code></td>
+    <td>Two stations, <code>*date 2025-06-01</code>, <code>*team Alice</code>, <code>*team Bob</code>, <code>*calibrate declination 7.2</code>. Doubles as the file-owns-declination fixture (driver must emit no declination for it).</td>
   </tr>
   <tr>
     <td><code>survex_no_metadata.svx</code></td>
-    <td><code>[Scanner][Metadata]</code></td>
-    <td>Two stations, no <code>*date</code>, no <code>*calibrate</code>, no <code>*team</code>.</td>
+    <td><code>[Scanner][Metadata]</code>, <code>[Attach][Declination]</code></td>
+    <td>Two stations, no <code>*date</code>, no <code>*calibrate</code>, no <code>*team</code>. Doubles as the CaveWhere-owns-declination fixture (driver must inject the resolved value).</td>
   </tr>
   <tr>
     <td><code>compass_with_metadata.dat</code> + <code>compass_with_metadata.mak</code></td>
     <td><code>[Scanner][Metadata]</code></td>
-    <td><code>SURVEY DATE: 6 1 2025</code> + <code>CORRECTIONS: 7.2 0 0</code>.</td>
+    <td><code>SURVEY DATE: 6 1 2025</code> + <code>DECLINATION: 7.20</code>; the <code>.mak</code> covers the consult-first-<code>.dat</code> path.</td>
   </tr>
   <tr>
     <td><code>walls_with_metadata.srv</code></td>
@@ -1107,7 +1381,7 @@ public:
       Qt 6.10+ (modal flag, native-vs-Quick rendering).</td>
     <td>Use the existing
       <code>cwFileDialogHelper</code> wrapper if there is one (verify in
-      commit 8); otherwise pin the platform variant for now and document
+      commit 12); otherwise pin the platform variant for now and document
       in the dialog's source comment.</td>
   </tr>
   <tr>
@@ -1139,7 +1413,7 @@ public:
     <td>Phase 2 uses <code>linePlotManager.missingSourceOwners.includes(trip.id)</code>
       instead &mdash; the manager already maintains this set per Phase 1
       commit 9. The skeleton's binding gets updated in
-      commit 7 when the panel lands.</td>
+      commit 11 when the panel lands.</td>
   </tr>
 </table>
 

@@ -1,0 +1,5 @@
+; Walls metadata fixture for the [Scanner][Metadata] tests.
+#DATE 2025-06-01
+#UNITS D=Meters A=Degrees V=Degrees DECL=7.2
+#NOTE Team: Alice, Bob
+W1	W2	10.0	0	0

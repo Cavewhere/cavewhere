@@ -1,0 +1,10 @@
+MetaCave
+SURVEY NAME: META
+SURVEY DATE: 6 1 2025  COMMENT:Metadata fixture
+SURVEY TEAM:
+Alice, Bob
+DECLINATION: 7.20  FORMAT: DDDDLRUDLADN  CORRECTIONS: 0.00 0.00 0.00
+
+FROM         TO        LENGTH  BEARING     INC     LEFT    UP    DOWN   RIGHT
+M1           M2        10.00   0.00        0.00    1.0     1.0   1.0    1.0
+

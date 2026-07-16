@@ -34,6 +34,28 @@
   design pass should wait until after Phase 3 ships so Scope-trip UI is
   real when picker decisions get made. When the design pass happens,
   its output moves here.
+  <br><br>
+  <strong>Implementation order:</strong> Phase 4 ships <em>after</em>
+  Phase 5 (orphan detection) &mdash; see the master plan &sect;9
+  implementation-order note. Phase numbers are stable names, not the
+  delivery sequence.
+</div>
+
+<div class="note">
+  <strong>Prerequisite refactor &mdash; per-format strategy split in
+  <code>cwExternalCenterlineScanner</code>.</strong> The scanner
+  already carries three per-format axes side by side (dependency
+  walkers, metadata line-parsers, per-format regexes/comment
+  strippers) with format-dispatch switches duplicated in
+  <code>scanByFormat</code> and <code>parseSeededMetadata</code>.
+  Phase 4/5 station extraction from external files adds a fourth
+  axis. Before implementing it, restructure into per-format units
+  (a <code>FormatTraits</code>-style strategy, or per-format TUs
+  &mdash; cwSurvexFormat / cwCompassFormat / cwWallsFormat &mdash;
+  behind the existing namespace facade) so the duplicated switches
+  collapse and the file stops growing monolithically. Pure
+  mechanical restructure, zero behavior change; whichever of
+  Phase 5 / Phase 4 ships first does it.
 </div>
 
 <h2>What this file will contain (after the design pass)</h2>

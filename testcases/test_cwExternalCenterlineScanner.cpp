@@ -17,6 +17,7 @@
 // Qt
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QDate>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -458,6 +459,382 @@ TEST_CASE("scanSurvex pulls in a Compass .dat via *include", "[Scanner][CrossFor
     CHECK(hasFileNameInDeps(scan, QStringLiteral("cross_format.svx")));
     CHECK(hasFileNameInDeps(scan, QStringLiteral("compass_simple.dat")));
     CHECK(scan.warnings.isEmpty());
+}
+
+TEST_CASE("seededMetadata populates date, team, and declination from a Survex entry",
+          "[Scanner][Metadata]")
+{
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("survex_with_metadata.svx"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.warnings.isEmpty());
+
+    REQUIRE(scan.seededMetadata.date.has_value());
+    CHECK(scan.seededMetadata.date.value() == QDate(2025, 6, 1));
+    REQUIRE(scan.seededMetadata.declination.has_value());
+    CHECK(scan.seededMetadata.declination.value() == 7.2);
+    // One entry per *team line
+    CHECK(scan.seededMetadata.team
+          == QStringList({QStringLiteral("Alice"), QStringLiteral("Bob")}));
+}
+
+TEST_CASE("seededMetadata stays empty for a Survex file without directives",
+          "[Scanner][Metadata]")
+{
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("survex_no_metadata.svx"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.warnings.isEmpty());
+    CHECK_FALSE(scan.seededMetadata.date.has_value());
+    CHECK_FALSE(scan.seededMetadata.declination.has_value());
+    CHECK(scan.seededMetadata.team.isEmpty());
+}
+
+TEST_CASE("seededMetadata handles quoted *team names and dotted *date",
+          "[Scanner][Metadata]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("quoted-team.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin QuotedTeam\n"
+                                    "*date 2025.06.01\n"
+                                    "*team \"Alice Smith\" notes\n"
+                                    "*team Bob\n"
+                                    "*data normal from to tape compass clino\n"
+                                    "A1 A2 10.0 0 0\n"
+                                    "*end QuotedTeam\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    REQUIRE(scan.seededMetadata.date.has_value());
+    CHECK(scan.seededMetadata.date.value() == QDate(2025, 6, 1));
+    CHECK(scan.seededMetadata.team
+          == QStringList({QStringLiteral("Alice Smith"), QStringLiteral("Bob")}));
+}
+
+TEST_CASE("seededMetadata warns on a malformed *date and leaves it unset",
+          "[Scanner][Metadata]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("bad-date.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin BadDate\n"
+                                    "*date xyzzy\n"
+                                    "*data normal from to tape compass clino\n"
+                                    "A1 A2 10.0 0 0\n"
+                                    "*end BadDate\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK_FALSE(scan.seededMetadata.date.has_value());
+    CHECK(anyWarningContains(scan, QStringLiteral("*date")));
+}
+
+TEST_CASE("seededMetadata warns on a non-numeric *calibrate declination",
+          "[Scanner][Metadata]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("bad-decl.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin BadDecl\n"
+                                    "*calibrate declination auto\n"
+                                    "*data normal from to tape compass clino\n"
+                                    "A1 A2 10.0 0 0\n"
+                                    "*end BadDecl\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK_FALSE(scan.seededMetadata.declination.has_value());
+    CHECK(anyWarningContains(scan, QStringLiteral("declination")));
+}
+
+TEST_CASE("seededMetadata reads the modern *declination command",
+          "[Scanner][Metadata]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("declination-cmd.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin DeclCmd\n"
+                                    "*declination 7.2 degrees\n"
+                                    "*data normal from to tape compass clino\n"
+                                    "A1 A2 10.0 0 0\n"
+                                    "*end DeclCmd\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.warnings.isEmpty());
+    REQUIRE(scan.seededMetadata.declination.has_value());
+    CHECK(scan.seededMetadata.declination.value() == 7.2);
+    CHECK(scan.seededMetadata.fileOwnsDeclination());
+}
+
+TEST_CASE("seededMetadata flags *declination auto as file-owned without a value",
+          "[Scanner][Metadata]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("declination-auto.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin DeclAuto\n"
+                                    "*declination auto 393000 5789000 100\n"
+                                    "*data normal from to tape compass clino\n"
+                                    "A1 A2 10.0 0 0\n"
+                                    "*end DeclAuto\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.warnings.isEmpty());
+    CHECK_FALSE(scan.seededMetadata.declination.has_value());
+    CHECK(scan.seededMetadata.declinationIsAuto);
+    CHECK(scan.seededMetadata.fileOwnsDeclination());
+}
+
+TEST_CASE("seededMetadata warns on a non-numeric Compass DECLINATION field",
+          "[Scanner][Metadata]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("bad-decl.dat"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("BadDeclCave\n"
+                                    "SURVEY NAME: BAD\n"
+                                    "SURVEY DATE: 6 1 2025\n"
+                                    "SURVEY TEAM:\n"
+                                    "Alice\n"
+                                    "DECLINATION: N/A  FORMAT: DDDDLRUDLADN\n"));
+
+    auto result = cwExternalCenterlineScanner::scanCompass(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK_FALSE(scan.seededMetadata.declination.has_value());
+    CHECK_FALSE(scan.seededMetadata.fileOwnsDeclination());
+    CHECK(anyWarningContains(scan, QStringLiteral("DECLINATION")));
+}
+
+TEST_CASE("seededMetadata warns on a non-numeric Walls DECL= value",
+          "[Scanner][Metadata]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // Walls' degree:minute form is valid to dewalls/cavern but not
+    // parsed here; it must warn rather than silently seeding 7.0.
+    const QString path = tempPath(tempDir, QStringLiteral("bad-decl.srv"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("#UNITS D=Meters A=Degrees DECL=7:30\n"
+                                    "W1\tW2\t10.0\t0\t0\n"));
+
+    auto result = cwExternalCenterlineScanner::scanWalls(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK_FALSE(scan.seededMetadata.declination.has_value());
+    CHECK(anyWarningContains(scan, QStringLiteral("DECL")));
+}
+
+TEST_CASE("seededMetadata comes from the entry file only, not nested includes",
+          "[Scanner][Metadata]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString childPath = tempPath(tempDir, QStringLiteral("child.svx"));
+    writeUtf8File(childPath,
+                  QByteArrayLiteral("*begin Child\n"
+                                    "*date 2025-06-01\n"
+                                    "*calibrate declination 7.2\n"
+                                    "*data normal from to tape compass clino\n"
+                                    "C1 C2 10.0 0 0\n"
+                                    "*end Child\n"));
+    const QString driverPath = tempPath(tempDir, QStringLiteral("driver.svx"));
+    writeUtf8File(driverPath,
+                  QByteArrayLiteral("*include \"child.svx\"\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(driverPath);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.dependencies.size() == 2);
+    CHECK_FALSE(scan.seededMetadata.date.has_value());
+    CHECK_FALSE(scan.seededMetadata.declination.has_value());
+    CHECK(scan.seededMetadata.team.isEmpty());
+}
+
+TEST_CASE("seededMetadata reads a Compass .dat header",
+          "[Scanner][Metadata]")
+{
+    const QString path = datasetExternalCenterlinePath(
+        QStringLiteral("compass_with_metadata.dat"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanCompass(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.warnings.isEmpty());
+
+    REQUIRE(scan.seededMetadata.date.has_value());
+    CHECK(scan.seededMetadata.date.value() == QDate(2025, 6, 1));
+    // From the DECLINATION: header field, NOT the CORRECTIONS
+    // instrument corrections (which are 0.00 in the fixture).
+    REQUIRE(scan.seededMetadata.declination.has_value());
+    CHECK(scan.seededMetadata.declination.value() == 7.2);
+    CHECK(scan.seededMetadata.team
+          == QStringList({QStringLiteral("Alice"), QStringLiteral("Bob")}));
+}
+
+TEST_CASE("seededMetadata on a Compass .mak entry consults the first .dat",
+          "[Scanner][Metadata]")
+{
+    const QString path = datasetExternalCenterlinePath(
+        QStringLiteral("compass_with_metadata.mak"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanCompass(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    REQUIRE(scan.seededMetadata.date.has_value());
+    CHECK(scan.seededMetadata.date.value() == QDate(2025, 6, 1));
+    REQUIRE(scan.seededMetadata.declination.has_value());
+    CHECK(scan.seededMetadata.declination.value() == 7.2);
+    CHECK(scan.seededMetadata.team
+          == QStringList({QStringLiteral("Alice"), QStringLiteral("Bob")}));
+}
+
+TEST_CASE("seededMetadata reads Walls #DATE, #UNITS DECL, and #NOTE team",
+          "[Scanner][Metadata]")
+{
+    const QString path = datasetExternalCenterlinePath(
+        QStringLiteral("walls_with_metadata.srv"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanWalls(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.warnings.isEmpty());
+
+    REQUIRE(scan.seededMetadata.date.has_value());
+    CHECK(scan.seededMetadata.date.value() == QDate(2025, 6, 1));
+    REQUIRE(scan.seededMetadata.declination.has_value());
+    CHECK(scan.seededMetadata.declination.value() == 7.2);
+    CHECK(scan.seededMetadata.team
+          == QStringList({QStringLiteral("Alice"), QStringLiteral("Bob")}));
+}
+
+TEST_CASE("seededMetadata parses CRLF-terminated files",
+          "[Scanner][Metadata]")
+{
+    // Real Compass and Walls files are conventionally DOS-formatted;
+    // the parsers split on '\n' and must shed the trailing '\r'
+    // before date/number parsing.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempPath(tempDir, QStringLiteral("crlf.svx"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("*begin Crlf\r\n"
+                                    "*date 2025-06-01\r\n"
+                                    "*team Alice\r\n"
+                                    "*calibrate declination 7.2\r\n"
+                                    "*data normal from to tape compass clino\r\n"
+                                    "A1 A2 10.0 0 0\r\n"
+                                    "*end Crlf\r\n"));
+
+    auto result = cwExternalCenterlineScanner::scanSurvex(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(scan.warnings.isEmpty());
+    REQUIRE(scan.seededMetadata.date.has_value());
+    CHECK(scan.seededMetadata.date.value() == QDate(2025, 6, 1));
+    REQUIRE(scan.seededMetadata.declination.has_value());
+    CHECK(scan.seededMetadata.declination.value() == 7.2);
+    CHECK(scan.seededMetadata.team == QStringList({QStringLiteral("Alice")}));
+}
+
+TEST_CASE("seededMetadata reads only the first survey of a multi-survey Compass .dat",
+          "[Scanner][Metadata]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // First survey has a declination but no date; the second (after
+    // the form-feed separator) has a date that must NOT leak into
+    // the seed.
+    const QString path = tempPath(tempDir, QStringLiteral("two-surveys.dat"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("TwoSurveyCave\n"
+                                    "SURVEY NAME: ONE\n"
+                                    "SURVEY TEAM:\n"
+                                    "Alice\n"
+                                    "DECLINATION: 3.50  FORMAT: DDDDLRUDLADN\n"
+                                    "\n"
+                                    "FROM TO LENGTH BEARING INC\n"
+                                    "S1 S2 10.00 0.00 0.00\n"
+                                    "\f\n"
+                                    "TwoSurveyCave\n"
+                                    "SURVEY NAME: TWO\n"
+                                    "SURVEY DATE: 6 1 2025\n"
+                                    "SURVEY TEAM:\n"
+                                    "Bob\n"
+                                    "DECLINATION: 9.00  FORMAT: DDDDLRUDLADN\n"));
+
+    auto result = cwExternalCenterlineScanner::scanCompass(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK_FALSE(scan.seededMetadata.date.has_value());
+    REQUIRE(scan.seededMetadata.declination.has_value());
+    CHECK(scan.seededMetadata.declination.value() == 3.5);
+    CHECK(scan.seededMetadata.team == QStringList({QStringLiteral("Alice")}));
+}
+
+TEST_CASE("seededMetadata stays empty for a Walls .wpj entry",
+          "[Scanner][Metadata]")
+{
+    // A .wpj seeds nothing - its leaf .srv files each carry their
+    // own dates, so a project-level seed would be ambiguous. The
+    // referenced MAIN.SRV declares decl=0, which must NOT leak in.
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("walls_simple.wpj"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanWalls(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK_FALSE(scan.seededMetadata.date.has_value());
+    CHECK_FALSE(scan.seededMetadata.declination.has_value());
+    CHECK(scan.seededMetadata.team.isEmpty());
+}
+
+TEST_CASE("seededMetadata treats a Walls DECL=0 as file-owned declination",
+          "[Scanner][Metadata]")
+{
+    // MAIN.SRV declares "#units ... decl=0" - zero still counts as
+    // set, because the file explicitly owns its declination.
+    const QString path = datasetExternalCenterlinePath(QStringLiteral("MAIN.SRV"));
+    REQUIRE(QFileInfo::exists(path));
+
+    auto result = cwExternalCenterlineScanner::scanWalls(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    REQUIRE(scan.seededMetadata.declination.has_value());
+    CHECK(scan.seededMetadata.declination.value() == 0.0);
 }
 
 TEST_CASE("scanSurvex's cycle detection spans format boundaries",

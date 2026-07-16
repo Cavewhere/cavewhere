@@ -13,7 +13,11 @@
 #include <Monad/Result.h>
 
 //Qt includes
+#include <QDate>
 #include <QStringList>
+
+//Std includes
+#include <optional>
 
 /**
  * Free-function scanner that walks the dependency closure of an
@@ -38,6 +42,59 @@ enum class Format {
     Unknown    // no extension or unrecognised
 };
 
+/**
+ * Best-effort trip metadata pulled from the entry file only -
+ * nested included files are not consulted because their directives
+ * would scope to a child block, not the trip being attached. The
+ * one exception: a Compass .mak entry carries no header itself, so
+ * the first referenced .dat's header is consulted instead.
+ *
+ * fileOwnsDeclination() is the file-owns-declination signal: cavern
+ * applies the file's own directive over anything the driver emits,
+ * so the driver must not inject a declination for that trip and the
+ * UI shows the value read-only. It is true for a numeric directive
+ * (declination set) and for Survex "*declination auto ..."
+ * (declinationIsAuto - cavern computes the value itself via IGRF).
+ *
+ * Sources per format:
+ *   date        - Survex *date (yyyy.mm.dd / yyyy-mm-dd),
+ *                 Compass "SURVEY DATE: M D YYYY",
+ *                 Walls #DATE YYYY-MM-DD
+ *   declination - Survex *calibrate declination <deg> or
+ *                 *declination <deg> <units> / *declination auto,
+ *                 Compass "DECLINATION: <deg>" header field,
+ *                 Walls #UNITS DECL=<deg>
+ *   team        - one entry per person: Survex *team lines,
+ *                 Compass "SURVEY TEAM:" names split like
+ *                 cwCompassImporter (';' if present, else commas /
+ *                 runs of spaces), Walls #NOTE lines mentioning
+ *                 "team" split on commas (best-effort)
+ *
+ * Missing values leave the optional empty and the team list empty;
+ * a present-but-unparseable date or declination additionally
+ * appends a warning to ScanResult.warnings in every format.
+ */
+struct SeededTripMetadata {
+    std::optional<QDate> date = std::nullopt;
+    std::optional<double> declination = std::nullopt;  // degrees, positive east
+    bool declinationIsAuto = false;
+    QStringList team;
+
+    bool fileOwnsDeclination() const
+    {
+        return declination.has_value() || declinationIsAuto;
+    }
+
+    bool operator==(const SeededTripMetadata& other) const
+    {
+        return date == other.date
+            && declination == other.declination
+            && declinationIsAuto == other.declinationIsAuto
+            && team == other.team;
+    }
+    bool operator!=(const SeededTripMetadata& other) const { return !(*this == other); }
+};
+
 struct ScanResult {
     /**
      * Every file required to feed the entry file into cavern,
@@ -58,9 +115,18 @@ struct ScanResult {
      */
     QStringList warnings;
 
+    /**
+     * Trip metadata seeded from the entry file. Participates in
+     * equality so a metadata-only edit (e.g. adding *calibrate
+     * declination) reads as a changed scan.
+     */
+    SeededTripMetadata seededMetadata;
+
     bool operator==(const ScanResult& other) const
     {
-        return dependencies == other.dependencies && warnings == other.warnings;
+        return dependencies == other.dependencies
+            && warnings == other.warnings
+            && seededMetadata == other.seededMetadata;
     }
     bool operator!=(const ScanResult& other) const { return !(*this == other); }
 };

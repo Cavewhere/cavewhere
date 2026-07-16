@@ -1,0 +1,13 @@
+; Metadata-seeding fixture for the [Scanner][Metadata] tests: date,
+; two *team lines (joined with ", "), and a declination. The set
+; declination also makes this the file-owns-declination fixture for
+; the [Attach][Declination] driver-emission tests.
+*begin WithMetadata
+*date 2025-06-01
+*team Alice
+*team Bob
+*calibrate declination 7.2
+*fix A1 0 0 0
+*data normal from to tape compass clino
+A1 A2 10.0 0 0
+*end WithMetadata

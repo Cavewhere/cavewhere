@@ -29,6 +29,7 @@ constexpr const char* kCompassDatExtension = ".dat";
 constexpr const char* kCompassMakExtension = ".mak";
 constexpr const char* kWallsWpjExtension = ".wpj";
 constexpr const char* kWallsSrvExtension = ".srv";
+constexpr int kCompassYearPivot = 1900;
 
 // UTF-8 byte-order mark (0xEF 0xBB 0xBF).
 const QByteArray kUtf8Bom = QByteArray::fromHex("EFBBBF");
@@ -531,6 +532,338 @@ Monad::Result<ScanResult> scan(const QString& entryFile)
 
 namespace {
 
+QStringList readDecodedLines(const QString& filePath)
+{
+    QFile file(filePath);
+    if (!file.open(QFile::ReadOnly)) {
+        return QStringList();
+    }
+    const QByteArray bytes = file.readAll();
+    file.close();
+
+    // The metadata pass never emits encoding warnings: the walk
+    // already warned for files it decoded (.svx / .mak), and the
+    // formats first decoded here (.dat / .srv) stay silent by
+    // design - metadata seeding is best-effort.
+    const DecodedFile decoded = decodeBytes(bytes);
+    return decoded.text.split(QLatin1Char('\n'));
+}
+
+std::optional<QDate> parseIsoOrDottedDate(const QString& token)
+{
+    QDate date = QDate::fromString(token, QStringLiteral("yyyy.MM.dd"));
+    if (!date.isValid()) {
+        date = QDate::fromString(token, QStringLiteral("yyyy-MM-dd"));
+    }
+    if (!date.isValid()) {
+        return std::nullopt;
+    }
+    return date;
+}
+
+void parseSurvexMetadata(const QStringList& lines,
+                         SeededTripMetadata& metadata,
+                         QStringList& warnings)
+{
+    static const QRegularExpression dateRegex(
+        QStringLiteral(R"RX(^\*date\s+(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression teamRegex(
+        QStringLiteral(R"RX(^\*team\s+(?:"([^"]+)"|(\S+)))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression calibrateDeclinationRegex(
+        QStringLiteral(R"RX(^\*calibrate\s+declination\s+(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    // "*declination <value> <units>" or "*declination auto <x> <y> <z>"
+    // - the modern replacement for *calibrate declination.
+    static const QRegularExpression declinationCommandRegex(
+        QStringLiteral(R"RX(^\*declination\s+(\S+)(?:\s+(\S+))?)RX"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    const auto seedDeclination = [&](const QString& token,
+                                     const char* directiveName) {
+        bool ok = false;
+        const double value = token.toDouble(&ok);
+        if (!ok) {
+            warnings.append(
+                QStringLiteral("could not parse %1: %2")
+                    .arg(QLatin1String(directiveName), token));
+        } else if (!metadata.declination.has_value()) {
+            metadata.declination = value;
+        }
+    };
+
+    for (const QString& rawLine : lines) {
+        const QString line = stripCommentAndWhitespace(rawLine);
+        if (line.isEmpty() || !line.startsWith(QLatin1Char('*'))) {
+            continue;
+        }
+
+        if (const auto match = dateRegex.match(line); match.hasMatch()) {
+            const QString token = match.captured(1);
+            const auto date = parseIsoOrDottedDate(token);
+            if (!date.has_value()) {
+                warnings.append(
+                    QStringLiteral("could not parse *date: %1").arg(token));
+            } else if (!metadata.date.has_value()) {
+                metadata.date = date;
+            }
+            continue;
+        }
+
+        if (const auto match = teamRegex.match(line); match.hasMatch()) {
+            QString name = match.captured(1);  // quoted form
+            if (name.isEmpty()) {
+                name = match.captured(2);      // bareword form
+            }
+            if (!name.isEmpty()) {
+                metadata.team.append(name);
+            }
+            continue;
+        }
+
+        if (const auto match = calibrateDeclinationRegex.match(line); match.hasMatch()) {
+            seedDeclination(match.captured(1), "*calibrate declination");
+            continue;
+        }
+
+        if (const auto match = declinationCommandRegex.match(line); match.hasMatch()) {
+            const QString token = match.captured(1);
+            if (token.compare(QStringLiteral("auto"), Qt::CaseInsensitive) == 0) {
+                metadata.declinationIsAuto = true;
+                continue;
+            }
+            const QString units = match.captured(2);
+            if (!units.isEmpty()
+                && !units.startsWith(QStringLiteral("deg"), Qt::CaseInsensitive)) {
+                warnings.append(
+                    QStringLiteral("*declination units '%1' not supported, assuming degrees")
+                        .arg(units));
+            }
+            seedDeclination(token, "*declination");
+            continue;
+        }
+    }
+}
+
+void parseCompassMetadata(const QStringList& lines,
+                          SeededTripMetadata& metadata,
+                          QStringList& warnings)
+{
+    // "SURVEY DATE: 6 1 2025" optionally followed by "COMMENT: ..."
+    static const QRegularExpression dateRegex(
+        QStringLiteral(R"RX(^SURVEY\s+DATE:\s*(\d+)\s+(\d+)\s+(\d+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    // "DECLINATION: 7.20  FORMAT: ...  CORRECTIONS: ..." - the
+    // DECLINATION field is the magnetic declination cavern applies;
+    // CORRECTIONS are instrument corrections (compass clino tape),
+    // deliberately NOT read here. Captures any token so a
+    // non-numeric value warns instead of silently reading as
+    // "no declination".
+    static const QRegularExpression declinationRegex(
+        QStringLiteral(R"RX(^DECLINATION:\s*(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression teamRegex(
+        QStringLiteral(R"RX(^SURVEY\s+TEAM:\s*(.*)$)RX"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    for (int i = 0; i < lines.size(); ++i) {
+        // A .dat holds one header per survey, separated by form
+        // feeds; only the first survey's header seeds the trip.
+        // Checked pre-trim because trimmed() strips '\f'.
+        if (lines.at(i).contains(QLatin1Char('\f'))) {
+            break;
+        }
+        const QString line = lines.at(i).trimmed();
+
+        if (const auto match = dateRegex.match(line); match.hasMatch()) {
+            const int month = match.captured(1).toInt();
+            const int day = match.captured(2).toInt();
+            int year = match.captured(3).toInt();
+            if (year < kCompassYearPivot) {
+                // Compass writes 2-digit years pre-2000; same pivot
+                // rule as cwCompassImporter so a .dat seeds the same
+                // date the importer would produce.
+                year += kCompassYearPivot;
+            }
+            const QDate date(year, month, day);
+            if (!date.isValid()) {
+                warnings.append(
+                    QStringLiteral("could not parse SURVEY DATE: %1")
+                        .arg(match.captured(0)));
+            } else if (!metadata.date.has_value()) {
+                metadata.date = date;
+            }
+            continue;
+        }
+
+        if (const auto match = teamRegex.match(line); match.hasMatch()) {
+            // Compass puts the names on the line after "SURVEY
+            // TEAM:", but tolerate same-line names too.
+            QString team = match.captured(1).trimmed();
+            if (team.isEmpty() && i + 1 < lines.size()) {
+                team = lines.at(i + 1).trimmed();
+            }
+            if (metadata.team.isEmpty()) {
+                // Same delimiter rule as cwCompassImporter's
+                // parseSurveyTeam: ';' when present, otherwise
+                // commas / runs of whitespace.
+                static const QRegularExpression semicolonDelimiter(
+                    QStringLiteral(R"RX(\s*;\s*)RX"));
+                static const QRegularExpression commaDelimiter(
+                    QStringLiteral(R"RX(\s\s+|\s*,\s*)RX"));
+                const QRegularExpression& delimiter =
+                    team.contains(QLatin1Char(';')) ? semicolonDelimiter
+                                                    : commaDelimiter;
+                metadata.team = team.split(delimiter, Qt::SkipEmptyParts);
+            }
+            continue;
+        }
+
+        if (const auto match = declinationRegex.match(line); match.hasMatch()) {
+            const QString token = match.captured(1);
+            bool ok = false;
+            const double value = token.toDouble(&ok);
+            if (!ok) {
+                warnings.append(
+                    QStringLiteral("could not parse DECLINATION: %1").arg(token));
+            } else if (!metadata.declination.has_value()) {
+                metadata.declination = value;
+            }
+            continue;
+        }
+    }
+}
+
+void parseWallsMetadata(const QStringList& lines,
+                        SeededTripMetadata& metadata,
+                        QStringList& warnings)
+{
+    static const QRegularExpression dateRegex(
+        QStringLiteral(R"RX(^#date\s+(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    // Captures any token so a non-numeric DECL= value (e.g. the
+    // degree:minute form "7:30") warns instead of silently reading
+    // as "no declination".
+    static const QRegularExpression declinationRegex(
+        QStringLiteral(R"RX(^#units\b.*?\bdecl\s*=\s*(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression noteRegex(
+        QStringLiteral(R"RX(^#note\s+(.*)$)RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression teamInNoteRegex(
+        QStringLiteral(R"RX(\bteam\b[:\s]*(.*)$)RX"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    for (const QString& rawLine : lines) {
+        const QString line = rawLine.trimmed();
+        if (!line.startsWith(QLatin1Char('#'))) {
+            continue;
+        }
+
+        if (const auto match = dateRegex.match(line); match.hasMatch()) {
+            const QString token = match.captured(1);
+            const QDate date = QDate::fromString(token, QStringLiteral("yyyy-MM-dd"));
+            if (!date.isValid()) {
+                warnings.append(
+                    QStringLiteral("could not parse #DATE: %1").arg(token));
+            } else if (!metadata.date.has_value()) {
+                metadata.date = date;
+            }
+            continue;
+        }
+
+        if (const auto match = declinationRegex.match(line); match.hasMatch()) {
+            const QString token = match.captured(1);
+            bool ok = false;
+            const double value = token.toDouble(&ok);
+            if (!ok) {
+                warnings.append(
+                    QStringLiteral("could not parse #UNITS DECL: %1").arg(token));
+            } else if (!metadata.declination.has_value()) {
+                metadata.declination = value;
+            }
+            continue;
+        }
+
+        if (const auto match = noteRegex.match(line); match.hasMatch()) {
+            // Best-effort: "#NOTE Team: Alice, Bob" -> {Alice, Bob}
+            const auto teamMatch = teamInNoteRegex.match(match.captured(1));
+            if (teamMatch.hasMatch() && metadata.team.isEmpty()) {
+                static const QRegularExpression nameDelimiter(
+                    QStringLiteral(R"RX(\s*[,;]\s*)RX"));
+                metadata.team =
+                    teamMatch.captured(1).trimmed().split(nameDelimiter,
+                                                          Qt::SkipEmptyParts);
+            }
+            continue;
+        }
+    }
+}
+
+/**
+ * Fills result.seededMetadata from the entry file only (entry =
+ * dependencies.first()). Two container-format special cases: a
+ * Compass .mak carries no survey header, so the first referenced
+ * .dat is consulted instead; a Walls .wpj seeds nothing (its leaf
+ * .srv files each carry their own dates, so a project-level seed
+ * would be ambiguous).
+ */
+void parseSeededMetadata(ScanResult& result)
+{
+    using cwExternalCenterlineScanner::Format;
+
+    const QString& entry = result.dependencies.constFirst();
+    QString metadataFile = entry;
+
+    switch (cwExternalCenterlineScanner::formatFor(entry)) {
+    case Format::Survex:
+        break;
+    case Format::Compass:
+        if (hasExtension(entry, kCompassMakExtension)) {
+            metadataFile.clear();
+            for (const QString& dependency : std::as_const(result.dependencies)) {
+                if (hasExtension(dependency, kCompassDatExtension)) {
+                    metadataFile = dependency;
+                    break;
+                }
+            }
+        }
+        break;
+    case Format::Walls:
+        if (hasExtension(entry, kWallsWpjExtension)) {
+            metadataFile.clear();
+        }
+        break;
+    case Format::Unknown:
+        metadataFile.clear();
+        break;
+    }
+
+    if (metadataFile.isEmpty()) {
+        return;
+    }
+
+    const QStringList lines = readDecodedLines(metadataFile);
+    if (lines.isEmpty()) {
+        return;
+    }
+
+    switch (cwExternalCenterlineScanner::formatFor(metadataFile)) {
+    case Format::Survex:
+        parseSurvexMetadata(lines, result.seededMetadata, result.warnings);
+        break;
+    case Format::Compass:
+        parseCompassMetadata(lines, result.seededMetadata, result.warnings);
+        break;
+    case Format::Walls:
+        parseWallsMetadata(lines, result.seededMetadata, result.warnings);
+        break;
+    case Format::Unknown:
+        break;
+    }
+}
+
 Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
                                         void (*scanFn)(const QString&, ScanState&),
                                         const char* contextName)
@@ -557,6 +890,7 @@ Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
     ScanResult result;
     result.dependencies = state.dependencies;
     result.warnings = state.warnings;
+    parseSeededMetadata(result);
     return Monad::Result<ScanResult>(result);
 }
 

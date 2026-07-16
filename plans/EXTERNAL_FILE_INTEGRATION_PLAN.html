@@ -514,7 +514,7 @@
 
 <p>
   Source paths (per-user, per-machine) live in
-  <code>.cwproj/local_settings.json</code>, gitignored. See &sect;5.3.
+  the per-machine app-data <code>local_settings.json</code>. See &sect;5.3.
 </p>
 
 <h2 id="scanner">4. Scanner &amp; dependency discovery</h2>
@@ -938,12 +938,37 @@ cwExternalCenterlineSync::reconcile(const ScanResult&amp; scan,
 </ul>
 
 <p>
-  Source path is <strong>per-user, per-machine</strong>: stored in
-  <code>.cwproj/local_settings.json</code> (gitignored), not in the
-  region protobuf. Collaborators who pull the project never see the
-  original attacher's path; they get the in-project copy and watch
-  that. If they later attach their own files, they choose modes
-  independently.
+  Source path is <strong>per-user, per-machine</strong>: stored in a
+  single global app-data file
+  (<code>QStandardPaths::AppDataLocation</code>, i.e.
+  <code>&lt;AppData&gt;/Cavewhere/local_settings.json</code>) keyed by
+  owner UUID &mdash; <em>not</em> in the project tree and not in the
+  region protobuf. Owner UUIDs (<code>cwCave::id()</code> /
+  <code>cwTrip::id()</code>) are globally unique, so one file serves
+  every project on the machine with no per-project namespace.
+  Collaborators who pull the project never see the original attacher's
+  path; they get the in-project copy and watch that. If they later
+  attach their own files, they choose modes independently.
+</p>
+
+<p>
+  <strong>Why app-data and not a file inside the project.</strong>
+  The original design stored this as <code>.cwproj/local_settings.json</code>
+  (gitignored), which is what Phase 1 shipped. That breaks for bundled
+  <code>.cw</code> projects: a <code>.cw</code> is a zipped
+  <code>.cwproj</code> extracted to a fresh <code>QTemporaryDir</code>
+  on every open, and <code>cwSaveLoad::saveBundledArchive</code>
+  applies the project's git-exclude patterns when zipping &mdash; so an
+  in-project <code>local_settings.json</code> either evaporates when
+  the project closes (excluded from the zip) or, if it were shipped,
+  would leak the attacher's machine paths to everyone who receives the
+  file. The app-data store survives <code>.cw</code> open/close cycles,
+  works identically for <code>.cwproj</code>, survives a project being
+  moved or renamed on disk, and removes the gitignore/zip-exclusion
+  dependency entirely. Phase 2 reworks the Phase 1 storage location;
+  <strong>no migration path is needed</strong> &mdash; this is
+  unreleased dev code. Dead entries for deleted projects are harmless
+  (a UUID lookup that never matches) and are not GC'd in v1.
 </p>
 
 <p>
@@ -957,12 +982,12 @@ cwExternalCenterlineSync::reconcile(const ScanResult&amp; scan,
 <pre><code>// In cavewhere.proto
 //
 // LocalSettings is the umbrella container for *all* per-user,
-// per-machine state stored next to the project. The current v1
-// payload is just external-centerline source paths, but the file
-// already exists, so future per-machine subsystems (recent-file
-// state, per-machine credentials cache pointers, last-opened
-// sub-page, etc.) should land here as new top-level fields rather
-// than spinning up another sibling file. Keep inner-message names
+// per-machine state, stored once per machine in app-data. The
+// current v1 payload is just external-centerline source paths, but
+// the file already exists, so future per-machine subsystems
+// (recent-file state, per-machine credentials cache pointers,
+// last-opened sub-page, etc.) should land here as new top-level
+// fields rather than spinning up another sibling file. Keep inner-message names
 // domain-specific (NOT generic words like "Attachment", "Setting",
 // or "Entry") so two unrelated subsystems can't collide and a
 // reader can tell which feature a field belongs to without looking
@@ -984,7 +1009,7 @@ message LocalSettings {
 </code></pre>
 
 <p>
-  Serialised to <code>.cwproj/local_settings.json</code> as e.g.:
+  Serialised to <code>&lt;AppData&gt;/Cavewhere/local_settings.json</code> as e.g.:
 </p>
 
 <pre><code>{
@@ -1003,6 +1028,52 @@ message LocalSettings {
   surface a one-time warning ("Original source moved or deleted;
   switched to import mode"), clear the entry, continue with just the
   in-project copy.
+</p>
+
+<h3>5.4 Bundled <code>.cw</code> projects</h3>
+
+<p>
+  A bundled <code>.cw</code> is a zipped <code>.cwproj</code>
+  (<code>cwProject::BundledGitFileType</code>) extracted to a
+  <code>QTemporaryDir</code> on load and re-zipped on save, with the
+  <code>.git</code> history inside the archive. Because the extraction
+  is a full <code>.cwproj</code> directory tree, everything in this
+  plan works on it unchanged: the <code>external-centerline/</code>
+  layout (&sect;5.1), the reconcile jobs (&sect;5.2), the
+  <code>QFileSystemWatcher</code>, the rename/delete cascades, and the
+  git-history-as-backup rationale for detach (&sect;8.8 q1). Two
+  <code>.cw</code>-specific requirements:
+</p>
+
+<ul>
+  <li>
+    <strong>Live-link storage must live outside the project tree</strong>
+    &mdash; handled by &sect;5.3's app-data store. The extraction dir
+    is a fresh temp path every session, so nothing per-machine can
+    persist inside it.
+  </li>
+  <li>
+    <strong>Reconcile mutations must dirty the project.</strong> When a
+    live-link reconcile copies an updated source file into the
+    extraction mid-session, <code>cwSaveLoad</code> must emit
+    <code>localMutationOccurred</code> so
+    <code>cwProject::modified()</code> flips and the save affordance
+    appears &mdash; otherwise a <code>.cw</code> user who quits without
+    saving silently loses the refresh (for <code>.cwproj</code> the
+    copy is durable immediately, so this never mattered). Precedent:
+    commit <code>50595738</code> wired exactly this for Git-driven
+    GIS-layer changes. Phase 2 verifies whether the reconcile jobs
+    already flow through the modified-bit plumbing and wires them if
+    not.
+  </li>
+</ul>
+
+<p>
+  The practical consequence for <code>.cw</code> users: the "edit the
+  in-project copy" workflow (&sect;5.2 case 2) is a poor fit &mdash;
+  the copy lives at a hidden temp path that changes every session.
+  Live-link is the primary mode for bundled projects; the attach
+  dialog's default (&sect;8.1) already reflects that.
 </p>
 
 <h2 id="driver">6. Driver-file shape</h2>
@@ -1652,20 +1723,25 @@ QString exportDisabledReason() const;  // empty when canExport() is true
     user rebinds it.
   </li>
   <li>
-    <strong>Date and declination are kept and remain editable</strong>
-    for Attached and Scope trips alike. Date drives auto-declination
-    via the IGRF model (<code>cwTripCalibration::autoDeclination</code>)
-    so it is not purely informational; many TopoDroid exports omit
-    declination entirely and rely on CaveWhere to compute it. On scan,
-    the date is seeded from the external file's <code>*date</code>
-    (Survex), <code>SURVEY DATE</code> (Compass), or <code>#DATE</code>
-    (Walls) directive when present. If the file carries an explicit
-    declination (<code>*calibrate declination</code> /
-    <code>CORRECTIONS</code> / <code>#UNITS DECL</code>), import it as
-    <code>declinationManual</code> with <code>autoDeclination = false</code>;
-    otherwise default to <code>autoDeclination = true</code>. The chosen
-    declination is then injected into the driver block before
-    <code>*include</code> so cavern uses it.
+    <strong>Date is kept and remains editable</strong> for Attached and
+    Scope trips alike; on scan it is seeded from the external file's
+    <code>*date</code> (Survex), <code>SURVEY DATE</code> (Compass), or
+    <code>#DATE</code> (Walls) directive when present.
+    <strong>Declination ownership depends on the file</strong>
+    (verified empirically against cavern &mdash; a directive emitted in
+    the driver before <code>*include</code> is overridden by the file's
+    own directive, not the other way around):
+    if the file carries an explicit declination
+    (<code>*calibrate declination</code> / Compass <code>DECLINATION:</code> /
+    <code>#UNITS DECL</code>), the file owns it &mdash; the panel shows
+    it <em>read-only</em> ("Declination 7.2&deg; &mdash; set by your
+    survey file") and the driver emits nothing (any injected value
+    would be dead text). Only when the file has no declination of its
+    own (the common TopoDroid case) is it CaveWhere-owned: editable,
+    <code>autoDeclination = true</code> by default (IGRF from
+    date&nbsp;+&nbsp;fix location), and the resolved value is injected
+    into the driver block before <code>*include</code>, where it
+    demonstrably applies.
   </li>
 </ul>
 
@@ -1690,11 +1766,14 @@ QString exportDisabledReason() const;  // empty when canExport() is true
     file (e.g. <code>sidepassage.B1</code>).
   </li>
   <li>
-    <strong>Trip metadata.</strong> Date and declination are
-    CaveWhere-owned and editable (see &sect;8.5 bullet above); team is
-    CaveWhere-side informational. The scanner seeds these from the
-    external file on first attach (Survex <code>*date</code> /
-    <code>*team</code> / <code>*calibrate declination</code>, equivalents
+    <strong>Trip metadata.</strong> Date is CaveWhere-owned and
+    editable; declination is file-owned (read-only display) when the
+    file carries its own directive and CaveWhere-owned (editable,
+    IGRF auto) otherwise &mdash; see the &sect;8.5 metadata bullet and
+    q7; team is CaveWhere-side informational. The scanner seeds these
+    from the external file on first attach (Survex <code>*date</code> /
+    <code>*team</code> / <code>*calibrate declination</code> /
+    <code>*declination</code>, equivalents
     for Compass/Walls); subsequent edits are user-controlled. Trip name
     remains a CaveWhere display label.
   </li>
@@ -1924,7 +2003,7 @@ QQ.Item {
   </tr>
   <tr>
     <td><code>ExternalCenterlineTripMetadata.qml</code></td>
-    <td>Date (editable, drives auto-decl), declination (editable, manual override), team (editable, informational). Same field semantics as the existing trip metadata; extract a shared component or duplicate &mdash; decide during implementation.</td>
+    <td>Date (editable, drives auto-decl), declination (editable with IGRF auto when the file has none; read-only "set by your survey file" when the file carries its own directive &mdash; q7), team (editable, informational). Same field semantics as the existing trip metadata; extract a shared component or duplicate &mdash; decide during implementation.</td>
     <td>2</td>
   </tr>
   <tr>
@@ -2105,13 +2184,14 @@ QQ.Item {
   </li>
   <li>
     <strong>Trip metadata for external trips</strong> (date, decl, team).
-    Resolved: Date and Decl are CaveWhere-owned and editable; the
-    scanner seeds them from the file's <code>*date</code> /
-    <code>*calibrate declination</code> (Survex equivalents in
-    Compass/Walls) on first attach. Date drives auto-declination via
-    IGRF the same way it does for native trips. The driver block
-    re-emits the chosen date/decl before <code>*include</code> so
-    cavern uses the CaveWhere-managed values. Team stays editable as
+    Resolved: Date is CaveWhere-owned and editable, seeded from the
+    file's <code>*date</code> (Survex equivalents in Compass/Walls) on
+    first attach. Declination is <em>file-owned when the file carries
+    its own directive</em> (shown read-only with a "set by your survey
+    file" hint) and CaveWhere-owned otherwise (editable, IGRF
+    auto-declination, injected into the driver before
+    <code>*include</code>). See the &sect;8.5 metadata bullet and q7
+    for the cavern-verified precedence. Team stays editable as
     informational.
   </li>
   <li>
@@ -2136,16 +2216,29 @@ QQ.Item {
   </li>
   <li>
     <strong>Auto-declination.</strong> Resolved &mdash; applies to
-    external trips too.
-    <code>cwSurvexExporterUtils::makeDeclinationContext</code> uses
-    cave fixes + per-trip date today; the same path runs for external
-    trips. The driver block emits the resolved value as
-    <code>*calibrate declination</code> before <code>*include</code>,
-    overriding any value the external file carries. On first scan, if
-    the file has its own <code>*calibrate declination</code> /
-    <code>CORRECTIONS</code> / <code>#UNITS DECL</code>, it seeds
-    <code>declinationManual</code> with <code>autoDeclination = false</code>;
-    otherwise <code>autoDeclination</code> stays on.
+    external trips <em>only when the file carries no declination of
+    its own</em>. Empirically verified against cavern: a
+    <code>*calibrate declination</code> emitted in the driver before
+    <code>*include</code> takes effect when the included file has no
+    declination directive, but is <em>overridden by the file's own</em>
+    <code>*calibrate declination</code> the moment the file sets one
+    (later directive wins within the scope) &mdash; the original
+    "driver overrides file" claim here was backwards. Contract:
+    scanner detects whether the file carries its own declination
+    (<code>*calibrate declination</code>, the modern
+    <code>*declination</code> command incl. <code>auto</code> /
+    Compass <code>DECLINATION:</code> /
+    <code>#UNITS DECL</code>). If yes &rarr; file-owned; panel shows
+    the value read-only with a "set by your survey file" hint
+    ("automatic (IGRF)" for <code>*declination auto</code>);
+    <code>autoDeclination = false</code>; driver emits no declination
+    for this trip. If no &rarr; CaveWhere-owned;
+    <code>autoDeclination = true</code> by default
+    (<code>cwSurvexExporterUtils::makeDeclinationContext</code>, same
+    path as native trips); the driver emits the resolved value before
+    <code>*include</code>. Note Compass and Walls files essentially
+    always embed their own declination handling, so the editable field
+    is in practice a Survex/TopoDroid affordance.
   </li>
   <li>
     <strong>CavePage stats when cave-level attached.</strong>
@@ -2293,6 +2386,18 @@ QQ.Item {
 
 <h2 id="phases">9. Phases</h2>
 
+<div class="note">
+  <strong>Implementation order: 1 &rarr; 2 &rarr; 3 &rarr; 5 &rarr; 4
+  &rarr; 5b &rarr; 6.</strong> Phase 5 (orphan detection) ships
+  <em>before</em> Phase 4 (equates editor): station renames in the
+  user's native tool are the daily workflow this feature exists for,
+  and until orphan detection lands a rename silently breaks scrap
+  references; equates serve the rarer mixed-native-plus-external case.
+  Phase numbers stay as originally assigned so file names and
+  cross-references throughout these documents remain stable &mdash;
+  the numbers name the phases, the list above orders them.
+</div>
+
 <div class="phase" id="p1">
   <h3>Phase 1 &mdash; Data model, scanner, copy, driver, runner, watcher</h3>
   <p class="meta">Goal: end-to-end plumbing works for at least one attach level. Nothing user-visible yet; verified by integration tests.</p>
@@ -2328,7 +2433,7 @@ QQ.Item {
     touched, acceptance criteria, attach orchestrator design, scanner
     <code>SeededTripMetadata</code> extension, per-scope station-list
     model, <code>ExternalCenterlineTripPanel</code> Phase-2 deltas vs.
-    &sect;8.5.1, failure-mode taxonomy, the 10-commit sequence,
+    &sect;8.5.1, failure-mode taxonomy, the 13-commit sequence,
     per-commit test gates, and fixture files. The cross-cutting test
     rules in &sect;10.1 apply unchanged.
   </div>
