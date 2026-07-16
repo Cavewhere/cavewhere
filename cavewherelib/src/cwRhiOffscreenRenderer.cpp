@@ -411,7 +411,7 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
         cameraBatch, rhi, offscreenRenderData, cameraSlot, m_target.target.get(),
         p.projectionMatrix, p.viewMatrix, p.devicePixelRatio, size);
 
-    const std::array<cwRHIObject::RenderData, cwRhiFrameRenderer::kPassCount> perPassRenderData =
+    const cwRHIObject::PerPassRenderData perPassRenderData =
         m_frame.buildPerPassRenderData(offscreenRenderData);
 
     // Resolve this job's per-object appearance overrides to transient slots,

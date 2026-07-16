@@ -8,6 +8,7 @@ class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 
 #include <rhi/qrhi.h>
+#include <array>
 #include <functional>
 #include <QMatrix4x4>
 #include <QSize>
@@ -55,16 +56,6 @@ public:
         float devicePixelRatio = 1.0f;
     };
 
-    struct ResourceUpdateData {
-        QRhiResourceUpdateBatch* resourceUpdateBatch;
-        RenderData renderData;
-    };
-
-    struct SynchronizeData {
-        cwRenderObject* object;
-        cwRhiItemRenderer* renderer;
-    };
-
     //For rendering
     enum class RenderPass : int {
         Background = 0,   // radial gradient — was implicit; now an explicit named pass
@@ -74,6 +65,26 @@ public:
         Overlay,
         ShadowMap,
         Count
+    };
+
+    // One RenderData per RenderPass, stamped with the target each pass routes into
+    // this frame (cwRhiFrameRenderer::buildPerPassRenderData is the single resolver).
+    using PerPassRenderData = std::array<RenderData, static_cast<size_t>(RenderPass::Count)>;
+
+    struct ResourceUpdateData {
+        QRhiResourceUpdateBatch* resourceUpdateBatch;
+        RenderData renderData;
+        // The frame's routed targets — the same source gather() receives. renderData
+        // above carries the frame's final target, not per-pass routing, so an object
+        // that builds a pipeline here for a pass that can route elsewhere
+        // (cwRhiTexturedItems) must key on its pass's entry. Always supplied by the
+        // frame renderer.
+        const PerPassRenderData* perPassRenderData = nullptr;
+    };
+
+    struct SynchronizeData {
+        cwRenderObject* object;
+        cwRhiItemRenderer* renderer;
     };
 
     // Per-object appearance-slot budget (ceiling) for offscreen render overrides.

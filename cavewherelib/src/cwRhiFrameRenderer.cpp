@@ -264,7 +264,14 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
         m_projectionMatrix, m_viewMatrix, m_devicePixelRatio, m_viewportSize);
     m_updateFlags = cwSceneUpdate::Flag::None;
 
-    cwRHIObject::ResourceUpdateData resourceUpdateData{resources, renderData};
+    // Built after setupPassRouting and stampCamera so each per-pass copy carries
+    // both this frame's routing and the live camera. Shared with updateResources
+    // (via resourceUpdateData) and gather() so every pipeline — wherever it is
+    // built — keys on the same stamped routing.
+    const cwRHIObject::PerPassRenderData perPassRenderData =
+        buildPerPassRenderData(renderData);
+
+    cwRHIObject::ResourceUpdateData resourceUpdateData{resources, renderData, &perPassRenderData};
 
     if(!m_rhiObjectsToInitilize.isEmpty()) {
         for(auto object : std::as_const(m_rhiObjectsToInitilize)) {
@@ -281,9 +288,6 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
     }
 
     std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount> passBatches;
-
-    const std::array<cwRHIObject::RenderData, kPassCount> perPassRenderData =
-        buildPerPassRenderData(renderData);
 
     gatherScene(passBatches, perPassRenderData);
 
@@ -529,10 +533,10 @@ QSet<cwRenderObjectId> cwRhiFrameRenderer::atlasIncompatibleVisibleObjectIds() c
     return ids;
 }
 
-std::array<cwRHIObject::RenderData, cwRhiFrameRenderer::kPassCount> cwRhiFrameRenderer::buildPerPassRenderData(
+cwRHIObject::PerPassRenderData cwRhiFrameRenderer::buildPerPassRenderData(
     const cwRHIObject::RenderData& base) const
 {
-    std::array<cwRHIObject::RenderData, kPassCount> perPass;
+    cwRHIObject::PerPassRenderData perPass;
     for (int i = 0; i < kPassCount; ++i) {
         perPass[i] = base;
         const auto pass = static_cast<cwRHIObject::RenderPass>(i);
@@ -543,7 +547,7 @@ std::array<cwRHIObject::RenderData, cwRhiFrameRenderer::kPassCount> cwRhiFrameRe
 }
 
 void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>& passBatches,
-                            const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData,
+                            const cwRHIObject::PerPassRenderData& perPassRenderData,
                             const cwSceneGatherOptions& options)
 {
     // Resolve the per-job hidden ids to the live cwRHIObject pointers once, so the
@@ -706,7 +710,7 @@ void cwRhiFrameRenderer::drawScene(QRhiCommandBuffer* cb,
                            QRhiRenderTarget* finalTarget,
                            const EdlOffscreen* edl,
                            std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>& passBatches,
-                           const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData,
+                           const cwRHIObject::PerPassRenderData& perPassRenderData,
                            QRhiResourceUpdateBatch* resources,
                            const cwRhiPostProcessEffect::FrameUniformContext& frameContext,
                            quint32 cameraUniformOffset,

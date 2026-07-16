@@ -186,14 +186,6 @@ public:
     // allocated descriptors at the same address.
     void evictPipelinesFor(QRhiRenderPassDescriptor* descriptor);
 
-    // Per-pass routing for the current frame: the render-pass descriptor and
-    // MSAA sample count a given pass draws into. Filled at the start of the frame
-    // and queried by render objects that build their pipelines outside gather()
-    // (cwRhiTexturedItems) so they key on the correct target. Background,
-    // Opaque, and PointCloud route to the EDL offscreen (1x) while a cloud is
-    // visible; every other pass routes to the swap chain.
-    QRhiRenderPassDescriptor* passRenderPassDescriptor(cwRHIObject::RenderPass pass) const;
-    int passSampleCount(cwRHIObject::RenderPass pass) const;
     const QHash<cwRhiPipelineKey, cwRhiPipelineRecord*>& pipelineCache() const { return m_pipelineCache; }
 
     // Create the global camera UBO. Idempotent — called from cwRhiScene::initialize,
@@ -240,7 +232,7 @@ public:
     // Copy @a base into one RenderData per pass, stamping each with the rpDesc +
     // sample count that pass routes into this frame (from setupPassRouting).
     // gather() reads those when building pipeline keys.
-    std::array<cwRHIObject::RenderData, kPassCount> buildPerPassRenderData(
+    cwRHIObject::PerPassRenderData buildPerPassRenderData(
         const cwRHIObject::RenderData& base) const;
 
     // Derive one clip-space camera from @a projection / @a view and stamp it into
@@ -271,7 +263,7 @@ public:
     // overrides (default = gather exactly like the live frame, which is what the
     // live frame passes): see cwSceneGatherOptions.
     void gatherScene(std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>& passBatches,
-                     const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData,
+                     const cwRHIObject::PerPassRenderData& perPassRenderData,
                      const cwSceneGatherOptions& options = {});
 
     // Draw the gathered scene into finalTarget. When edl is non-null the EDL
@@ -285,7 +277,7 @@ public:
                    QRhiRenderTarget* finalTarget,
                    const EdlOffscreen* edl,
                    std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>& passBatches,
-                   const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData,
+                   const cwRHIObject::PerPassRenderData& perPassRenderData,
                    QRhiResourceUpdateBatch* resources,
                    const cwRhiPostProcessEffect::FrameUniformContext& frameContext,
                    quint32 cameraUniformOffset,
@@ -297,6 +289,14 @@ public:
     // pipeline whose sample count differs from its render target does not render
     // and triggers backend validation errors).
     void setupPassRouting(QRhiRenderTarget* finalTarget, const EdlOffscreen* edl);
+
+    // Per-pass routing for the current frame, filled by setupPassRouting and read
+    // only by buildPerPassRenderData — the single resolver that stamps routing
+    // into the per-pass RenderData every pipeline key derives from. Background,
+    // Opaque, and PointCloud route to the EDL offscreen (1x) while a cloud is
+    // visible; every other pass routes to the final target.
+    QRhiRenderPassDescriptor* passRenderPassDescriptor(cwRHIObject::RenderPass pass) const;
+    int passSampleCount(cwRHIObject::RenderPass pass) const;
 
     // Build (or rebuild on resize / sample-count change) the shared-depth EDL
     // offscreen: sceneColor + cloudColor + shared depth, the two render targets,
