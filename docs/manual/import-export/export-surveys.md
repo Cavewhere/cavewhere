@@ -111,5 +111,5 @@ you can read.
 
 - [Import Surveys from Other Programs](import-surveys.md) — the reverse trip, and
   the note on names that a round-trip doesn't preserve.
-- [Export a Map Image](export-a-map.md) — export a *picture* of the cave (PNG,
+- [Export a Map](export-a-map.md) — export a *picture* of the cave (PNG,
   PDF, SVG) rather than its survey data.

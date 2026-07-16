@@ -1,12 +1,12 @@
 ---
-title: Export a Map Image
+title: Export a Map
 summary: Compose a map on the Map page from one or more captured views, set the paper size, scale, and resolution, and export to PNG, JPG, TIF, SVG, or PDF.
 problem: Turn the 3D cave into a printable or shareable picture — a map at a real paper scale, not survey data.
 keywords: [map, export, image, PNG, PDF, SVG, JPG, TIF, paper size, scale, resolution, DPI, print, layer]
 related: [../view-3d/the-3d-view.md, export-surveys.md]
 ---
 
-# Export a Map Image
+# Export a Map
 
 ## Why / when you need this
 

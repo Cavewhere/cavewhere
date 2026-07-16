@@ -42,13 +42,23 @@ CHAPTER_TITLES = {
     "survey-data": "Survey Data",
     "notes": "Notes",
     "scraps": "Scraps and Carpeting",
-    "import-export": "Import & Export",
     "": "Meta",
+}
+
+# The import-export/ directory holds two chapters; split it by filename so import
+# pages and export pages get their own headers.
+CHAPTER_BY_FILE = {
+    "import-export/import-surveys.md": "Import",
+    "import-export/import-csv.md": "Import",
+    "import-export/export-surveys.md": "Export",
+    "import-export/export-a-map.md": "Export",
 }
 
 
 def chapter_title(relpath):
-    """The sidebar chapter a page is grouped under, derived from its directory."""
+    """The sidebar chapter a page is grouped under, derived from its path."""
+    if relpath in CHAPTER_BY_FILE:
+        return CHAPTER_BY_FILE[relpath]
     directory = relpath.split("/", 1)[0] if "/" in relpath else ""
     return CHAPTER_TITLES.get(directory, directory.replace("-", " ").title() or "Meta")
 
