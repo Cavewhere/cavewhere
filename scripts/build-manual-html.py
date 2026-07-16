@@ -132,6 +132,24 @@ def rewrite_links(html, relpath, key_by_relpath):
     return re.sub(r'href="([^"#]+\.md)(#[^"]*)?"', repl, html)
 
 
+def font_face_css():
+    """Embed the Yanone Kaffeesatz heading font (the face cavewhere.com uses) as a
+    data URI, so the manual renders with the brand font offline and with no
+    external request — the same self-contained approach used for images."""
+    path = os.path.join(ROOT, "assets", "YanoneKaffeesatz-latin.woff2")
+    with open(path, "rb") as handle:
+        data = base64.b64encode(handle.read()).decode("ascii")
+    return (
+        "@font-face {\n"
+        "  font-family: 'Yanone Kaffeesatz';\n"
+        "  font-style: normal;\n"
+        "  font-weight: 400 700;\n"
+        "  font-display: swap;\n"
+        f"  src: url(data:font/woff2;base64,{data}) format('woff2');\n"
+        "}\n"
+    )
+
+
 def build():
     entries = parse_llms()
     key_by_relpath = {relpath: slug_key(relpath) for _, _, relpath in entries}
@@ -164,43 +182,49 @@ def build():
     nav = "\n".join(nav_html)
     main = "\n\n".join(pages_html)
 
-    return PAGE_TEMPLATE.format(css=CSS, nav=nav, main=main, script=SCRIPT)
+    return PAGE_TEMPLATE.format(css=font_face_css() + CSS, nav=nav, main=main, script=SCRIPT)
 
 
 CSS = """
+/* Palette drawn from CaveWhere's app (Theme.qml) and cavewhere.com: brand navy
+   ink (#1a2533 family), CaveWhere link blue (#1d4d77 / dark #85c1f4), slate-gray
+   muted tones, and the app's warm orange kept as a single accent spark. */
 :root {
-  --paper: #f3f5f7;
+  --paper: #eceff3;
   --surface: #ffffff;
-  --surface-2: #eef1f4;
-  --ink: #171b20;
-  --muted: #5c656e;
-  --border: #dbe1e6;
-  --accent: #17618f;
-  --accent-soft: #dcebf5;
-  --mark: #d6552b;
-  --code-bg: #eef1f4;
-  --shadow: 0 1px 2px rgba(20,30,40,.06), 0 8px 24px rgba(20,30,40,.06);
+  --surface-2: #e6ebf0;
+  --ink: #1f2b38;
+  --heading: #16202b;
+  --muted: #566472;
+  --border: #d4d9df;
+  --accent: #1d4d77;
+  --accent-soft: #dbe6f0;
+  --mark: #e0662f;
+  --code-bg: #e6ebf0;
+  --shadow: 0 1px 2px rgba(20,30,45,.06), 0 8px 24px rgba(20,30,45,.07);
+  --font-head: "Yanone Kaffeesatz", "Oswald", "Segoe UI", system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #0e1216; --surface: #161b21; --surface-2: #1b2129;
-    --ink: #e7ecf1; --muted: #9aa4ae; --border: #2a323a;
-    --accent: #7cc0ee; --accent-soft: #16303f; --mark: #ff8a5c;
-    --code-bg: #1b2129;
-    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+    --paper: #10161e; --surface: #182029; --surface-2: #1f2833;
+    --ink: #d7dfe8; --heading: #eef3f8; --muted: #93a1b0; --border: #2c3742;
+    --accent: #85c1f4; --accent-soft: #1c3346; --mark: #ff8a5c;
+    --code-bg: #1f2833;
+    --shadow: 0 1px 2px rgba(0,0,0,.45), 0 10px 30px rgba(0,0,0,.4);
   }
 }
 :root[data-theme="light"] {
-  --paper: #f3f5f7; --surface: #ffffff; --surface-2: #eef1f4;
-  --ink: #171b20; --muted: #5c656e; --border: #dbe1e6;
-  --accent: #17618f; --accent-soft: #dcebf5; --mark: #d6552b; --code-bg: #eef1f4;
-  --shadow: 0 1px 2px rgba(20,30,40,.06), 0 8px 24px rgba(20,30,40,.06);
+  --paper: #eceff3; --surface: #ffffff; --surface-2: #e6ebf0;
+  --ink: #1f2b38; --heading: #16202b; --muted: #566472; --border: #d4d9df;
+  --accent: #1d4d77; --accent-soft: #dbe6f0; --mark: #e0662f; --code-bg: #e6ebf0;
+  --shadow: 0 1px 2px rgba(20,30,45,.06), 0 8px 24px rgba(20,30,45,.07);
 }
 :root[data-theme="dark"] {
-  --paper: #0e1216; --surface: #161b21; --surface-2: #1b2129;
-  --ink: #e7ecf1; --muted: #9aa4ae; --border: #2a323a;
-  --accent: #7cc0ee; --accent-soft: #16303f; --mark: #ff8a5c; --code-bg: #1b2129;
-  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  --paper: #10161e; --surface: #182029; --surface-2: #1f2833;
+  --ink: #d7dfe8; --heading: #eef3f8; --muted: #93a1b0; --border: #2c3742;
+  --accent: #85c1f4; --accent-soft: #1c3346; --mark: #ff8a5c; --code-bg: #1f2833;
+  --shadow: 0 1px 2px rgba(0,0,0,.45), 0 10px 30px rgba(0,0,0,.4);
 }
 
 * { box-sizing: border-box; }
@@ -208,14 +232,10 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font: 16px/1.65 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font: 16px/1.65 var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
-
-.serif {
-  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-}
 
 .layout { display: grid; grid-template-columns: 288px minmax(0, 1fr); }
 
@@ -230,15 +250,16 @@ body {
 .brand { display: block; margin-bottom: 26px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
 .brand .mark-rule { width: 34px; height: 3px; background: var(--mark); border-radius: 2px; margin-bottom: 12px; }
 .brand h1 {
-  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: 1.28rem; line-height: 1.2; margin: 0; letter-spacing: .01em; text-wrap: balance;
+  font-family: var(--font-head); font-weight: 700;
+  font-size: 1.72rem; line-height: 1.05; margin: 0; letter-spacing: .01em;
+  text-wrap: balance; color: var(--heading);
 }
 .brand p { margin: 8px 0 0; font-size: .82rem; color: var(--muted); line-height: 1.5; }
 
 .nav-group { margin-bottom: 22px; }
 .nav-label {
-  margin: 0 0 8px; font-size: .68rem; font-weight: 700; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--muted);
+  margin: 0 0 8px; font-family: var(--font-head); font-size: .86rem; font-weight: 600;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--muted);
 }
 .sidebar a {
   display: block; padding: 6px 10px; margin: 1px 0; border-radius: 7px;
@@ -261,19 +282,19 @@ main { padding: 0; }
 .page:last-child { border-bottom: 0; }
 
 .page h1, .page h2, .page h3, .page h4 {
-  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  line-height: 1.22; text-wrap: balance; color: var(--ink);
+  font-family: var(--font-head); font-weight: 700;
+  line-height: 1.08; text-wrap: balance; color: var(--heading);
 }
-.page h1 { font-size: 2.1rem; margin: 0 0 .5em; letter-spacing: .005em; }
+.page h1 { font-size: 2.6rem; margin: 0 0 .35em; letter-spacing: .01em; }
 .page h2 {
-  font-size: 1.5rem; margin: 2em 0 .6em; padding-top: .5em;
+  font-size: 1.9rem; font-weight: 600; margin: 1.8em 0 .5em; padding-top: .4em;
 }
-.page h3 { font-size: 1.18rem; margin: 1.7em 0 .5em; }
-.page h1 + p { font-size: 1.08rem; color: var(--muted); }
+.page h3 { font-size: 1.45rem; font-weight: 600; margin: 1.6em 0 .45em; }
+.page h1 + p { font-family: var(--font-body); font-size: 1.08rem; color: var(--muted); }
 .page p, .page li { font-size: 1rem; }
 .page a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
 .page a:hover { text-decoration-thickness: 2px; }
-.page strong { color: var(--ink); }
+.page strong { color: var(--heading); font-weight: 600; }
 .page ul, .page ol { padding-left: 1.3em; }
 .page li { margin: .3em 0; }
 .page li::marker { color: var(--mark); }
