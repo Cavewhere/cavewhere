@@ -100,9 +100,17 @@ public:
     QBox3D boundingBox(const QList<Key>& keys) const;
 
     //! World-space union of every object's bounding box. Null box when empty.
-    //! Counts hidden objects — use isPickableEmpty() to ask what the pick
-    //! paths can actually reach.
+    //! Counts hidden objects — use visibleBoundingBox() for the region the
+    //! pick paths can actually reach.
     QBox3D boundingBox() const;
+
+    //! Like boundingBox(), but skips objects the pick traversals skip (a
+    //! hidden parent render object) — the box a camera should frame. Same
+    //! flat O(#Keys) loop over cached per-Node boxes; no BVH or vertex
+    //! traversal. Main-thread only: reads the authoring object list, so
+    //! during an async build it already reflects objects that will become
+    //! pickable.
+    QBox3D visibleBoundingBox() const;
 
     //! True when no pick can ever hit anything: no objects, every object
     //! hidden, or only degenerate bounds. Mirrors the visibility rule the
@@ -113,8 +121,7 @@ public:
     //! NaN check: a box with NaN corners still reports Finite. Nothing in the
     //! codebase builds an Infinite box, so that arm is unreachable today.
     //!
-    //! Reads the authoring object list, not the built BVH: during an async
-    //! build the objects exist and will become pickable, so this reports
+    //! Delegates to visibleBoundingBox(), so during an async build it reports
     //! non-empty and a caller keeps its fallback suppressed rather than
     //! acting on a temporary emptiness.
     bool isPickableEmpty() const;

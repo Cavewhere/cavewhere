@@ -17,6 +17,7 @@
 #include <QHash>
 #include <QFuture>
 #include <QImage>
+#include <QBox3D>
 
 //Std includes
 #include <memory>
@@ -76,6 +77,13 @@ public:
 
     //For doing intersection tests
     cwGeometryItersecter* geometryItersecter() const;
+
+    // The world-space box a camera should frame: the union of the scene's
+    // visible geometry. "What should reset/capture frame" is a scene concern;
+    // callers use this seam rather than reading the pick structure directly,
+    // so the answer can evolve (per-id visibility, masks) without touching
+    // camera code. Null box when nothing is visible. GUI thread only.
+    QBox3D visibleFramingBounds() const;
 
     void update();
 

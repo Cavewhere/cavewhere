@@ -114,12 +114,11 @@ TEST_CASE("cwRenderTexturedItems hidden item must not be pickable",
     CHECK_FALSE(hit.hit());
 }
 
-// KNOWN BUG (issue #549, per-scrap flavor). The bounds resetView frames come
-// from the intersecter, which today has no visibility filter at all — a hidden
-// scrap still inflates the framed box, so reset zooms out to include geometry
-// the user hid. The planned fix routes framing through a visible-only bounds
-// query that skips per-Key-hidden items; when it lands, point this test at
-// that API and drop [!shouldfail].
+// KNOWN BUG (issue #549, per-scrap flavor). Reset framing now comes from
+// cwScene::visibleFramingBounds(), which filters whole-object visibility only
+// — per-id hiding never reaches the intersecter, so a hidden scrap still
+// inflates the framed box and reset zooms out to include geometry the user
+// hid. Phase 2a's per-Key flag fixes this; drop [!shouldfail] when it lands.
 TEST_CASE("cwRenderTexturedItems hidden item must not inflate framing bounds",
           "[cwRenderTexturedItems][!shouldfail]")
 {
@@ -131,14 +130,14 @@ TEST_CASE("cwRenderTexturedItems hidden item must not inflate framing bounds",
     const uint32_t hiddenId = addTriangleItem(items, kSecondItemY);
 
     // Baseline: both items contribute — the box reaches item B.
-    REQUIRE(scene.geometryItersecter()->boundingBox().maximum().y()
+    REQUIRE(scene.visibleFramingBounds().maximum().y()
             >= kSecondItemY - kTriangleExtent);
 
     items.setVisible(hiddenId, false);
 
     // Desired: framing bounds shrink to item A (max y ~= kTriangleExtent).
     // Currently fails — the box still spans to the hidden item B.
-    const QBox3D box = scene.geometryItersecter()->boundingBox();
+    const QBox3D box = scene.visibleFramingBounds();
     CHECK(box.maximum().y() < kSecondItemY - kTriangleExtent);
 }
 
@@ -166,4 +165,30 @@ TEST_CASE("cwRenderTexturedItems whole-object hide removes it from intersecter p
     const cwRayHit hit = scene.geometryItersecter()->intersectsDetailed(
         rayThroughSecondItem(), cwPickQuery());
     CHECK_FALSE(hit.hit());
+}
+
+// Phase 1: whole-object visibility filters the framing bounds. The raw
+// boundingBox() intentionally keeps counting hidden objects (it describes the
+// registered geometry); visibleFramingBounds() is the box cameras frame.
+TEST_CASE("cwRenderTexturedItems whole-object hide removes it from the visible framing bounds",
+          "[cwRenderTexturedItems]")
+{
+    cwScene scene;
+
+    cwRenderTexturedItems items;
+    items.setScene(&scene);
+    addTriangleItem(items, 0.0f);
+    addTriangleItem(items, kSecondItemY);
+
+    // Baseline: while visible, the framing bounds span both items.
+    REQUIRE(scene.visibleFramingBounds().maximum().y()
+            >= kSecondItemY - kTriangleExtent);
+
+    items.cwRenderObject::setVisible(false);
+
+    // The only render object is hidden, so there is nothing to frame — but
+    // the raw box still reports the registered geometry.
+    CHECK(scene.visibleFramingBounds().isNull());
+    CHECK(scene.geometryItersecter()->boundingBox().maximum().y()
+          >= kSecondItemY - kTriangleExtent);
 }

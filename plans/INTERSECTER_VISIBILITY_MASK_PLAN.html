@@ -66,8 +66,10 @@
     <a href="#intersecter">Phase 0c · What the intersecter does (and doesn't)</a><br>
     <a href="#phase1">Phase 1 · Whole-object visibleBoundingBox</a><br>
     <a href="#boundary">Phase 1 · Framing-bounds seam (architecture)</a><br>
-    <a href="#phase2">Phase 2 · The per-primitive mask</a><br>
+    <a href="#phase2a">Phase 2a · Per-Key visible flag (scraps, glTF)</a><br>
+    <a href="#phase2">Phase 2b · Per-primitive mask (line plot)</a><br>
     <a href="#threading">Phase 2 · Thread-safety / snapshot</a><br>
+    <a href="#perf">Performance analysis</a><br>
     <a href="#files">File-by-file changes</a><br>
     <a href="#alt">Alternatives considered</a><br>
     <a href="#tests">Test plan</a><br>
@@ -85,13 +87,18 @@
     <td>Per-shot line-plot visibility never reaches the intersecter; a <code>Kind::Lines</code> pick hits hidden segments.</td>
   </tr>
   <tr>
+    <td>#575-class<br><span class="muted">(scrap flavor)</span></td>
+    <td>Keyword-hidden scraps and glTF models are still pickable, and the rotation pivot (<code>nearestGeometryPoint</code>) anchors onto them. Manually confirmed.</td>
+    <td>Per-id visibility (<code>cwRenderTexturedItems::setVisible(id)</code>) is render-side only; all scraps share one render object, so the whole-object gate never fires.</td>
+  </tr>
+  <tr>
     <td><a href="https://github.com/Cavewhere/cavewhere/issues/549" style="color:var(--accent)">#549</a></td>
-    <td>Reset view frames hidden caves/trips/LiDAR — the model zooms out to include things you hid.</td>
-    <td><code>boundingBox()</code> unions <em>every</em> registered object with no visibility filter at all.</td>
+    <td>Reset view frames hidden caves/trips/scraps/LiDAR — the model zooms out to include things you hid.</td>
+    <td><code>boundingBox()</code> unions <em>every</em> registered object with no visibility filter at all (its doc now says so explicitly).</td>
   </tr>
 </table>
 
-<p><strong>Design goal.</strong> Make the intersecter return correct <em>visible-only</em> results, so consumers (reset-view, Distance tool, lead occlusion) are written as if <code>cwGeometryItersecter</code> is simply correct — no visibility logic duplicated into each consumer. A committed failing test (<span class="fileref">testcases/test_cwRenderLinePlotPickVisibility.cpp</span>, tagged <code>[!shouldfail]</code>) pins #575.</p>
+<p><strong>Design goal.</strong> Make the intersecter return correct <em>visible-only</em> results, so consumers (reset-view, Distance tool, rotation pivot, lead occlusion) are written as if <code>cwGeometryItersecter</code> is simply correct — no visibility logic duplicated into each consumer. Two committed failing tests (tagged <code>[!shouldfail]</code>) pin the bugs: <span class="fileref">testcases/test_cwRenderLinePlotPickVisibility.cpp</span> (#575, per-shot) and <span class="fileref">testcases/test_cwRenderTexturedItemsPickVisibility.cpp</span> (per-id pick + framing bounds).</p>
 
 <h2 id="phase0">Phase 0 · How it works today <span class="tag p0">current</span></h2>
 <p>Three layers, wired end-to-end. Visibility flows left→right; the intersecter is the one box the flow skips.</p>
@@ -193,8 +200,11 @@
   <tr><th>Granularity</th><th>Proxy object</th><th>Action</th><th>Reaches intersecter?</th></tr>
   <tr><td>Whole object<br>(cloud, LiDAR, entire plot)</td><td><code>cwRenderObject</code></td><td><span class="fileref">setVisible()</span></td><td class="good">Yes — <code>isPickable()</code></td></tr>
   <tr><td>Per shot / trip<br>(centerline)</td><td><code>cwLinePlotTripVisibility</code><br><span class="fileref">.cpp:26-38</span></td><td><code>linePlot-&gt;setRangeVisible(start,count)</code></td><td class="bad">No</td></tr>
-  <tr><td>Per scrap</td><td><code>cwRenderTexturedItemVisibility</code><br><span class="fileref">.cpp:14-26</span></td><td><code>items-&gt;setVisible(id)</code></td><td class="bad">No</td></tr>
+  <tr><td>Per scrap<br><span class="muted">(one item id per scrap, all in one shared <code>cwRenderTexturedItems</code>)</span></td><td><code>cwRenderTexturedItemVisibility</code><br><span class="fileref">cwScrapManager.cpp:1333</span></td><td><code>items-&gt;setVisible(id)</code></td><td class="bad">No</td></tr>
+  <tr><td>Per glTF model<br><span class="muted">(polycam LiDAR — multiple item ids, always toggled together)</span></td><td><code>cwRenderTexturedItemsVisibilityGroup</code><br><span class="fileref">cwNoteLiDARManager.cpp:824</span></td><td><code>items-&gt;setVisible(id)</code> per id in the group</td><td class="bad">No</td></tr>
 </table>
+
+<div class="callout"><strong>Key structural fact.</strong> Each textured item id is <em>already its own intersecter Key</em> — <code>addItem</code> registers <code>Object({this, id}, …)</code> (<span class="fileref">cwRenderTexturedItems.cpp:140</span>). The intersecter already has per-scrap / per-glTF-part granularity structurally; only the visibility bit is missing. So textured items need a <a href="#phase2a">per-Key visible flag</a>, not the per-primitive mask — the mask is needed only by the line plot, which is one Key with per-vertex visibility.</div>
 
 <h3 id="render">Phase 0b · How the renderer honors visibility</h3>
 <ul>
@@ -204,20 +214,23 @@
 </ul>
 
 <h3 id="intersecter">Phase 0c · What the intersecter does — and doesn't</h3>
+<p class="sub">Refreshed July 2026 after the traversal rework (tube-fallback deletion, pivot anchoring, <code>traverseBvh</code> unification).</p>
 <ul>
-  <li>Geometry is registered <em>once</em> as the <strong>full</strong> vertex list in <span class="fileref">cwRenderLinePlot.cpp:46-59</span> (<code>setGeometry → addObject</code>). Visibility toggles (<code>setRangeVisible</code>, <span class="fileref">.cpp:76-99</span>) never call the intersecter.</li>
-  <li>The only visibility gate is whole render-object: <span class="fileref">cwGeometryItersecter.cpp:196-198</span> <code>isPickable() = parent==nullptr || parent-&gt;isVisible()</code>, hoisted once per sub-BVH at <span class="fileref">:951</span>.</li>
-  <li><code>boundingBox()</code> <span class="fileref">:652</span> unions <em>all</em> node boxes with <strong>no visibility check whatsoever</strong> — not even whole-object.</li>
-  <li>Key type is <code>Key{cwRenderObject* parentObject, uint64_t id}</code> <span class="fileref">cwGeometryItersecter.h:46</span>; there is <code>boundingBox(const QList&lt;Key&gt;&amp;)</code> <span class="fileref">:100</span> but no way to enumerate keys or filter by visibility.</li>
+  <li>Geometry is registered <em>once</em> as the <strong>full</strong> vertex list in <span class="fileref">cwRenderLinePlot.cpp:46-59</span> (<code>setGeometry → addObject</code>). Visibility toggles (<code>setRangeVisible</code>) never call the intersecter. Likewise <code>cwRenderTexturedItems::setVisible(id)</code> (<span class="fileref">cwRenderTexturedItems.cpp:222</span>) updates render state only.</li>
+  <li>Both ray entry points — <code>intersectsDetailed</code> (<code>ExactPick</code>) and the rotation-pivot anchor <code>nearestGeometryPoint</code> (<code>AnchorPick</code>) — now share one traversal, <code>traverseBvh&lt;Policy&gt;</code>. The only visibility gate is whole render-object: <code>isPickable() = parent==nullptr || parent-&gt;isVisible()</code>, hoisted once per sub-BVH descent inside <code>traverseBvh</code>. <strong>One hook point now covers every ray query.</strong></li>
+  <li><code>boundingBox()</code> unions <em>all</em> node boxes with <strong>no visibility check whatsoever</strong> — its doc now says "Counts hidden objects" explicitly.</li>
+  <li><code>isPickableEmpty()</code> (added for the pivot fallback) already contains the Phase 1 loop: it unions boxes over <code>isPickable</code>-filtered live Nodes, then throws the box away and returns only its emptiness.</li>
+  <li><code>pointsInBox(QuerySnapshot, box, Key)</code> is an off-thread, <em>explicit-Key</em> query (sink-scan broad phase). It is deliberately unfiltered: the caller already chose the object, so visibility policy belongs to the caller, not this query.</li>
+  <li>Key type is <code>Key{cwRenderObject* parentObject, uint64_t id}</code>; the published BVH keeps a <code>keyToSlot</code> reverse index, so per-Key state can be republished with a direct lookup.</li>
 </ul>
 
 <h2 id="phase1">Phase 1 · Whole-object <code>visibleBoundingBox()</code> <span class="tag p1">interim</span></h2>
-<p>Ship the reset-view API immediately, correct for the common cases, before the deeper mask work.</p>
+<p>Ship the reset-view API immediately, before the deeper work. The body already exists: <code>isPickableEmpty()</code> unions boxes over <code>isPickable</code>-filtered live Nodes and discards the box. Phase 1 is an extraction, not new logic.</p>
 <ul>
-  <li>Add <code>cwGeometryItersecter::visibleBoundingBox()</code> that unions node boxes for which <code>node.Object.parent()==nullptr || parent-&gt;isVisible()</code>. Main-thread only (bbox is computed against live <code>Nodes</code>).</li>
-  <li>Point <code>cwBaseTurnTableInteraction::resetView()</code> at <code>visibleBoundingBox()</code> (replacing <code>boundingBox()</code> at <span class="fileref">cwBaseTurnTableInteraction.cpp:331</span>); keep the empty-box fallback.</li>
+  <li>Extract that loop into <code>cwGeometryItersecter::visibleBoundingBox()</code>; reimplement <code>isPickableEmpty()</code> as <code>{ const auto box = visibleBoundingBox(); return box.isNull() || !box.isFinite(); }</code>. Main-thread only (computed against live <code>Nodes</code>), flat loop over cached per-Node boxes — O(#Keys), no BVH or vertex traversal.</li>
+  <li>Point <code>cwBaseTurnTableInteraction::resetView()</code> at <code>visibleBoundingBox()</code> (replacing <code>boundingBox()</code> at <span class="fileref">cwBaseTurnTableInteraction.cpp:424</span>); keep the empty-box fallback.</li>
 </ul>
-<div class="callout warn"><strong>Correct for:</strong> hidden LiDAR cloud, hidden scrap group, entirely-hidden centerline. <strong>Still wrong for:</strong> hiding a single cave/trip (the plot object stays visible). Reset-view is written <em>once</em>, against the final API — Phase 2 upgrades correctness with no change here.</div>
+<div class="callout warn"><strong>Coverage is narrower than it looks.</strong> The only keyword items that carry a whole <code>cwRenderObject</code> are <strong>point clouds</strong> (<span class="fileref">cwLazLayersSceneNode.cpp:367</span>). Scraps, glTF models, and centerline trips all hide through per-id / per-range proxies whose shared parent stays visible — so Phase 1 fixes framing for hidden clouds <em>only</em>. Phases 2a/2b upgrade correctness for the rest with <strong>no change to reset-view</strong>, which is written once against the final API.</div>
 
 <h3 id="boundary">Architectural note · put the seam in the right place</h3>
 <p>Today <code>resetView()</code> reads <code>scene()-&gt;geometryItersecter()-&gt;boundingBox()</code> directly (<span class="fileref">cwBaseTurnTableInteraction.cpp:331</span>). "What bounds should the camera frame" is a <em>scene / view-presentation</em> concern, but <code>cwGeometryItersecter::boundingBox()</code> is an artifact of the <em>pick-acceleration</em> structure. Sourcing framing policy straight off the picking BVH leaks the picking subsystem's boundary into camera behavior.</p>
@@ -227,8 +240,19 @@
   <span class="muted">Blast radius: moderate — one new scene-level accessor, re-point <code>resetView</code> (and the Phase 1/2 work) at it; no data-model changes. Tracked as the architectural follow-up from the #549 review; can land before or alongside Phase 1.</span>
 </div>
 
-<h2 id="phase2">Phase 2 · The per-primitive mask <span class="tag p2">the fix</span></h2>
-<p>Give the intersecter its own visibility channel, fed from the same <code>setRangeVisible</code> calls the renderer already makes. Both picking and bounding box consult it. One mechanism → both #575 and per-trip #549 fall out.</p>
+<h2 id="phase2a">Phase 2a · Per-Key visible flag <span class="tag p2">scraps + glTF</span></h2>
+<p>Textured items don't need the mask: each item id is already its own intersecter Key with its own Node and sub-BVH slot. They need one bit.</p>
+<ul>
+  <li>Add <code>cwGeometryItersecter::setVisible(const Key&amp;, bool visible)</code> — a per-Key flag on the live <code>Node</code>, republished into the snapshot slot (the <code>keyToSlot</code> index makes this a direct lookup). No geometry change, no BVH rebuild.</li>
+  <li><code>traverseBvh</code> consults it beside the existing <code>isPickable()</code> hoist — one boolean per descended sub-BVH, <strong>zero per-primitive cost</strong>. Because the traversal is shared, picking (<code>ExactPick</code>) and the rotation pivot (<code>AnchorPick</code>) are both fixed by the same check.</li>
+  <li><code>visibleBoundingBox()</code> / <code>isPickableEmpty()</code> skip per-Key-hidden nodes — per-scrap and per-glTF framing become correct.</li>
+  <li>Forward from <code>cwRenderTexturedItems::setVisible(id)</code> (<span class="fileref">cwRenderTexturedItems.cpp:222</span>): one line, <code>intersecter-&gt;setVisible({this, id}, visible)</code>. Scraps (per-id proxies) and glTF groups (N per-id calls) are both covered — no manager changes.</li>
+  <li>Flip the two <code>[!shouldfail]</code> cases in <span class="fileref">test_cwRenderTexturedItemsPickVisibility.cpp</span>; repoint its bounds test at <code>visibleBoundingBox()</code>.</li>
+</ul>
+<div class="callout"><strong>Snapshot subtlety.</strong> <code>sub.object</code> inside a published snapshot is a <em>copy</em> of the Object, so a plain member on the live Object won't be seen by held snapshots. The whole-object gate gets away with this because it dereferences the live <code>parent-&gt;isVisible()</code>; the per-Key flag instead follows the same discipline as the Phase 2b mask — per-slot shared state, republished on change. Ray queries run on the main thread, so a simpler live-read is also defensible; decide at implementation time, but keep it consistent with the mask.</div>
+
+<h2 id="phase2">Phase 2b · The per-primitive mask <span class="tag p2">line plot</span></h2>
+<p>Give the intersecter its own visibility channel, fed from the same <code>setRangeVisible</code> calls the renderer already makes. Both picking and bounding box consult it. One mechanism → both #575 and per-trip #549 fall out. Only the line plot needs this — it is one Key whose visibility varies per vertex.</p>
 
 <figure>
 <svg viewBox="0 0 960 300" role="img" aria-label="Proposed mask flow">
@@ -287,31 +311,47 @@ const QVector&lt;quint8&gt;&amp; visibility() const { return m_visibility; }
 <ul>
   <li><code>cwRenderLinePlot::setGeometry()</code> — after <code>addObject</code>, seed an all-visible mask (or none).</li>
   <li><code>cwRenderLinePlot::setRangeVisible()</code> — additionally call <code>geometryItersecter()-&gt;setRangeVisible(Key{this,0}, start, count, visible)</code>. The intersecter mask becomes the twin of the render <code>m_visibility</code>, fed by the same call.</li>
-  <li>(Optional, later) <code>cwRenderTexturedItems</code> per-id visibility can push analogously if scraps become pickable/framed at per-id granularity.</li>
+  <li>Textured items do <em>not</em> push a mask — Phase 2a's per-Key flag covers them.</li>
 </ul>
 
 <h3>2.4 · Consumers honor the mask</h3>
 <ul>
-  <li><strong>Picking</strong> — in <code>testPrimitive()</code> (<span class="fileref">cwGeometryItersecter.cpp:1108+</span>), after resolving the primitive's vertex indices, skip when the mask marks them hidden. Whole-object <code>isPickable()</code> stays as the cheap early-out.</li>
-  <li><strong>Bounding box</strong> — <code>visibleBoundingBox()</code> unions only visible primitives. Masked objects iterate their primitives (can't use the cached node box); unmasked objects keep the fast whole-box path. O(vertices), once per reset.</li>
+  <li><strong>Ray queries</strong> — in <code>traverseBvh</code>'s leaf loop, check the mask just before <code>policy.testPrimitive(ctx, prim)</code>. One check in the shared traversal covers <em>both</em> policies (<code>ExactPick</code> picking and <code>AnchorPick</code> pivot anchoring) with no per-policy duplication. Hoist the has-mask test to the sub-BVH descent (beside <code>isPickable()</code>) so unmasked objects — clouds, scraps, triangles — pay one pointer compare and nothing per primitive.</li>
+  <li><strong>Bounding box</strong> — <code>visibleBoundingBox()</code> unions only visible primitives. Masked objects iterate their primitives (can't use the cached node box); unmasked objects keep the fast whole-box path. O(vertices), only on reset, only for the line plot.</li>
 </ul>
 
 <h3 id="threading">2.5 · Thread-safety &amp; the snapshot</h3>
 <div class="callout"><strong>The one real cost.</strong> Picks run off-thread against an immutable snapshot (<code>SubBvh</code>s). Bounding box runs on the main thread against live <code>Nodes</code>.</div>
 <ul>
   <li><strong>Bounding box</strong>: main-thread, reads the live mask directly — trivial.</li>
-  <li><strong>Picking</strong>: the mask must live <em>in</em> the published snapshot so an in-flight pick sees a consistent view. Store the mask as a per-slot <code>shared_ptr&lt;const QVector&lt;quint8&gt;&gt;</code> alongside each <code>SubBvh</code>; <code>setRangeVisible</code> builds a new array and atomically swaps the pointer. BVH nodes are untouched, so toggling never triggers a rebuild and captured snapshots stay valid.</li>
+  <li><strong>Picking</strong>: the mask must live <em>in</em> the published snapshot so an in-flight pick sees a consistent view. Store the mask as a per-slot <code>shared_ptr&lt;const QVector&lt;quint8&gt;&gt;</code> alongside each <code>SubBvh</code>; <code>setRangeVisible</code> builds a new array and atomically swaps the pointer (<code>keyToSlot</code> finds the slot directly). BVH nodes are untouched, so toggling never triggers a rebuild and captured snapshots stay valid.</li>
   <li>This mirrors the existing snapshot discipline (<code>QuerySnapshot</code>, slot invalidation) — the mask is just one more immutable-per-publish array.</li>
+  <li><strong>Republish coalescing</strong> (watch, don't pre-build): each <code>setRangeVisible</code> copies the whole mask, and <code>cwLinePlotTripVisibility</code> fires once per trip — a keyword flip hiding N trips does N full-array copies. At 1 byte/vertex that's memcpy-speed (~1&nbsp;MB per copy on a 1M-vertex plot), a few ms worst case, never per-frame. If profiling ever cares, coalesce like <code>scheduleTopLevelRebuild</code>: mutate a pending mask, publish once per event-loop tick.</li>
+  <li><code>pointsInBox</code> reads the same snapshot but stays visibility-unfiltered on purpose — it is an explicit-Key query; the caller already chose the object.</li>
 </ul>
+
+<h2 id="perf">Performance analysis</h2>
+<p><code>cwGeometryItersecter</code> is a hot path; this design keeps every cost off it by construction.</p>
+<table>
+  <tr><th>Path</th><th>Cost added</th><th>Why</th></tr>
+  <tr><td>Pick over unmasked objects<br><span class="muted">(clouds, scraps, triangles — the perf-critical mass)</span></td><td class="good">~zero</td><td>Per-Key flag: one bool per descended sub-BVH, beside the existing <code>isPickable()</code> hoist. Mask: one pointer compare (empty/null mask) at the same hoist. BVH node traversal — the cost that dominates a pick — is untouched.</td></tr>
+  <tr><td>Pick over the masked line plot</td><td class="good">2 byte-loads / tested leaf primitive</td><td>Only primitives that already survived ray-box descent reach the check (a handful per pick), next to segment-distance math that dwarfs it.</td></tr>
+  <tr><td><code>visibleBoundingBox()</code>, no mask</td><td class="good">O(#Keys)</td><td>Flat loop over cached per-Node boxes (same shape as today's <code>boundingBox()</code> / <code>isPickableEmpty()</code>) — one box transform per registered Key, no BVH or vertex traversal. Microseconds.</td></tr>
+  <tr><td><code>visibleBoundingBox()</code>, masked object</td><td class="warn">O(vertices), reset only</td><td>Line plot only, only while partially hidden, only when reset runs — never per-frame, never in picking. ~ms at 500k vertices. If it ever matters: cache the visible box per Node, invalidate in <code>setRangeVisible</code>.</td></tr>
+  <tr><td><code>setRangeVisible</code> republish</td><td class="warn">O(vertices) copy per call</td><td>User-interaction rate (keyword toggles), never per-frame. Coalescible — see 2.5.</td></tr>
+</table>
 
 <h2 id="files">File-by-file changes</h2>
 <table>
   <tr><th>File</th><th>Phase</th><th>Change</th></tr>
-  <tr><td><span class="fileref">cwGeometryItersecter.h/.cpp</span></td><td>1</td><td><code>visibleBoundingBox()</code> — whole-object filter over live Nodes.</td></tr>
-  <tr><td><span class="fileref">cwBaseTurnTableInteraction.cpp</span></td><td>1</td><td><code>resetView()</code> → <code>visibleBoundingBox()</code> (line ~331), keep fallback.</td></tr>
-  <tr><td><span class="fileref">cwGeometryItersecter.h/.cpp</span></td><td>2</td><td><code>Object::m_visibility</code>; <code>setRangeVisible(Key,…)</code>; mask in snapshot; <code>visibleBoundingBox()</code> and <code>testPrimitive()</code> honor mask.</td></tr>
-  <tr><td><span class="fileref">cwRenderLinePlot.cpp</span></td><td>2</td><td>Push mask on <code>setGeometry</code> (seed) and <code>setRangeVisible</code> (range update).</td></tr>
-  <tr><td><span class="fileref">test_cwRenderLinePlotPickVisibility.cpp</span></td><td>2</td><td>Drop <code>[!shouldfail]</code>; flip to assert the hidden shot is NOT pickable.</td></tr>
+  <tr><td><span class="fileref">cwGeometryItersecter.h/.cpp</span></td><td>1</td><td>Extract <code>isPickableEmpty()</code>'s loop into <code>visibleBoundingBox()</code>; <code>isPickableEmpty()</code> delegates to it.</td></tr>
+  <tr><td><span class="fileref">cwBaseTurnTableInteraction.cpp</span></td><td>1</td><td><code>resetView()</code> → <code>visibleBoundingBox()</code> (line ~424), keep fallback.</td></tr>
+  <tr><td><span class="fileref">cwGeometryItersecter.h/.cpp</span></td><td>2a</td><td><code>setVisible(Key, bool)</code> per-Key flag; checked in <code>traverseBvh</code> beside <code>isPickable()</code> and in <code>visibleBoundingBox()</code>/<code>isPickableEmpty()</code>.</td></tr>
+  <tr><td><span class="fileref">cwRenderTexturedItems.cpp</span></td><td>2a</td><td><code>setVisible(id)</code> additionally forwards <code>intersecter-&gt;setVisible({this,id}, …)</code>.</td></tr>
+  <tr><td><span class="fileref">test_cwRenderTexturedItemsPickVisibility.cpp</span></td><td>2a</td><td>Drop <code>[!shouldfail]</code> from both cases; repoint the bounds case at <code>visibleBoundingBox()</code>.</td></tr>
+  <tr><td><span class="fileref">cwGeometryItersecter.h/.cpp</span></td><td>2b</td><td><code>Object::m_visibility</code>; <code>setRangeVisible(Key,…)</code>; mask in snapshot; <code>traverseBvh</code> leaf loop and <code>visibleBoundingBox()</code> honor the mask.</td></tr>
+  <tr><td><span class="fileref">cwRenderLinePlot.cpp</span></td><td>2b</td><td>Push mask on <code>setGeometry</code> (seed) and <code>setRangeVisible</code> (range update).</td></tr>
+  <tr><td><span class="fileref">test_cwRenderLinePlotPickVisibility.cpp</span></td><td>2b</td><td>Drop <code>[!shouldfail]</code>; flip to assert the hidden shot is NOT pickable.</td></tr>
 </table>
 
 <h2 id="alt">Alternatives considered</h2>
@@ -323,8 +363,10 @@ const QVector&lt;quint8&gt;&amp; visibility() const { return m_visibility; }
 
 <h2 id="tests">Test plan</h2>
 <ul>
-  <li><strong>#575 pick</strong> — flip <span class="fileref">test_cwRenderLinePlotPickVisibility.cpp</span> to assert <code>CHECK_FALSE(hit.hit())</code> on the hidden shot; remove <code>[!shouldfail]</code>. Keep the whole-object contrast test.</li>
-  <li><strong>Bounding box</strong> — new test: register two shots, hide one via <code>setRangeVisible</code>, assert <code>visibleBoundingBox()</code> tightens to the visible shot; hide whole object → null/empty; empty mask → equals <code>boundingBox()</code>.</li>
+  <li><strong>Per-id pick + framing (2a)</strong> — flip both <code>[!shouldfail]</code> cases in <span class="fileref">test_cwRenderTexturedItemsPickVisibility.cpp</span> (committed): hidden item not pickable; hidden item excluded from <code>visibleBoundingBox()</code>. Keep the whole-object contrast test.</li>
+  <li><strong>#575 pick (2b)</strong> — flip <span class="fileref">test_cwRenderLinePlotPickVisibility.cpp</span> to assert <code>CHECK_FALSE(hit.hit())</code> on the hidden shot; remove <code>[!shouldfail]</code>. Keep the whole-object contrast test.</li>
+  <li><strong>Bounding box (1, 2b)</strong> — new test: register two shots, hide one via <code>setRangeVisible</code>, assert <code>visibleBoundingBox()</code> tightens to the visible shot; hide whole object → null/empty; empty mask → equals <code>boundingBox()</code>.</li>
+  <li><strong>Pivot anchor (2a/2b)</strong> — <code>nearestGeometryPoint</code> over a hidden scrap/shot returns nullopt (or the nearest <em>visible</em> geometry), since <code>AnchorPick</code> shares the traversal gate.</li>
   <li><strong>Reset framing (#549)</strong> — extend the existing C++ resetView tests: hidden geometry outside the visible box must not affect the framed center.</li>
   <li><strong>Threading</strong> — toggle <code>setRangeVisible</code> while a pick snapshot is held; the held snapshot returns its captured visibility, the next pick sees the update.</li>
   <li><strong>QML</strong> — Distance tool over a keyword-hidden trip does not snap to it.</li>

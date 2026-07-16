@@ -415,19 +415,19 @@ void cwBaseTurnTableInteraction::zoom(QPoint position, double delta) {
   \brief Resets the view to frame the whole scene
 
   Animates from the current view to the default orientation framed on the
-  geometry intersecter's root bounding box, so a model whose datum places it
-  far from the origin (issue #549) is brought back into view. When the scene
-  is empty or its bounding box is degenerate there is nothing to frame, so
-  fall back to the fixed default pose.
+  scene's visible framing bounds, so a model whose datum places it far from
+  the origin (issue #549) is brought back into view without zooming out to
+  include geometry the user hid. When the scene is empty, everything is
+  hidden, or the bounds are degenerate there is nothing to frame, so fall
+  back to the fixed default pose.
   */
 void cwBaseTurnTableInteraction::resetView() {
-    if(Camera.isNull() || scene() == nullptr
-            || scene()->geometryItersecter() == nullptr) {
+    if(Camera.isNull() || scene() == nullptr) {
         resetViewImmediate();
         return;
     }
 
-    const QBox3D box = scene()->geometryItersecter()->boundingBox();
+    const QBox3D box = scene()->visibleFramingBounds();
     if(box.isNull() || !box.isFinite()) {
         resetViewImmediate();
         return;

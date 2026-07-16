@@ -297,6 +297,24 @@ void checkNoPanLurchOnOffRayLineGrab(Fixture& f)
     CHECK(matricesNearlyEqual(f.camera.viewMatrix(), before));
 }
 
+// Rotates away from the default pose, resets, and asserts the reset restored
+// the fixed default pose synchronously — the fallback taken when there is
+// nothing visible to frame.
+void checkResetFallsBackToDefaultPose(Fixture& f)
+{
+    f.interaction.setAzimuth(75.0);
+    f.interaction.setPitch(45.0);
+
+    f.interaction.resetView();
+
+    CHECK(f.interaction.azimuth() == Approx(0.0));
+    CHECK(f.interaction.pitch() == Approx(90.0));
+
+    QMatrix4x4 expected;
+    expected.translate(QVector3D(0.0f, 0.0f, kDefaultViewZ));
+    CHECK(matricesNearlyEqual(f.camera.viewMatrix(), expected));
+}
+
 } // namespace
 
 TEST_CASE("cwBaseTurnTableInteraction default state after setCamera",
@@ -882,17 +900,59 @@ TEST_CASE("cwBaseTurnTableInteraction resetView on an empty scene falls back to 
     // With no geometry there is nothing to frame, so resetView() falls back to
     // the fixed default pose (a plain T(0,0,kDefaultViewZ)) synchronously.
     Fixture f;
-    f.interaction.setAzimuth(75.0);
-    f.interaction.setPitch(45.0);
+    checkResetFallsBackToDefaultPose(f);
+}
 
+TEST_CASE("cwBaseTurnTableInteraction resetView frames only the visible geometry",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Reset must not zoom out to include geometry the user hid: framing comes
+    // from cwScene::visibleFramingBounds(), not the raw intersecter box.
+    //
+    // `hidden` outlives the fixture so the intersecter never holds a key to a
+    // destroyed object.
+    cwRenderObject hidden;
+    Fixture f;
+    hidden.setVisible(false);
+
+    const QVector3D visibleCenter(500.0f, -300.0f, 0.0f);
+    addGeometryAt(f.scene, visibleCenter, 20.0f);
+    addSinglePoint(f.scene, QVector3D(5000.0f, 3000.0f, 0.0f), &hidden, 4);
+
+    // Guard against vacuity: the hidden point really does inflate the raw
+    // box, so this test fails if framing ever reads boundingBox() again.
+    const QBox3D rawBox = f.scene.geometryItersecter()->boundingBox();
+    const QBox3D visibleBox = f.scene.visibleFramingBounds();
+    REQUIRE(rawBox.center() != visibleBox.center());
+
+    QSignalSpy spy(&f.camera, &cwCamera::viewMatrixChanged);
     f.interaction.resetView();
+    REQUIRE(spy.wait(kAnimationFirstTickTimeoutMs));
+    while (spy.wait(kAnimationQuietWindowMs)) {
+        // drain remaining animation ticks
+    }
 
-    CHECK(f.interaction.azimuth() == Approx(0.0));
-    CHECK(f.interaction.pitch() == Approx(90.0));
+    // The visible box is centered on screen; the raw union box is not.
+    const QPointF expected = screenCenter();
+    const QPointF projectedVisible = f.camera.project(visibleBox.center());
+    CHECK(projectedVisible.x() == Approx(expected.x()).margin(kPixelTolerance));
+    CHECK(projectedVisible.y() == Approx(expected.y()).margin(kPixelTolerance));
 
-    QMatrix4x4 expected;
-    expected.translate(QVector3D(0.0f, 0.0f, kDefaultViewZ));
-    CHECK(matricesNearlyEqual(f.camera.viewMatrix(), expected));
+    const QPointF projectedRaw = f.camera.project(rawBox.center());
+    CHECK(std::abs(projectedRaw.x() - expected.x()) > kPixelTolerance);
+}
+
+TEST_CASE("cwBaseTurnTableInteraction resetView with all geometry hidden falls back to the default pose",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Everything is hidden, so there is nothing visible to frame — reset
+    // behaves like the empty scene and restores the fixed default pose.
+    cwRenderObject hidden;
+    Fixture f;
+    hidden.setVisible(false);
+    addSinglePoint(f.scene, QVector3D(500.0f, -300.0f, 0.0f), &hidden);
+
+    checkResetFallsBackToDefaultPose(f);
 }
 
 TEST_CASE("cwBaseTurnTableInteraction startRotating + setAzimuth orbits around the click point",

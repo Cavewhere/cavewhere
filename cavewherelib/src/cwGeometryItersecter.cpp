@@ -716,7 +716,7 @@ QBox3D cwGeometryItersecter::boundingBox() const
     return box;
 }
 
-bool cwGeometryItersecter::isPickableEmpty() const
+QBox3D cwGeometryItersecter::visibleBoundingBox() const
 {
     QBox3D box;
     for (const Node& node : Nodes) {
@@ -725,6 +725,12 @@ bool cwGeometryItersecter::isPickableEmpty() const
         }
         box.unite(node.BoundingBox.transformed(node.Object.modelMatrix()));
     }
+    return box;
+}
+
+bool cwGeometryItersecter::isPickableEmpty() const
+{
+    const QBox3D box = visibleBoundingBox();
     return box.isNull() || !box.isFinite();
 }
 

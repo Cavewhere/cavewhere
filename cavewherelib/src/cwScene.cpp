@@ -169,6 +169,11 @@ cwGeometryItersecter *cwScene::geometryItersecter() const
     return GeometryItersecter;
 }
 
+QBox3D cwScene::visibleFramingBounds() const
+{
+    return GeometryItersecter->visibleBoundingBox();
+}
+
 /**
  * @brief cwScene::update
  *
