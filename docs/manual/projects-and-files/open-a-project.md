@@ -76,7 +76,7 @@ without going back to the File menu.
 **File → Open from Online…** (`Ctrl+Shift+O`) downloads a project shared by your
 team rather than opening one from your disk, and **File → Open from Link…** opens
 one from a link someone sent you. Both belong to CaveWhere's collaboration
-features, which have their own chapter, still to be written.
+features — see [Open a Shared Project](../collaboration/open-a-shared-project.md).
 
 ## What happens to the project you had open
 

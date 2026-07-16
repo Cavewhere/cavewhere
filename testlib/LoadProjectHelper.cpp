@@ -270,6 +270,12 @@ bool TestHelper::fileExists(const QUrl &filename) const
     return info.exists();
 }
 
+bool TestHelper::copyFile(const QString &sourcePath, const QString &destPath) const
+{
+    QFile::remove(destPath);
+    return QFile::copy(sourcePath, destPath);
+}
+
 QString TestHelper::clipboardText() const
 {
     return QGuiApplication::clipboard()->text();

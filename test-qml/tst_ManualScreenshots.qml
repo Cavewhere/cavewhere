@@ -1027,6 +1027,159 @@ MainWindowTest {
             restoreDemoProject();
         }
 
+        // The before/after image comparison on the History page. Backs "Seeing what
+        // a version changed" in docs/manual/collaboration/review-history.md.
+        //
+        // A real same-path "Modified" image diff needs the note's on-disk image file
+        // to change between two commits — only a file overwrite does that (a
+        // re-import writes a NEW filename, i.e. Added). So: commit a baseline holding
+        // the original note image, overwrite that file with a different raster,
+        // commit again, then open the History page's image diff for it. The compare
+        // page renders the before from the parent commit and the after from HEAD via
+        // the git image provider, so both panes must finish loading before the grab.
+        function test_gitImageCompare() {
+            let notePage = loadCarpetNote("test_cwProject/Phake Cave 3000.cw", false,
+                "Source/Data/Cave=Phake Cave 3000/Trip=Release 0.08/Note=001");
+            if (!notePage) { return; }
+
+            // Commits need an identity; cleared settings otherwise fail the commit.
+            RootData.account.name = gitHistoryShotAuthor;
+            RootData.account.email = gitHistoryShotEmail;
+
+            let gallery = findByName(notePage, "noteGallery");
+            verify(gallery, "found the note gallery");
+            let note = gallery.currentNote;
+            verify(note, "the raster note is current");
+
+            // Baseline commit: guarantees the ORIGINAL image is in history, so the
+            // before pane has something to show.
+            RootData.futureManagerModel.waitForFinished();
+            RootData.project.safeCommitAll("Baseline for image diff", "");
+            RootData.futureManagerModel.waitForFinished();
+
+            let abs = RootData.project.absolutePath(note);
+            let root = RootData.project.repository.directoryPath;
+            verify(abs.length > 0 && abs.startsWith(root),
+                   "the note image path is inside the repository");
+            let rel = abs.substring(root.length + 1);
+
+            // Overwrite the note image with a different raster, then commit it — a
+            // same-path Modified diff. crashMap.png sits beside the demo dataset.
+            verify(TestHelper.copyFile(
+                       TestHelper.testcasesDatasetPath("test_cwProject/crashMap.png"), abs),
+                   "overwrote the note image on disk");
+            RootData.project.repository.checkStatusAsync();
+            tryVerify(() => RootData.project.repository.modifiedFileCount > 0, 5000,
+                      "the overwritten image shows as a working-tree change");
+            RootData.project.safeCommitAll("Update note image", "screenshot fixture");
+            RootData.futureManagerModel.waitForFinished();
+            tryVerify(() => RootData.project.repository.modifiedFileCount === 0, 5000,
+                      "the image change is committed");
+
+            let headOid = TestHelper.projectHeadCommitOid(RootData.project);
+            verify(headOid.length === 40, "have the head commit oid");
+
+            RootData.pageSelectionModel.gotoPageByName(null, "History");
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "gitHistoryPage",
+                      5000, "the History page is current");
+            let histPage = RootData.pageView.currentPageItem;
+
+            // Clean tree, so the newest row (HEAD, our image commit) auto-selects.
+            let histView = findByName(histPage, "gitHistoryView");
+            verify(histView, "found the history view");
+            tryVerify(() => histView.selectedSha === headOid, 5000,
+                      "the image commit is selected");
+
+            histPage.navigateToFileDiff(rel, true, true, "Modified", false);
+            tryVerify(() => RootData.pageView.currentPageItem !== histPage, 5000,
+                      "navigated to the image diff page");
+            let cmp = RootData.pageView.currentPageItem;
+            compare(cmp.commitSha, headOid, "the diff is for the image commit");
+
+            // Both panes must finish loading, or the shot is a placeholder.
+            let primaryImage = findByName(cmp, "primaryImage");
+            let beforeImage = findByName(cmp, "beforeImage");
+            verify(primaryImage && beforeImage, "found both compare images");
+            tryVerify(() => primaryImage.status === QQ.Image.Ready
+                      && beforeImage.status === QQ.Image.Ready, 15000,
+                      "before and after images both loaded");
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "git-image-compare");
+            verify(path.length > 0, "grabToFile wrote the image-compare screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "image-compare screenshot is not blank");
+
+            restoreDemoProject();
+        }
+
+        // The sign-in panel on the Online projects page (File -> Open from
+        // Online...), the first-run route to GitHub. Backs "Signing in: the device
+        // code" in docs/manual/collaboration/sign-in-to-github.md.
+        //
+        // The panel is what the Account picker's "Add Account" entry reveals, so we
+        // put the page in its "addAccount" state — but set directly rather than by
+        // clicking that entry, whose onClicked also fires startAddGitHubAccount()
+        // and requests a device code over the network, swapping the idle "Connect to
+        // GitHub" button for "Requesting a sign-in code...". The harness has no
+        // GitHub, so we stage the idle state (cleared settings mean no account is
+        // signed in) and assert it before the grab.
+        function test_signInConnectGitHub() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            RootData.pageSelectionModel.gotoPageByName(null, "Remote");
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "remoteRepositoryPage",
+                      5000, "the Online projects page is current");
+
+            let page = RootData.pageView.currentPageItem;
+            page.state = "addAccount";
+            settle();
+
+            // Idle and not installed: the panel shows the "Connect to GitHub" button
+            // and its context message, with no device-code request in flight.
+            let gitHub = RootData.remote.gitHubIntegration;
+            compare(gitHub.authState, GitHubIntegration.Idle,
+                    "the sign-in panel is idle (no device code requested)");
+            verify(!gitHub.needsInstallation, "the install prompt is not showing");
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "collaboration-sign-in");
+            verify(path.length > 0, "grabToFile wrote the sign-in screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "sign-in screenshot is not blank");
+
+            restoreDemoProject();
+        }
+
+        // The Sync button ringed in the top-right of the window, in its no-remote
+        // state (the upload-cloud icon). Backs "Step 1: give the project a remote"
+        // in docs/manual/collaboration/share-a-project.md: the demo project has no
+        // remote, so the button shows the "click to set up sync" icon a user starts
+        // sharing from. Full-window grab with the highlight ring, so the shot also
+        // teaches where the button lives.
+        function test_setUpRemoteButton() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            let syncButton = findByName(rootId.mainWindow, "syncButton");
+            verify(syncButton, "found the sync button in the link bar");
+            verify(!syncButton.hasRemote,
+                   "the demo project has no remote, so the button shows the set-up icon");
+
+            highlightOverlayId.target = syncButton;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow,
+                                                "collaboration-set-up-remote");
+            verify(path.length > 0, "grabToFile wrote the set-up-remote screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "set-up-remote screenshot is not blank");
+
+            highlightOverlayId.target = null;
+        }
+
         // The Source page — the recent projects list, and the breadcrumb that is the
         // only way to reach it. Backs "Reopen a recent project" in
         // docs/manual/projects-and-files/open-a-project.md.

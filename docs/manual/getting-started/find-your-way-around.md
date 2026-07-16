@@ -91,8 +91,9 @@ click.
 
 At the far right of the bar is the **sync button**, which shares your project
 with a team and shows whether you're up to date. Its tooltip always says what
-clicking it will do. Sync is opt-in and has its own chapter, still to be written
-— if you're working alone you can ignore it entirely.
+clicking it will do. Sync is opt-in and has its own chapter —
+[How Collaboration Works](../collaboration/how-sync-works.md) — and if you're
+working alone you can ignore it entirely.
 
 ## The window rearranges itself as it gets narrower
 

@@ -66,8 +66,10 @@ history, on your disk. Again in the app's own words:
 > This information is only used within your version history and is not shared
 > online unless you choose to sync with a service like GitHub.
 
-Syncing is opt-in and has its own chapter, still to be written. Until you set it
-up, your identity goes no further than your own machine.
+Syncing is opt-in and has its own chapter —
+[Sign In to GitHub](../collaboration/sign-in-to-github.md) picks up where this
+one leaves off, and explains how your identity differs from your GitHub account.
+Until you set sync up, your identity goes no further than your own machine.
 
 ## Where it is stored
 

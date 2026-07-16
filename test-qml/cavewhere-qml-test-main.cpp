@@ -18,6 +18,7 @@
 
 //QuickGit includes
 #include "GitRepository.h"
+#include "GitCommitImageProvider.h"
 
 class Setup : public QObject
 {
@@ -47,6 +48,8 @@ public slots:
 
         if(rootData) {
             new cwQmlImageProviderBinder(engine, rootData, engine);
+            //Enables image://gitcommit/ URLs in QML for viewing images at any commit
+            QQuickGit::GitCommitImageProvider::registerOn(engine);
         } else {
             qFatal("RootData didn't load correctly, check qml import path / build setup");
         }

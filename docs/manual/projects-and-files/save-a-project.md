@@ -75,8 +75,9 @@ is its date and its list of changes.
 right unpacks whichever one you select.*
 
 Working through that history — reading a save, comparing two, restoring an old
-one — is a chapter of its own, still to be written. What matters here is that it
-exists, and that every Save you press adds to it.
+one — is a chapter of its own:
+[Review Project History](../collaboration/review-history.md). What matters here is
+that it exists, and that every Save you press adds to it.
 
 That reframes two things people expect from other apps:
 

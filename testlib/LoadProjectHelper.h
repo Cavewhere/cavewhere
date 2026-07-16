@@ -244,6 +244,7 @@ public:
     Q_INVOKABLE QUrl copyToTempDirUrl(const QString& filename);
 
     Q_INVOKABLE bool fileExists(const QUrl& filename) const;
+    Q_INVOKABLE bool copyFile(const QString& sourcePath, const QString& destPath) const;
     Q_INVOKABLE bool directoryExists(const QUrl& directory) const;
     Q_INVOKABLE size_t fileSize(const QUrl& filename) const;
     Q_INVOKABLE void removeFile(const QUrl& filename) const;

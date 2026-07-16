@@ -72,6 +72,7 @@ StandardPage {
 
             QG.GitHistoryView {
                 id: historyView
+                objectName: "gitHistoryView"
                 anchors.fill: parent
                 anchors.rightMargin: Theme.pageMargin
                 repository: RootData.project.repository

@@ -56,8 +56,8 @@ below it. The destination is where the downloaded cave will live on your disk �
 click the path to choose a different folder, or leave it at the default.
 
 The example repository is public, so **you don't need to sign in** — leave the
-**Account** picker alone. (Signing in is only for private team repositories, which
-the Collaboration chapter covers.)
+**Account** picker alone. (Signing in is only for private team repositories —
+see [Sign In to GitHub](../collaboration/sign-in-to-github.md).)
 
 Click **Clone & Open**. A progress bar tracks the download, and when it finishes
 CaveWhere opens Phake Cave 3000. Because CaveWhere

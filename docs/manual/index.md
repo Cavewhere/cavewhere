@@ -86,6 +86,20 @@ the problems CaveWhere solves — then keep the
 - [Export a Map](import-export/export-a-map.md) — compose a map on paper
   and export it to PNG, PDF, or SVG.
 
+### Collaboration
+- [How Collaboration Works](collaboration/how-sync-works.md) — Git without
+  knowing Git, one shared copy on GitHub, and a merge that understands caves.
+- [Sign In to GitHub](collaboration/sign-in-to-github.md) — the one-time
+  device-code sign-in, installing the app, and multiple accounts.
+- [Share a Project](collaboration/share-a-project.md) — put a cave on GitHub
+  (private by default) and send your team a link.
+- [Sync Your Changes](collaboration/sync-your-changes.md) — the Sync button,
+  its badge and tooltip, and what one click does.
+- [Open a Shared Project](collaboration/open-a-shared-project.md) — clone a
+  cave from a link or from your own repository list.
+- [Review Project History](collaboration/review-history.md) — every version,
+  the file-by-file diffs, and rolling back.
+
 ## Planned chapters
 
 These directories exist and will be filled in as the manual is built out. Each
@@ -103,7 +117,5 @@ chapter is task-oriented and problem-first (see
 - **Measurement** — distance, azimuth (grid / true / magnetic), inclination.
 - **Loop Closure** — closure errors and reviewing blunders.
 - **Leads** — the lead list, editing, CSV export.
-- **Collaboration** — why Git and `.cwproj`, GitHub sign-in, the Sync button and
-  health, remotes, history and diffs, sharing and deep links.
 - **Settings** — Jobs, Warping, PDF/SVG, Git, Appearance, Rendering.
 - **Appendix** — small screens, keyboard shortcuts, troubleshooting.

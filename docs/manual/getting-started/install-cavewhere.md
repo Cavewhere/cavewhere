@@ -44,8 +44,8 @@ Open dialog for a project you can already see in your file browser.
 
 Those two platforms also register the `cavewhere://` link scheme, so a shared
 project link opens the app straight from your browser. Sharing belongs to
-CaveWhere's collaboration features, which have their own chapter, still to be
-written.
+CaveWhere's collaboration features, covered in the
+[Collaboration](../collaboration/how-sync-works.md) chapter.
 
 **On Linux, neither of these applies.** The AppImage is a single file you run
 rather than something that installs itself, so nothing tells your desktop that
