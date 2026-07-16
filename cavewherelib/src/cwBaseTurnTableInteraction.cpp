@@ -77,7 +77,7 @@ cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
                                   Qt::QueuedConnection);
     });
 
-    resetView();
+    resetViewImmediate();
 
     setupInteractionTimers();
 }
@@ -313,9 +313,46 @@ void cwBaseTurnTableInteraction::zoom(QPoint position, double delta) {
 }
 
 /**
-  \brief Resets the view
+  \brief Resets the view to frame the whole scene
+
+  Animates from the current view to the default orientation framed on the
+  geometry intersecter's root bounding box, so a model whose datum places it
+  far from the origin (issue #549) is brought back into view. When the scene
+  is empty or its bounding box is degenerate there is nothing to frame, so
+  fall back to the fixed default pose.
   */
 void cwBaseTurnTableInteraction::resetView() {
+    if(Camera.isNull() || scene() == nullptr
+            || scene()->geometryItersecter() == nullptr) {
+        resetViewImmediate();
+        return;
+    }
+
+    const QBox3D box = scene()->geometryItersecter()->boundingBox();
+    if(box.isNull() || !box.isFinite()) {
+        resetViewImmediate();
+        return;
+    }
+
+    // Compute the framed target the way zoomTo() does: normalize to the
+    // default pose FIRST so framingViewState()'s ortho fit is measured against
+    // the default zoom, not the current one. Without this the framing scales
+    // with wherever the user happened to be zoomed (issue #549), so the reset
+    // wouldn't be idempotent. Capture the current view to animate FROM, then
+    // restore it so the transition is smooth rather than a pop-to-default.
+    const cwTurnTableViewState from = viewState();
+    resetViewImmediate();
+    const cwTurnTableViewState target =
+            framingViewState(box, defaultAzimuth(), defaultPitch());
+    setViewState(from);
+
+    animateToViewState(target);
+}
+
+/**
+  \brief Instantly restores the default orientation and a fixed eye pose
+  */
+void cwBaseTurnTableInteraction::resetViewImmediate() {
     Pitch = defaultPitch();
     Azimuth = defaultAzimuth();
 
@@ -827,7 +864,7 @@ inline double lerpAzimuth(double a, double b, double t) {
 // View-matrix rotation that matches cwBaseTurnTableInteraction's existing
 // (Pitch, Azimuth) convention.
 //
-// resetView() leaves the view matrix as a plain T(0,0,-50) — i.e. no
+// resetViewImmediate() leaves the view matrix as a plain T(0,0,-50) — i.e. no
 // rotation — and caches CurrentRotation = R_x(90)*R_z(0) as "default."
 // updateRotationMatrix() then applies INCREMENTAL deltas
 // CurrentRotation^-1 * newQuat to the live view matrix. So the cached
@@ -1046,7 +1083,7 @@ void cwBaseTurnTableInteraction::onStateAnimTick(const QVariant& value)
 void cwBaseTurnTableInteraction::setCamera(cwCamera* camera) {
     if(Camera != camera) {
         Camera = camera;
-        resetView();
+        resetViewImmediate();
         emit cameraChanged();
     }
 }
@@ -1146,7 +1183,7 @@ void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)
     }
 
     // 1) Reset orientation/eye to your default
-    resetView();
+    resetViewImmediate();
 
     const QVector3D c = box.center();
 
@@ -1215,7 +1252,7 @@ void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)
 
         // Build the view matrix from scratch: camera at view-space (0,0,0)
         // with box.center() at view-space (0,0,-dist), looking down -Z
-        // (the orientation resetView left us in). Replaces the previous
+        // (the orientation resetViewImmediate left us in). Replaces the previous
         // translate-the-existing-matrix path that had a sign error AND an
         // inverted `canInvert` guard.
         QMatrix4x4 newView;
@@ -1234,14 +1271,14 @@ void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)
  *
  * Returns the 5-channel viewState that frames @a box at the supplied
  * @a azimuth / @a pitch (degrees). Unlike zoomTo() this is const, does
- * NOT call resetView(), and uses the supplied orientation for BOTH the
+ * NOT reset the view, and uses the supplied orientation for BOTH the
  * fit math AND the returned target — so the AABB is sized against the
  * post-rotation view, not the current one. Box-null, camera-null, or
  * non-finite box falls through to the current viewState() unchanged.
  * Caller routes the result through animateToViewState() / setViewState().
  *
  * Fit math runs in VIEW space, not world space. zoomTo() can use raw
- * box.x()/y() half-extents because it resetView()'s to identity-on-view
+ * box.x()/y() half-extents because it resetViewImmediate()'s to identity-on-view
  * first, so the box's world axes align with the view axes. Here the
  * orientation is whatever was supplied, so we project the eight AABB
  * corners through that view rotation and read the view-space

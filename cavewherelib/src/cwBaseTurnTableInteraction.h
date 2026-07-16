@@ -125,7 +125,7 @@ public:
 
     // Returns the 5-channel viewState that frames @a box at the supplied
     // @a azimuth / @a pitch (degrees). Unlike zoomTo() this is const, does
-    // NOT call resetView(), and uses the supplied orientation for BOTH the
+    // NOT reset the view, and uses the supplied orientation for BOTH the
     // fit math AND the returned target — so the AABB is sized against the
     // post-rotation view, not the current one. Lets callers snap to a
     // canonical orientation (e.g. pitch=0 profile view for a sink) and
@@ -159,6 +159,10 @@ public slots:
 
     void zoom(QPoint position, double delta);
 
+    //! Frames the whole scene (the geometry intersecter's root bounding box)
+    //! at the default orientation, animating there from the current view.
+    //! Falls back to the fixed default pose via resetViewImmediate() when the
+    //! scene is empty or its bounding box is degenerate.
     void resetView();
 
 private slots:
@@ -216,6 +220,12 @@ private:
     QVariantAnimation* m_stateAnimation;
     cwTurnTableViewState m_stateAnimStart;
     cwTurnTableViewState m_stateAnimTarget;
+
+    //! Instantaneously restores the default orientation and a fixed eye pose
+    //! (no scene framing). Used for initial setup (constructor, setCamera),
+    //! as the orientation reset inside zoomTo(), and as resetView()'s
+    //! empty-scene fallback.
+    void resetViewImmediate();
 
     void zoomPerspective();
     void zoomOrtho();

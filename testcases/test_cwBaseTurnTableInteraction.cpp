@@ -165,6 +165,29 @@ void addCenterline(cwScene& scene, uint64_t id = 2)
     scene.geometryItersecter()->waitForFinish();
 }
 
+// Adds a small point cluster of half-size `extent` centered at `center`
+// (world space) to the scene's intersecter and blocks until the BVH is built.
+// Places the whole scene far from the origin so resetView()'s scene framing
+// can be tested against a non-origin datum (issue #549).
+void addGeometryAt(cwScene& scene, const QVector3D& center, float extent, uint64_t id = 3)
+{
+    cwGeometry geometry {
+        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
+    };
+    geometry.set(cwGeometry::Semantic::Position, QVector<QVector3D>{
+        center,
+        center + QVector3D(-extent, -extent, 0.0f),
+        center + QVector3D( extent,  extent, 0.0f),
+        center + QVector3D(-extent,  extent, 0.0f),
+        center + QVector3D( extent, -extent, 0.0f),
+    });
+    geometry.setType(cwGeometry::Type::Points);
+
+    scene.geometryItersecter()->addObject(
+        cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4(), 0.5f));
+    scene.geometryItersecter()->waitForFinish();
+}
+
 bool matricesNearlyEqual(const QMatrix4x4& a, const QMatrix4x4& b, float eps = kMatrixEps)
 {
     for (int i = 0; i < 16; ++i) {
@@ -739,6 +762,58 @@ TEST_CASE("cwBaseTurnTableInteraction framingViewState(box, az, pitch) null box 
     CHECK(got.azimuth == Approx(before.azimuth));
     CHECK(got.pitch == Approx(before.pitch));
     CHECK(got.distance == Approx(before.distance).margin(kMatrixEps));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction resetView frames the whole scene at the default orientation",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Issue #549: a model whose datum places it far from the origin must be
+    // brought back into view by reset, not left off-screen. resetView() frames
+    // the geometry intersecter's root bounding box, animating there.
+    Fixture f;
+    const QVector3D sceneCenter(500.0f, -300.0f, 0.0f);
+    addGeometryAt(f.scene, sceneCenter, 20.0f);
+
+    // Rotate away from default so we can verify the orientation is restored.
+    f.interaction.setAzimuth(75.0);
+    f.interaction.setPitch(45.0);
+
+    // Drive the animation to completion the same way the centerOn(true) test
+    // does: drain viewMatrixChanged ticks until the spy goes quiet.
+    QSignalSpy spy(&f.camera, &cwCamera::viewMatrixChanged);
+    f.interaction.resetView();
+    REQUIRE(spy.wait(kAnimationFirstTickTimeoutMs));
+    while (spy.wait(kAnimationQuietWindowMs)) {
+        // drain remaining animation ticks
+    }
+
+    CHECK(f.interaction.azimuth() == Approx(0.0));
+    CHECK(f.interaction.pitch() == Approx(90.0));
+
+    const QBox3D sceneBox = f.scene.geometryItersecter()->boundingBox();
+    QPointF projected = f.camera.project(sceneBox.center());
+    QPointF expected = screenCenter();
+    CHECK(projected.x() == Approx(expected.x()).margin(kPixelTolerance));
+    CHECK(projected.y() == Approx(expected.y()).margin(kPixelTolerance));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction resetView on an empty scene falls back to the default pose",
+          "[cwBaseTurnTableInteraction]")
+{
+    // With no geometry there is nothing to frame, so resetView() falls back to
+    // the fixed default pose (a plain T(0,0,kDefaultViewZ)) synchronously.
+    Fixture f;
+    f.interaction.setAzimuth(75.0);
+    f.interaction.setPitch(45.0);
+
+    f.interaction.resetView();
+
+    CHECK(f.interaction.azimuth() == Approx(0.0));
+    CHECK(f.interaction.pitch() == Approx(90.0));
+
+    QMatrix4x4 expected;
+    expected.translate(QVector3D(0.0f, 0.0f, kDefaultViewZ));
+    CHECK(matricesNearlyEqual(f.camera.viewMatrix(), expected));
 }
 
 TEST_CASE("cwBaseTurnTableInteraction startRotating + setAzimuth orbits around the click point",
