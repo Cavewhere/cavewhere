@@ -21,8 +21,15 @@ Related prior work: `PREVENT_VIEW_TELEPORT_527_PLAN.html` (#527, the `acceptFall
   a cloud to a far point.
 - Tube-promote deletion — the near-miss fallback is gone; see "Review 3 findings" at the end.
 
-**Next up:** the two items marked **next up (2026-07-15)** in the triage index — unify the two BVH
-traversals, and the radius-systems naming fix. Read Review 3 first; it settles the direction on both.
+- Radius-systems naming fix — `cwPickTolerance` now documents its per-entry-point split, and
+  `cwScenePick`'s `pixelRadius` is `linePixelRadius`. No behavior change. ▸ line 471
+
+**Next up:** **unify the two BVH traversals** behind a per-kind accept policy (▸ line 459) — the last
+item marked next up in the triage index. Read Review 3 first; it settles the direction. Worth knowing
+before starting: the radius work above pinned the exact policy split the unification has to preserve —
+`intersectsDetailed` consults the tolerance for **lines only**, `nearestGeometryPoint` consults it for
+**every kind**. That is the per-kind rule the accept policy has to express, and it is now written down
+on `cwPickTolerance` rather than only implied by two traversals.
 
 **The section below describes the state BEFORE `2f692f12` and is kept as the design record.
 "Uncommitted working tree" now means "landed in `2f692f12`".**
@@ -435,12 +442,10 @@ repeated verbatim at the target, so grep that if the number has drifted.
   cleanly — exact picking and off-ray anchoring are two policies, off-ray is opt-in via a separate
   entry point. Keep that split; delete only the copy-paste. Not blocked on the picking service.
   *Size: large; hot path, wants its own commit + profiling.* ▸ line 459
-- [ ] **Reconcile the two radius systems — a naming fix, NOT a behavior fix** — **next up (2026-07-15).**
-  (`cwPickTolerance` screen-space vs `pickRadius` world-space; which applies is decided by call order in
-  `unProject`, not by stated policy.) Review 3 settled the direction: points must **not** start
-  consulting the screen-space tolerance — that is the off-ray snap this branch just deleted. Document
-  `tolerance` as Lines-only and rename `cwScenePick`'s `pixelRadius` → `lineToleranceMillimeters`.
-  *Size: small; no behavior change.* ▸ line 471
+- [x] **Reconcile the two radius systems — a naming fix, NOT a behavior fix** — **DONE (2026-07-15).**
+  Documented `cwPickTolerance` with the per-entry-point split it actually has, and renamed
+  `cwScenePick`'s `pixelRadius` → `linePixelRadius`. No behavior change; picking tests green.
+  ▸ line 471
 - [ ] **Make the queries static-on-`QuerySnapshot`**, like `pointsInBox` already is — they read nothing
   but `BvhData`. Drops the main-thread constraint, lets a picking service hold a *value* instead of a
   back-reference to a mutable subsystem, and removes the `waitForFinish()` test hazard. Natural
@@ -521,14 +526,28 @@ Refactors this change makes worthwhile:
   just deleted, and `test_cwLeadView_occlusion.cpp` would fail again. The tube already proved the damage:
   `cwCoordinatePicker::pick` fed the promoted centre straight into `m_geoReference->toGlobal()`, so a
   WGS84 readout named a point the user was never over.
-  So the follow-up is **typing and naming only, no behavior change**: document `tolerance` on
-  `cwPickTolerance` as Lines-only, and rename `cwScenePick::snappedPoint`'s `pixelRadius`
-  (`cwScenePick.h:39-42`) — which reads as a global snap budget — to something like
-  `lineToleranceMillimeters`, so the next caller doesn't assume points widen with it. If sparse-cloud
-  reach ever genuinely matters, the lever is `PointPickRadiusScale`, which keeps picks on-ray and
-  watertight. *Size: small; renames through `cwScenePicker` / `cwCoordinatePicker` /
-  `cwMeasurementInteraction`. Pairs naturally with the accept-policy parameter above, which is where the
-  per-kind rule gets named.*
+  So the follow-up is **typing and naming only, no behavior change**. If sparse-cloud reach ever
+  genuinely matters, the lever is `PointPickRadiusScale`, which keeps picks on-ray and watertight.
+
+  **DONE (2026-07-15).** Two things written above were wrong, and doing the work surfaced both:
+  - **The mismatch is sharper than "points ignore the tolerance."** `cwPickTolerance` means two
+    different things depending on the entry point: **Lines only** in `intersectsDetailed`
+    (`:1380-1429` — triangles exact, points on `Object::pickRadius()`), but **every kind including
+    points** in `nearestGeometryPoint` (`:1214`, where `considerCandidate` applies
+    `tolerance.radiusAt(tWorld)` to all candidates and `pickRadius` is never read). Both are right for
+    what each path asks — "what did the ray hit?" vs "what lies nearest the ray?" — but the type said
+    neither. That split is now the substance of the `cwPickTolerance` doc.
+  - **`lineToleranceMillimeters` would have been a false name.** The value reaching `snappedPoint` is
+    **pixels**, not millimeters — `cwScenePicker.cpp:67` already applies `pixelsForMillimeters()` at
+    the call site. Landed as **`linePixelRadius`**, which states both the unit and the Lines-only
+    scope. (`cwLinePlotStationSnap::snapToStation`'s own `pixelRadius` is genuinely pixels and
+    genuinely line-scoped by construction, so it was left alone.)
+  - Blast radius was smaller than predicted: `cwCoordinatePicker` / `cwMeasurementInteraction` call
+    `snapPick(screenPoint)` and never name the radius, so the rename touched only `cwPickQuery.h` +
+    `cwScenePick.{h,cpp}`. Tests pass positionally too.
+
+  *Verified: 504 assertions / 69 cases green across `[cwScenePick]` `[cwGeometryItersecter]`
+  `[cwLeadView]` `[cwLinePlotStationSnap]` `[cwMeasurementInteraction]`.*
 - **[HIGH — live per-frame cost] Scope `intersectsDetailed`'s tolerance pad per node.** DONE for
   `nearestGeometryPoint` (this commit); **`intersectsDetailed` still has it** and is the worse of the
   two. It computes `linePad = conservativeTolerancePad(ray, topLevel.at(0).bbox, ...)` — the
