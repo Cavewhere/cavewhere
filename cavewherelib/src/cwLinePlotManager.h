@@ -24,7 +24,7 @@ class cwKeywordItem;
 class cwKeywordItemModel;
 class cwLinePlotTripVisibility;
 #include "cwLinePlotTask.h"
-#include "cwLocalSettings.h"
+#include "cwExternalSourceSettings.h"
 #include "cwSurveyNetwork.h"
 #include "cwSurveyNetworkArtifact.h"
 #include "cwGlobals.h"
@@ -89,14 +89,16 @@ public:
     void setCaveAttachmentDirs(QHash<QUuid, QString> dirs);
     void setTripAttachmentDirs(QHash<QUuid, QString> dirs);
 
-    // Per-machine state for live-link attachments. The manager re-runs the
-    // scanner over each entry whose ownerId appears here with a non-empty
-    // sourcePath, and a source-side fileChanged event triggers a
-    // reconcile-from-source through m_saveLoad before re-solving. Empty
-    // by default, in which case every attachment is treated as import-mode
-    // (no source-side watching).
-    void setLocalSettings(cwLocalSettings settings);
-    cwLocalSettings localSettings() const { return m_localSettings; }
+    // Per-machine state for live-link attachments, owned by cwRootData.
+    // The manager re-runs the scanner over each entry whose ownerId
+    // appears here with a non-empty sourcePath, and a source-side
+    // fileChanged event triggers a reconcile-from-source through
+    // m_saveLoad before re-solving. The manager observes the store's
+    // change signal and recomputes the watch set on every mutation.
+    // Null by default, in which case every attachment is treated as
+    // import-mode (no source-side watching).
+    void setExternalSourceSettings(cwExternalSourceSettings* settings);
+    cwExternalSourceSettings* externalSourceSettings() const { return m_externalSourceSettings; }
 
     // Optional cwSaveLoad used to enqueue reconcile copy/remove jobs when
     // a live-link source changes on disk. Without it the source-side
@@ -110,7 +112,7 @@ public:
     // dependencies and live-link source-side dependencies.
     QStringList watchedFiles() const;
 
-    // Owners (cave or trip id) whose local_settings.json sourcePath does
+    // Owners (cave or trip id) whose cwExternalSourceSettings sourcePath does
     // not exist on disk at the most recent recompute. Surfaces the
     // "Source not found" startup probe per §8.8 question 16 of the master
     // plan. Empty when no live-link attachment is configured.
@@ -166,7 +168,7 @@ private:
     QHash<QUuid, QString> m_caveAttachmentDirs;
     QHash<QUuid, QString> m_tripAttachmentDirs;
 
-    cwLocalSettings m_localSettings;
+    QPointer<cwExternalSourceSettings> m_externalSourceSettings;
     QPointer<cwSaveLoad> m_saveLoad;
 
     QFileSystemWatcher* m_watcher = nullptr;
@@ -240,6 +242,10 @@ private:
     // continue to receive change events for it; on macOS the watcher
     // implicitly drops a path after an atomic-write replace.
     void rearmWatcher(const QString& path);
+
+    // ownerId's live-link source path, or empty when no store is set -
+    // no store means every attachment is import mode.
+    QString sourcePathForOwner(const QUuid& ownerId) const;
 
 private slots:
     void runSurvex();

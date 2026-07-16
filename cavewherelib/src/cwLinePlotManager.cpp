@@ -148,12 +148,20 @@ void cwLinePlotManager::setTripAttachmentDirs(QHash<QUuid, QString> dirs)
     recomputeWatchSetAndProbeSources();
 }
 
-void cwLinePlotManager::setLocalSettings(cwLocalSettings settings)
+void cwLinePlotManager::setExternalSourceSettings(cwExternalSourceSettings* settings)
 {
-    if (m_localSettings == settings) {
+    if (m_externalSourceSettings == settings) {
         return;
     }
-    m_localSettings = std::move(settings);
+    if (!m_externalSourceSettings.isNull()) {
+        disconnect(m_externalSourceSettings.data(), &cwExternalSourceSettings::externalCenterlineSourcesChanged,
+                   this, &cwLinePlotManager::recomputeWatchSetAndProbeSources);
+    }
+    m_externalSourceSettings = settings;
+    if (!m_externalSourceSettings.isNull()) {
+        connect(m_externalSourceSettings.data(), &cwExternalSourceSettings::externalCenterlineSourcesChanged,
+                this, &cwLinePlotManager::recomputeWatchSetAndProbeSources);
+    }
     recomputeWatchSetAndProbeSources();
 }
 
@@ -725,7 +733,7 @@ void cwLinePlotManager::recomputeWatchSetAndProbeSources()
                     }
                 }
             }
-            const QString sourcePath = m_localSettings.sourcePathFor(ownerId);
+            const QString sourcePath = sourcePathForOwner(ownerId);
             if (!sourcePath.isEmpty()) {
                 if (!QFileInfo::exists(sourcePath)) {
                     newMissingSourceOwners.append(ownerId);
@@ -802,6 +810,11 @@ void cwLinePlotManager::recomputeWatchSetAndProbeSources()
     }
 }
 
+QString cwLinePlotManager::sourcePathForOwner(const QUuid& ownerId) const
+{
+    return m_externalSourceSettings.isNull() ? QString() : m_externalSourceSettings->sourcePathFor(ownerId);
+}
+
 void cwLinePlotManager::rearmWatcher(const QString& path)
 {
     // macOS atomic-replace (write-to-temp, rename-over) drops the path from
@@ -820,7 +833,7 @@ void cwLinePlotManager::onWatchedFileChanged(const QString& path)
     const auto sourceIt = m_sourceOwnerForPath.constFind(path);
     if (sourceIt != m_sourceOwnerForPath.constEnd() && !m_saveLoad.isNull()) {
         const QUuid ownerId = sourceIt.value();
-        const QString sourcePath = m_localSettings.sourcePathFor(ownerId);
+        const QString sourcePath = sourcePathForOwner(ownerId);
         QString attachmentDir = m_caveAttachmentDirs.value(ownerId);
         if (attachmentDir.isEmpty()) {
             attachmentDir = m_tripAttachmentDirs.value(ownerId);

@@ -108,11 +108,15 @@ cwRootData::cwRootData(QObject *parent) :
     RegionTreeModel = new cwRegionTreeModel(Project);
     RegionTreeModel->setCavingRegion(Region);
 
+    //Per-machine live-link source paths (QSettings-backed)
+    m_externalSourceSettings = new cwExternalSourceSettings(this);
+
     //Setup the loop closer
     LinePlotManager = new cwLinePlotManager(Project);
     LinePlotManager->setRegion(Region);
     LinePlotManager->setFutureManagerToken(FutureManagerModel->token());
     LinePlotManager->setKeywordItemModel(m_keywordItemModel);
+    LinePlotManager->setExternalSourceSettings(m_externalSourceSettings);
 
     //Setup the scrap manager
     ScrapManager = new cwScrapManager(Project);

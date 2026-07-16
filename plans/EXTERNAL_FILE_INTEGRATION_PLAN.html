@@ -450,7 +450,7 @@
       <code>cwSaveLoad::externalCenterlineDirHelper</code> (&sect;5.1), so
       the protobuf payload doesn't carry an owner UUID or any
       machine-specific prefix. The original source location lives in
-      <code>local_settings.json</code> per &sect;5.3.
+      the <code>cwExternalSourceSettings</code> store per &sect;5.3.
     </td>
   </tr>
 </table>
@@ -513,8 +513,8 @@
 </code></pre>
 
 <p>
-  Source paths (per-user, per-machine) live in
-  the per-machine app-data <code>local_settings.json</code>. See &sect;5.3.
+  Source paths (per-user, per-machine) live in the QSettings-backed
+  <code>cwExternalSourceSettings</code> store. See &sect;5.3.
 </p>
 
 <h2 id="scanner">4. Scanner &amp; dependency discovery</h2>
@@ -938,21 +938,35 @@ cwExternalCenterlineSync::reconcile(const ScanResult&amp; scan,
 </ul>
 
 <p>
-  Source path is <strong>per-user, per-machine</strong>: stored in a
-  single global app-data file
-  (<code>QStandardPaths::AppDataLocation</code>, i.e.
-  <code>&lt;AppData&gt;/Cavewhere/local_settings.json</code>) keyed by
-  owner UUID &mdash; <em>not</em> in the project tree and not in the
-  region protobuf. Owner UUIDs (<code>cwCave::id()</code> /
-  <code>cwTrip::id()</code>) are globally unique, so one file serves
-  every project on the machine with no per-project namespace.
-  Collaborators who pull the project never see the original attacher's
-  path; they get the in-project copy and watch that. If they later
-  attach their own files, they choose modes independently.
+  Source path is <strong>per-user, per-machine</strong>: stored in
+  <strong>QSettings</strong> keyed by owner UUID &mdash; <em>not</em>
+  in the project tree and not in the region protobuf. Owner UUIDs
+  (<code>cwCave::id()</code> / <code>cwTrip::id()</code>) are globally
+  unique, so one store serves every project on the machine with no
+  per-project namespace. Collaborators who pull the project never see
+  the original attacher's path; they get the in-project copy and watch
+  that. If they later attach their own files, they choose modes
+  independently.
 </p>
 
 <p>
-  <strong>Why app-data and not a file inside the project.</strong>
+  <strong>Copies of a project alias each other &mdash; intended v1
+  behavior.</strong> Every mechanism that copies a project (Git clone,
+  Save As, file copy, restored backup) preserves cave/trip UUIDs, so
+  all copies of a project on one machine <em>share</em> their live-link
+  entries: setting, re-linking, or switching an attachment to import
+  mode in one copy applies to every copy. That's the desired outcome
+  for the common case &mdash; two checkouts of the same survey pointed
+  at the same source file &mdash; and per-copy divergence is
+  deliberately not supported in v1. Widening the key to
+  (project&nbsp;identity, owner) was considered and rejected: a path
+  key orphans entries on every project move/rename, and a stored
+  project UUID is duplicated by the same copy mechanisms it would need
+  to distinguish.
+</p>
+
+<p>
+  <strong>Why not a file inside the project.</strong>
   The original design stored this as <code>.cwproj/local_settings.json</code>
   (gitignored), which is what Phase 1 shipped. That breaks for bundled
   <code>.cw</code> projects: a <code>.cw</code> is a zipped
@@ -962,65 +976,55 @@ cwExternalCenterlineSync::reconcile(const ScanResult&amp; scan,
   in-project <code>local_settings.json</code> either evaporates when
   the project closes (excluded from the zip) or, if it were shipped,
   would leak the attacher's machine paths to everyone who receives the
-  file. The app-data store survives <code>.cw</code> open/close cycles,
-  works identically for <code>.cwproj</code>, survives a project being
-  moved or renamed on disk, and removes the gitignore/zip-exclusion
-  dependency entirely. Phase 2 reworks the Phase 1 storage location;
-  <strong>no migration path is needed</strong> &mdash; this is
-  unreleased dev code. Dead entries for deleted projects are harmless
-  (a UUID lookup that never matches) and are not GC'd in v1.
+  file. A machine-global store survives <code>.cw</code> open/close
+  cycles, works identically for <code>.cwproj</code>, survives a
+  project being moved or renamed on disk, and removes the
+  gitignore/zip-exclusion dependency entirely. Phase 2 reworks the
+  Phase 1 storage location; <strong>no migration path is needed</strong>
+  &mdash; this is unreleased dev code. Dead entries for deleted
+  projects are harmless (a UUID lookup that never matches) and are not
+  GC'd in v1.
 </p>
 
 <p>
-  <strong>Schema:</strong> defined as a protobuf message in
-  <code>cavewhere.proto</code> and serialised with protobuf's JSON
-  codec (<code>google::protobuf::util::MessageToJsonString</code>) so
-  we get the same versioning / forward-compat story as the rest of the
-  project format. The file isn't checked in, but the schema is.
+  <strong>Why QSettings and not a hand-rolled app-data JSON file.</strong>
+  An earlier revision of this section specified a protobuf-JSON file at
+  <code>&lt;AppDataLocation&gt;/local_settings.json</code>. Dropped for
+  three reasons. (1) <em>Concurrency:</em> a whole-file
+  load&rarr;modify&rarr;save cycle is last-writer-wins across two
+  CaveWhere instances; QSettings serializes writers with a lock file
+  and merges per-key on sync, so instances upserting different owners
+  both persist. (2) <em>Consistency:</em> QSettings is where the rest
+  of CaveWhere's per-machine state already lives (recent projects,
+  job/font/PDF settings) &mdash; a third persistence mechanism needs a
+  reason to exist, and this one didn't have it. (3) <em>Roaming:</em>
+  <code>AppDataLocation</code> is the roaming AppData dir on Windows,
+  which would sync machine-local absolute paths across machines.
+  CaveWhere is not single-instance-enforced, so (1) is real.
 </p>
 
-<pre><code>// In cavewhere.proto
-//
-// LocalSettings is the umbrella container for *all* per-user,
-// per-machine state, stored once per machine in app-data. The
-// current v1 payload is just external-centerline source paths, but
-// the file already exists, so future per-machine subsystems
-// (recent-file state, per-machine credentials cache pointers,
-// last-opened sub-page, etc.) should land here as new top-level
-// fields rather than spinning up another sibling file. Keep inner-message names
-// domain-specific (NOT generic words like "Attachment", "Setting",
-// or "Entry") so two unrelated subsystems can't collide and a
-// reader can tell which feature a field belongs to without looking
-// up its parent.
-message LocalSettings {
-  // Per-machine source paths for live-link external-centerline
-  // attachments. Owner UUID identifies the cwCave or cwTrip in the
-  // Attached state.
-  message ExternalCenterlineSource {
-    string owner_id = 1;        // cwCave or cwTrip QUuid (no braces, no hyphens)
-    string source_path = 2;     // absolute path on this machine; empty == import mode
-  }
-  repeated ExternalCenterlineSource external_centerline_sources = 1;
+<p>
+  <strong>Shape:</strong> <code>cwExternalSourceSettings</code> is a QObject
+  store owned by <code>cwRootData</code> (exposed as the
+  <code>externalSourceSettings</code> CONSTANT property). Every read/write goes
+  straight to QSettings &mdash; one key per owner under the
+  <code>externalCenterlineSources</code> group:
+</p>
 
-  // Future per-machine fields go here, each as its own
-  // domain-named message + repeated/optional field.
-  // e.g. repeated RecentProjectEntry recent_projects = 2;
-}
+<pre><code>externalCenterlineSources/&lt;owner-uuid-without-braces&gt; = /Users/alice/topodroid/2025-06-01/trip.svx
+// absent key            == import mode (no entry)
+// key with empty value  == import mode entry (attached without live-link)
 </code></pre>
 
 <p>
-  Serialised to <code>&lt;AppData&gt;/Cavewhere/local_settings.json</code> as e.g.:
+  Mutations emit <code>externalCenterlineSourcesChanged</code> on the
+  mutating instance; <code>cwLinePlotManager</code> observes the
+  rootData-owned store and recomputes its watch set on every change, so
+  writers (the attach orchestrator, the MissingSourceBanner's
+  switch-to-import action) just write. Future per-machine state should
+  use QSettings likewise (its own domain-specific group), not a new
+  sibling store.
 </p>
-
-<pre><code>{
-  "externalCenterlineSources": [
-    {
-      "ownerId": "6ba7b8109dad11d180b400c04fd430c8",
-      "sourcePath": "/Users/alice/topodroid/2025-06-01/trip.svx"
-    }
-  ]
-}
-</code></pre>
 
 <p>
   Absent entry for an owner &rArr; import mode for that attachment on
@@ -1048,7 +1052,7 @@ message LocalSettings {
 <ul>
   <li>
     <strong>Live-link storage must live outside the project tree</strong>
-    &mdash; handled by &sect;5.3's app-data store. The extraction dir
+    &mdash; handled by &sect;5.3's QSettings store. The extraction dir
     is a fresh temp path every session, so nothing per-machine can
     persist inside it.
   </li>
@@ -1298,7 +1302,7 @@ QRegularExpression caveRegex("cave_([0-9a-f]{32})\\.(.+)");
     <code>cwLinePlotManager</code>. Watch set = union of:
     <ul>
       <li>All <code>ScanResult.dependencies</code> across attached centerlines (the in-project copies).</li>
-      <li>All <em>source paths</em> from <code>local_settings.json</code> for attachments in live-link mode, plus their scanner-discovered dependencies on the source side.</li>
+      <li>All <em>source paths</em> from the <code>cwExternalSourceSettings</code> store for attachments in live-link mode, plus their scanner-discovered dependencies on the source side.</li>
     </ul>
   </li>
   <li>
@@ -1365,8 +1369,8 @@ AsyncFuture::observe(scanFuture)
     If a live-link source path disappears (user moved/deleted the
     original file outside CaveWhere), record the change in
     <code>CavernOutputPage</code>, switch that attachment to
-    import-mode silently (clear its entry in
-    <code>local_settings.json</code>), and proceed with the in-project
+    import-mode silently (clear its entry in the
+    <code>cwExternalSourceSettings</code> store), and proceed with the in-project
     copy. No crash.
   </li>
   <li>
@@ -1553,7 +1557,7 @@ QString exportDisabledReason() const;  // empty when canExport() is true
   <li>If scanner returns warnings, surface them but proceed.</li>
   <li>Copy the dependency closure into the owner's <code>external-centerline/</code> subdir (resolved via <code>cwSaveLoad::externalCenterlineDir(owner)</code>).</li>
   <li>Persist the <code>cwExternalCenterline</code> with the entry-file path relative to that subdir (usually a basename).</li>
-  <li>If live-link selected: write the source path to <code>local_settings.json</code>.</li>
+  <li>If live-link selected: write the source path to the <code>cwExternalSourceSettings</code> store.</li>
   <li>Trigger a re-solve via the existing pipeline.</li>
   <li>
     For cave-level attach: silently auto-create one cwTrip per
@@ -1819,7 +1823,7 @@ QString exportDisabledReason() const;  // empty when canExport() is true
   </tr>
   <tr>
     <td><strong>MissingSource</strong></td>
-    <td>Attached AND <code>localSettings</code> has a <code>sourcePath</code> for the owner that doesn't exist on disk</td>
+    <td>Attached AND <code>externalSourceSettings</code> has a <code>sourcePath</code> for the owner that doesn't exist on disk</td>
     <td>(unchanged from Attached &mdash; the file in the project tree still exists)</td>
     <td>(unchanged)</td>
     <td>Yellow banner: <em>"Source not found at &lt;path&gt;"</em> + <code>[Re-link&hellip;]</code> <code>[Switch to import mode]</code></td>
@@ -1839,7 +1843,7 @@ QString exportDisabledReason() const;  // empty when canExport() is true
 <ul>
   <li><code>required property cwTrip trip</code> &mdash; owner.</li>
   <li><code>required property cwLinePlotManager linePlotManager</code> &mdash; for <code>hasSolveError</code> / <code>cavernLog</code> / <code>loopClosureStats</code> / <code>solveErrorMessage</code> Q_PROPERTYs already on the manager (post-lineplot-port).</li>
-  <li><code>required property cwLocalSettings localSettings</code> &mdash; <code>Q_INVOKABLE QString sourcePathFor(QUuid ownerId)</code> and <code>Q_INVOKABLE bool isLiveLink(QUuid ownerId)</code>.</li>
+  <li><code>required property cwExternalSourceSettings externalSourceSettings</code> &mdash; <code>Q_INVOKABLE QString sourcePathFor(QUuid ownerId)</code> and <code>Q_INVOKABLE bool isLiveLink(QUuid ownerId)</code>.</li>
   <li><code>required property QAbstractItemModel scopeStationModel</code> &mdash; the per-scope station-list model from &sect;7.2 (new in Phase 2). Same model also backs the carpet station picker.</li>
 </ul>
 
@@ -1861,14 +1865,14 @@ QQ.Item {
 
     required property cwTrip trip
     required property cwLinePlotManager linePlotManager
-    required property cwLocalSettings localSettings
+    required property cwExternalSourceSettings externalSourceSettings
     required property QAbstractItemModel scopeStationModel
 
     readonly property bool isAttached: trip.externalCenterline.entryFile.length &gt; 0
     readonly property bool isScope: trip.stationPrefix.length &gt; 0
     readonly property bool sourceMissing:
-        isAttached &amp;&amp; localSettings.isLiveLink(trip.id) &amp;&amp;
-        !FileSystemHelper.exists(localSettings.sourcePathFor(trip.id))
+        isAttached &amp;&amp; externalSourceSettings.isLiveLink(trip.id) &amp;&amp;
+        !FileSystemHelper.exists(externalSourceSettings.sourcePathFor(trip.id))
 
     signal reloadRequested()
     signal detachRequested()
@@ -1885,7 +1889,7 @@ QQ.Item {
         ExternalCenterlineMissingSourceBanner {
             Layout.fillWidth: true
             visible: root.sourceMissing
-            sourcePath: root.localSettings.sourcePathFor(root.trip.id)
+            sourcePath: root.externalSourceSettings.sourcePathFor(root.trip.id)
             onRelinkRequested: root.relinkRequested()
             onSwitchToImportRequested: root.switchToImportRequested()
         }
@@ -1942,7 +1946,7 @@ QQ.Item {
         id: attachedHeaderComp
         ExternalCenterlineAttachedHeader {
             trip: root.trip
-            localSettings: root.localSettings
+            externalSourceSettings: root.externalSourceSettings
         }
     }
 
@@ -2016,7 +2020,7 @@ QQ.Item {
 <h5>Lifecycle / threading notes</h5>
 
 <ul>
-  <li>The panel never touches the filesystem directly. Source-path existence (<code>sourceMissing</code>) is computed against a snapshot held by <code>cwLocalSettings</code>; the C++ side refreshes it on file-system change events and emits a signal the QML binding picks up.</li>
+  <li>The panel never touches the filesystem directly. Source-path existence (<code>sourceMissing</code>) is computed against a snapshot held by <code>cwExternalSourceSettings</code>; the C++ side refreshes it on file-system change events and emits a signal the QML binding picks up.</li>
   <li>The stations list model is computed on the main thread from the post-solve <code>cwStationPositionLookup</code> snapshot; reads are O(1) per row, so a <code>ListView</code> bound directly to it is fine.</li>
   <li>The Reload action enqueues into the existing <code>AsyncFuture::Restarter</code> via <code>linePlotManager.rerunSurvex()</code>; the panel's solve-status badge updates from the manager's existing signals when the new result lands. No bespoke async state in QML.</li>
 </ul>
@@ -2305,8 +2309,8 @@ QQ.Item {
   </li>
   <li>
     <strong>Collaborator opens a Git-shared project for the first
-    time.</strong> Resolved &mdash; on a machine with no entry in
-    <code>local_settings.json</code> for an attachment, the
+    time.</strong> Resolved &mdash; on a machine whose
+    <code>cwExternalSourceSettings</code> store has no entry for an attachment, the
     <code>ExternalCenterlinePanel</code> shows
     <em>"Source: in-project copy (this machine)"</em> with a small
     <code>[Switch to live-link&hellip;]</code> link that opens a
@@ -2322,7 +2326,7 @@ QQ.Item {
     attachment's startup probe, not just the
     <code>QFileSystemWatcher</code> path. When
     <code>cwLinePlotManager</code> loads the project, any attachment
-    whose <code>local_settings.json</code> <code>sourcePath</code> no
+    whose <code>cwExternalSourceSettings</code> <code>sourcePath</code> no
     longer exists on disk gets a persistent
     <em>"Source not found at &lt;path&gt;"</em> banner on its
     <code>ExternalCenterlinePanel</code> with
@@ -2517,7 +2521,7 @@ QQ.Item {
 
   <h4>Two flows, one dialog</h4>
   <ul>
-    <li><strong>Re-link</strong> &mdash; source file moved on disk; content unchanged. UI: when the watcher reports the source path missing, the ExternalCenterlinePanel shows a yellow "Source not found" banner with a <em>Re-link&hellip;</em> button. Picker selects the new path; the scanner confirms prefix/station set matches the cached in-project copy; we update <code>local_settings.json</code>'s <code>sourcePath</code> and resume watching. No project-data change.</li>
+    <li><strong>Re-link</strong> &mdash; source file moved on disk; content unchanged. UI: when the watcher reports the source path missing, the ExternalCenterlinePanel shows a yellow "Source not found" banner with a <em>Re-link&hellip;</em> button. Picker selects the new path; the scanner confirms prefix/station set matches the cached in-project copy; we update the <code>cwExternalSourceSettings</code> <code>sourcePath</code> and resume watching. No project-data change.</li>
     <li><strong>Replace</strong> &mdash; user picks a different file for the same scope (e.g. newer TopoDroid export, revised cave survey). UI: <em>Replace centerline&hellip;</em> action on the panel opens a picker, then a diff-and-confirm dialog (see &sect;10 in the UX prototype).</li>
   </ul>
 

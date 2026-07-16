@@ -22,6 +22,7 @@
 #include "cwRegionTreeModel.h"
 #include "cwCavingRegion.h"
 #include "cwLinePlotManager.h"
+#include "cwExternalSourceSettings.h"
 #include "cwScrapManager.h"
 #include "cwNoteLiDARManager.h"
 #include "cwSketchManager.h"
@@ -90,6 +91,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwKeywordItemModel* keywordItemModel READ keywordItemModel CONSTANT)
     Q_PROPERTY(cwKeywordFilterPipelineModel* keywordFilterPipelineModel READ keywordFilterPipelineModel CONSTANT)
     Q_PROPERTY(cwSettings* settings READ settings CONSTANT)
+    Q_PROPERTY(cwExternalSourceSettings* externalSourceSettings READ externalSourceSettings CONSTANT)
     Q_PROPERTY(QString supportImageFormats READ supportImageFormats CONSTANT)
 
     Q_PROPERTY(int titleBarHeight READ titleBarHeight CONSTANT)
@@ -125,6 +127,7 @@ public:
     cwKeywordItemModel* keywordItemModel() const;
     cwKeywordFilterPipelineModel* keywordFilterPipelineModel() const;
     cwSettings* settings() const;
+    cwExternalSourceSettings* externalSourceSettings() const { return m_externalSourceSettings; }
     QQuickGit::Account *account() const { return m_account; }
     cwRecentProjectModel* recentProjectModel() const { return m_recentProjectModel; }
     cwRemoteServices* remote() const;
@@ -209,6 +212,7 @@ public slots:
 
 private:
     cwCavingRegion* Region; //!< Where all the data is stored
+    cwExternalSourceSettings* m_externalSourceSettings; //!< Per-machine live-link source paths
     cwLinePlotManager* LinePlotManager; //!< For keeping the lineplot updated
     cwScrapManager* ScrapManager; //!< For keeping all the scraps updated (carpeting)
     cwNoteLiDARManager* NoteLiDARManager; //!< For carpeting lidar scans

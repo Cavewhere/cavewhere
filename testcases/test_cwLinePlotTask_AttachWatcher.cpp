@@ -13,7 +13,7 @@
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
 #include "cwLinePlotManager.h"
-#include "cwLocalSettings.h"
+#include "cwExternalSourceSettings.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
@@ -279,7 +279,7 @@ TEST_CASE("Startup probe detects a missing live-link source path",
     const QString attachDir = tempSubdir(tempRoot, QStringLiteral("probe-attach"));
     seedAttachment(attachDir, fixturePath(QStringLiteral("survex_simple.svx")));
 
-    // Plant a sourcePath in local_settings that *does not* exist on disk -
+    // Plant a sourcePath in cwExternalSourceSettings that *does not* exist on disk -
     // simulates the user moving the original outside CaveWhere while the
     // project was closed. Per §8.8 question 16 the missing-source state
     // must surface at startup, not just on a watcher event.
@@ -292,14 +292,14 @@ TEST_CASE("Startup probe detects a missing live-link source path",
     cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
     attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
 
-    cwLocalSettings settings;
+    cwExternalSourceSettings settings;
     settings.setSourcePath(attached->id(), missingSource);
 
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
     manager.setTripAttachmentDirs(tripDirs);
-    manager.setLocalSettings(settings);
+    manager.setExternalSourceSettings(&settings);
 
     cwSignalSpy missingSpy(&manager, &cwLinePlotManager::missingSourceOwnersChanged);
 
@@ -383,7 +383,7 @@ TEST_CASE("Live-link source edit fires reconcile then re-runs the solve",
 {
     auto fixture = makeLiveLinkFixture();
 
-    cwLocalSettings settings;
+    cwExternalSourceSettings settings;
     settings.setSourcePath(fixture->trip->id(), fixture->sourcePath);
 
     cwLinePlotManager manager;
@@ -391,7 +391,7 @@ TEST_CASE("Live-link source edit fires reconcile then re-runs the solve",
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(fixture->trip->id(), fixture->attachmentDir);
     manager.setTripAttachmentDirs(tripDirs);
-    manager.setLocalSettings(settings);
+    manager.setExternalSourceSettings(&settings);
     manager.setRegion(fixture->project->cavingRegion());
     manager.waitToFinish();
     fixture->project->waitSaveToFinish();

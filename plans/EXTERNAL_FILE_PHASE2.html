@@ -67,7 +67,7 @@
     <td>Panel mode selection; attach orchestrator; TripPage left-pane swap</td>
   </tr>
   <tr>
-    <td><code>cwLocalSettings</code> value class + JSON IO, <code>sourcePathFor(QUuid)</code>. Phase 1 shipped it backed by <code>.cwproj/local_settings.json</code> and without <code>isLiveLink(QUuid)</code>; Phase 2 commit 2 reworks storage to the per-machine app-data file (master &sect;5.3, no migration &mdash; unreleased dev code) and adds the <code>isLiveLink</code> convenience</td>
+    <td><code>cwExternalSourceSettings</code>, <code>sourcePathFor(QUuid)</code>. Phase 1 shipped it as a value class backed by <code>.cwproj/local_settings.json</code> and without <code>isLiveLink(QUuid)</code>; Phase 2 commit 2 reworked it into a QSettings-backed QObject store owned by <code>cwRootData</code> (master &sect;5.3, no migration &mdash; unreleased dev code) and added the <code>isLiveLink</code> convenience + <code>externalCenterlineSourcesChanged</code> signal</td>
     <td>Commit 3 (+ Phase 2 commit 2 rework)</td>
     <td>Attach dialog (live-link toggle); MissingSourceBanner; AttachedHeader source-mode line</td>
   </tr>
@@ -140,7 +140,7 @@
     <code>cwExternalCenterlineScanner::scan</code> &rarr;
     <code>cwExternalCenterlineSync::reconcile</code> chain with the data-model
     mutation (<code>cwTrip::setExternalCenterline</code>) and the optional
-    <code>cwLocalSettings</code> live-link entry write. Pure functions that
+    <code>cwExternalSourceSettings</code> live-link entry write. Pure functions that
     take their dependencies as args &mdash; no QObject, no member state &mdash;
     so the QML attach dialog and headless tests share one entry point.
     <code>AttachOptions</code> carries <code>{ bool liveLink; QString
@@ -215,16 +215,23 @@
     <code>Monad::Result&lt;LinePlotResultData&gt;</code> boundary.
   </li>
   <li>
-    <code>cwLocalSettings.h/.cpp</code> &mdash; storage rework (master
-    &sect;5.3): the backing file moves from
-    <code>.cwproj/local_settings.json</code> to the single per-machine
-    <code>&lt;QStandardPaths::AppDataLocation&gt;/local_settings.json</code>,
-    keyed by owner UUID, so live-link entries survive bundled
-    <code>.cw</code> open/close cycles (the extraction dir is a fresh
-    temp path every session and the bundle zip applies git-exclude
-    patterns). Same class, same proto JSON codec, same API; adds the
-    <code>isLiveLink(QUuid)</code> convenience
-    (<code>!sourcePathFor(id).isEmpty()</code>). <strong>No
+    <code>cwExternalSourceSettings.h/.cpp</code> &mdash; storage rework (master
+    &sect;5.3): the class becomes a QObject store backed by
+    <strong>QSettings</strong> (one key per owner UUID under the
+    <code>externalCenterlineSources</code> group), replacing the Phase 1
+    <code>.cwproj/local_settings.json</code> value class + proto JSON
+    codec. Machine-global, so live-link entries survive bundled
+    <code>.cw</code> open/close cycles; QSettings serializes concurrent
+    writers with a lock file and merges per-key on sync, so two
+    CaveWhere instances upserting different owners both persist (a
+    hand-rolled file would be whole-file last-writer-wins). Owned by
+    <code>cwRootData</code> (<code>externalSourceSettings</code> CONSTANT
+    property); <code>cwLinePlotManager</code> takes the pointer and
+    recomputes its watch set on
+    <code>externalCenterlineSourcesChanged</code>. Adds
+    <code>isLiveLink(QUuid)</code>
+    (<code>!sourcePathFor(id).isEmpty()</code>); the
+    <code>LocalSettings</code> proto message is deleted. <strong>No
     migration</strong> &mdash; unreleased dev code; Phase 1's tests are
     updated in place.
   </li>
@@ -396,8 +403,8 @@
     file <em>with</em> its own declination &rarr; the driver emits no
     declination for that trip (cavern-verified precedence, master
     &sect;8.8 q7).</li>
-  <li>C++ test: <code>cwLocalSettings</code> entries persist in the
-    per-machine app-data file across a project close + reopen &mdash;
+  <li>C++ test: <code>cwExternalSourceSettings</code> entries persist in the
+    machine-global QSettings store across a project close + reopen &mdash;
     including a bundled <code>.cw</code> round-trip (save, close, reopen
     from the zip) where the extraction path changes but
     <code>sourcePathFor(ownerId)</code> still resolves.</li>
@@ -470,7 +477,7 @@
 <p>
   The orchestrator composes the three primitives Phase 1 shipped
   (scanner, reconcile, data-model mutation) plus the new
-  <code>cwLocalSettings</code> live-link entry write into one
+  <code>cwExternalSourceSettings</code> live-link entry write into one
   cancellable, testable entry point. Free functions in
   <code>cwExternalCenterlineAttach::</code> namespace; no QObject, no
   member state.
@@ -497,21 +504,21 @@ struct AttachReport {
 
 // Trip-level attach: scan source -&gt; reconcile into trip's attachment dir
 // -&gt; set externalCenterline -&gt; seed trip metadata -&gt; optionally update
-// cwLocalSettings live-link entry.
+// cwExternalSourceSettings live-link entry.
 QFuture&lt;Monad::Result&lt;AttachReport&gt;&gt;
 attach(cwTrip* trip,
        const QString& sourceFile,
        AttachOptions options,
        cwSaveLoad* saveLoad,
-       cwLocalSettings* localSettings);
+       cwExternalSourceSettings* externalSourceSettings);
 
 // Trip-level detach: clear externalCenterline -&gt; remove attachment dir
-// -&gt; drop any cwLocalSettings entry. Idempotent; safe to call on a
+// -&gt; drop any cwExternalSourceSettings entry. Idempotent; safe to call on a
 // trip that's already Native.
 QFuture&lt;Monad::ResultBase&gt;
 detach(cwTrip* trip,
        cwSaveLoad* saveLoad,
-       cwLocalSettings* localSettings);
+       cwExternalSourceSettings* externalSourceSettings);
 
 } // namespace
 </code></pre>
@@ -537,14 +544,15 @@ detach(cwTrip* trip,
   <li>
     <strong>Live-link wiring.</strong> When
     <code>options.liveLink</code> is true, the orchestrator writes a
-    <code>cwLocalSettings::ExternalCenterlineSource</code> entry with
+    <code>cwExternalSourceSettings::ExternalCenterlineSource</code> entry with
     <code>ownerId = trip-&gt;id()</code> and
     <code>sourcePath = options.sourcePath</code>. When false, any
     existing live-link entry for that owner is removed (import mode is
-    the default). The <code>cwLocalSettings</code> object is the same
-    one <code>cwLinePlotManager</code> reads; the manager picks up the
-    change via the <code>setLocalSettings</code> setter the orchestrator
-    calls after the write.
+    the default). The <code>cwExternalSourceSettings</code> store is the same
+    rootData-owned object <code>cwLinePlotManager</code> observes; the
+    manager recomputes its watch set on
+    <code>externalCenterlineSourcesChanged</code>, so the orchestrator
+    just writes.
   </li>
   <li>
     <strong>Metadata seeding.</strong> Scanner returns
@@ -573,7 +581,7 @@ detach(cwTrip* trip,
     <code>cwExternalCenterlineManager</code> singleton &mdash; decide
     during commit 5 based on cwRootData bloat) exposes the orchestrator
     to QML. The wrapper resolves the <code>cwSaveLoad</code> and
-    <code>cwLocalSettings</code> dependencies from the root singleton
+    <code>cwExternalSourceSettings</code> dependencies from the root singleton
     and forwards.
   </li>
 </ul>
@@ -763,7 +771,7 @@ public:
     with <code>enabled: false</code> and a tooltip "Re-link will be
     available in a future release; for now use Switch to import mode."
     Switch to import mode <em>is</em> wired in Phase 2 (it just calls
-    <code>cwLocalSettings::setLiveLinkSource(ownerId, QString())</code>).
+    <code>cwExternalSourceSettings::clearSourcePath(ownerId)</code>).
   </li>
   <li>
     <strong>SolveStatus deep-link target.</strong> The "View cavern
@@ -861,15 +869,20 @@ public:
     <code>[Scanner][Metadata]</code>.
   </li>
   <li>
-    <strong><code>cwLocalSettings</code> app-data rework.</strong> Move
-    the backing file from <code>.cwproj/local_settings.json</code> to
-    the per-machine
-    <code>&lt;QStandardPaths::AppDataLocation&gt;/local_settings.json</code>
-    keyed by owner UUID (master &sect;5.3); add
-    <code>isLiveLink(QUuid)</code>. No migration &mdash; unreleased dev
-    code; update the Phase 1 <code>[LocalSettings]</code> tests in
-    place. Tests: <code>[LocalSettings]</code> extended with app-data
-    persistence + bundled-<code>.cw</code> reopen coverage.
+    <strong><code>cwExternalSourceSettings</code> QSettings rework.</strong>
+    Replace the <code>.cwproj/local_settings.json</code> value class
+    (Phase 1's <code>cwLocalSettings</code> &mdash; renamed here, the
+    store is external-source settings, not generic local state)
+    with a QSettings-backed QObject store keyed by owner UUID (master
+    &sect;5.3): per-key concurrent-writer merge for free, owned by
+    <code>cwRootData</code>, observed by <code>cwLinePlotManager</code>
+    via <code>externalCenterlineSourcesChanged</code>; add
+    <code>isLiveLink(QUuid)</code>; delete the <code>LocalSettings</code>
+    proto message. No migration &mdash; unreleased dev code; update the
+    Phase 1 <code>[ExternalSourceSettings]</code> tests in place. Tests:
+    <code>[ExternalSourceSettings]</code> extended with cross-instance
+    persistence, change-signal, and bundled-<code>.cw</code> reopen
+    coverage.
   </li>
   <li>
     <strong>External-trip declination emission.</strong>
@@ -1047,22 +1060,28 @@ public:
   <li>CRLF-terminated files parse identically (real Compass/Walls files are DOS-formatted).</li>
 </ul>
 
-<h3>Commit 2 &mdash; cwLocalSettings app-data rework</h3>
-<p><strong>Tag:</strong> <code>[LocalSettings]</code> (extends Phase 1's suite in place)</p>
+<h3>Commit 2 &mdash; cwExternalSourceSettings QSettings rework</h3>
+<p><strong>Tag:</strong> <code>[ExternalSourceSettings]</code> (extends Phase 1's suite in place)</p>
 <ul>
-  <li>Write an entry; construct a fresh <code>cwLocalSettings</code>
+  <li>Write an entry; construct a fresh <code>cwExternalSourceSettings</code>
     (new instance, same machine) &rarr; <code>sourcePathFor(ownerId)</code>
-    resolves &mdash; persistence is app-data-backed, not project-backed.
-    Tests point the app-data root at a <code>QTemporaryDir</code>
-    (PID-safe) rather than the real location.</li>
-  <li>Bundled <code>.cw</code> round-trip: save a bundle, close, reopen
-    (fresh extraction path) &rarr; entry still resolves by owner UUID.</li>
+    resolves &mdash; persistence is QSettings-backed, not
+    project-backed. Multi-process safe: the test harness's pid-unique
+    application name gives each test process its own QSettings store.</li>
+  <li>Bundled <code>.cw</code> round-trip: save a bundle, record the
+    entry through the rootData-owned store, close, reopen (asserted
+    fresh extraction path) &rarr; entry still resolves by owner UUID
+    from a fresh store instance.</li>
   <li><code>isLiveLink(ownerId)</code> true iff
-    <code>sourcePathFor</code> is non-empty.</li>
+    <code>sourcePathFor</code> is non-empty (live-link entry /
+    import-mode entry / no entry / null owner all covered).</li>
   <li>Entries for unknown owner UUIDs (deleted projects) are returned
     as-is and harmless &mdash; no GC.</li>
-  <li>No <code>local_settings.json</code> is created inside the project
-    tree.</li>
+  <li><code>externalCenterlineSourcesChanged</code> fires on real
+    mutations only &mdash; no-op upserts, no-op clears, and null owners
+    don't emit.</li>
+  <li>Junk (non-UUID) keys in the settings group are skipped by the
+    listing without breaking valid entries.</li>
 </ul>
 
 <h3>Commit 3 &mdash; external-trip declination emission</h3>
@@ -1113,13 +1132,18 @@ public:
   <li>Cancel during scan &rarr; future is cancelled; no data-model
     change.</li>
   <li>Detach on Attached trip &rarr; <code>externalCenterline</code>
-    cleared, attachment dir gone, no <code>cwLocalSettings</code>
+    cleared, attachment dir gone, no <code>cwExternalSourceSettings</code>
     leftover.</li>
   <li>Detach on Native trip &rarr; no-op, future returns
     <code>Monad::Ok</code>.</li>
   <li>Live-link enabled &rarr;
-    <code>cwLocalSettings::sourcePathFor(trip-&gt;id())</code> returns the
+    <code>cwExternalSourceSettings::sourcePathFor(trip-&gt;id())</code> returns the
     source path after the future resolves; detach clears the entry.</li>
+  <li>Attach writes go through the rootData-owned store: after
+    <code>attach()</code> resolves, a <em>fresh</em>
+    <code>cwExternalSourceSettings</code> instance resolves the entry &mdash;
+    commit 2 proved the store persists, this proves production writes
+    actually route through it (the first real writer).</li>
   <li>Re-attach over a trip whose <code>cwTripCalibration</code> has a
     user-set declination &rarr; orchestrator does not overwrite it; the
     seeded declination is silently ignored.</li>
@@ -1285,7 +1309,7 @@ public:
     (Use <code>tryVerify</code> on
     <code>trip.externalCenterline.entryFile.length === 0</code>.)</li>
   <li>MissingSourceBanner Switch-to-import button &rarr;
-    <code>cwLocalSettings::sourcePathFor</code> returns empty after
+    <code>cwExternalSourceSettings::sourcePathFor</code> returns empty after
     click.</li>
 </ul>
 
@@ -1301,7 +1325,7 @@ public:
   <li>Pick a fixture, click Attach, immediately click Cancel during the
     scan &rarr; orchestrator future is cancelled, no data-model change.</li>
   <li>Live-link checkbox on &rarr; after Attach,
-    <code>cwLocalSettings::sourcePathFor(trip.id)</code> equals the
+    <code>cwExternalSourceSettings::sourcePathFor(trip.id)</code> equals the
     picked path.</li>
 </ul>
 
