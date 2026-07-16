@@ -18,6 +18,10 @@ the problems CaveWhere solves — then keep the
 
 ### Concepts
 - [Why CaveWhere](concepts/why-cavewhere.md) — the problems CaveWhere solves.
+- [How a Project Is Organized](concepts/data-model.md) — the Region → Cave →
+  Trip → Shot / Note → Scrap tree, and why an edit ripples through it.
+- [Directions and Coordinate Systems](concepts/coordinate-systems.md) — the
+  three norths, and what georeferencing gives a cave.
 - [Glossary](concepts/glossary.md) — survey and CaveWhere terms.
 
 ### Getting Started
@@ -106,8 +110,6 @@ These directories exist and will be filled in as the manual is built out. Each
 chapter is task-oriented and problem-first (see
 [the authoring guide](AUTHORING.md)).
 
-- **Concepts** — the data model (Region → Cave → Trip → Survey chunk →
-  Shot/Note → Scrap), coordinate systems.
 - **Notes (more)** — note keywords build on the [Notes](notes/add-a-note.md)
   pages above.
 - **3D View (more)** — field of view, labels, leads, and rendering settings
