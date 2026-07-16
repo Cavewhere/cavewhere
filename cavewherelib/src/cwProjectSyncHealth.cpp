@@ -14,29 +14,18 @@ cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
     m_pollTimer.setInterval(5 * 60 * 1000);
     connect(&m_pollTimer, &QTimer::timeout, this, &cwProjectSyncHealth::refresh);
 
-    m_remoteStatusRestarter.onFutureChanged([this]() {
-        const auto future = m_remoteStatusRestarter.future();
-        // The Restarter coalesces a burst of refresh() calls into a single run
-        // and fires onFutureChanged once per run (when a fresh future is
-        // installed). Tag this run with a generation so a delivery superseded by
-        // a newer run — which fires onFutureChanged again — is dropped. The
-        // request context (remote/branch/local-changes) is read at delivery
-        // time: within a burst the latest scheduleRemoteStatusRefresh wins, and
-        // that is exactly the run the coalesced future ends up delivering.
-        const int generation = ++m_remoteStatusGeneration;
-
-        AsyncFuture::observe(future)
-            .context(this, [this, future, generation]() {
-                if (future.isCanceled() || generation != m_remoteStatusGeneration) {
-                    return;
-                }
-
+    // The Restarter coalesces a burst of refresh() calls into a single run and
+    // delivers that run's result once. A run superseded by a newer refresh() is
+    // cancelled, which onResult() drops — so the request context
+    // (remote/branch/local-changes), read from members at delivery time below,
+    // always reflects the run that actually delivers.
+    m_remoteStatusRestarter.onResult(this,
+        [this](const Monad::Result<QQuickGit::GitRepository::AheadBehindCounts>& aheadBehindResult) {
                 const bool localChanges = m_pendingLocalChanges;
                 const bool usesTokenAuth = m_pendingUsesTokenAuth;
                 const QString remoteName = m_pendingRemoteName;
                 const QString branchName = m_pendingBranchName;
 
-                const auto aheadBehindResult = future.result();
                 if (aheadBehindResult.hasError()) {
                     const bool authFailed =
                         aheadBehindResult.errorCode()
@@ -74,8 +63,7 @@ cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
                                      .arg(static_cast<int>(aheadBehindResult.value().ahead))
                                      .arg(static_cast<int>(aheadBehindResult.value().behind))
                                      .arg(localChanges ? QStringLiteral(", local edits pending") : QString())});
-            });
-    });
+        });
 }
 
 cwSyncStatus cwProjectSyncHealth::status() const
