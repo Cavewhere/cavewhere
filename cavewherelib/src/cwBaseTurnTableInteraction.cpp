@@ -174,12 +174,10 @@ std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point,
 
     //Rotation. Survey geometry — scraps, LiDAR notes, the centerline — is what
     //a user means to orbit, so it competes with BOTH an exact hit and the wider
-    //near-miss anchor, while the point cloud competes only with an exact hit
-    //(which still carries the intersecter's world-space tube fallback — much
-    //tighter than this anchor, so the demotion holds, but it is not literally
-    //exact-only). Depth then picks the winner between the two, with no priority
-    //rule: that yields "geometry first" (a near-missed scrap beats a far cloud
-    //point, issue #562) while still letting a cloud that genuinely occludes the
+    //near-miss anchor, while the point cloud competes only with an exact hit.
+    //Depth then picks the winner between the two, with no priority rule: that
+    //yields "geometry first" (a near-missed scrap beats a far cloud point,
+    //issue #562) while still letting a cloud that genuinely occludes the
     //geometry take the pivot, rather than orbiting something out of sight.
     //
     //Splitting the kinds costs up to four top-level descents per press (two

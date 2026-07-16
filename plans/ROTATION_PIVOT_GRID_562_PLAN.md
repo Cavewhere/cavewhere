@@ -9,14 +9,25 @@ Related prior work: `PREVENT_VIEW_TELEPORT_527_PLAN.html` (#527, the `acceptFall
 
 ---
 
-## SESSION STATUS (read first — updated 2026-07-14, before compaction)
+## SESSION STATUS (read first — updated 2026-07-15)
 
-**Committed:**
+**Committed (branch `dev_4`, ahead of `origin/dev`, none pushed):**
 - `5d7146f2` Phase 1 (grid gated to no-geometry; keep-pivot on miss).
 - `8c95450d` Unrelated crash fix: `dumpLeafPrimitive` had no `Line` branch → read a 3rd index →
   SIGABRT when `cw.picking` logging is on. Fixed + regression test in `test_..._linePick.cpp`.
+- `2f692f12` Phase 2b — rotate around survey geometry instead of distant point cloud data. The
+  "uncommitted working tree" described below landed here, plus the watertight pick radius
+  (`PointPickRadiusScale = 1.0`, was 0.5 = below the sqrt(2)/2 threshold) that fixed picking *through*
+  a cloud to a far point.
+- Tube-promote deletion — the near-miss fallback is gone; see "Review 3 findings" at the end.
 
-**Uncommitted working tree (Phase 2b, under review — DO NOT revert; user wants to keep it):**
+**Next up:** the two items marked **next up (2026-07-15)** in the triage index — unify the two BVH
+traversals, and the radius-systems naming fix. Read Review 3 first; it settles the direction on both.
+
+**The section below describes the state BEFORE `2f692f12` and is kept as the design record.
+"Uncommitted working tree" now means "landed in `2f692f12`".**
+
+**Then-uncommitted working tree (Phase 2b — now committed):**
 - `cwGeometryItersecter::nearestGeometryPoint(ray, query)` — the closest point ON real geometry
   (iteration 3; see THE FIX below). Supersedes `nearestNodeCenter`, which is deleted.
 - `unProject(point, bool anchorToNearestGeometry=false)` — the anchor is gated behind the flag;
@@ -418,9 +429,18 @@ repeated verbatim at the target, so grep that if the number has drifted.
 - [ ] **Consolidate the pivot ladder into `resolvePivot`** — moves product policy out of a low-level
   input handler. Also gives the two tuning knobs one home (today `kPivotPickRadiusMillimeters` is
   anon-namespace in the `.cpp` and `PivotAnchorRadiusMillimeters` is public in the `.h`). ▸ line 529
-- [ ] **Unify the two BVH traversals behind a per-kind accept policy** ▸ line 459
-- [ ] **Reconcile the two radius systems** (`cwPickTolerance` screen-space vs `pickRadius` world-space;
-  which applies is decided by call order in `unProject`, not by stated policy) ▸ line 471
+- [ ] **Unify the two BVH traversals behind a per-kind accept policy** — **next up (2026-07-15).**
+  ~340 lines, ~80% shared. The tube-promote deletion made this the strongest item on the list: the
+  fallback was a *third* variant of the same traversal, and removing it states the architecture
+  cleanly — exact picking and off-ray anchoring are two policies, off-ray is opt-in via a separate
+  entry point. Keep that split; delete only the copy-paste. Not blocked on the picking service.
+  *Size: large; hot path, wants its own commit + profiling.* ▸ line 459
+- [ ] **Reconcile the two radius systems — a naming fix, NOT a behavior fix** — **next up (2026-07-15).**
+  (`cwPickTolerance` screen-space vs `pickRadius` world-space; which applies is decided by call order in
+  `unProject`, not by stated policy.) Review 3 settled the direction: points must **not** start
+  consulting the screen-space tolerance — that is the off-ray snap this branch just deleted. Document
+  `tolerance` as Lines-only and rename `cwScenePick`'s `pixelRadius` → `lineToleranceMillimeters`.
+  *Size: small; no behavior change.* ▸ line 471
 - [ ] **Make the queries static-on-`QuerySnapshot`**, like `pointsInBox` already is — they read nothing
   but `BvhData`. Drops the main-thread constraint, lets a picking service hold a *value* instead of a
   back-reference to a mutable subsystem, and removes the `waitForFinish()` test hazard. Natural
@@ -463,25 +483,61 @@ Refactors this change makes worthwhile:
   walk), and the per-primitive index extraction is a third copy in `testPrimitive`. The two functions
   are **the same algorithm with a different per-kind accept predicate** — and for `Lines` they are not
   different at all, just a different radius (20mm vs 4mm). Right shape: one traversal parameterised by
-  a policy (`exact` = MT with cull / line tolerance / pickRadius sphere+tube; `anchor` = MT no-cull
+  a policy (`exact` = MT with cull / line tolerance / pickRadius sphere; `anchor` = MT no-cull
   else nearest edge / line tolerance / point tolerance).
   **Correction to the earlier note here:** this is *not* blocked behind the scene-picking service.
   `intersectsDetailed`'s public contract does not change — only `testPrimitive`'s **private**
   signature does. It can land on its own. Wants its own test matrix per kind × policy.
-- **Reconcile the two radius systems governing point picking.** `cwPickTolerance` is documented as
-  "screen-space pick tolerance for ray-vs-line picking" (`cwPickQuery.h:15`), but `nearestGeometryPoint`
-  now uses it for points and triangles too. So a point is governed by `Object::pickRadius()`
-  (world-space, data-derived: `0.5 * meanSpacingXY`) × `kTubeFactor` on the exact path, and by
-  `cwPickTolerance` (screen-space, camera-derived) on the anchor path — and *which one applies is
-  decided by call order in `unProject`*, not by any stated policy. The accept-policy parameter above is
-  where this gets named and reconciled.
+  **Sharpened by the tube-promote deletion (review 3, 2026-07-15) — the strongest item on this list:**
+  the near-miss fallback was a *third* variant of the same traversal, an off-ray policy fused into the
+  exact path. Deleting it leaves the architecture stated cleanly for the first time: **exact picking
+  and off-ray anchoring are two policies, and off-ray anchoring is opt-in via a separate entry point.**
+  That is why `cwLeadView::isOccluded` is now correct *by construction* — it calls `intersectsDetailed`
+  and therefore cannot receive an off-ray point, while `cwBaseTurnTableInteraction` opts into
+  `nearestGeometryPoint` deliberately. The policy split is the good part and must survive the
+  unification; only the copy-paste goes. Current spans: `intersectsDetailed` ≈ `:882-1090`,
+  `nearestGeometryPoint` ≈ `:1122-1305` — ~340 lines, sharing ~80%. The live cost of *not* doing it:
+  the exit-t prune and the scene-global line pad (both below) each have to be fixed twice, in two
+  places that have already drifted. Two side-effects it would clean up, both visible only now that the
+  tube is gone: `RaySphereHit::dSq` has exactly **one** consumer (`nearestGeometryPoint`, probing with
+  radius 0 purely to read a distance — a `raySquaredDistance()` wearing a sphere-hit costume), and
+  `kPointAabbPadScale = 1.0f` is a multiply-by-one that exists only to name the leaf-pad/pickRadius
+  relationship. *Size: large; hot path, wants before/after profiling and its own commit — bundling it
+  with anything else makes a perf regression unbisectable.*
+- **Reconcile the two radius systems governing point picking — a NAMING fix, not a behavior fix.**
+  `cwPickTolerance` is documented as "screen-space pick tolerance for ray-vs-line picking"
+  (`cwPickQuery.h:15`), but `nearestGeometryPoint` uses it for points and triangles too. So a point is
+  governed by `Object::pickRadius()` (world-space, data-derived: `meanSpacingXY *
+  cwRenderPointCloud::PointPickRadiusScale`) on the exact path, and by `cwPickTolerance` (screen-space,
+  camera-derived) on the anchor path — and *which one applies is decided by call order in `unProject`*,
+  not by any stated policy.
+  **Resolved direction (review 3, 2026-07-15): do NOT make points consult the tolerance.** The obvious
+  reading of this mismatch — "`cwScenePick.cpp:29` asks for a 1.5mm screen-space snap and points
+  silently ignore it, so wire it up" — is **wrong, and this commit is why**. A screen-space tolerance is
+  right for a 1-D line (a ray never exactly hits one). For a point cloud standing in for a *surface*, a
+  world-space watertight sphere is not a degraded substitute, it is the correct model: watertightness is
+  view-independent, so a ray over the cloud surface hits at any zoom. Making points honor a screen-space
+  radius means accepting points the ray missed and reporting their centres — precisely the off-ray snap
+  just deleted, and `test_cwLeadView_occlusion.cpp` would fail again. The tube already proved the damage:
+  `cwCoordinatePicker::pick` fed the promoted centre straight into `m_geoReference->toGlobal()`, so a
+  WGS84 readout named a point the user was never over.
+  So the follow-up is **typing and naming only, no behavior change**: document `tolerance` on
+  `cwPickTolerance` as Lines-only, and rename `cwScenePick::snappedPoint`'s `pixelRadius`
+  (`cwScenePick.h:39-42`) — which reads as a global snap budget — to something like
+  `lineToleranceMillimeters`, so the next caller doesn't assume points widen with it. If sparse-cloud
+  reach ever genuinely matters, the lever is `PointPickRadiusScale`, which keeps picks on-ray and
+  watertight. *Size: small; renames through `cwScenePicker` / `cwCoordinatePicker` /
+  `cwMeasurementInteraction`. Pairs naturally with the accept-policy parameter above, which is where the
+  per-kind rule gets named.*
 - **[HIGH — live per-frame cost] Scope `intersectsDetailed`'s tolerance pad per node.** DONE for
   `nearestGeometryPoint` (this commit); **`intersectsDetailed` still has it** and is the worse of the
-  two. `:930` computes `linePad = conservativeTolerancePad(ray, topLevel.at(0).bbox, ...)` — the
-  *root* box — and `:1042` folds it into every line object's sub-BVH pad:
-  `subPad = isLineObject ? max(subTubeDist, linePad) : subTubeDist`. `cwRenderLinePlot.cpp:57`
-  registers the centerline with the **default `pickRadius = 0.0f`**, so `subTubeDist = 0` and `subPad`
-  *is* `linePad` with nothing competing — every centerline node inflated by the radius at the scene's
+  two. It computes `linePad = conservativeTolerancePad(ray, topLevel.at(0).bbox, ...)` — the
+  *root* box — and folds it into every line object's sub-BVH pad.
+  **Updated after the tube-promote deletion (review 3):** that pad line now reads
+  `subPad = isLineObject ? linePad : 0.0f` — the `max(subTubeDist, ...)` competitor is gone, and
+  `linePad` is the only pad left in the traversal, so it is now the *sole* remaining consumer of this
+  code path and the item is unchanged in substance: every centerline node is still inflated by the
+  radius at the scene's
   far corner. Unlike the anchor (once per rotate-press), this runs **per mouse-move**: the measurement
   tool's `HoverHandler.onPointChanged` → `cwMeasurementInteraction::hover` → `snapPick` →
   `cwScenePick::snappedPoint` → `intersectsDetailed`, and `cwCamera::pickQuery` always enables the
@@ -676,3 +732,105 @@ binding is correct, not a UAF. No `detach()` anywhere in the new traversal (`top
   registers and `isPickableEmpty()` goes false. Before the GLTF loads, the scene *is* pickable-empty.
   This commit makes it strictly better (the grid rung used to fire on *every* miss), but
   `std::optional<QPlane3D>` would make the second viewer's silence explicit instead of accidental.
+
+## Review 3 findings (pre-commit review of the tube-promote deletion, 2026-07-15)
+
+The commit: deleted the near-miss / "tube pick" fallback (`tryPromoteNearMiss`, `NearMissResult`,
+`kTubeFactor`, the test-only `setTubePickEnabled`/`isTubePickEnabled`, the per-pick traversal box pad,
+`RaySphereHit::tCenter`, `BvhData::maxPickRadius`) and added `testcases/test_cwLeadView_occlusion.cpp`.
+Net −303 lines. The two items marked **next up** in the triage index came out of this review.
+
+**Why the pad went, against the earlier recommendation to keep it.** The prior session's note here said
+to keep the pad as budget for future WYSIWYG work. That was wrong, and the reason is worth recording:
+`primitiveModelBox` already bakes a full `pickRadius` pad into every point's *leaf* box at build time,
+so an unpadded traversal still reaches every leaf whose sphere the ray can exactly hit. The pad's only
+job was reaching leaves the ray **misses** — i.e. the tube, and nothing else. Verified adversarially:
+all five `bbox` write sites traced (no path builds a node box from raw vertices); production clouds
+register with an identity matrix; and a bit-exact replica of `primitiveModelBox` +
+`QBox3D::intersection` + `raySphereIntersectDouble` lost **zero** hits across 198M randomized grazing
+rays plus exhaustive float-grid sweeps. The one failing regime (`r < ULP/2`, where the padded box
+collapses to zero extent) needs a cloud ~168 km from its project origin — `cwLazLoader` rebases every
+cloud to the region origin in double, and the old pad vanished there too.
+
+**Two bugs fixed, not one.** The known one is `cwLeadView::isOccluded` — it picks `cwPickQuery::Solid`
+with no tolerance, and neither triangles nor points consult the tolerance, so the tube was the only
+near-miss path reachable there and had nothing to lose to; an off-ray cloud point was promoted, reported
+its *centre* depth in front of the lead's billboard, and made a plainly-visible lead unclickable. The
+second was missed until review: `startPanning` (`cwBaseTurnTableInteraction.cpp:316-318`) calls
+`setCenter(*clickWorld)` on the unlocked path, so the tube was feeding **pan** a pivot up to 2.5
+spacings off-ray — exactly what `cwBaseTurnTableInteraction.h`'s doc says must never happen ("would
+visibly jerk a pan or drift a zoom — the other reason only rotation opts in"). Pan does *not* regress
+from the deletion: `PanPlane` is fully determined by the anchor's depth, so the tube's lateral error was
+discarded anyway.
+
+**The one accepted regression: `cwScenePick::snappedPoint`.** Its cloud reach drops 2.5× → 1.0×
+spacings, and it is the only consumer with no near-miss fallback of its own. Bites where local spacing
+exceeds ~1.41× the mean (`PointPickRadiusScale = 1.0` vs the 0.7071 threshold) — e.g. a wall met at 60°
+grazing. Accepted deliberately: the tube *violated* this consumer's own stated contract ("triangle and
+point hits keep their exact surface point"), handing `cwCoordinatePicker` → `toGlobal()` → WGS84 a
+coordinate for a point the user was never over. Returning nothing beats lying. See the radius-systems
+item above for why the fix is **not** a fallback here.
+
+**Deferred out of this commit (candidates, not decisions):**
+- **`Object`'s `float pickRadius = 0.0f` is the real hole in the watertight invariant.** The
+  `static_assert` in `cwRenderPointCloud.h` guards the *constant* (`PointPickRadiusScale >= 0.7071068f`),
+  not the value that reaches the BVH (`pickRadius >= meanSpacing * sqrt(2)/2`). Any future `Type::Points`
+  producer — a decimated LOD, a second loader, a mesh-to-cloud path — can register with any radius,
+  including the default `0.0f`, which makes the cloud silently unpickable. It holds today only by
+  coincidence of there being exactly one producer, which matters more now that the header states this
+  constant is "the only thing keeping a cloud pickable where it is drawn". Fix: `Object` takes the
+  spacing (or a small policy struct) and derives the radius itself, so the rule is applied where it is
+  depended on and a zero-radius cloud becomes unrepresentable. Folds in the "`pickRadius` is a per-Object
+  field doing a per-Kind job" note — that becomes true for free, and isn't worth a commit alone.
+  *Size: constructor signature + ~8 test files.*
+- **`cwRayHit` has never promised `pointWorld()` lies on the query ray** — the root-cause *class* here.
+  `fillPointHit` reports the vertex centre; the deleted promote reported a centre up to 2.5 radii
+  off-ray; `nearestGeometryPoint` returns an off-ray point by design. Three producers, three off-ray
+  budgets, one return type, no stated contract — which is why `isOccluded` consumed an off-ray point as
+  a depth with no type-level reason to suspect it. This commit establishes the rule empirically; it
+  survives only as prose in two files that a change to a third won't read. *Size: small in code, large
+  in leverage. Pairs with the traversal unification — the contract is what distinguishes the policies.*
+- **WYSIWYG picking — the pad was never the blocker; correct an earlier note here.** The blocker is
+  `fillPointHit` setting `pointWorld = centerWorld`. At `pickRadius ≈ one spacing` that's centimetres
+  off-ray and harmless; at a splat-sized radius a rim hit would hand the measurement tool a coordinate
+  far off the ray the user pointed — the *same* defect class as the tube, reached by growing the sphere
+  instead of by a fallback. And the pad mechanism isn't gone from the file: `conservativeTolerancePad` +
+  the `linePad` path is a live, working template of exactly that shape. So the ordering is **(1) decide
+  what a point hit reports, (2) then the radius can grow** — not the reverse. Note the draw/pick gap is
+  parameter-dependent, not one number: the drawn half-extent is `worldRadius/2` (`gl_PointSize` is a
+  square's *side*, and `PointCloud.frag` fills it with no disc discard), so it is ~1.6× at a tuned
+  `worldRadius = 0.565` on a 0.172 m cloud, but ~13× at the `1.29` default on a 5 cm scan.
+- **`cwPickQuery::Kind` conflates three taxonomies, and it is already load-bearing** — not future drift.
+  `Kind` is mechanically the geometry primitive type (`pickKindOf` is a straight `cwGeometry::Type`
+  switch), yet it is used as provenance (`kSurveyGeometryKinds = Triangles|Lines`, "everything a user
+  authors or surveys") and as occlusion semantics (`Solid = Triangles|Points`). LiDAR notes **already**
+  ride `Kind::Triangles` into `kSurveyGeometryKinds`, so "scanned geometry is orbit-worthy" is a
+  coincidence of rendering choice, not a decision — a meshed point cloud would join silently and no test
+  would notice. Symmetrically, sketch strokes rendering as `Lines` would become pivot-eligible and stay
+  non-occluding. Fix: `Object` carries a pick *role*; queries filter on role. Composes with the
+  `pickRadius` item above (both want a richer `Object` construction API). *Size: medium.*
+- **`cwLeadView`'s ray/plane solve has zero coverage repo-wide** (conf 85). It carries the file's longest
+  comment — `quadDistance` solves the ray/billboard-plane crossing rather than reusing the marker
+  centre's depth, because "comparing the cave hit to the centre's depth would mis-gate off-centre taps
+  under perspective". Every test that touches it (the three new C++ cases, `tst_Leads.qml:571`,
+  `tst_ScrapInteraction.qml:309`) taps the **centre** under **ortho**, where the rays are parallel to
+  the plane normal and the crossing depth equals the centre depth for every pixel — the solve is a no-op
+  by construction, so replacing it with the naive centre-depth compare passes everything in the repo.
+  Needs an off-centre tap under perspective. Deliberately not added to this commit: it tests
+  pre-existing production code the deletion never touched, and a version that doesn't distinguish the
+  two implementations is worthless. *Size: small, but the geometry is fiddly — note `rayFromQtViewport`
+  starts the ray on the near plane, not at the eye.*
+- **`cwRenderPointCloud::setWorldRadius` doesn't clamp** while `cwLazLayersSceneNode.cpp:386` clamps to
+  `[0.01, 50]`, and the offline `sink_repatcher --point-radius` path (`cwRHIPointCloud` reading
+  `appearance->worldRadius`) bypasses both. Inert today — the only caller of the unclamped setter passes
+  an already-clamped value. *Size: 3 lines; an issue, not a refactor.*
+
+**Test-integrity note settled in this commit.** Both "miss" tests in the point suites were being decided
+by the **broad-phase AABB**, never reaching the sphere test — `addPoints` pads the object box by a full
+`pickRadius`, so an x-only offset past 1× is box-rejected. Fixed with diagonal rays that sit inside the
+padded box but outside the sphere, and confirmed by mutation: widening the accept region to the box's
+corner distance (`sqrt(3)*r`) fails **only** on the new diagonal cases while the axis-aligned ones pass.
+Worth recording that the reviewer's proposed mutation for this — deleting `testPrimitive`'s
+`if (!sphere.hit)` guard — does **not** work: on a miss `raySphereIntersectDouble` returns `tNear = 0.0`
+and the next guard (`if (sphere.tNear <= 0.0)`) catches it, so the sphere rejection is double-guarded.
+Ran the mutation before believing it.

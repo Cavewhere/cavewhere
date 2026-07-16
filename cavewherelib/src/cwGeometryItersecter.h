@@ -158,14 +158,6 @@ public:
                                         const QBox3D& box,
                                         const Key& key);
 
-    // Escape hatch for the BVH-tube fallback that snaps to a sphere-miss
-    // within kTubeFactor * pickRadius of the ray. Disabling reverts to
-    // strict sphere intersection — picks return no-hit when the cursor
-    // sits in a sub-pixel gap, and the AABB box tests stop being
-    // inflated, recovering the pre-tube traversal cost on huge clouds.
-    void setTubePickEnabled(bool enabled) { m_tubePickEnabled = enabled; }
-    bool isTubePickEnabled() const { return m_tubePickEnabled; }
-
     // Debug-only snapshot of what the picker currently knows about. Reads
     // the built BVH's source-node snapshot if available (post-bvhReady);
     // falls back to the live Nodes list otherwise. Use from tests and the
@@ -295,11 +287,6 @@ private:
         // Precomputed inverse of each modelMatrices entry — avoids paying
         // QMatrix4x4::inverted() per top-level-leaf pick in the hot path.
         QVector<QMatrix4x4> inverseModelMatrices;
-        // Max pickRadius across nodesSnapshot — cached once at build time
-        // so the per-pick tube-box test doesn't have to rescan. Triangles
-        // and zero-radius Points contribute 0; harmless for those paths
-        // since they don't take the tube fallback.
-        float maxPickRadius = 0.0f;
         // Reverse index: Key → slot in the parallel arrays above. Lets a
         // mutator null out the dirty Key's sub-BVH in the published BVH so
         // it stops contributing to picks the instant its cache entry is
@@ -329,7 +316,6 @@ public:
     };
 
 private:
-    bool m_tubePickEnabled = true;
 
     // Live BVH. nullptr until the first async build completes. Only
     // accessed from the main thread: pick queries (intersects/
@@ -368,12 +354,6 @@ private:
     // Defined in the .cpp because it's purely a debug aid.
     struct PickStats;
     friend QDebug operator<<(QDebug d, const cwGeometryItersecter::PickStats& s);
-
-    // Tube-pick fallback: tracks the closest sphere-miss seen during a
-    // traversal so intersectsDetailed can snap to a point the user almost
-    // clicked. Defined in the .cpp because it's an internal traversal
-    // detail.
-    struct NearMissResult;
 
     // Invalidate the cached sub-BVH for one Object and schedule a rebuild.
     // Use for addObject (which always replaces) and any mutation that
@@ -429,13 +409,12 @@ private:
                               const QMatrix4x4& modelToWorld,
                               const cwPickTolerance& tolerance,
                               cwRayHit& best,
-                              NearMissResult* nearMiss,
                               PickStats* stats);
 
-    // Shared cwRayHit field fill for any Point primitive — used by the
-    // sphere-hit path in testPrimitive and the tube-pick promote in
-    // tryPromoteNearMiss. Pre-computed by the caller because the two
-    // paths source tModel and the world point differently.
+    // cwRayHit field fill for a Point primitive. The analogue of
+    // fillLineHit: pointWorld is the vertex centre (so a readout snaps to
+    // the data point), while tModel/tWorld are the sphere-entry depths the
+    // caller computed.
     static void fillPointHit(cwRayHit& best,
                              const Object& object,
                              const Primitive& prim,
@@ -457,15 +436,6 @@ private:
                             const QVector3D& segPointModel,
                             const QVector3D& segPointWorld,
                             double tWorld);
-
-    // Post-traversal tube-pick promote. Snaps best to the closest tracked
-    // sphere-miss whose perpendicular distance is within kTubeFactor *
-    // pickRadius. No-op when best already hit, nearMiss is empty, or the
-    // miss is beyond the tube.
-    static void tryPromoteNearMiss(cwRayHit& best,
-                                   const NearMissResult& nearMiss,
-                                   const QRay3D& ray,
-                                   bool debug);
 
     // Debug-only per-primitive diagnostic; gated on lcPick debug.
     static void dumpLeafPrimitive(const Object& object,

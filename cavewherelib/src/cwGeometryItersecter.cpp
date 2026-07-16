@@ -70,23 +70,6 @@ struct cwGeometryItersecter::SubBvh {
     Object object;
 };
 
-// Closest sphere-miss seen during a traversal; tryPromoteNearMiss snaps
-// best to it when no true hit exists.
-struct cwGeometryItersecter::NearMissResult {
-    bool valid = false;
-    double dSq = (std::numeric_limits<double>::max)();
-    double tCenterModel = 0.0;
-    Primitive prim;
-    float radius = 0.0f;
-    // Pointer into the owning SubBvh::object — valid for the duration
-    // of intersectsDetailed (SubBvh is held alive by m_bvh->subBvhs).
-    // SubBvh::object's modelMatrix may be stale (sub-BVHs survive
-    // modelMatrix changes), so worldFromModel below carries the fresh
-    // matrix from BvhData::modelMatrices.
-    const Object* object = nullptr;
-    QMatrix4x4 worldFromModel;
-};
-
 // Per-pick rejection counters. Populated by intersectsDetailed and
 // testPrimitive when the cw.picking category has debug enabled; nullptr
 // otherwise so the hot path pays nothing. Defined here (not in the anon
@@ -136,18 +119,6 @@ namespace {
     // broad-phase AABB so that rays passing tangentially through the
     // outermost spheres aren't rejected by the box test.
     constexpr float kPointAabbPadScale = 1.0f;
-
-    // Tube-pick fallback radius as a multiplier of pickRadius. Lets the
-    // user clicking near a point in a sub-pixel gap still pivot on it.
-    //
-    // Held at 2.5 world-spacings of reach. This was 5.0 back when a cloud's
-    // pickRadius was half its point spacing; cwRenderPointCloud::
-    // PointPickRadiusScale is now a full spacing, so the same 5.0 would have
-    // silently doubled the reach to ~3x the drawn splat and made the fallback
-    // grab points the user is plainly not over. The gaps this compensated for
-    // are gone anyway — a watertight radius yields an exact hit on the near
-    // surface — so the tube is now only for genuinely sparse clouds.
-    constexpr float kTubeFactor = 2.5f;
 
     // Leaf threshold — the largest count of primitives we'll let stop
     // subdivision. Bigger leaves trade a slightly longer per-leaf linear
@@ -251,7 +222,10 @@ namespace {
     struct RaySphereHit {
         bool hit;
         double tNear;    // sphere-entry depth (valid only when hit)
-        double tCenter;  // perpendicular-projection depth of the sphere center
+        // Squared perpendicular ray-to-centre distance. Filled on both the hit
+        // and the miss path — nearestGeometryPoint leans on the miss value,
+        // probing with radius 0 purely to read it. Zero on the degenerate-ray
+        // early-out below, where it is a sentinel rather than a distance.
         double dSq;
     };
 
@@ -278,7 +252,7 @@ namespace {
         // but cheap), and NaN-direction rays before they poison
         // tNear/dSq with inf/NaN.
         if (!(dDotD > 0.0)) {
-            return {false, 0.0, 0.0, 0.0};
+            return {false, 0.0, 0.0};
         }
         const double invDDotD = 1.0 / dDotD;
         const double tCenter =
@@ -290,9 +264,9 @@ namespace {
         const double rSq = double(radius) * double(radius);
 
         if (dSq > rSq) {
-            return {false, 0.0, tCenter, dSq};
+            return {false, 0.0, dSq};
         }
-        return {true, tCenter - std::sqrt((rSq - dSq) * invDDotD), tCenter, dSq};
+        return {true, tCenter - std::sqrt((rSq - dSq) * invDDotD), dSq};
     }
 
     struct RaySegmentHit {
@@ -738,9 +712,9 @@ bool cwGeometryItersecter::isPickableEmpty() const
 /**
  * @brief cwGeometryItersecter::intersects
  * @param ray
- * @return Closest intersection along the ray, or NaN when the BVH (with
- *         the tube-pick fallback in intersectsDetailed) finds nothing.
- *         Callers can then fall back to a grid plane / projected pivot.
+ * @return Closest intersection along the ray, or NaN when the BVH finds
+ *         nothing. Callers can then fall back to a grid plane / projected
+ *         pivot, or to nearestGeometryPoint for a near-miss anchor.
  */
 double cwGeometryItersecter::intersects(const QRay3D &ray, const cwPickQuery& query) const
 {
@@ -925,36 +899,28 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
     const QVector<BvhNode>& topLevel = m_bvh->topLevel;
     const QVector<std::shared_ptr<const SubBvh>>& subBvhs = m_bvh->subBvhs;
 
-    // Top-level tube pad uses the global max across all Objects: a single
-    // value keeps the AABB-test fast path identical to the pre-tube cost
-    // when m_tubePickEnabled is off.
-    const float topTubeDist = m_tubePickEnabled
-                              ? m_bvh->maxPickRadius * kTubeFactor
-                              : 0.0f;
-
     // Line picking grows its accept radius with depth (screen-space), so a
     // fixed baked AABB pad can't bound it. Derive one conservative scalar —
     // the radius at the farthest scene depth — and fold it into the box-test
     // pads; the fine test still uses the exact radiusAt(hitDepth). Zero when
-    // no tolerance is supplied, so the box pads collapse to the pre-line tube
-    // values and the AABB fast path is byte-for-byte the old one (line sub-BVHs
-    // are skipped entirely in that case — see the kind-filter block below).
+    // no tolerance is supplied, in which case the box tests run unpadded and
+    // line sub-BVHs are skipped entirely (see the kind-filter block below).
+    //
+    // This is the only pad in the traversal. Points need none: their leaf
+    // boxes are baked with a pickRadius pad already (primitiveModelBox), so
+    // an unpadded box test still reaches every leaf whose sphere the ray can
+    // hit. Triangles are exact and need none either.
     const float linePad =
         conservativeTolerancePad(ray, topLevel.at(0).bbox, query.tolerance);
 
-    const float topPad = std::max(topTubeDist, linePad);
-    const QVector3D topTubePad(topPad, topPad, topPad);
-
-    NearMissResult nearMiss;
-    NearMissResult* nearMissPtr = m_tubePickEnabled ? &nearMiss : nullptr;
+    const QVector3D topLinePad(linePad, linePad, linePad);
 
     if (debug) {
         qCDebug(lcPick).nospace()
             << "intersectsDetailed: topLevel=" << topLevel.size()
             << ", subBvhs=" << subBvhs.size()
             << ", source nodes=" << m_bvh->nodesSnapshot.size()
-            << ", maxPickRadius=" << m_bvh->maxPickRadius
-            << ", topTubeDist=" << topTubeDist
+            << ", linePad=" << linePad
             << ", ray.origin=" << ray.origin()
             << ", ray.dir=" << ray.direction();
     }
@@ -973,10 +939,10 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
             ++stats.nodesVisited;
         }
 
-        const double tBox = (topPad == 0.0f)
+        const double tBox = (linePad == 0.0f)
             ? bn.bbox.intersection(ray)
-            : QBox3D(bn.bbox.minimum() - topTubePad,
-                     bn.bbox.maximum() + topTubePad).intersection(ray);
+            : QBox3D(bn.bbox.minimum() - topLinePad,
+                     bn.bbox.maximum() + topLinePad).intersection(ray);
         if (qIsNaN(tBox)) {
             if (debug) {
                 ++stats.nodesBoxMiss;
@@ -1040,21 +1006,14 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
         const QMatrix4x4& modelToWorld = m_bvh->inverseModelMatrices.at(slot);
         const QRay3D rayModel = transformRayWithInverse(modelToWorld, ray);
 
-        // Per-Object tube pad applies to the model-space boxes within
-        // this sub-BVH. Triangle-only Objects have pickRadius() == 0,
-        // which collapses the pad to zero and matches the pre-tube cost.
-        // The line pick tolerance pads boxes the same way; for a line
-        // object the conservative linePad lets a grazing ray reach the
-        // leaf where the exact distance test decides the hit. (Model-space
-        // pad against a world-space radius — exact for the identity model
-        // matrix the line plot uses, like the point/sphere path.)
-        const float subTubeDist = m_tubePickEnabled
-                                  ? sub.object.pickRadius() * kTubeFactor
-                                  : 0.0f;
-        const float subPad = isLineObject
-                             ? std::max(subTubeDist, linePad)
-                             : subTubeDist;
-        const QVector3D subTubePad(subPad, subPad, subPad);
+        // Only line objects pad their model-space boxes: the conservative
+        // linePad lets a grazing ray reach the leaf where the exact distance
+        // test decides the hit. (Model-space pad against a world-space radius
+        // — exact for the identity model matrix the line plot uses.) Points
+        // and triangles bake whatever pad they need into the leaf box at
+        // build time, so their boxes are tested as-is.
+        const float subPad = isLineObject ? linePad : 0.0f;
+        const QVector3D subLinePad(subPad, subPad, subPad);
 
         // tModel and tWorld parameterize the same point — transformRayToModel
         // applies the inverse model matrix uniformly to direction so the
@@ -1075,8 +1034,8 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
 
             const double tSubBox = (subPad == 0.0f)
                 ? sbn.bbox.intersection(rayModel)
-                : QBox3D(sbn.bbox.minimum() - subTubePad,
-                         sbn.bbox.maximum() + subTubePad).intersection(rayModel);
+                : QBox3D(sbn.bbox.minimum() - subLinePad,
+                         sbn.bbox.maximum() + subLinePad).intersection(rayModel);
             if (qIsNaN(tSubBox)) {
                 if (debug) {
                     ++stats.nodesBoxMiss;
@@ -1111,7 +1070,7 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
                     }
                     testPrimitive(sub.object, sub.primitives.at(p),
                                   ray, rayModel, worldFromModel, modelToWorld,
-                                  query.tolerance, best, nearMissPtr, statsPtr);
+                                  query.tolerance, best, statsPtr);
                 }
             } else {
                 uint32_t nearChild = sbn.left;
@@ -1123,14 +1082,6 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
                 subStack.append(nearChild);
             }
         }
-    }
-
-    // Without the tube fallback, a sub-pixel cursor gap in a dense LAZ
-    // surface returns NaN from intersects() and the camera-pivot path in
-    // cwBaseTurnTableInteraction snaps to the grid plane at the wrong
-    // depth, jerking the view.
-    if (m_tubePickEnabled) {
-        tryPromoteNearMiss(best, nearMiss, ray, debug);
     }
 
     if (debug) {
@@ -1367,7 +1318,6 @@ void cwGeometryItersecter::testPrimitive(const Object& object,
                                          const QMatrix4x4& modelToWorld,
                                          const cwPickTolerance& tolerance,
                                          cwRayHit& best,
-                                         NearMissResult* nearMiss,
                                          PickStats* stats)
 {
     // Visibility is guaranteed by the caller (intersectsDetailed hoists
@@ -1492,21 +1442,6 @@ void cwGeometryItersecter::testPrimitive(const Object& object,
         if (stats != nullptr) {
             ++stats->primsSphereMiss;
         }
-        // tCenter > 0 filters primitives behind the camera; the dSq
-        // threshold is applied once in tryPromoteNearMiss. Skipped
-        // entirely when nearMiss is null (tube-pick disabled), so the
-        // sphere-miss hot path matches the pre-tube cost.
-        if (nearMiss != nullptr
-            && sphere.dSq < nearMiss->dSq
-            && sphere.tCenter > 0.0) {
-            nearMiss->valid = true;
-            nearMiss->dSq = sphere.dSq;
-            nearMiss->tCenterModel = sphere.tCenter;
-            nearMiss->prim = prim;
-            nearMiss->radius = radius;
-            nearMiss->object = &object;
-            nearMiss->worldFromModel = worldFromModel;
-        }
         return;
     }
     if (sphere.tNear <= 0.0) {
@@ -1611,59 +1546,6 @@ void cwGeometryItersecter::fillLineHit(cwRayHit& best,
     // plot registers, this equals the from-vertex index (Commit 2's
     // segmentEndpoints leans on that identity).
     best.m_firstIndex = static_cast<int>(prim.primitiveIndex);
-}
-
-void cwGeometryItersecter::tryPromoteNearMiss(cwRayHit& best,
-                                              const NearMissResult& nearMiss,
-                                              const QRay3D& ray,
-                                              bool debug)
-{
-    if (best.hit() || !nearMiss.valid || nearMiss.object == nullptr) {
-        return;
-    }
-    const double tubeLimit = double(nearMiss.radius) * double(kTubeFactor);
-    if (nearMiss.dSq > tubeLimit * tubeLimit) {
-        if (debug) {
-            qCDebug(lcPick).nospace()
-                << "tube-pick rejected: best near-miss d=" << std::sqrt(nearMiss.dSq)
-                << " > tube limit " << tubeLimit;
-        }
-        return;
-    }
-
-    const Object& object = *nearMiss.object;
-    const cwGeometry& geometry = object.geometry();
-    const auto positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
-    Q_ASSERT(positionAttribute);
-
-    // Use the snapshotted modelMatrix (the SubBvh-stored Object's matrix
-    // may be stale across modelMatrix changes — see SubBvh::object).
-    const QMatrix4x4& worldFromModel = nearMiss.worldFromModel;
-    const QVector3D centerModel = geometry.value<QVector3D>(
-        positionAttribute, nearMiss.prim.primitiveIndex);
-    const QVector3D centerWorld = mapPoint(worldFromModel, centerModel);
-    const double tWorld = ray.projectedDistance(centerWorld);
-    if (tWorld <= 0.0) {
-        if (debug) {
-            qCDebug(lcPick).nospace()
-                << "tube-pick rejected: tWorld=" << tWorld
-                << " <= 0 after reprojection to world space"
-                << " (model matrix may mirror or skew)";
-        }
-        return;
-    }
-
-    const QRay3D rayModel = transformRayToModel(worldFromModel, ray);
-    fillPointHit(best, object, nearMiss.prim, ray, rayModel,
-                 centerModel, centerWorld, nearMiss.tCenterModel, tWorld);
-    if (debug) {
-        qCDebug(lcPick).nospace()
-            << "tube-pick promoted: d=" << std::sqrt(nearMiss.dSq)
-            << " (<= " << tubeLimit << ")"
-            << " tWorld=" << tWorld
-            << " pWorld=" << centerWorld
-            << " vert=" << nearMiss.prim.primitiveIndex;
-    }
 }
 
 void cwGeometryItersecter::dumpLeafPrimitive(const Object& object,
@@ -2519,7 +2401,6 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             out->inverseModelMatrices.append(m.inverted());
             worldBoxes.append(wb);
             out->keyToSlot.insert(key, slot);
-            out->maxPickRadius = std::max(out->maxPickRadius, sb.object.pickRadius());
         }
 
         if (promise.isCanceled()) {

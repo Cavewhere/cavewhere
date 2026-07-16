@@ -261,13 +261,13 @@ private:
     //! what they authored, not the LiDAR cloud that happens to be behind it.
     //! Survey geometry (scraps, LiDAR notes, centerline) competes with BOTH an
     //! exact hit and a near-miss anchor within PivotAnchorRadiusMillimeters.
-    //! The cloud competes with an exact hit, which carries the intersecter's
-    //! own tube fallback (kTubeFactor * pickRadius of world-space reach) — far
-    //! tighter than the screen-space anchor, but not nothing, so this is a
-    //! demotion rather than an exact-only rule. Depth then decides between the
-    //! two winners: a near-missed scrap beats a far cloud point, while a cloud
-    //! genuinely occluding the scrap still takes the pivot — orbiting geometry
-    //! hidden behind a LiDAR wall would just trade one teleport for another.
+    //! The cloud competes with an exact hit only — its pick spheres are sized
+    //! to be watertight (cwRenderPointCloud::PointPickRadiusScale), so a cloud
+    //! surface the user is actually over always yields one. Depth then decides
+    //! between the two winners: a near-missed scrap beats a far cloud point,
+    //! while a cloud genuinely occluding the scrap still takes the pivot —
+    //! orbiting geometry hidden behind a LiDAR wall would just trade one
+    //! teleport for another.
     //!
     //! If BOTH miss, the cloud gets the wide anchor too, as a last rung. A
     //! LiDAR-only project has no survey geometry to lose to and still has to be

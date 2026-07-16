@@ -109,14 +109,22 @@ TEST_CASE("Ray within pickRadius of a point still hits", "[cwGeometryItersecter]
     REQUIRE(hit.hit());
 }
 
-TEST_CASE("Ray well beyond the tube range does not hit the point", "[cwGeometryItersecter][points]")
+TEST_CASE("Ray outside the pick radius does not hit the point", "[cwGeometryItersecter][points]")
 {
-    // Offset well past the tube-pick range (kTubeFactor=2.5 * pickRadius)
-    // so neither the sphere intersection nor the near-miss fallback
-    // fires. Rays in the (1x, 2.5x) band are expected to snap to the
-    // point via the tube fallback (see test_cwGeometryItersecter_tubePick).
-    const float offset = kPickRadius * 10.0f;
-    const QVector3D origin(offset, 0.0f, 10.0f);
+    // The pick sphere is the whole rule: outside it is a miss.
+    //
+    // Offset DIAGONALLY, and by only ~1.13x the radius, so this single case
+    // pins two things a comfortable axis-aligned 10x would miss:
+    //   - addPoints pads the object's broad-phase AABB by a full pickRadius,
+    //     so an x-only offset above 1x is rejected by the BOX and never
+    //     reaches the sphere test. (0.08, 0.08) is 0.113 from the centre — a
+    //     true miss — yet sits inside that padded box, so only the ray/sphere
+    //     test can reject it. That makes this the case that pins the reject
+    //     boundary as a sphere rather than the box around it.
+    //   - 1.13x is inside the 2.5x reach of the deleted near-miss fallback, so
+    //     this hit before that fallback was removed.
+    const float offset = kPickRadius * 0.8f;
+    const QVector3D origin(offset, offset, 10.0f);
     const QRay3D ray(origin, QVector3D(0.0f, 0.0f, -1.0f));
 
     cwGeometryItersecter intersector;

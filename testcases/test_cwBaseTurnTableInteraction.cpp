@@ -932,8 +932,8 @@ TEST_CASE("cwBaseTurnTableInteraction startRotating near geometry anchors the pi
     // anchor radius, so the rotate keeps its context. It must still never fall
     // to the grid.
     //
-    // One cloud point sits beyond the exact pick's reach (its pick tube spans
-    // 5x the 0.5 pick radius = 2.5 units) but inside the anchor radius. The
+    // One cloud point sits 10 units off the ray — far beyond the exact pick's
+    // reach (its 0.5 pick radius) but inside the anchor radius. The
     // screen-center click misses it exactly, yet the pivot snaps to the point
     // itself — the z proves it landed on the geometry, not the z = 0 grid
     // plane and not the z = 0 default pivot it would have held before.

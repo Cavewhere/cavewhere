@@ -45,8 +45,13 @@ public:
     //! then hits some unoccluded point far down the ray instead. The splats
     //! are drawn from worldRadius and overlap into a solid-looking wall, so
     //! that gap is invisible: the surface reads as watertight and picks
-    //! through. Above the threshold the near wall yields an exact hit, which
-    //! wins on depth without leaning on the tube fallback.
+    //! through. Above the threshold the near wall yields an exact hit.
+    //!
+    //! Nothing catches a miss any more: the near-miss fallback that used to
+    //! paper over sub-threshold radii is gone (it snapped picks to points the
+    //! ray never touched, which made leads unclickable — see
+    //! cwLeadView::isOccluded). This constant is the only thing keeping a
+    //! cloud pickable where it is drawn.
     //!
     //! Deliberately NOT tied to worldRadius, which would match the drawn
     //! footprint exactly but is tuned live (P + mouse wheel, see
