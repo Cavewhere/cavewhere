@@ -258,7 +258,7 @@ bool cwCoordinateTransform::isGeographic(const QString& cs)
         return false;
     }
 
-    // Per-thread cache: callers like cwCave::recomputeGridConvergenceText
+    // Per-thread cache: callers like cwCave::recomputeGridConvergence
     // hit this on every fix-station edit. Without the cache each call pays
     // proj_create + proj_get_type + proj_destroy. Capped like nameFor's
     // cache so CSCustomDialog browsing can't grow it unboundedly.

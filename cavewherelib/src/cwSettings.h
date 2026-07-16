@@ -9,6 +9,7 @@
 class cwJobSettings;
 class cwPDFSettings;
 class cwFontSettings;
+class cwRenderingSettings;
 #include "cwSketchSettings.h"
 #include "cwGlobals.h"
 
@@ -22,12 +23,14 @@ class CAVEWHERE_LIB_EXPORT cwSettings : public QObject
     Q_PROPERTY(cwPDFSettings* pdfSettings READ pdfSettings CONSTANT)
     Q_PROPERTY(cwFontSettings* fontSettings READ fontSettings CONSTANT)
     Q_PROPERTY(cwSketchSettings* sketchSettings READ sketchSettings CONSTANT)
+    Q_PROPERTY(cwRenderingSettings* renderingSettings READ renderingSettings CONSTANT)
 
 public:
     cwJobSettings* jobSettings() const;
     cwPDFSettings* pdfSettings() const;
     cwFontSettings* fontSettings() const;
     cwSketchSettings* sketchSettings() const;
+    cwRenderingSettings* renderingSettings() const;
 
     static void initialize();
     static cwSettings* instance();

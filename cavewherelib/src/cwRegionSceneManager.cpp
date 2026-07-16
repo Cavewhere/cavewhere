@@ -37,6 +37,34 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
 
     m_lazLayers = new cwLazLayersSceneNode(this);
     m_lazLayers->setScene(scene());
+
+    //Keep the grid plane sitting at the lowest cave depth (issue #534). The
+    //plane's default elevation already covers the no-geometry state, so only the
+    //signal wiring is needed here.
+    connect(m_linePlot, &cwRenderLinePlot::geometryChanged,
+            this, &cwRegionSceneManager::updateGridPlaneElevation);
+}
+
+/**
+  \brief Snaps the grid plane's elevation to the lowest depth of the survey
+
+  Only the elevation (z) tracks the line plot; the plane stays horizontal and
+  centred on the world origin in x/y. Empty geometry leaves min/max inverted
+  (the setGeometry sentinels), so the plane is left at its default until there
+  is real geometry. setPlane suppresses the write when the elevation is
+  unchanged.
+  */
+void cwRegionSceneManager::updateGridPlaneElevation()
+{
+    if(m_linePlot->minZValue() > m_linePlot->maxZValue()) {
+        return;
+    }
+
+    QPlane3D plane = m_plane->plane();
+    QVector3D origin = plane.origin();
+    origin.setZ(m_linePlot->minZValue());
+    plane.setOrigin(origin);
+    m_plane->setPlane(plane);
 }
 
 /**
@@ -57,15 +85,11 @@ cwCavingRegion* cwRegionSceneManager::cavingRegion() const {
     return Region;
 }
 
-void cwRegionSceneManager::setCapturing(bool newCapturing)
+QSet<cwRenderObjectId> cwRegionSceneManager::captureHiddenObjectIds() const
 {
-    if (m_capturing == newCapturing) {
-        return;
-    }
-    m_capturing = newCapturing;
-    m_background->setVisible(!m_capturing);
-    m_linePlot->setVisible(!m_capturing);
-    m_plane->setVisible(!m_capturing);
-    m_lazLayers->setVisibleForAll(!m_capturing);
-    emit capturingChanged();
+    return {
+        m_background->renderObjectId(),
+        m_linePlot->renderObjectId(),
+        m_plane->renderObjectId()
+    };
 }

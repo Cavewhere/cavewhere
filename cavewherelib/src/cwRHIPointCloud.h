@@ -9,20 +9,18 @@
 #define CWRHIPOINTCLOUD_H
 
 // Our includes
+#include "cwAppearanceSlotted.h"
 #include "cwRHIObject.h"
 #include "cwRenderPointCloud.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 
 // Qt includes
 #include <QMatrix4x4>
 #include <QVector3D>
 
-// Std includes
-#include <limits>
-
 class cwRhiItemRenderer;
 
-class cwRHIPointCloud : public cwRHIObject
+class cwRHIPointCloud : public cwRHIObject, public cwAppearanceSlotted
 {
 public:
     cwRHIPointCloud();
@@ -33,21 +31,37 @@ public:
     void updateResources(const ResourceUpdateData& data) override;
     void render(const RenderData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
+    bool usesPointCloudPass() const override;
+    cwAppearanceSlotted* appearanceSlots() override { return this; }
+
+    // cwAppearanceSlotted: unpack a cwPointCloudAppearance from the opaque payload
+    // and write it (world radius) into one slot of m_perCloudUBO.
+    void uploadAppearance(QRhiResourceUpdateBatch* batch, int slot,
+                          const cwAppearanceOverride& override) override;
 
 private:
     void initializeResources(const ResourceUpdateData& data);
-    void releasePipeline();
     bool ensurePipeline(const RenderData& data);
     bool ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer);
-    cwRhiPipelineKey buildPipelineKey(QRhiRenderTarget* target,
-                                      QRhiRenderPassDescriptor* renderPassDescriptor) const;
+    cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
+                                      int sampleCount) const;
 
-    // std140 layout: two floats padded to a 16-byte vec4 slot. Mirrors the
-    // PerCloudBlock declaration in PointCloud.vert.
+    // cwAppearanceSlotted: grow m_perCloudUBO to @a slotCount slots, deferring
+    // deletion of the prior buffer + SRB (m_retiredBuffers/m_retiredSrbs, flushed
+    // next updateResources) so draws already recorded this frame keep valid
+    // pointers. Re-writes the live slot 0 onto @a batch.
+    void resizeAppearanceSlots(QRhi* rhi, QRhiResourceUpdateBatch* batch,
+                               int slotCount) override;
+
+    // Write one PerCloudUniform (just @a worldRadius today) into @a slot.
+    void writeAppearanceSlot(QRhiResourceUpdateBatch* batch, int slot, float worldRadius);
+
+    // std140 rounds a uniform block to a multiple of 16 bytes; pad three
+    // floats so the C++ struct matches the shader-side block size. Mirrors
+    // the PerCloudBlock declaration in PointCloud.vert.
     struct PerCloudUniform {
         float worldRadius = 0.0f;
-        float gapFudge = 2.0f;
-        float pad[2] = {0.0f, 0.0f};
+        float pad[3] = {0.0f, 0.0f, 0.0f};
     };
 
     bool m_resourcesInitialized = false;
@@ -59,19 +73,24 @@ private:
     QRhiVertexInputLayout m_inputLayout;
     QVector<QRhiBuffer*> m_vertexBuffers;
     QVector<qsizetype> m_vertexBufferCapacities;
-    // Per-cloud uniform block (binding 1): world-space point radius derived
-    // from the cloud's mean point spacing, plus a user-tunable gapFudge.
-    // NaN sentinels force the first upload since NaN != anything.
+    // Per-cloud uniform block (binding 1): world-space sprite radius in meters,
+    // one aligned slot per appearance slot, bound with a dynamic offset so an
+    // offscreen job can render the cloud at an overridden radius without disturbing
+    // the live view (slot 0). Steady state is ONE slot (the live radius); the pool
+    // (cwAppearanceSlotted) grows it on demand to the concurrent-override high-water
+    // mark, so an interactive session pays one slot per cloud, not kAppearanceSlotCount.
+    // m_perCloudStride is the aligned byte size of one slot, also the dynamic-offset
+    // granularity.
     QRhiBuffer* m_perCloudUBO = nullptr;
-    float m_lastUploadedWorldRadius = std::numeric_limits<float>::quiet_NaN();
-    float m_lastUploadedGapFudge = std::numeric_limits<float>::quiet_NaN();
+    quint32 m_perCloudStride = 0;
     QRhiShaderResourceBindings* m_srb = nullptr;
-    cwRhiScene* m_scene = nullptr;
-    cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;
-    cwRhiPipelineKey m_pipelineKey;
-    bool m_hasPipelineKey = false;
+    cwRhiFrameRenderer* m_frame = nullptr;
 
-    cwTracked<cwRenderPointCloud::Data> m_data;
+    // Geometry and render-state tracked independently so a uniform-only
+    // change (world radius / point size) never re-stages the vertex buffer —
+    // the expensive vertex upload is gated on m_geometry.isChanged().
+    cwTracked<cwRenderPointCloud::GeometryState> m_geometry;
+    cwTracked<cwRenderPointCloud::RenderState> m_renderState;
 };
 
 #endif // CWRHIPOINTCLOUD_H

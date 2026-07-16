@@ -96,6 +96,10 @@ MainWindowTest {
         }
 
         function test_addPdfMultipage_selectsFirstPage() {
+            if (!TestHelper.pdfSupported()) {
+                skip("Qt Pdf not built — PDF note import is a no-op without it")
+            }
+
             let noteGallery = findNoteGallery()
             let surveyEditor = findSurveyEditor()
 

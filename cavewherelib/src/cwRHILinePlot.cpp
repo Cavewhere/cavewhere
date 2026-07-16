@@ -2,7 +2,7 @@
 #include "cwRhiItemRenderer.h"
 #include "cwScene.h"
 #include "cwRenderLinePlot.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 #include "cwRenderMaterialState.h"
 #include <QFile>
 #include <QDebug>
@@ -14,10 +14,9 @@ cwRHILinePlot::cwRHILinePlot()
 cwRHILinePlot::~cwRHILinePlot()
 {
     delete m_vertexBuffer;
-    delete m_indexBuffer;
-    // delete m_uniformBuffer;
+    delete m_visibilityBuffer;
     delete m_srb;
-    releasePipeline();
+    // m_pipelines releases its held pipeline references on destruction.
 }
 
 void cwRHILinePlot::initialize(const ResourceUpdateData& data)
@@ -25,8 +24,8 @@ void cwRHILinePlot::initialize(const ResourceUpdateData& data)
     if (m_resourcesInitialized)
         return;
 
-    if (!m_scene && data.renderData.renderer) {
-        m_scene = data.renderData.renderer->sceneBackend();
+    if (!m_frame && data.renderData.renderer) {
+        m_frame = data.renderData.renderer->frameRenderer();
     }
 
     initializeResources(data);
@@ -37,20 +36,25 @@ void cwRHILinePlot::initializeResources(const ResourceUpdateData& data)
 {
     auto rhi = data.renderData.cb->rhi();
 
-    // Create buffers
+    // Create buffers — positions plus a parallel per-vertex visibility buffer.
+    // Non-indexed line list, so there is no index buffer.
     m_vertexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
     m_vertexBuffer->create();
 
-    m_indexBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::IndexBuffer, 0);
-    m_indexBuffer->create();
+    m_visibilityBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
+    m_visibilityBuffer->create();
 
-    // Input layout
+    // Input layout: binding 0 = vec3 position, binding 1 = uint visibility
+    // (0 = hidden, non-zero = visible). A uint keeps the attribute 4-byte
+    // aligned across every RHI backend.
     QRhiVertexInputLayout inputLayout;
     inputLayout.setBindings({
-        { sizeof(QVector3D) }
+        { sizeof(QVector3D) },
+        { sizeof(quint32) }
     });
     inputLayout.setAttributes({
-        { 0, 0, QRhiVertexInputAttribute::Float3, 0 }
+        { 0, 0, QRhiVertexInputAttribute::Float3, 0 },
+        { 1, 1, QRhiVertexInputAttribute::UInt, 0 }
     });
     m_inputLayout = inputLayout;
 }
@@ -62,6 +66,9 @@ void cwRHILinePlot::synchronize(const SynchronizeData& data)
 
     m_data = linePlot->m_data;
     linePlot->m_data.resetChanged();
+
+    m_visibility = linePlot->m_visibility;
+    linePlot->m_visibility.resetChanged();
 }
 
 void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
@@ -81,39 +88,47 @@ void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
             }
             batch->updateDynamicBuffer(m_vertexBuffer, 0, vertexBufferSize, data.points.constData());
         }
-
-        if (!data.indexes.isEmpty()) {
-            // Update index buffer
-            int indexBufferSize = data.indexes.size() * sizeof(unsigned int);
-            if (m_indexBuffer->size() != indexBufferSize) {
-                m_indexBuffer->setSize(indexBufferSize);
-                m_indexBuffer->create();
-            }
-            batch->updateDynamicBuffer(m_indexBuffer, 0, indexBufferSize, data.indexes.constData());
-        }
-
-        // UniformData uniformData;
-        // memcpy(uniformData.mvpMatrix, mvp.constData(), sizeof(float) * 16);
-        // uniformData.maxZValue = data.maxZValue;
-        // uniformData.minZValue = data.minZValue;
-
-        // // Update the buffer with m_mvpMatrix
-        // batch->updateDynamicBuffer(
-        //     m_uniformBuffer,
-        //     offsetof(UniformData, mvpMatrix),
-        //     sizeof(UniformData::mvpMatrix),
-        //     mvp.constData()
-        //     );
-
-        // batch->updateDynamicBuffer(m_uniformBuffer, 0, sizeof(UniformData), &uniformData);
     }
 
     m_data.resetChanged();
+
+    updateVisibilityBuffer(batch);
+}
+
+// Uploads the per-vertex visibility buffer when it changed. The render object
+// keeps visibility as one byte per vertex; the GPU attribute is a uint (4-byte
+// aligned on every backend), so expand on upload. Only runs on a toggle or a
+// new solve, so the small expansion cost is off the hot path.
+void cwRHILinePlot::updateVisibilityBuffer(QRhiResourceUpdateBatch* batch)
+{
+    if (!m_visibilityBuffer) {
+        return;
+    }
+
+    if (m_visibility.isChanged()) {
+        const QVector<quint8>& flags = m_visibility.value();
+
+        // Expand to the 4-byte-aligned uint attribute the shader reads; the
+        // range constructor widens each quint8 to quint32.
+        const QVector<quint32> expanded(flags.cbegin(), flags.cend());
+
+        const int bufferSize = expanded.size() * sizeof(quint32);
+        if (bufferSize > 0) {
+            if (m_visibilityBuffer->size() != bufferSize) {
+                m_visibilityBuffer->setSize(bufferSize);
+                m_visibilityBuffer->create();
+            }
+            batch->updateDynamicBuffer(m_visibilityBuffer, 0, bufferSize, expanded.constData());
+        }
+    }
+
+    m_visibility.resetChanged();
 }
 
 void cwRHILinePlot::render(const RenderData& data)
 {
-    if (m_data.value().indexes.size() == 0) {
+    const int vertexCount = m_data.value().points.size();
+    if (vertexCount == 0) {
         return;
     }
 
@@ -126,10 +141,16 @@ void cwRHILinePlot::render(const RenderData& data)
     }
 
     data.cb->setGraphicsPipeline(m_pipelineRecord->pipeline);
-    data.cb->setShaderResources(m_srb);
-    const QRhiCommandBuffer::VertexInput vertexInput(m_vertexBuffer, 0);
-    data.cb->setVertexInput(0, 1, &vertexInput, m_indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
-    data.cb->drawIndexed(m_data.value().indexes.size());
+    // The global camera UBO at binding 0 is dynamic-offset; this legacy path only
+    // ever draws the live frame, so it reads slot 0 (offset 0).
+    const QRhiCommandBuffer::DynamicOffset cameraOffset(0, 0);
+    data.cb->setShaderResources(m_srb, 1, &cameraOffset);
+    const QRhiCommandBuffer::VertexInput vertexInputs[2] = {
+        QRhiCommandBuffer::VertexInput(m_vertexBuffer, 0),
+        QRhiCommandBuffer::VertexInput(m_visibilityBuffer, 0)
+    };
+    data.cb->setVertexInput(0, 2, vertexInputs);
+    data.cb->draw(vertexCount);
 }
 
 bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
@@ -143,7 +164,7 @@ bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>&
     }
 
     const auto& value = m_data.value();
-    if (value.indexes.isEmpty()) {
+    if (value.points.isEmpty()) {
         return false;
     }
 
@@ -153,7 +174,7 @@ bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>&
     }
 
     auto* pipeline = m_pipelineRecord ? m_pipelineRecord->pipeline : nullptr;
-    if (!pipeline || !m_vertexBuffer || !m_indexBuffer || !m_srb) {
+    if (!pipeline || !m_vertexBuffer || !m_visibilityBuffer || !m_srb) {
         return false;
     }
 
@@ -163,24 +184,15 @@ bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>&
 
     auto& batch = acquirePipelineBatch(batches, state);
     cwRHIObject::Drawable drawable;
-    drawable.type = cwRHIObject::Drawable::Type::Indexed;
+    drawable.type = cwRHIObject::Drawable::Type::NonIndexed;
     drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(m_vertexBuffer, 0));
-    drawable.indexBuffer = m_indexBuffer;
-    drawable.indexFormat = QRhiCommandBuffer::IndexUInt32;
-    drawable.indexCount = static_cast<quint32>(value.indexes.size());
+    drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(m_visibilityBuffer, 0));
+    drawable.vertexCount = static_cast<quint32>(value.points.size());
     drawable.bindings = m_srb;
+    drawable.globalCameraBinding = 0; // slot 0 binds the global camera UBO (dynamic offset)
 
     batch.drawables.append(drawable);
     return true;
-}
-
-void cwRHILinePlot::releasePipeline()
-{
-    if (m_pipelineRecord && m_scene) {
-        m_scene->releasePipeline(m_pipelineRecord);
-    }
-    m_pipelineRecord = nullptr;
-    m_hasPipelineKey = false;
 }
 
 bool cwRHILinePlot::ensurePipeline(const RenderData& data)
@@ -189,11 +201,11 @@ bool cwRHILinePlot::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    if (!m_scene && data.renderer) {
-        m_scene = data.renderer->sceneBackend();
+    if (!m_frame && data.renderer) {
+        m_frame = data.renderer->frameRenderer();
     }
 
-    if (!m_scene || !data.renderer) {
+    if (!m_frame || !data.renderer) {
         return false;
     }
 
@@ -203,59 +215,53 @@ bool cwRHILinePlot::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    const auto key = buildPipelineKey(target, data.renderPassDescriptor);
-    if (!m_hasPipelineKey || !(m_pipelineKey == key)) {
-        releasePipeline();
+    const quint32 globalStride = data.renderer->globalUniformBufferStride();
 
-        auto createFn = [this, key](QRhi* localRhi) -> cwRhiScene::PipelineRecord* {
-            if (!localRhi) {
-                return nullptr;
-            }
+    const auto key = buildPipelineKey(data.renderPassDescriptor, data.sampleCount);
 
-            auto* record = new cwRhiScene::PipelineRecord;
-            record->pipeline = localRhi->newGraphicsPipeline();
-
-            QShader vs = loadShader(":/shaders/LinePlot.vert.qsb");
-            QShader fs = loadShader(":/shaders/LinePlot.frag.qsb");
-
-            record->pipeline->setShaderStages({
-                { QRhiShaderStage::Vertex, vs },
-                { QRhiShaderStage::Fragment, fs }
-            });
-
-            record->pipeline->setDepthTest(true);
-            record->pipeline->setDepthWrite(true);
-            record->pipeline->setSampleCount(key.sampleCount);
-            record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
-            record->pipeline->setVertexInputLayout(m_inputLayout);
-            record->pipeline->setTopology(QRhiGraphicsPipeline::Lines);
-
-            QRhiGraphicsPipeline::TargetBlend blendState;
-            blendState.enable = false;
-            record->pipeline->setTargetBlends({ blendState });
-
-            record->layout = localRhi->newShaderResourceBindings();
-            record->layout->setBindings({
-                QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr)
-            });
-            record->layout->create();
-
-            record->pipeline->setShaderResourceBindings(record->layout);
-            record->pipeline->setRenderPassDescriptor(key.renderPass);
-            record->pipeline->create();
-
-            return record;
-        };
-
-        m_pipelineRecord = m_scene->acquirePipeline(key, rhi, createFn);
-        m_pipelineKey = key;
-        m_hasPipelineKey = (m_pipelineRecord != nullptr);
-
-        if (m_srb) {
-            delete m_srb;
-            m_srb = nullptr;
+    auto createFn = [this, key, globalStride](QRhi* localRhi) -> cwRhiPipelineRecord* {
+        if (!localRhi) {
+            return nullptr;
         }
-    }
+
+        auto* record = new cwRhiPipelineRecord;
+        record->pipeline = localRhi->newGraphicsPipeline();
+
+        QShader vs = loadShader(":/shaders/LinePlot.vert.qsb");
+        QShader fs = loadShader(":/shaders/LinePlot.frag.qsb");
+
+        record->pipeline->setShaderStages({
+            { QRhiShaderStage::Vertex, vs },
+            { QRhiShaderStage::Fragment, fs }
+        });
+
+        record->pipeline->setDepthTest(true);
+        record->pipeline->setDepthWrite(true);
+        record->pipeline->setSampleCount(key.sampleCount);
+        record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
+        record->pipeline->setVertexInputLayout(m_inputLayout);
+        record->pipeline->setTopology(QRhiGraphicsPipeline::Lines);
+
+        QRhiGraphicsPipeline::TargetBlend blendState;
+        blendState.enable = false;
+        record->pipeline->setTargetBlends({ blendState });
+
+        record->layout = localRhi->newShaderResourceBindings();
+        record->layout->setBindings({
+            QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, nullptr, globalStride)
+        });
+        record->layout->create();
+
+        record->pipeline->setShaderResourceBindings(record->layout);
+        record->pipeline->setRenderPassDescriptor(key.renderPass);
+        record->pipeline->create();
+
+        return record;
+    };
+
+    m_pipelineRecord = m_pipelines.acquire(m_frame, key, [&]() {
+        return m_frame->acquirePipeline(key, rhi, createFn);
+    });
 
     if (!m_pipelineRecord) {
         return false;
@@ -290,7 +296,7 @@ bool cwRHILinePlot::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer
 
     m_srb = rhi->newShaderResourceBindings();
     m_srb->setBindings({
-        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer())
+        QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer(), renderer->globalUniformBufferStride())
     });
     m_srb->create();
 
@@ -301,12 +307,12 @@ bool cwRHILinePlot::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer
     return true;
 }
 
-cwRhiPipelineKey cwRHILinePlot::buildPipelineKey(QRhiRenderTarget* target,
-                                                 QRhiRenderPassDescriptor* renderPassDescriptor) const
+cwRhiPipelineKey cwRHILinePlot::buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
+                                                 int sampleCount) const
 {
     cwRhiPipelineKey key;
     key.renderPass = renderPassDescriptor;
-    key.sampleCount = target ? target->sampleCount() : 1;
+    key.sampleCount = sampleCount;
     key.vertexShader = QStringLiteral(":/shaders/LinePlot.vert.qsb");
     key.fragmentShader = QStringLiteral(":/shaders/LinePlot.frag.qsb");
     key.cullMode = static_cast<quint8>(cwRenderMaterialState::CullMode::None);

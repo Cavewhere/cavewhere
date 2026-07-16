@@ -23,8 +23,20 @@
 
 cwCavingRegion::cwCavingRegion(QObject *parent) :
     QAbstractListModel(parent),
+    m_geoReference(new cwGeoReference(this)),
     m_lazLayers(new cwLazLayerModel(this))
 {
+    // geoReference owns the CS + worldOrigin; the region only mirrors each change
+    // into the LAZ layer model (it owns lazLayers). Consumers that react to CS /
+    // worldOrigin connect to geoReference directly. The worldOrigin push runs
+    // before the CS push for a CS-driven reset, matching the prior in-setter
+    // ordering.
+    connect(m_geoReference, &cwGeoReference::worldOriginChanged, this, [this] {
+        m_lazLayers->setRegionWorldOrigin(m_geoReference->worldOrigin());
+    });
+    connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged, this, [this] {
+        m_lazLayers->setRegionGlobalCS(m_geoReference->globalCoordinateSystem());
+    });
 }
 
 void cwCavingRegion::setFutureManagerToken(const cwFutureManagerToken& token)
@@ -269,45 +281,9 @@ cwProject *cwCavingRegion::parentProject() const
     return dynamic_cast<cwProject*>(parent());
 }
 
-void cwCavingRegion::setGlobalCoordinateSystem(const QString& cs)
-{
-    if (m_globalCoordinateSystem == cs) {
-        return;
-    }
-    m_globalCoordinateSystem = cs;
-    // The stored worldOrigin was computed in the old CS, so reset it.
-    // The next line-plot completion will auto-recompute against the new CS.
-    // Reset both value and explicitlySet directly (not via setWorldOrigin),
-    // since a CS-driven reset is not a user choice — leaving the flag false
-    // lets a freshly added LAZ seed the origin from its bbox center again.
-    if (m_worldOrigin.value != cwGeoPoint{} || m_worldOrigin.explicitlySet) {
-        m_worldOrigin = WorldOriginState{};
-        m_lazLayers->setRegionWorldOrigin(m_worldOrigin.value);
-        emit worldOriginChanged();
-    }
-    m_lazLayers->setRegionGlobalCS(cs);
-    emit globalCoordinateSystemChanged();
-}
-
-void cwCavingRegion::setWorldOrigin(const cwGeoPoint& origin)
-{
-    // Short-circuit only when both the value AND the explicit-set flag are
-    // already what we'd produce. An explicit setWorldOrigin(0,0,0) on a
-    // freshly-constructed region must still flip the flag — otherwise the
-    // user's intent is indistinguishable from "never set" and LAZ auto-adopt
-    // will silently overwrite it (see [cwSinkTrainingModel] failures).
-    if (m_worldOrigin.value == origin && m_worldOrigin.explicitlySet) {
-        return;
-    }
-    m_worldOrigin.value = origin;
-    m_worldOrigin.explicitlySet = true;
-    m_lazLayers->setRegionWorldOrigin(origin);
-    emit worldOriginChanged();
-}
-
 void cwCavingRegion::recomputeWorldOrigin()
 {
-    const QString globalCSTrimmed = m_globalCoordinateSystem.trimmed();
+    const QString globalCSTrimmed = m_geoReference->globalCoordinateSystem().trimmed();
 
     QList<cwGeoPoint> candidates;
     for (cwCave* cave : m_caves) {
@@ -349,13 +325,13 @@ void cwCavingRegion::recomputeWorldOrigin()
         sum.z += p.z;
     }
     const double n = double(candidates.size());
-    setWorldOrigin(cwGeoPoint{sum.x / n, sum.y / n, sum.z / n});
+    m_geoReference->setWorldOrigin(cwGeoPoint{sum.x / n, sum.y / n, sum.z / n});
 }
 
 void cwCavingRegion::setData(const cwCavingRegionData &data)
 {
     setName(data.name);
-    setGlobalCoordinateSystem(data.globalCoordinateSystem);
+    m_geoReference->setGlobalCoordinateSystem(data.globalCoordinateSystem);
     // worldOrigin is intentionally not persisted (see cavewhere.proto:
     // "reserved 5; // Removed: worldOrigin ... recomputed on load"). On
     // disk-load, data.worldOrigin is always default-constructed cwGeoPoint{},
@@ -366,7 +342,7 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
     // auto-adopt. (In-process data → setData round-trips still work because
     // a non-default value will be present.)
     if (data.worldOrigin != cwGeoPoint{}) {
-        setWorldOrigin(data.worldOrigin);
+        m_geoReference->setWorldOrigin(data.worldOrigin);
     }
 
     clearCaves();
@@ -386,8 +362,8 @@ cwCavingRegionData cwCavingRegion::data() const
     return {
         m_name.value(),
         cwData::toDataList<cwCaveData>(m_caves),
-        m_globalCoordinateSystem,
-        m_worldOrigin.value
+        m_geoReference->globalCoordinateSystem(),
+        m_geoReference->worldOrigin()
     };
 }
 
@@ -445,17 +421,17 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
     emit regionPtr->beginInsertRows(QModelIndex(), BeginIndex, EndIndex);
     for(int i = 0; i < Caves.size(); i++) {
         int index = BeginIndex + i;
-        regionPtr->m_caves.insert(index, Caves[i]);
-        regionPtr->m_caveNames.insert(Caves[i]->name());
-        Caves[i]->setParent(regionPtr);
+        regionPtr->m_caves.insert(index, Caves.at(i));
+        regionPtr->m_caveNames.insert(Caves.at(i)->name());
+        Caves.at(i)->setParent(regionPtr);
 
         // The cave's grid-convergence readout depends on the region's
         // globalCS when a fix station omits its own inputCS. UniqueConnection
         // keeps re-insert/undo paths from doubling up.
-        QObject::connect(regionPtr, &cwCavingRegion::globalCoordinateSystemChanged,
-                         Caves[i], &cwCave::recomputeGridConvergenceText,
+        QObject::connect(regionPtr->geoReference(), &cwGeoReference::globalCoordinateSystemChanged,
+                         Caves.at(i), &cwCave::recomputeGridConvergence,
                          Qt::UniqueConnection);
-        Caves[i]->recomputeGridConvergenceText();
+        Caves.at(i)->recomputeGridConvergence();
     }
 
     OwnsCaves = false;
@@ -532,14 +508,14 @@ cwCavingRegion::RemoveCaveCommand::RemoveCaveCommand(cwCavingRegion* region,
     InsertRemoveCave(region, beginIndex, endIndex)
 {
     for(int i = beginIndex; i <= endIndex; i++) {
-       Caves.append(region->m_caves[i]);
+       Caves.append(region->m_caves.at(i));
     }
 
     QString commandText;
     if(beginIndex != endIndex) {
         commandText = QString("Remove %1 caves").arg(endIndex - beginIndex);
     } else {
-        cwCave* cave = region->m_caves[beginIndex];
+        cwCave* cave = region->m_caves.at(beginIndex);
         commandText = QString("Remove %1").arg(cave->name());
     }
 }

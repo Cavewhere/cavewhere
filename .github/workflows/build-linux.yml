@@ -66,7 +66,7 @@ jobs:
           AQT_CONFIG: ${{ github.workspace }}/.github/aqt.ini
         with:
           aqtversion: '==3.3.*'
-          version: '6.11.0'
+          version: '6.11.1'
           host: ${{ matrix.qt_host }}
           target: 'desktop'
           arch: ${{ matrix.qt_arch }}
@@ -106,7 +106,7 @@ jobs:
         run: |
           cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
           -DBUILD_TESTING=OFF \
-          -DCMAKE_PREFIX_PATH=${{ github.workspace }}/Qt/6.11.0/${{ matrix.qt_dir }}/lib \
+          -DCMAKE_PREFIX_PATH=${{ github.workspace }}/Qt/6.11.1/${{ matrix.qt_dir }}/lib \
           -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S . -B build
 
       - name: Build AppImage

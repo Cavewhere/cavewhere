@@ -259,6 +259,11 @@ void cwCaptureManager::capture()
         } else if(NumberOfImagesProcessed == Captures.size()) {
             //Finished
             saveCaptures();
+
+            //`next` must capture itself to recurse, which forms a reference cycle that would
+            //leak the std::function once per capture() run. Break it now that we're done. Queued
+            //because we're inside *next's own body — destroying it inline would be undefined.
+            QMetaObject::invokeMethod(this, [next]() { *next = nullptr; }, Qt::QueuedConnection);
         }
     };
 

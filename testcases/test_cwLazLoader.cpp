@@ -3,6 +3,7 @@
 
 #include <QCoreApplication>
 #include <QTemporaryDir>
+#include <QThread>
 
 #include "cwGeoPoint.h"
 #include "cwGeometry.h"
@@ -11,6 +12,14 @@
 #include "LazFixtureHelper.h"
 
 using Catch::Matchers::WithinAbs;
+
+namespace {
+// kMinPointsPerWorker in cwLazLoader.cpp is 256 * 1024. To force multi-worker
+// mode we need at least 2 * that, with the actual worker count capped by
+// QThread::idealThreadCount() - 1. 600k is comfortably above the threshold and
+// keeps synthesis quick (~100ms).
+constexpr int kMultiWorkerPointCount = 600 * 1024;
+} // namespace
 
 TEST_CASE("cwLazLoader: empty source CS short-circuits and applies worldOrigin", "[cwLazLoader]") {
     QTemporaryDir tempDir;
@@ -105,4 +114,42 @@ TEST_CASE("cwLazLoader: missing file returns empty result", "[cwLazLoader]") {
     REQUIRE(future.resultCount() == 1);
     cwLazLoadResult result = future.result();
     REQUIRE(result.geometry.vertexCount() == 0);
+}
+
+// Reproduces the cancel-mid-multi-worker crash at cwLazLoader.cpp:388 where
+// mapFuture.results() can return fewer items than ranges if cancellation
+// prevents some mapped tasks from running. The original workflow:
+//   1. Add a multi-million-point USGS LAZ.
+//   2. Disable the layer mid-load (or via .cwlaz on re-rescan).
+//   3. cwLazLayer::setEnabled(false) cancels m_loadRestarter.future().
+//   4. cwLazLoader's polling loop calls mapFuture.cancel(); pending workers
+//      never run; mapFuture.results().size() < ranges.size().
+//   5. The for (i = 0; i < ranges.size(); ++i) loop then indexes
+//      workerResults[i] past the end → Q_ASSERT abort.
+TEST_CASE("cwLazLoader: cancel during multi-worker load does not crash",
+          "[cwLazLoader][cancel]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    QVector<QVector3D> points;
+    points.reserve(kMultiWorkerPointCount);
+    for (int i = 0; i < kMultiWorkerPointCount; ++i) {
+        points.append(QVector3D(float(i % 1000),
+                                float((i / 1000) % 1000),
+                                float(i & 0xff) * 0.1f));
+    }
+    const QString path = tempLazPath(tempDir, QStringLiteral("cancel-race"));
+    REQUIRE(writeSyntheticLazFile(path, points));
+
+    // Cancel as soon as the future exists. The race we want to lose: cancel
+    // arrives at the polling loop before all mapped workers have started, so
+    // mapFuture.results() comes back shorter than ranges.
+    auto future = cwLazLoader::load({.path = path, .maxPoints = -1});
+    future.cancel();
+    future.waitForFinished();
+
+    // No assertion on result shape — the contract under cancel is "don't
+    // crash"; cwLazLayer's observer drops the result anyway when m_enabled
+    // is false. This test passes iff cwLazLoader returned without aborting.
+    SUCCEED();
 }

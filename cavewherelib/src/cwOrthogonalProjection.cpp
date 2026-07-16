@@ -10,11 +10,11 @@
 #include "cwOrthogonalProjection.h"
 #include "cwProjection.h"
 #include "cwLength.h"
+#include "cwCamera.h"
 
 cwOrthogonalProjection::cwOrthogonalProjection(QObject *parent) :
     cwAbstractProjection(parent)
 {
-
 }
 
 /**

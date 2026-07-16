@@ -287,26 +287,13 @@ void cwScrapManager::setSketchManager(cwSketchManager *sketchManager)
 
 void cwScrapManager::setKeywordItemModel(cwKeywordItemModel *keywordItemModel)
 {
-    if(m_keywordItemModel == keywordItemModel) {
+    if(m_keywordRegistry.model() == keywordItemModel) {
         return;
     }
 
-    if(m_keywordItemModel) {
-        for(auto iter = m_scrapKeywordEntries.begin(); iter != m_scrapKeywordEntries.end(); ++iter) {
-            if(iter.value().item) {
-                m_keywordItemModel->removeItem(iter.value().item);
-                iter.value().item->deleteLater();
-            }
-            if(iter.value().visibility) {
-                iter.value().visibility->deleteLater();
-            }
-        }
-        m_scrapKeywordEntries.clear();
-    }
+    m_keywordRegistry.setModel(keywordItemModel);
 
-    m_keywordItemModel = keywordItemModel;
-
-    if(!m_keywordItemModel) {
+    if(keywordItemModel == nullptr) {
         return;
     }
 
@@ -1328,11 +1315,7 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
 
 void cwScrapManager::addKeywordItemForScrap(cwScrap *scrap)
 {
-    if(!m_keywordItemModel || !m_renderScraps || !scrap) {
-        return;
-    }
-
-    if(m_scrapKeywordEntries.contains(scrap)) {
+    if(m_keywordRegistry.model() == nullptr || !m_renderScraps || !scrap) {
         return;
     }
 
@@ -1341,39 +1324,21 @@ void cwScrapManager::addKeywordItemForScrap(cwScrap *scrap)
         return;
     }
 
-    auto keywordItem = new cwKeywordItem();
-    keywordItem->keywordModel()->addExtension(scrap->keywordModel());
+    const uint32_t renderId = renderIdIter.value();
+    m_keywordRegistry.ensure(scrap, [this, scrap, renderId]() {
+        auto keywordItem = new cwKeywordItem();
+        keywordItem->keywordModel()->addExtension(scrap->keywordModel());
 
-    auto visibility = new cwRenderTexturedItemVisibility(m_renderScraps, renderIdIter.value(), keywordItem);
-    keywordItem->setObject(visibility);
-    m_keywordItemModel->addItem(keywordItem);
-
-    ScrapKeywordEntry entry;
-    entry.item = keywordItem;
-    entry.visibility = visibility;
-    m_scrapKeywordEntries.insert(scrap, entry);
+        // The visibility proxy is parented to the keyword item, so it dies with it.
+        auto visibility = new cwRenderTexturedItemVisibility(m_renderScraps, renderId, keywordItem);
+        keywordItem->setObject(visibility);
+        return keywordItem;
+    });
 }
 
 void cwScrapManager::removeKeywordItemForScrap(cwScrap *scrap)
 {
-    auto iter = m_scrapKeywordEntries.find(scrap);
-    if(iter == m_scrapKeywordEntries.end()) {
-        return;
-    }
-
-    if(m_keywordItemModel && iter.value().item) {
-        m_keywordItemModel->removeItem(iter.value().item);
-    }
-
-    if(iter.value().item) {
-        iter.value().item->deleteLater();
-    }
-
-    if(iter.value().visibility) {
-        iter.value().visibility->deleteLater();
-    }
-
-    m_scrapKeywordEntries.erase(iter);
+    m_keywordRegistry.drop(scrap);
 }
 
 /**

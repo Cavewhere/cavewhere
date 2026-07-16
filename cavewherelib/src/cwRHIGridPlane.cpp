@@ -14,8 +14,7 @@ cwRHIGridPlane::~cwRHIGridPlane()
     delete m_uniformBuffer;
     delete m_fragmentUniformBuffer;
     delete m_srb;
-
-    releasePipeline();
+    // m_pipelines releases its held pipeline references on destruction.
 }
 
 void cwRHIGridPlane::initialize(const ResourceUpdateData& data)
@@ -24,8 +23,8 @@ void cwRHIGridPlane::initialize(const ResourceUpdateData& data)
         return;
     }
 
-    if (!m_scene && data.renderData.renderer) {
-        m_scene = data.renderData.renderer->sceneBackend();
+    if (!m_frame && data.renderData.renderer) {
+        m_frame = data.renderData.renderer->frameRenderer();
     }
 
     initializeResources(data);
@@ -84,37 +83,28 @@ void cwRHIGridPlane::synchronize(const SynchronizeData& data)
 
 void cwRHIGridPlane::updateResources(const ResourceUpdateData & data)
 {
-    if(cwSceneUpdate::isFlagSet(data.renderData.updateFlag, cwSceneUpdate::Flag::ViewMatrix)
-        || cwSceneUpdate::isFlagSet(data.renderData.updateFlag, cwSceneUpdate::Flag::ProjectionMatrix)
-        || m_modelMatrix.isChanged()
-        || m_scaleMatrix.isChanged()
-        )
+    // The grid now reads view/projection from the shared global UBO, so its own
+    // block holds only placement + scale and updates solely on those changes — no
+    // longer on every camera move.
+    if(m_modelMatrix.isChanged() || m_scaleMatrix.isChanged())
     {
-        auto mvp = data.renderData.renderer->viewProjectionMatrix() * m_modelMatrix.value();
-
-        // Update the buffer with m_mvpMatrix
         data.resourceUpdateBatch->updateDynamicBuffer(
             m_uniformBuffer,
-            offsetof(UniformData, mvpMatrix),
-            sizeof(UniformData::mvpMatrix),
-            mvp.constData()
+            offsetof(UniformData, modelMatrix),
+            sizeof(UniformData::modelMatrix),
+            m_modelMatrix.value().constData()
             );
 
-        if(m_modelMatrix.isChanged() || m_scaleMatrix.isChanged()) {
-            // Update the buffer with the scale-only matrix for grid shading
-            data.resourceUpdateBatch->updateDynamicBuffer(
-                m_uniformBuffer,
-                offsetof(UniformData, modelMatrix),
-                sizeof(UniformData::modelMatrix),
-                m_scaleMatrix.value().constData()
-                );
-            if (m_modelMatrix.isChanged()) {
-                m_modelMatrix.resetChanged();
-            }
-            if (m_scaleMatrix.isChanged()) {
-                m_scaleMatrix.resetChanged();
-            }
-        }
+        // The scale-only matrix used for contour sampling in the fragment shader.
+        data.resourceUpdateBatch->updateDynamicBuffer(
+            m_uniformBuffer,
+            offsetof(UniformData, scaleMatrix),
+            sizeof(UniformData::scaleMatrix),
+            m_scaleMatrix.value().constData()
+            );
+
+        m_modelMatrix.resetChanged();
+        m_scaleMatrix.resetChanged();
     }
 
     if (m_color.isChanged()) {
@@ -157,7 +147,11 @@ bool cwRHIGridPlane::gather(const GatherContext& context, QVector<PipelineBatch>
         return false;
     }
 
-    if (context.renderPass != RenderPass::Opaque) {
+    // The grid is a semi-transparent reference overlay: it must draw *after* the
+    // point cloud (and the EDL composite), depth-testing against the combined
+    // scene+cloud depth but never writing its own full-plane depth — otherwise
+    // its invisible inter-line areas occlude everything behind them.
+    if (context.renderPass != RenderPass::Transparent) {
         return false;
     }
 
@@ -181,18 +175,10 @@ bool cwRHIGridPlane::gather(const GatherContext& context, QVector<PipelineBatch>
     drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(m_vertexBuffer, 0));
     drawable.vertexCount = 4;
     drawable.bindings = m_srb;
+    drawable.globalCameraBinding = 0; // slot 0 binds the global camera UBO (dynamic offset)
 
     batch.drawables.append(drawable);
     return true;
-}
-
-void cwRHIGridPlane::releasePipeline()
-{
-    if (m_pipelineRecord && m_scene) {
-        m_scene->releasePipeline(m_pipelineRecord);
-    }
-    m_pipelineRecord = nullptr;
-    m_hasPipelineKey = false;
 }
 
 bool cwRHIGridPlane::ensurePipeline(const RenderData& data)
@@ -201,11 +187,11 @@ bool cwRHIGridPlane::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    if (!m_scene && data.renderer) {
-        m_scene = data.renderer->sceneBackend();
+    if (!m_frame && data.renderer) {
+        m_frame = data.renderer->frameRenderer();
     }
 
-    if (!m_scene || !data.renderer) {
+    if (!m_frame || !data.renderer) {
         return false;
     }
 
@@ -215,77 +201,72 @@ bool cwRHIGridPlane::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    const auto key = buildPipelineKey(target, data.renderPassDescriptor);
-    if (!m_hasPipelineKey || !(m_pipelineKey == key)) {
-        releasePipeline();
+    const quint32 globalStride = data.renderer->globalUniformBufferStride();
 
-        auto createFn = [this, key](QRhi* localRhi) -> cwRhiScene::PipelineRecord* {
-            if (!localRhi) {
-                return nullptr;
-            }
+    const auto key = buildPipelineKey(data.renderPassDescriptor, data.sampleCount);
 
-            auto* record = new cwRhiScene::PipelineRecord;
-            record->pipeline = localRhi->newGraphicsPipeline();
-
-            QShader vs = loadShader(":/shaders/grid.vert.qsb");
-            QShader fs = loadShader(":/shaders/grid.frag.qsb");
-
-            record->pipeline->setShaderStages({
-                { QRhiShaderStage::Vertex, vs },
-                { QRhiShaderStage::Fragment, fs }
-            });
-
-            record->pipeline->setDepthTest(true);
-            record->pipeline->setDepthWrite(true);
-            record->pipeline->setSampleCount(key.sampleCount);
-            record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
-            record->pipeline->setVertexInputLayout(m_inputLayout);
-            record->pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
-
-            QRhiGraphicsPipeline::TargetBlend blendState;
-            blendState.enable = true;
-            blendState.srcColor = QRhiGraphicsPipeline::SrcAlpha;
-            blendState.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
-            blendState.srcAlpha = QRhiGraphicsPipeline::One;
-            blendState.dstAlpha = QRhiGraphicsPipeline::OneMinusSrcAlpha;
-            record->pipeline->setTargetBlends({ blendState });
-
-            record->layout = localRhi->newShaderResourceBindings();
-            record->layout->setBindings({
-                QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, nullptr),
-                QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, nullptr)
-            });
-            record->layout->create();
-
-            record->pipeline->setShaderResourceBindings(record->layout);
-            record->pipeline->setRenderPassDescriptor(key.renderPass);
-            record->pipeline->create();
-
-            return record;
-        };
-
-        m_pipelineRecord = m_scene->acquirePipeline(key, rhi, createFn);
-        m_pipelineKey = key;
-        m_hasPipelineKey = (m_pipelineRecord != nullptr);
-
-        if (m_srb) {
-            delete m_srb;
-            m_srb = nullptr;
+    auto createFn = [this, key, globalStride](QRhi* localRhi) -> cwRhiPipelineRecord* {
+        if (!localRhi) {
+            return nullptr;
         }
-    }
+
+        auto* record = new cwRhiPipelineRecord;
+        record->pipeline = localRhi->newGraphicsPipeline();
+
+        QShader vs = loadShader(":/shaders/grid.vert.qsb");
+        QShader fs = loadShader(":/shaders/grid.frag.qsb");
+
+        record->pipeline->setShaderStages({
+            { QRhiShaderStage::Vertex, vs },
+            { QRhiShaderStage::Fragment, fs }
+        });
+
+        record->pipeline->setDepthTest(true);
+        record->pipeline->setDepthWrite(false);
+        record->pipeline->setSampleCount(key.sampleCount);
+        record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
+        record->pipeline->setVertexInputLayout(m_inputLayout);
+        record->pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+
+        QRhiGraphicsPipeline::TargetBlend blendState;
+        blendState.enable = true;
+        blendState.srcColor = QRhiGraphicsPipeline::SrcAlpha;
+        blendState.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
+        blendState.srcAlpha = QRhiGraphicsPipeline::One;
+        blendState.dstAlpha = QRhiGraphicsPipeline::OneMinusSrcAlpha;
+        record->pipeline->setTargetBlends({ blendState });
+
+        record->layout = localRhi->newShaderResourceBindings();
+        record->layout->setBindings({
+            QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, nullptr, globalStride),
+            QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, nullptr),
+            QRhiShaderResourceBinding::uniformBuffer(2, QRhiShaderResourceBinding::FragmentStage, nullptr)
+        });
+        record->layout->create();
+
+        record->pipeline->setShaderResourceBindings(record->layout);
+        record->pipeline->setRenderPassDescriptor(key.renderPass);
+        record->pipeline->create();
+
+        return record;
+    };
+
+    m_pipelineRecord = m_pipelines.acquire(m_frame, key, [&]() {
+        return m_frame->acquirePipeline(key, rhi, createFn);
+    });
 
     if (!m_pipelineRecord) {
         return false;
     }
 
-    if (!ensureShaderResources(rhi)) {
+    if (!ensureShaderResources(rhi, data.renderer)) {
         return false;
     }
 
     return true;
 }
 
-bool cwRHIGridPlane::ensureShaderResources(QRhi* rhi)
+bool cwRHIGridPlane::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer)
 {
     if (m_srb) {
         if (m_pipelineRecord && m_pipelineRecord->layout &&
@@ -297,14 +278,16 @@ bool cwRHIGridPlane::ensureShaderResources(QRhi* rhi)
         }
     }
 
-    if (!rhi || !m_uniformBuffer || !m_fragmentUniformBuffer) {
+    auto* globalUniformBuffer = renderer ? renderer->globalUniformBuffer() : nullptr;
+    if (!rhi || !globalUniformBuffer || !m_uniformBuffer || !m_fragmentUniformBuffer) {
         return false;
     }
 
     m_srb = rhi->newShaderResourceBindings();
     m_srb->setBindings({
-        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, m_uniformBuffer),
-        QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, m_fragmentUniformBuffer)
+        QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, globalUniformBuffer, renderer->globalUniformBufferStride()),
+        QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::VertexStage, m_uniformBuffer),
+        QRhiShaderResourceBinding::uniformBuffer(2, QRhiShaderResourceBinding::FragmentStage, m_fragmentUniformBuffer)
     });
     m_srb->create();
 
@@ -315,19 +298,19 @@ bool cwRHIGridPlane::ensureShaderResources(QRhi* rhi)
     return true;
 }
 
-cwRhiPipelineKey cwRHIGridPlane::buildPipelineKey(QRhiRenderTarget* target,
-                                                  QRhiRenderPassDescriptor* renderPassDescriptor) const
+cwRhiPipelineKey cwRHIGridPlane::buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
+                                                  int sampleCount) const
 {
     cwRhiPipelineKey key;
     key.renderPass = renderPassDescriptor;
-    key.sampleCount = target ? target->sampleCount() : 1;
+    key.sampleCount = sampleCount;
     key.vertexShader = QStringLiteral(":/shaders/grid.vert.qsb");
     key.fragmentShader = QStringLiteral(":/shaders/grid.frag.qsb");
     key.cullMode = static_cast<quint8>(cwRenderMaterialState::CullMode::None);
     key.frontFace = static_cast<quint8>(cwRenderMaterialState::FrontFace::CCW);
     key.blendMode = static_cast<quint8>(cwRenderMaterialState::BlendMode::Alpha);
     key.depthTest = 1;
-    key.depthWrite = 1;
+    key.depthWrite = 0;
     key.globalBinding = 0;
     key.perDrawBinding = 0xFF;
     key.textureBinding = 0xFF;

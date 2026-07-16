@@ -34,6 +34,9 @@
 #include <QQuickWindow>
 #include <QWindow>
 
+//Async includes
+#include <asyncfuture.h>
+
 namespace {
     //Transient parent keeps the dialog above the main window on macOS (issue #481).
     QWindow* mainQuickWindow() {
@@ -62,18 +65,26 @@ namespace {
 cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
     QObject(parent),
     CavingRegion(nullptr),
-    CompassImporter(new cwCompassImporter()),
     MessageListFont(QFontDatabase::systemFont(QFontDatabase::FixedFont))
 {
-    connect(CompassImporter, &cwCompassImporter::finished, this, &cwSurveyImportManager::compassImporterFinished);
-    connect(CompassImporter, &cwCompassImporter::statusMessage, this, &cwSurveyImportManager::compassMessages);
 }
 
 cwSurveyImportManager::~cwSurveyImportManager()
 {
-    CompassImporter->stop();
-    CompassImporter->waitToFinish(cwTask::IgnoreRestart);
-    delete CompassImporter;
+    //Cancel any in-flight imports, then join their worker threads. The
+    //.context(this, ...) continuations are auto-disconnected as this is
+    //destroyed, so they won't run against a dead manager.
+    for(auto& future : m_compassFutures) {
+        future.cancel();
+    }
+    for(auto& future : m_compassFutures) {
+        future.waitForFinished();
+    }
+}
+
+void cwSurveyImportManager::setFutureManagerToken(cwFutureManagerToken token)
+{
+    m_futureManagerToken = token;
 }
 
 void cwSurveyImportManager::setCavingRegion(cwCavingRegion *region)
@@ -204,33 +215,53 @@ void cwSurveyImportManager::importCompassDataFile(QList<QUrl> filenames)
 {
     QStringList dataFiles = urlsToStringList(filenames);
 
-    if(CompassImporter->isReady()) {
-        CompassImporter->setCompassDataFiles(dataFiles + QueuedCompassFile);
-        emit messagesCleared();
-        CompassImporter->start();
-    } else if(CompassImporter->isRunning()) {
-        QueuedCompassFile.append(dataFiles);
+    emit messagesCleared();
+
+    //Each import runs independently so overlapping imports both complete (a
+    //restart-style cancel would drop the caves of the in-flight import).
+    auto future = cwCompassImporter::run(dataFiles);
+    m_compassFutures.append(future);
+
+    if(m_futureManagerToken.isValid()) {
+        m_futureManagerToken.addJob({ QFuture<void>(future), QStringLiteral("Compass import") });
     }
+
+    //.context(this, ...) delivers the result on the main thread and is
+    //auto-disconnected when this manager is destroyed.
+    AsyncFuture::observe(future).context(this, [this, future]() {
+        onCompassFinished(future.result());
+        //QFuture has no operator==, so drop every finished import (this one
+        //included) rather than removing by value.
+        m_compassFutures.removeIf([](const QFuture<cwCompassImporter::Result>& f) {
+            return f.isFinished();
+        });
+    });
 }
 
 void cwSurveyImportManager::waitForCompassToFinish()
 {
-    CompassImporter->waitToFinish();
+    //Test-only: spin the event loop (via AsyncFuture::waitForFinished) so the
+    //queued .context() continuation runs and the caves/messages are delivered
+    //before returning. Iterate a copy because the continuation mutates
+    //m_compassFutures.
+    const auto futures = m_compassFutures;
+    for(const auto& future : futures) {
+        AsyncFuture::waitForFinished(future);
+    }
 }
 
 /**
- * @brief cwSurveyImportManager::compassImporterFinished
+ * @brief cwSurveyImportManager::onCompassFinished
+ * @param result - The caves and parse messages produced by the import
  *
- * Called when the compass importer has finished running
+ * Called on the main thread when a compass import has finished running
  */
-void cwSurveyImportManager::compassImporterFinished()
+void cwSurveyImportManager::onCompassFinished(const cwCompassImporter::Result& result)
 {
-    Q_ASSERT(CompassImporter->isReady());
-
     UndoStack->beginMacro("Compass Import");
 
     //Add new caves
-    foreach(const auto& cave, CompassImporter->caves()) {
+    for(const auto& cave : result.caves) {
         cwCave* newCave = new cwCave();
         newCave->setData(cave);
         CavingRegion->addCave(newCave);
@@ -238,24 +269,14 @@ void cwSurveyImportManager::compassImporterFinished()
 
     UndoStack->endMacro();
 
-    if(!QueuedCompassFile.isEmpty()) {
-        //Rerun the compass data file with the queued compass files
-        CompassImporter->setCompassDataFiles(QueuedCompassFile);
-        CompassImporter->start();
-    }
-}
-
-/**
- * @brief cwSurveyImportManager::compassMessages
- * @param message
- *
- * Reports messages
- * TODO: Make this report to the gui, in a meaning full way
- */
-void cwSurveyImportManager::compassMessages(QString message)
-{
-    if(ErrorModel) {
-        ErrorModel->append(cwError(message, cwError::Warning));
+    //Report any parse warnings as a single batch
+    if(ErrorModel && !result.messages.isEmpty()) {
+        QList<cwError> errors;
+        errors.reserve(result.messages.size());
+        for(const auto& message : result.messages) {
+            errors.append(cwError(message, cwError::Warning));
+        }
+        ErrorModel->append(errors);
     }
 }
 

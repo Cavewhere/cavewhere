@@ -1,4 +1,4 @@
-// CPU-only tests for the render-pass dispatch foundation in cwRhiScene.
+// CPU-only tests for the render-pass dispatch foundation in cwRhiFrameRenderer.
 // None of these tests touch a real QRhi device.
 
 #include <catch2/catch_test_macros.hpp>
@@ -7,7 +7,7 @@
 #include <cstdint>
 
 #include "cwRHIObject.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 #include "cwSceneUpdate.h"
 
 namespace {
@@ -30,11 +30,11 @@ cwRhiPipelineKey makeKey(QRhiRenderPassDescriptor* rpDesc, const QString& vsTag)
     return key;
 }
 
-// PipelineRecord with null pipeline/layout — the eviction's `delete` is then
+// cwRhiPipelineRecord with null pipeline/layout — the eviction's `delete` is then
 // a safe no-op so tests don't have to fabricate real QRhi pipelines.
-cwRhiScene::PipelineRecord* makeStubRecord(QRhi*)
+cwRhiPipelineRecord* makeStubRecord(QRhi*)
 {
-    auto* r = new cwRhiScene::PipelineRecord;
+    auto* r = new cwRhiPipelineRecord;
     r->pipeline = nullptr;
     r->layout = nullptr;
     return r;
@@ -57,18 +57,24 @@ TEST_CASE("RenderPass enum exposes Background and PointCloud in expected order",
     REQUIRE(static_cast<int>(RP::ShadowMap) < static_cast<int>(RP::Count));
 }
 
-TEST_CASE("cwRhiScene defaults to empty PassConfig table (fallthrough to swap-chain)",
+TEST_CASE("cwRhiFrameRenderer defaults to unrouted passes (fallthrough to swap-chain)",
           "[cwRhiSceneDispatch]")
 {
-    cwRhiScene scene;
-    REQUIRE(scene.passConfigs().empty());
-    REQUIRE(scene.pipelineCache().isEmpty());
+    cwRhiFrameRenderer frame;
+    // Before the first render() the per-pass routing is unset, so objects fall
+    // back to the swap-chain target and nothing is allocated yet.
+    using RP = cwRHIObject::RenderPass;
+    REQUIRE(frame.passRenderPassDescriptor(RP::Background) == nullptr);
+    REQUIRE(frame.passRenderPassDescriptor(RP::Opaque) == nullptr);
+    REQUIRE(frame.passRenderPassDescriptor(RP::PointCloud) == nullptr);
+    REQUIRE(frame.passSampleCount(RP::Opaque) == 0);
+    REQUIRE(frame.pipelineCache().isEmpty());
 }
 
 TEST_CASE("evictPipelinesFor removes cache entries keyed on the freed descriptor",
           "[cwRhiSceneDispatch]")
 {
-    cwRhiScene scene;
+    cwRhiFrameRenderer frame;
 
     auto* keptDesc = sentinelDescriptor(0xCA5E1001);
     auto* doomedDesc = sentinelDescriptor(0xCA5E2002);
@@ -77,31 +83,31 @@ TEST_CASE("evictPipelinesFor removes cache entries keyed on the freed descriptor
     const cwRhiPipelineKey doomedKeyA = makeKey(doomedDesc, QStringLiteral("doomedA.vert"));
     const cwRhiPipelineKey doomedKeyB = makeKey(doomedDesc, QStringLiteral("doomedB.vert"));
 
-    REQUIRE(scene.acquirePipeline(keptKey, nullptr, makeStubRecord) != nullptr);
-    REQUIRE(scene.acquirePipeline(doomedKeyA, nullptr, makeStubRecord) != nullptr);
-    REQUIRE(scene.acquirePipeline(doomedKeyB, nullptr, makeStubRecord) != nullptr);
-    REQUIRE(scene.pipelineCache().size() == 3);
+    REQUIRE(frame.acquirePipeline(keptKey, nullptr, makeStubRecord) != nullptr);
+    REQUIRE(frame.acquirePipeline(doomedKeyA, nullptr, makeStubRecord) != nullptr);
+    REQUIRE(frame.acquirePipeline(doomedKeyB, nullptr, makeStubRecord) != nullptr);
+    REQUIRE(frame.pipelineCache().size() == 3);
 
-    scene.evictPipelinesFor(doomedDesc);
+    frame.evictPipelinesFor(doomedDesc);
 
-    REQUIRE(scene.pipelineCache().size() == 1);
-    REQUIRE(scene.pipelineCache().contains(keptKey));
-    REQUIRE_FALSE(scene.pipelineCache().contains(doomedKeyA));
-    REQUIRE_FALSE(scene.pipelineCache().contains(doomedKeyB));
+    REQUIRE(frame.pipelineCache().size() == 1);
+    REQUIRE(frame.pipelineCache().contains(keptKey));
+    REQUIRE_FALSE(frame.pipelineCache().contains(doomedKeyA));
+    REQUIRE_FALSE(frame.pipelineCache().contains(doomedKeyB));
 }
 
 TEST_CASE("evictPipelinesFor with null descriptor is a no-op",
           "[cwRhiSceneDispatch]")
 {
-    cwRhiScene scene;
+    cwRhiFrameRenderer frame;
 
     auto* keepDesc = sentinelDescriptor(0xCA5E3003);
     const cwRhiPipelineKey key = makeKey(keepDesc, QStringLiteral("safe.vert"));
-    REQUIRE(scene.acquirePipeline(key, nullptr, makeStubRecord) != nullptr);
+    REQUIRE(frame.acquirePipeline(key, nullptr, makeStubRecord) != nullptr);
 
-    scene.evictPipelinesFor(nullptr);
+    frame.evictPipelinesFor(nullptr);
 
-    REQUIRE(scene.pipelineCache().contains(key));
+    REQUIRE(frame.pipelineCache().contains(key));
 }
 
 TEST_CASE("cwSceneUpdate::Flag::ViewportSize is a distinct bit",

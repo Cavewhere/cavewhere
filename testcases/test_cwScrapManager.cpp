@@ -32,6 +32,8 @@
 #include <QImageReader>
 #include <QElapsedTimer>
 #include <QThread>
+#include <QCoreApplication>
+#include <QEvent>
 #include <QThreadPool>
 #include "cwSignalSpy.h"
 
@@ -342,6 +344,61 @@ TEST_CASE("cwScrapManager scrap render items should remain visible after loading
     // Sanity-check: the dataset has scraps, so we must have found at least one
     // visibility item.
     CHECK(visibilityItemCount > 0);
+}
+
+TEST_CASE("Scrap keyword items are cleaned up across a project reload", "[cwScrapManager][regression]") {
+    // cwRootData's filenameChanged handler deliberately does NOT clear the
+    // keyword item model on reload, relying on scrap keyword items being torn
+    // down when their scraps are destroyed.  This guards that contract: reloading
+    // a project into the same cwRootData must not accumulate stale scrap keyword
+    // items (each reload destroys the previous region's scraps).
+    requireAutomaticUpdatesEnabled();
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    auto* keywordModel = rootData->keywordItemModel();
+    REQUIRE(keywordModel != nullptr);
+
+    const QString dataset =
+        testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw");
+
+    auto scrapVisibilityCount = [&]() {
+        int count = 0;
+        for (int i = 0; i < keywordModel->rowCount(); ++i) {
+            auto* kwItem = keywordModel->item(i);
+            REQUIRE(kwItem != nullptr);
+            if (qobject_cast<cwRenderTexturedItemVisibility*>(kwItem->object())) {
+                ++count;
+            }
+        }
+        return count;
+    };
+
+    auto loadAndSettle = [&]() {
+        fileToProject(project, dataset);
+        rootData->futureManagerModel()->waitForFinished();
+        rootData->scrapManager()->waitForFinish();
+        // Drain deferred deletions so removed keyword items leave the model.
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCoreApplication::processEvents();
+    };
+
+    loadAndSettle();
+    const int afterFirstLoad = scrapVisibilityCount();
+    const int rowsAfterFirstLoad = keywordModel->rowCount();
+    REQUIRE(afterFirstLoad > 0);
+
+    // Each reload must return the keyword item model to its baseline, never
+    // accumulating leftovers from the previous region. scrapVisibilityCount()
+    // guards the scrap items specifically; rowCount() guards every per-entity
+    // registry (scrap, line plot, ...) against a reload leak.
+    for (int reload = 0; reload < 3; ++reload) {
+        loadAndSettle();
+        INFO("reload iteration " << reload);
+        CHECK(scrapVisibilityCount() == afterFirstLoad);
+        CHECK(keywordModel->rowCount() == rowsAfterFirstLoad);
+    }
 }
 
 // Helper: load a v6 .cw file and return the first note

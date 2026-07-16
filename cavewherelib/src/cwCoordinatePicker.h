@@ -9,12 +9,10 @@
 #define CWCOORDINATEPICKER_H
 
 //Our includes
-#include "cwInteraction.h"
+#include "cwScenePicker.h"
 #include "cwGeoPoint.h"
-class cwCamera;
-class cwScene;
-class cwCavingRegion;
 class cwCoordinateTransform;
+class cwGeoReference;
 
 //Qt includes
 #include <QPointer>
@@ -34,14 +32,12 @@ class cwCoordinateTransform;
  * activate()/deactivate(); the manager's signal wiring restores the
  * default (turn-table) interaction when deactivated.
  */
-class cwCoordinatePicker : public cwInteraction
+class cwCoordinatePicker : public cwScenePicker
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(CoordinatePicker)
 
-    Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
-    Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
-    Q_PROPERTY(cwCavingRegion* region READ region WRITE setRegion NOTIFY regionChanged)
+    Q_PROPERTY(cwGeoReference* geoReference READ geoReference WRITE setGeoReference NOTIFY geoReferenceChanged)
 
     Q_PROPERTY(bool hasPick READ hasPick NOTIFY pickChanged)
     Q_PROPERTY(QPointF pickScreenPoint READ pickScreenPoint NOTIFY pickChanged)
@@ -52,21 +48,16 @@ class cwCoordinatePicker : public cwInteraction
     Q_PROPERTY(double wgs84Latitude  READ wgs84Latitude  NOTIFY pickChanged)
     Q_PROPERTY(double wgs84Longitude READ wgs84Longitude NOTIFY pickChanged)
     Q_PROPERTY(double elevation READ elevation NOTIFY pickChanged)
-    Q_PROPERTY(QString globalCoordinateSystem READ globalCoordinateSystem NOTIFY pickChanged)
+    Q_PROPERTY(QString globalCoordinateSystem READ globalCoordinateSystem NOTIFY coordinateSystemChanged)
+    Q_PROPERTY(bool hasCoordinateSystem READ hasCoordinateSystem NOTIFY coordinateSystemChanged)
     Q_PROPERTY(bool hasWgs84 READ hasWgs84 NOTIFY pickChanged)
 
 public:
     explicit cwCoordinatePicker(QQuickItem* parent = nullptr);
     ~cwCoordinatePicker() override;
 
-    cwCamera* camera() const { return m_camera; }
-    void setCamera(cwCamera* camera);
-
-    cwScene* scene() const { return m_scene; }
-    void setScene(cwScene* scene);
-
-    cwCavingRegion* region() const { return m_region; }
-    void setRegion(cwCavingRegion* region);
+    cwGeoReference* geoReference() const;
+    void setGeoReference(cwGeoReference* geoReference);
 
     bool hasPick() const { return m_hasPick; }
     QPointF pickScreenPoint() const { return m_pickScreenPoint; }
@@ -78,24 +69,27 @@ public:
     double wgs84Longitude() const { return m_wgs84Lon; }
     double elevation() const { return m_globalPoint.z; }
     QString globalCoordinateSystem() const { return m_globalCoordinateSystemCached; }
+
+    //! Whether the pick can be placed in a real-world CRS. Delegates to the
+    //! geo-reference's single definition (cwGeoReference::hasCoordinateSystem)
+    //! so consumers don't re-derive the empty-CS rule.
+    bool hasCoordinateSystem() const;
+
     bool hasWgs84() const { return m_hasWgs84; }
 
     Q_INVOKABLE void pick(QPointF screenPoint);
     Q_INVOKABLE void clearPick();
 
 signals:
-    void cameraChanged();
-    void sceneChanged();
-    void regionChanged();
+    void geoReferenceChanged();
     void pickChanged();
+    void coordinateSystemChanged();
 
 private slots:
     void rebuildWgs84Transform();
 
 private:
-    QPointer<cwCamera> m_camera;
-    QPointer<cwScene> m_scene;
-    QPointer<cwCavingRegion> m_region;
+    QPointer<cwGeoReference> m_geoReference;
 
     bool m_hasPick = false;
     bool m_hasWgs84 = false;
@@ -107,7 +101,7 @@ private:
     QString m_globalCoordinateSystemCached;
 
     // PROJ setup (proj_create_crs_to_crs + normalize) is non-trivial. Cache the
-    // transform and rebuild only when the region's globalCoordinateSystem changes.
+    // transform and rebuild only when the geo-reference's CS changes.
     std::unique_ptr<cwCoordinateTransform> m_wgs84Transform;
 };
 

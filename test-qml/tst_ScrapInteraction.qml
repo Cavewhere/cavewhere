@@ -37,15 +37,15 @@ MainWindowTest {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_ScrapInteraction/projectedProfile.cw"));
 
             //Zoom into the data, in the 3d view
-            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer");
-            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
+            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
+            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.05;
 
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select carpet
-            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(_obj1);
 
             // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
@@ -125,7 +125,7 @@ MainWindowTest {
             mouseClick(viewButton)
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });
-            // let renderingView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer")
+            // let renderingView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer")
             // let renderingViewCenterX = renderingView.width / 2.0;
             // let renderingViewCenterY = renderingView.height / 2.0;
 
@@ -280,54 +280,68 @@ MainWindowTest {
             //Switch to rendering view
             zoomIntoRenderingView();
 
-            let render = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer")
+            let render = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer")
 
-            let leadPoint = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0")
+            let leadPoint = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0")
             verify(leadPoint.x >= 0);
             verify(leadPoint.y >= 0);
             verify(leadPoint.x <= render.width)
             verify(leadPoint.y <= render.height)
 
-            // lead is not in the center. Initially the projection places the
-            // lead at exact viewport center; a secondary cwTransformUpdater
-            // tick ~100ms later shifts it off-center. Bumped to 10s from the
+            // cwLeadView projects each lead's world position to screen; the lead
+            // is not parked at the exact viewport center. Bumped to 10s from the
             // default 5s since the nightly has flaked at the 5s budget.
             tryVerify(() => { return leadPoint.x !== render.width * 0.5; }, 10000,
-                      "lead point should move off horizontal center")
+                      "lead point should be off horizontal center")
             tryVerify(() => { return leadPoint.y !== render.height * 0.5; }, 10000,
-                      "lead point should move off vertical center")
+                      "lead point should be off vertical center")
+
+            // A lead click is gated by cwLeadView::isOccluded (clicks must not
+            // pass through walls). The gate now tests the tapped marker pixel
+            // against the billboard's own depth, so a lead resting on its scrap
+            // is clickable from the default framing — confirm the gate agrees,
+            // then click it for real.
+            let leadView = leadPoint.leadView
+            verify(leadView !== null, "leadView should be injected into LeadPoint")
+
+            let leadPos = leadPoint.position3D
+            let tap = leadPoint.mapToItem(leadView, 0, 0)
+            verify(!leadView.isOccluded(leadPos, tap), "a lead resting on its scrap should not be occluded")
 
             mouseClick(leadPoint)
 
             verify(leadPoint.selected === true)
 
-            //Make sure the popup box is showing the write data
-            let leadPointSizeWidth = null
-            let leadPointSizeHeight = null
+            //Make sure the popup box is showing the right data. In view mode the
+            //size renders as a single read-only label ("5 × 4 m").
+            let leadSize = null
             tryVerify(() => {
-                          leadPointSizeWidth = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->widthText")
-                          leadPointSizeHeight = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->heightText")
-                          return leadPointSizeWidth !== null && leadPointSizeHeight !== null
+                          leadSize = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0->leadQuoteBox->sizeText")
+                          return leadSize !== null
                       })
 
-            verify(leadPointSizeWidth.text === "5")
-            verify(leadPointSizeHeight.text === "4")
+            verify(leadSize.text.indexOf("5 ×") >= 0,
+                   "size label should show width 5, got: " + leadSize.text)
+            verify(leadSize.text.indexOf("× 4") >= 0,
+                   "size label should show height 4, got: " + leadSize.text)
 
-            let description2 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->description")
+            let description2 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0->leadQuoteBox->description")
             verify(description2.text === "Sauce")
 
             //Use the goto notes button to go to the notes
-            let notesButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->leadPoint2_0->leadQuoteBox->gotoNotes")
+            let notesButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_0->leadQuoteBox->gotoNotes")
             mouseClick(notesButton)
 
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "notePage" });
 
-            // Navigate back to the trip page to continue lead interactions
-            RootData.pageSelectionModel.back()
+            // Navigate to the trip page to continue lead interactions. back() is
+            // history-based and returns to the rendering view (where gotoNotes was
+            // clicked), so address the trip page directly like addScrapOutline does.
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select the carpet button
-            let carpet = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let carpet = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpet);
 
             //Select the select button
@@ -359,15 +373,15 @@ MainWindowTest {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_ScrapInteraction/projectedProfile.cw"));
 
             //Zoom into the data, in the 3d view
-            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer");
-            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
+            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
+            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.05;
 
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select carpet
-            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(_obj1);
 
             // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
@@ -406,7 +420,7 @@ MainWindowTest {
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Re-enter the carpet tool — page navigation exits it (#342)
-            let carpet_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let carpet_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpet_obj1)
             wait(500)
 

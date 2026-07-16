@@ -112,6 +112,7 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager = new cwLinePlotManager(Project);
     LinePlotManager->setRegion(Region);
     LinePlotManager->setFutureManagerToken(FutureManagerModel->token());
+    LinePlotManager->setKeywordItemModel(m_keywordItemModel);
 
     //Setup the scrap manager
     ScrapManager = new cwScrapManager(Project);
@@ -158,6 +159,7 @@ cwRootData::cwRootData(QObject *parent) :
     SurveyImportManager->setCavingRegion(Region);
     SurveyImportManager->setUndoStack(undoStack());
     SurveyImportManager->setErrorModel(Project->errorModel());
+    SurveyImportManager->setFutureManagerToken(FutureManagerModel->token());
 
     //Save account settings to QSetting
     m_accountWatcher->setPerson(m_account);
@@ -208,12 +210,14 @@ cwRootData::cwRootData(QObject *parent) :
 
     connect(Project, &cwProject::filenameChanged, this, [this]() {
         // Reset the filter pipeline UI state when the project file changes.
-        // Do NOT clear m_keywordItemModel here — scrap keyword items self-destruct
-        // via cwKeywordItem::setObject()'s destroyed-signal connection when their
-        // associated cwScrap objects are deleted on project unload.  Clearing the
-        // item model while new scraps are already registered (bundle load completes
-        // after scraps are inserted) permanently hides their carpeting because the
-        // guard in addKeywordItemForScrap() prevents re-registration.
+        // Do NOT clear m_keywordItemModel here — scrap keyword items are released
+        // as their scraps are detached when the previous region is cleared
+        // (cwScrapManager drops each item through cwKeywordItemRegistry on scrap
+        // teardown; verified by test_cwScrapManager's reload regression).  Clearing
+        // the item model while scraps are still registered orphans their keyword
+        // items: the registry still references them, so ensure() treats them as
+        // present and never re-adds them to the cleared model, permanently hiding
+        // their carpeting (bug #329).
         m_keywordFilterPipelineModel->clear();
     });
 }

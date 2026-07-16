@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Measurement Tool — Implementation Plan (#487)</title>
+<style>
+  :root {
+    --bg: #1a1d21; --panel: #23272e; --panel2: #2b3038; --ink: #e6e9ee;
+    --muted: #9aa4b2; --accent: #5aa9e6; --accent2: #7ddc8f; --warn: #e6b35a;
+    --bad: #e66a6a; --line: #3a414b; --code-bg: #15181c;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 120px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 { font-size: 22px; margin: 52px 0 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); letter-spacing: -0.2px; }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  p { margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 13.5px; background: var(--code-bg);
+    padding: 1.5px 6px; border-radius: 4px; color: #d8e0ea; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 18px 0; }
+  .fig { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin: 22px 0; text-align: center; }
+  .fig svg { max-width: 100%; height: auto; }
+  .figcap { color: var(--muted); font-size: 13.5px; margin-top: 12px; text-align: center; }
+  .figcap b { color: var(--ink); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px;
+    border-radius: 999px; vertical-align: middle; }
+  .pill.ok { background: rgba(125,220,143,.16); color: var(--accent2); }
+  .pill.new { background: rgba(90,169,230,.16); color: var(--accent); }
+  .pill.edit { background: rgba(230,179,90,.16); color: var(--warn); }
+  .pill.del { background: rgba(230,106,106,.16); color: var(--bad); }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); font-weight: 600; }
+  td code { font-size: 12.5px; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel2);
+    padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+  .callout.warn { border-color: var(--warn); }
+  .callout.bad { border-color: var(--bad); }
+  .callout.ok { border-color: var(--accent2); }
+  .toc { columns: 2; column-gap: 32px; font-size: 14px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .commit { display:inline-block; font-family:var(--mono); font-size:12px; font-weight:700;
+    padding:3px 10px; border-radius:6px; background:rgba(90,169,230,.16); color:var(--accent);
+    border:1px solid rgba(90,169,230,.35); white-space:nowrap; }
+  .commit.two   { background:rgba(125,220,143,.16); color:var(--accent2); border-color:rgba(125,220,143,.35); }
+  .commit.three { background:rgba(230,179,90,.16);  color:var(--warn);    border-color:rgba(230,179,90,.35); }
+  .commit.four  { background:rgba(198,150,236,.16); color:#c696ec;        border-color:rgba(198,150,236,.35); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+  .mono-note { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>3D Measurement Tool</h1>
+<p class="sub">A two-point measuring interaction in the 3D view: hover to highlight the station under the
+cursor, click two points (snapping to survey stations), and read back distance / azimuth / inclination
+/ horizontal / vertical / deltas — with a copy-to-clipboard. Built on the pickable centerline and
+clamp-to-station seams delivered by
+<a href="https://github.com/Cavewhere/cavewhere/issues/530" style="color:var(--accent)">#530</a>.</p>
+
+<div class="callout">
+  <b>Scope.</b> GitHub
+  <a href="https://github.com/Cavewhere/cavewhere/issues/487" style="color:var(--accent)">#487</a>,
+  delivered as <b>four commits</b>:
+  <span class="commit">C1 — shared snap-pick core</span>
+  <span class="commit two">C2 — measurement math</span>
+  <span class="commit three">C3 — interaction</span>
+  <span class="commit four">C4 — QML view &amp; UI</span>.
+  C1 is a behaviour-preserving refactor of <code>cwCoordinatePicker</code> that is worthwhile on its own
+  (it also closes a #530 §11 follow-up); C2–C4 build the feature on top.
+</div>
+
+<h2>1. Contents</h2>
+<div class="toc">
+  <a href="#scope">2. Commit breakdown &amp; why multi-commit</a><br>
+  <a href="#reuse">3. What already exists (reuse map)</a><br>
+  <a href="#core">4. C1 — shared snap-pick core</a><br>
+  <a href="#math">5. C2 — measurement math</a><br>
+  <a href="#interaction">6. C3 — the interaction state machine</a><br>
+  <a href="#qml">7. C4 — QML view, overlay, readout, copy</a><br>
+  <a href="#grid">8. The grid-azimuth caveat</a><br>
+  <a href="#tests">9. Tests</a><br>
+  <a href="#out">10. Out of scope / follow-ups</a><br>
+  <a href="#decisions">11. Decisions locked in</a><br>
+  <a href="#northref">12. Azimuth north reference (Grid / True / Magnetic)</a>
+</div>
+
+<h2 id="scope">2. Commit breakdown &amp; why multi-commit</h2>
+<p>One commit would braid a refactor of existing picker code together with a large new feature spanning
+C++ logic, pure math, a QML view and clipboard glue — hard to review, hard to bisect. The seams give four
+commits that each build and test on their own:</p>
+<table>
+  <tr><th>#</th><th>Commit</th><th>Touches</th><th>Guarded by</th></tr>
+  <tr>
+    <td><span class="commit">C1</span></td>
+    <td>Extract the snap-pick core; refactor <code>cwCoordinatePicker</code> onto it</td>
+    <td><span class="pill new">new</span> <code>cwScenePick.{h,cpp}</code>,
+        <span class="pill edit">edit</span> <code>cwCamera</code>, <code>cwCoordinatePicker.cpp</code></td>
+    <td>existing <code>[cwCoordinatePicker]</code> / <code>[linePick]</code> tests (no behaviour change)</td>
+  </tr>
+  <tr>
+    <td><span class="commit two">C2</span></td>
+    <td>Pure positions&rarr;measurement helper</td>
+    <td><span class="pill new">new</span> <code>cwMeasurementMath.{h,cpp}</code></td>
+    <td><span class="pill new">new</span> <code>[cwMeasurementMath]</code> unit tests</td>
+  </tr>
+  <tr>
+    <td><span class="commit three">C3</span></td>
+    <td>The interaction: state machine, hover/place, readout properties, copy</td>
+    <td><span class="pill new">new</span> <code>cwMeasurementInteraction.{h,cpp}</code></td>
+    <td><span class="pill new">new</span> <code>[cwMeasurementInteraction]</code> e2e tests</td>
+  </tr>
+  <tr>
+    <td><span class="commit four">C4</span></td>
+    <td>QML view, overlay markers, connecting line, readout panel, toolbar button</td>
+    <td><span class="pill new">new</span> <code>MeasurementInteractionView.qml</code> + panel,
+        <span class="pill edit">edit</span> <code>GLTerrainRenderer.qml</code></td>
+    <td><span class="pill new">new</span> <code>tst_MeasurementInteractionView.qml</code></td>
+  </tr>
+</table>
+<p>C1 is a strict prerequisite (C3 calls the extracted core). C2 is independent and can land in any order
+after — but the table order keeps the dependency chain linear. C3 and C4 could be folded into one if you
+prefer three commits; the plan keeps them split.</p>
+
+<h2 id="reuse">3. What already exists (reuse map)</h2>
+<p>The tool is mostly assembly of seams already in the tree — very little is genuinely new infrastructure.</p>
+<table>
+  <tr><th>Seam</th><th>Where</th><th>Used for</th></tr>
+  <tr><td>Depth-ordered pick (occlusion)</td><td><code>cwGeometryItersecter::intersectsDetailed(ray, cwPickQuery{kinds=All})</code></td><td>nearest-by-depth hit; an occluded station's line loses to the wall triangle &rarr; never snaps</td></tr>
+  <tr><td>Clamp-to-station snap</td><td><code>cwLinePlotStationSnap::snapToStation(...)</code> + <code>cwRenderLinePlot::segmentEndpoints()</code></td><td>turn a centerline hit into a station hit (#530 C2)</td></tr>
+  <tr><td>Camera&rarr;tolerance derivation</td><td>inline in <code>cwCoordinatePicker.cpp:113–128</code></td><td>lifted to <code>cwCamera::pickQuery()</code> in C1</td></tr>
+  <tr><td>Physical pick radius (mm&rarr;px)</td><td><code>cwInteraction::pixelsForMillimeters()</code> (C1)</td><td>turn a mm tolerance into logical px so the grab feels the same size on every display; hover passes <code>pixelsForMillimeters(kRadiusMm)</code> into <code>pickQuery()</code></td></tr>
+  <tr><td>Interaction activation</td><td><code>cwInteraction</code> + <code>InteractionManager.qml</code> (<code>activate()</code>/<code>deactivate()</code>, hides inactive)</td><td>"hover only when tool enabled" falls out for free</td></tr>
+  <tr><td>World&rarr;viewport overlay marker</td><td><code>TransformUpdater</code> in <code>CoordinatePickerInteraction.qml:49</code> (crosshair re-projected on camera change)</td><td>hover indicator + A/B markers + line, all 2D overlays</td></tr>
+  <tr><td>Toolbar toggle button</td><td><code>IconButton</code> at <code>GLTerrainRenderer.qml:199</code> (picker), <code>InteractionManager</code> list at <code>:117</code></td><td>copy the pattern for the measure button</td></tr>
+  <tr><td>Floating readout panel</td><td><code>CoordinatePickerPopup.qml</code></td><td>template for the measurement readout</td></tr>
+  <tr><td>Custom 2D painting</td><td><code>QCanvasPainterItem</code> (CLAUDE.md: no QML <code>Shapes</code>/<code>Canvas</code>)</td><td>the A&harr;B connecting line / rubber-band</td></tr>
+</table>
+
+<div class="callout ok">
+  <b>Why occlusion is free.</b> The pick uses <code>kinds=All</code> and the BVH returns the nearest hit by
+  depth. A station behind geometry yields a triangle hit, not a line hit, so
+  <code>qobject_cast&lt;cwRenderLinePlot*&gt;(hit.object())</code> is <code>nullptr</code>, the snap is
+  refused, and <code>hoverSnapped</code> is false. <b>An occluded station never highlights.</b> Consequence:
+  the indicator itself is a plain always-on-top 2D overlay — no depth-occluded billboards needed.
+</div>
+
+<h2 id="core">4. <span class="commit">C1</span> — shared snap-pick core</h2>
+<p>Both the coordinate picker and the measuring tool need the same primitive: <i>"the snapped world point
+under this screen position."</i> Today that logic is inline in <code>cwCoordinatePicker::pick()</code>. Lift it
+into a reusable, header-only-friendly seam so neither tool duplicates query-building or the snap.</p>
+
+<h3>4.1 <code>cwCamera::pickQuery(double pixelRadius) const</code> <span class="pill new">new</span></h3>
+<p>Move the tolerance derivation from <code>cwCoordinatePicker.cpp:113–128</code> verbatim onto the camera —
+it is pure camera math (ortho uses <code>pixelsPerMeter()</code>; perspective uses
+<code>projectionMatrix()(1,1)</code> and viewport height). Returns a <code>cwPickQuery</code> with
+<code>kinds = All</code>. This is the #530 §11 "consolidate into a <code>cwCamera::pickTolerance()</code>
+helper" follow-up, now paid for.</p>
+
+<h3>4.2 <code>cwScenePick</code> free function <span class="pill new">new</span></h3>
+<pre><code>namespace cwScenePick {
+    struct Result {
+        QVector3D world;                 // hit point, or station position if snapped
+        bool hit = false;
+        bool snappedToStation = false;
+        int  stationVertexIndex = -1;    // from-vertex index when snapped, else -1
+    };
+
+    // Ray-cast screenPoint against the scene's BVH (nearest by depth), then clamp
+    // a centerline hit to the nearest survey station within pixelRadius. Pure w.r.t.
+    // scene state: reads, never mutates.
+    Result snappedPoint(QPointF screenPoint,
+                        const cwCamera& camera,
+                        cwGeometryItersecter& intersecter,
+                        double pixelRadius);
+}</code></pre>
+<p>Body = exactly what <code>cwCoordinatePicker::pick()</code> does between building the ray and setting
+<code>m_scenePoint</code>: <code>rayFromQtViewport</code> &rarr; <code>camera.pickQuery(pixelRadius)</code>
+&rarr; <code>intersectsDetailed</code> &rarr; <code>qobject_cast&lt;cwRenderLinePlot*&gt;</code> +
+<code>segmentEndpoints</code> + <code>snapToStation</code>. <code>cwCoordinatePicker::pick()</code> shrinks to a
+caller that maps the <code>Result</code> into its CRS/WGS84 outputs. <b>No behaviour change</b> — the existing
+picker and linePick tests are the guard.</p>
+
+<h3>4.3 <code>cwInteraction::pixelsForMillimeters(double mm)</code> <span class="pill new">new</span></h3>
+<p>The <code>pixelRadius</code> that <code>snappedPoint</code>/<code>pickQuery</code> consume must be a
+<i>physical</i> size, not a fixed pixel count: a logical pixel is not a constant physical size across macOS
+"scaled resolution" modes, so a hard-coded px radius drifts physically as the user changes display scaling
+(the DPR bug found in testing). The radius is therefore specified in millimeters and converted per-call:</p>
+<pre><code>// on cwInteraction (the QQuickItem base all pickers inherit)
+double pixelsForMillimeters(double mm) const;                       // instance: reads window()-&gt;screen()
+static double pixelsPerMillimeter(double geometryWidthPx,           // pure, unit-tested without QGuiApplication
+                                  double physicalWidthMm);</code></pre>
+<p><code>pixelsForMillimeters</code> derives logical-px/mm from <code>screen()-&gt;geometry().width() /
+physicalSize().width()</code> (width only — pick tolerance only needs to be isotropic), falling back to
+<b>96 DPI</b> when off-screen / headless / no EDID physical size. Both <code>cwCoordinatePicker</code>
+(<code>kPickRadiusMillimeters = 1.5</code>) and <code>cwBaseTurnTableInteraction</code>
+(<code>kPivotPickRadiusMillimeters = 4.0</code>) feed it into <code>camera.pickQuery()</code>; the measurement
+tool's hover (C3) <b>must do the same</b> so its snap radius is DPI-correct for free. The pure
+<code>pixelsPerMillimeter</code> seam is what the <code>[cwInteraction]</code> unit test covers.</p>
+
+<h2 id="math">5. <span class="commit two">C2</span> — measurement math</h2>
+<p>A pure function of two scene points, unit-tested exactly like <code>snapToStation</code>. Scene axes are
+<b>+X East, +Y North, +Z up</b> (the local frame is the region's projected CRS translated to the origin).</p>
+<pre><code>namespace cwMeasurementMath {
+    struct Measurement {
+        double distance;      // |b - a|, 3D
+        double horizontal;    // hypot(dx, dy)
+        double vertical;      // dz  (signed, + up)
+        double azimuth;       // atan2(dx, dy) normalized to [0,360)  — GRID north (see §8)
+        double inclination;   // atan2(dz, horizontal), [-90,90], + up
+        double deltaEast;     // dx
+        double deltaNorth;    // dy
+        double deltaUp;       // dz
+    };
+    Measurement between(QVector3D a, QVector3D b);
+}</code></pre>
+<div class="callout warn">
+  <b>Degenerate cases to name in code.</b> Coincident points (<code>distance == 0</code>): azimuth and
+  inclination are undefined — return <code>0</code> for both and let the readout show <code>—</code>.
+  Purely vertical shot (<code>horizontal == 0</code>, <code>dz != 0</code>): azimuth undefined &rarr;
+  <code>0</code>; inclination is <code>±90</code>. Use <code>std::atan2</code> (handles the zero-args branch
+  without a divide).
+</div>
+<p>Angles are computed in radians and converted to degrees with a <code>k</code>-prefixed constant. Display
+formatting (metres/feet, degrees/grads, precision) is the QML layer's job via CaveWhere's existing unit
+settings — the helper returns canonical SI + degrees only.</p>
+
+<h2 id="interaction">6. <span class="commit three">C3</span> — the interaction state machine</h2>
+<p><code>cwMeasurementInteraction : cwInteraction</code>, shaped like <code>cwCoordinatePicker</code>. It holds the
+two points and the current mode, drives hover, and exposes the readout as properties.</p>
+
+<div class="fig">
+<svg viewBox="0 0 760 230" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace, Menlo, monospace" font-size="13">
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#5aa9e6"/>
+    </marker>
+  </defs>
+  <!-- states -->
+  <rect x="20"  y="90" width="150" height="48" rx="9" fill="#23272e" stroke="#7ddc8f"/>
+  <text x="95"  y="112" fill="#e6e9ee" text-anchor="middle">Idle</text>
+  <text x="95"  y="128" fill="#9aa4b2" text-anchor="middle" font-size="11">hover only</text>
+
+  <rect x="300" y="90" width="170" height="48" rx="9" fill="#23272e" stroke="#e6b35a"/>
+  <text x="385" y="112" fill="#e6e9ee" text-anchor="middle">AwaitingSecond</text>
+  <text x="385" y="128" fill="#9aa4b2" text-anchor="middle" font-size="11">A placed · live preview</text>
+
+  <rect x="600" y="90" width="140" height="48" rx="9" fill="#23272e" stroke="#c696ec"/>
+  <text x="670" y="112" fill="#e6e9ee" text-anchor="middle">Complete</text>
+  <text x="670" y="128" fill="#9aa4b2" text-anchor="middle" font-size="11">readout shown</text>
+
+  <!-- transitions -->
+  <line x1="170" y1="108" x2="296" y2="108" stroke="#5aa9e6" marker-end="url(#ah)"/>
+  <text x="233" y="100" fill="#9aa4b2" text-anchor="middle" font-size="11">place A</text>
+
+  <line x1="470" y1="108" x2="596" y2="108" stroke="#5aa9e6" marker-end="url(#ah)"/>
+  <text x="533" y="100" fill="#9aa4b2" text-anchor="middle" font-size="11">place B</text>
+
+  <!-- restart: Complete -> AwaitingSecond via place -->
+  <path d="M600,128 C520,185 470,185 400,142" fill="none" stroke="#5aa9e6" marker-end="url(#ah)"/>
+  <text x="500" y="185" fill="#9aa4b2" text-anchor="middle" font-size="11">click → reset, place new A</text>
+
+  <!-- Esc exits tool -->
+  <path d="M385,90 C385,40 95,40 95,86" fill="none" stroke="#e66a6a" marker-end="url(#ah)"/>
+  <text x="240" y="34" fill="#e66a6a" text-anchor="middle" font-size="11">Esc → deactivate() (exit tool)</text>
+</svg>
+<div class="figcap"><b>State machine.</b> A click in <b>Complete</b> resets and starts a new measurement.
+<b>Esc</b> exits the tool entirely (back to turn-table), per the locked decision.</div>
+</div>
+
+<h3>6.1 Surface</h3>
+<pre><code>class cwMeasurementInteraction : public cwInteraction {
+    enum class Mode { Free, StationOnly };   // Q_ENUM
+    // properties (Q_PROPERTY ... NOTIFY, plain members + setters — no bindable):
+    //   cwCamera* camera; cwScene* scene;
+    //   Mode mode;                      // Free | StationOnly
+    //   QVector3D hoverPoint; bool hoverSnapped; bool hoverValid;
+    //   QVector3D firstPoint, secondPoint; bool hasFirst, hasMeasurement;
+    //   double distance, azimuth, inclination, horizontal, vertical;
+    //   double deltaEast, deltaNorth, deltaUp;
+
+    Q_INVOKABLE void hover(QPointF screenPoint);   // every mouse-move while active
+    Q_INVOKABLE void place(QPointF screenPoint);   // a click
+    Q_INVOKABLE void reset();                      // back to Idle, clear points
+    Q_INVOKABLE void copyToClipboard() const;      // QGuiApplication::clipboard()
+};</code></pre>
+
+<h3>6.2 Behaviour</h3>
+<ul>
+  <li><b>hover()</b> calls <code>cwScenePick::snappedPoint(pos, camera, intersecter,
+    pixelsForMillimeters(kRadiusMm))</code> (the mm radius keeps the snap physically constant across display
+    scaling — §4.3); sets <code>hoverPoint</code>/
+    <code>hoverSnapped</code>. <code>hoverValid</code> = <code>hit &amp;&amp; (mode==Free || snappedToStation)</code>
+    — i.e. would a click here place a point. In <b>AwaitingSecond</b> it also recomputes the live preview
+    measurement A&rarr;hoverPoint so the readout tracks the cursor.</li>
+  <li><b>place()</b> ignores the click when <code>!hoverValid</code> (Station-only over empty space is a no-op).
+    Idle&rarr;store A&rarr;AwaitingSecond; AwaitingSecond&rarr;store B, compute via
+    <code>cwMeasurementMath::between</code>&rarr;Complete; Complete&rarr;<code>reset()</code> then place A.</li>
+  <li><b>Mode</b> is a plain settable property; the QML exposes a Free/Station toggle. Switching to
+    Station-only mid-measure does not retroactively invalidate an already-placed free point — it only gates
+    future placements (documented).</li>
+  <li><b>copyToClipboard()</b> formats the active-unit readout as multi-line text and writes it via
+    <code>QGuiApplication::clipboard()</code>. Kept in C++ because QML has no clipboard write.</li>
+  <li><b>Esc</b> is handled in QML (a <code>Shortcut</code>/<code>Keys</code> calling <code>deactivate()</code>);
+    the manager restores the turn-table.</li>
+</ul>
+<div class="callout">
+  <b>Hover cost.</b> One BVH ray-cast per mouse-move. The BVH pick is sub-millisecond and only runs while the
+  tool is the active interaction, so no throttling in v1; revisit only if profiling on a large cave says
+  otherwise.
+</div>
+
+<h2 id="qml">7. <span class="commit four">C4</span> — QML view, overlay, readout, copy</h2>
+<p><code>MeasurementInteractionView.qml</code> wraps the interaction, mirroring
+<code>CoordinatePickerInteraction.qml</code>:</p>
+<ul>
+  <li><b>Input.</b> A <code>HoverHandler</code> (<code>onPointChanged → interaction.hover(point.position)</code>)
+    and a <code>TapHandler</code> (<code>onTapped → interaction.place(eventPoint.position)</code>). A
+    <code>Shortcut</code> on <code>Esc</code> &rarr; <code>deactivate()</code>. Reuse
+    <code>TurnTableForwardingHandlers</code> so orbit/zoom still work while measuring (the clip tool and picker
+    both do this).</li>
+  <li><b>Overlay markers</b> via one <code>TransformUpdater</code> re-projecting world&rarr;viewport on camera
+    change (the picker's pattern): the <b>hover indicator</b> (accent ring when <code>hoverSnapped</code>, a
+    smaller free-point dot otherwise — and hidden / "snap to a station" hint when Station-only over empty
+    space), and the placed <b>A</b> / <b>B</b> dots (always visible, so they stay readable when orbited behind
+    geometry).</li>
+  <li><b>Connecting line</b>: a <code>QCanvasPainterItem</code> drawing A&harr;B (and the rubber-band
+    A&harr;hover in AwaitingSecond) in screen space, on top — never a 3D line (a 3D line would be occluded,
+    wrong for an always-on annotation).</li>
+  <li><b>Readout panel</b> (template: <code>CoordinatePickerPopup.qml</code>): distance / azimuth /
+    inclination / horizontal / vertical / ΔE ΔN ΔZ, formatted in the user's units, a <b>Free/Station</b> toggle,
+    and a <b>Copy</b> button calling <code>copyToClipboard()</code>. Use <code>QC.Label</code>/<code>BodyText</code>
+    and <code>Theme</code> tokens (no bare <code>Text</code>, no hardcoded colours/sizes).</li>
+  <li><b>Toolbar.</b> Add a measure <code>IconButton</code> beside the pick button
+    (<code>GLTerrainRenderer.qml:199</code>), <code>selected: activeInteraction === measurementId</code>,
+    toggling <code>activate()</code>/<code>deactivate()</code>; add <code>measurementId</code> to the
+    <code>InteractionManager.interactions</code> list (<code>:117</code>).</li>
+</ul>
+
+<h2 id="grid">8. The grid-azimuth caveat</h2>
+<div class="callout warn">
+  Scene XY is the region's <b>projected CRS</b> translated to the origin, so <code>atan2(dx, dy)</code> yields
+  the azimuth relative to <b>grid north (scene +Y)</b> — not true north and not magnetic. For a north-up
+  projection near its central meridian this equals true north; away from it, <b>grid convergence</b> rotates
+  grid north off true north by up to a couple degrees, and a genuinely rotated CRS makes the bearing wrong
+  versus surveyor expectation.
+</div>
+<p><b>v1 scope:</b> report grid azimuth relative to scene +Y and label it as such (e.g. "Azimuth (grid)").
+True-north correction — apply the CRS grid convergence at the measurement location via PROJ — is a documented
+follow-up, deliberately kept out of the pure math helper so <code>between()</code> stays a function of two
+points. (Consistent with the "ship the simple tier first" preference.) <b>The follow-up is now fully specced in
+§12</b> as a Grid / True / Magnetic azimuth selector.</p>
+<p><b>Cheaper than it looks:</b> the PROJ math already exists as the pure helper
+<code>cwGridConvergence::computeAt()</code> (<code>cwGridConvergence.h:89</code>), so the follow-up is mostly
+wiring, not new geodesy. Apply it in the <b>C3 interaction layer</b>
+(<code>trueAzimuth = gridAzimuth + convergence</code>) rather than in <code>between()</code> — that keeps CRS
+knowledge out of the pure-math helper and preserves the front/back split.</p>
+
+<h2 id="tests">9. Tests</h2>
+<table>
+  <tr><th>Commit</th><th>Test</th><th>Checks</th></tr>
+  <tr><td><span class="commit">C1</span></td>
+    <td>existing <code>[cwCoordinatePicker]</code>/<code>[linePick]</code>; optional thin <code>[cwScenePick]</code></td>
+    <td>refactor is behaviour-preserving: snap-to-station exact coord, mid-segment free point still hold</td></tr>
+  <tr><td><span class="commit two">C2</span></td>
+    <td><span class="pill new">new</span> <code>test_cwMeasurementMath.cpp</code> <code>[cwMeasurementMath]</code></td>
+    <td>due-north (az 0), due-east (az 90), 45° up (incl 45), straight down (incl −90, az 0), coincident
+        (dist 0, angles 0), wrap to [0,360); deltas signed correctly</td></tr>
+  <tr><td><span class="commit three">C3</span></td>
+    <td><span class="pill new">new</span> <code>test_cwMeasurementInteraction.cpp</code> <code>[cwMeasurementInteraction]</code></td>
+    <td>e2e (mirror the picker test, <code>geometryItersecter()->waitForFinish()</code> after
+        <code>addObject</code>): hover near station → <code>hoverSnapped</code>; place A+B → readout values;
+        Station-only rejects a free-space click; Complete+click restarts; reset() clears</td></tr>
+  <tr><td><span class="commit four">C4</span></td>
+    <td><span class="pill new">new</span> <code>tst_MeasurementInteractionView.qml</code></td>
+    <td>activate via button; simulate hover + two taps; assert readout text + marker visibility;
+        copy button invokes <code>copyToClipboard()</code>. <code>tryVerify</code> the
+        <code>TransformUpdater</code>-driven side-effects, not fixed waits</td></tr>
+</table>
+<p class="mono-note">Run targeted: <code>cavewhere-test "[cwMeasurementMath],[cwMeasurementInteraction]"</code>
+and <code>cavewhere-qml-test --platform offscreen -input test-qml/tst_MeasurementInteractionView.qml</code>.
+Tests use <code>QTemporaryDir</code>/<code>applicationPid()</code> for any temp paths (concurrent CI).</p>
+
+<h2 id="out">10. Out of scope / follow-ups</h2>
+<ul>
+  <li><b>True-north / grid-convergence correction</b> for azimuth (see §8) — PROJ-based, deferred, but
+    cheaper than it looks: <code>cwGridConvergence::computeAt()</code> (<code>cwGridConvergence.h:89</code>)
+    already supplies the convergence; the C3 layer just adds it to the grid azimuth.
+    <b>Promoted to a full spec — see §12</b>, expanded to a Grid / True / <b>Magnetic</b> selector once it
+    surfaced that survex already ships the IGRF model behind <code>cwDeclination::compute()</code>, so magnetic
+    costs no new dependency.</li>
+  <li><b>Station names in the readout</b> — needs the additive <code>cwLinePlotGeometry::Result</code> metadata
+    flagged in #530 (vertex&rarr;station-name map was discarded). Snap currently yields position + vertex index
+    only; "from STA12 to STA15" waits on that.</li>
+  <li><b>Multiple / persisted measurements</b> — v1 keeps exactly one live measurement.</li>
+  <li><b>Unify azimuth/inclination math with LiDAR note georeferencing</b> —
+    <code>cwMeasurementMath::between()</code> shares byte-identical bearing
+    (<code>atan2(dx, dy)</code> + <code>[0,360)</code> wrap) and clino (<code>atan2(dz, horizontal)</code>,
+    &plusmn;90 guard) math with <code>cwNoteLiDARTransformation::calculateNorth()</code> /
+    <code>calculateVerticalAngle()</code> (<code>cwNoteLiDARTransformation.cpp:102,123</code>). Once C2
+    lands, have the LiDAR path delegate to <code>between()</code> after its up-quaternion rotation so the
+    two stay in sync. Its own commit + tests; C2 ships as a dependency-free leaf first. (dewalls
+    <code>vector.cpp</code> is <i>not</i> a merge target — vendored, unit-typed, applies instrument corrections.)</li>
+  <li><b>Explicit <code>cwPickQuery</code> in the other 3 BVH callers</b> (<code>cwLeadView</code>,
+    <code>cwBaseTurnTableInteraction</code> ×2) — the standing #530 §11 item; unrelated to this tool but in the
+    same neighbourhood. <b>Done alongside C1:</b> <code>cwLeadView</code> occlusion now uses
+    <code>cwPickQuery::Solid</code> (lines don't occlude a lead), and the turntable pivot uses
+    <code>pickQuery(pixelsForMillimeters(...))</code> with <code>kinds = All</code> so it can orbit a bare
+    centerline when the solid geometry is hidden.</li>
+  <li><b>Shared snapped-pick on a <code>cwScenePicker</code> interaction base</b> &mdash;
+    <b>Done.</b> Promoted <code>cwScenePicker : cwInteraction</code> (<code>QML_ANONYMOUS</code>) that owns the
+    camera/scene <code>QPointer</code>s, their accessors/setters/signals, and one protected
+    <code>snapPick(QPointF)</code> that null-checks camera/scene/<code>geometryItersecter()</code> and calls
+    <code>cwScenePick::snappedPoint()</code> with a single shared <code>kDefaultPickRadiusMillimeters = 1.5</code>.
+    <code>cwCoordinatePicker</code> and <code>cwMeasurementInteraction</code> now derive from it (the latter
+    dropping its private <code>Pick</code> struct and <code>pickAt()</code> in favour of
+    <code>cwScenePick::Result</code>). Scope correction from the original note: <code>cwLazClipInteraction</code>
+    does <i>not</i> snap-pick &mdash; it unprojects to the camera near plane for coplanar polygon vertices
+    (<code>screenToWorldXYZ()</code>), a different picking model &mdash; so it stays a direct
+    <code>cwInteraction</code> and is intentionally left out. Keeps <code>cwInteraction</code> clean and gives one
+    definition of "snapped world pick" so the radius / occlusion semantics can't drift across the two real
+    snap-pickers.</li>
+  <li><b>Shared screen-space annotation-overlay base</b> &mdash; <s>extract a <code>QCanvasPainterItem</code>
+    base shared by <code>cwMeasurementLineCanvas</code>, <code>cwLazClipPolygonCanvas</code>, and
+    <code>cwSketchCanvas</code>.</s> <b>Investigated 2026-06-20 &mdash; not worth doing; closed.</b> The
+    "three near-clones" premise was wrong: <code>cwSketchCanvas</code> is a 2D paper-space editor (zoom / pan /
+    <code>mapMatrix</code>, path/grid/line-plot models, sketch &amp; scrap managers, ~492 lines) with <i>no</i>
+    <code>interaction</code> <code>QPointer</code> and <i>no</i> camera&rarr;<code>update()</code> wiring &mdash;
+    it only shares the <code>QCanvasPainterItem</code> ancestor every custom-painted item shares. That leaves just
+    two real candidates, and Qt's per-class named-property requirement resists the dedup: their
+    <code>interaction</code> properties are differently typed (<code>cwMeasurementInteraction*</code> vs.
+    <code>cwLazClipInteraction*</code>) with different <code>connectInteraction()</code> signal sets, so the
+    property / typed getter / setter / connect must stay in the derived class; the colour-fallback properties have
+    entirely different names and counts (<code>lineColor</code>+<code>invalidColor</code> vs.
+    <code>polygonOutlineColor</code>+<code>polygonFillColor</code>+<code>polygonVertexBorderColor</code>) and can't
+    be hoisted without losing the names QML binds to; the camera&rarr;<code>update()</code> wiring exists only on
+    the measurement canvas (LazClip reaches the camera through its interaction). The two renderers share only the
+    <code>QCanvasPainterItemRenderer</code> interface skeleton &mdash; their <code>synchronize()</code> /
+    <code>paint()</code> bodies are wholly different. A base would save ~15&ndash;25 lines across two files while
+    adding a class, a virtual, downcasts, and a standing temptation to drag the unrelated
+    <code>cwSketchCanvas</code> under it. Unlike the ScenePicker base (identically-typed <code>camera</code>/<code>scene</code>
+    properties <i>and</i> shared ray-cast/tolerance logic), here only the structural <i>shape</i> is shared, not
+    types, names, or logic &mdash; correctly expressed as two parallel implementations, not a base class.</li>
+  <li><b>One geodesy home for azimuth / inclination / north-correction</b> — the natural endpoint of the
+    true-north correction and LiDAR-unification items above: instead of each feature computing grid-north
+    bearings and bolting on convergence ad hoc, keep the pure <code>atan2</code> primitive in
+    <code>cwMeasurementMath</code> and route all true-north correction through
+    <code>cwGridConvergence::computeAt()</code>, so the measurement tool, LiDAR-note georeferencing, and survey
+    readouts share one "scene vector &rarr; bearing in the user's chosen north." Data-model-adjacent (needs the
+    fix-station / CRS context the tool doesn't yet carry); deferred.</li>
+  <li><b>Migrate <code>cwLazClipInteraction</code> to take <code>cwGeoReference*</code></b> instead of the whole
+    <code>cwCavingRegion</code> &mdash; enabled by the geoReference single-owner refactor (the region's CS/origin
+    forwarders were removed; consumers now go through <code>region.geoReference</code>).
+    <code>cwLazClipInteraction</code> holds a <code>cwCavingRegion*</code> Q_PROPERTY
+    (<code>cwLazClipInteraction.h:51,82,163</code>) purely to read
+    <code>m_region-&gt;geoReference()-&gt;worldOrigin()</code> / <code>globalCoordinateSystem()</code> at commit
+    (<code>cwLazClipInteraction.cpp:217-218</code>); it touches no caves, lazLayers, or undo. After the refactor it
+    is the last interaction still taking the whole region for a two-field read &mdash;
+    <code>cwMeasurementInteraction</code> and <code>cwCoordinatePicker</code> already take the
+    <code>cwGeoReference*</code> slice. Migrating it would finish unifying the interaction boundary on the slice.
+    Out of scope here: it is a QML-facing property change (the <code>region:</code> binding in the LAZ-clip QML)
+    plus its own test churn, unrelated to removing the region forwarders. (Distinct from the snapped-pick item
+    above, which is about picking model, not the geo slice.)</li>
+</ul>
+
+<h2 id="decisions">11. Decisions locked in</h2>
+<table>
+  <tr><th>Question</th><th>Decision</th></tr>
+  <tr><td>Axes / azimuth</td><td>+Y North, +X East, +Z up; <code>azimuth = atan2(dx, dy)</code>, grid north (§8)</td></tr>
+  <tr><td>Esc</td><td>exits the tool (<code>deactivate()</code> → turn-table)</td></tr>
+  <tr><td>Click in Complete</td><td>resets and starts a new measurement</td></tr>
+  <tr><td>Readout fields</td><td>distance, azimuth, inclination, horizontal, vertical, <b>+ ΔE ΔN ΔZ</b></td></tr>
+  <tr><td>Modes</td><td><b>Free</b> and <b>Station-only</b> (toggle); Station-only no-ops a non-snapped click</td></tr>
+  <tr><td>Measurements on screen</td><td>exactly one at a time</td></tr>
+  <tr><td>Copy</td><td>copy-to-clipboard button → formatted multi-line text (C++ <code>QGuiApplication::clipboard()</code>)</td></tr>
+  <tr><td>Indicator rendering</td><td>always-on-top 2D overlay (<code>TransformUpdater</code>); occlusion handled by the snap, not by depth-occluded billboards</td></tr>
+  <tr><td>Commits</td><td>4 (C1 refactor prerequisite; C2 math; C3 interaction; C4 QML) — C3+C4 may fold to 3 if preferred</td></tr>
+</table>
+
+<h2 id="northref">12. Azimuth north reference (Grid / True / Magnetic) — spec</h2>
+<p>Expands the §8 true-north follow-up into a user-facing feature: the readout's azimuth gains a
+<b>north-reference selector</b> so the bearing can be read against the map, the globe, or a compass. Replaces a
+fixed "Azimuth (grid)" label with <b>Azimuth (<i>reference</i>) ▾</b> plus a <b>"?"</b> help affordance.</p>
+
+<div class="callout">
+  <b>Why this is cheap now (the key discovery):</b> magnetic north does <i>not</i> need a new geomagnetic model
+  or coefficient bundle. Survex already vendors the IGRF model behind
+  <code>cwDeclination::compute(location, sourceCS, date) → Monad::Result&lt;double&gt;</code>
+  (<code>cwDeclination.h</code>), and true north is the existing pure
+  <code>cwGridConvergence::computeAt(location, sourceCS) → Monad::Result&lt;double&gt;</code>
+  (<code>cwGridConvergence.h:89</code>). Both return <b>east-positive degrees</b>. No new dependency, no
+  WMM-style 5-year coefficient maintenance — IGRF rides along with survex submodule bumps. This is the same
+  pair of primitives <code>cwTripCalibration</code> already uses to auto-resolve a trip's declination, so the
+  measurement tool joins an established path rather than inventing geodesy.</p>
+</div>
+
+<h3>The three references</h3>
+<table>
+  <tr><th>Reference</th><th>From grid azimuth</th><th>Plain-language use</th></tr>
+  <tr><td><b>Grid</b> (default)</td><td><code>azimuth</code> as today (scene +Y)</td>
+    <td>North of the map's coordinate grid (e.g. UTM). Matches the 3D view, the survey coordinates, and a printed
+    map. <i>Grid = the map.</i></td></tr>
+  <tr><td><b>True</b></td><td><code>+ convergence</code></td>
+    <td>Geographic north, toward the pole. Canonical bearing for sharing or comparing against true-north data.
+    Differs from grid by the projection's <b>grid convergence</b> (no date). <i>True = the globe.</i></td></tr>
+  <tr><td><b>Magnetic (today)</b></td><td><code>+ convergence &minus; declination</code></td>
+    <td>Where a compass points right now. Field use: walk a bearing with a compass, or check a survey shot against
+    a live compass reading. Differs from true by the <b>magnetic declination</b>, which drifts — so it's computed
+    for <b>today's date</b>. <i>Magnetic = your compass.</i></td></tr>
+</table>
+<p class="note">Sign care at implementation time: both helpers are east-positive. Grid&rarr;true adds convergence
+(positive = grid north east of true); true&rarr;magnetic subtracts declination (positive = magnetic north east of
+true). Net <code>magneticAzimuth = gridAzimuth + convergence &minus; declination</code>, wrapped to
+<code>[0,360)</code> by the same wrap <code>between()</code> already applies. Verify the two signs against a known
+location in tests rather than trusting the prose.</p>
+
+<h3>Location &amp; date sourcing</h3>
+<ul>
+  <li><b>Location = the first picked point.</b> The resolver passes the point as a <b>global</b>
+    <code>cwGeoPoint</code> — <code>firstPoint</code> (scene) + <code>region-&gt;worldOrigin()</code> — together with
+    <code>sourceCS = region-&gt;globalCoordinateSystem()</code>. <b>Scope-check finding (2026-06-20):</b> the tool
+    does <i>not</i> WGS84-transform anything itself. Both <code>cwGridConvergence::computeAt()</code> and
+    <code>cwDeclination::compute()</code> take <code>location</code> <i>in</i> <code>sourceCS</code> and convert to
+    WGS84 internally (verified in their <code>.cpp</code>: each builds a <code>cwCoordinateTransform(sourceCS &rarr;
+    Wgs84)</code>). So the tool only reads <code>worldOrigin()</code> + <code>globalCoordinateSystem()</code> — no
+    <code>cwCoordinateTransform</code> in the measurement path. Deterministic and self-contained: an azimuth only
+    exists once the first point is placed, so the location is always available when any bearing is shown — no
+    "which end?" ambiguity and no empty-location case. The two points are metres apart inside one cave, where
+    convergence/declination are effectively identical, so first-point is as good as midpoint and simpler.</li>
+  <li><b>Date = today</b> for magnetic (label literally reads <b>"Magnetic (today)"</b>). A field compass reads
+    today's field, so today's declination is the right comparison for both "navigate a bearing" and "check a
+    shot" — the survey-date declination only matters when auditing the original reduction, a data task outside
+    this tool. Editable date is a deferred nicety, not v1.</li>
+</ul>
+
+<h3>n/a handling &amp; transparency</h3>
+<ul>
+  <li>True and Magnetic can be unavailable — no region CRS, a geographic (non-grid) CS, or a PROJ/IGRF failure
+    (both helpers already return <code>Monad::Result</code> with those states; <code>cwGridConvergence::State</code>
+    enumerates <code>NoCoordinateSystem</code> / <code>Geographic</code> / <code>Error</code>). When the selected
+    reference can't be computed, the azimuth shows <b>n/a</b> with the reason, and the selector grays/footnotes
+    that entry rather than silently falling back to grid (a wrong number is worse than an honest n/a).</li>
+  <li><b>Transparency:</b> a detail/tooltip spells out the inputs actually used — e.g.
+    <code>"IGRF · 2026-06-20 · 13.0° E decl · 0.7° E conv · 38.5°N 110.2°W"</code> — mirroring
+    <code>cwGridConvergence::detailText()</code>, so the value is reproducible and the n/a wording has a home.</li>
+</ul>
+
+<h3>"?" help copy</h3>
+<div class="callout">
+  <p><b>Azimuth reference</b> — which north the bearing is measured from.
+  <b>Grid = the map, True = the globe, Magnetic = your compass.</b></p>
+  <ul>
+    <li><b>Grid</b> — north of the map's coordinate grid (e.g. UTM grid lines). Matches the 3D view, the survey's
+      coordinates, and a printed map.</li>
+    <li><b>True</b> — geographic north, toward the pole. Differs from grid by the grid convergence at this
+      location (a fixed property of the projection).</li>
+    <li><b>Magnetic (today)</b> — where a compass points right now. Differs from true by the magnetic declination,
+      which drifts over time, so it's computed for today's date at this location.</li>
+  </ul>
+</div>
+
+<h3>Plumbing the tool needs (scope-checked 2026-06-20)</h3>
+<p>The measurement interaction currently carries only camera + scene (via <code>cwScenePicker</code>) — it has
+<b>no region/CRS</b>. The one structural addition is a <code>cwCavingRegion* region</code> Q_PROPERTY + setter on
+<code>cwMeasurementInteraction</code> (mirroring the one <code>cwCoordinatePicker</code> already has), which
+provides <code>worldOrigin()</code> + <code>globalCoordinateSystem()</code>. That single dependency powers
+<b>both</b> true and magnetic; everything else is wiring existing pure helpers.</p>
+<p><b>Keep <code>region</code> off the <code>cwScenePicker</code> base.</b> The base stays camera+scene only —
+the genuinely shared, identically-behaving part. <code>cwCoordinatePicker</code>'s region setter does extra work
+(rebuilds a cached WGS84 transform, clears the pick on change) that the measurement tool doesn't want, so a shared
+base member would be false-DRY. Two independent <code>region</code> members, parallel to how camera/scene were the
+only things hoisted. Consistent with the ScenePicker scoping decision (§10).</p>
+<p><b>QML wiring is one line.</b> <code>MeasurementInteractionView.qml</code>'s root type <i>is</i>
+<code>MeasurementInteraction</code>, so the new inherited <code>region</code> Q_PROPERTY is settable directly on
+the instance — exactly like <code>camera</code>/<code>scene</code> are today
+(<code>MeasurementInteractionView.qml</code> sets neither; they're passed in at
+<code>GLTerrainRenderer.qml:119</code>). The only change is adding <code>region: RootData.region</code> beside the
+existing <code>camera</code>/<code>scene</code> at <code>GLTerrainRenderer.qml:119–125</code> — the same
+<code>RootData.region</code> the picker and LazClip views already receive (lines 106, 114). No pass-through
+property in the wrapper.</p>
+
+<h3>Commit breakdown</h3>
+<table>
+  <tr><th>Commit</th><th>Scope</th></tr>
+  <tr><td><span class="commit">N1</span> <b>✓ implemented</b></td>
+    <td><b>Azimuth-reference resolver (back end).</b> Done as the pure namespace
+      <code>cwAzimuthReference</code> (<code>cwAzimuthReference.h/.cpp</code>):
+      <code>Q_NAMESPACE_EXPORT</code> + <code>QML_NAMED_ELEMENT(AzimuthReference)</code> with
+      <code>enum class Reference { Grid, True, Magnetic }</code> (<code>Q_ENUM_NS</code>, so N2/QML reuse it) and
+      a free <code>resolve(gridAzimuth, reference, location, sourceCS, date) → Result</code>. The
+      <code>Result</code> carries <code>azimuth</code> ([0,360)), <code>available</code> (n/a first-class),
+      the raw <code>convergence</code> / <code>declination</code> folded in, and a <code>reason</code> string.
+      Grid passes through (no CRS/date, never n/a); True adds
+      <code>cwGridConvergence::computeAt()</code>; Magnetic also subtracts
+      <code>cwDeclination::compute()</code> (<code>az = grid + conv − decl</code>, wrapped). No coordinate
+      transform in the tool — the helpers take the location in <code>sourceCS</code>. Keeps CRS/IGRF knowledge out
+      of <code>cwMeasurementMath::between()</code>. <b>Tests:</b> <code>test_cwAzimuthReference.cpp</code>,
+      <code>[cwAzimuthReference]</code> — 9 cases / 38 assertions green (grid passthrough + wrap, True=+convergence,
+      Magnetic=+conv−decl asserted against the helpers directly, geographic-CRS, and the three n/a paths: empty CS,
+      unknown CS, invalid date).</td></tr>
+  <tr><td><span class="commit two">N2</span></td>
+    <td><b>Wire region into the interaction + expose the reference.</b> Add the <code>cwCavingRegion</code>
+      property/setter to <code>cwMeasurementInteraction</code> + the one-line <code>region: RootData.region</code>
+      at <code>GLTerrainRenderer.qml:119</code>, compute the first-point global <code>cwGeoPoint</code>, drive N1, and
+      expose an <code>azimuthReference</code> enum property (Grid/True/Magnetic) + the resolved azimuth + its
+      availability/detail to QML. Reference persists via <code>cwSettings</code>. <code>[cwMeasurementInteraction]</code>
+      tests for each reference + the n/a paths.</td></tr>
+  <tr><td><span class="commit three">N3</span></td>
+    <td><b>Readout UI.</b> Swap the fixed "Azimuth (grid)" row for <b>Azimuth (<i>reference</i>) ▾</b> selector +
+      "?" popover (help copy above), default Grid, magnetic row labeled "Magnetic (today)" with the detail
+      tooltip; gray/footnote unavailable references. QML test for selector switching + n/a display.</td></tr>
+</table>
+<p class="note">This feature is the concrete first delivery of the §10 "one geodesy home" item: measurement
+azimuth routes through <code>cwGridConvergence</code> + <code>cwDeclination</code> instead of bolting convergence
+on ad hoc, so LiDAR-note georeferencing and survey readouts can later share the same resolver.</p>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Intersecter visibility mask — plan</title>
+<style>
+  :root {
+    --bg:#1d1f23; --panel:#26292e; --panel2:#2c3036; --ink:#e6e8eb; --muted:#9aa0a8;
+    --line:#3a3f47; --accent:#5db0ff; --warn:#e3b341; --bad:#e06c75; --good:#8bc98b;
+    --code:#d7e3f0;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  .wrap { max-width:1000px; margin:0 auto; padding:32px 24px 100px; }
+  h1 { font-size:26px; margin:0 0 4px; letter-spacing:-0.3px; }
+  h2 { font-size:20px; margin:38px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--line); }
+  h3 { font-size:16px; margin:24px 0 8px; color:var(--accent); }
+  p.sub { color:var(--muted); margin:0 0 8px; font-size:15px; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.88em;
+    background:#15171a; padding:1px 6px; border-radius:5px; color:var(--code); }
+  pre { background:#15171a; border:1px solid var(--line); border-radius:10px; padding:14px 16px;
+    overflow-x:auto; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:12.5px;
+    line-height:1.5; color:var(--code); }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin:14px 0; }
+  .tag { display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px;
+    vertical-align:middle; margin-left:8px; }
+  .tag.p0 { background:#37414d; color:var(--accent); }
+  .tag.p1 { background:#3a3722; color:var(--warn); }
+  .tag.p2 { background:#233a2a; color:var(--good); }
+  .bad { color:var(--bad); } .good { color:var(--good); } .warn { color:var(--warn); }
+  .muted { color:var(--muted); }
+  ul { padding-left:22px; } li { margin:5px 0; }
+  table { border-collapse:collapse; width:100%; margin:12px 0; font-size:13.5px; }
+  th,td { border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; }
+  th { background:var(--panel2); color:var(--ink); font-weight:600; }
+  td code { background:#15171a; }
+  .toc { columns:2; font-size:14px; }
+  .toc a { color:var(--accent); text-decoration:none; }
+  .toc a:hover { text-decoration:underline; }
+  figure { margin:18px 0; }
+  figcaption { color:var(--muted); font-size:12.5px; margin-top:8px; text-align:center; }
+  svg { width:100%; height:auto; background:#15171a; border:1px solid var(--line); border-radius:12px; }
+  .kbd { font-size:12px; color:var(--muted); }
+  .callout { border-left:3px solid var(--accent); padding:8px 14px; margin:14px 0; background:var(--panel2); border-radius:0 8px 8px 0; }
+  .callout.bad { border-left-color:var(--bad); }
+  .callout.warn { border-left-color:var(--warn); }
+  .fileref { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.85em; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Intersecter visibility mask</h1>
+<p class="sub">Making <code>cwGeometryItersecter</code> visibility-aware at per-primitive granularity, so picking and bounding-box queries honor keyword-driven visibility from one source of truth.</p>
+<p class="sub">Fixes <a href="https://github.com/Cavewhere/cavewhere/issues/575" style="color:var(--accent)">#575</a> (hidden shots still pickable) and <a href="https://github.com/Cavewhere/cavewhere/issues/549" style="color:var(--accent)">#549</a> (reset frames hidden geometry) through a single mechanism.</p>
+
+<div class="panel">
+  <strong>Contents</strong>
+  <div class="toc">
+    <a href="#goal">0 · Goal &amp; two bugs</a><br>
+    <a href="#phase0">Phase 0 · How it works today</a><br>
+    <a href="#keyword">Phase 0a · Keyword-keyed visibility</a><br>
+    <a href="#render">Phase 0b · How the renderer honors it</a><br>
+    <a href="#intersecter">Phase 0c · What the intersecter does (and doesn't)</a><br>
+    <a href="#phase1">Phase 1 · Whole-object visibleBoundingBox</a><br>
+    <a href="#boundary">Phase 1 · Framing-bounds seam (architecture)</a><br>
+    <a href="#phase2">Phase 2 · The per-primitive mask</a><br>
+    <a href="#threading">Phase 2 · Thread-safety / snapshot</a><br>
+    <a href="#files">File-by-file changes</a><br>
+    <a href="#alt">Alternatives considered</a><br>
+    <a href="#tests">Test plan</a><br>
+  </div>
+</div>
+
+<h2 id="goal">0 · Goal &amp; the two bugs</h2>
+<p>Visibility in CaveWhere is <strong>keyed on keywords</strong>: the user filters by keyword (Cave, Trip, Year, Type…), a filter pipeline splits keyword items into an <em>accepted</em> (visible) and a <em>rejected</em> (hidden) set, and each item hides its geometry at whatever granularity it owns. That hiding is applied on the <strong>render side only</strong>. The intersecter — which answers picks and bounding-box queries — never learns about it, except at whole render-object granularity.</p>
+
+<table>
+  <tr><th>Bug</th><th>Symptom</th><th>Cause</th></tr>
+  <tr>
+    <td><a href="https://github.com/Cavewhere/cavewhere/issues/575" style="color:var(--accent)">#575</a></td>
+    <td>The Distance tool snaps to a hidden shot; turntable pivot can land on a hidden trip.</td>
+    <td>Per-shot line-plot visibility never reaches the intersecter; a <code>Kind::Lines</code> pick hits hidden segments.</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/Cavewhere/cavewhere/issues/549" style="color:var(--accent)">#549</a></td>
+    <td>Reset view frames hidden caves/trips/LiDAR — the model zooms out to include things you hid.</td>
+    <td><code>boundingBox()</code> unions <em>every</em> registered object with no visibility filter at all.</td>
+  </tr>
+</table>
+
+<p><strong>Design goal.</strong> Make the intersecter return correct <em>visible-only</em> results, so consumers (reset-view, Distance tool, lead occlusion) are written as if <code>cwGeometryItersecter</code> is simply correct — no visibility logic duplicated into each consumer. A committed failing test (<span class="fileref">testcases/test_cwRenderLinePlotPickVisibility.cpp</span>, tagged <code>[!shouldfail]</code>) pins #575.</p>
+
+<h2 id="phase0">Phase 0 · How it works today <span class="tag p0">current</span></h2>
+<p>Three layers, wired end-to-end. Visibility flows left→right; the intersecter is the one box the flow skips.</p>
+
+<figure>
+<svg viewBox="0 0 960 430" role="img" aria-label="Current visibility data flow">
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa0a8"/>
+    </marker>
+    <marker id="arrowBad" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#e06c75"/>
+    </marker>
+  </defs>
+  <style>
+    .box{fill:#26292e;stroke:#3a3f47;rx:9;}
+    .lbl{fill:#e6e8eb;font:600 13px sans-serif;}
+    .sub{fill:#9aa0a8;font:11px monospace;}
+    .grp{fill:none;stroke:#3a3f47;stroke-dasharray:4 4;rx:12;}
+    .grplbl{fill:#9aa0a8;font:600 11px sans-serif;letter-spacing:.5px;}
+    .edge{stroke:#9aa0a8;stroke-width:1.6;fill:none;}
+    .edgeBad{stroke:#e06c75;stroke-width:1.6;fill:none;stroke-dasharray:5 4;}
+  </style>
+
+  <!-- Keyword group -->
+  <rect class="grp" x="10" y="26" width="250" height="380"/>
+  <text class="grplbl" x="24" y="20">KEYWORD MODEL (source of truth)</text>
+  <rect class="box" x="30" y="40" width="210" height="52"/>
+  <text class="lbl" x="42" y="62">cwKeywordItemModel</text>
+  <text class="sub" x="42" y="80">items: Trip / Cave / Type…</text>
+  <rect class="box" x="30" y="118" width="210" height="60"/>
+  <text class="lbl" x="42" y="140">KeywordFilterPipeline</text>
+  <text class="sub" x="42" y="158">→ acceptedModel (show)</text>
+  <text class="sub" x="42" y="172">→ rejectedModel (hide)</text>
+  <rect class="box" x="30" y="205" width="210" height="60"/>
+  <text class="lbl" x="42" y="227">cwKeywordVisibility</text>
+  <text class="sub" x="42" y="245">resolveVisibility → </text>
+  <text class="sub" x="42" y="259">invokeVisible(obj, on/off)</text>
+
+  <!-- Proxies group -->
+  <rect class="grp" x="290" y="26" width="300" height="380"/>
+  <text class="grplbl" x="304" y="20">VISIBILITY PROXIES (granularity)</text>
+  <rect class="box" x="310" y="50" width="260" height="56"/>
+  <text class="lbl" x="322" y="72">cwRenderObject::setVisible</text>
+  <text class="sub" x="322" y="90">cloud · LiDAR · whole plot</text>
+  <rect class="box" x="310" y="128" width="260" height="56"/>
+  <text class="lbl" x="322" y="150">cwLinePlotTripVisibility</text>
+  <text class="sub" x="322" y="168">→ setRangeVisible(start,count)</text>
+  <rect class="box" x="310" y="206" width="260" height="56"/>
+  <text class="lbl" x="322" y="228">cwRenderTexturedItemVisibility</text>
+  <text class="sub" x="322" y="246">→ items.setVisible(id)  (per scrap)</text>
+
+  <!-- Render group -->
+  <rect class="grp" x="620" y="26" width="200" height="240"/>
+  <text class="grplbl" x="634" y="20">RENDERER (honors it)</text>
+  <rect class="box" x="638" y="50" width="164" height="56"/>
+  <text class="lbl" x="650" y="72">gatherScene skip</text>
+  <text class="sub" x="650" y="90">m_isVisible</text>
+  <rect class="box" x="638" y="128" width="164" height="56"/>
+  <text class="lbl" x="650" y="150">visibilityBuffer</text>
+  <text class="sub" x="650" y="168">shader discard</text>
+  <rect class="box" x="638" y="206" width="164" height="56"/>
+  <text class="lbl" x="650" y="228">per-id skip</text>
+  <text class="sub" x="650" y="246">cwRhiTexturedItems</text>
+
+  <!-- Intersecter (skipped) -->
+  <rect class="grp" x="620" y="300" width="330" height="100" style="stroke:#e06c75;"/>
+  <text class="grplbl" x="634" y="294" style="fill:#e06c75;">INTERSECTER (flow skips it)</text>
+  <rect class="box" x="638" y="316" width="300" height="70" style="stroke:#e06c75;"/>
+  <text class="lbl" x="650" y="340">cwGeometryItersecter</text>
+  <text class="sub" x="650" y="358">full geometry · whole-object gate only</text>
+  <text class="sub" x="650" y="374">boundingBox() unions ALL</text>
+
+  <!-- edges -->
+  <path class="edge" d="M240,66 L305,78" marker-end="url(#arrow)"/>
+  <path class="edge" d="M240,150 L305,156" marker-end="url(#arrow)"/>
+  <path class="edge" d="M240,235 L305,234" marker-end="url(#arrow)"/>
+  <path class="edge" d="M570,78 L633,78" marker-end="url(#arrow)"/>
+  <path class="edge" d="M570,156 L633,156" marker-end="url(#arrow)"/>
+  <path class="edge" d="M570,234 L633,234" marker-end="url(#arrow)"/>
+  <!-- only whole-object reaches intersecter -->
+  <path class="edge" d="M440,106 C440,300 560,340 633,344" marker-end="url(#arrow)"/>
+  <!-- per-shot / per-scrap DON'T reach intersecter -->
+  <path class="edgeBad" d="M572,160 C700,180 720,300 760,314" marker-end="url(#arrowBad)"/>
+  <path class="edgeBad" d="M572,238 C740,250 760,300 800,314" marker-end="url(#arrowBad)"/>
+</svg>
+<figcaption>Whole-object visibility (solid) reaches the intersecter via <code>parent-&gt;isVisible()</code>. Per-shot and per-scrap visibility (<span class="bad">red, dashed</span>) never does.</figcaption>
+</figure>
+
+<h3 id="keyword">Phase 0a · Visibility is keyed on keywords</h3>
+<ul>
+  <li><span class="fileref">KeywordTab.qml:17-20</span> — <code>KeywordVisibility { visibleModel: pipeline.acceptedModel; hideModel: pipeline.rejectedModel }</code>. The filter pipeline is the source of truth for what's shown.</li>
+  <li><span class="fileref">cwKeywordVisibility.cpp:105</span> <code>resolveVisibility()</code> — <em>hide wins</em>: if an object is in the reject model, hide it; else show. Fires on <code>rowsInserted/Removed/modelReset</code>.</li>
+  <li><span class="fileref">cwKeywordVisibility.cpp:17</span> <code>invokeVisible()</code> dispatches by type: <code>QQuickItem</code>, <code>cwRenderObject</code>, or a generic <code>setVisible(bool)</code> — the last is how the <em>proxy</em> objects below get called.</li>
+  <li>Each keyword item carries an <code>ObjectRole</code> pointing at the object that knows how to hide the corresponding geometry at the right granularity.</li>
+</ul>
+
+<table>
+  <tr><th>Granularity</th><th>Proxy object</th><th>Action</th><th>Reaches intersecter?</th></tr>
+  <tr><td>Whole object<br>(cloud, LiDAR, entire plot)</td><td><code>cwRenderObject</code></td><td><span class="fileref">setVisible()</span></td><td class="good">Yes — <code>isPickable()</code></td></tr>
+  <tr><td>Per shot / trip<br>(centerline)</td><td><code>cwLinePlotTripVisibility</code><br><span class="fileref">.cpp:26-38</span></td><td><code>linePlot-&gt;setRangeVisible(start,count)</code></td><td class="bad">No</td></tr>
+  <tr><td>Per scrap</td><td><code>cwRenderTexturedItemVisibility</code><br><span class="fileref">.cpp:14-26</span></td><td><code>items-&gt;setVisible(id)</code></td><td class="bad">No</td></tr>
+</table>
+
+<h3 id="render">Phase 0b · How the renderer honors visibility</h3>
+<ul>
+  <li><strong>Whole object</strong> — <code>cwRHIObject::m_isVisible</code>, synced in <span class="fileref">cwRhiScene.cpp:71</span> and skipped at gather in <span class="fileref">cwRhiFrameRenderer.cpp:569</span> (<code>if (!object-&gt;isVisible() …) continue;</code>).</li>
+  <li><strong>Per-vertex centerline</strong> — <code>cwRenderLinePlot::m_visibility</code> is a <code>QVector&lt;quint8&gt;</code> (one byte/vertex, <code>kVisible=0xFF</code>/<code>kHidden=0x00</code>). <span class="fileref">cwRHILinePlot.cpp:44</span> uploads a parallel <code>m_visibilityBuffer</code> (uint attribute, binding 1); <span class="fileref">cwRHILinePlot.cpp:102</span> <code>updateVisibilityBuffer()</code> re-uploads on change; <code>LinePlot.vert/.frag</code> discard hidden vertices. <strong>This is the only place per-shot visibility exists.</strong></li>
+  <li><strong>Per-scrap</strong> — <code>cwRhiTexturedItems</code> stores per-id <code>visible</code> and skips hidden items at draw.</li>
+</ul>
+
+<h3 id="intersecter">Phase 0c · What the intersecter does — and doesn't</h3>
+<ul>
+  <li>Geometry is registered <em>once</em> as the <strong>full</strong> vertex list in <span class="fileref">cwRenderLinePlot.cpp:46-59</span> (<code>setGeometry → addObject</code>). Visibility toggles (<code>setRangeVisible</code>, <span class="fileref">.cpp:76-99</span>) never call the intersecter.</li>
+  <li>The only visibility gate is whole render-object: <span class="fileref">cwGeometryItersecter.cpp:196-198</span> <code>isPickable() = parent==nullptr || parent-&gt;isVisible()</code>, hoisted once per sub-BVH at <span class="fileref">:951</span>.</li>
+  <li><code>boundingBox()</code> <span class="fileref">:652</span> unions <em>all</em> node boxes with <strong>no visibility check whatsoever</strong> — not even whole-object.</li>
+  <li>Key type is <code>Key{cwRenderObject* parentObject, uint64_t id}</code> <span class="fileref">cwGeometryItersecter.h:46</span>; there is <code>boundingBox(const QList&lt;Key&gt;&amp;)</code> <span class="fileref">:100</span> but no way to enumerate keys or filter by visibility.</li>
+</ul>
+
+<h2 id="phase1">Phase 1 · Whole-object <code>visibleBoundingBox()</code> <span class="tag p1">interim</span></h2>
+<p>Ship the reset-view API immediately, correct for the common cases, before the deeper mask work.</p>
+<ul>
+  <li>Add <code>cwGeometryItersecter::visibleBoundingBox()</code> that unions node boxes for which <code>node.Object.parent()==nullptr || parent-&gt;isVisible()</code>. Main-thread only (bbox is computed against live <code>Nodes</code>).</li>
+  <li>Point <code>cwBaseTurnTableInteraction::resetView()</code> at <code>visibleBoundingBox()</code> (replacing <code>boundingBox()</code> at <span class="fileref">cwBaseTurnTableInteraction.cpp:331</span>); keep the empty-box fallback.</li>
+</ul>
+<div class="callout warn"><strong>Correct for:</strong> hidden LiDAR cloud, hidden scrap group, entirely-hidden centerline. <strong>Still wrong for:</strong> hiding a single cave/trip (the plot object stays visible). Reset-view is written <em>once</em>, against the final API — Phase 2 upgrades correctness with no change here.</div>
+
+<h3 id="boundary">Architectural note · put the seam in the right place</h3>
+<p>Today <code>resetView()</code> reads <code>scene()-&gt;geometryItersecter()-&gt;boundingBox()</code> directly (<span class="fileref">cwBaseTurnTableInteraction.cpp:331</span>). "What bounds should the camera frame" is a <em>scene / view-presentation</em> concern, but <code>cwGeometryItersecter::boundingBox()</code> is an artifact of the <em>pick-acceleration</em> structure. Sourcing framing policy straight off the picking BVH leaks the picking subsystem's boundary into camera behavior.</p>
+<div class="callout">
+  <strong>Preferred seam:</strong> expose a scene-level framing-bounds accessor on <code>cwScene</code> / <code>cwRegionSceneManager</code> (e.g. <code>framingBounds()</code> / <code>visibleFramingBounds()</code>), and have <code>resetView()</code> (and any capture/export framing) call <em>that</em>. The <code>visibleBoundingBox()</code> work below then lives <em>behind</em> the scene seam rather than being one more method bolted onto the intersecter — the interaction depends on the scene for framing, not on the pick structure.
+  <br><br>
+  <span class="muted">Blast radius: moderate — one new scene-level accessor, re-point <code>resetView</code> (and the Phase 1/2 work) at it; no data-model changes. Tracked as the architectural follow-up from the #549 review; can land before or alongside Phase 1.</span>
+</div>
+
+<h2 id="phase2">Phase 2 · The per-primitive mask <span class="tag p2">the fix</span></h2>
+<p>Give the intersecter its own visibility channel, fed from the same <code>setRangeVisible</code> calls the renderer already makes. Both picking and bounding box consult it. One mechanism → both #575 and per-trip #549 fall out.</p>
+
+<figure>
+<svg viewBox="0 0 960 300" role="img" aria-label="Proposed mask flow">
+  <defs>
+    <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#8bc98b"/></marker>
+  </defs>
+  <style>
+    .b{fill:#26292e;stroke:#3a3f47;rx:9;} .b2{fill:#233a2a;stroke:#8bc98b;rx:9;}
+    .l{fill:#e6e8eb;font:600 13px sans-serif;} .s{fill:#9aa0a8;font:11px monospace;}
+    .e{stroke:#8bc98b;stroke-width:1.7;fill:none;}
+  </style>
+  <rect class="b" x="24" y="60" width="220" height="70"/>
+  <text class="l" x="38" y="90">cwLinePlotTripVisibility</text>
+  <text class="s" x="38" y="110">setVisible(bool)</text>
+
+  <rect class="b" x="24" y="170" width="220" height="70"/>
+  <text class="l" x="38" y="200">cwRenderLinePlot</text>
+  <text class="s" x="38" y="220">setRangeVisible(start,count)</text>
+
+  <rect class="b2" x="360" y="115" width="250" height="80"/>
+  <text class="l" x="376" y="145">cwGeometryItersecter</text>
+  <text class="s" x="376" y="165">setRangeVisible(Key,start,count)</text>
+  <text class="s" x="376" y="181">Object.m_visibility mask</text>
+
+  <rect class="b" x="710" y="40" width="220" height="70"/>
+  <text class="l" x="724" y="70">visibleBoundingBox()</text>
+  <text class="s" x="724" y="90">skip hidden prims → #549</text>
+
+  <rect class="b" x="710" y="185" width="220" height="70"/>
+  <text class="l" x="724" y="215">intersectsDetailed()</text>
+  <text class="s" x="724" y="235">skip hidden prims → #575</text>
+
+  <path class="e" d="M244,95 C300,110 320,150 358,150" marker-end="url(#a2)"/>
+  <path class="e" d="M244,205 C300,190 320,160 358,158" marker-end="url(#a2)"/>
+  <path class="e" d="M610,140 C660,120 680,95 708,85" marker-end="url(#a2)"/>
+  <path class="e" d="M610,165 C660,190 680,210 708,215" marker-end="url(#a2)"/>
+</svg>
+<figcaption>Same <code>setRangeVisible</code> call sites; a second, intersecter-owned copy of the mask. No new source of truth — it is downstream of the keyword pipeline exactly like the render buffer.</figcaption>
+</figure>
+
+<h3>2.1 · Mask on the Object</h3>
+<pre>// cwGeometryItersecter.h — Object
+QVector&lt;quint8&gt; m_visibility;   // empty = all visible (fast path)
+const QVector&lt;quint8&gt;&amp; visibility() const { return m_visibility; }
+// helper: a Lines primitive at index i is visible iff both its
+// endpoint vertices' bytes != kHidden (indices[i], indices[i+1]).</pre>
+<p>Empty mask ⇒ zero per-primitive cost for clouds, scraps, triangles, and any object that never partially hides.</p>
+
+<h3>2.2 · Mutation API (no BVH rebuild)</h3>
+<pre>void cwGeometryItersecter::setRangeVisible(const Key&amp; key, int start, int count, bool visible);
+// Updates the mask on the live Node AND republishes the mask into the
+// query snapshot (copy-on-write swap of a per-slot shared array).
+// Geometry/BVH structure is unchanged, so this is O(range), not a rebuild.</pre>
+
+<h3>2.3 · Render side pushes the mask</h3>
+<ul>
+  <li><code>cwRenderLinePlot::setGeometry()</code> — after <code>addObject</code>, seed an all-visible mask (or none).</li>
+  <li><code>cwRenderLinePlot::setRangeVisible()</code> — additionally call <code>geometryItersecter()-&gt;setRangeVisible(Key{this,0}, start, count, visible)</code>. The intersecter mask becomes the twin of the render <code>m_visibility</code>, fed by the same call.</li>
+  <li>(Optional, later) <code>cwRenderTexturedItems</code> per-id visibility can push analogously if scraps become pickable/framed at per-id granularity.</li>
+</ul>
+
+<h3>2.4 · Consumers honor the mask</h3>
+<ul>
+  <li><strong>Picking</strong> — in <code>testPrimitive()</code> (<span class="fileref">cwGeometryItersecter.cpp:1108+</span>), after resolving the primitive's vertex indices, skip when the mask marks them hidden. Whole-object <code>isPickable()</code> stays as the cheap early-out.</li>
+  <li><strong>Bounding box</strong> — <code>visibleBoundingBox()</code> unions only visible primitives. Masked objects iterate their primitives (can't use the cached node box); unmasked objects keep the fast whole-box path. O(vertices), once per reset.</li>
+</ul>
+
+<h3 id="threading">2.5 · Thread-safety &amp; the snapshot</h3>
+<div class="callout"><strong>The one real cost.</strong> Picks run off-thread against an immutable snapshot (<code>SubBvh</code>s). Bounding box runs on the main thread against live <code>Nodes</code>.</div>
+<ul>
+  <li><strong>Bounding box</strong>: main-thread, reads the live mask directly — trivial.</li>
+  <li><strong>Picking</strong>: the mask must live <em>in</em> the published snapshot so an in-flight pick sees a consistent view. Store the mask as a per-slot <code>shared_ptr&lt;const QVector&lt;quint8&gt;&gt;</code> alongside each <code>SubBvh</code>; <code>setRangeVisible</code> builds a new array and atomically swaps the pointer. BVH nodes are untouched, so toggling never triggers a rebuild and captured snapshots stay valid.</li>
+  <li>This mirrors the existing snapshot discipline (<code>QuerySnapshot</code>, slot invalidation) — the mask is just one more immutable-per-publish array.</li>
+</ul>
+
+<h2 id="files">File-by-file changes</h2>
+<table>
+  <tr><th>File</th><th>Phase</th><th>Change</th></tr>
+  <tr><td><span class="fileref">cwGeometryItersecter.h/.cpp</span></td><td>1</td><td><code>visibleBoundingBox()</code> — whole-object filter over live Nodes.</td></tr>
+  <tr><td><span class="fileref">cwBaseTurnTableInteraction.cpp</span></td><td>1</td><td><code>resetView()</code> → <code>visibleBoundingBox()</code> (line ~331), keep fallback.</td></tr>
+  <tr><td><span class="fileref">cwGeometryItersecter.h/.cpp</span></td><td>2</td><td><code>Object::m_visibility</code>; <code>setRangeVisible(Key,…)</code>; mask in snapshot; <code>visibleBoundingBox()</code> and <code>testPrimitive()</code> honor mask.</td></tr>
+  <tr><td><span class="fileref">cwRenderLinePlot.cpp</span></td><td>2</td><td>Push mask on <code>setGeometry</code> (seed) and <code>setRangeVisible</code> (range update).</td></tr>
+  <tr><td><span class="fileref">test_cwRenderLinePlotPickVisibility.cpp</span></td><td>2</td><td>Drop <code>[!shouldfail]</code>; flip to assert the hidden shot is NOT pickable.</td></tr>
+</table>
+
+<h2 id="alt">Alternatives considered</h2>
+<ul>
+  <li><strong>Per-trip Objects</strong> — register each trip as its own <code>Key</code> and reuse whole-object <code>isPickable</code>. Rejected: restructures centerline registration, multiplies top-level BVH objects (perf), and changes the pick <code>firstIndex</code> contract (#530). The mask is purely additive — one object, one BVH.</li>
+  <li><strong>Visibility callback into the render object</strong> — intersecter reads <code>cwRenderLinePlot::m_visibility</code> live. Rejected: couples the intersecter to render internals and breaks off-thread pick safety (the array mutates under the pick). The owned-copy-in-snapshot avoids both.</li>
+  <li><strong>Fix only reset-view in the interaction</strong> (enumerate visible ranges, union in the interaction). Rejected: duplicates visibility logic per consumer and leaves #575 unfixed.</li>
+</ul>
+
+<h2 id="tests">Test plan</h2>
+<ul>
+  <li><strong>#575 pick</strong> — flip <span class="fileref">test_cwRenderLinePlotPickVisibility.cpp</span> to assert <code>CHECK_FALSE(hit.hit())</code> on the hidden shot; remove <code>[!shouldfail]</code>. Keep the whole-object contrast test.</li>
+  <li><strong>Bounding box</strong> — new test: register two shots, hide one via <code>setRangeVisible</code>, assert <code>visibleBoundingBox()</code> tightens to the visible shot; hide whole object → null/empty; empty mask → equals <code>boundingBox()</code>.</li>
+  <li><strong>Reset framing (#549)</strong> — extend the existing C++ resetView tests: hidden geometry outside the visible box must not affect the framed center.</li>
+  <li><strong>Threading</strong> — toggle <code>setRangeVisible</code> while a pick snapshot is held; the held snapshot returns its captured visibility, the next pick sees the update.</li>
+  <li><strong>QML</strong> — Distance tool over a keyword-hidden trip does not snap to it.</li>
+</ul>
+
+<p class="muted" style="margin-top:40px;font-size:13px;">Related render-side plans (Phase 0 background): <span class="fileref">CENTERLINE_KEYWORD_VISIBILITY_PLAN.html</span>, <span class="fileref">CENTERLINE_PER_SHOT_VISIBILITY_PLAN.html</span>. This plan is their intersecter-side counterpart.</p>
+
+</div>
+</body>
+</html>

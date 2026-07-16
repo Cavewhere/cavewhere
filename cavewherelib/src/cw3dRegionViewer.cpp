@@ -10,6 +10,7 @@
 #include "cw3dRegionViewer.h"
 #include "cwOrthogonalProjection.h"
 #include "cwPerspectiveProjection.h"
+#include "cwRenderingSettings.h"
 
 //Qt includes
 #include <QPainter>
@@ -29,8 +30,9 @@
 cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     cwRhiViewer(parent)
 {
-    //This doesn't work on macos
-    setSampleCount(4); //MSAA sample count
+    cwRenderingSettings* renderingSettings = cwRenderingSettings::instance();
+    Q_ASSERT(renderingSettings);
+    renderingSettings->driveSampleCount(this);
 
     OrthognalProjection = new cwOrthogonalProjection(this);
     OrthognalProjection->setViewer(this);

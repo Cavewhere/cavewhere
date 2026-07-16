@@ -194,7 +194,9 @@ int main(int argc, char *argv[])
     QSettings settings;
     // settings.clear();
 
-    // Configure multisample antialiasing
+    // Configure multisample antialiasing for the window swapchain (2D Quick UI).
+    // The 3D view's MSAA is separate: it is the QQuickRhiItem's own sample count,
+    // driven by cwRenderingSettings (see cw3dRegionViewer).
     QSurfaceFormat format;
     format.setSamples(4); // Adjust the sample count as needed
     QSurfaceFormat::setDefaultFormat(format);

@@ -19,7 +19,7 @@ MainWindowTest {
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             //Select carpet
-            let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let _obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(_obj1);
 
             // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
@@ -61,8 +61,10 @@ MainWindowTest {
             let done_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteScaleInteraction->doneButton->label")
             mouseClick(done_obj1)
 
-            //Make sure the scale updates correctly
-            tryFuzzyCompare(1.0 / scrap.noteTransformation.scale, 569, 3.0, `1.0 / ${scrap.noteTransformation.scale} === 569`);
+            //Make sure the scale updates correctly. The expected value reflects the
+            //native-resolution note rendering (the scale-bar clicks map to full-res
+            //note pixels); the older ~567 value predates that render-sizing fix.
+            tryFuzzyCompare(1.0 / scrap.noteTransformation.scale, 574.5, 3.0, `1.0 / ${scrap.noteTransformation.scale} === 574.5`);
         }
     }
 }

@@ -277,9 +277,10 @@ QString cwSaveLoadPrivate::Job::toString() const {
     const auto* copyPayload = std::get_if<CopyFilePayload>(&payload);
     const auto* customPayload = std::get_if<CustomPayload>(&payload);
     const QString sourcePath = copyPayload ? copyPayload->sourcePath : QString();
-    return QStringLiteral("Job{action=%1 kind=%2 objectId=0x%3 oldPath='%4' newPath='%5' sourcePath='%6' dataRoot='%7' hasMessage=%8 hasCustom=%9}")
+    return QStringLiteral("Job{action=%1 kind=%2 tag='%3' objectId=0x%4 oldPath='%5' newPath='%6' sourcePath='%7' dataRoot='%8' hasMessage=%9 hasCustom=%10}")
             .arg(QString::fromLatin1(actionName(action)),
                  QString::fromLatin1(kindName(kind)),
+                 tag,
                  objectHex,
                  oldPath,
                  path,
@@ -646,26 +647,12 @@ void cwSaveLoadPrivate::trackDisconnected(const QObject* object)
 
 bool cwSaveLoadPrivate::hasQueuedOperationType(Operation::Type type) const
 {
-    if (activeOperation
-            && activeOperation->generation == operationGeneration
-            && activeOperation->type == type) {
-        return true;
-    }
-
-    for (const auto& op : operationQueue) {
-        if (op
-                && op->generation == operationGeneration
-                && op->type == type) {
-            return true;
-        }
-    }
-
-    return false;
+    return m_operations.hasOperation(type, operationGeneration);
 }
 
 void cwSaveLoadPrivate::maybeStartPendingFileJobs(cwSaveLoad* context)
 {
-    if (activeOperation == nullptr) {
+    if (!m_operations.hasActive()) {
         return;
     }
 
@@ -713,30 +700,30 @@ QFuture<Monad::ResultBase> cwSaveLoadPrivate::enqueueOperation(cwSaveLoad* conte
     op->generation = operationGeneration;
     op->run = std::move(run);
 
-    operationQueue.enqueue(op);
+    auto future = op->deferred.future();
+    m_operations.enqueue(std::move(op));
     runNextOperation(context);
-    return op->deferred.future();
+    return future;
 }
 
 void cwSaveLoadPrivate::runNextOperation(cwSaveLoad* context)
 {
-    if (activeOperation != nullptr) {
+    if (m_operations.hasActive()) {
         return;
     }
 
-    if (operationQueue.isEmpty()) {
+    if (m_operations.isEmpty()) {
         return;
     }
 
-    activeOperation = operationQueue.dequeue();
-    auto op = activeOperation;
+    auto op = m_operations.activateNext();
 
     if (op->generation != operationGeneration) {
         const QString cancelReason = pendingCancellationReason.isEmpty()
                 ? QStringLiteral("Operation canceled.")
                 : pendingCancellationReason;
         op->deferred.complete(Monad::ResultBase(cancelReason));
-        activeOperation.reset();
+        m_operations.clearActive();
         runNextOperation(context);
         return;
     }
@@ -762,8 +749,8 @@ void cwSaveLoadPrivate::runNextOperation(cwSaveLoad* context)
             op->deferred.complete(result);
         }
 
-        if (activeOperation == op) {
-            activeOperation.reset();
+        if (m_operations.active() == op) {
+            m_operations.clearActive();
         }
 
         if (op->type == Operation::Type::SaveFlush && result.hasError()) {
@@ -782,14 +769,14 @@ void cwSaveLoadPrivate::cancelPendingOperations(const QString& reason)
     ++operationGeneration;
     pendingCancellationReason = reason;
 
-    if (activeOperation && !activeOperation->deferred.future().isFinished()) {
-        activeOperation->deferred.complete(Monad::ResultBase(reason));
+    if (const auto& active = m_operations.active();
+            active && !active->deferred.future().isFinished()) {
+        active->deferred.complete(Monad::ResultBase(reason));
     }
 
-    while (!operationQueue.isEmpty()) {
-        auto op = operationQueue.dequeue();
-        op->deferred.complete(Monad::ResultBase(reason));
-    }
+    // Any active operation is left running; it settles the idle future from its
+    // completion callback (via clearActive()).
+    m_operations.cancelQueued(reason);
 }
 
 void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
@@ -923,7 +910,7 @@ void cwSaveLoadPrivate::addFileSystemJob(Job job, cwSaveLoad* context) {
 
     m_pendingJobs.append(job);
 
-    if (activeOperation != nullptr) {
+    if (m_operations.hasActive()) {
         maybeStartPendingFileJobs(context);
     } else {
         ensureSaveFlushScheduled(context);
@@ -935,9 +922,16 @@ void cwSaveLoadPrivate::addExplicitFileSystemJob(Job job, cwSaveLoad* context) {
         return;
     }
 
-    // Explicit jobs are already path-resolved and don't track object state; move jobs here
-    // can race with path updates and break path-ready notifications. Use addFileSystemJob for moves.
-    Q_ASSERT(job.action != Job::Action::Move);
+    // Explicit jobs are already path-resolved and don't track m_objectStates.
+    // Move jobs here must therefore carry both oldPath and path set by the
+    // caller (no per-object path lookup will fill them in), and they will
+    // not emit objectPathReady — the destination must be a sibling artifact
+    // for which no path-ready signal is meaningful (e.g. cwLazLayer's .laz
+    // source file, which is not the canonical metadata file cwSaveLoad
+    // tracks). For metadata-file moves, use addFileSystemJob instead so
+    // path-ready emission is wired correctly.
+    Q_ASSERT(job.action != Job::Action::Move
+             || (!job.oldPath.isEmpty() && !job.path.isEmpty()));
 
     const QString dataRootName = context->dataRoot();
     const QString projectRootPath = context->projectRootDir().absolutePath();
@@ -955,7 +949,7 @@ void cwSaveLoadPrivate::addExplicitFileSystemJob(Job job, cwSaveLoad* context) {
 
     m_pendingJobs.append(job);
 
-    if (activeOperation != nullptr) {
+    if (m_operations.hasActive()) {
         maybeStartPendingFileJobs(context);
     } else {
         ensureSaveFlushScheduled(context);
@@ -971,6 +965,9 @@ QString cwSaveLoadPrivate::absolutePathFor(const cwSaveLoad* context, const QObj
     }
     if (auto sketch = qobject_cast<const cwSketch*>(object)) {
         return context->absolutePathPrivate(sketch);
+    }
+    if (auto laz = qobject_cast<const cwLazLayer*>(object)) {
+        return context->absolutePathPrivate(laz);
     }
     if (auto trip = qobject_cast<const cwTrip*>(object)) {
         return context->absolutePathPrivate(trip);
@@ -1326,12 +1323,13 @@ Monad::ResultBase cwSaveLoadPrivate::ensurePathForFile(const QString& filePath) 
     return Monad::ResultBase();
 }
 
-QHash<const void*, QList<int>> cwSaveLoadPrivate::jobIndicesByObjectId() const
+QHash<cwSaveLoadPrivate::GroupKey, QList<int>> cwSaveLoadPrivate::jobIndicesByGroup() const
 {
-    QHash<const void*, QList<int>> result;
+    QHash<GroupKey, QList<int>> result;
     for (int i = 0; i < m_pendingJobs.size(); ++i) {
-        if (m_pendingJobs[i].objectId != nullptr) {
-            result[m_pendingJobs[i].objectId].append(i);
+        const Job& job = m_pendingJobs.at(i);
+        if (job.objectId != nullptr) {
+            result[GroupKey{job.objectId, job.tag}].append(i);
         }
     }
     return result;
@@ -1398,7 +1396,7 @@ void cwSaveLoadPrivate::compressPendingJobs()
 
     QSet<int> indicesToDrop;
 
-    const auto indexMap = jobIndicesByObjectId();
+    const auto indexMap = jobIndicesByGroup();
     for (auto it = indexMap.cbegin(); it != indexMap.cend(); ++it) {
         const QList<int>& indices = it.value();
         if (indices.size() <= 1) {

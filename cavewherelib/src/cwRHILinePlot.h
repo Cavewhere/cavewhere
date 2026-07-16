@@ -4,7 +4,7 @@
 //Our includes
 #include "cwRHIObject.h"
 #include "cwRenderLinePlot.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 
 //Qt includes
 #include <QMatrix4x4>
@@ -13,6 +13,7 @@
 class QRhiBuffer;
 class QRhiShaderResourceBindings;
 class QRhiGraphicsPipeline;
+class QRhiResourceUpdateBatch;
 
 class cwRHILinePlot : public cwRHIObject
 {
@@ -34,16 +35,18 @@ private:
     // QRhi resources
     QRhiVertexInputLayout m_inputLayout;
     QRhiBuffer* m_vertexBuffer = nullptr;
-    QRhiBuffer* m_indexBuffer = nullptr;
-    // QRhiBuffer* m_uniformBuffer = nullptr;
+    // Per-vertex visibility, parallel to the position buffer (one 4-byte uint
+    // per vertex). Dynamic so a keyword toggle re-uploads only this buffer.
+    QRhiBuffer* m_visibilityBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
-    cwRhiScene* m_scene = nullptr;
-    cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;
-    cwRhiPipelineKey m_pipelineKey;
-    bool m_hasPipelineKey = false;
+
+    cwRhiFrameRenderer* m_frame = nullptr;
 
     //The front end data that will be rendered
     cwTracked<cwRenderLinePlot::Data> m_data;
+    cwTracked<QVector<quint8>> m_visibility;
+
+    void updateVisibilityBuffer(QRhiResourceUpdateBatch* batch);
 
     // Update uniform buffer
     // struct UniformData {
@@ -51,11 +54,10 @@ private:
     //     float minZValue;
     // };
 
-    void releasePipeline();
     bool ensurePipeline(const RenderData& data);
     bool ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer);
-    cwRhiPipelineKey buildPipelineKey(QRhiRenderTarget* target,
-                                      QRhiRenderPassDescriptor* renderPassDescriptor) const;
+    cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
+                                      int sampleCount) const;
 };
 
 #endif // CWRHILINEPLOT_H

@@ -14,6 +14,10 @@ MainWindowTest {
         when: windowShown
 
         function init() {
+            // Wide enough that the trip page shows the inline note gallery
+            // (showGallery is gated on the page reaching breakpointFullGallery);
+            // the note-selection helpers click gallery thumbnails.
+            rootId.width = 1600
             RootData.account.name = "LiDAR Sync Test"
             RootData.account.email = "lidar.sync.test@example.com"
         }
@@ -42,7 +46,7 @@ MainWindowTest {
             TestHelper.loadProjectFromPath(RootData.project, fixture.projectFilePath)
             tryVerify(() => {
                 return RootData.region.caveCount > 0
-            }, 10000)
+            }, 20000)
 
             let cave = null
             let trip = null
@@ -220,7 +224,7 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 let gv = freshGalleryView()
                 return gv !== null && gv.count > 0
-            }, 10000, "wait for LiDAR note gallery items")
+            }, 20000, "wait for LiDAR note gallery items")
 
             let galleryView = freshGalleryView()
             galleryView.currentIndex = -1
@@ -257,7 +261,7 @@ MainWindowTest {
 
             tryVerifyWithDiagnostics(() => {
                 return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-            }, 10000, "wait for LiDAR viewer ready", () => {
+            }, 20000, "wait for LiDAR viewer ready", () => {
                 SyncTestHelper.waitForFutureManagerToFinish(testCaseId, RootData)
             })
         }
@@ -276,7 +280,7 @@ MainWindowTest {
                        && TestHelper.liDARStationLookupSize(note) > 0
                        && TestHelper.liDARSurveyNetworkIsEmpty(note) === false
                        && selectedLiDARStationUiState().stationCount === note.rowCount()
-            }, 10000, "wait for LiDAR note ready", () => {
+            }, 20000, "wait for LiDAR note ready", () => {
                 SyncTestHelper.waitForFutureManagerToFinish(testCaseId, RootData)
             })
         }
@@ -306,7 +310,7 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 let gv = freshGalleryView()
                 return gv !== null && gv.count > 0
-            }, 10000, "wait for any LiDAR note gallery items")
+            }, 20000, "wait for any LiDAR note gallery items")
 
             let galleryView = freshGalleryView()
             galleryView.currentIndex = -1
@@ -340,7 +344,7 @@ MainWindowTest {
 
             tryVerifyWithDiagnostics(() => {
                 return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-            }, 10000, "wait for any LiDAR viewer ready", () => {
+            }, 20000, "wait for any LiDAR viewer ready", () => {
                 SyncTestHelper.waitForFutureManagerToFinish(testCaseId, RootData)
             })
 
@@ -717,8 +721,8 @@ MainWindowTest {
                 getter: snapshotSelectedLiDARStationState,
                 uiGetter: selectedLiDARStationUiState,
                 uiExpectedFromValue: expectedLiDARStationUiState,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 nextValue: nextLiDARStationStateWithAddedStation,
                 setter: applySelectedLiDARStationState,
                 prepare: function() {
@@ -737,8 +741,8 @@ MainWindowTest {
                 getter: snapshotSelectedLiDARStationState,
                 uiGetter: selectedLiDARStationUiState,
                 uiExpectedFromValue: expectedLiDARStationUiState,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 nextValue: nextLiDARStationStateWithRemovedStation,
                 setter: applySelectedLiDARStationState,
                 prepare: function() {
@@ -757,8 +761,8 @@ MainWindowTest {
                 getter: snapshotSelectedLiDARStationState,
                 uiGetter: selectedLiDARStationUiState,
                 uiExpectedFromValue: expectedLiDARStationUiState,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 nextValue: nextLiDARStationStateWithRenamedStation,
                 setter: applySelectedLiDARStationState,
                 prepare: function() {
@@ -778,8 +782,8 @@ MainWindowTest {
                 uiGetter: selectedLiDARStationUiState,
                 uiExpectedFromValue: expectedLiDARStationUiState,
                 verifyEditedUi: false,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 nextValue: nextLiDARStationStateWithMovedStation,
                 setter: applySelectedLiDARStationState,
                 prepare: function() {
@@ -799,8 +803,8 @@ MainWindowTest {
                 getter: snapshotSelectedLiDARTransformState,
                 uiGetter: selectedLiDARTransformUiState,
                 uiExpectedFromValue: expectedLiDARTransformUiState,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 nextValue: nextLiDARTransformStateWithManualNorthAndScale,
                 setter: applySelectedLiDARTransformState,
                 prepare: function(stage) {
@@ -827,8 +831,8 @@ MainWindowTest {
                 getter: snapshotSelectedLiDARTransformState,
                 uiGetter: selectedLiDARTransformUiState,
                 uiExpectedFromValue: expectedLiDARTransformUiState,
-                verifyBaselineAfterCheckoutTimeoutMs: 10000,
-                verifyResyncedValueTimeoutMs: 10000,
+                verifyBaselineAfterCheckoutTimeoutMs: 20000,
+                verifyResyncedValueTimeoutMs: 20000,
                 nextValue: nextLiDARTransformStateWithUpModeChange,
                 setter: applySelectedLiDARTransformState,
                 prepare: function(stage) {

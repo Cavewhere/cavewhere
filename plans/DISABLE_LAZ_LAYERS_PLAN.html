@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Disabling LAZ Layers</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --muted: #555;
+    --accent: #1f6feb;
+    --warn: #b95900;
+    --done: #1a7f37;
+    --code-bg: #f4f5f7;
+    --rule: #d8dbe0;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--fg);
+    max-width: 880px;
+    margin: 2.5rem auto;
+    padding: 0 1.5rem;
+    line-height: 1.55;
+  }
+  h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+  h2 {
+    font-size: 1.25rem;
+    margin-top: 2.2rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 { font-size: 1.05rem; margin-top: 1.5rem; }
+  .subtitle { color: var(--muted); margin-top: 0; }
+  code, pre {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    background: var(--code-bg);
+    border-radius: 4px;
+  }
+  code { padding: 1px 5px; font-size: 0.92em; }
+  pre {
+    padding: 0.75rem 1rem;
+    overflow-x: auto;
+    font-size: 0.88em;
+    border: 1px solid var(--rule);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.95em;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th { background: var(--code-bg); }
+  .callout {
+    border-left: 3px solid var(--accent);
+    padding: 0.6rem 0.9rem;
+    background: #eef4ff;
+    margin: 1rem 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .callout.warn { border-color: var(--warn); background: #fff8ee; }
+  .callout.done { border-color: var(--done); background: #eef9f0; }
+  ul { padding-left: 1.4rem; }
+  li { margin: 0.25rem 0; }
+  .path { color: var(--muted); font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.88em; }
+  .badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 0.78em;
+    font-weight: 600;
+    vertical-align: middle;
+    margin-left: 0.4em;
+  }
+  .badge.done { background: #d6f0db; color: var(--done); }
+  .badge.todo { background: #fde2e2; color: #a8221b; }
+</style>
+</head>
+<body>
+
+<h1>Disabling LAZ Layers</h1>
+<p class="subtitle">A per-layer <code>enabled</code> property: kept in the project, synced via Git, with disabled layers excluded from rendering, processing, and the async LAZ load.</p>
+
+<h2>Context</h2>
+<p>
+This is the &ldquo;commented-out code&rdquo; gesture for LAZ layers. A user disables a layer when:
+</p>
+<ul>
+  <li><b>Re-survey.</b> The old scan should stay in the project as a record, but should not be loaded, rendered,
+    or fed into algorithms.</li>
+  <li><b>Post-clip cleanup.</b> Commit <code>5cd906b</code> made the LAZ clip lossy &mdash; only point locations
+    survive; intensity / classification / RGB / GPS time are dropped. Deleting the original is not acceptable
+    (future algorithms may need the dropped attributes), but leaving both the original and the clip visible is
+    confusing. Disable the original; the file stays on disk, the clip becomes the only visible layer.</li>
+</ul>
+<p>
+This is the <b>project-level</b> visibility mechanism. It persists, it syncs through Git like every other
+project edit, and it lives on the object itself &mdash; the same way a layer&rsquo;s name and source path do.
+</p>
+<p>
+A separate, lighter-weight <b>session-level</b> hide gesture (right-click &ldquo;Hide&rdquo; in the scene,
+viewport chip for unhide) is intentionally deferred to a follow-up plan. See the bottom of this document.
+</p>
+
+<h2>Status snapshot</h2>
+<p>
+The save/load substrate landed in a separate series (<span class="path">plans/LAZ_LAYER_FILE_PLAN.html</span>
+commits 1&ndash;6) while this plan was paused. As a result, persistence now goes through a per-layer
+<code>&lt;basename&gt;.cwlaz</code> sidecar instead of the <code>LazLayerState</code> proto overlay this plan
+originally proposed. The <code>enabled</code> property itself, the cancellation side effects, and the
+<code>reload()</code> short-circuit are also already in place. What remains is the visibility wire-up, the
+QML toggle, and the post-clip auto-disable hook.
+</p>
+<table>
+  <thead>
+    <tr><th style="width: 30%">Piece</th><th style="width: 18%">Status</th><th>Where it lives now</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>cwLazLayer::enabled</code> property + cancel/reload side effects</td>
+      <td><span class="badge done">done</span></td>
+      <td><span class="path">cavewherelib/src/cwLazLayer.{h,cpp}</span> (cwLazLayer.h:52, cwLazLayer.cpp:166)</td>
+    </tr>
+    <tr>
+      <td>Per-project persistence of <code>enabled</code></td>
+      <td><span class="badge done">done</span></td>
+      <td>Per-layer <code>.cwlaz</code> sidecar (UUID + enabled bit), discovered alongside the <code>.laz</code> in
+        <code>GIS Layers/</code>. See <span class="path">LAZ_LAYER_FILE_PLAN.html</span> commits 1&ndash;6 for the
+        full design.</td>
+    </tr>
+    <tr>
+      <td><code>reload()</code> short-circuit on disabled layers</td>
+      <td><span class="badge done">done</span></td>
+      <td>cwLazLayer.cpp:240. <code>setSourcePath</code> still records path + size/mtime fingerprint so the layer
+        is identifiable in the model without owning the bytes.</td>
+    </tr>
+    <tr>
+      <td>Unit tests on the property and load-skip behavior</td>
+      <td><span class="badge done">done</span></td>
+      <td><span class="path">testcases/test_cwLazLayer_enabled.cpp</span> (5 cases); plus
+        <span class="path">testcases/test_cwLazLayerSaveLoad.cpp</span> &ldquo;disabled state survives reopen&rdquo;
+        and friends.</td>
+    </tr>
+    <tr>
+      <td>Scene-node materialization gated on <code>enabled</code></td>
+      <td><span class="badge todo">todo</span></td>
+      <td>Commit 1 of this plan.</td>
+    </tr>
+    <tr>
+      <td>Data-section toggle in the layer list</td>
+      <td><span class="badge todo">todo</span></td>
+      <td>Commit 2 of this plan.</td>
+    </tr>
+    <tr>
+      <td>Post-clip auto-disable</td>
+      <td><span class="badge todo">todo</span></td>
+      <td>Commit 3 of this plan.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+<b>Out-of-date in the original plan, repaired below:</b> the &ldquo;Persistence&rdquo; section was specified in
+terms of a <code>LazLayerState</code> proto field on <code>ProjectMetadata</code>. That field was added in an
+earlier exploration and removed in commit&nbsp;6 of <span class="path">LAZ_LAYER_FILE_PLAN.html</span> in favor
+of the <code>.cwlaz</code> sidecar. Treat all references to <code>LazLayerState</code> in older revisions of
+this document as historical.
+</div>
+
+<h2>UX</h2>
+
+<h3>Data section toggle</h3>
+<p>
+<span class="path">cavewherelib/qml/GeospatialLayerPage.qml</span> is the existing Data-section page that
+lists LAZ layers (<code>RootData.region.lazLayers</code>). Each row gains an Enable/Disable toggle (eye icon
+or labeled checkbox). Disabled rows render dimmed and tagged &ldquo;Disabled&rdquo; so they&rsquo;re still
+discoverable. Re-enabling triggers the normal async load.
+</p>
+
+<h3>Post-clip auto-disable</h3>
+<p>
+After a successful clip, every source layer that contributed is automatically set to
+<code>enabled = false</code>. No prompt, no setting. The user&rsquo;s recovery path is the Data section
+toggle &mdash; they can re-enable any layer there at any time. The new clip layer remains visible.
+</p>
+<p>
+This matches the &ldquo;clip means the original should step aside&rdquo; intent without adding an
+inline-prompt surface that would be the same answer almost every time. Disabling is reversible and
+the Data section makes the change discoverable.
+</p>
+
+<h3>Effective visibility</h3>
+<p>
+Render-side visible iff <b><code>layer.enabled</code> AND (keyword filter accepts)</b>. Both inputs are
+ANDed in <code>cwLazLayersSceneNode</code>. If a layer is disabled, the keyword filter cannot bring it back
+&mdash; the user must re-enable it from the Data section.
+</p>
+
+<h2>Architecture</h2>
+
+<h3>1. <code>enabled</code> on <code>cwLazLayer</code> <span class="badge done">done</span></h3>
+<p>
+Already shipped:
+</p>
+<pre><code>Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
+
+bool enabled() const { return m_enabled; }
+void setEnabled(bool enabled);
+
+signals:
+    void enabledChanged();
+
+private:
+    bool m_enabled = true;   // default: enabled</code></pre>
+<p>
+The setter follows the project pattern (<code>if (m_enabled == enabled) return; m_enabled = enabled; emit
+enabledChanged(); /* side effects */;</code>). On <b>true &rarr; false</b>: cancels the in-flight load
+(<code>m_loadRestarter.future().cancel()</code>), drops <code>m_geometry</code> back to default, clears the
+bbox / spacing / error message, and resets <code>m_loadStatus</code> to <code>Idle</code>. On
+<b>false &rarr; true</b>: calls <code>reload()</code>.
+</p>
+
+<h3>2. Persistence <span class="badge done">done</span></h3>
+<p>
+Per-layer <code>enabled</code> (plus a stable <code>QUuid</code> identity) is persisted in a sidecar
+<code>&lt;basename&gt;.cwlaz</code> next to each <code>.laz</code> in <code>GIS Layers/</code>. Discovery is
+by folder scan; <code>cwLazLayerModel::rescan</code> pairs each <code>.laz</code> with its
+<code>.cwlaz</code> sibling and calls <code>cwLazLayer::setData(...)</code> before announcing the row, so the
+final <code>enabled</code> bit is in place by the time observers (the scene node, the keyword filter
+pipeline, cwSaveLoad) see <code>rowsInserted</code>. The full design lives in
+<span class="path">plans/LAZ_LAYER_FILE_PLAN.html</span>. The <code>.cwproj</code> file no longer carries a
+LAZ-layer overlay (field <code>7</code> on <code>ProjectMetadata</code> is <code>reserved</code>).
+</p>
+<p>
+For Git sync, the <code>.cwlaz</code> sits inside the same <code>GIS Layers/</code> directory the
+<code>.laz</code> already lives in, so toggling <code>enabled</code> produces a single-file diff on the
+<code>.cwlaz</code>. The merge-handler shape for LAZ layers is itself an out-of-scope follow-up tracked in
+<span class="path">LAZ_LAYER_FILE_PLAN.html</span>.
+</p>
+
+<h3>3. Scene-node materialization <span class="badge todo">todo</span></h3>
+<p>
+A disabled layer has no geometry to draw &mdash; <code>cwLazLayer::setEnabled(false)</code> already drops
+<code>m_geometry</code> and resets <code>m_loadStatus</code> to <code>Idle</code>
+(<span class="path">cwLazLayer.cpp:174</span>), and <code>reload()</code> short-circuits on
+<code>!m_enabled</code> (<span class="path">cwLazLayer.cpp:240</span>). Leaving an empty
+<code>cwRenderPointCloud</code> and a <code>cwKeywordItem</code> in the scene for it is pure overhead
+and surfaces the layer as a chip in the keyword filter UI even though it has nothing to draw.
+</p>
+<p>
+The fix: <b>don&rsquo;t materialize the scene-node state for disabled layers at all.</b> Treat
+<code>enabledChanged</code> as the canonical add/remove signal for the scene node.
+</p>
+<ul>
+  <li><span class="path">cwLazLayersSceneNode::addLayer</span> (called from <code>rowsInserted</code>) always
+    connects <code>cwLazLayer::enabledChanged</code> to a new handler &mdash; even if the layer is currently
+    disabled &mdash; so a later toggle is observed. If <code>layer-&gt;enabled()</code> is <code>true</code>,
+    proceed with the current body (create the render object, hook
+    <code>loadStatusChanged</code> &rarr; <code>syncLayerGeometry</code>, add the keyword item). If
+    <code>false</code>, return after the <code>enabledChanged</code> connect.</li>
+  <li>The new <code>enabledChanged</code> handler is a single dispatch:
+    <ul>
+      <li><code>false &rarr; true</code>: run the materialization body
+        (factor the current <code>addLayer</code> body into a private
+        <code>materialize(cwLazLayer*)</code> helper that both call sites share).
+        <code>setEnabled(true)</code> in <code>cwLazLayer</code> already calls <code>reload()</code> after
+        emitting <code>enabledChanged</code>, so <code>syncLayerGeometry</code> will push the geometry as
+        soon as the async load lands on <code>Loaded</code>.</li>
+      <li><code>true &rarr; false</code>: run the tear-down body
+        (factor the current <code>removeLayer</code>&rsquo;s render-object / keyword-item disposal into
+        <code>dematerialize(cwLazLayer*)</code>; the model-disconnect that <code>removeLayer</code> does
+        last must stay in <code>removeLayer</code>, not in <code>dematerialize</code>). <code>setEnabled</code>
+        emits <code>enabledChanged</code> <em>before</em> it calls <code>setLoadStatus(Idle)</code>, so the
+        tear-down disconnect runs first and the subsequent <code>loadStatusChanged</code> finds nothing to
+        sync &mdash; no warning, no dangling lookup.</li>
+    </ul>
+  </li>
+  <li><span class="path">cwLazLayersSceneNode::removeLayer</span> (called from
+    <code>rowsAboutToBeRemoved</code>) calls <code>dematerialize</code> if the render object exists, then
+    disconnects everything from the layer (covers both the <code>enabledChanged</code> and the
+    <code>loadStatusChanged</code> hookups). No new state to track.</li>
+  <li><code>rebuild()</code> / <code>clear()</code> are unchanged &mdash; <code>clear()</code> walks
+    <code>m_pointClouds</code> and <code>m_keywordItems</code>, both of which are now narrower (disabled
+    layers simply aren&rsquo;t in either container).</li>
+</ul>
+<p>
+Side effects of this approach:
+</p>
+<ul>
+  <li><code>setVisibleForAll</code> still iterates <code>m_pointClouds</code> for capture-mode screenshots;
+    disabled layers are correctly excluded.</li>
+  <li><code>visibleLayers()</code> currently iterates <code>m_model-&gt;layers()</code> and filters by
+    <code>m_pointClouds[layer.id()].isVisible()</code>; disabled layers will be absent from
+    <code>m_pointClouds</code> and so dropped silently. That&rsquo;s the right answer for the post-clip
+    auto-disable path (Commit 3) &mdash; a disabled layer is not a valid clip source.</li>
+  <li><code>pointCloudForLayer(layer)</code> returns <code>nullptr</code> for a disabled layer. The only
+    callers are tests; the new test fixture asserts this explicitly so the contract is documented.</li>
+  <li>The keyword filter chip list now only contains enabled layers, which matches the &ldquo;commented out&rdquo;
+    mental model &mdash; a disabled layer is not in the scene, period.</li>
+</ul>
+<p>
+No new state, no recursion guard, no visibility composition &mdash; the existing add/remove machinery does
+the work and <code>enabledChanged</code> is its trigger.
+</p>
+
+<h3>4. Load skipping <span class="badge done">done</span></h3>
+<p>
+<code>cwLazLayer::reload()</code> short-circuits on <code>!m_enabled</code> at cwLazLayer.cpp:240.
+<code>setSourcePath</code> still records the size/mtime fingerprint (the
+<code>cwLazLayerModel::rescan</code> in-place-overwrite detector relies on it), but does not kick the
+restarter while the layer is disabled. Re-enabling calls <code>reload()</code>, which starts the load.
+</p>
+<p>
+<code>cwLazLayerModel::rescan</code> needs no change &mdash; newly-discovered layers default to
+<code>enabled = true</code>, and any disabling has already been applied by
+<code>cwLazLayer::setData(...)</code> from the paired <code>.cwlaz</code> before <code>rowsInserted</code>
+fires.
+</p>
+
+<h3>5. Data section toggle <span class="badge todo">todo</span></h3>
+<p>
+<span class="path">cavewherelib/qml/GeospatialLayerPage.qml</span> has both a <code>wideDelegateComponent</code>
+(around line 90) and a <code>narrowDelegateComponent</code> (around line 156). Both bind to
+<code>model.name</code>, <code>model.sourceCS</code>, <code>model.pointCount</code>. The model currently exposes
+those four roles plus <code>LayerRole</code>, <code>SourcePathRole</code>, <code>LoadStatusRole</code>
+(<span class="path">cwLazLayerModel.h:37</span>); there is no <code>EnabledRole</code> yet.
+</p>
+<ul>
+  <li><span class="path">cwLazLayerModel.{h,cpp}</span> &mdash; add <code>EnabledRole</code> to the
+    <code>Roles</code> enum, populate it in <code>data()</code>, accept it in <code>setData()</code> (route
+    through <code>layer-&gt;setEnabled(value.toBool())</code>), and register the string
+    <code>&quot;enabled&quot;</code> in <code>roleNames()</code>. Connect
+    <code>cwLazLayer::enabledChanged</code> in <code>connectLayer</code> (already at
+    <span class="path">cwLazLayerModel.cpp:537</span>) so the model emits
+    <code>dataChanged(index, index, {EnabledRole})</code> when the property changes from outside the model
+    (e.g. the post-clip auto-disable).</li>
+  <li><span class="path">GeospatialLayerPage.qml</span> &mdash; add a per-row <code>QC.CheckBox</code> (or
+    eye-icon button) bound to <code>model.enabled</code>; dim the row when disabled
+    (<code>opacity: model.enabled ? 1.0 : 0.5</code>); show a small &ldquo;Disabled&rdquo; chip via
+    <code>QC.Label</code> + <code>Theme.fontSizeCaption</code>. Apply consistently in both delegates.</li>
+</ul>
+
+<h3>6. Post-clip auto-disable <span class="badge todo">todo</span></h3>
+<p>
+<span class="path">cavewherelib/src/cwLazClipInteraction.cpp:174</span> resolves contributing layers via
+<code>m_sceneNode-&gt;visibleLayers()</code>. Capture their <code>QUuid</code>s into a list at that point.
+Today, the success branch of the AsyncFuture callback (around lines 233&ndash;253) calls
+<code>modelGuard-&gt;rescan()</code> to surface the new clip layer. After that <code>rescan()</code>, iterate
+the captured UUIDs, look each one up in <code>cwLazLayerModel</code> (a small
+<code>cwLazLayer* layerById(QUuid)</code> helper on the model, or a linear search through
+<code>layers()</code>), and call <code>layer-&gt;setEnabled(false)</code> on any pointer that&rsquo;s still
+alive.
+</p>
+<p>
+UUIDs (not <code>QPointer&lt;cwLazLayer&gt;</code>) because identity is what matters: a layer that was
+removed and re-paired during the rescan still represents the same source artifact and should still get
+disabled. Stale UUIDs (layer truly gone) are silently skipped.
+</p>
+<p>
+Failure / cancellation branches do nothing &mdash; the user&rsquo;s state is untouched on a no-op clip.
+</p>
+
+<h2>Commit breakdown</h2>
+<p>
+Three commits, each in a working state. The post-clip auto-disable is last because it depends on the
+visibility wire-up to be useful in the scene and on the Data-section toggle to be discoverable as the
+recovery affordance.
+</p>
+
+<h3>Commit 1 &mdash; Gate scene-node materialization on <code>enabled</code></h3>
+<ul>
+  <li><b>Scope:</b> A disabled layer holds neither a <code>cwRenderPointCloud</code> nor a
+    <code>cwKeywordItem</code>. Toggling <code>enabled</code> materializes or tears down both. No visibility
+    composition, no keyword filter interaction, no extra state tracking. The disabled-layer rendering /
+    chip-list overhead drops to zero.</li>
+  <li><b>Files:</b>
+    <ul>
+      <li><span class="path">cavewherelib/src/cwLazLayersSceneNode.{h,cpp}</span> &mdash; per &sect;3 above:
+        factor the current <code>addLayer</code> body into a private
+        <code>materialize(cwLazLayer*)</code> helper (everything from the
+        <code>new cwRenderPointCloud()</code> through <code>addKeywordItemForLayer</code>), and factor
+        <code>removeLayer</code>&rsquo;s body up to (but not including) the final
+        <code>disconnect(layer, ...)</code> into <code>dematerialize(cwLazLayer*)</code>.
+        <code>addLayer</code> always <code>connect</code>s <code>cwLazLayer::enabledChanged</code> to a new
+        <code>onEnabledChanged(cwLazLayer*)</code> slot, then calls <code>materialize(layer)</code> iff
+        <code>layer-&gt;enabled()</code>. <code>onEnabledChanged</code> reads the current
+        <code>layer-&gt;enabled()</code> and dispatches to <code>materialize</code> or
+        <code>dematerialize</code>. <code>removeLayer</code> calls <code>dematerialize</code> if a render
+        object exists, then disconnects everything from the layer (covers the new connection too).</li>
+      <li><span class="path">testcases/test_cwLazLayersSceneNode.cpp</span> <i>(new file)</i>:
+        <ol>
+          <li><b>Disabled at insert:</b> create a model containing one layer with
+            <code>enabled = false</code> from the start, bind the scene node, assert
+            <code>pointCloudForLayer(layer) == nullptr</code> and <code>visibleLayers().isEmpty()</code>.
+            The keyword item model has zero entries for that layer.</li>
+          <li><b>Toggle disable on a loaded layer:</b> insert an enabled layer, wait for
+            <code>Loaded</code>, assert <code>pointCloudForLayer(layer) != nullptr</code>. Call
+            <code>layer-&gt;setEnabled(false)</code>. Assert <code>pointCloudForLayer(layer) == nullptr</code>,
+            the keyword item is gone, and no leftover <code>cwLazLayer::loadStatusChanged</code> handler
+            invocation crashes on the destroyed render object (covered implicitly by ASan in Debug).</li>
+          <li><b>Toggle re-enable:</b> from the disabled state above, call
+            <code>layer-&gt;setEnabled(true)</code>. Assert <code>pointCloudForLayer(layer) != nullptr</code>
+            immediately (materialize ran before <code>reload()</code> started the load).
+            <code>tryVerify</code> on <code>renderObject-&gt;geometry()</code> becoming non-empty after the
+            async load completes.</li>
+          <li><b>Re-add after rescan with same UUID:</b> simulate the
+            <code>cwLazLayerModel::rescan</code> in-place-overwrite path by removing the layer from the
+            model (triggers <code>rowsAboutToBeRemoved</code>) and inserting a new layer with the same UUID
+            and <code>enabled = false</code>. Assert <code>pointCloudForLayer(uuid) == nullptr</code> &mdash;
+            no stale render object survives the rescan transient.</li>
+          <li><b>removeLayer disconnects the enabledChanged hookup:</b> insert an enabled layer, remove it,
+            then call <code>setEnabled(false)</code> on the now-orphan <code>cwLazLayer</code> pointer.
+            Assert no crash and the scene node&rsquo;s <code>m_pointClouds</code> stays empty (the
+            disconnect ran).</li>
+          <li><b>Rapid toggle:</b> toggle enabled false/true/false/true 50 times. Final state matches the
+            last toggle; no leaked render objects (<code>m_pointClouds.size()</code> reflects the final
+            state).</li>
+        </ol>
+      </li>
+      <li><span class="path">testlib/</span> &mdash; reuse <code>LazFixtureHelper</code> for synthetic
+        <code>.laz</code> bytes; no new fixture infrastructure needed.</li>
+    </ul>
+  </li>
+  <li><b>Verification:</b>
+    <ul>
+      <li><code>cavewhere-test "[cwLazLayersSceneNode]" -d yes 2&gt;&amp;1 | tee
+        /tmp/cavewhere-test.log</code> &mdash; new tests green.</li>
+      <li>Full <code>cavewhere-test -d yes</code> sweep &mdash; existing
+        <code>[cwLazLayer],[cwLazLayerModel],[cwSaveLoad]</code> regressions stay green.</li>
+      <li>Manual: load a project with a LAZ layer, toggle <code>layer.enabled</code> from a debug shell or
+        <code>QC.Button</code>; confirm the point cloud disappears immediately and the keyword filter chip
+        list no longer shows the layer&rsquo;s entry. Toggle back on; chip reappears, async load fires,
+        cloud renders.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3>Commit 2 &mdash; Data-section Enable/Disable toggle</h3>
+<ul>
+  <li><b>Scope:</b> Per-row toggle in the existing layer list, plus the model surface that backs it. Builds
+    on Commit&nbsp;1 so toggling the UI immediately hides the point cloud in the 3D view.</li>
+  <li><b>Files:</b>
+    <ul>
+      <li><span class="path">cavewherelib/src/cwLazLayerModel.{h,cpp}</span> &mdash; add
+        <code>EnabledRole</code> to the <code>Roles</code> enum, populate it in <code>data()</code>, accept
+        it in <code>setData(idx, value, EnabledRole)</code> (route through
+        <code>layer-&gt;setEnabled(value.toBool())</code>), register
+        <code>&quot;enabled&quot;</code> in <code>roleNames()</code>. Wire
+        <code>cwLazLayer::enabledChanged</code> in <code>connectLayer</code> (alongside the existing
+        sourcePath / loadStatus / pointCount hookups) so external sets emit
+        <code>dataChanged(idx, idx, {EnabledRole})</code> with the correct role in the vector.</li>
+      <li><span class="path">cavewherelib/qml/GeospatialLayerPage.qml</span> &mdash; add the toggle to both
+        <code>wideDelegateComponent</code> and <code>narrowDelegateComponent</code>; both must declare
+        <code>required property bool enabled</code> alongside the existing required properties; bind
+        toggle <code>checked</code> to <code>enabled</code>; <code>onToggled: model.enabled = checked</code>;
+        dim the row content (or the whole delegate <code>QQ.Item</code>) when disabled; a small
+        &ldquo;Disabled&rdquo; <code>QC.Label</code> chip aligned with the other status indicators. Keep
+        existing layout tokens (<code>Theme.tightSpacing</code>, <code>Theme.columnGap</code>,
+        <code>Theme.fontSizeCaption</code>).</li>
+      <li><span class="path">testcases/test_cwLazLayerModel.cpp</span> &mdash; new cases:
+        <ol>
+          <li><code>roleNames()</code> includes the entry <code>"enabled"</code> mapped to
+            <code>EnabledRole</code>.</li>
+          <li><code>data(idx, EnabledRole)</code> returns the underlying <code>layer-&gt;enabled()</code>.</li>
+          <li><code>setData(idx, false, EnabledRole)</code> drives <code>layer-&gt;enabled()</code> to
+            <code>false</code> and returns <code>true</code>; out-of-range row returns <code>false</code>.</li>
+          <li>Direct <code>layer-&gt;setEnabled(false)</code> from outside the model emits
+            <code>dataChanged</code> for that row with <code>EnabledRole</code> in the roles vector.</li>
+        </ol>
+      </li>
+      <li><span class="path">test-qml/tst_GeospatialLayerPage.qml</span> &mdash; new cases (extend the
+        existing TestCase):
+        <ol>
+          <li>Clicking the row toggle drives <code>RootData.region.lazLayers.layerAt(0).enabled</code>
+            from <code>true</code> to <code>false</code> and back. Use <code>tryCompare</code>, not
+            fixed waits.</li>
+          <li>Disabled rows render dimmed &mdash; <code>tryCompare</code> on a delegate-level
+            <code>opacity</code> or theme color binding; verify the &ldquo;Disabled&rdquo; chip is visible.</li>
+        </ol>
+      </li>
+    </ul>
+  </li>
+  <li><b>Verification:</b>
+    <ul>
+      <li><code>cavewhere-test "[cwLazLayerModel]" -d yes 2&gt;&amp;1 | tee /tmp/cavewhere-test.log</code>.</li>
+      <li><code>cavewhere-qml-test --platform offscreen -input
+        test-qml/tst_GeospatialLayerPage.qml 2&gt;&amp;1 | tee /tmp/cavewhere-qml-test.log</code>.</li>
+      <li>Manual: open the Data section &rarr; LAZ Layers tab. Toggle a layer off; row dims, chip appears,
+        scene drops the cloud. Toggle on; row brightens, async load fires, cloud reappears.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3>Commit 3 &mdash; Post-clip auto-disable</h3>
+<ul>
+  <li><b>Scope:</b> The original driver. Builds on the visibility wire-up (so the disabled layer disappears
+    from the scene without a refresh) and on the Data-section toggle (so the user has a discoverable recovery
+    path). Silent and unconditional.</li>
+  <li><b>Files:</b>
+    <ul>
+      <li><span class="path">cavewherelib/src/cwLazClipInteraction.cpp</span> &mdash; at
+        <code>commit(Mode)</code>, immediately after <code>const QList&lt;cwLazLayer*&gt; visible =
+        m_sceneNode-&gt;visibleLayers();</code> (line 174), snapshot
+        <code>QList&lt;QUuid&gt; sourceLayerIds;</code> from the visible layers (skipping nulls). Capture
+        <code>sourceLayerIds</code> in the existing success branch of the
+        <code>AsyncFuture::observe(...).context(this, ...)</code> lambda (around lines 233&ndash;253).
+        After <code>modelGuard-&gt;rescan()</code>, for each captured UUID, locate the
+        <code>cwLazLayer*</code> (via a new <code>cwLazLayer* layerById(QUuid) const</code> helper on
+        <code>cwLazLayerModel</code>, or a one-shot linear scan of <code>model-&gt;layers()</code>), and
+        call <code>layer-&gt;setEnabled(false)</code> on any still-alive pointer. Failure / cancellation
+        branches do nothing.</li>
+      <li><span class="path">cavewherelib/src/cwLazLayerModel.{h,cpp}</span> &mdash; if added, the
+        <code>Q_INVOKABLE cwLazLayer* layerById(QUuid id) const</code> helper. Trivial wrapper around
+        <code>std::find_if(m_layers.cbegin(), m_layers.cend(), &hellip;)</code>. Useful for tests and for any
+        future call site that needs identity-based lookup.</li>
+      <li><span class="path">testcases/test_cwLazClipInteraction.cpp</span> &mdash; new cases:
+        <ol>
+          <li>Successful clip auto-disables every contributing source layer
+            (<code>layer-&gt;enabled() == false</code> after the success callback runs).</li>
+          <li>Failed clip leaves every source <code>enabled == true</code>.</li>
+          <li>Cancelled clip leaves every source <code>enabled == true</code>.</li>
+          <li>Source layer destroyed before the success callback
+            (<code>layer-&gt;deleteLater()</code> + flush via
+            <code>QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete)</code>): surviving
+            sources still get disabled; no crash, no dangling pointer dereference.</li>
+          <li>Auto-disable runs <em>after</em> <code>rescan()</code> &mdash; the new clip layer is in the
+            model when the source layers flip. Verify via signal-spy ordering on
+            <code>cwLazLayerModel::rowsInserted</code> (for the clip layer) vs
+            <code>cwLazLayer::enabledChanged</code> (on the source).</li>
+        </ol>
+      </li>
+    </ul>
+  </li>
+  <li><b>Verification:</b>
+    <ul>
+      <li><code>cavewhere-test "[cwLazClipInteraction]" -d yes 2&gt;&amp;1 | tee /tmp/cavewhere-test.log</code>.</li>
+      <li>Full <code>cavewhere-test -d yes</code> &mdash; same regression sweep as Commit 1.</li>
+      <li>Manual end-to-end: load a project with one LAZ layer, activate the LAZ clip tool, draw a polygon,
+        press Crop. The source layer disappears from the scene, its Data-section row dims with the
+        &ldquo;Disabled&rdquo; chip; only the new <code>clip_NNN.laz</code> draws. Re-enable from the Data
+        section &mdash; the source reloads and re-renders. Save, reopen the project: the disabled state is
+        preserved (proves the <code>.cwlaz</code> sidecar update flushed).</li>
+    </ul>
+  </li>
+</ul>
+
+<h2>End-to-end verification (after Commit 3)</h2>
+<ol>
+  <li>Build:
+    <code>/Users/cave/Qt/Tools/CMake/CMake.app/Contents/bin/cmake --build
+    build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test cavewhere-qml-test CaveWhere</code></li>
+  <li>Run both suites with output teed to <code>/tmp/cavewhere-test.log</code> and
+    <code>/tmp/cavewhere-qml-test.log</code>.</li>
+  <li>Manual smoke:
+    <ul>
+      <li>Open the Data section &rarr; LAZ Layers tab. Toggle a layer Off; it disappears from the 3D scene and
+        the row dims. Toggle On; it reloads and renders.</li>
+      <li>Run a clip; on success, every source layer auto-disables &mdash; they disappear from the scene and
+        the Data-section rows dim. Re-enabling from the Data section restores them.</li>
+      <li>Save the project. Reopen. Disabled layers stay disabled. Confirm via the Future Manager queue that
+        no async load fired for the disabled layer on reopen.</li>
+      <li>Sync to a teammate via Git; verify the disabled state arrives on their side (the sidecar
+        <code>.cwlaz</code> change is the diff).</li>
+      <li>Reject the layer&rsquo;s type in the KeywordTab while it&rsquo;s disabled, then accept it again
+        &mdash; the layer stays invisible (the <code>enabled</code> AND wins).</li>
+    </ul>
+  </li>
+</ol>
+
+<h2>Out of scope &amp; follow-ups</h2>
+<ul>
+  <li><b>Session-level hide</b> &mdash; a transient right-click &ldquo;Hide&rdquo; gesture with a viewport chip
+    for unhide, never persisted, never synced. Conceptually paired with this plan but deferred to its own
+    document. Will use a new <code>cwHiddenObjects</code> manager keyed by <code>QUuid</code>, ANDed into the
+    same visibility composition: <b><code>enabled</code> AND (not in session-hidden) AND (keyword filter
+    accepts)</b>.</li>
+  <li><b>Disabling other object types</b> (scraps, trips, traces). The same <code>enabled</code> pattern
+    generalizes; each type adds the property, persists it, and ANDs into its own scene visibility path.</li>
+  <li><b>Replace original</b> destructive mode for clipping. Not in this plan; clipping always preserves the
+    source file.</li>
+  <li><b>Multi-select disable</b> from the Data section. Trivial extension once the per-row toggle works.</li>
+  <li><b>Persistence of keyword filter accept/reject.</b> Still not persisted; out of scope.</li>
+  <li><b>Sync-merge handler for LAZ layers.</b> Tracked in
+    <span class="path">LAZ_LAYER_FILE_PLAN.html</span>&rsquo;s &ldquo;Out of scope&rdquo; section. The
+    <code>.cwlaz</code> shape (UUID + enabled bit) is the prerequisite; a real per-layer merge UI is a
+    separate effort.</li>
+</ul>
+
+<h2>Decisions made</h2>
+<ul>
+  <li><b>Property name: <code>enabled</code>.</b> Matches the &ldquo;comment-out code&rdquo; analogy
+    directly &mdash; users disable a layer the way they comment out a block.</li>
+  <li><b>Disabling a mid-load layer cancels the in-flight load.</b> <code>cwLazLoader</code> already
+    honors cancellation via <code>QPromise::isCanceled()</code> between point chunks. The
+    <code>asyncfuture</code> Restarter propagates the outer cancel down to the inner worker, so cancellation
+    is a single <code>m_loadRestarter.future().cancel()</code> call. The observe-chain receives the canceled
+    future; the <code>m_enabled</code> guard in the <code>applyResult</code> callback drops any stale
+    delivery.</li>
+  <li><b>Persistence lives on the <code>.cwlaz</code> sidecar, not the <code>.cwproj</code>.</b> Decided
+    during the LAZ_LAYER_FILE_PLAN.html series. The <code>.cwlaz</code> next to each <code>.laz</code> means a
+    disable/enable toggle is a single small file diff that Git handles cleanly, and adding new per-layer
+    fields (point size, source-CS override, &hellip;) later doesn&rsquo;t require touching project metadata.</li>
+  <li><b>Disabled layers aren&rsquo;t materialized in the scene at all.</b> Because
+    <code>cwLazLayer::setEnabled(false)</code> already drops <code>m_geometry</code> and
+    <code>reload()</code> short-circuits, a disabled layer&rsquo;s render object would be permanently empty.
+    Rather than carry an empty <code>cwRenderPointCloud</code> + <code>cwKeywordItem</code> through the
+    scene and filter chip list, <code>cwLazLayersSceneNode</code> simply doesn&rsquo;t create them.
+    <code>enabledChanged</code> is the add/remove trigger. This also keeps the keyword filter UI
+    consistent with the &ldquo;commented out&rdquo; mental model &mdash; a disabled layer is not present in
+    the scene, period. The trade-off is that <code>pointCloudForLayer(layer)</code> can return
+    <code>nullptr</code> for a layer that&rsquo;s in the model; the test fixture documents the
+    contract.</li>
+  <li><b>Post-clip behavior is silent and unconditional.</b> No prompt, no setting. The
+    Data-section toggle is the recovery path. An inline-prompt surface that asks every time would be the
+    same answer almost always.</li>
+</ul>
+
+</body>
+</html>

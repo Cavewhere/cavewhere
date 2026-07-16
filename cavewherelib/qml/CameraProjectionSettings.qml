@@ -6,6 +6,7 @@ ColumnLayout {
     id: itemId
 
     property RegionViewer viewer;
+    property ProjectionTransition projectionTransition;
 
     anchors.fill: parent
 
@@ -20,7 +21,7 @@ ColumnLayout {
         ProjectionSlider {
             id: projectionSlider
             objectName: "projectionSlider"
-            viewer: itemId.viewer
+            projectionTransition: itemId.projectionTransition
         }
 
         RowLayout {

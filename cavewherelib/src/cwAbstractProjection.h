@@ -48,6 +48,13 @@ public:
 
     QMatrix4x4 matrix() const;
 
+    // Recomputes matrix() against the current camera/viewport on demand. When
+    // this projection is inactive it only refreshes the cached matrix (no push
+    // to the camera); when active it also pushes, exactly like any other
+    // input change. The projection-morph controller calls this to snapshot
+    // fresh endpoints right before a transition.
+    void refresh() { updateProjection(); }
+
 protected:
     virtual cwProjection calculateProjection() = 0;
 
@@ -78,8 +85,6 @@ private:
 
 
 };
-
-#include "cw3dRegionViewer.h"
 
 /**
  * @brief cwAbstractProjection::projection

@@ -48,3 +48,16 @@ void cwLabel3dGroup::setLabels(QList<cwLabel3dItem> labels) {
         m_parentView->updateGroup(this);
     }
 }
+
+void cwLabel3dGroup::setVisible(bool visible) {
+    if(m_visible == visible) {
+        return;
+    }
+    m_visible = visible;
+
+    if(m_parentView != nullptr) {
+        m_parentView->updateGroup(this);
+    }
+
+    emit visibleChanged();
+}

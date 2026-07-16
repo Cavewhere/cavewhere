@@ -27,27 +27,71 @@ cwEDLEffect::~cwEDLEffect()
 void cwEDLEffect::initialize(QRhi* rhi,
                              QRhiRenderPassDescriptor* outputRPDesc,
                              int outputSampleCount,
-                             QRhiBuffer* globalUBO)
+                             QRhiBuffer* globalUBO,
+                             quint32 globalUBOStride,
+                             int inputSampleCount)
 {
     if (!rhi || !outputRPDesc || !globalUBO) {
         return;
     }
 
+    const int newInputSampleCount = inputSampleCount > 1 ? inputSampleCount : 1;
+    // The shader variant is selected by 1x-vs-MSAA, not the exact sample count.
+    const bool variantChanged = (newInputSampleCount > 1) != (m_inputSampleCount > 1);
+
     m_outputSampleCount = outputSampleCount > 0 ? outputSampleCount : 1;
+    m_inputSampleCount = newInputSampleCount;
 
     m_rhi = rhi;
     m_globalUBO = globalUBO;
+    m_globalUBOStride = globalUBOStride;
+
+    const auto discardPipeline = [this]() {
+        // Leave m_pipeline null so apply()'s guard skips the composite cleanly
+        // rather than binding an uncreated pipeline. Drop the layout too so a
+        // later retry (createPipeline allocates it unconditionally) can't leak.
+        // Used both to reset before the unconditional rebuild below and to bail
+        // out cleanly on a failed init step.
+        delete m_pipeline;
+        m_pipeline = nullptr;
+        delete m_layout;
+        m_layout = nullptr;
+    };
 
     // Detect Y-axis convention for the offscreen texture sampling. Metal,
     // Vulkan, and D3D store textures top-left (Y-down); OpenGL stores them
     // bottom-left (Y-up). The shader uses textureYFlip to compensate.
     m_uniformData.textureYFlip = rhi->isYUpInFramebuffer() ? 0.0f : 1.0f;
+    m_uniformData.strength = m_parameters.value().strength / m_logDepthNormalizer;
+    m_uniformData.maxDarken = m_parameters.value().maxDarken;
     m_uniformsDirty = true;
+
+    // initialize() runs on first use and again whenever the sample count changes
+    // (cwRhiScene re-inits when the offscreen count differs). Always rebuild the
+    // pipeline so it matches the current output rpDesc + sample count and the 1x
+    // / MSAA shader variant — a stale pipeline whose sample count differs from
+    // the swap chain fails to render.
+    discardPipeline();
+
+    if (variantChanged) {
+        // The sampleOffset field changes units between 1x and MSAA (UV step vs.
+        // texel radius), so force a full uniform recompute, and drop the SRB so
+        // it rebinds (the offscreen textures were recreated too).
+        delete m_srb;
+        m_srb = nullptr;
+        m_lastSceneColor = nullptr;
+        m_lastCloudColor = nullptr;
+        m_lastDepth = nullptr;
+        m_frameStateSeen = false;
+    }
 
     if (!m_edlUBO) {
         const quint32 size = rhi->ubufAligned(sizeof(EdlUniform));
         m_edlUBO = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, size);
-        m_edlUBO->create();
+        if (!m_edlUBO->create()) {
+            discardPipeline();
+            return;
+        }
         m_uniformsDirty = true;
     }
 
@@ -59,11 +103,15 @@ void cwEDLEffect::initialize(QRhi* rhi,
                                     QRhiSampler::None,
                                     QRhiSampler::ClampToEdge,
                                     QRhiSampler::ClampToEdge);
-        m_sampler->create();
+        if (!m_sampler->create()) {
+            discardPipeline();
+            return;
+        }
     }
 
-    if (!m_pipeline) {
-        createPipeline(outputRPDesc);
+    if (!createPipeline(outputRPDesc)) {
+        discardPipeline();
+        return;
     }
 }
 
@@ -73,19 +121,29 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
     // projectionMatrix to detect backend Y-flip, fragment uses viewportSize
     // and devicePixelRatio for the sample radius. Stage flags must match
     // shader usage or the bind silently feeds zeros to the missing stage.
+    const QShader vs = cwRHIObject::loadShader(QStringLiteral(":/shaders/EDL.vert.qsb"));
+    // MSAA variant samples the multisample offscreen per-sample (sampler2DMS +
+    // gl_SampleID); 1x variant uses the plain sampler2D path.
+    const QShader fs = cwRHIObject::loadShader(
+        m_inputSampleCount > 1 ? QStringLiteral(":/shaders/EDL_MSAA.frag.qsb")
+                               : QStringLiteral(":/shaders/EDL.frag.qsb"));
+    if (!vs.isValid() || !fs.isValid()) {
+        return false;
+    }
+
     const auto bothStages =
         QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage;
     m_layout = m_rhi->newShaderResourceBindings();
     m_layout->setBindings({
-        QRhiShaderResourceBinding::uniformBuffer(0, bothStages, nullptr),
+        QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, bothStages, nullptr, m_globalUBOStride),
         QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, nullptr),
         QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr),
         QRhiShaderResourceBinding::sampledTexture(3, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr),
+        QRhiShaderResourceBinding::sampledTexture(4, QRhiShaderResourceBinding::FragmentStage, nullptr, nullptr),
     });
-    m_layout->create();
-
-    QShader vs = cwRHIObject::loadShader(QStringLiteral(":/shaders/EDL.vert.qsb"));
-    QShader fs = cwRHIObject::loadShader(QStringLiteral(":/shaders/EDL.frag.qsb"));
+    if (!m_layout->create()) {
+        return false;
+    }
 
     m_pipeline = m_rhi->newGraphicsPipeline();
     m_pipeline->setShaderStages({
@@ -96,10 +154,10 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
     // No vertex buffer — gl_VertexIndex drives the fullscreen triangle.
     m_pipeline->setVertexInputLayout({});
     m_pipeline->setTopology(QRhiGraphicsPipeline::Triangles);
-    // Depth test off — the swap-chain depth at composite time is the clear
-    // value (Background pass doesn't write depth), so any cloud depth passes.
-    // Depth write on — the fragment shader writes gl_FragDepth = cloud depth
-    // so subsequent Opaque draws can z-test against the cloud surface.
+    // Depth test off — this fullscreen pass writes every swap-chain pixel.
+    // Depth write on — the shader writes gl_FragDepth = combined cloud+scene
+    // depth so post-composite passes (Transparent, Overlay) z-test correctly
+    // against everything already drawn.
     m_pipeline->setDepthTest(false);
     m_pipeline->setDepthWrite(true);
     m_pipeline->setCullMode(QRhiGraphicsPipeline::None);
@@ -109,14 +167,12 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
     // averaged in three transparent-black samples).
     m_pipeline->setSampleCount(m_outputSampleCount);
 
-    // Premultiplied-alpha blend: keep Scene-layer content where the cloud is
-    // transparent (alpha=0). Source RGB is already premultiplied in the shader.
+    // No blend: the composite writes the final color (the scene, or the shaded
+    // cloud over it) opaquely over the freshly-cleared swap chain. The scene
+    // and cloud were already combined in the shader, not via fixed-function
+    // blending, because the silhouette darkens the cloud edge before compositing.
     QRhiGraphicsPipeline::TargetBlend blend;
-    blend.enable = true;
-    blend.srcColor = QRhiGraphicsPipeline::One;
-    blend.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
-    blend.srcAlpha = QRhiGraphicsPipeline::One;
-    blend.dstAlpha = QRhiGraphicsPipeline::OneMinusSrcAlpha;
+    blend.enable = false;
     m_pipeline->setTargetBlends({ blend });
 
     m_pipeline->setShaderResourceBindings(m_layout);
@@ -124,13 +180,13 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
     return m_pipeline->create();
 }
 
-bool cwEDLEffect::ensureBindings(QRhiTexture* color, QRhiTexture* depth)
+bool cwEDLEffect::ensureBindings(QRhiTexture* sceneColor, QRhiTexture* cloudColor, QRhiTexture* depth)
 {
-    if (!color || !depth || !m_globalUBO || !m_edlUBO || !m_sampler || !m_layout) {
+    if (!sceneColor || !cloudColor || !depth || !m_globalUBO || !m_edlUBO || !m_sampler || !m_layout) {
         return false;
     }
 
-    if (m_srb && m_lastColor == color && m_lastDepth == depth) {
+    if (m_srb && m_lastSceneColor == sceneColor && m_lastCloudColor == cloudColor && m_lastDepth == depth) {
         return true;
     }
 
@@ -139,10 +195,11 @@ bool cwEDLEffect::ensureBindings(QRhiTexture* color, QRhiTexture* depth)
         QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage;
     m_srb = m_rhi->newShaderResourceBindings();
     m_srb->setBindings({
-        QRhiShaderResourceBinding::uniformBuffer(0, bothStages, m_globalUBO),
+        QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, bothStages, m_globalUBO, m_globalUBOStride),
         QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, m_edlUBO),
-        QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage, color, m_sampler),
+        QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage, cloudColor, m_sampler),
         QRhiShaderResourceBinding::sampledTexture(3, QRhiShaderResourceBinding::FragmentStage, depth, m_sampler),
+        QRhiShaderResourceBinding::sampledTexture(4, QRhiShaderResourceBinding::FragmentStage, sceneColor, m_sampler),
     });
     if (!m_srb->create()) {
         delete m_srb;
@@ -152,21 +209,39 @@ bool cwEDLEffect::ensureBindings(QRhiTexture* color, QRhiTexture* depth)
 
     Q_ASSERT(m_layout->isLayoutCompatible(m_srb));
 
-    m_lastColor = color;
+    m_lastSceneColor = sceneColor;
+    m_lastCloudColor = cloudColor;
     m_lastDepth = depth;
     return true;
 }
 
+void cwEDLEffect::resize(QSize outputSize)
+{
+    Q_UNUSED(outputSize);
+    // Force the next apply() to rebuild the SRB against the recreated textures.
+    // Clearing the cached pointer identities is essential: a freed texture can
+    // be reallocated at the same address, which would make ensureBindings()'s
+    // pointer compare wrongly report "unchanged" and keep the stale SRB.
+    delete m_srb;
+    m_srb = nullptr;
+    m_lastSceneColor = nullptr;
+    m_lastCloudColor = nullptr;
+    m_lastDepth = nullptr;
+}
+
 void cwEDLEffect::updateFrameUniforms(const FrameUniformContext& ctx)
 {
-    // Skip the recompute when nothing relevant changed — the UBO retains the
-    // last value, so we only pay the upload on projection/viewport/DPR edits.
+    // Recompute only the terms whose inputs changed: the normalizer on a
+    // projection change, the effective slope on a projection or parameter change,
+    // the sample offset on a viewport/DPR or parameter change, the ceiling on a
+    // parameter change.
     const bool projectionChanged = !m_frameStateSeen
                                    || ctx.projectionMatrix != m_lastProjectionMatrix;
     const bool viewportChanged = !m_frameStateSeen
                                  || ctx.viewportSize != m_lastViewportSize
                                  || ctx.devicePixelRatio != m_lastDevicePixelRatio;
-    if (!projectionChanged && !viewportChanged) {
+    const bool parametersChanged = m_parameters.isChanged();
+    if (!projectionChanged && !viewportChanged && !parametersChanged) {
         return;
     }
     m_frameStateSeen = true;
@@ -177,7 +252,9 @@ void cwEDLEffect::updateFrameUniforms(const FrameUniformContext& ctx)
     if (projectionChanged) {
         // Mirrors linearDepthFromNear() in EDL.frag — see the shader for the
         // derivation. QMatrix4x4::operator()(row, col) maps to GLSL's
-        // projectionMatrix[col][row].
+        // projectionMatrix[col][row]. The log2 span of the far half of the depth
+        // range normalizes the baseline so ortho and perspective match: it is 1
+        // for orthographic (linear depth) and large for perspective.
         const float a = ctx.projectionMatrix(2, 2);
         const float b = ctx.projectionMatrix(2, 3);
         const bool isPerspective = ctx.projectionMatrix(3, 2) < -0.5f;
@@ -191,29 +268,58 @@ void cwEDLEffect::updateFrameUniforms(const FrameUniformContext& ctx)
 
         const float midZ = depthFromNear(0.5f);
         const float farZ = depthFromNear(1.0f);
-        const float normalizer = std::log2(farZ / std::max(midZ, 1e-6f));
-        m_uniformData.strength = m_strengthBaseline / std::max(normalizer, 1.0f);
+        const float normalizer = std::log2(farZ / (std::max)(midZ, 1e-6f));
+        m_logDepthNormalizer = (std::max)(normalizer, 1.0f);
     }
 
-    if (viewportChanged && ctx.viewportSize.isValid()) {
-        const float scale = m_radiusPx * ctx.devicePixelRatio;
-        m_uniformData.sampleOffset[0] = scale / float(ctx.viewportSize.width());
-        m_uniformData.sampleOffset[1] = scale / float(ctx.viewportSize.height());
+    // Effective slope is the baseline divided by the per-projection normalizer,
+    // so it tracks both projection and parameter changes.
+    if (projectionChanged || parametersChanged) {
+        m_uniformData.strength = m_parameters.value().strength / m_logDepthNormalizer;
     }
 
+    if (viewportChanged || parametersChanged) {
+        recomputeSampleOffset();
+    }
+
+    if (parametersChanged) {
+        m_uniformData.maxDarken = m_parameters.value().maxDarken;
+    }
+
+    m_parameters.resetChanged();
     m_uniformsDirty = true;
 }
 
+void cwEDLEffect::recomputeSampleOffset()
+{
+    if (!m_lastViewportSize.isValid()) {
+        return;
+    }
+    const float scale = m_parameters.value().radiusPx * m_lastDevicePixelRatio;
+    if (m_inputSampleCount > 1) {
+        // MSAA path: EDL_MSAA.frag offsets neighbors in integer texels off
+        // gl_FragCoord, so the radius stays in device pixels (no UV division).
+        // sampleOffset.x carries it; .y is unused.
+        m_uniformData.sampleOffset[0] = scale;
+        m_uniformData.sampleOffset[1] = 0.0f;
+        return;
+    }
+    m_uniformData.sampleOffset[0] = scale / float(m_lastViewportSize.width());
+    m_uniformData.sampleOffset[1] = scale / float(m_lastViewportSize.height());
+}
+
 void cwEDLEffect::apply(QRhiCommandBuffer* cb,
-                        QRhiTexture* inputColor,
-                        QRhiTexture* inputDepth,
-                        QSize outputSize)
+                        QRhiTexture* sceneColor,
+                        QRhiTexture* cloudColor,
+                        QRhiTexture* depth,
+                        QSize outputSize,
+                        quint32 cameraUniformOffset)
 {
     if (!cb || !m_pipeline) {
         return;
     }
 
-    if (!ensureBindings(inputColor, inputDepth)) {
+    if (!ensureBindings(sceneColor, cloudColor, depth)) {
         return;
     }
 
@@ -225,7 +331,18 @@ void cwEDLEffect::apply(QRhiCommandBuffer* cb,
     }
 
     cb->setGraphicsPipeline(m_pipeline);
-    cb->setShaderResources(m_srb);
+    // Binding 0 (the global camera block) is dynamic-offset so the composite
+    // linearizes depth with the same camera slot the depth buffer was rendered
+    // with (live = 0, offscreen = the per-slot stride).
+    const QRhiCommandBuffer::DynamicOffset cameraOffset(0, cameraUniformOffset);
+    cb->setShaderResources(m_srb, 1, &cameraOffset);
     cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
     cb->draw(3);
+}
+
+void cwEDLEffect::setParameters(const EdlParametersData& parameters)
+{
+    // Stage only — cwTracked flags the change; updateFrameUniforms() re-derives
+    // the UBO values (which also depend on the projection/viewport) next frame.
+    m_parameters.setValue(parameters);
 }

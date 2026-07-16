@@ -6,7 +6,7 @@
 **************************************************************************/
 
 import QtQuick
-import QtQuick.Controls as QC
+import QtQuick.Layouts
 import QtQuick.Window
 import cavewherelib
 
@@ -16,9 +16,12 @@ Item {
 
     property alias turnTableInteraction: turnTableInteractionId
     property alias coordinatePickerInteraction: coordinatePickerId
+    property alias measurementInteraction: measurementInteractionId
+    property alias measurementReadoutPopup: measurementPopupId
     property alias interactionManager: interactionManagerId
     property alias leadView: leadViewId
     property alias renderer: rendererId
+    property alias projectionTransition: projectionTransitionId
     property alias scene: rendererId.scene
 
     clip: true
@@ -53,7 +56,7 @@ Item {
         id: rendererId
         anchors.fill: parent
         camera.devicePixelRatio: Screen.devicePixelRatio
-        sampleCount:4
+        // Don't set sampleCount; cwRenderingSettings drives it.
     }
 
     Binding {
@@ -81,7 +84,15 @@ Item {
         camera: rendererId.camera
         scene: rendererId.scene
         gridPlane: RootData.regionSceneManager.gridPlane.plane
-        pointCloudGapFudgeTarget: RootData.regionSceneManager.lazLayersSceneNode
+        pointCloudWorldRadiusTarget: RootData.regionSceneManager.lazLayersSceneNode
+    }
+
+    ProjectionTransition {
+        id: projectionTransitionId
+        camera: rendererId.camera
+        orthoProjection: rendererId.orthoProjection
+        perspectiveProjection: rendererId.perspectiveProjection
+        interaction: turnTableInteractionId
     }
 
     // While the picker is the active Interaction, the turn-table is disabled.
@@ -92,17 +103,35 @@ Item {
         objectName: "coordinatePicker"
         camera: rendererId.camera
         scene: rendererId.scene
-        region: RootData.region
+        geoReference: RootData.region.geoReference
         turnTableInteraction: turnTableInteractionId
+    }
 
-        onDeactivated: pickButtonId.checked = false
+    LazClipInteractionView {
+        id: lazClipInteractionId
+        objectName: "lazClipInteraction"
+        camera: rendererId.camera
+        region: RootData.region
+        lazLayersSceneNode: RootData.regionSceneManager.lazLayersSceneNode
+        turnTableInteraction: turnTableInteractionId
+    }
+
+    MeasurementInteractionView {
+        id: measurementInteractionId
+        objectName: "measurementInteraction"
+        camera: rendererId.camera
+        scene: rendererId.scene
+        geoReference: RootData.region.geoReference
+        turnTableInteraction: turnTableInteractionId
     }
 
     InteractionManager {
         id: interactionManagerId
         interactions: [
             turnTableInteractionId,
-            coordinatePickerId
+            coordinatePickerId,
+            lazClipInteractionId,
+            measurementInteractionId
         ]
         defaultInteraction: turnTableInteractionId
     }
@@ -111,7 +140,9 @@ Item {
         id: labelView
         anchors.fill: parent
         camera: rendererId.camera
+        scene: rendererId.scene
         region: RootData.region
+        keywordItemModel: RootData.keywordItemModel
         visible: RootData.stationsVisible
     }
 
@@ -120,7 +151,15 @@ Item {
         anchors.fill: parent
         regionModel: RootData.regionTreeModel
         camera: rendererId.camera
+        scene: rendererId.scene
+        keywordItemModel: RootData.keywordItemModel
         visible: RootData.leadsVisible
+
+        // Tap on empty space closes the open lead popup (dialog dismiss). Lead
+        // items grab their taps exclusively, so this only fires off a lead.
+        TapHandler {
+            onTapped: leadViewId.selectionManager.selectedItem = null
+        }
     }
 
     Row {
@@ -145,31 +184,79 @@ Item {
             width: Math.min(Math.max(rendererId.width * 0.25, 80), 175)
             height: width
             compassRotation: turnTableInteractionId.cameraRotation
-            sampleCount: 4
+            // Don't set sampleCount; cwRenderingSettings drives it.
         }
     }
 
-    QC.RoundButton {
-        id: pickButtonId
-        objectName: "coordinatePickerButton"
+    // Floating background for the Pick/Clip toolbar. IconButton renders a
+    // transparent background until hovered/selected, so without this surface
+    // the icons disappear when the terrain underneath matches the icon color.
+    ShadowRectangle {
+        id: bottomToolbarId
         anchors {
             left: parent.left
             bottom: parent.bottom
             margins: 20
         }
-        checkable: true
-        text: "⌖"
-        font.pixelSize: Theme.fontSizeTitle
-        QC.ToolTip.visible: hovered
-        QC.ToolTip.text: qsTr("Pick coordinates")
-        // Guard: when deactivate() runs externally (e.g. another interaction
-        // takes over), onDeactivated below sets checked = false; this guard
-        // prevents the toggle from calling deactivate() again and re-emitting.
-        onCheckedChanged: {
-            if (checked && interactionManagerId.activeInteraction !== coordinatePickerId) {
-                coordinatePickerId.activate()
-            } else if (!checked && interactionManagerId.activeInteraction === coordinatePickerId) {
-                coordinatePickerId.deactivate()
+        width: bottomToolbarRowId.implicitWidth + Theme.floatingToolbarPadding
+        height: bottomToolbarRowId.implicitHeight + Theme.floatingToolbarPadding
+        color: Theme.surface
+        radius: 5
+
+        RowLayout {
+            id: bottomToolbarRowId
+            anchors.centerIn: parent
+            spacing: 4
+
+            IconButton {
+                id: pickButtonId
+                objectName: "coordinatePickerButton"
+                iconSource: "qrc:/twbs-icons/icons/crosshair.svg"
+                sourceSize: Qt.size(21, 21)
+                text: qsTr("Pick")
+                toolTip: qsTr("Pick coordinates")
+                selected: interactionManagerId.activeInteraction === coordinatePickerId
+                onClicked: {
+                    if (pickButtonId.selected) {
+                        coordinatePickerId.deactivate()
+                    } else {
+                        coordinatePickerId.activate()
+                    }
+                }
+            }
+
+            IconButton {
+                id: lazClipButtonId
+                objectName: "lazClipButton"
+                iconSource: "qrc:/twbs-icons/icons/scissors.svg"
+                sourceSize: Qt.size(21, 21)
+                text: qsTr("Clip")
+                toolTip: qsTr("Clip point cloud")
+                selected: interactionManagerId.activeInteraction === lazClipInteractionId
+                onClicked: {
+                    if (lazClipButtonId.selected) {
+                        lazClipInteractionId.deactivate()
+                    } else {
+                        lazClipInteractionId.activate()
+                    }
+                }
+            }
+
+            IconButton {
+                id: measureButtonId
+                objectName: "measurementButton"
+                iconSource: "qrc:/twbs-icons/icons/rulers.svg"
+                sourceSize: Qt.size(21, 21)
+                text: qsTr("Measure")
+                toolTip: qsTr("Measure distance and bearing")
+                selected: interactionManagerId.activeInteraction === measurementInteractionId
+                onClicked: {
+                    if (measureButtonId.selected) {
+                        measurementInteractionId.deactivate()
+                    } else {
+                        measurementInteractionId.activate()
+                    }
+                }
             }
         }
     }
@@ -179,7 +266,17 @@ Item {
         objectName: "coordinatePickerPopup"
         parent: rendererId
         picker: coordinatePickerId
-        visible: coordinatePickerId.hasPick && pickButtonId.checked
+        visible: coordinatePickerId.hasPick && pickButtonId.selected
+    }
+
+    MeasurementReadoutPopup {
+        id: measurementPopupId
+        objectName: "measurementReadoutPopup"
+        parent: rendererId
+        interaction: measurementInteractionId
+        visible: measureButtonId.selected && measurementInteractionId.hasMeasurement
+        x: Math.max(0, parent.width - width - 20)
+        y: 20
     }
 }
 

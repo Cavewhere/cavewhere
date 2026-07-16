@@ -13,6 +13,7 @@
 //Cavewhere includes
 #include "cwLinePlotManager.h"
 #include "cwCavingRegion.h"
+#include "cwGeoReference.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
@@ -23,6 +24,12 @@
 #include "cwProject.h"
 #include "cwFixStationModel.h"
 #include "cwFixStation.h"
+#include "cwRenderLinePlot.h"
+#include "cwKeywordItemModel.h"
+#include "cwKeywordItem.h"
+#include "cwKeywordModel.h"
+#include "cwKeyword.h"
+#include "cwLinePlotTripVisibility.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -933,7 +940,7 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
 
     SECTION("region.setGlobalCS triggers a re-run") {
         REQUIRE(positionSpy.count() == 0);
-        region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
+        region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
         plotManager->waitToFinish();
         CHECK(positionSpy.count() >= 1);
     }
@@ -944,7 +951,7 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
         // Set globalCS first; the spy after that captures only fix-related
         // re-runs. We don't reset the spy between this and the parent
         // setRegion run, so we tally only what happens after this point.
-        region.setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
+        region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32616"));
 
         // Pre-set worldOrigin to a non-sentinel value so the first-solve
         // auto-compute branch in cwLinePlotManager::publishLinePlotResults
@@ -955,7 +962,7 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
         // intermittently see un-shifted positions. The value is arbitrary:
         // the auto-compute guard only checks against the default sentinel.
         const cwGeoPoint kAutoComputeSuppressor{1.0, 1.0, 1.0};
-        region.setWorldOrigin(kAutoComputeSuppressor);
+        region.geoReference()->setWorldOrigin(kAutoComputeSuppressor);
 
         plotManager->waitToFinish();
         const int spyAfterGlobalCS = positionSpy.count();
@@ -979,7 +986,7 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
         // current worldOrigin back to recover absolute projected coords.
         const auto absolutePosition = [&](const QString& station) {
             return cave->stationPositionLookup().position(station)
-                + region.worldOrigin().toVector3D();
+                + region.geoReference()->worldOrigin().toVector3D();
         };
 
         CHECK(positionSpy.count() > spyAfterGlobalCS);
@@ -1130,6 +1137,135 @@ TEST_CASE("cwLinePlotManager handles chunks with empty shots (bug #435)", "[Line
         CHECK(cave->stationPositionLookup().hasPosition("a4"));
         // Geometry must cover chunk1 (10m) + chunk3 (5m); chunk2 is dropped.
         CHECK(cave->length()->value() == Catch::Approx(15.0).epsilon(0.01));
+    }
+}
+
+TEST_CASE("cwLinePlotManager registers per-trip centerline keyword visibility",
+          "[LinePlotManager][keyword]")
+{
+    // Two trips sharing the tie-in station a2: trip1 a1->a2, trip2 a2->a3.
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave 1"));
+    region.addCave(cave);
+
+    auto makeShot = [](const QString& dist, const QString& compass, const QString& clino) {
+        cwShot s;
+        s.setDistance(cwDistanceReading(dist));
+        s.setCompass(cwCompassReading(compass));
+        s.setClino(cwClinoReading(clino));
+        return s;
+    };
+
+    cwTrip* trip1 = new cwTrip();
+    trip1->setName(QStringLiteral("Trip A"));
+    trip1->calibrations()->setAutoDeclination(false);
+    cwSurveyChunk* chunk1 = new cwSurveyChunk();
+    trip1->addChunk(chunk1);
+    chunk1->appendShot(cwStation("a1"), cwStation("a2"), makeShot("10.0", "0.0", "0.0"));
+    cave->addTrip(trip1);
+
+    cwTrip* trip2 = new cwTrip();
+    trip2->setName(QStringLiteral("Trip B"));
+    trip2->calibrations()->setAutoDeclination(false);
+    cwSurveyChunk* chunk2 = new cwSurveyChunk();
+    trip2->addChunk(chunk2);
+    chunk2->appendShot(cwStation("a2"), cwStation("a3"), makeShot("10.0", "90.0", "0.0"));
+    cave->addTrip(trip2);
+
+    cwKeywordItemModel keywordModel;
+    cwRenderLinePlot linePlot;
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setKeywordItemModel(&keywordModel);
+    plotManager->setRenderLinePlot(&linePlot);
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    auto countHidden = [&]() {
+        int count = 0;
+        for (quint8 b : linePlot.visibility()) {
+            if (b == 0) { count++; }
+        }
+        return count;
+    };
+
+    auto proxyForTrip = [&](cwTrip* trip) -> cwLinePlotTripVisibility* {
+        for (int i = 0; i < keywordModel.rowCount(); ++i) {
+            auto* item = keywordModel.item(i);
+            auto* proxy = qobject_cast<cwLinePlotTripVisibility*>(item->object());
+            if (proxy && proxy->trip() == trip) {
+                return proxy;
+            }
+        }
+        return nullptr;
+    };
+
+    SECTION("geometry is de-shared per shot into the render object") {
+        // shot a1->a2 = [a1, a2], shot a2->a3 = [a2, a3] -> 4 vertices, a2 twice.
+        CHECK(linePlot.points().size() == 4);
+        CHECK(linePlot.visibility().size() == linePlot.points().size());
+        int a2Count = 0;
+        for (const QVector3D& p : linePlot.points()) {
+            if (p == QVector3D(0.0f, 10.0f, 0.0f)) { a2Count++; }
+        }
+        CHECK(a2Count == 2);
+    }
+
+    SECTION("one keyword item per trip, each extending its trip's keyword model") {
+        CHECK(keywordModel.rowCount() == 2);
+
+        auto* proxyA = proxyForTrip(trip1);
+        auto* proxyB = proxyForTrip(trip2);
+        REQUIRE(proxyA != nullptr);
+        REQUIRE(proxyB != nullptr);
+
+        // The item's keyword model aggregates the trip's keywords (Trip / Year /
+        // Date / Cave / Caver) via addExtension, plus publishes Type=Line Plot
+        // on its own model so filtering the Type keyword toggles the centerline.
+        for (int i = 0; i < keywordModel.rowCount(); ++i) {
+            auto* item = keywordModel.item(i);
+            const auto keywords = item->keywordModel()->keywords();
+            CHECK_FALSE(keywords.isEmpty());
+            CHECK(keywords.contains(cwKeyword(cwKeywordModel::TypeKey,
+                                              QStringLiteral("Line Plot"))));
+        }
+    }
+
+    SECTION("default visibility is all-visible, one byte per vertex") {
+        CHECK(linePlot.visibility().size() == 4);
+        CHECK(countHidden() == 0);
+    }
+
+    SECTION("hiding a trip's proxy masks exactly that trip's vertices") {
+        auto* proxyA = proxyForTrip(trip1);
+        REQUIRE(proxyA != nullptr);
+
+        // trip1 is one shot (a1->a2) = 2 vertices.
+        proxyA->setVisible(false);
+        CHECK(countHidden() == 2);
+
+        SECTION("the hidden state survives a re-solve (identity keyed)") {
+            // Rename the cave to force a re-solve; vertex ranges shift but the
+            // trip's hidden state is re-applied by UUID identity.
+            cave->setName(QStringLiteral("Renamed Cave"));
+            plotManager->waitToFinish();
+
+            CHECK(linePlot.visibility().size() == 4);
+            CHECK(countHidden() == 2);
+        }
+    }
+
+    SECTION("removing a trip drops its keyword item") {
+        REQUIRE(keywordModel.rowCount() == 2);
+
+        cave->removeTrip(1); // trip2
+        plotManager->waitToFinish();
+
+        CHECK(keywordModel.rowCount() == 1);
+        // Only trip1 remains: one shot (a1->a2) = 2 vertices.
+        CHECK(linePlot.visibility().size() == 2);
     }
 }
 

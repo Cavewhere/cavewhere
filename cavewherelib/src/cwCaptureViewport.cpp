@@ -6,14 +6,14 @@
 **************************************************************************/
 
 //Qt includes
-#include <QPen>
-#include <QUuid>
-#include <QQuickItemGrabResult>
+#include <QFuture>
 
 //Our includes
 #include "cwCaptureViewport.h"
 #include "cwScale.h"
 #include "cwScene.h"
+#include "cwOffscreenRenderParameters.h"
+#include "cwRenderingSettings.h"
 #include "cwCamera.h"
 #include "cw3dRegionViewer.h"
 #include "cwCaptureCenterline.h"
@@ -28,6 +28,9 @@
 #include "cwCave.h"
 #include "cwSurveyNetwork.h"
 #include "cwStationPositionLookup.h"
+
+//AsyncFuture includes
+#include "asyncfuture.h"
 
 //undef these because micrsoft is fucking retarded...
 #ifdef Q_OS_WIN
@@ -51,6 +54,12 @@ constexpr qreal ScaleBarZValue = 2000.0;
 constexpr qreal PlacerMaskCellPaperPx = 2.0;
 constexpr qreal PlacerLabelMarginPaperPx = 3.0;
 constexpr qreal StationDotObstacleMarginPaperPx = 1.0;
+
+// The map export renders at a fixed DPI (paperSize * resolution) and must be
+// identical regardless of the display it runs on, so each tile is rendered at
+// device-pixel-ratio 1 — no Retina supersampling. MSAA (cwRenderingSettings::
+// sampleCount) supplies the anti-aliasing the supersample used to provide.
+constexpr float kExportDevicePixelRatio = 1.0f;
 }
 
 cwCaptureViewport::cwCaptureViewport(QObject *parent) :
@@ -62,9 +71,6 @@ cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     PaperUnit(cwUnits::Inches),
     TransformOrigin(QQuickItem::TopLeft),
     CapturingImages(false),
-    NumberOfImagesProcessed(0),
-    Columns(0),
-    Rows(0),
     TileSize(1024, 1024),
     CaptureCamera(new cwCamera(this)),
     PreviewItem(nullptr),
@@ -139,14 +145,36 @@ void cwCaptureViewport::setViewport(QRect viewport) {
 void cwCaptureViewport::capture()
 {
     if(CapturingImages) { return; }
-    CapturingImages = true;
 
-    if(!viewport().size().isValid()) {
-        qWarning() << "Viewport isn't valid for export:" << viewport();
+    // Every bail-out below must still emit finishedCapture(): cwCaptureManager
+    // chains the next layer (and the final save) on that signal, so a silent
+    // return would stall the whole export. abort() clears the re-entrancy flag and
+    // signals completion so the manager advances rather than hangs. Capture no
+    // longer touches global scene state (the gradient/grid/line-plot are hidden
+    // per-tile via hiddenObjectIds), so there is nothing to restore here.
+    const auto abort = [this](const QString& reason) {
+        qWarning().noquote() << "Map export aborted:" << reason;
+        CapturingImages = false;
+        emit finishedCapture();
+    };
+
+    // isEmpty() (not isValid()) rejects a zero-area viewport too: QSize(0,0) is
+    // "valid", but it would yield zero tiles, and a combine() with no futures
+    // never fires its continuation — leaving the capture wedged.
+    if(viewport().size().isEmpty()) {
+        abort(QStringLiteral("export viewport is empty: %1x%2")
+                  .arg(viewport().width()).arg(viewport().height()));
         return;
     }
 
-    cwScene* scene = view()->scene();
+    cwScene* scene = (view() != nullptr) ? view()->scene() : nullptr;
+    if(scene == nullptr) {
+        abort(QStringLiteral("export has no render scene (viewer not set)"));
+        return;
+    }
+
+    CapturingImages = true;
+
     cwCamera* camera = CaptureCamera;
     cwProjection originalProj = camera->projection();
 
@@ -203,102 +231,32 @@ void cwCaptureViewport::capture()
     if(imageSize.width() % tileSize.width() > 0) { columns++; }
     if(imageSize.height() % tileSize.height() > 0) { rows++; }
 
-    NumberOfImagesProcessed = 0;
-    Columns = columns;
-    Rows = rows;
-
     cwProjection croppedProjection = tileProjection(viewport,
                                                     camera->viewport().size(),
                                                     originalProj);
 
-    struct CaptureJob {
-        int id;
+    // Hide the gradient/grid/line-plot so the rendered tiles are transparent-backed,
+    // but keep point clouds visible so they appear in the export (EDL-lit, as in the
+    // live view). Per-tile visibility override (not a global toggle), so the live 3D
+    // view stays interactive and undisturbed throughout the export.
+    const QSet<cwRenderObjectId> hiddenObjectIds =
+        m_sceneManager.isNull() ? QSet<cwRenderObjectId>{}
+                                : m_sceneManager->captureHiddenObjectIds();
+
+    const int sampleCount = cwRenderingSettings::instance()->sampleCount();
+    const QMatrix4x4 viewMatrix = camera->viewMatrix();
+
+    // Render every tile offscreen from the resident scene as an independent
+    // QFuture<QImage>; combine() below fires once they have all settled. No
+    // camera swap and no grabToImage — the offscreen path renders straight from
+    // the supplied matrices, so the live view is never disturbed. backgroundColor
+    // is left at its transparent default (see cwOffscreenRenderParameters).
+    struct Tile {
         QPointF origin;
-        QRect viewport;
-        cwProjection tileProj;
-        QMatrix4x4 viewMatrix;
+        QFuture<QImage> future;
     };
-
-    struct CaptuteRunData {
-        cwCamera* oldCamera;
-        cwCamera* captureCamera = new cwCamera();
-        QList<CaptureJob> CaptureJobs;
-    };
-
-    auto runData = std::make_shared<CaptuteRunData>();
-    runData->oldCamera = scene->camera();
-
-    //These are recursive lambdas, so we need to put this in a shared pointer
-    auto capturedImage = std::make_shared<std::function<void (const CaptureJob& data, const QImage& image)>>();
-
-    auto nextJob = [runData, this, capturedImage]() {
-        auto job = runData->CaptureJobs.at(NumberOfImagesProcessed);
-        runData->captureCamera->setProjection(job.tileProj);
-        runData->captureCamera->setViewMatrix(job.viewMatrix);
-        runData->captureCamera->setViewport(job.viewport);
-
-        auto grabResult = view()->grabToImage(job.viewport.size());
-        connect(grabResult.get(), &QQuickItemGrabResult::ready, this, [capturedImage, job, grabResult, this](){
-            //Call CaptureImage
-            (*capturedImage)(job, grabResult->image());
-        });
-    };
-
-    *capturedImage = [runData, nextJob, imageScale, this](const CaptureJob& job, const QImage& image) {
-        Q_ASSERT(CapturingImages);
-
-        QGraphicsItemGroup* parent = previewCapture() ? PreviewItem : Item;
-
-        cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
-        QImage correctedImage = image;
-        correctedImage.setDevicePixelRatio(1.0);
-        graphicsImage->setImage(correctedImage);
-        graphicsImage->setPos(job.origin);
-        graphicsImage->setScale(1.0 / image.devicePixelRatio());
-
-        // graphicsImage->setScale(1.0/image.devicePixelRatio());
-        parent->addToGroup(graphicsImage);
-
-        //For debugging tiles
-        // double scale = 1.0  / image.devicePixelRatio();
-        // QGraphicsRectItem* rectItem = new QGraphicsRectItem(parent);
-        // QRectF tileRect = graphicsImage->mapToItem(rectItem, graphicsImage->boundingRect()).boundingRect();
-        // rectItem->setPen(QPen(Qt::red));
-        // rectItem->setRect(tileRect);
-        // QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(parent);
-        // textItem->setText(QString("Id:%1").arg(job.id));
-        // textItem->setPen(QPen(Qt::red));
-        // textItem->setPos(tileRect.center());
-
-        NumberOfImagesProcessed++;
-
-        if(NumberOfImagesProcessed == Rows * Columns) {
-            //Finished capturing images
-            NumberOfImagesProcessed = 0;
-            Rows = 0;
-            Columns = 0;
-            CapturingImages = false;
-
-            if(previewCapture()) {
-                updateBoundingBox();
-            }
-
-            // Lay out and create the label overlays now that the tile alpha is
-            // available as an obstacle source.
-            placeLabelsAfterTiles(parent, imageScale);
-
-            //Clean up
-            m_sceneManager->setCapturing(false);
-            view()->scene()->setCamera(runData->oldCamera);
-
-            emit finishedCapture();
-        } else {
-            //Next image to capture
-            nextJob();
-        }
-    };
-
-    //Queue the jobs
+    QList<Tile> tiles;
+    tiles.reserve(rows * columns);
     for(int column = 0; column < columns; column++) {
         for(int row = 0; row < rows; row++) {
 
@@ -310,32 +268,82 @@ void cwCaptureViewport::capture()
             QRect tileViewport(QPoint(x, y), croppedTileSize);
             cwProjection tileProj = tileProjection(tileViewport, imageSize, croppedProjection);
 
-            int id = row * columns + column;
-
             double originX = column * tileSize.width();
             double originY = onPaperViewport.height() - (row * tileSize.height() + croppedTileSize.height());
-            QPointF origin(originX, originY);
 
-            QRect viewport = QRect(QPoint(), croppedTileSize);
+            cwOffscreenRenderParameters parameters;
+            parameters.viewMatrix = viewMatrix;
+            parameters.projectionMatrix = tileProj.matrix();
+            parameters.outputSize = croppedTileSize;
+            parameters.devicePixelRatio = kExportDevicePixelRatio;
+            parameters.sampleCount = sampleCount;
+            parameters.hiddenObjectIds = hiddenObjectIds;
 
-            runData->CaptureJobs.append(
-                CaptureJob{
-                    id,
-                    origin,
-                    viewport,
-                    tileProj,
-                    camera->viewMatrix()
-                });
+            tiles.append(Tile{QPointF(originX, originY), scene->renderOffscreen(parameters)});
         }
     }
 
-    //Initial settings
-    m_sceneManager->setCapturing(true);
-    view()->scene()->setCamera(runData->captureCamera);
+    // Defensive: the viewport guard above keeps this unreachable, but a combine()
+    // with no futures never fires its continuation, so never leave the capture
+    // state machine to depend on a non-empty list having been built.
+    if(tiles.isEmpty()) {
+        abort(QStringLiteral("export produced no tiles to render"));
+        return;
+    }
 
-    nextJob();
+    // AllSettled: a single failed tile must not abort the others, so the export
+    // degrades to a missing tile rather than no image at all. Placing every tile
+    // here (rather than as each future arrives) keeps placeLabelsAfterTiles()
+    // strictly after the last tile lands, with no ordering race against combine.
+    auto combine = AsyncFuture::combine(AsyncFuture::AllSettled);
+    for(const Tile& tile : tiles) {
+        combine << tile.future;
+    }
+    combine.context(this, [this, tiles, imageScale]() {
+        QGraphicsItemGroup* parent = previewCapture() ? PreviewItem : Item;
 
-    // view()->update();
+        int placed = 0;
+        for(const Tile& tile : tiles) {
+            const QFuture<QImage>& future = tile.future;
+            if(!future.isFinished() || future.resultCount() != 1 || future.result().isNull()) {
+                qWarning() << "Map export tile at" << tile.origin << "produced no image; it will be missing from the export";
+                continue;
+            }
+
+            const QImage image = future.result();
+            cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
+            graphicsImage->setImage(image);
+            graphicsImage->setPos(tile.origin);
+            parent->addToGroup(graphicsImage);
+            ++placed;
+        }
+
+        // Surface a wholly- or partly-empty result: the manager has no failure
+        // channel, so without this the user only discovers a blank/holed export
+        // by opening the saved file. We still emit finishedCapture() below so the
+        // export pipeline completes rather than stalling on this layer.
+        if(placed == 0) {
+            qWarning() << "Map export image is empty: all" << tiles.size()
+                       << "tiles failed to render";
+        } else if(placed < tiles.size()) {
+            qWarning() << "Map export image is missing" << (tiles.size() - placed)
+                       << "of" << tiles.size() << "tiles";
+        }
+
+        if(previewCapture()) {
+            updateBoundingBox();
+        }
+
+        // Lay out and create the label overlays now that the tile alpha is
+        // available as an obstacle source.
+        placeLabelsAfterTiles(parent, imageScale);
+
+        // Clean up. Visibility was overridden per-tile, never globally, so there is
+        // no scene state to restore here.
+        CapturingImages = false;
+
+        emit finishedCapture();
+    });
 }
 
 /**
@@ -631,15 +639,11 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
     placer.setLabelMarginPaperPx(PlacerLabelMarginPaperPx * paperPxToLocal);
     placer.setAlphaThreshold(cwCaptureLabelPlacer::DefaultAlphaThreshold);
 
-    int tilesSeen = 0;
-    int tilesSampled = 0;
     for(cwGraphicsImageItem* tile : std::as_const(tiles)) {
-        tilesSeen++;
         const QImage img = tile->image();
         if(img.isNull()) {
             continue;
         }
-        tilesSampled++;
         placer.addTileAlpha(img, tile->pos(), tile->scale());
     }
 
@@ -688,10 +692,6 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
             placer.addSoftLineObstacle(seg, centerlineThickness);
         }
     }
-
-    qDebug() << "[placer] tilesSampled=" << tilesSampled << "/" << tilesSeen
-             << "bounds=" << parentBounds
-             << "exportDpi=" << exportDpi;
 
     // Place leads first so each placement registers its leader line into
     // the placer; stations placed afterwards then avoid those leaders.

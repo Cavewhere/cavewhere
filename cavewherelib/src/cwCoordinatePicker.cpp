@@ -8,108 +8,85 @@
 #include "cwCoordinatePicker.h"
 
 //Our includes
-#include "cwCamera.h"
-#include "cwScene.h"
-#include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
-#include "cwGeometryItersecter.h"
-#include "cwRayHit.h"
-
-//Qt 3D
-#include <qray3d.h>
+#include "cwGeoReference.h"
+#include "cwScenePick.h"
 
 cwCoordinatePicker::cwCoordinatePicker(QQuickItem* parent) :
-    cwInteraction(parent)
+    cwScenePicker(parent)
 {
 }
 
 cwCoordinatePicker::~cwCoordinatePicker() = default;
 
-void cwCoordinatePicker::setCamera(cwCamera* camera)
+cwGeoReference* cwCoordinatePicker::geoReference() const
 {
-    if (m_camera == camera) {
-        return;
-    }
-    m_camera = camera;
-    emit cameraChanged();
+    return m_geoReference;
 }
 
-void cwCoordinatePicker::setScene(cwScene* scene)
+void cwCoordinatePicker::setGeoReference(cwGeoReference* geoReference)
 {
-    if (m_scene == scene) {
+    if (m_geoReference == geoReference) {
         return;
     }
-    m_scene = scene;
-    emit sceneChanged();
-}
-
-void cwCoordinatePicker::setRegion(cwCavingRegion* region)
-{
-    if (m_region == region) {
-        return;
-    }
-    if (m_region) {
-        disconnect(m_region, &cwCavingRegion::globalCoordinateSystemChanged,
+    if (m_geoReference) {
+        disconnect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
                    this, &cwCoordinatePicker::rebuildWgs84Transform);
     }
-    m_region = region;
-    if (m_region) {
-        connect(m_region, &cwCavingRegion::globalCoordinateSystemChanged,
+    m_geoReference = geoReference;
+    if (m_geoReference) {
+        connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
                 this, &cwCoordinatePicker::rebuildWgs84Transform);
     }
-    // A stale pick from the old region would silently misreport coordinates
-    // in the new CRS — clear it.
+    // A stale pick from the old geo-reference would silently misreport
+    // coordinates in the new CRS — clear it.
     clearPick();
     rebuildWgs84Transform();
-    emit regionChanged();
+    emit geoReferenceChanged();
+}
+
+bool cwCoordinatePicker::hasCoordinateSystem() const
+{
+    return m_geoReference && m_geoReference->hasCoordinateSystem();
 }
 
 void cwCoordinatePicker::rebuildWgs84Transform()
 {
-    const QString cs = m_region ? m_region->globalCoordinateSystem() : QString();
+    const QString cs = m_geoReference ? m_geoReference->globalCoordinateSystem() : QString();
     // Keep the cache in sync so the globalCoordinateSystem Q_PROPERTY reflects
     // the current region between picks (the getter reads this cache).
     m_globalCoordinateSystemCached = cs;
     if (cs.isEmpty()) {
         m_wgs84Transform.reset();
-        return;
+    } else {
+        m_wgs84Transform = std::make_unique<cwCoordinateTransform>(cs, cwCoordinateTransform::Wgs84);
+        if (!m_wgs84Transform->isValid()) {
+            m_wgs84Transform.reset();
+        }
     }
-    m_wgs84Transform = std::make_unique<cwCoordinateTransform>(cs, cwCoordinateTransform::Wgs84);
-    if (!m_wgs84Transform->isValid()) {
-        m_wgs84Transform.reset();
-    }
+
+    // A CS change without a new pick must still refresh the CS-derived readouts
+    // (globalCoordinateSystem, hasCoordinateSystem) so an open popup reflects the
+    // current geo-reference.
+    emit coordinateSystemChanged();
 }
 
 void cwCoordinatePicker::pick(QPointF screenPoint)
 {
-    if (!m_camera || !m_scene || !m_region) {
+    if (!m_geoReference) {
         return;
     }
 
-    cwGeometryItersecter* intersecter = m_scene->geometryItersecter();
-    if (!intersecter) {
+    const cwScenePick::Result pick = snapPick(screenPoint);
+    if (!pick.hit) {
         return;
     }
 
-    // Mirror cwBaseTurnTableInteraction::pick — frustrumRay expects
-    // GL-viewport coordinates, not Qt-viewport coordinates.
-    const QPoint mappedPos = m_camera->mapToGLViewport(screenPoint.toPoint());
-    const QRay3D ray = m_camera->frustrumRay(mappedPos);
-
-    const cwRayHit hit = intersecter->intersectsDetailed(ray);
-    if (!hit.hit()) {
-        return;
-    }
-
-    m_scenePoint = hit.pointWorld();
+    m_scenePoint = pick.world;
     m_pickScreenPoint = screenPoint;
 
-    const cwGeoPoint origin = m_region->worldOrigin();
-    m_globalPoint = cwGeoPoint(double(m_scenePoint.x()) + origin.x,
-                               double(m_scenePoint.y()) + origin.y,
-                               double(m_scenePoint.z()) + origin.z);
+    m_globalPoint = m_geoReference->toGlobal(m_scenePoint);
 
-    m_globalCoordinateSystemCached = m_region->globalCoordinateSystem();
     m_hasWgs84 = false;
     m_wgs84Lat = 0.0;
     m_wgs84Lon = 0.0;

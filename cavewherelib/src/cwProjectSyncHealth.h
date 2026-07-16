@@ -107,7 +107,6 @@ private:
     AsyncFuture::Restarter<Monad::Result<QQuickGit::GitRepository::AheadBehindCounts>> m_remoteStatusRestarter;
     QTimer m_pollTimer;
 
-    int m_activeRequestId = 0;
     bool m_pendingLocalChanges = false;
     bool m_pendingUsesTokenAuth = false;
     QString m_pendingRemoteName;

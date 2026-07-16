@@ -2,7 +2,7 @@
 #define CWRADIALGRADIENTRHIOBJECT_H
 
 #include "cwRHIObject.h"
-#include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 
 //Qt includes
 #include <QMatrix4x4>
@@ -32,10 +32,7 @@ private:
     QRhiBuffer* m_uniformBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
 
-    cwRhiScene* m_scene = nullptr;
-    cwRhiScene::PipelineRecord* m_pipelineRecord = nullptr;
-    cwRhiPipelineKey m_pipelineKey;
-    bool m_hasPipelineKey = false;
+    cwRhiFrameRenderer* m_frame = nullptr;
     bool m_resourcesInitialized = false;
 
     struct UniformData {
@@ -47,11 +44,10 @@ private:
         //make sure you add padding if you put more parameters in here
     } m_uniformData;
 
-    void releasePipeline();
     bool ensurePipeline(const RenderData& data);
     bool ensureShaderResources(QRhi* rhi);
-    cwRhiPipelineKey buildPipelineKey(QRhiRenderTarget* target,
-                                      QRhiRenderPassDescriptor* renderPassDescriptor) const;
+    cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
+                                      int sampleCount) const;
 };
 
 #endif // CWRADIALGRADIENTRHIOBJECT_H

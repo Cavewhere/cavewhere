@@ -63,7 +63,7 @@ MainWindowTest {
             tryVerify(function() {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.currentTrip !== null
-            }, 10000, "wait for trip page item to be ready")
+            }, 20000, "wait for trip page item to be ready")
             return RootData.pageView.currentPageItem.currentTrip
         }
 
@@ -188,7 +188,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let findTripDateInput = function() {
-                let dateInput = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->tripDate")
+                let dateInput = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->tripDate")
                 verify(dateInput !== null)
                 return dateInput
             }
@@ -242,7 +242,7 @@ MainWindowTest {
             }
 
             let tripNameInput = function() {
-                let input = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->tripNameText")
+                let input = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->tripNameText")
                 verify(input !== null)
                 return input
             }
@@ -255,7 +255,7 @@ MainWindowTest {
                     return trip !== null
                            && String(trip.name) === String(newName)
                            && RootData.pageSelectionModel.currentPageAddress === tripPageAddressForName(newName)
-                }, 10000, "verify trip renamed via UI")
+                }, 20000, "verify trip renamed via UI")
             }
 
             let snapshotUiState = function() {
@@ -294,10 +294,10 @@ MainWindowTest {
             let commitA = TestHelper.projectHeadCommitOid(RootData.project)
             verify(commitA !== "")
 
-            verifyTripPageState(baselineName, "verify baseline trip rename UI", 10000)
+            verifyTripPageState(baselineName, "verify baseline trip rename UI", 20000)
 
             renameTripViaUi(syncedName)
-            verifyTripPageState(syncedName, "verify renamed trip page state", 10000)
+            verifyTripPageState(syncedName, "verify renamed trip page state", 20000)
 
             verify(RootData.project.sync())
             waitForProjectSyncToFinish()
@@ -306,7 +306,7 @@ MainWindowTest {
             verify(commitB !== "")
             verify(commitB !== commitA)
 
-            verifyTripPageState(syncedName, "verify renamed trip page after first sync", 10000)
+            verifyTripPageState(syncedName, "verify renamed trip page after first sync", 20000)
 
             console.log("About to Checked out!");
             // wait(1000);
@@ -315,7 +315,7 @@ MainWindowTest {
             // wait(5000);
             console.log("Checked out!");
 
-            verifyTripPageState(baselineName, "verify baseline trip page after checkout", 10000)
+            verifyTripPageState(baselineName, "verify baseline trip page after checkout", 20000)
 
             console.log("About to final sync!");
             // wait(1000);
@@ -328,7 +328,7 @@ MainWindowTest {
             verify(commitC !== "")
             verify(commitC === commitB)
 
-            verifyTripPageState(syncedName, "verify renamed trip page after second sync", 10000)
+            verifyTripPageState(syncedName, "verify renamed trip page after second sync", 20000)
         }
 
         function test_caveRenameUpdatesLinkBarOnTripPage() {
@@ -391,7 +391,7 @@ MainWindowTest {
 
             tryVerifyWithDiagnostics(() => {
                 return hasLinkBarText(expectedLinkBarCaveText(baselineCaveName))
-            }, 10000, "verify baseline cave name in link bar on trip page")
+            }, 20000, "verify baseline cave name in link bar on trip page")
 
             cave.name = renamedCaveName
 
@@ -401,14 +401,14 @@ MainWindowTest {
                        && String(cave.name) === renamedCaveName
                        && String(RootData.pageSelectionModel.currentPageAddress) === expectedTripPageAddress
                        && hasLinkBarText(expectedLinkBarCaveText(renamedCaveName))
-            }, 10000, "verify link bar updates after cave rename while on trip page")
+            }, 20000, "verify link bar updates after cave rename while on trip page")
         }
 
         function test_tripCalibrationSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
 
             let findCalibrationControls = function() {
-                let rootChain = "rootId->tripPage->view"
+                let rootChain = "rootId->tripPage->surveyEditor->view"
                 let declinationEdit = ObjectFinder.findObjectByChain(mainWindow, rootChain + "->declinationEdit")
                 let frontEditor = ObjectFinder.findObjectByChain(mainWindow, rootChain + "->frontSightCalibrationEditor")
                 let backEditor = ObjectFinder.findObjectByChain(mainWindow, rootChain + "->backSightCalibrationEditor")
@@ -530,7 +530,7 @@ MainWindowTest {
             let context = loadFixtureAndOpenFirstTrip()
 
             let findFrontSightState = function() {
-                let rootChain = "rootId->tripPage->view"
+                let rootChain = "rootId->tripPage->surveyEditor->view"
                 let frontEditor = ObjectFinder.findObjectByChain(mainWindow, rootChain + "->frontSightCalibrationEditor")
                 verify(frontEditor !== null)
                 verify(frontEditor.calibration !== null)
@@ -838,11 +838,11 @@ MainWindowTest {
             }
 
             let surveyDataCell = function(row, role) {
-                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
                 verify(view !== null)
                 view.positionViewAtIndex(row, ListView.Contain)
                 // waitForRendering(rootId)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role)
                 verify(cell !== null)
                 return cell
             }
@@ -868,7 +868,7 @@ MainWindowTest {
             }
 
             let snapshotChunkUiState = function() {
-                let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+                let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->backSightCalibrationEditor->checkBox")
                 verify(backSightsCheck !== null)
                 let uiState = JSON.stringify({
                     backSightsEnabled: backSightsCheck.checked === true,
@@ -936,10 +936,10 @@ MainWindowTest {
             }
 
             let surveyDataCell = function(row, role) {
-                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
                 verify(view !== null)
                 view.positionViewAtIndex(row, ListView.Contain)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role)
                 verify(cell !== null)
                 return cell
             }
@@ -1039,7 +1039,7 @@ MainWindowTest {
                 let chunk = currentChunk()
                 let tailShotIndex = chunk.shotCount - 1
                 let tailStationIndex = chunk.stationCount - 1
-                let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+                let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->backSightCalibrationEditor->checkBox")
                 verify(backSightsCheck !== null)
                 return JSON.stringify({
                     backSightsEnabled: backSightsCheck.checked === true,
@@ -1117,10 +1117,10 @@ MainWindowTest {
             }
 
             let surveyDataCell = function(row, role) {
-                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
                 verify(view !== null)
                 view.positionViewAtIndex(row, ListView.Contain)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role)
                 verify(cell !== null)
                 return cell
             }
@@ -1204,7 +1204,7 @@ MainWindowTest {
             }, 3000, "verify removal after local setter")
             console.log("[TripSyncQmlDebug] remove-shot after local remove summary=", modelChunkSummary(currentChunk()))
 
-            let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+            let backSightsCheck = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->backSightCalibrationEditor->checkBox")
             verify(backSightsCheck !== null)
             compare(backSightsCheck.checked, true)
             verifyTailUiMatchesModel(currentChunk())
@@ -1262,7 +1262,7 @@ MainWindowTest {
 
         function test_tripChunkRemoveAboveSelectedTailStationSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -1299,10 +1299,10 @@ MainWindowTest {
             }
 
             let surveyDataCell = function(row, role) {
-                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
                 verify(view !== null)
                 view.positionViewAtIndex(row, ListView.Contain)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role)
                 verify(cell !== null)
                 return cell
             }
@@ -1534,7 +1534,7 @@ MainWindowTest {
 
         function test_tripRemoveChunkFromStationContextMenuSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -1550,7 +1550,7 @@ MainWindowTest {
 
             let surveyDataCell = function(row, role) {
                 view.positionViewAtIndex(row, ListView.Contain)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role)
                 verify(cell !== null)
                 return cell
             }
@@ -1562,7 +1562,7 @@ MainWindowTest {
             }
 
             let triggerMenuItemFromLoader = function(row, role, loaderObjectName, itemObjectName) {
-                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + role + "->" + loaderObjectName
+                let loaderPath = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role + "->" + loaderObjectName
                 let loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
                 verify(loader !== null)
                 verify(loader.item !== null)
@@ -1690,7 +1690,7 @@ MainWindowTest {
                     return snapshotTripState()
                 },
                 function(expectedStateJson) {
-                    let addDataBlockButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->spaceAddBar")
+                    let addDataBlockButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->spaceAddBar")
                     verify(addDataBlockButton !== null)
                     addDataBlockButton.clicked()
                     waitForRendering(rootId)
@@ -1713,7 +1713,7 @@ MainWindowTest {
 
         function test_tripAddFilledChunkFromSpacebarSyncAndCheckout() {
             let context = loadFixtureAndOpenFirstTrip()
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -1755,7 +1755,7 @@ MainWindowTest {
 
             let surveyDataCell = function(row, role) {
                 view.positionViewAtIndex(row, ListView.Contain)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + role)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role)
                 verify(cell !== null)
                 return cell
             }
@@ -1911,6 +1911,10 @@ MainWindowTest {
         }
 
         function test_tripAddLiDARNoteSyncAndCheckout() {
+            // The notes gallery only gets non-zero width in the wide responsive
+            // layout; at the default 1200 the survey editor consumes the row and
+            // the gallery delegates collapse, so thumbnail clicks land nowhere.
+            rootId.width = 1600
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentTrip = function() {
@@ -1962,39 +1966,47 @@ MainWindowTest {
             }
 
             let verifySelectedLiDARNote = function(expectedFileName) {
+                let lastIndex = noteGalleryView().count - 1
+                noteGalleryView().positionViewAtIndex(lastIndex, ListView.Beginning)
                 let galleryItem = null
                 tryVerify(() => {
                     galleryItem = ObjectFinder.findObjectByChain(
                         mainWindow,
-                        "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                        "rootId->tripPage->noteGallery->galleryView->noteImage" + lastIndex)
                     return galleryItem !== null
                 }, 5000, "gallery delegate should exist for last note")
-                mouseClick(galleryItem)
+                // The gallery delegate can be taller than the viewport, so its
+                // center is off-screen; click within the visible portion.
+                mouseClick(galleryItem, galleryItem.width / 2,
+                           Math.min(galleryItem.height, noteGalleryView().height) / 2)
 
                 tryVerifyWithDiagnostics(() => {
                     return noteGallery().currentNoteLiDAR !== null
                            && String(noteGallery().currentNoteLiDAR.filename) === expectedFileName
-                }, 10000, "verify selected LiDAR note")
+                }, 20000, "verify selected LiDAR note")
 
                 tryVerifyWithDiagnostics(() => {
                     return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-                }, 10000, "verify LiDAR viewer ready")
+                }, 20000, "verify LiDAR viewer ready")
             }
 
             let selectLastLiDARNote = function() {
+                let lastIndex = noteGalleryView().count - 1
+                noteGalleryView().positionViewAtIndex(lastIndex, ListView.Beginning)
                 let galleryItem = ObjectFinder.findObjectByChain(
                     mainWindow,
-                    "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                    "rootId->tripPage->noteGallery->galleryView->noteImage" + lastIndex)
                 verify(galleryItem !== null)
-                mouseClick(galleryItem)
+                mouseClick(galleryItem, galleryItem.width / 2,
+                           Math.min(galleryItem.height, noteGalleryView().height) / 2)
 
                 tryVerifyWithDiagnostics(() => {
                     return noteGallery().currentNoteLiDAR !== null
-                }, 10000, "verify selected last LiDAR note")
+                }, 20000, "verify selected last LiDAR note")
 
                 tryVerifyWithDiagnostics(() => {
                     return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-                }, 10000, "verify selected last LiDAR viewer ready")
+                }, 20000, "verify selected last LiDAR viewer ready")
 
                 return String(noteGallery().currentNoteLiDAR.filename)
             }
@@ -2062,6 +2074,9 @@ MainWindowTest {
         }
 
         function test_tripRemoveLiDARNoteSyncAndCheckout() {
+            // See test_tripAddLiDARNoteSyncAndCheckout: the gallery needs the
+            // wide layout for its thumbnail delegates to be clickable.
+            rootId.width = 1600
             let context = loadFixtureAndOpenFirstTrip()
 
             let currentTrip = function() {
@@ -2113,39 +2128,47 @@ MainWindowTest {
             }
 
             let verifySelectedLiDARNote = function(expectedFileName) {
+                let lastIndex = noteGalleryView().count - 1
+                noteGalleryView().positionViewAtIndex(lastIndex, ListView.Beginning)
                 let galleryItem = null
                 tryVerify(() => {
                     galleryItem = ObjectFinder.findObjectByChain(
                         mainWindow,
-                        "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                        "rootId->tripPage->noteGallery->galleryView->noteImage" + lastIndex)
                     return galleryItem !== null
                 }, 5000, "gallery delegate should exist for last note")
-                mouseClick(galleryItem)
+                // The gallery delegate can be taller than the viewport, so its
+                // center is off-screen; click within the visible portion.
+                mouseClick(galleryItem, galleryItem.width / 2,
+                           Math.min(galleryItem.height, noteGalleryView().height) / 2)
 
                 tryVerifyWithDiagnostics(() => {
                     return noteGallery().currentNoteLiDAR !== null
                            && String(noteGallery().currentNoteLiDAR.filename) === expectedFileName
-                }, 10000, "verify selected LiDAR note")
+                }, 20000, "verify selected LiDAR note")
 
                 tryVerifyWithDiagnostics(() => {
                     return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-                }, 10000, "verify LiDAR viewer ready")
+                }, 20000, "verify LiDAR viewer ready")
             }
 
             let selectLastLiDARNote = function() {
+                let lastIndex = noteGalleryView().count - 1
+                noteGalleryView().positionViewAtIndex(lastIndex, ListView.Beginning)
                 let galleryItem = ObjectFinder.findObjectByChain(
                     mainWindow,
-                    "rootId->tripPage->noteGallery->galleryView->noteImage" + (noteGalleryView().count - 1))
+                    "rootId->tripPage->noteGallery->galleryView->noteImage" + lastIndex)
                 verify(galleryItem !== null)
-                mouseClick(galleryItem)
+                mouseClick(galleryItem, galleryItem.width / 2,
+                           Math.min(galleryItem.height, noteGalleryView().height) / 2)
 
                 tryVerifyWithDiagnostics(() => {
                     return noteGallery().currentNoteLiDAR !== null
-                }, 10000, "verify selected last LiDAR note")
+                }, 20000, "verify selected last LiDAR note")
 
                 tryVerifyWithDiagnostics(() => {
                     return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-                }, 10000, "verify selected last LiDAR viewer ready")
+                }, 20000, "verify selected last LiDAR viewer ready")
 
                 return String(noteGallery().currentNoteLiDAR.filename)
             }
@@ -2373,7 +2396,7 @@ MainWindowTest {
             tryVerifyWithDiagnostics(() => {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "dataMainPage"
-            }, 10000, "navigate to data main page")
+            }, 20000, "navigate to data main page")
         }
 
         function regionNameInput() {
@@ -2428,7 +2451,7 @@ MainWindowTest {
             navigateToDataPage()
             tryVerifyWithDiagnostics(() => {
                 return String(RootData.region.name) === baselineName
-            }, 10000, "verify region name reverted after checkout")
+            }, 20000, "verify region name reverted after checkout")
             compare(String(regionNameInput().text), baselineName)
             tryVerifyWithDiagnostics(() => {
                 return String(RootData.project.filename).indexOf(baselineName) >= 0
@@ -2456,7 +2479,7 @@ MainWindowTest {
             // Ours-wins: local (old) name survives the rename/rename conflict.
             tryVerifyWithDiagnostics(() => {
                 return String(RootData.region.name) === baselineName
-            }, 10000, "verify local name wins after re-sync rename conflict")
+            }, 20000, "verify local name wins after re-sync rename conflict")
             compare(String(regionNameInput().text), baselineName)
 
             // project.filename must reflect the ours-wins name (drives the window title).

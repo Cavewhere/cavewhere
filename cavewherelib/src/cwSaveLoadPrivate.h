@@ -5,6 +5,7 @@
 #include "cwSaveLoad.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwLazLayer.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
 #include "cwSketch.h"
@@ -75,6 +76,13 @@ struct cwSaveLoadPrivate {
         // dataRoot otherwise). Used by ensureInsideRoot so jobs may target
         // siblings of dataRoot inside the project (e.g. "GIS Layers/").
         QString projectRoot;
+        // Sub-identity within (objectId, kind) for entities that own more than
+        // one artifact (e.g. cwLazLayer owns both a .laz and a .cwlaz). Jobs
+        // with different tags are never merged or cancelled against each other
+        // by the compression rules, so two artifacts of the same logical
+        // object can be queued and executed independently. Empty string is the
+        // default and preserves single-artifact behavior bit-for-bit.
+        QString tag;
 
         Job() = default;
         Job(const void* objectId, Kind kind, Action action)
@@ -252,8 +260,91 @@ struct cwSaveLoadPrivate {
         AsyncFuture::Deferred<Monad::ResultBase> deferred;
     };
 
-    QQueue<std::shared_ptr<Operation>> operationQueue;
-    std::shared_ptr<Operation> activeOperation;
+    // FIFO of pending operations plus the one currently running. It owns an
+    // "idle" future (finished()) that resolves whenever the queue is empty and
+    // nothing is active. enqueue()/activateNext()/clearActive()/cancelQueued()
+    // are the only mutators, so the idle future is maintained as a function of
+    // queue state and can never be stranded by a drain path that forgets to
+    // update it.
+    //
+    // The idle future is the ordering waitForFinished() relies on: a SaveFlush
+    // operation only settles after saveFlushImpl() has emitted
+    // saveFlushCompleted, so a finished idle future guarantees that emit
+    // already happened. Blocking on the raw m_pendingJobsDeferred (which is
+    // upstream of the flush emit) does not give that guarantee.
+    class OperationQueue
+    {
+    public:
+        OperationQueue() { m_idle.complete(); }
+
+        bool isEmpty() const { return m_queue.isEmpty(); }
+        bool hasActive() const { return m_active != nullptr; }
+        const std::shared_ptr<Operation>& active() const { return m_active; }
+        QFuture<void> finished() const { return m_idle.future(); }
+
+        bool hasOperation(Operation::Type type, quint64 generation) const
+        {
+            const auto matches = [&](const std::shared_ptr<Operation>& op) {
+                return op && op->generation == generation && op->type == type;
+            };
+            if (matches(m_active)) {
+                return true;
+            }
+            for (const auto& op : m_queue) {
+                if (matches(op)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void enqueue(std::shared_ptr<Operation> op)
+        {
+            m_queue.enqueue(std::move(op));
+            if (m_idle.future().isFinished()) {
+                m_idle = {};
+            }
+        }
+
+        std::shared_ptr<Operation> activateNext()
+        {
+            m_active = m_queue.dequeue();
+            return m_active;
+        }
+
+        void clearActive()
+        {
+            m_active.reset();
+            settleIfDrained();
+        }
+
+        // Drop every queued operation, completing each one's deferred with
+        // reason. An active operation is left untouched; it settles the idle
+        // future from clearActive().
+        void cancelQueued(const QString& reason)
+        {
+            while (!m_queue.isEmpty()) {
+                m_queue.dequeue()->deferred.complete(Monad::ResultBase(reason));
+            }
+            settleIfDrained();
+        }
+
+    private:
+        void settleIfDrained()
+        {
+            if (m_active == nullptr
+                    && m_queue.isEmpty()
+                    && !m_idle.future().isFinished()) {
+                m_idle.complete();
+            }
+        }
+
+        QQueue<std::shared_ptr<Operation>> m_queue;
+        std::shared_ptr<Operation> m_active;
+        AsyncFuture::Deferred<void> m_idle;
+    };
+
+    OperationQueue m_operations;
     quint64 operationGeneration = 0;
     QString pendingCancellationReason;
     quint64 modelMutationEpoch = 0;
@@ -327,21 +418,21 @@ struct cwSaveLoadPrivate {
     // pcloud). On copy-fallback success but source-cleanup failure, returns a
     // ResultBase with errorCode == Warning carrying the cleanup message —
     // hasError() is false so callers don't treat it as a failed operation.
-    static Monad::ResultBase moveDirectoryRobust(const QString& sourcePath,
-                                                 const QString& destinationPath);
+    static CAVEWHERE_LIB_EXPORT Monad::ResultBase moveDirectoryRobust(const QString& sourcePath,
+                                                                       const QString& destinationPath);
 
     // Sanity-check that a path is safe to pass to fsRemoveDirRecursive.
     // Rejects empty, relative, root ("/", "C:\\"), or non-existent paths,
     // as well as paths containing '..'. Returns a ResultBase with an error
     // describing the rejection; hasError() is false on success.
     // Exposed for unit testing.
-    static Monad::ResultBase validatePathSafeForRecursiveRemoval(const QString& path);
+    static CAVEWHERE_LIB_EXPORT Monad::ResultBase validatePathSafeForRecursiveRemoval(const QString& path);
 
     // Test seam for moveDirectoryRobust. Defaults to a thin wrapper around
     // QDir::rename. Tests swap this to deterministically exercise the
     // copy-fallback branch without needing an actual cross-filesystem mount.
     using RenameDirectoryFn = bool (*)(const QString& src, const QString& dst);
-    static RenameDirectoryFn renameDirectoryFn;
+    static CAVEWHERE_LIB_EXPORT RenameDirectoryFn renameDirectoryFn;
 
     cwSaveLoadPrivate();
 
@@ -358,6 +449,8 @@ struct cwSaveLoadPrivate {
                                          std::function<QFuture<Monad::ResultBase>()> run);
 
     void runNextOperation(cwSaveLoad* context);
+
+    QFuture<void> operationsFinished() const { return m_operations.finished(); }
 
     void cancelPendingOperations(const QString& reason);
 
@@ -432,8 +525,24 @@ struct cwSaveLoadPrivate {
             const void* objectId
             );
 
-    // Returns a map of objectId -> ordered job indices for all non-null objectIds.
-    QHash<const void*, QList<int>> jobIndicesByObjectId() const;
+    // Group key for compression: jobs that share (objectId, tag) are
+    // considered the same artifact-stream and may be merged or cancelled
+    // against each other. Jobs that differ in either field are independent.
+    struct GroupKey {
+        const void* objectId = nullptr;
+        QString tag;
+
+        bool operator==(const GroupKey& other) const noexcept {
+            return objectId == other.objectId && tag == other.tag;
+        }
+
+        friend size_t qHash(const GroupKey& key, size_t seed = 0) noexcept {
+            return qHashMulti(seed, reinterpret_cast<quintptr>(key.objectId), key.tag);
+        }
+    };
+
+    // Returns a map of (objectId, tag) -> ordered job indices for all non-null objectIds.
+    QHash<GroupKey, QList<int>> jobIndicesByGroup() const;
 
     // Rule 1: For each object with multiple WriteFile jobs, drop all but the last.
     void dropRedundantWrites(const QList<int>& indices, QSet<int>& indicesToDrop) const;
@@ -475,6 +584,8 @@ struct cwSaveLoadPrivate {
                 saveProtoMessage(context, cwSaveLoad::toProtoNoteLiDAR(object), object);
             } else if constexpr (std::is_same_v<T, cwSketch>) {
                 saveProtoMessage(context, cwSaveLoad::toProtoSketch(object), object);
+            } else if constexpr (std::is_same_v<T, cwLazLayer>) {
+                saveProtoMessage(context, cwSaveLoad::toProtoLazLayer(object), object);
             } else {
                 static_assert(std::is_same_v<T, void>, "Unsupported saveObject type");
             }

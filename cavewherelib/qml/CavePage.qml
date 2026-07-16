@@ -175,7 +175,7 @@ StandardPage {
 
             QC.Label {
                 objectName: "gridConvergenceValue"
-                text: cavePageArea.currentCave ? cavePageArea.currentCave.gridConvergenceText : ""
+                text: cavePageArea.currentCave ? cavePageArea.currentCave.gridConvergence.text : ""
 
                 QQ.HoverHandler {
                     id: gridConvergenceHoverId
@@ -183,8 +183,8 @@ StandardPage {
 
                 QC.ToolTip.visible: gridConvergenceHoverId.hovered
                                     && cavePageArea.currentCave
-                                    && cavePageArea.currentCave.gridConvergenceDetailText !== cavePageArea.currentCave.gridConvergenceText
-                QC.ToolTip.text: cavePageArea.currentCave ? cavePageArea.currentCave.gridConvergenceDetailText : ""
+                                    && cavePageArea.currentCave.gridConvergence.detailText !== cavePageArea.currentCave.gridConvergence.text
+                QC.ToolTip.text: cavePageArea.currentCave ? cavePageArea.currentCave.gridConvergence.detailText : ""
             }
         }
 
@@ -530,7 +530,7 @@ StandardPage {
                         implicitWidth: layoutId.width
                         implicitHeight: layoutId.height
 
-                        DataRightClickMouseMenu {
+                        CaveTripContextMenu {
                             anchors.fill: parent
                             removeChallenge: removeChallengeId
                             row: rowDelegateId.index
@@ -873,7 +873,7 @@ StandardPage {
                     }
                 }
 
-                DataRightClickMouseMenu {
+                CaveTripContextMenu {
                     anchors.fill: parent
                     removeChallenge: removeChallengeId
                     row: flowDelegateId.index

@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwRhiScene.h"
+#include "cwRhiFrameRenderer.h"
 
 //Qt includes
 #include <QQuickRhiItemRenderer>
@@ -39,12 +40,24 @@ public:
         return QQuickRhiItemRenderer::rhi();
     }
 
-    QMatrix4x4 viewMatrix() const { return m_sceneRenderer->viewMatrix(); }
-    QMatrix4x4 projectionMatrix() const { return m_sceneRenderer->projectionMatrix(); }
-    QMatrix4x4 viewProjectionMatrix() const { return m_sceneRenderer->viewProjectionMatrix(); }
-    float devicePixelRatio() const { return m_sceneRenderer->devicePixelRatio(); }
-    QRhiBuffer* globalUniformBuffer() const { return m_sceneRenderer->globalUniformBuffer(); }
-    cwRhiScene* sceneBackend() const { return m_sceneRenderer; }
+    // The global camera UBO and its per-slot stride. Render objects bind the UBO and
+    // select a camera slot via the stride; the per-job camera itself reaches CPU-side
+    // draws (cwRenderBillboards) through cwRHIObject::RenderData, not the renderer —
+    // the live frame renderer deliberately no longer exposes its on-screen camera, so
+    // an offscreen render can't pick up the wrong camera.
+    QRhiBuffer* globalUniformBuffer() const { return m_sceneRenderer->m_frame.globalUniformBuffer(); }
+    quint32 globalUniformBufferStride() const { return m_sceneRenderer->m_frame.globalUniformBufferStride(); }
+
+    // The shared GPU draw engine. Render objects acquire pipelines, read pass
+    // routing, and bind the global UBO through this handle instead of reaching
+    // cwRhiScene; the offscreen renderer holds the same engine by reference.
+    cwRhiFrameRenderer* frameRenderer() const { return &m_sceneRenderer->m_frame; }
+
+    // Request another frame from within the render thread (wraps the protected
+    // QQuickRhiItemRenderer::update()). cwRhiScene calls this to spread offscreen
+    // renders across frames and to flush pending texture read-backs. Guarded by
+    // cwRhiScene so it isn't called unconditionally (that would loop forever).
+    void requestUpdate() { update(); }
 
 protected:
     void initialize(QRhiCommandBuffer *cb) override;

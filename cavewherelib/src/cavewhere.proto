@@ -23,8 +23,18 @@ message ProjectMetadata {
     reserved 2; // Removed: GitMode enum (only ManagedNew was ever used)
     reserved 5; // Removed: worldOrigin (derived from fix-station centroid; recomputed on load)
     reserved 6; // Removed: lazLayers (now discovered via folder scan of "GIS Layers/")
+    reserved 7; // Removed: lazLayerStates (now persisted per-layer in <basename>.cwlaz)
     optional bool syncEnabled = 3;
     optional string globalCoordinateSystem = 4;
+}
+
+// Per-LAZ-layer persistent state. Stored as <basename>.cwlaz next to the
+// matching .laz/.las file in "GIS Layers/". Discovery is by folder scan;
+// the project's .cwproj file no longer references individual LAZ layers.
+message LazLayer {
+    optional FileVersion fileVersion = 1;
+    optional string id = 2;       // UUID, stable across reopen
+    optional bool enabled = 3;    // default true; absence == true
 }
 
 message Project {

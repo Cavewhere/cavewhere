@@ -35,8 +35,8 @@ void cwRhiTexturedItems::initialize(const ResourceUpdateData& data)
     }
 
     QRhi* rhi = data.renderData.cb->rhi();
-    if (!m_scene && data.renderData.renderer) {
-        m_scene = data.renderData.renderer->sceneBackend();
+    if (!m_frame && data.renderData.renderer) {
+        m_frame = data.renderData.renderer->frameRenderer();
     }
 
     {
@@ -159,8 +159,8 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
 
 void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
 {
-    if (!m_scene && data.renderData.renderer) {
-        m_scene = data.renderData.renderer->sceneBackend();
+    if (!m_frame && data.renderData.renderer) {
+        m_frame = data.renderData.renderer->frameRenderer();
     }
 
     for (auto it = m_items.begin(); it != m_items.end(); ++it) {
@@ -192,7 +192,14 @@ void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
         }
 
         if (item->pipelineNeedsUpdate) {
-            item->ensurePipeline(data, m_sharedData, m_inputLayout);
+            // Live-only pre-build so createShaderResourceBindings has a
+            // pipelineRecord; gather() is the authoritative build (the offscreen
+            // path never comes through here). Key on this item's pass entry —
+            // see ResourceUpdateData::perPassRenderData.
+            Q_ASSERT(data.perPassRenderData);
+            const auto pass = toRenderPass(item->material.renderPass);
+            const RenderData& routed = (*data.perPassRenderData)[static_cast<size_t>(pass)];
+            item->ensurePipeline(routed, m_sharedData, m_inputLayout);
             item->createShaderResourceBindings(data, m_sharedData);
         }
     }
@@ -252,11 +259,24 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
     const auto desiredPass = context.renderPass;
     bool appended = false;
 
+    // const iteration: the mapped values are Item* (the pointee is non-const, so
+    // item->ensurePipeline() below is still callable) — avoids a QHash detach.
     for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
-        const Item* item = it.value();
+        Item* item = it.value();
         if (!item || !item->visible) {
             continue;
         }
+
+        if (toRenderPass(item->material.renderPass) != desiredPass) {
+            continue;
+        }
+
+        // Rebuild the pipeline if this pass's target changed since last frame
+        // (cloud appeared/disappeared → Opaque routes through the 1x offscreen
+        // or back to the swap chain). Self-guards on the key, so a no-op when
+        // the routing is unchanged. The SRB layout is rpDesc-independent, so it
+        // stays valid across the rebuild — no need to recreate it here.
+        item->ensurePipeline(*context.renderData, m_sharedData, m_inputLayout);
 
         if (item->numberOfIndices <= 0 ||
             !item->pipelineRecord ||
@@ -264,10 +284,6 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
             !item->srb ||
             !item->vertexBuffer ||
             !item->indexBuffer) {
-            continue;
-        }
-
-        if (toRenderPass(item->material.renderPass) != desiredPass) {
             continue;
         }
 
@@ -286,6 +302,9 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
         drawable.indexFormat = QRhiCommandBuffer::IndexUInt32;
         drawable.indexCount = static_cast<quint32>(item->numberOfIndices);
         drawable.vertexBindings.append(QRhiCommandBuffer::VertexInput(item->vertexBuffer, 0));
+        // The material's global UBO binding is dynamic-offset; cwRhiScene supplies
+        // the per-pass camera slot offset.
+        drawable.globalCameraBinding = item->material.globalUniformBinding;
 
         batch.drawables.append(drawable);
         appended = true;
@@ -298,7 +317,7 @@ cwRhiTexturedItems::Item::Item() = default;
 
 cwRhiTexturedItems::Item::~Item()
 {
-    releasePipeline();
+    // `pipelines` releases its held pipeline references on destruction.
     delete vertexBuffer;
     delete indexBuffer;
     delete uniformBuffer;
@@ -414,7 +433,7 @@ void cwRhiTexturedItems::Item::updateUniformBuffer(const ResourceUpdateData& dat
     modelMatrixNeedsUpdate = false;
 }
 
-void cwRhiTexturedItems::Item::ensurePipeline(const ResourceUpdateData& data,
+void cwRhiTexturedItems::Item::ensurePipeline(const RenderData& renderData,
                                               const SharedItemData& sharedData,
                                               const QRhiVertexInputLayout& layout)
 {
@@ -423,19 +442,29 @@ void cwRhiTexturedItems::Item::ensurePipeline(const ResourceUpdateData& data,
         return;
     }
 
-    auto* renderer = data.renderData.renderer;
-    auto* renderTarget = renderer->renderTarget();
-    auto* currentPass = renderTarget->renderPassDescriptor();
-    const int currentSampleCount = renderTarget->sampleCount();
+    auto* renderer = renderData.renderer;
+    if (!owner->m_frame && renderer) {
+        owner->m_frame = renderer->frameRenderer();
+    }
 
-    const cwRhiPipelineKey key = owner->makePipelineKey(currentPass, currentSampleCount, material);
+    // Precondition: renderData is this item's pass's routed target (gather()
+    // filters items to its pass; updateResources() selects the item's entry from
+    // perPassRenderData). The key self-adjusts when the routing flips.
+    Q_ASSERT(renderData.renderPassDescriptor);
+
+    const cwRhiPipelineKey key = owner->makePipelineKey(renderData.renderPassDescriptor,
+                                                        renderData.sampleCount, material);
 
     if (!pipelineNeedsUpdate && pipelineRecord && pipelineRecord->key == key) {
         return;
     }
 
-    releasePipeline();
-    pipelineRecord = owner->acquirePipeline(key, material, data.renderData.cb->rhi(), layout, sharedData);
+    // Keep a reference to every target's pipeline (in `pipelines`), so toggling
+    // between the live swap chain and an offscreen target reuses the cached
+    // record instead of releasing and rebuilding it each frame.
+    pipelineRecord = pipelines.acquire(owner->m_frame, key, [&]() {
+        return owner->acquirePipeline(key, material, renderData.cb->rhi(), layout, sharedData);
+    });
     pipelineNeedsUpdate = (pipelineRecord == nullptr);
 
     if (!material.wantsPerDrawUniform()) {
@@ -449,16 +478,11 @@ void cwRhiTexturedItems::Item::ensurePipeline(const ResourceUpdateData& data,
     }
 }
 
-void cwRhiTexturedItems::Item::releasePipeline()
+void cwRhiTexturedItems::Item::purgePipelinesFor(QRhiRenderPassDescriptor* descriptor)
 {
-    if (owner && pipelineRecord) {
-        owner->releasePipeline(pipelineRecord);
-    }
+    pipelines.purgeFor(descriptor);
     pipelineRecord = nullptr;
-    if (material.wantsPerDrawUniform()) {
-        modelMatrixNeedsUpdate = true;
-        uniformNeedsUpdate = true;
-    }
+    pipelineNeedsUpdate = true; // re-acquired in the next ensurePipeline
 }
 
 void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdateData& data,
@@ -483,9 +507,10 @@ void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdate
     }
 
     QVector<QRhiShaderResourceBinding> bindings;
-    bindings.append(QRhiShaderResourceBinding::uniformBuffer(material.globalUniformBinding,
+    bindings.append(QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(material.globalUniformBinding,
                                                              toRhiStages(material.globalUniformStages),
-                                                             renderer->globalUniformBuffer()));
+                                                             renderer->globalUniformBuffer(),
+                                                             renderer->globalUniformBufferStride()));
 
     if (material.wantsPerDrawUniform()) {
         if (!uniformBuffer) {
@@ -555,7 +580,7 @@ cwRhiPipelineKey cwRhiTexturedItems::makePipelineKey(QRhiRenderPassDescriptor* r
     return key;
 }
 
-cwRhiScene::PipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipelineKey& key,
+cwRhiPipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipelineKey& key,
                                                                 const cwRenderMaterialState& material,
                                                                 QRhi* rhi,
                                                                 const QRhiVertexInputLayout& layout,
@@ -563,7 +588,7 @@ cwRhiScene::PipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipel
 {
     Q_UNUSED(sharedData);
 
-    if (!m_scene) {
+    if (!m_frame) {
         return nullptr;
     }
 
@@ -572,12 +597,14 @@ cwRhiScene::PipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipel
         return nullptr;
     }
 
-    auto createFn = [material, layout, sampler, key](QRhi* localRhi) -> cwRhiScene::PipelineRecord* {
+    const quint32 globalStride = m_frame->globalUniformBufferStride();
+
+    auto createFn = [material, layout, sampler, key, globalStride](QRhi* localRhi) -> cwRhiPipelineRecord* {
         if (!localRhi) {
             return nullptr;
         }
 
-        auto* record = new cwRhiScene::PipelineRecord;
+        auto* record = new cwRhiPipelineRecord;
         record->pipeline = localRhi->newGraphicsPipeline();
 
         QShader vertex = loadShader(material.vertexShader);
@@ -601,9 +628,10 @@ cwRhiScene::PipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipel
         }
 
         QVector<QRhiShaderResourceBinding> layoutBindings;
-        layoutBindings.append(QRhiShaderResourceBinding::uniformBuffer(material.globalUniformBinding,
+        layoutBindings.append(QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(material.globalUniformBinding,
                                                                        toRhiStages(material.globalUniformStages),
-                                                                       nullptr));
+                                                                       nullptr,
+                                                                       globalStride));
 
         if (material.wantsPerDrawUniform()) {
             layoutBindings.append(QRhiShaderResourceBinding::uniformBuffer(material.perDrawUniformBinding,
@@ -628,15 +656,14 @@ cwRhiScene::PipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipel
         return record;
     };
 
-    return m_scene->acquirePipeline(key, rhi, createFn);
+    return m_frame->acquirePipeline(key, rhi, createFn);
 }
 
-void cwRhiTexturedItems::releasePipeline(cwRhiScene::PipelineRecord* record)
+void cwRhiTexturedItems::purgePipelinesFor(QRhiRenderPassDescriptor* descriptor)
 {
-    if (!record || !m_scene) {
-        return;
+    for (auto* item : std::as_const(m_items)) {
+        item->purgePipelinesFor(descriptor);
     }
-    m_scene->releasePipeline(record);
 }
 
 QRhiShaderResourceBinding::StageFlags cwRhiTexturedItems::toRhiStages(cwRenderMaterialState::ShaderStages stages)
@@ -715,5 +742,5 @@ cwRHIObject::RenderPass cwRhiTexturedItems::toRenderPass(cwRenderMaterialState::
 
 QRhiSampler* cwRhiTexturedItems::sharedSampler(QRhi* rhi)
 {
-    return m_scene ? m_scene->sharedLinearClampSampler(rhi) : nullptr;
+    return m_frame ? m_frame->sharedLinearClampSampler(rhi) : nullptr;
 }

@@ -6,8 +6,8 @@ import QmlTestRecorder
 
 // Visual test for station-label and lead-label collision-based placement.
 // Loads Phake Cave 3000, sets up an export region, enables the Leads layer
-// option, and writes an SVG to /tmp/cavewhere_lead_placement.svg, then opens
-// it in the system default viewer for manual inspection.
+// option, and writes an SVG to the per-test temp directory, then opens it
+// in the system default viewer for manual inspection.
 MainWindowTest {
     id: rootId
 
@@ -21,6 +21,13 @@ MainWindowTest {
         when: windowShown
 
         function test_exportSvgWithLeads() {
+            // The export render path needs a live QRhi; the headless offscreen QPA has none.
+            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
+            if (!OffscreenRenderTester.windowHasRhi(renderer)) {
+                skip("no QRhi on this platform (headless offscreen); run with a GPU-backed platform");
+                return;
+            }
+
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
             // Wait for scrap triangulation / image upload futures to drain so
@@ -32,8 +39,7 @@ MainWindowTest {
             // Zoom into the data, in the 3d view (keep default plan view; do
             // not click the profile button — we want labels exported against
             // the plan-view rendering).
-            let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer");
-            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->RenderingView->renderer->turnTableInteraction")
+            let turnTableInteraction = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer->turnTableInteraction")
             turnTableInteraction.camera.zoomScale = 0.2;
 
             let mapButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->mapButton")
@@ -47,17 +53,17 @@ MainWindowTest {
 
             let selectionButton = null
             tryVerify(() => {
-                          selectionButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton")
+                          selectionButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectionToolButton")
                           return selectionButton !== null && selectionButton.visible
                       })
             mouseClick(selectionButton)
 
-            let interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectAreaInteraction")
+            let interaction = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectAreaInteraction")
             // Drag a generous rectangle around the cave so most scraps land in it
             mouseDrag(interaction, 389.645, 137.965, 340, 349)
 
             tryVerify(() => { return selectionButton.enabled === true })
-            let done = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->RenderingView->renderer->selectionExportAreaTool->selectionToolButton->label")
+            let done = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->selectionExportAreaTool->selectionToolButton->label")
             mouseClick(done)
 
             // wait() needed — capture viewport geometry is computed asynchronously
@@ -78,10 +84,10 @@ MainWindowTest {
             captureItem0.captureItem.leadsVisible = true
             verify(captureItem0.captureItem.leadsVisible === true)
 
-            // Export SVG to /tmp so it's easy to find. Open it after for visual
-            // inspection.
-            let outPath = "/tmp/cavewhere_lead_placement.svg"
-            let outUrl  = Qt.resolvedUrl("file://" + outPath)
+            // Export SVG to the per-test temp directory. Open it after for
+            // visual inspection.
+            let outPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl()) + "/cavewhere_lead_placement.svg"
+            let outUrl  = TestHelper.toLocalUrl(outPath)
             TestHelper.removeFile(outUrl)
             verify(!TestHelper.fileExists(outUrl))
 

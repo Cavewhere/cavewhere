@@ -147,11 +147,10 @@ Returns the full bounding box of the GLTF object
  */
 QBox3D cwRenderGLTF::boundingBox() const
 {
-    QBox3D boundingBox;
+    QList<cwGeometryItersecter::Key> keys;
+    keys.reserve(m_items.size());
     for (const auto id : m_items) {
-        cwGeometryItersecter::Key key{const_cast<cwRenderGLTF*>(this), id};
-        auto box = geometryItersecter()->boundingBox(key);
-        boundingBox.unite(box);
+        keys.append(cwGeometryItersecter::Key{const_cast<cwRenderGLTF*>(this), id});
     }
-    return boundingBox;
+    return geometryItersecter()->boundingBox(keys);
 }

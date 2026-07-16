@@ -56,7 +56,7 @@ MainWindowTest {
             waitForRendering(rootId)
             navigateToView()
 
-            let buttons = ObjectFinder.findObjectByName(rootId, "floatingButtons")
+            let buttons = findChild(rootId, "floatingButtons")
             verify(buttons !== null, "floatingButtons not found")
             verify(buttons.visible, "Floating buttons should be visible at narrow width")
         }
@@ -66,7 +66,7 @@ MainWindowTest {
             waitForRendering(rootId)
             navigateToView()
 
-            let buttons = ObjectFinder.findObjectByName(rootId, "floatingButtons")
+            let buttons = findChild(rootId, "floatingButtons")
             verify(buttons !== null, "floatingButtons not found")
             verify(!buttons.visible, "Floating buttons should be hidden at wide width")
         }
@@ -84,7 +84,7 @@ MainWindowTest {
             // Ensure drawer is fully closed and animation settled from any prior test
             tryVerify(function() { return drawer.position === 0 }, 2000, "Drawer should start fully closed")
 
-            let cameraBtn = ObjectFinder.findObjectByName(rootId, "cameraButton")
+            let cameraBtn = findChild(rootId, "cameraButton")
             verify(cameraBtn !== null, "cameraButton not found")
             tryVerify(function() { return cameraBtn.visible && cameraBtn.width > 0 }, 1000, "cameraButton should be visible")
             waitForRendering(cameraBtn)
@@ -92,7 +92,7 @@ MainWindowTest {
 
             tryVerify(function() { return drawer.opened }, 2000, "Drawer should be open after camera click")
 
-            let tabBar = ObjectFinder.findObjectByName(rootId, "renderingTabBar")
+            let tabBar = findChild(rootId, "renderingTabBar")
             verify(tabBar !== null, "renderingTabBar not found")
             compare(tabBar.currentIndex, 0, "Tab should be on View (index 0) after camera click")
 
@@ -111,13 +111,15 @@ MainWindowTest {
             verify(drawer !== null, "viewDrawer not found")
             tryVerify(function() { return drawer.position === 0 }, 1000, "Drawer should start fully closed")
 
-            let layersBtn = ObjectFinder.findObjectByName(rootId, "layersButton")
+            let layersBtn = findChild(rootId, "layersButton")
             verify(layersBtn !== null, "layersButton not found")
+            tryVerify(function() { return layersBtn.visible && layersBtn.width > 0 }, 1000, "layersButton should be visible")
+            waitForRendering(layersBtn)
             mouseClick(layersBtn)
 
             tryVerify(function() { return drawer.opened }, 2000, "Drawer should be open after layers click")
 
-            let tabBar = ObjectFinder.findObjectByName(rootId, "renderingTabBar")
+            let tabBar = findChild(rootId, "renderingTabBar")
             verify(tabBar !== null, "renderingTabBar not found")
             compare(tabBar.currentIndex, 1, "Tab should be on Layers (index 1) after layers click")
 
@@ -130,7 +132,7 @@ MainWindowTest {
             waitForRendering(rootId)
             navigateToView()
 
-            let cameraBtn = ObjectFinder.findObjectByName(rootId, "cameraButton")
+            let cameraBtn = findChild(rootId, "cameraButton")
             verify(cameraBtn !== null, "cameraButton not found")
             mouseClick(cameraBtn)
 
@@ -172,7 +174,7 @@ MainWindowTest {
         function test_compassMaximumSize() {
             rootId.width = 1200
             waitForRendering(rootId)
-            let compass = ObjectFinder.findObjectByName(rootId, "compass")
+            let compass = findChild(rootId, "compass")
             verify(compass !== null, "compass not found")
             verify(compass.width <= 175, "Compass should not exceed 175px, got " + compass.width)
         }
@@ -180,7 +182,7 @@ MainWindowTest {
         function test_compassMinimumSize() {
             rootId.width = 400
             waitForRendering(rootId)
-            let compass = ObjectFinder.findObjectByName(rootId, "compass")
+            let compass = findChild(rootId, "compass")
             verify(compass !== null, "compass not found")
             verify(compass.width >= 80, "Compass should be at least 80px, got " + compass.width)
         }

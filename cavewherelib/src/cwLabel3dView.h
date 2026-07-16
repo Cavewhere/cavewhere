@@ -18,40 +18,33 @@
 //Our includes
 #include "cwLabel3dItem.h"
 #include "cwCollisionRectKdTree.h"
-class cwCamera;
+#include "cwBillboardOverlayItem.h"
 class cwLabel3dGroup;
 
-class cwLabel3dView : public QQuickItem
+class cwLabel3dView : public cwBillboardOverlayItem
 {
     friend class cwLabel3dGroup;
 
     Q_OBJECT
     QML_NAMED_ELEMENT(Label3dView)
 
-    Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
-
 public:
     explicit cwLabel3dView(QQuickItem *parent = 0);
     ~cwLabel3dView();
-    
+
     void addGroup(cwLabel3dGroup* group);
     void removeGroup(cwLabel3dGroup* group);
 
-    cwCamera* camera() const;
-    void setCamera(cwCamera* camera);
-
-signals:
-    void cameraChanged();
-
-
 public slots:
-    
+
+protected:
+    void repositionBillboards() override;
+
 private:
     QSet<cwLabel3dGroup*> m_labelGroups;
 
     //For rendering labels
     QQmlComponent* m_component;
-    QPointer<cwCamera> m_camera; //!<
     cwCollisionRectKdTree m_labelKdTree;
     QSizeF m_averageLabelSize = QSizeF(80.0, 14.0);
 
@@ -60,6 +53,7 @@ private:
     QQuickItem* labelItem(cwLabel3dGroup* group, int labelIndex);
     QQuickItem* acquireLabelItem(cwLabel3dGroup* group, int labelIndex);
     void releaseLabelItem(cwLabel3dGroup* group, int labelIndex);
+    void addOrUpdateBillboard(cwLabel3dGroup* group, int labelIndex, QQuickItem* item);
 private slots:
     void updatePositions();
 

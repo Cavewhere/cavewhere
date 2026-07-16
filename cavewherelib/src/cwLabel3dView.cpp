@@ -19,16 +19,19 @@
 #include <algorithm>
 #include <QRectF>
 #include <QSizeF>
+
+namespace {
+// Pull a label toward the camera (along the line of sight, so its screen
+// position and size are unaffected) so local scrap/centerline geometry near the
+// station doesn't draw over the text and make it unreadable. Biased enough to
+// win against local clutter while a more distant wall still occludes it. World
+// units (cave coordinates are metres); tunable.
+constexpr float kLabelDepthBias = 1.0f;
+}
 cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
-    QQuickItem(parent),
-    m_component(nullptr),
-    m_camera(nullptr)
+    cwBillboardOverlayItem(parent),
+    m_component(nullptr)
 {
-    connect(this, &cwLabel3dView::visibleChanged, this, [this]() {
-        if(isVisible()) {
-            updatePositions();
-        }
-    });
 }
 
 /**
@@ -38,17 +41,6 @@ cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
  */
 cwLabel3dView::~cwLabel3dView()
 {
-//    for(auto groups : LabelGroups) {
-//        groups->setParentView(nullptr);
-//    }
-//    //Delete all the child groups
-//    QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
-//    while(iter.hasNext()) {
-//        cwLabel3dGroup* group = iter.next();
-//        group->Labels.clear();
-//        group->setParentView(nullptr);
-//        group->deleteLater();
-//    }
 }
 
 void cwLabel3dView::addGroup(cwLabel3dGroup *group) {
@@ -98,8 +90,10 @@ void cwLabel3dView::updateGroup(cwLabel3dGroup* group) {
             releaseLabelItem(group, i);
         }
         group->m_labelItems.resize(labelSize);
+        group->m_billboardHandles.resize(labelSize);
     } else if(labelSize > itemSize) {
         group->m_labelItems.resize(labelSize);
+        group->m_billboardHandles.resize(labelSize);  // new entries are empty handles
     }
 
     //Update all the positions
@@ -148,6 +142,16 @@ QQuickItem* cwLabel3dView::acquireLabelItem(cwLabel3dGroup* group, int labelInde
         item = group->m_itemPool.takeLast();
     } else {
         item = qobject_cast<QQuickItem*>(m_component->create());
+
+        if(item != nullptr) {
+            // The billboard draws in the on-demand 3D pass, so a fade animation
+            // must request a frame per step. Label3d mirrors its animated child
+            // opacity onto the root's opacity (its own opacity is excluded from
+            // the rendered subtree by refFromEffectItem, so it only serves as
+            // this signal), letting us drive re-renders without reaching into the
+            // QML internals. The connection self-limits to while opacity changes.
+            connect(item, &QQuickItem::opacityChanged, this, &cwLabel3dView::requestBillboardRender);
+        }
     }
 
     if(item == nullptr) {
@@ -176,6 +180,11 @@ void cwLabel3dView::releaseLabelItem(cwLabel3dGroup* group, int labelIndex)
         return;
     }
 
+    // Releasing the handle removes this label's billboard from the shared layer.
+    if(labelIndex < int(group->m_billboardHandles.size())) {
+        group->m_billboardHandles.at(labelIndex).reset();
+    }
+
     item->setVisible(false);
     item->setOpacity(0.0);
     group->m_itemPool.append(item);
@@ -183,16 +192,26 @@ void cwLabel3dView::releaseLabelItem(cwLabel3dGroup* group, int labelIndex)
 }
 
 /**
-Sets camera
-*/
-void cwLabel3dView::setCamera(cwCamera* camera) {
-    if(m_camera != camera) {
-        m_camera = camera;
-        connect(m_camera, &cwCamera::viewMatrixChanged, this, &cwLabel3dView::updatePositions);
-        connect(m_camera, &cwCamera::projectionChanged, this, &cwLabel3dView::updatePositions);
-        updatePositions();
-        emit cameraChanged();
+ * @brief cwLabel3dView::addOrUpdateBillboard
+ *
+ * Registers (or refreshes) a visible label as a billboard. A station's world
+ * position is camera-invariant, so this only does real work on first appearance
+ * or when the station actually moves (updateBillboard is a no-op otherwise).
+ */
+void cwLabel3dView::addOrUpdateBillboard(cwLabel3dGroup* group, int labelIndex, QQuickItem* item) {
+    if(item == nullptr) {
+        return;
     }
+    if(labelIndex < 0 || labelIndex >= int(group->m_billboardHandles.size())) {
+        return;
+    }
+
+    setBillboard(group->m_billboardHandles.at(labelIndex), item,
+                 group->m_labels.at(labelIndex).position(), kLabelDepthBias);
+}
+
+void cwLabel3dView::repositionBillboards() {
+    updatePositions();
 }
 
 /**
@@ -204,7 +223,19 @@ void cwLabel3dView::setCamera(cwCamera* camera) {
  */
 void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 {
-    if(m_camera == nullptr) {
+    if(camera() == nullptr) {
+        return;
+    }
+
+    // A keyword-hidden group renders nothing and claims no declutter space:
+    // release its pooled items and billboards and skip projection entirely.
+    // Reached when the group is toggled hidden (updateGroup); the per-frame
+    // updatePositions skips hidden groups outright so this loop runs once per
+    // toggle, not every frame.
+    if(!group->m_visible) {
+        for(int i = 0; i < group->m_labelItems.size(); i++) {
+            releaseLabelItem(group, i);
+        }
         return;
     }
 
@@ -212,8 +243,8 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 
     QList<cwLabel3dItem>& labels = group->m_labels;
 
-    const QMatrix4x4 matrix = m_camera->qtViewportMatrix() * m_camera->viewProjectionMatrix();
-    const QRectF viewportRect(m_camera->viewport());
+    const QMatrix4x4 matrix = camera()->qtViewportMatrix() * camera()->viewProjectionMatrix();
+    const QRectF viewportRect(camera()->viewport());
     const QSizeF averageSize = m_averageLabelSize;
 
     const int labelCount = labels.size();
@@ -232,9 +263,9 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
                 item->setVisible(true);
             }
 
-            if (item) {
-                item->setPosition(qtViewportCoordinate.toPointF());
-            }
+            // The billboard's model matrix places the item in 3D (depth-tested
+            // against cave geometry); we no longer position it in screen space.
+            addOrUpdateBillboard(group, i, item);
         };
 
         auto reject = [&]() {
@@ -243,7 +274,7 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
             }
         };
 
-        if(m_camera->isQtViewportCoordinateClipped(qtViewportCoordinate)) {
+        if(camera()->isQtViewportCoordinateClipped(qtViewportCoordinate)) {
             reject();
             return;
         }
@@ -353,22 +384,18 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
  */
 void cwLabel3dView::updatePositions()
 {
-    if(m_camera == nullptr) { return; }
+    if(camera() == nullptr) { return; }
 
     if(isVisible()) {
-        QSetIterator<cwLabel3dGroup*> iter(m_labelGroups);
-        while(iter.hasNext()) {
-            cwLabel3dGroup* group = iter.next();
+        for(cwLabel3dGroup* group : std::as_const(m_labelGroups)) {
+            // Hidden groups already released their items when toggled; skip the
+            // per-frame work entirely rather than re-walking an empty list.
+            if(!group->m_visible) {
+                continue;
+            }
             updateGroupPositions(group);
         }
 
         m_labelKdTree.clear();
     }
-}
-
-/**
-Gets camera
-*/
-cwCamera *cwLabel3dView::camera() const {
-    return m_camera;
 }

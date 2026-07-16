@@ -497,10 +497,10 @@ TEST_CASE("cwRecentProjectModel loadSettings prunes missing entries from QSettin
 
 TEST_CASE("cwRecentProjectModel opening sqlite project keeps only original entry",
           "[cwRecentProjectModel][bundled][open]") {
-    // SQLite .cw files convert to a temporary git directory (GitFileType).
-    // The loaded signal no longer auto-adds to recents (all callers add
-    // explicitly with the user-facing path), so only the original .cw entry
-    // should remain after loading.
+    // SQLite .cw files convert to a bundle anchored at the original .cw
+    // path (issue #515), and the loaded signal no longer auto-adds to
+    // recents (all callers add explicitly with the user-facing path), so
+    // only the original .cw entry should remain after loading.
     QSettings settings;
     settings.clear();
 

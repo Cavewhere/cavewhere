@@ -9,11 +9,6 @@ QQ.Item {
     required property int row
     required property string name
 
-    // Optional — when non-empty, the Declination submenu acts on every
-    // calibration in the list. The caller decides scope: a single row, or
-    // the whole selection when the right-clicked row is part of it.
-    property list<TripCalibration> tripCalibrations: []
-
     function showMenu(x, y) {
         clickPos = Qt.point(x, y)
         rightClickMenu.popup()
@@ -47,37 +42,6 @@ QQ.Item {
                 root.removeChallenge.indexToRemove = root.row
                 root.removeChallenge.removeName = root.name
                 root.removeChallenge.show()
-            }
-        }
-
-        QC.Menu {
-            id: declinationSubmenu
-            objectName: "declinationSubmenu"
-            title: "Declination"
-            // Submenu disables itself on pages with no calibrations wired so
-            // the regular remove menu doesn't grow a useless stub.
-            enabled: root.tripCalibrations.length > 0
-
-            QC.MenuItem {
-                objectName: "declinationAutoMenuItem"
-                text: "Auto"
-                checkable: true
-                // A mixed selection (some auto, some manual) leaves both
-                // items unchecked, doubling as a tri-state cue.
-                checked: root.tripCalibrations.length > 0
-                         && root.tripCalibrations.every(c => c.autoDeclination)
-                enabled: root.tripCalibrations.length > 0
-                onTriggered: root.tripCalibrations.forEach(c => c.autoDeclination = true)
-            }
-
-            QC.MenuItem {
-                objectName: "declinationManualMenuItem"
-                text: "Manual"
-                checkable: true
-                checked: root.tripCalibrations.length > 0
-                         && root.tripCalibrations.every(c => !c.autoDeclination)
-                enabled: root.tripCalibrations.length > 0
-                onTriggered: root.tripCalibrations.forEach(c => c.autoDeclination = false)
             }
         }
     }

@@ -922,7 +922,10 @@ TEST_CASE("cwSaveLoad should save and load old projects correctly", "[cwSaveLoad
 
     auto root2 = std::make_unique<cwRootData>();
 
-    CHECK(root->project()->fileType() == cwProject::GitFileType);
+    // SQLite .cw files convert to a bundle pointing at the original .cw
+    // path (issue #515). The working tree still lives in a temp dir, which
+    // we reach via dataRootDir() to verify the converted layout.
+    CHECK(root->project()->fileType() == cwProject::BundledGitFileType);
 
     const QDir workingDataRoot = root->project()->dataRootDir();
     const QDir workingProjectRoot = QFileInfo(workingDataRoot.absolutePath()).absoluteDir();
@@ -3733,7 +3736,14 @@ TEST_CASE("moveDirectoryRobust refuses to copy a symlink in the source tree", "[
 
     // Plant a symlink in src pointing at the parent temp dir. Without the
     // symlink guard, the recursive copy would escape the source tree.
+    // On Windows, QFile::link writes a .lnk shortcut and QFileInfo::isSymLink()
+    // only recognises shortcuts whose name ends in ".lnk", so the path we
+    // hand to QFile::link must include that extension explicitly on Qt 6.11+.
+#ifdef Q_OS_WIN
+    const QString linkPath = src + QStringLiteral("/escape-link.lnk");
+#else
     const QString linkPath = src + QStringLiteral("/escape-link");
+#endif
     REQUIRE(QFile::link(tmp.path(), linkPath));
 
     Monad::ResultBase result;

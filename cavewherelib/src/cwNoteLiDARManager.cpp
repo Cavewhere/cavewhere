@@ -234,26 +234,13 @@ void cwNoteLiDARManager::setFutureManagerToken(cwFutureManagerToken token)
 
 void cwNoteLiDARManager::setKeywordItemModel(cwKeywordItemModel *keywordItemModel)
 {
-    if(m_keywordItemModel == keywordItemModel) {
+    if(m_keywordRegistry.model() == keywordItemModel) {
         return;
     }
 
-    if(m_keywordItemModel) {
-        for(auto iter = m_keywordEntries.begin(); iter != m_keywordEntries.end(); ++iter) {
-            if(iter.value().item) {
-                m_keywordItemModel->removeItem(iter.value().item);
-                iter.value().item->deleteLater();
-            }
-            if(iter.value().visibility) {
-                iter.value().visibility->deleteLater();
-            }
-        }
-        m_keywordEntries.clear();
-    }
+    m_keywordRegistry.setModel(keywordItemModel);
 
-    m_keywordItemModel = keywordItemModel;
-
-    if(!m_keywordItemModel) {
+    if(keywordItemModel == nullptr) {
         return;
     }
 
@@ -266,7 +253,7 @@ void cwNoteLiDARManager::setRender(cwRenderTexturedItems *render)
 {
     m_render = render;
 
-    if(m_render && m_keywordItemModel) {
+    if(m_render && m_keywordRegistry.model() != nullptr) {
         for(auto note : m_noteToRender.keys()) {
             addKeywordItemForNote(note);
         }
@@ -816,7 +803,7 @@ QVector<uint32_t> cwNoteLiDARManager::renderItemIds(cwNoteLiDAR* note) const
 
 void cwNoteLiDARManager::addKeywordItemForNote(cwNoteLiDAR *note)
 {
-    if(!note || !m_keywordItemModel || !m_render) {
+    if(!note || m_keywordRegistry.model() == nullptr || !m_render) {
         return;
     }
 
@@ -825,40 +812,22 @@ void cwNoteLiDARManager::addKeywordItemForNote(cwNoteLiDAR *note)
         return;
     }
 
-    removeKeywordItemForNote(note);
+    // Render ids can change across rebuilds, so always rebind from scratch.
+    m_keywordRegistry.drop(note);
 
-    auto keywordItem = new cwKeywordItem();
-    keywordItem->keywordModel()->addExtension(note->keywordModel());
+    const QVector<uint32_t> renderIds = renderIdsIter.value();
+    m_keywordRegistry.ensure(note, [this, note, renderIds]() {
+        auto keywordItem = new cwKeywordItem();
+        keywordItem->keywordModel()->addExtension(note->keywordModel());
 
-    auto visibility = new cwRenderTexturedItemsVisibilityGroup(m_render, renderIdsIter.value(), keywordItem);
-    keywordItem->setObject(visibility);
-
-    m_keywordItemModel->addItem(keywordItem);
-
-    KeywordEntry entry;
-    entry.item = keywordItem;
-    entry.visibility = visibility;
-    m_keywordEntries.insert(note, entry);
+        // The visibility proxy is parented to the keyword item, so it dies with it.
+        auto visibility = new cwRenderTexturedItemsVisibilityGroup(m_render, renderIds, keywordItem);
+        keywordItem->setObject(visibility);
+        return keywordItem;
+    });
 }
 
 void cwNoteLiDARManager::removeKeywordItemForNote(cwNoteLiDAR *note)
 {
-    auto iter = m_keywordEntries.find(note);
-    if(iter == m_keywordEntries.end()) {
-        return;
-    }
-
-    if(m_keywordItemModel && iter.value().item) {
-        m_keywordItemModel->removeItem(iter.value().item);
-    }
-
-    if(iter.value().item) {
-        iter.value().item->deleteLater();
-    }
-
-    if(iter.value().visibility) {
-        iter.value().visibility->deleteLater();
-    }
-
-    m_keywordEntries.erase(iter);
+    m_keywordRegistry.drop(note);
 }

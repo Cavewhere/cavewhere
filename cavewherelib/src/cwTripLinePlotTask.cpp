@@ -9,7 +9,6 @@
 #include "cwTripLinePlotTask.h"
 #include "cwConcurrent.h"
 #include "cwLinePlotTask.h"
-#include "cwCavingRegion.h"
 #include "cwCavingRegionData.h"
 #include "cwCave.h"
 #include "cwCaveData.h"
@@ -194,12 +193,10 @@ cwLinePlotTask::Input buildLinePlotInput(const QString &tripName,
 
     cwCaveData caveData;
     caveData.name = QStringLiteral("sketch-trip"); // worker will re-encode
-    // cwLinePlotTask hashes per-cave bookkeeping by cwCaveData::id (the
-    // same UUID surfaces in the cavern station prefix). Synthetic input
-    // built here doesn't have a stable cave identity, but the id needs to
-    // be non-null so encodeCaveNames and the regionPointers cave (built
-    // from the same `caveData` below) end up on the same UUID. Generate
-    // once here and let the throwaway region adopt it via setData.
+    // cwLinePlotTask hashes per-cave bookkeeping by cwCaveData::id (the same
+    // UUID surfaces in the cavern station prefix). Synthetic input built here
+    // doesn't have a stable cave identity, but the id must be non-null so
+    // encodeCaveNames can stamp it into the cavern name. Generate once here.
     caveData.id = QUuid::createUuid();
     caveData.trips.append(tripData);
 
@@ -207,14 +204,6 @@ cwLinePlotTask::Input buildLinePlotInput(const QString &tripName,
     input.regionData.name = QStringLiteral("sketch-region");
     input.regionData.caves.append(caveData);
 
-    // cwLinePlotTask's RegionDataPtrs needs a real cwCavingRegion so the
-    // internal book-keeping indices line up. Construct a throwaway on the
-    // worker thread; its lifetime ends with this call, and cwLinePlotTask
-    // only dereferences the pointers through its own QMap keys.
-    //
-    // Live pointer: we can't store it here because RegionDataPtrs copies
-    // by value. Instead the caller (buildAndRun below) owns the region for
-    // the duration of the cwLinePlotTask run.
     return input;
 }
 
@@ -223,24 +212,17 @@ cwLinePlotTask::Input buildLinePlotInput(const QString &tripName,
 // positions, returns default-constructed values — caller treats as skip.
 cwLinePlotTask::LinePlotCaveData runLinePlot(cwLinePlotTask::Input input)
 {
-    // Throwaway region keeps RegionDataPtrs' Cave pointer stable for the
-    // duration of the run. cwLinePlotTask does not emit signals from the
-    // worker so creating QObjects here is safe.
-    cwCavingRegion throwaway;
-    throwaway.setData(input.regionData);
-    input.regionPointers = cwLinePlotTask::RegionDataPtrs(&throwaway);
-
     auto future = cwLinePlotTask::run(std::move(input));
     future.waitForFinished(); // worker-thread block, not a QEventLoop spin
     if (future.isCanceled() || future.resultCount() == 0) {
         return cwLinePlotTask::LinePlotCaveData();
     }
     const auto result = future.result();
-    const auto caves = result.caveData();
-    if (caves.isEmpty()) {
+    if (result.Caves.isEmpty()) {
         return cwLinePlotTask::LinePlotCaveData();
     }
-    return caves.first();
+    // Synthetic input always has exactly one cave.
+    return *result.Caves.constBegin();
 }
 
 } // namespace

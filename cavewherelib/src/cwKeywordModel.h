@@ -43,6 +43,7 @@ public:
     QHash<int, QByteArray> roleNames() const;
 
     static const QString TypeKey;
+    static const QString CaveKey;
     static const QString TripNameKey;
     static const QString YearKey;
     static const QString DateKey;

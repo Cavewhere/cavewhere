@@ -58,7 +58,7 @@ private:
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(
         cwRenderGridPlane,
         QPlane3D, m_plane,
-        QPlane3D(QVector3D(0.0, 0.0, -75.0), QVector3D(0.0, 0.0, 1.0)),
+        QPlane3D(QVector3D(0.0, 0.0, 0.0), QVector3D(0.0, 0.0, 1.0)),
         &cwRenderGridPlane::planeChanged);
     Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(cwRenderGridPlane,
                                          double, m_extent,

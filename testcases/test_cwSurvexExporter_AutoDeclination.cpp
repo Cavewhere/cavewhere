@@ -13,6 +13,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwFixStation.h"
+#include "cwGeoReference.h"
 #include "cwFixStationModel.h"
 #include "cwShot.h"
 #include "cwStation.h"
@@ -51,7 +52,7 @@ struct ExporterFixture {
 ExporterFixture buildBoulderUtmFixture()
 {
     auto region = std::make_unique<cwCavingRegion>();
-    region->setGlobalCoordinateSystem(kUtmZ13N);
+    region->geoReference()->setGlobalCoordinateSystem(kUtmZ13N);
     auto* cave = new cwCave();
     cave->setName(QStringLiteral("BoulderCave"));
     region->addCave(cave);

@@ -1,0 +1,80 @@
+#ifndef CWOFFSCREENRENDERPARAMETERS_H
+#define CWOFFSCREENRENDERPARAMETERS_H
+
+//Qt includes
+#include <QColor>
+#include <QHash>
+#include <QMatrix4x4>
+#include <QSet>
+#include <QSize>
+
+//Std includes
+#include <optional>
+
+//Our includes
+#include "cwAppearanceOverride.h"
+#include "cwRenderObjectId.h"
+#include "cwEdlParametersData.h"
+
+/**
+ * @brief Pure-input description of an offscreen render of the resident scene.
+ *
+ * A GUI-thread consumer (the hi-res map exporter, the sink classifier, the debug
+ * render hook) fills in a camera (view + projection matrices), a clear colour, an
+ * output size, and a device pixel ratio, then passes it by const ref to
+ * cwScene::renderOffscreen(), which returns a QFuture<QImage> for the result.
+ *
+ * This struct is input only: it carries no promise/future and no ownership
+ * machinery. cwScene owns the QPromise internally (see cwOffscreenRenderJob), so
+ * a caller can never resolve, cancel, or otherwise manipulate the result channel
+ * except through the QFuture it is handed back.
+ */
+struct cwOffscreenRenderParameters {
+    QMatrix4x4 viewMatrix;
+    QMatrix4x4 projectionMatrix;
+    QColor backgroundColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0);
+    QSize outputSize;
+    // Device pixel ratio fed to the camera UBO. Screen-size-dependent geometry
+    // (notably point-cloud point size, which scales by devicePixelRatio in the
+    // shader) needs this to match the live view's DPR, otherwise an offscreen
+    // render on a Retina/HiDPI display draws points at the wrong size. Defaults
+    // to 1.0 for display-independent renders (e.g. a fixed-resolution export);
+    // the "render what's on screen" path sets it from the live camera.
+    float devicePixelRatio = 1.0f;
+    // MSAA sample count the scene is rasterized at, then resolved down to the 1x
+    // read-back image, so anti-aliased edges match the live view. Capability-gated at
+    // render time (falls back to 1 when the backend lacks MSAA support for the count).
+    // Defaults to 1 (no AA) for display-independent renders (a fixed-resolution export
+    // / the sink classifier); the "render what's on screen" path sets it from the live
+    // framebuffer's sample count (cwRenderingSettings::sampleCount) so the render is a
+    // faithful copy.
+    int sampleCount = 1;
+
+    // Per-job appearance overrides. Both default to "render the scene exactly as the
+    // live frame does", so a plain capture is unchanged.
+    //
+    // Render objects to suppress for this job only, by stable render-object id. The
+    // live frame's visibility is untouched (no setVisible mutation, no race): the ids
+    // are resolved to render objects inside cwRhiScene::gatherScene and skipped there.
+    // Lets a capture hide chrome (gradient/grid/line-plot) while the on-screen view
+    // stays interactive — replacing the global cwRegionSceneManager::setCapturing hack.
+    QSet<cwRenderObjectId> hiddenObjectIds;
+    // EDL tuning for this job. Absent = use the scene's live EDL parameters (the
+    // back-compatible default); set it to render with a different eye-dome look than
+    // the on-screen view.
+    std::optional<EdlParametersData> edlOverride = std::nullopt;
+
+    // Per-object appearance overrides for this job, keyed by stable render-object
+    // id. Empty (default) = every object renders at its live appearance (slot 0),
+    // so a plain capture matches the on-screen look. An entry carries an opaque,
+    // per-object payload (cwAppearanceOverride wrapping e.g. cwPointCloudAppearance)
+    // that the matching object's back-end unpacks: the offscreen renderer acquires
+    // a transient appearance slot for that object, uploads the payload just-in-time,
+    // and draws the object at the slot's dynamic UBO offset — the live view is
+    // untouched. An object with no entry, or whose back-end does not recognise the
+    // payload, renders live. The payload travels here (self-describing job) rather
+    // than living in persistent renderer state behind a bare slot index.
+    QHash<cwRenderObjectId, cwAppearanceOverride> appearanceOverrides;
+};
+
+#endif // CWOFFSCREENRENDERPARAMETERS_H

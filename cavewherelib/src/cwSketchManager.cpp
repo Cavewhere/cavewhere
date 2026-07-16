@@ -632,42 +632,37 @@ void cwSketchManager::connectSketch(cwSketch* sketch)
 
     IconRestarter* restarterPtr = pipeline->restarter.get();
 
-    // Observer that runs on the GUI thread after a submitted render settles.
-    restarterPtr->onFutureChanged([this, sketch, restarterPtr]() {
-        auto future = restarterPtr->future();
-        AsyncFuture::observe(future).context(this,
-            [this, sketch, future]() {
-                auto* p = pipelineFor(sketch);
-                if (p == nullptr) {
-                    return; // sketch went away
-                }
-                if (future.isCanceled() || future.resultCount() == 0) {
-                    return;
-                }
-                if (future.result().isEmpty()) {
-                    return; // worker cancelled mid-flight; no disk write happened
-                }
-                if (p->cancelToken && p->cancelToken->load()) {
-                    return; // superseded by activeDrawing; drop stale result
-                }
-                if (m_project == nullptr) {
-                    return;
-                }
-                const auto key = cacheKey(sketch);
-                const QDir dir = cacheDir();
-                const QFileInfo info(cwDiskCacher(dir).filePath(key));
-                const QString version = QString::number(
-                    info.lastModified().toMSecsSinceEpoch());
-                sketch->setIconImagePath(cacheUrl(key, version));
-                p->completedEpoch = p->submittedEpoch;
+    // Runs on the GUI thread after a submitted render settles. onResult()
+    // supplies the cancel/empty guard; the result body handles the remaining
+    // sketch-specific drops.
+    restarterPtr->onResult(this, [this, sketch](const QByteArray& renderedIcon) {
+        auto* p = pipelineFor(sketch);
+        if (p == nullptr) {
+            return; // sketch went away
+        }
+        if (renderedIcon.isEmpty()) {
+            return; // worker cancelled mid-flight; no disk write happened
+        }
+        if (p->cancelToken && p->cancelToken->load()) {
+            return; // superseded by activeDrawing; drop stale result
+        }
+        if (m_project == nullptr) {
+            return;
+        }
+        const auto key = cacheKey(sketch);
+        const QDir dir = cacheDir();
+        const QFileInfo info(cwDiskCacher(dir).filePath(key));
+        const QString version = QString::number(
+            info.lastModified().toMSecsSinceEpoch());
+        sketch->setIconImagePath(cacheUrl(key, version));
+        p->completedEpoch = p->submittedEpoch;
 
-                if (m_autoIconUpdates
-                    && p->dirtyEpoch > p->completedEpoch
-                    && !p->activeDrawing
-                    && p->idleTimer) {
-                    p->idleTimer->start(m_idleIntervalMs);
-                }
-            });
+        if (m_autoIconUpdates
+            && p->dirtyEpoch > p->completedEpoch
+            && !p->activeDrawing
+            && p->idleTimer) {
+            p->idleTimer->start(m_idleIntervalMs);
+        }
     });
 
     QTimer* timerPtr = pipeline->idleTimer.get();
@@ -731,22 +726,15 @@ void cwSketchManager::acquireLinePlot(cwTrip* trip)
         auto pipeline = std::make_unique<TripPipeline>();
         pipeline->restarter = std::make_unique<Restarter>(this);
 
-        Restarter* capturedRestarter = pipeline->restarter.get();
-        pipeline->restarter->onFutureChanged([this, capturedRestarter, trip]() {
-            auto future = capturedRestarter->future();
-            AsyncFuture::observe(future).context(this,
-                [this, trip, future]() {
-                    if (future.isCanceled() || future.resultCount() == 0) {
-                        return;
-                    }
-                    auto entry = m_tripPipelines.find(trip);
-                    if (entry == m_tripPipelines.end()) {
-                        return;
-                    }
-                    entry->second->latest = future.result();
-                    emit linePlotUpdated(trip);
-                });
-        });
+        pipeline->restarter->onResult(this,
+            [this, trip](const QList<cwTripLinePlotTask::TripComponent>& result) {
+                auto entry = m_tripPipelines.find(trip);
+                if (entry == m_tripPipelines.end()) {
+                    return;
+                }
+                entry->second->latest = result;
+                emit linePlotUpdated(trip);
+            });
 
         auto [inserted, ok] = m_tripPipelines.emplace(trip, std::move(pipeline));
         Q_UNUSED(ok);

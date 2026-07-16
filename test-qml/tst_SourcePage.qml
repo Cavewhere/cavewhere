@@ -47,14 +47,16 @@ MainWindowTest {
             dialog.runLoadForTest(TestHelper.toLocalUrl(filename))
 
             //Make we have all the data
+            //Legacy SQLite .cw files convert in place to a .cw bundle (issue #515),
+            //so fileType is BundledGitFileType and save() re-zips over the source path.
             tryVerify(() => { return RootData.region.caveCount > 0 }, 20000)
-            tryCompare(RootData.project, "fileType", Project.GitFileType, 5000)
+            tryCompare(RootData.project, "fileType", Project.BundledGitFileType, 5000)
 
             verify(RootData.project.save())
             TestHelper.waitForProjectSaveToFinish(RootData.project)
             TestHelper.waitForFutureManagerToFinish(RootData.futureManagerModel)
 
-            compare(RootData.project.fileType, Project.GitFileType)
+            compare(RootData.project.fileType, Project.BundledGitFileType)
 
             //Save as a .cw bundle and verify it becomes BundledGitFileType
             let bundlePath = RootData.urlToLocal(TestHelper.tempDirectoryUrl()) + "/Phake Cave 3000.cw"

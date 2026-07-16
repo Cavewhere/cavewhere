@@ -38,7 +38,7 @@ MainWindowTest {
             const picker = findChild(dataPage, "globalCoordinateSystemComboBox")
             verify(picker !== null, "globalCoordinateSystemComboBox must exist")
             picker.committed(cs)
-            tryCompare(RootData.region, "globalCoordinateSystem", cs)
+            tryCompare(RootData.region.geoReference, "globalCoordinateSystem", cs)
         }
 
         function setInputCSViaPicker(rowIndex, cs) {
@@ -64,6 +64,9 @@ MainWindowTest {
                       5000)
 
             const addButton = findChild(findChild(RootData.pageView.currentPageItem, "addFixBar"), "addButton")
+            // addFixBar is positioned by a LayoutItemProxy; wait for layout so the
+            // clicks land on the button rather than its stale (0,0) position.
+            waitForRendering(rootId)
             mouseClick(addButton)
             mouseClick(addButton)
             tryCompare(cave.fixStations, "count", 2)
@@ -101,7 +104,7 @@ MainWindowTest {
             tryVerify(() => RootData.region.caveCount === 1, 10000,
                       "reloaded project should contain the round-trip cave")
 
-            tryCompare(RootData.region, "globalCoordinateSystem", "EPSG:32612")
+            tryCompare(RootData.region.geoReference, "globalCoordinateSystem", "EPSG:32612")
 
             const reloadedModel = RootData.region.cave(0).fixStations
             tryCompare(reloadedModel, "count", 2)

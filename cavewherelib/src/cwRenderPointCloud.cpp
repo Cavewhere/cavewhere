@@ -11,6 +11,9 @@
 #include "cwGeometryItersecter.h"
 #include "cwScene.h"
 
+// Qt includes
+#include <QDebug>
+
 namespace {
     // Sphere radius used for ray-vs-point picking. Matches the half-spacing
     // factor in PointCloud.vert so that "visible point under cursor" picks.
@@ -24,22 +27,21 @@ cwRenderPointCloud::cwRenderPointCloud(QObject* parent) :
 
 void cwRenderPointCloud::setGeometry(GeometryData geometry)
 {
-    Data data = m_data.value();
-    data.geometry = std::move(geometry.geometry);
-    data.bboxMin = geometry.bboxMin;
-    data.bboxMax = geometry.bboxMax;
-    data.meanSpacingXY = geometry.meanSpacingXY;
-    m_data.setValue(data);
+    GeometryState state;
+    state.geometry = std::move(geometry.geometry);
+    state.bboxMin = geometry.bboxMin;
+    state.bboxMax = geometry.bboxMax;
+    state.meanSpacingXY = geometry.meanSpacingXY;
 
     // Register with the scene's intersecter so 3D picking can hit points.
     // meanSpacingXY drives the per-point sphere radius — without it the
     // pick radius collapses to 0 and no point can be hit, so bail.
     if (auto* intersecter = geometryItersecter()) {
-        if (data.meanSpacingXY > 0.0f && !data.geometry.isEmpty()) {
-            const float pickRadius = data.meanSpacingXY * kPointPickRadiusScale;
+        if (state.meanSpacingXY > 0.0f && !state.geometry.isEmpty()) {
+            const float pickRadius = state.meanSpacingXY * kPointPickRadiusScale;
             intersecter->addObject(cwGeometryItersecter::Object(
                 cwGeometryItersecter::Key{this, 0},
-                data.geometry,
+                state.geometry,
                 QMatrix4x4(),
                 pickRadius));
         } else {
@@ -47,15 +49,18 @@ void cwRenderPointCloud::setGeometry(GeometryData geometry)
         }
     }
 
+    // Moved last so the geometry buffer is stolen rather than copied; the
+    // intersecter above still needs state.geometry, so the move waits for it.
+    m_geometry.setValue(std::move(state));
+
     update();
 }
 
 void cwRenderPointCloud::clear()
 {
-    Data data;
-    data.pointSize = m_data.value().pointSize;
-    data.gapFudge = m_data.value().gapFudge;
-    m_data.setValue(data);
+    // Render knobs (pointSize / worldRadius) live in m_renderState and are
+    // intentionally left untouched — clearing only drops the geometry.
+    m_geometry.setValue(GeometryState{});
 
     if (auto* intersecter = geometryItersecter()) {
         intersecter->removeObject(this, 0);
@@ -66,23 +71,23 @@ void cwRenderPointCloud::clear()
 
 void cwRenderPointCloud::setPointSize(float pointSize)
 {
-    Data data = m_data.value();
-    if (qFuzzyCompare(data.pointSize, pointSize)) {
+    RenderState state = m_renderState.value();
+    if (qFuzzyCompare(state.pointSize, pointSize)) {
         return;
     }
-    data.pointSize = pointSize;
-    m_data.setValue(data);
+    state.pointSize = pointSize;
+    m_renderState.setValue(state);
     update();
 }
 
-void cwRenderPointCloud::setGapFudge(float gapFudge)
+void cwRenderPointCloud::setWorldRadius(float worldRadius)
 {
-    Data data = m_data.value();
-    if (qFuzzyCompare(data.gapFudge, gapFudge)) {
+    RenderState state = m_renderState.value();
+    if (qFuzzyCompare(state.worldRadius, worldRadius)) {
         return;
     }
-    data.gapFudge = gapFudge;
-    m_data.setValue(data);
+    state.worldRadius = worldRadius;
+    m_renderState.setValue(state);
     update();
 }
 

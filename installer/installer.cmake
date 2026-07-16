@@ -141,7 +141,6 @@ if(WIN32)
 
     set(survex_files_to_copy
         "${SURVEX_BIN_DIR}/cavern${CMAKE_EXECUTABLE_SUFFIX}"
-        "${SURVEX_BIN_DIR}/survexport${CMAKE_EXECUTABLE_SUFFIX}"
     )
 
     set(DEPOLY_COPY_TIMESTAMP "${CMAKE_CURRENT_BINARY_DIR}/deploy-copy-timestamp.txt")
@@ -174,7 +173,6 @@ if(WIN32)
         ${DEPOLY_COPY_TIMESTAMP}
         CaveWhere
         cavern
-        survexport
         #cavewhere-test #This makes the release much bigger
         #cavewhere-qml-test #This makes the release much bigger
     )
@@ -451,7 +449,6 @@ if(UNIX AND NOT APPLE)
         COMMAND ${CMAKE_COMMAND} -E make_directory "${APPIMAGE_ICONS_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:CaveWhere>" "${APPIMAGE_BIN_DIR}/CaveWhere"
         COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:cavern>" "${APPIMAGE_BIN_DIR}/cavern"
-        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:survexport>" "${APPIMAGE_BIN_DIR}/survexport"
         COMMAND ${CMAKE_COMMAND} -E copy ${SVX_MESSAGE_FILES} "${APPIMAGE_LIB_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy "${APPIMAGE_DESKTOP_FILE}" "${APPIMAGE_APPLICATIONS_DIR}/CaveWhere.desktop"
         COMMAND ${CMAKE_COMMAND} -E copy "${APPIMAGE_APPRUN_FILE}" "${APPIMAGE_APPDIR}/AppRun"
@@ -463,7 +460,6 @@ if(UNIX AND NOT APPLE)
         DEPENDS
             CaveWhere
             cavern
-            survexport
             ${SVX_MESSAGE_FILES}
             messageFiles
             "${APPIMAGE_MIME_XML_SOURCE}"
@@ -496,7 +492,6 @@ if(UNIX AND NOT APPLE)
             --appdir "${APPIMAGE_APPDIR}"
             --executable "${APPIMAGE_BIN_DIR}/CaveWhere"
             --executable "${APPIMAGE_BIN_DIR}/cavern"
-            --executable "${APPIMAGE_BIN_DIR}/survexport"
             --desktop-file "${APPIMAGE_DESKTOP_FILE}"
             --icon-file "${APPIMAGE_ICON_TARGET}"
         COMMAND ${CMAKE_COMMAND} -E env "PATH=${LINUXDEPLOY_ENV_PATH}" ${QMAKE_ENV}

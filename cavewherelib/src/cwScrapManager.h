@@ -42,8 +42,6 @@ class cwTaskManagerModel;
 class cwRegionTreeModel;
 class cwRenderScraps;
 class cwKeywordItemModel;
-class cwKeywordItem;
-class cwRenderTexturedItemVisibility;
 class cwSketchManager;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
@@ -54,6 +52,7 @@ class cwSketchManager;
 #include "asyncfuture.h"
 #include "cwTriangulateWarping.h"
 #include "cwSketchScrapOutline.h"
+#include "cwKeywordItemRegistry.h"
 #include <memory>
 
 /**
@@ -150,12 +149,7 @@ private:
     QSet<cwScrap*> DirtyScraps; //These are the scraps that need to be updated
     QSet<cwScrap*> DeletedScraps; //All the deleted scraps
     QHash<cwScrap*, uint32_t> m_scrapToRenderId; //The render id of the scrap
-    struct ScrapKeywordEntry {
-        QPointer<cwKeywordItem> item;
-        QPointer<cwRenderTexturedItemVisibility> visibility;
-    };
-    cwKeywordItemModel* m_keywordItemModel = nullptr;
-    QHash<cwScrap*, ScrapKeywordEntry> m_scrapKeywordEntries;
+    cwKeywordItemRegistry<cwScrap*> m_keywordRegistry;
 
     //The task that'll be run
     cwProject* Project;

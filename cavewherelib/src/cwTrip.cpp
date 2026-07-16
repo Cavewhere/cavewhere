@@ -481,8 +481,16 @@ void cwTrip::setUndoStackForChildren() {
   */
 void cwTrip::setParentCave(cwCave* parentCave) {
     if(ParentCave != parentCave) {
+        if(ParentCave) {
+            KeywordModel->removeExtension(ParentCave->keywordModel());
+        }
+
         ParentCave = parentCave;
         setParent(parentCave);
+
+        if(ParentCave) {
+            KeywordModel->addExtension(ParentCave->keywordModel());
+        }
 
         // Notes->setParentCave(ParentCave);
         emit parentCaveChanged();
@@ -506,6 +514,25 @@ void cwTrip::updateKeywordMetadata()
     if(!fullDate.isEmpty()) {
         KeywordModel->replace({cwKeywordModel::DateKey, fullDate});
     }
+}
+
+/**
+ * Keyword model for this trip's line plot. Carries Type="Line Plot" and extends
+ * the trip's own keyword model, so the centerline filters both as "Line Plot"
+ * and alongside its trip (Trip, Year, Date, Cave, Caver, ...). Created lazily on
+ * first use; both the line plot geometry's and the station labels' keyword items
+ * reference this rather than rebuilding it, so geometry and labels share one
+ * trip-owned identity. Kept off keywordModel() itself because scraps/notes/leads
+ * extend that model and would otherwise inherit "Line Plot".
+ */
+cwKeywordModel* cwTrip::linePlotKeywordModel()
+{
+    if(m_linePlotKeywordModel == nullptr) {
+        m_linePlotKeywordModel = new cwKeywordModel(this);
+        m_linePlotKeywordModel->add(cwKeyword(cwKeywordModel::TypeKey, QStringLiteral("Line Plot")));
+        m_linePlotKeywordModel->addExtension(KeywordModel);
+    }
+    return m_linePlotKeywordModel;
 }
 
 cwTrip::NameCommand::NameCommand(cwTrip* trip, QString name) {

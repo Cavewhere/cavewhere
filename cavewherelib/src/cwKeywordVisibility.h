@@ -35,11 +35,12 @@ signals:
     void hideModelChanged();
 
 private:
-    QAbstractItemModel* mVisibleModel = nullptr; //!<
-    QAbstractItemModel* mHideModel = nullptr; //!<
+    QPointer<QAbstractItemModel> mVisibleModel; //!<
+    QPointer<QAbstractItemModel> mHideModel; //!<
 
-    void connectModel(QAbstractItemModel* model, bool visible);
-    void applyVisibility(QAbstractItemModel* model, bool visible) const;
+    void connectModel(QAbstractItemModel* model);
+    void resolveVisibility(QObject* object) const;
+    bool isInModel(QAbstractItemModel* model, QObject* object) const;
 
 };
 

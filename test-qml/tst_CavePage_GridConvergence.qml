@@ -27,7 +27,7 @@ MainWindowTest {
             while (cave.fixStations.count > 0) {
                 cave.fixStations.removeAt(0)
             }
-            RootData.region.globalCoordinateSystem = "EPSG:32613"
+            RootData.region.geoReference.globalCoordinateSystem = "EPSG:32613"
 
             // Reset the help-area visibility — tests share one CavePage
             // instance, so a previous toggle would otherwise bleed in.
@@ -62,7 +62,7 @@ MainWindowTest {
         function test_noFixStationShowsNotApplicable() {
             const label = convergenceLabel()
             verify(label !== null, "convergence label must exist in CavePage")
-            compare(cave.gridConvergenceText, "n/a (no fix station)")
+            compare(cave.gridConvergence.text, "n/a (no fix station)")
             compare(label.text, "n/a (no fix station)")
         }
 
@@ -71,7 +71,7 @@ MainWindowTest {
         function test_utmFixShowsNumericValue() {
             addUtm13NFix("a1", 478000.0, 4430000.0, 1655.0)
 
-            const text = cave.gridConvergenceText
+            const text = cave.gridConvergence.text
             verify(text.indexOf("a1") >= 0, "compact label includes the fix station name")
             verify(text.indexOf("(") < 0, "compact label omits the CS for compactness: " + text)
 
@@ -93,8 +93,8 @@ MainWindowTest {
         function test_detailTextAppendsCsForTooltip() {
             addUtm13NFix("a1", 478000.0, 4430000.0, 1655.0)
 
-            const compact = cave.gridConvergenceText
-            const detail = cave.gridConvergenceDetailText
+            const compact = cave.gridConvergence.text
+            const detail = cave.gridConvergence.detailText
             verify(detail.indexOf(compact) === 0,
                    "detail starts with the compact text: " + detail)
             verify(detail.length > compact.length,
@@ -151,7 +151,7 @@ MainWindowTest {
         // ── For n/a cases, compact == detail (nothing extra to surface) ──────
 
         function test_detailMatchesCompactForNotApplicableCases() {
-            compare(cave.gridConvergenceText, cave.gridConvergenceDetailText,
+            compare(cave.gridConvergence.text, cave.gridConvergence.detailText,
                     "no-fix case: detail equals compact")
 
             cave.fixStations.addFixStation()
@@ -159,7 +159,7 @@ MainWindowTest {
             cave.fixStations.setData(idx, "a1", FixStationModel.StationNameRole)
             cave.fixStations.setData(idx, "EPSG:4326", FixStationModel.InputCSRole)
 
-            compare(cave.gridConvergenceText, cave.gridConvergenceDetailText,
+            compare(cave.gridConvergence.text, cave.gridConvergence.detailText,
                     "geographic CS: detail equals compact")
         }
 
@@ -174,17 +174,17 @@ MainWindowTest {
             cave.fixStations.setData(idx, 40.015, FixStationModel.NorthingRole)
             cave.fixStations.setData(idx, 1655.0, FixStationModel.ElevationRole)
 
-            compare(cave.gridConvergenceText, "n/a (geographic CS)")
+            compare(cave.gridConvergence.text, "n/a (geographic CS)")
         }
 
         // ── Updates when a fix station is added ──────────────────────────────
 
         function test_textUpdatesWhenFixStationAdded() {
-            compare(cave.gridConvergenceText, "n/a (no fix station)")
+            compare(cave.gridConvergence.text, "n/a (no fix station)")
 
             addUtm13NFix("a1", 478000.0, 4430000.0, 1655.0)
 
-            tryVerify(() => cave.gridConvergenceText.indexOf("a1") >= 0, 500,
+            tryVerify(() => cave.gridConvergence.text.indexOf("a1") >= 0, 500,
                       "label must update to numeric value once a fix is added")
         }
 
@@ -192,14 +192,14 @@ MainWindowTest {
 
         function test_textUpdatesWhenFixCoordinatesChange() {
             addUtm13NFix("a1", 478000.0, 4430000.0, 1655.0)
-            const first = cave.gridConvergenceText
+            const first = cave.gridConvergence.text
 
             // Move the fix to a point ~3° west — should move convergence
             // measurably (>~1.5° magnitude shift).
             const idx = cave.fixStations.index(0)
             cave.fixStations.setData(idx, 224000.0, FixStationModel.EastingRole)
 
-            tryVerify(() => cave.gridConvergenceText !== first, 500,
+            tryVerify(() => cave.gridConvergence.text !== first, 500,
                       "label must recompute when fix coords change")
         }
 
@@ -215,8 +215,8 @@ MainWindowTest {
             cave.fixStations.setData(idx, 1655.0, FixStationModel.ElevationRole)
 
             // globalCS is EPSG:32613 from init(); convergence should be numeric.
-            verify(cave.gridConvergenceText.indexOf("a1") >= 0)
-            verify(cave.gridConvergenceText.indexOf("°") >= 0)
+            verify(cave.gridConvergence.text.indexOf("a1") >= 0)
+            verify(cave.gridConvergence.text.indexOf("°") >= 0)
         }
 
         // ── Updates when the region's globalCS changes ───────────────────────
@@ -230,15 +230,15 @@ MainWindowTest {
             cave.fixStations.setData(idx, 4430000.0, FixStationModel.NorthingRole)
             cave.fixStations.setData(idx, 1655.0, FixStationModel.ElevationRole)
 
-            const before = cave.gridConvergenceText
+            const before = cave.gridConvergence.text
 
             // Switch to a geographic global CS — fix falls back to globalCS
             // since inputCS is empty, so the readout flips to "geographic CS".
-            RootData.region.globalCoordinateSystem = "EPSG:4326"
+            RootData.region.geoReference.globalCoordinateSystem = "EPSG:4326"
 
-            tryVerify(() => cave.gridConvergenceText === "n/a (geographic CS)", 500,
+            tryVerify(() => cave.gridConvergence.text === "n/a (geographic CS)", 500,
                       "label must recompute when globalCS changes")
-            verify(before !== cave.gridConvergenceText)
+            verify(before !== cave.gridConvergence.text)
         }
     }
 }

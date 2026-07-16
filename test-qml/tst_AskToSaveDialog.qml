@@ -193,7 +193,10 @@ Item {
 
             verify(!RootData.project.isTemporaryProject);
             compare(RootData.project.filename, expectedPath);
-            verify(rootId.afterSaveCalled, "afterSaveFunc should be called after save completes");
+            // afterSaveFunc rides the queued fileSaved signal, so poll for it
+            // rather than assuming it has fired the instant the save wait returns.
+            tryVerify(function() { return rootId.afterSaveCalled; }, 5000,
+                      "afterSaveFunc should be called after save completes");
         }
 
         // Temporary modified project: Save button must be within the dialog's geometry so

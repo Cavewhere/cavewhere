@@ -61,8 +61,8 @@ TEST_CASE("cwOpenFileEventHandler should load and convert legacy cw files", "[cw
     CHECK(openEvent.isAccepted());
     CHECK(fatalErrorCount(root->project()->errorModel()) == 0);
     REQUIRE(root->project()->cavingRegion()->caveCount() >= 1);
-    CHECK(root->project()->filename() != legacyProjectPath);
-    CHECK(root->project()->fileType() == cwProject::GitFileType);
+    CHECK(root->project()->filename() == legacyProjectPath);
+    CHECK(root->project()->fileType() == cwProject::BundledGitFileType);
 }
 
 TEST_CASE("cwOpenFileEventHandler cavewhere:// URL handling", "[FileOpen]")

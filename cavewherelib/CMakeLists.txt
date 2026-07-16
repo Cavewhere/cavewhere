@@ -271,6 +271,7 @@ set(qml_singletons
     "qml/GlobalShadowTextInput.qml"
     "qml/RootPopupItem.qml"
 	"qml/Theme.qml"
+    "qml/SelectableValueGroup.qml"
 )
 
 # Remove the singleton files from the regular QML file list
@@ -349,8 +350,6 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
     FILES
         "shaders/grid.frag"
         "shaders/grid.vert"
-        "shaders/LinePlot.frag"
-        "shaders/LinePlot.vert"
         "shaders/PointCloud.frag"
         "shaders/PointCloud.vert"
         "shaders/EDL.vert"
@@ -364,6 +363,38 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
         "shaders/toColor.frag"
         "shaders/unlit.frag"
         "shaders/unlit.vert"
+    )
+
+# LinePlot reads a per-vertex unsigned-integer visibility attribute in the
+# vertex shader, which the legacy 120 / 100es targets reject (integer vertex
+# inputs need GLSL 150 / GLSL ES 300). Target those plus the usual HLSL SM5 /
+# MSL 1.2; Vulkan SPIR-V is always emitted.
+qt_add_shaders(cavewherelib "cavewherelib_shaders_lineplot"
+    PREFIX "/"
+    GLSL "150,300es"
+    HLSL 50
+    MSL 12
+    FILES
+        "shaders/LinePlot.frag"
+        "shaders/LinePlot.vert"
+    )
+
+# Second EDL.frag variant: same source, compiled with MSAA=1 so it samples the
+# multisample offscreen textures per-sample. Aliased to a distinct .qsb name
+# (:/shaders/EDL_MSAA.frag.qsb) that cwEDLEffect loads when the offscreen is MSAA.
+# gl_SampleID needs sample-variable support, so target GLSL 410 / GLSL ES 320
+# (the legacy 120/150/100es targets reject it) and shader models that have it
+# (HLSL SM5, MSL 1.2); Vulkan SPIR-V is always emitted.
+qt_add_shaders(cavewherelib "cavewherelib_shaders_msaa"
+    PREFIX "/"
+    GLSL "410,320es"
+    HLSL 50
+    MSL 12
+    DEFINES "MSAA=1"
+    FILES
+        "shaders/EDL.frag"
+    OUTPUTS
+        "shaders/EDL_MSAA.frag.qsb"
     )
 
 #This is a hack to find the conan protoc and not the system protoc

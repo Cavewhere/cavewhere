@@ -354,37 +354,56 @@ void cwTask::run()
  */
 void cwTask::waitToFinish(cwTask::WaitToFinishType type)
 {
-    if(isUsingThreadPool()) {
-        //We need to process the events because there could be events that cause the status to change
-        QCoreApplication::processEvents();
-
-        {
-            QReadLocker locker(&StatusLocker);
-
-            Status currentStatus = CurrentStatus;
-            if(type == IgnoreRestart && (CurrentStatus == Restarting || CurrentStatus == Restart)) {
-                currentStatus = Ready;
-            }
-
-            switch (currentStatus) {
-            case Ready:
-                break;
-            case PreparingToStart:
-            case Running:
-            case Stopped:
-            case Restarting:
-            case Restart:
-                QEventLoop loop;
-                QObject::connect(this, &cwTask::finished, &loop, &QEventLoop::quit);
-                QObject::connect(this, &cwTask::stopped, &loop, &QEventLoop::quit);
-                locker.unlock();
-                loop.exec();
-                break;
-            }
-        }
-
-        QCoreApplication::processEvents();
+    if(!isUsingThreadPool()) {
+        return;
     }
+
+    // Fast path: if the task is already Ready (or IgnoreRestart treats the
+    // current state as Ready), there is nothing to wait for — skip
+    // processEvents() entirely. processEvents() spins the event loop, which
+    // delivers queued signals and DeferredDelete events, and during the
+    // QObject destruction chain that re-enters sibling destructors and
+    // corrupts QObject::deleteChildren iteration. The pre-existing
+    // unconditional processEvents() calls were a use-after-free vector at
+    // teardown.
+    auto statusOrReady = [type](Status status) {
+        if(type == IgnoreRestart && (status == Restarting || status == Restart)) {
+            return Ready;
+        }
+        return status;
+    };
+
+    {
+        QReadLocker locker(&StatusLocker);
+        if(statusOrReady(CurrentStatus) == Ready) {
+            return;
+        }
+    }
+
+    //We need to process the events because there could be events that cause the status to change
+    QCoreApplication::processEvents();
+
+    {
+        QReadLocker locker(&StatusLocker);
+
+        switch (statusOrReady(CurrentStatus)) {
+        case Ready:
+            break;
+        case PreparingToStart:
+        case Running:
+        case Stopped:
+        case Restarting:
+        case Restart:
+            QEventLoop loop;
+            QObject::connect(this, &cwTask::finished, &loop, &QEventLoop::quit);
+            QObject::connect(this, &cwTask::stopped, &loop, &QEventLoop::quit);
+            locker.unlock();
+            loop.exec();
+            break;
+        }
+    }
+
+    QCoreApplication::processEvents();
 }
 
 int cwTask::maxThreadCount()

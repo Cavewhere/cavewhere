@@ -17,106 +17,17 @@
 
 namespace {
 
-QString fullStationName(int caveIndex, const QString& caveName, const QString& stationName)
+// Cave station positions keyed by canonical station name, built once per cave
+// so each trip can resolve the world position of any station it references.
+QHash<QString, QVector3D> caveStationPositions(const cwCaveData& cave)
 {
-    return QString::number(caveIndex) + QStringLiteral("-") + caveName
-           + QStringLiteral(".") + cwStation::canonicalKey(stationName);
-}
-
-void addStationPositions(int caveIndex,
-                         const cwCavingRegionData& region,
-                         QVector<QVector3D>& pointData,
-                         QHash<QString, unsigned int>& stationIndexLookup)
-{
-    const cwCaveData& cave = region.caves.at(caveIndex);
-
     const QMap<QString, QVector3D> positions = cave.stationPositionModel.positions();
+    QHash<QString, QVector3D> out;
+    out.reserve(positions.size());
     for (auto iter = positions.constBegin(); iter != positions.constEnd(); ++iter) {
-        const QString fullName = fullStationName(caveIndex, cave.name, iter.key());
-        stationIndexLookup.insert(fullName, pointData.size());
-        pointData.append(iter.value());
+        out.insert(cwStation::canonicalKey(iter.key()), iter.value());
     }
-}
-
-void addShotLines(int caveIndex,
-                  const cwCavingRegionData& region,
-                  const QVector<QVector3D>& pointData,
-                  const QHash<QString, unsigned int>& stationIndexLookup,
-                  QVector<unsigned int>& indexData,
-                  QVector<cwLinePlotGeometry::CaveLengthAndDepth>& cavesLengthAndDepths)
-{
-    if (pointData.isEmpty()) {
-        return;
-    }
-
-    const cwCaveData& cave = region.caves.at(caveIndex);
-
-    double minDepth = std::numeric_limits<double>::max();
-    double maxDepth = -std::numeric_limits<double>::max();
-    double length = 0.0;
-
-    for (int tripIndex = 0; tripIndex < cave.trips.size(); tripIndex++) {
-        const cwTripData& trip = cave.trips.at(tripIndex);
-
-        for (const cwSurveyChunkData& chunk : trip.chunks) {
-            if (chunk.stations.size() < 2) {
-                continue;
-            }
-
-            // Empty leading stations (bug #435) won't appear in the lookup —
-            // bootstrap from the first station that does.
-            int startIndex = 0;
-            auto bootstrapIt = stationIndexLookup.constEnd();
-            while (startIndex < chunk.stations.size()) {
-                auto it = stationIndexLookup.constFind(
-                    fullStationName(caveIndex, cave.name,
-                                    chunk.stations.at(startIndex).name()));
-                if (it != stationIndexLookup.constEnd()) {
-                    bootstrapIt = it;
-                    break;
-                }
-                startIndex++;
-            }
-            if (startIndex >= chunk.stations.size() - 1) {
-                continue;
-            }
-
-            unsigned int previousStationIndex = bootstrapIt.value();
-
-            QVector3D previousPoint = pointData.at(previousStationIndex);
-            minDepth = qMin(minDepth, (double)previousPoint.z());
-            maxDepth = qMax(maxDepth, (double)previousPoint.z());
-
-            for (int stationIndex = startIndex + 1;
-                 stationIndex < chunk.stations.size();
-                 stationIndex++) {
-                const cwStation& station = chunk.stations.at(stationIndex);
-                const cwShot& shot = chunk.shots.at(stationIndex - 1);
-
-                auto it = stationIndexLookup.constFind(
-                    fullStationName(caveIndex, cave.name, station.name()));
-                if (it != stationIndexLookup.constEnd()) {
-                    unsigned int currentStationIndex = it.value();
-
-                    QVector3D currentPoint = pointData.at(currentStationIndex);
-                    if (shot.isDistanceIncluded()) {
-                        minDepth = qMin(minDepth, (double)currentPoint.z());
-                        maxDepth = qMax(maxDepth, (double)currentPoint.z());
-                        length += QVector3D(currentPoint - previousPoint).length();
-                    }
-                    previousPoint = currentPoint;
-
-                    indexData.append(previousStationIndex);
-                    indexData.append(currentStationIndex);
-
-                    previousStationIndex = currentStationIndex;
-                }
-            }
-        }
-    }
-
-    const double depth = maxDepth - minDepth;
-    cavesLengthAndDepths[caveIndex] = cwLinePlotGeometry::CaveLengthAndDepth(length, depth);
+    return out;
 }
 
 } // namespace
@@ -129,16 +40,101 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region)
     const int caveCount = region.caves.size();
     result.cavesLengthAndDepths.resize(caveCount);
 
-    QHash<QString, unsigned int> stationIndexLookup;
-
     for (int caveIndex = 0; caveIndex < caveCount; caveIndex++) {
-        addStationPositions(caveIndex, region, result.points, stationIndexLookup);
-        addShotLines(caveIndex, region, result.points, stationIndexLookup,
-                     result.indices, result.cavesLengthAndDepths);
+        const cwCaveData& cave = region.caves.at(caveIndex);
+        const QHash<QString, QVector3D> stationPositions = caveStationPositions(cave);
+
+        double minDepth = std::numeric_limits<double>::max();
+        double maxDepth = -std::numeric_limits<double>::max();
+        double length = 0.0;
+        bool hasDepth = false;
+
+        for (int tripIndex = 0; tripIndex < cave.trips.size(); tripIndex++) {
+            const cwTripData& trip = cave.trips.at(tripIndex);
+
+            // Every trip gets a running id (== index into tripUuids /
+            // tripVertexRanges) in iteration order, even ones that emit no
+            // geometry, so both tables stay a dense total-trip-count list.
+            result.tripUuids.append(trip.id);
+            const int vertexStart = result.points.size();
+
+            const auto resolve = [&](const QString& stationName, QVector3D* out) -> bool {
+                auto posIt = stationPositions.constFind(cwStation::canonicalKey(stationName));
+                if (posIt == stationPositions.constEnd()) {
+                    return false;
+                }
+                *out = posIt.value();
+                return true;
+            };
+
+            for (const cwSurveyChunkData& chunk : trip.chunks) {
+                if (chunk.stations.size() < 2) {
+                    continue;
+                }
+
+                // Empty leading stations (bug #435) have no position —
+                // bootstrap from the first station that has a solved position.
+                int startIndex = 0;
+                QVector3D previousPoint;
+                bool havePrevious = false;
+                while (startIndex < chunk.stations.size()) {
+                    if (resolve(chunk.stations.at(startIndex).name(), &previousPoint)) {
+                        havePrevious = true;
+                        break;
+                    }
+                    startIndex++;
+                }
+                if (!havePrevious || startIndex >= chunk.stations.size() - 1) {
+                    continue;
+                }
+
+                minDepth = qMin(minDepth, (double)previousPoint.z());
+                maxDepth = qMax(maxDepth, (double)previousPoint.z());
+                hasDepth = true;
+
+                for (int stationIndex = startIndex + 1;
+                     stationIndex < chunk.stations.size();
+                     stationIndex++) {
+                    const cwShot& shot = chunk.shots.at(stationIndex - 1);
+
+                    QVector3D currentPoint;
+                    if (!resolve(chunk.stations.at(stationIndex).name(), &currentPoint)) {
+                        // Unresolved station — skip the shot; the next resolved
+                        // station bridges back to previousPoint, exactly as the
+                        // shared-vertex path did.
+                        continue;
+                    }
+
+                    if (shot.isDistanceIncluded()) {
+                        minDepth = qMin(minDepth, (double)currentPoint.z());
+                        maxDepth = qMax(maxDepth, (double)currentPoint.z());
+                        length += QVector3D(currentPoint - previousPoint).length();
+                    }
+
+                    // Per-shot de-share: emit both endpoints as this shot's own
+                    // vertices (a station shared with the prior shot is
+                    // duplicated), so the pair [2i, 2i+1] is one segment.
+                    result.points.append(previousPoint);
+                    result.points.append(currentPoint);
+
+                    previousPoint = currentPoint;
+                }
+            }
+
+            const int vertexCount = result.points.size() - vertexStart;
+            result.tripVertexRanges.append(VertexRange{vertexStart, vertexCount});
+        }
+
+        if (hasDepth) {
+            const double depth = maxDepth - minDepth;
+            result.cavesLengthAndDepths[caveIndex] =
+                cwLinePlotGeometry::CaveLengthAndDepth(length, depth);
+        }
     }
 
     result.points.squeeze();
-    result.indices.squeeze();
+    result.tripVertexRanges.squeeze();
+    result.tripUuids.squeeze();
 
-    return Monad::Result<Result>(result);
+    return Monad::Result<Result>(std::move(result));
 }

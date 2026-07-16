@@ -92,6 +92,7 @@ public:
     cwSurveyNoteLiDARModel* notesLiDAR() const;
     cwSurveyNoteSketchModel* notesSketch() const;
     cwKeywordModel* keywordModel() const;
+    cwKeywordModel* linePlotKeywordModel();
 
     void addShotToLastChunk(const cwStation& fromStation, const cwStation& toStation, const cwShot& shot);
     void removeChunks(int begin, int end);
@@ -151,6 +152,13 @@ protected:
     cwSurveyNoteSketchModel* NotesSketch;
     cwErrorModel* ErrorModel; //!<
     cwKeywordModel* KeywordModel;
+
+    //Lazily created keyword model that identifies this trip's line plot
+    //(Type="Line Plot") and inherits the trip's keywords via an extension. The
+    //line plot geometry's and the station labels' keyword items both reference
+    //this, so the "this is line plot" identity is owned by the trip.
+    cwKeywordModel* m_linePlotKeywordModel = nullptr;
+
     QUuid Id;
     cwExternalCenterline m_externalCenterline;
 

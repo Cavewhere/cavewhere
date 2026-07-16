@@ -29,7 +29,7 @@ MainWindowTest {
 
             // wait(1000)
 
-            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(_obj1)
 
             // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
@@ -87,7 +87,7 @@ MainWindowTest {
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
-            let carpetButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let carpetButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpetButton)
 
             // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
@@ -118,7 +118,7 @@ MainWindowTest {
             let northValue = Number(northText.text)
             fuzzyCompare(northValue, 0.0, 0.03, `${northValue} === 0.0`);
 
-            let declinationEdit = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->declinationEdit")
+            let declinationEdit = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->declinationEdit")
             mouseClick(declinationEdit)
 
             keyClick(52, 0) //4

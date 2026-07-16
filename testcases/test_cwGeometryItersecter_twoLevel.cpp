@@ -190,6 +190,42 @@ TEST_CASE("Empty -> add -> clear -> add cycle",
     REQUIRE(intersector.intersectsDetailed(ray).hit());
 }
 
+TEST_CASE("boundingBox() returns the world-space union of all objects",
+          "[cwGeometryItersecter][twoLevel]")
+{
+    cwGeometryItersecter intersector;
+
+    // Empty intersecter -> null box.
+    REQUIRE(intersector.boundingBox().isNull());
+
+    // Two points 10 apart. The union box should span both, model-space.
+    intersector.addObject(makePointObject(1, {QVector3D(0.0f, 0.0f, 0.0f)}));
+    intersector.addObject(makePointObject(2, {QVector3D(10.0f, 4.0f, -2.0f)}));
+    intersector.waitForFinish();
+
+    // Point boxes are inflated by the pick radius, so allow that slack.
+    const float slack = kPickRadius + 0.05f;
+    const QBox3D box = intersector.boundingBox();
+    REQUIRE_FALSE(box.isNull());
+    CHECK(box.contains(QVector3D(0.0f, 0.0f, 0.0f)));
+    CHECK(box.contains(QVector3D(10.0f, 4.0f, -2.0f)));
+    CHECK(box.minimum().x() == Approx(0.0f).margin(slack));
+    CHECK(box.minimum().y() == Approx(0.0f).margin(slack));
+    CHECK(box.minimum().z() == Approx(-2.0f).margin(slack));
+    CHECK(box.maximum().x() == Approx(10.0f).margin(slack));
+    CHECK(box.maximum().y() == Approx(4.0f).margin(slack));
+    CHECK(box.maximum().z() == Approx(0.0f).margin(slack));
+
+    // A modelMatrix translation must show up in the world-space union.
+    QMatrix4x4 translation;
+    translation.translate(100.0f, 0.0f, 0.0f);
+    intersector.setModelMatrix(nullptr, 2, translation);
+    intersector.waitForFinish();
+
+    const QBox3D moved = intersector.boundingBox();
+    CHECK(moved.maximum().x() == Approx(110.0f).margin(slack));
+}
+
 TEST_CASE("Two-level traversal returns closest hit across mixed types",
           "[cwGeometryItersecter][twoLevel]")
 {

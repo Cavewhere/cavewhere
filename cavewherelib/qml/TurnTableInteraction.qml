@@ -4,17 +4,21 @@ import cavewherelib
 BaseTurnTableInteraction {
     id: interactionId
 
-    // Target whose gapFudge property the hold-P + wheel gesture writes to.
+    // Target whose worldRadius property the hold-P + wheel gesture writes to.
     // Externally bound so the interaction doesn't depend on scene structure.
-    property LazLayersSceneNode pointCloudGapFudgeTarget: null
+    property LazLayersSceneNode pointCloudWorldRadiusTarget: null
 
     // Set true by GLTerrainRenderer while the P key is held. When true, the
-    // wheel re-routes from camera zoom to point-cloud gapFudge tuning.
+    // wheel re-routes from camera zoom to point-cloud worldRadius tuning.
     property bool pKeyHeld: false
 
-    // Per-wheel-tick delta applied to gapFudge while P is held. ~0.2 covers the
-    // full [1.0, 10.0] range in about a dozen ticks at the existing wheel scale.
-    readonly property real gapFudgeStep: 0.2
+    // Multiplicative per-tick factor applied to worldRadius. The radius spans
+    // [0.01, 50] m on the scene-node clamp, so a linear delta would feel
+    // either jumpy at small values or sluggish at large ones; exp() keeps
+    // each tick a fixed fraction of the current size. exp(deltaRotation *
+    // 0.1) at a typical mouse tick (~12 deg * rotationScale 0.1 = 1.2 of
+    // deltaRotation) gives ~13% per tick — ~6 ticks to double.
+    readonly property real worldRadiusLogStep: 0.1
 
     QQ.LoggingCategory {
         id: interactLog
@@ -130,10 +134,13 @@ BaseTurnTableInteraction {
                 return
             }
 
-            if(interactionId.pKeyHeld && interactionId.pointCloudGapFudgeTarget) {
+            if(interactionId.pKeyHeld && interactionId.pointCloudWorldRadiusTarget) {
                 // Wheel up (positive delta) grows points; wheel down shrinks.
-                interactionId.pointCloudGapFudgeTarget.gapFudge
-                    += deltaRotation * interactionId.gapFudgeStep
+                // Multiplicative — keeps the per-tick feel consistent across
+                // the full clamped range.
+                let target = interactionId.pointCloudWorldRadiusTarget
+                target.worldRadius = target.worldRadius
+                    * Math.exp(deltaRotation * interactionId.worldRadiusLogStep)
                 lastRotation = rotation
                 return
             }

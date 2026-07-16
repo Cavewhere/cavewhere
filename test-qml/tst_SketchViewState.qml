@@ -119,14 +119,10 @@ Item {
             const center = Qt.point(sketchItemId.width / 2, sketchItemId.height / 2)
             const lockBtn = findChild(sketchItemId, "zoomLockButton")
             verify(lockBtn !== null, "zoomLockButton should exist")
-            verify(lockBtn.checked,
-                   "Zoom lock defaults to true; the button should start checked")
+            verify(!lockBtn.checked,
+                   "Zoom lock defaults to off; the button should start unchecked")
 
-            // Unlock so wheel/drag are enabled, then pan + zoom off-center.
-            mouseClick(lockBtn)
-            tryVerify(() => !sketchA.viewState.zoomLocked, 2000,
-                      "First click should unlock zoom")
-
+            // Already unlocked, so wheel/drag are enabled — pan + zoom off-center.
             zoomWithWheel(3)
             rightDrag(Qt.point(100, 100), Qt.point(250, 220))
             tryVerify(() => sketchA.viewState.viewInitialized, 2000)
@@ -139,7 +135,7 @@ Item {
 
             mouseClick(lockBtn)
             tryVerify(() => sketchA.viewState.zoomLocked, 2000,
-                      "Second click should re-lock zoom")
+                      "Clicking the lock button should lock zoom")
 
             tryCompare(sketchItemId, "zoom", 1.0, 2000,
                        "Zoom lock should animate zoom back to 1×")

@@ -12,6 +12,7 @@ MainWindowTest {
         when: windowShown
 
         function init() {
+            rootId.width = 1600
             TestHelper.loadProjectFromZip(RootData.project, TestHelper.testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
@@ -37,6 +38,12 @@ MainWindowTest {
             tryVerify(() => { return lidarViewer.scene.gltf.status === RenderGLTF.Ready }, 10000);
 
             RootData.futureManagerModel.waitForFinished();
+
+            // The mesh BVH is built on a worker thread after the GLTF is Ready, so a
+            // pick arriving before it finishes silently misses. Wait until the mesh is
+            // actually pickable so the interaction tests don't race the build.
+            let turnTable = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction");
+            tryVerify(() => { return turnTable.pick(Qt.point(387, 257)).hit }, 10000, "LiDAR mesh should be pickable");
         }
 
         function cleanup() {
@@ -54,28 +61,26 @@ MainWindowTest {
         }
 
         function test_lidarCarpeting() {
-            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpetButton)
 
-            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
-            // that reposition the toolbar; clicks miss during the animation
-            wait(200)
-
-            let addStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
+            let addStationButton = null
+            tryVerify(() => {
+                          addStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
+                          return addStationButton !== null && addStationButton.visible
+                      })
             mouseClick(addStationButton)
 
-
-            let turnTableInteraction_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
-            mouseClick(turnTableInteraction_obj2, 203.117, 244.969)
+            let addStation_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARAddStationInteraction")
+            mouseClick(addStation_obj1, 405, 239)
 
             let stationNameInput_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0->coreTextInput")
             stationNameInput_obj1.openEditor();
             keyClick(54, 0) //6
             keyClick(16777220, 0) //Return
-            // wait(10000)
 
-            let turnTableInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
-            mouseClick(turnTableInteraction_obj3, 333.148, 541.453)
+            let addStation_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARAddStationInteraction")
+            mouseClick(addStation_obj2, 564, 479)
 
             let stationNameInput_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_1->coreTextInput")
             stationNameInput_obj2.openEditor();
@@ -83,19 +88,21 @@ MainWindowTest {
             keyClick(16777220, 0) //Return
 
             //Add the 3rd station
-            mouseClick(turnTableInteraction_obj3, 58.7891, 196.809)
+            let addStation_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARAddStationInteraction")
+            mouseClick(addStation_obj3, 252, 179)
             let stationNameInput_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_2->coreTextInput")
             stationNameInput_obj3.openEditor();
             keyClick(53, 0) //5
             keyClick(16777220, 0) //Return
 
             let northFieldObject = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northField")
-            tryVerify(() => { return northFieldObject.text === "272.7" })
+            tryVerify(() => { return northFieldObject.text === "269.3" })
 
             //Move station 6
             let selection = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->selectButton")
             mouseClick(selection)
 
+            let turnTableInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->turnTableInteraction")
 
             //Click and drag the station icon
             let stationIconHandler = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0")
@@ -148,13 +155,16 @@ MainWindowTest {
 
 
             //Go through the tool
-            let northToolButton_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northToolButton")
-            verify(northToolButton_obj2.visible)
+            let northToolButton_obj2 = null
+            tryVerify(() => {
+                          northToolButton_obj2 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northToolButton")
+                          return northToolButton_obj2 !== null && northToolButton_obj2.visible
+                      })
             mouseClick(northToolButton_obj2)
 
             let noteLiDARNorthInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction")
-            mouseClick(noteLiDARNorthInteraction_obj3, 203.246, 244.637)
-            mouseClick(noteLiDARNorthInteraction_obj3, 319.91, 514.371)
+            mouseClick(noteLiDARNorthInteraction_obj3, 475, 499)
+            mouseClick(noteLiDARNorthInteraction_obj3, 473.191, 241.352)
 
             //Escape out of the tool
             keyClick(16777216, 0) //Esc
@@ -171,9 +181,9 @@ MainWindowTest {
                           noteLiDARNorthInteraction_obj3 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARNorthInteraction")
                           return noteLiDARNorthInteraction_obj3 !== null
                       })
-            mouseClick(noteLiDARNorthInteraction_obj3, 319.91, 514.371)
-            mouseMove(noteLiDARNorthInteraction_obj3, 203.246, 244.637, 100)
-            mouseClick(noteLiDARNorthInteraction_obj3, 203.246, 244.637)
+            mouseClick(noteLiDARNorthInteraction_obj3, 473.191, 241.352)
+            mouseMove(noteLiDARNorthInteraction_obj3, 475, 499, 100)
+            mouseClick(noteLiDARNorthInteraction_obj3, 475, 499)
 
             let azimuth = null
             tryVerify(() => {
@@ -199,13 +209,13 @@ MainWindowTest {
 
             let northFieldObject = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->northField")
             tryVerify(() => {
-                          return northFieldObject.text === "274.5"
+                          return northFieldObject.text === "117.6"
                       })
 
             let trip = RootData.region.cave(0).trip(0)
             trip.calibration.declinationManual = 12.5
             tryVerify(() => {
-                          return northFieldObject.text === "274.5"
+                          return northFieldObject.text === "117.6"
                       })
 
         }
@@ -230,8 +240,8 @@ MainWindowTest {
                 }
                 return true
             }, 3000, "scaleInteraction should be visible after clicking setLengthButton")
-            mouseClick(scaleInteraction, 203.246, 244.637)
-            mouseClick(scaleInteraction, 319.91, 514.371)
+            mouseClick(scaleInteraction, 387, 257)
+            mouseClick(scaleInteraction, 473.699, 255.484)
 
             tryVerify(() => { return scaleInteraction.measuredValue > 1.0 })
             let measured = scaleInteraction.measuredValue

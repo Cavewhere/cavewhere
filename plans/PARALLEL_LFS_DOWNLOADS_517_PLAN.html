@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan — Issue #517: Parallel LFS downloads</title>
+<style>
+  :root {
+    --bg: #1d2127;
+    --panel: #262b33;
+    --panel2: #2d333d;
+    --ink: #e6e9ee;
+    --muted: #9aa4b2;
+    --accent: #5aa9e6;
+    --good: #6ccb7a;
+    --bad: #e06c6c;
+    --warn: #e0b14c;
+    --border: #3a414c;
+    --code: #1a1e24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    padding: 32px 40px 24px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #20252c, #1d2127);
+  }
+  header h1 { margin: 0 0 6px; font-size: 24px; }
+  header .sub { color: var(--muted); font-size: 14px; }
+  header .tag {
+    display: inline-block; margin-top: 12px; margin-right: 6px; padding: 3px 10px;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 12px; font-size: 12px; color: var(--accent);
+  }
+  main { max-width: 1000px; margin: 0 auto; padding: 0 40px; }
+  section { margin-top: 34px; }
+  h2 {
+    font-size: 19px; margin: 0 0 14px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 15px; margin: 22px 0 8px; color: var(--accent); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+  code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px; background: var(--code);
+    padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border);
+  }
+  pre {
+    background: var(--code); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px; overflow-x: auto;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px; line-height: 1.5;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px; margin: 14px 0;
+  }
+  .cols { display: flex; gap: 16px; flex-wrap: wrap; }
+  .cols > .panel { flex: 1; min-width: 280px; }
+  .bad-h { color: var(--bad); }
+  .good-h { color: var(--good); }
+  .warn-h { color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .file { color: var(--accent); font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 13px; }
+  .del { color: var(--bad); }
+  .add { color: var(--good); }
+  .note {
+    border-left: 3px solid var(--accent); padding: 8px 14px; margin: 14px 0;
+    background: var(--panel2); border-radius: 0 6px 6px 0;
+  }
+  .warn-note { border-left-color: var(--warn); }
+  .step-num {
+    display: inline-block; width: 24px; height: 24px; line-height: 24px;
+    text-align: center; background: var(--accent); color: #0c1116;
+    border-radius: 50%; font-weight: 700; font-size: 13px; margin-right: 8px;
+  }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; border:1px solid var(--border); }
+  .pill.s1 { color: var(--good); }
+  .pill.s2 { color: var(--warn); }
+  kbd { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Issue #517 — Parallel LFS downloads</h1>
+  <div class="sub">CaveWhere · QQuickGit submodule · Git LFS object hydration after clone / reset</div>
+  <div class="tag">Stage 1 + Stage 2 + 1A committed in QQuickGit (7dcbae2, master) · cwCaptureManager leak fix committed in cavewhere (a1f1d7ab, dev_cavewhere) · main-repo gitlink bump + pushes pending · §10 follow-ups open</div>
+  <div class="tag">Scope: QQuickGit only</div>
+</header>
+
+<main>
+
+<section>
+  <h2>1. Goal</h2>
+  <p>
+    Speed up Git LFS object hydration. Today, after a clone or reset, missing LFS objects are
+    fetched <strong>strictly one at a time</strong>, and each fetch makes its own
+    <em>separate</em> Batch-API metadata round trip. For a repository with many LFS files
+    (the common CaveWhere case — scanned notes and LiDAR are LFS-tracked), this stacks two
+    independent latency costs and leaves the network mostly idle.
+  </p>
+  <p>This plan delivers the speedup in two independently-shippable stages:</p>
+  <ul>
+    <li><span class="pill s1">Stage 1</span> &nbsp;<strong>Single batch request</strong> — collapse N per-object Batch-API
+        calls into one. Pure latency win, near-zero concurrency risk, minimal UI change.</li>
+    <li><span class="pill s2">Stage 2</span> &nbsp;<strong>Bounded-concurrency transfers</strong> — download up to
+        <code>K</code> objects at once from that single batch response, with aggregate progress.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>2. Where the work lives today</h2>
+  <p>
+    All orchestration is in the <span class="file">QQuickGit</span> submodule. The CaveWhere app
+    only wires up the auth provider
+    (<span class="file">cavewherelib/src/cwRemoteServices.cpp:18</span> →
+    <code>LfsBatchClient::setLfsAuthProvider</code>) and triggers hydration through the normal
+    clone/reset paths — <strong>no app-side change is needed</strong>.
+  </p>
+  <table>
+    <tr><th>Function / class</th><th>Location</th><th>Role</th></tr>
+    <tr><td><code>runLfsHydrationPipeline()</code></td><td class="file">QQuickGit/src/GitRepository.cpp:1396</td><td>The serial driver. <strong>This is the function we rewrite.</strong></td></tr>
+    <tr><td><code>buildLfsHydrationPlan()</code></td><td class="file">QQuickGit/src/GitRepository.cpp:1170</td><td>Scans work tree + index, fills <code>plan.missingPointers</code> (already deduped by oid).</td></tr>
+    <tr><td><code>hydratePointerFiles()</code></td><td class="file">QQuickGit/src/GitRepository.cpp:1275</td><td>After objects exist on disk, copies them over the pointer files &amp; fixes the index. Unchanged.</td></tr>
+    <tr><td><code>LfsStore::fetchObject()</code></td><td class="file">QQuickGit/src/LfsStore.cpp:433</td><td>Per-object: <code>batch({spec})</code> then <code>downloadObject</code>. Source of the redundant batch calls.</td></tr>
+    <tr><td><code>LfsBatchClient::batch()</code></td><td class="file">QQuickGit/src/LfsBatchClient.cpp / .h:59</td><td>Already accepts <code>QVector&lt;ObjectSpec&gt;</code> and returns <code>QVector&lt;ObjectResponse&gt;</code>. <strong>Already multi-object capable.</strong></td></tr>
+    <tr><td><code>LfsBatchClient::downloadObject()</code></td><td class="file">QQuickGit/src/LfsBatchClient.cpp:516</td><td>One streaming HTTP GET → isolated <code>StreamWriter</code> temp file. Fully async, independent per object.</td></tr>
+  </table>
+
+  <h3>The current serial driver</h3>
+  <div class="panel">
+    <p style="margin-top:0"><span class="file">GitRepository.cpp:1421–1485</span> — a hand-rolled recursive lambda:</p>
+<pre><code>auto pointers   = std::make_shared&lt;QVector&lt;LfsPointer&gt;&gt;(plan.missingPointers);
+auto nextIndex  = std::make_shared&lt;int&gt;(0);
+auto step       = std::make_shared&lt;std::function&lt;void()&gt;&gt;();
+
+*step = [...]() mutable {
+    if (*nextIndex &gt;= pointers-&gt;size()) { deferred.complete(hydratePointerFiles(plan)); return; }
+    const LfsPointer pointer = pointers-&gt;at(*nextIndex);
+    (*nextIndex)++;
+    auto fetchFuture = store-&gt;fetchObject(pointer, QString(), progressCb);   // <span class="warn-h">batch + download, one object</span>
+    AsyncFuture::observe(fetchFuture).context(context, [...]() mutable {
+        ...
+        (*step)();                                                          // <span class="bad-h">next object only AFTER this one finishes</span>
+    });
+};
+(*step)();</code></pre>
+  </div>
+  <p>So <code>N</code> missing objects ⇒ <code>N</code> Batch-API POSTs <em>and</em> <code>N</code> sequential downloads. The transfer engine itself is non-blocking; only this orchestration serializes it.</p>
+</section>
+
+<section>
+  <h2>3. Two distinct wins</h2>
+  <div class="cols">
+    <div class="panel">
+      <h3 style="margin-top:0">Win A — one batch call</h3>
+      <p>The Git LFS Batch API is designed to take many objects per POST. We currently send one object per POST. With 50 LFS files that is 49 wasted HTTPS+auth round trips, independent of bandwidth.</p>
+      <p class="good-h">Delivered by Stage 1. Biggest win on high-RTT links and many-small-file repos.</p>
+    </div>
+    <div class="panel">
+      <h3 style="margin-top:0">Win B — concurrent transfers</h3>
+      <p>After one batch response, fire up to <code>K</code> downloads at once instead of awaiting each. <code>StreamWriter</code> already writes isolated temp files, so concurrent writers never collide.</p>
+      <p class="warn-h">Delivered by Stage 2. Biggest win when per-object latency dominates throughput.</p>
+    </div>
+  </div>
+  <div class="note">
+    <strong>Natural cap already exists.</strong> Every request goes through one
+    <code>QNetworkAccessManager</code> (<span class="file">LfsBatchClient::mManager</span>),
+    which by default limits to 6 concurrent HTTP connections per host. So "parallel" is inherently
+    a small bounded pool — but we still add an explicit limit (Stage 2) so behaviour is intentional
+    and not an accident of Qt defaults.
+  </div>
+</section>
+
+<!-- ============================ STAGE 1 ============================ -->
+<section>
+  <h2>4. <span class="pill s1">Stage 1</span> &nbsp;Single batch request</h2>
+  <p>Replace the per-object batch round trips with one batch call covering all missing pointers, then download serially from the response (keeping today's transfer behaviour). This isolates the metadata win from the concurrency change so it can ship and be verified on its own.</p>
+
+  <h3>4.1 New batch-aware fetch on <code>LfsStore</code></h3>
+  <p>
+    <code>fetchObject</code> bakes in the single-spec batch call (<span class="file">LfsStore.cpp:449</span>),
+    so it cannot be reused for a multi-object batch. Add a sibling that performs only the transfer
+    once the caller already holds a resolved download <code>Action</code>:
+  </p>
+<pre><code><span class="add">// LfsStore.h — new public method</span>
+QFuture&lt;Monad::ResultBase&gt; downloadResolved(
+        const LfsBatchClient::Action&amp; action,
+        const LfsPointer&amp; pointer,
+        std::function&lt;void(qint64,qint64)&gt; progressCallback = {}) const;</code></pre>
+  <p>
+    Its body mirrors the second half of <code>fetchObject</code>
+    (<span class="file">LfsStore.cpp:446–490</span>): build a dedicated <code>downloadStore</code>
+    (never capture <code>this</code> across the async chain — see the existing comment at
+    <span class="file">LfsStore.cpp:444</span>) and call
+    <code>client-&gt;downloadObject(action, *downloadStore, pointer, progressCallback)</code>.
+    Keep the original <code>fetchObject</code> for the single-object callers (e.g. the smudge-filter
+    fallback path) so their behaviour is unchanged.
+  </p>
+
+  <h3>4.2 Rewrite <code>runLfsHydrationPipeline</code> — batch once, then serial download</h3>
+  <ol>
+    <li>Build one <code>QVector&lt;LfsBatchClient::ObjectSpec&gt;</code> from <code>plan.missingPointers</code>.</li>
+    <li>Construct a single <code>LfsBatchClient</code> for <code>plan.gitDirPath</code> and call <code>batch("download", specs)</code> once.</li>
+    <li>From the <code>BatchResponse</code>, build an oid → <code>Action</code> map (read the
+        <code>actions["download"]</code> href/headers per object; record per-object batch errors).</li>
+    <li>Drive the existing recursive <code>step</code> loop, but call the new
+        <code>downloadResolved(action, pointer, …)</code> instead of <code>fetchObject</code>.</li>
+    <li>Finish exactly as today: <code>deferred.complete(hydratePointerFiles(plan))</code>.</li>
+  </ol>
+
+  <h3>4.3 Error &amp; fallback semantics</h3>
+  <p>Two layers, kept faithful to today's behaviour:</p>
+  <ul>
+    <li><strong>Whole-batch failure</strong> (no remote / offline / auth). Today a per-object
+        <code>NoRemote</code> triggers <code>shouldFallbackForFetchError</code>
+        (<span class="file">LfsStore.cpp:512</span>, currently only <code>NoRemote</code>) and the
+        loop continues, ultimately falling back to leaving pointer files in place via
+        <code>hydratePointerFiles</code>. With a single batch, that decision moves up: if the
+        <em>batch call itself</em> returns a fallback-eligible error, skip all downloads and go
+        straight to <code>hydratePointerFiles(plan)</code> (offline clone still succeeds with
+        pointer files on disk). A non-fallback batch error completes the deferred with that error,
+        as today.</li>
+    <li><strong>Per-object error inside a successful batch</strong> (e.g. a single 404 →
+        <code>NotFound</code>/<code>Transfer</code>, see <span class="file">LfsStore.cpp:475</span>).
+        Preserve current semantics: that object is skipped (its pointer file stays), and the
+        remaining objects continue. Surface it the same way the per-object path does today.</li>
+  </ul>
+  <div class="note warn-note">
+    <strong>Decision to confirm:</strong> today a fatal (non-fallback) error on object <em>i</em>
+    aborts the whole hydration (<span class="file">GitRepository.cpp:1478</span>). Keep that
+    "first fatal error wins" rule in Stage 1 for behavioural parity; revisit only if we want
+    best-effort hydration.
+  </div>
+
+  <h3>4.4 Files touched — Stage 1</h3>
+  <table>
+    <tr><th>File</th><th>Change</th></tr>
+    <tr><td class="file">QQuickGit/src/LfsStore.h / .cpp</td><td class="add">+ <code>downloadResolved(Action, LfsPointer, progress)</code></td></tr>
+    <tr><td class="file">QQuickGit/src/GitRepository.cpp</td><td>Rewrite <code>runLfsHydrationPipeline</code> (1396–1487): one <code>batch()</code>, oid→Action map, serial <code>downloadResolved</code> loop, batch-level fallback.</td></tr>
+  </table>
+  <div class="note">Progress text is unchanged in Stage 1 — still "object i of N" — because downloads are still serial here.</div>
+</section>
+
+<!-- ============================ STAGE 2 ============================ -->
+<section>
+  <h2>5. <span class="pill s2">Stage 2</span> &nbsp;Bounded-concurrency transfers</h2>
+  <p>With the single batch response from Stage 1 already in hand, replace the serial download loop with a fixed-size worker pool.</p>
+
+  <h3>5.1 Concurrency control</h3>
+  <ul>
+    <li>Add a file-scope <code>constexpr int kDefaultLfsConcurrentTransfers = 8;</code> (matches git-lfs's <code>lfs.concurrenttransfers</code> default) in the anonymous namespace of <span class="file">GitRepository.cpp</span>.</li>
+    <li>Optionally read <code>lfs.concurrenttransfers</code> from the repo's git config to honour user intent; fall back to the constant. (Nice-to-have — can land later.)</li>
+    <li>Keep the limit ≤ what one <code>QNetworkAccessManager</code> will run per host anyway; oversubscription just queues inside Qt.</li>
+  </ul>
+
+  <h3>5.2 Fan-out / completion-counter pattern</h3>
+  <p>Replace the recursive single-index <code>step</code> with a pool driver. Shared state lives in <code>shared_ptr</code>s captured by the per-download continuations (same lifetime approach as today):</p>
+<pre><code>auto queueIndex   = std::make_shared&lt;int&gt;(0);        // next object to start
+auto inFlight     = std::make_shared&lt;int&gt;(0);        // active downloads
+auto completed    = std::make_shared&lt;int&gt;(0);        // finished (ok or skipped)
+auto firstError   = std::make_shared&lt;Monad::ResultBase&gt;();
+auto pump = std::make_shared&lt;std::function&lt;void()&gt;&gt;();
+
+*pump = [...]() mutable {
+    while (*inFlight &lt; kConcurrency &amp;&amp; *queueIndex &lt; total &amp;&amp; !firstError-&gt;hasError()) {
+        const int i = (*queueIndex)++;
+        (*inFlight)++;
+        auto f = store-&gt;downloadResolved(actions[i], pointers[i], aggregateProgressCb(i));
+        AsyncFuture::observe(f).context(context, [...]() mutable {
+            (*inFlight)--; (*completed)++;
+            // record fatal error / honour per-object skip exactly as Stage 1
+            if (*completed == total &amp;&amp; *inFlight == 0)
+                deferred.complete(firstError-&gt;hasError() ? *firstError
+                                                         : hydratePointerFiles(plan));
+            else
+                (*pump)();                              // refill freed slot
+        });
+    }
+};
+(*pump)();</code></pre>
+  <ul>
+    <li>Objects with a per-object <em>batch</em> error never enter the queue (counted as skipped up front), so the counter still reaches <code>total</code>.</li>
+    <li>On a fatal error, stop seeding new downloads; let in-flight ones drain, then complete with the stored error. (Matches Stage 1's "first fatal error wins".)</li>
+  </ul>
+
+  <h3>5.3 Aggregate progress</h3>
+  <p>
+    Today's progress is inherently serial: <code>currentObject</code> is incremented <em>before</em>
+    the fetch and the text reads <code>"Downloading LFS: file (3/50) - 1.2/4.0 MB"</code>
+    (<span class="file">GitRepository.cpp:1379–1394, 1445</span>). With unordered parallel
+    completion, "object i of N" is meaningless. Switch to <strong>aggregate bytes</strong>:
+  </p>
+  <ul>
+    <li>Pre-compute <code>totalBytes = Σ pointer.size</code> over <code>missingPointers</code>.</li>
+    <li>Keep a <code>shared_ptr&lt;QHash&lt;QString,qint64&gt;&gt;</code> of oid → bytesReceived; each
+        object's <code>progressCallback</code> updates its own entry and reports
+        <code>Σ entries / totalBytes</code> plus a count of completed objects.</li>
+    <li>New text, e.g. <code>"Downloading LFS objects — 12/50 files, 34.1/120.0 MB"</code>. Add a
+        <code>formatLfsAggregateProgressText()</code> helper alongside the existing
+        <code>formatLfsDownloadProgressText</code>; the latter stays for the serial single-object
+        fallback path.</li>
+    <li>The <code>LfsHydrationProgress</code> signature
+        (<span class="file">GitRepository.cpp:1358</span>, <code>(text, current, total)</code>)
+        is unchanged — pass <code>current = completedFiles</code>, <code>total = fileCount</code>
+        so existing UI consumers keep working.</li>
+  </ul>
+
+  <h3>5.4 Files touched — Stage 2</h3>
+  <table>
+    <tr><th>File</th><th>Change</th></tr>
+    <tr><td class="file">QQuickGit/src/GitRepository.cpp</td><td>Pool driver replacing serial loop; <code>kDefaultLfsConcurrentTransfers</code>; <code>formatLfsAggregateProgressText()</code>; optional git-config read of <code>lfs.concurrenttransfers</code>.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>6. Thread-safety &amp; lifetime review</h2>
+  <ul>
+    <li><strong>Per-object isolation.</strong> Each <code>downloadObject</code> owns its own
+        <code>StreamWriter</code> → unique temp file (<span class="file">LfsStore.h:67</span>,
+        <span class="file">LfsBatchClient.cpp:526–531</span>). Concurrent writers cannot collide.</li>
+    <li><strong>Single network manager.</strong> All GETs share <code>mManager</code> on the GUI
+        thread; <code>QNetworkAccessManager</code> is designed for many concurrent replies. No new
+        threads are introduced — this is event-loop concurrency, not data-parallelism.</li>
+    <li><strong>Store registry.</strong> <code>LfsStoreRegistry</code> lookups are mutex-guarded
+        (<span class="file">LfsStore.cpp</span>); unaffected.</li>
+    <li class="warn-h"><strong>SSH auth cache — watch item.</strong> <code>LfsBatchClient</code> caches
+        SSH-derived auth in <code>CachedSshAuth</code> (<span class="file">LfsBatchClient.h:79</span>).
+        With a <em>single</em> batch call (Stage 1) the cache is populated once before any parallel
+        download — Stage 2 reuses it, so there is <em>no</em> thundering-herd of concurrent SSH
+        auths. This is a concrete reason to keep batch-first ordering and not parallelize the batch
+        step.</li>
+    <li><strong>No <code>this</code> capture across async.</strong> Continue the existing discipline
+        (<span class="file">LfsStore.cpp:444</span>): capture <code>shared_ptr</code> stores, never
+        the <code>LfsStore*</code>. <code>downloadResolved</code> must follow the same rule.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>7. Testing</h2>
+  <p>The harness already exists: <span class="file">QQuickGit/tests/test_Lfs.cpp</span> with the
+     <code>LfsServer</code> test double (<span class="file">tests/lfs/LfsServer.h</span>), which
+     exposes request counters — ideal for asserting the batching change directly.</p>
+  <table>
+    <tr><th>Test</th><th>Asserts</th><th>Stage</th></tr>
+    <tr>
+      <td>Hydrate N missing objects issues <em>one</em> batch request</td>
+      <td><code>downloadBatchRequestCount() == 1</code> while <code>downloadObjectRequestCount() == N</code>, and all N files hydrate to correct bytes.</td>
+      <td><span class="pill s1">1</span></td>
+    </tr>
+    <tr>
+      <td>Per-object 404 inside a good batch</td>
+      <td>The 404 object keeps its pointer file; the others hydrate; matches prior single-object semantics.</td>
+      <td><span class="pill s1">1</span></td>
+    </tr>
+    <tr>
+      <td>Offline / no-remote batch failure</td>
+      <td>Hydration falls back to leaving pointer files (extends the existing test at <span class="file">test_Lfs.cpp:1572</span> to multi-object).</td>
+      <td><span class="pill s1">1</span></td>
+    </tr>
+    <tr>
+      <td>Concurrency cap honoured</td>
+      <td>Add a max-concurrent-requests counter to <code>LfsServer</code>; assert peak in-flight ≤ <code>K</code> for N≫K. (Server can hold replies briefly to force overlap.)</td>
+      <td><span class="pill s2">2</span></td>
+    </tr>
+    <tr>
+      <td>Aggregate progress monotonic &amp; terminal</td>
+      <td>Progress bytes never decrease and the final callback reports <code>completed == total</code> files.</td>
+      <td><span class="pill s2">2</span></td>
+    </tr>
+  </table>
+  <p>Reuse existing regression tests as guardrails — notably
+     <em>"Lfs reset does not issue duplicate batch fetch attempts"</em>
+     (<span class="file">test_Lfs.cpp:1627</span>) and the executable-bit / index-preservation cases
+     (<span class="file">test_Lfs.cpp:1509</span>), since the <code>hydratePointerFiles</code> tail is
+     unchanged. Run the QQuickGit unit tests; then build &amp; run the full
+     <code>cavewhere-test</code> / <code>cavewhere-qml-test</code> suites before pushing.</p>
+</section>
+
+<section>
+  <h2>8. Risks &amp; mitigations</h2>
+  <table>
+    <tr><th>Risk</th><th>Mitigation</th></tr>
+    <tr><td>Behavioural drift in error/fallback handling when collapsing per-object batches.</td><td>Stage 1 keeps the exact fallback rule (batch-level <code>NoRemote</code> → pointer files; first fatal error wins). Covered by the offline and 404 tests above.</td></tr>
+    <tr><td>Progress UI regressions for downstream consumers reading <code>(text, current, total)</code>.</td><td>Keep the callback signature; only the meaning of <code>current/total</code> shifts to files-completed/file-count, which existing bars already render sanely.</td></tr>
+    <tr><td>Server rate-limiting / connection exhaustion under parallelism.</td><td>Explicit <code>K</code> cap (default 8), bounded further by QNAM's per-host limit. Configurable via <code>lfs.concurrenttransfers</code>.</td></tr>
+    <tr><td>Memory / disk pressure from K simultaneous streams.</td><td>Streaming writers hold only a chunk in memory; K temp files is bounded and small. No full-object buffering (verified: <span class="file">test_Lfs.cpp:2181</span> "streams large files without buffering").</td></tr>
+    <tr><td>Cross-platform temp-file contention.</td><td>Each <code>StreamWriter</code> uses a unique temp path; finalize is atomic-rename style. No shared target until copy in <code>hydratePointerFiles</code> (post-download, serial).</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>9. Sequencing &amp; recommendation</h2>
+  <ol>
+    <li><span class="step-num">1</span><strong>Ship Stage 1 alone.</strong> Single batch request + serial download. Big latency win, no concurrency risk, no progress rework. Land + verify on a real many-LFS clone.</li>
+    <li><span class="step-num">2</span><strong>Then Stage 2.</strong> Bounded pool + aggregate progress on top of Stage 1's batch response.</li>
+  </ol>
+  <div class="note">
+    <strong>Why batch-first matters beyond latency:</strong> doing the single batch call before any
+    download means SSH auth is resolved and cached exactly once, so the parallel phase never races
+    on auth. Stage 1 is therefore a prerequisite for a clean Stage 2, not just an optimization.
+  </div>
+  <p class="muted" style="color:var(--muted)">
+    Net new code is small and contained to <span class="file">QQuickGit</span>: one new
+    <code>LfsStore</code> method, a rewrite of one driver function, one progress-formatting helper,
+    and tests. No CaveWhere app changes, no protobuf/schema changes, no submodule API breakage for
+    existing single-object callers.
+  </p>
+</section>
+
+<section>
+  <h2>10. Follow-ups (out of scope for this change)</h2>
+  <p>
+    Surfaced by the pre-commit review after Stage 1 + Stage 2 landed. None block shipping the
+    parallel-download fix. Items tagged <span class="pill s1">approved</span> have been signed off as
+    planned work; sequence them after this change has baked.
+  </p>
+
+  <div class="panel">
+    <h3>1A — Extract a reusable async-iterate / bounded-concurrency helper <span class="pill s1">implemented</span></h3>
+    <p class="good-h">
+      <strong>Done.</strong> Added two function templates in the anonymous namespace of
+      <span class="file">QQuickGit/src/GitRepository.cpp</span>:
+      <code>asyncPumpBounded(items, maxInFlight, context, perItem)</code> (the single driver) and
+      <code>asyncForEach(items, context, perItem)</code> (a window-of-one wrapper). <code>perItem</code>
+      maps one item to a <code>GitFuture</code>; the driver stops on the first error and otherwise
+      completes once every item finishes — perItem alone decides whether a soft failure aborts
+      (return error) or is swallowed (return success). All three former hand-rolled pumps now route
+      through it:
+      <code>runLfsBatchRequests</code> (serial chunks via <code>asyncForEach</code>, accumulator
+      caller-side), <code>runLfsUploadActions</code> (serial uploads via <code>asyncForEach</code>),
+      and <code>runLfsDownloadActions</code> (bounded-parallel via <code>asyncPumpBounded</code>; the old
+      <code>LfsDownloadRun</code> shrinks to a small <code>DownloadAggregate</code> holding only the
+      store / byte tallies / an <code>aborted</code> latch). The reference-cycle break now lives in
+      <em>one</em> place — the driver's single queued <code>releasePump()</code> — so
+      <code>releaseDownloadRunPump()</code> and the <code>releaseStep</code> local are gone. Verified:
+      full QQuickGit suite green under ASan (134 cases / 4164 assertions), <code>[LFS]</code> (55 cases)
+      and the hidden <code>[lfs-batch-cap]</code> boundary tests (1440 assertions) all pass.
+    </p>
+    <p>
+      The recursive <code>shared_ptr&lt;int&gt; nextIndex</code> + <code>shared_ptr&lt;std::function&lt;void()&gt;&gt; step</code>
+      + <code>AsyncFuture::observe(...).context(...)</code> re-enter shape now appears <strong>three times</strong>
+      in <span class="file">QQuickGit/src/GitRepository.cpp</span>:
+    </p>
+    <ul>
+      <li><code>runLfsBatchRequests</code> — serial chunk loop (added by this change)</li>
+      <li><code>runLfsUploadActions</code> — serial per-object upload loop</li>
+      <li><code>runLfsDownloadActions</code> / <code>LfsDownloadRun</code> — the new bounded-concurrency pump</li>
+    </ul>
+    <p>
+      The idiom is fiddly and self-referential — capture lists, the <code>finished</code> guard,
+      and exactly-once completion are easy to get subtly wrong, and the three copies have already
+      diverged (only the new pump carries a <code>finished</code> flag). Extract two internal helpers
+      in an anonymous namespace:
+    </p>
+    <pre><code>// serial: run each item through perItem, stop on first error, accumulate.
+GitFuture asyncForEach(items, perItem);
+// windowed: keep up to maxInFlight perItem calls running at once.
+GitFuture asyncPumpBounded(tasks, maxInFlight, perItem);</code></pre>
+    <p>
+      This collapses all three call sites to a few lines each and gives <strong>one</strong> place to
+      get cancellation / finished / lifetime semantics right — including the
+      <span class="good-h">reference-cycle leak</span> below, now fixed in two ad-hoc spots that should
+      collapse into the helper's single cycle-break.
+    </p>
+    <p class="muted" style="color:var(--muted)">
+      <strong>Blast radius:</strong> ~3 functions, internal linkage (anonymous namespace), no public
+      API or header change. Fully covered by the existing <code>[LFS]</code> suite. Low–medium risk;
+      do it after this fix has baked so the refactor is reviewable on its own.
+    </p>
+  </div>
+
+  <div class="note">
+    <strong>Reference-cycle leak — <span class="good-h">fixed in place</span> (was carried over from the pre-existing idiom).</strong>
+    Both <code>LfsDownloadRun::pump</code> and <code>runLfsBatchRequests::step</code> captured their own
+    owning <code>shared_ptr</code>, leaking the run state once per hydration (every pull/fetch/clone).
+    Now broken on every terminal path: <code>releaseDownloadRunPump()</code> (and a <code>releaseStep</code>
+    local in <code>runLfsBatchRequests</code>) null the self-referential <code>std::function</code> via a
+    <code>QMetaObject::invokeMethod(context, …, Qt::QueuedConnection)</code> post — queued because you
+    cannot destroy a <code>std::function</code> from inside its own running body (UB); the captured
+    <code>shared_ptr</code> keeps the state alive until the reset fires. Verified: full QQuickGit suite
+    green under ASan (134 cases / 4152 assertions), no use-after-free.
+    <br><br>
+    <strong>Carry-forward for 1A:</strong> when the shared <code>asyncForEach</code>/<code>asyncPumpBounded</code>
+    helper lands, fold both reset paths into it so the cycle-break lives in <em>one</em> place instead of
+    the two ad-hoc copies that exist now.
+  </div>
+
+  <div class="panel">
+    <h3>1B — Make the 100-object batch cap configurable <span class="pill s1">approved</span></h3>
+    <p>
+      <code>kMaxObjectsPerBatchRequest = 100</code> is GitHub's hard limit (it returns HTTP 413
+      "More than 100 objects specified"). GitLab allows far more (default 100,000), Bitbucket
+      documents no cap — so on those hosts we issue needless extra round trips. Read a per-repo key
+      (e.g. <code>lfs.batch.maxObjects</code>, or mirror git-lfs's own <code>transfer.maxbatchsize</code>)
+      and thread it into <code>runLfsBatchRequests</code>. The config-read infrastructure already
+      exists in <code>LfsBatchClient</code> (<code>git_config_get_string_buf</code>). Enhancement, not
+      a fix — defaulting to 100 is correct and safe everywhere today.
+    </p>
+  </div>
+
+  <div class="panel">
+    <h3>Testing — wire the chunk-boundary tests into CI</h3>
+    <p>
+      The two <code>[.][lfs-batch-cap]</code> tests (101 objects → ≥2 batch requests, download and
+      upload) are <strong>hidden</strong> because committing many LFS files trips the pre-existing
+      clean-path heap-corruption race (<strong>issue #546</strong>). They therefore don't run in the
+      default nightly suite, so the actual <code>&gt;100</code> chunk boundary — the whole point of the
+      413 fix — has <strong>no default coverage</strong> and could silently regress. Add a dedicated
+      <em>serial</em> CI job that runs <code>[lfs-batch-cap]</code>, gated behind / after a fix for
+      #546. Until then the tests commit one-file-per-commit to dodge the race (do not batch — see the
+      in-test comments).
+    </p>
+  </div>
+
+  <div class="panel">
+    <h3>2A — Parallelize the upload path &amp; surface pull/merge progress (#545) <span class="pill s1">approved</span></h3>
+    <p>
+      <code>runLfsUploadActions</code> still uploads <strong>serially</strong>; push of a large LFS set
+      is the symmetric slow case this change's pump model directly applies to. Separately,
+      <strong>#545</strong>: <code>pull()</code> / <code>pullRebaseOrMerge()</code> route hydration
+      through <code>runMergeHydrationForDirectory</code> with an empty progress callback, so they show
+      no LFS download progress. The aggregate-progress model added here
+      (<code>formatLfsAggregateProgressText</code>, <code>LfsDownloadRun</code>) is exactly what's
+      needed — the remaining work is threading a callback down through the merge/checkout/reset
+      hydration call sites. Each is its own ticket with its own tests.
+    </p>
+  </div>
+
+  <div class="panel">
+    <h3>2B — Promote LFS orchestration into its own subsystem <span class="pill s1">approved</span></h3>
+    <p>
+      The LFS pipeline now spans ~700+ lines across ~14 call sites inside the 5000+-line
+      <span class="file">GitRepository.cpp</span>, yet only depends on <code>LfsBatchClient</code>,
+      <code>LfsStore</code>, <code>LfsHydrationPlan</code> and <code>AsyncFuture</code> — a cohesive
+      module wanting its own translation unit (e.g. <code>LfsHydrator</code>). A pure move-and-rename
+      would shrink the giant file, make the orchestration independently testable, and give 1A/2A a
+      natural home. High mechanical churn, low semantic risk; best done <em>after</em> 2A so the upload
+      path moves in its final form. Covered by the existing <code>[LFS]</code> suite.
+    </p>
+  </div>
+
+  <div class="panel">
+    <h3>Promote the async helpers? — <span class="pill s1">audited: keep LFS-local for now</span></h3>
+    <p>
+      Ran a codebase audit for other hand-rolled async-iteration / self-referential
+      <code>shared_ptr&lt;std::function&gt;</code> pumps that could adopt <code>asyncForEach</code> /
+      <code>asyncPumpBounded</code>. Findings:
+    </p>
+    <ul>
+      <li><strong>Only two other pumps exist, both in cavewherelib.</strong>
+        <code>cwSaveLoad::syncProject()</code> (<span class="file">cwSaveLoad.cpp:4850</span>) is a
+        retry/state-machine orchestrator, <em>not</em> item iteration — the helpers don't apply.
+        <code>cwCaptureManager::capture()</code> (<span class="file">cwCaptureManager.cpp:245</span>)
+        is a serial signal-driven pump; a partial fit at best (signal-based, no error/result model,
+        <code>void</code> completion — adapting it means wrapping each capture in a
+        <code>QFuture&lt;ResultBase&gt;</code>, real work for a cosmetic dedup).</li>
+      <li><strong>Dependency direction (correcting the audit's first pass):</strong> cavewherelib
+        links QQuickGit (<span class="file">cavewherelib/CMakeLists.txt:332</span>), so cavewherelib
+        <em>can</em> include QQuickGit public headers — a QQuickGit-public helper would in fact be
+        reachable. (Lowest-common home would be <code>monad/</code> or a small common async header,
+        since the helper only needs AsyncFuture + <code>Monad::ResultBase</code>.) So location is not
+        the blocker; the lack of a genuine second consumer is.</li>
+    </ul>
+    <p>
+      <strong>Decision:</strong> keep the helpers anonymous-namespace-local in
+      <span class="file">GitRepository.cpp</span>. Promote only when a real second consumer
+      materializes; doing it now would drag LFS-shaped semantics into a shared header for no payoff.
+    </p>
+    <p class="good-h">
+      <strong>Bonus fix — <code>cwCaptureManager::capture()</code> reference-cycle leak (done).</strong>
+      The audit surfaced the same self-capturing <code>shared_ptr&lt;std::function&gt;</code> cycle that
+      1A removed from LFS, here never broken — leaking the pump's <code>std::function</code> once per
+      capture/export operation. Fixed in place with a queued <code>*next = nullptr</code> after
+      <code>saveCaptures()</code> (queued because we're inside <code>*next</code>'s own body; nulling it
+      inline is UB), mirroring the LFS cycle-break. Verified: compiles clean,
+      <code>[cwCaptureManager]</code> passes, and the PNG/SVG export QML flow ran 6/6 clean.
+      Committed as <code>a1f1d7ab</code> on cavewhere <code>dev_cavewhere</code> (with this plan);
+      the QQuickGit submodule pointer was deliberately left un-bumped.
+    </p>
+    <p class="muted" style="color:var(--muted)">
+      <strong>Discovered, unrelated:</strong> <code>tst_MapExportContent::test_pngExportContent</code>
+      has a <em>pre-existing</em> flaky GPU crash under headless Metal — <code>SIGSEGV / SEGV_ACCERR</code>
+      dereferencing <code>0x8</code> during the export render, ~3/8 baseline runs (independent of the
+      leak fix: stashing the fix reproduces it, the fix ran 0/6). Worth a separate ticket — likely a
+      null QRhi/window during <code>Scene::render</code> on the full-resolution item in a headless
+      context.
+    </p>
+  </div>
+</section>
+
+</main>
+</body>
+</html>

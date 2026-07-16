@@ -1,0 +1,483 @@
+<!--
+================================================================================
+CLAUDE_SUMMARY  (read me first; the rest of this file is for humans)
+================================================================================
+
+GOAL
+  Replace the ad-hoc, translation-only camera animation in
+  cwBaseTurnTableInteraction with a general "animate to view state"
+  framework. The framework treats the turntable as a 5-channel state
+  machine (center, azimuth, pitch, distance, zoomScale) and
+  rebuilds the view matrix from those channels on every animation tick.
+  This unlocks animated rotation, zoom, and center-point changes — none
+  of which the current cwMatrix4x4Animation (element-wise matrix lerp)
+  can do correctly.
+
+WHY NOW
+  The sink-clip preview feature (commit 8ce0df93) is about to grow a
+  camera-interaction layer: animated zoom-to-sink on enter, rotation
+  locked around the sink while preview is on, animated return-to-prior
+  view on exit. That feature needs to animate orientation and zoom,
+  not just translation. Rather than bolt a per-tick QML lerp on top of
+  the existing class for one caller, build the primitive once, in the
+  right place, and migrate centerOn() to it so all camera animations
+  share the same code path.
+
+NON-NEGOTIABLES
+  - cwMatrix4x4Animation is kept. It is also used for animating between
+    ortho and perspective projections (a separate axis from this
+    framework), so it stays as the matrix-blend primitive. The new
+    state-based animator is added alongside it, not in place of it.
+  - centerOn(QVector3D, bool animate) keeps its current public
+    signature and observable behavior. Existing callers (e.g.
+    CaveLeadPage.qml gotoLead) must continue to work unchanged.
+  - LastMouseGlobalPosition is renamed to m_center. It is in fact
+    the world-space orbit pivot for updateRotationMatrix, not a "last
+    mouse position." The new name reflects what the field actually is.
+  - The existing Q_OBJECT_BINDABLE_PROPERTY fields on
+    cwBaseTurnTableInteraction (azimuthLocked, pitchLocked, gridPlane)
+    are migrated to plain Q_PROPERTY + member + setter + NOTIFY in
+    this work, per CLAUDE.md ("don't add more, and don't refactor
+    unless touching the file for other reasons" — we are touching it
+    for other reasons).
+  - New public API on cwBaseTurnTableInteraction:
+      cwTurnTableViewState viewState() const
+      void setViewState(const cwTurnTableViewState&)            // snap
+      void animateToViewState(const cwTurnTableViewState&,
+                              int durationMs = 1000)
+      void setCenter(QVector3D)                                 // snap
+      void setCenterLocked(bool)                                // gates
+                              startRotating/startPanning unproject
+  - cwTurnTableViewState is a Q_GADGET (value type, no QObject), with
+    Q_PROPERTY accessors so QML can read/write fields. Returned by
+    value from Q_INVOKABLE methods.
+  - No Qt bindable properties (Q_OBJECT_BINDABLE_PROPERTY) in any new
+    code. Plain Q_PROPERTY + NOTIFY, per CLAUDE.md.
+  - Distance is projection-aware: lerped for perspective, skipped for
+    ortho (zoomScale carries the visible scale instead). When the
+    user switches projection mode, distance must be recomputed so the
+    next perspective view has a sane camera-to-center distance — this
+    is handled by viewState() reading the current camera world
+    position from the inverse view matrix.
+  - The framework is a strict superset of today's centerOn animation.
+    No existing call site changes semantics; only its plumbing.
+
+COMMIT PLAN (deliver in three commits, tests added each step)
+  1. Add testcases/test_cwBaseTurnTableInteraction.cpp with regression
+     tests against the *current* implementation. No changes to
+     cwBaseTurnTableInteraction itself. These tests must pass on
+     master HEAD before any refactor begins — they pin existing
+     behavior so commits 2 and 3 cannot silently regress it.
+  2. Add cwTurnTableViewState header, rename LastMouseGlobalPosition
+     → m_center, add setCenter / setCenterLocked / center() / locked
+     accessors, migrate azimuthLocked / pitchLocked / gridPlane off
+     the bindable-property macros, add viewState() and setViewState()
+     (snap, no animation). Extend the test file with state round-trip
+     and center-lock cases. The animation primitive is not yet added.
+  3. Add animateToViewState() and the per-tick interpolator; rewrite
+     centerOn(point, animate=true) on top of it. Extend the test file
+     with animator end-state, mid-tick, and azimuth-wrap cases.
+     CaveLeadPage.qml still works because the public signature of
+     centerOn is unchanged.
+
+NON-GOALS
+  - Not refactoring zoomTo(QBox3D) in this pass. It currently does a
+    hard reset (resetView) and instant zoom; folding it into the
+    animator is a bigger change and a separate plan.
+  - Not migrating cwMatrix4x4Animation users outside the turntable.
+  - Not exposing per-channel easing curves. One curve (InOutCubic) for
+    the whole animation; can be added later if needed.
+  - Not adding a separate cwTurnTableAnimator class — the animation
+    lives as a private member of cwBaseTurnTableInteraction, like
+    ViewMatrixAnimation does today.
+
+DELIVERABLES
+  - New header cwTurnTableViewState.h declaring the Q_GADGET state.
+  - Renamed LastMouseGlobalPosition → m_center throughout
+    cwBaseTurnTableInteraction.cpp.
+  - Q_OBJECT_BINDABLE_PROPERTY → plain Q_PROPERTY migration for
+    azimuthLocked, pitchLocked, gridPlane.
+  - Two new public setters on cwBaseTurnTableInteraction:
+    setCenter, setCenterLocked.
+  - viewState() / setViewState() / animateToViewState() Q_INVOKABLE
+    triple, plus animationFinished() signal.
+  - centerOn(point, animate) rewritten on top of animateToViewState
+    in commit 3.
+  - New test file testcases/test_cwBaseTurnTableInteraction.cpp
+    grown commit-by-commit: regression cases first (commit 1), state
+    round-trip and lock cases next (commit 2), animator cases last
+    (commit 3).
+================================================================================
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Turntable Animation Framework — Plan</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 920px;
+         margin: 2em auto; padding: 0 1em; color: #222; line-height: 1.55; }
+  h1, h2, h3 { font-weight: 600; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: .2em; }
+  h2 { margin-top: 2em; border-bottom: 1px solid #aaa; padding-bottom: .15em; }
+  code { background: #f3f3f3; padding: 1px 5px; border-radius: 3px;
+         font-family: ui-monospace, Menlo, monospace; font-size: 90%; }
+  pre  { background: #f8f8f8; padding: 1em; border-left: 3px solid #888;
+         overflow-x: auto; font-size: 88%; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left;
+           vertical-align: top; font-size: 92%; }
+  th { background: #eee; }
+  .note { background: #eef6ff; border-left: 4px solid #4a90d9;
+          padding: .6em 1em; margin: 1em 0; }
+  .caveat { background: #fff8d6; border-left: 4px solid #d4a700;
+            padding: .6em 1em; margin: 1em 0; }
+  svg { display: block; margin: 1em auto; max-width: 100%; }
+  kbd { background: #eee; border: 1px solid #aaa; border-bottom-width: 2px;
+        border-radius: 3px; padding: 1px 6px;
+        font-family: ui-monospace, Menlo, monospace; font-size: 88%; }
+</style>
+</head>
+<body>
+
+<h1>Turntable Animation Framework</h1>
+<p><em>Extend <code>cwBaseTurnTableInteraction</code> with a state-based animator. Replace the matrix-element-wise lerp used by <code>centerOn</code> today with a 5-channel state interpolator that handles rotation and zoom correctly, so the sink-clip preview (and future features) can animate the full camera, not just translation.</em></p>
+
+<h2>1. Why the current animation is not enough</h2>
+
+<p>Today there is exactly one camera animation primitive in the turntable:</p>
+<pre>cwBaseTurnTableInteraction::ViewMatrixAnimation  // cwMatrix4x4Animation, duration 1000 ms, InOutCubic</pre>
+
+<p>It is consumed by <code>centerOn(point, animate=true)</code> (cwBaseTurnTableInteraction.cpp:59-81) and by the only external caller <code>CaveLeadPage.qml:112</code>. The class <code>cwMatrix4x4Animation</code> interpolates a <code>QMatrix4x4</code> element-by-element:</p>
+
+<pre>// cwMatrix4x4Animation.cpp:41-45
+for (int i = 0; i &lt; 16; i++) {
+    result.data()[i] = fromValue + (toValue - fromValue) * progress;
+}</pre>
+
+<p>That is a <em>numeric</em> lerp, not a rigid-body interpolation. It works for <code>centerOn</code> only because <code>centerOn</code> animates pure translation — the rotation block of the matrix is identical at <code>from</code> and <code>to</code>, so each row stays on its own straight line. The moment you try to animate a rotation, the intermediate matrices are skewed/scaled non-orthogonal blends:</p>
+
+<svg viewBox="0 0 800 220" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#333" />
+    </marker>
+  </defs>
+  <text x="60"  y="30" font-size="14" font-weight="600">SLERP / rigid-body rotation (what we want)</text>
+  <circle cx="160" cy="120" r="60" fill="none" stroke="#333"/>
+  <line x1="160" y1="120" x2="220" y2="120" stroke="#2a7" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="160" y1="120" x2="200" y2="75"  stroke="#2a7" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="160" y1="120" x2="160" y2="60"  stroke="#2a7" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="160" y="200" font-size="12" text-anchor="middle">end vectors stay unit-length</text>
+
+  <text x="460" y="30" font-size="14" font-weight="600">Element-wise matrix LERP (what we have)</text>
+  <ellipse cx="600" cy="120" rx="60" ry="42" fill="none" stroke="#a44"/>
+  <line x1="600" y1="120" x2="660" y2="120" stroke="#a44" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="600" y1="120" x2="635" y2="83"  stroke="#a44" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="600" y1="120" x2="600" y2="78"  stroke="#a44" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="600" y="200" font-size="12" text-anchor="middle">vectors shrink + skew mid-anim</text>
+</svg>
+
+<p>Worse, the turntable's <em>stored</em> rotation state (<code>Pitch</code>, <code>Azimuth</code>, <code>CurrentRotation</code>) is never touched during an animation. After a successful translation animation the stored state still matches the view matrix, so the next <code>updateRotationMatrix()</code> (cwBaseTurnTableInteraction.cpp:417-433) computes <code>rotationDifferance = identity</code> and everything is consistent. After a (hypothetical) rotation animation, the stored state would not match the animated matrix — the first user rotate drag would snap the camera back to the stored orientation.</p>
+
+<p>Either of those two problems is fatal for the sink-clip preview feature. Both together mean we cannot just throw more <code>cwMatrix4x4Animation</code>s at the wall.</p>
+
+<h2>2. What the camera state actually is</h2>
+
+<p>The turntable's view matrix is reproducible from a small set of independent channels:</p>
+
+<table>
+<tr><th>Channel</th><th>Type</th><th>Stored as</th><th>Notes</th></tr>
+<tr><td><code>center</code></td><td><code>QVector3D</code></td><td>private member (today: <code>LastMouseGlobalPosition</code>)</td><td>World-space orbit pivot. Used directly by <code>updateRotationMatrix</code> at lines 428-430.</td></tr>
+<tr><td><code>azimuth</code></td><td><code>double</code></td><td><code>Azimuth</code> member, exposed via Q_PROPERTY</td><td>Degrees, wrapped to [0, 360) by <code>clampAzimuth</code>.</td></tr>
+<tr><td><code>pitch</code></td><td><code>double</code></td><td><code>Pitch</code> member, exposed via Q_PROPERTY</td><td>Degrees, clamped to [-90, 90] by <code>clampPitch</code>.</td></tr>
+<tr><td><code>distance</code></td><td><code>double</code></td><td>derivable from <code>Camera-&gt;viewMatrix()</code> + <code>center</code></td><td>Camera-to-center world distance. Encodes perspective zoom.</td></tr>
+<tr><td><code>zoomScale</code></td><td><code>double</code></td><td><code>Camera-&gt;zoomScale()</code></td><td>Ortho only. Ignored for perspective projection.</td></tr>
+</table>
+
+<p>Given these five channels and the camera's projection mode, the view matrix is determined. Conversely, the current view matrix can be decomposed back into them (with <code>center</code> read directly from the member field rather than re-derived). This is the basis for the animation framework: <strong>interpolate channels, rebuild view matrix.</strong></p>
+
+<h2>3. <code>cwTurnTableViewState</code> — the value type</h2>
+
+<p>New header <code>cavewherelib/src/cwTurnTableViewState.h</code>. A Q_GADGET (no QObject) returned and passed by value, registered as a metatype so it round-trips through QML, signals, and animations.</p>
+
+<pre>class cwTurnTableViewState
+{
+    Q_GADGET
+    QML_VALUE_TYPE(turnTableViewState)
+
+    Q_PROPERTY(QVector3D center MEMBER center)
+    Q_PROPERTY(double azimuth         MEMBER azimuth)
+    Q_PROPERTY(double pitch           MEMBER pitch)
+    Q_PROPERTY(double distance        MEMBER distance)
+    Q_PROPERTY(double zoomScale       MEMBER zoomScale)
+
+public:
+    QVector3D center;
+    double    azimuth   = 0.0;
+    double    pitch     = 90.0;
+    double    distance  = 50.0;
+    double    zoomScale = 1.0;
+
+    bool operator==(const cwTurnTableViewState&) const = default;
+};
+
+Q_DECLARE_METATYPE(cwTurnTableViewState)</pre>
+
+<p>Default values mirror <code>resetView()</code> (cwBaseTurnTableInteraction.cpp:238-258): pitch 90, azimuth 0, view-matrix translation <code>(0, 0, -50)</code>, ortho zoom at default scale.</p>
+
+<p>The same struct can be returned by other model-side helpers in lieu of <code>QVariantMap</code> — the user's earlier <code>previewBoundsFor(int)</code> on <code>cwSinkTrainingModel</code> will return its own Q_GADGET (<code>cwSinkPreviewBounds</code>) in a sibling plan; this one is scoped to the turntable.</p>
+
+<h2>4. Renaming <code>LastMouseGlobalPosition</code></h2>
+
+<p>The field is set in <code>startPanning</code> (line 163) and <code>startRotating</code> (line 206) and consumed by <code>updateRotationMatrix</code> (line 428-430) as the world-space pivot point of the orbital rotation. It is not a mouse position; it is the orbit center expressed as a world-space point.</p>
+
+<table>
+<tr><th>Before</th><th>After</th></tr>
+<tr><td><code>QVector3D LastMouseGlobalPosition;</code></td><td><code>QVector3D m_center;</code></td></tr>
+<tr><td><code>LastMouseGlobalPosition = unProject(mappedPosition);</code></td><td><code>m_center = unProject(mappedPosition);</code></td></tr>
+</table>
+
+<p>The other rotation-state members (<code>Pitch</code>, <code>Azimuth</code>, <code>CurrentRotation</code>, <code>LastMousePosition</code>, <code>ViewMatrixAnimation</code>) keep their current names — they read fine, and renaming them is not the point of this plan.</p>
+
+<h2>5. The center lock</h2>
+
+<p>Two new public methods replace the "external pivot override" idea from earlier discussion:</p>
+
+<pre>Q_INVOKABLE void setCenter(QVector3D center);   // writes m_center, emits notify
+QVector3D center() const { return m_center; }
+
+Q_INVOKABLE void setCenterLocked(bool locked);
+bool isCenterLocked() const { return m_centerLocked; }</pre>
+
+<p>When locked, both <code>startRotating</code> and <code>startPanning</code> skip the <code>unProject(position)</code> assignment — the externally-set center stays put across drags. When unlocked (default), behavior matches today bit-for-bit.</p>
+
+<pre>void cwBaseTurnTableInteraction::startRotating(QPoint position) {
+    position = Camera-&gt;mapToGLViewport(position);
+    if (!m_centerLocked) {
+        m_center = unProject(position);
+    }
+    LastMousePosition = position;
+}</pre>
+
+<p>The lock is the primitive used by the sink-clip preview to keep rotation orbiting the previewed sink. It is independent of the animation framework — locking does not require an animation, and animations can run without the lock engaged.</p>
+
+<h2>6. The animation framework</h2>
+
+<p>One new private member, three new public methods.</p>
+
+<h3>6.1 Storage</h3>
+<pre>// In cwBaseTurnTableInteraction private:
+QVariantAnimation* m_stateAnimation = nullptr;
+cwTurnTableViewState m_stateAnimStart;
+cwTurnTableViewState m_stateAnimTarget;
+bool m_centerLocked = false;</pre>
+
+<p>Constructed alongside the existing <code>ViewMatrixAnimation</code>. Easing <code>InOutCubic</code>, default duration 1000 ms. The animation is over a scalar <code>qreal</code> from 0.0 to 1.0; <code>valueChanged</code> applies an interpolated state to the turntable.</p>
+
+<h3>6.2 Public API</h3>
+<pre>cwTurnTableViewState viewState() const;
+Q_INVOKABLE void setViewState(const cwTurnTableViewState&amp; state);
+Q_INVOKABLE void animateToViewState(const cwTurnTableViewState&amp; target,
+                                    int durationMs = 1000);
+
+signals:
+    void animationFinished();
+    void centerChanged();
+    void centerLockedChanged();</pre>
+
+<h3>6.3 Per-tick application</h3>
+
+<p><code>setViewState(s)</code> is the single point that writes all five channels back into the live turntable + camera. Pseudo-code:</p>
+
+<pre>void cwBaseTurnTableInteraction::setViewState(const cwTurnTableViewState&amp; s) {
+    if (!Camera) return;
+
+    Pitch          = clampPitch(s.pitch);
+    Azimuth        = clampAzimuth(s.azimuth);
+    m_center = s.center;
+
+    // Rebuild view matrix from (pitch, azimuth, distance, center)
+    QQuaternion pitchQuat   = QQuaternion::fromAxisAndAngle(1,0,0, Pitch);
+    QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0,0,1, Azimuth);
+    QQuaternion newQuat     = pitchQuat * azimuthQuat;
+    setCurrentRotation(newQuat);
+
+    QMatrix4x4 view;
+    view.translate(0.0, 0.0, -s.distance);
+    view.rotate(newQuat);
+    view.translate(-s.center);
+    Camera-&gt;setViewMatrix(view);
+
+    if (Camera-&gt;projection().type() == cwProjection::Ortho) {
+        Camera-&gt;setZoomScale(s.zoomScale);
+    }
+
+    emit pitchChanged();
+    emit azimuthChanged();
+    emit centerChanged();
+}</pre>
+
+<p><code>viewState()</code> is the inverse: read <code>Pitch</code>, <code>Azimuth</code>, <code>m_center</code>, compute <code>distance</code> as <code>|cameraWorldPos − m_center|</code> where <code>cameraWorldPos</code> falls out of inverting <code>Camera-&gt;viewMatrix()</code>, and read <code>Camera-&gt;zoomScale()</code>.</p>
+
+<h3>6.4 Animation tick</h3>
+
+<pre>void cwBaseTurnTableInteraction::animateToViewState(
+        const cwTurnTableViewState&amp; target, int durationMs) {
+    stopAnimation();                  // also stops ViewMatrixAnimation
+    m_stateAnimStart  = viewState();
+    m_stateAnimTarget = target;
+    m_stateAnimation-&gt;setDuration(durationMs);
+    m_stateAnimation-&gt;setStartValue(0.0);
+    m_stateAnimation-&gt;setEndValue(1.0);
+    m_stateAnimation-&gt;start();
+}
+
+// connected to m_stateAnimation::valueChanged
+void cwBaseTurnTableInteraction::onStateAnimTick(const QVariant&amp; v) {
+    const qreal t = v.toReal();
+    cwTurnTableViewState s;
+    s.center = lerp(m_stateAnimStart.center,
+                          m_stateAnimTarget.center, t);
+    s.azimuth      = lerpAzimuth(m_stateAnimStart.azimuth,
+                                 m_stateAnimTarget.azimuth, t);
+    s.pitch        = lerp(m_stateAnimStart.pitch,    m_stateAnimTarget.pitch,    t);
+    s.distance     = isPerspective
+                     ? lerp(m_stateAnimStart.distance, m_stateAnimTarget.distance, t)
+                     : m_stateAnimTarget.distance;   // ortho: pin to target, don't animate
+    s.zoomScale    = lerp(m_stateAnimStart.zoomScale, m_stateAnimTarget.zoomScale, t);
+    setViewState(s);
+}</pre>
+
+<p><code>lerpAzimuth</code> wraps around the shorter arc on a 0..360 circle — going from 350° to 10° should be a 20° forward sweep, not a 340° backward sweep. <code>lerp</code> for pitch is straight linear (range is bounded ±90 and never wraps). Distance is lerped only for perspective projection — in ortho the visible scale comes from <code>zoomScale</code>, so animating distance is pointless flicker on the depth buffer. <code>zoomScale</code> is straight linear; a log-scale option for distance can be a parameter on the state struct later if zooming feels non-linear.</p>
+
+<div class="note">
+<strong>Distance correctness across projection switches.</strong> When the user toggles between ortho and perspective (handled separately by <code>cwMatrix4x4Animation</code>, outside this framework), the next call to <code>viewState()</code> recomputes <code>distance</code> from the current view matrix: <code>cameraWorldPos = inverse(viewMatrix) · (0,0,0)</code>, <code>distance = |cameraWorldPos − m_center|</code>. So the captured state always carries a correct distance for the projection mode the camera is currently in, even after a mode swap.
+</div>
+
+<div class="note">
+<strong>Why not SLERP a quaternion?</strong> Because the turntable's two angles are orthogonal (pitch around X, azimuth around Z, applied in that fixed order). Lerping each scalar independently produces the same path as a SLERP composed of those two axes, with simpler code and no risk of antipodal-quaternion sign flips. The composition order is fixed by <code>updateRotationMatrix</code> (cwBaseTurnTableInteraction.cpp:421-423).
+</div>
+
+<h2>7. <code>centerOn</code> rewritten on the framework</h2>
+
+<p>The new body is short and obviously equivalent for translation-only animations:</p>
+
+<pre>void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate) {
+    cwTurnTableViewState target = viewState();
+    target.center = point;
+    // distance, azimuth, pitch, zoomScale preserved
+    if (animate) {
+        animateToViewState(target);
+    } else {
+        setViewState(target);
+    }
+}</pre>
+
+<p>Compared to the existing implementation (cwBaseTurnTableInteraction.cpp:59-81), this preserves the observable contract: the point ends up at screen center, orientation and zoom are unchanged. The reconstruction in <code>setViewState</code> places the camera at exactly the right world position because <code>distance</code> was captured from the current view and the rotation block is rebuilt from the unchanged <code>(pitch, azimuth)</code>.</p>
+
+<div class="caveat">
+<strong>Verify with a regression test, not by inspection.</strong> The existing <code>centerOn</code> derives the translation from screen-center unprojection at the source point's depth — a slightly different code path. A test with a known camera + a known point should confirm that both implementations land at the same final view matrix to within float epsilon.
+</div>
+
+<h2>8. <code>zoomTo</code> is left alone (for now)</h2>
+
+<p><code>zoomTo(QBox3D)</code> (cwBaseTurnTableInteraction.cpp:633-728) currently calls <code>resetView()</code>, then computes a fit, then snaps the camera. It does not animate. Folding it into the animator is a separate plan because:</p>
+
+<ul>
+<li>The fit math (ortho viewport-span vs. perspective FOV) is non-trivial and is the bulk of the function.</li>
+<li>The current "resets to default orientation" behavior is depended on (or is at least a known quantity) at every call site.</li>
+<li>The sink-clip preview feature does not need zoomTo animation — it builds its target view state explicitly and calls <code>animateToViewState</code> directly.</li>
+</ul>
+
+<p>A follow-up plan can refactor <code>zoomTo</code> to compute a target state and dispatch through the animator.</p>
+
+<h2>9. Commit plan</h2>
+
+<p>Three commits on the same branch. Each commit must build green and pass all tests. The test file is started in commit 1 and grown commit-by-commit.</p>
+
+<h3>Commit 1 — Regression tests against current code</h3>
+
+<p><em>No changes to <code>cwBaseTurnTableInteraction</code> in this commit.</em> The point is to pin existing behavior with executable assertions so that the refactors in commits 2 and 3 cannot silently regress it. Tests must pass on the unmodified base class before any rename or new method is introduced.</p>
+
+<p>New file: <code>testcases/test_cwBaseTurnTableInteraction.cpp</code>. Catch2 cases under tag <code>[cwBaseTurnTableInteraction]</code>:</p>
+<ul>
+<li><strong>defaultViewAfterReset:</strong> a freshly constructed interaction with a connected camera has <code>azimuth() == 0</code>, <code>pitch() == 90</code>, view matrix translates <code>(0, 0, -50)</code>, ortho zoomScale at camera default.</li>
+<li><strong>setAzimuth/setPitch update view matrix:</strong> setting each rotates the camera view by the expected quaternion delta around the current <code>LastMouseGlobalPosition</code>.</li>
+<li><strong>azimuthLocked/pitchLocked block setters:</strong> with the lock on, calling <code>setAzimuth</code>/<code>setPitch</code> is a no-op (matches the current guard in setAzimuth/setPitch at .cpp:545,561).</li>
+<li><strong>centerOn(point, false) translation:</strong> for a known camera + point, the resulting view matrix translates the point to screen center. This baseline lets commit 3 prove parity after the refactor.</li>
+<li><strong>centerOn(point, true) end-state:</strong> drive the animation to completion via <code>QTest::qWait</code> or by stepping the animation, assert the final view matrix matches the false case.</li>
+<li><strong>zoomTo(box) end-state:</strong> after <code>zoomTo</code>, orientation is at defaults and the box is framed within the viewport. Pins the existing behavior so commit 3 doesn't accidentally break it.</li>
+<li><strong>startRotating updates LastMouseGlobalPosition:</strong> after <code>startRotating(p)</code>, the field equals <code>unProject(p)</code>. This baseline lets commit 2 prove that the center-lock change only gates this assignment.</li>
+</ul>
+
+<h3>Commit 2 — Rename, state value type, lock, snap setters</h3>
+
+<p>Modifies <code>cwBaseTurnTableInteraction</code> structurally but does not yet add animation. After this commit, <code>centerOn</code> still uses the old <code>cwMatrix4x4Animation</code> path.</p>
+
+<ul>
+<li>Rename <code>LastMouseGlobalPosition</code> → <code>m_center</code> throughout the .cpp.</li>
+<li>Migrate <code>azimuthLocked</code>, <code>pitchLocked</code>, <code>gridPlane</code> from <code>Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS</code> to plain members + setter + Q_PROPERTY + NOTIFY. Drop <code>BINDABLE</code> from the Q_PROPERTY lines; drop <code>azimuthLockedBinding()</code>, <code>pitchLockedBinding()</code>, <code>bindableGridPlane()</code> (no external callers — verify with grep before deleting).</li>
+<li>Add new header <code>cavewherelib/src/cwTurnTableViewState.h</code> declaring the Q_GADGET.</li>
+<li>Add <code>center()</code> / <code>setCenter()</code>, <code>isCenterLocked()</code> / <code>setCenterLocked()</code>, plus Q_PROPERTY declarations and NOTIFY signals.</li>
+<li>Gate the <code>unProject</code> assignment in <code>startRotating</code> and <code>startPanning</code> on <code>m_centerLocked</code>.</li>
+<li>Add <code>viewState()</code> reading current state (including projection-aware <code>distance</code> via inverse-view-matrix camera position) and <code>setViewState()</code> applying it.</li>
+</ul>
+
+<p>New test cases in <code>test_cwBaseTurnTableInteraction.cpp</code>:</p>
+<ul>
+<li><strong>State round-trip (ortho and perspective):</strong> build a known state, <code>setViewState</code>, read back via <code>viewState()</code>, compare to float epsilon.</li>
+<li><strong>Center lock blocks startRotating:</strong> <code>setCenter(c); setCenterLocked(true); startRotating(somePoint);</code> → <code>center() == c</code>.</li>
+<li><strong>Center lock blocks startPanning:</strong> same shape.</li>
+<li><strong>Center lock off restores old behavior:</strong> with the lock off, the existing commit 1 regression test for <code>startRotating</code> still passes (gives confidence the gate is purely additive).</li>
+<li><strong>Bindable migration:</strong> setting <code>azimuthLocked</code>/<code>pitchLocked</code> still blocks rotation; the NOTIFY signal still fires.</li>
+</ul>
+
+<h3>Commit 3 — Animation framework</h3>
+
+<ul>
+<li>Add private member <code>QVariantAnimation* m_stateAnimation</code>, two snapshot members for start/target state, <code>animationFinished</code> signal.</li>
+<li>Implement <code>animateToViewState(target, durationMs)</code> and the per-tick handler. Distance is lerped only for perspective.</li>
+<li>Rewrite <code>centerOn(point, true)</code> on top of <code>animateToViewState</code>. The <code>animate=false</code> branch becomes <code>setViewState(target)</code>.</li>
+<li><code>cwMatrix4x4Animation</code> and <code>ViewMatrixAnimation</code> remain in place; they are still used for projection-mode swap animations.</li>
+</ul>
+
+<p>New test cases:</p>
+<ul>
+<li><strong>centerOn parity:</strong> the commit 1 baseline for <code>centerOn(point, false)</code> view matrix is reproduced exactly by the refactored implementation.</li>
+<li><strong>Animator end-state:</strong> <code>animateToViewState(target, 100ms)</code>, run to completion, assert <code>viewState() == target</code>.</li>
+<li><strong>Animator mid-tick:</strong> at <code>t=0.5</code>, pitch / azimuth / center are each at the midpoint, zoomScale is at the midpoint, distance is at the midpoint in perspective and pinned to target in ortho.</li>
+<li><strong>Azimuth short-arc wraparound:</strong> 350° → 10° at <code>t=0.5</code> is 0°, not 180°.</li>
+<li><strong>CaveLeadPage smoke:</strong> in the QML test suite, the existing lead-goto-zoom flow still lands at the correct world point — pins that the centerOn public contract is preserved.</li>
+</ul>
+
+<h2>10. File changes (cumulative across all three commits)</h2>
+
+<table>
+<tr><th>File</th><th>Change</th><th>Commit</th></tr>
+<tr><td><code>testcases/test_cwBaseTurnTableInteraction.cpp</code></td><td><strong>New.</strong> Grown across all three commits; see §9 for per-commit content.</td><td>1, 2, 3</td></tr>
+<tr><td><code>testcases/CMakeLists.txt</code></td><td>Register the new test source.</td><td>1</td></tr>
+<tr><td><code>cavewherelib/src/cwTurnTableViewState.h</code></td><td><strong>New.</strong> Q_GADGET + Q_DECLARE_METATYPE.</td><td>2</td></tr>
+<tr><td><code>cavewherelib/src/cwBaseTurnTableInteraction.h</code></td><td>Rename field. Migrate azimuthLocked / pitchLocked / gridPlane off bindable macros. Add <code>setCenter</code>, <code>center</code>, <code>setCenterLocked</code>, <code>isCenterLocked</code>, <code>viewState</code>, <code>setViewState</code>, signals, Q_PROPERTY for <code>center</code>/<code>centerLocked</code>.</td><td>2</td></tr>
+<tr><td><code>cavewherelib/src/cwBaseTurnTableInteraction.cpp</code></td><td>Rename throughout. Bindable migration bodies. Gate <code>unProject</code> in <code>startRotating</code>/<code>startPanning</code> on <code>m_centerLocked</code>. Implement <code>viewState</code>/<code>setViewState</code>.</td><td>2</td></tr>
+<tr><td><code>cavewherelib/src/cwBaseTurnTableInteraction.h</code></td><td>Add <code>animateToViewState</code> and <code>animationFinished</code>. Declare private animation members.</td><td>3</td></tr>
+<tr><td><code>cavewherelib/src/cwBaseTurnTableInteraction.cpp</code></td><td>Implement <code>animateToViewState</code> + per-tick. Rewrite <code>centerOn</code>.</td><td>3</td></tr>
+<tr><td><code>cavewherelib/qml/CaveLeadPage.qml</code></td><td>No change. Verified by the smoke test.</td><td>—</td></tr>
+<tr><td><code>cavewherelib/qml/NoteLiDARItem.qml</code></td><td>No change. <code>zoomTo(box)</code> untouched in this plan.</td><td>—</td></tr>
+<tr><td><code>cavewherelib/src/cwMatrix4x4Animation.{h,cpp}</code></td><td>No change. Still used for ortho↔perspective projection-swap animations.</td><td>—</td></tr>
+</table>
+
+<p>All tests must include <code>QCoreApplication::applicationPid()</code> in any temp paths they use, per the project's parallel-test constraint.</p>
+
+<h2>11. Verification commands</h2>
+
+<pre>cmake --build build/Qt_6_11_0_for_macOS-Debug --target cavewhere-test cavewhere-qml-test
+./build/Qt_6_11_0_for_macOS-Debug/cavewhere-test "[cwBaseTurnTableInteraction]" -d yes 2&gt;&amp;1 | tee /tmp/cavewhere-test.log
+./build/Qt_6_11_0_for_macOS-Debug/cavewhere-qml-test --platform offscreen 2&gt;&amp;1 | tee /tmp/cavewhere-qml-test.log
+./build/Qt_6_11_0_for_macOS-Debug/CaveWhere
+  # Manual: open a project with leads, exercise "Goto" — animation should match prior behavior.
+  # Manual: switch to training mode (separate plan) and verify sink-preview animation is unblocked.</pre>
+
+</body>
+</html>

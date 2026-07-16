@@ -5,6 +5,7 @@
 #include <QDebug>
 
 const QString cwKeywordModel::TypeKey = QStringLiteral("Type");
+const QString cwKeywordModel::CaveKey = QStringLiteral("Cave");
 const QString cwKeywordModel::TripNameKey = QStringLiteral("Trip");
 const QString cwKeywordModel::YearKey = QStringLiteral("Year");
 const QString cwKeywordModel::DateKey = QStringLiteral("Date");

@@ -3,10 +3,12 @@
 
 //Qt includes
 #include "cwScene.h"
+#include "cwRhiPipelineSet.h"
 class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 
 #include <rhi/qrhi.h>
+#include <array>
 #include <functional>
 #include <QMatrix4x4>
 #include <QSize>
@@ -15,6 +17,7 @@ class QRhiResourceUpdateBatch;
 //Our includes
 class cwRhiItemRenderer;
 class cwRenderObject;
+class cwAppearanceSlotted;
 
 class cwRHIObject {
 
@@ -25,20 +28,32 @@ public:
         QRhiCommandBuffer* cb;
         cwRhiItemRenderer* renderer;
         cwSceneUpdate::Flag updateFlag;
-        // Active pass's render-pass descriptor — offscreen when the pass has a
-        // PassConfig entry in cwRhiScene, swap-chain otherwise. Back-ends key
-        // their pipelines on this so they rebuild when a pass switches targets.
+        // Active pass's render-pass descriptor — offscreen when the pass routes
+        // through an EDL offscreen target in cwRhiScene, swap-chain otherwise.
+        // Back-ends key their pipelines on this so they rebuild when a pass
+        // switches targets.
         QRhiRenderPassDescriptor* renderPassDescriptor = nullptr;
-    };
+        // Active pass's MSAA sample count. The swap chain is multisampled, but
+        // the EDL offscreen targets are 1x, so a pass routed offscreen needs a
+        // 1x pipeline. Back-ends key their pipelines on this; it must match the
+        // sample count of the render target the pass actually draws into.
+        int sampleCount = 1;
 
-    struct ResourceUpdateData {
-        QRhiResourceUpdateBatch* resourceUpdateBatch;
-        RenderData renderData;
-    };
-
-    struct SynchronizeData {
-        cwRenderObject* object;
-        cwRhiItemRenderer* renderer;
+        // The camera and target this render job draws with. Objects that bind the
+        // global camera UBO read the camera from the GPU at draw time, so they
+        // ignore these — but objects that build their own MVP on the CPU
+        // (cwRenderBillboards) MUST read these. They are the offscreen job's camera
+        // for an offscreen render and the live camera for the live frame; the live
+        // frame renderer no longer exposes its on-screen camera, so a CPU MVP can't
+        // accidentally pick up the wrong (on-screen) camera during an offscreen
+        // render and place billboards off-position. cwRhiFrameRenderer::stampCamera
+        // fills these and the matching global-UBO slot from one derivation, in the
+        // clip-space-corrected form the UBO carries.
+        QRhiRenderTarget* renderTarget = nullptr;
+        QMatrix4x4 viewMatrix;
+        QMatrix4x4 projectionMatrix;       //!< clip-space corrected
+        QMatrix4x4 viewProjectionMatrix;   //!< clip-space corrected
+        float devicePixelRatio = 1.0f;
     };
 
     //For rendering
@@ -52,10 +67,56 @@ public:
         Count
     };
 
+    // One RenderData per RenderPass, stamped with the target each pass routes into
+    // this frame (cwRhiFrameRenderer::buildPerPassRenderData is the single resolver).
+    using PerPassRenderData = std::array<RenderData, static_cast<size_t>(RenderPass::Count)>;
+
+    struct ResourceUpdateData {
+        QRhiResourceUpdateBatch* resourceUpdateBatch;
+        RenderData renderData;
+        // The frame's routed targets — the same source gather() receives. renderData
+        // above carries the frame's final target, not per-pass routing, so an object
+        // that builds a pipeline here for a pass that can route elsewhere
+        // (cwRhiTexturedItems) must key on its pass's entry. Always supplied by the
+        // frame renderer.
+        const PerPassRenderData* perPassRenderData = nullptr;
+    };
+
+    struct SynchronizeData {
+        cwRenderObject* object;
+        cwRhiItemRenderer* renderer;
+    };
+
+    // Per-object appearance-slot budget (ceiling) for offscreen render overrides.
+    // Slot 0 is the live appearance; the remaining slots hold per-job appearance
+    // overrides for offscreen jobs in flight (the payload travels on the job, see
+    // cwOffscreenRenderParameters::appearanceOverrides; the offscreen renderer
+    // resolves it to a slot, and Drawable::appearanceBinding carries the offset). An
+    // appearance-slotted object (cwAppearanceSlotted) grows its per-object UBO on
+    // demand up to this ceiling, not to it — steady state is one slot.
+    //
+    // The offscreen renderer acquires ONE appearance slot per tile/job, exactly as it
+    // takes one camera slot per tile, so the appearance budget mirrors the camera
+    // budget: an atlas batch of up to kOffscreenBatchCameraSlots tiles can have every
+    // tile override the same object. Kept numerically equal to
+    // cwRhiScene::kOffscreenBatchCameraSlots so no same-object override in a full batch
+    // silently degrades to live (acquireAppearanceSlot returns kNoAppearanceSlot past
+    // the ceiling). It is a literal, not a reference to that constant, because
+    // cwRhiScene.h includes this header (not the reverse) — keep the two in sync.
+    static constexpr int kOffscreenBatchAppearanceSlots = 256;
+    static constexpr int kAppearanceSlotCount = 1 + kOffscreenBatchAppearanceSlots;
+
     struct GatherContext {
         const RenderData* renderData;
         RenderPass renderPass;
         quint32 objectOrder = 0;
+        // Per-object appearance slot this render job selects (0 = the live
+        // appearance in slot 0; higher slots = a per-job override the offscreen
+        // renderer acquired and uploaded for this object before gathering). The
+        // scene stamps it from cwSceneGatherOptions::appearanceSlotForObject; an
+        // object's gather() turns it into Drawable::appearanceUniformOffset via its
+        // own per-slot stride. The live frame always passes 0.
+        int appearanceSlot = 0;
     };
 
     struct Drawable {
@@ -77,6 +138,27 @@ public:
         quint32 firstInstance = 0;
         QRhiShaderResourceBindings* bindings = nullptr;
         std::function<void(const RenderData&)> customDraw;
+
+        // When >= 0, `bindings` binds the shared global camera UBO at this
+        // binding point with a dynamic offset. cwRhiScene supplies the per-pass
+        // camera slot offset at draw time (0 for the live frame, the offscreen
+        // slot for an offscreen render), so the same SRB renders the object from
+        // either camera. -1 (default) means no dynamic global-camera binding and
+        // the SRB is bound with no dynamic offsets.
+        qint32 globalCameraBinding = -1;
+
+        // When >= 0, `bindings` binds a per-object "appearance" UBO at this
+        // binding point with a dynamic offset of appearanceUniformOffset bytes,
+        // selecting one slot of that object's multi-slot appearance UBO. Unlike
+        // the camera slot (one shared global UBO, offset supplied per render job
+        // in drainBatches), the appearance UBO is per object with its own per-slot
+        // stride, so the byte offset is computed by the object in gather() — from
+        // GatherContext::appearanceSlot times the object's own slot stride — and
+        // travels on the drawable. -1 (default) means no dynamic appearance
+        // binding. Independent of globalCameraBinding: a drawable may carry
+        // neither, either, or both.
+        qint32 appearanceBinding = -1;
+        quint32 appearanceUniformOffset = 0;
     };
 
     struct PipelineState {
@@ -116,6 +198,42 @@ public:
     void setVisible(bool visible) { m_isVisible = visible; }
     bool isVisible() const { return m_isVisible; }
 
+    // True when this object draws into the PointCloud pass with real geometry.
+    // cwRhiScene polls this before gathering to decide whether to engage the
+    // EDL offscreen-composite path (which reroutes Background + Opaque through
+    // a shared-depth offscreen so the cloud silhouette can darken against the
+    // scene). Default false; cwRHIPointCloud overrides.
+    virtual bool usesPointCloudPass() const { return false; }
+
+    // True when this object cannot be drawn in an atlas batch — it records draws
+    // through per-frame GPU state (cwItem2DRenderer's inline MVP UBO) that is
+    // rewritten per gather(), and several tiles sharing one command buffer collapse
+    // to the last tile's value (the same hazard the global camera UBO sidesteps with
+    // one slot per tile). The offscreen renderer falls back to one tile per command
+    // buffer (one per frame) whenever a visible object reports true, so each tile
+    // renders with its own camera. Default false; cwRenderBillboards overrides.
+    virtual bool precludesAtlasBatching() const { return false; }
+
+    // The appearance-slot pool backing this object's per-job override slots, or
+    // nullptr if the object doesn't support appearance overrides. Slotted objects
+    // (those deriving cwAppearanceSlotted) return `this`; the offscreen renderer
+    // uses this instead of a dynamic_cast to find, pre-grow, and recycle the pool.
+    // The slot concept already lives on this base (GatherContext::appearanceSlot,
+    // Drawable::appearanceBinding); this accessor reunites it with the pool.
+    virtual cwAppearanceSlotted* appearanceSlots() { return nullptr; }
+
+    // Drop any pipelines this object has cached against @a descriptor. The scene
+    // calls this on every render object just before it tears down a render
+    // target (and its render-pass descriptor), so per-object pipeline caches
+    // never outlive the descriptor their pipelines were built on. The default
+    // purges m_pipelines (the common case); cwRhiTexturedItems overrides it to
+    // fan out to its per-item sets.
+    virtual void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor)
+    {
+        m_pipelines.purgeFor(descriptor);
+        m_pipelineRecord = nullptr; // re-acquired in the next ensurePipeline
+    }
+
     static QShader loadShader(const QString& name);
 private:
     bool m_isVisible = true;
@@ -135,6 +253,15 @@ protected:
         batches.append(PipelineBatch{state, {}});
         return batches.last();
     }
+
+    // Per-render-target pipeline cache: one resident pipeline per render target
+    // this object draws into (live swap chain + any offscreen targets), so
+    // live↔offscreen toggling never rebuilds them. m_pipelineRecord is the
+    // record for the pass currently being gathered/rendered (set in the
+    // subclass's ensurePipeline). cwRhiTexturedItems keeps a set per item
+    // instead and leaves these unused.
+    cwRhiPipelineSet m_pipelines;
+    cwRhiPipelineRecord* m_pipelineRecord = nullptr;
 
 };
 
@@ -165,10 +292,19 @@ public:
     // outputSampleCount must match the destination render target's sample
     // count — mismatched MSAA pipelines silently write only sample 0 on
     // Metal/Vulkan, producing dim translucent output after resolve.
+    // inputSampleCount is the sample count of the offscreen textures the effect
+    // reads: > 1 selects a per-sample (sampler2DMS) path, 1 the plain sampler2D
+    // path. May be called again with a different inputSampleCount to swap paths.
+    // globalUBOStride is the byte stride between camera slots in globalUBO; the
+    // effect binds the global block with a dynamic offset so apply() can select
+    // the live (offset 0) or offscreen camera slot, matching the camera the
+    // depth buffer was rendered with.
     virtual void initialize(QRhi* rhi,
                             QRhiRenderPassDescriptor* outputRPDesc,
                             int outputSampleCount,
-                            QRhiBuffer* globalUBO) = 0;
+                            QRhiBuffer* globalUBO,
+                            quint32 globalUBOStride,
+                            int inputSampleCount) = 0;
 
     // Called when an input texture is recreated (e.g. on swap-chain resize) so
     // the effect can rebuild SRBs that reference it.
@@ -180,12 +316,19 @@ public:
     virtual void updateFrameUniforms(const FrameUniformContext&) {}
 
     // Emit pipeline+SRB+draw into `cb` (which must be inside an open beginPass
-    // against the output target). `inputColor`/`inputDepth` are the source
-    // pass's offscreen textures.
+    // against the output target, typically the swap chain). The effect is the
+    // final composite: `sceneColor` holds Background + Opaque drawn at 1x,
+    // `cloudColor` holds the point cloud (opaque where present, transparent
+    // elsewhere), and `depth` is the combined cloud+scene depth they share.
+    // cameraUniformOffset selects the global-UBO camera slot (0 = live frame,
+    // the per-slot stride = offscreen) so the depth linearization uses the same
+    // camera the depth buffer was rendered with.
     virtual void apply(QRhiCommandBuffer* cb,
-                       QRhiTexture* inputColor,
-                       QRhiTexture* inputDepth,
-                       QSize outputSize) = 0;
+                       QRhiTexture* sceneColor,
+                       QRhiTexture* cloudColor,
+                       QRhiTexture* depth,
+                       QSize outputSize,
+                       quint32 cameraUniformOffset) = 0;
 };
 
 

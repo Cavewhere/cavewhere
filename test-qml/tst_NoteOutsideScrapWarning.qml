@@ -20,13 +20,16 @@ MainWindowTest {
             // a note with zero scraps to exercise the warning UI.
             let phakeCavePath = TestHelper.copyToTempDirUrl(TestHelper.testcasesDatasetPath("test_cwTextureUploadTask/PhakeCave.PNG"));
             let noteGallery = findNoteGallery();
-            noteGallery.imagesAdded([phakeCavePath]);
+            // Use addFiles(), the production entry point, so the gallery
+            // auto-selects the newly added note (sets _pendingAutoSelect).
+            // Emitting imagesAdded directly inserts the row but skips selection.
+            noteGallery.addFiles([phakeCavePath]);
 
             let galleryView = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->galleryView");
             tryVerify(() => { return galleryView.count === 2 });
             tryCompare(galleryView, "currentIndex", 1);
 
-            let carpetButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+            let carpetButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpetButton);
             // The "" → "SELECT" transition includes PropertyAnimations that
             // reposition the toolbar; without this wait, clicks on the add-mode

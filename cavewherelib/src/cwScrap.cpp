@@ -12,6 +12,7 @@
 #include "cwMath.h"
 #include "cwTrip.h"
 #include "cwCave.h"
+#include "cwGridConvergence.h"
 #include "cwNote.h"
 #include "cwDebug.h"
 #include "cwLength.h"
@@ -582,6 +583,13 @@ void cwScrap::updateNoteTransformation() {
     averageTransformation.north = cwNoteTranformation::northAdjustedForDeclination(averageTransformation.north,
                                                                                    storageDeclination);
 
+    // The fit above aligns the note to the plotted (grid-aligned) stations, so
+    // subtract the grid convergence that noteTransformAdjustedDeclination adds
+    // back — the store/read round-trip cancels and the stored north stays in
+    // the magnetic frame.
+    averageTransformation.north =
+        cwWrapDegrees360(averageTransformation.north - autoDeclinationGridConvergence());
+
     NoteTransformation->setData(averageTransformation);
 }
 
@@ -589,6 +597,15 @@ cwTripCalibration* cwScrap::tripCalibration() const {
     if(parentNote() == nullptr) { return nullptr; }
     if(parentNote()->parentTrip() == nullptr) { return nullptr; }
     return parentNote()->parentTrip()->calibrations();
+}
+
+double cwScrap::autoDeclinationGridConvergence() const
+{
+    if(type() != Plan) { return 0.0; }
+    const cwTripCalibration* calibration = tripCalibration();
+    if(calibration == nullptr || !calibration->autoDeclination()) { return 0.0; }
+    const cwCave* cave = parentCave();
+    return cave == nullptr ? 0.0 : cave->gridConvergence()->angle();
 }
 
 cwNoteTransformationData cwScrap::noteTransformAdjustedDeclination() const {
@@ -608,6 +625,13 @@ cwNoteTransformationData cwScrap::noteTransformAdjustedDeclination(cwNoteTransfo
 
     transformData.north = cwNoteTranformation::northAdjustedForDeclination(transformData.north,
                                                                            calibration->declination());
+
+    // The note's resolved declination is the pure IGRF value; add the grid
+    // convergence back to match the grid-aligned 3D stations the shot leaders
+    // point to (see autoDeclinationGridConvergence).
+    transformData.north =
+        cwWrapDegrees360(transformData.north + autoDeclinationGridConvergence());
+
     return transformData;
 }
 
@@ -1317,4 +1341,20 @@ void cwScrap::updateTypeKeyword()
     KeywordModel->add(cwKeyword(QStringLiteral("Orientation"),
                                 profile ? QStringLiteral("Profile")
                                         : QStringLiteral("Plan")));
+}
+
+/**
+* Keyword model for this scrap's leads. Carries Type="Lead" and extends the
+* scrap's own keyword model, so leads filter both as "Lead" and alongside their
+* scrap (Type=Plan/Profile, Cave, Year, ...). Created lazily on first use; the
+* lead view's cwKeywordItem references this rather than rebuilding it.
+*/
+cwKeywordModel* cwScrap::leadKeywordModel()
+{
+    if(m_leadKeywordModel == nullptr) {
+        m_leadKeywordModel = new cwKeywordModel(this);
+        m_leadKeywordModel->add(cwKeyword(cwKeywordModel::TypeKey, QStringLiteral("Lead")));
+        m_leadKeywordModel->addExtension(KeywordModel);
+    }
+    return m_leadKeywordModel;
 }

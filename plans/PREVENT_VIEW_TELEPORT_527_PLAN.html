@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fix Plan — Issue #527: Missed intersection can make the view teleport</title>
+<style>
+  :root {
+    --bg: #1d2127;
+    --panel: #262b33;
+    --panel2: #2d333d;
+    --ink: #e6e9ee;
+    --muted: #9aa4b2;
+    --accent: #5aa9e6;
+    --good: #6ccb7a;
+    --bad: #e06c6c;
+    --warn: #e0b14c;
+    --border: #3a414c;
+    --code: #1a1e24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    padding: 32px 40px 24px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #20252c, #1d2127);
+  }
+  header h1 { margin: 0 0 6px; font-size: 24px; }
+  header .sub { color: var(--muted); font-size: 14px; }
+  header .tag {
+    display: inline-block; margin-top: 12px; padding: 3px 10px;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 12px; font-size: 12px; color: var(--accent);
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 0 40px; }
+  section { margin-top: 34px; }
+  h2 {
+    font-size: 19px; margin: 0 0 14px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 15px; margin: 22px 0 8px; color: var(--accent); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+  code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px; background: var(--code);
+    padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border);
+  }
+  pre {
+    background: var(--code); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px; overflow-x: auto;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px; line-height: 1.5;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px; margin: 14px 0;
+  }
+  .cols { display: flex; gap: 16px; flex-wrap: wrap; }
+  .cols > .panel { flex: 1; min-width: 280px; }
+  .bad-h { color: var(--bad); }
+  .good-h { color: var(--good); }
+  .warn-h { color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .file { color: var(--accent); font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 13px; }
+  .del { color: var(--bad); }
+  .add { color: var(--good); }
+  .note {
+    border-left: 3px solid var(--accent); padding: 8px 14px; margin: 14px 0;
+    background: var(--panel2); border-radius: 0 6px 6px 0;
+  }
+  .step-num {
+    display: inline-block; width: 24px; height: 24px; line-height: 24px;
+    text-align: center; background: var(--accent); color: #0c1116;
+    border-radius: 50%; font-weight: 700; font-size: 13px; margin-right: 8px;
+  }
+  kbd { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Issue #527 — Prevent the view from teleporting on a missed intersection</h1>
+  <div class="sub">CaveWhere · 3D turntable interaction · pivot/orbit-center selection</div>
+  <div class="tag">Plan — not yet implemented</div>
+</header>
+
+<main>
+
+<section>
+  <h2>1. The problem</h2>
+  <p>
+    When the user starts a rotate or pan in the 3D view, the code casts a ray from the cursor
+    into the scene and uses the hit point as the new orbit/pan center. If the cave geometry is
+    small and far from the world origin (the common case — surveys live in real-world UTM-ish
+    coordinates), clicking on or near empty space produces a bad center and the view
+    <em>teleports</em> to somewhere off-screen with nothing in it. The user is forced to hit
+    <em>Reset</em>.
+  </p>
+
+  <div class="panel">
+    <p style="margin-top:0">The whole bug lives in one function:</p>
+    <p><span class="file">cavewherelib/src/cwBaseTurnTableInteraction.cpp</span> &middot;
+       <code>cwBaseTurnTableInteraction::unProject(QPoint)</code> (lines&nbsp;99–131)</p>
+<pre><code>QVector3D cwBaseTurnTableInteraction::unProject(QPoint point) {
+    auto ray = Camera-&gt;frustrumRay(point);
+
+    double t = scene()-&gt;geometryItersecter()-&gt;intersects(ray);   // NaN on miss
+    const bool geometryHit = !std::isnan(t);
+
+    if(std::isnan(t)) {
+        t = m_gridPlane.intersection(ray);     // <span class="warn-h">infinite plane — almost always hits</span>
+        if(std::isnan(t)) {
+            return QVector3D();                 // <span class="bad-h">&larr; teleport bug #1: returns (0,0,0)</span>
+        }
+    }
+    return ray.point(t);                        // <span class="bad-h">&larr; teleport bug #2: unbounded grid hit</span>
+}</code></pre>
+  </div>
+
+  <h3>Two distinct teleport triggers</h3>
+  <table>
+    <tr><th>#</th><th>Trigger</th><th>What happens</th></tr>
+    <tr>
+      <td>1</td>
+      <td>Ray misses geometry <em>and</em> grid plane (ray parallel to plane / pointed at sky)</td>
+      <td><code>unProject</code> returns <code>(0,0,0)</code>. The caller does
+          <code>setCenter((0,0,0))</code>; rotation now orbits the world origin — a violent jump,
+          since the cave may be thousands of metres from origin.</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Ray misses the thin line/point cave geometry but hits the <em>infinite</em> grid plane
+          at a grazing angle</td>
+      <td>The grid-plane hit can be hundreds or thousands of metres away from the actual cave.
+          <code>setCenter()</code> moves the pivot there → the next rotate frame swings the camera
+          around that far point and the cave leaves the screen. This is the "<em>grid is far away</em>"
+          case from the issue title.</td>
+    </tr>
+  </table>
+
+  <h3>Where the bad center is consumed</h3>
+  <ul>
+    <li><code>startRotating()</code> (line 215): <code>if(!m_centerLocked) setCenter(unProject(position));</code></li>
+    <li><code>startPanning()</code> (line 163): <code>clickWorld = unProject(...)</code> →
+        <code>setCenter()</code> + <code>m_panAnchor = clickWorld</code> + builds <code>PanPlane</code> through it.</li>
+    <li><code>bindPerspectiveIntersection()</code> (line 150): zoom-toward-cursor uses
+        <code>unProject(m_perspectiveMappedPos)</code> as the zoom target.</li>
+  </ul>
+  <p>All three currently trust whatever <code>unProject</code> returns, including the
+     <code>(0,0,0)</code> sentinel and the unbounded grid hit.</p>
+</section>
+
+<section>
+  <h2>2. The fix idea (uses the AABB already in cwGeometryItersecter)</h2>
+  <p>
+    The user's instinct is right: bound the fallback with the scene's axis-aligned bounding box.
+    The intersecter already computes a world-space AABB — the root box of the top-level BVH
+    (<code>BvhData::topLevel[0].bbox</code>), and per-object boxes are exposed via
+    <code>boundingBox(const Key&amp;)</code>. We expose the <em>union</em> box and use it to:
+  </p>
+  <ol>
+    <li><strong>Reject</strong> a grid-plane hit that lies far outside the cave's footprint (kills trigger #2).</li>
+    <li><strong>Provide a sane fallback pivot</strong> instead of <code>(0,0,0)</code> (kills trigger #1).</li>
+    <li><strong>Tell callers a pick was a miss</strong> so they can keep the current center rather
+        than teleporting at all.</li>
+  </ol>
+
+  <div class="note">
+    <strong>Design principle:</strong> a click on empty space should never <em>move</em> the pivot
+    to a worse place than it already is. The safest no-teleport behavior is: <em>on a confident
+    geometry hit, re-center; on anything else, keep the existing center</em> (and for pan, anchor
+    the drag to the current center's depth so it still tracks smoothly).
+  </div>
+</section>
+
+<section>
+  <h2>3. Implementation steps</h2>
+
+  <h3><span class="step-num">1</span>Expose a scene-wide AABB on the intersecter</h3>
+  <p><span class="file">cwGeometryItersecter.h / .cpp</span></p>
+  <p>Add a const accessor returning the world-space union box of all objects. Prefer the
+     already-built top-level BVH root box when the BVH is ready; otherwise fold over the live
+     <code>Nodes</code> list (each <code>Node::BoundingBox</code> transformed by its model matrix —
+     same as the existing <code>boundingBox(Key)</code>).</p>
+<pre><code><span class="add">// Union of every object's world-space box. Null box when the scene is empty.</span>
+<span class="add">QBox3D boundingBox() const;</span></code></pre>
+  <p>This is cheap and reuses existing data — no new traversal of triangles.
+     <code>QBox3D</code> already provides <code>unite()</code>, <code>contains(QVector3D)</code>,
+     <code>center()</code>, <code>size()</code>, and <code>intersection(QRay3D)</code>, which we
+     lean on below.</p>
+
+  <h3><span class="step-num">2</span>Make <code>unProject</code> report success/failure instead of a sentinel</h3>
+  <p><span class="file">cwBaseTurnTableInteraction.cpp / .h</span></p>
+  <p>Change the return type so a miss is unambiguous (no more overloaded <code>(0,0,0)</code>):</p>
+<pre><code><span class="del">- QVector3D unProject(QPoint point);</span>
+<span class="add">+ std::optional&lt;QVector3D&gt; unProject(QPoint point) const;</span></code></pre>
+  <p>New fallback chain inside the body:</p>
+<pre><code>auto ray = Camera-&gt;frustrumRay(point);
+
+// 1) Confident hit on real geometry — always trust it.
+double t = scene()-&gt;geometryItersecter()-&gt;intersects(ray);
+if(!std::isnan(t)) return ray.point(t);
+
+// 2) Grid-plane fallback, but only if the hit is near the cave.
+const QBox3D sceneBox = scene()-&gt;geometryItersecter()-&gt;boundingBox();
+double gt = m_gridPlane.intersection(ray);
+if(!std::isnan(gt)) {
+    const QVector3D gridHit = ray.point(gt);
+    if(acceptFallbackPoint(gridHit, sceneBox)) {   // AABB gate, see step 3
+        return gridHit;
+    }
+}
+
+// 3) No usable pick.
+return std::nullopt;</code></pre>
+
+  <h3><span class="step-num">3</span>AABB gate for fallback points</h3>
+  <p>A small helper decides whether a non-geometry point is "near enough" to the cave to be a
+     legitimate pivot. Grow the scene box by a margin (the issue is about <em>far</em> hits, so a
+     generous margin is fine — e.g. one box-diagonal, or a fixed multiple of the box size) and
+     test containment:</p>
+<pre><code>namespace {
+    // Fallback pivots (grid plane, etc.) are accepted only inside the scene
+    // box grown by this fraction of its own diagonal. Keeps a grazing grid
+    // hit kilometres away from becoming the orbit center.
+    constexpr float kFallbackBoxMargin = 1.0f;
+}
+
+bool acceptFallbackPoint(const QVector3D&amp; p, const QBox3D&amp; sceneBox) {
+    if(sceneBox.isNull() || !sceneBox.isFinite()) return false; // empty doc — never re-center far
+    const float pad = sceneBox.size().length() * kFallbackBoxMargin;
+    QBox3D grown(sceneBox.minimum() - QVector3D(pad, pad, pad),
+                 sceneBox.maximum() + QVector3D(pad, pad, pad));
+    return grown.contains(p);
+}</code></pre>
+  <div class="note">
+    Tune <code>kFallbackBoxMargin</code> during review. Start permissive (1.0 = grid hits within
+    one scene-diagonal of the cave are fine); tighten only if teleports still slip through.
+    Extract it as a named <code>constexpr</code> per the no-magic-numbers rule.
+  </div>
+
+  <h3><span class="step-num">4</span>Callers keep the current center on a miss (the actual no-teleport behavior)</h3>
+  <p><span class="file">cwBaseTurnTableInteraction.cpp</span></p>
+  <p><strong>startRotating</strong> — only re-center on a real pick:</p>
+<pre><code>void cwBaseTurnTableInteraction::startRotating(QPoint position) {
+    position = Camera-&gt;mapToGLViewport(position);
+    if(!m_centerLocked) {
+        if(auto picked = unProject(position)) {
+            setCenter(*picked);
+        }
+        // else: keep m_center — orbit around the existing pivot, no jump.
+    }
+    LastMousePosition = position;
+}</code></pre>
+  <p><strong>startPanning</strong> — on a miss, anchor the drag to the current center's depth so
+     panning still feels attached to the cursor and nothing teleports:</p>
+<pre><code>const QPoint mapped = Camera-&gt;mapToGLViewport(position);
+QVector3D anchor;
+if(auto picked = unProject(mapped)) {
+    anchor = *picked;
+    if(!m_centerLocked) setCenter(anchor);
+} else {
+    // Fallback: intersect this ray with the plane through the current center,
+    // facing the camera. Keeps the pan smooth and the pivot put.
+    anchor = rayPointAtCenterDepth(mapped);   // helper using m_center + view dir
+}
+m_panAnchor = anchor;
+// ... build PanPlane through m_panAnchor as today ...</code></pre>
+  <p><strong>bindPerspectiveIntersection</strong> — zoom target falls back to the current center
+     instead of <code>(0,0,0)</code>:</p>
+<pre><code>m_perspectiveIntersection.setBinding([this]() -&gt; QVector3D {
+    return unProject(m_perspectiveMappedPos).value_or(m_center);
+});</code></pre>
+
+  <h3><span class="step-num">5</span>(Optional, stronger) Ray-vs-AABB fallback pivot</h3>
+  <p>
+    If reviewers prefer empty-space clicks to still re-center onto the cave rather than do nothing,
+    replace "keep current center" with a ray-vs-box pivot: when geometry misses, intersect the ray
+    with the scene AABB (<code>QBox3D::intersection(ray, &amp;tMin, &amp;tMax)</code>) and use the
+    midpoint of the entry/exit span. This pulls the pivot onto the cave's bounding volume even when
+    the precise line geometry was missed. Keep this behind the same AABB gate so a total miss still
+    returns <code>nullopt</code>. Recommend landing step 4 first (minimal, obviously correct), then
+    evaluating step 5 as a UX refinement.
+  </p>
+</section>
+
+<section>
+  <h2>4. Files to touch</h2>
+  <table>
+    <tr><th>File</th><th>Change</th></tr>
+    <tr><td class="file">cwGeometryItersecter.h / .cpp</td>
+        <td>Add <code>QBox3D boundingBox() const</code> (scene-wide union / BVH root box).</td></tr>
+    <tr><td class="file">cwBaseTurnTableInteraction.h</td>
+        <td><code>unProject</code> → <code>std::optional&lt;QVector3D&gt;</code>; declare the two
+            private helpers (<code>acceptFallbackPoint</code>, <code>rayPointAtCenterDepth</code>);
+            add the <code>constexpr</code> margin.</td></tr>
+    <tr><td class="file">cwBaseTurnTableInteraction.cpp</td>
+        <td>Rewrite <code>unProject</code> fallback chain; update <code>startRotating</code>,
+            <code>startPanning</code>, <code>bindPerspectiveIntersection</code> to handle
+            <code>nullopt</code>.</td></tr>
+  </table>
+  <div class="note warn-h" style="color:var(--ink)">
+    <strong>Scope check:</strong> no QML changes needed — <code>TurnTableInteraction.qml</code>
+    just forwards mouse events. The grid plane wiring
+    (<code>RootData.regionSceneManager.gridPlane</code>) is unchanged; we only gate <em>how</em> its
+    intersection is used.
+  </div>
+</section>
+
+<section>
+  <h2>5. Testing</h2>
+  <p>There is already <span class="file">testcases/test_cwBaseTurnTableInteraction.cpp</span> and a
+     rich set of <span class="file">test_cwGeometryItersecter*.cpp</span> files to extend.</p>
+  <ul>
+    <li><strong>Intersecter unit test:</strong> add objects far from origin; assert
+        <code>boundingBox()</code> equals the union of their world boxes; empty intersecter returns
+        a null box.</li>
+    <li><strong>Teleport regression (trigger #1):</strong> scene with geometry centered far from
+        origin; call <code>startRotating</code> on a screen point whose ray misses geometry and the
+        grid plane; assert <code>center()</code> did <em>not</em> become <code>(0,0,0)</code> and
+        stayed at its prior value (within the AABB).</li>
+    <li><strong>Teleport regression (trigger #2):</strong> camera at a grazing angle so the ray hits
+        the infinite grid plane far from the cave; assert the far grid hit is rejected and
+        <code>center()</code> stays put.</li>
+    <li><strong>Happy path unchanged:</strong> a ray that genuinely hits geometry still re-centers on
+        the hit point.</li>
+    <li>Keep tests safe for concurrent processes (PID in temp names / <code>QTemporaryDir</code>),
+        per project test rules. The BVH is CPU-side, so these run offscreen without RHI.</li>
+  </ul>
+<pre><code>cmake --build build/&lt;preset&gt; --target cavewhere-test
+./build/&lt;preset&gt;/cavewhere-test "[cwBaseTurnTableInteraction]" -d yes 2>&amp;1 | tee /tmp/cavewhere-test.log</code></pre>
+  <p>Run the full <code>cavewhere-test</code> and <code>cavewhere-qml-test</code> suites before
+     pushing.</p>
+</section>
+
+<section>
+  <h2>6. Manual verification</h2>
+  <ol>
+    <li>Open a survey that sits far from the origin (any real cave file).</li>
+    <li>Zoom in on a passage, then rotate/pan by grabbing empty space just off the passage —
+        confirm the view orbits the passage instead of jumping away.</li>
+    <li>Tilt to a near-horizontal view so the cursor ray grazes the grid; rotate from the sky —
+        confirm no teleport.</li>
+    <li>Confirm normal rotate/pan/zoom-on-cursor over geometry is unchanged.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>7. Open questions for review</h2>
+  <ul>
+    <li><strong>Step 4 vs Step 5:</strong> do we want empty-space clicks to keep the current pivot
+        (minimal) or snap onto the AABB (more "helpful" but more behavior change)? Recommend shipping
+        step 4 and treating step 5 as a follow-up.</li>
+    <li><strong>Margin value</strong> for <code>kFallbackBoxMargin</code> — needs a couple of real
+        files to tune.</li>
+    <li><strong>Grid plane intent:</strong> should the grid plane fallback exist at all once the AABB
+        gate is in, or is it only meaningful for an empty document (no geometry yet)? Worth confirming
+        the grid is still useful as a pivot source when there <em>is</em> geometry.</li>
+  </ul>
+</section>
+
+</main>
+</body>
+</html>

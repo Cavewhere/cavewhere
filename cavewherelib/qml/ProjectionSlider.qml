@@ -15,9 +15,7 @@ QQ.Item {
     implicitWidth: columnLayoutId.width
     implicitHeight: columnLayoutId.height
 
-    property RegionViewer viewer
-//    property alias orthoProjection: orthoProjectionId
-//    property alias perspectiveProjection: perspectiveProjectionId
+    property ProjectionTransition projectionTransition
 
     ColumnLayout {
         id: columnLayoutId
@@ -36,15 +34,12 @@ QQ.Item {
                 leftText: "     "
                 rightText: "     "
 
-                onIsLeftChanged: {
-                    if(cameraSettingsId.viewer !== null) {
-                        cameraSettingsId.viewer.orthoProjection.enabled = isLeft
-                    }
-                }
-
-                onIsRightChanged: {
-                    if(cameraSettingsId.viewer !== null) {
-                        cameraSettingsId.viewer.perspectiveProjection.enabled = isRight
+                // The slider is pure input: it scrubs the controller's
+                // transition. The controller owns the reconcile, the matrix
+                // blend, and settling onto a typed projection at the endpoints.
+                onSliderPosChanged: {
+                    if(cameraSettingsId.projectionTransition !== null) {
+                        cameraSettingsId.projectionTransition.progress = sliderPos
                     }
                 }
             }
@@ -63,22 +58,6 @@ QQ.Item {
 "projection you want to use." +
 "<li>Perspective – 3D objects appear smaller when they are further away and" +
 " bigger when they are closer to the camera."
-        }
-    }
-
-    Matrix4x4Animation {
-        id: matrix4x4AnimationId
-        startValue: cameraSettingsId.viewer.orthoProjection.matrix
-        duration: 1000
-        endValue: cameraSettingsId.viewer.perspectiveProjection.matrix
-        currentTime: sliderId.sliderPos * 1000
-
-        property real position: sliderId.sliderPos
-
-        onPositionChanged: {
-            if(position != 0.0 && position != 1.0) {
-                cameraSettingsId.viewer.camera.setCustomProjection(currentValue)
-            }
         }
     }
 }

@@ -30,7 +30,7 @@ MainWindowTest {
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
-            let addSuveyButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->addSurveyData")
+            let addSuveyButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->addSurveyData")
             mouseClick(addSuveyButton)
 
             waitForRendering(rootId)
@@ -62,7 +62,7 @@ MainWindowTest {
             //Check that we have two stations
             let trip = RootData.pageView.currentPageItem.currentTrip as Trip;
             verify(trip !== null);
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -177,12 +177,12 @@ MainWindowTest {
             tryVerify(() => {
                           firstChunkVirtualStationBox = ObjectFinder.findObjectByChain(
                                       rootId.mainWindow,
-                                      "rootId->tripPage->view->dataBox." + firstChunkVirtualStationRowNow + ".0")
+                                      "rootId->tripPage->surveyEditor->view->dataBox." + firstChunkVirtualStationRowNow + ".0")
                           return firstChunkVirtualStationBox !== null
                       })
             let firstChunkVirtualStationInput = ObjectFinder.findObjectByChain(
                         rootId.mainWindow,
-                        "rootId->tripPage->view->dataBox." + firstChunkVirtualStationRowNow + ".0->coreTextInput")
+                        "rootId->tripPage->surveyEditor->view->dataBox." + firstChunkVirtualStationRowNow + ".0->coreTextInput")
             if(firstChunkVirtualStationInput !== null) {
                 mouseClick(firstChunkVirtualStationInput)
             } else {
@@ -248,12 +248,12 @@ MainWindowTest {
             tryVerify(() => { return view.itemAtIndex(6) !== null })
             compare(ObjectFinder.findObjectByChain(
                         rootId.mainWindow,
-                        "rootId->tripPage->view->dataBox.6.0"), null)
+                        "rootId->tripPage->surveyEditor->view->dataBox.6.0"), null)
             let secondChunkStationRowBox = null
             tryVerify(() => {
                           secondChunkStationRowBox = ObjectFinder.findObjectByChain(
                                       rootId.mainWindow,
-                                      "rootId->tripPage->view->dataBox.7.0")
+                                      "rootId->tripPage->surveyEditor->view->dataBox.7.0")
                           return secondChunkStationRowBox !== null
                       })
             tryVerify(() => { return secondChunkStationRowBox.focus === true })
@@ -267,7 +267,7 @@ MainWindowTest {
             compare(focusedSecondChunkStation0Row, 7)
             let stationBox = ObjectFinder.findObjectByChain(
                         rootId.mainWindow,
-                        "rootId->tripPage->view->dataBox." + focusedSecondChunkStation0Row + ".0")
+                        "rootId->tripPage->surveyEditor->view->dataBox." + focusedSecondChunkStation0Row + ".0")
             verify(stationBox !== null)
             tryVerify(() => { return stationBox.focus === true; })
             verify(stationBox === mainWindow.Window.window.activeFocusItem)
@@ -286,7 +286,7 @@ MainWindowTest {
             tryVerify(() => {
                           secondChunkStation0Box = ObjectFinder.findObjectByChain(
                                       rootId.mainWindow,
-                                      "rootId->tripPage->view->dataBox." + secondChunkStation0Row + ".0")
+                                      "rootId->tripPage->surveyEditor->view->dataBox." + secondChunkStation0Row + ".0")
                           return secondChunkStation0Box !== null
                       })
             mouseClick(secondChunkStation0Box)
@@ -416,7 +416,7 @@ MainWindowTest {
 
                 keyClick(key, modifier)
 
-                let itemName = "rootId->tripPage->view->dataBox." + index + "." + nextRole
+                let itemName = "rootId->tripPage->surveyEditor->view->dataBox." + index + "." + nextRole
                 let item = null
                 let focusedName = ""
                 tryVerify(() => {
@@ -426,13 +426,13 @@ MainWindowTest {
                           })
 
                 if(item === null && focusedName.length > 0) {
-                    item = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
+                    item = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->" + focusedName)
                 }
                 verify(item !== null)
 
                 focusedName = focusedDataBoxObjectName()
                 if(focusedName.length > 0) {
-                    let focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
+                    let focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->" + focusedName)
                     if(focusedItem !== null) {
                         item = focusedItem
                     }
@@ -463,7 +463,7 @@ MainWindowTest {
                 keyClick(key, modifier)
 
                 let row = model.toModelRow(nextBoxIndex.rowIndex)
-                let itemName = "rootId->tripPage->view->dataBox." + row + "." + nextBoxIndex.chunkDataRole
+                let itemName = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + nextBoxIndex.chunkDataRole
                 let item = null
                 let focusedName = ""
                 tryVerify(() => {
@@ -473,13 +473,13 @@ MainWindowTest {
                           })
 
                 if(item === null && focusedName.length > 0) {
-                    item = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
+                    item = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->" + focusedName)
                 }
                 verify(item !== null)
 
                 focusedName = focusedDataBoxObjectName()
                 if(focusedName.length > 0) {
-                    let focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
+                    let focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->" + focusedName)
                     if(focusedItem !== null) {
                         item = focusedItem
                     }
@@ -525,7 +525,7 @@ MainWindowTest {
         function test_stationNameGuesser_runsOnVirtualThirdStationRow() {
             addSurvey()
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -546,7 +546,7 @@ MainWindowTest {
                 waitForRendering(rootId)
                 let box = ObjectFinder.findObjectByChain(
                             mainWindow,
-                            "rootId->tripPage->view->dataBox." + row + "." + SurveyChunk.StationNameRole)
+                            "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + SurveyChunk.StationNameRole)
                 verify(box !== null)
                 return box
             }
@@ -583,7 +583,7 @@ MainWindowTest {
         function test_enterSurveyData_fiveStationsFourShots_cannotContinueEditing() {
             addSurvey();
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -612,7 +612,7 @@ MainWindowTest {
                 let present = []
                 for(let i = 0; i < roles.length; ++i) {
                     let role = roles[i]
-                    let objectName = "rootId->tripPage->view->dataBox." + row + "." + role
+                    let objectName = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + role
                     let cell = ObjectFinder.findObjectByChain(mainWindow, objectName)
                     if(cell !== null) {
                         present.push(role)
@@ -627,7 +627,7 @@ MainWindowTest {
                 view.positionViewAtIndex(row, ListView.Contain)
                 let cell = null
                 tryVerify(() => {
-                              cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                              cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                               return cell !== null
                           })
                 mouseClick(cell)
@@ -715,7 +715,7 @@ MainWindowTest {
         function test_tabFromFourthStation_shouldGoToThirdShot() {
             addSurvey();
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -725,7 +725,7 @@ MainWindowTest {
                 waitForRendering(rootId)
                 let cell = ObjectFinder.findObjectByChain(
                             mainWindow,
-                            "rootId->tripPage->view->dataBox." + row + "." + column)
+                            "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                 verify(cell !== null, "Missing dataBox at row=" + row + " column=" + column)
                 return cell
             }
@@ -799,7 +799,7 @@ MainWindowTest {
 
         function test_spaceBarVisible() {
             addSurvey();
-            let spaceBar = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->spaceAddBar")
+            let spaceBar = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->surveyEditor->view->spaceAddBar")
             verify(spaceBar.visible === true)
 
             enterSurveyData();
@@ -813,7 +813,7 @@ MainWindowTest {
             addSurvey();
             enterSurveyData();
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -834,7 +834,7 @@ MainWindowTest {
             verify(secondStation0Row >= 0)
 
             let secondStation0Box = ObjectFinder.findObjectByChain(
-                        mainWindow, "rootId->tripPage->view->dataBox." + secondStation0Row + "." + SurveyChunk.StationNameRole + "->coreTextInput")
+                        mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + secondStation0Row + "." + SurveyChunk.StationNameRole + "->coreTextInput")
             verify(secondStation0Box !== null)
             mouseClick(secondStation0Box)
 
@@ -852,7 +852,7 @@ MainWindowTest {
             verify(secondStation1Row >= 0)
 
             let secondStation1Box = ObjectFinder.findObjectByChain(
-                        mainWindow, "rootId->tripPage->view->dataBox." + secondStation1Row + "." + SurveyChunk.StationNameRole + "->coreTextInput")
+                        mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + secondStation1Row + "." + SurveyChunk.StationNameRole + "->coreTextInput")
             verify(secondStation1Box !== null)
             secondStation1Box.openEditor()
 
@@ -888,7 +888,7 @@ MainWindowTest {
             keyClick(16777217, 0) //Tab
 
             //Check that we can supress the a warning
-            let databox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.1.1")
+            let databox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1.1")
             verify(databox !== null)
             verify(databox.errorModel !== null);
             let errors = databox.errorModel.errors;
@@ -902,9 +902,9 @@ MainWindowTest {
 
             // wait(1000000)
             //The error is in a async loader, so we need to wait for it to be created
-            tryVerify(() => { return ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.1.1->coreTextInput->errorIcon") !== null })
+            tryVerify(() => { return ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1.1->coreTextInput->errorIcon") !== null })
 
-            let errorIcon_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.1.1->coreTextInput->errorIcon")
+            let errorIcon_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1.1->coreTextInput->errorIcon")
             mouseClick(errorIcon_obj1)
 
             waitForRendering(rootId);
@@ -920,12 +920,12 @@ MainWindowTest {
             tryVerify(()=>{ return errors.data(firstErrorIndex, ErrorListModel.SuppressedRole) === true; })
 
             //Make sure error message works, click on it
-            let distanceError = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.2.5->coreTextInput->errorIcon")
+            let distanceError = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.2.5->coreTextInput->errorIcon")
             mouseClick(distanceError)
             waitForRendering(rootId);
 
             //Since error icon is in a loader, the item is deleted
-            errorIcon_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->view->dataBox.1.1->coreTextInput->errorIcon")
+            errorIcon_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1.1->coreTextInput->errorIcon")
 
             //Make sure the warning message that was shown before is now hidden
             verify(errorIcon_obj1 === null)
@@ -947,9 +947,9 @@ MainWindowTest {
         function test_missingStationNameAfterClearingShotData() {
             addSurvey();
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
-            let frontSight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->frontSightCalibrationEditor->checkBox")
-            let backSight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view");
+            let frontSight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->frontSightCalibrationEditor->checkBox")
+            let backSight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->backSightCalibrationEditor->checkBox")
 
             verify(view !== null)
             verify(frontSight !== null)
@@ -965,7 +965,7 @@ MainWindowTest {
             function dataBoxAt(row, column) {
                 view.positionViewAtIndex(row, ListView.Contain)
                 waitForRendering(rootId)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                 verify(cell !== null)
                 mouseClick(cell)
                 return cell
@@ -1088,7 +1088,7 @@ MainWindowTest {
         function test_insertRemoveStationsAndShots() {
             addSurvey();
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view");
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -1096,7 +1096,7 @@ MainWindowTest {
             function dataBoxAt(row, column) {
                 view.positionViewAtIndex(row, ListView.Contain)
                 waitForRendering(rootId)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                 verify(cell !== null)
                 mouseClick(cell)
                 return cell
@@ -1131,7 +1131,7 @@ MainWindowTest {
             }
 
             function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
-                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
+                let loaderPath = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column + "->" + loaderObjectName
                 let loader = null
                 tryVerify(() => {
                               loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
@@ -1252,13 +1252,13 @@ MainWindowTest {
         function test_insertAboveRowOneTwice() {
             addSurvey();
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view");
             verify(view !== null)
 
             function dataBoxAt(row, column) {
                 view.positionViewAtIndex(row, ListView.Contain)
                 waitForRendering(rootId)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                 verify(cell !== null)
                 mouseClick(cell)
                 return cell
@@ -1289,7 +1289,7 @@ MainWindowTest {
             }
 
             function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
-                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
+                let loaderPath = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column + "->" + loaderObjectName
                 let loader = null
                 tryVerify(() => {
                               loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
@@ -1335,8 +1335,8 @@ MainWindowTest {
             verify(chunk.data(SurveyChunk.StationNameRole, 4) === "A2")
 
             // Only one cell highlighted (focused)
-            let otherCell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1." + SurveyChunk.StationNameRole)
-            let focusedCell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.3." + SurveyChunk.StationNameRole)
+            let otherCell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1." + SurveyChunk.StationNameRole)
+            let focusedCell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.3." + SurveyChunk.StationNameRole)
             verify(focusedCell !== null)
             verify(otherCell !== null)
             verify(focusedCell.focus === true)
@@ -1347,13 +1347,13 @@ MainWindowTest {
         function test_insertBelowOnEmptyChunk() {
             addSurvey();
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view");
             verify(view !== null)
 
             function dataBoxAt(row, column) {
                 view.positionViewAtIndex(row, ListView.Contain)
                 waitForRendering(rootId)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                 verify(cell !== null)
                 mouseClick(cell)
                 return cell
@@ -1366,7 +1366,7 @@ MainWindowTest {
             }
 
             function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
-                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
+                let loaderPath = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column + "->" + loaderObjectName
                 let loader = null
                 tryVerify(() => {
                               loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
@@ -1401,7 +1401,7 @@ MainWindowTest {
         function test_insertBelowLastStationWithOneShot() {
             addSurvey();
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view");
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -1409,7 +1409,7 @@ MainWindowTest {
             function dataBoxAt(row, column) {
                 view.positionViewAtIndex(row, ListView.Contain)
                 waitForRendering(rootId)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                 verify(cell !== null)
                 mouseClick(cell)
                 return cell
@@ -1444,7 +1444,7 @@ MainWindowTest {
             }
 
             function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
-                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
+                let loaderPath = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column + "->" + loaderObjectName
                 let loader = null
                 tryVerify(() => {
                               loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
@@ -1501,7 +1501,7 @@ MainWindowTest {
         function test_insertDisabledOnVirtualStationAndShot() {
             addSurvey();
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view");
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -1509,7 +1509,7 @@ MainWindowTest {
             function dataBoxAt(row, column) {
                 view.positionViewAtIndex(row, ListView.Contain)
                 waitForRendering(rootId)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                 verify(cell !== null)
                 mouseClick(cell)
                 return cell
@@ -1540,7 +1540,7 @@ MainWindowTest {
             }
 
             function menuItemEnabled(row, column, loaderObjectName, itemObjectName) {
-                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
+                let loaderPath = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column + "->" + loaderObjectName
                 let loader = null
                 tryVerify(() => {
                               loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
@@ -1590,7 +1590,7 @@ MainWindowTest {
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + tripFromRegion.name
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" })
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view");
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -1598,7 +1598,7 @@ MainWindowTest {
             function dataBoxAt(row, column) {
                 view.positionViewAtIndex(row, ListView.Contain)
                 waitForRendering(rootId)
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                 verify(cell !== null)
                 mouseClick(cell)
                 return cell
@@ -1637,7 +1637,7 @@ MainWindowTest {
             }
 
             function triggerMenuItemFromLoader(row, column, loaderObjectName, itemObjectName) {
-                let loaderPath = "rootId->tripPage->view->dataBox." + row + "." + column + "->" + loaderObjectName
+                let loaderPath = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column + "->" + loaderObjectName
                 let loader = null
                 tryVerify(() => {
                               loader = ObjectFinder.findObjectByChain(mainWindow, loaderPath)
@@ -1752,7 +1752,7 @@ MainWindowTest {
             tryVerify(() => {
                           secondChunkStation0Box = ObjectFinder.findObjectByChain(
                                       mainWindow,
-                                      "rootId->tripPage->view->dataBox." + secondChunkStation0Row + "." + SurveyChunk.StationNameRole)
+                                      "rootId->tripPage->surveyEditor->view->dataBox." + secondChunkStation0Row + "." + SurveyChunk.StationNameRole)
                           if(secondChunkStation0Box === null) {
                               return false
                           }
@@ -1784,7 +1784,7 @@ MainWindowTest {
 
             view.positionViewAtIndex(secondChunkTitleRow, ListView.Contain)
             waitForRendering(rootId)
-            let secondChunkTitleDelegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->chunkErrorDelegate." + secondChunkTitleRow)
+            let secondChunkTitleDelegate = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->chunkErrorDelegate." + secondChunkTitleRow)
             verify(secondChunkTitleDelegate !== null)
 
             let rowBeforeTitle = editorModel.data(editorModel.index(secondChunkTitleRow - 1, 0), SurveyEditorModel.RowIndexRole)
@@ -1817,7 +1817,7 @@ MainWindowTest {
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + tripFromRegion.name
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" })
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             verify(view !== null)
             let editorModel = view.model
             verify(editorModel !== null)
@@ -1841,7 +1841,7 @@ MainWindowTest {
                 tryVerify(() => {
                               cell = ObjectFinder.findObjectByChain(
                                           mainWindow,
-                                          "rootId->tripPage->view->dataBox." + row + "." + SurveyChunk.StationNameRole)
+                                          "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + SurveyChunk.StationNameRole)
                               return cell !== null
                           })
                 mouseClick(cell)
@@ -1907,7 +1907,7 @@ MainWindowTest {
                 tryVerify(() => {
                               cell = ObjectFinder.findObjectByChain(
                                           mainWindow,
-                                          "rootId->tripPage->view->dataBox." + focusedRow + "." + SurveyChunk.StationNameRole)
+                                          "rootId->tripPage->surveyEditor->view->dataBox." + focusedRow + "." + SurveyChunk.StationNameRole)
                               return cell !== null
                           })
                 verify(cell.visible === true)
@@ -2050,7 +2050,7 @@ MainWindowTest {
         function test_dateChangeShouldWork() {
             addSurvey();
 
-            let date = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->tripDate")
+            let date = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->tripDate")
             date.openEditor();
             // mouseDoubleClickSequence(date)
 
@@ -2074,14 +2074,14 @@ MainWindowTest {
 
             enterSurveyData();
 
-            let coreTextInput_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.2.5->coreTextInput")
+            let coreTextInput_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.2.5->coreTextInput")
             mouseClick(coreTextInput_obj1)
 
             // wait(1000000)
 
-            ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.2.5->excludeMenuButton")
-            let excludeMenuButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.2.5->excludeMenuButton")
-            let excludeMenu = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.2.5->excludeMenuButton->menuLoader")
+            ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.2.5->excludeMenuButton")
+            let excludeMenuButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.2.5->excludeMenuButton")
+            let excludeMenu = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.2.5->excludeMenuButton->menuLoader")
             tryVerify(() => { return excludeMenu.active === false})
 
             mouseClick(excludeMenuButton)
@@ -2094,11 +2094,11 @@ MainWindowTest {
 
             tryVerify(() => { return excludeMenu.item.visible === false })
 
-            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+            let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view");
             view.positionViewAtEnd()
 
             //Make sure the distance has gone down
-            let totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->totalLengthText")
+            let totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->totalLengthText")
             tryCompare(totalLengthText_obj1, "text", "Total Length: 5 m");
 
             //Include it again
@@ -2112,7 +2112,7 @@ MainWindowTest {
             tryVerify(() => { return excludeMenu.item.visible === false })
 
             //Make sure the distance has gone down
-            totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->totalLengthText")
+            totalLengthText_obj1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->totalLengthText")
             tryCompare(totalLengthText_obj1, "text", "Total Length: 15 m");
         }
 
@@ -2131,8 +2131,8 @@ MainWindowTest {
 
             // wait(1000000)
 
-            let frontsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->frontSightCalibrationEditor->checkBox")
-            let backsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+            let frontsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->frontSightCalibrationEditor->checkBox")
+            let backsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->backSightCalibrationEditor->checkBox")
 
             function rightArrowOnFullRow(currentItem, rowIndex, columnIndex) {
                 let shotOffset = rowIndex === 1 ? 1 : -1
@@ -2187,7 +2187,7 @@ MainWindowTest {
             }
 
             function downArrowOnFullColumn(currentItem, rowIndex, columnIndex) {
-                let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
                 let model = currentItem.model
                 let maxSteps = surveyView.count + 10
 
@@ -2222,7 +2222,7 @@ MainWindowTest {
             }
 
             function upArrowOnFullColumn(currentItem, rowIndex, columnIndex) {
-                let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
                 let model = currentItem.model
 
                 //Scroll to the bottom
@@ -2257,11 +2257,11 @@ MainWindowTest {
             }
 
             function testRow(row, column, direction, testBacksights = true, startWithBacksights = false) {
-                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view");
+                let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view");
                 view.positionViewAtIndex(row, ListView.Contain)
 
 
-                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                 cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
 
                 verify(frontsight.checked === true)
@@ -2295,18 +2295,18 @@ MainWindowTest {
 
                     //We need to click twice because, this could change the number of the cells
                     tryVerify(() => {
-                                  cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + startColumn)
+                                  cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + startColumn)
                                   return cell !== null
                               })
                     cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
                     tryVerify(() => {
-                                  cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + startColumn)
+                                  cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + startColumn)
                                   return cell !== null
                               })
                     cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
 
                     let focusedName = focusedDataBoxObjectName()
-                    let focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
+                    let focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->" + focusedName)
                     if(focusedItem !== null) {
                         cell = focusedItem
                     }
@@ -2330,17 +2330,17 @@ MainWindowTest {
                     view.positionViewAtIndex(row + 1, ListView.Contain)
 
                     tryVerify(() => {
-                                  cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                                  cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                                   return cell !== null
                               })
                     cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
                     tryVerify(() => {
-                                  cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + column)
+                                  cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                                   return cell !== null
                               })
                     cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
                     focusedName = focusedDataBoxObjectName()
-                    focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->" + focusedName)
+                    focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->" + focusedName)
                     if(focusedItem !== null) {
                         cell = focusedItem
                     }
@@ -2390,11 +2390,11 @@ MainWindowTest {
 
             function scrollToBottom(row) {
                 //Scroll to the bottom
-                let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+                let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
                 surveyView.positionViewAtEnd()
                 let cell = null
                 tryVerify(() => {
-                              cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox." + row + "." + SurveyChunk.StationNameRole)
+                              cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + SurveyChunk.StationNameRole)
                               return cell !== null
                           })
                 mouseClick(cell)
@@ -2435,13 +2435,13 @@ MainWindowTest {
 
             waitForRendering(mainWindow)
 
-            let station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.0")
+            let station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1.0")
             mouseClick(station1)
 
             waitForRendering(mainWindow)
 
 
-            let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             let currentItem = station1;
 
             function tabTestSingleSight(frontsight) {
@@ -2571,7 +2571,7 @@ MainWindowTest {
                 //when reverse tabing, I'm not sure why. The testcase fail intermidantly without this
                 //It seems to work just fine on the real interface
                 tryVerify(() => {
-                              currentItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.11.4")
+                              currentItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.11.4")
                               return currentItem !== null && currentItem.visible
                           })
                 mouseClick(currentItem)
@@ -2816,8 +2816,8 @@ MainWindowTest {
                 currentItem = previousTab(currentItem, 1, SurveyChunk.StationNameRole);
             }
 
-            let frontsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->frontSightCalibrationEditor->checkBox")
-            let backsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->backSightCalibrationEditor->checkBox")
+            let frontsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->frontSightCalibrationEditor->checkBox")
+            let backsight = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->backSightCalibrationEditor->checkBox")
 
             verify(frontsight.checked === true)
             verify(backsight.checked === false)
@@ -2834,7 +2834,7 @@ MainWindowTest {
             verify(frontsight.checked === true)
             verify(backsight.checked === true)
 
-            station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.0")
+            station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1.0")
             mouseClick(station1)
 
             tabTestFrontAndBackSight();
@@ -2846,7 +2846,7 @@ MainWindowTest {
 
             mouseClick(frontsight);
 
-            station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.0")
+            station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1.0")
             mouseClick(station1)
 
             verify(frontsight.checked === false)
@@ -2868,7 +2868,7 @@ MainWindowTest {
 
             waitForRendering(RootData.pageView.currentPageItem)
 
-            let station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view->dataBox.1.0")
+            let station1 = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox.1.0")
             mouseClick(station1)
 
             waitForRendering(RootData.pageView.currentPageItem)
@@ -2883,12 +2883,12 @@ MainWindowTest {
 
 
             //-- Go the last element and tab forward
-            let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             surveyView.currentIndex = surveyView.count - 1;
             surveyView.positionViewAtEnd();
             waitForRendering(RootData.pageView.currentPageItem)
 
-            let itemName = "rootId->tripPage->view->dataBox." + surveyView.currentIndex + "." + SurveyChunk.StationDownRole;
+            let itemName = "rootId->tripPage->surveyEditor->view->dataBox." + surveyView.currentIndex + "." + SurveyChunk.StationDownRole;
             let lastItem = ObjectFinder.findObjectByChain(mainWindow, itemName)
             mouseClick(lastItem);
             waitForRendering(RootData.pageView.currentPageItem)
@@ -2911,12 +2911,12 @@ MainWindowTest {
             waitForRendering(RootData.pageView.currentPageItem)
 
             //-- Go the last element and tab forward
-            let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->view")
+            let surveyView = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
             surveyView.currentIndex = surveyView.count - 1;
             surveyView.positionViewAtEnd();
             waitForRendering(RootData.pageView.currentPageItem)
 
-            let itemName = "rootId->tripPage->view->dataBox." + surveyView.currentIndex + "." + SurveyChunk.StationNameRole;
+            let itemName = "rootId->tripPage->surveyEditor->view->dataBox." + surveyView.currentIndex + "." + SurveyChunk.StationNameRole;
             let lastItem = ObjectFinder.findObjectByChain(mainWindow, itemName)
             mouseClick(lastItem);
             waitForRendering(RootData.pageView.currentPageItem)

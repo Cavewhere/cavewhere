@@ -42,16 +42,16 @@ MainWindowTest {
             const picker = findChild(RootData.pageView.currentPageItem, "globalCoordinateSystemComboBox")
             verify(picker !== null, "globalCoordinateSystemComboBox must exist on dataMainPage")
 
-            compare(RootData.region.globalCoordinateSystem, "")
+            compare(RootData.region.geoReference.globalCoordinateSystem, "")
 
             picker.committed("EPSG:32612")
-            tryCompare(RootData.region, "globalCoordinateSystem", "EPSG:32612")
+            tryCompare(RootData.region.geoReference, "globalCoordinateSystem", "EPSG:32612")
 
             picker.committed("EPSG:32613")
-            tryCompare(RootData.region, "globalCoordinateSystem", "EPSG:32613")
+            tryCompare(RootData.region.geoReference, "globalCoordinateSystem", "EPSG:32613")
 
             picker.committed("")
-            tryCompare(RootData.region, "globalCoordinateSystem", "")
+            tryCompare(RootData.region.geoReference, "globalCoordinateSystem", "")
         }
 
         function test_globalCSPickerHidesGeographic() {

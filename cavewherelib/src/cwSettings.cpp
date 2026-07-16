@@ -4,6 +4,7 @@
 #include "cwPDFSettings.h"
 #include "cwFontSettings.h"
 #include "cwSketchSettings.h"
+#include "cwRenderingSettings.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -29,6 +30,7 @@ void cwSettings::initialize()
     cwPDFSettings::initialize();
     cwFontSettings::initialize();
     cwSketchSettings::initialize();
+    cwRenderingSettings::initialize();
 }
 
 cwSettings *cwSettings::instance()
@@ -50,4 +52,8 @@ cwFontSettings* cwSettings::fontSettings() const {
 
 cwSketchSettings* cwSettings::sketchSettings() const {
     return cwSketchSettings::instance();
+}
+
+cwRenderingSettings* cwSettings::renderingSettings() const {
+    return cwRenderingSettings::instance();
 }

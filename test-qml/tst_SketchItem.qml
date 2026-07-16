@@ -110,10 +110,12 @@ Item {
         function test_stylusInputAndUndo() {
             const initial = sketchId.strokeModel.rowCount()
 
-            drawStroke([Qt.point(100, 100),
-                        Qt.point(150, 120),
-                        Qt.point(200, 140),
-                        Qt.point(250, 160)])
+            // Keep x past the left toolbar (~114px wide) so the press lands on the
+            // canvas rather than a toolbar button.
+            drawStroke([Qt.point(200, 100),
+                        Qt.point(250, 120),
+                        Qt.point(300, 140),
+                        Qt.point(350, 160)])
             tryVerify(() => sketchId.strokeModel.rowCount() === initial + 1,
                       2000, "First drag should produce a stroke")
 

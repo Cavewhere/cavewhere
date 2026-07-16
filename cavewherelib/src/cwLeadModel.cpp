@@ -235,7 +235,7 @@ void cwLeadModel::addScrap(cwScrap *scrap)
             leadDataUpdated(scrap, 0, scrap->leads().size(), {cwScrap::LeadPosition});
         }
     });
-    connect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
+    connect(scrap, &cwScrap::destroyed, this, &cwLeadModel::scrapDeleted);
 }
 
 /**
@@ -246,30 +246,24 @@ void cwLeadModel::addScrap(cwScrap *scrap)
  */
 void cwLeadModel::updateOffsets(cwScrap *startScrap)
 {
-    int offset = ScrapToOffset.value(startScrap);
-    int nextOffset = offset + startScrap->numberOfLeads();
+    Q_UNUSED(startScrap);
 
-    auto iter = OffsetToScrap.lowerBound(offset);
-    Q_ASSERT(iter != OffsetToScrap.end());
+    // Recompute every scrap's offset as the running sum of the preceding scraps'
+    // lead counts, preserving the current scrap order (OffsetToScrap is sorted by
+    // offset). This is correct whether startScrap's lead count merely changed or
+    // the scrap was already removed from the database (its last lead deleted) —
+    // the previous lowerBound(startScrap) lookup asserted in the latter case.
+    const QList<cwScrap*> ordered = OffsetToScrap.values();
 
-    iter++;
+    OffsetToScrap.clear();
+    ScrapToOffset.clear();
 
-    bool updateOffset = false;
-    for(; iter != OffsetToScrap.end(); iter++) {
-        cwScrap* currentScrap = iter.value();
-        ScrapToOffset.insert(currentScrap, nextOffset);
-        nextOffset = nextOffset + currentScrap->numberOfLeads();
-        updateOffset = true;
+    int offset = 0;
+    for(cwScrap* scrap : ordered) {
+        OffsetToScrap.insert(offset, scrap);
+        ScrapToOffset.insert(scrap, offset);
+        offset += scrap->numberOfLeads();
     }
-
-    if(updateOffset) {
-        QMap<int, cwScrap*> offsetToScrap;
-        for(auto iter = ScrapToOffset.begin(); iter != ScrapToOffset.end(); iter++) {
-            offsetToScrap.insert(iter.value(), iter.key());
-        }
-        OffsetToScrap = offsetToScrap;
-    }
-
 }
 
 /**
@@ -376,13 +370,17 @@ void cwLeadModel::leadDataUpdated(cwScrap* scrap, int begin, int end, const QLis
  * @brief cwLeadModel::scrapDeleted
  * @param scrapObj
  *
- * Called when a scrap is deleted
+ * Called when a scrap is deleted.
+ *
+ * Note: this is connected to QObject::destroyed(QObject*), which fires from
+ * inside ~QObject() after the cwScrap-derived vtable has been reset. That
+ * means qobject_cast<cwScrap*>(scrapObj) returns nullptr here even though
+ * the pointer is genuinely a cwScrap* — only static_cast is valid, and only
+ * for use as a hash key (no member access).
  */
 void cwLeadModel::scrapDeleted(QObject *scrapObj)
 {
-    Q_ASSERT(qobject_cast<cwScrap*>(scrapObj) != nullptr);
     cwScrap* scrap = static_cast<cwScrap*>(scrapObj);
-
     removeScrap(scrap);
 }
 

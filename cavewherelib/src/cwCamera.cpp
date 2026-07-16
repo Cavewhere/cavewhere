@@ -204,6 +204,11 @@ QMatrix4x4 cwCamera::qtViewportMatrix() const
      return QRay3D(frontPoint, direction);
  }
 
+ QRay3D cwCamera::rayFromQtViewport(QPointF qtViewportPoint) const
+ {
+     return frustrumRay(mapToGLViewport(qtViewportPoint.toPoint()));
+ }
+
  /**
   * @brief cwCamera::pixelsPerMeter
   * @return double - pixels per meter
@@ -220,21 +225,45 @@ QMatrix4x4 cwCamera::qtViewportMatrix() const
      return pixelVector.x();
  }
 
+ cwPickQuery cwCamera::pickQuery(double pixelRadius) const
+ {
+     // No fov accessor is needed: the perspective slope falls out of the
+     // projection matrix, and ortho uses pixelsPerMeter directly. kinds stays
+     // at cwPickQuery::All — nearest of every kind by depth wins.
+     cwPickQuery query;
+     if (projection().type() == cwProjection::Ortho) {
+         const double pixelsPerMeterValue = pixelsPerMeter();
+         if (pixelsPerMeterValue > 0.0) {
+             query.tolerance.constant = pixelRadius / pixelsPerMeterValue;
+         }
+     } else {
+         // Slope from projectionMatrix(1,1) is exact for a symmetric frustum
+         // (the only perspective the 3D view uses). An off-axis/asymmetric
+         // frustum would make the tolerance slightly anisotropic.
+         const double p11 = projectionMatrix()(1, 1);
+         const int viewportHeight = viewport().height();
+         if (p11 > 0.0 && viewportHeight > 0) {
+             query.tolerance.slope = pixelRadius * 2.0 / (p11 * viewportHeight);
+         }
+     }
+     return query;
+ }
+
  /**
 * @brief cwCamera::setZoomScale
 * @param zoomScale
 */
  void cwCamera::setZoomScale(double zoomScale) {
-     if(projection().type() != cwProjection::Ortho) {
-         qWarning() << "Can't set zoom scale because the current projection isn't Ortho" << LOCATION;
-        return;
-     }
-
-     if(ZoomScale != zoomScale) {
-         ZoomScale = zoomScale;
+     if(ZoomScale == zoomScale) { return; }
+     ZoomScale = zoomScale;
+     // The projection itself only depends on ZoomScale under Ortho; for
+     // Perspective we still store the value so snapshot/restore round-trips
+     // (cwBaseTurnTableInteraction::viewState/setViewState) stay faithful
+     // across a projection swap.
+     if(projection().type() == cwProjection::Ortho) {
          setProjection(orthoProjectionDefault());
-         emit zoomScaleChanged();
      }
+     emit zoomScaleChanged();
  }
 
  /**
@@ -260,7 +289,7 @@ QMatrix4x4 cwCamera::qtViewportMatrix() const
  {
      cwProjection projection;
      QRectF viewport = this->viewport();
-     projection.setPerspective(55, viewport.width() / (float)viewport.height(), 1, 10000);
+     projection.setPerspective(defaultFieldOfView(), viewport.width() / (float)viewport.height(), 1, 10000);
      return projection;
  }
 

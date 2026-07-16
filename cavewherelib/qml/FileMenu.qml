@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 
-import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Dialogs
 import cavewherelib
@@ -8,7 +7,6 @@ import cavewherelib
 QC.Menu {
     id: fileMenuId
 
-    property QQ.Loader mainContentLoader
     required property FileDialog loadFileDialog
     required property SaveAsDialog saveAsFileDialog
     required property QC.ApplicationWindow applicationWindow
@@ -146,26 +144,6 @@ QC.Menu {
             onTriggered: RootData.scrapManager.updateAllScraps()
         }
 
-        // QC.MenuItem {
-        //     text: "Reload"
-        //     shortcut: "Ctrl+R"
-        //     onTriggered: {
-        //         //Keep the current address for the current page
-        //         var currentAddress = RootData.pageSelectionModel.currentPageAddress;
-        //         RootData.pageSelectionModel.clear();
-
-        //         var currentSource = mainContentLoader.source;
-        //         mainContentLoader.source = ""
-        //         mainContentLoader.asynchronous = false;
-        //         qmlReloader.reload();
-        //         mainContentLoader.source = currentSource;
-
-        //         console.log("Loader status:" + mainContentLoader.status + "Loader:" + QQ.Loader.Ready + " " + currentAddress)
-
-        //         RootData.pageSelectionModel.currentPageAddress = currentAddress;
-        //     }
-        // }
-
         QC.MenuItem {
             text: "Scraps Visible"
             checked: RootData.regionSceneManager.scraps.visible
@@ -211,17 +189,49 @@ QC.Menu {
             }
         }
 
-        QC.MenuItem {
-            text: "Resize to 1080p"
-            onTriggered: {
-                resizeTo(16, 9, 1920)
-            }
-        }
+        QC.Menu {
+            title: "Resize"
 
-        QC.MenuItem {
-            text: "Resize to 1080p - Vertical"
-            onTriggered: {
-                resizeTo(9, 16, 1920)
+            QC.MenuItem {
+                text: "1080p"
+                onTriggered: {
+                    resizeTo(16, 9, 1920)
+                }
+            }
+
+            QC.MenuItem {
+                text: "1080p - Vertical"
+                onTriggered: {
+                    resizeTo(9, 16, 1920)
+                }
+            }
+
+            QC.MenuItem {
+                text: "2k"
+                onTriggered: {
+                    resizeTo(16, 9, 2880)
+                }
+            }
+
+            QC.MenuItem {
+                text: "2k - Vertical"
+                onTriggered: {
+                    resizeTo(9, 16, 2880)
+                }
+            }
+
+            QC.MenuItem {
+                text: "4k"
+                onTriggered: {
+                    resizeTo(16, 9, 3840)
+                }
+            }
+
+            QC.MenuItem {
+                text: "4k - Vertical"
+                onTriggered: {
+                    resizeTo(9, 16, 3840)
+                }
             }
         }
 

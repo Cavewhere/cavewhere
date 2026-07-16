@@ -30,7 +30,7 @@ MainWindowTest {
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" })
 
             let carpetButton = ObjectFinder.findObjectByChain(
-                rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+                rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpetButton)
 
             // The "" → "SELECT" transition runs PropertyAnimations that
@@ -134,7 +134,7 @@ MainWindowTest {
             tryCompare(galleryView, "currentIndex", 0)
 
             let carpetButton = ObjectFinder.findObjectByChain(
-                rootId.mainWindow, "rootId->tripPage->noteGallery->carpetButtonId")
+                rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpetButton)
             wait(500)
             activateAddScrap()

@@ -124,11 +124,9 @@ QJSValue cwSortFilterProxyModel::get(int idx) const
     QJSEngine *engine = qmlEngine(this);
     QJSValue value = engine->newObject();
     if (idx >= 0 && idx < count()) {
-        QHash<int, QByteArray> roles = roleNames();
-        QHashIterator<int, QByteArray> it(roles);
-        while (it.hasNext()) {
-            it.next();
-            value.setProperty(QString::fromUtf8(it.value()), data(index(idx, 0), it.key()).toString());
+        const QHash<int, QByteArray> roles = roleNames();
+        for (const auto& [key, name] : roles.asKeyValueRange()) {
+            value.setProperty(QString::fromUtf8(name), data(index(idx, 0), key).toString());
         }
     }
     return value;
@@ -161,12 +159,10 @@ bool cwSortFilterProxyModel::setData(const QModelIndex &index, const QVariant &v
 
 int cwSortFilterProxyModel::roleKey(const QByteArray &role) const
 {
-    QHash<int, QByteArray> roles = roleNames();
-    QHashIterator<int, QByteArray> it(roles);
-    while (it.hasNext()) {
-        it.next();
-        if (it.value() == role)
-            return it.key();
+    const QHash<int, QByteArray> roles = roleNames();
+    for (const auto& [key, name] : roles.asKeyValueRange()) {
+        if (name == role)
+            return key;
     }
     return -1;
 }
@@ -186,12 +182,10 @@ bool cwSortFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &
     }
     QAbstractItemModel *model = sourceModel();
     if (filterRole().isEmpty()) {
-        QHash<int, QByteArray> roles = roleNames();
-        QHashIterator<int, QByteArray> it(roles);
-        while (it.hasNext()) {
-            it.next();
+        const QHash<int, QByteArray> roles = roleNames();
+        for (auto it = roles.keyBegin(), end = roles.keyEnd(); it != end; ++it) {
             QModelIndex sourceIndex = model->index(sourceRow, 0, sourceParent);
-            QString key = model->data(sourceIndex, it.key()).toString();
+            QString key = model->data(sourceIndex, *it).toString();
             if (key.contains(rx))
                 return true;
         }

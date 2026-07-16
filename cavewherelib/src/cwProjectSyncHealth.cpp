@@ -14,21 +14,18 @@ cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
     m_pollTimer.setInterval(5 * 60 * 1000);
     connect(&m_pollTimer, &QTimer::timeout, this, &cwProjectSyncHealth::refresh);
 
-    m_remoteStatusRestarter.onFutureChanged([this]() {
-        const auto future = m_remoteStatusRestarter.future();
-        const int requestId = m_activeRequestId;
-        const bool localChanges = m_pendingLocalChanges;
-        const bool usesTokenAuth = m_pendingUsesTokenAuth;
-        const QString remoteName = m_pendingRemoteName;
-        const QString branchName = m_pendingBranchName;
+    // The Restarter coalesces a burst of refresh() calls into a single run and
+    // delivers that run's result once. A run superseded by a newer refresh() is
+    // cancelled, which onResult() drops — so the request context
+    // (remote/branch/local-changes), read from members at delivery time below,
+    // always reflects the run that actually delivers.
+    m_remoteStatusRestarter.onResult(this,
+        [this](const Monad::Result<QQuickGit::GitRepository::AheadBehindCounts>& aheadBehindResult) {
+                const bool localChanges = m_pendingLocalChanges;
+                const bool usesTokenAuth = m_pendingUsesTokenAuth;
+                const QString remoteName = m_pendingRemoteName;
+                const QString branchName = m_pendingBranchName;
 
-        AsyncFuture::observe(future)
-            .context(this, [this, future, requestId, localChanges, usesTokenAuth, remoteName, branchName]() {
-                if (future.isCanceled() || requestId != m_activeRequestId) {
-                    return;
-                }
-
-                const auto aheadBehindResult = future.result();
                 if (aheadBehindResult.hasError()) {
                     const bool authFailed =
                         aheadBehindResult.errorCode()
@@ -66,8 +63,7 @@ cwProjectSyncHealth::cwProjectSyncHealth(QObject* parent) :
                                      .arg(static_cast<int>(aheadBehindResult.value().ahead))
                                      .arg(static_cast<int>(aheadBehindResult.value().behind))
                                      .arg(localChanges ? QStringLiteral(", local edits pending") : QString())});
-            });
-    });
+        });
 }
 
 cwSyncStatus cwProjectSyncHealth::status() const
@@ -245,7 +241,6 @@ void cwProjectSyncHealth::scheduleRemoteStatusRefresh(bool hasLocalChanges,
     m_pendingRemoteName = remoteName;
     m_pendingBranchName = branchName;
     m_pendingUsesTokenAuth = usesTokenAuth;
-    ++m_activeRequestId;
 
     QPointer<QQuickGit::GitRepository> repoPtr = repo;
     m_remoteStatusRestarter.restart([repoPtr, remoteName, branchName]() -> QQuickGit::GitRepository::AheadBehindFuture {

@@ -1,143 +1,77 @@
+import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-ColumnLayout  {
-    id: settingsId
-    // property OpenGLSettings renderingSettings: RootData.settings.renderingSettings
+ColumnLayout {
+    id: itemId
 
-    // QC.GroupBox {
-    //     title: "Texture Settings"
-    //     ColumnLayout {
-    //         id: textureColumnId
-    //         SupportedCheckLabel {
-    //             Layout.fillWidth: true
-    //             text: "Compression"
-    //             helpText: "When enabled, CaveWhere uses DXT1 compression OpenGL texture maps. This slightly reduces image quality of scraps, but reduces GPU memory by 1/4. When disabled, 4 times more GPU memory will be used but textures will look slightly better. It's recommended to leave this option enabled if supported.";
-    //             supported: settingsId.renderingSettings.dxt1Supported
-    //             using: settingsId.renderingSettings.useDXT1Compression
-    //             onUsingChanged: {
-    //                 settingsId.renderingSettings.useDXT1Compression = using
-    //             }
-    //         }
+    property RenderingSettings renderingSettings: RootData.settings.renderingSettings
 
-    //         SupportedCheckLabel {
-    //             Layout.fillWidth: true
-    //             text: "GPU Accelerated Compression"
-    //             helpText: "When enabled, CaveWhere will compress images on the GPU, instead of the CPU. When enabled, this can improve image loading preformance by 20 time vs thread CPU compression (when this option is disabled). It's recommended to leave this option enabled if supported."
-    //             supported: settingsId.renderingSettings.gpuGeneratedDXT1Supported
-    //             using: settingsId.renderingSettings.dxt1Algorithm === OpenGLSettings.DXT1_GPU
-    //             onUsingChanged: {
-    //                 if(using) {
-    //                     settingsId.renderingSettings.dxt1Algorithm = OpenGLSettings.DXT1_GPU
-    //                 } else {
-    //                     settingsId.renderingSettings.dxt1Algorithm = OpenGLSettings.DXT1_Squish
-    //                 }
-    //             }
-    //         }
+    QC.GroupBox {
+        title: "Anti-aliasing"
+        Layout.fillWidth: true
 
-    //         SupportedCheckLabel {
-    //             Layout.fillWidth: true
-    //             text: "Anisotropy"
-    //             helpIcon: "qrc:/icons/Anisotropic_filtering_en.png"
-    //             helpText: "When enabled, CaveWhere improves texture rendering by reducing texture blurring between mipmaps at the cost of rendering preformance. Rendering preformance maybe improved by disabling this option."
-    //             supported: settingsId.renderingSettings.anisotropySupported
-    //             using: settingsId.renderingSettings.useAnisotropy
-    //             onUsingChanged: {
-    //                 settingsId.renderingSettings.useAnisotropy = using
-    //             }
-    //         }
-    //     }
-    // }
+        ColumnLayout {
+            RowLayout {
+                InformationButton {
+                    showItemOnClick: msaaHelpId
+                }
 
-    // CheckableGroupBox {
-    //     id: mipmapsId
-    //     text: "Use Mipmaps"
-    //     checked: settingsId.renderingSettings.useMipmaps
-    //     onCheckedChanged: {
-    //         settingsId.renderingSettings.useMipmaps = checked
-    //     }
+                QC.Label {
+                    text: "MSAA samples"
+                }
 
-    //     ColumnLayout {
-    //         InformationButton {
-    //             showItemOnClick: mipmapHelpAreaId
-    //         }
+                QC.ComboBox {
+                    id: msaaComboBoxId
+                    objectName: "msaaSampleCountComboBox"
 
-    //         HelpArea {
-    //             id: mipmapHelpAreaId
-    //             Layout.fillWidth: true
-    //             text: "When mipmaps are enabled, CaveWhere will pyramid textures to reduce rendering artifacts. Disabling this option will reduce texture memory use, but will reduce the quality of the renderer. It's recommended to keep this enabled."
-    //         }
+                    textRole: "text"
+                    valueRole: "value"
+                    // Built from the backend's supported MSAA levels (reported by
+                    // cwRhiScene), so the list only ever offers counts the device
+                    // accepts — platform dependent (e.g. Metal: 1/2/4, no 8).
+                    model: {
+                        let counts = itemId.renderingSettings.supportedSampleCounts;
+                        let entries = [];
+                        for (let i = 0; i < counts.length; ++i) {
+                            let n = counts[i];
+                            entries.push({ text: n === 1 ? "Off (1×)" : (n + "×"), value: n });
+                        }
+                        return entries;
+                    }
 
-    //         ComboBoxWithInfo {
-    //             enabled: mipmapsId.enabled
-    //             text: "Magification Filter"
-    //             helpText: "When set to Nearest, zooming in on textures will render individual pixels. Using Linear, will cause the textures pixel to be blended together";
-    //             model: settingsId.renderingSettings.magFilterModel
-    //             currentIndex: settingsId.renderingSettings.magFilter
-    //             onCurrentIndexChanged: {
-    //                 settingsId.renderingSettings.magFilter = currentIndex
-    //             }
-    //         }
+                    // indexOfValue() isn't reactive and a currentIndex binding
+                    // evaluates before the model is applied, so it would resolve to
+                    // -1 (no selection). Set it once the model exists and re-sync
+                    // whenever the setting or the supported list changes (e.g.
+                    // Restore Defaults, or the backend reporting its sample counts).
+                    function syncToSettings() {
+                        currentIndex = indexOfValue(itemId.renderingSettings.sampleCount);
+                    }
 
-    //         ComboBoxWithInfo {
-    //             enabled: mipmapsId.enabled
-    //             text: "Minification Filter"
-    //             helpText: "The renderer will filter between mipmaps when zoomed out. The default is Nearest Mipmap Linear";
-    //             model: settingsId.renderingSettings.minFilterModel
-    //             currentIndex: settingsId.renderingSettings.minFilter
-    //             onCurrentIndexChanged: {
-    //                 settingsId.renderingSettings.minFilter = currentIndex
-    //             }
-    //         }
-    //     }
-    // }
+                    QQ.Component.onCompleted: syncToSettings()
+                    onCountChanged: syncToSettings()
+                    onActivated: {
+                        itemId.renderingSettings.sampleCount = currentValue;
+                    }
 
-    // QC.GroupBox {
-    //     title: "Engine"
+                    QQ.Connections {
+                        target: itemId.renderingSettings
+                        function onSampleCountChanged() { msaaComboBoxId.syncToSettings() }
+                    }
+                }
+            }
 
-    //     ColumnLayout {
+            HelpArea {
+                id: msaaHelpId
+                Layout.fillWidth: true
+                text: "Multisample anti-aliasing smooths jagged edges in the 3D view. Higher sample counts look better but cost more GPU time, especially with a point cloud visible (Eye-Dome Lighting runs once per sample). Off disables anti-aliasing. Changes apply immediately."
+            }
+        }
+    }
 
-    //         Text {
-    //             visible: settingsId.renderingSettings.needsRestart
-    //             text: "Restart Required!"
-    //         }
-
-    //         ComboBoxWithInfo {
-    //             text: "Renderer"
-    //             helpText: "The underlying OpenGL engine. It's recommended to use Automatic which should choose the correct renderer for you."
-    //             model: settingsId.renderingSettings.rendererModel
-    //             currentIndex: settingsId.renderingSettings.currentSupportedRenderer
-    //             onCurrentIndexChanged: {
-    //                 settingsId.renderingSettings.currentSupportedRenderer = currentIndex
-    //             }
-    //         }
-
-    //         CheckBoxWithInfo {
-    //             Layout.fillWidth: true
-    //             text: "Native Text Rendering"
-    //             helpText: "When enabled, CaveWhere uses native texture rendering. When disabled, CaveWhere uses OpenGL texture rendering (better performance). Unless you're seeing text rendering artifacts, it's recommended to keep this option disabled";
-    //             using: settingsId.renderingSettings.useNativeTextRendering
-    //             onUsingChanged: {
-    //                 settingsId.renderingSettings.useNativeTextRendering = using
-    //             }
-    //         }
-    //     }
-    // }
-
-    // QC.GroupBox {
-    //     title: "OpenGL Info"
-
-    //     ColumnLayout {
-    //         ResizeableScrollView {
-    //             implicitWidth: 400
-    //             implicitHeight: 150
-    //             QC.TextArea {
-    //                 readOnly: true
-    //                 selectByMouse: true
-    //                 text: settingsId.renderingSettings.allVersionInfo
-    //             }
-    //         }
-    //     }
-    // }
+    RestoreDefaultsButton {
+        settings: itemId.renderingSettings
+    }
 }

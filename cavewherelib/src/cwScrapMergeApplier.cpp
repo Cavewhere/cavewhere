@@ -77,16 +77,20 @@ bool areTransformBundleEquivalent(const cwScrapBaseIdentityData::GeometryData::T
     }
 
     if (lhs.hasProjectedProfileView) {
-        if (!almostEqual(lhs.projectedAzimuth, rhs.projectedAzimuth)
-            || lhs.projectedDirection != rhs.projectedDirection) {
+        if (lhs.projectedDirection != rhs.projectedDirection) {
+            return false;
+        }
+        // Under auto-calc the azimuth is minimizer-derived and recomputed on load,
+        // so a stored-vs-recomputed diff must not count as a conflict.
+        if (!lhs.calculateNoteTransform
+            && !almostEqual(lhs.projectedAzimuth, rhs.projectedAzimuth)) {
             return false;
         }
     }
 
     if (lhs.calculateNoteTransform) {
-        // Auto-calculated scraps derive north/scale from stations and geometry, so
-        // persisted note-transform values are not authoritative for merge conflict
-        // detection. Compare only mode and view settings above.
+        // Auto-calc derives north/scale (and azimuth above) from geometry, so
+        // persisted transform values aren't authoritative for conflict detection.
         return true;
     }
 

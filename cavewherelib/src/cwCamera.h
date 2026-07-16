@@ -11,6 +11,7 @@
 //Our includes
 #include "cwProjection.h"
 #include "cwGlobals.h"
+#include "cwPickQuery.h"
 
 //Math 3D
 #include <qray3d.h>
@@ -66,6 +67,11 @@ public:
 
     QRay3D frustrumRay(QPoint point) const;
 
+    /// Convenience: takes a Qt viewport pixel (origin top-left, e.g. from a
+    /// QML TapHandler eventPoint) and returns the corresponding world-space
+    /// frustum ray. Handles the Y-flip that frustrumRay() alone doesn't.
+    QRay3D rayFromQtViewport(QPointF qtViewportPoint) const;
+
     static QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point, const QRect& viewport);
     Q_INVOKABLE QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point) const;
     // Returns true when a point in normalized device coordinates lies outside the clip volume.
@@ -80,12 +86,19 @@ public:
 
     //Utility functions
     double pixelsPerMeter() const; //Only valid with ortho projection
+
+    //! Builds a pick query whose tolerance matches a screen-space radius of
+    //! pixelRadius pixels at the current projection — a perspective slope or an
+    //! ortho constant — with kinds left at cwPickQuery::All. Camera-agnostic
+    //! callers (the geometry intersecter) stay decoupled from the projection.
+    cwPickQuery pickQuery(double pixelRadius) const;
     cwProjection orthoProjectionDefault() const;
     cwProjection perspectiveProjectionDefault() const;
 
     QVector3D position() const;
 
     double defaultZoomScale() const { return 0.5; }
+    static constexpr double defaultFieldOfView() { return 55.0; }
 
 signals:
     void viewportChanged();

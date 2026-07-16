@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Centerline Per-Shot Visibility — Redesign Plan</title>
+<style>
+  :root {
+    --bg: #1a1d21; --panel: #23272e; --panel2: #2b3038; --ink: #e6e9ee;
+    --muted: #9aa4b2; --accent: #5aa9e6; --accent2: #7ddc8f; --warn: #e6b35a;
+    --bad: #e66a6a; --line: #3a414b; --code-bg: #15181c;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 120px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 { font-size: 22px; margin: 52px 0 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); letter-spacing: -0.2px; }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  p { margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 13.5px; background: var(--code-bg);
+    padding: 1.5px 6px; border-radius: 4px; color: #d8e0ea; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 18px 0; }
+  .fig { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin: 22px 0; text-align: center; }
+  .fig svg { max-width: 100%; height: auto; }
+  .figcap { color: var(--muted); font-size: 13.5px; margin-top: 12px; text-align: center; }
+  .figcap b { color: var(--ink); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px;
+    border-radius: 999px; vertical-align: middle; }
+  .pill.ok { background: rgba(125,220,143,.16); color: var(--accent2); }
+  .pill.new { background: rgba(90,169,230,.16); color: var(--accent); }
+  .pill.edit { background: rgba(230,179,90,.16); color: var(--warn); }
+  .pill.del { background: rgba(230,106,106,.16); color: var(--bad); }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); font-weight: 600; }
+  td code { font-size: 12.5px; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel2);
+    padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+  .callout.warn { border-color: var(--warn); }
+  .callout.bad { border-color: var(--bad); }
+  .callout.ok { border-color: var(--accent2); }
+  .toc { columns: 2; column-gap: 32px; font-size: 14px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .step-num { display:inline-flex; align-items:center; justify-content:center;
+    width:24px; height:24px; border-radius:50%; background:var(--accent);
+    color:#0d1014; font-weight:700; font-size:13px; margin-right:8px; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+  .mono-note { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Centerline Per-Shot Visibility — Redesign Plan</h1>
+<p class="sub">Replace the per-trip <code>tripId</code>+R8-texture visibility with per-shot de-sharing and per-vertex visibility, as the foundation for arbitrary keyword / named-region filtering of the 3D centerline.</p>
+
+<div class="callout">
+  <b>Status / baseline.</b> The current per-trip implementation is <b>committed</b> as
+  <code>9f79c241</code> ("Add keyword visibility for the survey centerline") on branch
+  <code>dev_cavewhere</code>. This plan supersedes its <em>internal representation</em> only — the
+  user-facing feature (keyword + <code>Type = Line Plot</code> filtering) is unchanged. Evolve the
+  working tree in place on top of that commit; squash before merge if a single clean commit is
+  wanted. Do <b>not</b> stash-and-restart — the keyword/manager half is reused almost verbatim.
+</div>
+
+<h2>1. Contents</h2>
+<div class="toc">
+  <a href="#why">2. Why redesign</a><br>
+  <a href="#idea">3. The core idea</a><br>
+  <a href="#delta">4. What changes vs the committed impl</a><br>
+  <a href="#geom">5. Geometry — per-shot de-share</a><br>
+  <a href="#render">6. Render / RHI — per-vertex visibility</a><br>
+  <a href="#manager">7. Manager — CPU resolution</a><br>
+  <a href="#combine">8. Combination semantics (overlap / AND)</a><br>
+  <a href="#tradeoffs">9. Tradeoffs &amp; accounting</a><br>
+  <a href="#steps">10. Implementation steps</a><br>
+  <a href="#tests">11. Tests</a><br>
+  <a href="#future">12. Future / out of scope</a><br>
+  <a href="#decisions">13. Decisions locked in</a>
+</div>
+
+<h2 id="why">2. Why redesign</h2>
+<p>The committed implementation keys visibility by <b>trip</b>: vertices are de-shared per trip, each
+carries a <code>tripId</code>, and an R8 texture (one texel per trip) holds visible/hidden, sampled
+in the vertex shader. That is the right shape for a <em>coarse, unbounded, single-membership</em>
+axis (trips). It does not extend cleanly to what we actually want next:</p>
+<ul>
+  <li><b>Arbitrary keyword groups on a series of shots</b> — e.g. "this zone is a named level," which
+    can span multiple trips and overlap other groups. A segment then has <em>multiple, overlapping</em>
+    memberships, and visibility becomes an <b>AND</b> of them. One <code>tripId</code> texel can't
+    represent that.</li>
+  <li>At cave scale (typical 1–2k stations; the longest cave on Earth ~100k) the texture indirection
+    buys nothing measurable — its only edge was being smaller than per-vertex storage <em>when groups
+    ≪ vertices</em>, which stops being true once groups get fine-grained.</li>
+  <li>Re-uploading an R8 texture is the same class of GPU transfer as re-uploading a small buffer, so
+    the indirection is pure machinery (texture, sampler, SRB binding, recreate-on-width,
+    <code>texelFetch</code>) with no payoff at these sizes.</li>
+</ul>
+<p>The per-shot model below is simpler <em>and</em> strictly more flexible, and it is the natural
+foundation for the named-region feature.</p>
+
+<h2 id="idea">3. The core idea</h2>
+<p><b>De-share at the shot, not the trip.</b> A station is not a renderable thing — a <em>shot</em> is.
+The centerline is a set of segments, so make the shot the atomic, independent unit: each shot owns its
+own two endpoint vertices. A station reused by consecutive shots is duplicated, once per shot.</p>
+
+<div class="fig">
+<svg viewBox="0 0 820 250" xmlns="http://www.w3.org/2000/svg" font-family="var(--mono)">
+  <!-- committed: shared within trip -->
+  <text x="200" y="28" fill="#9aa4b2" font-size="13" text-anchor="middle" font-weight="600">Committed: shared within trip</text>
+  <circle cx="80"  cy="90" r="9" fill="#5aa9e6"/><text x="80"  y="120" fill="#e6e9ee" font-size="12" text-anchor="middle">A1</text>
+  <circle cx="200" cy="90" r="9" fill="#5aa9e6"/><text x="200" y="120" fill="#e6e9ee" font-size="12" text-anchor="middle">A2</text>
+  <circle cx="320" cy="90" r="9" fill="#5aa9e6"/><text x="320" y="120" fill="#e6e9ee" font-size="12" text-anchor="middle">A3</text>
+  <line x1="89" y1="90" x2="191" y2="90" stroke="#7ddc8f" stroke-width="2.5"/>
+  <line x1="209" y1="90" x2="311" y2="90" stroke="#7ddc8f" stroke-width="2.5"/>
+  <text x="200" y="158" fill="#9aa4b2" font-size="11" text-anchor="middle">3 vertices, index buffer [A1,A2, A2,A3], A2 shared</text>
+  <text x="200" y="176" fill="#9aa4b2" font-size="11" text-anchor="middle">hiding A2's vertex would kill both segments</text>
+
+  <!-- per-shot -->
+  <text x="610" y="28" fill="#9aa4b2" font-size="13" text-anchor="middle" font-weight="600">Per-shot de-share</text>
+  <circle cx="470" cy="70" r="9" fill="#5aa9e6"/><text x="470" y="58" fill="#e6e9ee" font-size="12" text-anchor="middle">A1</text>
+  <circle cx="590" cy="70" r="9" fill="#5aa9e6"/><text x="590" y="58" fill="#e6e9ee" font-size="12" text-anchor="middle">A2</text>
+  <line x1="479" y1="70" x2="581" y2="70" stroke="#7ddc8f" stroke-width="2.5"/>
+  <text x="535" y="92" fill="#7ddc8f" font-size="11" text-anchor="middle">shot 0</text>
+  <circle cx="590" cy="125" r="9" fill="#e6b35a"/><text x="590" y="148" fill="#e6e9ee" font-size="12" text-anchor="middle">A2′</text>
+  <circle cx="710" cy="125" r="9" fill="#e6b35a"/><text x="710" y="148" fill="#e6e9ee" font-size="12" text-anchor="middle">A3</text>
+  <line x1="599" y1="125" x2="701" y2="125" stroke="#7ddc8f" stroke-width="2.5"/>
+  <text x="655" y="167" fill="#7ddc8f" font-size="11" text-anchor="middle">shot 1</text>
+  <text x="610" y="200" fill="#9aa4b2" font-size="11" text-anchor="middle">4 vertices = 2 per shot, A2 duplicated, no index buffer</text>
+  <text x="610" y="218" fill="#9aa4b2" font-size="11" text-anchor="middle">hide shot 1 → collapse A2′,A3 only — leak-free by construction</text>
+</svg>
+<div class="figcap"><b>Figure 1.</b> The complete de-share. No vertex is shared between two shots, so
+collapsing a shot's vertices affects exactly that shot — no special masking logic, no dedup hash.</div>
+</div>
+
+<p><b>Visibility is per-shot, stored per-vertex.</b> Each vertex carries a 1-byte visibility value
+(both vertices of a shot share it) in a <em>separate dynamic buffer</em> parallel to positions. The
+vertex shader reads it directly and collapses hidden vertices off-clip. <b>No R8 texture, no sampler,
+no SRB texture binding, no <code>texelFetch</code>, no index buffer</b> (shots are consecutive vertex
+pairs → non-indexed line list).</p>
+
+<p><b>The CPU resolves every grouping.</b> Trip, level, named region, even a single shot are all just
+"a set of shots." The manager maps any active keyword filter to per-shot visibility (the AND of every
+group a shot belongs to) and writes the bytes. One mechanism covers every axis, including overlapping
+ones, with no group-count cap.</p>
+
+<h2 id="delta">4. What changes vs the committed implementation</h2>
+<table>
+  <tr><th>Area</th><th></th><th>Change</th></tr>
+  <tr><td>Manager keyword wiring — <code>reconcileTripKeywordItems</code>, UUID identity resolution, teardown helpers, <code>destroyed</code> disconnect, <code>Type = Line Plot</code>, <code>cwRootData</code> wiring</td><td><span class="pill ok">keep</span></td><td>Survives almost verbatim. Only <em>what the proxy pokes</em> changes (vertex ranges, not a <code>tripId</code> texel).</td></tr>
+  <tr><td><code>cwLinePlotTripVisibility</code> proxy + registration lifecycle</td><td><span class="pill ok">keep</span></td><td>Proxy stays; its setter calls a per-shot/range API instead of <code>setTripVisible(id)</code>.</td></tr>
+  <tr><td><code>cwTracked</code> geometry-vs-visibility split</td><td><span class="pill ok">keep</span></td><td>Positions stay immutable; a separate visibility buffer is the mutable tracked member.</td></tr>
+  <tr><td><code>cwLinePlotGeometry::generate</code></td><td><span class="pill edit">rework</span></td><td>Emit per-shot vertex pairs (drop the <code>tripVertexLookup</code> dedup hash). Emit a <code>trip → vertex-range</code> table (and the index→UUID table) for CPU resolution. Keep the bug #435 handling (skip shots whose stations have no position).</td></tr>
+  <tr><td><code>cwRenderLinePlot</code> / <code>cwRHILinePlot</code></td><td><span class="pill edit">rework</span></td><td>Positions buffer = per-shot pairs (static). Add a separate dynamic per-vertex visibility buffer. Drop the index buffer (non-indexed line list).</td></tr>
+  <tr><td>R8 texture, sampler, SRB texture binding, recreate-on-width, <code>texelFetch</code></td><td><span class="pill del">delete</span></td><td>Replaced by the per-vertex visibility attribute.</td></tr>
+  <tr><td><code>tripId</code> vertex attribute + buffer</td><td><span class="pill del">delete</span></td><td>No longer needed on the GPU (visibility is per-vertex). Trip membership lives CPU-side.</td></tr>
+  <tr><td><code>shaders/LinePlot.vert</code></td><td><span class="pill edit">rework</span></td><td>Read the visibility attribute and collapse if hidden (was <code>texelFetch</code>). May allow reverting to the default shader GLSL targets since <code>texelFetch</code> is gone.</td></tr>
+  <tr><td>Geometry test (asserts per-trip de-share)</td><td><span class="pill edit">rework</span></td><td>Rewrite for per-shot duplication (A2 appears once per shot).</td></tr>
+  <tr><td>Manager keyword tests (registration, Type, toggle, survive-re-solve, removal)</td><td><span class="pill ok">keep</span></td><td>Operate at the trip/keyword level; mostly unchanged.</td></tr>
+</table>
+
+<h2 id="geom">5. Geometry — per-shot de-share</h2>
+<p><code>cwLinePlotGeometry::generate</code> becomes simpler:</p>
+<ul>
+  <li>For each cave → trip → chunk → shot: resolve the from/to station world positions. If both exist,
+    append <b>two vertices</b> (from, to) as a segment. No <code>QHash</code> dedup — every shot is
+    independent.</li>
+  <li>Lay vertices out grouped by trip (and contiguous per trip), so a trip is a single
+    <code>[vertexStart, vertexCount)</code> range. Emit that <code>trip → range</code> table (indexed
+    by the same running id as the <code>index → UUID</code> table the manager already resolves).</li>
+  <li>Keep the bug #435 bootstrap: a shot whose station has no solved position is skipped (its segment
+    simply isn't emitted), exactly as today's <code>vertexFor</code> returns the −1 sentinel.</li>
+  <li>Depth/length accumulation is unchanged (read positions; respect <code>isDistanceIncluded()</code>).</li>
+</ul>
+<p>Result struct: <code>points</code> (2 per emitted shot), a per-trip <code>vertexRanges</code> table,
+the <code>tripUuids</code> (index→UUID) table. The per-vertex <code>tripIds</code> array is gone.
+(No index array — the renderer draws a non-indexed line list.)</p>
+
+<h2 id="render">6. Render / RHI — per-vertex visibility</h2>
+<ul>
+  <li><b>Positions buffer</b> — per-shot vertex pairs, uploaded once per solve, never touched on toggle.</li>
+  <li><b>Visibility buffer</b> — a separate dynamic buffer, one entry per vertex (both vertices of a
+    shot share the value), <code>cwTracked</code> independently of positions so a toggle re-uploads
+    only this buffer. Format an impl detail (RHI vertex attributes generally want 4-byte alignment, so
+    likely a <code>uint</code> or normalized <code>UByte4</code> read as <code>.r</code> — note this is
+    the same ~4 bytes/vertex the deleted <code>tripId</code> attribute used).</li>
+  <li><b>No index buffer</b> — draw as a non-indexed line list; segment <code>i</code> = vertices
+    <code>[2i, 2i+1]</code>.</li>
+  <li><b>Shader</b> — <code>if (visibility &lt; 0.5) { gl_Position = vec4(2,2,2,1); return; }</code>,
+    reading the per-vertex attribute. No texture sample.</li>
+  <li>Render-object API: replace <code>setTripVisible(id,bool)</code> with a per-vertex /
+    per-range write (e.g. <code>setVisibility(QVector&lt;quint8&gt;)</code> or
+    <code>setRangeVisible(start, count, bool)</code>); keep <code>setGeometry(points, vertexRanges)</code>
+    resetting visibility to all-visible.</li>
+</ul>
+<div class="callout"><b>Keep the constants.</b> Reuse the <code>kTripVisible = 0xFF</code> /
+<code>kTripHidden = 0x00</code> sentinels (rename to <code>kVisible</code>/<code>kHidden</code>); the
+0.5 shader threshold is unchanged.</div>
+
+<h2 id="manager">7. Manager — CPU resolution</h2>
+<p>The manager keeps its keyword-item-per-group machinery (committed). What changes is the push:</p>
+<ol>
+  <li>It holds, per group, the set of shots/vertex-ranges that group covers. For trips this is the
+    <code>trip → range</code> table from geometry. For future named regions it is the region's shot set.</li>
+  <li>On a toggle (proxy <code>setVisible</code>) or after a solve, it writes per-vertex visibility =
+    <b>AND of every group's state over that vertex's shot</b>, then pushes the (small) buffer.</li>
+  <li><code>setGeometry</code> resets all-visible; reconcile re-applies hidden groups by writing their
+    ranges — same reset-then-seed flow as today, but writing buffer ranges instead of texels.</li>
+</ol>
+<p>For the current trips-only feature, each shot belongs to exactly one group (its trip), so the AND is
+trivial and writes are contiguous per-trip ranges.</p>
+
+<h2 id="combine">8. Combination semantics (overlap / AND)</h2>
+<p>A shot is visible iff <b>every</b> group it belongs to is visible. Because the combination is resolved
+on the CPU into a single per-vertex byte, this handles arbitrary overlap and any number of groups with
+<b>no cap</b> — the reason per-vertex visibility beats a GPU bitmask (which would cap groups at the mask
+width and bloat the vertex attribute). On any single group toggle, only that group's shots need
+recomputing/re-uploading.</p>
+
+<h2 id="tradeoffs">9. Tradeoffs &amp; accounting</h2>
+<p>For a trip with <code>S</code> stations (<code>S−1</code> shots), rough bytes:</p>
+<table>
+  <tr><th></th><th>Committed (per-trip de-share + texture)</th><th>Per-shot + per-vertex visibility</th></tr>
+  <tr><td>positions</td><td>~12·S</td><td>~24·S (2 vertices/shot)</td></tr>
+  <tr><td>per-vertex id / visibility</td><td>4·S (<code>tripId</code>)</td><td>~4·S (visibility)</td></tr>
+  <tr><td>index buffer</td><td>~8·S</td><td><b>none</b></td></tr>
+  <tr><td>visibility table</td><td>R8 texture (trip-count)</td><td>(folded into the per-vertex buffer)</td></tr>
+  <tr><td><b>≈ total</b></td><td><b>~24·S</b></td><td><b>~28–32·S</b></td></tr>
+  <tr><td>toggle upload</td><td>re-upload trip table (~KB)</td><td>re-upload visibility buffer / affected ranges (~KB–100s KB worst case)</td></tr>
+  <tr><td>generate()</td><td>per-trip dedup hash</td><td>just emit pairs (simpler)</td></tr>
+  <tr><td>RHI machinery</td><td>texture + sampler + SRB-tex + recreate + texelFetch</td><td>one extra vertex buffer</td></tr>
+</table>
+<p>Modestly more memory (positions ~2×, but the index buffer and texture go away), <b>immaterial at cave
+scale</b> — typical caves are 1–2k stations (low KB); the largest on Earth ~100k stations (~MBs). Toggle
+re-uploads are sub-millisecond and only on user action. Net: simpler GPU path, more flexibility, trivial
+cost.</p>
+
+<h2 id="steps">10. Implementation steps</h2>
+<ol>
+  <li><b>Geometry</b> — rewrite <code>generate</code> for per-shot pairs; emit <code>trip → vertex-range</code>
+    + <code>tripUuids</code>; drop <code>tripVertexLookup</code> and the per-vertex <code>tripIds</code>;
+    keep #435 handling. Update <code>cwLinePlotTask</code> pass-throughs. Rewrite the geometry test.</li>
+  <li><b>Render / RHI</b> — positions buffer = pairs; add the dynamic per-vertex visibility buffer
+    (separate <code>cwTracked</code>); drop the index buffer (non-indexed line list); delete the R8
+    texture / sampler / SRB-texture / recreate path; update the shader to read the attribute. Run the
+    line-plot tests.</li>
+  <li><b>Manager</b> — store <code>trip → range</code>; replace the texel push with per-range visibility
+    writes (AND for overlap); keep reconcile/Type/UUID identity; re-seed hidden ranges after solve.</li>
+  <li><b>Tests</b> — geometry per-shot duplication; reuse the <code>[LinePlotManager][keyword]</code>
+    cases (registration, Type, toggle, survive-re-solve, removal) adjusted for the new visibility query.</li>
+  <li><b>Verify</b> — build <code>cavewhere-test</code> + <code>cavewhere-qml-test</code>; run the full
+    C++ suite and the QML suite (offscreen), teeing to <code>/tmp/*.log</code>. Then manually confirm in
+    the running app that filtering hides/shows centerline segments.</li>
+</ol>
+<div class="callout warn"><b>Per-sketch-plan workflow:</b> for staged commits run only the new tests at
+each step; run the full C++ + QML suites once at the end before pushing.</div>
+
+<h2 id="tests">11. Tests</h2>
+<ul>
+  <li><b>Geometry</b> (<code>test_cwLinePlotGeometry.cpp</code>): a shared station appears once <em>per
+    shot</em> (e.g. A1→A2→A3 ⇒ 4 vertices, A2 twice); vertex count = 2 × emitted shots; per-trip
+    vertex-range table is correct; UUID table maps by identity; #435 shots with no position are skipped.</li>
+  <li><b>Manager</b> (<code>[LinePlotManager][keyword]</code>): one item per trip; each publishes
+    <code>Type = Line Plot</code> + the trip's keywords; default all-visible; hiding a proxy hides exactly
+    that trip's shots; hidden state survives a re-solve (UUID identity); removing a trip drops its item.</li>
+</ul>
+
+<h2 id="future">12. Future / out of scope</h2>
+<ul>
+  <li><b>Named regions / arbitrary keyword groups</b> — the payoff. A region = a user-selected set of
+    stations/shots (possibly spanning trips/caves) owning its own <code>cwKeywordModel</code>; the manager
+    registers a keyword item per region whose shots AND into the per-vertex visibility. Needs a data-model
+    entity + persistence (protobuf) + selection UI. Per-shot visibility is the enabling foundation.</li>
+  <li><b>Splays</b> — currently stored on stations (<code>cwStation::m_splays</code>) but not rendered.
+    Per-shot naturally accommodates them (each splay = one shot = 2 vertices) if/when rendered.</li>
+  <li><b>Picking</b> — the centerline is not pickable today (the BVH skips <code>Lines</code>); tracked in
+    <a href="https://github.com/Cavewhere/cavewhere/issues/530">#530</a>. Per-shot helps:
+    <code>shotId = vertexId / 2</code> maps a hit straight back to a shot.</li>
+  <li>Related cleanup issues from the committed work:
+    <a href="https://github.com/Cavewhere/cavewhere/issues/531">#531</a> (visibility-proxy base class),
+    <a href="https://github.com/Cavewhere/cavewhere/issues/532">#532</a> (<code>cwTracked::setValue</code> rvalue overload).</li>
+</ul>
+
+<h2 id="decisions">13. Decisions locked in (from discussion)</h2>
+<ul>
+  <li><b>De-share per shot</b> — each shot owns its 2 vertices; shared stations duplicated per shot. Shot
+    is the atomic, leak-free unit of visibility.</li>
+  <li><b>Per-vertex visibility, no texture</b> — visibility stored per-vertex in a separate dynamic
+    buffer; the R8-texture indirection is dropped (no benefit once visibility is shot-grained; texture
+    re-upload ≈ buffer re-upload).</li>
+  <li><b>Drop the index buffer</b> — non-indexed line list.</li>
+  <li><b>CPU resolves combination</b> — per-shot visibility = AND of all its groups; no GPU bitmask, no
+    group-count cap, native overlap. (Bitmask rejected: it caps groups and only wins on zero-re-upload
+    toggles, which don't matter at cave scale.)</li>
+  <li><b>Groups can overlap; a shot can be in several at once</b> (trip + level + region).</li>
+  <li><b>No nesting</b> of groups assumed.</li>
+  <li><b>Named regions defined by a station/vertex selection</b> (volume of stations), per the user.</li>
+  <li><b>Keep the manager/keyword layer</b> from commit <code>9f79c241</code> — it is representation-independent.</li>
+</ul>
+
+</div>
+</body>
+</html>

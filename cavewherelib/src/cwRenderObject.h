@@ -24,6 +24,7 @@ class cwRHIObject;
 class cwRhiItemRenderer;
 class cwGeometryItersector;
 #include "cwScene.h"
+#include "cwRenderObjectId.h"
 #include "CaveWhereLibExport.h"
 
 class CAVEWHERE_LIB_EXPORT cwRenderObject : public QObject {
@@ -39,6 +40,12 @@ public:
 
     void setScene(cwScene *scene);
     cwScene *scene() const;
+
+    // Stable, process-unique identity assigned at construction. Used instead of
+    // the raw `this` pointer to correlate a render object with its cwRHIObject
+    // across the cwScene / cwRhiScene queues: a freed object's address can be
+    // reused by a new object, but ids never repeat (issue #512).
+    cwRenderObjectId renderObjectId() const { return m_renderObjectId; }
 
     cwGeometryItersecter* geometryItersecter() const;
 
@@ -60,6 +67,8 @@ protected:
 
 private:
     cwScene* m_scene;
+
+    const cwRenderObjectId m_renderObjectId;
 
     bool m_visible = true;
 };

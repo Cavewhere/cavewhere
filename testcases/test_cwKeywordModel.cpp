@@ -5,6 +5,7 @@
 #include "cwKeywordModel.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
+#include "cwCave.h"
 #include "cwTrip.h"
 #include "cwScrap.h"
 #include "TestHelper.h"
@@ -51,6 +52,83 @@ TEST_CASE("cwNote keywords include file name and trip metadata", "[cwKeywordMode
     const auto keywords = note.keywordModel()->keywords();
     CHECK(keywords.contains(cwKeyword(cwKeywordModel::FileNameKey, QStringLiteral("note-image.png"))));
     CHECK(keywords.contains(cwKeyword(cwKeywordModel::TripNameKey, QStringLiteral("Trip A"))));
+}
+
+TEST_CASE("cwCave publishes its name as a Cave keyword", "[cwKeywordModel][cwCave]") {
+    cwCave cave;
+    cave.setName("Test Cave");
+
+    const auto keywords = cave.keywordModel()->keywords();
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::CaveKey, QStringLiteral("Test Cave"))));
+}
+
+TEST_CASE("cwTrip inherits its parent cave's Cave keyword", "[cwKeywordModel][cwCave][cwTrip]") {
+    cwCave cave;
+    cave.setName("Spider Cave");
+
+    auto trip = new cwTrip();
+    trip->setName("Trip 1");
+    cave.addTrip(trip);
+
+    const auto keywords = trip->keywordModel()->keywords();
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::CaveKey, QStringLiteral("Spider Cave"))));
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::TripNameKey, QStringLiteral("Trip 1"))));
+}
+
+TEST_CASE("Renaming a cave updates the trip's Cave keyword", "[cwKeywordModel][cwCave][cwTrip]") {
+    cwCave cave;
+    cave.setName("Old Name");
+
+    auto trip = new cwTrip();
+    cave.addTrip(trip);
+
+    cave.setName("New Name");
+
+    const auto keywords = trip->keywordModel()->keywords();
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::CaveKey, QStringLiteral("New Name"))));
+    CHECK_FALSE(keywords.contains(cwKeyword(cwKeywordModel::CaveKey, QStringLiteral("Old Name"))));
+}
+
+TEST_CASE("A trip without a parent cave has no Cave keyword", "[cwKeywordModel][cwTrip]") {
+    cwTrip trip;
+    trip.setName("Orphan Trip");
+
+    const auto keywords = trip.keywordModel()->keywords();
+    for(const auto& keyword : keywords) {
+        CHECK(keyword.key() != cwKeywordModel::CaveKey);
+    }
+}
+
+TEST_CASE("Moving a trip between caves updates its Cave keyword", "[cwKeywordModel][cwCave][cwTrip]") {
+    cwCave caveA;
+    caveA.setName("Cave A");
+    cwCave caveB;
+    caveB.setName("Cave B");
+
+    auto trip = new cwTrip();
+    caveA.addTrip(trip);
+    CHECK(trip->keywordModel()->keywords().contains(
+        cwKeyword(cwKeywordModel::CaveKey, QStringLiteral("Cave A"))));
+
+    caveB.addTrip(trip); //reparents the trip from caveA to caveB
+
+    const auto keywords = trip->keywordModel()->keywords();
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::CaveKey, QStringLiteral("Cave B"))));
+    CHECK_FALSE(keywords.contains(cwKeyword(cwKeywordModel::CaveKey, QStringLiteral("Cave A"))));
+}
+
+TEST_CASE("cwNote inherits the Cave keyword through its trip", "[cwKeywordModel][cwCave][cwNote]") {
+    cwCave cave;
+    cave.setName("Deep Cave");
+
+    auto trip = new cwTrip();
+    cave.addTrip(trip);
+
+    cwNote note;
+    note.setParentTrip(trip);
+
+    const auto keywords = note.keywordModel()->keywords();
+    CHECK(keywords.contains(cwKeyword(cwKeywordModel::CaveKey, QStringLiteral("Deep Cave"))));
 }
 
 TEST_CASE("cwScrap keywords include object id and type", "[cwKeywordModel][cwScrap]") {
