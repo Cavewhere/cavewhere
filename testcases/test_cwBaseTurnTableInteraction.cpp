@@ -261,6 +261,13 @@ QRay3D clickRay(const cwCamera& cam, QPoint qtViewportPoint)
     return QRay3D(front, (back - front).normalized());
 }
 
+// World-space eye position: the view-space origin mapped back to world. Zoom
+// tests measure how far and in which direction the camera moved by diffing this.
+QVector3D eyePosition(const cwCamera& cam)
+{
+    return cam.viewMatrix().inverted().map(QVector3D(0.0f, 0.0f, 0.0f));
+}
+
 // Pan-lurch regression body, run for whichever projection `f` is set to. Grabs
 // the centerline half a pick-radius off to the side so the click still lands an
 // exact hit, asserts the grab really is an OFF-ray hit (the path that used to
@@ -1137,6 +1144,115 @@ TEST_CASE("cwBaseTurnTableInteraction startPanning on an off-ray line grab does 
         addCenterline(f.scene);
         checkNoPanLurchOnOffRayLineGrab(f);
     }
+}
+
+TEST_CASE("cwBaseTurnTableInteraction perspective zoom anchors on near-miss geometry (issue #578)",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Zoom used to target only the 4mm exact pick, so a cursor near — but not
+    // exactly on — geometry fell back to the orbit pivot. It now uses the 20mm
+    // near anchor, so a near-miss zoom should move the camera the same amount as
+    // an exact-hit zoom (both anchored to the line's depth), not the very
+    // different amount a distant pivot fallback would produce.
+    Fixture f;
+    f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+    addCenterline(f.scene);
+
+    const QVector3D onLineWorld(5.0f, 0.0f, kCenterlineZ);
+    f.interaction.centerOn(onLineWorld, false);
+
+    // A distinct, far pivot depth: if the near-miss fell back to it (the old
+    // exact-only behavior) the camera would move a very different distance.
+    f.interaction.setCenter(QVector3D(0.0f, 0.0f, kCenterlineZ - 200.0f));
+
+    const double pickPx = f.interaction.pixelsForMillimeters(
+            cwBaseTurnTableInteraction::PivotPickRadiusMillimeters);
+    const QPointF onLineScreen = f.camera.project(onLineWorld);
+    const QPoint exactCursor = onLineScreen.toPoint();
+    // Off the line by ~2.2 pick radii: outside the exact pick, well inside the
+    // 20mm anchor.
+    const QPoint nearMissCursor = (onLineScreen + QPointF(0.0, pickPx * 2.2)).toPoint();
+
+    // Preconditions: the exact cursor hits the line, the near-miss does not.
+    REQUIRE(f.interaction.pick(exactCursor).hit());
+    REQUIRE_FALSE(f.interaction.pick(nearMissCursor).hit());
+
+    constexpr double kZoomInDelta = 0.25;
+    const QMatrix4x4 start = f.camera.viewMatrix();
+    const QVector3D eyeStart = eyePosition(f.camera);
+
+    f.interaction.zoom(exactCursor, kZoomInDelta);
+    const double exactMove = (eyePosition(f.camera) - eyeStart).length();
+
+    f.camera.setViewMatrix(start);
+    f.interaction.zoom(nearMissCursor, kZoomInDelta);
+    const double nearMissMove = (eyePosition(f.camera) - eyeStart).length();
+
+    REQUIRE(exactMove > kMatrixEps);
+    CHECK(nearMissMove == Approx(exactMove).epsilon(0.15));
+}
+
+TEST_CASE("cwBaseTurnTableInteraction perspective zoom on a miss moves along the cursor ray (issue #578)",
+          "[cwBaseTurnTableInteraction]")
+{
+    // On a genuine miss the zoom target is the orbit pivot, which is generally
+    // OFF the cursor ray. The old zoomPerspective built its direction as
+    // (target - front), so it panned the view sideways toward the pivot. The
+    // rewrite steps along the cursor ray using only the target's along-ray
+    // depth, so the camera must move parallel to the cursor ray with no lateral
+    // component, however far off-axis the pivot sits.
+    Fixture f;
+    f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+    addCenterline(f.scene);
+    f.interaction.centerOn(QVector3D(0.0f, 0.0f, kCenterlineZ), false);
+
+    const QVector3D offRayPivot(40.0f, 40.0f, kCenterlineZ);
+    f.interaction.setCenter(offRayPivot);
+
+    // Empty space far from the centerline, well outside the 20mm anchor.
+    const QPoint missCursor(120, 90);
+    REQUIRE_FALSE(f.interaction.pick(missCursor).hit());
+
+    const QRay3D ray = clickRay(f.camera, missCursor);
+
+    // Precondition: the pivot really is off this cursor ray, so a pivot-directed
+    // move would show a lateral component — the test isn't vacuous.
+    const QVector3D pivotFoot = ray.point(ray.projectedDistance(offRayPivot));
+    REQUIRE((offRayPivot - pivotFoot).length() > 1.0);
+
+    const QVector3D eyeStart = eyePosition(f.camera);
+    f.interaction.zoom(missCursor, 0.3);
+    const QVector3D move = eyePosition(f.camera) - eyeStart;
+
+    REQUIRE(move.length() > kMatrixEps);
+    // The camera moved purely along the cursor ray: no lateral (pan) component.
+    const QVector3D lateral = move - ray.direction() * QVector3D::dotProduct(move, ray.direction());
+    CHECK(lateral.length() < kMatrixEps);
+}
+
+TEST_CASE("cwBaseTurnTableInteraction perspective zoom-in stalls instead of reversing past the target (issue #578)",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Zooming in far enough that the near plane passes the target's depth used
+    // to flip the (target - front) direction and run the zoom backward. The
+    // rewrite clamps the along-ray distance at zero, so a zoom-in whose target
+    // is already behind the near plane stalls rather than reversing. Force that
+    // state directly: put the pivot at the eye (its along-ray depth is negative,
+    // i.e. behind the near plane) and zoom in over empty space (a miss, so the
+    // pivot is the target).
+    Fixture f;
+    f.camera.setProjection(f.camera.perspectiveProjectionDefault());
+    addCenterline(f.scene);
+    f.interaction.centerOn(QVector3D(0.0f, 0.0f, kCenterlineZ), false);
+
+    f.interaction.setCenter(eyePosition(f.camera));
+
+    const QPoint missCursor(120, 90);
+    REQUIRE_FALSE(f.interaction.pick(missCursor).hit());
+
+    const QMatrix4x4 before = f.camera.viewMatrix();
+    f.interaction.zoom(missCursor, 0.5);
+    CHECK(matricesNearlyEqual(f.camera.viewMatrix(), before));
 }
 
 TEST_CASE("cwBaseTurnTableInteraction startRotating that hits geometry re-centers on the hit",
