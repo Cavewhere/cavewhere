@@ -30,6 +30,29 @@ def slug_key(relpath):
     return re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-")
 
 
+# The chapter a page belongs to is its directory. These titles mirror the chapter
+# headings in index.md so the sidebar reads as the same table of contents. A
+# directory not listed here falls back to its name title-cased; a root-level file
+# (AUTHORING.md, index.md) has no directory and lands in "Meta".
+CHAPTER_TITLES = {
+    "concepts": "Concepts",
+    "getting-started": "Getting Started",
+    "projects-and-files": "Projects & Files",
+    "view-3d": "3D View",
+    "survey-data": "Survey Data",
+    "notes": "Notes",
+    "scraps": "Scraps and Carpeting",
+    "import-export": "Import & Export",
+    "": "Meta",
+}
+
+
+def chapter_title(relpath):
+    """The sidebar chapter a page is grouped under, derived from its directory."""
+    directory = relpath.split("/", 1)[0] if "/" in relpath else ""
+    return CHAPTER_TITLES.get(directory, directory.replace("-", " ").title() or "Meta")
+
+
 def parse_llms():
     """Ordered [(section, title, relpath)] parsed from llms.txt."""
     entries = []
@@ -103,7 +126,7 @@ def build():
     entries = parse_llms()
     key_by_relpath = {relpath: slug_key(relpath) for _, _, relpath in entries}
 
-    sections = []  # [(section, [(title, key)])]
+    chapters = []  # [(chapter, [(title, key)])]
     pages_html = []
     for section, title, relpath in entries:
         key = key_by_relpath[relpath]
@@ -114,18 +137,19 @@ def build():
         frag = embed_images(frag, os.path.dirname(relpath))
         pages_html.append(f'<section id="{key}" class="page">\n{frag}\n</section>')
 
-        if not sections or sections[-1][0] != section:
-            sections.append((section, []))
-        sections[-1][1].append((title, key))
+        chapter = chapter_title(relpath)
+        if not chapters or chapters[-1][0] != chapter:
+            chapters.append((chapter, []))
+        chapters[-1][1].append((title, key))
 
     nav_html = []
-    for section, items in sections:
+    for chapter, items in chapters:
         links = "\n".join(
             f'      <a href="#{key}">{title}</a>' for title, key in items
         )
         nav_html.append(
             f'    <div class="nav-group">\n'
-            f'      <p class="nav-label">{section}</p>\n{links}\n    </div>'
+            f'      <p class="nav-label">{chapter}</p>\n{links}\n    </div>'
         )
     nav = "\n".join(nav_html)
     main = "\n\n".join(pages_html)
