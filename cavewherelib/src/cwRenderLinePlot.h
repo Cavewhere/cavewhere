@@ -43,6 +43,11 @@ public:
     // the small visibility buffer, not the position buffer. setRangeVisible
     // flips a contiguous span (one trip's vertices); the manager ANDs
     // overlapping groups CPU-side. Mirrors cwRenderTexturedItems::setVisible.
+    //
+    // This buffer is also published to the pick intersecter
+    // (cwGeometryItersecter::setVisibilityMask), which shares it rather than
+    // deriving its own — so it is immutable once published: write to a copy
+    // and replace it, never mutate it in place.
     void setRangeVisible(int start, int count, bool visible);
 
     float maxZValue() const;

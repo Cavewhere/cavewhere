@@ -76,8 +76,16 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
 void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)
 {
     // Validate against the live buffer (a free const-ref read) before copying it,
-    // so an out-of-range call doesn't pay for a detach.
-    if (start < 0 || count <= 0 || start + count > m_visibility.value().size()) {
+    // so an out-of-range call doesn't pay for a detach. This is the only range
+    // guard — the intersecter takes a whole mask now, not a range. Test
+    // "count > vertexCount - start" rather than "start + count > vertexCount":
+    // the subtraction can't overflow once start is known non-negative, while
+    // the addition is signed-overflow UB the compiler may exploit to elide
+    // this check. No production caller can reach it (that needs ~2^31
+    // vertices), and the overflowed loop below would no-op anyway, so this
+    // buys correctness-under-optimization, not a reachable bug fix.
+    const qsizetype vertexCount = m_visibility.value().size();
+    if (start < 0 || count <= 0 || count > vertexCount - start) {
         return;
     }
 
@@ -94,15 +102,22 @@ void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)
         return;
     }
 
-    m_visibility.setValue(std::move(visibility));
+    // Hiding always leaves something hidden, so only a show can restore the
+    // all-visible state — and only then is the scan worth paying for.
+    const bool anyHidden = !visible || visibility.contains(kHidden);
 
-    // Twin the change into the intersecter's own mask so hidden shots stop
-    // taking picks and inflating the reset-view bounds (issues #575/#549).
-    // Both masks reset to all-visible on setGeometry, so applying the same
-    // ranges keeps them in step.
+    m_visibility.setValue(visibility);
+
+    // Publish the same buffer to the intersecter so hidden shots stop taking
+    // picks and inflating the reset-view bounds (issues #575/#549). QVector
+    // is implicitly shared, so it costs a refcount bump rather than a second
+    // copy of the mask — which is why the loop above writes to a copy and
+    // publishes the result instead of mutating in place. An empty mask is the
+    // intersecter's all-visible fast path; addObject already resets it there,
+    // so setGeometry needn't publish.
     if (auto* intersecter = geometryItersecter()) {
-        intersecter->setRangeVisible(cwGeometryItersecter::Key{this, 0},
-                                     start, count, visible);
+        intersecter->setVisibilityMask(cwGeometryItersecter::Key{this, 0},
+                                       anyHidden ? visibility : QVector<quint8>());
     }
 
     update();

@@ -184,10 +184,12 @@ namespace {
         return parent == nullptr || parent->isVisible();
     }
 
-    // Visibility bytes, shared by the per-vertex mask (Object::visibility /
-    // BvhData::visibilityMasks) and the per-slot flag (BvhData::slotVisible).
-    // Any nonzero byte reads as visible; these are what setRangeVisible and
-    // the publish paths write.
+    // Visibility bytes for the per-slot flag (BvhData::slotVisible). The
+    // per-vertex masks (Object::visibilityMask / BvhData::visibilityMasks)
+    // are written by their owners, not here, and use their own visible byte
+    // (cwRenderLinePlot::kVisible is 0xFF) — every reader below only asks
+    // whether a byte is nonzero, so the two never need to agree on more than
+    // "hidden is zero".
     constexpr quint8 kVertexHidden = 0;
     constexpr quint8 kVertexVisible = 1;
 
@@ -602,6 +604,14 @@ void cwGeometryItersecter::addObject(const cwGeometryItersecter::Object &object)
 
 bool cwGeometryItersecter::eraseNodeIfPresent(const Key& key)
 {
+    // Bounds cache growth; not needed for correctness. A stale entry is
+    // unreadable: visibleNodeBox only consults the cache for a non-empty
+    // mask, the only writer of one is setVisibilityMask (which drops the
+    // entry), and the addObject below re-registers the Key with a fresh
+    // empty-masked Object. Before the early return so a Key with no Node
+    // right now (a prior update went empty) is dropped too.
+    m_maskedBoxCache.remove(key);
+
     auto iter = findNode(key);
     if (iter == Nodes.end()) {
         return false;
@@ -631,6 +641,7 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
         m_subBvhs.clear();
         m_dirtyKeys.clear();
         m_hiddenKeys.clear();
+        m_maskedBoxCache.clear();
         // Total wipe: drop the published BVH entirely so every pick goes
         // no-hit immediately. No retention benefit here — there's no Key
         // left we'd want picks to still hit.
@@ -643,6 +654,9 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
     // registered is forgotten too.
     erase_if(m_hiddenKeys, [parentObject](const Key& key) {
         return key.parentObject == parentObject;
+    });
+    erase_if(m_maskedBoxCache, [parentObject](const QHash<Key, QBox3D>::iterator& it) {
+        return it.key().parentObject == parentObject;
     });
 
     int erased = 0;
@@ -734,54 +748,24 @@ void cwGeometryItersecter::setVisible(const Key& objectKey, bool visible)
     republishSlotVisibility(objectKey);
 }
 
-void cwGeometryItersecter::setRangeVisible(const Key& objectKey, int start, int count, bool visible)
+void cwGeometryItersecter::setVisibilityMask(const Key& objectKey, QVector<quint8> mask)
 {
     auto iter = findNode(objectKey);
     if (iter == Nodes.end()) {
         return;
     }
 
-    // count > vertexCount - start rather than start + count > vertexCount:
-    // the subtraction can't overflow once start is known non-negative and
-    // in range, while the addition can.
-    const qsizetype vertexCount = iter->Object.geometry().vertexCount();
-    if (start < 0 || count <= 0 || start > vertexCount
-        || count > vertexCount - start) {
+    if (iter->Object.visibilityMask() == mask) {
         return;
     }
 
-    QVector<quint8> mask = iter->Object.visibility();
-    if (mask.isEmpty()) {
-        if (visible) {
-            return; // empty mask already means all-visible
-        }
-        mask = QVector<quint8>(vertexCount, kVertexVisible);
-    }
-
-    const quint8 flag = visible ? kVertexVisible : kVertexHidden;
-    bool changed = false;
-    for (int i = start; i < start + count; ++i) {
-        if (mask.at(i) != flag) {
-            mask[i] = flag;
-            changed = true;
-        }
-    }
-    if (!changed) {
-        return;
-    }
-
-    // Collapse an all-visible mask back to empty so the unmasked fast
-    // paths (cached whole-node box, zero per-primitive checks) return
-    // once everything is shown again.
-    if (visible && !mask.contains(kVertexHidden)) {
-        mask = QVector<quint8>();
-    }
-
-    iter->Object.setVisibility(std::move(mask));
     qCDebug(lcPick).nospace()
-        << "setRangeVisible {parent=" << objectKey.parentObject
-        << ", id=" << objectKey.id << "} [" << start << ", " << (start + count)
-        << ") visible=" << visible << " — no rebuild, republish only";
+        << "setVisibilityMask {parent=" << objectKey.parentObject
+        << ", id=" << objectKey.id << "} maskSize=" << mask.size()
+        << " — no rebuild, republish only";
+
+    iter->Object.setVisibilityMask(std::move(mask));
+    m_maskedBoxCache.remove(objectKey);
     republishSlotVisibility(objectKey);
 }
 
@@ -828,30 +812,46 @@ QBox3D cwGeometryItersecter::visibleBoundingBox() const
     return box;
 }
 
-QBox3D cwGeometryItersecter::visibleNodeBox(const Node& node)
+QBox3D cwGeometryItersecter::visibleNodeBox(const Node& node) const
 {
-    const QVector<quint8>& mask = node.Object.visibility();
-    if (mask.isEmpty()) {
-        return node.BoundingBox.transformed(node.Object.modelMatrix());
+    const Object& object = node.Object;
+    if (object.visibilityMask().isEmpty()) {
+        return node.BoundingBox.transformed(object.modelMatrix());
     }
 
-    const cwGeometry& geometry = node.Object.geometry();
+    auto cached = m_maskedBoxCache.find(object.key());
+    if (cached == m_maskedBoxCache.end()) {
+        cached = m_maskedBoxCache.insert(object.key(), computeMaskedModelBox(object));
+    }
+    if (cached->isNull()) {
+        return QBox3D();
+    }
+    return cached->transformed(object.modelMatrix());
+}
+
+QBox3D cwGeometryItersecter::computeMaskedModelBox(const Object& object)
+{
+    const cwGeometry& geometry = object.geometry();
+    const QVector<quint8>& mask = object.visibilityMask();
+
+    QBox3D modelBox;
+
     const auto* positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
     if (positionAttribute == nullptr) {
-        return QBox3D();
+        return modelBox;
     }
 
     // Union per visible primitive, not per visible vertex, so a visible
     // vertex whose every primitive is hidden doesn't inflate the box —
     // matching what the pick traversal can actually reach.
     const QVector<uint32_t>& indices = geometry.indices();
-    QBox3D modelBox;
     switch (geometry.type()) {
     case cwGeometry::Type::Lines:
         for (qsizetype i = 0; i + 1 < indices.size(); i += 2) {
             const uint32_t a = indices.at(i);
             const uint32_t b = indices.at(i + 1);
-            if (vertexIsVisible(mask, a) && vertexIsVisible(mask, b)) {
+            if (vertexIsVisible(mask, a)
+                && vertexIsVisible(mask, b)) {
                 modelBox.unite(geometry.value<QVector3D>(positionAttribute, a));
                 modelBox.unite(geometry.value<QVector3D>(positionAttribute, b));
             }
@@ -862,7 +862,8 @@ QBox3D cwGeometryItersecter::visibleNodeBox(const Node& node)
             const uint32_t a = indices.at(i);
             const uint32_t b = indices.at(i + 1);
             const uint32_t c = indices.at(i + 2);
-            if (vertexIsVisible(mask, a) && vertexIsVisible(mask, b)
+            if (vertexIsVisible(mask, a)
+                && vertexIsVisible(mask, b)
                 && vertexIsVisible(mask, c)) {
                 modelBox.unite(geometry.value<QVector3D>(positionAttribute, a));
                 modelBox.unite(geometry.value<QVector3D>(positionAttribute, b));
@@ -879,21 +880,29 @@ QBox3D cwGeometryItersecter::visibleNodeBox(const Node& node)
             }
         }
         if (!modelBox.isNull()) {
-            const float pad = node.Object.pickRadius() * kPointAabbPadScale;
+            const float pad = object.pickRadius() * kPointAabbPadScale;
             const QVector3D padVec(pad, pad, pad);
             modelBox = QBox3D(modelBox.minimum() - padVec,
                               modelBox.maximum() + padVec);
         }
         break;
     }
-    default:
-        return node.BoundingBox.transformed(node.Object.modelMatrix());
+    default: {
+        // Unreachable: addObject only registers the three types above, so
+        // no masked Object can carry another. Union every vertex if one ever
+        // does — isPrimitiveVisible has no rule for an unknown kind either
+        // and reads it as visible, so the box must agree rather than hide
+        // geometry a pick can still reach.
+        const qsizetype vertexCount = geometry.vertexCount();
+        for (qsizetype i = 0; i < vertexCount; ++i) {
+            modelBox.unite(
+                geometry.value<QVector3D>(positionAttribute, static_cast<uint32_t>(i)));
+        }
+        break;
+    }
     }
 
-    if (modelBox.isNull()) {
-        return QBox3D();
-    }
-    return modelBox.transformed(node.Object.modelMatrix());
+    return modelBox;
 }
 
 bool cwGeometryItersecter::isPickableEmpty() const
@@ -1219,10 +1228,11 @@ void cwGeometryItersecter::traverseBvh(const BvhData& bvh,
         const QMatrix4x4& modelFromWorld = bvh.inverseModelMatrices.at(slot);
         const QRay3D rayModel = transformRayWithInverse(modelFromWorld, ray);
 
-        // Per-vertex mask (setRangeVisible). Unmasked objects — clouds,
-        // scraps, triangles — pay this one pointer load plus a predictable
+        // Per-vertex mask (setVisibilityMask). Unmasked objects — clouds,
+        // scraps, triangles — pay this one const-ref bind plus a predictable
         // null compare per tested leaf primitive.
-        const QVector<quint8>* visibilityMask = bvh.visibilityMasks.at(slot).get();
+        const QVector<quint8>& visibilityMask = bvh.visibilityMasks.at(slot);
+        const bool masked = !visibilityMask.isEmpty();
 
         const LeafContext ctx{sub.object, geometry, positionAttribute,
                               ray, rayModel, worldFromModel, modelFromWorld,
@@ -1292,8 +1302,7 @@ void cwGeometryItersecter::traverseBvh(const BvhData& bvh,
             }
             for (uint32_t p = first; p < first + primCount; ++p) {
                 const Primitive& prim = sub.primitives.at(p);
-                if (visibilityMask != nullptr
-                    && !isPrimitiveVisible(*visibilityMask, geometry, prim)) {
+                if (masked && !isPrimitiveVisible(visibilityMask, geometry, prim)) {
                     continue;
                 }
                 if (stats != nullptr) {
@@ -2055,11 +2064,9 @@ void cwGeometryItersecter::republishSlotVisibility(const Key& key)
     next->slotVisible[slot] = m_hiddenKeys.contains(key) ? kVertexHidden
                                                          : kVertexVisible;
     const auto nodeIter = findNode(key);
-    const bool hasMask = nodeIter != Nodes.cend()
-                         && !nodeIter->Object.visibility().isEmpty();
-    next->visibilityMasks[slot] = hasMask
-        ? std::make_shared<const QVector<quint8>>(nodeIter->Object.visibility())
-        : nullptr;
+    next->visibilityMasks[slot] = nodeIter != Nodes.cend()
+                                      ? nodeIter->Object.visibilityMask()
+                                      : QVector<quint8>();
     m_bvh = std::move(next);
 }
 
@@ -2067,8 +2074,7 @@ void cwGeometryItersecter::refreshPublishedVisibility(BvhData& bvh) const
 {
     const qsizetype slotCount = bvh.subBvhs.size();
     bvh.slotVisible = QVector<quint8>(slotCount, kVertexVisible);
-    bvh.visibilityMasks =
-        QVector<std::shared_ptr<const QVector<quint8>>>(slotCount);
+    bvh.visibilityMasks = QVector<QVector<quint8>>(slotCount);
     for (const Node& node : Nodes) {
         const auto it = bvh.keyToSlot.constFind(node.Object.key());
         if (it == bvh.keyToSlot.constEnd()) {
@@ -2078,10 +2084,7 @@ void cwGeometryItersecter::refreshPublishedVisibility(BvhData& bvh) const
         if (m_hiddenKeys.contains(node.Object.key())) {
             bvh.slotVisible[slot] = kVertexHidden;
         }
-        if (!node.Object.visibility().isEmpty()) {
-            bvh.visibilityMasks[slot] =
-                std::make_shared<const QVector<quint8>>(node.Object.visibility());
-        }
+        bvh.visibilityMasks[slot] = node.Object.visibilityMask();
     }
 }
 
