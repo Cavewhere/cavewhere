@@ -348,6 +348,17 @@ namespace {
         return std::max(0.0f, minimumT);
     }
 
+    // `box` grown by `pad` on every axis. Returns box untouched when pad is
+    // zero, which is the tolerance-free case every default pick takes.
+    QBox3D paddedBox(const QBox3D& box, float pad)
+    {
+        if (pad == 0.0f) {
+            return box;
+        }
+        const QVector3D padVec(pad, pad, pad);
+        return QBox3D(box.minimum() - padVec, box.maximum() + padVec);
+    }
+
     // A screen-space accept radius grows with depth, so no single scalar pad
     // fits every AABB test. The radius at `box`'s farthest depth bounds every
     // candidate inside it: projectedDistance is affine, so its maximum over
@@ -913,8 +924,6 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
     const float linePad =
         conservativeTolerancePad(ray, topLevel.at(0).bbox, query.tolerance);
 
-    const QVector3D topLinePad(linePad, linePad, linePad);
-
     if (debug) {
         qCDebug(lcPick).nospace()
             << "intersectsDetailed: topLevel=" << topLevel.size()
@@ -939,10 +948,7 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
             ++stats.nodesVisited;
         }
 
-        const double tBox = (linePad == 0.0f)
-            ? bn.bbox.intersection(ray)
-            : QBox3D(bn.bbox.minimum() - topLinePad,
-                     bn.bbox.maximum() + topLinePad).intersection(ray);
+        const double tBox = boxEntryDistance(paddedBox(bn.bbox, linePad), ray);
         if (qIsNaN(tBox)) {
             if (debug) {
                 ++stats.nodesBoxMiss;
@@ -1013,7 +1019,6 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
         // and triangles bake whatever pad they need into the leaf box at
         // build time, so their boxes are tested as-is.
         const float subPad = isLineObject ? linePad : 0.0f;
-        const QVector3D subLinePad(subPad, subPad, subPad);
 
         // tModel and tWorld parameterize the same point — transformRayToModel
         // applies the inverse model matrix uniformly to direction so the
@@ -1032,10 +1037,8 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
                 ++stats.nodesVisited;
             }
 
-            const double tSubBox = (subPad == 0.0f)
-                ? sbn.bbox.intersection(rayModel)
-                : QBox3D(sbn.bbox.minimum() - subLinePad,
-                         sbn.bbox.maximum() + subLinePad).intersection(rayModel);
+            const double tSubBox =
+                boxEntryDistance(paddedBox(sbn.bbox, subPad), rayModel);
             if (qIsNaN(tSubBox)) {
                 if (debug) {
                     ++stats.nodesBoxMiss;
@@ -1160,9 +1163,7 @@ std::optional<QVector3D> cwGeometryItersecter::nearestGeometryPoint(const QRay3D
         topStack.removeLast();
 
         const float nodePad = conservativeTolerancePad(ray, bn.bbox, query.tolerance);
-        const QVector3D nodePadVec(nodePad, nodePad, nodePad);
-        const double tBox = boxEntryDistance(QBox3D(bn.bbox.minimum() - nodePadVec,
-                                                    bn.bbox.maximum() + nodePadVec), ray);
+        const double tBox = boxEntryDistance(paddedBox(bn.bbox, nodePad), ray);
         if (qIsNaN(tBox)) {
             continue;
         }
@@ -1229,10 +1230,8 @@ std::optional<QVector3D> cwGeometryItersecter::nearestGeometryPoint(const QRay3D
 
             const float subPad =
                 conservativeTolerancePad(rayModel, sbn.bbox, query.tolerance);
-            const QVector3D subPadVec(subPad, subPad, subPad);
-            const double tSubBox = boxEntryDistance(QBox3D(sbn.bbox.minimum() - subPadVec,
-                                                          sbn.bbox.maximum() + subPadVec),
-                                                   rayModel);
+            const double tSubBox =
+                boxEntryDistance(paddedBox(sbn.bbox, subPad), rayModel);
             if (qIsNaN(tSubBox)) {
                 continue;
             }

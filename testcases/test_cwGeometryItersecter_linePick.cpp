@@ -447,3 +447,44 @@ TEST_CASE("Line pick: dumping a line leaf with picking debug on does not overrun
     CHECK(hit.hit());
     CHECK(hit.objectId() == 1u);
 }
+
+// Regression: QBox3D::intersection(ray) returns the box ENTRY parameter only
+// while that is positive, and silently switches to the EXIT parameter once the
+// ray origin is inside the box (QMath3d/qbox3d.cpp:403-416). The prune
+// `tBox >= best.tWorld()` reads that value as a lower bound on the node's
+// candidates, so an origin-inside node was compared on its far side and skipped
+// while holding the nearest candidate. boxEntryDistance() clamps the entry to 0
+// instead. The line tolerance pad is what makes this reachable: it inflates
+// every box by the accept radius, which readily swallows a camera sitting
+// inside the cave it is looking at.
+//
+// The same defect was found and fixed in nearestGeometryPoint first; this pins
+// the exact path, which is the one leads, cwScenePick, and the measurement tool
+// all run through.
+TEST_CASE("Line pick: a node containing the ray origin is not pruned away",
+          "[cwGeometryItersecter][linePick]")
+{
+    // The line runs the depth of the scene, so padding its box by the 10-unit
+    // tolerance swallows the ray origin at z=100. Its exit parameter is then
+    // ~210 — far behind the triangle at t=50 — so the unfixed prune drops the
+    // whole line object after the triangle has already scored a hit.
+    const QVector3D nearSpot(0.0f, 1.0f, 95.0f);  // 1 off-ray, depth 5
+    cwGeometryItersecter intersector;
+    intersector.addObject(makeTriangleObject(1,
+                                             QVector3D(-10.0f, -10.0f, 50.0f),
+                                             QVector3D(10.0f, -10.0f, 50.0f),
+                                             QVector3D(0.0f, 10.0f, 50.0f)));
+    intersector.addObject(makeLineObject(2, {nearSpot, QVector3D(0.0f, 1.0f, -100.0f)}));
+    intersector.waitForFinish();
+
+    // The triangle is hit exactly at depth 50; the line's near end is 1 off-ray
+    // (inside the 10-unit radius) at depth 5, so the line must win.
+    const QRay3D ray(QVector3D(0.0f, 0.0f, 100.0f), QVector3D(0.0f, 0.0f, -1.0f));
+    const cwRayHit hit = intersector.intersectsDetailed(ray, ortho(10.0));
+
+    REQUIRE(hit.hit());
+    CHECK(hit.objectId() == 2u);
+    CHECK(hit.tWorld() == Approx(5.0).margin(1e-2));
+    CHECK(hit.pointWorld().z() == Approx(nearSpot.z()).margin(1e-3));
+}
+
