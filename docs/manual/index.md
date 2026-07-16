@@ -25,6 +25,8 @@ the problems CaveWhere solves — then keep the
   it, and what installing registers on your system.
 - [Set Up Your Identity](getting-started/set-up-your-identity.md) — the name and
   email CaveWhere asks for before anything else, and why.
+- [Open the Example Cave](getting-started/open-the-example-cave.md) — download
+  Phake Cave 3000, the finished cave this manual's screenshots use, from a link.
 - [Find Your Way Around](getting-started/find-your-way-around.md) — the sidebar,
   the breadcrumb, and how the window adapts to its size.
 
