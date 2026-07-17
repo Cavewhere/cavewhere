@@ -139,7 +139,6 @@ cwQMLRegister::cwQMLRegister()
     // qmlRegisterType<cwCSVImporterManager>("Cavewhere", 1, 0, "CSVImporterManager");
     // qmlRegisterType<cwColumnNameModel>("Cavewhere", 1, 0, "ColumnNameModel");
     // qmlRegisterType<cwCSVLineModel>("Cavewhere", 1, 0, "CSVLineModel");
-    // qmlRegisterType<cwFutureFilterModel>("Cavewhere", 1, 0, "FutureFilterModel");
     // qmlRegisterType<cwFutureManagerModel>("Cavewhere", 1, 0, "FutureManagerModel");
     // qmlRegisterType<cwTaskFutureCombineModel>("Cavewhere", 1, 0, "TaskFutureCombineModel");
     // qmlRegisterUncreatableType<cwOpenGLSettings>("Cavewhere", 1, 0, "OpenGLSettings", "Should only be created in cwSettings also is static across the application");
