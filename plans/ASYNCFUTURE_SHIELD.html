@@ -210,21 +210,29 @@
 
 <pre><code>// asyncfuture.h
 
-// Private::DeferredFuture&lt;T&gt;: the minus-pushCancel twin of
-// complete(QFuture). Installs the forwarder watch (finished -&gt;
-// completeByFinishedFuture, canceled -&gt; cancel) and track(future)
-// for progress, and deliberately does NOT install the second
-// watch(this-&gt;future(), ..., pushCancel, ...).
-void completeShielded(QFuture&lt;T&gt; future);
+// Public policy enum. Propagate is the existing behavior and the
+// default; Blocked is the shield semantic. Naming note: this is NOT
+// "cancellation prevention" &mdash; the returned future stays cancelable,
+// the policy only controls whether that cancel is pushed upstream.
+enum class CancelPropagation { Propagate, Blocked };
 
-// Public: Deferred&lt;T&gt; and Deferred&lt;void&gt; wrappers.
-deferred.completeShielded(future);
+// Private::DeferredFuture&lt;T&gt;: complete(QFuture) grows a policy
+// parameter instead of a second method name. Both policies install
+// the forwarder watch (finished -&gt; completeByFinishedFuture,
+// canceled -&gt; cancel) and track(future) for progress; Blocked
+// deliberately does NOT install the second
+// watch(this-&gt;future(), ..., pushCancel, ...).
+void complete(QFuture&lt;T&gt; future,
+              CancelPropagation policy = CancelPropagation::Propagate);
+
+// Public: Deferred&lt;T&gt; and Deferred&lt;void&gt; forward the policy.
+deferred.complete(future, AsyncFuture::CancelPropagation::Blocked);
 
 // Public free function; the common consumer form.
 template &lt;typename T&gt;
 QFuture&lt;T&gt; AsyncFuture::shield(QFuture&lt;T&gt; future) {
     Deferred&lt;T&gt; d;
-    d.completeShielded(future);
+    d.complete(future, CancelPropagation::Blocked);
     return d.future();
 }
 </code></pre>
@@ -242,7 +250,8 @@ QFuture&lt;T&gt; AsyncFuture::shield(QFuture&lt;T&gt; future) {
 
 <h3>Commit 1 &mdash; asyncfuture fork: the primitive</h3>
 <p>
-  <code>completeShielded</code> on <code>DeferredFuture</code>,
+  <code>CancelPropagation</code> policy parameter on
+  <code>complete(QFuture)</code> in <code>DeferredFuture</code>,
   <code>Deferred&lt;T&gt;</code>, <code>Deferred&lt;void&gt;</code>;
   free <code>AsyncFuture::shield()</code>. Unit tests in the
   standalone asyncfuture suite (build recipe: see the repo's CI /
@@ -300,7 +309,8 @@ QFuture&lt;T&gt; AsyncFuture::shield(QFuture&lt;T&gt; future) {
   chain could be rewritten flat
   (<code>observe(scan).context(&hellip;)</code> returning futures) with
   the Deferred kept only as the outer bridge via
-  <code>completeShielded</code>. Pure taste &mdash; the current code
+  <code>complete(&hellip;, CancelPropagation::Blocked)</code>. Pure
+  taste &mdash; the current code
   is correct; only do this if the file is being touched anyway.
 </p>
 

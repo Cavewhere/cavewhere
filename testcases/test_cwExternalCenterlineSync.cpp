@@ -559,3 +559,50 @@ TEST_CASE("reconcile returns a failed future when saveLoad is null",
     REQUIRE(AsyncFuture::waitForFinished(future, kReconcileWaitMs));
     CHECK(future.result().hasError());
 }
+
+TEST_CASE("canceling a reconcile future does not poison the save-job drain",
+          "[SaveLoad][Shield]")
+{
+    // reconcile() chains on cwSaveLoad::pendingJobsFinished(), the
+    // project-wide drain future shared by every queued-job observer.
+    // AsyncFuture propagates cancel upstream through context chains, so
+    // without the shield in pendingJobsFinished() a consumer canceling
+    // its reconcile future would cancel the shared drain future
+    // underneath cwSaveLoad's re-arm polls and every sibling observer.
+    auto fixture = makeSavedProject(QStringLiteral("shield-cancel"));
+    const QString attachmentDir =
+        fixture->project->saveLoad()->externalCenterlineDir(fixture->cave).absolutePath();
+
+    const QString srcRoot = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scanA = makeScan(srcRoot,
+                                QStringLiteral("entry.svx"),
+                                { QStringLiteral("childA.svx"),
+                                  QStringLiteral("childB.svx"),
+                                  QStringLiteral("childC.svx") },
+                                mtime);
+
+    auto canceledFuture = cwExternalCenterlineSync::reconcile(
+        fixture->project->saveLoad(), scanA, attachmentDir);
+    canceledFuture.cancel();
+
+    // The canceled consumer stops observing, but the queue must still
+    // drain and land every copy.
+    fixture->project->waitSaveToFinish();
+    const QDir attachDirObj(attachmentDir);
+    CHECK(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"))));
+    CHECK(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("childC.svx"))));
+
+    // A fresh consumer chaining on the drain future must complete
+    // normally, and its GC pass must still act on the filesystem.
+    cwExternalCenterlineScanner::ScanResult scanB;
+    scanB.dependencies.append(scanA.dependencies.first());
+    auto futureB = cwExternalCenterlineSync::reconcile(
+        fixture->project->saveLoad(), scanB, attachmentDir);
+    fixture->project->waitSaveToFinish();
+    REQUIRE(AsyncFuture::waitForFinished(futureB, kReconcileWaitMs));
+    REQUIRE_FALSE(futureB.isCanceled());
+    REQUIRE_FALSE(futureB.result().hasError());
+    CHECK_FALSE(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("childA.svx"))));
+}

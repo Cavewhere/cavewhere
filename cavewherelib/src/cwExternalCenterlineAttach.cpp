@@ -126,6 +126,9 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
     // directly would let the dialog's Cancel walk through the reconcile
     // stage into cwSaveLoad's shared m_pendingJobsDeferred future and
     // poison the project-wide job-drain state for every other observer.
+    // (pendingJobsFinished() now AsyncFuture::shield()s that future as
+    // the infrastructure-level backstop; the Deferred additionally keeps
+    // attach's own chain from being torn down mid-mutation.)
     // The Deferred's future is connected to nothing upstream; the one
     // window where cancel is honored polls isCanceled() instead.
     AsyncFuture::Deferred<ReportResult> deferred;

@@ -4428,7 +4428,12 @@ QFuture<void> cwSaveLoad::completeSaveJobs()
 
 QFuture<void> cwSaveLoad::pendingJobsFinished()
 {
-    return completeSaveJobs();
+    // Shielded because the drain future is shared project-wide state:
+    // AsyncFuture propagates cancel() upstream through context chains,
+    // so an unshielded caller canceling its derived chain would cancel
+    // m_pendingJobsDeferred's future underneath the re-arm polls in
+    // cwSaveLoadPrivate and every sibling observer, starving the queue.
+    return AsyncFuture::shield(completeSaveJobs());
 }
 
 QString cwSaveLoad::sanitizeFileName(QString input) {
