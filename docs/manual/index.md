@@ -58,6 +58,14 @@ the problems CaveWhere solves — then keep the
 - [Fix Survey Errors](survey-data/survey-errors.md) — what each error and
   warning means, and how to clear it.
 
+### Georeferencing
+- [Georeference a Cave](georeferencing/georeference-a-cave.md) — give the project
+  a coordinate system and fix a station, so the cave sits at its true place on
+  Earth and caves stop overlapping.
+- [Understand Grid Convergence](georeferencing/grid-convergence.md) — the readout
+  georeferencing turns on, and why a placed cave's bearing correction is more than
+  its declination.
+
 ### Notes
 - [Add Notes to a Trip](notes/add-a-note.md) — import scans, PDFs, and 3D
   scans, and rotate or remove them.
@@ -114,7 +122,6 @@ chapter is task-oriented and problem-first (see
   pages above.
 - **3D View (more)** — field of view, labels, leads, and rendering settings
   (MSAA, EDL) build on [The 3D View](view-3d/the-3d-view.md).
-- **Georeferencing** — fixing stations, coordinate systems, grid convergence.
 - **Point Clouds** — adding LAZ/LAS, coordinate systems, clipping, EDL.
 - **Measurement** — distance, azimuth (grid / true / magnetic), inclination.
 - **Loop Closure** — closure errors and reviewing blunders.

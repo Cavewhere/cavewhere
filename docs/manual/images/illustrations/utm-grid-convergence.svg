@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 420" width="512" height="420" role="img" aria-label="A map graticule showing two families of north lines. Orange lines are true-north meridians, which fan out and converge toward the pole above the top of the frame. Blue lines are the UTM grid, a square Cartesian mesh of straight verticals and horizontals. Two points, A and B, sit on the same orange meridian (both at longitude 108 degrees East; A at 28 degrees North lower down, B at 33 degrees North higher up), so a sight from A to B runs due true north, zero degrees. But because that meridian leans relative to the blue grid, B sits to the left of the vertical grid line through A: B's UTM easting is smaller than A's, even though they share a longitude. The angle between the blue grid-north line and the orange true-north meridian at A is the grid convergence (drawn exaggerated for clarity). The correction chain is magnetic north, to true north via declination, to grid north via convergence.">
+  <defs>
+    <style>
+      .card   { fill: #ffffff; }
+      .title  { font: 600 13px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .grid    { fill: none; stroke: #17618f; stroke-width: 1; opacity: 0.42; }
+      .merid   { fill: none; stroke: #d6552b; stroke-width: 1.15; opacity: 0.62; }
+      .meridHi { fill: none; stroke: #d6552b; stroke-width: 2.4; }
+      .gnorth  { fill: none; stroke: #17618f; stroke-width: 2; stroke-dasharray: 5 3; }
+      .wedge   { fill: #d6552b; opacity: 0.16; }
+      .stn     { fill: #171b20; }
+      .slabel  { font: 600 13px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .nlabel  { font: 600 10px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+      .tn      { fill: #d6552b; }
+      .gn      { fill: #17618f; }
+      .conv    { font: 600 11px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .lead    { fill: none; stroke: #5c656e; stroke-width: 1; }
+      .delta   { fill: none; stroke: #5c656e; stroke-width: 1; stroke-dasharray: 2 2; }
+      .swatchO { fill: none; stroke: #d6552b; stroke-width: 2.4; }
+      .swatchB { fill: none; stroke: #17618f; stroke-width: 2; }
+      .note    { font: 11px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #171b20; }
+      .muted   { font: 11px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5c656e; }
+      .credit  { font: italic 10px system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #5c656e; }
+    </style>
+    <marker id="tnHead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#d6552b"/>
+    </marker>
+    <marker id="gnHead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#17618f"/>
+    </marker>
+    <clipPath id="plot"><rect x="34" y="58" width="376" height="260"/></clipPath>
+  </defs>
+
+  <rect class="card" width="512" height="420"/>
+  <text class="title" x="16" y="22">Why a true-north bearing isn&#8217;t a grid bearing</text>
+
+  <g clip-path="url(#plot)">
+    <!-- Blue UTM grid: a square Cartesian mesh (grid north = straight up). -->
+    <line class="grid" x1="34"  y1="58" x2="34"  y2="318"/>
+    <line class="grid" x1="81"  y1="58" x2="81"  y2="318"/>
+    <line class="grid" x1="128" y1="58" x2="128" y2="318"/>
+    <line class="grid" x1="175" y1="58" x2="175" y2="318"/>
+    <line class="grid" x1="222" y1="58" x2="222" y2="318"/>
+    <line class="grid" x1="269" y1="58" x2="269" y2="318"/>
+    <line class="grid" x1="316" y1="58" x2="316" y2="318"/>
+    <line class="grid" x1="363" y1="58" x2="363" y2="318"/>
+    <line class="grid" x1="410" y1="58" x2="410" y2="318"/>
+    <line class="grid" x1="34" y1="58"  x2="410" y2="58"/>
+    <line class="grid" x1="34" y1="95"  x2="410" y2="95"/>
+    <line class="grid" x1="34" y1="132" x2="410" y2="132"/>
+    <line class="grid" x1="34" y1="169" x2="410" y2="169"/>
+    <line class="grid" x1="34" y1="206" x2="410" y2="206"/>
+    <line class="grid" x1="34" y1="243" x2="410" y2="243"/>
+    <line class="grid" x1="34" y1="280" x2="410" y2="280"/>
+    <line class="grid" x1="34" y1="318" x2="410" y2="318"/>
+
+    <!-- Orange true-north meridians, fanning toward the pole above the frame. -->
+    <line class="merid" x1="106.1" y1="58" x2="34"  y2="318"/>
+    <line class="merid" x1="164.1" y1="58" x2="128" y2="318"/>
+    <line class="merid" x1="222"   y1="58" x2="222" y2="318"/>
+    <line class="merid" x1="337.9" y1="58" x2="410" y2="318"/>
+
+    <!-- The meridian A and B share (108 deg E), emphasized; arrowhead = true north. -->
+    <line class="meridHi" x1="279.9" y1="58" x2="316" y2="318" marker-start="url(#tnHead)"/>
+
+    <!-- Grid-north line through A (straight up the grid); arrowhead = grid north. -->
+    <line class="gnorth" x1="309" y1="90" x2="309" y2="318" marker-start="url(#gnHead)"/>
+
+    <!-- Convergence angle at A, between grid north (up) and the true-north meridian. -->
+    <path class="wedge" d="M 309 270 L 309 228 A 42 42 0 0 0 303.3 228.4 Z"/>
+
+    <!-- B sits left of A's grid line: smaller easting though the longitude is equal. -->
+    <line class="delta" x1="287" y1="110" x2="309" y2="110"/>
+  </g>
+
+  <!-- North-direction labels. -->
+  <text class="nlabel tn" x="268" y="52" text-anchor="end">true N</text>
+  <text class="nlabel gn" x="316" y="84" text-anchor="start">grid N</text>
+
+  <!-- Stations. -->
+  <circle class="stn" cx="309" cy="270" r="4.5"/>
+  <circle class="stn" cx="287" cy="110" r="4.5"/>
+  <text class="slabel" x="320" y="275">A</text>
+  <text class="muted"  x="333" y="275">108&#176;E, 28&#176;N</text>
+  <text class="slabel" x="276" y="107" text-anchor="end">B</text>
+  <text class="muted"  x="263" y="107" text-anchor="end">108&#176;E, 33&#176;N</text>
+
+  <!-- Convergence callout. -->
+  <line class="lead" x1="150" y1="243" x2="299" y2="252"/>
+  <text class="conv"  x="60" y="240">grid</text>
+  <text class="conv"  x="60" y="254">convergence</text>
+  <text class="muted" x="60" y="268">(exaggerated here)</text>
+
+  <!-- Legend and takeaway. -->
+  <line class="swatchO" x1="16" y1="344" x2="40" y2="344"/>
+  <text class="note" x="48" y="348">True north &#8212; meridians, converging toward the pole</text>
+  <line class="swatchB" x1="16" y1="366" x2="40" y2="366"/>
+  <text class="note" x="48" y="370">UTM grid north &#8212; a square Cartesian grid</text>
+
+  <text class="muted" x="16" y="392">A and B share a longitude (one true-north meridian), yet B&#8217;s UTM easting is smaller than A&#8217;s:</text>
+  <text class="muted" x="16" y="406">grid north leans from true north by the convergence.</text>
+
+  <text class="credit" x="496" y="416" text-anchor="end">Based on a diagram by Mike Futrell</text>
+</svg>

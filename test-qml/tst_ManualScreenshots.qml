@@ -1571,6 +1571,186 @@ MainWindowTest {
                    "survey-add-trip is not blank");
         }
 
+        // A UTM easting/northing in the demo cave's neighbourhood, used to fix a
+        // station so the georeferencing shots show a real value rather than the
+        // "n/a" a fresh (un-fixed) cave reports. EPSG:32613 is UTM zone 13N; the
+        // exact coordinate is arbitrary — only that it resolves to a convergence.
+        readonly property string georefCS: "EPSG:32613"
+        readonly property string georefStation: "a1"
+        readonly property real georefEasting: 350000
+        readonly property real georefNorthing: 4300000
+        readonly property real georefElevation: 1200
+
+        // Set the project coordinate system and fix `page.currentCave`'s first
+        // station to real coordinates, so the cave is georeferenced. Both changes
+        // are undone by the restoreDemoProject() reload each georef shot ends with.
+        function georeferenceDemoCave(page) {
+            RootData.region.geoReference.globalCoordinateSystem = georefCS;
+
+            let model = page.currentCave.fixStations;
+            model.addFixStation();
+            model.setData(model.index(0), georefStation, FixStationModel.StationNameRole);
+            model.setData(model.index(0), georefCS, FixStationModel.InputCSRole);
+            model.setData(model.index(0), georefEasting, FixStationModel.EastingRole);
+            model.setData(model.index(0), georefNorthing, FixStationModel.NorthingRole);
+            model.setData(model.index(0), georefElevation, FixStationModel.ElevationRole);
+        }
+
+        // The project Coordinate system control on the Data page, set to UTM so the
+        // zone / hemisphere / resolved-EPSG fields are all showing.
+        // Backs docs/manual/georeferencing/georeference-a-cave.md.
+        //
+        // Cropped to the Geospatial group box (label + control) rather than grabbed
+        // whole-window: the control is one small row on an otherwise full Data page,
+        // so a cropped shot reads in the manual's narrow column where a whole-window
+        // one would not.
+        function test_georefCoordinateSystem() {
+            let page = openDataPage("Source/Data", "dataMainPage");
+            if (!page) { return; }
+
+            RootData.region.geoReference.globalCoordinateSystem = georefCS;
+
+            let group = findByName(page, "geospatialGroupBox");
+            verify(group, "found the Geospatial group box");
+            let combo = findByName(page, "globalCoordinateSystemComboBox");
+            verify(combo, "found the coordinate system combo box");
+
+            highlightOverlayId.target = combo;
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(group, "georef-coordinate-system",
+                                                    panelCropMargin);
+            verify(path.length > 0, "grabItemToFile wrote the coordinate-system shot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "georef-coordinate-system is not blank");
+
+            restoreDemoProject();
+        }
+
+        // Two shots from one georeferenced cave: the Fix Stations page with a fixed
+        // station, and the cave page's Grid convergence readout showing a value.
+        // Back docs/manual/georeferencing/georeference-a-cave.md and
+        // grid-convergence.md.
+        function test_georefFixAndConvergence() {
+            let page = openDataPage("Source/Data/Cave=Phake Cave 3000", "cavePage");
+            if (!page) { return; }
+
+            georeferenceDemoCave(page);
+            settle();
+
+            // The cave page, with the Fix stations count and Grid convergence value
+            // both now populated. Whole-window: the trip table and stats column
+            // around the readout are the context. Ring the whole convergence cell
+            // (label + value) via the value's parent.
+            let gcValue = findByName(page, "gridConvergenceValue");
+            verify(gcValue, "found the grid convergence value");
+            highlightOverlayId.target = gcValue.parent;
+            settle();
+
+            let gcPath = WindowGrabber.grabToFile(rootId.mainWindow, "georef-grid-convergence");
+            verify(gcPath.length > 0, "grabToFile wrote the grid-convergence shot");
+            verify(OffscreenRenderTester.nonBlackFraction(gcPath) > 0.3,
+                   "georef-grid-convergence is not blank");
+
+            // Now the Fix Stations sub-page, reached the way the cave page's link
+            // reaches it (gotoPageByName off the cave page's own PageView.page).
+            highlightOverlayId.target = null;
+            RootData.pageSelectionModel.gotoPageByName(page.PageView.page, "Fix Stations");
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      5000, "the Fix Stations page is current");
+            let fixPage = RootData.pageView.currentPageItem;
+
+            // No highlight ring here: the row is a single populated line and the
+            // ring would occlude the easting. The columns are the point.
+            let csCombo = findVisibleByName(fixPage, "inputCSComboBox.0");
+            verify(csCombo, "found the row's Input CS picker (page rendered)");
+            highlightOverlayId.target = null;
+            settle();
+
+            let fixPath = WindowGrabber.grabToFile(rootId.mainWindow, "georef-fix-station");
+            verify(fixPath.length > 0, "grabToFile wrote the fix-station shot");
+            verify(OffscreenRenderTester.nonBlackFraction(fixPath) > 0.3,
+                   "georef-fix-station is not blank");
+
+            restoreDemoProject();
+        }
+
+        // The 3D-view coordinate picker: georeference the cave, activate the Pick
+        // tool, pick a point on the model, and grab the popup that reads the point
+        // back out in the project CRS, WGS84, and elevation. Backs the "Read
+        // coordinates back out" section of georeference-a-cave.md.
+        //
+        // The popup is a QC.Popup opened by a `visible` binding (hasPick &&
+        // pickButtonId.selected), so it's a QObject child (findChild, not
+        // findByName) and needs popupType = Popup.Item to draw into the window
+        // overlay grabWindow can see — the same reason as the Import/Export menus.
+        function test_georefCoordinatePicker() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            let glTerrain = ObjectFinder.findObjectByChain(rootId.mainWindow,
+                "rootId->viewPage->SplitView->renderer");
+            verify(glTerrain, "found the GLTerrainRenderer");
+
+            // Georeference cave 0 so the picked point resolves to real coordinates:
+            // the popup's CRS / WGS84 / Elevation sections only show with a CS set.
+            let cave = RootData.region.cave(0);
+            verify(cave, "found the demo cave");
+            RootData.region.geoReference.globalCoordinateSystem = georefCS;
+            let model = cave.fixStations;
+            model.addFixStation();
+            model.setData(model.index(0), georefStation, FixStationModel.StationNameRole);
+            model.setData(model.index(0), georefCS, FixStationModel.InputCSRole);
+            model.setData(model.index(0), georefEasting, FixStationModel.EastingRole);
+            model.setData(model.index(0), georefNorthing, FixStationModel.NorthingRole);
+            model.setData(model.index(0), georefElevation, FixStationModel.ElevationRole);
+            RootData.futureManagerModel.waitForFinished();
+
+            let picker = glTerrain.coordinatePickerInteraction;
+            verify(picker, "found the coordinate picker");
+            let popup = findChild(glTerrain, "coordinatePickerPopup");
+            verify(popup, "found the coordinate picker popup");
+            popup.popupType = QC.Popup.Item;
+
+            picker.activate();
+            tryVerify(() => picker.enabled === true, 2000, "the picker is active");
+
+            // Ray-cast candidate points around the view center until one lands on the
+            // cave geometry (the carpet meshes are the easy hit; the line plot is thin).
+            let cx = glTerrain.width / 2;
+            let cy = glTerrain.height / 2;
+            let offsets = [[0,0],[0,-60],[0,60],[-90,0],[90,0],[-90,-60],[90,60],
+                           [0,-130],[0,130],[-180,0],[180,0],[-180,-120],[180,120]];
+            let picked = false;
+            for (let k = 0; k < offsets.length && !picked; ++k) {
+                picker.clearPick();
+                picker.pick(Qt.point(cx + offsets[k][0], cy + offsets[k][1]));
+                wait(60);
+                picked = picker.hasPick;
+            }
+            verify(picked, "a pick landed on the cave geometry");
+            tryVerify(() => popup.visible, 2000, "the picked-coordinates popup is open");
+
+            // A UTM easting/northing is wider than the value field, and the field
+            // defaults to its tail (cursor at end), hiding the leading digits — the
+            // meaningful part of the coordinate. Scroll each field to the start.
+            let csField = findChild(popup, "CSField");
+            if (csField) { csField.cursorPosition = 0; }
+            let wgsField = findChild(popup, "WgsField");
+            if (wgsField) { wgsField.cursorPosition = 0; }
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(popup.contentItem,
+                                                    "georef-coordinate-picker", 100);
+            verify(path.length > 0, "grabItemToFile wrote the coordinate-picker shot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "georef-coordinate-picker is not blank");
+
+            picker.deactivate();
+            restoreDemoProject();
+        }
+
         // The Import menu on the Data page, open, showing the survey formats.
         // Backs docs/manual/import-export/import-surveys.md.
         //

@@ -112,5 +112,5 @@ A warning icon appears beside the field when CaveWhere has something to say:
 
 - [Calibration](calibration.md) covers the rest of the box — distance, compass
   and clino corrections, which fix the *instrument* rather than the world.
-- Auto declination depends on a fixed station. Georeferencing has its own
-  chapter, still to be written.
+- [Georeference a Cave](../georeferencing/georeference-a-cave.md) — fix a station
+  so Auto declination has a location to compute from.
