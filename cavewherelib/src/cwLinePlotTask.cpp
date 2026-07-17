@@ -16,6 +16,7 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
 #include "cwNote.h"
 #include "cwSurveyNoteModel.h"
 #include "cwScrap.h"
@@ -267,6 +268,7 @@ private:
         cwSurvexExporterRegion::Options exportOptions;
         exportOptions.caveAttachmentDirs = InputData.caveAttachmentDirs;
         exportOptions.tripAttachmentDirs = InputData.tripAttachmentDirs;
+        exportOptions.tripInjectedDeclinations = InputData.tripInjectedDeclinations;
 
         const Monad::ResultBase r =
             cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath, exportOptions);
@@ -616,11 +618,32 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion *region)
 
 cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
                                                  const QHash<QUuid, QString>& caveAttachmentDirs,
-                                                 const QHash<QUuid, QString>& tripAttachmentDirs)
+                                                 const QHash<QUuid, QString>& tripAttachmentDirs,
+                                                 const QHash<QUuid, bool>& fileOwnsDeclination)
 {
     Input input = buildInput(region);
     input.caveAttachmentDirs = caveAttachmentDirs;
     input.tripAttachmentDirs = tripAttachmentDirs;
+
+    if (region != nullptr) {
+        // Resolve the injected declination here, on the main thread: the
+        // resolved value (IGRF auto or manual fallback) lives on the live
+        // cwTripCalibration and isn't part of the worker snapshot. Owners
+        // missing from fileOwnsDeclination stay uninjected — same outcome
+        // as a file that owns its declination.
+        for (cwCave* cave : region->caves()) {
+            for (cwTrip* trip : cave->trips()) {
+                if (trip->externalCenterline().isEmpty()) {
+                    continue;
+                }
+                if (fileOwnsDeclination.value(trip->id(), true)) {
+                    continue;
+                }
+                input.tripInjectedDeclinations.insert(trip->id(),
+                                                      trip->calibrations()->declination());
+            }
+        }
+    }
     return input;
 }
 

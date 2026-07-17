@@ -660,21 +660,21 @@ detach(cwTrip* trip,
 
 <div class="note">
   <strong>Deferred refactor &mdash; split the metadata pass from the
-  dependency walk.</strong> <code>scan()</code> runs per-solve
-  (<code>cwLinePlotManager::recomputeWatchSetAndProbeSources</code>
-  calls it up to twice per owner, <code>onWatchedFileChanged</code>
-  again), but of the metadata trio only the
-  <code>fileOwnsDeclination()</code> flag is needed per-solve
-  (commit 3's driver emission); date/team are attach-time-only, and
-  the metadata pass re-reads the entry file the walk already decoded.
-  When commit 3's per-owner scan cache lands, revisit the seam:
-  either thread the decoded entry text through the walk state, or
-  split the API into <code>scanDependencies()</code> +
-  <code>scanMetadata()</code> so the per-solve path stops paying for
-  attach-time parsing. The main-thread half of this is no longer
-  deferred: commit 8 moves the closure scan into a worker outright
-  &mdash; disk I/O of this shape always runs off the GUI thread &mdash;
-  so this note's remaining scope is the metadata/dependency API seam.
+  dependency walk &mdash; revisited at commit 3 and dropped.</strong>
+  The original argument was that of the metadata trio only the
+  <code>fileOwnsDeclination()</code> flag is needed per-solve, so the
+  per-solve path was paying for attach-time date/team parsing it never
+  uses. Commit 3 changed that calculus: the per-owner cache in
+  <code>cwLinePlotManager::recomputeWatchSetAndProbeSources</code> now
+  consumes <code>seededMetadata.fileOwnsDeclination()</code> from every
+  scan, so a <code>scanDependencies()</code>-only per-solve API would
+  still have to parse declination directives &mdash; the split would
+  save only the date/team field extraction, which is a few regex
+  matches over lines the walk already decoded. Not worth a second
+  scanner entry point; <code>scan()</code> stays unified. The
+  main-thread half was already resolved separately: commit 8 moves the
+  closure scan into a worker outright (disk I/O of this shape always
+  runs off the GUI thread).
 </div>
 
 <h2 id="scope-model">8. Per-scope station-list model</h2>
@@ -892,14 +892,18 @@ public:
     <code>*include</code> <em>only when</em> the per-solve scan reports
     <code>fileOwnsDeclination()</code> false (master &sect;8.8 q7 —
     cavern-verified that the file's own directive wins otherwise;
-    <code>declinationIsAuto</code> counts as file-owned). The
-    flag rides the scan result through the worker input; the manager
-    caches it per owner for the panel's read-only binding. When that
-    per-owner cache lands, revisit the &sect;7 deferred refactor
-    (split <code>scanMetadata()</code> from the dependency walk so
-    the per-solve path stops re-parsing attach-time metadata). Tests:
-    <code>[Attach][Declination]</code> asserting driver text for both
-    file-with-decl and file-without-decl fixtures.
+    <code>declinationIsAuto</code> counts as file-owned). The manager
+    caches the flag per owner from the scans it already runs
+    (<code>cwLinePlotManager::fileOwnsDeclination()</code>, the panel's
+    future read-only binding); <code>buildInput</code> resolves the
+    trip's declination (IGRF auto or manual) on the main thread and the
+    value rides the worker input as
+    <code>tripInjectedDeclinations</code>. The &sect;7 deferred
+    refactor (split <code>scanMetadata()</code> from the dependency
+    walk) was revisited here and dropped &mdash; the per-solve path now
+    consumes the flag, so the split no longer pays; see the &sect;7
+    note. Tests: <code>[Attach][Declination]</code> asserting driver
+    text for both file-with-decl and file-without-decl fixtures.
   </li>
   <li>
     <strong>Reconcile dirty-bit wiring.</strong> Verify (and wire if
@@ -1089,8 +1093,11 @@ public:
 <ul>
   <li>External trip, fixture <em>without</em> declination, trip has
     <code>autoDeclination = true</code> &rarr; driver contains
-    <code>*calibrate declination &lt;igrf-value&gt;</code> inside the
-    <code>trip_&lt;uuid&gt;</code> block, before <code>*include</code>.</li>
+    <code>*calibrate DECLINATION &lt;igrf-value&gt;</code> inside the
+    <code>trip_&lt;uuid&gt;</code> block, before <code>*include</code>
+    (emitted with the same negated-value survex calibrate convention as
+    native trips: stored east-positive 5.5 &rarr;
+    <code>*calibrate DECLINATION -5.50</code>).</li>
   <li>Same fixture, user-set manual declination &rarr; driver contains
     the manual value.</li>
   <li>External trip, fixture <em>with</em> its own

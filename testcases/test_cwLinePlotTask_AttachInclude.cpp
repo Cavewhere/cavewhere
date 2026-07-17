@@ -6,12 +6,17 @@
 **************************************************************************/
 
 // Catch
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 // Cavewhere
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
+#include "cwExternalSourceSettings.h"
+#include "cwFixStation.h"
+#include "cwFixStationModel.h"
+#include "cwGeoReference.h"
 #include "cwLinePlotManager.h"
 #include "cwLinePlotTask.h"
 #include "cwShot.h"
@@ -20,8 +25,10 @@
 #include "cwSurveyChunk.h"
 #include "cwSurvexExporterRegion.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
 
 // Test helpers
+#include "BoulderFixtureHelper.h"
 #include "LoadProjectHelper.h"
 
 // Qt
@@ -298,6 +305,263 @@ TEST_CASE("Mixed cave: native trip and attached trip both resolve",
     const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
     CHECK(lookup.hasPosition(tripPrefix + QStringLiteral(".simple.a1")));
     CHECK(lookup.hasPosition(tripPrefix + QStringLiteral(".simple.a3")));
+}
+
+TEST_CASE("buildInput injects resolved declination only for CaveWhere-owned external trips",
+          "[Attach][Declination]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+
+    cwTrip* caveWhereOwned = addEmptyTrip(cave, QStringLiteral("CaveWhereOwned"));
+    caveWhereOwned->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
+    caveWhereOwned->calibrations()->setAutoDeclination(false);
+    caveWhereOwned->calibrations()->setDeclinationManual(5.5);
+
+    cwTrip* fileOwned = addEmptyTrip(cave, QStringLiteral("FileOwned"));
+    fileOwned->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_with_metadata.svx")));
+    fileOwned->calibrations()->setAutoDeclination(false);
+    fileOwned->calibrations()->setDeclinationManual(3.3);
+
+    // Native trips never appear in the injection map, even when the flag
+    // map (wrongly) claims their file doesn't own declination.
+    cwTrip* nativeTrip = addTripWithShot(cave,
+                                         QStringLiteral("Native"),
+                                         QStringLiteral("N1"),
+                                         QStringLiteral("N2"),
+                                         15.0);
+
+    QHash<QUuid, bool> fileOwnsDeclination;
+    fileOwnsDeclination.insert(caveWhereOwned->id(), false);
+    fileOwnsDeclination.insert(fileOwned->id(), true);
+    fileOwnsDeclination.insert(nativeTrip->id(), false);
+
+    const auto input = cwLinePlotTask::buildInput(&region, {}, {}, fileOwnsDeclination);
+
+    REQUIRE(input.tripInjectedDeclinations.size() == 1);
+    CHECK(input.tripInjectedDeclinations.value(caveWhereOwned->id()) == 5.5);
+}
+
+TEST_CASE("buildInput rides the IGRF-resolved declination for auto external trips",
+          "[Attach][Declination]")
+{
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Boulder"));
+
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("a1"));
+    fix.setInputCS(QStringLiteral("EPSG:32613"));
+    fix.setEasting(478000.0);
+    fix.setNorthing(4430000.0);
+    fix.setElevation(1655.0);
+    cave->fixStations()->appendFixStation(fix);
+
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
+    attached->setDate(makeUtcDate(2024, 6, 1));
+    REQUIRE(attached->calibrations()->autoDeclination());
+    REQUIRE(attached->calibrations()->autoDeclinationAvailable());
+
+    QHash<QUuid, bool> fileOwnsDeclination;
+    fileOwnsDeclination.insert(attached->id(), false);
+
+    const auto input = cwLinePlotTask::buildInput(&region, {}, {}, fileOwnsDeclination);
+
+    // The injected value is the trip's resolved declination — IGRF here,
+    // since auto is on and a dated trip + fixed cave make it available.
+    const double resolved = attached->calibrations()->declination();
+    CHECK(resolved != 0.0);
+    CHECK(input.tripInjectedDeclinations.value(attached->id()) == resolved);
+}
+
+TEST_CASE("Driver emits injected declination inside the trip block before *include",
+          "[Attach][Declination]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("decl-attach")),
+                                             fixturePath(QStringLiteral("survex_no_metadata.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
+
+    cwCavingRegionData snapshot = region.data();
+    REQUIRE(snapshot.caves.size() == 1);
+    snapshot.caves[0].name = cwLinePlotTask::cavernCaveNameFor(cave->id());
+
+    cwSurvexExporterRegion::Options options;
+    options.tripAttachmentDirs.insert(attached->id(), attachDir);
+    options.tripInjectedDeclinations.insert(attached->id(), 5.5);
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    auto result = cwSurvexExporterRegion::exportRegion(snapshot, driverPath, options);
+    REQUIRE_FALSE(result.hasError());
+
+    QFile file(driverPath);
+    REQUIRE(file.open(QFile::ReadOnly));
+    QString driver = QString::fromUtf8(file.readAll());
+    file.close();
+
+    // Stored +5.5 east-positive comes out with survex's negated calibrate
+    // convention, same as native trips.
+    const QString tripLabel = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const qsizetype beginIndex = driver.indexOf(QStringLiteral("*begin %1").arg(tripLabel));
+    const qsizetype declinationIndex = driver.indexOf(QStringLiteral("*calibrate DECLINATION -5.50"));
+    const qsizetype includeIndex = driver.indexOf(QStringLiteral("*include"));
+    const qsizetype endIndex = driver.indexOf(QStringLiteral("*end %1").arg(tripLabel));
+    REQUIRE(beginIndex >= 0);
+    REQUIRE(declinationIndex >= 0);
+    REQUIRE(includeIndex >= 0);
+    REQUIRE(endIndex >= 0);
+    CHECK(beginIndex < declinationIndex);
+    CHECK(declinationIndex < includeIndex);
+    CHECK(includeIndex < endIndex);
+
+    // Without an injection entry the trip block carries no declination at
+    // all (the file-owned / unknown-ownership path).
+    options.tripInjectedDeclinations.clear();
+    result = cwSurvexExporterRegion::exportRegion(snapshot, driverPath, options);
+    REQUIRE_FALSE(result.hasError());
+    REQUIRE(file.open(QFile::ReadOnly));
+    driver = QString::fromUtf8(file.readAll());
+    CHECK_FALSE(driver.contains(QStringLiteral("*calibrate DECLINATION")));
+}
+
+TEST_CASE("Injected manual declination rotates externally attached stations",
+          "[Attach][Declination]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("decl-rotate")),
+                                             fixturePath(QStringLiteral("survex_no_metadata.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Rotated"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
+    attached->calibrations()->setAutoDeclination(false);
+    attached->calibrations()->setDeclinationManual(90.0);
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // The scan of the in-project entry found no declination directive, so
+    // CaveWhere owns it and the driver injected the manual 90.
+    CHECK_FALSE(manager.fileOwnsDeclination(attached->id()));
+
+    // survex_no_metadata.svx shoots B1→B2 at compass 0 for 10 m with B1
+    // fixed at the origin. Declination +90 east swings the true bearing
+    // to 90°, so B2 lands 10 m east instead of 10 m north.
+    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString b2Key = tripPrefix + QStringLiteral(".nometadata.b2");
+    REQUIRE(lookup.hasPosition(b2Key));
+    const QVector3D b2 = lookup.position(b2Key);
+    CHECK(b2.x() == Catch::Approx(10.0).margin(0.01));
+    CHECK(b2.y() == Catch::Approx(0.0).margin(0.01));
+}
+
+TEST_CASE("Project-side scan flag wins over a diverged live-link source",
+          "[Attach][Declination]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    // In-project copy carries no declination (CaveWhere owns it), but the
+    // live-link source has since gained its own *calibrate declination and
+    // no reconcile has run. The solve *includes the in-project bytes, so
+    // the flag — and therefore the injection — must follow the project
+    // copy, not the fresher source.
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("decl-diverged")),
+                                             fixturePath(QStringLiteral("survex_no_metadata.svx")));
+    const QString sourceDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("decl-source")),
+                                             fixturePath(QStringLiteral("survex_with_metadata.svx")));
+    const QString sourcePath = QDir(sourceDir).absoluteFilePath(QStringLiteral("survex_with_metadata.svx"));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Diverged"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
+    attached->calibrations()->setAutoDeclination(false);
+    attached->calibrations()->setDeclinationManual(90.0);
+
+    cwExternalSourceSettings settings;
+    settings.setSourcePath(attached->id(), sourcePath);
+
+    cwLinePlotManager manager;
+    manager.setExternalSourceSettings(&settings);
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK_FALSE(manager.fileOwnsDeclination(attached->id()));
+
+    // Injection applied → B2 swings east, exactly as in the undiverged case.
+    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString b2Key = tripPrefix + QStringLiteral(".nometadata.b2");
+    REQUIRE(lookup.hasPosition(b2Key));
+    const QVector3D b2 = lookup.position(b2Key);
+    CHECK(b2.x() == Catch::Approx(10.0).margin(0.01));
+    CHECK(b2.y() == Catch::Approx(0.0).margin(0.01));
+
+    settings.clearSourcePath(attached->id());
+}
+
+TEST_CASE("File-owned declination wins over the trip's CaveWhere setting",
+          "[Attach][Declination]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("decl-fileowned")),
+                                             fixturePath(QStringLiteral("survex_with_metadata.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("FileOwned"));
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_with_metadata.svx")));
+    // Sentinel that must NOT take effect: the file's own
+    // *calibrate declination 7.2 owns the trip's declination.
+    attached->calibrations()->setAutoDeclination(false);
+    attached->calibrations()->setDeclinationManual(90.0);
+
+    cwLinePlotManager manager;
+    QHash<QUuid, QString> tripDirs;
+    tripDirs.insert(attached->id(), attachDir);
+    manager.setTripAttachmentDirs(tripDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK(manager.fileOwnsDeclination(attached->id()));
+
+    // A1→A2, compass 0, 10 m, A1 fixed at origin. The file's
+    // *calibrate declination 7.2 means "subtract 7.2 from bearings"
+    // (survex calibrate convention), so A2 resolves at bearing -7.2°:
+    // x = 10·sin(-7.2°), y = 10·cos(-7.2°). The trip's 90° sentinel must
+    // leave no trace.
+    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const QString tripPrefix = QStringLiteral("trip_%1").arg(attached->id().toString(QUuid::Id128));
+    const QString a2Key = tripPrefix + QStringLiteral(".withmetadata.a2");
+    REQUIRE(lookup.hasPosition(a2Key));
+    const QVector3D a2 = lookup.position(a2Key);
+    CHECK(a2.x() == Catch::Approx(-1.2533).margin(0.01));
+    CHECK(a2.y() == Catch::Approx(9.9211).margin(0.01));
 }
 
 TEST_CASE("Broken external centerline surfaces SolveError with Step::Cavern",

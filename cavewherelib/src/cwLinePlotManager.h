@@ -118,6 +118,17 @@ public:
     // plan. Empty when no live-link attachment is configured.
     QList<QUuid> missingSourceOwners() const { return m_missingSourceOwners; }
 
+    // True when the owner's external file carries its own declination
+    // (master plan §8.8 q7) — the driver then injects nothing and the
+    // trip panel shows the value read-only. Captured from the most recent
+    // scan (source-side wins over project-side when both resolve); owners
+    // that were never scanned successfully default to file-owned so an
+    // unknown state never injects a declination.
+    bool fileOwnsDeclination(const QUuid& ownerId) const
+    {
+        return m_fileOwnsDeclination.value(ownerId, true);
+    }
+
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);
 
@@ -191,6 +202,11 @@ private:
     QHash<QString, QUuid> m_sourceOwnerForPath;
 
     QList<QUuid> m_missingSourceOwners;
+
+    // Per-owner file-owns-declination flag from the most recent recompute;
+    // read via fileOwnsDeclination() and baked into each solve's Input by
+    // runSurvex(). Rebuilt wholesale on every recompute.
+    QHash<QUuid, bool> m_fileOwnsDeclination;
 
     // Per-trip centerline keyword visibility. One keyword item per trip, keyed
     // by the live cwTrip*. The visibility proxy (reachable via item->object())

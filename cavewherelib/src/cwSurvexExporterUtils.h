@@ -72,6 +72,26 @@ inline void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& 
     stream << Qt::endl;
 }
 
+// Emit a `*calibrate <type> <value> [scale]` line. The value is negated on
+// the way out — survex's calibrate convention subtracts the zero error, so
+// CaveWhere's east-positive declination (and the other corrections) flip
+// sign. Zero value with unit scale emits nothing (survex's default).
+inline void writeCalibration(QTextStream& stream, const QString& type, double value, double scale = 1.0)
+{
+    if(value == 0.0 && scale == 1.0) { return; }
+    value = -value;
+
+    QString calibrationString = QStringLiteral("*calibrate %1 %2")
+            .arg(type)
+            .arg(value, 0, 'f', 2);
+
+    if(scale != 1.0) {
+        calibrationString += QStringLiteral(" %1").arg(scale, 0, 'f', 2);
+    }
+
+    stream << calibrationString << Qt::endl;
+}
+
 /**
  * Survex requires *cs out whenever any *cs appears, so when the user hasn't
  * set a globalCS but a fix has its own inputCS, fall back to that fix's CS

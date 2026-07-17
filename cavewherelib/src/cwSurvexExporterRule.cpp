@@ -167,41 +167,26 @@ void cwSurvexExporterRule::writeCalibrations(QTextStream& stream,
                                              const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext) {
     writeLengthUnits(stream, calibrations.distanceUnit());
 
-    writeCalibration(stream, "TAPE", calibrations.tapeCalibration());
+    using cwSurvexExporterUtils::writeCalibration;
+    writeCalibration(stream, QStringLiteral("TAPE"), calibrations.tapeCalibration());
 
     double correctFrontsightCompass = calibrations.hasCorrectedCompassFrontsight() ? -180.0 : 0.0;
-    writeCalibration(stream, "COMPASS", calibrations.frontCompassCalibration() + correctFrontsightCompass);
+    writeCalibration(stream, QStringLiteral("COMPASS"), calibrations.frontCompassCalibration() + correctFrontsightCompass);
 
     double correctBacksightCompass = calibrations.hasCorrectedCompassBacksight() ? -180.0 : 0.0;
-    writeCalibration(stream, "BACKCOMPASS", calibrations.backCompassCalibration() + correctBacksightCompass);
+    writeCalibration(stream, QStringLiteral("BACKCOMPASS"), calibrations.backCompassCalibration() + correctBacksightCompass);
 
     double frontClinoScale = calibrations.hasCorrectedClinoFrontsight() ? -1.0 : 1.0;
-    writeCalibration(stream, "CLINO", calibrations.frontClinoCalibration(), frontClinoScale);
+    writeCalibration(stream, QStringLiteral("CLINO"), calibrations.frontClinoCalibration(), frontClinoScale);
 
     double backClinoScale = calibrations.hasCorrectedClinoBacksight() ? -1.0 : 1.0;
-    writeCalibration(stream, "BACKCLINO", calibrations.backClinoCalibration(), backClinoScale);
+    writeCalibration(stream, QStringLiteral("BACKCLINO"), calibrations.backClinoCalibration(), backClinoScale);
 
     if (calibrations.autoDeclination() && declinationContext) {
         cwSurvexExporterUtils::writeDeclinationAuto(stream, *declinationContext);
     } else {
-        writeCalibration(stream, "DECLINATION", calibrations.declinationManual());
+        writeCalibration(stream, QStringLiteral("DECLINATION"), calibrations.declinationManual());
     }
-}
-
-void cwSurvexExporterRule::writeCalibration(QTextStream& stream, QString type, double value, double scale) {
-    if(value == 0.0 && scale == 1.0) { return; }
-    value = -value; //Flip the value be survex is counter intuitive
-
-    QString calibrationString = QString("*calibrate %1 %2")
-                                    .arg(type)
-                                    .arg(value, 0, 'f', 2);
-
-    if(scale != 1.0) {
-        QString scaleString = QString(" %3").arg(scale, 0, 'f', 2);
-        calibrationString += scaleString;
-    }
-
-    stream << calibrationString << Qt::endl;
 }
 
 /**

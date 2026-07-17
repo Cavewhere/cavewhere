@@ -71,6 +71,14 @@ public:
         // (see cwSurvexExporterCaveTask::writeExternalInclude).
         QHash<QUuid, QString> caveAttachmentDirs;
         QHash<QUuid, QString> tripAttachmentDirs;
+
+        // CaveWhere-resolved declination (degrees, east-positive) per
+        // external trip whose file carries no declination of its own.
+        // Resolved on the main thread by buildInput from the live
+        // cwTripCalibration (IGRF auto or manual value) — the worker
+        // snapshot only carries the raw manual/auto fields. Absent key =
+        // file-owned or unknown → the driver emits nothing for that trip.
+        QHash<QUuid, double> tripInjectedDeclinations;
     };
 
     class LinePlotCaveData {
@@ -169,9 +177,15 @@ public:
     };
 
     static Input buildInput(const cwCavingRegion* region);
+
+    // fileOwnsDeclination carries the manager's per-owner scan flag
+    // (cwLinePlotManager::fileOwnsDeclination); trips flagged false get
+    // their resolved declination baked into tripInjectedDeclinations.
+    // Owners missing from the map are treated as file-owned.
     static Input buildInput(const cwCavingRegion* region,
                             const QHash<QUuid, QString>& caveAttachmentDirs,
-                            const QHash<QUuid, QString>& tripAttachmentDirs);
+                            const QHash<QUuid, QString>& tripAttachmentDirs,
+                            const QHash<QUuid, bool>& fileOwnsDeclination = {});
     static QFuture<LinePlotResultData> run(Input input);
 
     /**

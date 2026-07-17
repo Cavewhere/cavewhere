@@ -83,6 +83,7 @@ void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream,
                                                  const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext) {
     writeLengthUnits(stream, calibrations->distanceUnit());
 
+    using cwSurvexExporterUtils::writeCalibration;
     writeCalibration(stream, QStringLiteral("TAPE"), calibrations->tapeCalibration());
 
     double correctFrontsightCompass = calibrations->hasCorrectedCompassFrontsight() ? -180.0 : 0.0;
@@ -102,22 +103,6 @@ void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream,
     } else {
         writeCalibration(stream, QStringLiteral("DECLINATION"), calibrations->declination());
     }
-}
-
-void cwSurvexExporterTripTask::writeCalibration(QTextStream& stream, QString type, double value, double scale) {
-    if(value == 0.0 && scale == 1.0) { return; }
-    value = -value; //Flip the value be survex is counter intuitive
-
-    QString calibrationString = QStringLiteral("*calibrate %1 %2")
-            .arg(type)
-            .arg(value, 0, 'f', 2);
-
-    if(scale != 1.0) {
-        QString scaleString = QStringLiteral(" %3").arg(scale, 0, 'f', 2);
-        calibrationString += scaleString;
-    }
-
-    stream << calibrationString << Qt::endl;
 }
 
 /**

@@ -55,7 +55,6 @@ private:
     void writeCalibrations(QTextStream& stream,
                            cwTripCalibration* calibrations,
                            const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext);
-    void writeCalibration(QTextStream& stream, QString type, double value, double scale = 1.0);
     void writeLengthUnits(QTextStream& stream, cwUnits::LengthUnit unit);
     void writeShotData(QTextStream& stream, const cwTrip* trip);
     void writeLRUDData(QTextStream& stream, const cwTrip *trip);

@@ -527,7 +527,8 @@ void cwLinePlotManager::runSurvex() {
 
             auto input = cwLinePlotTask::buildInput(Region.data(),
                                                     m_caveAttachmentDirs,
-                                                    m_tripAttachmentDirs);
+                                                    m_tripAttachmentDirs,
+                                                    m_fileOwnsDeclination);
             auto future = cwLinePlotTask::run(std::move(input));
 
             // Receive the worker's result by parameter rather than capturing
@@ -710,6 +711,7 @@ void cwLinePlotManager::recomputeWatchSetAndProbeSources()
     QStringList newWatchedFiles;
     QHash<QString, QUuid> newSourceOwnerForPath;
     QList<QUuid> newMissingSourceOwners;
+    QHash<QUuid, bool> newFileOwnsDeclination;
 
     if (Region != nullptr) {
         // Per-owner scan: project-side (in-project copy) and source-side
@@ -730,6 +732,8 @@ void cwLinePlotManager::recomputeWatchSetAndProbeSources()
                         for (const QString& dep : scan.value().dependencies) {
                             newWatchedFiles.append(dep);
                         }
+                        newFileOwnsDeclination.insert(
+                            ownerId, scan.value().seededMetadata.fileOwnsDeclination());
                     }
                 }
             }
@@ -748,6 +752,16 @@ void cwLinePlotManager::recomputeWatchSetAndProbeSources()
                             if (!newSourceOwnerForPath.contains(dep)) {
                                 newSourceOwnerForPath.insert(dep, ownerId);
                             }
+                        }
+                        // The project-side flag wins when both scans resolve:
+                        // the solve *includes the in-project copy, so its scan
+                        // describes the bytes actually exported. The source
+                        // scan only fills in when no project entry exists yet;
+                        // once reconcile copies the source over, the next
+                        // recompute converges the flag to the new bytes.
+                        if (!newFileOwnsDeclination.contains(ownerId)) {
+                            newFileOwnsDeclination.insert(
+                                ownerId, scan.value().seededMetadata.fileOwnsDeclination());
                         }
                     }
                 }
@@ -808,6 +822,8 @@ void cwLinePlotManager::recomputeWatchSetAndProbeSources()
         m_missingSourceOwners = std::move(newMissingSourceOwners);
         emit missingSourceOwnersChanged();
     }
+
+    m_fileOwnsDeclination = std::move(newFileOwnsDeclination);
 }
 
 QString cwLinePlotManager::sourcePathForOwner(const QUuid& ownerId) const

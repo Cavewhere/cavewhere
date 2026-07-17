@@ -114,6 +114,17 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         if (!tripData.externalCenterline.isEmpty()) {
             const QString tripLabel = cavernTripNameFor(tripData.id);
             stream << "*begin " << tripLabel << " ; " << tripData.name << Qt::endl;
+            // CaveWhere-resolved declination for files that carry none of
+            // their own. Emitted before *include so it scopes over the
+            // included legs; when the file owns declination the map has no
+            // entry (see cwSurvexExporterRegion::Options).
+            const auto declinationIt =
+                ExportOptions.tripInjectedDeclinations.constFind(tripData.id);
+            if (declinationIt != ExportOptions.tripInjectedDeclinations.constEnd()) {
+                cwSurvexExporterUtils::writeCalibration(stream,
+                                                        QStringLiteral("DECLINATION"),
+                                                        declinationIt.value());
+            }
             if (!writeExternalInclude(stream, tripData.id,
                                       ExportOptions.tripAttachmentDirs,
                                       tripData.externalCenterline.entryFile(),

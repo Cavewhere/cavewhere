@@ -133,7 +133,6 @@ private:
     static void writeCalibrations(QTextStream& stream,
                                   const cwTripCalibrationData& calibrations,
                                   const std::optional<cwSurvexExporterUtils::DeclinationContext>& declinationContext);
-    static void writeCalibration(QTextStream& stream, QString type, double value, double scale = 1.0);
 
     static void writeLengthUnits(QTextStream &stream, cwUnits::LengthUnit unit);
     static void writeShotData(QTextStream &stream, const cwSurveyDataArtifact::Trip trip, int textPadding = -11);
