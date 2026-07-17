@@ -4433,6 +4433,8 @@ QFuture<void> cwSaveLoad::pendingJobsFinished()
     // so an unshielded caller canceling its derived chain would cancel
     // m_pendingJobsDeferred's future underneath the re-arm polls in
     // cwSaveLoadPrivate and every sibling observer, starving the queue.
+    // Note the shielded future settles via the event loop, so it is
+    // never already-finished at return - observe it, don't poll it.
     return AsyncFuture::shield(completeSaveJobs());
 }
 

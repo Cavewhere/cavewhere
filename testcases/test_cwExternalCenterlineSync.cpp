@@ -604,5 +604,6 @@ TEST_CASE("canceling a reconcile future does not poison the save-job drain",
     REQUIRE(AsyncFuture::waitForFinished(futureB, kReconcileWaitMs));
     REQUIRE_FALSE(futureB.isCanceled());
     REQUIRE_FALSE(futureB.result().hasError());
+    CHECK(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"))));
     CHECK_FALSE(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("childA.svx"))));
 }

@@ -46,10 +46,11 @@
     <code>.subscribe(&hellip;)</code>) watches its own chain future and,
     when a consumer cancels it, calls <code>futurePtr-&gt;cancel()</code>
     on the <em>observed</em> future
-    (<code>asyncfuture.h:1256-1268</code>).</li>
+    (<code>asyncfuture.h:~1277</code>).</li>
   <li><code>DeferredFuture::complete(QFuture)</code> installs
     <code>pushCancel</code> &mdash; "Pushes cancel to child futures in
-    the chain" (<code>asyncfuture.h:582-595</code>) &mdash; so a
+    the chain" (<code>asyncfuture.h:~597-611</code>, now gated on
+    <code>CancelPropagation::Propagate</code>) &mdash; so a
     deferred completed <em>from a future</em> forwards its own
     cancellation into that future.</li>
 </ul>
@@ -59,11 +60,12 @@
   QtConcurrent worker future it observes gets marked). It becomes a
   defect when the chain bottoms out in a <strong>shared</strong>
   future &mdash; one handed out to many observers and used by its
-  owner for bookkeeping. The concrete case:
-  <code>cwSaveLoad::pendingJobsFinished()</code> returns
-  <code>d-&gt;m_pendingJobsDeferred.future()</code>
-  (<code>cwSaveLoad.cpp:4426</code>), the project-wide job-drain
-  future. <code>QFuture</code> copies share one
+  owner for bookkeeping. The concrete case (pre-fix):
+  <code>cwSaveLoad::pendingJobsFinished()</code> returned the raw
+  <code>d-&gt;m_pendingJobsDeferred.future()</code>, the project-wide
+  job-drain future; commit 2 now shields it
+  (<code>cwSaveLoad.cpp:4436</code>).
+  <code>QFuture</code> copies share one
   <code>QFutureInterface</code>, so a cancel arriving through
   <em>any</em> derived chain marks the one shared object canceled:
 </p>
@@ -80,15 +82,19 @@
 </ul>
 
 <p>
-  Exposure today: any caller that cancels the future returned by
-  <code>cwExternalCenterlineSync::reconcile()</code> reaches the shared
-  deferred in one hop. The attach orchestrator dodges it by hand with
-  a value-completed <code>AsyncFuture::Deferred</code> firewall
+  Exposure before the fix: any caller that canceled the future
+  returned by <code>cwExternalCenterlineSync::reconcile()</code>
+  reached the shared deferred in one hop (the
+  <code>[SaveLoad][Shield]</code> regression test demonstrates the
+  hang). The attach orchestrator dodged it by hand with a
+  value-completed <code>AsyncFuture::Deferred</code> firewall
   (<code>cwExternalCenterlineAttach.cpp</code>, see the comment on the
-  Deferred), and commit 7's <code>updateFromSource</code> would need
-  the same incantation. Per-consumer incantations are the same bug
-  farm shape as the pre-refactor <code>localMutationOccurred</code>
-  emits &mdash; fix it at the source instead.
+  Deferred), and commit 7's <code>updateFromSource</code> would have
+  needed the same incantation. Per-consumer incantations are the same
+  bug farm shape as the pre-refactor
+  <code>localMutationOccurred</code> emits &mdash; commit 2 fixed it
+  at the source instead, so <code>updateFromSource</code> needs no
+  firewall of its own.
 </p>
 
 <h2 id="figure">2. Figure: how shield() breaks the propagation</h2>
@@ -103,7 +109,7 @@
           &#9474;  future.cancel()
           &#9662;
    [ chain future        ]  ...........  cb skipped (no rollback / no completion)
-          &#9474;  execute() watch: futurePtr-&gt;cancel()     asyncfuture.h:1256-1268
+          &#9474;  execute() watch: futurePtr-&gt;cancel()     asyncfuture.h:~1277
           &#9662;
    [ reconcile()'s chain future ]
           &#9474;  same watch, one level up
@@ -248,15 +254,19 @@ QFuture&lt;T&gt; AsyncFuture::shield(QFuture&lt;T&gt; future) {
 
 <h2 id="commits">5. Commit sequence</h2>
 
-<h3>Commit 1 &mdash; asyncfuture fork: the primitive</h3>
+<h3>Commit 1 &mdash; asyncfuture fork: the primitive
+  <span class="meta">(landed: fork commit <code>7a8b768</code>)</span></h3>
 <p>
   <code>CancelPropagation</code> policy parameter on
   <code>complete(QFuture)</code> in <code>DeferredFuture</code>,
   <code>Deferred&lt;T&gt;</code>, <code>Deferred&lt;void&gt;</code>;
-  free <code>AsyncFuture::shield()</code>. Unit tests in the
+  free <code>AsyncFuture::shield()</code>; fork README documentation
+  for both (shield() section + the policy parameter on the
+  <code>Deferred::complete(QFuture)</code> entry). Unit tests in the
   standalone asyncfuture suite (build recipe: see the repo's CI /
   existing test project; cavewhere's superbuild does not compile
-  them). Gates:
+  them). Gates (all covered by the new <code>ShieldTests</code>
+  class):
 </p>
 <ul>
   <li>Result forwarding: complete the inner deferred with a value
@@ -283,7 +293,8 @@ QFuture&lt;T&gt; AsyncFuture::shield(QFuture&lt;T&gt; future) {
     push (loop both variants through the same assertions).</li>
 </ul>
 
-<h3>Commit 2 &mdash; cavewhere: shield the shared drain future at the source</h3>
+<h3>Commit 2 &mdash; cavewhere: shield the shared drain future at the source
+  <span class="meta">(landed: <code>57b9ba16</code>)</span></h3>
 <ul>
   <li>Bump the <code>asyncfuture</code> submodule; note the bump in
     the commit message per house rules.</li>
@@ -299,7 +310,7 @@ QFuture&lt;T&gt; AsyncFuture::shield(QFuture&lt;T&gt; future) {
     hang &mdash; i.e. the drain cycle survived a consumer cancel.</li>
   <li>Keep the attach orchestrator unchanged: its Deferred still
     provides the scan-window cancel poll and the one-way-cancel
-    contract; its firewall comment gains one line pointing at
+    contract; its firewall comment gains a note pointing at
     shield() as the infrastructure-level backstop.</li>
 </ul>
 
@@ -316,15 +327,30 @@ QFuture&lt;T&gt; AsyncFuture::shield(QFuture&lt;T&gt; future) {
 
 <h2 id="out-of-scope">6. Out of scope / survey items</h2>
 <ul>
-  <li><strong>Future-API audit.</strong> Sweep other
-    <code>cwSaveLoad</code>/<code>cwProject</code> methods that return
-    futures (<code>sync()</code>,
-    <code>resetBranchAndReconcile()</code>, <code>retire()</code>,
-    the per-call shared_ptr deferreds) for the same
-    shared-state-escapes-as-cancellable-handle shape. Per-call
-    deferreds are fine (cancel only poisons that one operation);
-    anything returning a <em>member</em> deferred's future needs
-    shield().</li>
+  <li><strong>Future-API audit.</strong> The boundary rule: a member
+    deferred's future (or a chain observing one) never crosses
+    <code>cwSaveLoad</code>'s public API unshielded &mdash;
+    <code>completeSaveJobs()</code> (private, raw) vs
+    <code>pendingJobsFinished()</code> (public, shielded) is the
+    pattern. The post-commit-2 review found the concrete worklist:
+    <ul>
+      <li><code>retire()</code>'s no-owned-tempdirs branch returns the
+        <em>raw</em> <code>completeSaveJobs()</code> future
+        (<code>cwSaveLoad.cpp:~5448/5465</code>) &mdash; zero-hop
+        exposure of the shared deferred, the exact shape commit 2
+        fixed; wrap in <code>shield()</code>.</li>
+      <li><code>saveAllFromV6()</code> returns
+        <code>observe(m_pendingJobsDeferred.future()).context(&hellip;)</code>
+        (<code>cwSaveLoad.cpp:~2657</code>) &mdash; one propagation hop
+        from a consumer cancel to the shared deferred; shield the
+        source future.</li>
+      <li>Verified clean, no action: <code>sync()</code> and
+        <code>resetBranchAndReconcile()</code> bottom out in per-call
+        deferreds (cancel only poisons that one operation), and the
+        operation queue's internal consumers value-complete their
+        per-op deferreds without ever calling
+        <code>QFuture::cancel()</code>.</li>
+    </ul></li>
   <li><strong>Hard shield.</strong> Not implementable over QFuture
     (see &sect;3); revisit only if a custom handle type ever becomes
     worth it.</li>
