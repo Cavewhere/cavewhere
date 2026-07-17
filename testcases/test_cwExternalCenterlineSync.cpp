@@ -13,6 +13,7 @@
 #include "cwCavingRegion.h"
 #include "cwExternalCenterlineScanner.h"
 #include "cwExternalCenterlineSync.h"
+#include "cwFutureManagerModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
@@ -23,6 +24,7 @@
 
 // Qt
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
@@ -67,6 +69,10 @@ std::unique_ptr<SavedProjectFixture> makeSavedProject(const QString& projectFile
         QDir(fixture->tempDir.path()).filePath(projectFileBase + QStringLiteral(".cwproj"));
     REQUIRE(fixture->project->saveAs(projectPath));
     fixture->project->waitSaveToFinish();
+    // Drain the queued fileSaved delivery so modified() is settled false
+    // before tests take a baseline (same idiom as test_cwLazLayerSaveLoad).
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
     return fixture;
 }
 
@@ -449,6 +455,100 @@ TEST_CASE("two reconcile calls in sequence leave a consistent final state",
     const QStringList files = listFilesUnder(attachDirObj);
     REQUIRE(files.size() == 1);
     CHECK(files.first() == attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")));
+}
+
+TEST_CASE("reconcile that copies files flips the project modified bit",
+          "[Sync][Reconcile]")
+{
+    // A live-link refresh landing mid-session mutates the project's
+    // on-disk shape; without the modified flip the refresh is silently
+    // lost in a bundled .cw on quit-without-save (master plan §5.4).
+    auto fixture = makeSavedProject(QStringLiteral("reconcile-dirty-copy"));
+    REQUIRE_FALSE(fixture->project->modified());
+
+    const QString attachmentDir =
+        fixture->project->saveLoad()->externalCenterlineDir(fixture->cave).absolutePath();
+
+    const QString srcRoot = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                                QStringLiteral("entry.svx"),
+                                {},
+                                mtime);
+
+    auto future = cwExternalCenterlineSync::reconcile(
+        fixture->project->saveLoad(), scan, attachmentDir);
+    fixture->project->waitSaveToFinish();
+    REQUIRE(AsyncFuture::waitForFinished(future, kReconcileWaitMs));
+
+    CHECK(fixture->project->modified());
+}
+
+TEST_CASE("no-op reconcile leaves the modified bit untouched",
+          "[Sync][Reconcile]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("reconcile-dirty-noop"));
+    REQUIRE_FALSE(fixture->project->modified());
+
+    const QString attachmentDir =
+        fixture->project->saveLoad()->externalCenterlineDir(fixture->cave).absolutePath();
+
+    const QString srcRoot = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                                QStringLiteral("entry.svx"),
+                                {},
+                                mtime);
+
+    // Plant a matching destination so the plan has no copies and no removes.
+    const QDir attachDirObj(attachmentDir);
+    writeFile(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")),
+              QByteArray(kFakeContent),
+              mtime);
+
+    auto future = cwExternalCenterlineSync::reconcile(
+        fixture->project->saveLoad(), scan, attachmentDir);
+    fixture->project->waitSaveToFinish();
+    REQUIRE(AsyncFuture::waitForFinished(future, kReconcileWaitMs));
+
+    CHECK_FALSE(fixture->project->modified());
+}
+
+TEST_CASE("GC-only reconcile flips the project modified bit",
+          "[Sync][Reconcile]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("reconcile-dirty-gc"));
+    REQUIRE_FALSE(fixture->project->modified());
+
+    const QString attachmentDir =
+        fixture->project->saveLoad()->externalCenterlineDir(fixture->cave).absolutePath();
+
+    const QString srcRoot = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                                QStringLiteral("entry.svx"),
+                                {},
+                                mtime);
+
+    // Matching entry (no copy needed) plus a stranded file from a previous
+    // scan, so the plan is removes-only.
+    const QDir attachDirObj(attachmentDir);
+    writeFile(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx")),
+              QByteArray(kFakeContent),
+              mtime);
+    const QString stranded = attachDirObj.absoluteFilePath(QStringLiteral("ghost.svx"));
+    writeFile(stranded, QByteArrayLiteral("; ghost\n"), mtime);
+
+    auto future = cwExternalCenterlineSync::reconcile(
+        fixture->project->saveLoad(), scan, attachmentDir);
+    fixture->project->waitSaveToFinish();
+    REQUIRE(AsyncFuture::waitForFinished(future, kReconcileWaitMs));
+
+    CHECK_FALSE(QFileInfo::exists(stranded));
+    CHECK(fixture->project->modified());
 }
 
 TEST_CASE("reconcile returns a failed future when saveLoad is null",

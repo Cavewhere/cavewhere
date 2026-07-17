@@ -3800,6 +3800,16 @@ void cwSaveLoad::enqueueExternalCenterlineCopyIfNewer(const QString& sourcePath,
         return;
     }
 
+    // An external-centerline copy mutates the project's on-disk shape
+    // (a live-link refresh landing mid-session), so flip
+    // cwProject::modified() via localMutationOccurred — otherwise the
+    // refresh is silently lost in a bundled .cw on quit-without-save.
+    // reconcile()'s planner skips up-to-date destinations, so a no-op
+    // reconcile never reaches this and the bit stays untouched.
+    if (!d->suppressLocalMutationTracking) {
+        emit localMutationOccurred();
+    }
+
     cwSaveLoadPrivate::Job job(
                 nullptr,
                 cwSaveLoadPrivate::Job::Kind::File,
@@ -3858,6 +3868,12 @@ void cwSaveLoad::enqueueExternalCenterlineRemoveFile(const QString& path)
         return;
     }
 
+    // GC of a stranded attachment file is a project mutation too; see
+    // enqueueExternalCenterlineCopyIfNewer.
+    if (!d->suppressLocalMutationTracking) {
+        emit localMutationOccurred();
+    }
+
     cwSaveLoadPrivate::Job job(nullptr,
                                cwSaveLoadPrivate::Job::Kind::File,
                                cwSaveLoadPrivate::Job::Action::Remove);
@@ -3869,6 +3885,12 @@ void cwSaveLoad::enqueueExternalCenterlineRemoveTree(const QString& path)
 {
     if (d->isTemporary || path.isEmpty()) {
         return;
+    }
+
+    // Removing an attachment dir (detach) is a project mutation too; see
+    // enqueueExternalCenterlineCopyIfNewer.
+    if (!d->suppressLocalMutationTracking) {
+        emit localMutationOccurred();
     }
 
     cwSaveLoadPrivate::Job job(nullptr,

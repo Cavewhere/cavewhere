@@ -11,6 +11,7 @@
 // Our
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwFutureManagerModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
@@ -18,6 +19,7 @@
 #include "ProjectFilenameTestHelper.h"
 
 // Qt
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -73,6 +75,10 @@ std::unique_ptr<SavedProjectFixture> makeSavedProject(const QString& projectFile
         QDir(fixture->tempDir.path()).filePath(projectFileBase + QStringLiteral(".cwproj"));
     REQUIRE(fixture->project->saveAs(projectPath));
     fixture->project->waitSaveToFinish();
+    // Drain the queued fileSaved delivery so modified() is settled false
+    // before tests take a baseline (same idiom as test_cwLazLayerSaveLoad).
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
 
     return fixture;
 }
@@ -329,6 +335,7 @@ TEST_CASE("enqueueExternalCenterlineRemoveTree recursively deletes a subtree",
     }
     REQUIRE(QFileInfo::exists(shallowFile));
     REQUIRE(QFileInfo::exists(deepFile));
+    REQUIRE_FALSE(fixture->project->modified());
 
     fixture->project->saveLoad()->enqueueExternalCenterlineRemoveTree(externalDir.absolutePath());
     fixture->project->waitSaveToFinish();
@@ -336,4 +343,7 @@ TEST_CASE("enqueueExternalCenterlineRemoveTree recursively deletes a subtree",
     CHECK_FALSE(externalDir.exists());
     CHECK_FALSE(QFileInfo::exists(shallowFile));
     CHECK_FALSE(QFileInfo::exists(deepFile));
+    // Removing an attachment tree (the future detach flow) is a project
+    // mutation and must dirty the project.
+    CHECK(fixture->project->modified());
 }
