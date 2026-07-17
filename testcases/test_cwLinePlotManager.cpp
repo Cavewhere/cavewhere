@@ -8,6 +8,7 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
 #include "LoadProjectHelper.h"
+#include "BoulderFixtureHelper.h"
 #include <catch2/catch_approx.hpp>
 
 //Cavewhere includes
@@ -1022,6 +1023,81 @@ TEST_CASE("cwLinePlotManager re-runs cavern when globalCS or fix stations change
             CHECK(absolutePosition("a2") == QVector3D(0.0f, 10.0f, 0.0f));
         }
     }
+}
+
+TEST_CASE("cwLinePlotManager re-solves when a trip's date changes (bug #581)",
+          "[LinePlotManager][declination]")
+{
+    // Auto-declination resolves IGRF from the trip's date, so changing the
+    // date changes the resolved declination and must re-solve the line plot.
+    // The gap: cwTripCalibration::refreshResolved emits only declinationChanged
+    // (not calibrationsChanged), and nothing wired declinationChanged /
+    // cwTrip::dateChanged to runSurvex — so the plot kept a stale declination
+    // until an unrelated edit happened to trigger a re-run.
+
+    const QString utmZ13N = QStringLiteral("EPSG:32613");
+
+    cwCavingRegion region;
+    region.geoReference()->setGlobalCoordinateSystem(utmZ13N);
+
+    auto* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave 1"));
+    region.addCave(cave);
+
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("a1"));
+    fix.setInputCS(utmZ13N);
+    fix.setEasting(478000.0);
+    fix.setNorthing(4430000.0);
+    fix.setElevation(1655.0);
+    cave->fixStations()->appendFixStation(fix);
+
+    auto* trip = new cwTrip();
+    cave->addTrip(trip);
+    REQUIRE(trip->calibrations()->autoDeclination() == true);
+    trip->setDate(makeUtcDate(1990, 1, 1));
+
+    auto* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+    cwShot shot;
+    shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+    shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
+    shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+    chunk->appendShot(cwStation(QStringLiteral("a1")), cwStation(QStringLiteral("a2")), shot);
+
+    // Auto-declination must actually resolve, otherwise a date change couldn't
+    // move the plot and the test would pass vacuously.
+    REQUIRE(trip->calibrations()->autoDeclinationAvailable() == true);
+
+    // Pre-set worldOrigin off the default sentinel so the first-solve
+    // auto-compute branch doesn't queue a second run that races waitToFinish
+    // (see the fix-station test above for the same guard).
+    region.geoReference()->setWorldOrigin(cwGeoPoint(478000.0, 4430000.0, 1655.0));
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    REQUIRE(cave->stationPositionLookup().hasPosition("a2"));
+    const QVector3D a2Before = cave->stationPositionLookup().position("a2");
+    const double declBefore = trip->calibrations()->declination();
+
+    cwSignalSpy positionSpy(plotManager.get(), &cwLinePlotManager::stationPositionInCavesChanged);
+
+    // Move the trip date by 35 years; Boulder's IGRF declination differs
+    // enough between 1990 and 2025 to visibly rotate the 10 m shot.
+    trip->setDate(makeUtcDate(2025, 1, 1));
+
+    // Precondition: the date change genuinely altered the resolved declination.
+    REQUIRE(trip->calibrations()->declination() != declBefore);
+
+    plotManager->waitToFinish();
+
+    const QVector3D a2After = cave->stationPositionLookup().position("a2");
+
+    // a1 is fixed, so only the declination-rotated a2 should move.
+    CHECK(positionSpy.count() >= 1);
+    CHECK(a2After != a2Before);
 }
 
 TEST_CASE("cwLinePlotManager handles chunks with empty shots (bug #435)", "[LinePlotManager]")
