@@ -51,6 +51,65 @@
   <code>CavernOutputPage</code> grows the attached-centerlines list and
   driver-source disclosure.</p>
 
+<h2 id="direction-change">Direction change (2026-07-16): live-link
+  auto-reconcile dropped &mdash; notify + one-click update</h2>
+
+<p>
+  Decided after commit 4. The watcher-driven <em>auto</em>-reconcile
+  model (source file changes on disk &rarr; CaveWhere silently copies
+  it into the project and re-solves) is dropped. The complexity it
+  generated was out of proportion to its value: mid-session refreshes
+  with nobody at the wheel forced the commit-4 dirty-bit semantics,
+  the mid-git-sync fold-in rules, the per-machine last-sync-wins
+  ping-pong corollary, and made commit 8's async scan pipeline
+  load-bearing &mdash; and the UX was confusing (plot changes and save
+  prompts the user never caused).
+</p>
+
+<p>The replacement model:</p>
+<ul>
+  <li><strong>The in-project copy is the source of truth.</strong> It
+    is what solves, syncs, and versions. The user's original file is
+    just where updates come from.</li>
+  <li><strong>The source path is always remembered</strong> in
+    <code>cwExternalSourceSettings</code> (per-machine, as built in
+    commit 2). The attach dialog's live-link checkbox is dropped;
+    there is no mode dichotomy. A "Forget source" action clears the
+    entry for users who don't want update checks.
+    <code>isLiveLink()</code> reads as "has a remembered source"
+    (rename to <code>hasSource()</code> when next touching the
+    class).</li>
+  <li><strong>Staleness is detected, never acted on automatically.</strong>
+    The source-side <code>QFileSystemWatcher</code> stays but its only
+    action is setting a per-owner stale flag
+    (<code>staleSourceOwners</code>, mirroring
+    <code>missingSourceOwners</code>); an open-time probe backstops it
+    (the freshness test is free: <code>computePlan</code> with a
+    non-empty <code>copies</code> list). Watcher failure modes become
+    benign &mdash; worst case the banner lights late.</li>
+  <li><strong>Updating is user-triggered.</strong> The trip panel
+    shows "The source file has changed on disk &mdash; [Update]";
+    Update runs the existing scan + reconcile + re-solve path. The
+    commit-4 dirty-bit wiring is unchanged and now always fires as
+    the direct result of a click. Updates cannot interleave with a
+    git sync (the affordance is disabled while a sync runs), so the
+    &sect;10 mid-sync row is moot.</li>
+  <li><strong>Missing source is benign:</strong> the Update affordance
+    disables with a "source not found" hint; no urgent banner.</li>
+</ul>
+
+<p>
+  Reading guide for the rest of this file and the master plan: text
+  written before this note says "live-link" for what is now simply "a
+  remembered source"; "reconcile-from-source on watcher event" is now
+  "flag stale on watcher event; reconcile on Update". Normative
+  sections below (&sect;6, &sect;10, &sect;11 commits 5/7/8, &sect;12
+  gates) have been updated; incidental mentions elsewhere have not.
+  The auto-reconcile stripping from
+  <code>cwLinePlotManager::onWatchedFileChanged</code> lands in
+  commit 7 (the manager commit).
+</p>
+
 <h2 id="prerequisite">1. Prerequisite</h2>
 
 <p>
@@ -139,11 +198,12 @@
     Composes the existing
     <code>cwExternalCenterlineScanner::scan</code> &rarr;
     <code>cwExternalCenterlineSync::reconcile</code> chain with the data-model
-    mutation (<code>cwTrip::setExternalCenterline</code>) and the optional
-    <code>cwExternalSourceSettings</code> live-link entry write. Pure functions that
+    mutation (<code>cwTrip::setExternalCenterline</code>) and the
+    <code>cwExternalSourceSettings</code> source-memory entry write (always
+    written &mdash; direction change). Pure functions that
     take their dependencies as args &mdash; no QObject, no member state &mdash;
     so the QML attach dialog and headless tests share one entry point.
-    <code>AttachOptions</code> carries <code>{ bool liveLink; QString
+    <code>AttachOptions</code> carries <code>{ QString
     sourcePath; }</code>; <code>AttachReport</code> carries
     <code>{ ScanResult scan; cwExternalCenterline persisted; QStringList
     warnings; SeededTripMetadata metadata; }</code>.
@@ -301,7 +361,8 @@
     &mdash; modal dialog opened by TripPage's
     <code>[Attach external centerline&hellip;]</code> button. File picker
     via <code>Qt.labs.platform.FileDialog</code>, inline error/warning
-    area, live-link checkbox, [Attach] / [Cancel] buttons. Calls the
+    area, [Attach] / [Cancel] buttons (no live-link checkbox &mdash;
+    direction change: the source path is always remembered). Calls the
     orchestrator via a thin Q_INVOKABLE wrapper on
     <code>cwRootData</code> (see &sect;<a class="anchor" href="#attach">7</a>).
   </li>
@@ -487,8 +548,9 @@
 namespace cwExternalCenterlineAttach {
 
 struct AttachOptions {
-    bool liveLink = false;       // false = import (copy + forget source path)
-    QString sourcePath;          // absolute path; ignored when liveLink is false
+    QString sourcePath;          // absolute path the user picked; always
+                                 // remembered in cwExternalSourceSettings
+                                 // (direction change: no liveLink toggle)
 };
 
 // SeededTripMetadata lives on the scanner (see section 7):
@@ -542,17 +604,19 @@ detach(cwTrip* trip,
     <code>cwExternalCenterlineSync::reconcile</code> directly.
   </li>
   <li>
-    <strong>Live-link wiring.</strong> When
-    <code>options.liveLink</code> is true, the orchestrator writes a
+    <strong>Source-memory wiring</strong> <em>(rewritten by the
+    direction change)</em>. The orchestrator always writes a
     <code>cwExternalSourceSettings::ExternalCenterlineSource</code> entry with
     <code>ownerId = trip-&gt;id()</code> and
-    <code>sourcePath = options.sourcePath</code>. When false, any
-    existing live-link entry for that owner is removed (import mode is
-    the default). The <code>cwExternalSourceSettings</code> store is the same
+    <code>sourcePath = options.sourcePath</code> &mdash; the path the
+    user picked is always known at attach time, and there is no mode
+    toggle. <code>AttachOptions.liveLink</code> is dropped. Detach
+    (and a later "Forget source" action) removes the entry. The
+    <code>cwExternalSourceSettings</code> store is the same
     rootData-owned object <code>cwLinePlotManager</code> observes; the
-    manager recomputes its watch set on
-    <code>externalCenterlineSourcesChanged</code>, so the orchestrator
-    just writes.
+    manager recomputes its watch set (stale/missing probing only, no
+    auto-reconcile) on <code>externalCenterlineSourcesChanged</code>,
+    so the orchestrator just writes.
   </li>
   <li>
     <strong>Metadata seeding.</strong> Scanner returns
@@ -575,8 +639,8 @@ detach(cwTrip* trip,
   </li>
   <li>
     <strong>QML entry point.</strong> A thin
-    <code>Q_INVOKABLE QFuture attachTripCenterline(cwTrip*, QString,
-    bool liveLink, QString sourcePath)</code> wrapper on
+    <code>Q_INVOKABLE QFuture attachTripCenterline(cwTrip*,
+    QString sourcePath)</code> wrapper on
     <code>cwRootData</code> (or on a new
     <code>cwExternalCenterlineManager</code> singleton &mdash; decide
     during commit 5 based on cwRootData bloat) exposes the orchestrator
@@ -834,8 +898,12 @@ public:
     <td>Inherited from Phase 1 commit 9 (Restarter coalesces; old solve runs to completion and result is dropped).</td>
   </tr>
   <tr>
-    <td>Live-link source missing at app launch</td>
-    <td>Phase 1 commit 9's startup probe seeds <code>missingSourceOwners</code>; panel's <code>MissingSourceBanner</code> binds and lights up. q16.</td>
+    <td>Remembered source missing at app launch</td>
+    <td><em>(Softened by the direction change.)</em> Phase 1 commit 9's
+      startup probe seeds <code>missingSourceOwners</code>; the panel's
+      Update affordance disables with a "source not found" hint. Benign
+      &mdash; the in-project copy is the truth and keeps solving; no
+      urgent banner. q16.</td>
   </tr>
   <tr>
     <td>Carpet picker on Native trip after detach</td>
@@ -843,8 +911,26 @@ public:
       <code>externalCenterlineChanged</code>; no special case.</td>
   </tr>
   <tr>
-    <td>Live-link refresh lands mid-session in a bundled <code>.cw</code>, user quits without saving</td>
-    <td>Reconcile flips <code>cwProject::modified()</code> (master &sect;5.4, commit 4), so the standard save prompt appears on close; declining it discards the refresh, which re-applies on next open + solve since the source still differs.</td>
+    <td>User clicks [Update] in a bundled <code>.cw</code>, then quits
+      without saving</td>
+    <td>The update's reconcile flips <code>cwProject::modified()</code>
+      (master &sect;5.4, commit 4), so the standard save prompt appears
+      on close; declining it discards the update, and the stale banner
+      simply re-lights on next open since the source still differs.
+      Under the direction change the flip is always the direct result
+      of a user click &mdash; no surprise save prompts.</td>
+  </tr>
+  <tr>
+    <td>Source changes on disk mid-git-sync in a <code>.cwproj</code></td>
+    <td><em>(Moot under the direction change &mdash; superseded the
+      fold-in semantics decided earlier at commit 4.)</em> The watcher
+      only sets the stale flag; nothing touches the working tree until
+      the user clicks Update, and the Update affordance is disabled
+      while a sync is running. The signal-only
+      <code>enqueueExternalCenterline*</code> emissions (no
+      <code>localMutationEpoch</code> bump, no
+      <code>remoteApplyGuard.noteMutation()</code>) are therefore
+      sufficient: updates cannot interleave with a sync.</td>
   </tr>
 </table>
 
@@ -913,6 +999,32 @@ public:
     precedent <code>50595738</code>). Tests:
     <code>[Sync][Reconcile]</code> extended with a modified-bit
     assertion.
+    <em>Resolved at commit 4:</em> the wiring was missing; the emit
+    (guarded by <code>suppressLocalMutationTracking</code>, matching
+    the precedent) lives at the three
+    <code>enqueueExternalCenterline*</code> sites in
+    <code>cwSaveLoad</code> rather than in
+    <code>cwExternalCenterlineSync::reconcile</code> &mdash; the
+    planner already skips up-to-date destinations, so no-op
+    reconciles enqueue nothing and the bit stays untouched, and
+    <code>RemoveTree</code> is covered too, so commit 5's detach
+    dirties the project for free.
+    <em>Deferred refactor (not this phase):</em> there are now five
+    hand-rolled
+    <code>if&nbsp;(!suppressLocalMutationTracking) emit localMutationOccurred()</code>
+    blocks in <code>cwSaveLoad</code> (object removal, LAZ rescan
+    removal, these three), and every future explicit-job enqueuer
+    must remember the incantation &mdash; the exact omission this
+    commit fixed, which has now bitten twice (LAZ May 2026, external
+    centerline here). The right shape is a
+    <code>dirtiesProject</code> provenance flag on
+    <code>cwSaveLoadPrivate::Job</code> with the guard+emit
+    centralized in <code>addExplicitFileSystemJob</code>. A naive
+    always-emit there is wrong: the git-sync-driven enqueuers
+    (project rename, conflicting-project cleanup, orphan-dir cleanup)
+    must <em>not</em> dirty the project. Pure refactor, ~17 enqueue
+    sites, no behavior change &mdash; its own commit, outside this
+    plan.
   </li>
   <li>
     <strong>Attach orchestrator.</strong>
@@ -920,7 +1032,8 @@ public:
     <code>detach</code>. Pure-C++ commit: no QML yet. Tests:
     <code>[Attach][Orchestrator]</code> covering happy path, scan
     failure, reconcile failure, cancel, detach idempotence,
-    live-link write, and re-attach-over-edited-metadata no-clobber.
+    source-memory write (always written &mdash; direction change),
+    and re-attach-over-edited-metadata no-clobber.
   </li>
   <li>
     <strong><code>cwScopeStationListModel</code>.</strong> New model
@@ -930,12 +1043,36 @@ public:
   <li>
     <strong><code>cwLinePlotManager</code> extensions.</strong>
     <code>attachedCenterlinesModel()</code> + <code>driverSource()</code>;
-    worker writes <code>driverSource</code> on every solve. Tests:
+    worker writes <code>driverSource</code> on every solve.
+    <em>Direction change lands here too</em> (split into its own
+    commit if it grows): strip the auto-reconcile from
+    <code>onWatchedFileChanged</code> &mdash; a source-side event now
+    only sets a per-owner stale flag
+    (<code>staleSourceOwners()</code> +
+    <code>staleSourceOwnersChanged</code>, mirroring
+    <code>missingSourceOwners</code>) and never touches the
+    filesystem or re-solves; add
+    <code>updateFromSource(ownerId)</code> which runs the existing
+    scan + reconcile + re-solve on demand and clears the flag; the
+    open-time probe seeds staleness via
+    <code>computePlan(&hellip;).copies.isEmpty()</code>. Tests:
     <code>[LinePlotManager][AttachedCenterlinesModel]</code> covering
-    attach/detach round-trip + multi-attach ordering.
+    attach/detach round-trip + multi-attach ordering;
+    <code>[Attach][Stale]</code> covering source-edit &rarr; flag set
+    with no reconcile/re-solve, <code>updateFromSource</code> &rarr;
+    copy lands + re-solve + flag clears + <code>modified()</code>
+    flips, and the existing auto-reconcile
+    <code>[Attach][Watcher]</code> tests reworked to the new
+    contract.
   </li>
   <li>
-    <strong>Async scan pipeline.</strong> Move the per-owner
+    <strong>Async scan pipeline.</strong> <em>(Demoted by the
+    direction change: with user-triggered updates, scans run at
+    attach time, Update-click time, and the open-time probe &mdash;
+    all moments where brief latency is acceptable. Keep the async
+    move for the open-time probe on cloud-synced/network volumes,
+    but it is no longer load-bearing for correctness; descope or
+    defer if Phase 2 runs long.)</em> Move the per-owner
     dependency-closure scan off the main thread &mdash; disk I/O of
     this shape always runs in a worker.
     <code>recomputeWatchSetAndProbeSources()</code> becomes: gather
@@ -997,8 +1134,9 @@ public:
   </li>
   <li>
     <strong><code>AttachExternalCenterlineDialog.qml</code>.</strong>
-    File picker, inline error/warning area, live-link checkbox, progress
-    strip + Cancel, [Attach] / [Cancel] buttons. Calls the orchestrator
+    File picker, inline error/warning area, progress
+    strip + Cancel, [Attach] / [Cancel] buttons (no live-link
+    checkbox &mdash; direction change). Calls the orchestrator
     via the <code>cwRootData</code> wrapper. Tests:
     <code>tst_AttachExternalCenterlineDialog.qml</code> covering happy
     path, scan error, scan warning (Attach still enabled), and Cancel.
@@ -1143,9 +1281,9 @@ public:
     leftover.</li>
   <li>Detach on Native trip &rarr; no-op, future returns
     <code>Monad::Ok</code>.</li>
-  <li>Live-link enabled &rarr;
+  <li>Source memory always written (direction change) &rarr;
     <code>cwExternalSourceSettings::sourcePathFor(trip-&gt;id())</code> returns the
-    source path after the future resolves; detach clears the entry.</li>
+    picked path after the future resolves; detach clears the entry.</li>
   <li>Attach writes go through the rootData-owned store: after
     <code>attach()</code> resolves, a <em>fresh</em>
     <code>cwExternalSourceSettings</code> instance resolves the entry &mdash;
@@ -1198,7 +1336,7 @@ public:
     source-owner routing table populate after the async scan resolves
     (assert via the manager's existing wait helper, not a fixed
     sleep); results identical to the previous synchronous behavior.</li>
-  <li>Live-link source missing at recompute &rarr;
+  <li>Remembered source missing at recompute &rarr;
     <code>missingSourceOwners()</code> populates asynchronously; the
     startup-probe test from Phase 1 commit 9 stays green.</li>
   <li>Burst-coalescing: touch several files in the closure in quick
@@ -1331,7 +1469,7 @@ public:
     warning; Attach still enabled.</li>
   <li>Pick a fixture, click Attach, immediately click Cancel during the
     scan &rarr; orchestrator future is cancelled, no data-model change.</li>
-  <li>Live-link checkbox on &rarr; after Attach,
+  <li>After Attach (source always remembered &mdash; direction change),
     <code>cwExternalSourceSettings::sourcePathFor(trip.id)</code> equals the
     picked path.</li>
 </ul>

@@ -918,22 +918,46 @@ cwExternalCenterlineSync::reconcile(const ScanResult&amp; scan,
 
 <h3>5.3 Live-link vs. import mode</h3>
 
+<p class="meta">
+  <strong>Superseded (2026-07-16, decided during Phase 2 after
+  commit 4</strong> &mdash; see the "Direction change" section at the
+  top of <a href="EXTERNAL_FILE_PHASE2.html#direction-change">Phase
+  2</a><strong>).</strong> The two-mode dichotomy below is dropped;
+  there is no auto-copy and no mode choice. The single model:
+  the <em>in-project copy is the source of truth</em>; the source
+  path is always remembered (per-machine, QSettings-backed
+  <code>cwExternalSourceSettings</code>, exactly as specified below);
+  the source-side watcher and an open-time probe only set a
+  per-owner <em>stale</em> flag; the trip panel offers a
+  user-triggered [Update] that runs scan + reconcile + re-solve.
+  Rationale: auto-reconcile at arbitrary times forced mid-git-sync
+  fold-in semantics, surprise dirty-bit flips and save prompts, a
+  collaborator ping-pong corollary, and a load-bearing async scan
+  pipeline &mdash; all for the value of saving one click. The
+  storage design, watcher infrastructure, and reconcile primitive
+  below are unchanged; only the <em>action</em> taken on a source
+  change moved from automatic to user-triggered. Mentions of
+  "live link" elsewhere in this master plan read as "remembered
+  source"; "auto-copy on next solve" reads as "stale banner +
+  [Update]".
+</p>
+
 <p>
-  At attach time the user picks one of two modes:
+  <s>At attach time the user picks one of two modes:</s>
 </p>
 
 <ul>
   <li>
-    <strong>Watch for changes</strong> (default, "live link"). CaveWhere
+    <s><strong>Watch for changes</strong> (default, "live link"). CaveWhere
     records the original source path on this machine and watches both
     the source and the in-project copy. Edits to the source auto-copy
-    into the project on next solve.
+    into the project on next solve.</s>
   </li>
   <li>
-    <strong>Copy once</strong> ("import mode"). CaveWhere copies the
+    <s><strong>Copy once</strong> ("import mode"). CaveWhere copies the
     file into the project once and forgets the source path. Only the
     in-project copy is watched from then on. To refresh, the user
-    re-attaches.
+    re-attaches.</s>
   </li>
 </ul>
 
