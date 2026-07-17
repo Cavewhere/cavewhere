@@ -18,8 +18,11 @@
 //
 // The stub scene/backend pair built here is the cheapest way to drive that
 // handoff, so this file has since become the home for cwScene's RHI-object
-// lifetime coverage generally — not just #512. The middle test pins a plain
-// steady-state removal and is unrelated to address reuse.
+// lifetime coverage generally — not just #512: a plain steady-state removal, the
+// real LAZ-layer removal path, and — since the single-map handoff refactor — that
+// Adds register in add order (draw order) and that a removed object cannot be
+// resurrected by a late updateItem(). Only the two named #512 cases are about
+// address reuse.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -37,6 +40,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QList>
 #include <QPointer>
 #include <QTemporaryDir>
 #include <QVector3D>
@@ -66,6 +70,11 @@ namespace {
 // fix-agnostic observable: any correct add/remove path leaves exactly one.
 int g_aliveRhiObjects = 0;
 
+// Records the label of each stub render object as its cwRHIObject is created, i.e.
+// in the order synchroize() registers Adds — which is the order they draw. Used to
+// pin that Adds register in add order, not construction order.
+QVector<char> g_registrationOrder;
+
 class StubRhiObject : public cwRHIObject
 {
 public:
@@ -84,8 +93,19 @@ class StubRenderObject : public cwRenderObject
 public:
     using cwRenderObject::cwRenderObject;
 
+    void setLabel(char label) { m_label = label; }
+
 protected:
-    cwRHIObject* createRHIObject() override { return new StubRhiObject(); }
+    cwRHIObject* createRHIObject() override
+    {
+        if (m_label != '\0') {
+            g_registrationOrder.append(m_label);
+        }
+        return new StubRhiObject();
+    }
+
+private:
+    char m_label = '\0';
 };
 
 // A 3x3 grid in the z = 0 plane, one unit apart — the smallest cloud that still
@@ -288,4 +308,73 @@ TEST_CASE("issue #512: re-adding the same render object before a sync must free 
     REQUIRE(g_aliveRhiObjects == 1);        // 2 would mean RHI #1 was orphaned
 
     delete object;
+}
+
+// Draw order follows add order, not construction order. gatherScene() walks the
+// backend's render list in registration order and bakes that index into the sort
+// key, so the sync drain must register Adds in the order addItem() ran — even when
+// the objects were constructed in a different order. The pending map is keyed on the
+// render-object id, which is a construction-order counter; a drain that leaned on
+// that key order would silently swap these two and change what draws on top. The
+// queued sequence is what holds add order, and this test is its guard.
+TEST_CASE("added render objects register in add order, not construction order",
+          "[cwScene][cwRhiScene]")
+{
+    g_aliveRhiObjects = 0;
+    g_registrationOrder.clear();
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    // Construct A before B (so A's id < B's id), then add B before A.
+    auto* a = new StubRenderObject();
+    auto* b = new StubRenderObject();
+    a->setLabel('A');
+    b->setLabel('B');
+    REQUIRE(a->renderObjectId() < b->renderObjectId());
+
+    b->setScene(&scene);
+    b->setParent(nullptr);   // we manage lifetime, not the scene
+    a->setScene(&scene);
+    a->setParent(nullptr);
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+
+    // Registration (== draw) order is the add order B, A — not the id order A, B.
+    REQUIRE(g_registrationOrder == QVector<char>({'B', 'A'}));
+
+    delete a;
+    delete b;
+}
+
+// A removed object stays removed even if updateItem() arrives for it before the next
+// sync. The transition model records {Delete}, and updateItem() must not resurrect it
+// into a live-pointer entry that the next synchroize() would then dereference — the
+// #491 failure mode, now unrepresentable. Pre-refactor this left the freed pointer in
+// the update queue: pendingItemCount() read 1 and the next sync dereferenced it.
+TEST_CASE("updateItem on a removed render object does not resurrect it",
+          "[cwScene][cwRhiScene]")
+{
+    g_aliveRhiObjects = 0;
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    auto* object = new StubRenderObject();
+    object->setScene(&scene);
+    object->setParent(nullptr);   // we manage its lifetime, not the scene
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // creates RHI object #1
+    REQUIRE(g_aliveRhiObjects == 1);
+
+    scene.removeItem(object);     // {Delete}
+    scene.updateItem(object);     // must not put the live pointer back
+
+    // Delete holds no live pointer, so nothing the next sync will dereference.
+    REQUIRE(scene.pendingItemCount() == 0);
+
+    delete object;
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // frees RHI #1, no deref
+
+    REQUIRE(g_aliveRhiObjects == 0);
 }

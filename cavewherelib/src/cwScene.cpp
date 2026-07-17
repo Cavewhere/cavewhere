@@ -54,12 +54,12 @@ cwScene::~cwScene()
  */
 void cwScene::addItem(cwRenderObject *item)
 {
-    // Cancel a pending delete only for the *same* object being re-added. Keyed on
-    // the stable id, so a new object reusing a freed address can't false-match a
-    // dead entry and steal its cancellation (issue #512).
-    m_toDeleteRenderObjects.removeOne(item->renderObjectId());
-
-    m_newRenderObjects.append(item);
+    // {Add} overwrites any entry pending for this id: an Update is subsumed (an Add
+    // already implies a full synchronize), and a Delete left by a remove-before-sync
+    // is cancelled. Because the same object re-added keeps its id, its still-mapped
+    // cwRHIObject is freed and rebuilt by the register step rather than orphaned
+    // (issue #512).
+    m_pending.insert(item->renderObjectId(), {PendingOp::Add, item, m_pendingSequence++});
     item->setScene(this);
     item->setParent(this);
     update();
@@ -94,32 +94,28 @@ void cwScene::removeItem(cwRenderObject *item)
     // via setScene(nullptr), so geometryItersecter() is already null by then.
     GeometryItersecter->clear(item);
 
-    // Drop live references before the caller deletes `item` (issue #491);
-    // synchroize() dereferences entries in m_newRenderObjects and
-    // m_toUpdateRenderObjects.
-    m_newRenderObjects.removeAll(item);
-    m_toUpdateRenderObjects.remove(item);
-
-    // Queue the delete unconditionally. Both queues above are empty for a
-    // quiescent item — one already synced with no update pending, since
-    // synchroize() drains them every frame — so gating this on "was it queued?"
-    // stranded such an item's cwRHIObject and its GPU buffers in the backend
-    // forever. (Callers that re-touch the item just before removal dodge it; a
-    // steady LAZ layer removed while idle does not.)
-    //
-    // Capture the id while `item` is still alive (the caller deletes it next), so
-    // the next sync can drop the matching m_rhiObjectLookup entry without ever
-    // dereferencing — or pointer-matching — a dangling pointer.
-    const cwRenderObjectId id = item->renderObjectId();
-    if (!m_toDeleteRenderObjects.contains(id)) {
-        m_toDeleteRenderObjects.append(id);
-    }
+    // {Delete, null} overwrites whatever was pending for this id and, holding no
+    // pointer, cannot dangle when the caller deletes `item` next (issue #491). The
+    // id is read while `item` is still alive so the next sync can drop the matching
+    // lookup entry without ever dereferencing a freed pointer. The delete is
+    // recorded unconditionally: because the entry names the transition, a quiescent
+    // object — already synced, nothing pending — is no longer mistaken for "not in
+    // the scene" and left to strand its cwRHIObject and GPU buffers (follow-up 7).
+    m_pending.insert(item->renderObjectId(), {PendingOp::Delete, nullptr, m_pendingSequence++});
     update();
 }
 
 void cwScene::updateItem(cwRenderObject *item)
 {
-    m_toUpdateRenderObjects.insert(item);
+    // A pending Add already implies a full synchronize; a pending Delete must not be
+    // resurrected into a dereference of the freed object; a pending Update is
+    // idempotent. In every case the existing entry stands, so only a render object
+    // with nothing pending needs a fresh Update queued.
+    const cwRenderObjectId id = item->renderObjectId();
+    if (m_pending.contains(id)) {
+        return;
+    }
+    m_pending.insert(id, {PendingOp::Update, item, m_pendingSequence++});
     update();
 }
 
@@ -197,8 +193,16 @@ void cwScene::update()
 
 int cwScene::pendingItemCount() const
 {
-    return m_newRenderObjects.size()
-           + m_toUpdateRenderObjects.size();
+    // Only entries that still hold a live pointer synchroize() will dereference —
+    // Add and Update. A Delete holds none (the object is already freed), so it must
+    // not count, or the #491 canary would never fall back to zero after a removal.
+    int count = 0;
+    for (const auto& change : std::as_const(m_pending)) {
+        if (change.object != nullptr) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 QFuture<QImage> cwScene::renderOffscreen(const cwOffscreenRenderParameters& parameters)

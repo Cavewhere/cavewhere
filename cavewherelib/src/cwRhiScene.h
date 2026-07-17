@@ -9,6 +9,7 @@ class QRhiCommandBuffer;
 #include "cwRhiFrameRenderer.h"
 #include <memory>
 class cwScene;
+class cwRenderObject;
 class cwRhiItemRenderer;
 class cwRhiOffscreenRenderer;
 
@@ -38,6 +39,11 @@ private:
     void initialize(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer);
     void synchroize(cwScene* scene, cwRhiItemRenderer* renderer);
     void render(QRhiCommandBuffer *cb, cwRhiItemRenderer* renderer);
+
+    // Push a render object's live state into its registered cwRHIObject (visibility
+    // + synchronize + queue a resource update). Shared by the Add and Update arms of
+    // synchroize()'s drain.
+    void syncRenderObject(cwRenderObject* object, cwRhiItemRenderer* renderer);
 
     // The shared GPU draw engine, composed by value. cwRhiItemRenderer (a friend)
     // exposes it to render objects via frameRenderer(). Declared before m_offscreen

@@ -9,6 +9,20 @@
 #include "cwOffscreenRenderJob.h"
 #include "cwRhiOffscreenRenderer.h"
 
+//Qt includes
+#include <QVarLengthArray>
+
+//Std includes
+#include <algorithm>
+#include <utility>
+
+namespace {
+    // Inline capacity for the per-sync drain buffer: the pending-change count between
+    // two syncs is small in the steady state, so this keeps the copy off the heap
+    // without bounding it (QVarLengthArray spills to the heap past this).
+    constexpr int kTypicalPendingChanges = 16;
+}
+
 cwRhiScene::cwRhiScene()
     : m_offscreen(std::make_unique<cwRhiOffscreenRenderer>(m_frame))
 {
@@ -45,39 +59,58 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer* renderer)
 
     m_frame.setEdlParameters(scene->edl()->parameters());
 
-    //Add new rendering object
-    if(!scene->m_newRenderObjects.isEmpty()) {
-        for(auto object : std::as_const(scene->m_newRenderObjects)) {
-            auto rhiObject = object->createRHIObject();
-            // qDebug() << "Creating rhiObject:" << object << "->" << rhiObject;
-            m_frame.registerRenderObject(object->renderObjectId(), rhiObject);
-            scene->m_toUpdateRenderObjects.insert(object);
+    //Drain the pending render-object changes. One entry per id names its transition
+    //(Add/Update/Delete), so this is a single ordered pass rather than three queues.
+    //The map is ordered by id — i.e. construction order — but Adds must register in
+    //*add* order or draw order changes (gatherScene bakes registration order into
+    //the sort key), so drain by the queued sequence. Deletes/Updates are order-
+    //independent, so one sorted pass over everything is correct.
+    if(!scene->m_pending.isEmpty()) {
+        QVarLengthArray<std::pair<cwRenderObjectId, cwScene::PendingChange>, kTypicalPendingChanges> changes;
+        changes.reserve(scene->m_pending.size());
+        for(auto it = scene->m_pending.cbegin(); it != scene->m_pending.cend(); ++it) {
+            changes.append({it.key(), it.value()});
         }
-        scene->m_newRenderObjects.clear();
-    }
+        scene->m_pending.clear();
 
-    //Remove old rendering objects
-    if(!scene->m_toDeleteRenderObjects.isEmpty()) {
-        for(cwRenderObjectId id : std::as_const(scene->m_toDeleteRenderObjects)) {
-            m_frame.destroyRenderObject(id);
-        }
-        scene->m_toDeleteRenderObjects.clear();
-    }
+        std::sort(changes.begin(), changes.end(),
+                  [](const auto& a, const auto& b) {
+                      return a.second.sequence < b.second.sequence;
+                  });
 
-    //Update rendering objects
-    for(auto object : std::as_const(scene->m_toUpdateRenderObjects)) {
-        auto rhiObject = m_frame.renderObjectForId(object->renderObjectId());
-        if(rhiObject) {
-            rhiObject->setVisible(object->isVisible());
-            rhiObject->synchronize({object, renderer});
-            m_frame.markForResourceUpdate(rhiObject);
+        for(const auto& [id, change] : changes) {
+            switch(change.op) {
+            case cwScene::PendingOp::Add: {
+                auto rhiObject = change.object->createRHIObject();
+                m_frame.registerRenderObject(id, rhiObject);
+                //An Add implies a first synchronize, exactly as a following Update
+                //would — do it inline so the new object never renders empty a frame.
+                syncRenderObject(change.object, renderer);
+                break;
+            }
+            case cwScene::PendingOp::Update:
+                syncRenderObject(change.object, renderer);
+                break;
+            case cwScene::PendingOp::Delete:
+                m_frame.destroyRenderObject(id);
+                break;
+            }
         }
     }
-    scene->m_toUpdateRenderObjects.clear();
 
     // Move queued offscreen jobs across to the render thread (GUI is blocked during
     // synchronize, so the handoff is safe). render() drains them via m_offscreen.
     m_offscreen->enqueue(scene->m_pendingOffscreenJobs);
+}
+
+void cwRhiScene::syncRenderObject(cwRenderObject* object, cwRhiItemRenderer* renderer)
+{
+    auto rhiObject = m_frame.renderObjectForId(object->renderObjectId());
+    if(rhiObject) {
+        rhiObject->setVisible(object->isVisible());
+        rhiObject->synchronize({object, renderer});
+        m_frame.markForResourceUpdate(rhiObject);
+    }
 }
 
 void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)
