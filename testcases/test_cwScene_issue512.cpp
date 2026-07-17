@@ -15,15 +15,33 @@
 //
 // Regression guard: after reusing the address, exactly one cwRHIObject stays
 // alive and the two render objects carry distinct ids.
+//
+// The stub scene/backend pair built here is the cheapest way to drive that
+// handoff, so this file has since become the home for cwScene's RHI-object
+// lifetime coverage generally — not just #512. The middle test pins a plain
+// steady-state removal and is unrelated to address reuse.
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <new>
 
+#include "cwGeometry.h"
+#include "cwLazLayer.h"
+#include "cwLazLayerModel.h"
+#include "cwLazLayersSceneNode.h"
 #include "cwRHIObject.h"
 #include "cwRenderObject.h"
+#include "cwRenderPointCloud.h"
 #include "cwRhiScene.h"
 #include "cwScene.h"
+
+#include <QCoreApplication>
+#include <QDir>
+#include <QPointer>
+#include <QTemporaryDir>
+#include <QVector3D>
+
+#include "LazFixtureHelper.h"
 
 // Friend accessor (declared friend in cwRhiScene.h) so the test can drive the
 // backend's private apply step — normally called only by cwRhiItemRenderer —
@@ -31,6 +49,13 @@
 struct CwRhiSceneTestAccess {
     static void synchroize(cwRhiScene& rhiScene, cwScene* scene) {
         rhiScene.synchroize(scene, nullptr);
+    }
+
+    // Reaches the backend's registry so a test can ask whether an id still maps to
+    // a live cwRHIObject. The stub tests count constructions instead; this is for
+    // the real render objects, which the tests must not instrument.
+    static cwRHIObject* renderObjectForId(cwRhiScene& rhiScene, cwRenderObjectId id) {
+        return rhiScene.m_frame.renderObjectForId(id);
     }
 };
 
@@ -63,6 +88,29 @@ protected:
     cwRHIObject* createRHIObject() override { return new StubRhiObject(); }
 };
 
+// A 3x3 grid in the z = 0 plane, one unit apart — the smallest cloud that still
+// loads through the real LAZ pipeline.
+constexpr float kGridSpacing = 1.0f;
+constexpr int kGridSide = 3;
+
+QVector<QVector3D> gridPoints()
+{
+    QVector<QVector3D> points;
+    for (int x = 0; x < kGridSide; ++x) {
+        for (int y = 0; y < kGridSide; ++y) {
+            points.append(QVector3D((x - 1) * kGridSpacing, (y - 1) * kGridSpacing, 0.0f));
+        }
+    }
+    return points;
+}
+
+QDir prepareGisLayersDir(const QTemporaryDir& tempDir)
+{
+    const QString path = QDir(tempDir.path()).filePath(cwLazLayerModel::folderName());
+    QDir().mkpath(path);
+    return QDir(path);
+}
+
 } // namespace
 
 TEST_CASE("issue #512: reusing a deleted render object's address must not orphan "
@@ -87,8 +135,9 @@ TEST_CASE("issue #512: reusing a deleted render object's address must not orphan
     REQUIRE(g_aliveRhiObjects == 1);
 
     // A visibility toggle re-queues #1 for update (as the real LAZ visibility
-    // thrash does); synchroize() leaves a synced object in none of the live
-    // queues, so removeItem() would otherwise have nothing to move to delete.
+    // thrash does), so removeItem() has a live queue entry to scrub. #1 is
+    // destroyed below before the next sync, so if that scrub ever regressed,
+    // synchroize()'s update loop would dereference freed memory (issue #491).
     first->setVisible(false);
     scene.removeItem(first);                // queues #1 for delete; RHI #1 still live
 
@@ -118,6 +167,92 @@ TEST_CASE("issue #512: reusing a deleted render object's address must not orphan
     ::operator delete(storage);
 }
 
+// The plain steady-state removal: an object that has been synced sits in neither
+// queue, because synchroize() drains both every frame. removeItem() used to read
+// that emptiness as "nothing to do" and return before queueing the delete, so the
+// backend kept the cwRHIObject — and, for a LAZ layer, its multi-gigabyte vertex
+// buffer — for the life of the scene. Every removal the running app performs takes
+// this path, yet nothing covered it: the test above dodges it by toggling
+// visibility first, which puts the object back in a queue.
+TEST_CASE("removing a synced render object frees its cwRHIObject",
+          "[cwScene][cwRhiScene]")
+{
+    g_aliveRhiObjects = 0;
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    auto* object = new StubRenderObject();
+    object->setScene(&scene);
+    object->setParent(nullptr);   // we manage its lifetime, not the scene
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // creates RHI object #1
+    REQUIRE(g_aliveRhiObjects == 1);
+
+    // No visibility toggle: this is a bare removal of a synced object, so both
+    // of removeItem()'s queues are empty when it runs.
+    scene.removeItem(object);
+    delete object;
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // must free RHI #1
+
+    REQUIRE(g_aliveRhiObjects == 0);        // 1 would mean RHI #1 was stranded
+}
+
+// The same steady-state removal as above, driven through the real path a user
+// takes: removing a LAZ layer. cwLazLayersSceneNode::dematerialize() does
+// setScene(nullptr) then delete, with no visibility toggle anywhere — so this is
+// what the running app actually did every time a layer was removed, and what
+// stranded a cwRHIPointCloud holding the layer's whole vertex buffer.
+//
+// Real render objects here, not stubs: the tests must not instrument production
+// classes, so the observable is the backend's own registry — an id that still
+// resolves to a cwRHIObject after the object is gone is the leak.
+TEST_CASE("removing a LAZ layer frees its point cloud's cwRHIObject",
+          "[cwScene][cwRhiScene][cwLazLayersSceneNode]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+
+    cwLazLayerModel model;
+    node.setLazLayerModel(&model);
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    const QString filePath = gisLayersDir.filePath(QStringLiteral("rhi-lifetime-%1.laz")
+                                                       .arg(QCoreApplication::applicationPid()));
+    REQUIRE(writeSyntheticLazFile(filePath, gridPoints()));
+    model.setGisLayersDir(gisLayersDir);
+    model.rescan();
+
+    cwLazLayer* layer = model.layerAt(model.count() - 1);
+    REQUIRE(layer != nullptr);
+    REQUIRE(waitForLazLayerLoaded(layer));
+
+    cwRenderPointCloud* cloud = node.pointCloudForLayer(layer);
+    REQUIRE(cloud != nullptr);
+
+    // Captured while the cloud is alive; the id outlives it by design, which is
+    // exactly what lets the delete be queued without dereferencing the pointer.
+    const cwRenderObjectId id = cloud->renderObjectId();
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // creates the cwRHIPointCloud
+    REQUIRE(CwRhiSceneTestAccess::renderObjectForId(rhiScene, id) != nullptr);
+
+    QPointer<cwRenderPointCloud> guard(cloud);
+    model.removeAt(0);
+    REQUIRE(guard.isNull());
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // must destroy it
+
+    REQUIRE(CwRhiSceneTestAccess::renderObjectForId(rhiScene, id) == nullptr);
+}
+
 TEST_CASE("issue #512: re-adding the same render object before a sync must free "
           "its previous cwRHIObject",
           "[cwScene][cwRhiScene][issue512]")
@@ -140,9 +275,7 @@ TEST_CASE("issue #512: re-adding the same render object before a sync must free 
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // creates RHI object #1
     REQUIRE(g_aliveRhiObjects == 1);
 
-    // Toggle visibility so the synced object lands back in a live queue, then
-    // remove it — queuing its id while RHI #1 stays mapped under that id.
-    object->setVisible(false);
+    // Remove it, queuing its id while RHI #1 stays mapped under that id.
     scene.removeItem(object);
 
     // Re-add the *same* object before syncing: addItem() cancels the pending

@@ -92,19 +92,21 @@ void cwScene::removeItem(cwRenderObject *item)
     // every pick, so a Node outliving its render object is a use-after-free.
     // Here rather than ~cwRenderObject(), which is too late — callers arrive
     // via setScene(nullptr), so geometryItersecter() is already null by then.
-    // Above the early return: a synced item has empty queues, making
-    // removedCount 0 for exactly the steady-state removals that need purging.
     GeometryItersecter->clear(item);
 
     // Drop live references before the caller deletes `item` (issue #491);
     // synchroize() dereferences entries in m_newRenderObjects and
     // m_toUpdateRenderObjects.
-    const qsizetype removedCount = m_newRenderObjects.removeAll(item)
-                                   + (m_toUpdateRenderObjects.remove(item) ? 1 : 0);
-    if (removedCount == 0) {
-        return;
-    }
+    m_newRenderObjects.removeAll(item);
+    m_toUpdateRenderObjects.remove(item);
 
+    // Queue the delete unconditionally. Both queues above are empty for a
+    // quiescent item — one already synced with no update pending, since
+    // synchroize() drains them every frame — so gating this on "was it queued?"
+    // stranded such an item's cwRHIObject and its GPU buffers in the backend
+    // forever. (Callers that re-touch the item just before removal dodge it; a
+    // steady LAZ layer removed while idle does not.)
+    //
     // Capture the id while `item` is still alive (the caller deletes it next), so
     // the next sync can drop the matching m_rhiObjectLookup entry without ever
     // dereferencing — or pointer-matching — a dangling pointer.

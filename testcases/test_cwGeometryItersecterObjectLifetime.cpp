@@ -90,9 +90,6 @@ QDir prepareGisLayersDir(const QTemporaryDir& tempDir)
 //
 // Each test REQUIREs the purge *before* it picks, so a regression reports as a
 // readable Catch2 failure instead of taking the suite down with an ASAN abort.
-// Neither reaches removeItem()'s `removedCount == 0` early return — that needs
-// a live RHI to drain the sync queues — so nothing here pins the purge's
-// placement above it.
 TEST_CASE("cwGeometryItersecter forgets a deleted render object",
           "[cwGeometryItersecter][cwRenderPointCloud]")
 {
