@@ -585,6 +585,9 @@ TEST_CASE("canceling a reconcile future does not poison the save-job drain",
 
     auto canceledFuture = cwExternalCenterlineSync::reconcile(
         fixture->project->saveLoad(), scanA, attachmentDir);
+    // Guard the premise: if the future were already settled, cancel()
+    // would be a no-op and the barrier would go unexercised.
+    REQUIRE(!canceledFuture.isFinished());
     canceledFuture.cancel();
 
     // The canceled consumer stops observing, but the queue must still
