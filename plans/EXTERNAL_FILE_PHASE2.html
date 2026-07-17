@@ -128,7 +128,7 @@
   <tr>
     <td><code>cwExternalSourceSettings</code>, <code>sourcePathFor(QUuid)</code>. Phase 1 shipped it as a value class backed by <code>.cwproj/local_settings.json</code> and without <code>isLiveLink(QUuid)</code>; Phase 2 commit 2 reworked it into a QSettings-backed QObject store owned by <code>cwRootData</code> (master &sect;5.3, no migration &mdash; unreleased dev code) and added the <code>isLiveLink</code> convenience + <code>externalCenterlineSourcesChanged</code> signal</td>
     <td>Commit 3 (+ Phase 2 commit 2 rework)</td>
-    <td>Attach dialog (live-link toggle); MissingSourceBanner; AttachedHeader source-mode line</td>
+    <td>Attach dialog (no toggle &mdash; direction change: source is always remembered); MissingSourceBanner; AttachedHeader remembered-source line</td>
   </tr>
   <tr>
     <td><code>cwExternalCenterlineScanner::scan(QString entryFile)</code> &rarr; <code>Monad::Result&lt;ScanResult&gt;</code></td>
@@ -192,21 +192,24 @@
   <li>
     <strong>New:</strong> <code>cwExternalCenterlineAttach.h/.cpp</code>
     &mdash; orchestrator namespace with
-    <code>attach(cwTrip*, QString sourceFile, AttachOptions opts, cwSaveLoad*) &rarr; QFuture&lt;Monad::Result&lt;AttachReport&gt;&gt;</code>
+    <code>attach(cwTrip*, QString sourceFile, cwSaveLoad*, cwExternalSourceSettings*) &rarr; QFuture&lt;Monad::Result&lt;AttachReport&gt;&gt;</code>
     and
-    <code>detach(cwTrip*, cwSaveLoad*) &rarr; QFuture&lt;Monad::ResultBase&gt;</code>.
+    <code>detach(cwTrip*, cwSaveLoad*, cwExternalSourceSettings*) &rarr; QFuture&lt;Monad::ResultBase&gt;</code>.
     Composes the existing
     <code>cwExternalCenterlineScanner::scan</code> &rarr;
     <code>cwExternalCenterlineSync::reconcile</code> chain with the data-model
     mutation (<code>cwTrip::setExternalCenterline</code>) and the
     <code>cwExternalSourceSettings</code> source-memory entry write (always
-    written &mdash; direction change). Pure functions that
-    take their dependencies as args &mdash; no QObject, no member state &mdash;
-    so the QML attach dialog and headless tests share one entry point.
-    <code>AttachOptions</code> carries <code>{ QString
-    sourcePath; }</code>; <code>AttachReport</code> carries
+    written &mdash; direction change; <code>sourceFile</code> is both the
+    scan target and the remembered source, stored absolute). Pure
+    functions that take their dependencies as args &mdash; no QObject, no
+    member state &mdash; so the QML attach dialog and headless tests share
+    one entry point. <code>AttachOptions</code> was dropped at commit 5
+    (its only surviving field duplicated <code>sourceFile</code>);
+    <code>AttachReport</code> carries
     <code>{ ScanResult scan; cwExternalCenterline persisted; QStringList
-    warnings; SeededTripMetadata metadata; }</code>.
+    warnings; SeededTripMetadata metadata; }</code> where
+    <code>metadata</code> holds only the fields actually applied.
   </li>
   <li>
     <strong>New:</strong> <code>cwScopeStationListModel.h/.cpp</code>
@@ -346,7 +349,8 @@
   </li>
   <li>
     <code>cavewherelib/qml/ExternalCenterlineMissingSourceBanner.qml</code>
-    &mdash; yellow banner; <code>[Switch to import mode]</code> wired in
+    &mdash; yellow banner; <code>[Forget source]</code> (renamed from
+    "Switch to import mode" by the direction change) wired in
     Phase 2; <code>[Re-link&hellip;]</code> button stubbed
     (<code>enabled: false</code> with a tooltip that says "Available in a
     future release") pending Phase 5b's rebind dialog.
@@ -538,7 +542,7 @@
 <p>
   The orchestrator composes the three primitives Phase 1 shipped
   (scanner, reconcile, data-model mutation) plus the new
-  <code>cwExternalSourceSettings</code> live-link entry write into one
+  <code>cwExternalSourceSettings</code> source-memory entry write into one
   cancellable, testable entry point. Free functions in
   <code>cwExternalCenterlineAttach::</code> namespace; no QObject, no
   member state.
@@ -547,11 +551,9 @@
 <pre><code>// cwExternalCenterlineAttach.h
 namespace cwExternalCenterlineAttach {
 
-struct AttachOptions {
-    QString sourcePath;          // absolute path the user picked; always
-                                 // remembered in cwExternalSourceSettings
-                                 // (direction change: no liveLink toggle)
-};
+// AttachOptions was dropped at commit 5: after the direction change its
+// only field (sourcePath) duplicated the sourceFile parameter - the path
+// the user picked is both the scan target and the remembered source.
 
 // SeededTripMetadata lives on the scanner (see section 7):
 // cwExternalCenterlineScanner::SeededTripMetadata - the orchestrator
@@ -561,16 +563,16 @@ struct AttachReport {
     cwExternalCenterlineScanner::ScanResult scan;  // copy of scanner result
     cwExternalCenterline persisted;                 // entryFile that landed on the trip
     QStringList warnings;                           // scanner warnings + reconcile warnings
-    cwExternalCenterlineScanner::SeededTripMetadata metadata;  // applied to cwTripCalibration on success
+    cwExternalCenterlineScanner::SeededTripMetadata metadata;  // fields actually applied
+                                                    // (skipped fields stay empty)
 };
 
-// Trip-level attach: scan source -&gt; reconcile into trip's attachment dir
-// -&gt; set externalCenterline -&gt; seed trip metadata -&gt; optionally update
-// cwExternalSourceSettings live-link entry.
+// Trip-level attach: scan sourceFile -&gt; set externalCenterline -&gt;
+// reconcile into trip's attachment dir -&gt; seed trip metadata -&gt;
+// remember sourceFile in cwExternalSourceSettings (always).
 QFuture&lt;Monad::Result&lt;AttachReport&gt;&gt;
 attach(cwTrip* trip,
        const QString& sourceFile,
-       AttachOptions options,
        cwSaveLoad* saveLoad,
        cwExternalSourceSettings* externalSourceSettings);
 
@@ -608,9 +610,9 @@ detach(cwTrip* trip,
     direction change)</em>. The orchestrator always writes a
     <code>cwExternalSourceSettings::ExternalCenterlineSource</code> entry with
     <code>ownerId = trip-&gt;id()</code> and
-    <code>sourcePath = options.sourcePath</code> &mdash; the path the
+    <code>sourcePath = sourceFile</code> &mdash; the path the
     user picked is always known at attach time, and there is no mode
-    toggle. <code>AttachOptions.liveLink</code> is dropped. Detach
+    toggle. <code>AttachOptions</code> is dropped entirely. Detach
     (and a later "Forget source" action) removes the entry. The
     <code>cwExternalSourceSettings</code> store is the same
     rootData-owned object <code>cwLinePlotManager</code> observes; the
@@ -638,15 +640,26 @@ detach(cwTrip* trip,
     the QML caller doesn't need to guard.
   </li>
   <li>
+    <strong>Persistence wiring</strong> <em>(found missing at commit
+    5)</em>. <code>cwSaveLoad</code>'s connectTrip/connectCave blocks
+    had no connection for <code>externalCenterlineChanged</code>, so a
+    changed attachment would never re-save the owner's protobuf (and
+    never flip the modified bit through <code>saveObject</code>).
+    Commit 5 added both connections; the attach round-trip test guards
+    the trip one. The cave connection has no coverage until Phase 3's
+    cave-level attach &mdash; its round-trip test must guard it then.
+  </li>
+  <li>
     <strong>QML entry point.</strong> A thin
     <code>Q_INVOKABLE QFuture attachTripCenterline(cwTrip*,
     QString sourcePath)</code> wrapper on
-    <code>cwRootData</code> (or on a new
-    <code>cwExternalCenterlineManager</code> singleton &mdash; decide
-    during commit 5 based on cwRootData bloat) exposes the orchestrator
-    to QML. The wrapper resolves the <code>cwSaveLoad</code> and
-    <code>cwExternalSourceSettings</code> dependencies from the root singleton
-    and forwards.
+    <code>cwRootData</code> exposes the orchestrator to QML, resolving
+    the <code>cwSaveLoad</code> and <code>cwExternalSourceSettings</code>
+    dependencies from the root singleton and forwarding.
+    <em>Decided at commit 5:</em> cwRootData, not a new singleton &mdash;
+    it already owns every dependency and a one-function manager is
+    bloat. The wrapper itself lands with the first QML consumer
+    (commit 9's attach dialog).
   </li>
 </ul>
 
@@ -833,8 +846,9 @@ public:
     <strong>Re-link button stubbed.</strong>
     <code>ExternalCenterlineMissingSourceBanner</code> ships the button
     with <code>enabled: false</code> and a tooltip "Re-link will be
-    available in a future release; for now use Switch to import mode."
-    Switch to import mode <em>is</em> wired in Phase 2 (it just calls
+    available in a future release; for now use Forget source."
+    Forget source (renamed from "Switch to import mode" by the
+    direction change) <em>is</em> wired in Phase 2 (it just calls
     <code>cwExternalSourceSettings::clearSourcePath(ownerId)</code>).
   </li>
   <li>
@@ -1025,6 +1039,34 @@ public:
     must <em>not</em> dirty the project. Pure refactor, ~17 enqueue
     sites, no behavior change &mdash; its own commit, outside this
     plan.
+    <em>Second axis of the same Job-struct refactor (added at the
+    commit-5 review):</em> per-job result futures. The copy/remove
+    jobs already compute a <code>Monad::ResultBase</code>
+    (<code>cwSaveLoad.cpp</code> copy-if-newer body) but drop it into
+    the generic save-flush error channel, so
+    <code>cwExternalCenterlineSync::reconcile</code> structurally
+    resolves Ok on queue drain and the commit-5 orchestrator has to
+    compensate with disk probes (a fresh <code>computePlan</code>
+    verify in attach; a dir-exists check in detach). Surfacing each
+    job's result would replace both probes with real error
+    propagation. Do it in the same refactor commit as
+    <code>dirtiesProject</code> &mdash; identical surgery on
+    <code>cwSaveLoadPrivate::Job</code>. Related but separate:
+    <a href="ASYNCFUTURE_SHIELD.html">the asyncfuture shield() plan</a>
+    protects the shared <code>pendingJobsFinished()</code> future from
+    consumer cancellation at the boundary.
+  </li>
+  <li>
+    <strong>Deferred refactor (not this phase):</strong> a
+    <code>cwExternalCenterlineSync::reconcile</code> overload taking a
+    precomputed <code>ReconcilePlan</code>. The commit-5 orchestrator
+    stat-walks the closure twice per attach (its verify
+    <code>computePlan</code> plus reconcile's internal one), and the
+    two plans are a divergence seam if the source tree changes between
+    the calls. Commit 7's <code>updateFromSource</code> re-hits the
+    same scan &rarr; plan &rarr; reconcile chain, so add the overload
+    there (or in its own small commit) and pass one plan through both
+    the enqueue and the verify.
   </li>
   <li>
     <strong>Attach orchestrator.</strong>
@@ -1034,6 +1076,10 @@ public:
     failure, reconcile failure, cancel, detach idempotence,
     source-memory write (always written &mdash; direction change),
     and re-attach-over-edited-metadata no-clobber.
+    <em>Shipped at commit 5</em>; also carried the
+    <code>externalCenterlineChanged</code> &rarr; save wiring in
+    <code>cwSaveLoad</code> (see the &sect;6 persistence-wiring bullet)
+    and dropped <code>AttachOptions</code>.
   </li>
   <li>
     <strong><code>cwScopeStationListModel</code>.</strong> New model
@@ -1064,6 +1110,18 @@ public:
     flips, and the existing auto-reconcile
     <code>[Attach][Watcher]</code> tests reworked to the new
     contract.
+    <em>In-flight guard (added at the commit-5 review):</em> the
+    orchestrator is stateless, so a <code>detach()</code> (or second
+    <code>attach()</code>/<code>updateFromSource()</code>) can
+    interleave with an in-flight attach's reconcile continuation,
+    which then re-writes the settings entry and seeds metadata for a
+    trip the user just detached. The commit-9 modal dialog masks the
+    attach/attach case but not attach/detach or
+    Update-vs-detach. This manager layer is where the per-owner
+    in-flight token (or an <code>AsyncFuture::Restarter</code> per
+    owner) belongs &mdash; <code>updateFromSource</code> and the
+    detach path should refuse (or queue) while an operation for the
+    same ownerId is in flight.
   </li>
   <li>
     <strong>Async scan pipeline.</strong> <em>(Demoted by the
@@ -1273,7 +1331,12 @@ public:
     attachment dir.</li>
   <li>Reconcile failure (simulated via read-only attachment dir) &rarr;
     <code>Monad::Result</code> error; orchestrator rolls back
-    <code>setExternalCenterline</code> so the trip stays Native.</li>
+    <code>setExternalCenterline</code> so the trip stays Native.
+    <em>Pinned at commit 5:</em> <code>modified()</code> is
+    <strong>true</strong> after a failed attach &mdash; the copy jobs
+    flipped the bit at enqueue and partial files may have hit disk, so
+    claiming the project is clean would lose that state on
+    quit-without-save.</li>
   <li>Cancel during scan &rarr; future is cancelled; no data-model
     change.</li>
   <li>Detach on Attached trip &rarr; <code>externalCenterline</code>
@@ -1292,6 +1355,10 @@ public:
   <li>Re-attach over a trip whose <code>cwTripCalibration</code> has a
     user-set declination &rarr; orchestrator does not overwrite it; the
     seeded declination is silently ignored.</li>
+  <li><em>Added at commit 5:</em> attach survives a save/load round trip
+    &mdash; guards the new <code>externalCenterlineChanged</code> &rarr;
+    save connections in <code>cwSaveLoad</code> (without them the trip
+    protobuf never re-saved and a reload came back Native).</li>
 </ul>
 
 <h3>Commit 6 &mdash; cwScopeStationListModel</h3>
@@ -1377,7 +1444,7 @@ public:
   <li>Driver-source disclosure starts collapsed; clicking expands and
     shows the <code>driverSource</code> text from Phase 1 commit 8
     (absolute forward-slash quoted <code>*include</code>).</li>
-  <li>Simulate a missing source: clear the live-link target file on
+  <li>Simulate a missing source: delete the remembered source file on
     disk &rarr;
     <code>tryVerify(missingSourceBanner.visible === true)</code> once
     the watcher fires.</li>
@@ -1423,8 +1490,9 @@ public:
   <code>tst_ExternalCenterlinePanelComponents.qml</code></p>
 <ul>
   <li><code>AttachedHeader</code>: bind to a trip with attached
-    centerline &rarr; renders filename + format; live-link path renders
-    when present; import-mode line renders when absent.</li>
+    centerline &rarr; renders filename + format; remembered-source path
+    renders when an entry exists; a forgotten-source line renders when
+    the entry was cleared.</li>
   <li><code>SolveStatus</code>: <code>linePlotManager.hasSolveError ==
     false</code> + clean log &rarr; green dot; with one warning &rarr; yellow;
     with error &rarr; red.</li>

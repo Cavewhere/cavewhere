@@ -4011,6 +4011,7 @@ void cwSaveLoad::connectCave(cwCave *cave)
     };
     connect(cave->length(), &cwUnitValue::unitChanged, this, saveCave);
     connect(cave->depth(), &cwUnitValue::unitChanged, this, saveCave);
+    connect(cave, &cwCave::externalCenterlineChanged, this, saveCave);
 
     cwFixStationModel* fixModel = cave->fixStations();
     connect(fixModel, &QAbstractItemModel::rowsInserted, this, saveCave);
@@ -4076,6 +4077,7 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
 
     // Trip-level changes
     connect(trip, &cwTrip::dateChanged, this, saveTrip);
+    connect(trip, &cwTrip::externalCenterlineChanged, this, saveTrip);
     // connect(trip, &cwTrip::numberOfChunksChanged, this, saveTrip);
     connect(trip, &cwTrip::chunksAboutToBeRemoved, this, saveTrip);
     connect(trip, &cwTrip::chunksRemoved, this, saveTrip);

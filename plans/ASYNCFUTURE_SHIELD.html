@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AsyncFuture shield() — one-way cancellation barrier</title>
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1c1c1c; background: #fff; line-height: 1.5; max-width: 920px; margin: 2.5rem auto; padding: 0 1.5rem 4rem; }
+  h1 { font-size: 1.85rem; border-bottom: 2px solid #2451a4; padding-bottom: 0.35rem; }
+  h2 { font-size: 1.4rem; margin-top: 2.4rem; border-bottom: 1px solid #d8d8d8; padding-bottom: 0.25rem; color: #2451a4; }
+  h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  code { background: #f4f4f6; padding: 0.08rem 0.32rem; border-radius: 3px; font-size: 0.92em; }
+  pre { background: #f4f4f6; padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.88em; line-height: 1.4; }
+  pre code { background: transparent; padding: 0; }
+  table { border-collapse: collapse; margin: 0.6rem 0 1.1rem; font-size: 0.95em; }
+  th, td { border: 1px solid #d8d8d8; padding: 0.4rem 0.7rem; text-align: left; vertical-align: top; }
+  th { background: #f4f4f6; font-weight: 600; }
+  .note { background: #fff7d6; border: 1px solid #e0c346; padding: 0.5rem 0.9rem; border-radius: 4px; margin: 0.8rem 0; }
+  .meta { color: #5a5a5a; font-size: 0.92em; }
+  a { color: #2451a4; }
+</style>
+</head>
+<body>
+
+<h1>AsyncFuture <code>shield()</code> &mdash; one-way cancellation barrier</h1>
+
+<p class="meta">
+  Written 2026-07-17, out of the externalFiles commit-5 review. Touches
+  two repos: the <code>asyncfuture</code> submodule (vpicaver fork
+  &mdash; the primitive + its standalone unit tests) and cavewhere (one
+  boundary fix + a regression test). Independent of the External File
+  phase plans; <a href="EXTERNAL_FILE_PHASE2.html">Phase 2</a> &sect;11
+  references it from the deferred-refactor notes.
+</p>
+
+<h2 id="hazard">1. The hazard: cancel propagates upstream into shared state</h2>
+
+<p>
+  AsyncFuture deliberately propagates <code>cancel()</code>
+  <em>upstream</em> through observation chains, in two places:
+</p>
+
+<ul>
+  <li><code>Private::execute()</code> (the engine under
+    <code>observe(f).context(&hellip;)</code> /
+    <code>.subscribe(&hellip;)</code>) watches its own chain future and,
+    when a consumer cancels it, calls <code>futurePtr-&gt;cancel()</code>
+    on the <em>observed</em> future
+    (<code>asyncfuture.h:1256-1268</code>).</li>
+  <li><code>DeferredFuture::complete(QFuture)</code> installs
+    <code>pushCancel</code> &mdash; "Pushes cancel to child futures in
+    the chain" (<code>asyncfuture.h:582-595</code>) &mdash; so a
+    deferred completed <em>from a future</em> forwards its own
+    cancellation into that future.</li>
+</ul>
+
+<p>
+  Usually that is what you want (cancel a chain &rarr; the
+  QtConcurrent worker future it observes gets marked). It becomes a
+  defect when the chain bottoms out in a <strong>shared</strong>
+  future &mdash; one handed out to many observers and used by its
+  owner for bookkeeping. The concrete case:
+  <code>cwSaveLoad::pendingJobsFinished()</code> returns
+  <code>d-&gt;m_pendingJobsDeferred.future()</code>
+  (<code>cwSaveLoad.cpp:4426</code>), the project-wide job-drain
+  future. <code>QFuture</code> copies share one
+  <code>QFutureInterface</code>, so a cancel arriving through
+  <em>any</em> derived chain marks the one shared object canceled:
+</p>
+
+<ul>
+  <li><code>cwSaveLoadPrivate</code> polls
+    <code>m_pendingJobsDeferred.future().isFinished()</code> to decide
+    when to re-arm the drain cycle
+    (<code>cwSaveLoadPrivate.cpp:663, 1429</code>) &mdash; a canceled
+    future reads as finished while real jobs are still queued.</li>
+  <li>Every sibling observer of the same drain cycle (other
+    <code>cwExternalCenterlineSync::reconcile()</code> calls, future
+    save-flush waiters) sees its chain cancel spuriously.</li>
+</ul>
+
+<p>
+  Exposure today: any caller that cancels the future returned by
+  <code>cwExternalCenterlineSync::reconcile()</code> reaches the shared
+  deferred in one hop. The attach orchestrator dodges it by hand with
+  a value-completed <code>AsyncFuture::Deferred</code> firewall
+  (<code>cwExternalCenterlineAttach.cpp</code>, see the comment on the
+  Deferred), and commit 7's <code>updateFromSource</code> would need
+  the same incantation. Per-consumer incantations are the same bug
+  farm shape as the pre-refactor <code>localMutationOccurred</code>
+  emits &mdash; fix it at the source instead.
+</p>
+
+<h2 id="figure">2. Figure: how shield() breaks the propagation</h2>
+
+<pre>
+ WITHOUT shield &mdash; cancel walks the whole chain up into shared state
+ ====================================================================
+
+     results flow DOWN &#9662;                  cancel flows UP &#9652;
+
+   [ caller / dialog ]
+          &#9474;  future.cancel()
+          &#9662;
+   [ chain future        ]  ...........  cb skipped (no rollback / no completion)
+          &#9474;  execute() watch: futurePtr-&gt;cancel()     asyncfuture.h:1256-1268
+          &#9662;
+   [ reconcile()'s chain future ]
+          &#9474;  same watch, one level up
+          &#9662;
+   [ pendingJobsFinished() future ]  &#9668;&#9472;&#9472; ONE shared QFutureInterface
+          &#9474;
+    &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9508;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+    &#9662;        &#9662;                    &#9662;
+ cwSaveLoad   other reconcile     any other waiter
+ re-arm poll  observers           on the drain cycle
+ (canceled    (their chains       (spuriously
+  reads as     cancel too)         canceled)
+  finished!)
+
+
+ WITH shield &mdash; propagation dies at the barrier
+ ====================================================================
+
+   [ caller / dialog ]
+          &#9474;  future.cancel()
+          &#9662;
+   [ shield future ]   settles canceled; consumer's observers stop cleanly
+          &#9615;
+   &#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;&#9552;  one-way glass: results/cancel forwarded DOWN,
+          &#9650;                 nothing pushed UP (no pushCancel watch)
+          &#9474;  forwarder watch only (finished / canceled / progress)
+   [ pendingJobsFinished() future ]   isCanceled() == false, untouched
+          &#9474;
+    everything below runs exactly as if the cancel never happened
+</pre>
+
+<h2 id="semantics">3. Semantics &mdash; and why the "design question" dissolves</h2>
+
+<p>
+  Two candidate behaviors were on the table for what happens when a
+  consumer cancels the future <code>shield()</code> returned:
+</p>
+
+<table>
+  <tr><th></th><th>A &mdash; "asyncio-style" (soft shield)</th><th>B &mdash; hard shield (cancel is a no-op)</th></tr>
+  <tr>
+    <th>Consumer's view</th>
+    <td>The shield future settles as <em>canceled</em>. Watchers get
+      the canceled signal, chains built on it stop, the dialog can
+      dismiss. Cancel means "stop notifying me".</td>
+    <td>Cancel does nothing; the future later delivers the real
+      result. Cancel means nothing.</td>
+  </tr>
+  <tr>
+    <th>Producer's view</th>
+    <td>Untouched. Work runs to completion; its result is dropped
+      into the already-canceled shield future (a guarded no-op).</td>
+    <td>Untouched (same).</td>
+  </tr>
+</table>
+
+<p>
+  "asyncio-style" refers to Python's <code>asyncio.shield(task)</code>:
+  when the <em>outer</em> await is cancelled, the awaiting coroutine
+  receives <code>CancelledError</code> (so the consumer side genuinely
+  observes the cancellation and unwinds), while the <em>inner</em> task
+  keeps running to completion. Cancellation is delivered to the
+  consumer's view only; the producer is protected.
+</p>
+
+<p class="note">
+  <strong>Resolution: option B is not implementable with QFuture, so
+  the question answers itself.</strong>
+  <code>QFuture::cancel()</code> calls the <em>non-virtual</em>
+  <code>QFutureInterfaceBase::cancel()</code>, which flips the shared
+  canceled flag synchronously. A library cannot veto or intercept
+  that; it can only <em>react</em> afterwards (that is exactly what
+  <code>pushCancel</code> is &mdash; a <code>QFutureWatcher</code>
+  reaction). So the shield future will always read
+  <code>isCanceled() == true</code> after a consumer cancel; the only
+  thing shield() controls is whether the library <em>reacts by pushing
+  the cancel upstream</em>. Declining to react is option A. A faithful
+  option B would require a custom non-QFuture handle type &mdash; out
+  of scope and worse ergonomics.
+</p>
+
+<h3>Contract</h3>
+<ul>
+  <li>Consumer cancels shield future &rarr; shield future is canceled
+    (unavoidable, and useful); upstream is untouched; the upstream's
+    eventual completion is dropped (complete-on-finished-future is
+    already a guarded no-op).</li>
+  <li>Upstream completes &rarr; result forwarded to the shield
+    future.</li>
+  <li>Upstream cancels (or reports an exception) &rarr; forwarded
+    downstream, matching <code>complete(QFuture)</code>'s existing
+    forwarder behavior. Shield is one-way glass, not a result
+    filter.</li>
+  <li>Progress forwarded via the existing <code>track()</code>
+    machinery.</li>
+  <li>Shield gives the producer <em>no visibility</em> of consumer
+    cancellation. Producers that want a cancel window (attach's
+    scan-stage poll) keep a <code>Deferred</code> and poll
+    <code>future().isCanceled()</code> &mdash; shield does not replace
+    that pattern, it protects infrastructure from consumers.</li>
+</ul>
+
+<h2 id="api">4. API</h2>
+
+<pre><code>// asyncfuture.h
+
+// Private::DeferredFuture&lt;T&gt;: the minus-pushCancel twin of
+// complete(QFuture). Installs the forwarder watch (finished -&gt;
+// completeByFinishedFuture, canceled -&gt; cancel) and track(future)
+// for progress, and deliberately does NOT install the second
+// watch(this-&gt;future(), ..., pushCancel, ...).
+void completeShielded(QFuture&lt;T&gt; future);
+
+// Public: Deferred&lt;T&gt; and Deferred&lt;void&gt; wrappers.
+deferred.completeShielded(future);
+
+// Public free function; the common consumer form.
+template &lt;typename T&gt;
+QFuture&lt;T&gt; AsyncFuture::shield(QFuture&lt;T&gt; future) {
+    Deferred&lt;T&gt; d;
+    d.completeShielded(future);
+    return d.future();
+}
+</code></pre>
+
+<p class="note">
+  <strong>Opt-in, not a default change.</strong>
+  <code>complete(QFuture)</code>'s propagation stays as-is &mdash; the
+  fork's Restarter work ("Propagate Restarter outer cancel to the
+  inner worker", <code>6a5b05b</code>) deliberately relies on
+  propagation being the default. shield() is the explicit opt-out for
+  boundaries where the observed future is shared.
+</p>
+
+<h2 id="commits">5. Commit sequence</h2>
+
+<h3>Commit 1 &mdash; asyncfuture fork: the primitive</h3>
+<p>
+  <code>completeShielded</code> on <code>DeferredFuture</code>,
+  <code>Deferred&lt;T&gt;</code>, <code>Deferred&lt;void&gt;</code>;
+  free <code>AsyncFuture::shield()</code>. Unit tests in the
+  standalone asyncfuture suite (build recipe: see the repo's CI /
+  existing test project; cavewhere's superbuild does not compile
+  them). Gates:
+</p>
+<ul>
+  <li>Result forwarding: complete the inner deferred with a value
+    &rarr; shield future finishes with that value.</li>
+  <li>Upstream cancel forwarding: cancel the inner &rarr; shield
+    future is canceled.</li>
+  <li><strong>The barrier itself:</strong> cancel the shield future
+    &rarr; inner future's <code>isCanceled()</code> stays false; the
+    inner deferred can still complete afterwards without crash or
+    warning; a separate direct observer of the inner future still
+    fires.</li>
+  <li>Shared-fan-out miniature of the cavewhere hazard: one
+    <code>Deferred&lt;void&gt;</code>, two consumers each observing
+    their own <code>shield()</code> of it; cancel consumer 1's shield
+    future &rarr; consumer 2 still completes; the shared future is
+    not canceled.</li>
+  <li>Progress forwarding via <code>track()</code>
+    (progressValue/range reach the shield future).</li>
+  <li>Thread hop: inner is a <code>QtConcurrent::run</code> future
+    completed on a pool thread &rarr; shield future completes on the
+    consumer thread per existing watch() delivery rules.</li>
+  <li>Parity check: shielded vs plain <code>complete(QFuture)</code>
+    behave identically in every respect except the downstream-cancel
+    push (loop both variants through the same assertions).</li>
+</ul>
+
+<h3>Commit 2 &mdash; cavewhere: shield the shared drain future at the source</h3>
+<ul>
+  <li>Bump the <code>asyncfuture</code> submodule; note the bump in
+    the commit message per house rules.</li>
+  <li><code>cwSaveLoad::pendingJobsFinished()</code> returns
+    <code>AsyncFuture::shield(completeSaveJobs())</code> &mdash; no
+    caller-derived chain can reach
+    <code>m_pendingJobsDeferred</code> any more.</li>
+  <li>Regression test (tag <code>[SaveLoad][Shield]</code>): enqueue
+    external-centerline jobs, cancel the future returned by
+    <code>cwExternalCenterlineSync::reconcile()</code> mid-flight
+    &rarr; the queue still drains, a <em>second</em> reconcile
+    completes normally, and <code>waitSaveToFinish</code> does not
+    hang &mdash; i.e. the drain cycle survived a consumer cancel.</li>
+  <li>Keep the attach orchestrator unchanged: its Deferred still
+    provides the scan-window cancel poll and the one-way-cancel
+    contract; its firewall comment gains one line pointing at
+    shield() as the infrastructure-level backstop.</li>
+</ul>
+
+<h3>Commit 3 (optional, default: skip) &mdash; attach internals as a flat chain</h3>
+<p>
+  With the drain future shielded at the source, attach's internal
+  chain could be rewritten flat
+  (<code>observe(scan).context(&hellip;)</code> returning futures) with
+  the Deferred kept only as the outer bridge via
+  <code>completeShielded</code>. Pure taste &mdash; the current code
+  is correct; only do this if the file is being touched anyway.
+</p>
+
+<h2 id="out-of-scope">6. Out of scope / survey items</h2>
+<ul>
+  <li><strong>Future-API audit.</strong> Sweep other
+    <code>cwSaveLoad</code>/<code>cwProject</code> methods that return
+    futures (<code>sync()</code>,
+    <code>resetBranchAndReconcile()</code>, <code>retire()</code>,
+    the per-call shared_ptr deferreds) for the same
+    shared-state-escapes-as-cancellable-handle shape. Per-call
+    deferreds are fine (cancel only poisons that one operation);
+    anything returning a <em>member</em> deferred's future needs
+    shield().</li>
+  <li><strong>Hard shield.</strong> Not implementable over QFuture
+    (see &sect;3); revisit only if a custom handle type ever becomes
+    worth it.</li>
+  <li><strong>Upstreaming.</strong> The fork has diverged from
+    benlau/asyncfuture; no upstream PR planned.</li>
+</ul>
+
+</body>
+</html>

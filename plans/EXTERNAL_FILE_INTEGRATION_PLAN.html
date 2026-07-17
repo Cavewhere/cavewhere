@@ -1581,7 +1581,7 @@ QString exportDisabledReason() const;  // empty when canExport() is true
   <li>If scanner returns warnings, surface them but proceed.</li>
   <li>Copy the dependency closure into the owner's <code>external-centerline/</code> subdir (resolved via <code>cwSaveLoad::externalCenterlineDir(owner)</code>).</li>
   <li>Persist the <code>cwExternalCenterline</code> with the entry-file path relative to that subdir (usually a basename).</li>
-  <li>If live-link selected: write the source path to the <code>cwExternalSourceSettings</code> store.</li>
+  <li>Write the source path to the <code>cwExternalSourceSettings</code> store &mdash; always (direction change 2026-07-16: no live-link selection; the source is unconditionally remembered).</li>
   <li>Trigger a re-solve via the existing pipeline.</li>
   <li>
     For cave-level attach: silently auto-create one cwTrip per
@@ -1686,7 +1686,7 @@ QString exportDisabledReason() const;  // empty when canExport() is true
 │ ┌─ ExternalCenterlinePanel ──┬─ NotesGallery ───────────────┐  │
 │ │  📄 trip.svx · Survex       │  (unchanged)                 │  │
 │ │  Source: ~/topodroid/…/    │                              │  │
-│ │     (live-linked)          │  carpet mode: station picker │  │
+│ │     (source remembered)     │  carpet mode: station picker │  │
 │ │  Last solved: 0.2s ago     │  draws from this trip's      │  │
 │ │  14 stations · 13 shots    │  scope in the resolved       │  │
 │ │  0 warnings · 0 errors     │  network (§7.2)              │  │
@@ -1834,7 +1834,7 @@ QString exportDisabledReason() const;  // empty when canExport() is true
   <tr>
     <td><strong>Attached</strong></td>
     <td><code>trip.externalCenterline.entryFile</code> non-empty</td>
-    <td>Filename + format; source mode line ("In-project copy (this machine)" or "Live-linked: &lt;path&gt;")</td>
+    <td>Filename + format; source mode line ("Source forgotten (this machine)" or "Source: &lt;path&gt;" &mdash; direction change: remembered source, no mode)</td>
     <td><code>[Reload now]</code> <code>[Detach&hellip;]</code></td>
     <td>none</td>
   </tr>
@@ -1850,7 +1850,7 @@ QString exportDisabledReason() const;  // empty when canExport() is true
     <td>Attached AND <code>externalSourceSettings</code> has a <code>sourcePath</code> for the owner that doesn't exist on disk</td>
     <td>(unchanged from Attached &mdash; the file in the project tree still exists)</td>
     <td>(unchanged)</td>
-    <td>Yellow banner: <em>"Source not found at &lt;path&gt;"</em> + <code>[Re-link&hellip;]</code> <code>[Switch to import mode]</code></td>
+    <td>Yellow banner: <em>"Source not found at &lt;path&gt;"</em> + <code>[Re-link&hellip;]</code> <code>[Forget source]</code> (renamed from "Switch to import mode" by the 2026-07-16 direction change)</td>
   </tr>
 </table>
 
@@ -1867,7 +1867,7 @@ QString exportDisabledReason() const;  // empty when canExport() is true
 <ul>
   <li><code>required property cwTrip trip</code> &mdash; owner.</li>
   <li><code>required property cwLinePlotManager linePlotManager</code> &mdash; for <code>hasSolveError</code> / <code>cavernLog</code> / <code>loopClosureStats</code> / <code>solveErrorMessage</code> Q_PROPERTYs already on the manager (post-lineplot-port).</li>
-  <li><code>required property cwExternalSourceSettings externalSourceSettings</code> &mdash; <code>Q_INVOKABLE QString sourcePathFor(QUuid ownerId)</code> and <code>Q_INVOKABLE bool isLiveLink(QUuid ownerId)</code>.</li>
+  <li><code>required property cwExternalSourceSettings externalSourceSettings</code> &mdash; <code>Q_INVOKABLE QString sourcePathFor(QUuid ownerId)</code> and <code>Q_INVOKABLE bool hasSource(QUuid ownerId)</code> (direction change 2026-07-16: <code>isLiveLink</code> is retired in favor of <code>hasSource</code>; no mode dichotomy).</li>
   <li><code>required property QAbstractItemModel scopeStationModel</code> &mdash; the per-scope station-list model from &sect;7.2 (new in Phase 2). Same model also backs the carpet station picker.</li>
 </ul>
 
@@ -1895,13 +1895,13 @@ QQ.Item {
     readonly property bool isAttached: trip.externalCenterline.entryFile.length &gt; 0
     readonly property bool isScope: trip.stationPrefix.length &gt; 0
     readonly property bool sourceMissing:
-        isAttached &amp;&amp; externalSourceSettings.isLiveLink(trip.id) &amp;&amp;
+        isAttached &amp;&amp; externalSourceSettings.hasSource(trip.id) &amp;&amp;
         !FileSystemHelper.exists(externalSourceSettings.sourcePathFor(trip.id))
 
     signal reloadRequested()
     signal detachRequested()
     signal relinkRequested()
-    signal switchToImportRequested()
+    signal forgetSourceRequested()
     signal changePrefixRequested()
     signal removeTripRequested()
 
@@ -1915,7 +1915,7 @@ QQ.Item {
             visible: root.sourceMissing
             sourcePath: root.externalSourceSettings.sourcePathFor(root.trip.id)
             onRelinkRequested: root.relinkRequested()
-            onSwitchToImportRequested: root.switchToImportRequested()
+            onForgetSourceRequested: root.forgetSourceRequested()
         }
 
         Loader {
@@ -2006,7 +2006,7 @@ QQ.Item {
   </tr>
   <tr>
     <td><code>ExternalCenterlineAttachedHeader.qml</code></td>
-    <td>Filename + format icon + source-mode line (in-project / live-linked path).</td>
+    <td>Filename + format icon + remembered-source line (path, or a forgotten-source note).</td>
     <td>2</td>
   </tr>
   <tr>
@@ -2027,7 +2027,7 @@ QQ.Item {
   <tr>
     <td><code>ExternalCenterlineMissingSourceBanner.qml</code></td>
     <td>Yellow banner; Re-link / Switch-to-import buttons (&sect;8.8 question 16).</td>
-    <td>2 (banner lights up trivially in Phase 2 even before Phase 5b lands the rebind dialog &mdash; the buttons can be present but only "Switch to import mode" wired in Phase 2; Re-link wires to its dialog in Phase 5b)</td>
+    <td>2 (banner lights up trivially in Phase 2 even before Phase 5b lands the rebind dialog &mdash; the buttons can be present but only "Forget source" wired in Phase 2; Re-link wires to its dialog in Phase 5b)</td>
   </tr>
   <tr>
     <td><code>ExternalCenterlineTripMetadata.qml</code></td>
@@ -2355,7 +2355,7 @@ QQ.Item {
     <em>"Source not found at &lt;path&gt;"</em> banner on its
     <code>ExternalCenterlinePanel</code> with
     <code>[Re-link&hellip;]</code> and
-    <code>[Switch to import mode]</code> buttons. The watcher
+    <code>[Forget source]</code> buttons. The watcher
     <code>fileChanged</code> path (Phase 5b) feeds into the same
     banner state, so the two routes converge on one UI surface.
     Without this, the watcher-only design quietly drops the
