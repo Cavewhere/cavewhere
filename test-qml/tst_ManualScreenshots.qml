@@ -1751,6 +1751,67 @@ MainWindowTest {
             restoreDemoProject();
         }
 
+        // The empty Geospatial Layers page: the "Add LAZ Files" bar (highlighted)
+        // and the "no layers yet" help box. Whole-window so the sidebar / breadcrumb
+        // place it, and because the demo has no point cloud to populate the table —
+        // the page's own entry point is the point of the shot. Backs the "Where point
+        // clouds live" / "Add a LAZ or LAS file" sections of
+        // docs/manual/point-clouds/add-a-point-cloud.md.
+        //
+        // Reached the way the Data page's Layers link reaches it: gotoPageByName off
+        // the Data page's own PageView.page (the page is registered lazily on
+        // DataMainPage, so navigate to Data first).
+        function test_pointCloudGeospatialPage() {
+            let page = openDataPage("Source/Data", "dataMainPage");
+            if (!page) { return; }
+
+            RootData.pageSelectionModel.gotoPageByName(page.PageView.page, "Geospatial Layers");
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "geospatialLayerPage",
+                      5000, "the Geospatial Layers page is current");
+            let geoPage = RootData.pageView.currentPageItem;
+
+            let addBar = findByName(geoPage, "addLazBar");
+            verify(addBar, "found the Add LAZ Files bar");
+            highlightOverlayId.target = addBar;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "point-clouds-empty");
+            verify(path.length > 0, "grabToFile wrote the geospatial-page shot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "point-clouds-empty is not blank");
+
+            highlightOverlayId.target = null;
+            restoreDemoProject();
+        }
+
+        // The Clip tool in the 3D view's bottom toolbar, highlighted, so the clip
+        // page can show where the tool lives. Whole-window: the demo cave in the 3D
+        // view is the context, and the toolbar (Pick / Clip / Measure) sits over it.
+        // The button is present with or without a loaded cloud, so no fixture is
+        // needed. Backs the "Open the clip tool" section of
+        // docs/manual/point-clouds/clip-a-point-cloud.md.
+        function test_pointCloudClipTool() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            let glTerrain = ObjectFinder.findObjectByChain(rootId.mainWindow,
+                "rootId->viewPage->SplitView->renderer");
+            verify(glTerrain, "found the GLTerrainRenderer");
+
+            let clipButton = findByName(glTerrain, "lazClipButton");
+            verify(clipButton, "found the Clip tool button");
+            highlightOverlayId.target = clipButton;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "point-clouds-clip-tool");
+            verify(path.length > 0, "grabToFile wrote the clip-tool shot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   "point-clouds-clip-tool is not blank");
+
+            highlightOverlayId.target = null;
+        }
+
         // The Import menu on the Data page, open, showing the survey formats.
         // Backs docs/manual/import-export/import-surveys.md.
         //

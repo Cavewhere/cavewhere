@@ -26,7 +26,7 @@ particular break until you place it:
   where the cave is; without a fixed station there's nothing to compute from.
 
 Georeferencing also lets you overlay the cave on surface maps and imagery, drop
-georeferenced [point clouds](../concepts/coordinate-systems.md) into the same
+georeferenced [point clouds](../point-clouds/add-a-point-cloud.md) into the same
 space, and hand real coordinates to anyone who needs them. This page is the
 task; [Directions and Coordinate Systems](../concepts/coordinate-systems.md) is
 the concept behind it.

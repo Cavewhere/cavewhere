@@ -66,6 +66,12 @@ the problems CaveWhere solves — then keep the
   georeferencing turns on, and why a placed cave's bearing correction is more than
   its declination.
 
+### Point Clouds
+- [Add a Point Cloud](point-clouds/add-a-point-cloud.md) — bring an aerial or
+  surface LiDAR scan in as a geospatial layer, so the cave sits in its real terrain.
+- [Clip a Point Cloud](point-clouds/clip-a-point-cloud.md) — draw a polygon to trim
+  a big scan down to just the part over your cave.
+
 ### Notes
 - [Add Notes to a Trip](notes/add-a-note.md) — import scans, PDFs, and 3D
   scans, and rotate or remove them.
@@ -122,7 +128,6 @@ chapter is task-oriented and problem-first (see
   pages above.
 - **3D View (more)** — field of view, labels, leads, and rendering settings
   (MSAA, EDL) build on [The 3D View](view-3d/the-3d-view.md).
-- **Point Clouds** — adding LAZ/LAS, coordinate systems, clipping, EDL.
 - **Measurement** — distance, azimuth (grid / true / magnetic), inclination.
 - **Loop Closure** — closure errors and reviewing blunders.
 - **Leads** — the lead list, editing, CSV export.

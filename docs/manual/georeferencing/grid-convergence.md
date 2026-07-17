@@ -26,7 +26,8 @@ with anything measured on the grid. Two cases make it matter:
   the fixes that no amount of re-measuring will clear. Correcting for convergence
   puts your measured directions in the same grid as the fixed coordinates, so the
   loop closes on the geometry instead of fighting it.
-- **Aligning with aerial LiDAR or a point cloud.** Aerial scans and surface point
+- **Aligning with aerial LiDAR or a [point cloud](../point-clouds/add-a-point-cloud.md).**
+  Aerial scans and surface point
   clouds arrive already in a projected grid, oriented to grid north. A cave turned
   only to true north sits rotated off them by the convergence angle, so a passage
   drifts sideways from the surface feature it actually runs beneath — and the error
