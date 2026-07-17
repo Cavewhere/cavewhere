@@ -31,7 +31,15 @@ cwRenderObject::cwRenderObject(QObject* parent) :
 
 cwRenderObject::~cwRenderObject()
 {
-
+    // A render object may be deleted while still attached to a live scene (a direct
+    // `delete`, not the setScene(nullptr) path). Scrub its pending entry and picker
+    // geometry now, or the scene keeps a dangling pointer to drain (#491) and the
+    // intersecter dereferences freed geometry on the next pick (follow-up 6). When
+    // the scene is itself being torn down it has already called detachFromScene() on
+    // us, so m_scene is null here and this no-ops — see ~cwScene().
+    if (m_scene != nullptr) {
+        m_scene->removeItem(this);
+    }
 }
 
 void cwRenderObject::setScene(cwScene *scene)

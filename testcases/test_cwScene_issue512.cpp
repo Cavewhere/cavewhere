@@ -20,9 +20,11 @@
 // handoff, so this file has since become the home for cwScene's RHI-object
 // lifetime coverage generally — not just #512: a plain steady-state removal, the
 // real LAZ-layer removal path, and — since the single-map handoff refactor — that
-// Adds register in add order (draw order) and that a removed object cannot be
-// resurrected by a late updateItem(). Only the two named #512 cases are about
-// address reuse.
+// Adds register in add order (draw order), that a removed object cannot be
+// resurrected by a late updateItem(), and — since the destructor-scrub hardening
+// (follow-up 8, phase 2) — that deleting a render object directly (no
+// setScene(nullptr)) and tearing a scene down over its still-attached children are
+// both safe. Only the two named #512 cases are about address reuse.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -375,6 +377,92 @@ TEST_CASE("updateItem on a removed render object does not resurrect it",
 
     delete object;
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // frees RHI #1, no deref
+
+    REQUIRE(g_aliveRhiObjects == 0);
+}
+
+// Deleting a render object directly — no setScene(nullptr) first — while its Add is
+// still pending. The pending entry holds the object's live pointer, so without the
+// destructor scrub the next synchroize() would dereference freed memory (issue #491
+// through the direct-delete path this time). ~cwRenderObject() must convert that
+// entry to a {Delete}, dropping the pointer, so pendingItemCount() falls to zero the
+// moment the object dies and the drain touches nothing.
+TEST_CASE("deleting an attached render object before its Add is synced does not dangle",
+          "[cwScene][cwRhiScene]")
+{
+    g_aliveRhiObjects = 0;
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    auto* object = new StubRenderObject();
+    object->setScene(&scene);     // queues an Add holding object's live pointer
+    object->setParent(nullptr);   // we manage its lifetime, not the scene
+
+    // The Add is still pending (no sync yet), so its entry holds the live pointer.
+    REQUIRE(scene.pendingItemCount() == 1);
+
+    delete object;                // ~cwRenderObject() must scrub the pending Add
+
+    // The Add was converted to a {Delete}, which holds no pointer to dereference.
+    REQUIRE(scene.pendingItemCount() == 0);
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // drains the Delete, no deref
+
+    REQUIRE(g_aliveRhiObjects == 0);
+}
+
+// The same direct delete, but after the object has been synced: a real caller that
+// does `delete cloud` without setScene(nullptr) first. The object's cwRHIObject is
+// live and mapped under its id; ~cwRenderObject() must queue the {Delete} so the next
+// sync frees it rather than stranding it for the life of the scene.
+TEST_CASE("deleting a synced render object directly frees its cwRHIObject",
+          "[cwScene][cwRhiScene]")
+{
+    g_aliveRhiObjects = 0;
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+
+    auto* object = new StubRenderObject();
+    object->setScene(&scene);
+    object->setParent(nullptr);   // we manage its lifetime, not the scene
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // creates RHI object #1
+    REQUIRE(g_aliveRhiObjects == 1);
+
+    delete object;                // no removeItem(); the destructor must queue the Delete
+
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // must free RHI #1
+
+    REQUIRE(g_aliveRhiObjects == 0);        // 1 would mean RHI #1 was stranded
+}
+
+// Tearing a scene down while it still owns render-object children. addItem() parents
+// each object to the scene, so ~QObject deletes them *after* ~cwScene's body runs, by
+// which point the value member m_pending is already destroyed. Without ~cwScene()
+// detaching them first, each ~cwRenderObject() would call removeItem() and insert into
+// that dead QMap — a use-after-free ASAN catches. The detach nulls their back-pointers
+// so those destructors no-op. The real observable is the clean teardown under ASAN
+// (this test crashes without the fix); no synchroize() runs here, so no StubRhiObject
+// is ever created and the closing g_aliveRhiObjects check is only a reached-the-end
+// sanity anchor.
+TEST_CASE("destroying a scene severs its render-object children before they are deleted",
+          "[cwScene][cwRhiScene]")
+{
+    g_aliveRhiObjects = 0;
+
+    {
+        cwScene scene;
+
+        // Scene-owned: no setParent(nullptr), so the scene deletes these on teardown.
+        auto* first = new StubRenderObject();
+        auto* second = new StubRenderObject();
+        first->setScene(&scene);
+        second->setScene(&scene);
+
+        REQUIRE(scene.pendingItemCount() == 2);
+    }   // scene destroyed; its children deleted via ~QObject, must not touch the scene
 
     REQUIRE(g_aliveRhiObjects == 0);
 }

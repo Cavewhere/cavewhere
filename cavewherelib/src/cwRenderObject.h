@@ -33,6 +33,7 @@ class CAVEWHERE_LIB_EXPORT cwRenderObject : public QObject {
     Q_PROPERTY(bool visible READ isVisible WRITE setVisible NOTIFY visibleChanged FINAL)
 
     friend class cwRhiScene;
+    friend class cwScene;
 
 public:
     cwRenderObject(QObject* parent = nullptr);
@@ -66,6 +67,12 @@ protected:
     // virtual cwSceneUpdate::Flag updateOnFlags() const { return cwSceneUpdate::Flag::None; }
 
 private:
+    // Sever the back-pointer to the scene without touching it. cwScene calls this on
+    // each render-object child while destructing, so that when ~QObject later deletes
+    // those children, ~cwRenderObject sees a null scene and skips the removeItem()
+    // that would otherwise reach into the half-destroyed scene (see ~cwScene()).
+    void detachFromScene() { m_scene = nullptr; }
+
     cwScene* m_scene;
 
     const cwRenderObjectId m_renderObjectId;

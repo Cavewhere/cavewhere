@@ -36,6 +36,19 @@ cwScene::cwScene(QObject *parent) :
 
 cwScene::~cwScene()
 {
+    // Sever every render-object child's back-pointer before this scene is torn down.
+    // ~QObject deletes those children *after* this destructor body, by which point the
+    // value member m_pending is already destroyed — so a child's ~cwRenderObject
+    // calling removeItem() would insert into a dead QMap. (GeometryItersecter is itself
+    // a scene child, deleted in that same ~QObject phase in unspecified sibling order,
+    // so removeItem()'s clear() could hit it freed too.) Detaching the children here,
+    // while the scene is still whole, makes those destructors no-op — see
+    // ~cwRenderObject().
+    const auto renderObjects = findChildren<cwRenderObject*>();
+    for (cwRenderObject* object : renderObjects) {
+        object->detachFromScene();
+    }
+
     // Finish any offscreen jobs that were queued but never handed off to the
     // render thread (e.g. the scene is torn down before the next synchroize), so
     // their futures resolve rather than hang.
