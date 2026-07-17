@@ -1596,6 +1596,43 @@ MainWindowTest {
             model.setData(model.index(0), georefElevation, FixStationModel.ElevationRole);
         }
 
+        // Drive a live two-point measurement on `interaction` for the shots that show
+        // the measurement tool in action. Clears any prior measurement, activates the
+        // tool, then ray-casts a grid of offsets around the view center until two
+        // points land on the cave geometry (carpet meshes are the easy hit; the line
+        // plot is thin) — the same approach as test_georefCoordinatePicker. Point A is
+        // found scanning from the near-center out and point B from the far end in, so
+        // the two sit well apart and the measured span (and its line) reads clearly.
+        function placeDemoMeasurement(glTerrain, interaction) {
+            interaction.deactivate();
+            interaction.activate();
+            tryVerify(() => interaction.enabled === true, 2000, "the measure tool is active");
+
+            let cx = glTerrain.width / 2;
+            let cy = glTerrain.height / 2;
+            let offsets = [];
+            for (let gx = -200; gx <= 200; gx += 50) {
+                for (let gy = -140; gy <= 140; gy += 50) {
+                    offsets.push([gx, gy]);
+                }
+            }
+
+            let aIndex = -1;
+            for (let k = 0; k < offsets.length && aIndex < 0; ++k) {
+                interaction.place(Qt.point(cx + offsets[k][0], cy + offsets[k][1]));
+                wait(40);
+                if (interaction.hasFirst) { aIndex = k; }
+            }
+            verify(aIndex >= 0, "the first measurement point landed on the cave");
+
+            for (let k = offsets.length - 1; k > aIndex && !interaction.hasMeasurement; --k) {
+                interaction.place(Qt.point(cx + offsets[k][0], cy + offsets[k][1]));
+                wait(40);
+            }
+            tryVerify(() => interaction.hasMeasurement, 2000,
+                      "a two-point measurement is complete");
+        }
+
         // The project Coordinate system control on the Data page, set to UTM so the
         // zone / hemisphere / resolved-EPSG fields are all showing.
         // Backs docs/manual/georeferencing/georeference-a-cave.md.
@@ -1810,6 +1847,98 @@ MainWindowTest {
                    "point-clouds-clip-tool is not blank");
 
             highlightOverlayId.target = null;
+        }
+
+        // The Measure tool in action: the button highlighted in the 3D view's bottom
+        // toolbar (Pick / Clip / Measure) AND a completed two-point measurement — the
+        // two placed points and the line drawn between them — so the page shows both
+        // where the tool lives and what using it looks like. Whole-window for context.
+        // Backs the "Open the measurement tool" / "Place two points" sections of
+        // docs/manual/measurement/measure-distance-and-bearing.md.
+        function test_measurementTool() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            let glTerrain = ObjectFinder.findObjectByChain(rootId.mainWindow,
+                "rootId->viewPage->SplitView->renderer");
+            verify(glTerrain, "found the GLTerrainRenderer");
+
+            let interaction = findChild(glTerrain, "measurementInteraction");
+            verify(interaction, "found the measurement interaction");
+            placeDemoMeasurement(glTerrain, interaction);
+
+            // Hide the readout popup for this shot so it doesn't cover the measurement
+            // line — the line and its endpoints are the point here, and the readout has
+            // its own dedicated shot (measurement-readout.png). Assigning visible drops
+            // the popup's `measureButton.selected && hasMeasurement` binding, which is
+            // fine for a one-shot grab; the interaction is torn down right after.
+            let popup = findChild(glTerrain, "measurementReadoutPopup");
+            if (popup) { popup.visible = false; }
+
+            let measureButton = findByName(glTerrain, "measurementButton");
+            verify(measureButton, "found the Measure tool button");
+            highlightOverlayId.target = measureButton;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "measurement-tool");
+            verify(path.length > 0, "grabToFile wrote the measurement-tool shot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   "measurement-tool is not blank");
+
+            highlightOverlayId.target = null;
+            interaction.deactivate();
+            restoreDemoProject();
+        }
+
+        // A live two-point measurement, with the readout panel showing the distance /
+        // direction / by-axis groups and the grid/true/magnetic azimuth selector. The
+        // cave is georeferenced first so True and Magnetic are enabled (a local cave
+        // offers Grid only). Two points are ray-cast around the view center until each
+        // lands on the cave geometry (the carpet meshes are the easy hit; the line
+        // plot is thin) — the same approach as test_georefCoordinatePicker. Backs the
+        // "Read the measurement" and "Choose which north the azimuth uses" sections of
+        // docs/manual/measurement/measure-distance-and-bearing.md.
+        function test_measurementReadout() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            let glTerrain = ObjectFinder.findObjectByChain(rootId.mainWindow,
+                "rootId->viewPage->SplitView->renderer");
+            verify(glTerrain, "found the GLTerrainRenderer");
+
+            // Georeference cave 0 so the azimuth selector's True and Magnetic options
+            // are enabled (both need a coordinate system). Undone by restoreDemoProject.
+            let cave = RootData.region.cave(0);
+            verify(cave, "found the demo cave");
+            RootData.region.geoReference.globalCoordinateSystem = georefCS;
+            let model = cave.fixStations;
+            model.addFixStation();
+            model.setData(model.index(0), georefStation, FixStationModel.StationNameRole);
+            model.setData(model.index(0), georefCS, FixStationModel.InputCSRole);
+            model.setData(model.index(0), georefEasting, FixStationModel.EastingRole);
+            model.setData(model.index(0), georefNorthing, FixStationModel.NorthingRole);
+            model.setData(model.index(0), georefElevation, FixStationModel.ElevationRole);
+            RootData.futureManagerModel.waitForFinished();
+
+            let interaction = findChild(glTerrain, "measurementInteraction");
+            verify(interaction, "found the measurement interaction");
+            let popup = findChild(glTerrain, "measurementReadoutPopup");
+            verify(popup, "found the measurement readout popup");
+            popup.popupType = QC.Popup.Item;
+
+            interaction.azimuthReference = AzimuthReference.Grid;
+            placeDemoMeasurement(glTerrain, interaction);
+            tryVerify(() => popup.visible, 2000, "the measurement readout is open");
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(popup.contentItem,
+                                                    "measurement-readout", 40);
+            verify(path.length > 0, "grabItemToFile wrote the measurement-readout shot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "measurement-readout is not blank");
+
+            interaction.deactivate();
+            restoreDemoProject();
         }
 
         // The Import menu on the Data page, open, showing the survey formats.

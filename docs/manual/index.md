@@ -72,6 +72,11 @@ the problems CaveWhere solves — then keep the
 - [Clip a Point Cloud](point-clouds/clip-a-point-cloud.md) — draw a polygon to trim
   a big scan down to just the part over your cave.
 
+### Measurement
+- [Measure Distance and Bearing](measurement/measure-distance-and-bearing.md) —
+  measure distance, azimuth (grid / true / magnetic), and inclination between two
+  points in the 3D view.
+
 ### Notes
 - [Add Notes to a Trip](notes/add-a-note.md) — import scans, PDFs, and 3D
   scans, and rotate or remove them.
@@ -128,7 +133,6 @@ chapter is task-oriented and problem-first (see
   pages above.
 - **3D View (more)** — field of view, labels, leads, and rendering settings
   (MSAA, EDL) build on [The 3D View](view-3d/the-3d-view.md).
-- **Measurement** — distance, azimuth (grid / true / magnetic), inclination.
 - **Loop Closure** — closure errors and reviewing blunders.
 - **Leads** — the lead list, editing, CSV export.
 - **Settings** — Jobs, Warping, PDF/SVG, Git, Appearance, Rendering.
