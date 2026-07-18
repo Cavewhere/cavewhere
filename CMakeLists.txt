@@ -212,6 +212,7 @@ if(BUILD_TESTING)
             testlib/cwSketchTestHelpers.h
             testlib/LazFixtureHelper.cpp
             testlib/LazFixtureHelper.h
+            testlib/CwRhiSceneTestAccess.h
             testlib/BoulderFixtureHelper.cpp
             testlib/BoulderFixtureHelper.h
             testlib/MockAuthProvider.cpp

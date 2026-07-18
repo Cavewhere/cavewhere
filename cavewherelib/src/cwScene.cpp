@@ -204,20 +204,6 @@ void cwScene::update()
     emit needsRendering();
 }
 
-int cwScene::pendingItemCount() const
-{
-    // Only entries that still hold a live pointer synchroize() will dereference —
-    // Add and Update. A Delete holds none (the object is already freed), so it must
-    // not count, or the #491 canary would never fall back to zero after a removal.
-    int count = 0;
-    for (const auto& change : std::as_const(m_pending)) {
-        if (change.object != nullptr) {
-            ++count;
-        }
-    }
-    return count;
-}
-
 QFuture<QImage> cwScene::renderOffscreen(const cwOffscreenRenderParameters& parameters)
 {
     // The queue handoff to the render thread is guarded only by the synchroize()

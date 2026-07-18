@@ -40,6 +40,8 @@
 #include "cwRhiScene.h"
 #include "cwScene.h"
 
+#include "CwRhiSceneTestAccess.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QList>
@@ -48,22 +50,6 @@
 #include <QVector3D>
 
 #include "LazFixtureHelper.h"
-
-// Friend accessor (declared friend in cwRhiScene.h) so the test can drive the
-// backend's private apply step — normally called only by cwRhiItemRenderer —
-// without putting test scaffolding on the production API.
-struct CwRhiSceneTestAccess {
-    static void synchroize(cwRhiScene& rhiScene, cwScene* scene) {
-        rhiScene.synchroize(scene, nullptr);
-    }
-
-    // Reaches the backend's registry so a test can ask whether an id still maps to
-    // a live cwRHIObject. The stub tests count constructions instead; this is for
-    // the real render objects, which the tests must not instrument.
-    static cwRHIObject* renderObjectForId(cwRhiScene& rhiScene, cwRenderObjectId id) {
-        return rhiScene.m_frame.renderObjectForId(id);
-    }
-};
 
 namespace {
 
@@ -351,9 +337,10 @@ TEST_CASE("added render objects register in add order, not construction order",
 
 // A removed object stays removed even if updateItem() arrives for it before the next
 // sync. The transition model records {Delete}, and updateItem() must not resurrect it
-// into a live-pointer entry that the next synchroize() would then dereference — the
-// #491 failure mode, now unrepresentable. Pre-refactor this left the freed pointer in
-// the update queue: pendingItemCount() read 1 and the next sync dereferenced it.
+// into a live-pointer entry that the next synchroize() would then re-register — the
+// #491 failure mode, now unrepresentable. A resurrected Update would re-sync the object
+// and leave its cwRHIObject alive; the recorded {Delete} instead destroys it, so the
+// surviving-RHI count after the drain is the observable.
 TEST_CASE("updateItem on a removed render object does not resurrect it",
           "[cwScene][cwRhiScene]")
 {
@@ -370,23 +357,22 @@ TEST_CASE("updateItem on a removed render object does not resurrect it",
     REQUIRE(g_aliveRhiObjects == 1);
 
     scene.removeItem(object);     // {Delete}
-    scene.updateItem(object);     // must not put the live pointer back
+    scene.updateItem(object);     // must not overwrite the Delete with a live Update
 
-    // Delete holds no live pointer, so nothing the next sync will dereference.
-    REQUIRE(scene.pendingItemCount() == 0);
+    // Drain with the object still alive: the recorded {Delete} must destroy RHI #1. A
+    // resurrected Update would instead re-sync it and leave the count at 1.
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    REQUIRE(g_aliveRhiObjects == 0);
 
     delete object;
-    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // frees RHI #1, no deref
-
-    REQUIRE(g_aliveRhiObjects == 0);
 }
 
 // Deleting a render object directly — no setScene(nullptr) first — while its Add is
 // still pending. The pending entry holds the object's live pointer, so without the
 // destructor scrub the next synchroize() would dereference freed memory (issue #491
-// through the direct-delete path this time). ~cwRenderObject() must convert that
-// entry to a {Delete}, dropping the pointer, so pendingItemCount() falls to zero the
-// moment the object dies and the drain touches nothing.
+// through the direct-delete path this time). ~cwRenderObject() must convert that entry
+// to a {Delete}, dropping the pointer, so the drain touches nothing and registers no
+// cwRHIObject for the dead id.
 TEST_CASE("deleting an attached render object before its Add is synced does not dangle",
           "[cwScene][cwRhiScene]")
 {
@@ -396,20 +382,21 @@ TEST_CASE("deleting an attached render object before its Add is synced does not 
     cwRhiScene rhiScene;
 
     auto* object = new StubRenderObject();
+    // Captured while alive; the id outlives the object so the drain can drop the dead
+    // entry without dereferencing the freed pointer.
+    const cwRenderObjectId id = object->renderObjectId();
     object->setScene(&scene);     // queues an Add holding object's live pointer
     object->setParent(nullptr);   // we manage its lifetime, not the scene
 
-    // The Add is still pending (no sync yet), so its entry holds the live pointer.
-    REQUIRE(scene.pendingItemCount() == 1);
+    delete object;                // ~cwRenderObject() must scrub the pending Add to a Delete
 
-    delete object;                // ~cwRenderObject() must scrub the pending Add
-
-    // The Add was converted to a {Delete}, which holds no pointer to dereference.
-    REQUIRE(scene.pendingItemCount() == 0);
-
-    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // drains the Delete, no deref
+    // The scrubbed {Delete} holds no pointer, so the drain neither dereferences the
+    // freed object (a no-scrub bug would create an RHI object from freed memory) nor
+    // registers anything under its id.
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
 
     REQUIRE(g_aliveRhiObjects == 0);
+    REQUIRE(CwRhiSceneTestAccess::renderObjectForId(rhiScene, id) == nullptr);
 }
 
 // The same direct delete, but after the object has been synced: a real caller that
@@ -461,7 +448,11 @@ TEST_CASE("destroying a scene severs its render-object children before they are 
         first->setScene(&scene);
         second->setScene(&scene);
 
-        REQUIRE(scene.pendingItemCount() == 2);
+        // addItem() parents each object to the scene; assert it so the test can't pass
+        // vacuously — the sever path must actually have children to sever. No sync runs
+        // here, so there is no RHI object to observe; parent() is the honest precondition.
+        REQUIRE(first->parent() == &scene);
+        REQUIRE(second->parent() == &scene);
     }   // scene destroyed; its children deleted via ~QObject, must not touch the scene
 
     REQUIRE(g_aliveRhiObjects == 0);

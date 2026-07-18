@@ -205,12 +205,13 @@ TEST_CASE("scene node disconnects enabledChanged on removeLayer",
     REQUIRE_FALSE(layerGuard.isNull());
     REQUIRE(node.pointCloudForLayer(layer) == nullptr);
 
+    // A materialize() would re-insert into the map pointCloudForLayer() reads, so the
+    // null result after each toggle is proof the disconnected layer no longer reaches
+    // the scene node — no scene-queue peek needed.
     layer->setEnabled(false);
     REQUIRE(node.pointCloudForLayer(layer) == nullptr);
     layer->setEnabled(true);
     REQUIRE(node.pointCloudForLayer(layer) == nullptr);
-
-    REQUIRE(scene.pendingItemCount() == 0);
 
     // Pump the event loop so deleteLater() fires and the layer is destroyed
     // before the test fixture goes out of scope.

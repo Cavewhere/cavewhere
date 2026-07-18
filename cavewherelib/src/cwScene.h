@@ -88,11 +88,6 @@ public:
 
     void update();
 
-    // Number of pending changes that still hold a live cwRenderObject* — the ones
-    // cwRhiScene::synchroize() will dereference (Add/Update, never Delete). A live
-    // #491 canary for tests: after removeItem() + delete, this must read zero.
-    int pendingItemCount() const;
-
     // Render the resident scene from an arbitrary camera into an offscreen image,
     // returning a QFuture that resolves to the result. A GUI-thread consumer
     // (hi-res map export, sink classifier) supplies pure parameters (camera

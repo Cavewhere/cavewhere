@@ -5,15 +5,21 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <QDir>
+#include <QList>
 #include <QPointer>
 #include <QTemporaryDir>
+
+#include <utility>
 
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwLazLayersSceneNode.h"
+#include "cwRenderObjectId.h"
 #include "cwRenderPointCloud.h"
+#include "cwRhiScene.h"
 #include "cwScene.h"
 
+#include "CwRhiSceneTestAccess.h"
 #include "LazFixtureHelper.h"
 
 namespace {
@@ -50,6 +56,7 @@ TEST_CASE("issue #491: deleting a never-loaded LAZ layer must not leave a "
     REQUIRE(tempDir.isValid());
 
     cwScene scene;
+    cwRhiScene rhiScene;
     cwLazLayersSceneNode node;
     node.setScene(&scene);
 
@@ -62,13 +69,21 @@ TEST_CASE("issue #491: deleting a never-loaded LAZ layer must not leave a "
 
     cwRenderPointCloud* renderObject = node.pointCloudForLayer(layer);
     REQUIRE(renderObject != nullptr);
-    REQUIRE(scene.pendingItemCount() > 0);
 
+    // Captured while alive; the id outlives the render object, which is what lets the
+    // removal queue a delete without dereferencing the freed pointer.
+    const cwRenderObjectId id = renderObject->renderObjectId();
+
+    // No synchroize() before the removal — this is the #491 scenario of a queue that
+    // no render sync has drained yet.
     QPointer<cwRenderPointCloud> guard(renderObject);
     model.removeAt(0);
-
     REQUIRE(guard.isNull());
-    REQUIRE(scene.pendingItemCount() == 0);
+
+    // Draining the queue now must not dereference the freed cloud (a surviving Add
+    // would be built from freed memory) and must leave nothing registered for its id.
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    REQUIRE(CwRhiSceneTestAccess::renderObjectForId(rhiScene, id) == nullptr);
 }
 
 TEST_CASE("issue #491: repeated add/remove of never-loaded LAZ layers stays clean",
@@ -78,6 +93,7 @@ TEST_CASE("issue #491: repeated add/remove of never-loaded LAZ layers stays clea
     REQUIRE(tempDir.isValid());
 
     cwScene scene;
+    cwRhiScene rhiScene;
     cwLazLayersSceneNode node;
     node.setScene(&scene);
 
@@ -85,11 +101,14 @@ TEST_CASE("issue #491: repeated add/remove of never-loaded LAZ layers stays clea
     node.setLazLayerModel(&model);
 
     const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    QList<cwRenderObjectId> ids;
     for (int i = 0; i < 5; ++i) {
         const QString tag = QStringLiteral("issue491-%1").arg(i);
         cwLazLayer* layer = addLazViaRescan(model, gisLayersDir, tag);
         REQUIRE(layer != nullptr);
-        REQUIRE(node.pointCloudForLayer(layer) != nullptr);
+        cwRenderPointCloud* renderObject = node.pointCloudForLayer(layer);
+        REQUIRE(renderObject != nullptr);
+        ids.append(renderObject->renderObjectId());
 
         model.removeAt(0);
         REQUIRE(model.rowCount() == 0);
@@ -99,5 +118,10 @@ TEST_CASE("issue #491: repeated add/remove of never-loaded LAZ layers stays clea
         QFile::remove(gisLayersDir.filePath(QStringLiteral("%1.laz").arg(tag)));
     }
 
-    REQUIRE(scene.pendingItemCount() == 0);
+    // Draining the accumulated deletes must not dereference any freed cloud, and none
+    // of the removed ids may still resolve to a live cwRHIObject.
+    CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+    for (const cwRenderObjectId id : std::as_const(ids)) {
+        REQUIRE(CwRhiSceneTestAccess::renderObjectForId(rhiScene, id) == nullptr);
+    }
 }
