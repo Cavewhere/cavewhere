@@ -327,23 +327,32 @@ QFuture&lt;T&gt; AsyncFuture::shield(QFuture&lt;T&gt; future) {
 
 <h2 id="out-of-scope">6. Out of scope / survey items</h2>
 <ul>
-  <li><strong>Future-API audit.</strong> The boundary rule: a member
+  <li><strong>Future-API audit &mdash; done.</strong> The boundary rule: a member
     deferred's future (or a chain observing one) never crosses
     <code>cwSaveLoad</code>'s public API unshielded &mdash;
     <code>completeSaveJobs()</code> (private, raw) vs
     <code>pendingJobsFinished()</code> (public, shielded) is the
-    pattern. The post-commit-2 review found the concrete worklist:
+    pattern. The post-commit-2 review found the concrete worklist,
+    landed after commit 2:
     <ul>
-      <li><code>retire()</code>'s no-owned-tempdirs branch returns the
-        <em>raw</em> <code>completeSaveJobs()</code> future
-        (<code>cwSaveLoad.cpp:~5448/5465</code>) &mdash; zero-hop
-        exposure of the shared deferred, the exact shape commit 2
-        fixed; wrap in <code>shield()</code>.</li>
-      <li><code>saveAllFromV6()</code> returns
-        <code>observe(m_pendingJobsDeferred.future()).context(&hellip;)</code>
-        (<code>cwSaveLoad.cpp:~2657</code>) &mdash; one propagation hop
-        from a consumer cancel to the shared deferred; shield the
-        source future.</li>
+      <li><strong>Done.</strong> <code>retire()</code> now shields at
+        <em>both</em> public returns (the re-entry branch and the tail)
+        instead of only wrapping the no-owned-tempdirs branch: the
+        tempdir-cleanup chain was equally exposed (one hop), and the
+        internal <code>deleteLater</code>/cleanup observers watch
+        <code>d-&gt;retireFuture</code>, so a caller canceling a shared
+        handle would also tear <em>them</em> down. Per-caller shields at
+        the return keep internals raw and every caller isolated.
+        Regression test: <em>"canceling a retire future does not poison
+        the save-job drain"</em> <code>[SaveLoad][Shield]</code> in
+        <code>test_cwExternalCenterlineSync.cpp</code> &mdash; pre-fix it
+        failed with the retired <code>cwSaveLoad</code> leaking (cancel
+        killed the <code>deleteLater</code> observer).</li>
+      <li><strong>Done.</strong> <code>saveAllFromV6()</code> now chains
+        on <code>pendingJobsFinished()</code> (the shielded accessor)
+        instead of the raw
+        <code>m_pendingJobsDeferred.future()</code>. Covered by the
+        existing <code>[conversion]</code> tests.</li>
       <li>Verified clean, no action: <code>sync()</code> and
         <code>resetBranchAndReconcile()</code> bottom out in per-call
         deferreds (cancel only poisons that one operation), and the

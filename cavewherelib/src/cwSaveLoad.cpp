@@ -2654,7 +2654,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
         saveTrips(caveDir, cave);
     }
 
-    return AsyncFuture::observe(d->m_pendingJobsDeferred.future())
+    return AsyncFuture::observe(pendingJobsFinished())
             .context(this, [this, newProjectFilename]() {
         return ResultString(newProjectFilename);
     })
@@ -5437,42 +5437,43 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
 
 QFuture<void> cwSaveLoad::retire()
 {
-    if (d->retiring) {
-        return d->retireFuture;
+    if (!d->retiring) {
+        d->retiring = true;
+        d->cancelPendingOperations(QStringLiteral("Project is retiring."));
+        setSaveEnabled(false);
+        disconnectTreeModel();
+        d->m_regionTreeModel->setCavingRegion(nullptr);
+
+        auto saveJobsFuture = completeSaveJobs();
+
+        QFuture<void> retireFuture;
+        if (!d->m_ownedTempDirs.isEmpty()) {
+            const QStringList capturedTempDirs = d->m_ownedTempDirs;
+            d->m_ownedTempDirs.clear();  // Prevent destructor double-cleanup
+            retireFuture = AsyncFuture::observe(saveJobsFuture)
+                .context(this, [this, capturedTempDirs]() {
+                    return QtConcurrent::run(&d->m_saveThreadPool, [capturedTempDirs]() {
+                        for (const QString& dir : capturedTempDirs) {
+                            removeTemporaryProjectDir(dir);
+                        }
+                    });
+                }).future();
+        } else {
+            retireFuture = saveJobsFuture;
+        }
+
+        d->retireFuture = retireFuture;
+        d->futureToken.addJob(cwFuture(QFuture<void>(d->retireFuture),
+                                       QStringLiteral("Finishing saves")));
+
+        AsyncFuture::observe(d->retireFuture)
+                .context(this, [this]() {
+            deleteLater();
+        });
     }
 
-    d->retiring = true;
-    d->cancelPendingOperations(QStringLiteral("Project is retiring."));
-    setSaveEnabled(false);
-    disconnectTreeModel();
-    d->m_regionTreeModel->setCavingRegion(nullptr);
-
-    auto saveJobsFuture = completeSaveJobs();
-
-    QFuture<void> retireFuture;
-    if (!d->m_ownedTempDirs.isEmpty()) {
-        const QStringList capturedTempDirs = d->m_ownedTempDirs;
-        d->m_ownedTempDirs.clear();  // Prevent destructor double-cleanup
-        retireFuture = AsyncFuture::observe(saveJobsFuture)
-            .context(this, [this, capturedTempDirs]() {
-                return QtConcurrent::run(&d->m_saveThreadPool, [capturedTempDirs]() {
-                    for (const QString& dir : capturedTempDirs) {
-                        removeTemporaryProjectDir(dir);
-                    }
-                });
-            }).future();
-    } else {
-        retireFuture = saveJobsFuture;
-    }
-
-    d->retireFuture = retireFuture;
-    d->futureToken.addJob(cwFuture(QFuture<void>(d->retireFuture),
-                                   QStringLiteral("Finishing saves")));
-
-    AsyncFuture::observe(d->retireFuture)
-            .context(this, [this]() {
-        deleteLater();
-    });
-
-    return d->retireFuture;
+    // Shielded per caller: retireFuture chains on the shared save-job
+    // drain, and the tempdir-cleanup + deleteLater observers watch the
+    // same future, so a consumer cancel must reach neither.
+    return AsyncFuture::shield(d->retireFuture);
 }

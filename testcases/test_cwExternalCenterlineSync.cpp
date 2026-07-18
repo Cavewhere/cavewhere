@@ -30,7 +30,9 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QPointer>
 #include <QTemporaryDir>
+#include <QTest>
 
 namespace {
 
@@ -609,4 +611,46 @@ TEST_CASE("canceling a reconcile future does not poison the save-job drain",
     REQUIRE_FALSE(futureB.result().hasError());
     CHECK(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"))));
     CHECK_FALSE(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("childA.svx"))));
+}
+
+TEST_CASE("canceling a retire future does not poison the save-job drain",
+          "[SaveLoad][Shield]")
+{
+    // retire()'s internal cleanup/deleteLater observers and the shared
+    // save-job drain must both survive a consumer canceling its handle.
+    auto fixture = makeSavedProject(QStringLiteral("shield-retire"));
+    cwSaveLoad* saveLoad = fixture->project->saveLoad();
+    const QString attachmentDir =
+        saveLoad->externalCenterlineDir(fixture->cave).absolutePath();
+
+    const QString srcRoot = QDir(fixture->tempDir.path()).filePath(QStringLiteral("src"));
+    REQUIRE(QDir().mkpath(srcRoot));
+    const QDateTime mtime = QDateTime::currentDateTimeUtc().addSecs(-kOneHourSeconds);
+    const auto scan = makeScan(srcRoot,
+                               QStringLiteral("entry.svx"),
+                               { QStringLiteral("childA.svx"),
+                                 QStringLiteral("childB.svx"),
+                                 QStringLiteral("childC.svx") },
+                               mtime);
+
+    // Queue the copy jobs synchronously so retire has a pending drain.
+    cwExternalCenterlineSync::reconcile(saveLoad, scan, attachmentDir);
+
+    QPointer<cwSaveLoad> retired(saveLoad);
+    auto canceledRetire = saveLoad->retire();
+    REQUIRE(!canceledRetire.isFinished());
+    canceledRetire.cancel();
+
+    // Hand off the retiring saveLoad the way production does; the
+    // re-entrant retire() inside newProject() must still drain normally.
+    fixture->project->newProject();
+    fixture->project->waitSaveToFinish();
+
+    const QDir attachDirObj(attachmentDir);
+    CHECK(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("entry.svx"))));
+    CHECK(QFileInfo::exists(attachDirObj.absoluteFilePath(QStringLiteral("childC.svx"))));
+
+    // The internal chain must survive the consumer cancel all the way to
+    // deleteLater.
+    CHECK(QTest::qWaitFor([&]() { return retired.isNull(); }, kReconcileWaitMs));
 }
