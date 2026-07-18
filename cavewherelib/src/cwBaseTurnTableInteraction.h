@@ -61,9 +61,10 @@ public:
     // animator pointer on the public API.
     static constexpr const char* stateAnimationObjectName = "stateAnimation";
 
-    // Margin multiplier applied by zoomTo() so the framed box doesn't sit
-    // flush against the viewport edges. Exposed so tests can use the same
-    // value without duplicating the literal.
+    // Margin multiplier applied by framingViewState() (and thus zoomTo(),
+    // which delegates to it) so the framed box doesn't sit flush against the
+    // viewport edges. Exposed so tests can use the same value without
+    // duplicating the literal.
     static constexpr float FramingPad = 1.08f;
 
     // Screen-space radius (physical millimeters) of the pivot's exact pick. A
@@ -141,14 +142,15 @@ public:
     void reconcileZoomForProjection(bool toPerspective, double fovRadians);
 
     // Returns the 5-channel viewState that frames @a box at the supplied
-    // @a azimuth / @a pitch (degrees). Unlike zoomTo() this is const, does
-    // NOT reset the view, and uses the supplied orientation for BOTH the
-    // fit math AND the returned target — so the AABB is sized against the
-    // post-rotation view, not the current one. Lets callers snap to a
+    // @a azimuth / @a pitch (degrees). Pure and const — it reads no live
+    // camera pose and mutates nothing — using the supplied orientation for
+    // BOTH the fit math AND the returned target, so the AABB is sized against
+    // the post-rotation view, not the current one. Lets callers snap to a
     // canonical orientation (e.g. pitch=0 profile view for a sink) and
     // still get a tight fit. Box-null, camera-null, or non-finite box
-    // falls through to the current viewState() unchanged. Caller routes
-    // the result through animateToViewState() / setViewState().
+    // falls through to the current viewState() unchanged. Caller applies the
+    // result via animateToViewState() / setViewState() (zoomTo() is the
+    // default-pose caller).
     Q_INVOKABLE cwTurnTableViewState framingViewState(const QBox3D& box,
                                                       double azimuth,
                                                       double pitch) const;
@@ -239,9 +241,8 @@ private:
     cwTurnTableViewState m_stateAnimTarget;
 
     //! Instantaneously restores the default orientation and a fixed eye pose
-    //! (no scene framing). Used for initial setup (constructor, setCamera),
-    //! as the orientation reset inside zoomTo(), and as resetView()'s
-    //! empty-scene fallback.
+    //! (no scene framing). Used for initial setup (constructor, setCamera) and
+    //! as resetView()'s empty-scene fallback.
     void resetViewImmediate();
 
     void zoomPerspective();

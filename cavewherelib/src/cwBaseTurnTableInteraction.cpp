@@ -433,18 +433,13 @@ void cwBaseTurnTableInteraction::resetView() {
         return;
     }
 
-    // Compute the framed target the way zoomTo() does: normalize to the
-    // default pose FIRST so framingViewState()'s ortho fit is measured against
-    // the default zoom, not the current one. Without this the framing scales
-    // with wherever the user happened to be zoomed (issue #549), so the reset
-    // wouldn't be idempotent. Capture the current view to animate FROM, then
-    // restore it so the transition is smooth rather than a pop-to-default.
-    const cwTurnTableViewState from = viewState();
-    resetViewImmediate();
+    // framingViewState()'s fit is now an absolute, pure function of the box and
+    // viewport (its ortho branch no longer scales off the live zoom — issue
+    // #549), so we compute the target directly and animate from wherever the
+    // user currently is. No normalize-measure-restore bounce through the
+    // default pose, and no spurious pitch/azimuth/viewMatrix signals from it.
     const cwTurnTableViewState target =
             framingViewState(box, defaultAzimuth(), defaultPitch());
-    setViewState(from);
-
     animateToViewState(target);
 }
 
@@ -1275,117 +1270,41 @@ cwRayHit cwBaseTurnTableInteraction::pick(QPointF qtViewPoint) const
 
 void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)
 {
-    if(box.isNull()) {
-        return;
-    }
     // box.isNull() only catches the default-constructed case; an explicit
-    // finite check guards against NaN/inf min/max propagating into the
-    // fit math and poisoning the view matrix.
-    if (!isFinite3(box.minimum()) || !isFinite3(box.maximum())) {
+    // finite check guards against NaN/inf min/max propagating into the fit
+    // math and poisoning the view matrix. Bail before touching the camera so
+    // a bad box is a true no-op (framingViewState would otherwise echo the
+    // current state straight back).
+    if (box.isNull()
+            || !isFinite3(box.minimum()) || !isFinite3(box.maximum())) {
         return;
     }
 
-    // 1) Reset orientation/eye to your default
-    resetViewImmediate();
-
-    const QVector3D c = box.center();
-
-    switch(Camera->projection().type()) {
-    case cwProjection::Ortho: {
-        // -------- ORTHOGRAPHIC FIT --------
-        // Re-center first: ortho's fit math reads the current world span
-        // via unProject, and the final positioning needs box.center() at
-        // view-space (0,0,-defaultDistance). The perspective branch builds
-        // its view matrix from scratch and does not want this intermediate
-        // write.
-        QMatrix4x4 view = Camera->viewMatrix();
-        view.translate(-c);
-        Camera->setViewMatrix(view);
-
-        // Compute the current world-span visible in the viewport at the
-        // box's depth by unprojecting the viewport corners, then scale zoom
-        // so the larger box dimension fills the corresponding viewport span.
-        const QSize viewportSize = Camera->viewport().size();
-        const QVector3D topLeft     = Camera->unProject(QPoint(0, 0), 1.0);
-        const QVector3D bottomRight = Camera->unProject(
-                    QPoint(viewportSize.width(), viewportSize.height()), 1.0);
-
-        const float viewSpanX = std::abs(bottomRight.x() - topLeft.x());
-        const float viewSpanY = std::abs(bottomRight.y() - topLeft.y());
-
-        const QVector3D half = 0.5f * (box.maximum() - box.minimum());
-        const float boxSizeX = 2.0f * (std::max)(half.x(), kFramingEpsilon);
-        const float boxSizeY = 2.0f * (std::max)(half.y(), kFramingEpsilon);
-
-        const float fitX = boxSizeX / (std::max)(viewSpanX, kFramingEpsilon);
-        const float fitY = boxSizeY / (std::max)(viewSpanY, kFramingEpsilon);
-        const float fit  = (std::max)(fitX, fitY) * FramingPad;
-        if (!std::isfinite(fit) || fit <= 0.0f) {
-            return;
-        }
-
-        Camera->setZoomScale(Camera->zoomScale() * fit);
-        return;
-    }
-    case cwProjection::Perspective:
-    case cwProjection::PerspectiveFrustum: {
-        // -------- PERSPECTIVE FIT --------
-        // Required eye-to-box-center distance so the box's half-width
-        // subtends half of the appropriate FOV. Take the bigger of the X
-        // and Y fits (whichever axis is wider). Add half-depth so the near
-        // face of a box with Z-thickness doesn't clip. Multiply by pad.
-        const float fovY = Camera->projection().fieldOfView() * cwGlobals::degreesToRadians();
-        const float aspect = Camera->projection().aspectRatio();
-        const float tanHalfFovY = std::tan(0.5f * fovY);
-        const float tanHalfFovX = tanHalfFovY * aspect;
-
-        const QVector3D half = 0.5f * (box.maximum() - box.minimum());
-        const float hx = (std::max)(half.x(), kFramingEpsilon);
-        const float hy = (std::max)(half.y(), kFramingEpsilon);
-        const float hz = (std::max)(half.z(), 0.0f);
-
-        // Symmetric guards on both FOV-tangent divisors so a degenerate
-        // projection (fov == 0 → tan == 0) can't slip through.
-        const float dY = hy / (std::max)(tanHalfFovY, kFramingEpsilon);
-        const float dX = hx / (std::max)(tanHalfFovX, kFramingEpsilon);
-        const float dist = ((std::max)(dX, dY) + hz) * FramingPad;
-        if (!std::isfinite(dist) || dist <= 0.0f) {
-            return;
-        }
-
-        // Build the view matrix from scratch: camera at view-space (0,0,0)
-        // with box.center() at view-space (0,0,-dist), looking down -Z
-        // (the orientation resetViewImmediate left us in). Replaces the previous
-        // translate-the-existing-matrix path that had a sign error AND an
-        // inverted `canInvert` guard.
-        QMatrix4x4 newView;
-        newView.translate(0.0f, 0.0f, -dist);
-        newView.translate(-c);
-        Camera->setViewMatrix(newView);
-        return;
-    }
-    default:
-        break;
-    }
+    // zoomTo is the default-orientation special case of framingViewState:
+    // frame the box at the reset pose (azimuth=0, pitch=90 → identity view
+    // rotation, so the rotated half-extents collapse to the raw box extents)
+    // and snap to it. framingViewState owns the single copy of the ortho and
+    // perspective fit math; setViewState is the authoritative writer that
+    // applies the view matrix and zoom.
+    setViewState(framingViewState(box, defaultAzimuth(), defaultPitch()));
 }
 
 /**
  * @brief cwBaseTurnTableInteraction::framingViewState
  *
  * Returns the 5-channel viewState that frames @a box at the supplied
- * @a azimuth / @a pitch (degrees). Unlike zoomTo() this is const, does
- * NOT reset the view, and uses the supplied orientation for BOTH the
- * fit math AND the returned target — so the AABB is sized against the
+ * @a azimuth / @a pitch (degrees). Pure and const: it reads no live camera
+ * pose and mutates nothing, using the supplied orientation for BOTH the fit
+ * math AND the returned target — so the AABB is sized against the
  * post-rotation view, not the current one. Box-null, camera-null, or
  * non-finite box falls through to the current viewState() unchanged.
- * Caller routes the result through animateToViewState() / setViewState().
+ * Caller routes the result through animateToViewState() / setViewState()
+ * (zoomTo() is the default-pose caller).
  *
- * Fit math runs in VIEW space, not world space. zoomTo() can use raw
- * box.x()/y() half-extents because it resetViewImmediate()'s to identity-on-view
- * first, so the box's world axes align with the view axes. Here the
- * orientation is whatever was supplied, so we project the eight AABB
- * corners through that view rotation and read the view-space
- * half-extents — anything less would under-fit at non-default tilts.
+ * Fit math runs in VIEW space, not world space: the box is framed at the
+ * supplied orientation, so the eight AABB corners are projected through that
+ * view rotation and the view-space half-extents read off them. Using the raw
+ * world half-extents would under-fit at any non-default tilt.
  */
 cwTurnTableViewState cwBaseTurnTableInteraction::framingViewState(
         const QBox3D& box, double azimuth, double pitch) const
@@ -1439,28 +1358,26 @@ cwTurnTableViewState cwBaseTurnTableInteraction::framingViewState(
 
     switch (Camera->projection().type()) {
     case cwProjection::Ortho: {
-        // Read the current ortho frustum's view-space half-extents by
-        // unprojecting the viewport corners and forward-transforming back
-        // into view space. For ortho, P^-1 maps NDC ±1 to ±frustum half;
-        // unProject + view.map cancels the view inverse and lands exactly
-        // there.
-        const QSize viewportSize = Camera->viewport().size();
-        const QVector3D worldTL = Camera->unProject(QPoint(0, 0), 1.0);
-        const QVector3D worldBR = Camera->unProject(
-                    QPoint(viewportSize.width(), viewportSize.height()), 1.0);
-        const QMatrix4x4 view = Camera->viewMatrix();
-        const QVector3D vTL = view.map(worldTL);
-        const QVector3D vBR = view.map(worldBR);
-        const float viewSpanX = std::abs(vBR.x() - vTL.x());
-        const float viewSpanY = std::abs(vBR.y() - vTL.y());
-
-        const float fitX = (2.0f * vhx) / (std::max)(viewSpanX, kFramingEpsilon);
-        const float fitY = (2.0f * vhy) / (std::max)(viewSpanY, kFramingEpsilon);
+        // Absolute ortho fit. cwCamera::orthoProjectionDefault sets the
+        // frustum half-width to viewport/2 * zoomScale, so the full-viewport
+        // view-space span at any zoom is viewportDim * zoomScale. The zoomScale
+        // that makes the box's view-space extent (2*vh) fill that span — plus
+        // pad — is therefore 2*vh*FramingPad / viewportDim, independent of the
+        // current zoom. Take the larger axis so both fit. Being pose- and
+        // zoom-independent is what lets resetView() frame without first
+        // normalizing the camera to the default zoom.
+        const QSizeF viewport = Camera->viewport().size();
+        const float vpW = (std::max)(static_cast<float>(viewport.width()),
+                                     kFramingEpsilon);
+        const float vpH = (std::max)(static_cast<float>(viewport.height()),
+                                     kFramingEpsilon);
+        const float fitX = (2.0f * vhx) / vpW;
+        const float fitY = (2.0f * vhy) / vpH;
         const float fit  = (std::max)(fitX, fitY) * FramingPad;
         if (!std::isfinite(fit) || fit <= 0.0f) {
             return viewState();
         }
-        target.zoomScale = Camera->zoomScale() * fit;
+        target.zoomScale = fit;
         // distance unchanged for ortho — scale comes from zoomScale.
         break;
     }
