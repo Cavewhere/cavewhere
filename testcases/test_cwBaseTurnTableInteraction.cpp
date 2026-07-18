@@ -444,6 +444,54 @@ TEST_CASE("cwBaseTurnTableInteraction centerOn(point, true) end-state matches th
     CHECK(matricesNearlyEqual(f.camera.viewMatrix(), expectedView));
 }
 
+TEST_CASE("cwBaseTurnTableInteraction centerOn puts point at screen center after a pan",
+          "[cwBaseTurnTableInteraction]")
+{
+    // Regression (issue #577 follow-up): CaveLeadPage.gotoLead() calls
+    // centerOn(leadPosition, true). If the user has panned the view first, the
+    // lead used to land off-screen instead of centered. centerOn copies the
+    // current viewState and overwrites only `center`, but it must also drop the
+    // eyeOffset (eye-space pan shift) — otherwise buildViewMatrix applies that
+    // shift as the outermost translate and pushes the "centered" point back off
+    // by the pan amount. framingViewState already zeroes eyeOffset; centerOn was
+    // overlooked when the eyeOffset channel was added.
+    //
+    // Snap path only: the "centerOn(point, true) end-state matches the snap
+    // path" case above proves the animated goto lands on the same matrix, so
+    // this transitively covers gotoLead's animate=true call.
+    Fixture f;
+
+    // Put the camera in a zoomed-out, tilted pose so the target is nowhere near
+    // the screen — the "view that doesn't show the cave" the bug needs.
+    cwTurnTableViewState posed;
+    posed.center = QVector3D(2.0f, 3.0f, 0.0f);
+    posed.azimuth = 45.0;
+    posed.pitch = 60.0;
+    posed.distance = 50.0;
+    posed.zoomScale = f.camera.defaultZoomScale() * 3.0;
+    f.interaction.setViewState(posed);
+
+    // Synthesize a pan: translate the live view matrix sideways (no mouse-event
+    // plumbing in this fixture). viewState() reads the leftover eye-space XY as
+    // eyeOffset — the same channel a real drag-pan fills.
+    QMatrix4x4 panned = f.camera.viewMatrix();
+    panned.translate(QVector3D(30.0f, -20.0f, 0.0f));
+    f.camera.setViewMatrix(panned);
+
+    // Precondition: the pan actually registered, so the assertion below is not
+    // vacuous (a zero eyeOffset would pass even with the bug present).
+    const QVector3D eyeOffset = f.interaction.viewState().eyeOffset;
+    REQUIRE(std::hypot(eyeOffset.x(), eyeOffset.y()) > kPixelTolerance);
+
+    const QVector3D lead(15.0f, -10.0f, 5.0f);
+    f.interaction.centerOn(lead, false);
+
+    const QPointF projected = f.camera.project(lead);
+    const QPointF expected = screenCenter();
+    CHECK(projected.x() == Approx(expected.x()).margin(kPixelTolerance));
+    CHECK(projected.y() == Approx(expected.y()).margin(kPixelTolerance));
+}
+
 TEST_CASE("cwBaseTurnTableInteraction zoomTo resets orientation and frames the box center",
           "[cwBaseTurnTableInteraction]")
 {

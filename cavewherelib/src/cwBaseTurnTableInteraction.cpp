@@ -89,6 +89,11 @@ void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
 
     cwTurnTableViewState target = viewState();
     target.center = point;
+    // Drop any carried-over pan: buildViewMatrix applies eyeOffset as the
+    // outermost eye-space translate, so a non-zero offset would push the
+    // recentred point back off screen by the pan amount (the gotoLead-after-pan
+    // regression). framingViewState() zeroes it for the same reason.
+    target.eyeOffset = QVector3D();
     // distance, azimuth, pitch, zoomScale preserved -> the rebuilt view
     // matrix puts `point` at view-space (0, 0, -distance), which is the
     // screen center for both ortho and perspective.
