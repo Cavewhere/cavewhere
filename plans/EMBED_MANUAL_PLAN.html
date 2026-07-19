@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embed the User Manual into CaveWhere — Plan</title>
+<style>
+  :root {
+    --paper:#eceff3; --surface:#ffffff; --surface-2:#e6ebf0;
+    --ink:#1f2b38; --heading:#16202b; --muted:#566472; --border:#d4d9df;
+    --accent:#1d4d77; --accent-soft:#dbe6f0; --mark:#e0662f;
+    --good:#2f7d4f; --good-soft:#dcefe3; --warn:#8a5a12; --warn-soft:#f4e7cf;
+    --code-bg:#e6ebf0;
+    --shadow:0 1px 2px rgba(20,30,45,.06),0 8px 24px rgba(20,30,45,.07);
+    --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --font-head:"Oswald","Segoe UI",system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root{
+      --paper:#10161e; --surface:#182029; --surface-2:#1f2833;
+      --ink:#d7dfe8; --heading:#eef3f8; --muted:#93a1b0; --border:#2c3742;
+      --accent:#85c1f4; --accent-soft:#1c3346; --mark:#ff8a5c;
+      --good:#6fd196; --good-soft:#173726; --warn:#e2b667; --warn-soft:#3a2f16;
+      --code-bg:#1f2833;
+      --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 30px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#eceff3; --surface:#ffffff; --surface-2:#e6ebf0;
+    --ink:#1f2b38; --heading:#16202b; --muted:#566472; --border:#d4d9df;
+    --accent:#1d4d77; --accent-soft:#dbe6f0; --mark:#e0662f;
+    --good:#2f7d4f; --good-soft:#dcefe3; --warn:#8a5a12; --warn-soft:#f4e7cf;
+    --code-bg:#e6ebf0;
+  }
+  :root[data-theme="dark"]{
+    --paper:#10161e; --surface:#182029; --surface-2:#1f2833;
+    --ink:#d7dfe8; --heading:#eef3f8; --muted:#93a1b0; --border:#2c3742;
+    --accent:#85c1f4; --accent-soft:#1c3346; --mark:#ff8a5c;
+    --good:#6fd196; --good-soft:#173726; --warn:#e2b667; --warn-soft:#3a2f16;
+    --code-bg:#1f2833;
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:16px/1.65 var(--font-body);-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:80ch;margin:0 auto;padding:0 26px 96px;}
+
+  header.masthead{
+    max-width:80ch;margin:0 auto;padding:56px 26px 20px;
+  }
+  .eyebrow{font-family:var(--font-head);text-transform:uppercase;letter-spacing:.14em;
+    font-size:.78rem;font-weight:600;color:var(--mark);margin:0 0 10px;}
+  h1{font-family:var(--font-head);font-weight:700;line-height:1.05;
+    font-size:2.7rem;margin:0 0 .3em;color:var(--heading);text-wrap:balance;letter-spacing:.01em;}
+  .lede{font-size:1.12rem;color:var(--muted);margin:0;max-width:64ch;}
+
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0;}
+  .chip{font-size:.8rem;background:var(--surface);border:1px solid var(--border);
+    border-radius:999px;padding:5px 12px;color:var(--muted);}
+  .chip b{color:var(--ink);font-weight:600;}
+
+  h2{font-family:var(--font-head);font-weight:600;font-size:1.62rem;
+    color:var(--heading);margin:2.4em 0 .5em;padding-top:.3em;
+    border-top:1px solid var(--border);}
+  h2:first-of-type{border-top:0;}
+  h3{font-family:var(--font-head);font-weight:600;font-size:1.2rem;
+    color:var(--heading);margin:1.7em 0 .4em;}
+  p{margin:.7em 0;}
+  a{color:var(--accent);text-underline-offset:2px;}
+  strong{color:var(--heading);font-weight:600;}
+  code{font-family:var(--mono);font-size:.86em;background:var(--code-bg);
+    padding:.12em .4em;border-radius:5px;}
+  ul,ol{padding-left:1.3em;}
+  li{margin:.32em 0;}
+  li::marker{color:var(--mark);}
+
+  .callout{border:1px solid var(--border);border-left:4px solid var(--accent);
+    background:var(--surface);border-radius:0 10px 10px 0;padding:2px 20px;
+    margin:1.4em 0;box-shadow:var(--shadow);}
+  .callout.decision{border-left-color:var(--mark);}
+  .callout .k{font-family:var(--font-head);text-transform:uppercase;letter-spacing:.08em;
+    font-size:.74rem;font-weight:700;color:var(--mark);margin:14px 0 0;}
+
+  table{border-collapse:collapse;width:100%;margin:1.3em 0;font-size:.93rem;
+    display:block;overflow-x:auto;}
+  th,td{border:1px solid var(--border);padding:9px 13px;text-align:left;vertical-align:top;}
+  th{background:var(--surface-2);font-weight:600;font-family:var(--font-head);
+    letter-spacing:.02em;}
+  td code{white-space:nowrap;}
+
+  .verdict{background:var(--good-soft);color:var(--good);font-weight:600;
+    border-radius:6px;padding:2px 8px;font-size:.82rem;white-space:nowrap;}
+  .verdict.no{background:var(--warn-soft);color:var(--warn);}
+
+  .cp{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:4px 22px 18px;margin:1.1em 0;box-shadow:var(--shadow);}
+  .cp .tag{display:inline-block;font-family:var(--font-head);font-weight:700;
+    font-size:.76rem;letter-spacing:.06em;text-transform:uppercase;
+    background:var(--accent-soft);color:var(--accent);border-radius:999px;
+    padding:4px 12px;margin:18px 0 2px;}
+  .cp h3{margin:.35em 0 .3em;}
+  .cp .files{font-family:var(--mono);font-size:.8rem;color:var(--muted);
+    background:var(--code-bg);border-radius:7px;padding:9px 12px;margin:.6em 0;}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:1.3em 0;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:6px 20px 16px;box-shadow:var(--shadow);}
+  .card h3{font-size:1.05rem;}
+  .card .rec{font-size:.82rem;color:var(--good);font-weight:600;}
+  @media (max-width:720px){.grid{grid-template-columns:1fr;}}
+
+  .flow{font-family:var(--mono);font-size:.82rem;background:var(--surface);
+    border:1px solid var(--border);border-radius:10px;padding:16px 18px;
+    overflow-x:auto;line-height:1.7;color:var(--ink);box-shadow:var(--shadow);}
+  .flow .c{color:var(--muted);}
+  footer{color:var(--muted);font-size:.85rem;margin-top:3em;padding-top:1.2em;
+    border-top:1px solid var(--border);}
+</style>
+</head>
+<body>
+<header class="masthead">
+  <p class="eyebrow">CaveWhere · Implementation Plan</p>
+  <h1>Embed the User Manual into CaveWhere</h1>
+  <p class="lede">A File&nbsp;→&nbsp;Docs viewer that renders the manual's Markdown natively,
+    turns every article into a real navigable page, and is searchable — with no web-engine
+    dependency and no break for the mobile build.</p>
+  <div class="meta">
+    <span class="chip"><b>Branch</b> manual (app code)</span>
+    <span class="chip"><b>Source of truth</b> docs/manual/*.md</span>
+    <span class="chip"><b>Renderer</b> Qt TextFormat.MarkdownText</span>
+    <span class="chip"><b>Nav</b> cwPageSelectionModel, page per article</span>
+    <span class="chip"><b>Status</b> CP1 done · CP2 next</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+<h2>Goal</h2>
+<p>Let a user open the manual <em>inside</em> CaveWhere (File&nbsp;→&nbsp;Docs) and read it
+the way they read any other part of the app: the same breadcrumb, the same
+back/forward, a search box that finds a topic, and cross-reference links that
+navigate in place. The Markdown files under <code>docs/manual/</code> stay the single
+source of truth — the same source that already builds the web page for cavewhere.com.</p>
+
+<h2>The decision that drives everything: no web view</h2>
+<p>CaveWhere ships <strong>no web-rendering module today</strong> — there is no QtWebEngine or
+QtWebView anywhere in <code>conanfile.py</code> (the Qt modules requested are only
+<code>qtshadertools, qtdeclarative, qtsvg, qttools, qttranslations, qtimageformats</code>),
+in the submodules, or in CMake. Rendering the built <code>manual.html</code> would mean
+<em>adding</em> one:</p>
+<ul>
+  <li><strong>QtWebEngine</strong> — Chromium; hundreds of MB, and it does not ship on iOS.</li>
+  <li><strong>QtWebView</strong> — lighter (system webview), but still a new module with
+    per-platform quirks.</li>
+</ul>
+<p>Both bring their <em>own</em> navigation history and their <em>own</em> find-in-page — exactly
+what we don't want, since the goal is to reach into the content with <em>CaveWhere's</em>
+back/forward and search. A web view fights both goals and costs the mobile build.</p>
+
+<div class="callout decision">
+  <p class="k">Decision — confirmed</p>
+  <p><strong>Render the Markdown natively</strong> with Qt&nbsp;6's <code>TextFormat.MarkdownText</code>
+  (zero new dependencies; keeps iOS/mobile alive), and make <strong>each article its own
+  registered page</strong> so the existing history stack carries back/forward and the breadcrumb.
+  The honest cost is fidelity: article bodies use Qt's default Markdown styling, not the
+  <code>manual.html</code> CSS. We rebuild the <em>chrome</em> (sidebar, search, header) natively —
+  which is what makes the integration work — and theme the reading column through
+  <code>Theme.qml</code>.</p>
+</div>
+
+<h3>Why this fits what's already there</h3>
+<table>
+  <thead><tr><th>Capability we need</th><th>Already in the codebase</th><th></th></tr></thead>
+  <tbody>
+    <tr><td>Discrete pages with a route string</td>
+        <td><code>cwPageSelectionModel</code> — a page tree, addresses joined by <code>/</code>; <code>registerPage</code> / <code>registerSubPage</code></td>
+        <td><span class="verdict">reuse</span></td></tr>
+    <tr><td>Back / forward with a history stack</td>
+        <td><code>PageHistory</code> + <code>back()</code>/<code>forward()</code>, <code>hasBackward</code>/<code>hasForward</code></td>
+        <td><span class="verdict">reuse</span></td></tr>
+    <tr><td>Breadcrumb + nav buttons</td>
+        <td><code>LinkBar.qml</code> (back :97, forward :107, breadcrumb model :27)</td>
+        <td><span class="verdict">reuse</span></td></tr>
+    <tr><td>Show a QML view for a page</td>
+        <td><code>cwPageView</code> lazy-instantiates &amp; caches a page's component; one <code>PageView</code> in <code>MainContent.qml:69</code></td>
+        <td><span class="verdict">reuse</span></td></tr>
+    <tr><td>Markdown → rich text</td>
+        <td><code>Text.MarkdownText</code> (native Qt 6); RichText + <code>onLinkActivated</code> precedent in <code>HelpArea.qml:74</code></td>
+        <td><span class="verdict">reuse</span></td></tr>
+    <tr><td>Open external links</td>
+        <td><code>Qt.openUrlExternally(link)</code> — <code>CloneArea.qml:140</code></td>
+        <td><span class="verdict">reuse</span></td></tr>
+    <tr><td>Render HTML with full CSS fidelity</td>
+        <td>—</td>
+        <td><span class="verdict no">would add QtWebEngine</span></td></tr>
+  </tbody>
+</table>
+
+<h2>Architecture</h2>
+<div class="flow">
+File → Docs  ──▶  gotoPageByName(null,"Docs")
+                        │
+        ┌───────────────┴────────────────┐
+        │        <span class="c">DocsPage.qml (shared)</span>       │   ← root: StandardPage
+        │  ┌──────────┬──────────────────┐│
+        │  │ sidebar/ │  reading column  ││   ← Flickable + Label(MarkdownText),
+        │  │ TOC +    │  renders slug's  ││     baseUrl = article's resource dir
+        │  │ search   │  .md body        ││
+        │  └──────────┴──────────────────┘│
+        └─────────────────────────────────┘
+                        │
+   registerPage(Docs, "Enter Survey Data", docsPageComponent, {slug:…})  <span class="c"># × ~48</span>
+                        │
+   back() / forward() / breadcrumb  ◀── all free via cwPageSelectionModel
+</div>
+
+<h3>Pieces</h3>
+<ul>
+  <li><strong><code>DocsPage.qml</code></strong> — root <code>StandardPage</code> (same trivial wrapper
+    <code>AboutPage.qml</code> uses). One shared component with a <code>slug</code> property; a
+    themed reading column (<code>Flickable</code> + <code>QC.Label</code> with
+    <code>textFormat: Label.MarkdownText</code>), plus a native sidebar/TOC and search box as chrome.</li>
+  <li><strong>Registration loop</strong> in <code>MainContent.qml</code>'s
+    <code>Component.onCompleted</code> (alongside the existing About/Settings/Cavern
+    registrations at <code>:200–212</code>): register a <code>"Docs"</code> landing page, then loop the
+    <code>llms.txt</code> manifest calling <code>registerPage(docsRoot, title, docsPageComponent, {slug})</code> for each article.</li>
+  <li><strong>Link interceptor</strong> — articles link to each other by relative path
+    (<code>../survey-data/enter-survey-data.md#anchor</code>). On <code>onLinkActivated</code>: map a
+    <code>.md</code> path → its slug and <code>gotoPageByName</code> (in-app, enters history);
+    <code>http(s)</code> → <code>Qt.openUrlExternally</code>.</li>
+  <li><strong>Search index + filter model</strong> — a small model backed by a generated index
+    of <code>title</code>/<code>summary</code>/<code>keywords</code> (front matter we already have). Typing
+    filters; selecting jumps to that article's page.</li>
+  <li><strong>File-menu item</strong> — copy the About item (<code>FileMenu.qml:130–135</code>):
+    <code>text: "Docs…"; onTriggered: RootData.pageSelectionModel.gotoPageByName(null, "Docs")</code>.</li>
+  <li><strong>Content staging</strong> — a build step emits the <code>.md</code> + images into a Qt
+    resource (or data dir) so they're readable at runtime, with each page's Markdown
+    <code>baseUrl</code> set to its directory so relative images resolve.</li>
+</ul>
+
+<h2>Content pipeline</h2>
+<div class="flow">
+docs/manual/**/*.md  ──(strip front matter, keep as-is)──▶  staged .md
+docs/manual/images/  ──────────────────────────────────▶  staged images
+docs/manual/llms.txt ──(parse order + titles)──────────▶  manifest.json  (slug, title, chapter, path)
+front matter          ──(title/summary/keywords)────────▶  search-index.json
+                                   │
+                                   ▼
+                      cavewhere_manual.qrc  ──▶  compiled into the app
+</div>
+<p>Reuses the machinery already in <code>scripts/build-manual-html.py</code>: <code>parse_llms()</code>
+for order/titles, <code>strip_front_matter()</code>, and the same slug scheme. A new sibling
+script (e.g. <code>scripts/build-manual-resource.py</code>) emits the <code>.qrc</code> + two JSON files
+rather than one HTML blob. Both scripts share one source; neither becomes a second index
+to maintain.</p>
+
+<h2>Decisions — resolved</h2>
+<div class="grid">
+  <div class="card">
+    <h3>1 · How to ship the content</h3>
+    <p><strong>Compile into the app (<code>.qrc</code>).</strong> Single binary, offline, simple.
+      If the PNGs push the binary too far, the fallback is down-sampling the in-app image
+      copies before ever reaching for a data dir.</p>
+    <p class="rec">✓ <code>.qrc</code></p>
+  </div>
+  <div class="card">
+    <h3>2 · The sketch app</h3>
+    <p><strong>Ignore it entirely — it's a dead prototype.</strong> Docs is registered only in the
+      main app (<code>MainContent.qml</code>). Do not touch <code>sketch/qml/Main.qml</code>.</p>
+    <p class="rec">✓ Main app only</p>
+  </div>
+  <div class="card">
+    <h3>3 · Landing page</h3>
+    <p><strong>Mirror <code>index.md</code>'s chapter grouping</strong> as the TOC, search box on top.
+      It already reads as the table of contents.</p>
+    <p class="rec">✓ Chapter-grouped TOC</p>
+  </div>
+  <div class="card">
+    <h3>4 · Intra-page anchors</h3>
+    <p><strong>Cross-page navigation first;</strong> land intra-page heading scroll in CP3 if the
+      anchor→y glue is cheap, otherwise fast-follow. Not a blocker for shipping the viewer.</p>
+    <p class="rec">✓ Cross-page first, anchors fast-follow</p>
+  </div>
+</div>
+
+<div class="callout decision">
+  <p class="k">Decision 5 — the CP2 content seam (added after the CP1 review)</p>
+  <p>Register each article by a <strong><code>slug</code></strong>, not by pushing a Markdown
+  string. CP1 shipped a placeholder <code>markdownText</code> string to prove the render path;
+  CP2 replaces it with a <code>slug</code> property that <code>DocsPage</code> resolves internally
+  into <em>both</em> the body text and the <code>baseUrl</code> — a raw string can't carry the
+  per-article image base the plan requires.</p>
+  <p><strong>Use <code>registerPage</code>, not <code>registerSubPage</code>.</strong>
+  <code>registerSubPage</code> is a little funny — it implicitly reuses the <em>parent page's</em>
+  <code>QQmlComponent</code> and merges the new properties over the parent's
+  (<code>cwPageSelectionModel.cpp:111-122</code>) — so we avoid it. Register each article with an
+  explicit component and explicit properties instead:
+  <code>registerPage(docsRoot, title, docsPageComponent, {slug})</code> (the <code>CavePage</code>
+  idiom, <code>CavePage.qml:55</code>). <code>DocsPage</code> stays <strong>one slug-driven
+  component</strong> reused for every article — the <code>"Docs"</code> landing page is that same
+  component with the slug unset (it shows the chapter-grouped TOC), and each article passes its own
+  <code>{slug}</code>. Passing the component explicitly keeps the registration readable and free of
+  the parent-property inheritance <code>registerSubPage</code> would splice in.</p>
+</div>
+
+<h2>Implementation checkpoints</h2>
+
+<div class="cp">
+  <span class="tag">CP1 · Skeleton page + menu</span>
+  <h3>A Docs page you can open, showing one article</h3>
+  <p>Create <code>DocsPage.qml</code> (root <code>StandardPage</code>) rendering a single hard-coded
+    <code>.md</code> via <code>MarkdownText</code>. Register <code>"Docs"</code> in <code>MainContent.qml</code>,
+    add the File-menu item. Proves the render path, theming, and that the page shows through
+    <code>cwPageView</code>.</p>
+  <div class="files">+ cavewherelib/qml/DocsPage.qml · ~ MainContent.qml · ~ FileMenu.qml</div>
+  <p class="rec">✓ Done — implemented &amp; verified, 6/6 smoke tests green
+    (<code>tst_DocsPage.qml</code>, brought forward from CP5). Its <code>markdownText</code>
+    placeholder is superseded by the <code>slug</code> seam in CP2 (Decision&nbsp;5).</p>
+</div>
+
+<div class="cp">
+  <span class="tag">CP2 · Content resource + manifest</span>
+  <h3>All articles staged and addressable</h3>
+  <p>Give <code>DocsPage</code> the <code>slug</code> seam (Decision&nbsp;5), resolving slug → body +
+    <code>baseUrl</code>. Add <code>scripts/build-manual-resource.py</code> → <code>.qrc</code> +
+    <code>manifest.json</code>. Loop the manifest in <code>MainContent.qml</code> calling
+    <code>registerPage(docsRoot, title, docsPageComponent, {slug})</code> for every article (explicit
+    component + props — <em>not</em> <code>registerSubPage</code>; see Decision&nbsp;5). The landing
+    page is that same <code>DocsPage</code> component with slug unset. Set each page's Markdown
+    <code>baseUrl</code> so images resolve. Wire the CMake step so the resource builds.</p>
+  <div class="files">+ scripts/build-manual-resource.py · + cavewhere_manual.qrc · ~ CMakeLists.txt · ~ MainContent.qml</div>
+</div>
+
+<div class="cp">
+  <span class="tag">CP3 · Navigation &amp; links</span>
+  <h3>Back/forward, breadcrumb, and cross-links work</h3>
+  <p>Add the <code>onLinkActivated</code> interceptor: <code>.md</code> paths → <code>gotoPageByName</code>,
+    external → <code>openUrlExternally</code>. Verify <code>LinkBar</code> back/forward and the breadcrumb
+    step between articles. Intra-page anchor scroll if cheap here.</p>
+  <div class="files">~ cavewherelib/qml/DocsPage.qml (+ a small path→slug helper)</div>
+</div>
+
+<div class="cp">
+  <span class="tag">CP4 · Sidebar TOC + search</span>
+  <h3>Find a topic and jump to it</h3>
+  <p>Build the sidebar TOC (chapter grouping from the manifest) and a search box backed by a
+    filter model over <code>search-index.json</code>. Selecting a result navigates to that page.</p>
+  <div class="files">+ search-index.json (generated) · + a small filter model · ~ DocsPage.qml</div>
+</div>
+
+<div class="cp">
+  <span class="tag">CP5 · Polish &amp; tests</span>
+  <h3>Dark-mode verification and fuller tests</h3>
+  <p>Verify the reading column (already themed from CP1) reads correctly in dark mode.
+    <em>Expand</em> the CP1 smoke test (<code>tst_DocsPage.qml</code> already exists): assert a real
+    article renders, a cross-link navigates and lands in history, and search filters. Confirm the
+    offscreen/mobile build still links (no web module pulled in).</p>
+  <div class="files">~ test-qml/tst_DocsPage.qml · ~ DocsPage.qml</div>
+</div>
+
+<h2>Risks &amp; nuances</h2>
+<ul>
+  <li><strong>Markdown fidelity.</strong> Qt renders GitHub-flavored Markdown including tables,
+    but with default styling and no per-element CSS. Captions (our <code>img</code>+<code>em</code>
+    pattern) render as plain italic under the image — acceptable. Anything that leaned on the
+    HTML's CSS won't carry; the text must (and, per the authoring rules, already does) stand
+    on its own.</li>
+  <li><strong>Front-matter stripping at load.</strong> The renderer must drop the leading
+    <code>---&nbsp;…&nbsp;---</code> block, same as <code>build-manual-html.py</code> does.</li>
+  <li><strong>Intra-page anchors</strong> need anchor→y-position glue (decision&nbsp;4).</li>
+  <li><strong>Binary size</strong> from compiled images (decision&nbsp;1).</li>
+  <li><strong>Two renderers, one source.</strong> Keep the web (<code>manual.html</code>) and in-app
+    (native) paths as separate renderers over the same <code>.md</code> — don't try to make one
+    artifact serve both.</li>
+</ul>
+
+<h2>Out of scope (this plan)</h2>
+<ul>
+  <li>Publishing the manual to <strong>cavewhere.com</strong> — same source, separate task; the
+    web build already exists.</li>
+  <li>Any change to the manual's <em>content</em> — this is viewer plumbing only.</li>
+  <li>Rewriting <code>Theme.qml</code> or the page framework — we consume both as-is.</li>
+</ul>
+
+<footer>
+  CP1 done (implemented &amp; verified, 6/6 tests green) · CaveWhere · renders natively, no web
+  engine · all file:line references verified against the current tree. Decisions 1–5 resolved —
+  CP2 (slug seam + content resource) is next.
+</footer>
+
+</div>
+</body>
+</html>
