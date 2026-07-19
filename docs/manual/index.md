@@ -45,6 +45,9 @@ the problems CaveWhere solves — then keep the
 ### 3D View
 - [The 3D View](view-3d/the-3d-view.md) — navigate the model, aim the camera,
   and filter with layers.
+- [Focus the View with Keyword Layers](view-3d/layers-and-keywords.md) — show
+  only part of a cave by keyword: AND columns that drill down, and the "Also
+  Include" (OR) button that combines independent selections.
 
 ### Survey Data
 - [Organize Caves and Trips](survey-data/caves-and-trips.md) — the region → cave

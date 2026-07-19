@@ -1,5 +1,6 @@
 import QtQuick as QQ
 import QtQuick.Controls as QC
+import QtQuick.Controls // unaliased: lets a test set the SplitView.* attached properties by name
 import QtTest
 import cavewherelib
 import cw.TestLib
@@ -574,6 +575,104 @@ MainWindowTest {
             verify(path.length > 0, "grabToFile wrote the layers screenshot");
             verify(OffscreenRenderTester.nonBlackFraction(path) > 0.5,
                    "layers screenshot is not blank");
+        }
+
+        // Tick only `value` in a KeywordGroupByKeyModel column, unticking the rest —
+        // the model-level equivalent of clicking one value's checkbox in KeywordTab.
+        function checkOnlyValue(group, value) {
+            for (let r = 0; r < group.rowCount(); ++r) {
+                let idx = group.index(r, 0);
+                let v = group.data(idx, KeywordGroupByKeyModel.ValueRole);
+                group.setData(idx, v === value, KeywordGroupByKeyModel.AcceptedRole);
+            }
+        }
+
+        // First value in a column that isn't the "Others" catch-all, or "".
+        function firstRealValue(group) {
+            for (let r = 0; r < group.rowCount(); ++r) {
+                let v = group.data(group.index(r, 0), KeywordGroupByKeyModel.ValueRole);
+                if (v !== "Others") { return v; }
+            }
+            return "";
+        }
+
+        // A built-up filter: two AND columns drilling down (Type -> Plan, then a
+        // Caver column showing only the cavers among those plan scraps, one ticked).
+        // Backs the "Drill down: add an AND column" section of
+        // docs/manual/view-3d/layers-and-keywords.md, whose sibling shot
+        // (view-3d-layers) shows the single-column starting state.
+        function test_view3dLayersDrilldown() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            let panel = findByName(rootId.mainWindow, "renderingSidePanel");
+            verify(panel, "found the rendering side panel");
+
+            let tabBar = sidePanelTabBar();
+            verify(tabBar, "found the side-panel tab bar");
+            tabBar.currentIndex = 1; // Layers
+
+            let pipeline = RootData.keywordFilterPipelineModel;
+            verify(pipeline, "found the keyword filter pipeline model");
+            verify(pipeline.rowCount() >= 1, "pipeline has its default first column");
+
+            // Column 1: group by Type, show only Plan scraps.
+            let typeGroup = pipeline.data(pipeline.index(0, 0),
+                KeywordFilterPipelineModel.FilterModelObjectRole);
+            verify(typeGroup, "found the first column's group-by model");
+            typeGroup.key = "Type";
+            tryVerify(function() { return typeGroup.rowCount() > 0; }, 5000,
+                      "the Type column populated its values");
+            checkOnlyValue(typeGroup, "Plan");
+
+            // Column 2: drill into those plan scraps by Caver.
+            pipeline.insertRow(1);
+            verify(pipeline.rowCount() >= 2, "the second column was inserted");
+            let caverGroup = pipeline.data(pipeline.index(1, 0),
+                KeywordFilterPipelineModel.FilterModelObjectRole);
+            verify(caverGroup, "found the second column's group-by model");
+            caverGroup.key = "Caver";
+            tryVerify(function() { return caverGroup.rowCount() > 0; }, 5000,
+                      "the Caver column populated from the plan scraps");
+            let caver = firstRealValue(caverGroup);
+            if (caver.length > 0) { checkOnlyValue(caverGroup, caver); }
+
+            // Widen the side panel so both AND columns are fully visible — the same
+            // thing a user does by dragging the SplitView handle. The default 320px
+            // panel fits only one 220px column, clipping the second mid-word.
+            let renderer = findByName(rootId.mainWindow, "renderer");
+            let viewPageItem = findByName(rootId.mainWindow, "viewPage");
+            if (renderer && viewPageItem) {
+                let rendererWrapper = renderer.parent;
+                let splitView = rendererWrapper.parent;
+                let panelHost = null;
+                for (let i = 0; i < splitView.children.length; ++i) {
+                    let c = splitView.children[i];
+                    if (c !== rendererWrapper && findByName(c, "renderingSidePanel")) {
+                        panelHost = c;
+                        break;
+                    }
+                }
+                if (panelHost) {
+                    // Make the renderer the fill item and give the panel a wider
+                    // preferred width, so SplitView lays both AND columns out fully.
+                    rendererWrapper.SplitView.fillWidth = true;
+                    panelHost.SplitView.preferredWidth = 480;
+                }
+            }
+
+            highlightOverlayId.target = panel;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "view-3d-layers-drilldown");
+            verify(path.length > 0, "grabToFile wrote the drilldown screenshot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.5,
+                   "drilldown screenshot is not blank");
+
+            // Hygiene: reset the filter and hand the next shot the demo on a neutral
+            // page (this shot leaves a two-column filter that would otherwise persist).
+            pipeline.clear();
+            restoreDemoProject();
         }
 
         // Cropped, element-focused grab: grabItemToFile crops the window grab to

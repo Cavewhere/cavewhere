@@ -3,7 +3,7 @@ title: The 3D View
 summary: Navigate the 3D cave model, aim the camera, and control what's shown with layers.
 problem: See your survey as a 3D cave and aim the view to answer where passages go and where the leads are.
 keywords: [3d view, navigation, turntable, camera, azimuth, vertical angle, plan, profile, projection, compass, scale bar, layers, keyword]
-related: [../concepts/why-cavewhere.md, ../concepts/glossary.md]
+related: [layers-and-keywords.md, ../concepts/why-cavewhere.md, ../concepts/glossary.md]
 ---
 
 # The 3D View
@@ -110,14 +110,15 @@ show only the parts you're working on and hide the rest — the same idea as
 layers in a drawing program, but driven by the tags on your caves, trips, and
 notes.
 
-![The Layers tab, listing checkable groups: Lead, Line Plot, Plan, and Others.](../images/view-3d-layers.png)
-*The Layers tab groups the scene by keyword; untick a group to hide it.*
+![The Layers tab, listing checkable keyword values under a Type column, each with a count, and an "Also Include" button.](../images/view-3d-layers.png)
+*The Layers tab groups the scene by keyword; untick a value to hide it.*
 
-Pick a grouping (here, **Type**) and CaveWhere lists the groups it finds, each
-with a count. Untick a group — say **Plan** — to hide those objects; tick it to
-bring them back. Use **Also Include** to pull in related items that a strict
-filter would otherwise leave out. Hiding everything except the section you're
-surveying makes it far easier to see where *that* passage is going.
+Pick a key (here, **Type**) and CaveWhere lists its values, each with a count.
+Untick a value — say **Plan** — to hide those objects; tick it to bring them
+back. You can narrow further by drilling down through more keys, and combine
+independent selections with **Also Include**. See
+[Focus the View with Keyword Layers](layers-and-keywords.md) for the full filter
+— the AND columns that drill down and the OR groups that add selections together.
 
 ## Where to go next
 
