@@ -32,6 +32,7 @@ RowLayout {
     }
 
     SelectableValue {
+        objectName: "value"
         text: rootId.unitValue !== null
             ? Utils.fixed(Units.convertLength(rootId.meters, Units.Meters, rootId.displayUnit), 2)
             : ""
