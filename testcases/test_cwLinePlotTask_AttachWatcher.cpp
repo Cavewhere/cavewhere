@@ -25,6 +25,7 @@
 #include "cwTrip.h"
 
 // Tests
+#include "ExternalCenterlineTestHelpers.h"
 #include "LoadProjectHelper.h"
 #include "cwSignalSpy.h"
 
@@ -46,93 +47,6 @@
 #include <QUuid>
 
 namespace {
-
-// Watcher events flow through OS notifications and are delivered on the
-// next event-loop spin. Tests poll the predicate, processing events each
-// iteration, until either the predicate is satisfied or the budget runs
-// out. Picked well above the actual settle time so a busy CI under
-// valgrind still has headroom; the watcher itself fires within ~10ms.
-constexpr int kWatcherWaitMs = 5000;
-
-// Per-iteration event-loop budget inside tryWait. Long enough for one
-// AsyncFuture continuation to run; short enough that the predicate
-// re-evaluates promptly on flaky-CI scheduling jitter.
-constexpr int kPollEventsBudgetMs = 50;
-
-// Inside a tryWait predicate we also pump the loop once more so a freshly
-// queued continuation that the outer pump just missed can land before we
-// re-evaluate. Smaller than kPollEventsBudgetMs because we only need to
-// drain whatever is already queued, not wait for new work.
-constexpr int kInnerPollEventsMs = 10;
-
-bool tryWait(int timeoutMs, std::function<bool()> predicate)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (!predicate()) {
-        if (timer.elapsed() >= timeoutMs) {
-            return predicate(); // one last evaluation under the deadline
-        }
-        QCoreApplication::processEvents(QEventLoop::AllEvents, kPollEventsBudgetMs);
-    }
-    return true;
-}
-
-QString fixturePath(const QString& name)
-{
-    return testcasesDatasetSourcePath(QStringLiteral("external-centerlines/%1").arg(name));
-}
-
-QString tempSubdir(const QTemporaryDir& root, const QString& name)
-{
-    const QDir baseDir(root.path());
-    REQUIRE(baseDir.mkpath(name));
-    return baseDir.absoluteFilePath(name);
-}
-
-// Copies `source` to <attachDir>/<basename(source)> with the watcher
-// pattern from the existing [Attach][...] tests. Returns the destination
-// path so the test can later edit it directly.
-QString seedAttachment(const QString& attachDir, const QString& source)
-{
-    const QString basename = QFileInfo(source).fileName();
-    const QString dest = QDir(attachDir).absoluteFilePath(basename);
-    REQUIRE_FALSE(source.isEmpty());
-    REQUIRE(QFile::exists(source));
-    if (QFile::exists(dest)) {
-        QFile::remove(dest);
-    }
-    REQUIRE(QFile::copy(source, dest));
-    return dest;
-}
-
-// Atomically overwrite a watched file. QFileSystemWatcher on macOS treats
-// some editors' rename-over patterns differently from in-place writes, so
-// we do an in-place open-truncate-write (the same shape as a user editing
-// the file in a regular editor that saves in place).
-void overwriteFile(const QString& path, const QByteArray& content)
-{
-    QFile f(path);
-    REQUIRE(f.open(QFile::WriteOnly | QFile::Truncate));
-    REQUIRE(f.write(content) == content.size());
-    f.close();
-}
-
-cwCave* addEmptyCave(cwCavingRegion& region, const QString& name)
-{
-    cwCave* cave = new cwCave();
-    cave->setName(name);
-    region.addCave(cave);
-    return cave;
-}
-
-cwTrip* addEmptyTrip(cwCave* cave, const QString& name)
-{
-    cwTrip* trip = new cwTrip();
-    trip->setName(name);
-    cave->addTrip(trip);
-    return trip;
-}
 
 // survex_simple.svx + an appended extra shot pulling the chain out to a4.
 // The new station name is asserted against the cave's position lookup
@@ -249,18 +163,24 @@ TEST_CASE("Detach mid-solve does not crash and empties the watch set",
     manager.setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
 
+    // Wait for the initial async scan to install the watch set — its
+    // apply chains the solve, so the solve is now in (or about to be in)
+    // flight. Coalescing means detaching before this point would fold
+    // into the initial scan and never populate the set at all.
+    REQUIRE(tryWait(kWatcherWaitMs, [&] { return !manager.watchedFiles().isEmpty(); }));
+
     cwSignalSpy watcherSpy(&manager, &cwLinePlotManager::watchedFilesChanged);
 
     // Do NOT wait for the solve - this models the "detach mid-solve"
     // condition. Detach by clearing the trip's externalCenterline and
-    // dropping the trip-attachment dir entry, then recompute via the
-    // public setters so the watcher rebuild path runs immediately.
+    // dropping the trip-attachment dir entry; the setter kicks off the
+    // async recompute that rebuilds the watcher.
     attached->setExternalCenterline(cwExternalCenterline());
     manager.setTripAttachmentDirs(QHash<QUuid, QString>());
 
-    // The recompute synchronously empties the watch set. Verify the
-    // signal fired and the public accessor is empty - no need to wait
-    // for the in-flight solve to finish or fail.
+    // The recompute empties the watch set once its apply lands. Verify
+    // the signal fired and the public accessor is empty - no need to
+    // wait for the in-flight solve to finish or fail.
     REQUIRE(tryWait(kWatcherWaitMs, [&] { return manager.watchedFiles().isEmpty(); }));
     CHECK(manager.watchedFiles().isEmpty());
     CHECK(watcherSpy.count() >= 1);
@@ -386,13 +306,6 @@ std::unique_ptr<LiveLinkFixture> makeLiveLinkFixture()
     return fixture;
 }
 
-QByteArray fileContents(const QString& path)
-{
-    QFile file(path);
-    REQUIRE(file.open(QFile::ReadOnly));
-    return file.readAll();
-}
-
 // Spins the event loop for `ms` wall-clock milliseconds, giving any
 // (wrongly) queued reconcile/solve continuation every chance to run
 // before the test asserts nothing happened.
@@ -440,9 +353,8 @@ TEST_CASE("Live-link source edit flags the owner stale and never reconciles on i
     REQUIRE_FALSE(fixture->cave->stationPositionLookup().hasPosition(a4Key));
 
     // Watch set should include both the in-project copy and the
-    // source-side path - tryWait because recompute runs synchronously on
-    // setRegion but the test guards against any race with the initial
-    // solve's continuations.
+    // source-side path - tryWait because the recompute is async and the
+    // initial solve's continuations may still be draining.
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
         const QStringList watched = manager.watchedFiles();
         const QString srcCanonical = QFileInfo(fixture->sourcePath).canonicalFilePath();
@@ -565,12 +477,13 @@ TEST_CASE("Open-time probe seeds staleness for a source that drifted while close
     manager.setExternalSourceSettings(&settings);
     manager.setRegion(fixture->project->cavingRegion());
 
-    // setRegion's recompute probes freshness synchronously — no watcher
-    // event is needed to light the stale banner at open time.
+    // setRegion's async recompute probes freshness — no watcher event is
+    // needed to light the stale banner at open time. Drain the scan (and
+    // its chained solve) before checking.
+    manager.waitToFinish();
+
     CHECK(manager.staleSourceOwners().contains(fixture->trip->id()));
     CHECK(manager.missingSourceOwners().isEmpty());
-
-    manager.waitToFinish();
 }
 
 TEST_CASE("Deleting the live-link source reports missing, not stale",

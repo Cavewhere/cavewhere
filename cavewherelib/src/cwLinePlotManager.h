@@ -137,8 +137,11 @@ public:
     // no-op. A source-side watcher event flags the owner immediately as a
     // fast path; every recompute re-derives the list wholesale from the
     // probe, clearing it once a fresh copy lands (normally via
-    // updateFromSource). Staleness is only ever surfaced — the manager
-    // never reconciles on its own (see the Phase 2 direction change).
+    // updateFromSource). The recompute runs async — flags raised by
+    // watcher events after its snapshot are unioned back in at apply so
+    // the probe can't wipe an edit it never saw. Staleness is only ever
+    // surfaced — the manager never reconciles on its own (see the
+    // Phase 2 direction change).
     QList<QUuid> staleSourceOwners() const { return m_staleSourceOwners; }
 
     // User-triggered "Update" for a stale live-link owner: rescans the
@@ -210,10 +213,41 @@ public slots:
     void rerunSurvex();
 
 private:
+    // Value-type inputs and outputs of the async recompute pipeline.
+    // One OwnerScanInput per attached owner, snapshotted on the main
+    // thread; no live pointers cross the thread boundary (same rule as
+    // cwLinePlotTask::buildInput).
+    struct OwnerScanInput {
+        QUuid ownerId;
+        QString caveName;
+        QString ownerName;
+        QString ownerKind;
+        QString entryFile;
+        QString attachmentDir;
+        QString sourcePath;
+    };
+
+    // Everything the worker derives from an OwnerScanInput batch; the
+    // main-thread apply installs it wholesale (watcher diff, member
+    // swaps, signal emissions, model rows).
+    struct ExternalScanResult {
+        QStringList watchedFiles;
+        // Subset of watchedFiles that existed when the worker looked —
+        // the apply feeds these to addPaths (QFileSystemWatcher warns on
+        // missing files) without re-statting on the main thread.
+        QStringList existingWatchedFiles;
+        QHash<QString, QUuid> sourceOwnerForPath;
+        QList<QUuid> missingSourceOwners;
+        QList<QUuid> staleSourceOwners;
+        QHash<QUuid, bool> fileOwnsDeclination;
+        QVector<cwAttachedCenterlinesModel::Row> rows;
+    };
+
     QPointer<cwCavingRegion> Region; //The main
     QList<QPointer<cwErrorListModel>> UnconnectedChunks; //Current unconnected chunks
 
     AsyncFuture::Restarter<cwLinePlotTask::LinePlotResultData> m_restarter;
+    AsyncFuture::Restarter<ExternalScanResult> m_scanRestarter;
     cwFutureManagerToken m_futureManagerToken;
     cwRenderLinePlot* m_linePlot;
 
@@ -256,6 +290,23 @@ private:
 
     QList<QUuid> m_missingSourceOwners;
     QList<QUuid> m_staleSourceOwners;
+
+    // Watcher flags raised after the current scan's snapshot was taken.
+    // The worker's probe result was computed without them, so the apply
+    // unions this set into the probe-derived stale list instead of
+    // overwriting wholesale (commit-8 merge policy). Cleared at each
+    // snapshot — that instant is what "since" means.
+    QSet<QUuid> m_staleRaisedSinceSnapshot;
+
+    // Sticky "run a solve when the next scan applies" request, set by
+    // callers that used to do recompute-then-runSurvex synchronously.
+    // buildInput reads m_fileOwnsDeclination, so the solve must chain
+    // behind the apply rather than race the worker.
+    bool m_solveOnScanApply = false;
+
+    // Rows from the most recent scan apply; the rename rebuild reuses
+    // their dep/warning counts so it never touches the disk.
+    QVector<cwAttachedCenterlinesModel::Row> m_lastScanRows;
 
     // Owners with an updateFromSource reconcile still draining; guards
     // against interleaved per-owner filesystem operations (commit-5
@@ -307,12 +358,33 @@ private:
                              std::optional<cwLinePlotTask::SolveError> solveError);
     void publishPerCaveErrors(const cwLinePlotTask::LinePlotResultData& results);
 
-    // Re-runs the scanner over every attachment (project-side, plus the
-    // source side for live-link entries), rebuilds m_watchedFiles and
-    // m_missingSourceOwners, and brings the QFileSystemWatcher in line by
-    // diffing against the previous set. Cheap: scanner walks are
-    // sub-millisecond per file and the test fixtures total ~3 files.
+    // Async three-stage recompute: snapshot per-owner value inputs on
+    // the main thread (no I/O), run every scan and freshness probe on a
+    // cwConcurrent worker, then apply the result wholesale on the main
+    // thread via applyScanResult. Coalesced through m_scanRestarter, so
+    // a settings flurry or editor save burst runs one scan and only the
+    // newest result lands. Callers that also need a solve set
+    // m_solveOnScanApply first — never call runSurvex alongside this,
+    // the apply chains it (buildInput reads m_fileOwnsDeclination).
     void recomputeWatchSetAndProbeSources();
+
+    // Stage 1: one value-type input per attached owner with a non-empty
+    // entry file. Pure region/member reads, no filesystem access.
+    QVector<OwnerScanInput> collectOwnerSnapshots() const;
+
+    // Stage 2, runs on the worker thread: project-side scan, source-side
+    // scan, and computePlan freshness probe per owner. Static and pure —
+    // touches no manager state, only the filesystem.
+    static ExternalScanResult scanOwners(const QVector<OwnerScanInput>& owners);
+
+    // Identity fields of a model row from an owner snapshot (counts and
+    // lastSolved are filled by the caller).
+    static cwAttachedCenterlinesModel::Row rowFromOwner(const OwnerScanInput& owner);
+
+    // Stage 3, back on the main thread: watcher diff, member swaps,
+    // signal emissions, model rows, stale-flag union, and the chained
+    // solve when one was requested or the declination flags changed.
+    void applyScanResult(ExternalScanResult result);
 
     // Re-arms the watcher for `path` (the file that just fired) so we
     // continue to receive change events for it; on macOS the watcher
@@ -326,6 +398,11 @@ private:
 private slots:
     void runSurvex();
     void onWatchedFileChanged(const QString& path);
+
+    // Cave/trip rename: rebuild the model rows from fresh names plus the
+    // cached per-owner scan counts (m_lastScanRows) — zero disk I/O and
+    // no waiting on a full recompute, so the list re-sorts immediately.
+    void rebuildAttachedRowsFromNames();
 };
 
 //This needs to be here for moc to generate correctly and we can forward declare cwRenderLinePlot

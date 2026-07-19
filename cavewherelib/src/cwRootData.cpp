@@ -113,8 +113,10 @@ cwRootData::cwRootData(QObject *parent) :
 
     //Setup the loop closer
     LinePlotManager = new cwLinePlotManager(Project);
-    LinePlotManager->setRegion(Region);
+    // Token before region: setRegion kicks off the initial external
+    // scan + solve, which should register with the future manager.
     LinePlotManager->setFutureManagerToken(FutureManagerModel->token());
+    LinePlotManager->setRegion(Region);
     LinePlotManager->setKeywordItemModel(m_keywordItemModel);
     LinePlotManager->setExternalSourceSettings(m_externalSourceSettings);
 

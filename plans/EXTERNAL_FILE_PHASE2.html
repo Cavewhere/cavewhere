@@ -695,6 +695,11 @@ detach(cwTrip* trip,
     would otherwise plan two reconciles against shifting state; the
     cwSaveLoad queue serializes the disk writes but not the
     planning).
+    <em>Home update (decided after commit 8):</em> the token's state
+    moves with the <code>cwExternalCenterlineManager</code> extraction
+    (see its commit-sequence entry between commits 8 and 9), so
+    <code>isOwnerBusy</code> lands on that object &mdash; the
+    invariant stays enforced where the state lives.
   </li>
 </ul>
 
@@ -1125,6 +1130,20 @@ public:
     the enqueue and the verify.
   </li>
   <li>
+    <strong>Deferred refactor (after the
+    <code>cwExternalCenterlineManager</code> extraction):</strong> a
+    <code>cwWatchSet</code> value type for the watcher-table
+    management. The "intent set &rarr; diff against
+    QFileSystemWatcher, keep non-existent paths for later re-arm,
+    re-add after atomic-save replaces" logic (today
+    <code>applyScanResult</code>'s wholesale remove/add with the
+    worker-side <code>existingWatchedFiles</code> filter, plus
+    <code>rearmWatcher</code>) is self-contained but bespoke and
+    untestable in isolation. Found at the commit-8 review; sequenced
+    after the extraction moves it, so the value type lands in its
+    final home.
+  </li>
+  <li>
     <strong>Attach orchestrator.</strong>
     <code>cwExternalCenterlineAttach::attach</code> +
     <code>detach</code>. Pure-C++ commit: no QML yet. Tests:
@@ -1275,6 +1294,71 @@ public:
     related metadata-split seam live in the &sect;7
     deferred-refactor note. Tests:
     <code>[LinePlotManager][AsyncScan]</code>.
+    <em>Shipped at commit 8</em> &mdash; all three stages as planned
+    (snapshot <code>collectOwnerSnapshots</code>, worker
+    <code>scanOwners</code> via <code>cwConcurrent</code>, apply
+    <code>applyScanResult</code>), coalesced through a second
+    <code>Restarter</code> registered with the future-manager token.
+    Naming drift from the prose above: there is no per-owner
+    <code>OwnerScanReport</code> intermediate (the worker aggregates
+    directly), and the result struct is
+    <code>ExternalScanResult</code>, not <code>RecomputeResult</code>;
+    it also grew an <code>existingWatchedFiles</code> field &mdash; the
+    <code>QFileInfo::exists</code> filter for <code>addPaths</code>
+    runs on the worker so the apply stays free of file I/O (the design
+    point serving the no-main-thread-I/O gate).
+    The stale-flag union rides a
+    <code>m_staleRaisedSinceSnapshot</code> set cleared at snapshot
+    time and unioned at apply; the solve chains behind the apply via
+    a sticky <code>m_solveOnScanApply</code> request OR a
+    declination-flag map change. Rename refresh is
+    <code>rebuildAttachedRowsFromNames</code> (synchronous, cached
+    counts). <code>waitToFinish()</code> drains scan-then-solve;
+    cwRootData now sets the future-manager token before
+    <code>setRegion</code> so the initial scan registers.
+    <code>updateFromSource</code>'s one-shot source scan stays on the
+    main thread (user-triggered, once per click) &mdash; only the
+    recompute moved off-thread, per the gates.
+  </li>
+  <li>
+    <strong><code>cwExternalCenterlineManager</code> extraction
+    (decided after commit 8; do before commit 9).</strong> Pull the
+    external-centerline subsystem out of <code>cwLinePlotManager</code>
+    into a self-contained object the manager consumes.
+    <em>Why now:</em> the manager carries two full subsystems (two
+    <code>Restarter</code>s is the tell), and commit 9 piles the
+    cwRootData wrapper, the per-owner <em>operation</em> token
+    (<code>isOwnerBusy</code>, &sect;6 "QML entry point" decision), and
+    the detach wiring onto this same state &mdash; extracting first
+    means commit 9 binds to the right API instead of a facade.
+    <em>What moves:</em> the <code>QFileSystemWatcher</code> + watch
+    set + <code>sourceOwnerForPath</code> routing, the scan
+    restarter and all three pipeline stages, stale/missing owner
+    lists + since-snapshot union set, <code>fileOwnsDeclination</code>,
+    attachment-dir ownership (single source of truth; the manager
+    reads them via getter for <code>buildInput</code>), the
+    attached-centerlines model + cached rows + rename rebuild, and
+    <code>updateFromSource</code> + in-flight tokens (which
+    generalize to the operation token here at commit 9).
+    <em>What stays:</em> the solve restarter,
+    <code>publishResults</code>/<code>updateLinePlot</code>,
+    <code>driverSource</code> (solve output), keyword items.
+    <em>Coupling contract:</em> getters for
+    <code>fileOwnsDeclination</code>/dirs; a <code>solveNeeded()</code>
+    signal emitted <em>after</em> the apply's member swap (preserving
+    the commit-8 ordering guarantee that a solve never reads
+    half-applied flags); one <code>markSolved</code> call from the
+    manager's solve-success path; the manager's
+    <code>waitToFinish()</code> keeps draining scan-then-solve through
+    the new object so the test idiom survives. cwRootData exposes the
+    object directly (CavernOutputPage binds to it; no delegating
+    Q_PROPERTYs on the manager). The rename rebuild needs its own
+    <code>nameChanged</code> wiring (own signaler or forwarded).
+    <em>Gates:</em> pure refactor &mdash; the
+    <code>[Attach*]</code>/<code>[AsyncScan]</code>/<code>[AttachedCenterlinesModel]</code>
+    suites stay green with mechanical churn only (scan-only tests may
+    construct the new object directly and get simpler); no behavior
+    change.
   </li>
   <li>
     <strong><code>CavernOutputPage</code> extension + DataMainPage
@@ -1284,7 +1368,11 @@ public:
     <code>FileMenu.qml:210</code> already navigate to it. This commit
     grows the page with three new sections (missing-source banner,
     attached-centerlines list, driver-source disclosure &mdash; all
-    above the existing TabBar), updates
+    above the existing TabBar; the banner and list bind to
+    <code>cwExternalCenterlineManager</code>, extracted in the prior
+    commit and exposed on cwRootData &mdash; only the disclosure's
+    <code>driverSource</code> and the Solve wiring stay on
+    <code>LinePlotManager</code>), updates
     <code>DataMainPage.qml</code>'s existing LinkText to show live
     cavern stats, and binds the existing FileMenu Survex/Compass export
     items to <code>cwSurveyExportManager::canExport</code> /
@@ -1538,7 +1626,7 @@ public:
     <code>setRegion</code>, no watcher event required.</li>
 </ul>
 
-<h3>Commit 8 &mdash; async recompute pipeline</h3>
+<h3>Commit 8 &mdash; async recompute pipeline <em>(landed)</em></h3>
 <p><strong>New tag:</strong> <code>[LinePlotManager][AsyncScan]</code></p>
 <ul>
   <li>Attach an owner &rarr; <code>watchedFiles()</code> and the
@@ -1562,13 +1650,28 @@ public:
     full recompute.</li>
   <li>Burst-coalescing: touch several files in the closure in quick
     succession &rarr; one rescan (observable as a single
-    watch-set/solve update, Restarter-style), not one per event.</li>
+    watch-set/solve update, Restarter-style), not one per event.
+    <em>Coverage note (commit-8 review):</em> the shipped test drives a
+    <em>setter</em> burst, which exercises same-turn queued-start
+    coalescing; the gate's literal watcher-event scenario — events
+    spread across a worker window, coalesced by the Restarter's
+    cancel-restart supersession — has no test. The mechanism is shared,
+    but a file-touch-burst test under
+    <code>[LinePlotManager][AsyncScan]</code> is still owed; the hard
+    part is observing "one rescan" without test-only scaffolding
+    (content edits don't change the watch set, so
+    <code>watchedFilesChanged</code> can't count scans).</li>
   <li>Owner detached (or region destroyed) while a scan is in flight
     &rarr; no crash, stale result dropped
     (<code>AsyncFuture</code> context auto-disconnect).</li>
   <li>No <code>waitForFinished</code> in the production path; the
     main thread performs no file I/O during recompute (owner-list
-    gathering only).</li>
+    gathering only). The existence filter for <code>addPaths</code>
+    runs on the worker (<code>existingWatchedFiles</code>); watcher
+    <em>arming</em> (<code>removePaths</code>/<code>addPaths</code> at
+    apply, and <code>rearmWatcher</code> on the event fast path) still
+    performs syscalls on the main thread — inherent to
+    QFileSystemWatcher and outside this gate's scope.</li>
 </ul>
 
 <h3>Commit 9 &mdash; CavernOutputPage extension + DataMainPage summary text + FileMenu export-disable wire-up</h3>

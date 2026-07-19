@@ -34,6 +34,7 @@
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
 #include "cwLinePlotTripVisibility.h"
+#include "cwConcurrent.h"
 #include "asyncfuture.h"
 
 #include <QDateTime>
@@ -44,6 +45,7 @@
 #include <QSet>
 
 //Std includes
+#include <algorithm>
 #include <tuple>
 
 namespace {
@@ -58,6 +60,23 @@ struct ResolvedResults {
     QSet<cwTrip*> trips;
     QSet<cwScrap*> scraps;
 };
+
+// Deterministic presentation order: cave display name, then trip
+// display name (cave-level owners sort ahead of their trips via the
+// empty trip key), with ownerId as a stable tiebreak for duplicates.
+void sortAttachedRows(QVector<cwAttachedCenterlinesModel::Row>& rows)
+{
+    std::stable_sort(rows.begin(), rows.end(),
+                     [](const cwAttachedCenterlinesModel::Row& left,
+                        const cwAttachedCenterlinesModel::Row& right) {
+        const QString leftTripKey = left.ownerKind == QStringLiteral("Cave")
+            ? QString() : left.ownerName;
+        const QString rightTripKey = right.ownerKind == QStringLiteral("Cave")
+            ? QString() : right.ownerName;
+        return std::tie(left.caveName, leftTripKey, left.ownerId)
+             < std::tie(right.caveName, rightTripKey, right.ownerId);
+    });
+}
 
 ResolvedResults resolveResultsToLive(const cwCavingRegion* region,
                                      const cwLinePlotTask::LinePlotResultData& results)
@@ -93,7 +112,8 @@ ResolvedResults resolveResultsToLive(const cwCavingRegion* region,
 
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     QObject(parent),
-    m_restarter(this)
+    m_restarter(this),
+    m_scanRestarter(this)
 {
     Region = nullptr;
     m_linePlot = nullptr;
@@ -120,6 +140,11 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     SurveySignaler->addConnectionToTrips(SIGNAL(chunksInserted(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToTrips(SIGNAL(chunksRemoved(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToTrips(SIGNAL(nameChanged()), this, SLOT(runSurvex()));
+
+    // Renames re-sort the attached-centerlines rows immediately from
+    // cached scan counts — no disk I/O, no waiting for a full recompute.
+    SurveySignaler->addConnectionToCaves(SIGNAL(nameChanged()), this, SLOT(rebuildAttachedRowsFromNames()));
+    SurveySignaler->addConnectionToTrips(SIGNAL(nameChanged()), this, SLOT(rebuildAttachedRowsFromNames()));
     SurveySignaler->addConnectionToTripCalibrations(SIGNAL(calibrationsChanged()), this, SLOT(runSurvex()));
 
     SurveySignaler->addConnectionToChunks(SIGNAL(shotsAdded(int,int)), this, SLOT(runSurvex()));
@@ -133,9 +158,18 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
             m_futureManagerToken.addJob({ QFuture<void>(m_restarter.future()), QStringLiteral("Line plot") });
         }
     });
+
+    // Same idiom as the solve: registering the scan with the future
+    // manager lets tests drain it via futureManagerModel()->waitForFinished().
+    m_scanRestarter.onFutureChanged([this]() {
+        if (m_futureManagerToken.isValid()) {
+            m_futureManagerToken.addJob({ QFuture<void>(m_scanRestarter.future()), QStringLiteral("External centerline scan") });
+        }
+    });
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
+    m_scanRestarter.future().cancel();
     m_restarter.future().cancel();
     waitToFinish();
 
@@ -193,7 +227,14 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     // nullptr (publishPerCaveErrors no-ops without a Region).
     publishResults(cwLinePlotTask::LinePlotResultData());
 
-    if(Region == nullptr) { return; }
+    if(Region == nullptr) {
+        // Supersede any scan still in flight for the previous region —
+        // its apply would otherwise reinstall that region's watch set and
+        // model rows. The null-region snapshot produces an empty result,
+        // clearing both.
+        recomputeWatchSetAndProbeSources();
+        return;
+    }
 
     //Connect all signal from the region
     connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(runSurvex()));
@@ -225,12 +266,13 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
 
     // Recompute the external-centerline watch set + missing-source probe.
     // Done after the per-cave/trip connects so any subsequent attach/detach
-    // signal recompute lands on a populated region.
-    recomputeWatchSetAndProbeSources();
-
-    if(Region->hasCaves()) {
-        runSurvex();
+    // signal recompute lands on a populated region. The initial solve
+    // chains behind the scan's apply — buildInput reads
+    // m_fileOwnsDeclination, so it must not race the worker.
+    if (Region->hasCaves()) {
+        m_solveOnScanApply = true;
     }
+    recomputeWatchSetAndProbeSources();
 
     updateLinePlot(cwLinePlotTask::LinePlotResultData());
 }
@@ -399,6 +441,11 @@ void cwLinePlotManager::clearTripKeywordEntries()
  */
 void cwLinePlotManager::waitToFinish()
 {
+    // The scan's apply continuation can chain into a solve (and a solve
+    // never chains back into a scan), so draining scan-then-solve settles
+    // both pipelines. waitForFinished pumps queued continuations before
+    // returning, which is what lets the apply's runSurvex land in between.
+    AsyncFuture::waitForFinished(m_scanRestarter.future());
     AsyncFuture::waitForFinished(m_restarter.future());
 }
 
@@ -721,183 +768,265 @@ void cwLinePlotManager::setAutomaticUpdate(bool automaticUpdate) {
 
 void cwLinePlotManager::recomputeWatchSetAndProbeSources()
 {
-    QStringList newWatchedFiles;
-    QHash<QString, QUuid> newSourceOwnerForPath;
-    QList<QUuid> newMissingSourceOwners;
-    QList<QUuid> newStaleSourceOwners;
-    QHash<QUuid, bool> newFileOwnsDeclination;
-    QVector<cwAttachedCenterlinesModel::Row> newRows;
+    m_scanRestarter.restart([this]() {
+        // Stage 1 (main thread, no I/O): snapshot the per-owner value
+        // inputs. Clearing the since-snapshot set here — not at restart
+        // time — matters: the restarter defers this lambda through the
+        // event loop, and "since the snapshot" means since this instant.
+        m_staleRaisedSinceSnapshot.clear();
+        const QVector<OwnerScanInput> owners = collectOwnerSnapshots();
 
-    if (Region != nullptr) {
-        // Per-owner scan: project-side (in-project copy) and source-side
-        // (live-link). Both feed the same watch set; the source-side
-        // mapping survives separately so onWatchedFileChanged can route
-        // to the stale flag. Each owner also contributes one row to the
-        // attached-centerlines model, counted from the project-side scan
-        // when it resolves (the solve *includes the in-project bytes) and
-        // the source-side scan otherwise.
-        const auto handleOwner = [&](const QUuid& ownerId,
-                                     const QString& attachmentDir,
-                                     const QString& entryFile,
-                                     const QString& caveName,
-                                     const QString& ownerName,
-                                     const QString& ownerKind) {
-            if (entryFile.isEmpty()) {
-                return;
-            }
-            cwAttachedCenterlinesModel::Row row;
-            row.ownerId = ownerId;
-            row.caveName = caveName;
-            row.ownerName = ownerName;
-            row.ownerKind = ownerKind;
-            row.entryFile = entryFile;
-            bool rowCounted = false;
+        // Stage 2 (worker thread): every scan and freshness probe. The
+        // scanner and planner are stateless; `owners` crosses by value.
+        auto future = cwConcurrent::run([owners]() {
+            return scanOwners(owners);
+        });
 
-            if (!attachmentDir.isEmpty()) {
-                const QString projectEntry = QDir(attachmentDir).filePath(entryFile);
-                if (QFileInfo::exists(projectEntry)) {
-                    const auto scan = cwExternalCenterlineScanner::scan(projectEntry);
-                    if (!scan.hasError()) {
-                        for (const QString& dep : scan.value().dependencies) {
-                            newWatchedFiles.append(dep);
-                        }
-                        newFileOwnsDeclination.insert(
-                            ownerId, scan.value().seededMetadata.fileOwnsDeclination());
-                        row.depCount = scan.value().dependencies.size();
-                        row.warningCount = scan.value().warnings.size();
-                        rowCounted = true;
-                    }
-                }
-            }
-            const QString sourcePath = sourcePathForOwner(ownerId);
-            if (!sourcePath.isEmpty()) {
-                if (!QFileInfo::exists(sourcePath)) {
-                    newMissingSourceOwners.append(ownerId);
-                } else {
-                    const auto scan = cwExternalCenterlineScanner::scan(sourcePath);
-                    if (!scan.hasError()) {
-                        for (const QString& dep : scan.value().dependencies) {
-                            newWatchedFiles.append(dep);
-                            // First owner wins; collisions between two
-                            // live-link owners pointing at the same source
-                            // tree are not a v1 use case.
-                            if (!newSourceOwnerForPath.contains(dep)) {
-                                newSourceOwnerForPath.insert(dep, ownerId);
-                            }
-                        }
-                        // The project-side flag wins when both scans resolve:
-                        // the solve *includes the in-project copy, so its scan
-                        // describes the bytes actually exported. The source
-                        // scan only fills in when no project entry exists yet;
-                        // once reconcile copies the source over, the next
-                        // recompute converges the flag to the new bytes.
-                        if (!newFileOwnsDeclination.contains(ownerId)) {
-                            newFileOwnsDeclination.insert(
-                                ownerId, scan.value().seededMetadata.fileOwnsDeclination());
-                        }
-                        if (!rowCounted) {
-                            row.depCount = scan.value().dependencies.size();
-                            row.warningCount = scan.value().warnings.size();
-                        }
-                        // Open-time / recompute freshness probe: a pending
-                        // copy in the reconcile plan means the source has
-                        // drifted from the in-project bytes. computePlan
-                        // only reads the filesystem, so the probe is free
-                        // of side effects (Phase 2 direction change).
-                        if (!attachmentDir.isEmpty()
-                            && !cwExternalCenterlineSync::computePlan(
-                                    scan.value(), attachmentDir).copies.isEmpty()) {
-                            newStaleSourceOwners.append(ownerId);
-                        }
-                    }
-                }
-            }
-            newRows.append(row);
-        };
+        // Stage 3 (main thread): install the result wholesale. A result
+        // superseded by a newer restart never lands (the restarter
+        // cancels this future), and a result outliving the manager is
+        // dropped by the context auto-disconnect.
+        AsyncFuture::observe(future).context(this, [this](ExternalScanResult result) {
+            applyScanResult(std::move(result));
+        });
 
-        for (cwCave* cave : Region->caves()) {
-            if (!cave->externalCenterline().isEmpty()) {
-                handleOwner(cave->id(),
-                            m_caveAttachmentDirs.value(cave->id()),
-                            cave->externalCenterline().entryFile(),
+        return future;
+    });
+}
+
+QVector<cwLinePlotManager::OwnerScanInput> cwLinePlotManager::collectOwnerSnapshots() const
+{
+    QVector<OwnerScanInput> owners;
+    if (Region.isNull()) {
+        return owners;
+    }
+
+    const auto appendOwner = [&](const QUuid& ownerId,
+                                 const QString& attachmentDir,
+                                 const QString& entryFile,
+                                 const QString& caveName,
+                                 const QString& ownerName,
+                                 const QString& ownerKind) {
+        if (entryFile.isEmpty()) {
+            return;
+        }
+        owners.append(OwnerScanInput { ownerId, caveName, ownerName, ownerKind,
+                                       entryFile, attachmentDir,
+                                       sourcePathForOwner(ownerId) });
+    };
+
+    for (cwCave* cave : Region->caves()) {
+        if (!cave->externalCenterline().isEmpty()) {
+            appendOwner(cave->id(),
+                        m_caveAttachmentDirs.value(cave->id()),
+                        cave->externalCenterline().entryFile(),
+                        cave->name(),
+                        cave->name(),
+                        QStringLiteral("Cave"));
+        }
+        for (cwTrip* trip : cave->trips()) {
+            if (!trip->externalCenterline().isEmpty()) {
+                appendOwner(trip->id(),
+                            m_tripAttachmentDirs.value(trip->id()),
+                            trip->externalCenterline().entryFile(),
                             cave->name(),
-                            cave->name(),
-                            QStringLiteral("Cave"));
+                            trip->name(),
+                            QStringLiteral("Trip"));
             }
-            for (cwTrip* trip : cave->trips()) {
-                if (!trip->externalCenterline().isEmpty()) {
-                    handleOwner(trip->id(),
-                                m_tripAttachmentDirs.value(trip->id()),
-                                trip->externalCenterline().entryFile(),
-                                cave->name(),
-                                trip->name(),
-                                QStringLiteral("Trip"));
+        }
+    }
+    return owners;
+}
+
+cwAttachedCenterlinesModel::Row cwLinePlotManager::rowFromOwner(const OwnerScanInput& owner)
+{
+    cwAttachedCenterlinesModel::Row row;
+    row.ownerId = owner.ownerId;
+    row.caveName = owner.caveName;
+    row.ownerName = owner.ownerName;
+    row.ownerKind = owner.ownerKind;
+    row.entryFile = owner.entryFile;
+    return row;
+}
+
+cwLinePlotManager::ExternalScanResult cwLinePlotManager::scanOwners(
+    const QVector<OwnerScanInput>& owners)
+{
+    ExternalScanResult result;
+
+    // Per-owner scan: project-side (in-project copy) and source-side
+    // (live-link). Both feed the same watch set; the source-side
+    // mapping survives separately so onWatchedFileChanged can route
+    // to the stale flag. Each owner also contributes one row to the
+    // attached-centerlines model, counted from the project-side scan
+    // when it resolves (the solve *includes the in-project bytes) and
+    // the source-side scan otherwise.
+    for (const OwnerScanInput& owner : owners) {
+        cwAttachedCenterlinesModel::Row row = rowFromOwner(owner);
+        bool rowCounted = false;
+
+        if (!owner.attachmentDir.isEmpty()) {
+            const QString projectEntry = QDir(owner.attachmentDir).filePath(owner.entryFile);
+            if (QFileInfo::exists(projectEntry)) {
+                const auto scan = cwExternalCenterlineScanner::scan(projectEntry);
+                if (!scan.hasError()) {
+                    for (const QString& dep : scan.value().dependencies) {
+                        result.watchedFiles.append(dep);
+                    }
+                    result.fileOwnsDeclination.insert(
+                        owner.ownerId, scan.value().seededMetadata.fileOwnsDeclination());
+                    row.depCount = scan.value().dependencies.size();
+                    row.warningCount = scan.value().warnings.size();
+                    rowCounted = true;
                 }
             }
         }
+        if (!owner.sourcePath.isEmpty()) {
+            if (!QFileInfo::exists(owner.sourcePath)) {
+                result.missingSourceOwners.append(owner.ownerId);
+            } else {
+                const auto scan = cwExternalCenterlineScanner::scan(owner.sourcePath);
+                if (!scan.hasError()) {
+                    for (const QString& dep : scan.value().dependencies) {
+                        result.watchedFiles.append(dep);
+                        // First owner wins; collisions between two
+                        // live-link owners pointing at the same source
+                        // tree are not a v1 use case.
+                        if (!result.sourceOwnerForPath.contains(dep)) {
+                            result.sourceOwnerForPath.insert(dep, owner.ownerId);
+                        }
+                    }
+                    // The project-side flag wins when both scans resolve:
+                    // the solve *includes the in-project copy, so its scan
+                    // describes the bytes actually exported. The source
+                    // scan only fills in when no project entry exists yet;
+                    // once reconcile copies the source over, the next
+                    // recompute converges the flag to the new bytes.
+                    if (!result.fileOwnsDeclination.contains(owner.ownerId)) {
+                        result.fileOwnsDeclination.insert(
+                            owner.ownerId, scan.value().seededMetadata.fileOwnsDeclination());
+                    }
+                    if (!rowCounted) {
+                        row.depCount = scan.value().dependencies.size();
+                        row.warningCount = scan.value().warnings.size();
+                    }
+                    // Open-time / recompute freshness probe: a pending
+                    // copy in the reconcile plan means the source has
+                    // drifted from the in-project bytes. computePlan
+                    // only reads the filesystem, so the probe is free
+                    // of side effects (Phase 2 direction change).
+                    if (!owner.attachmentDir.isEmpty()
+                        && !cwExternalCenterlineSync::computePlan(
+                                scan.value(), owner.attachmentDir).copies.isEmpty()) {
+                        result.staleSourceOwners.append(owner.ownerId);
+                    }
+                }
+            }
+        }
+        result.rows.append(row);
     }
 
     // Stable order so equality comparisons against m_watchedFiles are
     // deterministic, and the StringList tests can compare by index.
-    const QSet<QString> dedup(newWatchedFiles.cbegin(), newWatchedFiles.cend());
-    newWatchedFiles = QStringList(dedup.cbegin(), dedup.cend());
-    std::sort(newWatchedFiles.begin(), newWatchedFiles.end());
-    std::sort(newMissingSourceOwners.begin(), newMissingSourceOwners.end());
-    std::sort(newStaleSourceOwners.begin(), newStaleSourceOwners.end());
+    const QSet<QString> dedup(result.watchedFiles.cbegin(), result.watchedFiles.cend());
+    result.watchedFiles = QStringList(dedup.cbegin(), dedup.cend());
+    std::sort(result.watchedFiles.begin(), result.watchedFiles.end());
+    result.existingWatchedFiles.reserve(result.watchedFiles.size());
+    for (const QString& path : std::as_const(result.watchedFiles)) {
+        if (QFileInfo::exists(path)) {
+            result.existingWatchedFiles.append(path);
+        }
+    }
+    std::sort(result.missingSourceOwners.begin(), result.missingSourceOwners.end());
+    std::sort(result.staleSourceOwners.begin(), result.staleSourceOwners.end());
+    sortAttachedRows(result.rows);
 
-    // Deterministic presentation order: cave display name, then trip
-    // display name (cave-level owners sort ahead of their trips via the
-    // empty trip key), with ownerId as a stable tiebreak for duplicates.
-    std::stable_sort(newRows.begin(), newRows.end(),
-                     [](const cwAttachedCenterlinesModel::Row& left,
-                        const cwAttachedCenterlinesModel::Row& right) {
-        const QString leftTripKey = left.ownerKind == QStringLiteral("Cave")
-            ? QString() : left.ownerName;
-        const QString rightTripKey = right.ownerKind == QStringLiteral("Cave")
-            ? QString() : right.ownerName;
-        return std::tie(left.caveName, leftTripKey, left.ownerId)
-             < std::tie(right.caveName, rightTripKey, right.ownerId);
-    });
+    return result;
+}
 
-    if (newWatchedFiles != m_watchedFiles) {
+void cwLinePlotManager::applyScanResult(ExternalScanResult result)
+{
+    // Commit-8 merge policy: a watcher event that fired after the
+    // snapshot raised a flag the probe was computed without — union it
+    // back in rather than letting the wholesale rebuild wipe it.
+    for (const QUuid& ownerId : std::as_const(m_staleRaisedSinceSnapshot)) {
+        if (!result.staleSourceOwners.contains(ownerId)) {
+            result.staleSourceOwners.append(ownerId);
+        }
+    }
+    std::sort(result.staleSourceOwners.begin(), result.staleSourceOwners.end());
+
+    if (result.watchedFiles != m_watchedFiles) {
         // Wholesale-replace the watcher's table from our intent set. Files
         // that don't exist on disk are kept in m_watchedFiles (so a later
         // recompute can pick them up if they appear) but skipped on the
         // addPaths call - QFileSystemWatcher emits a warning otherwise.
+        // The existence filter ran on the worker so the apply stays free
+        // of file I/O.
         const QStringList currentlyWatched = m_watcher->files();
         if (!currentlyWatched.isEmpty()) {
             m_watcher->removePaths(currentlyWatched);
         }
-        QStringList toAdd;
-        toAdd.reserve(newWatchedFiles.size());
-        for (const QString& p : newWatchedFiles) {
-            if (QFileInfo::exists(p)) {
-                toAdd.append(p);
-            }
+        if (!result.existingWatchedFiles.isEmpty()) {
+            m_watcher->addPaths(result.existingWatchedFiles);
         }
-        if (!toAdd.isEmpty()) {
-            m_watcher->addPaths(toAdd);
-        }
-        m_watchedFiles = std::move(newWatchedFiles);
-        m_sourceOwnerForPath = std::move(newSourceOwnerForPath);
+        m_watchedFiles = std::move(result.watchedFiles);
+        m_sourceOwnerForPath = std::move(result.sourceOwnerForPath);
         emit watchedFilesChanged();
     } else {
         // Union unchanged but per-owner source mapping may have shifted.
-        m_sourceOwnerForPath = std::move(newSourceOwnerForPath);
+        m_sourceOwnerForPath = std::move(result.sourceOwnerForPath);
     }
 
-    if (newMissingSourceOwners != m_missingSourceOwners) {
-        m_missingSourceOwners = std::move(newMissingSourceOwners);
+    if (result.missingSourceOwners != m_missingSourceOwners) {
+        m_missingSourceOwners = std::move(result.missingSourceOwners);
         emit missingSourceOwnersChanged();
     }
 
-    if (newStaleSourceOwners != m_staleSourceOwners) {
-        m_staleSourceOwners = std::move(newStaleSourceOwners);
+    if (result.staleSourceOwners != m_staleSourceOwners) {
+        m_staleSourceOwners = std::move(result.staleSourceOwners);
         emit staleSourceOwnersChanged();
     }
 
-    m_fileOwnsDeclination = std::move(newFileOwnsDeclination);
-    m_attachedCenterlinesModel->setRows(std::move(newRows));
+    // Chain the solve behind the flag swap so buildInput never reads
+    // half-applied declination state; an owner entering or leaving the
+    // map is a change too (its *include just appeared or vanished).
+    const bool solveNow = m_solveOnScanApply
+        || result.fileOwnsDeclination != m_fileOwnsDeclination;
+    m_solveOnScanApply = false;
+    m_fileOwnsDeclination = std::move(result.fileOwnsDeclination);
+
+    m_lastScanRows = result.rows;
+    m_attachedCenterlinesModel->setRows(std::move(result.rows));
+
+    if (solveNow) {
+        runSurvex();
+    }
+}
+
+void cwLinePlotManager::rebuildAttachedRowsFromNames()
+{
+    QVector<cwAttachedCenterlinesModel::Row> rows;
+    const QVector<OwnerScanInput> owners = collectOwnerSnapshots();
+    rows.reserve(owners.size());
+    for (const OwnerScanInput& owner : owners) {
+        cwAttachedCenterlinesModel::Row row = rowFromOwner(owner);
+        // Counts come from the last scan; an owner attached since then
+        // shows zeros until its scan applies. lastSolved is carried by
+        // the model itself.
+        const auto cached = std::find_if(m_lastScanRows.cbegin(), m_lastScanRows.cend(),
+                                         [&owner](const cwAttachedCenterlinesModel::Row& candidate) {
+            return candidate.ownerId == owner.ownerId;
+        });
+        if (cached != m_lastScanRows.cend()) {
+            row.depCount = cached->depCount;
+            row.warningCount = cached->warningCount;
+        }
+        rows.append(row);
+    }
+    sortAttachedRows(rows);
+    m_lastScanRows = rows;
+    m_attachedCenterlinesModel->setRows(std::move(rows));
 }
 
 QString cwLinePlotManager::sourcePathForOwner(const QUuid& ownerId) const
@@ -935,8 +1064,11 @@ void cwLinePlotManager::onWatchedFileChanged(const QString& path)
         // Direction change (see the header comment on
         // setExternalSourceSettings): a source-side edit only flags the
         // owner stale. It never touches the filesystem or re-solves —
-        // the user triggers the reconcile via updateFromSource.
+        // the user triggers the reconcile via updateFromSource. Also
+        // record it for the apply-time union: a scan in flight probed
+        // the disk before this edit and must not clear the flag.
         const QUuid ownerId = sourceIt.value();
+        m_staleRaisedSinceSnapshot.insert(ownerId);
         if (!m_staleSourceOwners.contains(ownerId)) {
             m_staleSourceOwners.append(ownerId);
             std::sort(m_staleSourceOwners.begin(), m_staleSourceOwners.end());
@@ -945,11 +1077,12 @@ void cwLinePlotManager::onWatchedFileChanged(const QString& path)
         return;
     }
 
-    // Project-side change: straight rerun. Also recompute the dep set in
-    // case the edit added or removed an *include that needs to
-    // enter/leave the watch set.
+    // Project-side change: recompute the dep set in case the edit added
+    // or removed an *include that needs to enter/leave the watch set,
+    // with the rerun chained behind the apply so the solve sees the
+    // fresh declination flags.
+    m_solveOnScanApply = true;
     recomputeWatchSetAndProbeSources();
-    runSurvex();
 }
 
 void cwLinePlotManager::updateFromSource(const QUuid& ownerId)
@@ -990,8 +1123,8 @@ void cwLinePlotManager::updateFromSource(const QUuid& ownerId)
     AsyncFuture::observe(future).context(this,
             [this, ownerId](Monad::ResultBase) {
         m_updateInFlightOwners.remove(ownerId);
+        m_solveOnScanApply = true;
         recomputeWatchSetAndProbeSources();
-        runSurvex();
     },
             [this, ownerId]() {
         m_updateInFlightOwners.remove(ownerId);

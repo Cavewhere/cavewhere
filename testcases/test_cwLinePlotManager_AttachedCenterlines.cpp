@@ -21,6 +21,7 @@
 #include "cwTrip.h"
 
 // Test helpers
+#include "ExternalCenterlineTestHelpers.h"
 #include "LoadProjectHelper.h"
 
 // Qt
@@ -36,56 +37,6 @@
 
 namespace {
 
-QString fixturePath(const QString& name)
-{
-    return testcasesDatasetSourcePath(QStringLiteral("external-centerlines/%1").arg(name));
-}
-
-QString tempSubdir(const QTemporaryDir& root, const QString& name)
-{
-    const QDir baseDir(root.path());
-    REQUIRE(baseDir.mkpath(name));
-    return baseDir.absoluteFilePath(name);
-}
-
-// Copies `source` to <attachDir>/<basename(source)> so the worker's
-// *include path resolves at solve time. Returns the attachment dir.
-QString seedAttachment(const QString& attachDir, const QString& source)
-{
-    const QString basename = QFileInfo(source).fileName();
-    const QString dest = QDir(attachDir).absoluteFilePath(basename);
-    REQUIRE_FALSE(source.isEmpty());
-    REQUIRE(QFile::exists(source));
-    if (QFile::exists(dest)) {
-        QFile::remove(dest);
-    }
-    REQUIRE(QFile::copy(source, dest));
-    return attachDir;
-}
-
-cwCave* addEmptyCave(cwCavingRegion& region, const QString& name)
-{
-    cwCave* cave = new cwCave();
-    cave->setName(name);
-    region.addCave(cave);
-    return cave;
-}
-
-cwTrip* addEmptyTrip(cwCave* cave, const QString& name)
-{
-    cwTrip* trip = new cwTrip();
-    trip->setName(name);
-    cave->addTrip(trip);
-    return trip;
-}
-
-cwTrip* addAttachedTrip(cwCave* cave, const QString& name)
-{
-    cwTrip* trip = addEmptyTrip(cave, name);
-    trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_simple.svx")));
-    return trip;
-}
-
 cwTrip* addTripWithShot(cwCave* cave, const QString& name)
 {
     cwTrip* trip = addEmptyTrip(cave, name);
@@ -97,11 +48,6 @@ cwTrip* addTripWithShot(cwCave* cave, const QString& name)
     shot.setClino(cwClinoReading(QStringLiteral("0.0")));
     chunk->appendShot(cwStation(QStringLiteral("N1")), cwStation(QStringLiteral("N2")), shot);
     return trip;
-}
-
-QVariant roleAt(const cwAttachedCenterlinesModel* model, int row, int role)
-{
-    return model->data(model->index(row, 0), role);
 }
 
 } // namespace
@@ -135,8 +81,8 @@ TEST_CASE("Attaching one trip yields one row and an *include in the driver sourc
     QTemporaryDir tempRoot;
     REQUIRE(tempRoot.isValid());
 
-    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("one-trip")),
-                                             fixturePath(QStringLiteral("survex_simple.svx")));
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("one-trip"));
+    seedAttachment(attachDir, fixturePath(QStringLiteral("survex_simple.svx")));
 
     cwCavingRegion region;
     cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
@@ -178,10 +124,10 @@ TEST_CASE("Rows sort by cave display name then trip display name",
     QTemporaryDir tempRoot;
     REQUIRE(tempRoot.isValid());
 
-    const QString zuluDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("zulu")),
-                                           fixturePath(QStringLiteral("survex_simple.svx")));
-    const QString alphaDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("alpha")),
-                                            fixturePath(QStringLiteral("survex_simple.svx")));
+    const QString zuluDir = tempSubdir(tempRoot, QStringLiteral("zulu"));
+    seedAttachment(zuluDir, fixturePath(QStringLiteral("survex_simple.svx")));
+    const QString alphaDir = tempSubdir(tempRoot, QStringLiteral("alpha"));
+    seedAttachment(alphaDir, fixturePath(QStringLiteral("survex_simple.svx")));
 
     // Insert the later-sorting cave first so the model's order can't
     // accidentally mirror region insertion order.
@@ -216,10 +162,10 @@ TEST_CASE("Detach removes the owner's row via rowsRemoved with correct indices",
     QTemporaryDir tempRoot;
     REQUIRE(tempRoot.isValid());
 
-    const QString firstDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("first")),
-                                            fixturePath(QStringLiteral("survex_simple.svx")));
-    const QString secondDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("second")),
-                                             fixturePath(QStringLiteral("survex_simple.svx")));
+    const QString firstDir = tempSubdir(tempRoot, QStringLiteral("first"));
+    seedAttachment(firstDir, fixturePath(QStringLiteral("survex_simple.svx")));
+    const QString secondDir = tempSubdir(tempRoot, QStringLiteral("second"));
+    seedAttachment(secondDir, fixturePath(QStringLiteral("survex_simple.svx")));
 
     cwCavingRegion region;
     cwCave* cave = addEmptyCave(region, QStringLiteral("Detach"));
@@ -243,11 +189,13 @@ TEST_CASE("Detach removes the owner's row via rowsRemoved with correct indices",
     QSignalSpy resetSpy(model, &QAbstractItemModel::modelReset);
 
     // Detach "First": clear its centerline and drop its attachment-dir
-    // entry — the setter drives the recompute that rebuilds the rows.
+    // entry — the setter drives the (async) recompute that rebuilds the
+    // rows, so drain it before asserting on the model signals.
     first->setExternalCenterline(cwExternalCenterline());
     QHash<QUuid, QString> remainingDirs;
     remainingDirs.insert(second->id(), secondDir);
     manager.setTripAttachmentDirs(remainingDirs);
+    manager.waitToFinish();
 
     REQUIRE(removedSpy.count() == 1);
     CHECK(removedSpy.at(0).at(1).toInt() == 0); // first
@@ -256,6 +204,4 @@ TEST_CASE("Detach removes the owner's row via rowsRemoved with correct indices",
     REQUIRE(model->rowCount() == 1);
     CHECK(roleAt(model, 0, cwAttachedCenterlinesModel::OwnerNameRole).toString()
           == QStringLiteral("Second"));
-
-    manager.waitToFinish();
 }
