@@ -1943,13 +1943,15 @@ public:
 <h3>Commit 10 &mdash; panel sub-components</h3>
 <p><strong>New QML test:</strong>
   <code>tst_ExternalCenterlinePanelComponents.qml</code></p>
-<p><em>Before writing this test</em>, promote the duplicated
-  <code>attachFixtureTrip</code> QML helper
-  (<code>tst_CavernOutputPageExternal.qml</code> /
-  <code>tst_FileMenuExportDisable.qml</code>) into shared test
-  infrastructure rather than copying it a third time (commit-9 review
-  R3; note QML <code>verify()</code> is a TestCase method, so the
-  helper needs the TestCase passed in or a non-asserting design).</p>
+<p><em>Done (pre-commit-10 cleanup):</em> the duplicated
+  <code>attachFixtureTrip</code> helper now lives on
+  <code>test-qml/ExternalCenterlineTestCase.qml</code>, a
+  <code>CWTestCase</code> subclass (the codebase's existing shared
+  TestCase-helper pattern &mdash; helpers on a TestCase subclass have
+  <code>verify()</code>/<code>tryVerify()</code> natively). Both
+  existing external test files use it; this commit's new test file
+  should too (<code>ExternalCenterlineTestCase { ... }</code> instead
+  of <code>TestCase { ... }</code>).</p>
 <ul>
   <li><code>AttachedHeader</code>: bind to a trip with attached
     centerline &rarr; renders filename + format; remembered-source path
@@ -2172,11 +2174,10 @@ public:
   </li>
   <li>
     <strong>Shared QML attach-fixture helper.</strong>
-    <code>attachFixtureTrip</code> is duplicated verbatim between
-    <code>tst_CavernOutputPageExternal.qml</code> and
-    <code>tst_FileMenuExportDisable.qml</code>; promote it to shared
-    test infrastructure <em>before commit 10</em> copies it a third
-    time (see the note on commit 10's &sect;12 entry).
+    <em>Done (2026-07-19):</em> promoted to
+    <code>test-qml/ExternalCenterlineTestCase.qml</code> (a
+    <code>CWTestCase</code> subclass); both test files refactored to
+    use it, 8 + 4 tests green.
   </li>
   <li>
     <strong>PMF-based connection API on

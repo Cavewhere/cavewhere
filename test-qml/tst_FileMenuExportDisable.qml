@@ -10,7 +10,7 @@ import QmlTestRecorder
 MainWindowTest {
     id: rootId
 
-    TestCase {
+    ExternalCenterlineTestCase {
         name: "FileMenuExportDisable"
         when: windowShown
 
@@ -31,29 +31,6 @@ MainWindowTest {
                             && RootData.pageView.currentPageItem.objectName === "dataMainPage",
                       5000, "should land on dataMainPage")
             return RootData.pageView.currentPageItem
-        }
-
-        function attachFixtureTrip(projectBaseName) {
-            RootData.account.name = "Export Disable Test"
-            RootData.account.email = "export.disable@example.com"
-
-            RootData.region.addCave()
-            const cave = RootData.region.cave(0)
-            cave.addTrip()
-            const trip = cave.trip(0)
-
-            const tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
-            const projectPath = tmpPath + "/" + projectBaseName + ".cwproj"
-            verify(RootData.project.saveAs(projectPath), "saveAs should succeed")
-            TestHelper.waitForProjectSaveToFinish(RootData.project)
-
-            const source = TestHelper.testcasesDatasetPath(
-                "external-centerlines/survex_simple.svx")
-            RootData.attachTripCenterline(trip, source)
-            tryVerify(() => RootData.externalCenterlineManager
-                                .attachedCenterlinesModel.rowCount() > 0,
-                      10000, "attach should land a row in the attached model")
-            RootData.futureManagerModel.waitForFinished()
         }
 
         function test_nativeRegionExportsEnabled() {
