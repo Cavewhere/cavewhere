@@ -130,12 +130,15 @@ public:
     // plan. Empty when no live-link attachment is configured.
     QList<QUuid> missingSourceOwners() const { return m_missingSourceOwners; }
 
-    // Owners whose remembered source has changed since the in-project copy
-    // was last reconciled. Set by a source-side watcher event and by the
-    // recompute probe (computePlan against the attachment dir reports a
-    // pending copy); cleared when updateFromSource lands a fresh copy.
-    // Staleness is only ever surfaced — the manager never reconciles on
-    // its own (see the Phase 2 direction change).
+    // Owners whose remembered source has drifted from the in-project copy.
+    // Staleness is probe-defined: an owner is stale exactly when the
+    // reconcile plan (computePlan against the attachment dir) has pending
+    // copies, so the Update affordance never advertises a copy that would
+    // no-op. A source-side watcher event flags the owner immediately as a
+    // fast path; every recompute re-derives the list wholesale from the
+    // probe, clearing it once a fresh copy lands (normally via
+    // updateFromSource). Staleness is only ever surfaced — the manager
+    // never reconciles on its own (see the Phase 2 direction change).
     QList<QUuid> staleSourceOwners() const { return m_staleSourceOwners; }
 
     // User-triggered "Update" for a stale live-link owner: rescans the

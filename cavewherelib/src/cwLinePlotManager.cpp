@@ -972,8 +972,8 @@ void cwLinePlotManager::updateFromSource(const QUuid& ownerId)
     }
     const auto scan = cwExternalCenterlineScanner::scan(sourcePath);
     if (scan.hasError()) {
-        // Unreadable source: leave the stale flag up so the affordance
-        // stays visible; nothing sensible to reconcile.
+        // Unreadable source: nothing sensible to reconcile. The stale
+        // flag is probe-owned — the next recompute re-derives it.
         return;
     }
     m_updateInFlightOwners.insert(ownerId);

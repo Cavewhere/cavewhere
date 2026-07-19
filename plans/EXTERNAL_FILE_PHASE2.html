@@ -1238,7 +1238,16 @@ public:
     half-applied flags. The watcher fast path stays synchronous:
     flagging <code>staleSourceOwners</code> on a source-side event is
     pure list manipulation and needs no I/O; the async probe
-    confirms or clears it on the next apply. <strong>Rename
+    confirms or clears it on the next apply. <strong>Stale-flag merge
+    policy at apply time:</strong> a watcher event that fires between
+    snapshot and apply raises a flag the probe result was computed
+    without &mdash; the apply must union the probe-derived stale list
+    with watcher flags raised after the snapshot was taken (never
+    overwrite wholesale), else the async move turns the synchronous
+    flag-clearing edge case (a recompute wiping a watcher-raised flag
+    the probe can't confirm, found at the commit-7 review) into a
+    routine race. Gate it: edit a source while a recompute is in flight
+    &rarr; the owner reads stale after the apply lands. <strong>Rename
     refresh:</strong> connect cave/trip <code>nameChanged</code> to a
     cheap rows-only rebuild (fresh names + cached per-owner scan
     counts, zero disk I/O) so the model's names and sort order no
