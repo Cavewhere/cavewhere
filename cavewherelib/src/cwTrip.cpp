@@ -497,6 +497,12 @@ void cwTrip::setParentCave(cwCave* parentCave) {
     }
 }
 
+cwUnits::UnitSystem cwTrip::unitSystem() const
+{
+    const cwCave* cave = parentCave();
+    return cave ? cave->unitSystem() : cwUnits::Metric;
+}
+
 void cwTrip::updateKeywordMetadata()
 {
     if(!KeywordModel) {

@@ -30,6 +30,15 @@ QQ.Item {
                                               !(scaleObject.scaleDenominator.unit === Units.Unitless &&
                                                 scaleObject.scaleNumerator.unit === Units.Unitless)
 
+    // Fallback units when no scaleObject is bound yet, matching the project's
+    // paper/cave unit pairing (Imperial → in / ft, Metric → cm / m). A bound
+    // scrap scale shows its own stored units (seeded by cwScrap::seedDefaultScale);
+    // these only surface for an unbound input, mirroring ScaleInput.qml.
+    readonly property int onPaperDefaultUnit: ProjectUnits.unitSystem === Units.Imperial
+        ? Units.Inches : Units.Centimeters
+    readonly property int inCaveDefaultUnit: ProjectUnits.unitSystem === Units.Imperial
+        ? Units.Feet : Units.Meters
+
     signal scaleInteractionActivated()
 
     implicitHeight: childrenRect.height
@@ -66,7 +75,7 @@ QQ.Item {
                     unitValue: null
                     valueVisible: false
                     valueReadOnly: scaleInput.autoScaling
-                    defaultUnit: Units.LengthUnitless
+                    defaultUnit: scaleInput.onPaperDefaultUnit
                     Layout.alignment: Qt.AlignHCenter
                 }
             }
@@ -84,7 +93,7 @@ QQ.Item {
                     unitValue: null
                     valueVisible: false
                     valueReadOnly: scaleInput.autoScaling
-                    defaultUnit: Units.LengthUnitless
+                    defaultUnit: scaleInput.inCaveDefaultUnit
                     Layout.alignment: Qt.AlignHCenter
                 }
             }

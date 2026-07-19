@@ -40,6 +40,12 @@ void cwBaseScrapInteraction::addScrap() {
         //Used the previous note transform
         scrap()->setCalculateNoteTransform(false);
         scrap()->noteTransformation()->setData(transform->data());
+    } else {
+        // No previous transform to inherit: seed the auto-scaled scale's display
+        // units from the project unit system (cwNote::unitSystem() resolves the
+        // region, Metric fallback) so it reads in the project's paper/cave units
+        // (cm/m or in/ft) instead of raw inches.
+        scrap()->seedDefaultScale(note() ? note()->unitSystem() : cwUnits::Metric);
     }
 
     note()->addScrap(scrap());
