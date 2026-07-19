@@ -1249,6 +1249,7 @@ void cwProject::newProject() {
     //Create a new save and load
     m_saveLoad = new cwSaveLoad(this);
     connectSaveLoad(m_saveLoad);
+    emit saveLoadChanged();
     m_saveLoad->newProject();
     setSqliteTemporaryProject(false);
     LoadedFromBundledArchive = false;

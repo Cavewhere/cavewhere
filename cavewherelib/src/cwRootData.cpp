@@ -120,6 +120,12 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager->setRegion(Region);
     LinePlotManager->setKeywordItemModel(m_keywordItemModel);
     LinePlotManager->externalCenterlineManager()->setExternalSourceSettings(m_externalSourceSettings);
+    // The attach/detach/updateFromSource operations reconcile through the
+    // project's save/load pipeline; newProject() replaces it, so track it.
+    LinePlotManager->externalCenterlineManager()->setSaveLoad(Project->saveLoad());
+    connect(Project, &cwProject::saveLoadChanged, this, [this]() {
+        LinePlotManager->externalCenterlineManager()->setSaveLoad(Project->saveLoad());
+    });
 
     //Setup the scrap manager
     ScrapManager = new cwScrapManager(Project);
@@ -389,6 +395,22 @@ int cwRootData::titleBarHeight() const
 {
     Q_ASSERT(dynamic_cast<QApplication*>(QApplication::instance()) != nullptr);
     return static_cast<QApplication*>(QApplication::instance())->style()->pixelMetric(QStyle::PM_TitleBarHeight);
+}
+
+cwExternalCenterlineManager* cwRootData::externalCenterlineManager() const
+{
+    return LinePlotManager->externalCenterlineManager();
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwRootData::attachTripCenterline(cwTrip* trip, const QString& sourcePath)
+{
+    return externalCenterlineManager()->attachCenterline(trip, sourcePath);
+}
+
+QFuture<Monad::ResultBase> cwRootData::detachTripCenterline(cwTrip* trip)
+{
+    return externalCenterlineManager()->detachCenterline(trip);
 }
 
 void cwRootData::showInFolder(const QString &path) const

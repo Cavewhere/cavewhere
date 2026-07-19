@@ -178,6 +178,16 @@ public:
         // cwLinePlotManager property this populates.
         QString DriverSource;
 
+        // Wall-clock seconds for the whole pipeline (export → cavern →
+        // parse → geometry); negative when no solve ran (the default
+        // result published on setRegion / no-shots paths). The UI shows
+        // the stats suffix only for non-negative values.
+        double SolveDurationSeconds = -1.0;
+
+        // Cavern's warning tally for this run (0 when cavern failed
+        // before reporting or never ran).
+        int CavernWarningCount = 0;
+
         friend class cwLinePlotTask;
         friend struct LinePlotWorker;
     };

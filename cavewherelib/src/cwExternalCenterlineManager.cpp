@@ -11,6 +11,7 @@
 #include "cwCavingRegion.h"
 #include "cwConcurrent.h"
 #include "cwExternalCenterline.h"
+#include "cwExternalCenterlineAttach.h"
 #include "cwExternalCenterlineScanner.h"
 #include "cwExternalCenterlineSync.h"
 #include "cwSaveLoad.h"
@@ -70,6 +71,17 @@ cwExternalCenterlineManager::cwExternalCenterlineManager(QObject* parent) :
     m_signaler->addConnectionToCaves(SIGNAL(nameChanged()), this, SLOT(rebuildAttachedRowsFromNames()));
     m_signaler->addConnectionToTrips(SIGNAL(nameChanged()), this, SLOT(rebuildAttachedRowsFromNames()));
 
+    // Any attach/detach — the wrappers here, undo/redo, or protobuf load
+    // populating a trip after insertion — re-derives the watch set, dir
+    // maps, rows, and missing/stale probes. Trip-list churn matters too:
+    // a cave inserted at load (or a trip restored by undo) can carry an
+    // already-set externalCenterline that never fires the change signal
+    // post-connect.
+    m_signaler->addConnectionToCaves(SIGNAL(externalCenterlineChanged()), this, SLOT(recomputeWatchSetAndProbeSources()));
+    m_signaler->addConnectionToCaves(SIGNAL(insertedTrips(int,int)), this, SLOT(recomputeWatchSetAndProbeSources()));
+    m_signaler->addConnectionToCaves(SIGNAL(removedTrips(int,int)), this, SLOT(recomputeWatchSetAndProbeSources()));
+    m_signaler->addConnectionToTrips(SIGNAL(externalCenterlineChanged()), this, SLOT(recomputeWatchSetAndProbeSources()));
+
     // Registering the scan with the future manager lets tests drain it
     // via futureManagerModel()->waitForFinished().
     m_scanRestarter.onFutureChanged([this]() {
@@ -94,8 +106,24 @@ void cwExternalCenterlineManager::cancelScan()
 
 void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
 {
+    if (!m_region.isNull()) {
+        disconnect(m_region.data(), &cwCavingRegion::insertedCaves,
+                   this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
+        disconnect(m_region.data(), &cwCavingRegion::removedCaves,
+                   this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
+    }
     m_region = region;
     m_signaler->setRegion(region);
+    if (!m_region.isNull()) {
+        // Cave-list churn (project load, undo/redo) can bring in owners
+        // whose externalCenterline was set before the signaler connected
+        // — the per-object change signal never fires, so the list-level
+        // signal drives the recompute.
+        connect(m_region.data(), &cwCavingRegion::insertedCaves,
+                this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
+        connect(m_region.data(), &cwCavingRegion::removedCaves,
+                this, &cwExternalCenterlineManager::recomputeWatchSetAndProbeSources);
+    }
 
     if (m_region.isNull()) {
         // Supersede any scan still in flight for the previous region —
@@ -177,6 +205,7 @@ void cwExternalCenterlineManager::recomputeWatchSetAndProbeSources()
         // time — matters: the restarter defers this lambda through the
         // event loop, and "since the snapshot" means since this instant.
         m_staleRaisedSinceSnapshot.clear();
+        refreshAttachmentDirsFromSaveLoad();
         const QVector<OwnerScanInput> owners = collectOwnerSnapshots();
 
         // Stage 2 (worker thread): every scan and freshness probe. The
@@ -195,6 +224,29 @@ void cwExternalCenterlineManager::recomputeWatchSetAndProbeSources()
 
         return future;
     });
+}
+
+void cwExternalCenterlineManager::refreshAttachmentDirsFromSaveLoad()
+{
+    if (m_saveLoad.isNull() || m_region.isNull()) {
+        return;
+    }
+    QHash<QUuid, QString> caveDirs;
+    QHash<QUuid, QString> tripDirs;
+    for (cwCave* cave : m_region->caves()) {
+        if (!cave->externalCenterline().isEmpty()) {
+            caveDirs.insert(cave->id(),
+                            m_saveLoad->externalCenterlineDir(cave).absolutePath());
+        }
+        for (cwTrip* trip : cave->trips()) {
+            if (!trip->externalCenterline().isEmpty()) {
+                tripDirs.insert(trip->id(),
+                                m_saveLoad->externalCenterlineDir(trip).absolutePath());
+            }
+        }
+    }
+    m_caveAttachmentDirs = std::move(caveDirs);
+    m_tripAttachmentDirs = std::move(tripDirs);
 }
 
 QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager::collectOwnerSnapshots() const
@@ -491,7 +543,7 @@ void cwExternalCenterlineManager::onWatchedFileChanged(const QString& path)
 
 void cwExternalCenterlineManager::updateFromSource(const QUuid& ownerId)
 {
-    if (m_updateInFlightOwners.contains(ownerId) || m_saveLoad.isNull()) {
+    if (isOwnerBusy(ownerId) || m_saveLoad.isNull()) {
         return;
     }
     const QString sourcePath = sourcePathForOwner(ownerId);
@@ -513,7 +565,7 @@ void cwExternalCenterlineManager::updateFromSource(const QUuid& ownerId)
         // flag is probe-owned — the next recompute re-derives it.
         return;
     }
-    m_updateInFlightOwners.insert(ownerId);
+    beginOwnerOperation(ownerId);
     auto future = cwExternalCenterlineSync::reconcile(
         m_saveLoad.data(), scan.value(), attachmentDir);
     // Reconcile drains through the cwSaveLoad job queue; the returned
@@ -526,11 +578,101 @@ void cwExternalCenterlineManager::updateFromSource(const QUuid& ownerId)
     // affordance stays stuck for the rest of the session.
     AsyncFuture::observe(future).context(this,
             [this, ownerId](Monad::ResultBase) {
-        m_updateInFlightOwners.remove(ownerId);
+        endOwnerOperation(ownerId);
         m_solveOnScanApply = true;
         recomputeWatchSetAndProbeSources();
     },
             [this, ownerId]() {
-        m_updateInFlightOwners.remove(ownerId);
+        endOwnerOperation(ownerId);
     });
+}
+
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourcePath)
+{
+    using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
+
+    if (trip == nullptr) {
+        return AsyncFuture::completed(
+            ReportResult(QStringLiteral("attach: trip is null")));
+    }
+    const QUuid ownerId = trip->id();
+    if (isOwnerBusy(ownerId)) {
+        return AsyncFuture::completed(ReportResult(
+            QStringLiteral("attach: another operation for this trip is still in progress")));
+    }
+
+    beginOwnerOperation(ownerId);
+    auto future = cwExternalCenterlineAttach::attach(
+        trip, sourcePath, m_saveLoad.data(), m_externalSourceSettings.data());
+    // The canceled path (project retired mid-attach, or the dialog's
+    // Cancel landing before the scan) must still release the token.
+    AsyncFuture::observe(future).context(this,
+            [this, ownerId](const ReportResult& result) {
+        endOwnerOperation(ownerId);
+        if (!result.hasError()) {
+            // The settings write already queued a recompute; make sure
+            // its apply also requests the solve that picks up the new
+            // owner's *include.
+            m_solveOnScanApply = true;
+            recomputeWatchSetAndProbeSources();
+        }
+    },
+            [this, ownerId]() {
+        endOwnerOperation(ownerId);
+    });
+    return future;
+}
+
+QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwTrip* trip)
+{
+    using Monad::ResultBase;
+
+    if (trip == nullptr) {
+        return AsyncFuture::completed(
+            ResultBase(QStringLiteral("detach: trip is null")));
+    }
+    const QUuid ownerId = trip->id();
+    if (isOwnerBusy(ownerId)) {
+        return AsyncFuture::completed(ResultBase(
+            QStringLiteral("detach: another operation for this trip is still in progress")));
+    }
+
+    beginOwnerOperation(ownerId);
+
+    // Queued-invoke hole (commit-7 review): an updateFromSource invoke
+    // already queued behind this call would otherwise still see the
+    // owner's attachment dir and resurrect files into it. Drop the map
+    // entry in the same synchronous block as detach()'s settings and
+    // model clears so the late invoke hits the empty-guard and no-ops.
+    m_tripAttachmentDirs.remove(ownerId);
+
+    auto future = cwExternalCenterlineAttach::detach(
+        trip, m_saveLoad.data(), m_externalSourceSettings.data());
+    AsyncFuture::observe(future).context(this,
+            [this, ownerId](const ResultBase&) {
+        endOwnerOperation(ownerId);
+        // Re-probe after the remove-tree drains (the settings clear
+        // already queued one recompute; this one sees the dir gone) and
+        // request the solve that drops the owner's *include.
+        m_solveOnScanApply = true;
+        recomputeWatchSetAndProbeSources();
+    },
+            [this, ownerId]() {
+        endOwnerOperation(ownerId);
+    });
+    return future;
+}
+
+void cwExternalCenterlineManager::beginOwnerOperation(const QUuid& ownerId)
+{
+    m_busyOwners.insert(ownerId);
+    emit ownerBusyChanged(ownerId);
+}
+
+void cwExternalCenterlineManager::endOwnerOperation(const QUuid& ownerId)
+{
+    if (m_busyOwners.remove(ownerId)) {
+        emit ownerBusyChanged(ownerId);
+    }
 }

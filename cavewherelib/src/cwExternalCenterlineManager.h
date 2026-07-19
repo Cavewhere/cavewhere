@@ -12,7 +12,9 @@
 class cwCavingRegion;
 class cwSaveLoad;
 class cwSurveyChunkSignaler;
+class cwTrip;
 #include "cwAttachedCenterlinesModel.h"
+#include "cwExternalCenterlineAttach.h"
 #include "cwExternalSourceSettings.h"
 #include "cwFutureManagerToken.h"
 #include "cwGlobals.h"
@@ -47,6 +49,8 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterlineManager : public QObject
     QML_UNCREATABLE("ExternalCenterlineManager is created by cwLinePlotManager")
 
     Q_PROPERTY(cwAttachedCenterlinesModel* attachedCenterlinesModel READ attachedCenterlinesModel CONSTANT FINAL)
+    Q_PROPERTY(QList<QUuid> missingSourceOwners READ missingSourceOwners NOTIFY missingSourceOwnersChanged FINAL)
+    Q_PROPERTY(QList<QUuid> staleSourceOwners READ staleSourceOwners NOTIFY staleSourceOwnersChanged FINAL)
 
 public:
     explicit cwExternalCenterlineManager(QObject* parent = nullptr);
@@ -62,13 +66,14 @@ public:
     void setFutureManagerToken(cwFutureManagerToken token);
 
     // Per-owner attachment directories (abs paths on disk) consumed by
-    // the line-plot driver's *include emission. Populated by the project
-    // wiring (commit 9) from cwSaveLoad::externalCenterlineDir(owner); the
-    // [Attach][...] tests call these setters directly. The maps are read
-    // by every subsequent solve and baked into the cwLinePlotTask
-    // Input — change them while a solve is in flight and the in-flight
-    // solve still sees the old map (the Input copy is already made), and
-    // the next solve picks up the new one.
+    // the line-plot driver's *include emission. When a saveLoad is wired
+    // (production), the maps are derived wholesale from
+    // cwSaveLoad::externalCenterlineDir(owner) at every recompute
+    // snapshot; the setters are the seam for scan-only tests with no
+    // saveLoad. The maps are read by every subsequent solve and baked
+    // into the cwLinePlotTask Input — change them while a solve is in
+    // flight and the in-flight solve still sees the old map (the Input
+    // copy is already made), and the next solve picks up the new one.
     void setCaveAttachmentDirs(QHash<QUuid, QString> dirs);
     void setTripAttachmentDirs(QHash<QUuid, QString> dirs);
 
@@ -124,17 +129,30 @@ public:
     // User-triggered "Update" for a stale live-link owner: rescans the
     // remembered source, reconciles the closure into the owner's
     // attachment dir through cwSaveLoad, then recomputes the watch set
-    // (clearing the stale flag) and requests a re-solve. No-op while an
-    // update for the same owner is already in flight, or when no
+    // (clearing the stale flag) and requests a re-solve. No-op while any
+    // operation for the same owner is already in flight, or when no
     // saveLoad is wired.
     Q_INVOKABLE void updateFromSource(const QUuid& ownerId);
 
-    // True while an updateFromSource reconcile for ownerId has not yet
-    // drained. The UI disables the Update/detach affordances on it so
-    // filesystem operations for one owner never interleave.
-    Q_INVOKABLE bool isUpdateFromSourceInFlight(const QUuid& ownerId) const
+    // Trip-level attach/detach through the cwExternalCenterlineAttach
+    // orchestrator, using the wired saveLoad and settings store. Both
+    // refuse a busy owner (completed error future) so two filesystem
+    // operations for one owner can never interleave — the same
+    // protection the UI gets from isOwnerBusy, enforced for every
+    // caller. Detach drops the owner's settings entry and attachment-dir
+    // map entry synchronously, so an updateFromSource invoke already
+    // queued behind it hits the empty-guard and no-ops instead of
+    // resurrecting files into the detached owner's dir.
+    QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    attachCenterline(cwTrip* trip, const QString& sourcePath);
+    QFuture<Monad::ResultBase> detachCenterline(cwTrip* trip);
+
+    // True while an attach / detach / updateFromSource for ownerId has
+    // not yet drained. QML binds this one query for the
+    // Update/Detach/re-attach affordances; ownerBusyChanged notifies.
+    Q_INVOKABLE bool isOwnerBusy(const QUuid& ownerId) const
     {
-        return m_updateInFlightOwners.contains(ownerId);
+        return m_busyOwners.contains(ownerId);
     }
 
     // True when the owner's external file carries its own declination
@@ -184,6 +202,10 @@ signals:
     // declination flags changed. The consumer runs its solve here — the
     // ordering guarantees buildInput never reads half-applied flags.
     void solveNeeded();
+
+    // Emitted whenever isOwnerBusy(ownerId) flips for ownerId — an
+    // attach/detach/updateFromSource started or drained.
+    void ownerBusyChanged(const QUuid& ownerId);
 
 private:
     // Value-type inputs and outputs of the async recompute pipeline.
@@ -272,25 +294,28 @@ private:
     // their dep/warning counts so it never touches the disk.
     QVector<cwAttachedCenterlinesModel::Row> m_lastScanRows;
 
-    // Owners with an updateFromSource reconcile still draining; guards
-    // against interleaved per-owner filesystem operations (commit-5
-    // review's in-flight-token item).
-    QSet<QUuid> m_updateInFlightOwners;
+    // Owners with an attach/detach/updateFromSource still draining;
+    // guards against interleaved per-owner filesystem operations
+    // (commit-5 review's in-flight-token item, generalized to the
+    // per-owner operation token at commit 9).
+    QSet<QUuid> m_busyOwners;
 
     // Per-owner file-owns-declination flag from the most recent recompute;
     // read via fileOwnsDeclination() and baked into each solve's Input by
     // the consumer. Rebuilt wholesale on every recompute.
     QHash<QUuid, bool> m_fileOwnsDeclination;
 
-    // Async three-stage recompute: snapshot per-owner value inputs on
-    // the main thread (no I/O), run every scan and freshness probe on a
-    // cwConcurrent worker, then apply the result wholesale on the main
-    // thread via applyScanResult. Coalesced through m_scanRestarter, so
-    // a settings flurry or editor save burst runs one scan and only the
-    // newest result lands. Paths that also need a solve set
-    // m_solveOnScanApply first — the apply emits solveNeeded() so the
-    // consumer's solve chains behind the member swap.
-    void recomputeWatchSetAndProbeSources();
+    // Per-owner operation token bookkeeping; every begin/end pair emits
+    // ownerBusyChanged so QML affordances track the flip.
+    void beginOwnerOperation(const QUuid& ownerId);
+    void endOwnerOperation(const QUuid& ownerId);
+
+    // Rebuilds both attachment-dir maps wholesale from the region walk
+    // via cwSaveLoad::externalCenterlineDir (pure path math, no disk
+    // I/O). Runs at every recompute snapshot when a saveLoad is wired,
+    // so the maps track attach/detach/load without per-path bookkeeping;
+    // the setters remain the seam for scan-only tests with no saveLoad.
+    void refreshAttachmentDirsFromSaveLoad();
 
     // Stage 1: one value-type input per attached owner with a non-empty
     // entry file. Pure region/member reads, no filesystem access.
@@ -321,6 +346,18 @@ private:
     QString sourcePathForOwner(const QUuid& ownerId) const;
 
 private slots:
+    // Async three-stage recompute: snapshot per-owner value inputs on
+    // the main thread (no I/O), run every scan and freshness probe on a
+    // cwConcurrent worker, then apply the result wholesale on the main
+    // thread via applyScanResult. Coalesced through m_scanRestarter, so
+    // a settings flurry or editor save burst runs one scan and only the
+    // newest result lands. Paths that also need a solve set
+    // m_solveOnScanApply first — the apply emits solveNeeded() so the
+    // consumer's solve chains behind the member swap. A slot so the
+    // signaler's externalCenterlineChanged / trip-list connections can
+    // route here.
+    void recomputeWatchSetAndProbeSources();
+
     void onWatchedFileChanged(const QString& path);
 
     // Cave/trip rename: rebuild the model rows from fresh names plus the

@@ -11,6 +11,15 @@
 // Survex library
 #include "cavern_lib.h"
 
+// Survex's per-run warning counter (message.c, declared in message.h).
+// cavern_run resets it via msg_reset_counters(), so reading it right
+// after the run — still under the serialising mutex — yields this run's
+// count. Hand-declared because survex's message.h can't be included from
+// C++/Qt code (requires config.h first and #defines error(...), which
+// clobbers Qt headers); exporting counters via cavern_lib.h would fix
+// this properly but needs a survex submodule change.
+extern "C" int msg_warnings;
+
 #include <QFile>
 #include <QFileInfo>
 #include <QMutex>
@@ -89,5 +98,6 @@ cwCavernRunner::run(const QString& svxPath, const QString& output3dPath)
     result.logText = logText;
     result.loopClosureStats = loopClosureStats;
     result.exitCode = returnCode;
+    result.warningCount = msg_warnings;
     return Monad::Result<Result>(result);
 }

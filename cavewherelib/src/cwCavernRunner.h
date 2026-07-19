@@ -47,6 +47,7 @@ public:
         QString logText;            // <basename>.log — info + error messages
         QString loopClosureStats;   // <basename>.err — netskel loop-closure report
         int exitCode = 0;
+        int warningCount = 0;       // cavern's msg_warnings counter for this run
     };
 
     static Monad::Result<Result> run(const QString& svxPath,

@@ -42,6 +42,8 @@ QStringList cwSurveyNetwork::neighbors(const QString& stationName) const {
 
 QStringList cwSurveyNetwork::stations() const { return stationDataMap.keys(); }
 
+int cwSurveyNetwork::stationCount() const { return stationDataMap.size(); }
+
 bool cwSurveyNetwork::isEmpty() const { return stationDataMap.isEmpty(); }
 
 void cwSurveyNetwork::setPosition(const QString& stationName, const QVector3D& stationPosition) {

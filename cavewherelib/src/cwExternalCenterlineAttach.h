@@ -68,13 +68,11 @@ struct AttachReport {
  * (always - the in-project copy is the source of truth and sourceFile
  * is where updates come from; see the Phase 2 direction change).
  *
- * A failed or cancelled scan leaves the data model, filesystem, and
- * settings untouched. A failed reconcile rolls back the trip's
- * externalCenterline - to the prior attachment when its entry file
- * still exists, otherwise to Native (a partial re-attach may have
- * garbage-collected the old closure). Partial files may remain in the
- * attachment dir and the project stays modified; the next attach or
- * detach cleans them up.
+ * Set-model-on-success: the trip's externalCenterline flips only after
+ * the reconcile verify passes, so any failure - scan, cancel, or
+ * reconcile - leaves the data model and settings exactly as they were.
+ * Partial files may remain in the attachment dir and the project stays
+ * modified; the next attach or detach cleans them up.
  */
 CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> attach(
     cwTrip* trip,

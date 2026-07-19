@@ -204,6 +204,12 @@ signals:
     // -----Old save and load
     void filenameChanged(QString newFilename);
     void fileTypeChanged();
+
+    // The owned cwSaveLoad was replaced (newProject retires the old
+    // pipeline and creates a fresh one). Consumers holding the pointer
+    // — e.g. cwExternalCenterlineManager via cwRootData — re-resolve it
+    // here.
+    void saveLoadChanged();
     void dataRootChanged();
     void canSaveDirectlyChanged();
     void isTemporaryProjectChanged();

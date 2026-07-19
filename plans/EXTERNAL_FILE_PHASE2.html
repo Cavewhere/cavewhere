@@ -145,7 +145,7 @@
     <td>Attach orchestrator (Phase 2 commit 5); detach path</td>
   </tr>
   <tr>
-    <td><code>cwLinePlotManager</code>: <code>hasSolveError</code>, <code>solveErrorMessage</code>, <code>cavernLog</code>, <code>loopClosureStats</code>, <code>watchedFiles()</code>, <code>missingSourceOwners()</code>, <code>rerunSurvex()</code></td>
+    <td><code>cwLinePlotManager</code>: <code>hasSolveError</code>, <code>solveErrorMessage</code>, <code>cavernLog</code>, <code>loopClosureStats</code>, <code>rerunSurvex()</code>. <em>Moved (commit 8 extraction, Q_PROPERTYs at commit 9):</em> <code>watchedFiles()</code> and <code>missingSourceOwners</code>/<code>staleSourceOwners</code> live on <code>cwExternalCenterlineManager</code>, reachable in QML as <code>RootData.externalCenterlineManager</code></td>
     <td>Commits 7&ndash;9 + lineplot port</td>
     <td>SolveStatus; MissingSourceBanner; CavernOutputPage; Reload action</td>
   </tr>
@@ -404,32 +404,40 @@
   </li>
   <li>
     <code>cavewherelib/qml/CavernOutputPage.qml</code> &mdash;
-    <em>extend the existing page</em> (commit <code>29bcd026</code>;
-    status label, Solve button, error label, TabBar are already there
-    and stay untouched). New insertions, all above the existing TabBar:
-    a missing-source banner (visible when
-    <code>linePlotManager.missingSourceOwners.length &gt; 0</code>); an
-    attached-centerlines section bound to
-    <code>linePlotManager.attachedCenterlinesModel</code> (the new Phase 2
-    accessor); a collapsible driver-source disclosure
-    (<code>QC.Frame</code> with the <code>linePlotManager.driverSource</code>
-    text). Each section gets a stable <code>objectName</code>
-    (<code>missingSourceBanner</code>, <code>attachedCenterlinesSection</code>,
-    <code>driverSourceDisclosure</code>) so QML tests and the
-    SolveStatus deep-link target it; no <code>cwPageSelectionModel</code>
+    <em>extend the existing page</em> (commit <code>29bcd026</code>).
+    <em>As shipped at commit 9 (superseding the prose below):</em> new
+    sections above the switcher &mdash; a missing-source banner
+    (visible when
+    <code>RootData.externalCenterlineManager.missingSourceOwners.length
+    &gt; 0</code>) and an attached-centerlines section bound to
+    <code>RootData.externalCenterlineManager.attachedCenterlinesModel</code>
+    (<code>objectName</code>s <code>missingSourceBanner</code>,
+    <code>attachedCenterlinesSection</code>). The page's original
+    TabBar was replaced at manual QA by the switcher described in the
+    commit-9 "Revised" note: two group boxes
+    (<code>cavernInputGroupBox</code>/<code>cavernOutputGroupBox</code>)
+    in a <code>QQ.Flow</code>, holding three ButtonGroup-exclusive
+    buttons
+    (<code>cavernInputButton</code>/<code>cavernOutputButton</code>/<code>loopClosureButton</code>)
+    that drive one shared <code>cavernTextArea</code>. The driver
+    source shows under <code>cavernInputButton</code> &mdash; there is
+    no disclosure; the SolveStatus deep-link (commit 10/11) should
+    navigate to <code>"Cavern"</code> and check
+    <code>cavernInputButton</code>. No <code>cwPageSelectionModel</code>
     anchor IDs are introduced &mdash; the page is already routable as
     <code>"Cavern"</code>.
   </li>
   <li>
-    <code>cavewherelib/qml/DataMainPage.qml</code> &mdash; the existing
-    LinkText at line 161 already calls
-    <code>RootData.pageSelectionModel.gotoPageByName(null, "Cavern")</code>;
-    Phase 2 only updates its <code>text</code> binding so the label
-    becomes <code>"Cavern output (last run: 0.4&nbsp;s, 1247 stations,
-    2 warnings)"</code> with live bindings to
-    <code>linePlotManager.lastSolveDuration</code> /
-    <code>stationCount</code> / <code>warningCount</code>. No new
-    navigation, no new component.
+    <code>cavewherelib/qml/DataMainPage.qml</code> &mdash; the
+    navigation entry is the <code>cavernOutputMenuItem</code> in the
+    region context menu (the old page-body LinkText is gone).
+    <em>Decided at manual QA (2026-07-19):</em> no live-stats text in
+    the menu item &mdash; it stays plain <code>"Cavern Output"</code>
+    (pinned by <code>tst_DataMainPageExternal.qml</code>); the stats
+    render on CavernOutputPage's <code>statusLabel</code> instead,
+    bound to <code>linePlotManager.lastSolveDuration</code> /
+    <code>lastSolveStationCount</code> / <code>lastSolveWarningCount</code>.
+    No new navigation, no new component.
   </li>
   <li>
     Notes / scrap station-reference input fields (located in
@@ -463,11 +471,15 @@
     count on the panel changes.</li>
   <li>QML test: <code>CavernOutputPage</code> shows the attachment in
     the attached-centerlines section and the driver source in the
-    disclosure; broken <code>.svx</code> fixture produces a non-empty
-    <code>solveErrorMessage</code> visible on the page.</li>
-  <li>QML test: trip starts native &rarr; FileMenu Survex / Compass
-    export items are enabled; after attach &rarr; both are disabled with
-    the <code>exportDisabledReason</code> tooltip.</li>
+    shared <code>cavernTextArea</code> after checking
+    <code>cavernInputButton</code>; broken <code>.svx</code> fixture
+    produces a non-empty <code>solveErrorMessage</code> visible on the
+    page.</li>
+  <li>QML test: trip starts native &rarr; the Survex / Compass export
+    items (in <code>ExportImportButtons.qml</code> via
+    <code>ExportSurveyMenuItem</code>) are enabled; after attach &rarr;
+    both are disabled with the <code>exportDisabledReason</code>
+    tooltip.</li>
   <li>QML test: scrap and note station-reference inputs accept
     <code>"A.1"</code> when the owner trip is externally backed and
     reject the same input when native.</li>
@@ -535,19 +547,32 @@
   <tr>
     <td><strong>q13</strong> &mdash; Disabled-export presentation</td>
     <td>Visible but disabled; tooltip carries the reason.</td>
-    <td><code>FileMenu.qml</code>'s Survex / Compass items bind <code>enabled: rootData.surveyExportManager.canExport</code> and <code>QC.ToolTip.text: rootData.surveyExportManager.exportDisabledReason</code>. No <code>visible</code> binding.</td>
+    <td><em>Landed at commit 9, in <code>ExportImportButtons.qml</code> /
+    <code>ExportSurveyMenuItem.qml</code> (not FileMenu &mdash; that's
+    where the export items actually live):</em> all four Survex/Compass
+    items plus Chipdata bind <code>exportAllowed:
+    exportManager.canExport</code> and show
+    <code>exportManager.exportDisabledReason</code> as the tooltip when
+    disabled. No <code>visible</code> binding.</td>
   </tr>
   <tr>
     <td><strong>q14</strong> &mdash; Cancel during attach</td>
     <td>Dialog stays modal during scan; Cancel aborts and persists nothing.</td>
-    <td><code>AttachExternalCenterlineDialog</code> shows a determinate progress strip while the orchestrator's scan future is running. The Cancel button calls <code>QFuture::cancel()</code> on the scan future and dismisses. Nothing in the data model or filesystem changes until the reconcile step starts (which only runs after scan returns <code>Monad::Ok</code>).</td>
+    <td><code>AttachExternalCenterlineDialog</code> shows a determinate progress strip while the orchestrator's scan future is running. The Cancel button calls <code>QFuture::cancel()</code> on the scan future and dismisses. Nothing in the data model or filesystem changes until the reconcile step starts (which only runs after scan returns <code>Monad::Ok</code>). <strong>Commit-9 review note:</strong> the orchestrator deliberately ignores cancellation once the scan has landed, but the manager's per-owner busy token <em>is</em> released when the returned future is canceled &mdash; so the dialog must stop offering Cancel once the scan completes (or the token can free while reconcile is still writing, letting a detach interleave).</td>
   </tr>
   <tr>
     <td><strong>q16</strong> &mdash; Re-link discoverability across restarts</td>
     <td>Startup probe seeds <code>missingSourceOwners</code>; banner appears in the panel.</td>
-    <td>Phase 1 commit 9 already wires <code>cwLinePlotManager::missingSourceOwners()</code> with the startup probe. Phase 2 binds
-    <code>ExternalCenterlineMissingSourceBanner.visible</code> to
-    <code>linePlotManager.missingSourceOwners.includes(trip.id)</code>. The Re-link button stays stubbed
+    <td>The startup probe wires <code>missingSourceOwners</code>, which
+    since the commit-8 extraction lives on
+    <code>cwExternalCenterlineManager</code> (Q_PROPERTY at commit 9:
+    <code>RootData.externalCenterlineManager.missingSourceOwners</code>).
+    <strong>Binding caveat for commit 11:</strong> the property is a
+    <code>QList&lt;QUuid&gt;</code>; JS <code>.includes(trip.id)</code>
+    compares QUuid values with strict equality and will likely never
+    match &mdash; use a string compare or add a
+    <code>Q_INVOKABLE bool isSourceMissing(const QUuid&amp;)</code> on
+    the manager instead. The Re-link button stays stubbed
     (Phase 5b).</td>
   </tr>
   <tr>
@@ -713,6 +738,12 @@ detach(cwTrip* trip,
     (see its commit-sequence entry between commits 8 and 9), so
     <code>isOwnerBusy</code> lands on that object &mdash; the
     invariant stays enforced where the state lives.
+    <em>Shipped at commit 9</em> &mdash; as decided, with one
+    refinement: the orchestration itself also lives on the manager
+    (<code>attachCenterline</code>/<code>detachCenterline</code>, which
+    own the token begin/end and the synchronous detach drops), and the
+    cwRootData Q_INVOKABLEs are pure forwarders. Non-UI callers go
+    through the manager and get the same protection.
   </li>
 </ul>
 
@@ -1476,6 +1507,70 @@ public:
     <code>tst_CavernOutputPageExternal.qml</code>,
     <code>tst_DataMainPageExternal.qml</code>,
     <code>tst_FileMenuExportDisable.qml</code>.
+    <em>Shipped</em> &mdash; all three surfaces plus the C++ they
+    needed. C++: cwRootData exposes
+    <code>externalCenterlineManager</code> (CONSTANT) and the
+    <code>attachTripCenterline</code>/<code>detachTripCenterline</code>
+    wrappers, which forward to new manager-level
+    <code>attachCenterline</code>/<code>detachCenterline</code> &mdash;
+    the per-owner operation token lives on the manager
+    (<code>isOwnerBusy</code> + <code>ownerBusyChanged</code>,
+    generalizing <code>m_updateInFlightOwners</code>; the old
+    <code>isUpdateFromSourceInFlight</code> is gone), both wrappers
+    refuse busy owners, and detach drops the settings entry and
+    trip-dir map entry synchronously (the commit-7 queued-invoke
+    hole, gated by <code>[Attach][Manager]</code>).
+    <code>missingSourceOwners</code>/<code>staleSourceOwners</code>
+    became Q_PROPERTYs. The attachment-dir maps are now
+    <em>derived</em>: when a saveLoad is wired (production wiring
+    landed here &mdash; cwRootData sets it and tracks the new
+    <code>cwProject::saveLoadChanged</code>), every recompute snapshot
+    rebuilds both maps from
+    <code>cwSaveLoad::externalCenterlineDir(owner)</code>; the setters
+    remain the scan-only-test seam. Load-time coverage came from new
+    recompute triggers (region insertedCaves/removedCaves + signaler
+    externalCenterlineChanged / insertedTrips / removedTrips).
+    DataMainPage stats needed real data:
+    <code>lastSolveDuration</code>/<code>lastSolveStationCount</code>/<code>lastSolveWarningCount</code>
+    Q_PROPERTYs on cwLinePlotManager (NOTIFY cavernOutputChanged),
+    fed by task-side timing, the region network's station list, and
+    cavern's <code>msg_warnings</code> counter surfaced through
+    <code>cwCavernRunner::Result::warningCount</code>.
+    <em>Reality drift from the prose above:</em> the DataMainPage
+    "LinkText" is today the <code>cavernOutputMenuItem</code> in the
+    region context menu (the page-body link was removed when solver
+    status moved to the hamburger menu); and the Survex/Compass export
+    items live in <code>ExportImportButtons.qml</code> (via
+    <code>ExportSurveyMenuItem</code>), not FileMenu &mdash; the
+    canExport/exportDisabledReason wire-up (enabled + tooltip) landed
+    there, on all four export items plus Chipdata.
+    <code>tst_FileMenuExportDisable.qml</code> covers those items on
+    DataMainPage; the FileMenu-navigation smoke stays with
+    <code>tst_CavernOutputPage.qml</code>'s existing menu test.
+    <em>Revised at manual QA (2026-07-19):</em> the driver-source
+    disclosure (and the TabBar that briefly replaced it) is gone.
+    The page now has a switcher row (a <code>QQ.Flow</code>, so the
+    boxes wrap on narrow/mobile windows) of two group boxes &mdash;
+    <code>cavernInputGroupBox</code> ("Input") holding
+    <code>cavernInputButton</code> ("Cavern Input", the generated
+    .svx), and <code>cavernOutputGroupBox</code> ("Output") holding
+    <code>cavernOutputButton</code> ("Cavern Output", the cavern log,
+    selected by default) and <code>loopClosureButton</code> ("Loop
+    Closure", disabled when the cave has no loops, falls back to
+    output when it goes empty) &mdash; all three checkable buttons in
+    one <code>QC.ButtonGroup</code> (autoExclusive can't span the two
+    boxes), driving ONE shared <code>cavernTextArea</code> whose text and
+    placeholder switch with the selection (mobile-friendly: no
+    side-by-side panes). The pinned
+    <code>driverSourceDisclosure</code>/<code>survexInputTab</code>/<code>outputTabBar</code>/<code>cavernLogTextArea</code>/<code>loopClosureTextArea</code>/<code>survexInputTextArea</code>
+    objectNames no longer exist &mdash; the SolveStatus deep-link in
+    the panel commits should navigate to the page and check
+    <code>cavernInputButton</code> to show the input. The live-stats
+    text was dropped from the context menu item (reads plain "Cavern
+    Output" again, pinned by <code>tst_DataMainPageExternal.qml</code>)
+    &mdash; the stats moved to CavernOutputPage's
+    <code>statusLabel</code> ("Last solve completed successfully in
+    0.4&nbsp;s &mdash; 1247 stations, 2 warnings.").
   </li>
   <li>
     <strong>Panel sub-components.</strong> Ship
@@ -1779,70 +1874,82 @@ public:
   <code>tst_FileMenuExportDisable.qml</code></p>
 
 <p>
-  Background: the page itself, its <code>"Cavern"</code> registration,
-  and the DataMainPage/FileMenu navigation targets all shipped in
-  commit <code>29bcd026</code>. These tests cover the new bindings only;
-  the pre-existing structure (status label, Solve button, error label,
-  TabBar, cavern-log + loop-closure text areas) is owned by tests that
-  already shipped with <code>29bcd026</code> and must stay green.
+  Background: the page itself and its <code>"Cavern"</code> registration
+  shipped in commit <code>29bcd026</code>. <em>Gates rewritten
+  2026-07-19 to match the delivered tests</em> (the original gates
+  targeted the TabBar/disclosure design and the LinkText live-stats
+  text, both superseded at manual QA &mdash; see the commit-9 "Revised"
+  note in &sect;11).
 </p>
 
-<h4><code>tst_CavernOutputPageExternal.qml</code></h4>
+<h4><code>tst_CavernOutputPageExternal.qml</code> <em>(delivered, green)</em></h4>
 <ul>
   <li>Native region with no attached trips &rarr;
     <code>missingSourceBanner.visible === false</code>;
-    <code>attachedCenterlinesSection.visible === false</code>;
-    <code>driverSourceDisclosure</code> exists and starts collapsed.</li>
-  <li>Programmatically attach via the orchestrator; verify the
-    attached-centerlines section becomes visible and contains the
-    expected row.</li>
-  <li>Driver-source disclosure starts collapsed; clicking expands and
-    shows the <code>driverSource</code> text from Phase 1 commit 8
-    (absolute forward-slash quoted <code>*include</code>).</li>
+    <code>attachedCenterlinesSection.visible === false</code>; checking
+    <code>cavernInputButton</code> shows an empty
+    <code>cavernTextArea</code> (no solve on a fresh project).</li>
+  <li>Programmatically attach via
+    <code>RootData.attachTripCenterline</code>; verify the
+    attached-centerlines section becomes visible and
+    <code>attachedRowLabel</code> names the entry file.</li>
+  <li>After the attach's chained solve publishes, checking
+    <code>cavernInputButton</code> shows the driver source in
+    <code>cavernTextArea</code> (absolute forward-slash quoted
+    <code>*include</code>); the test restores
+    <code>cavernOutputButton</code> (page item is cached across
+    tests).</li>
+  <li><code>statusLabel</code> after a real solve matches
+    <code>"Last solve completed successfully in N.N s &mdash; N
+    stations, N warnings."</code></li>
   <li>Simulate a missing source: delete the remembered source file on
     disk &rarr;
     <code>tryVerify(missingSourceBanner.visible === true)</code> once
     the watcher fires.</li>
-  <li>Existing Solve button (<code>objectName: "rerunSolveButton"</code>)
-    still routes to <code>linePlotManager.rerunSurvex()</code>;
-    existing TabBar still switches between
-    <code>cavernLogTextArea</code> and
-    <code>loopClosureTextArea</code>. (Smoke checks that the
-    extension didn't break the inherited structure.)</li>
+  <li>Structure smoke: <code>statusLabel</code>,
+    <code>rerunSolveButton</code>, both switcher group boxes, all three
+    switcher buttons, and <code>cavernTextArea</code> exist.</li>
+  <li><em>Open gap (commit-9 review F10):</em> the Loop Closure
+    button's fall-back-to-output when its stats empty while selected is
+    implemented but untested.</li>
 </ul>
 
-<h4><code>tst_DataMainPageExternal.qml</code></h4>
+<h4><code>tst_DataMainPageExternal.qml</code> <em>(delivered, green)</em></h4>
 <ul>
-  <li>Existing cavern-output LinkText (already at
-    <code>DataMainPage.qml:161</code>) shows the new live-stats text
-    after a solve &mdash; e.g. <code>"Cavern output (last run:
-    0.4&nbsp;s, 1247 stations, 2 warnings)"</code>.</li>
-  <li>Clicking the LinkText navigates to <code>cavernOutputPage</code>
-    via the existing
-    <code>gotoPageByName(null, "Cavern")</code> call. (Verifies the
-    extension did not break the binding.)</li>
-  <li>Pre-solve / native-empty state: LinkText shows a fallback like
-    <code>"Cavern output (not yet run)"</code>; navigation still
-    works.</li>
+  <li>The region context menu's <code>cavernOutputMenuItem</code> reads
+    plain <code>"Cavern Output"</code> on a fresh project <em>and</em>
+    after a solve (pins the no-stats-in-menu decision).</li>
+  <li>Clicking the item navigates to <code>cavernOutputPage</code> via
+    <code>gotoPageByName(null, "Cavern")</code>.</li>
+  <li><em>Dropped from the original gates (commit-9 review F11):</em>
+    the "not yet run" fallback text &mdash; a fresh project's
+    <code>statusLabel</code> currently reads "Last solve completed
+    successfully."; surfacing a distinct not-yet-run state is an open
+    UX decision.</li>
 </ul>
 
-<h4><code>tst_FileMenuExportDisable.qml</code></h4>
+<h4><code>tst_FileMenuExportDisable.qml</code> <em>(delivered, green)</em></h4>
 <ul>
-  <li>Native region &rarr; FileMenu Survex item <code>enabled</code> is
-    true.</li>
-  <li>Attach one trip &rarr; same item <code>enabled</code> is false;
-    tooltip text matches
-    <code>cwSurveyExportManager::exportDisabledReason</code>.</li>
-  <li>Same for the Compass export item.</li>
-  <li>Existing FileMenu navigation at <code>FileMenu.qml:210</code>
-    (<code>gotoPageByName(null, "Cavern")</code>) still resolves to the
-    cavern output page. (Verifies the QML wire-up did not regress
-    sibling actions.)</li>
+  <li>Native region &rarr; <code>survexRegionExportMenuItem.enabled</code>
+    true; <code>compassCaveExportMenuItem.exportAllowed</code> true with
+    empty <code>disabledReason</code> (items live in
+    <code>ExportImportButtons.qml</code>, not FileMenu).</li>
+  <li>Attach one trip &rarr; region item disabled; trip Survex and cave
+    Compass items <code>!exportAllowed</code>/<code>!enabled</code>;
+    <code>disabledReason</code> starts with "Cannot export" and matches
+    across items.</li>
 </ul>
 
 <h3>Commit 10 &mdash; panel sub-components</h3>
 <p><strong>New QML test:</strong>
   <code>tst_ExternalCenterlinePanelComponents.qml</code></p>
+<p><em>Before writing this test</em>, promote the duplicated
+  <code>attachFixtureTrip</code> QML helper
+  (<code>tst_CavernOutputPageExternal.qml</code> /
+  <code>tst_FileMenuExportDisable.qml</code>) into shared test
+  infrastructure rather than copying it a third time (commit-9 review
+  R3; note QML <code>verify()</code> is a TestCase method, so the
+  helper needs the TestCase passed in or a non-asserting design).</p>
 <ul>
   <li><code>AttachedHeader</code>: bind to a trip with attached
     centerline &rarr; renders filename + format; remembered-source path
@@ -1866,6 +1973,18 @@ public:
 <h3>Commit 11 &mdash; ExternalCenterlineTripPanel assembly</h3>
 <p><strong>New QML test:</strong>
   <code>tst_ExternalCenterlineTripPanel.qml</code></p>
+<p><em>Design prerequisites from the commit-9 review:</em>
+  (a) the cwRootData attach/detach wrappers return
+  <code>QFuture&lt;Monad::Result&lt;...&gt;&gt;</code>, which QML cannot
+  observe &mdash; decide the future&rarr;QML bridge here (a small
+  observer/gadget type or completion signals carrying a value-type
+  report) before binding error/report text into the panel or the
+  commit-12 dialog (review A1);
+  (b) the panel's Update/Reload and Detach affordances must disable on
+  <code>RootData.externalCenterlineManager.isOwnerBusy(ownerId)</code>
+  (re-evaluated on <code>ownerBusyChanged</code>) &mdash; a busy owner
+  silently drops <code>updateFromSource</code> calls, so an enabled
+  button would be a dead click (review F8).</p>
 <ul>
   <li>Programmatic attach &rarr; panel mode is Attached; sub-components
     render in order.</li>
@@ -1891,7 +2010,10 @@ public:
   <li>Pick a fixture with a missing <code>*include</code> &rarr; yellow
     warning; Attach still enabled.</li>
   <li>Pick a fixture, click Attach, immediately click Cancel during the
-    scan &rarr; orchestrator future is cancelled, no data-model change.</li>
+    scan &rarr; orchestrator future is cancelled, no data-model change.
+    Per the &sect;5 q14 review note: stop offering Cancel once the scan
+    lands &mdash; a post-scan cancel releases the manager's busy token
+    while reconcile is still writing (commit-9 review F7).</li>
   <li>After Attach (source always remembered &mdash; direction change),
     <code>cwExternalSourceSettings::sourcePathFor(trip.id)</code> equals the
     picked path.</li>
@@ -1999,15 +2121,101 @@ public:
       re-attach-over-edited explicitly.</td>
   </tr>
   <tr>
+    <td>Hand-rolled <code>extern "C" int msg_warnings;</code> in
+      <code>cwCavernRunner.cpp</code> has no source-level coupling to
+      survex; a submodule bump renaming/retyping the counter fails only
+      at link time (or silently misreads).</td>
+    <td>Tracked in &sect;15 ("Export cavern counters through
+      <code>cavern_lib.h</code>"). Including survex's
+      <code>message.h</code> from C++ is not an option &mdash; it
+      requires <code>config.h</code> first and
+      <code>#define</code>s <code>error(...)</code>, which clobbers Qt
+      headers.</td>
+  </tr>
+  <tr>
     <td>Master &sect;8.5.1 skeleton's <code>FileSystemHelper.exists()</code>
       call inside a binding is incorrect (no such global today) and would
       thrash on every fileChanged.</td>
-    <td>Phase 2 uses <code>linePlotManager.missingSourceOwners.includes(trip.id)</code>
-      instead &mdash; the manager already maintains this set per Phase 1
-      commit 9. The skeleton's binding gets updated in
+    <td>Phase 2 binds against
+      <code>RootData.externalCenterlineManager.missingSourceOwners</code>
+      instead (the set moved off cwLinePlotManager at the commit-8
+      extraction). Per the q16 caveat, don't use JS
+      <code>.includes()</code> on the <code>QList&lt;QUuid&gt;</code>
+      &mdash; use a string compare or a <code>Q_INVOKABLE</code>
+      membership check. The skeleton's binding gets updated in
       commit 11 when the panel lands.</td>
   </tr>
 </table>
+
+<h2 id="followups">15. Follow-ups from the commit-9 code review (2026-07-19)</h2>
+
+<p>
+  Deliberately out of scope for commit 9; none block the remaining
+  Phase-2 commits unless noted. Ordered roughly by payoff.
+</p>
+
+<ul>
+  <li>
+    <strong>Future&rarr;QML bridge for attach/detach results.</strong>
+    <code>cwRootData::attachTripCenterline</code>/<code>detachTripCenterline</code>
+    return <code>QFuture&lt;Monad::Result&lt;...&gt;&gt;</code>, which
+    QML cannot observe (the commit-9 tests poll
+    <code>attachedCenterlinesModel</code> instead). Commit 11/12 need
+    the error message and <code>AttachReport.scan.warnings</code> bound
+    into labels, so a small observer/gadget type (or completion signals
+    carrying a value-type report) is required &mdash; and generalizes
+    to every future-returning invokable (the only precedent,
+    <code>cwPDFConverter::convert</code>, has the same dead return).
+    Blast radius: one new class + the two wrappers + the dialog.
+    <em>Decide in commit 11 (see the prerequisite note on its
+    &sect;12 entry).</em>
+  </li>
+  <li>
+    <strong>Shared QML attach-fixture helper.</strong>
+    <code>attachFixtureTrip</code> is duplicated verbatim between
+    <code>tst_CavernOutputPageExternal.qml</code> and
+    <code>tst_FileMenuExportDisable.qml</code>; promote it to shared
+    test infrastructure <em>before commit 10</em> copies it a third
+    time (see the note on commit 10's &sect;12 entry).
+  </li>
+  <li>
+    <strong>PMF-based connection API on
+    <code>cwSurveyChunkSignaler</code>.</strong> The signaler only
+    accepts string-macro <code>SIGNAL()/SLOT()</code> connections, so
+    every consumer (commit 9 added four more in
+    <code>cwExternalCenterlineManager</code>'s constructor) is
+    unchecked at compile time &mdash; a signature typo fails silently
+    at runtime. Templating the API on member-function pointers would
+    catch this at build time. Blast radius: every existing signaler
+    caller.
+  </li>
+  <li>
+    <strong>Export cavern counters through
+    <code>cavern_lib.h</code>.</strong> Replace the hand-declared
+    <code>extern "C" int msg_warnings;</code> in
+    <code>cwCavernRunner.cpp</code> with warning/error counts returned
+    in the cavern-run result struct. Needs a survex submodule commit +
+    bump (see the &sect;14 risk row for why a direct include is
+    impossible). While there, add a C++ test asserting a nonzero
+    warning count against a warning-producing fixture &mdash; today the
+    plumbing is only pinned at "0 warnings".
+  </li>
+  <li>
+    <strong>RAII owner-busy token.</strong> The
+    <code>beginOwnerOperation</code>/<code>endOwnerOperation</code>-in-both-callbacks
+    pattern is copied three times
+    (<code>attachCenterline</code>/<code>detachCenterline</code>/<code>updateFromSource</code>);
+    a scope-guard object (precedent: <code>cwBillboardHandle</code>)
+    would make "token always released" structural instead of
+    per-call-site discipline.
+  </li>
+  <li>
+    <strong><code>publishCavernOutput</code> parameter object.</strong>
+    The private publish call is at seven parameters (three strings, an
+    optional error, three stats); fold the stats into a struct before
+    the panel commits grow the signature again.
+  </li>
+</ul>
 
 </body>
 </html>

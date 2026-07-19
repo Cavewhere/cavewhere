@@ -55,6 +55,9 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
     Q_PROPERTY(QString loopClosureStats READ loopClosureStats NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString driverSource READ driverSource NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(cwSurveyNetwork regionNetwork READ regionNetwork NOTIFY regionNetworkChanged FINAL)
+    Q_PROPERTY(double lastSolveDuration READ lastSolveDuration NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(int lastSolveStationCount READ lastSolveStationCount NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(int lastSolveWarningCount READ lastSolveWarningCount NOTIFY cavernOutputChanged FINAL)
 
 public:
     explicit cwLinePlotManager(QObject *parent = 0);
@@ -69,6 +72,13 @@ public:
     // populated alongside cavernLog (present even when cavern itself
     // failed; empty when the export step failed or nothing was solvable).
     QString driverSource() const { return m_lastDriverSource; }
+
+    // Live stats for the most recent solve, surfaced by CavernOutputPage's
+    // status label. Duration is wall-clock seconds for the whole
+    // pipeline; negative means no solve has run yet ("not yet run").
+    double lastSolveDuration() const { return m_lastSolveDuration; }
+    int lastSolveStationCount() const { return m_lastStationCount; }
+    int lastSolveWarningCount() const { return m_lastWarningCount; }
 
     // The external-centerline subsystem (watcher, async scan pipeline,
     // attachment dirs, attached-centerlines model, stale/missing owners).
@@ -133,6 +143,9 @@ private:
     QString m_lastCavernLog;
     QString m_lastLoopClosureStats;
     QString m_lastDriverSource;
+    double m_lastSolveDuration = -1.0;
+    int m_lastStationCount = 0;
+    int m_lastWarningCount = 0;
 
     cwExternalCenterlineManager* m_externalCenterlineManager = nullptr;
 
@@ -173,7 +186,10 @@ private:
     void publishCavernOutput(QString cavernLog,
                              QString loopClosureStats,
                              QString driverSource,
-                             std::optional<cwLinePlotTask::SolveError> solveError);
+                             std::optional<cwLinePlotTask::SolveError> solveError,
+                             double solveDuration,
+                             int stationCount,
+                             int warningCount);
     void publishPerCaveErrors(const cwLinePlotTask::LinePlotResultData& results);
 
 private slots:

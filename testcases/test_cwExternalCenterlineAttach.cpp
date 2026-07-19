@@ -13,15 +13,19 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterlineAttach.h"
+#include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceSettings.h"
 #include "cwFutureManagerModel.h"
+#include "cwLinePlotManager.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
+#include "cwSignalSpy.h"
 #include "cwTeam.h"
 #include "cwTeamMember.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
+#include "ExternalCenterlineTestHelpers.h"
 #include "LoadProjectHelper.h"
 
 // AsyncFuture
@@ -510,4 +514,144 @@ TEST_CASE("attach refuses null inputs and unsaved projects with a clear error",
         // produce hasError() but with a confusing message.
         CHECK(future.result().errorMessage().contains(QStringLiteral("save the project")));
     }
+}
+
+// ---------------------------------------------------------------------
+// cwExternalCenterlineManager operation surface (commit 9): the
+// per-owner operation token, the attach/detach wrappers, and the
+// saveLoad-derived attachment-dir maps. These run through cwRootData's
+// production wiring - the manager under test is the one the QML
+// surface binds to.
+// ---------------------------------------------------------------------
+
+namespace {
+
+cwExternalCenterlineManager* managerOf(SavedProjectFixture* fixture)
+{
+    return fixture->rootData->externalCenterlineManager();
+}
+
+// Drains the scan-then-solve pipeline plus the save queue so the maps,
+// rows, and watch set reflect every queued recompute.
+void drainPipelines(SavedProjectFixture* fixture)
+{
+    fixture->project->waitSaveToFinish();
+    fixture->rootData->linePlotManager()->waitToFinish();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+}
+
+} // namespace
+
+TEST_CASE("manager attach holds the owner token, refuses re-entry, and derives the dir map",
+          "[Attach][Manager]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("manager-attach"));
+    auto manager = managerOf(fixture.get());
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const QUuid ownerId = fixture->trip->id();
+
+    cwSignalSpy busySpy(manager, &cwExternalCenterlineManager::ownerBusyChanged);
+
+    auto future = fixture->rootData->attachTripCenterline(fixture->trip, source);
+    CHECK(manager->isOwnerBusy(ownerId));
+
+    // Re-entry while the attach drains is refused without touching the
+    // token (no extra ownerBusyChanged emissions).
+    auto refused = fixture->rootData->attachTripCenterline(fixture->trip, source);
+    REQUIRE(refused.isFinished());
+    CHECK(refused.result().hasError());
+    CHECK(refused.result().errorMessage().contains(QStringLiteral("in progress")));
+
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
+    CHECK_FALSE(manager->isOwnerBusy(ownerId));
+    CHECK(busySpy.count() == 2); // begin + end; the refused call emitted nothing
+
+    // The recompute snapshot derives the attachment-dir map from the
+    // save/load pipeline - the next solve emits the trip's *include.
+    drainPipelines(fixture.get());
+    const auto inputs = manager->solveInputs();
+    REQUIRE(inputs.tripAttachmentDirs.contains(ownerId));
+    CHECK(inputs.tripAttachmentDirs.value(ownerId)
+          == fixture->saveLoad()->externalCenterlineDir(fixture->trip).absolutePath());
+}
+
+TEST_CASE("manager detach drops the settings entry and dir map synchronously",
+          "[Attach][Manager]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("manager-detach"));
+    auto manager = managerOf(fixture.get());
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const QUuid ownerId = fixture->trip->id();
+
+    auto attachFuture = manager->attachCenterline(fixture->trip, source);
+    REQUIRE(AsyncFuture::waitForFinished(attachFuture, kAttachWaitMs));
+    REQUIRE_FALSE(attachFuture.result().hasError());
+    drainPipelines(fixture.get());
+    REQUIRE(manager->solveInputs().tripAttachmentDirs.contains(ownerId));
+
+    const QString attachmentDir =
+        fixture->saveLoad()->externalCenterlineDir(fixture->trip).absolutePath();
+
+    auto detachFuture = manager->detachCenterline(fixture->trip);
+
+    // The queued-invoke hole (commit-7 review): everything a late
+    // updateFromSource would consult is already gone, synchronously -
+    // before the remove-tree drains.
+    CHECK(fixture->settings()->sourcePathFor(ownerId).isEmpty());
+    CHECK_FALSE(manager->solveInputs().tripAttachmentDirs.contains(ownerId));
+    CHECK(fixture->trip->externalCenterline().isEmpty());
+    CHECK(manager->isOwnerBusy(ownerId));
+
+    // A late updateFromSource during the drain is refused by the busy
+    // token; after the drain it hits the empty sourcePath/attachmentDir
+    // guard. Either way nothing is resurrected.
+    manager->updateFromSource(ownerId);
+
+    REQUIRE(AsyncFuture::waitForFinished(detachFuture, kAttachWaitMs));
+    REQUIRE_FALSE(detachFuture.result().hasError());
+    CHECK_FALSE(manager->isOwnerBusy(ownerId));
+
+    manager->updateFromSource(ownerId);
+    drainPipelines(fixture.get());
+    CHECK_FALSE(QDir(attachmentDir).exists());
+}
+
+TEST_CASE("attachment dirs derive from the save/load pipeline at load time",
+          "[Attach][Manager]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("manager-load-derive"));
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const auto attachResult = runAttach(fixture.get(), source);
+    REQUIRE_FALSE(attachResult.hasError());
+    const QString projectPath = fixture->project->filename();
+    const QUuid ownerId = fixture->trip->id();
+    fixture->rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    // A fresh session opening the project: no attach ran here, so the
+    // dir map, rows, and watch set can only come from the load-time
+    // derivation (insertedCaves -> recompute -> saveLoad-derived dirs).
+    auto freshRoot = std::make_unique<cwRootData>();
+    freshRoot->project()->loadFile(projectPath);
+    freshRoot->project()->waitLoadToFinish();
+    auto freshManager = freshRoot->externalCenterlineManager();
+
+    REQUIRE(tryWait(kWatcherWaitMs, [&] {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
+        return freshManager->solveInputs().tripAttachmentDirs.contains(ownerId);
+    }));
+    const QString derivedDir = freshManager->solveInputs().tripAttachmentDirs.value(ownerId);
+    CHECK(derivedDir.endsWith(QStringLiteral("external-centerline")));
+    CHECK(QFileInfo::exists(QDir(derivedDir).filePath(QStringLiteral("survex_simple.svx"))));
+
+    REQUIRE(tryWait(kWatcherWaitMs, [&] {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
+        return freshManager->attachedCenterlinesModel()->rowCount() == 1;
+    }));
+
+    freshRoot->linePlotManager()->waitToFinish();
+    freshRoot->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
 }

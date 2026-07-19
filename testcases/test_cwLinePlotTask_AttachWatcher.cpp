@@ -433,7 +433,7 @@ TEST_CASE("updateFromSource lands the copy, re-solves, clears the flag, and mark
     manager.externalCenterlineManager()->updateFromSource(fixture->trip->id());
     // Per-owner in-flight guard: the reconcile hasn't drained yet, and a
     // second call while it runs is refused rather than interleaved.
-    CHECK(manager.externalCenterlineManager()->isUpdateFromSourceInFlight(fixture->trip->id()));
+    CHECK(manager.externalCenterlineManager()->isOwnerBusy(fixture->trip->id()));
     manager.externalCenterlineManager()->updateFromSource(fixture->trip->id());
 
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
@@ -453,7 +453,7 @@ TEST_CASE("updateFromSource lands the copy, re-solves, clears the flag, and mark
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
         return manager.externalCenterlineManager()->staleSourceOwners().isEmpty();
     }));
-    CHECK_FALSE(manager.externalCenterlineManager()->isUpdateFromSourceInFlight(fixture->trip->id()));
+    CHECK_FALSE(manager.externalCenterlineManager()->isOwnerBusy(fixture->trip->id()));
     CHECK(fixture->project->modified());
     CHECK(mutationSpy.count() == 1);
 }

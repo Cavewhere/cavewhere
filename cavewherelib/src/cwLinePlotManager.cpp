@@ -540,14 +540,20 @@ void cwLinePlotManager::publishResults(const cwLinePlotTask::LinePlotResultData&
                         results.DriverSource,
                         results.hasSolveError()
                             ? std::optional<cwLinePlotTask::SolveError>(results.solveError())
-                            : std::nullopt);
+                            : std::nullopt,
+                        results.SolveDurationSeconds,
+                        results.regionNetwork().stationCount(),
+                        results.CavernWarningCount);
     publishPerCaveErrors(results);
 }
 
 void cwLinePlotManager::publishCavernOutput(QString cavernLog,
                                             QString loopClosureStats,
                                             QString driverSource,
-                                            std::optional<cwLinePlotTask::SolveError> solveError)
+                                            std::optional<cwLinePlotTask::SolveError> solveError,
+                                            double solveDuration,
+                                            int stationCount,
+                                            int warningCount)
 {
     bool changed = false;
     if (cavernLog != m_lastCavernLog
@@ -556,6 +562,14 @@ void cwLinePlotManager::publishCavernOutput(QString cavernLog,
         m_lastCavernLog = std::move(cavernLog);
         m_lastLoopClosureStats = std::move(loopClosureStats);
         m_lastDriverSource = std::move(driverSource);
+        changed = true;
+    }
+    if (solveDuration != m_lastSolveDuration
+        || stationCount != m_lastStationCount
+        || warningCount != m_lastWarningCount) {
+        m_lastSolveDuration = solveDuration;
+        m_lastStationCount = stationCount;
+        m_lastWarningCount = warningCount;
         changed = true;
     }
     // SolveError has no operator==; compare by presence + message+step+exitCode.

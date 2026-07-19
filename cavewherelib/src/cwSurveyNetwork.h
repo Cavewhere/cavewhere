@@ -28,6 +28,7 @@ public:
 
     QStringList neighbors(const QString& stationName) const;
     QStringList stations() const;
+    int stationCount() const;
     bool isEmpty() const;
 
     void setPosition(const QString& stationName, const QVector3D& stationPosition);

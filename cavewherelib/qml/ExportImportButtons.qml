@@ -142,8 +142,11 @@ QQ.Item {
                     title: "Survex"
 
                     ExportSurveyMenuItem {
+                        objectName: "survexTripExportMenuItem"
                         prefixText: "Current trip"
                         currentText: exportManager.currentTripName
+                        exportAllowed: exportManager.canExport
+                        disabledReason: exportManager.exportDisabledReason
                         onTriggered: {
                             fileDialogItem.state = "EXPORT_TRIP_SURVEX"
                             fileDialog.open()
@@ -151,8 +154,11 @@ QQ.Item {
                     }
 
                     ExportSurveyMenuItem {
+                        objectName: "survexCaveExportMenuItem"
                         prefixText: "Current cave"
                         currentText: exportManager.currentCaveName
+                        exportAllowed: exportManager.canExport
+                        disabledReason: exportManager.exportDisabledReason
                         onTriggered: {
                             fileDialogItem.state = "EXPORT_CAVE_SURVEX"
                             fileDialog.open()
@@ -160,7 +166,12 @@ QQ.Item {
                     }
 
                     QC.MenuItem {
+                        objectName: "survexRegionExportMenuItem"
                         text: "Region (all caves)"
+                        enabled: exportManager.canExport
+                        QC.ToolTip.text: exportManager.exportDisabledReason
+                        QC.ToolTip.visible: hovered && !exportManager.canExport
+                                            && exportManager.exportDisabledReason.length > 0
                         onTriggered: {
                             fileDialogItem.state = "EXPORT_REGION_SURVEX"
                             fileDialog.open()
@@ -172,8 +183,11 @@ QQ.Item {
                     title: "Compass"
 
                     ExportSurveyMenuItem {
+                        objectName: "compassCaveExportMenuItem"
                         prefixText: "Current cave"
                         currentText: exportManager.currentCaveName
+                        exportAllowed: exportManager.canExport
+                        disabledReason: exportManager.exportDisabledReason
                         onTriggered: {
                             fileDialogItem.state = "EXPORT_CAVE_COMPASS"
                             fileDialog.open()
@@ -185,8 +199,11 @@ QQ.Item {
                     title: "Chipdata"
 
                     ExportSurveyMenuItem {
+                        objectName: "chipdataCaveExportMenuItem"
                         prefixText: "Current cave"
                         currentText: exportManager.currentCaveName
+                        exportAllowed: exportManager.canExport
+                        disabledReason: exportManager.exportDisabledReason
                         onTriggered: {
                             fileDialogItem.state = "EXPORT_CAVE_CHIPDATA"
                             fileDialog.open()

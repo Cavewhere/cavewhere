@@ -22,6 +22,8 @@
 #include "cwRegionTreeModel.h"
 #include "cwCavingRegion.h"
 #include "cwLinePlotManager.h"
+#include "cwExternalCenterlineAttach.h"
+#include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceSettings.h"
 #include "cwScrapManager.h"
 #include "cwNoteLiDARManager.h"
@@ -74,6 +76,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(QString version READ version NOTIFY versionChanged)
     Q_PROPERTY(cwLicenseAgreement* license READ license NOTIFY licenseChanged)
     Q_PROPERTY(cwRegionSceneManager* regionSceneManager READ regionSceneManager NOTIFY regionSceneManagerChanged)
+    Q_PROPERTY(cwExternalCenterlineManager* externalCenterlineManager READ externalCenterlineManager CONSTANT FINAL)
     Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
     Q_PROPERTY(cwFutureManagerModel* futureManagerModel READ futureManagerModel CONSTANT)
     Q_PROPERTY(QQuickGit::Account* account READ account CONSTANT)
@@ -110,6 +113,7 @@ public:
     ~cwRootData();
     cwCavingRegion* region() const;
     cwLinePlotManager* linePlotManager() const;
+    cwExternalCenterlineManager* externalCenterlineManager() const;
     cwScrapManager* scrapManager() const;
     cwProject* project() const;
     cwSurveyImportManager* surveyImportManager() const;
@@ -152,6 +156,13 @@ public:
     void setLastDirectory(QUrl lastDirectory);
 
     QString supportImageFormats() const;
+
+    // Thin QML entry points for the external-centerline orchestrator —
+    // the manager resolves the saveLoad/settings dependencies and
+    // enforces the per-owner operation token (isOwnerBusy).
+    Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    attachTripCenterline(cwTrip* trip, const QString& sourcePath);
+    Q_INVOKABLE QFuture<Monad::ResultBase> detachTripCenterline(cwTrip* trip);
 
     //Helper functions for creating things
     Q_INVOKABLE cwImage emptyImage() const  { return cwImage(); }

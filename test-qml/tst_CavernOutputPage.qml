@@ -72,8 +72,8 @@ MainWindowTest {
             verify(errorLabel !== null, "errorMessageLabel must exist")
             verify(!errorLabel.visible, "error message hidden when no solve error")
 
-            const textArea = findChild(page, "cavernLogTextArea")
-            verify(textArea !== null, "cavernLogTextArea must exist")
+            const textArea = findChild(page, "cavernTextArea")
+            verify(textArea !== null, "cavernTextArea must exist")
             compare(textArea.text, "")
         }
 
@@ -86,12 +86,13 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
 
             const page = gotoCavernOutput()
-            const textArea = findChild(page, "cavernLogTextArea")
-            verify(textArea !== null, "cavernLogTextArea must exist")
+            const textArea = findChild(page, "cavernTextArea")
+            verify(textArea !== null, "cavernTextArea must exist")
 
-            // The page binds TextArea.text to manager.cavernLog. After a real
-            // solve, both the manager state and the visible text must be
-            // populated with cavern's diagnostic output.
+            // With "Cavern Output" selected (the default) the shared
+            // TextArea binds to manager.cavernLog. After a real solve, both
+            // the manager state and the visible text must be populated with
+            // cavern's diagnostic output.
             tryVerify(() => RootData.linePlotManager.cavernLog.length > 0,
                       5000, "cavernLog Q_PROPERTY should be populated")
             tryVerify(() => textArea.text.length > 0,
@@ -107,8 +108,39 @@ MainWindowTest {
             verify(!RootData.linePlotManager.hasSolveError,
                    "hasSolveError should be false on a clean solve")
 
+            // After a real solve the status line carries the live stats
+            // suffix ("… in 0.4 s — 214 stations, 0 warnings.").
             const status = findChild(page, "statusLabel")
-            compare(status.text, qsTr("Last solve completed successfully."))
+            verify(status.text.indexOf(qsTr("Last solve completed successfully")) === 0,
+                   "status leads with the success text; got: " + status.text)
+        }
+
+        function test_switcherButtonsAreExclusive() {
+            // Cavern Input / Cavern Output / Loop Closure act as a tab
+            // switcher driving the single shared TextArea. On a fresh
+            // project the output (log) is selected and loop closure is
+            // disabled (no loops).
+            const page = gotoCavernOutput()
+
+            const inputButton = findChild(page, "cavernInputButton")
+            verify(inputButton !== null, "cavernInputButton must exist")
+            const outputButton = findChild(page, "cavernOutputButton")
+            verify(outputButton !== null, "cavernOutputButton must exist")
+            const loopButton = findChild(page, "loopClosureButton")
+            verify(loopButton !== null, "loopClosureButton must exist")
+
+            verify(outputButton.checked, "output selected by default")
+            verify(!loopButton.enabled,
+                   "loop closure disabled when the cave has no loops")
+
+            mouseClick(inputButton)
+            verify(inputButton.checked, "input selected after click")
+            verify(!outputButton.checked, "output deselected — exclusive")
+
+            // The page item is cached across tests — restore the default
+            // selection so later tests see the pristine page.
+            mouseClick(outputButton)
+            verify(outputButton.checked, "output re-selected")
         }
 
         function test_rerunButtonInvokesManager() {

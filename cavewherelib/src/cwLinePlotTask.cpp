@@ -26,6 +26,7 @@
 #include "cwErrorModel.h"
 
 // Qt includes
+#include <QElapsedTimer>
 #include <QHash>
 #include <QTemporaryDir>
 #include <QRegularExpression>
@@ -314,6 +315,7 @@ private:
         // that CavernOutputPage exposes to the user.
         result.CavernLog = cavern.logText;
         result.LoopClosureStats = cavern.loopClosureStats;
+        result.CavernWarningCount = cavern.warningCount;
 
         if (!QFileInfo::exists(cavern.output3dPath)) {
             cwLinePlotTask::SolveError error;
@@ -656,7 +658,11 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
 QFuture<cwLinePlotTask::LinePlotResultData> cwLinePlotTask::run(cwLinePlotTask::Input input)
 {
     return cwConcurrent::run([input = std::move(input)]() mutable {
+        QElapsedTimer timer;
+        timer.start();
         cwLinePlotTask::LinePlotWorker worker(std::move(input));
-        return worker.run();
+        auto result = worker.run();
+        result.SolveDurationSeconds = timer.elapsed() / 1000.0;
+        return result;
     });
 }
