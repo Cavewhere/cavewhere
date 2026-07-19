@@ -295,7 +295,7 @@ ColumnLayout {
                 UnitSystemComboBox {
                     id: scaleBarUnitComboId
                     objectName: "scaleBarUnitComboBox"
-                    // Index maps to CaptureViewport.ScaleBarUnitMode:
+                    // Index maps to Units.ScaleBarUnitMode:
                     // 0 = FollowProject, 1 = ForceMetric, 2 = ForceImperial.
                     includeFollowProject: true
                 }

@@ -998,11 +998,11 @@ void cwCaptureViewport::setLeadsVisible(bool visible)
 cwUnits::UnitSystem cwCaptureViewport::effectiveScaleBarUnitSystem() const
 {
     switch(m_scaleBarUnitMode) {
-    case ForceMetric:
+    case cwUnits::ForceMetric:
         return cwUnits::Metric;
-    case ForceImperial:
+    case cwUnits::ForceImperial:
         return cwUnits::Imperial;
-    case FollowProject:
+    case cwUnits::FollowProject:
         break;
     }
 
@@ -1012,7 +1012,7 @@ cwUnits::UnitSystem cwCaptureViewport::effectiveScaleBarUnitSystem() const
     return cwUnits::Metric;
 }
 
-void cwCaptureViewport::setScaleBarUnitMode(ScaleBarUnitMode mode)
+void cwCaptureViewport::setScaleBarUnitMode(cwUnits::ScaleBarUnitMode mode)
 {
     if(m_scaleBarUnitMode == mode) {
         return;

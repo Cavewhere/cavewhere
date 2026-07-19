@@ -53,9 +53,22 @@ public:
         Imperial = 1
     };
 
+    //! How a scale bar picks its unit system, independent of the project's own
+    //! setting. FollowProject tracks the project's UnitSystem live;
+    //! ForceMetric/ForceImperial pin one bar to a system regardless of the
+    //! project. Shared by the on-screen view bar (ScaleBar.qml) and the per-layer
+    //! export bar (cwCaptureViewport, where the value is persisted, #470).
+    //! Values match the Metric/Imperial combobox index (0/1/2 with FollowProject).
+    enum ScaleBarUnitMode {
+        FollowProject = 0,
+        ForceMetric = 1,
+        ForceImperial = 2
+    };
+
     Q_ENUM(LengthUnit)
     Q_ENUM(ImageResolutionUnit)
     Q_ENUM(UnitSystem)
+    Q_ENUM(ScaleBarUnitMode)
 
     static constexpr double PointsPerInch = 72.0;
     static constexpr double SvgCssDpi = 96.0;

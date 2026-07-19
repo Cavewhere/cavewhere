@@ -28,7 +28,7 @@ TEST_CASE("cwCaptureViewport export scale bar resolves its unit system",
     REQUIRE(bar != nullptr);
 
     SECTION("defaults to following the project, metric with no project") {
-        CHECK(viewport.scaleBarUnitMode() == cwCaptureViewport::FollowProject);
+        CHECK(viewport.scaleBarUnitMode() == cwUnits::FollowProject);
         CHECK(viewport.effectiveScaleBarUnitSystem() == cwUnits::Metric);
         CHECK(bar->unitSystem() == cwUnits::Metric);
     }
@@ -36,19 +36,19 @@ TEST_CASE("cwCaptureViewport export scale bar resolves its unit system",
     SECTION("a forced mode pins the bar regardless of any project") {
         cwSignalSpy modeSpy(&viewport, &cwCaptureViewport::scaleBarUnitModeChanged);
 
-        viewport.setScaleBarUnitMode(cwCaptureViewport::ForceImperial);
+        viewport.setScaleBarUnitMode(cwUnits::ForceImperial);
         CHECK(modeSpy.count() == 1);
         CHECK(viewport.effectiveScaleBarUnitSystem() == cwUnits::Imperial);
         CHECK(bar->unitSystem() == cwUnits::Imperial);
 
-        viewport.setScaleBarUnitMode(cwCaptureViewport::ForceMetric);
+        viewport.setScaleBarUnitMode(cwUnits::ForceMetric);
         CHECK(viewport.effectiveScaleBarUnitSystem() == cwUnits::Metric);
         CHECK(bar->unitSystem() == cwUnits::Metric);
     }
 
     SECTION("setting the same mode does not re-emit") {
         cwSignalSpy modeSpy(&viewport, &cwCaptureViewport::scaleBarUnitModeChanged);
-        viewport.setScaleBarUnitMode(cwCaptureViewport::FollowProject);
+        viewport.setScaleBarUnitMode(cwUnits::FollowProject);
         CHECK(modeSpy.count() == 0);
     }
 }
@@ -79,7 +79,7 @@ TEST_CASE("cwCaptureViewport export scale bar follows the project unit system li
     }
 
     SECTION("a forced mode ignores the project and its later changes") {
-        viewport.setScaleBarUnitMode(cwCaptureViewport::ForceMetric);
+        viewport.setScaleBarUnitMode(cwUnits::ForceMetric);
         CHECK(bar->unitSystem() == cwUnits::Metric);
 
         region.setUnitSystem(cwUnits::Imperial);

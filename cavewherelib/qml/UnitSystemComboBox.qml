@@ -14,7 +14,7 @@ QC.ComboBox {
     id: controlId
 
     // Prepend a "Project Default" entry at index 0, shifting Metric/Imperial to
-    // 1/2 — the index layout of CaptureViewport.ScaleBarUnitMode.
+    // 1/2 — the index layout of Units.ScaleBarUnitMode.
     property bool includeFollowProject: false
 
     model: controlId.includeFollowProject

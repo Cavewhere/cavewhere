@@ -20,42 +20,55 @@ QQ.Item {
     property real maxTotalWidth: itemId.parent.width * 0.75
     property real minTotalWidth: itemId.parent.width * 0.2
 
-    // A session-only, in-memory unit override for THIS bar, chosen from the
-    // right-click menu. It never writes the project or app default.
-    property bool hasSessionOverride: false
-    property int sessionUnitSystem: Units.Metric
+    // A session-only, in-memory unit choice for THIS bar, set from the right-click
+    // menu. FollowProject tracks the project (or app default) live;
+    // ForceMetric/ForceImperial pin just this bar without writing the project.
+    // Units.ScaleBarUnitMode is the shared enum the export bar (cwCaptureViewport)
+    // uses too.
+    property int unitMode: Units.FollowProject
 
-    // The unit system the bar reads in: the session override when set, else the
-    // project's. The concrete unit (m/km or ft/mi) is then chosen by magnitude.
-    readonly property int unitSystem: itemId.hasSessionOverride
-        ? itemId.sessionUnitSystem
-        : ProjectUnits.unitSystem
+    // The unit system the bar reads in, resolved from unitMode. The concrete
+    // unit (m/km or ft/mi) is then chosen by magnitude.
+    readonly property int unitSystem: {
+        switch (itemId.unitMode) {
+        case Units.ForceMetric:
+            return Units.Metric;
+        case Units.ForceImperial:
+            return Units.Imperial;
+        default:
+            return ProjectUnits.unitSystem;
+        }
+    }
 
     QC.Menu {
         id: unitMenuId
 
+        // One item per unit system. The item matching the project default is
+        // annotated and, when chosen, returns the bar to following the project
+        // (live) rather than pinning; the other item pins its system for this
+        // bar. The item for the unit already shown is disabled (a no-op).
         QC.MenuItem {
-            text: "Follow Project Default"
-            enabled: itemId.hasSessionOverride
-            onTriggered: itemId.hasSessionOverride = false
-        }
+            objectName: "scaleBarMetricMenuItem"
+            readonly property bool isProjectDefault: ProjectUnits.unitSystem === Units.Metric
 
-        QC.MenuSeparator {}
-
-        QC.MenuItem {
             text: Units.unitSystemName(Units.Metric)
-            onTriggered: {
-                itemId.sessionUnitSystem = Units.Metric;
-                itemId.hasSessionOverride = true;
-            }
+                  + (isProjectDefault ? " - " + qsTr("Project Default") : "")
+            enabled: itemId.unitSystem !== Units.Metric
+            onTriggered: itemId.unitMode = isProjectDefault
+                ? Units.FollowProject
+                : Units.ForceMetric
         }
 
         QC.MenuItem {
+            objectName: "scaleBarImperialMenuItem"
+            readonly property bool isProjectDefault: ProjectUnits.unitSystem === Units.Imperial
+
             text: Units.unitSystemName(Units.Imperial)
-            onTriggered: {
-                itemId.sessionUnitSystem = Units.Imperial;
-                itemId.hasSessionOverride = true;
-            }
+                  + (isProjectDefault ? " - " + qsTr("Project Default") : "")
+            enabled: itemId.unitSystem !== Units.Imperial
+            onTriggered: itemId.unitMode = isProjectDefault
+                ? Units.FollowProject
+                : Units.ForceImperial
         }
     }
 
