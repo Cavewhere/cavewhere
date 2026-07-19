@@ -14,6 +14,10 @@ StandardPage {
     readonly property int readingMaxWidth: 720
     readonly property int readingPadding: 32
 
+    // Top-level page under which every article is registered (see MainContent);
+    // article addresses are "Docs/<article title>".
+    readonly property string docsRootName: "Docs"
+
     property string slug: ""
 
     property string markdownText: docsPageId.slug === ""
@@ -51,10 +55,23 @@ StandardPage {
                 font.family: Theme.fontFamilyBody
                 font.pixelSize: Theme.fontSizeBody
 
-                // CP3 routes .md links through the page model; until then only
-                // external links are meaningful, so hand them to the browser.
+                // Relative .md links (the landing index and inter-article
+                // cross-references) navigate in-app through the page model;
+                // everything else (http(s), mailto) opens in the browser.
+                // Same-page anchors are ignored for now — intra-page scrolling
+                // is a fast-follow.
                 onLinkActivated: function(link) {
-                    Qt.openUrlExternally(link)
+                    if (link.startsWith("#")) {
+                        return
+                    }
+
+                    let targetSlug = RootData.manualIndex.slugForLink(docsPageId.slug, link)
+                    if (targetSlug.length > 0) {
+                        RootData.pageSelectionModel.currentPageAddress =
+                            docsPageId.docsRootName + "/" + RootData.manualIndex.title(targetSlug)
+                    } else {
+                        Qt.openUrlExternally(link)
+                    }
                 }
             }
         }

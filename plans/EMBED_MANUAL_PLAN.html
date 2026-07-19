@@ -130,7 +130,7 @@
     <span class="chip"><b>Source of truth</b> docs/manual/*.md</span>
     <span class="chip"><b>Renderer</b> Qt TextFormat.MarkdownText</span>
     <span class="chip"><b>Nav</b> cwPageSelectionModel, page per article</span>
-    <span class="chip"><b>Status</b> CP1–CP2 done · CP3 next</span>
+    <span class="chip"><b>Status</b> CP1–CP3 done · CP4 next</span>
   </div>
 </header>
 
@@ -377,10 +377,18 @@ docs-website tool, never a CaveWhere build dependency.</p>
 <div class="cp">
   <span class="tag">CP3 · Navigation &amp; links</span>
   <h3>Back/forward, breadcrumb, and cross-links work</h3>
-  <p>Add the <code>onLinkActivated</code> interceptor: <code>.md</code> paths → <code>gotoPageByName</code>,
-    external → <code>openUrlExternally</code>. Verify <code>LinkBar</code> back/forward and the breadcrumb
-    step between articles. Intra-page anchor scroll if cheap here.</p>
-  <div class="files">~ cavewherelib/qml/DocsPage.qml (+ a small path→slug helper)</div>
+  <p class="rec">✓ Done — cross-page nav via relative <code>.md</code> links; 31 <code>[cwManualIndex]</code>
+    assertions + 9 <code>tst_DocsPage</code> cases green.</p>
+  <p>Added the <code>onLinkActivated</code> interceptor: relative <code>.md</code> paths (the landing
+    index TOC and inter-article cross-references) → in-app nav, external → <code>openUrlExternally</code>,
+    same-page <code>#anchor</code> ignored (intra-page scroll deferred). Path→slug resolution lives in C++
+    (<code>cwManualIndex::slugForLink(fromSlug, href)</code>): it needs <code>QUrl</code> relative
+    resolution against the source page's location plus the article map, so QML stays dumb (resolve →
+    navigate by <code>Docs/&lt;title&gt;</code> address, or hand the link to the browser). Back/forward
+    and the breadcrumb carry for free because each hop is an ordinary <code>currentPageAddress</code>
+    navigation.</p>
+  <div class="files">~ cavewherelib/qml/DocsPage.qml · ~ cwManualIndex.{h,cpp} (slugForLink) ·
+    ~ test_cwManualIndex.cpp · ~ tst_DocsPage.qml</div>
 </div>
 
 <div class="cp">
@@ -418,8 +426,8 @@ docs-website tool, never a CaveWhere build dependency.</p>
     artifact serve both.</li>
 </ul>
 
-<h2>Follow-ups (from the CP2 review — not blocking)</h2>
-<p>Deferred improvements surfaced reviewing CP2. None is a correctness bug against today's
+<h2>Follow-ups (from the CP2 &amp; CP3 reviews — not blocking)</h2>
+<p>Deferred improvements surfaced reviewing CP2 and CP3. None is a correctness bug against today's
 manual; each is worth doing before or alongside CP4, where the payoffs land.</p>
 <ul>
   <li><strong>A1/R1 · Make <code>llms.txt</code> the one source; stop duplicating the website build.</strong>
@@ -446,6 +454,33 @@ manual; each is worth doing before or alongside CP4, where the payoffs land.</p>
     <code>QHash&lt;slug,QString&gt;</code> memo if it ever matters; negligible for a viewer today.</li>
 </ul>
 
+<p>From the CP3 review — three <code>🟢</code> coupling notes, none a live bug, all latent given today's
+curated manual. A1 below naturally pairs with CP4 (it builds the TOC/search over the same index).</p>
+<ul>
+  <li><strong>R1 · Navigate by page handle, not a reconstructed address string.</strong>
+    <code>DocsPage.qml:19,70</code> hardcodes <code>docsRootName: "Docs"</code> and builds
+    <code>"Docs/" + title</code>, restating both the registration name at <code>MainContent.qml:224</code>
+    and <code>cwPageSelectionModel::seperator()</code> (<code>"/"</code>). The model already exposes
+    <code>gotoPageByName(parentPage, subPage)</code>, which navigates a child by name with no string-building
+    or separator knowledge in QML. Needs the Docs parent <code>cwPage*</code> threaded into <code>DocsPage</code>
+    (or a slug-nav helper on the model). Tiny/harmless today; the string form works.</li>
+  <li><strong>R2 · <code>slugForLink</code>'s empty return conflates three outcomes.</strong>
+    <code>cwManualIndex.cpp:141,167,171</code> return <code>QString()</code> for same-page anchor,
+    external link, <em>and</em> not-a-registered-article. The caller can't tell them apart, so
+    <code>DocsPage.qml:64</code>'s <code>startsWith("#")</code> guard is load-bearing (removing it sends
+    anchors to <code>openUrlExternally</code>), and an in-manual relative link to a non-article page would
+    also be handed to the browser as a bare relative path. A small result type or split
+    <code>isExternal</code>/<code>isAnchor</code> predicates would make the contract precise. Not reachable
+    from the link-checked manual today.</li>
+  <li><strong>A1 · In-app doc nav is keyed by human title, not the stable slug.</strong> Articles register
+    under <code>article.title</code> as the page name (<code>MainContent.qml:228</code>) and addresses resolve
+    by name, so CP3 round-trips <em>slug → <code>title(slug)</code> → <code>"Docs/&lt;title&gt;"</code> → page-by-name</em>.
+    Correctness depends on titles staying unique and never reworded; the stable id (slug) never appears in the
+    address space. A slug-addressed docs sub-space (a model/index helper that navigates the Docs child by slug)
+    would be robust and give stable deep-links. Blast radius: registration loop + a small nav helper + the
+    DocsPage seam. Best folded into CP4's TOC/search work over the same index.</li>
+</ul>
+
 <h2>Out of scope (this plan)</h2>
 <ul>
   <li>Publishing the manual to <strong>cavewhere.com</strong> — same source, separate task; the
@@ -455,9 +490,9 @@ manual; each is worth doing before or alongside CP4, where the payoffs land.</p>
 </ul>
 
 <footer>
-  CP1–CP2 done (22 <code>[cwManualIndex]</code> + 7 <code>tst_DocsPage</code> cases green; app links
+  CP1–CP3 done (31 <code>[cwManualIndex]</code> + 9 <code>tst_DocsPage</code> cases green; app links
   clean) · CaveWhere · renders natively, no web engine · all file:line references verified against the
-  current tree. Decisions 1–6 resolved — CP3 (nav/link interceptor) is next.
+  current tree. Decisions 1–6 resolved — CP4 (sidebar TOC + search) is next.
 </footer>
 
 </div>

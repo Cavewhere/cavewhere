@@ -63,6 +63,37 @@ TEST_CASE("cwManualIndex parses the embedded manual", "[cwManualIndex]") {
         CHECK(index.body(QStringLiteral("no-such-page")).isEmpty());
         CHECK(index.title(QStringLiteral("no-such-page")).isEmpty());
     }
+
+    SECTION("slugForLink resolves relative .md links to article slugs") {
+        //A cross-reference from one article to a sibling directory resolves
+        //against the source page's location (settings/ -> scraps/).
+        CHECK(index.slugForLink(QStringLiteral("settings-change-settings"),
+                                QStringLiteral("../scraps/carpeting.md"))
+              == QStringLiteral("scraps-carpeting"));
+
+        //The landing page (empty slug) resolves links against the manual root.
+        CHECK(index.slugForLink(QString(),
+                                QStringLiteral("scraps/carpeting.md"))
+              == QStringLiteral("scraps-carpeting"));
+
+        //A trailing #anchor on an article link is dropped before slugging.
+        CHECK(index.slugForLink(QStringLiteral("settings-change-settings"),
+                                QStringLiteral("../scraps/carpeting.md#warping"))
+              == QStringLiteral("scraps-carpeting"));
+    }
+
+    SECTION("slugForLink rejects non-article links") {
+        //External links, same-page anchors, and empties are not in-app pages.
+        CHECK(index.slugForLink(QString(), QStringLiteral("https://cavewhere.com")).isEmpty());
+        CHECK(index.slugForLink(QString(), QStringLiteral("mailto:a@b.com")).isEmpty());
+        CHECK(index.slugForLink(QStringLiteral("scraps-carpeting"),
+                                QStringLiteral("#warping")).isEmpty());
+        CHECK(index.slugForLink(QString(), QString()).isEmpty());
+        //A .md path that is not a registered article resolves to nothing.
+        CHECK(index.slugForLink(QString(), QStringLiteral("does/not-exist.md")).isEmpty());
+        //index.md is the landing, excluded from the article list.
+        CHECK(index.slugForLink(QString(), QStringLiteral("index.md")).isEmpty());
+    }
 }
 
 TEST_CASE("cwManualIndex path helpers mirror the website build", "[cwManualIndex]") {

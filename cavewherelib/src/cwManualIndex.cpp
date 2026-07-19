@@ -133,6 +133,44 @@ QString cwManualIndex::title(const QString& slug) const
     return index < 0 ? QString() : m_articles.at(index).title;
 }
 
+QString cwManualIndex::slugForLink(const QString& fromSlug, const QString& href) const
+{
+    const QString trimmed = href.trimmed();
+    if (trimmed.isEmpty() || trimmed.startsWith(QLatin1Char('#'))) {
+        //Empty, or a same-page anchor the caller handles itself.
+        return QString();
+    }
+
+    const QUrl target(trimmed);
+    if (!target.scheme().isEmpty()) {
+        //Absolute link (http, https, mailto, …) — not an in-app page.
+        return QString();
+    }
+
+    //Resolve the (possibly relative) link against the current page's location
+    //inside the manual, then map the resulting resource path back to a slug.
+    const int fromIndex = m_slugToIndex.value(fromSlug, -1);
+    const QString fromPath = fromIndex >= 0 ? m_articles.at(fromIndex).relativePath
+                                            : kLandingPage;
+    const QString resolved = QUrl(kResourceUrlRoot + fromPath).resolved(target).toString();
+    if (!resolved.startsWith(kResourceUrlRoot)) {
+        //The link resolved outside the manual tree.
+        return QString();
+    }
+
+    QString relativePath = resolved.mid(kResourceUrlRoot.size());
+    const int hash = relativePath.indexOf(QLatin1Char('#'));
+    if (hash >= 0) {
+        relativePath = relativePath.left(hash);
+    }
+    if (!relativePath.endsWith(kMarkdownSuffix)) {
+        return QString();
+    }
+
+    const QString slug = slugForPath(relativePath);
+    return m_slugToIndex.contains(slug) ? slug : QString();
+}
+
 QString cwManualIndex::slugForPath(const QString& relativePath)
 {
     QString base = relativePath;

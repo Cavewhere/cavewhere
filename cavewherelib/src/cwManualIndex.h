@@ -46,6 +46,13 @@ public:
     Q_INVOKABLE QString landingBody() const;
     Q_INVOKABLE QString title(const QString& slug) const;
 
+    //Resolves a Markdown link clicked on the page whose slug is @p fromSlug
+    //(empty for the landing page) into the slug of the manual article it points
+    //at. Returns an empty string for same-page anchors, external links, or any
+    //target that is not a registered article — the viewer treats those as
+    //"not in-app" and hands them to the browser.
+    Q_INVOKABLE QString slugForLink(const QString& fromSlug, const QString& href) const;
+
     static QString slugForPath(const QString& relativePath);
     static QString chapterForPath(const QString& relativePath);
 
