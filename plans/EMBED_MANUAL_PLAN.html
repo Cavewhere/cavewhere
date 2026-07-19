@@ -130,7 +130,7 @@
     <span class="chip"><b>Source of truth</b> docs/manual/*.md</span>
     <span class="chip"><b>Renderer</b> Qt TextFormat.MarkdownText</span>
     <span class="chip"><b>Nav</b> cwPageSelectionModel, page per article</span>
-    <span class="chip"><b>Status</b> CP1 done · CP2 next</span>
+    <span class="chip"><b>Status</b> CP1–CP2 done · CP3 next</span>
   </div>
 </header>
 
@@ -205,7 +205,7 @@ File → Docs  ──▶  gotoPageByName(null,"Docs")
         │        <span class="c">DocsPage.qml (shared)</span>       │   ← root: StandardPage
         │  ┌──────────┬──────────────────┐│
         │  │ sidebar/ │  reading column  ││   ← Flickable + Label(MarkdownText),
-        │  │ TOC +    │  renders slug's  ││     baseUrl = article's resource dir
+        │  │ TOC +    │  renders slug's  ││     images → qrc: absolute (rewritten in C++)
         │  │ search   │  .md body        ││
         │  └──────────┴──────────────────┘│
         └─────────────────────────────────┘
@@ -229,40 +229,52 @@ File → Docs  ──▶  gotoPageByName(null,"Docs")
     (<code>../survey-data/enter-survey-data.md#anchor</code>). On <code>onLinkActivated</code>: map a
     <code>.md</code> path → its slug and <code>gotoPageByName</code> (in-app, enters history);
     <code>http(s)</code> → <code>Qt.openUrlExternally</code>.</li>
-  <li><strong>Search index + filter model</strong> — a small model backed by a generated index
-    of <code>title</code>/<code>summary</code>/<code>keywords</code> (front matter we already have). Typing
-    filters; selecting jumps to that article's page.</li>
+  <li><strong>Search index + filter model</strong> — a small model backed by
+    <code>cwManualIndex</code>'s in-memory <code>title</code>/<code>summary</code>/<code>keywords</code>
+    (front matter it already parsed). Typing filters; selecting jumps to that article's page.</li>
   <li><strong>File-menu item</strong> — copy the About item (<code>FileMenu.qml:130–135</code>):
     <code>text: "Docs…"; onTriggered: RootData.pageSelectionModel.gotoPageByName(null, "Docs")</code>.</li>
-  <li><strong>Content staging</strong> — a build step emits the <code>.md</code> + images into a Qt
-    resource (or data dir) so they're readable at runtime, with each page's Markdown
-    <code>baseUrl</code> set to its directory so relative images resolve.</li>
+  <li><strong>Content staging</strong> — CMake's <code>qt_add_resources</code> globs the
+    <code>.md</code> + images + <code>llms.txt</code> into the binary (<code>:/manual/…</code>); the
+    runtime <code>cwManualIndex</code> C++ class rewrites each body's relative image links to absolute
+    <code>qrc:</code> URLs, so no Markdown base URL is needed (Qt's <code>Text</code> has none anyway).</li>
 </ul>
 
-<h2>Content pipeline</h2>
+<h2>Content pipeline — no build-time codegen</h2>
 <div class="flow">
-docs/manual/**/*.md  ──(strip front matter, keep as-is)──▶  staged .md
-docs/manual/images/  ──────────────────────────────────▶  staged images
-docs/manual/llms.txt ──(parse order + titles)──────────▶  manifest.json  (slug, title, chapter, path)
-front matter          ──(title/summary/keywords)────────▶  search-index.json
-                                   │
+docs/manual/**/*.md  ─┐
+docs/manual/images/  ─┼─ CMake file(GLOB) + qt_add_resources ─▶  :/manual/…  compiled into the app
+docs/manual/llms.txt ─┘
+                                   │  (at runtime)
                                    ▼
-                      cavewhere_manual.qrc  ──▶  compiled into the app
+   cwManualIndex (C++)  ── parses llms.txt → ordered (title, slug); chapter from the path
+                           strips front matter + rewrites image links → qrc: absolute
+                           (front-matter summary/keywords for search — deferred to CP4)
+                                   │
+                    ┌──────────────┴───────────────┐
+                    ▼                               ▼
+   RootData.manualIndex.articles          RootData.manualIndex.body(slug)
+   ──▶ registration loop + TOC + search   ──▶ DocsPage reading column
 </div>
-<p>Reuses the machinery already in <code>scripts/build-manual-html.py</code>: <code>parse_llms()</code>
-for order/titles, <code>strip_front_matter()</code>, and the same slug scheme. A new sibling
-script (e.g. <code>scripts/build-manual-resource.py</code>) emits the <code>.qrc</code> + two JSON files
-rather than one HTML blob. Both scripts share one source; neither becomes a second index
-to maintain.</p>
+<p>No Python, no pandoc, no generated <code>manifest.json</code>/<code>search-index.json</code>.
+The app renders Markdown <em>natively</em>, so the HTML conversion pandoc did for the website
+is never needed here — the only work is embedding the raw <code>.md</code> + images and parsing a
+little front matter. Embedding is CMake's existing <code>qt_add_resources</code> mechanism
+(already used at <code>cavewherelib/CMakeLists.txt:217</code>); the parsing lives in a small
+<code>cwManualIndex</code> C++ class covered by <code>cavewhere-test</code>. <code>llms.txt</code>
+stays the single ordered index — the same file the website build reads — so there is no second
+manifest to keep in sync. <code>scripts/build-manual-html.py</code> is unaffected: Python stays a
+docs-website tool, never a CaveWhere build dependency.</p>
 
 <h2>Decisions — resolved</h2>
 <div class="grid">
   <div class="card">
     <h3>1 · How to ship the content</h3>
-    <p><strong>Compile into the app (<code>.qrc</code>).</strong> Single binary, offline, simple.
-      If the PNGs push the binary too far, the fallback is down-sampling the in-app image
-      copies before ever reaching for a data dir.</p>
-    <p class="rec">✓ <code>.qrc</code></p>
+    <p><strong>Compile into the app, via CMake's <code>qt_add_resources</code>.</strong> Single
+      binary, offline, simple — and no build script (see Decision&nbsp;6). If the PNGs push the
+      binary too far, the fallback is down-sampling the in-app image copies before ever reaching
+      for a data dir.</p>
+    <p class="rec">✓ <code>qt_add_resources</code> (no codegen)</p>
   </div>
   <div class="card">
     <h3>2 · The sketch app</h3>
@@ -288,9 +300,12 @@ to maintain.</p>
   <p class="k">Decision 5 — the CP2 content seam (added after the CP1 review)</p>
   <p>Register each article by a <strong><code>slug</code></strong>, not by pushing a Markdown
   string. CP1 shipped a placeholder <code>markdownText</code> string to prove the render path;
-  CP2 replaces it with a <code>slug</code> property that <code>DocsPage</code> resolves internally
-  into <em>both</em> the body text and the <code>baseUrl</code> — a raw string can't carry the
-  per-article image base the plan requires.</p>
+  CP2 replaces it with a <code>slug</code> property that <code>DocsPage</code> resolves — via
+  <code>markdownText: RootData.manualIndex.body(slug)</code> — into the article's Markdown body with
+  its image links already rewritten to absolute <code>qrc:</code> URLs. A raw pushed string couldn't
+  carry the per-article image base, and Qt's <code>Text</code>/<code>Label</code> has <em>no</em>
+  settable Markdown base URL, so the C++ index resolves images to absolute resource paths rather
+  than relying on a <code>baseUrl</code> that doesn't exist.</p>
   <p><strong>Use <code>registerPage</code>, not <code>registerSubPage</code>.</strong>
   <code>registerSubPage</code> is a little funny — it implicitly reuses the <em>parent page's</em>
   <code>QQmlComponent</code> and merges the new properties over the parent's
@@ -302,6 +317,24 @@ to maintain.</p>
   component with the slug unset (it shows the chapter-grouped TOC), and each article passes its own
   <code>{slug}</code>. Passing the component explicitly keeps the registration readable and free of
   the parent-property inheritance <code>registerSubPage</code> would splice in.</p>
+</div>
+
+<div class="callout decision">
+  <p class="k">Decision 6 — build the resource with CMake, parse at runtime in C++ (no Python in the app build)</p>
+  <p>CaveWhere must build without Python — it is a moving target across build platforms, and the app
+  build already has CMake. So CP2 does <strong>no build-time codegen</strong>: CMake's
+  <code>qt_add_resources</code> globs the manual's <code>.md</code> + images + <code>llms.txt</code>
+  into the binary, and a runtime <code>cwManualIndex</code> C++ class does the parsing (order/titles
+  from <code>llms.txt</code>, chapter grouping from the file path, front-matter stripping, and
+  image-link rewriting). Front-matter summary/keywords for search are read in CP4, not CP2.</p>
+  <p>This is <em>better</em> than the earlier <code>build-manual-resource.py</code> idea on every axis
+  that matters: zero new build dependency; the parsing is unit-tested in <code>cavewhere-test</code>
+  instead of an un-tested script or fragile CMake regex; there is no generated
+  <code>manifest.json</code>/<code>search-index.json</code> to check in or regenerate; and
+  <code>llms.txt</code> stays the single ordered index shared with the website build. Editing a page
+  is just a rebuild (rcc re-embeds). Python remains fine for the website HTML build, which is not part
+  of building CaveWhere. The pandoc/Markdown→HTML conversion the website needs never applied here —
+  the app renders Markdown natively.</p>
 </div>
 
 <h2>Implementation checkpoints</h2>
@@ -320,16 +353,25 @@ to maintain.</p>
 </div>
 
 <div class="cp">
-  <span class="tag">CP2 · Content resource + manifest</span>
-  <h3>All articles staged and addressable</h3>
-  <p>Give <code>DocsPage</code> the <code>slug</code> seam (Decision&nbsp;5), resolving slug → body +
-    <code>baseUrl</code>. Add <code>scripts/build-manual-resource.py</code> → <code>.qrc</code> +
-    <code>manifest.json</code>. Loop the manifest in <code>MainContent.qml</code> calling
+  <span class="tag">CP2 · Content resource + runtime index</span>
+  <h3>All articles staged and addressable — no Python, no codegen</h3>
+  <p>Embed the manual with CMake and parse it at runtime (Decision&nbsp;6). CMake
+    <code>qt_add_resources</code> globs <code>docs/manual/**/*.md</code> + images + <code>llms.txt</code>
+    into <code>:/manual/…</code> (exclude <code>_site/</code>). New <code>cwManualIndex</code> C++ class
+    parses <code>llms.txt</code> (ordered chapter/title/slug), strips front matter, and rewrites image
+    links to absolute <code>qrc:</code> URLs; exposed as <code>RootData.manualIndex</code> with
+    <code>articles</code> + <code>body(slug)</code>. Give <code>DocsPage</code> the <code>slug</code>
+    seam binding <code>markdownText: RootData.manualIndex.body(slug)</code> (Decision&nbsp;5). Loop
+    <code>RootData.manualIndex.articles</code> in <code>MainContent.qml</code> calling
     <code>registerPage(docsRoot, title, docsPageComponent, {slug})</code> for every article (explicit
-    component + props — <em>not</em> <code>registerSubPage</code>; see Decision&nbsp;5). The landing
-    page is that same <code>DocsPage</code> component with slug unset. Set each page's Markdown
-    <code>baseUrl</code> so images resolve. Wire the CMake step so the resource builds.</p>
-  <div class="files">+ scripts/build-manual-resource.py · + cavewhere_manual.qrc · ~ CMakeLists.txt · ~ MainContent.qml</div>
+    component + props — <em>not</em> <code>registerSubPage</code>). The landing page is that same
+    <code>DocsPage</code> with slug unset. Cover the parser with a <code>cavewhere-test</code> case.</p>
+  <div class="files">+ cwManualIndex.{h,cpp} · + testcases/&hellip; (index unit test) · ~ cavewherelib/CMakeLists.txt (qt_add_resources) · ~ cwRootData · ~ MainContent.qml · ~ DocsPage.qml</div>
+  <p class="rec">✓ Done — 22 <code>[cwManualIndex]</code> assertions + 7 <code>tst_DocsPage</code> cases green; app +
+    both test binaries link clean. <code>index.md</code>/<code>AUTHORING.md</code> excluded from article
+    registration (root-level, no chapter dir). Image optimization <strong>skipped</strong> by decision:
+    qrc is demand-paged (the 34&nbsp;MB is binary size only, zero runtime cost) and local lossless gave
+    just ~4%; revisit only if download size matters.</p>
 </div>
 
 <div class="cp">
@@ -344,9 +386,10 @@ to maintain.</p>
 <div class="cp">
   <span class="tag">CP4 · Sidebar TOC + search</span>
   <h3>Find a topic and jump to it</h3>
-  <p>Build the sidebar TOC (chapter grouping from the manifest) and a search box backed by a
-    filter model over <code>search-index.json</code>. Selecting a result navigates to that page.</p>
-  <div class="files">+ search-index.json (generated) · + a small filter model · ~ DocsPage.qml</div>
+  <p>Build the sidebar TOC (chapter grouping from <code>cwManualIndex.articles</code>) and a search box
+    backed by a filter model over the index's title/summary/keywords. Selecting a result navigates to
+    that page.</p>
+  <div class="files">+ a small filter model · ~ cwManualIndex (search accessor) · ~ DocsPage.qml</div>
 </div>
 
 <div class="cp">
@@ -375,6 +418,34 @@ to maintain.</p>
     artifact serve both.</li>
 </ul>
 
+<h2>Follow-ups (from the CP2 review — not blocking)</h2>
+<p>Deferred improvements surfaced reviewing CP2. None is a correctness bug against today's
+manual; each is worth doing before or alongside CP4, where the payoffs land.</p>
+<ul>
+  <li><strong>A1/R1 · Make <code>llms.txt</code> the one source; stop duplicating the website build.</strong>
+    <code>cwManualIndex::slugForPath</code>/<code>chapterForPath</code> (<code>cwManualIndex.cpp:136,156</code>)
+    re-implement <code>scripts/build-manual-html.py</code>'s slug scheme and chapter table as a second
+    hardcoded source of truth — add a chapter directory and you must edit both, or C++ silently falls
+    back to <code>titleCase()</code> (<code>view-3d</code> → "View 3d", not "3D View"). Meanwhile
+    <code>llms.txt</code> already carries the ordering, its own <code>##</code> section grouping, <em>and</em>
+    a per-page summary that the parser captures up to <code>):</code> and then discards. Generalize the
+    parser to consume <code>llms.txt</code>'s structure (sections → chapters, trailing text → summary):
+    it becomes the single ordered index the plan promises and hands <strong>CP4 search its summaries
+    for free</strong>. Blast radius: the parser only. Best done at the start of CP4.</li>
+  <li><strong>A3 · Move the "empty slug = landing" rule into C++.</strong> The routing lives in QML today
+    (<code>DocsPage.qml:19</code>: <code>slug === "" ? landingBody() : body(slug)</code>). Folding it into
+    <code>body("")</code> returning the landing keeps the QML seam a single dumb call and puts the routing
+    next to the data. Minor; do it if CP3/CP4 touch the seam anyway.</li>
+  <li><strong>A2 · <code>cwManualIndex</code> as a <code>QML_SINGLETON</code> — considered, rejected.</strong>
+    It's a stateless read-only service (a textbook singleton, and <code>RootData</code> is already a
+    god-object hub), but every subsystem is reached through <code>RootData.*</code> and this plan
+    deliberately chose <code>RootData.manualIndex</code>. Consistency wins; <strong>keep it on RootData</strong>.
+    Recorded so it isn't re-litigated.</li>
+  <li><strong>Body/render memo (nice-to-have).</strong> <code>renderMarkdown</code> (<code>cwManualIndex.cpp:193</code>)
+    re-reads the resource and re-runs the regex on every <code>body()</code> call. A trivial
+    <code>QHash&lt;slug,QString&gt;</code> memo if it ever matters; negligible for a viewer today.</li>
+</ul>
+
 <h2>Out of scope (this plan)</h2>
 <ul>
   <li>Publishing the manual to <strong>cavewhere.com</strong> — same source, separate task; the
@@ -384,9 +455,9 @@ to maintain.</p>
 </ul>
 
 <footer>
-  CP1 done (implemented &amp; verified, 6/6 tests green) · CaveWhere · renders natively, no web
-  engine · all file:line references verified against the current tree. Decisions 1–5 resolved —
-  CP2 (slug seam + content resource) is next.
+  CP1–CP2 done (22 <code>[cwManualIndex]</code> + 7 <code>tst_DocsPage</code> cases green; app links
+  clean) · CaveWhere · renders natively, no web engine · all file:line references verified against the
+  current tree. Decisions 1–6 resolved — CP3 (nav/link interceptor) is next.
 </footer>
 
 </div>

@@ -43,6 +43,7 @@ class cwKeywordItemModel;
 class cwKeywordFilterPipelineModel;
 class cwRemoteServices;
 class cwDeepLinkHandler;
+class cwManualIndex;
 
 //QQuickGit inculdes
 #include "Account.h"
@@ -79,6 +80,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwRecentProjectModel* recentProjectModel READ recentProjectModel CONSTANT)
     Q_PROPERTY(cwRemoteServices* remote READ remote CONSTANT)
     Q_PROPERTY(cwDeepLinkHandler* deepLinkHandler READ deepLinkHandler CONSTANT)
+    Q_PROPERTY(cwManualIndex* manualIndex READ manualIndex CONSTANT)
 
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
     Q_PROPERTY(cwPageView* pageView READ pageView WRITE setPageView NOTIFY pageViewChanged)
@@ -129,6 +131,7 @@ public:
     cwRecentProjectModel* recentProjectModel() const { return m_recentProjectModel; }
     cwRemoteServices* remote() const;
     cwDeepLinkHandler* deepLinkHandler() const;
+    cwManualIndex* manualIndex() const { return m_manualIndex; }
 
     cwPageView* pageView() const { return m_pageView; }
     void setPageView(cwPageView* value);
@@ -232,6 +235,7 @@ private:
     QQuickGit::AccountSettingWatcher* m_accountWatcher;
     mutable cwRemoteServices* m_remoteServices = nullptr; // mutable for lazy creation
     mutable cwDeepLinkHandler* m_deepLinkHandler = nullptr;
+    cwManualIndex* m_manualIndex = nullptr;
 
     QPointer<cwPageView> m_pageView;
 

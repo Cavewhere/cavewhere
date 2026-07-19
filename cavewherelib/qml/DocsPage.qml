@@ -2,10 +2,10 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 
-// In-app user-manual viewer. CP1 renders a single hard-coded Markdown string
-// through Qt's native MarkdownText to prove the render path, theming, and that
-// the page shows through cwPageView. CP2 replaces the placeholder by loading a
-// per-article Markdown body selected by a slug property.
+// In-app user-manual viewer. One shared component drives every article: the
+// slug selects the page, and cwManualIndex resolves it to the front-matter-
+// stripped Markdown body (with image links rewritten to absolute qrc: URLs).
+// An empty slug is the "Docs" landing page, which renders the manual's index.
 StandardPage {
     id: docsPageId
 
@@ -14,33 +14,11 @@ StandardPage {
     readonly property int readingMaxWidth: 720
     readonly property int readingPadding: 32
 
-    property string markdownText: docsPageId.placeholderMarkdown
+    property string slug: ""
 
-    readonly property string placeholderMarkdown: [
-        "# Docs viewer preview",
-        "",
-        "This page is a **CP1 placeholder**. It renders through Qt's native",
-        "`MarkdownText`, with no web engine, and shows through the same",
-        "`cwPageView` every other page uses — so back, forward, and the",
-        "breadcrumb already work. Real per-article content arrives in CP2.",
-        "",
-        "## What this proves",
-        "",
-        "- Markdown renders natively and picks up the app's theme colors and font.",
-        "- The page is reachable from **File → Docs** and lives in page history.",
-        "- Links, tables, and code all come through Qt's renderer:",
-        "",
-        "| Construct | Renders |",
-        "| --- | --- |",
-        "| Headings, bold, lists | Yes |",
-        "| Tables | Yes |",
-        "| Inline `code` and blocks | Yes |",
-        "",
-        "> The article body uses Qt's default Markdown styling; the surrounding",
-        "> chrome — sidebar, search, header — is rebuilt natively in later checkpoints.",
-        "",
-        "For the full manual, see [cavewhere.com](https://cavewhere.com).",
-    ].join("\n")
+    property string markdownText: docsPageId.slug === ""
+                                  ? RootData.manualIndex.landingBody()
+                                  : RootData.manualIndex.body(docsPageId.slug)
 
     QQ.Rectangle {
         anchors.fill: parent
