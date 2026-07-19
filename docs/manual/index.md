@@ -64,6 +64,11 @@ the problems CaveWhere solves — then keep the
 - [Fix Survey Errors](survey-data/survey-errors.md) — what each error and
   warning means, and how to clear it.
 
+### Loop Closure
+- [Check Loop Closure and Find Blunders](loop-closure/check-loop-closure.md) —
+  read the Cavern Output page to see whether your loops close, and use the
+  loop-closure report to run down a transposed digit or a reversed reading.
+
 ### Georeferencing
 - [Georeference a Cave](georeferencing/georeference-a-cave.md) — give the project
   a coordinate system and fix a station, so the cave sits at its true place on
@@ -145,5 +150,4 @@ These directories exist and will be filled in as the manual is built out. Each
 chapter is task-oriented and problem-first (see
 [the authoring guide](AUTHORING.md)).
 
-- **Loop Closure** — closure errors and reviewing blunders.
 - **Appendix** — small screens, keyboard shortcuts, troubleshooting.

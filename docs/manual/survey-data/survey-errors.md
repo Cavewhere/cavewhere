@@ -3,7 +3,7 @@ title: Fix Survey Errors
 summary: What CaveWhere's errors and warnings mean, which ones stop the cave plotting, and how to fix each one.
 problem: Find the bad reading that's stopping your cave from plotting — or the one that plots fine and is quietly wrong.
 keywords: [error, warning, fatal, survey error, duplicate station, missing station, backsight, tolerance, unconnected, blunder]
-related: [enter-survey-data.md, calibration.md, ../concepts/glossary.md]
+related: [enter-survey-data.md, calibration.md, ../loop-closure/check-loop-closure.md, ../concepts/glossary.md]
 ---
 
 # Fix Survey Errors
@@ -134,8 +134,9 @@ disagree by more than **2°** once the backsight is reversed and
 [calibration](calibration.md) is applied.
 
 Two readings of the same leg should give the same answer. When they don't, one
-of them is wrong, and the shot is telling you so on the day rather than at loop
-closure six months later. Common causes, in rough order:
+of them is wrong, and the shot is telling you so on the day rather than at
+[loop closure](../loop-closure/check-loop-closure.md) six months later. Common
+causes, in rough order:
 
 - A **transposed digit** — `173` typed as `137`.
 - **Iron** near one end of the shot: a bolt, a carbide dump, a helmet on the

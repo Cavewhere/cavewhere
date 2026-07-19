@@ -620,6 +620,42 @@ MainWindowTest {
             glTerrain.projectionTransition.progress = 0;
         }
 
+        // The Cavern Output page: the solve summary on the Cavern log tab (with its
+        // loop count), and the Loop closure tab where Survex's per-traverse error
+        // report appears for a cave that has loops. The demo cave is a single line
+        // with no loops, so that tab is correctly disabled here — which is itself
+        // what the manual describes. Backs docs/manual/loop-closure/.
+        function test_loopClosureReport() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            // The solve runs during load; its log feeds cavernLog. Navigate to the
+            // page the way the Data page's region menu reaches it.
+            RootData.pageSelectionModel.gotoPageByName(null, "Cavern");
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "cavernOutputPage",
+                      5000, "the Cavern Output page is current");
+            let page = RootData.pageView.currentPageItem;
+
+            tryVerify(() => RootData.linePlotManager.cavernLog.length > 0, 10000,
+                      "cavern produced a solve log");
+
+            // Cavern log tab (index 0): shows "There are N loops" and the length
+            // summary. The Loop closure tab (index 1) stays disabled because the
+            // demo cave has no loops — the manual explains that state.
+            let tabBar = findByName(page, "outputTabBar");
+            verify(tabBar, "found the output tab bar");
+            tabBar.currentIndex = 0;
+
+            highlightOverlayId.target = tabBar;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "loop-closure-summary");
+            verify(path.length > 0, "grabToFile wrote the loop-closure screenshot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "loop-closure screenshot is not blank");
+        }
+
         // The Layers tab active: shows the keyword layer panel. Backs the
         // chapter's "Focus on part of the cave with layers" section.
         function test_view3dLayers() {
