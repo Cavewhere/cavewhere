@@ -279,6 +279,13 @@ private:
             result.setSolveError(error);
             return false;
         }
+
+        // Capture the driver text before cavern runs so the manager can
+        // surface it even when the solve fails downstream.
+        QFile driverFile(svxPath);
+        if (driverFile.open(QFile::ReadOnly)) {
+            result.DriverSource = QString::fromUtf8(driverFile.readAll());
+        }
         return true;
     }
 

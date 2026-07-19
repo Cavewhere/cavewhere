@@ -23,6 +23,7 @@ class cwSaveLoad;
 class cwKeywordItem;
 class cwKeywordItemModel;
 class cwLinePlotTripVisibility;
+#include "cwAttachedCenterlinesModel.h"
 #include "cwLinePlotTask.h"
 #include "cwExternalSourceSettings.h"
 #include "cwSurveyNetwork.h"
@@ -58,6 +59,8 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
     Q_PROPERTY(QString solveErrorMessage READ solveErrorMessage NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString cavernLog READ cavernLog NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString loopClosureStats READ loopClosureStats NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(QString driverSource READ driverSource NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(cwAttachedCenterlinesModel* attachedCenterlinesModel READ attachedCenterlinesModel CONSTANT FINAL)
     Q_PROPERTY(cwSurveyNetwork regionNetwork READ regionNetwork NOTIFY regionNetworkChanged FINAL)
 
 public:
@@ -68,6 +71,15 @@ public:
     QString solveErrorMessage() const { return m_lastSolveError ? m_lastSolveError->message : QString(); }
     QString cavernLog() const { return m_lastCavernLog; }
     QString loopClosureStats() const { return m_lastLoopClosureStats; }
+
+    // The driver .svx text the worker generated for the most recent solve,
+    // populated alongside cavernLog (present even when cavern itself
+    // failed; empty when the export step failed or nothing was solvable).
+    QString driverSource() const { return m_lastDriverSource; }
+
+    // One row per attached external centerline, rebuilt on every watch-set
+    // recompute. Always non-null; owned by the manager.
+    cwAttachedCenterlinesModel* attachedCenterlinesModel() const { return m_attachedCenterlinesModel; }
 
     void setRegion(cwCavingRegion* region);
     Q_INVOKABLE void setRenderLinePlot(cwRenderLinePlot* linePlot);
@@ -92,19 +104,18 @@ public:
 
     // Per-machine state for live-link attachments, owned by cwRootData.
     // The manager re-runs the scanner over each entry whose ownerId
-    // appears here with a non-empty sourcePath, and a source-side
-    // fileChanged event triggers a reconcile-from-source through
-    // m_saveLoad before re-solving. The manager observes the store's
-    // change signal and recomputes the watch set on every mutation.
-    // Null by default, in which case every attachment is treated as
-    // import-mode (no source-side watching).
+    // appears here with a non-empty sourcePath; a source-side
+    // fileChanged event only flags the owner stale (staleSourceOwners)
+    // — reconciling waits for an explicit updateFromSource call. The
+    // manager observes the store's change signal and recomputes the
+    // watch set on every mutation. Null by default, in which case every
+    // attachment is treated as import-mode (no source-side watching).
     void setExternalSourceSettings(cwExternalSourceSettings* settings);
     cwExternalSourceSettings* externalSourceSettings() const { return m_externalSourceSettings; }
 
-    // Optional cwSaveLoad used to enqueue reconcile copy/remove jobs when
-    // a live-link source changes on disk. Without it the source-side
-    // watcher path still fires rerunSurvex but skips the reconcile; this
-    // is the test mode used by the simpler [Attach][Watcher] cases.
+    // Optional cwSaveLoad used by updateFromSource to enqueue reconcile
+    // copy/remove jobs. Without it updateFromSource is a no-op; staleness
+    // detection (watcher + probe) works regardless.
     void setSaveLoad(cwSaveLoad* saveLoad);
 
     // The current set of paths the QFileSystemWatcher is intended to watch
@@ -118,6 +129,29 @@ public:
     // "Source not found" startup probe per §8.8 question 16 of the master
     // plan. Empty when no live-link attachment is configured.
     QList<QUuid> missingSourceOwners() const { return m_missingSourceOwners; }
+
+    // Owners whose remembered source has changed since the in-project copy
+    // was last reconciled. Set by a source-side watcher event and by the
+    // recompute probe (computePlan against the attachment dir reports a
+    // pending copy); cleared when updateFromSource lands a fresh copy.
+    // Staleness is only ever surfaced — the manager never reconciles on
+    // its own (see the Phase 2 direction change).
+    QList<QUuid> staleSourceOwners() const { return m_staleSourceOwners; }
+
+    // User-triggered "Update" for a stale live-link owner: rescans the
+    // remembered source, reconciles the closure into the owner's
+    // attachment dir through cwSaveLoad, then recomputes the watch set
+    // (clearing the stale flag) and re-solves. No-op while an update for
+    // the same owner is already in flight, or when no saveLoad is wired.
+    Q_INVOKABLE void updateFromSource(const QUuid& ownerId);
+
+    // True while an updateFromSource reconcile for ownerId has not yet
+    // drained. The UI disables the Update/detach affordances on it so
+    // filesystem operations for one owner never interleave.
+    Q_INVOKABLE bool isUpdateFromSourceInFlight(const QUuid& ownerId) const
+    {
+        return m_updateInFlightOwners.contains(ownerId);
+    }
 
     // True when the owner's external file carries its own declination
     // (master plan §8.8 q7) — the driver then injects nothing and the
@@ -163,6 +197,10 @@ signals:
     // changes. The set itself is read via missingSourceOwners().
     void missingSourceOwnersChanged();
 
+    // Emitted whenever the set of owners with a stale live-link source
+    // changes. The set itself is read via staleSourceOwners().
+    void staleSourceOwnersChanged();
+
     void regionNetworkChanged();
 
 public slots:
@@ -184,6 +222,9 @@ private:
     std::optional<cwLinePlotTask::SolveError> m_lastSolveError;
     QString m_lastCavernLog;
     QString m_lastLoopClosureStats;
+    QString m_lastDriverSource;
+
+    cwAttachedCenterlinesModel* m_attachedCenterlinesModel;
 
     QHash<QUuid, QString> m_caveAttachmentDirs;
     QHash<QUuid, QString> m_tripAttachmentDirs;
@@ -211,6 +252,12 @@ private:
     QHash<QString, QUuid> m_sourceOwnerForPath;
 
     QList<QUuid> m_missingSourceOwners;
+    QList<QUuid> m_staleSourceOwners;
+
+    // Owners with an updateFromSource reconcile still draining; guards
+    // against interleaved per-owner filesystem operations (commit-5
+    // review's in-flight-token item).
+    QSet<QUuid> m_updateInFlightOwners;
 
     // Per-owner file-owns-declination flag from the most recent recompute;
     // read via fileOwnsDeclination() and baked into each solve's Input by
@@ -253,6 +300,7 @@ private:
     void publishResults(const cwLinePlotTask::LinePlotResultData& results);
     void publishCavernOutput(QString cavernLog,
                              QString loopClosureStats,
+                             QString driverSource,
                              std::optional<cwLinePlotTask::SolveError> solveError);
     void publishPerCaveErrors(const cwLinePlotTask::LinePlotResultData& results);
 

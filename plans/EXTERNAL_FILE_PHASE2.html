@@ -63,7 +63,10 @@
   the mid-git-sync fold-in rules, the per-machine last-sync-wins
   ping-pong corollary, and made commit 8's async scan pipeline
   load-bearing &mdash; and the UX was confusing (plot changes and save
-  prompts the user never caused).
+  prompts the user never caused). (Commit 8 was later re-promoted for
+  a different reason: the commit-7 recompute added a synchronous
+  main-thread staleness probe and row rebuild &mdash; see the
+  commit-8 entry.)
 </p>
 
 <p>The replacement model:</p>
@@ -84,9 +87,10 @@
     action is setting a per-owner stale flag
     (<code>staleSourceOwners</code>, mirroring
     <code>missingSourceOwners</code>); an open-time probe backstops it
-    (the freshness test is free: <code>computePlan</code> with a
-    non-empty <code>copies</code> list). Watcher failure modes become
-    benign &mdash; worst case the banner lights late.</li>
+    (the freshness test reuses <code>computePlan</code> and is
+    side-effect-free; its I/O cost is bounded by the closure size and
+    moves off the main thread in commit 8). Watcher failure modes
+    become benign &mdash; worst case the banner lights late.</li>
   <li><strong>Updating is user-triggered.</strong> The trip panel
     shows "The source file has changed on disk &mdash; [Update]";
     Update runs the existing scan + reconcile + re-solve path. The
@@ -269,14 +273,20 @@
   <li>
     <code>cwLinePlotManager.h/.cpp</code> &mdash; grow two accessors used
     by <code>CavernOutputPage</code>:
-    <code>QAbstractListModel* attachedCenterlinesModel() const</code>
+    <code>cwAttachedCenterlinesModel* attachedCenterlinesModel() const</code>
     (rows: <code>{ ownerName, ownerKind, entryFile, depCount,
     warningCount, lastSolved }</code>) and
     <code>QString driverSource() const</code> (the most recent driver
     <code>.svx</code> text the worker emitted; populated alongside
-    <code>cavernLog</code> on every solve). Both are
-    <code>NOTIFY cavernOutputChanged</code> &mdash; the existing signal
-    that drives the rest of the page.
+    <code>cavernLog</code> on every solve). <em>Landed at commit 7:</em>
+    <code>driverSource</code> is <code>NOTIFY cavernOutputChanged</code>;
+    the model is its own <code>cwAttachedCenterlinesModel</code> class
+    (a <code>CONSTANT</code> pointer property, uncreatable from QML) that
+    emits row-level signals itself &mdash; rows rebuilt on every watch-set
+    recompute, diffed by ownerId so a detach emits
+    <code>rowsRemoved</code> rather than a wholesale reset;
+    <code>lastSolved</code> is stamped by the manager when a solve
+    completes successfully and survives rebuilds.
   </li>
   <li>
     <code>cwLinePlotTask.cpp</code> &mdash;
@@ -1153,35 +1163,89 @@ public:
     owner) belongs &mdash; <code>updateFromSource</code> and the
     detach path should refuse (or queue) while an operation for the
     same ownerId is in flight.
+    <em>Shipped at commit 7</em> &mdash; all of the above in one
+    commit (it stayed small). The per-owner token guards
+    <code>updateFromSource</code> re-entry directly and is exposed as
+    <code>isUpdateFromSourceInFlight(ownerId)</code>; the orchestrator
+    stays stateless, so the commit-9+ UI disables the Update/detach
+    affordances off that query rather than the manager blocking
+    <code>detach()</code> itself. The canceled reconcile path also
+    releases the token (two-callback <code>context()</code>).
+    <em>Queued-invoke hole (found at the commit-7 review):</em>
+    affordance-disabling cannot stop an <code>updateFromSource</code>
+    invoke that was already queued when a detach ran &mdash; the
+    update then trusts <code>cwExternalSourceSettings</code> and the
+    manager's attachment-dir maps (both outlive the detach today) and
+    can resurrect files into the detached owner's attachment dir. The
+    commit-9+ detach wiring must therefore drop the owner's
+    settings entry and the manager's attachment-dir map entry
+    <strong>synchronously</strong> with the model mutation, so the
+    late invoke hits the empty
+    <code>sourcePath / attachmentDir</code> guard and no-ops. Gate it
+    in the detach wire-up tests.
   </li>
   <li>
-    <strong>Async scan pipeline.</strong> <em>(Demoted by the
-    direction change: with user-triggered updates, scans run at
-    attach time, Update-click time, and the open-time probe &mdash;
-    all moments where brief latency is acceptable. Keep the async
-    move for the open-time probe on cloud-synced/network volumes,
-    but it is no longer load-bearing for correctness; descope or
-    defer if Phase 2 runs long.)</em> Move the per-owner
-    dependency-closure scan off the main thread &mdash; disk I/O of
-    this shape always runs in a worker.
-    <code>recomputeWatchSetAndProbeSources()</code> becomes: gather
-    the owner list on the main thread (cheap, no I/O), run
-    <code>cwExternalCenterlineScanner::scan()</code> per owner via
-    <code>cwConcurrent</code> (the scanner is stateless and
-    thread-safe &mdash; function-local <code>static const</code>
-    regexes + const <code>match()</code> only), then apply the watch
-    set, <code>missingSourceOwners</code>, and source-owner routing
-    table back on the main thread through
-    <code>AsyncFuture::observe(&hellip;).context(this, &hellip;)</code>
-    (never <code>waitForFinished</code> in production).
-    <code>onWatchedFileChanged</code> routes through the same async
-    path, coalesced Restarter-style so an editor save burst triggers
-    one rescan, not one per file event. This closes the main-thread
-    stall risk for large attached projects and cloud-synced/network
-    volumes (a single cold <code>read()</code> on a Dropbox
-    placeholder can block for seconds). Rationale and the related
-    metadata-split seam live in the &sect;7 deferred-refactor note.
-    Tests: <code>[LinePlotManager][AsyncScan]</code>.
+    <strong>Async recompute pipeline.</strong> <em>(Re-promoted after
+    commit 7: the recompute is no longer just the dependency scan —
+    it also runs the <code>computePlan</code> staleness probe, which
+    stat-walks the closure and recursively enumerates each
+    attachment dir, and it rebuilds the attached-centerlines model
+    rows. All of that is synchronous main-thread I/O today, executed
+    on every settings/attachment-dir/region change and at open time
+    — exactly the stall this commit exists to remove. Do not
+    descope.)</em> All filesystem I/O moves behind
+    <code>QFuture</code> + AsyncFuture; the recompute becomes a
+    three-stage pipeline:
+    <ol>
+      <li><em>Snapshot (main thread, no I/O):</em> walk the region
+        and collect one value-type input per attached owner
+        <code>{ ownerId, caveName, ownerName, ownerKind, entryFile,
+        attachmentDir, sourcePath }</code> — no live pointers cross
+        the thread boundary (same rule as
+        <code>cwLinePlotTask::buildInput</code>).</li>
+      <li><em>Worker (<code>cwConcurrent</code>):</em> per owner run
+        the project-side scan, the source-side scan, and the
+        <code>computePlan</code> freshness probe (the scanner and
+        planner are stateless and thread-safe), producing a
+        value-type <code>OwnerScanReport</code>; aggregate into one
+        <code>RecomputeResult { watchedFiles, sourceOwnerForPath,
+        missingSourceOwners, staleSourceOwners, fileOwnsDeclination,
+        rows }</code>.</li>
+      <li><em>Apply (main thread):</em>
+        <code>AsyncFuture::observe(&hellip;).context(this,
+        &hellip;)</code> installs the result wholesale — watcher
+        diff, member swap, signal emissions, <code>setRows</code> —
+        never <code>waitForFinished</code> in production.</li>
+    </ol>
+    Coalescing and cancellation ride an
+    <code>AsyncFuture::Restarter&lt;RecomputeResult&gt;</code>
+    (mirroring the solve's restarter): an editor save burst or a
+    settings flurry restarts the worker and only the newest result
+    applies; a result that lands after the region/owner is gone is
+    dropped by the context auto-disconnect. Register the restarter's
+    future with <code>m_futureManagerToken</code> so tests drain it
+    through the existing
+    <code>futureManagerModel()-&gt;waitForFinished()</code> idiom
+    (no new test-only scaffolding). <strong>Solve ordering:</strong>
+    <code>buildInput</code> reads
+    <code>m_fileOwnsDeclination</code>, so callers that today do
+    recompute-then-<code>runSurvex</code> synchronously (project-side
+    watcher events, <code>updateFromSource</code> completion,
+    <code>setRegion</code>) must chain the solve into the apply
+    continuation instead — the apply step triggers
+    <code>runSurvex</code> when the caller asked for it or when the
+    declination flags changed, so a solve never runs against
+    half-applied flags. The watcher fast path stays synchronous:
+    flagging <code>staleSourceOwners</code> on a source-side event is
+    pure list manipulation and needs no I/O; the async probe
+    confirms or clears it on the next apply. <strong>Rename
+    refresh:</strong> connect cave/trip <code>nameChanged</code> to a
+    cheap rows-only rebuild (fresh names + cached per-owner scan
+    counts, zero disk I/O) so the model's names and sort order no
+    longer lag until the next full recompute. Rationale and the
+    related metadata-split seam live in the &sect;7
+    deferred-refactor note. Tests:
+    <code>[LinePlotManager][AsyncScan]</code>.
   </li>
   <li>
     <strong><code>CavernOutputPage</code> extension + DataMainPage
@@ -1415,8 +1479,9 @@ public:
   <li>Setting a default-constructed network clears the rows.</li>
 </ul>
 
-<h3>Commit 7 &mdash; cwLinePlotManager attached-centerlines model + driver source</h3>
-<p><strong>New tag:</strong> <code>[LinePlotManager][AttachedCenterlinesModel]</code></p>
+<h3>Commit 7 &mdash; cwLinePlotManager attached-centerlines model + driver source <em>(landed; includes the direction-change stale/updateFromSource work)</em></h3>
+<p><strong>New tags:</strong> <code>[LinePlotManager][AttachedCenterlinesModel]</code>,
+<code>[Attach][Stale]</code></p>
 <ul>
   <li>Native region &rarr; <code>attachedCenterlinesModel</code> has
     zero rows; <code>driverSource</code> is the existing native
@@ -1431,18 +1496,41 @@ public:
   <li>Solve completes &rarr; <code>driverSource</code> string is
     non-empty and contains the expected <code>*include</code> line per
     Phase 1 commit 8's format (absolute forward-slash quoted).</li>
+  <li><code>[Attach][Stale]</code>: source edit &rarr; owner flagged
+    stale, no reconcile and no re-solve (in-project bytes and lookup
+    unchanged after the event loop settles).</li>
+  <li><code>[Attach][Stale]</code>: <code>updateFromSource</code>
+    &rarr; copy lands through the cwSaveLoad queue + re-solve picks up
+    the new station + flag clears + <code>modified()</code> flips; a
+    second call while the reconcile is in flight is refused
+    (<code>isUpdateFromSourceInFlight</code>).</li>
+  <li><code>[Attach][Stale]</code>: open-time probe &mdash; a source
+    that drifted while the project was closed reads as stale right at
+    <code>setRegion</code>, no watcher event required.</li>
 </ul>
 
-<h3>Commit 8 &mdash; async scan pipeline</h3>
+<h3>Commit 8 &mdash; async recompute pipeline</h3>
 <p><strong>New tag:</strong> <code>[LinePlotManager][AsyncScan]</code></p>
 <ul>
   <li>Attach an owner &rarr; <code>watchedFiles()</code> and the
     source-owner routing table populate after the async scan resolves
-    (assert via the manager's existing wait helper, not a fixed
+    (drain via <code>futureManagerModel()-&gt;waitForFinished()</code>
+    or <code>tryWait</code> on the change signals, not a fixed
     sleep); results identical to the previous synchronous behavior.</li>
   <li>Remembered source missing at recompute &rarr;
     <code>missingSourceOwners()</code> populates asynchronously; the
     startup-probe test from Phase 1 commit 9 stays green.</li>
+  <li>Staleness probe and attached-centerlines rows (both added at
+    commit 7) survive the async move: the open-time drift probe and
+    the <code>[AttachedCenterlinesModel]</code> suite stay green with
+    only wait-helper changes.</li>
+  <li>Solve-after-recompute ordering: a solve triggered alongside a
+    recompute sees the fresh <code>fileOwnsDeclination</code> flags
+    (declination-injection tests from commit 3 stay green with the
+    chained apply&rarr;solve path).</li>
+  <li>Cave/trip rename &rarr; model rows re-sort/rename via the
+    rows-only rebuild without any disk I/O and without waiting for a
+    full recompute.</li>
   <li>Burst-coalescing: touch several files in the closure in quick
     succession &rarr; one rescan (observable as a single
     watch-set/solve update, Restarter-style), not one per event.</li>

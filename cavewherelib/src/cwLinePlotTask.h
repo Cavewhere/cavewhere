@@ -172,6 +172,12 @@ public:
         QString CavernLog;
         QString LoopClosureStats;
 
+        // The generated driver .svx text fed to cavern — captured right
+        // after export, so it is present even when cavern itself fails.
+        // CavernOutputPage's driver-source disclosure binds to the
+        // cwLinePlotManager property this populates.
+        QString DriverSource;
+
         friend class cwLinePlotTask;
         friend struct LinePlotWorker;
     };
