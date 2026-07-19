@@ -114,6 +114,11 @@ the problems CaveWhere solves — then keep the
 - [Export a Map](import-export/export-a-map.md) — compose a map on paper
   and export it to PNG, PDF, or SVG.
 
+### Settings
+- [Change CaveWhere's Settings](settings/change-settings.md) — the app-wide
+  preferences page: worker threads, PDF/SVG import resolution, the interface font
+  and size, and 3D anti-aliasing.
+
 ### Collaboration
 - [How Collaboration Works](collaboration/how-sync-works.md) — Git without
   knowing Git, one shared copy on GitHub, and a merge that understands caves.
@@ -139,5 +144,4 @@ chapter is task-oriented and problem-first (see
 - **3D View (more)** — field of view, labels, leads, and rendering settings
   (MSAA, EDL) build on [The 3D View](view-3d/the-3d-view.md).
 - **Loop Closure** — closure errors and reviewing blunders.
-- **Settings** — Jobs, Warping, PDF/SVG, Git, Appearance, Rendering.
 - **Appendix** — small screens, keyboard shortcuts, troubleshooting.

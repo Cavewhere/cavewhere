@@ -29,7 +29,7 @@ StandardPage {
 
 
                 JobSettingsItem {
-
+                    objectName: "jobSettingsItem"
                 }
 
                 WarpingSettingsItem {
@@ -42,7 +42,7 @@ StandardPage {
                 // }
 
                 PDFSettingsItem {
-
+                    objectName: "pdfSettingsItem"
                 }
 
                 GitSettingsItem {
@@ -50,11 +50,11 @@ StandardPage {
                 }
 
                 AppearanceSettingsItem {
-
+                    objectName: "appearanceSettingsItem"
                 }
 
                 RenderingSettingsItem {
-
+                    objectName: "renderingSettingsItem"
                 }
 
                 SketchSettingsItem {

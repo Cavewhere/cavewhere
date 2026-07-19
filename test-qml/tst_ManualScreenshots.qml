@@ -1485,6 +1485,83 @@ MainWindowTest {
                    "warping-settings screenshot is not blank");
         }
 
+        // Load the demo project, open the Settings page, and select tab `index`
+        // on the vertical tab bar (0 Jobs, 1 Warping, 2 PDF/SVG, 3 Git,
+        // 4 Appearance, 5 Rendering, 6 Sketch). Returns the tab bar, or null after
+        // skip() when there is no live QRhi. The Settings panels don't depend on
+        // project content, but reloading hands each shot a known-clean window; the
+        // font/PDF/MSAA defaults come from QSettings, which the test harness clears
+        // per process, so those shots are deterministic. (The Jobs tab's thread
+        // counts reflect the regenerating machine's cores, so its numbers vary by
+        // machine like the git-history hashes do — the prose asserts no specific
+        // value.)
+        function openSettingsTab(index) {
+            TestHelper.loadProjectFromFile(RootData.project,
+                TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            RootData.pageSelectionModel.currentPageAddress = "Settings";
+
+            let fileLoader = findByName(rootId.mainWindow, "fileMenuButtonLoader");
+            if (fileLoader) { fileLoader.active = true; }
+
+            let tabBar = findByName(rootId.mainWindow, "settingsTabBar");
+            tryVerify(() => tabBar !== null, 3000, "found the settings tab bar");
+
+            if (!requireRhi(tabBar)) { return null; }
+
+            tabBar.currentIndex = index;
+            verify(tabBar.currentIndex === index, "settings tab " + index + " is selected");
+            return tabBar;
+        }
+
+        // Grab the whole Settings page after selecting tab `index`, with a
+        // highlight ring around the tab's panel (found by `panelName`). Whole-window
+        // so the tab rail stays visible for orientation; the ring directs the eye to
+        // the panel against the page's whitespace, the same way test_warpingSettings
+        // does. Backs docs/manual/settings/change-settings.md.
+        function grabSettingsTab(index, panelName, shotName) {
+            let tabBar = openSettingsTab(index);
+            if (!tabBar) { return; }
+
+            let panel = findByName(rootId.mainWindow, panelName);
+            tryVerify(() => findByName(rootId.mainWindow, panelName) !== null, 3000,
+                      "found " + panelName);
+            highlightOverlayId.target = findByName(rootId.mainWindow, panelName);
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, shotName);
+            verify(path.length > 0, "grabToFile wrote the " + shotName + " screenshot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   shotName + " screenshot is not blank");
+
+            highlightOverlayId.target = null;
+            restoreDemoProject();
+        }
+
+        // Settings → Jobs tab (also the page-overview shot: the tab rail is visible
+        // down the left). Backs docs/manual/settings/change-settings.md.
+        function test_settingsJobs() {
+            grabSettingsTab(0, "jobSettingsItem", "settings-jobs");
+        }
+
+        // Settings → PDF / SVG tab. Backs docs/manual/settings/change-settings.md.
+        function test_settingsPdf() {
+            grabSettingsTab(2, "pdfSettingsItem", "settings-pdf");
+        }
+
+        // Settings → Appearance tab (font family + size). Backs
+        // docs/manual/settings/change-settings.md.
+        function test_settingsAppearance() {
+            grabSettingsTab(4, "appearanceSettingsItem", "settings-appearance");
+        }
+
+        // Settings → Rendering tab (MSAA anti-aliasing). Backs
+        // docs/manual/settings/change-settings.md.
+        function test_settingsRendering() {
+            grabSettingsTab(5, "renderingSettingsItem", "settings-rendering");
+        }
+
         // ---------------------------------------------------------------------
         // Survey Data chapter (docs/manual/survey-data/)
         // ---------------------------------------------------------------------
