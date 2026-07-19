@@ -29,20 +29,34 @@ cwCavingRegion* cwSurveyChunkSignaler::region() const {
 /**
 * @brief cwSurveyChunkSignaler::setRegion
 * @param region
+*
+* Supports switching regions and clearing with nullptr: the previous
+* region's connections (structural and user-added, down to chunks and
+* calibrations) are severed first, so a retired region's signals can no
+* longer reach this signaler or its receivers.
 */
 void cwSurveyChunkSignaler::setRegion(cwCavingRegion* region) {
-    if(Region != region) {
-        Region = region;
+    if(Region == region) {
+        return;
+    }
 
+    if(!Region.isNull()) {
+        disconnect(Region.data(), nullptr, this, nullptr);
+        disconnectCaves(Region.data());
+    }
+
+    Region = region;
+
+    if(!Region.isNull()) {
         //Connect all signal from the region
         connect(Region.data(), &cwCavingRegion::insertedCaves, this, &cwSurveyChunkSignaler::connectAddedCaves);
         connect(Region.data(), &cwCavingRegion::beginRemoveCaves, this, &cwSurveyChunkSignaler::disconnectRemovedCaves);
 
         //Connect all sub data
         connectCaves(Region);
-
-        emit regionChanged();
     }
+
+    emit regionChanged();
 }
 
 /**
@@ -204,12 +218,26 @@ void cwSurveyChunkSignaler::connectChunk(cwSurveyChunk* chunk) {
 }
 
 /**
+ * @brief cwSurveyChunkSignaler::disconnectCaves
+ * @param region
+ *
+ * Disconnects all the caves in the region — the inverse of connectCaves,
+ * used when the signaler switches away from a region that stays alive.
+ */
+void cwSurveyChunkSignaler::disconnectCaves(cwCavingRegion *region)
+{
+    foreach(cwCave* cave, region->caves()) {
+        disconnectCave(cave);
+    }
+}
+
+/**
  * @brief cwSurveyChunkSignaler::disconnectCave
  * @param cave
  */
 void cwSurveyChunkSignaler::disconnectCave(cwCave *cave)
 {
-
+    disconnect(cave, nullptr, this, nullptr);
     disconnectAll(cave, CaveConnections);
 
     if(cave->hasTrips()) {
@@ -237,7 +265,9 @@ void cwSurveyChunkSignaler::disconnectTrips(cwCave *cave, int beginIndex, int en
  */
 void cwSurveyChunkSignaler::disconnectTrip(cwTrip *trip)
 {
+    disconnect(trip, nullptr, this, nullptr);
     disconnectAll(trip, TripConnections);
+    disconnectAll(trip->calibrations(), TripCalibrationConnections);
 
     if(!trip->chunks().isEmpty()) {
         disconnectSurveyChunks(trip, 0, trip->chunks().size() - 1);

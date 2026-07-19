@@ -184,14 +184,20 @@ public:
 
     static Input buildInput(const cwCavingRegion* region);
 
-    // fileOwnsDeclination carries the manager's per-owner scan flag
-    // (cwLinePlotManager::fileOwnsDeclination); trips flagged false get
-    // their resolved declination baked into tripInjectedDeclinations.
-    // Owners missing from the map are treated as file-owned.
+    // The external-centerline subsystem's contribution to a solve, taken
+    // as one value snapshot (cwExternalCenterlineManager::solveInputs())
+    // so a solve can never mix dirs and flags from different scans.
+    struct ExternalCenterlineInputs {
+        QHash<QUuid, QString> caveAttachmentDirs;
+        QHash<QUuid, QString> tripAttachmentDirs;
+        // Per-owner scan flag; trips flagged false get their resolved
+        // declination baked into tripInjectedDeclinations. Owners
+        // missing from the map are treated as file-owned.
+        QHash<QUuid, bool> fileOwnsDeclination;
+    };
+
     static Input buildInput(const cwCavingRegion* region,
-                            const QHash<QUuid, QString>& caveAttachmentDirs,
-                            const QHash<QUuid, QString>& tripAttachmentDirs,
-                            const QHash<QUuid, bool>& fileOwnsDeclination = {});
+                            const ExternalCenterlineInputs& external);
     static QFuture<LinePlotResultData> run(Input input);
 
     /**

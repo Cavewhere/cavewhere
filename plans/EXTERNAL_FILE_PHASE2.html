@@ -618,6 +618,18 @@ detach(cwTrip* trip,
     cancel. Only on <code>Monad::Ok</code> does the function call
     <code>cwTrip::setExternalCenterline</code> and reconcile. A
     cancelled or failed scan leaves the data model untouched.
+    <em>Decided 2026-07-19 (set-model-on-success):</em> the model flip
+    moves to <em>after</em> the reconcile verify passes &mdash; today
+    <code>setExternalCenterline</code> fires at scan-success, before
+    any file lands, so observers see a file-less attachment for the
+    whole copy drain (a crash in that window persists a broken
+    attachment via the <code>externalCenterlineChanged</code> save
+    hook). Reconciling first (the attachment dir comes from
+    <code>externalCenterlineDir(trip)</code>, which doesn't need the
+    model) makes failure mean "nothing happened" and deletes the
+    rollback path, including its dangling-previous fallback. Lands as
+    the small commit before commit 9 (see the commit sequence) so the
+    wrapper and dialog bind to the final semantics.
   </li>
   <li>
     <strong>Reconcile target.</strong>
@@ -849,8 +861,11 @@ public:
     case-insensitive. Carrying original-case display names through the
     solve is a separate product decision (blast radius:
     <code>cwSurveyNetwork</code>, <code>cwLinePlotTask</code>,
-    <code>cwSurvey2DGeometryRule</code>, this model) &mdash; decide
-    before the panel ships in commits 9+.
+    <code>cwSurvey2DGeometryRule</code>, this model).
+    <em>Decided 2026-07-19:</em> v1 ships canonical lowercase display
+    names; carrying original case through the pipeline is additive API
+    and is parked in the &sect;7 deferred-refactor list &mdash; it does
+    not gate commits 9+.
   </li>
   <li>
     <strong>Sort.</strong> Stable lexicographic sort by qualified name.
@@ -1144,6 +1159,19 @@ public:
     final home.
   </li>
   <li>
+    <strong>Deferred (product, decided 2026-07-19):</strong> carry
+    original-case station display names through the solve.
+    <code>cwStation::canonicalKey</code> lowercases every network key,
+    so the panel/picker display canonical lowercase in v1 (decided
+    &mdash; see the &sect;5 station-model rules). The follow-up adds a
+    display-name field alongside the canonical key: additive API
+    through <code>cwSurveyNetwork</code>, <code>cwLinePlotTask</code>
+    (recover case from the .3d parse),
+    <code>cwSurvey2DGeometryRule</code>, and
+    <code>cwScopeStationListModel</code>, plus the network snapshot
+    serialization. Does not gate commits 9+.
+  </li>
+  <li>
     <strong>Attach orchestrator.</strong>
     <code>cwExternalCenterlineAttach::attach</code> +
     <code>detach</code>. Pure-C++ commit: no QML yet. Tests:
@@ -1359,6 +1387,58 @@ public:
     suites stay green with mechanical churn only (scan-only tests may
     construct the new object directly and get simpler); no behavior
     change.
+    <em>Shipped as commit 8.5</em> &mdash; everything listed moved into
+    <code>cwExternalCenterlineManager</code> (owned by the manager,
+    reachable via <code>externalCenterlineManager()</code>; registered
+    <code>QML_UNCREATABLE</code> so commit 9 can bind to it directly).
+    Coupling landed as pinned: <code>solveNeeded()</code> emitted after
+    the apply's member swap and connected to <code>runSurvex</code>;
+    <code>markSolved(when)</code> forwarded from the solve-success
+    path; the manager's <code>waitToFinish()</code> drains the
+    object's scan future then its own solve future. The rename
+    rebuild got its own <code>cwSurveyChunkSignaler</code> (nameChanged
+    only). Tests stayed on <code>cwLinePlotManager</code> +
+    <code>externalCenterlineManager()</code> accessor (integration
+    coverage over standalone construction).
+    <em>Deviation from the contract above:</em> the cwRootData/QML
+    exposure did NOT land here &mdash; 8.5 stayed a pure C++ refactor
+    with zero new QML surface, so commit 9 adds the cwRootData
+    Q_PROPERTY itself (consistent with &sect;6's "QML entry point lands
+    with the first QML consumer").
+    <em>Post-review revisions (same working tree):</em> the pinned
+    per-map getters were replaced by one atomic snapshot &mdash;
+    <code>solveInputs()</code> returning
+    <code>cwLinePlotTask::ExternalCenterlineInputs</code> (dirs +
+    declination flags), taken by the new
+    <code>buildInput(region, external)</code> overload &mdash; so a
+    solve can never mix dirs and flags from different scans. Teardown
+    was reworked after a review-proven null-deref: the manager's
+    destructor now cancels the scan (<code>cancelScan()</code>),
+    cancels the solve, and drains scan-then-solve with the child object
+    still alive (queued solve callbacks dispatch during the drain's
+    pump); the child's own destructor is cancel-only per the house
+    rule. <code>cwSurveyChunkSignaler::setRegion</code> was hardened to
+    support null and region switches (disconnecting the old region
+    down to chunks and calibrations), which deleted the null-guard
+    workarounds in both managers' <code>setRegion</code> paths. Tests:
+    <code>[cwSurveyChunkSignaler]</code> plus a teardown SECTION in
+    <code>[AsyncScan]</code> pinning the queued-solve-restart drain.
+  </li>
+  <li>
+    <strong>Set-model-on-success attach ordering (decided 2026-07-19;
+    do before commit 9).</strong> Move the
+    <code>trip-&gt;setExternalCenterline</code> call in
+    <code>cwExternalCenterlineAttach::attach</code> from scan-success
+    to <em>after</em> the reconcile verify passes (next to the
+    settings-entry write), per the &sect;6 "Scan first, persist last"
+    decision note. Deletes the rollback path and its dangling-previous
+    fallback; a failed or crashed attach leaves the model untouched
+    (orphan files in the attachment dir are the next reconcile's GC
+    problem). Gates: <code>[Attach][Orchestrator]</code> updated &mdash;
+    the reconcile-failure test asserts the model was never set instead
+    of asserting rollback; happy path asserts the model is unset while
+    the reconcile drains and set at completion. Commit 9's wrapper and
+    dialog then bind to the final semantics.
   </li>
   <li>
     <strong><code>CavernOutputPage</code> extension + DataMainPage
@@ -1370,7 +1450,11 @@ public:
     attached-centerlines list, driver-source disclosure &mdash; all
     above the existing TabBar; the banner and list bind to
     <code>cwExternalCenterlineManager</code>, extracted in the prior
-    commit and exposed on cwRootData &mdash; only the disclosure's
+    commit &mdash; <em>this</em> commit exposes it on cwRootData and
+    adds the QML-bindable surface the banner needs:
+    <code>missingSourceOwners</code>/<code>staleSourceOwners</code>
+    are plain C++ getters today (the NOTIFY-shaped change signals
+    already exist, the Q_PROPERTYs don't) &mdash; only the disclosure's
     <code>driverSource</code> and the Solve wiring stay on
     <code>LinePlotManager</code>), updates
     <code>DataMainPage.qml</code>'s existing LinkText to show live
@@ -1424,8 +1508,11 @@ public:
 </ol>
 
 <p>
-  Total: 13 commits. Commits 1&ndash;8 are pure C++ (testable headless,
-  no UI yet); commits 9&ndash;13 are QML on top of that foundation.
+  Total: 15 commits (the original 13 plus the two decided-later C++
+  entries: the 8.5 extraction and the set-model-on-success attach
+  ordering). Everything through the attach-ordering commit is pure C++
+  (testable headless, no UI yet); commits 9&ndash;13 are QML on top of
+  that foundation.
   Splitting along this line means the C++ surface stabilises first and
   the QML commits can use Catch2-driven setup
   (<code>cwExternalCenterlineAttach::attach</code> directly from a test

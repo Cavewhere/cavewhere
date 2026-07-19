@@ -624,13 +624,12 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion *region)
 }
 
 cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
-                                                 const QHash<QUuid, QString>& caveAttachmentDirs,
-                                                 const QHash<QUuid, QString>& tripAttachmentDirs,
-                                                 const QHash<QUuid, bool>& fileOwnsDeclination)
+                                                 const ExternalCenterlineInputs& external)
 {
     Input input = buildInput(region);
-    input.caveAttachmentDirs = caveAttachmentDirs;
-    input.tripAttachmentDirs = tripAttachmentDirs;
+    input.caveAttachmentDirs = external.caveAttachmentDirs;
+    input.tripAttachmentDirs = external.tripAttachmentDirs;
+    const QHash<QUuid, bool>& fileOwnsDeclination = external.fileOwnsDeclination;
 
     if (region != nullptr) {
         // Resolve the injected declination here, on the main thread: the

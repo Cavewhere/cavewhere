@@ -13,6 +13,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
+#include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceSettings.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
@@ -197,7 +198,7 @@ TEST_CASE("Trip-attached centerline resolves stations under cave_<uuid>.trip_<uu
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
@@ -242,7 +243,7 @@ TEST_CASE("Cave-attached centerline skips trip loop and resolves under cave_<uui
     cwLinePlotManager manager;
     QHash<QUuid, QString> caveDirs;
     caveDirs.insert(cave->id(), attachDir);
-    manager.setCaveAttachmentDirs(caveDirs);
+    manager.externalCenterlineManager()->setCaveAttachmentDirs(caveDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
@@ -289,7 +290,7 @@ TEST_CASE("Mixed cave: native trip and attached trip both resolve",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
@@ -336,7 +337,7 @@ TEST_CASE("buildInput injects resolved declination only for CaveWhere-owned exte
     fileOwnsDeclination.insert(fileOwned->id(), true);
     fileOwnsDeclination.insert(nativeTrip->id(), false);
 
-    const auto input = cwLinePlotTask::buildInput(&region, {}, {}, fileOwnsDeclination);
+    const auto input = cwLinePlotTask::buildInput(&region, { {}, {}, fileOwnsDeclination });
 
     REQUIRE(input.tripInjectedDeclinations.size() == 1);
     CHECK(input.tripInjectedDeclinations.value(caveWhereOwned->id()) == 5.5);
@@ -366,7 +367,7 @@ TEST_CASE("buildInput rides the IGRF-resolved declination for auto external trip
     QHash<QUuid, bool> fileOwnsDeclination;
     fileOwnsDeclination.insert(attached->id(), false);
 
-    const auto input = cwLinePlotTask::buildInput(&region, {}, {}, fileOwnsDeclination);
+    const auto input = cwLinePlotTask::buildInput(&region, { {}, {}, fileOwnsDeclination });
 
     // The injected value is the trip's resolved declination — IGRF here,
     // since auto is on and a dated trip + fixed cave make it available.
@@ -450,7 +451,7 @@ TEST_CASE("Injected manual declination rotates externally attached stations",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
@@ -458,7 +459,7 @@ TEST_CASE("Injected manual declination rotates externally attached stations",
 
     // The scan of the in-project entry found no declination directive, so
     // CaveWhere owns it and the driver injected the manual 90.
-    CHECK_FALSE(manager.fileOwnsDeclination(attached->id()));
+    CHECK_FALSE(manager.externalCenterlineManager()->fileOwnsDeclination(attached->id()));
 
     // survex_no_metadata.svx shoots B1→B2 at compass 0 for 10 m with B1
     // fixed at the origin. Declination +90 east swings the true bearing
@@ -500,15 +501,15 @@ TEST_CASE("Project-side scan flag wins over a diverged live-link source",
     settings.setSourcePath(attached->id(), sourcePath);
 
     cwLinePlotManager manager;
-    manager.setExternalSourceSettings(&settings);
+    manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
     REQUIRE_FALSE(manager.hasSolveError());
-    CHECK_FALSE(manager.fileOwnsDeclination(attached->id()));
+    CHECK_FALSE(manager.externalCenterlineManager()->fileOwnsDeclination(attached->id()));
 
     // Injection applied → B2 swings east, exactly as in the undiverged case.
     const cwStationPositionLookup& lookup = cave->stationPositionLookup();
@@ -543,12 +544,12 @@ TEST_CASE("File-owned declination wins over the trip's CaveWhere setting",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
     REQUIRE_FALSE(manager.hasSolveError());
-    CHECK(manager.fileOwnsDeclination(attached->id()));
+    CHECK(manager.externalCenterlineManager()->fileOwnsDeclination(attached->id()));
 
     // A1→A2, compass 0, 10 m, A1 fixed at origin. The file's
     // *calibrate declination 7.2 means "subtract 7.2 from bearings"
@@ -581,7 +582,7 @@ TEST_CASE("Broken external centerline surfaces SolveError with Step::Cavern",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 

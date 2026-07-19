@@ -81,6 +81,7 @@ private:
    QList<Connection> TripCalibrationConnections;
 
    void connectCaves(cwCavingRegion* region);
+   void disconnectCaves(cwCavingRegion* region);
    void connectCave(cwCave* cave);
    void connectTrips(cwCave* cave);
    void connectTrip(cwTrip* trip);

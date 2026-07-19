@@ -13,6 +13,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
+#include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceSettings.h"
 #include "cwLinePlotManager.h"
 #include "cwTrip.h"
@@ -69,22 +70,22 @@ TEST_CASE("Attach populates the watch set only after the async scan applies",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
 
     // Everything above ran synchronously and the scan is deferred through
     // the event loop, so nothing has applied yet — no main-thread I/O
     // happened during the recompute call itself.
-    CHECK(manager.watchedFiles().isEmpty());
-    CHECK(manager.attachedCenterlinesModel()->rowCount() == 0);
+    CHECK(manager.externalCenterlineManager()->watchedFiles().isEmpty());
+    CHECK(manager.externalCenterlineManager()->attachedCenterlinesModel()->rowCount() == 0);
 
     // Draining yields the same result the synchronous recompute produced.
     manager.waitToFinish();
-    CHECK(manager.watchedFiles().contains(QFileInfo(copyPath).canonicalFilePath()));
-    const cwAttachedCenterlinesModel* model = manager.attachedCenterlinesModel();
+    CHECK(manager.externalCenterlineManager()->watchedFiles().contains(QFileInfo(copyPath).canonicalFilePath()));
+    const cwAttachedCenterlinesModel* model = manager.externalCenterlineManager()->attachedCenterlinesModel();
     REQUIRE(model->rowCount() == 1);
     CHECK(roleAt(model, 0, cwAttachedCenterlinesModel::DepCountRole).toInt() == 1);
-    CHECK_FALSE(manager.fileOwnsDeclination(attached->id()));
+    CHECK_FALSE(manager.externalCenterlineManager()->fileOwnsDeclination(attached->id()));
 }
 
 TEST_CASE("Setter burst coalesces into one scan and only the newest result applies",
@@ -107,24 +108,24 @@ TEST_CASE("Setter burst coalesces into one scan and only the newest result appli
     cwLinePlotManager manager;
     manager.setRegion(&region);
     manager.waitToFinish();
-    REQUIRE(manager.watchedFiles().isEmpty());
+    REQUIRE(manager.externalCenterlineManager()->watchedFiles().isEmpty());
 
-    cwSignalSpy watchedSpy(&manager, &cwLinePlotManager::watchedFilesChanged);
+    cwSignalSpy watchedSpy(manager.externalCenterlineManager(), &cwExternalCenterlineManager::watchedFilesChanged);
 
     // Two synchronous restarts in one event-loop turn: the restarter
     // coalesces them into a single scan, so the dirA state never applies.
     QHash<QUuid, QString> dirsA;
     dirsA.insert(attached->id(), dirA);
-    manager.setTripAttachmentDirs(dirsA);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(dirsA);
     QHash<QUuid, QString> dirsB;
     dirsB.insert(attached->id(), dirB);
-    manager.setTripAttachmentDirs(dirsB);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(dirsB);
 
     manager.waitToFinish();
 
     CHECK(watchedSpy.count() == 1);
-    CHECK(manager.watchedFiles().contains(QFileInfo(copyB).canonicalFilePath()));
-    CHECK_FALSE(manager.watchedFiles().contains(QFileInfo(copyA).canonicalFilePath()));
+    CHECK(manager.externalCenterlineManager()->watchedFiles().contains(QFileInfo(copyB).canonicalFilePath()));
+    CHECK_FALSE(manager.externalCenterlineManager()->watchedFiles().contains(QFileInfo(copyA).canonicalFilePath()));
 }
 
 TEST_CASE("Rename re-sorts and renames rows synchronously from cached counts",
@@ -151,11 +152,11 @@ TEST_CASE("Rename re-sorts and renames rows synchronously from cached counts",
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(alphaTrip->id(), alphaDir);
     tripDirs.insert(zuluTrip->id(), zuluDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
-    const cwAttachedCenterlinesModel* model = manager.attachedCenterlinesModel();
+    const cwAttachedCenterlinesModel* model = manager.externalCenterlineManager()->attachedCenterlinesModel();
     REQUIRE(model->rowCount() == 2);
     REQUIRE(roleAt(model, 0, cwAttachedCenterlinesModel::OwnerNameRole).toString()
             == QStringLiteral("TripA"));
@@ -201,7 +202,7 @@ TEST_CASE("Teardown while a scan is in flight is safe",
         cwLinePlotManager manager;
         QHash<QUuid, QString> tripDirs;
         tripDirs.insert(attached->id(), attachDir);
-        manager.setTripAttachmentDirs(tripDirs);
+        manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
         manager.setRegion(region.get());
 
         // The scan is queued but has not snapshotted yet; killing the
@@ -210,8 +211,8 @@ TEST_CASE("Teardown while a scan is in flight is safe",
         region.reset();
         manager.waitToFinish();
 
-        CHECK(manager.watchedFiles().isEmpty());
-        CHECK(manager.attachedCenterlinesModel()->rowCount() == 0);
+        CHECK(manager.externalCenterlineManager()->watchedFiles().isEmpty());
+        CHECK(manager.externalCenterlineManager()->attachedCenterlinesModel()->rowCount() == 0);
     }
 
     SECTION("setRegion(nullptr) supersedes the previous region's scan state") {
@@ -222,11 +223,11 @@ TEST_CASE("Teardown while a scan is in flight is safe",
         cwLinePlotManager manager;
         QHash<QUuid, QString> tripDirs;
         tripDirs.insert(attached->id(), attachDir);
-        manager.setTripAttachmentDirs(tripDirs);
+        manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
         manager.setRegion(&region);
         manager.waitToFinish();
-        REQUIRE_FALSE(manager.watchedFiles().isEmpty());
-        REQUIRE(manager.attachedCenterlinesModel()->rowCount() == 1);
+        REQUIRE_FALSE(manager.externalCenterlineManager()->watchedFiles().isEmpty());
+        REQUIRE(manager.externalCenterlineManager()->attachedCenterlinesModel()->rowCount() == 1);
 
         // Nulling the region restarts the scan (superseding any in-flight
         // worker) with an empty snapshot, so the old region's watch set
@@ -234,8 +235,31 @@ TEST_CASE("Teardown while a scan is in flight is safe",
         manager.setRegion(nullptr);
         manager.waitToFinish();
 
-        CHECK(manager.watchedFiles().isEmpty());
-        CHECK(manager.attachedCenterlinesModel()->rowCount() == 0);
+        CHECK(manager.externalCenterlineManager()->watchedFiles().isEmpty());
+        CHECK(manager.externalCenterlineManager()->attachedCenterlinesModel()->rowCount() == 0);
+    }
+
+    SECTION("manager destroyed with a solve restart queued") {
+        cwCavingRegion region;
+        cwCave* cave = addEmptyCave(region, QStringLiteral("QueuedSolve"));
+        cwTrip* attached = addAttachedTrip(cave, QStringLiteral("Attached"));
+
+        auto manager = std::make_unique<cwLinePlotManager>();
+        QHash<QUuid, QString> tripDirs;
+        tripDirs.insert(attached->id(), attachDir);
+        manager->externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+        manager->setRegion(&region);
+        manager->waitToFinish();
+
+        // Queue a fresh solve restart through the event loop, then destroy
+        // before it dispatches. The restarter's queued start executes during
+        // the destructor's drain pump (only the m_alive flag guards it, and
+        // that flag stays true for the whole destructor body), and its
+        // buildInput reads the external subsystem's attachment dirs — which
+        // must therefore still be alive at that point.
+        manager->rerunSurvex();
+        manager.reset();
+        CHECK(true); // sentinel: reached teardown without crashing
     }
 
     SECTION("manager destroyed while the scan is queued or running") {
@@ -246,7 +270,7 @@ TEST_CASE("Teardown while a scan is in flight is safe",
         auto manager = std::make_unique<cwLinePlotManager>();
         QHash<QUuid, QString> tripDirs;
         tripDirs.insert(attached->id(), attachDir);
-        manager->setTripAttachmentDirs(tripDirs);
+        manager->externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
         manager->setRegion(&region);
 
         // Destructor cancels both restarters; the worker's result (if it
@@ -283,17 +307,17 @@ TEST_CASE("Source edit during an in-flight scan survives the apply-time union",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(trip->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
-    manager.setExternalSourceSettings(&settings);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
     manager.setRegion(&region);
     manager.waitToFinish();
-    REQUIRE(manager.staleSourceOwners().isEmpty());
-    REQUIRE(manager.watchedFiles().contains(QFileInfo(sourcePath).canonicalFilePath()));
+    REQUIRE(manager.externalCenterlineManager()->staleSourceOwners().isEmpty());
+    REQUIRE(manager.externalCenterlineManager()->watchedFiles().contains(QFileInfo(sourcePath).canonicalFilePath()));
 
     // Kick off a scan FIRST — its queued snapshot runs before the watcher
     // event below can be delivered, so the flag the event raises lands in
     // the since-snapshot set while the worker probes the disk.
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
 
     // Same-size edit with a backdated mtime: computePlan's size+mtime
     // heuristic reads this as "in sync", so the probe alone can never
@@ -326,12 +350,12 @@ TEST_CASE("Source edit during an in-flight scan survives the apply-time union",
     QThread::msleep(kWatcherPostWindowMs);
 
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
-        return manager.staleSourceOwners().contains(trip->id());
+        return manager.externalCenterlineManager()->staleSourceOwners().contains(trip->id());
     }));
 
     // Drain the scan and the chained solve: the apply must have unioned
     // the watcher-raised flag back in rather than trusting the probe.
     manager.waitToFinish();
-    CHECK(manager.staleSourceOwners().contains(trip->id()));
-    CHECK(manager.missingSourceOwners().isEmpty());
+    CHECK(manager.externalCenterlineManager()->staleSourceOwners().contains(trip->id()));
+    CHECK(manager.externalCenterlineManager()->missingSourceOwners().isEmpty());
 }

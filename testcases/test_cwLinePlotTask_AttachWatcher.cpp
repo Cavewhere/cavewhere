@@ -13,6 +13,7 @@
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
 #include "cwFutureManagerModel.h"
+#include "cwExternalCenterlineManager.h"
 #include "cwLinePlotManager.h"
 #include "cwExternalSourceSettings.h"
 #include "cwProject.h"
@@ -87,7 +88,7 @@ TEST_CASE("Watcher set contains the in-project copy paths after attach",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
@@ -96,10 +97,10 @@ TEST_CASE("Watcher set contains the in-project copy paths after attach",
     const QString expected = QFileInfo(copyPath).canonicalFilePath();
     INFO("expected watch path: " << expected.toStdString());
     REQUIRE_FALSE(expected.isEmpty());
-    CHECK(manager.watchedFiles().contains(expected));
+    CHECK(manager.externalCenterlineManager()->watchedFiles().contains(expected));
     // Watch set on a project-side-only attach has no source-side entries
     // until live-link is configured.
-    CHECK(manager.missingSourceOwners().isEmpty());
+    CHECK(manager.externalCenterlineManager()->missingSourceOwners().isEmpty());
 }
 
 TEST_CASE("Editing the in-project copy triggers a re-run that picks up the new station",
@@ -120,7 +121,7 @@ TEST_CASE("Editing the in-project copy triggers a re-run that picks up the new s
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
@@ -160,29 +161,29 @@ TEST_CASE("Detach mid-solve does not crash and empties the watch set",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
 
     // Wait for the initial async scan to install the watch set — its
     // apply chains the solve, so the solve is now in (or about to be in)
     // flight. Coalescing means detaching before this point would fold
     // into the initial scan and never populate the set at all.
-    REQUIRE(tryWait(kWatcherWaitMs, [&] { return !manager.watchedFiles().isEmpty(); }));
+    REQUIRE(tryWait(kWatcherWaitMs, [&] { return !manager.externalCenterlineManager()->watchedFiles().isEmpty(); }));
 
-    cwSignalSpy watcherSpy(&manager, &cwLinePlotManager::watchedFilesChanged);
+    cwSignalSpy watcherSpy(manager.externalCenterlineManager(), &cwExternalCenterlineManager::watchedFilesChanged);
 
     // Do NOT wait for the solve - this models the "detach mid-solve"
     // condition. Detach by clearing the trip's externalCenterline and
     // dropping the trip-attachment dir entry; the setter kicks off the
     // async recompute that rebuilds the watcher.
     attached->setExternalCenterline(cwExternalCenterline());
-    manager.setTripAttachmentDirs(QHash<QUuid, QString>());
+    manager.externalCenterlineManager()->setTripAttachmentDirs(QHash<QUuid, QString>());
 
     // The recompute empties the watch set once its apply lands. Verify
     // the signal fired and the public accessor is empty - no need to
     // wait for the in-flight solve to finish or fail.
-    REQUIRE(tryWait(kWatcherWaitMs, [&] { return manager.watchedFiles().isEmpty(); }));
-    CHECK(manager.watchedFiles().isEmpty());
+    REQUIRE(tryWait(kWatcherWaitMs, [&] { return manager.externalCenterlineManager()->watchedFiles().isEmpty(); }));
+    CHECK(manager.externalCenterlineManager()->watchedFiles().isEmpty());
     CHECK(watcherSpy.count() >= 1);
 
     // Draining the in-flight solve must not crash or leave the manager
@@ -219,10 +220,10 @@ TEST_CASE("Startup probe detects a missing live-link source path",
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
-    manager.setExternalSourceSettings(&settings);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
 
-    cwSignalSpy missingSpy(&manager, &cwLinePlotManager::missingSourceOwnersChanged);
+    cwSignalSpy missingSpy(manager.externalCenterlineManager(), &cwExternalCenterlineManager::missingSourceOwnersChanged);
 
     // Now bind the region. setRegion's recompute walks the region against
     // the already-configured local settings and surfaces the missing
@@ -230,7 +231,7 @@ TEST_CASE("Startup probe detects a missing live-link source path",
     manager.setRegion(&region);
     manager.waitToFinish();
 
-    const QList<QUuid> missing = manager.missingSourceOwners();
+    const QList<QUuid> missing = manager.externalCenterlineManager()->missingSourceOwners();
     CHECK(missing.size() == 1);
     CHECK(missing.contains(attached->id()));
     CHECK(missingSpy.count() >= 1);
@@ -329,11 +330,11 @@ TEST_CASE("Live-link source edit flags the owner stale and never reconciles on i
     settings.setSourcePath(fixture->trip->id(), fixture->sourcePath);
 
     cwLinePlotManager manager;
-    manager.setSaveLoad(fixture->project->saveLoad());
+    manager.externalCenterlineManager()->setSaveLoad(fixture->project->saveLoad());
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(fixture->trip->id(), fixture->attachmentDir);
-    manager.setTripAttachmentDirs(tripDirs);
-    manager.setExternalSourceSettings(&settings);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
     manager.setRegion(fixture->project->cavingRegion());
     manager.waitToFinish();
     fixture->project->waitSaveToFinish();
@@ -343,7 +344,7 @@ TEST_CASE("Live-link source edit flags the owner stale and never reconciles on i
 
     // Source and in-project copy start in sync, so the recompute probe
     // must not report staleness at bind time.
-    CHECK(manager.staleSourceOwners().isEmpty());
+    CHECK(manager.externalCenterlineManager()->staleSourceOwners().isEmpty());
 
     const QString tripPrefix =
         QStringLiteral("trip_%1").arg(fixture->trip->id().toString(QUuid::Id128));
@@ -356,7 +357,7 @@ TEST_CASE("Live-link source edit flags the owner stale and never reconciles on i
     // source-side path - tryWait because the recompute is async and the
     // initial solve's continuations may still be draining.
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
-        const QStringList watched = manager.watchedFiles();
+        const QStringList watched = manager.externalCenterlineManager()->watchedFiles();
         const QString srcCanonical = QFileInfo(fixture->sourcePath).canonicalFilePath();
         const QString destCanonical = QFileInfo(QDir(fixture->attachmentDir)
                                                     .filePath(QStringLiteral("source.svx")))
@@ -364,14 +365,14 @@ TEST_CASE("Live-link source edit flags the owner stale and never reconciles on i
         return watched.contains(srcCanonical) && watched.contains(destCanonical);
     }));
 
-    cwSignalSpy staleSpy(&manager, &cwLinePlotManager::staleSourceOwnersChanged);
+    cwSignalSpy staleSpy(manager.externalCenterlineManager(), &cwExternalCenterlineManager::staleSourceOwnersChanged);
 
     // Edit the source side (not the project copy). Direction change: the
     // watcher event only flags the owner stale — no reconcile, no re-solve.
     overwriteFile(fixture->sourcePath, simpleSvxWithExtraShot());
 
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
-        return manager.staleSourceOwners().contains(fixture->trip->id());
+        return manager.externalCenterlineManager()->staleSourceOwners().contains(fixture->trip->id());
     }));
     CHECK(staleSpy.count() >= 1);
 
@@ -401,11 +402,11 @@ TEST_CASE("updateFromSource lands the copy, re-solves, clears the flag, and mark
     settings.setSourcePath(fixture->trip->id(), fixture->sourcePath);
 
     cwLinePlotManager manager;
-    manager.setSaveLoad(fixture->project->saveLoad());
+    manager.externalCenterlineManager()->setSaveLoad(fixture->project->saveLoad());
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(fixture->trip->id(), fixture->attachmentDir);
-    manager.setTripAttachmentDirs(tripDirs);
-    manager.setExternalSourceSettings(&settings);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
     manager.setRegion(fixture->project->cavingRegion());
     manager.waitToFinish();
     fixture->project->waitSaveToFinish();
@@ -420,7 +421,7 @@ TEST_CASE("updateFromSource lands the copy, re-solves, clears the flag, and mark
 
     overwriteFile(fixture->sourcePath, simpleSvxWithExtraShot());
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
-        return manager.staleSourceOwners().contains(fixture->trip->id());
+        return manager.externalCenterlineManager()->staleSourceOwners().contains(fixture->trip->id());
     }));
 
     // One copy enqueue per accepted update — the spy pins the in-flight
@@ -429,11 +430,11 @@ TEST_CASE("updateFromSource lands the copy, re-solves, clears the flag, and mark
     cwSignalSpy mutationSpy(fixture->project->saveLoad(),
                             &cwSaveLoad::localMutationOccurred);
 
-    manager.updateFromSource(fixture->trip->id());
+    manager.externalCenterlineManager()->updateFromSource(fixture->trip->id());
     // Per-owner in-flight guard: the reconcile hasn't drained yet, and a
     // second call while it runs is refused rather than interleaved.
-    CHECK(manager.isUpdateFromSourceInFlight(fixture->trip->id()));
-    manager.updateFromSource(fixture->trip->id());
+    CHECK(manager.externalCenterlineManager()->isUpdateFromSourceInFlight(fixture->trip->id()));
+    manager.externalCenterlineManager()->updateFromSource(fixture->trip->id());
 
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
         QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
@@ -450,9 +451,9 @@ TEST_CASE("updateFromSource lands the copy, re-solves, clears the flag, and mark
     // Flag clears once the recompute re-probes the fresh copy; the copy
     // job flipped the project's modified bit; the guard released.
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
-        return manager.staleSourceOwners().isEmpty();
+        return manager.externalCenterlineManager()->staleSourceOwners().isEmpty();
     }));
-    CHECK_FALSE(manager.isUpdateFromSourceInFlight(fixture->trip->id()));
+    CHECK_FALSE(manager.externalCenterlineManager()->isUpdateFromSourceInFlight(fixture->trip->id()));
     CHECK(fixture->project->modified());
     CHECK(mutationSpy.count() == 1);
 }
@@ -470,11 +471,11 @@ TEST_CASE("Open-time probe seeds staleness for a source that drifted while close
     settings.setSourcePath(fixture->trip->id(), fixture->sourcePath);
 
     cwLinePlotManager manager;
-    manager.setSaveLoad(fixture->project->saveLoad());
+    manager.externalCenterlineManager()->setSaveLoad(fixture->project->saveLoad());
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(fixture->trip->id(), fixture->attachmentDir);
-    manager.setTripAttachmentDirs(tripDirs);
-    manager.setExternalSourceSettings(&settings);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
     manager.setRegion(fixture->project->cavingRegion());
 
     // setRegion's async recompute probes freshness — no watcher event is
@@ -482,8 +483,8 @@ TEST_CASE("Open-time probe seeds staleness for a source that drifted while close
     // its chained solve) before checking.
     manager.waitToFinish();
 
-    CHECK(manager.staleSourceOwners().contains(fixture->trip->id()));
-    CHECK(manager.missingSourceOwners().isEmpty());
+    CHECK(manager.externalCenterlineManager()->staleSourceOwners().contains(fixture->trip->id()));
+    CHECK(manager.externalCenterlineManager()->missingSourceOwners().isEmpty());
 }
 
 TEST_CASE("Deleting the live-link source reports missing, not stale",
@@ -495,17 +496,17 @@ TEST_CASE("Deleting the live-link source reports missing, not stale",
     settings.setSourcePath(fixture->trip->id(), fixture->sourcePath);
 
     cwLinePlotManager manager;
-    manager.setSaveLoad(fixture->project->saveLoad());
+    manager.externalCenterlineManager()->setSaveLoad(fixture->project->saveLoad());
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(fixture->trip->id(), fixture->attachmentDir);
-    manager.setTripAttachmentDirs(tripDirs);
-    manager.setExternalSourceSettings(&settings);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setExternalSourceSettings(&settings);
     manager.setRegion(fixture->project->cavingRegion());
     manager.waitToFinish();
 
-    REQUIRE(manager.missingSourceOwners().isEmpty());
+    REQUIRE(manager.externalCenterlineManager()->missingSourceOwners().isEmpty());
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
-        return manager.watchedFiles()
+        return manager.externalCenterlineManager()->watchedFiles()
             .contains(QFileInfo(fixture->sourcePath).canonicalFilePath());
     }));
 
@@ -514,9 +515,9 @@ TEST_CASE("Deleting the live-link source reports missing, not stale",
     REQUIRE(QFile::remove(fixture->sourcePath));
 
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
-        return manager.missingSourceOwners().contains(fixture->trip->id());
+        return manager.externalCenterlineManager()->missingSourceOwners().contains(fixture->trip->id());
     }));
-    CHECK(manager.staleSourceOwners().isEmpty());
+    CHECK(manager.externalCenterlineManager()->staleSourceOwners().isEmpty());
 
     manager.waitToFinish();
 }

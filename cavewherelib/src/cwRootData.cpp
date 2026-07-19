@@ -10,6 +10,7 @@
 #include "cwSaveLoad.h"
 #include "cwRegionTreeModel.h"
 #include "cwCavingRegion.h"
+#include "cwExternalCenterlineManager.h"
 #include "cwLinePlotManager.h"
 #include "cwScrapManager.h"
 #include "cwProject.h"
@@ -118,7 +119,7 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager->setFutureManagerToken(FutureManagerModel->token());
     LinePlotManager->setRegion(Region);
     LinePlotManager->setKeywordItemModel(m_keywordItemModel);
-    LinePlotManager->setExternalSourceSettings(m_externalSourceSettings);
+    LinePlotManager->externalCenterlineManager()->setExternalSourceSettings(m_externalSourceSettings);
 
     //Setup the scrap manager
     ScrapManager = new cwScrapManager(Project);

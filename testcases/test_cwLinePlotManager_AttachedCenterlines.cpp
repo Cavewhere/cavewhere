@@ -13,6 +13,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterline.h"
+#include "cwExternalCenterlineManager.h"
 #include "cwLinePlotManager.h"
 #include "cwLinePlotTask.h"
 #include "cwShot.h"
@@ -64,7 +65,7 @@ TEST_CASE("Native region has zero attached rows and a native driver source",
     manager.waitToFinish();
 
     REQUIRE_FALSE(manager.hasSolveError());
-    CHECK(manager.attachedCenterlinesModel()->rowCount() == 0);
+    CHECK(manager.externalCenterlineManager()->attachedCenterlinesModel()->rowCount() == 0);
 
     // The driver text is the native *begin cave_<uuid> form the line-plot
     // exporter has emitted since Phase 1 commit 7.
@@ -91,13 +92,13 @@ TEST_CASE("Attaching one trip yields one row and an *include in the driver sourc
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(attached->id(), attachDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
     REQUIRE_FALSE(manager.hasSolveError());
 
-    const cwAttachedCenterlinesModel* model = manager.attachedCenterlinesModel();
+    const cwAttachedCenterlinesModel* model = manager.externalCenterlineManager()->attachedCenterlinesModel();
     REQUIRE(model->rowCount() == 1);
     CHECK(roleAt(model, 0, cwAttachedCenterlinesModel::OwnerNameRole).toString()
           == QStringLiteral("Attached"));
@@ -142,11 +143,11 @@ TEST_CASE("Rows sort by cave display name then trip display name",
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(zuluTrip->id(), zuluDir);
     tripDirs.insert(alphaTrip->id(), alphaDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
-    const cwAttachedCenterlinesModel* model = manager.attachedCenterlinesModel();
+    const cwAttachedCenterlinesModel* model = manager.externalCenterlineManager()->attachedCenterlinesModel();
     REQUIRE(model->rowCount() == 2);
     // Cave name is the major key: Alpha's "Zeta trip" precedes Zulu's
     // "Alpha trip" even though the trip names sort the other way.
@@ -176,11 +177,11 @@ TEST_CASE("Detach removes the owner's row via rowsRemoved with correct indices",
     QHash<QUuid, QString> tripDirs;
     tripDirs.insert(first->id(), firstDir);
     tripDirs.insert(second->id(), secondDir);
-    manager.setTripAttachmentDirs(tripDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
 
-    cwAttachedCenterlinesModel* model = manager.attachedCenterlinesModel();
+    cwAttachedCenterlinesModel* model = manager.externalCenterlineManager()->attachedCenterlinesModel();
     REQUIRE(model->rowCount() == 2);
     REQUIRE(roleAt(model, 0, cwAttachedCenterlinesModel::OwnerNameRole).toString()
             == QStringLiteral("First"));
@@ -194,7 +195,7 @@ TEST_CASE("Detach removes the owner's row via rowsRemoved with correct indices",
     first->setExternalCenterline(cwExternalCenterline());
     QHash<QUuid, QString> remainingDirs;
     remainingDirs.insert(second->id(), secondDir);
-    manager.setTripAttachmentDirs(remainingDirs);
+    manager.externalCenterlineManager()->setTripAttachmentDirs(remainingDirs);
     manager.waitToFinish();
 
     REQUIRE(removedSpy.count() == 1);
