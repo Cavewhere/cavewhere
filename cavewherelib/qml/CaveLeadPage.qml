@@ -19,6 +19,7 @@ StandardPage {
 
     LeadModel {
         id: leadModel
+        objectName: "leadModel"
         regionModel: RootData.regionTreeModel
         cave: leadPage.cave
     }

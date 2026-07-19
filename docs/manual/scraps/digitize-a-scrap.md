@@ -3,7 +3,7 @@ title: Digitize a Scrap
 summary: Enter Carpet mode, trace a passage outline on a note, place the survey stations inside it, and mark leads.
 problem: Turn a scanned passage sketch into a scrap CaveWhere can morph onto the 3D survey.
 keywords: [scrap, carpet mode, outline, trace, digitize, station, note, sketch, lead, leads, go, unexplored passage]
-related: [carpeting.md, scrap-types.md, ../concepts/glossary.md]
+related: [carpeting.md, scrap-types.md, ../leads/track-and-export-leads.md, ../concepts/glossary.md]
 ---
 
 # Digitize a Scrap
@@ -115,11 +115,10 @@ lead is anchored inside a scrap, it is morphed onto the survey along with the
 carpet — so leads appear in the [3D view](../view-3d/the-3d-view.md) as
 question-mark markers sitting where the passage actually is, not on a flat page.
 
-Each cave then collects its leads on its **Leads** page: they're listed by
-**description**, **size**, and **trip**, with each lead's line-of-sight
-**distance** from a station you pick. From there you can **Goto** a lead in the 3D
-view, tick it **Done** once it's been pushed, and **Export CSV** to take a
-trip-planning list into the field.
+Each cave then collects its leads on its **Leads** page, where you can rank them
+by size or by distance from a station you pick, jump to any one in the 3D view,
+mark the ones you've pushed as done, and export the list to CSV for the next
+trip — see [Track and Export Leads](../leads/track-and-export-leads.md).
 
 ## Where to go next
 

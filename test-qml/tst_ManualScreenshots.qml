@@ -1941,6 +1941,125 @@ MainWindowTest {
             restoreDemoProject();
         }
 
+        // The Leads page for a cave: every lead gathered into one table (Done, Goto,
+        // Nearest, Size, Distance, Trip, Description), with the description filter,
+        // the reference station the Distance is measured from, and the Export CSV
+        // button in the toolbar above. Whole-window so the breadcrumb / sidebar place
+        // the page. The demo cave ships with five leads, so the list populates as-is;
+        // a reference station is set so the Distance column reads real values instead
+        // of the 0 m a lead reports with none. Backs
+        // docs/manual/leads/track-and-export-leads.md.
+        function test_leadsList() {
+            let page = openDataPage("Source/Data/Cave=Phake Cave 3000", "cavePage");
+            if (!page) { return; }
+
+            // The Leads sub-page is registered on the cave page; reach it the way the
+            // cave page's Leads link does (gotoPageByName off its own PageView.page).
+            RootData.pageSelectionModel.gotoPageByName(page.PageView.page, "Leads");
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "leadPage",
+                      5000, "the Leads page is current");
+            let leadPageItem = RootData.pageView.currentPageItem;
+
+            // The LeadModel is a non-visual child (findChild, not findByName). Set its
+            // reference station to a real survey station so Distance isn't all 0 m.
+            let leadModel = findChild(leadPageItem, "leadModel");
+            verify(leadModel, "found the lead model");
+            leadModel.referanceStation = "a1";
+
+            tryVerify(() => leadModel.rowCount() > 0, 5000,
+                      "the demo cave has leads to list");
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "leads-page");
+            verify(path.length > 0, "grabToFile wrote the leads-page shot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.3,
+                   "leads-page is not blank");
+
+            restoreDemoProject();
+        }
+
+        // A lead selected in the 3D view with its popup open in edit mode — the
+        // Completed checkbox, the size editor, and the description field where a lead
+        // is edited and marked done — with the cave's other question-mark markers
+        // behind it. Cropped around the popup (with margin) so the form reads while
+        // keeping the 3D context. Backs the "Edit a lead and mark it done" section of
+        // docs/manual/leads/track-and-export-leads.md.
+        function test_leadEdit() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            let glTerrain = ObjectFinder.findObjectByChain(rootId.mainWindow,
+                "rootId->viewPage->SplitView->renderer");
+            verify(glTerrain, "found the GLTerrainRenderer");
+
+            RootData.leadsVisible = true;
+
+            // The "Walking" lead (2.5 x 2 m, described and sized — the one tst_Leads
+            // pins as leadPoint2_1) makes the edit form show real values. Its marker
+            // is created once carpeting has positioned the leads (loadRhiViewer drains
+            // those jobs).
+            // Select through the live LeadView's selection manager (a CONSTANT
+            // property that is always valid), not the marker's own injected one — in
+            // a full run the marker can be found while still mid-initialisation, when
+            // its per-item selectionManager is briefly undefined. Clear any selection
+            // an earlier 3D-view test left behind so the popup state is fresh.
+            let leadView = glTerrain.leadView;
+            verify(leadView && leadView.selectionManager, "found the live lead view");
+            leadView.selectionManager.selectedItem = null;
+
+            let leadPoint = null;
+            tryVerify(() => {
+                leadPoint = findByName(glTerrain, "leadPoint2_1");
+                return leadPoint !== null && leadPoint.scrap !== null;
+            }, 8000, "the Walking lead marker is live in the 3D view");
+
+            // Center the camera on the lead so its popup opens with room in every
+            // direction rather than hanging off a window edge (which clips the form).
+            // This is what the Leads page's Goto does; the popup points at the marker.
+            let viewpage = RootData.pageView.currentPageItem;
+            if (viewpage && viewpage.turnTableInteraction) {
+                viewpage.turnTableInteraction.centerOn(leadPoint.position3D, false);
+            }
+            settle();
+
+            // Selecting the marker opens its popup (loaded asynchronously). Re-find
+            // and re-apply the selection each tick: in a full run the marker can be
+            // rebuilt (project reload, billboard reposition) after the first lookup,
+            // so a single set of selectedItem can miss and the popup never opens.
+            let quoteBox = null;
+            tryVerify(() => {
+                let lp = findByName(glTerrain, "leadPoint2_1");
+                if (lp && lp.scrap !== null) {
+                    leadPoint = lp;
+                    leadView.selectionManager.selectedItem = lp;
+                }
+                quoteBox = findByName(glTerrain, "leadQuoteBox");
+                return quoteBox !== null;
+            }, 10000, "the lead popup opened");
+            quoteBox.editMode = true;
+
+            // The QuoteBox root is a zero-size point at the pointer tip; its balloon
+            // is the content Item nested inside it (Shape -> childrenContainer). Wait
+            // for that to be laid out, then crop to it so the whole form is captured
+            // rather than a margin around the tip.
+            let content = null;
+            tryVerify(() => {
+                content = (quoteBox.children[0] && quoteBox.children[0].children[0])
+                          ? quoteBox.children[0].children[0] : null;
+                return content !== null && content.width > 0;
+            }, 5000, "the popup content box is laid out");
+            settle();
+
+            let path = WindowGrabber.grabItemToFile(content, "lead-edit", 40);
+            verify(path.length > 0, "grabItemToFile wrote the lead-edit shot");
+            verify(OffscreenRenderTester.imageIsNonUniform(path),
+                   "lead-edit is not blank");
+
+            leadView.selectionManager.selectedItem = null;
+            restoreDemoProject();
+        }
+
         // The Import menu on the Data page, open, showing the survey formats.
         // Backs docs/manual/import-export/import-surveys.md.
         //

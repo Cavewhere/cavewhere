@@ -97,6 +97,11 @@ the problems CaveWhere solves — then keep the
 - [Tune the Warping Settings](scraps/warping-settings.md) — grid, interpolation,
   stations, and smoothing.
 
+### Leads
+- [Track and Export Leads](leads/track-and-export-leads.md) — gather a cave's
+  unexplored leads into one ranked list, jump to any in the 3D view, mark the
+  ones you've pushed as done, and export the list to CSV for trip planning.
+
 ### Import
 - [Import Surveys from Other Programs](import-export/import-surveys.md) — bring
   Survex, Compass, and Walls surveys in as new caves.
@@ -134,6 +139,5 @@ chapter is task-oriented and problem-first (see
 - **3D View (more)** — field of view, labels, leads, and rendering settings
   (MSAA, EDL) build on [The 3D View](view-3d/the-3d-view.md).
 - **Loop Closure** — closure errors and reviewing blunders.
-- **Leads** — the lead list, editing, CSV export.
 - **Settings** — Jobs, Warping, PDF/SVG, Git, Appearance, Rendering.
 - **Appendix** — small screens, keyboard shortcuts, troubleshooting.
