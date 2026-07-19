@@ -11,12 +11,11 @@
 
 //Our includes
 #include "cwScaleBarItem.h"
+#include "cwScaleBarSelector.h"
 #include "cwUnits.h"
 
-#include <array>
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <vector>
 
 namespace {
@@ -25,55 +24,6 @@ namespace {
     constexpr double kLabelSpacingInches = 0.05;
     constexpr double kBarHeightInches = 0.1;
     constexpr double kPointsPerInch = cwUnits::PointsPerInch;
-
-    // The "nice" mantissas a scale bar rounds to (1/2/5 × 10ⁿ), and the exponent
-    // sweep that covers everything from a fraction of the unit up to very large
-    // scales.
-    constexpr std::array<double, 3> kNiceMantissas = {1.0, 2.0, 5.0};
-    constexpr int kMinExponent = -2;
-    constexpr int kMaxExponent = 6;
-
-    struct ScaleCandidate {
-        double meters;                //!< the world length this bar represents
-        double value;                 //!< that length as a round number in `unit`
-        cwUnits::LengthUnit unit;     //!< the unit the label is expressed in
-    };
-
-    // Round candidate lengths for \a system, sorted by metres. Each is a round
-    // number in the unit its magnitude calls for (m/ft below one large unit,
-    // km/mi at or above it), so every label reads cleanly in the target unit
-    // rather than as a converted-from-metric fraction.
-    std::vector<ScaleCandidate> niceCandidates(cwUnits::UnitSystem system)
-    {
-        const cwUnits::LengthUnit smallUnit = cwUnits::smallLengthUnit(system);
-        const cwUnits::LengthUnit largeUnit = cwUnits::largeLengthUnit(system);
-        const double largeThresholdMeters = cwUnits::convert(1.0, largeUnit, cwUnits::Meters);
-
-        std::vector<ScaleCandidate> candidates;
-        auto addNice = [&](cwUnits::LengthUnit unit, double minMeters, double maxMeters) {
-            for (int exponent = kMinExponent; exponent <= kMaxExponent; ++exponent) {
-                for (double mantissa : kNiceMantissas) {
-                    const double value = mantissa * std::pow(10.0, exponent);
-                    const double meters = cwUnits::convert(value, unit, cwUnits::Meters);
-                    if (meters < minMeters || meters >= maxMeters) {
-                        continue;
-                    }
-                    candidates.push_back({meters, value, unit});
-                }
-            }
-        };
-
-        // Split the range at one large unit so each candidate's generating unit
-        // is also its magnitude unit — keeping the round value round in its label.
-        addNice(smallUnit, 0.0, largeThresholdMeters);
-        addNice(largeUnit, largeThresholdMeters, std::numeric_limits<double>::max());
-
-        std::sort(candidates.begin(), candidates.end(),
-                  [](const ScaleCandidate& a, const ScaleCandidate& b) {
-                      return a.meters < b.meters;
-                  });
-        return candidates;
-    }
 }
 
 cwScaleBarItem::cwScaleBarItem(QGraphicsItem *parent) :
@@ -175,12 +125,13 @@ cwScaleBarItem::ScaleSelection cwScaleBarItem::selectScale(double scaleRatio,
         return cwUnits::convert(scaleRatio * meters, cwUnits::Meters, cwUnits::Inches);
     };
 
-    const std::vector<ScaleCandidate> candidates = niceCandidates(system);
+    const std::vector<cwScaleBarSelector::Candidate>& candidates =
+            cwScaleBarSelector::niceCandidates(system);
 
-    const ScaleCandidate* selected = nullptr;
-    const ScaleCandidate* fallback = nullptr;
+    const cwScaleBarSelector::Candidate* selected = nullptr;
+    const cwScaleBarSelector::Candidate* fallback = nullptr;
 
-    for(const ScaleCandidate& candidate : candidates) {
+    for(const cwScaleBarSelector::Candidate& candidate : candidates) {
         double candidateWidth = paperWidthFromMeters(candidate.meters);
         if(candidateWidth > availableWidthInches) {
             break;

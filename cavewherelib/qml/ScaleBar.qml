@@ -75,52 +75,23 @@ QQ.Item {
     QQ.QtObject {
         id: privateData
 
-        // Choose the display unit from the bar's target span, so a large scale
-        // reads in km/mi and a small one in m/ft (magnitude-aware).
-        property int displayUnit: {
-            var ppm = itemId.camera.pixelsPerMeter;
-            var target = itemId.maxTotalWidth - itemId.minTotalWidth / 2.0;
-            var metersAcross = ppm > 0.0 ? target / ppm : 0.0;
-            return Units.lengthDisplayUnit(metersAcross, itemId.unitSystem);
-        }
+        // The round per-cell increment and its unit, chosen by the shared C++
+        // producer so this on-screen bar rounds to the same nice numbers as the
+        // printed export bar (cwScaleBarItem). The whole bar spans one
+        // subdivided small cell plus largeGrid.columns large cells.
+        readonly property scaleBarSelection selection: ScaleBarSelector.selectViewScale(
+            itemId.camera.pixelsPerMeter,
+            itemId.minTotalWidth,
+            itemId.maxTotalWidth,
+            1 + largeGrid.columns,
+            itemId.unitSystem)
+
+        property int displayUnit: selection.unit
         property real metersPerUnit: Units.convertLength(1.0, displayUnit, Units.Meters)
         property real pixelsPerUnit: itemId.camera.pixelsPerMeter * metersPerUnit
         property string unitName: Units.lengthUnitName(displayUnit)
 
-        property real unitsPerCell: {
-            if(itemId.visible) {
-                //Go through the exponents, working in the display unit so the
-                //cell labels land on round numbers of that unit.
-                var labelIncrement = 0.0 //In displayUnit
-                var nearestToBest = 10000.0 //In pixels
-
-                var numberOfLargeCells = 5; //Number of cells in the scale bar
-                var increments = [1.0, 2.5, 5.0];
-
-                var bestWidth = itemId.maxTotalWidth - itemId.minTotalWidth / 2.0;
-
-                //Search for the best label incement
-                for(var i = 0; i < increments.length; i++) {
-                    for(var ii = -5; ii < 10; ii++) {
-                        var currentLabelIncrement = increments[i] * Math.pow(10.0, ii); //In displayUnit
-                        var currentCellWidth = currentLabelIncrement * pixelsPerUnit;
-                        var currentTotalWidth = currentCellWidth * numberOfLargeCells;
-
-                        if(currentTotalWidth >= itemId.minTotalWidth && currentTotalWidth <= itemId.maxTotalWidth) {
-                            var currentNearest = Math.abs(bestWidth - currentTotalWidth);
-                            if(currentNearest < nearestToBest) {
-                                labelIncrement = currentLabelIncrement;
-                                nearestToBest = currentNearest;
-                            }
-                        }
-                    }
-                }
-
-                return labelIncrement;
-            }
-
-            return 10.0;
-        }
+        property real unitsPerCell: selection.value
 
         property real smallCellWidth: cellWidth / smallGrid.columns
         property real cellWidth: pixelsPerUnit * unitsPerCell
