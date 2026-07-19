@@ -543,6 +543,7 @@ cwGeometryItersecter::DebugStatistics cwGeometryItersecter::debugStatistics() co
                                 : Nodes;
     stats.hasBvh = static_cast<bool>(m_bvh);
     stats.sourceNodeCount = source.size();
+    stats.cachedSubBvhCount = m_subBvhs.size();
     for (const Node& n : source) {
         stats.totalPrimitives += countNodePrimitives(n.Object);
         switch (n.Object.geometry().type()) {
@@ -2585,25 +2586,43 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         }
         // No visibility stamping here: queries pair the installed BVH with a
         // store snapshot captured at query entry, so a toggle that raced the
-        // build is simply read fresh on the next pick. A *removal* racing the
-        // build is not covered — its key is gone from both m_dirtyKeys and the
-        // store (absent = visible), so a worker that finished just before the
-        // cancel republishes the removed slot until the restarted build
-        // installs. Pre-existing window; this refactor narrows what a stale
-        // slot can dereference but doesn't close it.
-        m_bvh = *resultSlot;
-        // A worker that finished computing just before cancel still
-        // publishes here. Re-apply the dirty filter on this side of the
-        // swap — mutator-site invalidatePublishedSlot was a no-op against
-        // the old m_bvh and would otherwise miss these Keys.
-        for (const Key& dirtyKey : std::as_const(m_dirtyKeys)) {
-            invalidatePublishedSlot(dirtyKey);
+        // build is simply read fresh on the next pick.
+        //
+        // A worker that finished computing just before cancel still publishes
+        // here, so re-apply two filters on this side of the swap. The dirty
+        // filter catches Keys mutated mid-build (mutator-site
+        // invalidatePublishedSlot was a no-op against the old m_bvh). The
+        // live-Nodes filter catches Keys *removed* mid-build — removal strips
+        // its Key from m_dirtyKeys, so the dirty filter alone would republish
+        // the removed slot (picks hitting freed geometry) and promote its
+        // sub-BVH into the cache forever (ids are never recycled). Nodes is
+        // ground truth on this thread.
+        QSet<Key> liveKeys;
+        liveKeys.reserve(Nodes.size());
+        for (const Node& node : std::as_const(Nodes)) {
+            liveKeys.insert(node.Object.key());
         }
+        // One predicate for both loops below — a slot that publishes must
+        // also be cacheable, and vice versa, so they can't drift apart.
+        const auto shouldPublish = [this, &liveKeys](const Key& key) {
+            return !m_dirtyKeys.contains(key) && liveKeys.contains(key);
+        };
+        // The built BvhData isn't published yet, so nulling slots in place
+        // here doesn't violate the immutable-once-published rule on m_bvh —
+        // and avoids invalidatePublishedSlot's per-Key copy-on-write.
+        std::shared_ptr<BvhData> built = *resultSlot;
+        for (auto it = built->keyToSlot.cbegin(); it != built->keyToSlot.cend(); ++it) {
+            if (!shouldPublish(it.key())) {
+                built->subBvhs[it.value()].reset();
+            }
+        }
+        m_bvh = std::move(built);
         // Promote freshly built sub-BVHs to the cache, skipping any Key
         // that's been re-dirtied since the build started — those will be
-        // rebuilt by the next launched job.
+        // rebuilt by the next launched job — and any Key no longer
+        // registered.
         for (auto it = builtSlot->constBegin(); it != builtSlot->constEnd(); ++it) {
-            if (!m_dirtyKeys.contains(it.key())) {
+            if (shouldPublish(it.key())) {
                 m_subBvhs[it.key()] = it.value();
             }
         }
