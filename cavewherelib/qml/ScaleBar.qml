@@ -31,8 +31,6 @@ QQ.Item {
         ? itemId.sessionUnitSystem
         : ProjectUnits.unitSystem
 
-    Units { id: unitsId }
-
     QC.Menu {
         id: unitMenuId
 
@@ -45,7 +43,7 @@ QQ.Item {
         QC.MenuSeparator {}
 
         QC.MenuItem {
-            text: unitsId.unitSystemName(Units.Metric)
+            text: Units.unitSystemName(Units.Metric)
             onTriggered: {
                 itemId.sessionUnitSystem = Units.Metric;
                 itemId.hasSessionOverride = true;
@@ -53,7 +51,7 @@ QQ.Item {
         }
 
         QC.MenuItem {
-            text: unitsId.unitSystemName(Units.Imperial)
+            text: Units.unitSystemName(Units.Imperial)
             onTriggered: {
                 itemId.sessionUnitSystem = Units.Imperial;
                 itemId.hasSessionOverride = true;
@@ -70,11 +68,11 @@ QQ.Item {
             var ppm = itemId.camera.pixelsPerMeter;
             var target = itemId.maxTotalWidth - itemId.minTotalWidth / 2.0;
             var metersAcross = ppm > 0.0 ? target / ppm : 0.0;
-            return unitsId.lengthDisplayUnit(metersAcross, itemId.unitSystem);
+            return Units.lengthDisplayUnit(metersAcross, itemId.unitSystem);
         }
-        property real metersPerUnit: unitsId.convertLength(1.0, displayUnit, Units.Meters)
+        property real metersPerUnit: Units.convertLength(1.0, displayUnit, Units.Meters)
         property real pixelsPerUnit: itemId.camera.pixelsPerMeter * metersPerUnit
-        property string unitName: unitsId.lengthUnitName(displayUnit)
+        property string unitName: Units.lengthUnitName(displayUnit)
 
         property real unitsPerCell: {
             if(itemId.visible) {

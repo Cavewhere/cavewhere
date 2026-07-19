@@ -19,10 +19,8 @@ QC.ComboBox {
 
     model: controlId.includeFollowProject
         ? [qsTr("Project Default"),
-           unitsId.unitSystemName(Units.Metric),
-           unitsId.unitSystemName(Units.Imperial)]
-        : [unitsId.unitSystemName(Units.Metric),
-           unitsId.unitSystemName(Units.Imperial)]
-
-    Units { id: unitsId }
+           Units.unitSystemName(Units.Metric),
+           Units.unitSystemName(Units.Imperial)]
+        : [Units.unitSystemName(Units.Metric),
+           Units.unitSystemName(Units.Imperial)]
 }

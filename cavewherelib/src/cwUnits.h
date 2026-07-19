@@ -22,6 +22,7 @@ class CAVEWHERE_LIB_EXPORT cwUnits : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(Units)
+    QML_SINGLETON
 
 public:
     // !!NOTICE!! Changing the enum effects SAVE / LOAD and the cwUnit Code !!NOTICE!!
@@ -96,8 +97,8 @@ public:
     // The static methods above are the single source of truth for unit
     // derivation and conversion; these thin instance forwarders exist only so
     // QML (the view scale bar, the cave length/depth stats) can resolve a
-    // display unit live from a project's UnitSystem. Instantiate
-    // `Units { id: units }` and call e.g. units.lengthDisplayUnit(meters, system).
+    // display unit live from a project's UnitSystem. cwUnits is a QML_SINGLETON,
+    // so call them off the type directly, e.g. Units.lengthDisplayUnit(meters, system).
     Q_INVOKABLE cwUnits::LengthUnit lengthDisplayUnit(double meters, cwUnits::UnitSystem system) const {
         return magnitudeUnit(meters, system);
     }
@@ -217,7 +218,5 @@ inline constexpr double cwUnits::convert(double value,
     return convert(value, ResolutionUnitToDotPerMeters[from], ResolutionUnitToDotPerMeters[to]);
 }
 
-
-Q_DECLARE_METATYPE(cwUnits*)
 
 #endif // CWUNITCOVERTER_H

@@ -16,17 +16,13 @@ RowLayout {
     // cave's stored length/depth unit (which stays metres regardless).
     readonly property int caveUnitSystem: ProjectUnits.unitSystem
     readonly property real meters: rootId.unitValue !== null
-        ? unitsId.convertLength(rootId.unitValue.value, rootId.unitValue.unit, Units.Meters)
+        ? Units.convertLength(rootId.unitValue.value, rootId.unitValue.unit, Units.Meters)
         : 0.0
     readonly property int displayUnit: rootId.depth
-        ? unitsId.depthDisplayUnit(rootId.caveUnitSystem)
-        : unitsId.lengthDisplayUnit(rootId.meters, rootId.caveUnitSystem)
+        ? Units.depthDisplayUnit(rootId.caveUnitSystem)
+        : Units.lengthDisplayUnit(rootId.meters, rootId.caveUnitSystem)
 
     spacing: Theme.delegatePadding
-
-    Units {
-        id: unitsId
-    }
 
     QC.Label {
         text: rootId.label
@@ -37,12 +33,12 @@ RowLayout {
 
     SelectableValue {
         text: rootId.unitValue !== null
-            ? Utils.fixed(unitsId.convertLength(rootId.meters, Units.Meters, rootId.displayUnit), 2)
+            ? Utils.fixed(Units.convertLength(rootId.meters, Units.Meters, rootId.displayUnit), 2)
             : ""
         font.pixelSize: Theme.fontSizeUI
     }
 
     QC.Label {
-        text: rootId.unitValue !== null ? unitsId.lengthUnitName(rootId.displayUnit) : ""
+        text: rootId.unitValue !== null ? Units.lengthUnitName(rootId.displayUnit) : ""
     }
 }
