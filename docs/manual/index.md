@@ -9,9 +9,8 @@ New here? Read **[Why CaveWhere](concepts/why-cavewhere.md)** first — it expla
 the problems CaveWhere solves — then keep the
 **[Glossary](concepts/glossary.md)** handy for survey vocabulary.
 
-> This manual is being written chapter by chapter. Links below point to pages
-> that exist today; chapters still in progress are listed in plain text so you
-> can see the planned structure. (For AI agents: [`llms.txt`](llms.txt) is the
+> This manual is written as task-focused chapters. Every link below points to a
+> page that exists today. (For AI agents: [`llms.txt`](llms.txt) is the
 > machine-readable index of available pages.)
 
 ## Available now
@@ -144,10 +143,7 @@ the problems CaveWhere solves — then keep the
 - [Review Project History](collaboration/review-history.md) — every version,
   the file-by-file diffs, and rolling back.
 
-## Planned chapters
-
-These directories exist and will be filled in as the manual is built out. Each
-chapter is task-oriented and problem-first (see
-[the authoring guide](AUTHORING.md)).
-
-- **Appendix** — small screens, keyboard shortcuts, troubleshooting.
+### Keyboard Shortcuts
+- [Keyboard Shortcuts](keyboard-shortcuts/keyboard-shortcuts.md) — the File-menu
+  accelerators, the keys that drive the survey table, and the single keys the
+  note editor, 3D view, and tools respond to.
