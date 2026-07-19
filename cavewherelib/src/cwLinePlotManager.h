@@ -58,6 +58,7 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
     Q_PROPERTY(QString solveErrorMessage READ solveErrorMessage NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString cavernLog READ cavernLog NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString loopClosureStats READ loopClosureStats NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(cwSurveyNetwork regionNetwork READ regionNetwork NOTIFY regionNetworkChanged FINAL)
 
 public:
     explicit cwLinePlotManager(QObject *parent = 0);
@@ -138,6 +139,12 @@ public:
     // unstarted until the first line plot finishes.
     cwSurveyNetworkArtifact* surveyNetworkArtifact() const { return m_surveyNetworkArtifact; }
 
+    // Region-wide qualified survey network (cave_<uuid>.trip_<uuid>.<station>
+    // keys) parsed from cavern's .3d output on the most recent solve. Empty
+    // until the first solve completes. Bind cwScopeStationListModel::network
+    // to this.
+    cwSurveyNetwork regionNetwork() const { return m_lastPublishedNetwork; }
+
     void waitToFinish();
 
 signals:
@@ -155,6 +162,8 @@ signals:
     // Emitted whenever the set of owners with a missing live-link source
     // changes. The set itself is read via missingSourceOwners().
     void missingSourceOwnersChanged();
+
+    void regionNetworkChanged();
 
 public slots:
     void rerunSurvex();

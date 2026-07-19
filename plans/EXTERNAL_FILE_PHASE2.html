@@ -212,17 +212,27 @@
     <code>metadata</code> holds only the fields actually applied.
   </li>
   <li>
-    <strong>New:</strong> <code>cwScopeStationListModel.h/.cpp</code>
+    <strong>New (landed at commit 6):</strong>
+    <code>cwScopeStationListModel.h/.cpp</code>
     &mdash; <code>QAbstractListModel</code> exposing the post-solve
     stations under a given <code>cave_&lt;uuid&gt;.trip_&lt;uuid&gt;.</code>
-    qualified-name prefix. Listens to
-    <code>cwSurveyNetworkArtifact::changed</code> (already on the manager
-    via <code>cwLinePlotManager::surveyNetworkArtifact()</code>) and to the
-    owner trip's <code>idChanged</code>. Two roles:
+    qualified-name prefix. The source of truth is a plain
+    <code>cwSurveyNetwork network</code> value property; QML binds it to
+    the new <code>cwLinePlotManager::regionNetwork</code> Q_PROPERTY
+    (added at commit 6, backed by the manager's existing
+    <code>m_lastPublishedNetwork</code> + a new
+    <code>regionNetworkChanged</code> signal). The model deliberately does
+    <em>not</em> consume <code>cwSurveyNetworkArtifact</code> &mdash; the
+    rule/artifact pipeline is experimental and unused in production. No
+    trip coupling either &mdash; the QML layer binds
+    <code>scopePrefix</code> from the trip, so id changes flow through the
+    binding. Three roles per the &sect;8 sketch:
     <code>StationNameRole</code> (display name, prefix stripped per
-    &sect;8.8 q9) and <code>QualifiedNameRole</code> (full
-    <code>cave_X.trip_Y.&hellip;</code> form for matching the lookup).
-    Same model backs the panel's
+    &sect;8.8 q9), <code>QualifiedNameRole</code> (full
+    <code>cave_X.trip_Y.&hellip;</code> form for matching the lookup), and
+    <code>PositionRole</code> (QML name <code>stationPosition</code> &mdash;
+    not <code>position</code>, which QC control roots like Slider/ScrollBar
+    would shadow in delegates). Same model backs the panel's
     <code>ExternalCenterlineStationsList</code> and the carpet sub-page
     station picker (replaces <code>cwTrip::stations()</code> for external
     trips).
@@ -759,32 +769,34 @@ detach(cwTrip* trip,
 <p>
   <code>cwScopeStationListModel</code> backs both the panel's stations
   list and the carpet sub-page picker autocomplete. Read-only,
-  list-shaped, one row per station whose qualified name in
-  <code>cwSurveyNetworkArtifact</code> starts with the model's
+  list-shaped, one row per station whose qualified name in the bound
+  <code>cwSurveyNetwork</code> (from
+  <code>cwLinePlotManager::regionNetwork</code>) starts with the model's
   <code>scopePrefix</code> (typically
   <code>cave_&lt;X&gt;.trip_&lt;Y&gt;.</code>).
 </p>
 
-<pre><code>// cwScopeStationListModel.h
+<pre><code>// cwScopeStationListModel.h (as landed at commit 6)
 class cwScopeStationListModel : public QAbstractListModel {
     Q_OBJECT
-    QML_ELEMENT
+    QML_NAMED_ELEMENT(ScopeStationListModel)
 
     // The qualified-name prefix to filter on. Setter recomputes the
     // visible rows + emits modelReset (cheap: typical scope has &lt;
     // a few hundred stations).
     Q_PROPERTY(QString scopePrefix READ scopePrefix WRITE setScopePrefix NOTIFY scopePrefixChanged)
 
-    // The source of truth. Setter connects to the artifact's changed
-    // signal so the model auto-refreshes when the line-plot pipeline
-    // publishes a new network.
-    Q_PROPERTY(cwSurveyNetworkArtifact* artifact READ artifact WRITE setArtifact NOTIFY artifactChanged)
+    // The source of truth: a plain value, bound in QML to
+    // cwLinePlotManager::regionNetwork so the model refreshes when the
+    // line-plot pipeline publishes a new network. (Deliberately not the
+    // experimental cwSurveyNetworkArtifact.)
+    Q_PROPERTY(cwSurveyNetwork network READ network WRITE setNetwork NOTIFY networkChanged)
 
 public:
     enum Roles {
-        StationNameRole = Qt::UserRole + 1,  // prefix-stripped display name
-        QualifiedNameRole,                   // full qualified name
-        PositionRole,                        // QVector3D from the lookup
+        StationNameRole = Qt::UserRole + 1,  // "stationName": prefix-stripped display name
+        QualifiedNameRole,                   // "qualifiedName": full qualified name
+        PositionRole,                        // "stationPosition": QVector3D from the network
     };
     ...
 };
@@ -796,29 +808,48 @@ public:
 <ul>
   <li>
     <strong>Prefix strip.</strong> A station's qualified name
-    <code>cave_X.trip_Y.A1</code> with
-    <code>scopePrefix = "cave_X.trip_Y."</code> displays as
-    <code>A1</code>; <code>cave_X.trip_Y.sidepassage.B1</code> displays
-    as <code>sidepassage.B1</code>. Per &sect;8.8 question 9.
+    <code>cave_x.trip_y.a1</code> with
+    <code>scopePrefix = "cave_x.trip_y."</code> displays as
+    <code>a1</code>; <code>cave_x.trip_y.sidepassage.b1</code> displays
+    as <code>sidepassage.b1</code>. Per &sect;8.8 question 9. Both roles
+    are canonical lowercase &mdash; <code>cwSurveyNetwork</code>
+    canonicalizes keys via <code>cwStation::canonicalKey</code>
+    (<code>toLower()</code>), so input case is unrecoverable at this
+    layer; the prefix is canonicalized the same way, so matching is
+    case-insensitive. Carrying original-case display names through the
+    solve is a separate product decision (blast radius:
+    <code>cwSurveyNetwork</code>, <code>cwLinePlotTask</code>,
+    <code>cwSurvey2DGeometryRule</code>, this model) &mdash; decide
+    before the panel ships in commits 9+.
   </li>
   <li>
-    <strong>Sort.</strong> Stable sort by qualified name
-    case-insensitively. Locked here so the carpet picker autocomplete is
-    deterministic regardless of how cavern ordered its output.
+    <strong>Sort.</strong> Stable lexicographic sort by qualified name.
+    Locked here so the carpet picker autocomplete is deterministic
+    regardless of how cavern ordered its output. (Keys are canonical
+    lowercase, so case-insensitivity is inherent, not a comparator
+    property.)
   </li>
   <li>
-    <strong>Refresh.</strong> Connected to
-    <code>artifact-&gt;changed()</code> via
-    <code>AsyncFuture::observe(...).context(this, ...)</code>; on
-    artifact reset, walks the new network's
-    <code>cwStationPositionLookup</code> once and re-populates the row
-    list. No incremental diff; project sizes don't warrant it in v1.
+    <strong>Refresh.</strong> The <code>network</code> value property is
+    bound (in QML) to <code>cwLinePlotManager::regionNetwork</code>; the
+    setter walks the new network's <code>stations()</code> /
+    <code>position()</code> once, synchronously, and re-populates the
+    row list. Setting an equal network is a no-op (no reset, no signal).
+    No incremental diff; project sizes don't warrant it in v1. All the
+    async lives in the manager &mdash; the model itself has no futures.
   </li>
   <li>
     <strong>Empty prefix.</strong>
     <code>scopePrefix.isEmpty()</code> returns zero rows (rather than
     every station in the region). The caller is expected to set the
     prefix before the model has any meaning.
+  </li>
+  <li>
+    <strong>Empty network.</strong> Setting a default-constructed
+    <code>cwSurveyNetwork</code> clears the rows synchronously. Errored
+    solves never publish, so <code>regionNetwork</code> (and therefore
+    the model) keeps the last good network until the next successful
+    solve.
   </li>
 </ul>
 
@@ -1084,7 +1115,7 @@ public:
   <li>
     <strong><code>cwScopeStationListModel</code>.</strong> New model
     class. Tests: <code>[Model][ScopeStations]</code> covering prefix
-    strip, sort, refresh on artifact change, empty-prefix returns zero.
+    strip, sort, refresh on network change, empty-prefix returns zero.
   </li>
   <li>
     <strong><code>cwLinePlotManager</code> extensions.</strong>
@@ -1361,21 +1392,27 @@ public:
     protobuf never re-saved and a reload came back Native).</li>
 </ul>
 
-<h3>Commit 6 &mdash; cwScopeStationListModel</h3>
+<h3>Commit 6 &mdash; cwScopeStationListModel <em>(landed; gates updated to match canonical-lowercase reality)</em></h3>
 <p><strong>New tag:</strong> <code>[Model][ScopeStations]</code></p>
 <ul>
-  <li>Prefix strip: <code>scopePrefix = "cave_X.trip_Y."</code>; lookup
-    has <code>cave_X.trip_Y.A1</code>, <code>cave_X.trip_Y.A2</code>,
-    <code>cave_X.trip_Y.sidepassage.B1</code> &rarr; rows display
-    <code>A1</code>, <code>A2</code>, <code>sidepassage.B1</code>;
-    QualifiedNameRole keeps the originals.</li>
+  <li>Prefix strip: <code>scopePrefix = "cave_x.trip_y."</code>; network
+    has <code>cave_x.trip_y.A1</code>, <code>cave_x.trip_y.A2</code>,
+    <code>cave_x.trip_y.sidepassage.B1</code> &rarr; rows display the
+    canonical forms <code>a1</code>, <code>a2</code>,
+    <code>sidepassage.b1</code>; QualifiedNameRole carries the full
+    canonical names (<code>cwSurveyNetwork</code> lowercases keys, so
+    neither role preserves input case). Mixed-case prefixes are
+    canonicalized before matching.</li>
   <li>Sort: stations arrive out of order &rarr; rows present sorted
-    case-insensitively by qualified name.</li>
-  <li>Refresh: artifact emits <code>changed</code> with a different
-    lookup &rarr; <code>modelReset</code> signal fires once and rows
-    update.</li>
+    lexicographically by qualified name (enough stations that hash-order
+    luck can't pass a broken sort).</li>
+  <li>Refresh: <code>setNetwork</code> with a different network &rarr;
+    <code>modelReset</code> signal fires once and rows update; setting
+    an equal network is a no-op (no reset, no
+    <code>networkChanged</code>).</li>
   <li>Empty prefix &rarr; <code>rowCount() == 0</code>.</li>
   <li>Out-of-scope stations (different cave/trip prefix) are skipped.</li>
+  <li>Setting a default-constructed network clears the rows.</li>
 </ul>
 
 <h3>Commit 7 &mdash; cwLinePlotManager attached-centerlines model + driver source</h3>

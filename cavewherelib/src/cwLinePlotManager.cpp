@@ -669,6 +669,7 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     const cwSurveyNetwork newNetwork = results.regionNetwork();
     if (newNetwork != m_lastPublishedNetwork) {
         m_lastPublishedNetwork = newNetwork;
+        emit regionNetworkChanged();
         m_surveyNetworkArtifact->setSurveyNetwork(
             QtFuture::makeReadyValueFuture(Monad::Result<cwSurveyNetwork>(newNetwork)));
     }
