@@ -26,6 +26,9 @@ message ProjectMetadata {
     reserved 7; // Removed: lazLayerStates (now persisted per-layer in <basename>.cwlaz)
     optional bool syncEnabled = 3;
     optional string globalCoordinateSystem = 4;
+    // Project-wide default unit system. Absent (old files) loads as Metric and
+    // never retroactively reinterprets existing trips — it only seeds new ones.
+    optional Units.UnitSystem unitSystem = 8;
 }
 
 // Per-LAZ-layer persistent state. Stored as <basename>.cwlaz next to the
@@ -399,6 +402,12 @@ message Units {
         DotsPerInch = 0;
         DotsPerCentimeter = 1;
         DotsPerMeter = 2;
+    }
+
+    // The project-wide display-unit choice. Absent (old files) loads as Metric.
+    enum UnitSystem {
+        Metric = 0;
+        Imperial = 1;
     }
 }
 

@@ -17,6 +17,7 @@
 #include "cwGridConvergence.h"
 #include "cwNameUtils.h"
 #include "cwKeywordModel.h"
+#include "cwTripCalibration.h"
 
 //Qt includes
 #include <QThread>
@@ -192,6 +193,14 @@ void cwCave::setExternalCenterline(const cwExternalCenterline& value)
   */
 void cwCave::addTripNullHelper() {
     cwTrip* trip = new cwTrip(undoStack());
+
+    // Seed the new trip's survey-entry unit from the project default. The region
+    // is the single conduit for that default (it seeds itself from the app-level
+    // setting), so a cave not yet in a region falls back to Metric. Only new
+    // trips are seeded; loaded trips keep their own stored unit.
+    const cwCavingRegion* region = parentRegion();
+    const cwUnits::UnitSystem system = region ? region->unitSystem() : cwUnits::Metric;
+    trip->calibrations()->setDistanceUnit(cwUnits::surveyUnit(system));
 
     QString tripName = QString("Trip %1").arg(tripCount() + 1);
     beginUndoMacro(QString("Add %1").arg(tripName));

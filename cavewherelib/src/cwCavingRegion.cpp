@@ -39,6 +39,15 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
     });
 }
 
+void cwCavingRegion::setUnitSystem(cwUnits::UnitSystem system)
+{
+    if (m_unitSystem == system) {
+        return;
+    }
+    m_unitSystem = system;
+    emit unitSystemChanged();
+}
+
 void cwCavingRegion::setFutureManagerToken(const cwFutureManagerToken& token)
 {
     m_lazLayers->setFutureManagerToken(token);
@@ -331,6 +340,7 @@ void cwCavingRegion::recomputeWorldOrigin()
 void cwCavingRegion::setData(const cwCavingRegionData &data)
 {
     setName(data.name);
+    setUnitSystem(data.unitSystem);
     m_geoReference->setGlobalCoordinateSystem(data.globalCoordinateSystem);
     // worldOrigin is intentionally not persisted (see cavewhere.proto:
     // "reserved 5; // Removed: worldOrigin ... recomputed on load"). On
@@ -363,7 +373,8 @@ cwCavingRegionData cwCavingRegion::data() const
         m_name.value(),
         cwData::toDataList<cwCaveData>(m_caves),
         m_geoReference->globalCoordinateSystem(),
-        m_geoReference->worldOrigin()
+        m_geoReference->worldOrigin(),
+        m_unitSystem
     };
 }
 

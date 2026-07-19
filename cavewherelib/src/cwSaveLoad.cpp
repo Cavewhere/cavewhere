@@ -1835,6 +1835,9 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
     protoMetadata->set_syncenabled(metadata.syncEnabled);
 
     if (region != nullptr) {
+        protoMetadata->set_unitsystem(
+            static_cast<CavewhereProto::Units_UnitSystem>(region->unitSystem()));
+
         if (region->geoReference()->hasCoordinateSystem()) {
             cwProtoUtils::saveString(protoMetadata->mutable_globalcoordinatesystem(),
                                      region->geoReference()->globalCoordinateSystem());
@@ -2918,6 +2921,10 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
             if (metadataProto.has_globalcoordinatesystem()) {
                 loadData.region.globalCoordinateSystem =
                     QString::fromStdString(metadataProto.globalcoordinatesystem());
+            }
+            if (metadataProto.has_unitsystem()) {
+                loadData.region.unitSystem =
+                    static_cast<cwUnits::UnitSystem>(metadataProto.unitsystem());
             }
         }
 
