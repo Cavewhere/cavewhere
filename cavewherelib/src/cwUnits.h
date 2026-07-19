@@ -44,8 +44,17 @@ public:
         DotsPerMeter = 2
     };
 
+    // The project-wide display-unit choice. Every concrete unit shown to the
+    // user is derived from this via the helpers below, so there is no per-unit
+    // settings matrix. // !!NOTICE!! persisted to SAVE / LOAD !!NOTICE!!
+    enum UnitSystem {
+        Metric = 0,
+        Imperial = 1
+    };
+
     Q_ENUM(LengthUnit)
     Q_ENUM(ImageResolutionUnit)
+    Q_ENUM(UnitSystem)
 
     static constexpr double PointsPerInch = 72.0;
     static constexpr double SvgCssDpi = 96.0;
@@ -63,6 +72,25 @@ public:
     //! no sign (a rounded -0 renders a clean "0.00 <unit>").
     static QString formatLength(double meters, cwUnits::LengthUnit unit,
                                 bool signedValue = false, int decimals = 2);
+
+    //! The unit new survey shots default to for \a system (metres / feet).
+    static constexpr cwUnits::LengthUnit surveyUnit(cwUnits::UnitSystem system);
+    //! The unit cave depth is displayed in for \a system (metres / feet).
+    static constexpr cwUnits::LengthUnit depthUnit(cwUnits::UnitSystem system);
+    //! The base (short-distance) unit for \a system (metres / feet) — the small
+    //! half of the small/large pair magnitudeUnit() chooses between.
+    static constexpr cwUnits::LengthUnit smallLengthUnit(cwUnits::UnitSystem system);
+    //! The large-distance unit for \a system (kilometres / miles), used once a
+    //! length reaches one large unit — see magnitudeUnit().
+    static constexpr cwUnits::LengthUnit largeLengthUnit(cwUnits::UnitSystem system);
+    //! Pick the sensible display unit for \a meters in \a system: the small unit
+    //! (m / ft) below one large unit, the large unit (km / mi) at or above it.
+    //! Drives the cave-length stat and both scale bars.
+    static constexpr cwUnits::LengthUnit magnitudeUnit(double meters, cwUnits::UnitSystem system);
+    //! The display name of a unit system ("Metric" / "Imperial").
+    static QString unitName(cwUnits::UnitSystem system);
+    //! The unit-system names in enum order — a combobox model.
+    static QStringList unitSystemNames();
 
     static constexpr double convert(double value,
                                     cwUnits::ImageResolutionUnit from,
@@ -122,6 +150,34 @@ inline constexpr double cwUnits::convert(double value,
         return value;
     }
     return convert(value, LengthUnitsToMeters[from], LengthUnitsToMeters[to]);
+}
+
+inline constexpr cwUnits::LengthUnit cwUnits::smallLengthUnit(cwUnits::UnitSystem system)
+{
+    return system == Imperial ? Feet : Meters;
+}
+
+inline constexpr cwUnits::LengthUnit cwUnits::surveyUnit(cwUnits::UnitSystem system)
+{
+    return smallLengthUnit(system);
+}
+
+inline constexpr cwUnits::LengthUnit cwUnits::depthUnit(cwUnits::UnitSystem system)
+{
+    return smallLengthUnit(system);
+}
+
+inline constexpr cwUnits::LengthUnit cwUnits::largeLengthUnit(cwUnits::UnitSystem system)
+{
+    return system == Imperial ? Miles : Kilometers;
+}
+
+inline constexpr cwUnits::LengthUnit cwUnits::magnitudeUnit(double meters, cwUnits::UnitSystem system)
+{
+    // The crossover is exactly one large unit, so a value never renders below
+    // 1.0 of the large unit (e.g. 999 m stays "999 m", 1000 m becomes "1 km").
+    const cwUnits::LengthUnit large = largeLengthUnit(system);
+    return qAbs(meters) >= LengthUnitsToMeters[large] ? large : smallLengthUnit(system);
 }
 
 inline constexpr double cwUnits::convert(double value,
