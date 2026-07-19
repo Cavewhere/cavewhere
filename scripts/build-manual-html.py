@@ -132,6 +132,20 @@ def rewrite_links(html, relpath, key_by_relpath):
     return re.sub(r'href="([^"#]+\.md)(#[^"]*)?"', repl, html)
 
 
+def cavewhere_version():
+    """The CaveWhere version the manual documents, as `git describe HEAD` — the
+    same string the app shows (e.g. 2026.4.3-424-ged1d7c4a). Returns None when
+    git or a tag is unavailable, so the sidebar simply omits the line."""
+    try:
+        result = subprocess.run(
+            ["git", "describe", "HEAD"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout.strip() or None
+
+
 # The manual's first page opens with the CaveWhere app icon as a title mark.
 LOGO_PAGE = "concepts/why-cavewhere.md"
 
@@ -197,9 +211,14 @@ def build():
     nav = "\n".join(nav_html)
     main = "\n\n".join(pages_html)
 
+    version = cavewhere_version()
+    version_html = (
+        f'      <p class="brand-version">CaveWhere {version}</p>\n' if version else ""
+    )
+
     return PAGE_TEMPLATE.format(
         css=font_face_css() + CSS, brand_logo=logo_html("brand-logo"),
-        nav=nav, main=main, script=SCRIPT,
+        brand_version=version_html, nav=nav, main=main, script=SCRIPT,
     )
 
 
@@ -277,6 +296,10 @@ body {
   text-wrap: balance; color: var(--heading);
 }
 .brand p { margin: 14px 0 0; font-size: .82rem; color: var(--muted); line-height: 1.5; }
+.brand-version {
+  margin: 12px 0 0; font-size: .72rem; color: var(--muted); letter-spacing: .02em;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; word-break: break-all;
+}
 
 .nav-group { margin-bottom: 22px; }
 .nav-label {
@@ -409,7 +432,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
         <h1>CaveWhere User Manual</h1>
       </div>
       <p>Turning underground sketches and instrument readings into an accurate, shareable 3D cave map.</p>
-    </div>
+{brand_version}    </div>
     <nav>
 {nav}
     </nav>
