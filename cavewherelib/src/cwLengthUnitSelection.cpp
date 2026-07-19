@@ -15,7 +15,7 @@
 
 namespace {
     // The curated length units offered to the user, in menu order (m, km, ft,
-    // mi). Single source of truth — UnitDefaults.lengthModel derives from it.
+    // mi). Single source of truth for the selector's model.
     constexpr std::array<cwUnits::LengthUnit, 4> kCuratedUnits = {
         cwUnits::Meters, cwUnits::Kilometers, cwUnits::Feet, cwUnits::Miles
     };

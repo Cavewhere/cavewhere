@@ -20,11 +20,46 @@ QQ.Item {
     property real maxTotalWidth: itemId.parent.width * 0.75
     property real minTotalWidth: itemId.parent.width * 0.2
 
-    // The project's unit system drives whether the bar reads in metric or
-    // imperial; the concrete unit (m/km or ft/mi) is then chosen by magnitude.
-    property int unitSystem: RootData.region ? RootData.region.unitSystem : Units.Metric
+    // A session-only, in-memory unit override for THIS bar, chosen from the
+    // right-click menu. It never writes the project or app default.
+    property bool hasSessionOverride: false
+    property int sessionUnitSystem: Units.Metric
+
+    // The unit system the bar reads in: the session override when set, else the
+    // project's. The concrete unit (m/km or ft/mi) is then chosen by magnitude.
+    readonly property int unitSystem: itemId.hasSessionOverride
+        ? itemId.sessionUnitSystem
+        : (RootData.region ? RootData.region.unitSystem : Units.Metric)
 
     Units { id: unitsId }
+
+    QC.Menu {
+        id: unitMenuId
+
+        QC.MenuItem {
+            text: "Follow Project Default"
+            enabled: itemId.hasSessionOverride
+            onTriggered: itemId.hasSessionOverride = false
+        }
+
+        QC.MenuSeparator {}
+
+        QC.MenuItem {
+            text: unitsId.unitSystemName(Units.Metric)
+            onTriggered: {
+                itemId.sessionUnitSystem = Units.Metric;
+                itemId.hasSessionOverride = true;
+            }
+        }
+
+        QC.MenuItem {
+            text: unitsId.unitSystemName(Units.Imperial)
+            onTriggered: {
+                itemId.sessionUnitSystem = Units.Imperial;
+                itemId.hasSessionOverride = true;
+            }
+        }
+    }
 
     QQ.QtObject {
         id: privateData
@@ -202,5 +237,11 @@ QQ.Item {
 
         border.width: 1
         color: Theme.transparent
+
+        QQ.TapHandler {
+            objectName: "scaleBarUnitTapHandler"
+            acceptedButtons: Qt.RightButton
+            onTapped: unitMenuId.popup()
+        }
     }
 }

@@ -30,8 +30,8 @@
  * drive the choice by `index`. When `settingsKey` is set, the choice is loaded
  * from and saved to that QSettings key, so it persists across sessions.
  *
- * This is the single source of truth for the curated length-unit set;
- * UnitDefaults.lengthModel derives its model from unitNames().
+ * This is the single source of truth for the curated length-unit set that
+ * feeds an index-based selector's model via unitNames().
  */
 class CAVEWHERE_LIB_EXPORT cwLengthUnitSelection : public QObject
 {
@@ -55,7 +55,7 @@ public:
 
     //! The curated set of selectable units, in menu order: m, km, ft, mi.
     static QList<cwUnits::LengthUnit> curatedUnits();
-    //! The curated set's names, in menu order (single source for UnitDefaults).
+    //! The curated set's names, in menu order (the selector's model source).
     static QStringList unitNames();
 
     cwUnits::LengthUnit unit() const { return m_unit; }

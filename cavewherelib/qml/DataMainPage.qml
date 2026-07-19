@@ -19,6 +19,8 @@ StandardPage {
 
     objectName: "dataMainPage"
 
+    Units { id: unitsId }
+
     function cavePageName(cave) {
         return "Cave=" + cave.name;
     }
@@ -85,6 +87,28 @@ StandardPage {
                 icon.height: Theme.iconSizeSmall
                 menu: regionContextMenuComponent
             }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
+
+            QC.Label {
+                text: "Units:"
+            }
+
+            QC.ComboBox {
+                objectName: "unitSystemComboBox"
+                // The project-wide unit system (region-level). Seeds new trips
+                // and drives every displayed length; existing trips keep their
+                // entry units. Metric = index 0, Imperial = index 1.
+                model: [unitsId.unitSystemName(Units.Metric),
+                        unitsId.unitSystemName(Units.Imperial)]
+                currentIndex: RootData.region.unitSystem
+                onActivated: RootData.region.unitSystem = currentIndex
+            }
+
+            QQ.Item { Layout.fillWidth: true }
         }
 
         QC.GroupBox {

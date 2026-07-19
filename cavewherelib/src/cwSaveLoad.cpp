@@ -3512,6 +3512,11 @@ void cwSaveLoad::connectTreeModel()
         };
         connect(region->geoReference(), &cwGeoReference::globalCoordinateSystemChanged, this, saveMetadata);
 
+        // The project's default unitSystem lives in the same metadata file, so it
+        // needs the same handler — without it a units change made in the UI never
+        // reaches disk or flips the dirty bit, and is dropped on close.
+        connect(region, &cwCavingRegion::unitSystemChanged, this, saveMetadata);
+
         // LAZ layers live in "GIS Layers/" inside the project root and are
         // discovered by directory scan, so adds go through cwProject::addFiles
         // (which already flushes + commits after copy). Watch removal here so

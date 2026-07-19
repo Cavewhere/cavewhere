@@ -110,6 +110,11 @@ public:
     Q_INVOKABLE QString lengthUnitName(cwUnits::LengthUnit unit) const {
         return unitName(unit);
     }
+    //! The display name of a unit system ("Metric" / "Imperial") — feeds the
+    //! Metric/Imperial comboboxes (settings, project, scale-bar controls).
+    Q_INVOKABLE QString unitSystemName(cwUnits::UnitSystem system) const {
+        return unitName(system);
+    }
 
     static constexpr double convert(double value,
                                     cwUnits::ImageResolutionUnit from,

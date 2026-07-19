@@ -80,6 +80,36 @@ TEST_CASE("cwCavingRegion unitSystem survives save/load", "[RegionUnitSystem]")
     CHECK(reloaded->project()->cavingRegion()->unitSystem() == cwUnits::Imperial);
 }
 
+TEST_CASE("Changing the region unitSystem persists without an explicit save",
+          "[RegionUnitSystem]")
+{
+    // Regression: unitSystem lives in the project metadata file, so a change made
+    // through the UI (the settings/project combobox) must reach disk on its own —
+    // the metadata save handler has to watch unitSystemChanged, exactly as it does
+    // globalCoordinateSystemChanged. Without that wiring the edit is silently lost
+    // on close.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto root = std::make_unique<cwRootData>();
+    auto* region = root->project()->cavingRegion();
+    region->setUnitSystem(cwUnits::Metric);
+
+    // Establish the project on disk in Metric.
+    const QString actualPath = saveProject(root.get(), tempDir, QStringLiteral("unit-incremental"));
+
+    // Flip the default the way the combobox does — no second saveAs. This alone
+    // must be persisted by the metadata save handler.
+    region->setUnitSystem(cwUnits::Imperial);
+    root->project()->waitSaveToFinish();
+
+    auto reloaded = std::make_unique<cwRootData>();
+    reloaded->project()->loadFile(actualPath);
+    reloaded->project()->waitLoadToFinish();
+
+    CHECK(reloaded->project()->cavingRegion()->unitSystem() == cwUnits::Imperial);
+}
+
 TEST_CASE("A Metric project loads as Metric even when the app default is Imperial",
           "[RegionUnitSystem]")
 {

@@ -16,7 +16,7 @@ StandardPage {
             Layout.maximumWidth: 200
             implicitWidth: 200
 
-            model: ["Jobs", "Warping", "PDF / SVG", "Git", "Appearance", "Rendering", "Sketch"]
+            model: ["Jobs", "Warping", "PDF / SVG", "Git", "Appearance", "Rendering", "Sketch", "Units"]
         }
 
         QC.ScrollView {
@@ -56,6 +56,10 @@ StandardPage {
                 }
 
                 SketchSettingsItem {
+
+                }
+
+                UnitsSettingsItem {
 
                 }
             }

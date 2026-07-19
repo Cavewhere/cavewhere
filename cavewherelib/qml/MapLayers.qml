@@ -13,6 +13,8 @@ ColumnLayout {
     required property CaptureItemManiputalor captureItemManiputlor
     required property GLTerrainRenderer view
 
+    Units { id: unitsId }
+
     SelectExportAreaTool {
         id: selectionTool
         parent: mapLayersId.view
@@ -285,6 +287,24 @@ ColumnLayout {
                 checked: true
             }
 
+            RowLayout {
+                enabled: scaleBarCheckBoxId.checked
+
+                QC.Label {
+                    text: "Units:"
+                }
+
+                QC.ComboBox {
+                    id: scaleBarUnitComboId
+                    objectName: "scaleBarUnitComboBox"
+                    // Index maps to CaptureViewport.ScaleBarUnitMode:
+                    // 0 = FollowProject, 1 = ForceMetric, 2 = ForceImperial.
+                    model: ["Project Default",
+                            unitsId.unitSystemName(Units.Metric),
+                            unitsId.unitSystemName(Units.Imperial)]
+                }
+            }
+
             QC.CheckBox {
                 id: leadsCheckBoxId
                 objectName: "leadsCheckBox"
@@ -349,6 +369,13 @@ ColumnLayout {
                         checked: layerProperties.layerObject.scaleBarVisible
                         onCheckedChanged: {
                             layerProperties.layerObject.scaleBarVisible = scaleBarCheckBoxId.checked
+                        }
+                    }
+
+                    scaleBarUnitComboId {
+                        currentIndex: layerProperties.layerObject.scaleBarUnitMode
+                        onActivated: {
+                            layerProperties.layerObject.scaleBarUnitMode = scaleBarUnitComboId.currentIndex
                         }
                     }
 
