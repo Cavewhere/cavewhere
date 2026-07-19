@@ -35,7 +35,7 @@ cwGeometryItersecter::Object makePointObject(uint64_t id,
     geometry.set(cwGeometry::Semantic::Position, points);
     geometry.setType(cwGeometry::Type::Points);
 
-    return cwGeometryItersecter::Object({nullptr, id},
+    return cwGeometryItersecter::Object(nullptr, id,
                                         geometry,
                                         modelMatrix,
                                         pickRadius);
@@ -60,7 +60,7 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
     geometry.setIndices(indexes);
     geometry.setType(cwGeometry::Type::Triangles);
 
-    return cwGeometryItersecter::Object({nullptr, id},
+    return cwGeometryItersecter::Object(nullptr, id,
                                         geometry,
                                         modelMatrix);
 }
@@ -104,7 +104,7 @@ TEST_CASE("setModelMatrix translates pick without invalidating sub-BVH",
     // world (5, 0, 0). Ray at the new world position should hit.
     QMatrix4x4 translation;
     translation.translate(5.0f, 0.0f, 0.0f);
-    intersector.setModelMatrix(nullptr, 1, translation);
+    intersector.setModelMatrix(cwRenderObjectId{}, 1, translation);
     intersector.waitForFinish();
 
     const QRay3D rayAtFive(QVector3D(5.0f, 0.0f, 100.0f),
@@ -155,7 +155,7 @@ TEST_CASE("Remove + add same Key produces fresh sub-BVH",
                              QVector3D(0.0f, 0.0f, -1.0f));
     REQUIRE(intersector.intersectsDetailed(rayAtOrigin).hit());
 
-    intersector.removeObject(nullptr, 42);
+    intersector.removeObject(cwRenderObjectId{}, 42);
     intersector.waitForFinish();
     REQUIRE_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
 
@@ -219,7 +219,7 @@ TEST_CASE("boundingBox() returns the world-space union of all objects",
     // A modelMatrix translation must show up in the world-space union.
     QMatrix4x4 translation;
     translation.translate(100.0f, 0.0f, 0.0f);
-    intersector.setModelMatrix(nullptr, 2, translation);
+    intersector.setModelMatrix(cwRenderObjectId{}, 2, translation);
     intersector.waitForFinish();
 
     const QBox3D moved = intersector.boundingBox();
@@ -511,7 +511,7 @@ TEST_CASE("perf: setModelMatrix on small object is near-instant",
     for (int i = 0; i < kIterations; ++i) {
         QMatrix4x4 m;
         m.translate(float(i), 0.0f, 0.0f);
-        intersector.setModelMatrix(nullptr, 2, m);
+        intersector.setModelMatrix(cwRenderObjectId{}, 2, m);
         intersector.waitForFinish();
     }
     const auto elapsed = std::chrono::steady_clock::now() - start;

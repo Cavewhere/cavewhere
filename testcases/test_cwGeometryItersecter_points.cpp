@@ -11,6 +11,7 @@
 #include "cwGeometryItersecter.h"
 #include "cwRayHit.h"
 #include "cwRenderObject.h"
+#include "cwScene.h"
 
 using namespace Catch;
 
@@ -30,7 +31,7 @@ cwGeometryItersecter::Object makePointObject(cwRenderObject* parent,
     geometry.set(cwGeometry::Semantic::Position, points);
     geometry.setType(cwGeometry::Type::Points);
 
-    return cwGeometryItersecter::Object({parent, id},
+    return cwGeometryItersecter::Object(parent, id,
                                         geometry,
                                         modelMatrix,
                                         pickRadius);
@@ -64,7 +65,7 @@ cwGeometryItersecter::Object makeTriangleAtZ(uint64_t id, float worldZ)
 
     QMatrix4x4 modelMatrix;
     modelMatrix.translate(0.0f, 0.0f, worldZ);
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, modelMatrix);
+    return cwGeometryItersecter::Object(nullptr, id, geometry, modelMatrix);
 }
 
 } // namespace
@@ -204,25 +205,31 @@ TEST_CASE("Mixed triangle and point — closer one wins regardless of type", "[c
 
 TEST_CASE("Hidden render object is skipped during picking", "[cwGeometryItersecter][points]")
 {
-    cwRenderObject hiddenOwner;
-    hiddenOwner.setVisible(false);
+    // The intersecter reads visibility from the scene's store, so the owners
+    // must be attached — setVisible then publishes through the facade.
+    cwScene scene;
+    auto* intersector = scene.geometryItersecter();
 
-    cwRenderObject visibleOwner;
-    REQUIRE(visibleOwner.isVisible());
+    auto* hiddenOwner = new cwRenderObject();
+    hiddenOwner->setScene(&scene);
+    hiddenOwner->setVisible(false);
+
+    auto* visibleOwner = new cwRenderObject();
+    visibleOwner->setScene(&scene);
+    REQUIRE(visibleOwner->isVisible());
 
     const QVector3D origin(0.0f, 0.0f, 100.0f);
     const QRay3D ray(origin, QVector3D(0.0f, 0.0f, -1.0f));
 
-    cwGeometryItersecter intersector;
     // Hidden cloud is closer (z=50), visible cloud is further (z=10).
     // If visibility is honored, the visible (further) cloud wins.
-    intersector.addObject(makeSinglePointObject(&hiddenOwner, 1, QVector3D(0.0f, 0.0f, 50.0f)));
-    intersector.addObject(makeSinglePointObject(&visibleOwner, 2, QVector3D(0.0f, 0.0f, 10.0f)));
-    intersector.waitForFinish();
+    intersector->addObject(makeSinglePointObject(hiddenOwner, 1, QVector3D(0.0f, 0.0f, 50.0f)));
+    intersector->addObject(makeSinglePointObject(visibleOwner, 2, QVector3D(0.0f, 0.0f, 10.0f)));
+    intersector->waitForFinish();
 
-    const cwRayHit hit = intersector.intersectsDetailed(ray);
+    const cwRayHit hit = intersector->intersectsDetailed(ray);
     REQUIRE(hit.hit());
-    REQUIRE(hit.object() == &visibleOwner);
+    REQUIRE(hit.object() == visibleOwner);
 }
 
 TEST_CASE("Ray with origin inside a point's sphere does not produce a hit", "[cwGeometryItersecter][points]")

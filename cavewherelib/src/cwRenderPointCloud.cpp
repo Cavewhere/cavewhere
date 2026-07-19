@@ -34,12 +34,13 @@ void cwRenderPointCloud::setGeometry(GeometryData geometry)
         if (state.meanSpacingXY > 0.0f && !state.geometry.isEmpty()) {
             const float pickRadius = state.meanSpacingXY * PointPickRadiusScale;
             intersecter->addObject(cwGeometryItersecter::Object(
-                cwGeometryItersecter::Key{this, 0},
+                this,
+                0,
                 state.geometry,
                 QMatrix4x4(),
                 pickRadius));
         } else {
-            intersecter->removeObject(this, 0);
+            intersecter->removeObject(renderObjectId(), 0);
         }
     }
 
@@ -57,7 +58,7 @@ void cwRenderPointCloud::clear()
     m_geometry.setValue(GeometryState{});
 
     if (auto* intersecter = geometryItersecter()) {
-        intersecter->removeObject(this, 0);
+        intersecter->removeObject(renderObjectId(), 0);
     }
 
     update();

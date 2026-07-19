@@ -110,7 +110,7 @@ void addScrapTriangle(cwScene& scene, float offsetX, float z, uint64_t id = 1)
     geometry.setType(cwGeometry::Type::Triangles);
 
     scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object({nullptr, id}, geometry));
+        cwGeometryItersecter::Object(nullptr, id, geometry));
     scene.geometryItersecter()->waitForFinish();
 }
 
@@ -130,7 +130,7 @@ void addCloudPointOnRay(cwScene& scene, float z, uint64_t id = 2)
     geometry.setType(cwGeometry::Type::Points);
 
     scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4(), 0.5f));
+        cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4(), 0.5f));
     scene.geometryItersecter()->waitForFinish();
 }
 
@@ -192,7 +192,7 @@ void addPointWall(cwScene& scene, float z, float pickRadius, uint64_t id = 3)
     geometry.setType(cwGeometry::Type::Points);
 
     scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4(), pickRadius));
+        cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4(), pickRadius));
     scene.geometryItersecter()->waitForFinish();
 }
 

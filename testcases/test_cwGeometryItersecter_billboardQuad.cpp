@@ -49,7 +49,7 @@ cwGeometryItersecter::Object makeObject(uint64_t id, const Mesh& mesh)
     geometry.setIndices(mesh.indices);
     geometry.setType(cwGeometry::Type::Triangles);
     geometry.setCullBackfaces(false);
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4());
+    return cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4());
 }
 
 struct Basis {

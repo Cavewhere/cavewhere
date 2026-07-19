@@ -67,7 +67,8 @@ TEST_CASE("Point picking ranks by sphere entry, not by center depth",
 
     cwGeometryItersecter picker;
     cwGeometryItersecter::Object object(
-        cwGeometryItersecter::Key{nullptr, /*id=*/1},
+        nullptr,
+        /*id=*/1,
         geometry,
         QMatrix4x4(),
         kPickRadius);

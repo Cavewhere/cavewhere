@@ -138,7 +138,7 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
 
     if (!commandItem.geometry.isEmpty()) {
         if (auto* intersector = geometryItersecter()) {
-            intersector->addObject(cwGeometryItersecter::Object({this, id}, commandItem.geometry, item.modelMatrix));
+            intersector->addObject(cwGeometryItersecter::Object(this, id, commandItem.geometry, item.modelMatrix));
         } else {
             qCDebug(lcPick).nospace()
                 << "addItem id=" << id
@@ -154,17 +154,11 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
             << " (later updateGeometry(id, nonEmpty) would still register it)";
     }
 
-    // Seed the intersecter's per-Key flag unconditionally: a born-hidden
-    // item needs it before its geometry registers (empty-geometry branch
-    // above), and an affirmative visible write clears any stale flag a
-    // reused key could otherwise inherit.
-    if (auto* intersector = geometryItersecter()) {
-        intersector->setVisible({this, id}, item.visible);
-    }
-
-    // Dual-publish (issue #579): the store entry is identity state keyed by
-    // (ownerId, id), independent of geometry registration. A visible item is
-    // the sparse default, so this only writes when born hidden.
+    // Publish to the store (issue #579): the entry is identity state keyed by
+    // (ownerId, id), independent of geometry registration — pick traversals
+    // read it from a snapshot, so a born-hidden item is unpickable even
+    // before (or without) its geometry registering. A visible item is the
+    // sparse default, so this only writes when born hidden.
     if (auto* visibility = sceneVisibility()) {
         visibility->setSubVisible(renderObjectId(), id, item.visible);
     }
@@ -210,13 +204,12 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
 
     if (intersector != nullptr) {
         if (!payload.geometry.isEmpty()) {
-            intersector->addObject(cwGeometryItersecter::Object({this, id}, payload.geometry, modelMatrix));
-            // Re-seed the per-Key flag: if a prior update went empty, the
-            // removeObject below forgot it, and this re-registration would
-            // otherwise resurrect a render-hidden item in picking/framing.
-            intersector->setVisible({this, id}, entry->visible);
+            // No visibility re-seed needed: the store entry is identity
+            // state that survives geometry removal and re-registration, so a
+            // render-hidden item can't be resurrected by a geometry cycle.
+            intersector->addObject(cwGeometryItersecter::Object(this, id, payload.geometry, modelMatrix));
         } else {
-            intersector->removeObject({this, id});
+            intersector->removeObject({renderObjectId(), id});
         }
     }
 }
@@ -254,10 +247,7 @@ void cwRenderTexturedItems::setItemVisible(uint32_t id, bool visible)
 
     // Keep picking and framing in step with rendering: a hidden item must
     // not take picks or inflate the reset-view bounds (issues #575/#549).
-    if (auto* intersector = geometryItersecter()) {
-        intersector->setVisible({this, id}, visible);
-    }
-
+    // The intersecter reads this store entry from a snapshot per query.
     if (auto* visibilityStore = sceneVisibility()) {
         visibilityStore->setSubVisible(renderObjectId(), id, visible);
     }
@@ -319,7 +309,7 @@ void cwRenderTexturedItems::setModelMatrix(uint32_t id, const QMatrix4x4& modelM
     entry->modelMatrix = modelMatrix;
 
     if (auto* intersector = geometryItersecter()) {
-        intersector->setModelMatrix({this, id}, modelMatrix);
+        intersector->setModelMatrix({renderObjectId(), id}, modelMatrix);
     }
 }
 
@@ -332,7 +322,7 @@ void cwRenderTexturedItems::removeItem(uint32_t id)
     addCommand(PendingCommand(PendingCommand::Remove, id, Item{}));
 
     if (auto* intersector = geometryItersecter()) {
-        intersector->removeObject({this, id});
+        intersector->removeObject({renderObjectId(), id});
     }
     if (auto* visibility = sceneVisibility()) {
         visibility->removeSub(renderObjectId(), id);

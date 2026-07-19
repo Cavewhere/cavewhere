@@ -31,7 +31,7 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
     geometry.setType(cwGeometry::Type::Triangles);
 
     // parent can be nullptr in tests; ids must be unique per parent
-    return cwGeometryItersecter::Object({nullptr, id},
+    return cwGeometryItersecter::Object(nullptr, id,
                                         geometry,
                                         modelMatrix);
 }

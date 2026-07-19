@@ -121,7 +121,7 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id, const Mesh& mesh)
     geometry.setType(cwGeometry::Type::Triangles);
     geometry.setCullBackfaces(false); // Double-sided, as cwTriangulateTask sets on scraps.
 
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4());
+    return cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4());
 }
 
 } // namespace

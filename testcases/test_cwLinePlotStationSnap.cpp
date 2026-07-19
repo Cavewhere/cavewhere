@@ -60,7 +60,7 @@ cwGeometryItersecter::Object makeLineObjectFor(cwRenderObject* owner,
     geometry.setIndices(std::move(indices));
     geometry.setType(cwGeometry::Type::Lines);
 
-    return cwGeometryItersecter::Object({owner, 0}, geometry);
+    return cwGeometryItersecter::Object(owner, 0, geometry);
 }
 
 }

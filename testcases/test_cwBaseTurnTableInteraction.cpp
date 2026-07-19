@@ -134,7 +134,7 @@ void addSmallGeometry(cwScene& scene, float extent, uint64_t id = 1)
     geometry.setType(cwGeometry::Type::Points);
 
     scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4(), 0.5f));
+        cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4(), 0.5f));
     scene.geometryItersecter()->waitForFinish();
 }
 
@@ -162,7 +162,7 @@ void addCenterline(cwScene& scene, uint64_t id = 2)
     geometry.setType(cwGeometry::Type::Lines);
 
     scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object({nullptr, id}, geometry));
+        cwGeometryItersecter::Object(nullptr, id, geometry));
     scene.geometryItersecter()->waitForFinish();
 }
 
@@ -185,7 +185,7 @@ void addGeometryAt(cwScene& scene, const QVector3D& center, float extent, uint64
     geometry.setType(cwGeometry::Type::Points);
 
     scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4(), 0.5f));
+        cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4(), 0.5f));
     scene.geometryItersecter()->waitForFinish();
 }
 
@@ -202,7 +202,7 @@ void addSinglePoint(cwScene& scene, const QVector3D& position,
     geometry.setType(cwGeometry::Type::Points);
 
     scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object({parent, id}, geometry, QMatrix4x4(), 0.5f));
+        cwGeometryItersecter::Object(parent, id, geometry, QMatrix4x4(), 0.5f));
     scene.geometryItersecter()->waitForFinish();
 }
 
@@ -958,15 +958,16 @@ TEST_CASE("cwBaseTurnTableInteraction resetView frames only the visible geometry
     // Reset must not zoom out to include geometry the user hid: framing comes
     // from cwScene::visibleFramingBounds(), not the raw intersecter box.
     //
-    // `hidden` outlives the fixture so the intersecter never holds a key to a
-    // destroyed object.
-    cwRenderObject hidden;
+    // The owner is scene-attached so setVisible publishes into the scene's
+    // visibility store — the truth the framing box reads.
     Fixture f;
-    hidden.setVisible(false);
+    auto* hidden = new cwRenderObject();
+    hidden->setScene(&f.scene);
+    hidden->setVisible(false);
 
     const QVector3D visibleCenter(500.0f, -300.0f, 0.0f);
     addGeometryAt(f.scene, visibleCenter, 20.0f);
-    addSinglePoint(f.scene, QVector3D(5000.0f, 3000.0f, 0.0f), &hidden, 4);
+    addSinglePoint(f.scene, QVector3D(5000.0f, 3000.0f, 0.0f), hidden, 4);
 
     // Guard against vacuity: the hidden point really does inflate the raw
     // box, so this test fails if framing ever reads boundingBox() again.
@@ -996,10 +997,11 @@ TEST_CASE("cwBaseTurnTableInteraction resetView with all geometry hidden falls b
 {
     // Everything is hidden, so there is nothing visible to frame — reset
     // behaves like the empty scene and restores the fixed default pose.
-    cwRenderObject hidden;
     Fixture f;
-    hidden.setVisible(false);
-    addSinglePoint(f.scene, QVector3D(500.0f, -300.0f, 0.0f), &hidden);
+    auto* hidden = new cwRenderObject();
+    hidden->setScene(&f.scene);
+    hidden->setVisible(false);
+    addSinglePoint(f.scene, QVector3D(500.0f, -300.0f, 0.0f), hidden);
 
     checkResetFallsBackToDefaultPose(f);
 }
@@ -1140,7 +1142,7 @@ TEST_CASE("cwBaseTurnTableInteraction startRotating in a point-cloud gap keeps t
     geometry.set(cwGeometry::Semantic::Position, points);
     geometry.setType(cwGeometry::Type::Points);
     f.scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object({nullptr, 4}, geometry, QMatrix4x4(), 0.5f));
+        cwGeometryItersecter::Object(nullptr, 4, geometry, QMatrix4x4(), 0.5f));
     f.scene.geometryItersecter()->waitForFinish();
 
     const QVector3D pivotBefore(5.0f, 6.0f, 7.0f);
@@ -1156,22 +1158,20 @@ TEST_CASE("cwBaseTurnTableInteraction startRotating in a point-cloud gap keeps t
 TEST_CASE("cwBaseTurnTableInteraction startRotating does not anchor the pivot to a hidden object",
           "[cwBaseTurnTableInteraction]")
 {
-    // The nearest-point fallback skips hidden objects (isPickable guard): a
-    // hidden cloud must never anchor the pivot. Same click and point as the
-    // anchor test above, but the point's parent is invisible.
+    // The nearest-point fallback skips hidden objects (the store's visibility
+    // gate): a hidden cloud must never anchor the pivot. Same click and point
+    // as the anchor test above, but the point's parent is invisible.
     //
     // Every object here is hidden, so nothing is pickable and the scene reads
     // as empty — the grid comes back as the last-resort pivot (isPickableEmpty),
     // which is the only way out: with the grid gated off the pivot could never
     // be moved again while the geometry stays hidden. What must NOT happen is
     // the pivot landing on the hidden point.
-    //
-    // `hidden` outlives the fixture so the intersecter never holds a key to a
-    // destroyed object.
-    cwRenderObject hidden;
     Fixture f;
-    hidden.setVisible(false);
-    addSinglePoint(f.scene, QVector3D(10.0f, 0.0f, kCenterlineZ), &hidden);
+    auto* hidden = new cwRenderObject();
+    hidden->setScene(&f.scene);
+    hidden->setVisible(false);
+    addSinglePoint(f.scene, QVector3D(10.0f, 0.0f, kCenterlineZ), hidden);
 
     f.interaction.setCenter(QVector3D(5.0f, 6.0f, 7.0f));
     f.interaction.startRotating(screenCenter().toPoint());
@@ -1191,10 +1191,11 @@ TEST_CASE("cwBaseTurnTableInteraction startRotating keeps the grid gated off whi
     // must not re-open the grid. A visible object exists, so a click that
     // reaches nothing keeps the pivot rather than teleporting to the grid
     // (#562) — the grid only returns when nothing at all is pickable.
-    cwRenderObject hidden;
     Fixture f;
-    hidden.setVisible(false);
-    addSinglePoint(f.scene, QVector3D(10.0f, 0.0f, kCenterlineZ), &hidden);
+    auto* hidden = new cwRenderObject();
+    hidden->setScene(&f.scene);
+    hidden->setVisible(false);
+    addSinglePoint(f.scene, QVector3D(10.0f, 0.0f, kCenterlineZ), hidden);
 
     // A visible object far outside the anchor's reach of the centre click.
     addSinglePoint(f.scene, QVector3D(400.0f, 400.0f, kCenterlineZ), nullptr, 4);

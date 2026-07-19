@@ -38,7 +38,7 @@ cwGeometryItersecter::Object makePointCloudObject(uint64_t id,
     geometry.set(cwGeometry::Semantic::Position, points);
     geometry.setType(cwGeometry::Type::Points);
 
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4(),
+    return cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4(),
                                         pickRadius);
 }
 
@@ -57,7 +57,7 @@ cwGeometryItersecter::Object makeLineObject(uint64_t id,
     geometry.setIndices(std::move(indices));
     geometry.setType(cwGeometry::Type::Lines);
 
-    return cwGeometryItersecter::Object({nullptr, id}, geometry);
+    return cwGeometryItersecter::Object(nullptr, id, geometry);
 }
 
 cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
@@ -72,7 +72,7 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
     geometry.setIndices(QVector<uint32_t>{0u, 1u, 2u});
     geometry.setType(cwGeometry::Type::Triangles);
 
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4());
+    return cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4());
 }
 
 // A constant (ortho-style) tolerance: a fixed world-space anchor radius.

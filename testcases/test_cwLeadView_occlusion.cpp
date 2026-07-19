@@ -89,7 +89,7 @@ void addCloudPoint(cwScene& scene, const QVector3D& position, uint64_t id = 1)
     geometry.setType(cwGeometry::Type::Points);
 
     scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4(), kPickRadius));
+        cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4(), kPickRadius));
     scene.geometryItersecter()->waitForFinish();
 }
 

@@ -81,15 +81,14 @@ QDir prepareGisLayersDir(const QTemporaryDir& tempDir)
 
 } // namespace
 
-// A Node that outlives its render object is a use-after-free — the intersecter
-// keys geometry by raw cwRenderObject* and dereferences it on every pick. These
-// pin the purge in cwScene::removeItem() that prevents it; see that function
-// for why it lives there. Both cases below delete a registered render object,
-// and before the fix ASAN caught each one reading cwRenderObject::isVisible()
-// out of freed memory, via isPickable() <- visibleBoundingBox().
+// A Node that outlives its render object keeps serving picks for deleted
+// geometry — still a use-after-free, since a hit fills cwRayHit::object()
+// from the Object's raw attribution pointer. These pin the purge in
+// cwScene::removeItem() that prevents it; see that function for why it lives
+// there. Both cases below delete a registered render object.
 //
 // Each test REQUIREs the purge *before* it picks, so a regression reports as a
-// readable Catch2 failure instead of taking the suite down with an ASAN abort.
+// readable Catch2 failure instead of a stale hit downstream.
 TEST_CASE("cwGeometryItersecter forgets a deleted render object",
           "[cwGeometryItersecter][cwRenderPointCloud]")
 {
@@ -100,11 +99,9 @@ TEST_CASE("cwGeometryItersecter forgets a deleted render object",
     cloud->setScene(&scene);
     cloud->setGeometry(gridGeometry());
 
-    // Captured while the cloud is alive; the Key is only ever compared by
-    // pointer value, never dereferenced, so it stays a usable probe after the
-    // delete below. cwScene::removeItem() plays the same trick with
-    // renderObjectId() (issues #491/#512).
-    const cwGeometryItersecter::Key key{cloud, 0};
+    // Captured while the cloud is alive; the id-based Key stays a usable
+    // probe after the delete below — ids are never recycled (issue #512).
+    const cwGeometryItersecter::Key key{cloud->renderObjectId(), 0};
 
     intersecter->waitForFinish();
     REQUIRE_FALSE(intersecter->boundingBox(key).isNull());
@@ -150,7 +147,7 @@ TEST_CASE("cwGeometryItersecter forgets a removed LAZ layer's point cloud",
 
     cwRenderPointCloud* cloud = node.pointCloudForLayer(layer);
     REQUIRE(cloud != nullptr);
-    const cwGeometryItersecter::Key key{cloud, 0};
+    const cwGeometryItersecter::Key key{cloud->renderObjectId(), 0};
 
     intersecter->waitForFinish();
     REQUIRE_FALSE(intersecter->boundingBox(key).isNull());

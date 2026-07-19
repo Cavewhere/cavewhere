@@ -8,6 +8,7 @@
 #include "cwGeometryItersecter.h"
 #include "cwPickQuery.h"
 #include "cwRayHit.h"
+#include "cwSceneVisibility.h"
 
 //Qt includes
 #include <QMatrix4x4>
@@ -182,8 +183,8 @@ TEST_CASE("cwGeometryItersecter mask shorter than the geometry hides only what i
     scene.geometryItersecter()->waitForFinish();
 
     // Covers shot 0's two vertices only; shot 1 is off the end of the mask.
-    scene.geometryItersecter()->setVisibilityMask(
-        cwGeometryItersecter::Key{&linePlot, 0},
+    scene.visibility()->setMask(
+        linePlot.renderObjectId(), 0,
         QVector<quint8>{cwRenderLinePlot::kHidden, cwRenderLinePlot::kHidden});
 
     CHECK_FALSE(scene.geometryItersecter()->intersectsDetailed(
@@ -208,7 +209,7 @@ TEST_CASE("cwRenderLinePlot masked framing box follows the model matrix",
     linePlot.setGeometry(twoShots());
     scene.geometryItersecter()->waitForFinish();
 
-    const cwGeometryItersecter::Key key{&linePlot, 0};
+    const cwGeometryItersecter::Key key{linePlot.renderObjectId(), 0};
     linePlot.setRangeVisible(2, 2, false);
 
     // Fill the memo: shot 1 is hidden, so only shot 0 frames.

@@ -10,6 +10,7 @@
 #include "cwGeometryItersecter.h"
 #include "cwPickingLog.h"
 #include "cwRenderObject.h"
+#include "cwSceneVisibility.h"
 #include "cwConcurrent.h"
 #include "cwTask.h"
 
@@ -41,11 +42,26 @@ namespace {
         const char* parentClass = parent != nullptr
             ? parent->metaObject()->className()
             : "(null)";
-        return QStringLiteral("{%1@%2, id=%3}")
+        return QStringLiteral("{%1#%2, id=%3}")
             .arg(QLatin1String(parentClass))
-            .arg(reinterpret_cast<quintptr>(parent), 0, 16)
+            .arg(static_cast<quint64>(object.key().parentId))
             .arg(object.id());
     }
+}
+
+cwGeometryItersecter::Object::Object(cwRenderObject* parentObject,
+                                     uint64_t id,
+                                     cwGeometry geometry,
+                                     QMatrix4x4 modelMatrix,
+                                     float pickRadius) :
+    m_key{parentObject != nullptr ? parentObject->renderObjectId()
+                                  : cwRenderObjectId{0},
+          id},
+    m_parentObject(parentObject),
+    m_geometry(std::move(geometry)),
+    m_modelMatrix(modelMatrix),
+    m_pickRadius(pickRadius)
+{
 }
 
 // Per-Object acceleration structure, model space. Cached across rebuilds
@@ -176,22 +192,19 @@ namespace {
         }
     };
 
-    // Visibility guard shared by every traversal entry point. A null parent
-    // means the object isn't owned by a cwRenderObject (test fixtures), so
-    // treat it as pickable.
-    bool isPickable(const cwGeometryItersecter::Object& object) {
-        const cwRenderObject* parent = object.parent();
-        return parent == nullptr || parent->isVisible();
-    }
-
-    // Visibility bytes for the per-slot flag (BvhData::slotVisible). The
-    // per-vertex masks (Object::visibilityMask / BvhData::visibilityMasks)
-    // are written by their owners, not here, and use their own visible byte
-    // (cwRenderLinePlot::kVisible is 0xFF) — every reader below only asks
-    // whether a byte is nonzero, so the two never need to agree on more than
-    // "hidden is zero".
+    // Per-vertex mask byte convention: masks are written by their owners
+    // into cwSceneVisibility (cwRenderLinePlot::kVisible is 0xFF) — every
+    // reader below only asks whether a byte is nonzero, so the two never
+    // need to agree on more than "hidden is zero".
     constexpr quint8 kVertexHidden = 0;
-    constexpr quint8 kVertexVisible = 1;
+
+    // Store sub-ids are 32-bit; every producer's per-owner id fits (textured
+    // item ids are a uint32_t counter, line plot and clouds use 0). The
+    // wider Key::id exists for cwRayHit::objectId() compatibility.
+    uint32_t storeSubId(const cwGeometryItersecter::Key& key)
+    {
+        return static_cast<uint32_t>(key.id);
+    }
 
     // Mask read shared by every per-vertex visibility consumer. Out-of-range
     // reads as visible on purpose: an empty/short mask must never hide
@@ -604,12 +617,11 @@ void cwGeometryItersecter::addObject(const cwGeometryItersecter::Object &object)
 
 bool cwGeometryItersecter::eraseNodeIfPresent(const Key& key)
 {
-    // Bounds cache growth; not needed for correctness. A stale entry is
-    // unreadable: visibleNodeBox only consults the cache for a non-empty
-    // mask, the only writer of one is setVisibilityMask (which drops the
-    // entry), and the addObject below re-registers the Key with a fresh
-    // empty-masked Object. Before the early return so a Key with no Node
-    // right now (a prior update went empty) is dropped too.
+    // A geometry replacement reuses the Key with vertices the memoized walk
+    // never saw, and the store's entryVersion only tracks mask changes — so
+    // this drop is what keeps the masked-box memo honest across addObject.
+    // Before the early return so a Key with no Node right now (a prior
+    // update went empty) is dropped too.
     m_maskedBoxCache.remove(key);
 
     auto iter = findNode(key);
@@ -623,48 +635,46 @@ bool cwGeometryItersecter::eraseNodeIfPresent(const Key& key)
     return true;
 }
 
-/**
- * @brief cwGeometryItersecter::clearObjects
- * @param parentObject
- *
- * This removes all objects that have parent object of parentObject
- *
- * If parentObject is null, this will clear objects
- */
-void cwGeometryItersecter::clear(cwRenderObject *parentObject)
+void cwGeometryItersecter::setVisibilityStore(cwSceneVisibility* store)
 {
-    if(parentObject == nullptr) {
-        qCDebug(lcPick).nospace()
-            << "clear(all) — dropping " << Nodes.size() << " Nodes, "
-            << m_subBvhs.size() << " cached sub-BVHs";
-        Nodes.clear();
-        m_subBvhs.clear();
-        m_dirtyKeys.clear();
-        m_hiddenKeys.clear();
-        m_maskedBoxCache.clear();
-        // Total wipe: drop the published BVH entirely so every pick goes
-        // no-hit immediately. No retention benefit here — there's no Key
-        // left we'd want picks to still hit.
-        m_bvh.reset();
-        scheduleTopLevelRebuild();
-        return;
-    }
+    m_visibility = store;
+}
 
-    // Set-wide (not per-Node) so a Key hidden before it was ever
-    // registered is forgotten too.
-    erase_if(m_hiddenKeys, [parentObject](const Key& key) {
-        return key.parentObject == parentObject;
-    });
-    erase_if(m_maskedBoxCache, [parentObject](const QHash<Key, QBox3D>::iterator& it) {
-        return it.key().parentObject == parentObject;
+/**
+ * Removes every registered object.
+ */
+void cwGeometryItersecter::clear()
+{
+    qCDebug(lcPick).nospace()
+        << "clear(all) — dropping " << Nodes.size() << " Nodes, "
+        << m_subBvhs.size() << " cached sub-BVHs";
+    Nodes.clear();
+    m_subBvhs.clear();
+    m_dirtyKeys.clear();
+    m_maskedBoxCache.clear();
+    // Total wipe: drop the published BVH entirely so every pick goes
+    // no-hit immediately. No retention benefit here — there's no Key
+    // left we'd want picks to still hit.
+    m_bvh.reset();
+    scheduleTopLevelRebuild();
+}
+
+/**
+ * Removes all objects registered under parentId (one per sub-id). Reached
+ * for every render object leaving the scene (cwScene::removeItem).
+ */
+void cwGeometryItersecter::clear(cwRenderObjectId parentId)
+{
+    erase_if(m_maskedBoxCache,
+             [parentId](const QHash<Key, MaskedBoxEntry>::iterator& it) {
+        return it.key().parentId == parentId;
     });
 
     int erased = 0;
     QList<Node>::iterator iter = Nodes.begin();
     while(iter != Nodes.end()) {
-        Node& currentNode = *iter;
-        if(currentNode.Object.parent() == parentObject) {
-            const Key key{currentNode.Object.parent(), currentNode.Object.id()};
+        const Key key = iter->Object.key();
+        if(key.parentId == parentId) {
             m_subBvhs.remove(key);
             m_dirtyKeys.remove(key);
             invalidatePublishedSlot(key);
@@ -675,46 +685,39 @@ void cwGeometryItersecter::clear(cwRenderObject *parentObject)
         }
     }
     qCDebug(lcPick).nospace()
-        << "clear(parent=" << parentObject << ") — erased " << erased
-        << " Nodes; remaining=" << Nodes.size();
-    // Every render object leaving the scene reaches here (cwScene::removeItem),
-    // most having registered no pick geometry at all — and a rebuild that would
-    // find nothing changed still cancels and relaunches the in-flight one
-    // through the restarter. Same guard removeObject() applies.
+        << "clear(parent=" << static_cast<quint64>(parentId) << ") — erased "
+        << erased << " Nodes; remaining=" << Nodes.size();
+    // Most render objects leaving the scene registered no pick geometry at
+    // all — and a rebuild that would find nothing changed still cancels and
+    // relaunches the in-flight one through the restarter. Same guard
+    // removeObject() applies.
     if (erased > 0) {
         scheduleTopLevelRebuild();
     }
 }
 
 /**
- * @brief cwGeometryItersecter::removeObject
- * @param parentObject
- * @param id
- *
- * Removes the geometry that makes up parentObject and id
+ * Removes the geometry registered under {parentId, id}.
  */
-void cwGeometryItersecter::removeObject(cwRenderObject *parentObject, uint64_t id)
+void cwGeometryItersecter::removeObject(cwRenderObjectId parentId, uint64_t id)
 {
-    removeObject(Key(parentObject, id));
+    removeObject(Key{parentId, id});
 }
 
 void cwGeometryItersecter::removeObject(const Key &objectKey)
 {
-    // The per-Key hide is identity state that survives geometry replacement
-    // (addObject), so only an actual removal forgets it.
-    m_hiddenKeys.remove(objectKey);
     if (eraseNodeIfPresent(objectKey)) {
         qCDebug(lcPick).nospace()
-            << "removeObject {parent=" << objectKey.parentObject
+            << "removeObject {parent=" << static_cast<quint64>(objectKey.parentId)
             << ", id=" << objectKey.id << "}"
             << " Nodes.size after=" << Nodes.size();
         scheduleTopLevelRebuild();
     }
 }
 
-void cwGeometryItersecter::setModelMatrix(cwRenderObject *parentObject, uint64_t id, const QMatrix4x4 &modelMatrix)
+void cwGeometryItersecter::setModelMatrix(cwRenderObjectId parentId, uint64_t id, const QMatrix4x4 &modelMatrix)
 {
-    setModelMatrix(Key(parentObject, id), modelMatrix);
+    setModelMatrix(Key{parentId, id}, modelMatrix);
 }
 
 void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4& modelMatrix)
@@ -722,57 +725,18 @@ void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4
     auto iter = findNode(objectKey);
     if (iter == Nodes.end()) {
         qCDebug(lcPick).nospace()
-            << "setModelMatrix {parent=" << objectKey.parentObject
+            << "setModelMatrix {parent=" << static_cast<quint64>(objectKey.parentId)
             << ", id=" << objectKey.id << "} — Key not in Nodes; no-op";
         return;
     }
     qCDebug(lcPick).nospace()
-        << "setModelMatrix {parent=" << objectKey.parentObject
+        << "setModelMatrix {parent=" << static_cast<quint64>(objectKey.parentId)
         << ", id=" << objectKey.id << "} — top-level rebuild only"
         << " (sub-BVH cache preserved)";
     iter->Object.setModelMatrix(modelMatrix);
     // No sub-BVH invalidation — sub-BVHs are model-space and unaffected
     // by modelMatrix changes. Only the top-level needs refreshing.
     scheduleTopLevelRebuild();
-}
-
-void cwGeometryItersecter::setVisible(const Key& objectKey, bool visible)
-{
-    const bool hidden = m_hiddenKeys.contains(objectKey);
-    if (hidden == !visible) {
-        return;
-    }
-    if (visible) {
-        m_hiddenKeys.remove(objectKey);
-    } else {
-        m_hiddenKeys.insert(objectKey);
-    }
-    qCDebug(lcPick).nospace()
-        << "setVisible {parent=" << objectKey.parentObject
-        << ", id=" << objectKey.id << "} visible=" << visible
-        << " — no rebuild, republish only";
-    republishSlotVisibility(objectKey);
-}
-
-void cwGeometryItersecter::setVisibilityMask(const Key& objectKey, QVector<quint8> mask)
-{
-    auto iter = findNode(objectKey);
-    if (iter == Nodes.end()) {
-        return;
-    }
-
-    if (iter->Object.visibilityMask() == mask) {
-        return;
-    }
-
-    qCDebug(lcPick).nospace()
-        << "setVisibilityMask {parent=" << objectKey.parentObject
-        << ", id=" << objectKey.id << "} maskSize=" << mask.size()
-        << " — no rebuild, republish only";
-
-    iter->Object.setVisibilityMask(std::move(mask));
-    m_maskedBoxCache.remove(objectKey);
-    republishSlotVisibility(objectKey);
 }
 
 QBox3D cwGeometryItersecter::boundingBox(const Key &objectKey) const
@@ -803,42 +767,52 @@ QBox3D cwGeometryItersecter::boundingBox() const
     return box;
 }
 
+cwVisibilitySnapshot cwGeometryItersecter::currentVisibility() const
+{
+    return m_visibility != nullptr ? m_visibility->snapshot()
+                                   : cwVisibilitySnapshot();
+}
+
 QBox3D cwGeometryItersecter::visibleBoundingBox() const
 {
+    const cwVisibilitySnapshot visibility = currentVisibility();
     QBox3D box;
     for (const Node& node : Nodes) {
-        if (!isPickable(node.Object)) {
+        const Key key = node.Object.key();
+        if (!visibility.subVisible(key.parentId, storeSubId(key))) {
             continue;
         }
-        if (m_hiddenKeys.contains(node.Object.key())) {
-            continue;
-        }
-        box.unite(visibleNodeBox(node));
+        box.unite(visibleNodeBox(node, visibility));
     }
     return box;
 }
 
-QBox3D cwGeometryItersecter::visibleNodeBox(const Node& node) const
+QBox3D cwGeometryItersecter::visibleNodeBox(const Node& node,
+                                            const cwVisibilitySnapshot& visibility) const
 {
     const Object& object = node.Object;
-    if (object.visibilityMask().isEmpty()) {
+    const Key key = object.key();
+    const QVector<quint8>* mask = visibility.mask(key.parentId, storeSubId(key));
+    if (mask == nullptr || mask->isEmpty()) {
         return node.BoundingBox.transformed(object.modelMatrix());
     }
 
-    auto cached = m_maskedBoxCache.find(object.key());
-    if (cached == m_maskedBoxCache.end()) {
-        cached = m_maskedBoxCache.insert(object.key(), computeMaskedModelBox(object));
+    const quint64 entryVersion = visibility.entryVersion(key.parentId, storeSubId(key));
+    auto cached = m_maskedBoxCache.find(key);
+    if (cached == m_maskedBoxCache.end() || cached->entryVersion != entryVersion) {
+        cached = m_maskedBoxCache.insert(
+            key, {entryVersion, computeMaskedModelBox(object, *mask)});
     }
-    if (cached->isNull()) {
+    if (cached->box.isNull()) {
         return QBox3D();
     }
-    return cached->transformed(object.modelMatrix());
+    return cached->box.transformed(object.modelMatrix());
 }
 
-QBox3D cwGeometryItersecter::computeMaskedModelBox(const Object& object)
+QBox3D cwGeometryItersecter::computeMaskedModelBox(const Object& object,
+                                                   const QVector<quint8>& mask)
 {
     const cwGeometry& geometry = object.geometry();
-    const QVector<quint8>& mask = object.visibilityMask();
 
     QBox3D modelBox;
 
@@ -948,7 +922,7 @@ void cwGeometryItersecter::addTriangles(const cwGeometryItersecter::Object &obje
         return;
     }
 
-    const Key key{object.parent(), object.id()};
+    const Key key = object.key();
     eraseNodeIfPresent(key);
 
     auto positionAttribute = object.geometry().attribute(cwGeometry::Semantic::Position);
@@ -993,7 +967,7 @@ void cwGeometryItersecter::addLines(const cwGeometryItersecter::Object &object)
         return;
     }
 
-    const Key key{object.parent(), object.id()};
+    const Key key = object.key();
     eraseNodeIfPresent(key);
 
 #ifndef QT_NO_DEBUG
@@ -1058,7 +1032,7 @@ void cwGeometryItersecter::addPoints(const cwGeometryItersecter::Object &object)
         return;
     }
 
-    const Key key{object.parent(), object.id()};
+    const Key key = object.key();
     eraseNodeIfPresent(key);
 
     const PointPositionReader reader(geometry, positionAttribute);
@@ -1107,6 +1081,7 @@ struct cwGeometryItersecter::LeafContext {
 
 template <typename Policy>
 void cwGeometryItersecter::traverseBvh(const BvhData& bvh,
+                                       const cwVisibilitySnapshot& visibility,
                                        const QRay3D& ray,
                                        const cwPickQuery& query,
                                        Policy& policy)
@@ -1194,21 +1169,18 @@ void cwGeometryItersecter::traverseBvh(const BvhData& bvh,
         }
         const SubBvh& sub = *subPtr;
 
-        // Hoist visibility check: every primitive in the sub-BVH belongs
-        // to the same Object, so a single isPickable() guard short-
-        // circuits the entire descent when the Object is hidden.
-        if (!isPickable(sub.object)) {
-            continue;
-        }
-
-        // Per-Key hide (setVisible(Key, false)) — the same hoist for
-        // sub-object visibility: one byte skips the whole descent.
-        if (!bvh.slotVisible.at(slot)) {
+        // Hoist visibility: every primitive in the sub-BVH belongs to the
+        // same Object, so one snapshot read — objectVisible AND the
+        // sub-entry flag — short-circuits the entire descent when the
+        // Object is hidden at either level.
+        const Key subKey = sub.object.key();
+        if (!visibility.subVisible(subKey.parentId, storeSubId(subKey))) {
             continue;
         }
 
         // Runtime kind filter (§5): priority lives in the caller as a cheap
-        // skip beside isPickable(), never as a depth bias inside traversal.
+        // skip beside the visibility gate, never as a depth bias inside
+        // traversal.
         // Every primitive in this sub-BVH shares the Object's geometry type,
         // so one test short-circuits the whole descent.
         const cwGeometry& geometry = sub.object.geometry();
@@ -1234,11 +1206,12 @@ void cwGeometryItersecter::traverseBvh(const BvhData& bvh,
         const QMatrix4x4& modelFromWorld = bvh.inverseModelMatrices.at(slot);
         const QRay3D rayModel = transformRayWithInverse(modelFromWorld, ray);
 
-        // Per-vertex mask (setVisibilityMask). Unmasked objects — clouds,
-        // scraps, triangles — pay this one const-ref bind plus a predictable
-        // null compare per tested leaf primitive.
-        const QVector<quint8>& visibilityMask = bvh.visibilityMasks.at(slot);
-        const bool masked = !visibilityMask.isEmpty();
+        // Per-vertex mask from the snapshot (points into it — stable while
+        // `visibility` is held by the caller). Unmasked objects — clouds,
+        // scraps, triangles — pay one null compare per tested leaf primitive.
+        const QVector<quint8>* visibilityMask =
+            visibility.mask(subKey.parentId, storeSubId(subKey));
+        const bool masked = visibilityMask != nullptr && !visibilityMask->isEmpty();
 
         const LeafContext ctx{sub.object, geometry, positionAttribute,
                               ray, rayModel, worldFromModel, modelFromWorld,
@@ -1308,7 +1281,7 @@ void cwGeometryItersecter::traverseBvh(const BvhData& bvh,
             }
             for (uint32_t p = first; p < first + primCount; ++p) {
                 const Primitive& prim = sub.primitives.at(p);
-                if (masked && !isPrimitiveVisible(visibilityMask, geometry, prim)) {
+                if (masked && !isPrimitiveVisible(*visibilityMask, geometry, prim)) {
                     continue;
                 }
                 if (stats != nullptr) {
@@ -1369,8 +1342,8 @@ struct cwGeometryItersecter::AnchorPick {
 void cwGeometryItersecter::ExactPick::testPrimitive(const LeafContext& ctx,
                                                     const Primitive& prim)
 {
-    // Visibility is guaranteed by the caller (traverseBvh hoists
-    // isPickable() to once per top-level leaf, before this descent).
+    // Visibility is guaranteed by the caller (traverseBvh hoists the
+    // snapshot gate to once per top-level leaf, before this descent).
     PickStats* s = stats();
     if (s != nullptr) {
         ++s->primsTested;
@@ -1643,7 +1616,8 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
 
     const QVector<std::shared_ptr<const SubBvh>>& subBvhs = m_bvh->subBvhs;
 
-    traverseBvh(*m_bvh, ray, query, pick);
+    const cwVisibilitySnapshot visibility = currentVisibility();
+    traverseBvh(*m_bvh, visibility, ray, query, pick);
 
     const cwRayHit& best = pick.best;
     const PickStats& stats = pick.counters;
@@ -1674,12 +1648,14 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
                 const char* parentClass = parent != nullptr
                     ? parent->metaObject()->className()
                     : "(null)";
+                const Key subKey = sb.object.key();
                 qCDebug(lcPick).nospace()
                     << "    [" << i << "] " << QLatin1String(parentClass)
-                    << "@" << parent
+                    << "#" << static_cast<quint64>(subKey.parentId)
                     << " type=" << cwGeometry::typeName(sb.object.geometry().type())
                     << " prims=" << sb.primitives.size()
-                    << " visible=" << (parent != nullptr ? parent->isVisible() : true);
+                    << " visible="
+                    << visibility.subVisible(subKey.parentId, storeSubId(subKey));
             }
         }
     }
@@ -1697,7 +1673,7 @@ std::optional<QVector3D> cwGeometryItersecter::nearestGeometryPoint(const QRay3D
     }
 
     AnchorPick pick;
-    traverseBvh(*m_bvh, ray, query, pick);
+    traverseBvh(*m_bvh, currentVisibility(), ray, query, pick);
 
     if (!pick.found) {
         return std::nullopt;
@@ -2009,7 +1985,7 @@ void cwGeometryItersecter::scheduleObjectRebuild(const Key& key)
     m_dirtyKeys.insert(key);
     invalidatePublishedSlot(key);
     qCDebug(lcPick).nospace()
-        << "scheduleObjectRebuild {parent=" << key.parentObject
+        << "scheduleObjectRebuild {parent=" << static_cast<quint64>(key.parentId)
         << ", id=" << key.id << "} — sub-BVH invalidated; "
         << m_subBvhs.size() << " other sub-BVH(s) still cached, "
         << m_dirtyKeys.size() << " dirty";
@@ -2049,49 +2025,6 @@ void cwGeometryItersecter::invalidatePublishedSlot(const Key& key)
     auto next = std::make_shared<BvhData>(*m_bvh);
     next->subBvhs[*it].reset();
     m_bvh = std::move(next);
-}
-
-void cwGeometryItersecter::republishSlotVisibility(const Key& key)
-{
-    if (!m_bvh) {
-        // No published BVH to patch; the install callback refreshes the
-        // in-flight build's arrays from live state (refreshPublishedVisibility).
-        return;
-    }
-    auto it = m_bvh->keyToSlot.constFind(key);
-    if (it == m_bvh->keyToSlot.constEnd()) {
-        return;
-    }
-    // Same copy-on-write discipline as invalidatePublishedSlot: a published
-    // BvhData is never edited in place, so readers holding the old snapshot
-    // keep seeing their captured visibility.
-    auto next = std::make_shared<BvhData>(*m_bvh);
-    const int slot = *it;
-    next->slotVisible[slot] = m_hiddenKeys.contains(key) ? kVertexHidden
-                                                         : kVertexVisible;
-    const auto nodeIter = findNode(key);
-    next->visibilityMasks[slot] = nodeIter != Nodes.cend()
-                                      ? nodeIter->Object.visibilityMask()
-                                      : QVector<quint8>();
-    m_bvh = std::move(next);
-}
-
-void cwGeometryItersecter::refreshPublishedVisibility(BvhData& bvh) const
-{
-    const qsizetype slotCount = bvh.subBvhs.size();
-    bvh.slotVisible = QVector<quint8>(slotCount, kVertexVisible);
-    bvh.visibilityMasks = QVector<QVector<quint8>>(slotCount);
-    for (const Node& node : Nodes) {
-        const auto it = bvh.keyToSlot.constFind(node.Object.key());
-        if (it == bvh.keyToSlot.constEnd()) {
-            continue;
-        }
-        const int slot = *it;
-        if (m_hiddenKeys.contains(node.Object.key())) {
-            bvh.slotVisible[slot] = kVertexHidden;
-        }
-        bvh.visibilityMasks[slot] = node.Object.visibilityMask();
-    }
 }
 
 bool cwGeometryItersecter::isPrimitiveVisible(const QVector<quint8>& mask,
@@ -2468,7 +2401,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             case cwGeometry::Type::Points:    ++pointNodes; break;
             default:                          ++otherNodes; break;
             }
-            const Key key{n.Object.parent(), n.Object.id()};
+            const Key key = n.Object.key();
             if (subBvhSnapshot.contains(key) && !dirtyKeysSnapshot.contains(key)) {
                 ++cached;
             }
@@ -2506,7 +2439,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             if (countNodePrimitives(n.Object) <= 0) {
                 continue;
             }
-            const Key key{n.Object.parent(), n.Object.id()};
+            const Key key = n.Object.key();
             const bool missing = !subBvhSnapshot.contains(key);
             const bool dirty = dirtyKeysSnapshot.contains(key);
             if (missing || dirty) {
@@ -2531,7 +2464,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
                 if (primCount <= 0) {
                     continue;
                 }
-                const Key key{n.Object.parent(), n.Object.id()};
+                const Key key = n.Object.key();
                 if (!subBvhSnapshot.contains(key) || dirtyKeysSnapshot.contains(key)) {
                     rebuiltPrims += primCount;
                 } else {
@@ -2577,7 +2510,8 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
                     ? built[i]->primitives.size()
                     : qsizetype(0);
                 qCDebug(lcPick).nospace()
-                    << "  task[" << i << "] {parent=" << tasks[i].key.parentObject
+                    << "  task[" << i << "] {parent="
+                    << static_cast<quint64>(tasks[i].key.parentId)
                     << ", id=" << tasks[i].key.id << "}"
                     << " prims=" << prims
                     << " ms=" << taskMs[i];
@@ -2610,7 +2544,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         out->keyToSlot.reserve(nodesSnapshot.size());
         for (qsizetype i = 0; i < nodesSnapshot.size(); ++i) {
             const Node& n = nodesSnapshot.at(i);
-            const Key key{n.Object.parent(), n.Object.id()};
+            const Key key = n.Object.key();
             auto it = subBvhSnapshot.constFind(key);
             if (it == subBvhSnapshot.constEnd() || !*it) {
                 continue;
@@ -2658,12 +2592,14 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
                             << "(canceled or zero prims)";
             return;
         }
-        // Stamp the per-slot visibility from live state on this side of the
-        // swap — the worker's snapshot predates any setVisible /
-        // setRangeVisible that raced the build. *resultSlot is not yet
-        // published, so mutating it here doesn't violate the
-        // immutable-once-published rule.
-        refreshPublishedVisibility(**resultSlot);
+        // No visibility stamping here: queries pair the installed BVH with a
+        // store snapshot captured at query entry, so a toggle that raced the
+        // build is simply read fresh on the next pick. A *removal* racing the
+        // build is not covered — its key is gone from both m_dirtyKeys and the
+        // store (absent = visible), so a worker that finished just before the
+        // cancel republishes the removed slot until the restarted build
+        // installs. Pre-existing window; this refactor narrows what a stale
+        // slot can dereference but doesn't close it.
         m_bvh = *resultSlot;
         // A worker that finished computing just before cancel still
         // publishes here. Re-apply the dirty filter on this side of the

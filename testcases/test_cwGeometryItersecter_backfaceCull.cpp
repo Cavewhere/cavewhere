@@ -38,7 +38,7 @@ cwGeometryItersecter::Object makeTriangle(uint64_t id,
     geometry.setType(cwGeometry::Type::Triangles);
     geometry.setCullBackfaces(cullBackfaces);
 
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, modelMatrix);
+    return cwGeometryItersecter::Object(nullptr, id, geometry, modelMatrix);
 }
 
 // A ray that strikes the triangle at (0.25, 0.25) from the +Z side, travelling

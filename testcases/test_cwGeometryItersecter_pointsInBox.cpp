@@ -29,7 +29,7 @@ cwGeometryItersecter::Object makePointCloud(uint64_t id,
     geometry.set(cwGeometry::Semantic::Position, points);
     geometry.setType(cwGeometry::Type::Points);
 
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, modelMatrix, kPickRadius);
+    return cwGeometryItersecter::Object(nullptr, id, geometry, modelMatrix, kPickRadius);
 }
 
 //! Integer lattice points (0..n-1)^3 — a deterministic cloud with n^3 vertices.
@@ -93,7 +93,7 @@ TEST_CASE("pointsInBox returns exactly the points inside an interior box",
     const auto snapshot = intersector.snapshotForQuery();
     REQUIRE_FALSE(snapshot.isNull());
 
-    requireSameSet(cwGeometryItersecter::pointsInBox(snapshot, box, {nullptr, 1}),
+    requireSameSet(cwGeometryItersecter::pointsInBox(snapshot, box, {cwRenderObjectId{}, 1}),
                    expected);
 }
 
@@ -112,7 +112,7 @@ TEST_CASE("pointsInBox on an edge-straddling box returns only the interior point
     REQUIRE(expected.size() == 27);
 
     const auto snapshot = intersector.snapshotForQuery();
-    requireSameSet(cwGeometryItersecter::pointsInBox(snapshot, box, {nullptr, 1}),
+    requireSameSet(cwGeometryItersecter::pointsInBox(snapshot, box, {cwRenderObjectId{}, 1}),
                    expected);
 }
 
@@ -127,7 +127,7 @@ TEST_CASE("pointsInBox over an empty region returns nothing",
                      QVector3D(200.0f, 200.0f, 200.0f));
     const auto snapshot = intersector.snapshotForQuery();
 
-    REQUIRE(cwGeometryItersecter::pointsInBox(snapshot, box, {nullptr, 1}).isEmpty());
+    REQUIRE(cwGeometryItersecter::pointsInBox(snapshot, box, {cwRenderObjectId{}, 1}).isEmpty());
 }
 
 TEST_CASE("pointsInBox follows a translated model matrix into world space",
@@ -148,7 +148,7 @@ TEST_CASE("pointsInBox follows a translated model matrix into world space",
 
     const auto snapshot = intersector.snapshotForQuery();
     const QList<QVector3D> got =
-        cwGeometryItersecter::pointsInBox(snapshot, box, {nullptr, 1});
+        cwGeometryItersecter::pointsInBox(snapshot, box, {cwRenderObjectId{}, 1});
 
     requireSameSet(got, expected);
     for (const QVector3D& p : got) {
@@ -167,15 +167,15 @@ TEST_CASE("pointsInBox rejects unknown keys, null boxes, and null snapshots",
     const QBox3D box(QVector3D(0.0f, 0.0f, 0.0f), QVector3D(3.0f, 3.0f, 3.0f));
 
     SECTION("unknown key") {
-        REQUIRE(cwGeometryItersecter::pointsInBox(snapshot, box, {nullptr, 99}).isEmpty());
+        REQUIRE(cwGeometryItersecter::pointsInBox(snapshot, box, {cwRenderObjectId{}, 99}).isEmpty());
     }
     SECTION("null box") {
-        REQUIRE(cwGeometryItersecter::pointsInBox(snapshot, QBox3D(), {nullptr, 1}).isEmpty());
+        REQUIRE(cwGeometryItersecter::pointsInBox(snapshot, QBox3D(), {cwRenderObjectId{}, 1}).isEmpty());
     }
     SECTION("null snapshot") {
         const cwGeometryItersecter::QuerySnapshot empty;
         REQUIRE(empty.isNull());
-        REQUIRE(cwGeometryItersecter::pointsInBox(empty, box, {nullptr, 1}).isEmpty());
+        REQUIRE(cwGeometryItersecter::pointsInBox(empty, box, {cwRenderObjectId{}, 1}).isEmpty());
     }
 }
 
@@ -203,7 +203,7 @@ TEST_CASE("a snapshot stays stable and safe to read while the BVH is rebuilt",
     std::thread worker([&]() {
         while (!stop.load(std::memory_order_relaxed)) {
             const QList<QVector3D> got =
-                cwGeometryItersecter::pointsInBox(snapshot, box, {nullptr, 1});
+                cwGeometryItersecter::pointsInBox(snapshot, box, {cwRenderObjectId{}, 1});
             if (got.size() != expected) {
                 mismatches.fetch_add(1, std::memory_order_relaxed);
             }

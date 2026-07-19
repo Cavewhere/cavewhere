@@ -61,7 +61,7 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
         geometry.setIndices(std::move(sequentialIndices));
         geometry.setType(cwGeometry::Type::Lines);
 
-        intersecter->addObject(cwGeometryItersecter::Object(cwGeometryItersecter::Key{this, kLinePlotSubId},
+        intersecter->addObject(cwGeometryItersecter::Object(this, kLinePlotSubId,
                                                             std::move(geometry)));
     }
 
@@ -75,10 +75,10 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
     // (cwLinePlotManager::reconcileTripKeywordItems).
     m_visibility.setValue(QVector<quint8>(vertexCount, kVisible));
 
-    // Dual-publish (issue #579): the store mask keyed to the old layout no
-    // longer maps to the right vertices either; clear it to the all-visible
-    // default. Unlike the intersecter there is no addObject-resets-visibility
-    // side effect, so this is the explicit reset.
+    // The published store mask is keyed to the old vertex layout, which no
+    // longer maps to the right vertices; clear it to the all-visible default.
+    // This is the reset the pick traversals see — the owner re-applies hidden
+    // ranges right after (cwLinePlotManager::reconcileTripKeywordItems).
     if (auto* visibilityStore = sceneVisibility()) {
         visibilityStore->setMask(renderObjectId(), kLinePlotSubId, QVector<quint8>());
     }
@@ -123,20 +123,13 @@ void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)
 
     m_visibility.setValue(visibility);
 
-    // Publish the same buffer to the intersecter so hidden shots stop taking
-    // picks and inflating the reset-view bounds (issues #575/#549). QVector
-    // is implicitly shared, so it costs a refcount bump rather than a second
-    // copy of the mask — which is why the loop above writes to a copy and
-    // publishes the result instead of mutating in place. An empty mask is the
-    // intersecter's all-visible fast path; addObject already resets it there,
-    // so setGeometry needn't publish.
-    if (auto* intersecter = geometryItersecter()) {
-        intersecter->setVisibilityMask(cwGeometryItersecter::Key{this, kLinePlotSubId},
-                                       anyHidden ? visibility : QVector<quint8>());
-    }
-
-    // Dual-publish (issue #579): same buffer, same empty-means-all-visible
-    // convention; the store shares it rather than copying.
+    // Publish the same buffer to the scene's visibility store so hidden
+    // shots stop taking picks and inflating the reset-view bounds (issues
+    // #575/#549) — the intersecter reads the mask from a store snapshot per
+    // query. QVector is implicitly shared, so this costs a refcount bump
+    // rather than a second copy of the mask — which is why the loop above
+    // writes to a copy and publishes the result instead of mutating in
+    // place. An empty mask is the all-visible fast path.
     if (auto* visibilityStore = sceneVisibility()) {
         visibilityStore->setMask(renderObjectId(), kLinePlotSubId,
                                  anyHidden ? visibility : QVector<quint8>());

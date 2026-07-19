@@ -32,7 +32,7 @@ cwGeometryItersecter::Object makePointObject(uint64_t id,
     geometry.set(cwGeometry::Semantic::Position, points);
     geometry.setType(cwGeometry::Type::Points);
 
-    return cwGeometryItersecter::Object({nullptr, id},
+    return cwGeometryItersecter::Object(nullptr, id,
                                         geometry,
                                         modelMatrix,
                                         pickRadius);
@@ -59,7 +59,7 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
     QMatrix4x4 modelMatrix;
     modelMatrix.translate(0.0f, 0.0f, worldZ);
 
-    return cwGeometryItersecter::Object({nullptr, id},
+    return cwGeometryItersecter::Object(nullptr, id,
                                         geometry,
                                         modelMatrix);
 }
@@ -92,7 +92,7 @@ TEST_CASE("BVH rebuilds after mutation", "[cwGeometryItersecter][bvh]")
     }
 
     // Remove the closer point — BVH must rebuild and the farther one wins again
-    intersector.removeObject(nullptr, 2);
+    intersector.removeObject(cwRenderObjectId{}, 2);
     intersector.waitForFinish();
     {
         const cwRayHit hit = intersector.intersectsDetailed(ray);
@@ -101,7 +101,7 @@ TEST_CASE("BVH rebuilds after mutation", "[cwGeometryItersecter][bvh]")
     }
 
     // Remove everything — no hit at all
-    intersector.removeObject(nullptr, 1);
+    intersector.removeObject(cwRenderObjectId{}, 1);
     intersector.waitForFinish();
     {
         const cwRayHit hit = intersector.intersectsDetailed(ray);
@@ -128,7 +128,7 @@ TEST_CASE("BVH rebuilds after setModelMatrix", "[cwGeometryItersecter][bvh]")
     // Translate the cloud up to world z=20 — the BVH must reflect the new position
     QMatrix4x4 m;
     m.translate(0.0f, 0.0f, 20.0f);
-    intersector.setModelMatrix(nullptr, 1, m);
+    intersector.setModelMatrix(cwRenderObjectId{}, 1, m);
     intersector.waitForFinish();
     {
         const cwRayHit hit = intersector.intersectsDetailed(ray);
@@ -189,7 +189,7 @@ TEST_CASE("BVH returns closest across mixed triangle + point primitives", "[cwGe
     REQUIRE(hit.objectId() == 100u);
 
     // Remove the point — the closest triangle (z=9, id=10) should win.
-    intersector.removeObject(nullptr, 100);
+    intersector.removeObject(cwRenderObjectId{}, 100);
     intersector.waitForFinish();
     const cwRayHit hit2 = intersector.intersectsDetailed(ray);
     REQUIRE(hit2.hit());

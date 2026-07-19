@@ -46,7 +46,7 @@ cwGeometryItersecter::Object makeLineObject(uint64_t id,
     geometry.setIndices(std::move(indices));
     geometry.setType(cwGeometry::Type::Lines);
 
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, modelMatrix);
+    return cwGeometryItersecter::Object(nullptr, id, geometry, modelMatrix);
 }
 
 cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
@@ -68,7 +68,7 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
     geometry.setType(cwGeometry::Type::Triangles);
     geometry.setCullBackfaces(false); // Double-sided, like scrap carpets.
 
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4());
+    return cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4());
 }
 
 // A constant (ortho-style) tolerance: a fixed world-space pick radius.

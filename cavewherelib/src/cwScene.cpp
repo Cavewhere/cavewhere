@@ -31,6 +31,12 @@ cwScene::cwScene(QObject *parent) :
     Camera(nullptr),
     m_edl(new cwEDLSettings(this))
 {
+    // Every pick and framing query reads visibility from the store's
+    // snapshot. Sibling destruction order is unspecified (see ~cwScene), but
+    // that's safe here: the intersecter reads the store only inside query
+    // calls, and no query runs during teardown.
+    GeometryItersecter->setVisibilityStore(m_visibility);
+
     // An EDL tuning change marks the scene dirty and schedules a repaint;
     // cwRhiScene::synchroize() then pulls the new values across to the effect.
     connect(m_edl, &cwEDLSettings::changed, this, &cwScene::update);
@@ -109,12 +115,12 @@ void cwScene::removeItem(cwRenderObject *item)
         return;
     }
 
-    // Drop the picker's entries before the caller deletes `item`: the
-    // intersecter keys geometry by raw cwRenderObject* and dereferences it on
-    // every pick, so a Node outliving its render object is a use-after-free.
-    // Here rather than ~cwRenderObject(), which is too late — callers arrive
-    // via setScene(nullptr), so geometryItersecter() is already null by then.
-    GeometryItersecter->clear(item);
+    // Drop the picker's entries before the caller deletes `item`: a Node
+    // outliving its render object would keep serving picks (and dangle its
+    // attribution pointer in cwRayHit::object()). Here rather than
+    // ~cwRenderObject(), which is too late — callers arrive via
+    // setScene(nullptr), so geometryItersecter() is already null by then.
+    GeometryItersecter->clear(item->renderObjectId());
 
     // Scrub the object's published visibility (object entry + every sub) so a
     // recycled or re-added id starts from the sparse default.
