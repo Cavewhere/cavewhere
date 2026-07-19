@@ -35,7 +35,10 @@ public:
     uint32_t addItem(const Item& item);
     void updateGeometry(uint32_t id, const cwGeometry& geometry);
     void updateTexture(uint32_t id, const QImage& image);
-    void setVisible(uint32_t id, bool visible);
+    // Named setItemVisible, not an overload of setVisible: a same-name
+    // overload would hide cwRenderObject::setVisible(bool) and make the
+    // whole-object toggle unreachable without qualification.
+    void setItemVisible(uint32_t id, bool visible);
     void setCulling(uint32_t id, CullMode culling);
     void setMaterial(uint32_t id, const cwRenderMaterialState& material);
     void setUniformBlock(uint32_t id, const QByteArray& uniformBlock);
@@ -49,8 +52,21 @@ public:
 
 protected:
     cwRHIObject *createRHIObject() override;
+    void publishVisibility() override;
 
 private:
+    // What travels to the render thread. Item additionally carries
+    // visible/storeGeometry/storeTexture, which are authoring state only —
+    // visibility publishes through the scene visibility store, never on a
+    // command — so payloads carry just the render data.
+    struct ItemPayload {
+        cwGeometry geometry;
+        QImage texture;
+        cwRenderMaterialState material;
+        QByteArray uniformBlock;
+        QMatrix4x4 modelMatrix;
+    };
+
     // Pending data to update
     class PendingCommand {
     public:
@@ -61,7 +77,6 @@ private:
             UpdateTexture,
             UpdateMaterial,
             UpdateUniformBlock,
-            UpdateVisiblity,
             UpdateModelMatrix,
             Unknown
         };
@@ -72,19 +87,19 @@ private:
 
         }
 
-        PendingCommand(Type type, uint32_t id, Item item) :
+        PendingCommand(Type type, uint32_t id, ItemPayload payload) :
             m_commandType(type),
             m_id(id),
-            m_item(item)
+            m_payload(payload)
         { }
 
         Type type() const { return m_commandType; }
         uint32_t id() const { return m_id; }
-        const Item& item() const { return m_item; }
+        const ItemPayload& payload() const { return m_payload; }
 
 
     private:
-        Item m_item;
+        ItemPayload m_payload;
 
         Type m_commandType;
         uint32_t m_id = 0;

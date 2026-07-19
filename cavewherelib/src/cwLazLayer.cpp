@@ -37,35 +37,31 @@ cwLazLayer::cwLazLayer(QObject* parent) :
     // future manager and chain the result delivery onto it. Restarter cancels
     // the previous future and waits for it to settle before this fires again,
     // so we can never have two applyResult chains racing each other.
+    // Register each load run with the global future manager. onResult() below
+    // handles result delivery; the two compose (both fire when a fresh future
+    // is installed).
     m_loadRestarter.onFutureChanged([this]() {
         if (m_futureManagerToken.isValid()) {
             m_futureManagerToken.addJob(cwFuture(
                 QFuture<void>(m_loadRestarter.future()),
                 QStringLiteral("Loading %1.laz").arg(m_name)));
         }
+    });
 
-        AsyncFuture::observe(m_loadRestarter.future())
-            .context(this, [this]() {
-                // The user may have disabled the layer between the load
-                // start and its delivery. Drop the result — setEnabled(false)
-                // already cleared geometry and reset status to Idle.
-                if (!m_enabled) {
-                    return;
-                }
-                QFuture<cwLazLoadResult> finished = m_loadRestarter.future();
-                if (finished.resultCount() == 0) {
-                    setErrorMessage(QStringLiteral("Load failed: %1").arg(m_sourcePath));
-                    setLoadStatus(LoadStatus::Error);
-                    return;
-                }
-                // result() returns const T& — the local copy is a shallow
-                // refcount bump (cwGeometry's vertex data is QByteArray,
-                // CoW), so this isn't a deep copy. takeResult() returns a
-                // default-constructed value when delivered through an
-                // AsyncFuture Deferred — copy is the safe path.
-                cwLazLoadResult result = finished.result();
-                applyResult(std::move(result));
-            });
+    // Fires once per load run, only for a completed (non-cancelled, non-empty)
+    // future. cwLazLoader always addResult()s except on cancellation — a header
+    // open failure still yields an empty-geometry result — so applyResult()
+    // owns all error reporting (its vertexCount() == 0 branch). The by-value
+    // parameter is a shallow refcount bump: cwGeometry's vertex data is a CoW
+    // QByteArray, not a deep copy.
+    m_loadRestarter.onResult(this, [this](cwLazLoadResult result) {
+        // The user may have disabled the layer between the load start and its
+        // delivery. Drop the result — setEnabled(false) already cleared
+        // geometry and reset status to Idle.
+        if (!m_enabled) {
+            return;
+        }
+        applyResult(std::move(result));
     });
 }
 

@@ -32,11 +32,13 @@ MainWindowTest {
             let mapButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mainSideBar->mapButton")
             mouseClick(mapButton)
 
-            // wait() needed — mapPage layout must complete before addLayerButton is interactive
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "mapPage" });
-            wait(100)
 
+            // The map page's SplitView lays out its panes on the next polish pass, so wait
+            // until the Add Layer button has settled into the right-hand panel before clicking.
+            // Until then it maps into the left half and the click lands on the scene view.
             let addLayerButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage->SplitView->addLayerButton")
+            tryVerify(()=>{ return addLayerButton.mapToItem(null, 0, 0).x > mainWindow.width / 2 });
             mouseClick(addLayerButton)
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "viewPage" });

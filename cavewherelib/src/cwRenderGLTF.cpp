@@ -150,7 +150,7 @@ QBox3D cwRenderGLTF::boundingBox() const
     QList<cwGeometryItersecter::Key> keys;
     keys.reserve(m_items.size());
     for (const auto id : m_items) {
-        keys.append(cwGeometryItersecter::Key{const_cast<cwRenderGLTF*>(this), id});
+        keys.append(cwGeometryItersecter::Key{renderObjectId(), id});
     }
     return geometryItersecter()->boundingBox(keys);
 }

@@ -8,6 +8,7 @@
 //Our includes
 #include "cwRenderObject.h"
 #include "cwScene.h"
+#include "cwSceneVisibility.h"
 #include "cwGeometryItersecter.h"
 
 //Qt includes
@@ -31,7 +32,15 @@ cwRenderObject::cwRenderObject(QObject* parent) :
 
 cwRenderObject::~cwRenderObject()
 {
-
+    // A render object may be deleted while still attached to a live scene (a direct
+    // `delete`, not the setScene(nullptr) path). Scrub its pending entry and picker
+    // geometry now, or the scene keeps a dangling pointer to drain (#491) and the
+    // intersecter dereferences freed geometry on the next pick (follow-up 6). When
+    // the scene is itself being torn down it has already called detachFromScene() on
+    // us, so m_scene is null here and this no-ops — see ~cwScene().
+    if (m_scene != nullptr) {
+        m_scene->removeItem(this);
+    }
 }
 
 void cwRenderObject::setScene(cwScene *scene)
@@ -70,12 +79,26 @@ void cwRenderObject::setScene(cwScene *scene)
     return m_scene == nullptr ? nullptr : m_scene->geometryItersecter();
 }
 
+cwSceneVisibility *cwRenderObject::sceneVisibility() const
+{
+    return m_scene == nullptr ? nullptr : m_scene->visibility();
+}
 
 void cwRenderObject::setVisible(bool newVisible)
 {
     if (m_visible == newVisible)
         return;
     m_visible = newVisible;
+    if (auto* visibility = sceneVisibility()) {
+        visibility->setObjectVisible(m_renderObjectId, m_visible);
+    }
     update();
     emit visibleChanged();
+}
+
+void cwRenderObject::publishVisibility()
+{
+    if (auto* visibility = sceneVisibility()) {
+        visibility->setObjectVisible(m_renderObjectId, m_visible);
+    }
 }

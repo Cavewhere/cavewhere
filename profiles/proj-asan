@@ -1,0 +1,27 @@
+# Conf-only profile: builds PROJ with AddressSanitizer, nothing else.
+#
+# CaveWhere + submodules compile with -fsanitize=address on macOS Debug
+# (ASAN_ENABLED, default ON). With libc++ that turns on container annotations
+# (poisoned gap between a container's size and capacity). PROJ ships from Conan
+# as a static libproj.a built WITHOUT ASAN, so its inlined container ops don't
+# update those annotations; a container crossing the CaveWhere<->PROJ boundary
+# then trips a bogus ASAN "container-overflow". Building PROJ with ASAN keeps
+# the annotations consistent, so detect_container_overflow can stay on (no
+# ASAN_OPTIONS=detect_container_overflow=0 workaround). See issue #580.
+#
+# This profile only adds sanitizer flags scoped to proj/*. LAYER it on top of
+# your real host profile so all other settings (cppstd, compiler, build_type)
+# are unchanged and PROJ's Conan package_id is unaffected:
+#
+#   -pr:h <your-host-profile> -pr:h profiles/proj-asan
+#
+# tools.build:cxxflags is not part of the package_id, so the instrumented
+# libproj.a lands in the SAME cache slot the plain build would use. A later
+# Qt Creator configure (conan install --build=missing) then reuses it instead
+# of rebuilding a non-ASAN PROJ. See docs/asan-debug-build.md.
+
+[conf]
+proj/*:tools.build:cflags+=["-fsanitize=address"]
+proj/*:tools.build:cxxflags+=["-fsanitize=address"]
+proj/*:tools.build:sharedlinkflags+=["-fsanitize=address"]
+proj/*:tools.build:exelinkflags+=["-fsanitize=address"]

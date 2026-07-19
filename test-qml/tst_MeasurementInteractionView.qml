@@ -249,7 +249,7 @@ MainWindowTest {
             verify(distField !== null, "Distance value field found")
 
             // The underlying string is right; the bug is purely visual clipping.
-            let expected = Number(measurement.distance).toFixed(2)
+            let expected = measurement.lengthUnit.format(measurement.distance)
             verify(distField.text.indexOf(expected) !== -1,
                    "Field text '" + distField.text + "' should contain '" + expected + "'")
 
@@ -270,7 +270,7 @@ MainWindowTest {
             // than the text (the original "14.2" -> "4.2" truncation report).
             let chip = _findByObjectName(renderer, "measurementLineDistanceLabel")
             verify(chip !== null, "On-line distance chip found")
-            tryCompare(chip, "text", qsTr("%1 m").arg(Number(measurement.distance).toFixed(2)),
+            tryCompare(chip, "text", measurement.lengthUnit.format(measurement.distance),
                        1000, "Chip shows the full distance string in the selected unit")
             verify(chip.parent.width >= chip.contentWidth + 2.0,
                    "Chip background has no margin for its text: rect " + chip.parent.width
@@ -418,13 +418,15 @@ MainWindowTest {
             // metres (settings persist across runs, so drive from a known unit).
             measurement.lengthUnit.index = 0
             tryCompare(combo, "unit", 0, 1000, "Selector reflects metres")
-            let metersText = qsTr("%1 m").arg(Number(measurement.distance).toFixed(2))
+            let metersText = measurement.lengthUnit.format(measurement.distance)
+            verify(metersText.indexOf(" m") !== -1, "Metres format carries the m suffix")
             tryCompare(distField, "text", metersText, 1000, "Distance shows metres")
 
             // Switching to feet reconverts every length row in place.
             measurement.lengthUnit.index = 2
             tryCompare(combo, "unit", 2, 1000, "Selector reflects feet")
-            let feetText = qsTr("%1 ft").arg(Number(measurement.lengthUnit.fromMeters(measurement.distance)).toFixed(2))
+            let feetText = measurement.lengthUnit.format(measurement.distance)
+            verify(feetText.indexOf(" ft") !== -1, "Feet format carries the ft suffix")
             tryCompare(distField, "text", feetText, 1000, "Distance reconverts to feet")
             // The magnitude actually grew (feet < metre), proving a real
             // reconversion rather than just a swapped suffix.

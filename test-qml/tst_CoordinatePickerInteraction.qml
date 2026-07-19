@@ -62,5 +62,42 @@ MainWindowTest {
             tryVerify(() => picker.enabled === false, 1000, "Picker disabled after toggle off")
             tryVerify(() => picker.hasPick === false, 1000, "Pick cleared when picker deactivated")
         }
+
+        // Without a coordinate system the pick can't be georeferenced, so the
+        // popup must guide the user to set one instead of showing a blank body
+        // (issue #571). The link navigates to the Data page, where the region's
+        // coordinate system is set.
+        function test_needsCoordinateSystemGuidance() {
+            RootData.newProject()
+
+            RootData.pageSelectionModel.currentPageAddress = "View"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "viewPage",
+                      5000, "View page should be active")
+
+            let renderer = null
+            tryVerify(() => {
+                renderer = ObjectFinder.findObjectByChain(rootId.mainWindow,
+                    "rootId->viewPage->SplitView->renderer")
+                return renderer !== null
+            }, 5000, "Renderer found")
+
+            let popup = findChild(renderer, "coordinatePickerPopup")
+            verify(popup !== null, "Coordinate picker popup found")
+
+            compare(RootData.region.geoReference.globalCoordinateSystem, "",
+                    "Fresh project has no coordinate system")
+            verify(!RootData.region.geoReference.hasCoordinateSystem,
+                   "geoReference reports no coordinate system")
+            verify(!popup.picker.hasCoordinateSystem,
+                   "Picker mirrors the geo-reference's has-CS state")
+            verify(popup._needsCoordinateSystem,
+                   "Popup should offer coordinate-system guidance when there's no CS")
+
+            popup._gotoCoordinateSystem()
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "dataMainPage",
+                      5000, "Link should navigate to the Data page")
+        }
     }
 }

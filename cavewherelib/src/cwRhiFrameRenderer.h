@@ -11,6 +11,7 @@ class QRhiCommandBuffer;
 #include "cwRhiPipelineTypes.h"
 #include "cwEdlParametersData.h"
 #include "cwRenderObjectId.h"
+#include "cwSceneVisibility.h"
 #include <QHash>
 #include <QList>
 #include <QSet>
@@ -26,7 +27,7 @@ class cwRhiItemRenderer;
 // fields rather than as more gatherScene() arguments.
 struct cwSceneGatherOptions {
     // Render objects to suppress for this gather only, by stable id (per-job
-    // visibility override); empty = honor each object's live isVisible().
+    // visibility override); empty = honor the frame's visibility snapshot alone.
     QSet<cwRenderObjectId> hiddenObjectIds;
     // Per-object appearance slot stamped into each object's GatherContext, by
     // cwRHIObject pointer. Empty (the live frame) = every object gathers at slot 0
@@ -186,14 +187,6 @@ public:
     // allocated descriptors at the same address.
     void evictPipelinesFor(QRhiRenderPassDescriptor* descriptor);
 
-    // Per-pass routing for the current frame: the render-pass descriptor and
-    // MSAA sample count a given pass draws into. Filled at the start of the frame
-    // and queried by render objects that build their pipelines outside gather()
-    // (cwRhiTexturedItems) so they key on the correct target. Background,
-    // Opaque, and PointCloud route to the EDL offscreen (1x) while a cloud is
-    // visible; every other pass routes to the swap chain.
-    QRhiRenderPassDescriptor* passRenderPassDescriptor(cwRHIObject::RenderPass pass) const;
-    int passSampleCount(cwRHIObject::RenderPass pass) const;
     const QHash<cwRhiPipelineKey, cwRhiPipelineRecord*>& pipelineCache() const { return m_pipelineCache; }
 
     // Create the global camera UBO. Idempotent — called from cwRhiScene::initialize,
@@ -209,6 +202,15 @@ public:
                           const QMatrix4x4& viewMatrix,
                           const QMatrix4x4& projectionMatrix);
     void setEdlParameters(const EdlParametersData& parameters);
+
+    // The frame's visibility truth: one immutable snapshot of the scene's
+    // visibility store, captured per sync at the barrier (the GUI thread is
+    // blocked, so the read is race-free) and read by every render-side gate —
+    // gatherScene's object gate, the cloud/atlas checks, and per-object readers
+    // (cwRhiTexturedItems item gating, cwRHILinePlot's mask upload). A default
+    // snapshot (never synced) reads as everything-visible.
+    void setVisibilitySnapshot(cwVisibilitySnapshot snapshot) { m_visibility = std::move(snapshot); }
+    const cwVisibilitySnapshot& visibilitySnapshot() const { return m_visibility; }
 
     // Render-object registry mutation, driven by cwRhiScene::synchroize from the
     // front-end cwScene's add/remove/update queues. registerRenderObject frees any
@@ -240,7 +242,7 @@ public:
     // Copy @a base into one RenderData per pass, stamping each with the rpDesc +
     // sample count that pass routes into this frame (from setupPassRouting).
     // gather() reads those when building pipeline keys.
-    std::array<cwRHIObject::RenderData, kPassCount> buildPerPassRenderData(
+    cwRHIObject::PerPassRenderData buildPerPassRenderData(
         const cwRHIObject::RenderData& base) const;
 
     // Derive one clip-space camera from @a projection / @a view and stamp it into
@@ -271,7 +273,7 @@ public:
     // overrides (default = gather exactly like the live frame, which is what the
     // live frame passes): see cwSceneGatherOptions.
     void gatherScene(std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>& passBatches,
-                     const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData,
+                     const cwRHIObject::PerPassRenderData& perPassRenderData,
                      const cwSceneGatherOptions& options = {});
 
     // Draw the gathered scene into finalTarget. When edl is non-null the EDL
@@ -285,7 +287,7 @@ public:
                    QRhiRenderTarget* finalTarget,
                    const EdlOffscreen* edl,
                    std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>& passBatches,
-                   const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData,
+                   const cwRHIObject::PerPassRenderData& perPassRenderData,
                    QRhiResourceUpdateBatch* resources,
                    const cwRhiPostProcessEffect::FrameUniformContext& frameContext,
                    quint32 cameraUniformOffset,
@@ -297,6 +299,14 @@ public:
     // pipeline whose sample count differs from its render target does not render
     // and triggers backend validation errors).
     void setupPassRouting(QRhiRenderTarget* finalTarget, const EdlOffscreen* edl);
+
+    // Per-pass routing for the current frame, filled by setupPassRouting and read
+    // only by buildPerPassRenderData — the single resolver that stamps routing
+    // into the per-pass RenderData every pipeline key derives from. Background,
+    // Opaque, and PointCloud route to the EDL offscreen (1x) while a cloud is
+    // visible; every other pass routes to the final target.
+    QRhiRenderPassDescriptor* passRenderPassDescriptor(cwRHIObject::RenderPass pass) const;
+    int passSampleCount(cwRHIObject::RenderPass pass) const;
 
     // Build (or rebuild on resize / sample-count change) the shared-depth EDL
     // offscreen: sceneColor + cloudColor + shared depth, the two render targets,
@@ -366,6 +376,7 @@ private:
     QHash<cwRenderObjectId, cwRHIObject*> m_rhiObjectLookup;
 
     cwSceneUpdate::Flag m_updateFlags = cwSceneUpdate::Flag::None;
+    cwVisibilitySnapshot m_visibility;
     QMatrix4x4 m_projectionMatrix;
     QMatrix4x4 m_viewMatrix;
     float m_devicePixelRatio = 1.0f;

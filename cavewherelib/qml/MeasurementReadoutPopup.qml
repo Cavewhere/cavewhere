@@ -17,7 +17,6 @@ QC.Popup {
 
     required property MeasurementInteraction interaction
 
-    readonly property int _lengthPrecision: 2
     readonly property int _anglePrecision: 1
     readonly property int _narrowWidth: 480
 
@@ -25,14 +24,14 @@ QC.Popup {
     // header button overrides (assigning here breaks this binding, as intended).
     property bool collapsed: root.parent ? root.parent.width < root._narrowWidth : false
 
-    // Lengths render in the user-selected unit (shared with the clipboard via
-    // cwMeasurementInteraction). Reading the lengthUnit.name property re-evaluates
-    // these bindings when the unit selector changes; fromMeters() is a plain
+    // Lengths render in the user-selected unit through the shared C++ formatter
+    // (cwLengthUnitSelection::format), so the panel, the on-line chip, and the
+    // clipboard agree by construction. Reading the reactive lengthUnit.name here
+    // re-evaluates these bindings when the selector changes; format() is a plain
     // invokable QML can't track, but it re-runs on that re-evaluation.
     function _length(meters) {
-        let value = root.interaction.lengthUnit.fromMeters(meters)
-        return qsTr("%1 %2").arg(Number(value).toFixed(root._lengthPrecision))
-                            .arg(root.interaction.lengthUnit.name)
+        root.interaction.lengthUnit.name
+        return root.interaction.lengthUnit.format(meters)
     }
 
     function _angle(degrees) {
@@ -40,15 +39,10 @@ QC.Popup {
     }
 
     // Signed length for the by-axis components, where the sign carries the
-    // direction (east/west, north/south, up/down). Positive gets an explicit
-    // '+'; a value that rounds to zero shows no sign — parseFloat collapses a
-    // "-0.00" round-down to -0, which toFixed then renders as a clean "0.00".
+    // direction (east/west, north/south, up/down).
     function _signedLength(meters) {
-        let value = root.interaction.lengthUnit.fromMeters(meters)
-        let rounded = parseFloat(Number(value).toFixed(root._lengthPrecision))
-        return (rounded > 0 ? "+" : "")
-               + qsTr("%1 %2").arg(Number(rounded).toFixed(root._lengthPrecision))
-                              .arg(root.interaction.lengthUnit.name)
+        root.interaction.lengthUnit.name
+        return root.interaction.lengthUnit.format(meters, true)
     }
 
     // The azimuth value's tooltip: the reason when n/a, otherwise the
@@ -68,12 +62,11 @@ QC.Popup {
         return parts.join(qsTr(" · "))
     }
 
-    // Read-only TextInput (not a Label, not a TextField) so the value can be
-    // selected and copied with the mouse and reads as flat text, not an input.
-    // A QC.TextField would need a background override, which the native style
-    // forbids; TextInput has none — matching the app's SelectableCaveStat. Shared
-    // by ReadoutRow and the azimuth row so every readout value is copyable.
-    component ReadoutValue: QQ.TextInput {
+    // The shared copyable value field (SelectableValue), specialized for the
+    // readout: mono, right-aligned, with a hover tooltip and a content-fitting
+    // layout slot. Shared by ReadoutRow and the azimuth row so every readout
+    // value is copyable.
+    component ReadoutValue: SelectableValue {
         id: valueId
 
         // Hover tooltip text; empty means no tooltip (the plain rows).
@@ -86,15 +79,12 @@ QC.Popup {
         readonly property int _valuePadding: 4
         readonly property int _valueClipMargin: 6
 
-        // TextInput derives its own (read-only) implicitWidth from content and
+        // The field derives its own (read-only) implicitWidth from content and
         // padding; size the layout slot to that plus the clip margin instead.
         readonly property real _slotWidth: valueId.contentWidth + valueId.leftPadding
                                            + valueId.rightPadding + valueId._valueClipMargin
 
-        readOnly: true
-        selectByMouse: true
         font.family: Theme.fontFamilyMono
-        color: Theme.text
         horizontalAlignment: QQ.TextInput.AlignRight
         topPadding: 0
         bottomPadding: 0

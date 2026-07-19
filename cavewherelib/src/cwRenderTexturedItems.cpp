@@ -2,6 +2,7 @@
 #include "cwGeometryItersecter.h"
 #include "cwPickingLog.h"
 #include "cwRhiTexturedItems.h"
+#include "cwSceneVisibility.h"
 #include "Monad/Result.h"
 
 #include <QtGlobal>
@@ -121,10 +122,14 @@ void cwRenderTexturedItems::addCommand(const PendingCommand&& command)
 uint32_t cwRenderTexturedItems::addItem(const Item& item)
 {
     const uint32_t id = m_nextId++;
-    Item commandItem = item;
-    commandItem.geometry = handleGeometryError(geometryForRender(commandItem.geometry));
+    ItemPayload payload;
+    payload.geometry = handleGeometryError(geometryForRender(item.geometry));
+    payload.texture = item.texture;
+    payload.material = item.material;
+    payload.uniformBlock = item.uniformBlock;
+    payload.modelMatrix = item.modelMatrix;
 
-    addCommand(PendingCommand(PendingCommand::Add, id, commandItem));
+    addCommand(PendingCommand(PendingCommand::Add, id, payload));
 
     Item storedItem = item;
     if (!storedItem.storeGeometry) {
@@ -135,9 +140,9 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     }
     m_frontState.insert(id, storedItem);
 
-    if (!commandItem.geometry.isEmpty()) {
+    if (!payload.geometry.isEmpty()) {
         if (auto* intersector = geometryItersecter()) {
-            intersector->addObject(cwGeometryItersecter::Object({this, id}, commandItem.geometry, item.modelMatrix));
+            intersector->addObject(cwGeometryItersecter::Object(this, id, payload.geometry, item.modelMatrix));
         } else {
             qCDebug(lcPick).nospace()
                 << "addItem id=" << id
@@ -151,6 +156,15 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
             << " transformedGeometryEmpty=true"
             << " -> picker.addObject SKIPPED at addItem"
             << " (later updateGeometry(id, nonEmpty) would still register it)";
+    }
+
+    // Publish to the store (issue #579): the entry is identity state keyed by
+    // (ownerId, id), independent of geometry registration — pick traversals
+    // read it from a snapshot, so a born-hidden item is unpickable even
+    // before (or without) its geometry registering. A visible item is the
+    // sparse default, so this only writes when born hidden.
+    if (auto* visibility = sceneVisibility()) {
+        visibility->setSubVisible(renderObjectId(), id, item.visible);
     }
 
     return id;
@@ -167,7 +181,7 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
         return;
     }
 
-    Item payload;
+    ItemPayload payload;
     payload.geometry = handleGeometryError(geometryForRender(geometry));
     addCommand(PendingCommand(PendingCommand::UpdateGeometry, id, payload));
 
@@ -194,9 +208,12 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
 
     if (intersector != nullptr) {
         if (!payload.geometry.isEmpty()) {
-            intersector->addObject(cwGeometryItersecter::Object({this, id}, payload.geometry, modelMatrix));
+            // No visibility re-seed needed: the store entry is identity
+            // state that survives geometry removal and re-registration, so a
+            // render-hidden item can't be resurrected by a geometry cycle.
+            intersector->addObject(cwGeometryItersecter::Object(this, id, payload.geometry, modelMatrix));
         } else {
-            intersector->removeObject({this, id});
+            intersector->removeObject({renderObjectId(), id});
         }
     }
 }
@@ -208,7 +225,7 @@ void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
         return;
     }
 
-    Item payload;
+    ItemPayload payload;
     payload.texture = image; // geometry left default
     addCommand(PendingCommand(PendingCommand::UpdateTexture, id, payload));
 
@@ -219,18 +236,25 @@ void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
     }
 }
 
-void cwRenderTexturedItems::setVisible(uint32_t id, bool visible)
+void cwRenderTexturedItems::setItemVisible(uint32_t id, bool visible)
 {
     auto entry = m_frontState.find(id);
     if (entry == m_frontState.end()) {
         return;
     }
 
-    Item payload;
-    payload.visible = visible;
-    addCommand(PendingCommand(PendingCommand::UpdateVisiblity, id, payload));
-
     entry->visible = visible;
+
+    // The store entry is the single published truth: the intersecter reads it
+    // from a snapshot per query (a hidden item must not take picks or inflate
+    // the reset-view bounds, issues #575/#549), and cwRhiTexturedItems::gather
+    // reads it from the frame's snapshot — no per-item visibility command
+    // travels to the render thread. update() schedules the sync that refreshes
+    // the frame's snapshot.
+    if (auto* visibilityStore = sceneVisibility()) {
+        visibilityStore->setSubVisible(renderObjectId(), id, visible);
+    }
+    update();
 }
 
 void cwRenderTexturedItems::setCulling(uint32_t id, CullMode culling)
@@ -242,7 +266,7 @@ void cwRenderTexturedItems::setCulling(uint32_t id, CullMode culling)
 
     entry->material.cullMode = culling;
 
-    Item payload;
+    ItemPayload payload;
     payload.material = entry->material;
     addCommand(PendingCommand(PendingCommand::UpdateMaterial, id, payload));
 }
@@ -254,7 +278,7 @@ void cwRenderTexturedItems::setMaterial(uint32_t id, const cwRenderMaterialState
         return;
     }
 
-    Item payload;
+    ItemPayload payload;
     payload.material = material;
     addCommand(PendingCommand(PendingCommand::UpdateMaterial, id, payload));
 
@@ -268,7 +292,7 @@ void cwRenderTexturedItems::setUniformBlock(uint32_t id, const QByteArray& unifo
         return;
     }
 
-    Item payload;
+    ItemPayload payload;
     payload.uniformBlock = uniformBlock;
     addCommand(PendingCommand(PendingCommand::UpdateUniformBlock, id, payload));
 
@@ -282,14 +306,14 @@ void cwRenderTexturedItems::setModelMatrix(uint32_t id, const QMatrix4x4& modelM
         return;
     }
 
-    Item payload;
+    ItemPayload payload;
     payload.modelMatrix = modelMatrix;
     addCommand(PendingCommand(PendingCommand::UpdateModelMatrix, id, payload));
 
     entry->modelMatrix = modelMatrix;
 
     if (auto* intersector = geometryItersecter()) {
-        intersector->setModelMatrix({this, id}, modelMatrix);
+        intersector->setModelMatrix({renderObjectId(), id}, modelMatrix);
     }
 }
 
@@ -299,12 +323,27 @@ void cwRenderTexturedItems::removeItem(uint32_t id)
         return;
     }
 
-    addCommand(PendingCommand(PendingCommand::Remove, id, Item{}));
+    addCommand(PendingCommand(PendingCommand::Remove, id, ItemPayload{}));
 
     if (auto* intersector = geometryItersecter()) {
-        intersector->removeObject({this, id});
+        intersector->removeObject({renderObjectId(), id});
+    }
+    if (auto* visibility = sceneVisibility()) {
+        visibility->removeSub(renderObjectId(), id);
     }
     m_frontState.remove(id);
+}
+
+void cwRenderTexturedItems::publishVisibility()
+{
+    cwRenderObject::publishVisibility();
+    auto* visibility = sceneVisibility();
+    if (visibility == nullptr) {
+        return;
+    }
+    for (auto it = m_frontState.cbegin(); it != m_frontState.cend(); ++it) {
+        visibility->setSubVisible(renderObjectId(), it.key(), it.value().visible);
+    }
 }
 
 cwRenderTexturedItems::Item cwRenderTexturedItems::item(uint32_t id) const

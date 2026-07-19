@@ -14,6 +14,7 @@
 
 // SUT
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwRayHit.h"
 
 using namespace Catch;
@@ -113,15 +114,10 @@ Mesh makeFoldedGrid(int n, const QVector3D& origin, float span)
 
 cwGeometryItersecter::Object makeTriangleObject(uint64_t id, const Mesh& mesh)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, mesh.verts);
-    geometry.setIndices(mesh.indices);
-    geometry.setType(cwGeometry::Type::Triangles);
-    geometry.setCullBackfaces(false); // Double-sided, as cwTriangulateTask sets on scraps.
-
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4());
+    // Double-sided (cullBackfaces=false), as cwTriangulateTask sets on scraps.
+    return cwGeometryItersecter::Object(
+        nullptr, id, cwTestGeometry::triangles(mesh.verts, mesh.indices, false),
+        QMatrix4x4());
 }
 
 } // namespace

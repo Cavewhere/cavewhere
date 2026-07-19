@@ -38,6 +38,7 @@ class CAVEWHERE_LIB_EXPORT cwGeoReference : public QObject
     QML_UNCREATABLE("Owned by CavingRegion; access via region.geoReference")
 
     Q_PROPERTY(QString globalCoordinateSystem READ globalCoordinateSystem WRITE setGlobalCoordinateSystem NOTIFY globalCoordinateSystemChanged)
+    Q_PROPERTY(bool hasCoordinateSystem READ hasCoordinateSystem NOTIFY globalCoordinateSystemChanged)
     Q_PROPERTY(cwGeoPoint worldOrigin READ worldOrigin WRITE setWorldOrigin NOTIFY worldOriginChanged)
 
 public:

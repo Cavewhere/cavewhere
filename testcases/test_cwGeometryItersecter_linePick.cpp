@@ -3,16 +3,24 @@
 #include <catch2/catch_approx.hpp>
 
 // Std
+#include <algorithm>
 #include <cmath>
+#include <functional>
 #include <numeric>
 
 // Qt
+#include <QElapsedTimer>
+#include <QList>
 #include <QMatrix4x4>
 #include <QVector3D>
 #include <QRay3D>
+#include <QLoggingCategory>
+#include <QScopeGuard>
 
 // SUT
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
+#include "cwPickingLog.h"
 #include "cwPickQuery.h"
 #include "cwRayHit.h"
 
@@ -29,17 +37,8 @@ cwGeometryItersecter::Object makeLineObject(uint64_t id,
                                             const QVector<QVector3D>& points,
                                             const QMatrix4x4& modelMatrix = QMatrix4x4())
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-
-    QVector<uint32_t> indices(points.size());
-    std::iota(indices.begin(), indices.end(), 0u);
-    geometry.setIndices(std::move(indices));
-    geometry.setType(cwGeometry::Type::Lines);
-
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, modelMatrix);
+    return cwGeometryItersecter::Object(nullptr, id, cwTestGeometry::lines(points),
+                                        modelMatrix);
 }
 
 cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
@@ -47,21 +46,10 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
                                                 const QVector3D& b,
                                                 const QVector3D& c)
 {
-    QVector<QVector3D> points;
-    points << a << b << c;
-
-    QVector<uint32_t> indices;
-    indices << 0u << 1u << 2u;
-
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setIndices(indices);
-    geometry.setType(cwGeometry::Type::Triangles);
-    geometry.setCullBackfaces(false); // Double-sided, like scrap carpets.
-
-    return cwGeometryItersecter::Object({nullptr, id}, geometry, QMatrix4x4());
+    // Double-sided (cullBackfaces=false), like scrap carpets.
+    return cwGeometryItersecter::Object(
+        nullptr, id, cwTestGeometry::triangles({a, b, c}, {0u, 1u, 2u}, false),
+        QMatrix4x4());
 }
 
 // A constant (ortho-style) tolerance: a fixed world-space pick radius.
@@ -405,3 +393,195 @@ TEST_CASE("Line pick: nearer of two lines wins by depth",
     CHECK(pickNearestId(true) == 1u);   // near added first
     CHECK(pickNearestId(false) == 1u);  // near added last — still wins
 }
+
+// Regression: with cw.picking debug logging on, intersectsDetailed dumps every
+// primitive in the hit leaf through dumpLeafPrimitive. That helper had no Line
+// branch and read a segment as a triangle (three indices), overrunning the
+// two-index buffer and aborting in QList::at (SIGABRT while loading + picking).
+// Picking a single-segment line under the debug filter reproduces the crash on
+// unfixed code; the fix reads the two endpoints instead.
+TEST_CASE("Line pick: dumping a line leaf with picking debug on does not overrun the index buffer",
+          "[cwGeometryItersecter][linePick]")
+{
+    // Flip the category's enabled flag rather than calling setFilterRules:
+    // that clobbers any global rules a sibling test or QT_LOGGING_RULES
+    // installed, and restoring it means wiping every rule rather than putting
+    // the old ones back. The scope guard also survives an early REQUIRE exit,
+    // which matters because a leaked cw.picking.debug=true would silently skew
+    // the [performance] test's exact-pick baseline in a later file.
+    QLoggingCategory& category = const_cast<QLoggingCategory&>(lcPick());
+    const bool wasEnabled = category.isDebugEnabled();
+    category.setEnabled(QtDebugMsg, true);
+    auto restoreCategory = qScopeGuard([&category, wasEnabled]() {
+        category.setEnabled(QtDebugMsg, wasEnabled);
+    });
+
+    const QVector3D a(1000.0f, 2000.0f, -500.0f);
+    const QVector3D b(1020.0f, 2000.0f, -500.0f);
+
+    cwGeometryItersecter intersector;
+    intersector.addObject(makeLineObject(1, {a, b}));
+    intersector.waitForFinish();
+
+    // Straight through the segment so the leaf is visited and dumped. Before
+    // the fix this aborts inside dumpLeafPrimitive; reaching the assertions
+    // below means it no longer overruns.
+    const QRay3D ray(QVector3D(1010.0f, 2000.0f, -200.0f), QVector3D(0.0f, 0.0f, -1.0f));
+    const cwRayHit hit = intersector.intersectsDetailed(ray, ortho(0.5));
+
+    CHECK(hit.hit());
+    CHECK(hit.objectId() == 1u);
+}
+
+// Regression: QBox3D::intersection(ray) returns the box ENTRY parameter only
+// while that is positive, and silently switches to the EXIT parameter once the
+// ray origin is inside the box (QMath3d/qbox3d.cpp:403-416). The prune
+// `tBox >= best.tWorld()` reads that value as a lower bound on the node's
+// candidates, so an origin-inside node was compared on its far side and skipped
+// while holding the nearest candidate. boxEntryDistance() clamps the entry to 0
+// instead. The line tolerance pad is what makes this reachable: it inflates
+// every box by the accept radius, which readily swallows a camera sitting
+// inside the cave it is looking at.
+//
+// The same defect was found and fixed in nearestGeometryPoint first; this pins
+// the exact path, which is the one leads, cwScenePick, and the measurement tool
+// all run through.
+TEST_CASE("Line pick: a node containing the ray origin is not pruned away",
+          "[cwGeometryItersecter][linePick]")
+{
+    // The line runs the depth of the scene, so padding its box by the 10-unit
+    // tolerance swallows the ray origin at z=100. Its exit parameter is then
+    // ~210 — far behind the triangle at t=50 — so the unfixed prune drops the
+    // whole line object after the triangle has already scored a hit.
+    const QVector3D nearSpot(0.0f, 1.0f, 95.0f);  // 1 off-ray, depth 5
+    cwGeometryItersecter intersector;
+    intersector.addObject(makeTriangleObject(1,
+                                             QVector3D(-10.0f, -10.0f, 50.0f),
+                                             QVector3D(10.0f, -10.0f, 50.0f),
+                                             QVector3D(0.0f, 10.0f, 50.0f)));
+    intersector.addObject(makeLineObject(2, {nearSpot, QVector3D(0.0f, 1.0f, -100.0f)}));
+    intersector.waitForFinish();
+
+    // The triangle is hit exactly at depth 50; the line's near end is 1 off-ray
+    // (inside the 10-unit radius) at depth 5, so the line must win.
+    const QRay3D ray(QVector3D(0.0f, 0.0f, 100.0f), QVector3D(0.0f, 0.0f, -1.0f));
+    const cwRayHit hit = intersector.intersectsDetailed(ray, ortho(10.0));
+
+    REQUIRE(hit.hit());
+    CHECK(hit.objectId() == 2u);
+    CHECK(hit.tWorld() == Approx(5.0).margin(1e-2));
+    CHECK(hit.pointWorld().z() == Approx(nearSpot.z()).margin(1e-3));
+}
+
+// The exact pick's BVH has to prune, not scan — and unlike the anchor next
+// door, this path runs once per mouse-move rather than once per press. This is
+// a performance contract with no behavioural signature to test instead: the
+// scene-global tolerance pad this path originally shipped with returned exactly
+// the same answers, but padded every node by the accept radius at the far
+// corner of the WHOLE scene. A centerline near the camera was then inflated by
+// a radius belonging to the far end of the survey, the ray crossed every leaf,
+// and the descent degenerated into a linear scan.
+//
+// Absolute timings mean nothing across machines, build configs, or a CI box
+// running several test processes at once, so this measures intersectsDetailed
+// against nearestGeometryPoint on the SAME centerline with the SAME query in
+// the SAME run. The anchor is the control: on a line-only scene the two paths
+// apply an identical accept rule to every segment, so once their pads agree
+// they do the same work and the ratio is ~1. The anchor's per-node pad is
+// already pinned by its own [performance] test.
+//
+// The existing point-cloud control could not catch this: the exact path folds
+// the pad in only for line objects, so a cloud scene never exercises it.
+TEST_CASE("Line pick: the exact pick prunes instead of scanning the whole centerline",
+          "[cwGeometryItersecter][linePick][performance]")
+{
+    // Only intersectsDetailed dumps per-primitive debug output — an inherited
+    // cw.picking.debug=true would inflate the measured path alone and turn the
+    // ratio below into a guaranteed failure.
+    QLoggingCategory& category = const_cast<QLoggingCategory&>(lcPick());
+    const bool wasEnabled = category.isDebugEnabled();
+    category.setEnabled(QtDebugMsg, false);
+    auto restoreCategory = qScopeGuard([&category, wasEnabled]() {
+        category.setEnabled(QtDebugMsg, wasEnabled);
+    });
+
+    // A dense centerline beside the ray and close to the camera (depth 10-20),
+    // plus one far shot that drags the scene's far corner out to depth ~5000.
+    // The gap between those depths is the whole lever: a scene-global pad is
+    // radiusAt(farDepth) ~ 79, which is ~250x the radius the cluster's own
+    // depth earns and swallows a ray that misses it by 8 units.
+    // An EVEN vertex count: the line plot lists shots as disjoint vertex pairs,
+    // and addLines rejects an odd index list outright.
+    constexpr int kVertices = 5000;
+    constexpr float kMeanderRadius = 1.75f;
+    constexpr float kMeanderCenterX = 10.0f;
+
+    QVector<QVector3D> centerline;
+    centerline.reserve(kVertices);
+    for (int i = 0; i < kVertices; ++i) {
+        const float t = float(i) / float(kVertices);
+        const float angle = t * 40.0f * float(M_PI);
+        centerline.append(QVector3D(kMeanderCenterX + kMeanderRadius * std::cos(angle),
+                                    kMeanderRadius * std::sin(angle),
+                                    -10.0f * t));
+    }
+
+    cwGeometryItersecter intersecter;
+    intersecter.addObject(makeLineObject(1, centerline));
+    intersecter.addObject(makeLineObject(2, {QVector3D(100.0f, 0.0f, -5000.0f),
+                                             QVector3D(100.0f, 0.0f, -4990.0f)}));
+    intersecter.waitForFinish();
+
+    // A 4mm perspective tolerance derived exactly as cwCamera::pickQuery does:
+    // slope = pixelRadius * 2 / (p11 * viewportHeight), with the 96dpi headless
+    // fallback (3.78 px/mm), p11 = 1.921 for a 55 degree fov and a 1000px
+    // viewport.
+    const double pixelRadius = 4.0 * (96.0 / 25.4);
+    const cwPickQuery query = perspective(pixelRadius * 2.0 / (1.921 * 1000.0));
+
+    // Straight down the z axis, missing both objects by far more than the
+    // radius either one's depth earns. A miss is the case that matters: it is
+    // what every mouse-move over empty space costs, and it leaves the
+    // prune-by-best path out of the measurement so only the pads decide.
+    const QRay3D ray(QVector3D(0.0f, 0.0f, 10.0f), QVector3D(0.0f, 0.0f, -1.0f));
+
+    // Preconditions — without these the timings measure the wrong thing and the
+    // test would pass vacuously. Assert what the BVH actually holds, not what
+    // was handed to addObject: addLines drops a malformed object with only a
+    // qDebug, and a scene that silently lost its centerline still misses the ray
+    // and still times fast, which reads exactly like a pass.
+    const cwGeometryItersecter::DebugStatistics stats = intersecter.debugStatistics();
+    REQUIRE(stats.lineSourceNodes == 2);
+    REQUIRE(stats.totalPrimitives > 1000);
+    REQUIRE_FALSE(intersecter.intersectsDetailed(ray, query).hit());
+    REQUIRE_FALSE(intersecter.nearestGeometryPoint(ray, query).has_value());
+
+    constexpr int kPicksPerSample = 500;
+    const auto medianMs = [](const std::function<void()>& work) {
+        constexpr int kRuns = 5;
+        QList<double> samples;
+        for (int i = 0; i < kRuns; ++i) {
+            QElapsedTimer timer;
+            timer.start();
+            for (int pick = 0; pick < kPicksPerSample; ++pick) {
+                work();
+            }
+            samples.append(double(timer.nsecsElapsed()) / 1e6);
+        }
+        std::sort(samples.begin(), samples.end());
+        return samples.at(samples.size() / 2);
+    };
+
+    const double exactMs = medianMs([&]{ intersecter.intersectsDetailed(ray, query); });
+    const double anchorMs = medianMs([&]{ intersecter.nearestGeometryPoint(ray, query); });
+
+    // Guard against a degenerate control: if the anchor is too fast to time,
+    // the ratio is noise rather than signal.
+    REQUIRE(anchorMs > 0.0);
+
+    INFO("exact " << exactMs << " ms, anchor " << anchorMs << " ms, ratio "
+         << (exactMs / anchorMs) << "x over " << centerline.size()
+         << " vertices, " << stats.totalPrimitives << " segments, " << kPicksPerSample << " picks per sample");
+    CHECK(exactMs < anchorMs * 10.0);
+}
+

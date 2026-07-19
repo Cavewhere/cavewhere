@@ -57,6 +57,13 @@ public:
     static QString unitName(cwUnits::LengthUnit unit);
     static cwUnits::LengthUnit toLengthUnit(QString unitString);
 
+    //! A length in \a meters, converted to \a unit and rendered at \a decimals
+    //! places with the unit suffix (e.g. "196.85 ft"). With \a signedValue a
+    //! positive value gets an explicit '+'; a value that rounds to zero carries
+    //! no sign (a rounded -0 renders a clean "0.00 <unit>").
+    static QString formatLength(double meters, cwUnits::LengthUnit unit,
+                                bool signedValue = false, int decimals = 2);
+
     static constexpr double convert(double value,
                                     cwUnits::ImageResolutionUnit from,
                                     cwUnits::ImageResolutionUnit to);

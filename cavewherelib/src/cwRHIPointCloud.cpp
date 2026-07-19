@@ -46,10 +46,6 @@ void cwRHIPointCloud::initialize(const ResourceUpdateData& data)
         return;
     }
 
-    if (!m_frame && data.renderData.renderer) {
-        m_frame = data.renderData.renderer->frameRenderer();
-    }
-
     initializeResources(data);
     m_resourcesInitialized = true;
 }
@@ -208,45 +204,8 @@ void cwRHIPointCloud::resizeAppearanceSlots(QRhi* rhi, QRhiResourceUpdateBatch* 
     writeAppearanceSlot(batch, kLiveAppearanceSlot, m_renderState.value().worldRadius);
 }
 
-void cwRHIPointCloud::render(const RenderData& data)
-{
-    if (m_geometry.value().geometry.vertexCount() == 0) {
-        return;
-    }
-
-    if (!ensurePipeline(data)) {
-        return;
-    }
-
-    if (!m_pipelineRecord || !m_pipelineRecord->pipeline || m_vertexBuffers.isEmpty()) {
-        return;
-    }
-
-    data.cb->setGraphicsPipeline(m_pipelineRecord->pipeline);
-    // Both the global camera UBO (binding 0) and the per-cloud appearance UBO
-    // (binding 1) are dynamic-offset. This legacy path only ever draws the live
-    // frame, so both read slot 0 (offset 0).
-    const QRhiCommandBuffer::DynamicOffset offsets[2] = {
-        QRhiCommandBuffer::DynamicOffset(0, 0),
-        QRhiCommandBuffer::DynamicOffset(1, 0),
-    };
-    data.cb->setShaderResources(m_srb, 2, offsets);
-
-    QVarLengthArray<QRhiCommandBuffer::VertexInput, 4> inputs;
-    inputs.reserve(m_vertexBuffers.size());
-    for (QRhiBuffer* buffer : m_vertexBuffers) {
-        inputs.append(QRhiCommandBuffer::VertexInput(buffer, 0));
-    }
-    data.cb->setVertexInput(0, inputs.size(), inputs.constData());
-    data.cb->draw(quint32(m_geometry.value().geometry.vertexCount()));
-}
-
 bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
 {
-    if (!isVisible()) {
-        return false;
-    }
-
     if (context.renderPass != RenderPass::PointCloud) {
         return false;
     }
@@ -297,7 +256,9 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
 
 bool cwRHIPointCloud::usesPointCloudPass() const
 {
-    return isVisible() && m_geometry.value().geometry.vertexCount() > 0;
+    // Reports geometry only; the caller (cwRhiFrameRenderer::anyCloudVisible)
+    // ANDs in this object's snapshot visibility.
+    return m_geometry.value().geometry.vertexCount() > 0;
 }
 
 bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
@@ -312,11 +273,7 @@ bool cwRHIPointCloud::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    if (!m_frame && data.renderer) {
-        m_frame = data.renderer->frameRenderer();
-    }
-
-    if (!m_frame || !data.renderer) {
+    if (!data.renderer) {
         return false;
     }
 

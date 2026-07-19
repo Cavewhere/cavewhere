@@ -271,6 +271,7 @@ set(qml_singletons
     "qml/GlobalShadowTextInput.qml"
     "qml/RootPopupItem.qml"
 	"qml/Theme.qml"
+    "qml/SelectableValueGroup.qml"
 )
 
 # Remove the singleton files from the regular QML file list

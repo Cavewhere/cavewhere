@@ -24,7 +24,6 @@ public:
     virtual void initialize(const ResourceUpdateData &data) override;
     virtual void synchronize(const SynchronizeData& data) override;
     virtual void updateResources(const ResourceUpdateData&) override;
-    virtual void render(const RenderData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
 
 private:
@@ -44,7 +43,6 @@ private:
     QRhiBuffer* m_uniformBuffer = nullptr;
     QRhiBuffer* m_fragmentUniformBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
-    cwRhiFrameRenderer* m_frame = nullptr;
 
     cwTracked<QMatrix4x4> m_modelMatrix;
     cwTracked<QMatrix4x4> m_scaleMatrix;

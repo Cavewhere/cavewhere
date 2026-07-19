@@ -24,7 +24,6 @@ public:
     virtual void initialize(const ResourceUpdateData& data) override;
     virtual void synchronize(const SynchronizeData& data) override;
     virtual void updateResources(const ResourceUpdateData& data) override;
-    virtual void render(const RenderData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
 
 private:
@@ -40,11 +39,16 @@ private:
     QRhiBuffer* m_visibilityBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
 
-    cwRhiFrameRenderer* m_frame = nullptr;
 
     //The front end data that will be rendered
     cwTracked<cwRenderLinePlot::Data> m_data;
-    cwTracked<QVector<quint8>> m_visibility;
+
+    // Upload gate for the visibility attribute: the store entryVersion and
+    // vertex count the buffer was last filled for. The mask itself is read
+    // from the frame's snapshot at updateResources time — there is no synced
+    // RHI-side copy. Count -1 forces the first upload (a real plot has >= 0).
+    quint64 m_uploadedMaskVersion = 0;
+    qsizetype m_uploadedMaskVertexCount = -1;
 
     void updateVisibilityBuffer(QRhiResourceUpdateBatch* batch);
 

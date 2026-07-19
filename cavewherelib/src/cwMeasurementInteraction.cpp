@@ -12,9 +12,6 @@
 #include "cwGeoReference.h"
 #include "cwMeasurementMath.h"
 
-//Std includes
-#include <cmath>
-
 //Qt includes
 #include <QClipboard>
 #include <QDateTime>
@@ -23,30 +20,10 @@
 #include <QString>
 
 namespace {
-    // Clipboard readout mirrors the on-screen popup: lengths in the selected unit,
-    // degrees for angles, at the same precision the panel shows.
-    constexpr int kLengthDecimals = 2;
+    // Clipboard readout mirrors the on-screen popup: degrees for angles, at the
+    // same precision the panel shows. Lengths go through the shared length
+    // formatter (cwLengthUnitSelection::format).
     constexpr int kAngleDecimals = 1;
-
-    QString formatLength(double value, const QString& unitName)
-    {
-        return QStringLiteral("%1 %2").arg(value, 0, 'f', kLengthDecimals).arg(unitName);
-    }
-
-    // Signed length at display precision for the by-axis components; the sign is
-    // the direction (east/west, north/south, up/down). Mirrors the popup's
-    // _signedLength: a positive value gets an explicit '+', and a value that
-    // rounds to zero shows no sign (a rounded -0 renders a clean "0.00 m").
-    QString formatSignedLength(double value, const QString& unitName)
-    {
-        const double scale = std::pow(10.0, kLengthDecimals);
-        double rounded = std::round(value * scale) / scale;
-        if (rounded == 0.0) {
-            rounded = 0.0; // collapse -0.0 so a rounds-to-zero component shows no sign
-        }
-        const QString sign = rounded > 0.0 ? QStringLiteral("+") : QString();
-        return sign + formatLength(rounded, unitName);
-    }
 
     QString azimuthReferenceKey() { return QStringLiteral("measurement/azimuthReference"); }
     QString lengthUnitKey() { return QStringLiteral("measurement/lengthUnit"); }
@@ -352,15 +329,13 @@ void cwMeasurementInteraction::copyToClipboard() const
     // carry referenceReason (a PROJ/IGRF error string) whose embedded %N would be
     // re-targeted by the later .arg() calls. Vertical is the ΔZ component, so it
     // is reported once, under By Axis (no separate ΔUp).
-    const QString unitName = m_lengthUnit->name();
-    const auto inUnit = [this](double meters) { return m_lengthUnit->fromMeters(meters); };
     const QString text =
             QStringLiteral("Distance\n"
                            "  Straight-line (3D): %1\n"
                            "  Horizontal (2D): %2\n"
                            "Direction\n  ")
-              .arg(formatLength(inUnit(m_distance), unitName),
-                   formatLength(inUnit(m_horizontal), unitName))
+              .arg(m_lengthUnit->format(m_distance),
+                   m_lengthUnit->format(m_horizontal))
             + azimuthLine
             + QStringLiteral("\n"
                              "  Inclination: %1°\n"
@@ -369,9 +344,9 @@ void cwMeasurementInteraction::copyToClipboard() const
                              "  Northing (Y): %3\n"
                              "  Vertical (Z): %4")
               .arg(QString::number(m_inclination, 'f', kAngleDecimals),
-                   formatSignedLength(inUnit(m_deltaEast), unitName),
-                   formatSignedLength(inUnit(m_deltaNorth), unitName),
-                   formatSignedLength(inUnit(m_vertical), unitName));
+                   m_lengthUnit->format(m_deltaEast, true),
+                   m_lengthUnit->format(m_deltaNorth, true),
+                   m_lengthUnit->format(m_vertical, true));
 
     if (QClipboard* clipboard = QGuiApplication::clipboard()) {
         clipboard->setText(text);

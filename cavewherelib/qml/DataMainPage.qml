@@ -144,7 +144,7 @@ StandardPage {
                 QC.MenuItem {
                     objectName: "recenterWorldOriginAction"
                     text: qsTr("Recenter world origin")
-                    enabled: RootData.region.geoReference.globalCoordinateSystem !== ""
+                    enabled: RootData.region.geoReference.hasCoordinateSystem
                     onTriggered: RootData.region.recomputeWorldOrigin()
                 }
 

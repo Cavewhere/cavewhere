@@ -13,6 +13,7 @@
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
 #include "cwMath.h"
+#include "cwRayHit.h"
 
 //Std includes
 #include "math.h"
@@ -24,33 +25,13 @@
 Q_LOGGING_CATEGORY(lcInteract, "cw.interaction", QtWarningMsg)
 
 namespace {
-    // Screen-space radius, in millimeters, for snapping the pivot to geometry. A
-    // tolerance is what lets the otherwise infinitely-thin centerline be picked,
-    // so the view can orbit the line plot when the solid geometry is hidden.
-    // Millimeters (not pixels) so the grab feels the same size on every display.
-    constexpr double kPivotPickRadiusMillimeters = 4.0;
+    // Everything a user authors or surveys: scrap carpets, LiDAR notes (which
+    // render as triangles through the same path as scraps) and the centerline.
+    // Deliberately excludes Kind::Points — the LiDAR cloud — which the rotation
+    // pivot treats as a second-class citizen. See unProject().
+    constexpr cwPickQuery::Kinds kSurveyGeometryKinds =
+        cwPickQuery::Kinds(cwPickQuery::Kind::Triangles) | cwPickQuery::Kind::Lines;
 
-    // A non-geometry pick (grid plane) is only accepted as a pivot if it
-    // lands inside the scene box grown by this fraction of the box diagonal.
-    // Keeps a grazing grid hit kilometres away from the cave from becoming
-    // the orbit center and teleporting the view (issue #527).
-    constexpr float kFallbackBoxMargin = 1.0f;
-
-    bool acceptFallbackPoint(const QVector3D& point, const QBox3D& sceneBox)
-    {
-        if(sceneBox.isNull() || !sceneBox.isFinite()) {
-            // No finite geometry to anchor against (empty/unloaded project):
-            // the grid plane is the only reference, so accept it. There's
-            // nothing on screen to teleport away from. The #527 teleport only
-            // happens once real geometry exists and the grid hit lands far
-            // from it — handled by the box test below.
-            return true;
-        }
-        const float pad = sceneBox.size().length() * kFallbackBoxMargin;
-        const QBox3D grown(sceneBox.minimum() - QVector3D(pad, pad, pad),
-                           sceneBox.maximum() + QVector3D(pad, pad, pad));
-        return grown.contains(point);
-    }
 }
 
 cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
@@ -77,7 +58,7 @@ cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
                                   Qt::QueuedConnection);
     });
 
-    resetView();
+    resetViewImmediate();
 
     setupInteractionTimers();
 }
@@ -108,6 +89,11 @@ void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
 
     cwTurnTableViewState target = viewState();
     target.center = point;
+    // Drop any carried-over pan: buildViewMatrix applies eyeOffset as the
+    // outermost eye-space translate, so a non-zero offset would push the
+    // recentred point back off screen by the pan amount (the gotoLead-after-pan
+    // regression). framingViewState() zeroes it for the same reason.
+    target.eyeOffset = QVector3D();
     // distance, azimuth, pitch, zoomScale preserved -> the rebuilt view
     // matrix puts `point` at view-space (0, 0, -distance), which is the
     // screen center for both ortho and perspective.
@@ -124,56 +110,167 @@ void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
  * @param point - screen point in GL viewport coordinates
  * @return World point under the cursor, or nullopt on a miss
  *
- * Returns a geometry hit when one is under the cursor; otherwise a grid-plane
- * hit, but only if it lands near the scene bounding box. Returns nullopt when
- * nothing usable is under the cursor so callers keep the current pivot rather
- * than teleporting the view (issue #527).
+ * See the declaration for the full ladder. The constraint that shapes it: the
+ * anchor returns a point OFF the cursor ray. Rotation and zoom both opt in —
+ * rotation orbits the point directly, and zoom (issue #578) uses only its depth
+ * along the cursor ray, so the off-ray offset is harmless; pan keeps the
+ * exact-hit path.
  */
-std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point) const {
+std::optional<QVector3D> cwBaseTurnTableInteraction::unProject(QPoint point,
+                                                               bool anchorToNearestGeometry) const {
     Q_ASSERT(Camera);
     Q_ASSERT(scene());
     Q_ASSERT(scene()->geometryItersecter());
 
     //Create a ray from the back projection front and back plane
-    auto ray = Camera->frustrumRay(point);
+    const QRay3D ray = Camera->frustrumRay(point);
+    const cwGeometryItersecter* intersecter = scene()->geometryItersecter();
 
-    //See if it hits any of the scraps or objects — always trust a real hit. The
-    //pick radius keeps the thin centerline grabbable, so the view can pivot on it
-    //when the solid geometry is hidden. The pivot is the hit's point on the
-    //geometry — for a line that's the closest point on the segment, so orbiting a
-    //picked line spins around the line itself, not a point floating beside it.
-    const cwRayHit hit = scene()->geometryItersecter()->intersectsDetailed(
-                ray, Camera->pickQuery(pixelsForMillimeters(kPivotPickRadiusMillimeters)));
-    if(hit.hit()) {
-        const QVector3D world = hit.pointWorld();
+    const cwPickQuery pivotQuery =
+            Camera->pickQuery(pixelsForMillimeters(PivotPickRadiusMillimeters));
+
+    //The grid plane is a last-resort pivot, but only when there's nothing to
+    //anchor against (an empty/unloaded project). Once survey geometry exists, an
+    //off-geometry click must not pivot on the grid: the infinite grid plane sits
+    //at the cave floor (min Z), so a grazing hit lands far out in X/Y and
+    //teleports the view, losing the rotation context (issues #562, #527). In
+    //that case return nullopt so the caller keeps the current pivot instead.
+    //
+    //This asks the intersecter what a pick can actually reach, not merely what
+    //exists: hiding every object leaves the picks with nothing, so the grid has
+    //to come back or the pivot would be stuck with no way to recover.
+    const auto gridPivot = [&]() -> std::optional<QVector3D> {
+        const bool hasGeometry = !intersecter->isPickableEmpty();
+        if(!hasGeometry) {
+            const double gridT = m_gridPlane.intersection(ray);
+            if(!std::isnan(gridT)) {
+                const QVector3D gridHit = ray.point(gridT);
+                qCDebug(lcInteract).nospace()
+                    << "unProject(" << point << "): gridPlane t=" << gridT
+                    << " world=" << gridHit << " rayOrigin=" << ray.origin();
+                return gridHit;
+            }
+        }
         qCDebug(lcInteract).nospace()
-            << "unProject(" << point << "): geometry world=" << world
+            << "unProject(" << point << "): no geometry pivot"
+            << " (hasGeometry=" << hasGeometry << ") -> miss"
+            << " rayOrigin=" << ray.origin() << " rayDir=" << ray.direction();
+        return std::nullopt;
+    };
+
+    //Pan and zoom want the point under the cursor, whatever it belongs to, so
+    //they take the nearest exact hit of any kind. Only rotation sorts by kind
+    //below — it is choosing something to orbit, not something to track.
+    if(!anchorToNearestGeometry) {
+        const cwRayHit hit = intersecter->intersectsDetailed(ray, pivotQuery);
+        if(hit.hit()) {
+            // Project the hit onto the cursor ray. A line hit returns the
+            // closest point on the segment and a point hit returns the vertex
+            // center, so an exact hit can sit off the ray by up to the pick
+            // radius. Pan and zoom do delta math against this point, so an
+            // off-ray anchor would lurch the first pan tick (and drift zoom) by
+            // the miss distance. Projecting keeps the geometry's depth while
+            // placing the anchor exactly under the cursor; a triangle hit is
+            // already on-ray, so this is a no-op for it.
+            const QVector3D world = ray.point(ray.projectedDistance(hit.pointWorld()));
+            qCDebug(lcInteract).nospace()
+                << "unProject(" << point << "): geometry world=" << world
+                << " rayOrigin=" << ray.origin();
+            return world;
+        }
+        return gridPivot();
+    }
+
+    //Rotation. Survey geometry — scraps, LiDAR notes, the centerline — is what
+    //a user means to orbit, so it competes with BOTH an exact hit and the wider
+    //near-miss anchor, while the point cloud competes only with an exact hit.
+    //Depth then picks the winner between the two, with no priority rule: that
+    //yields "geometry first" (a near-missed scrap beats a far cloud point,
+    //issue #562) while still letting a cloud that genuinely occludes the
+    //geometry take the pivot, rather than orbiting something out of sight.
+    //
+    //Splitting the kinds costs up to four top-level descents per press (two
+    //here, plus an anchor each). The kind filter rejects a whole Object before
+    //its sub-BVH is entered, so the cloud's 100M+ points are skipped outright
+    //by the geometry query; the extra cost is top-level only, and this runs per
+    //mouse-down. Deliberately NOT merged into one traversal: a shared best-depth
+    //prune would let a near cloud hit discard the farther geometry hit that the
+    //comparison below needs computed independently.
+    cwPickQuery geometryQuery = pivotQuery;
+    geometryQuery.kinds = kSurveyGeometryKinds;
+    cwPickQuery cloudQuery = pivotQuery;
+    cloudQuery.kinds = cwPickQuery::Kinds(cwPickQuery::Kind::Points);
+
+    const cwRayHit geometryHit = intersecter->intersectsDetailed(ray, geometryQuery);
+    const cwRayHit cloudHit = intersecter->intersectsDetailed(ray, cloudQuery);
+
+    //The exact hit is on the ray; the anchor is the closest point ON geometry
+    //within a much wider reach, so a near-miss still pivots on the geometry the
+    //user aimed at instead of teleporting. Triangles are picked by an exact
+    //ray-triangle test that never consults the tolerance, so for a scrap the
+    //anchor is the ONLY thing that can catch a near-miss.
+    std::optional<QVector3D> geometryPivot;
+    double geometryDepth = 0.0;
+    if(geometryHit.hit()) {
+        geometryPivot = geometryHit.pointWorld();
+        geometryDepth = geometryHit.tWorld();
+    } else {
+        cwPickQuery anchorQuery =
+                Camera->pickQuery(pixelsForMillimeters(PivotAnchorRadiusMillimeters));
+        anchorQuery.kinds = kSurveyGeometryKinds;
+        if(const std::optional<QVector3D> anchor =
+                intersecter->nearestGeometryPoint(ray, anchorQuery)) {
+            geometryPivot = anchor;
+            //The same measure nearestGeometryPoint ranks its own candidates by.
+            geometryDepth = ray.projectedDistance(*anchor);
+        }
+    }
+
+    //Not quite like-for-like, and knowingly so: geometryDepth is the depth of
+    //the point returned, while a cloud exact hit reports its SPHERE-ENTRY depth
+    //(the exact point pick ranks by tNear, deliberately, so a head-on point beats a
+    //grazing one) even though the pivot it returns is the sphere CENTRE. So the
+    //cloud is favoured by up to one pickRadius — one mean point spacing, a few
+    //cm in a real cave. That is well under what a pivot shift needs to be for
+    //an orbit to look wrong, and erring toward the thing that visually occludes
+    //is the right direction to err, so it is left alone. Comparing centre depth
+    //instead (ray.projectedDistance(cloudHit.pointWorld())) would remove the
+    //bias if this ever matters.
+    if(geometryPivot && (!cloudHit.hit() || geometryDepth < cloudHit.tWorld())) {
+        qCDebug(lcInteract).nospace()
+            << "unProject(" << point << "): survey geometry=" << *geometryPivot
+            << " depth=" << geometryDepth
+            << " (cloudHit=" << cloudHit.hit() << " cloudDepth=" << cloudHit.tWorld() << ")"
+            << " rayOrigin=" << ray.origin();
+        return geometryPivot;
+    }
+
+    if(cloudHit.hit()) {
+        const QVector3D world = cloudHit.pointWorld();
+        qCDebug(lcInteract).nospace()
+            << "unProject(" << point << "): point cloud occludes=" << world
+            << " depth=" << cloudHit.tWorld()
             << " rayOrigin=" << ray.origin();
         return world;
     }
 
-    //No geometry under the cursor. Fall back to the grid plane, but only if
-    //the hit lands near the cave — an infinite grid plane hit at a grazing
-    //angle can be kilometres away and would teleport the view (issue #527).
-    const double gridT = m_gridPlane.intersection(ray);
-    if(!std::isnan(gridT)) {
-        const QVector3D gridHit = ray.point(gridT);
-        if(acceptFallbackPoint(gridHit, scene()->geometryItersecter()->boundingBox())) {
-            qCDebug(lcInteract).nospace()
-                << "unProject(" << point << "): gridPlane t=" << gridT
-                << " world=" << gridHit << " rayOrigin=" << ray.origin();
-            return gridHit;
-        }
+    //Nothing under the cursor at all. Second-class is not last-resort-less: a
+    //LiDAR-only project (a scan with no scraps drawn yet) still has to be
+    //orbitable, so the cloud gets the wide anchor too — but only here, after
+    //survey geometry has had both of its chances. This is #562's original
+    //"can't rotate around a point cloud point".
+    cwPickQuery cloudAnchorQuery =
+            Camera->pickQuery(pixelsForMillimeters(PivotAnchorRadiusMillimeters));
+    cloudAnchorQuery.kinds = cwPickQuery::Kinds(cwPickQuery::Kind::Points);
+    if(const std::optional<QVector3D> cloudAnchor =
+            intersecter->nearestGeometryPoint(ray, cloudAnchorQuery)) {
         qCDebug(lcInteract).nospace()
-            << "unProject(" << point << "): grid hit " << gridHit
-            << " rejected (outside scene box) -> miss";
-    } else {
-        qCDebug(lcInteract).nospace()
-            << "unProject(" << point << "): no geometry hit, no grid hit -> miss"
-            << " rayOrigin=" << ray.origin() << " rayDir=" << ray.direction();
+            << "unProject(" << point << "): point cloud anchor=" << *cloudAnchor
+            << " rayOrigin=" << ray.origin();
+        return cloudAnchor;
     }
 
-    return std::nullopt;
+    return gridPivot();
 }
 
 QVector3D cwBaseTurnTableInteraction::rayPointAtCenterDepth(QPoint mappedPoint) const {
@@ -210,8 +307,13 @@ void cwBaseTurnTableInteraction::bindPerspectiveIntersection()
 {
     if(Camera && Scene) {
         m_perspectiveIntersection.setBinding([this]() -> QVector3D {
-            // On a miss, zoom toward the current center rather than (0,0,0).
-            return unProject(m_perspectiveMappedPos).value_or(m_center);
+            // The zoom target: the nearest geometry within the wide anchor reach
+            // (issue #578) so a cursor near — not exactly on — a wall still zooms
+            // toward it, falling back to the pivot when nothing is near. This may
+            // sit off the cursor ray, but zoomPerspective consumes only its depth
+            // along that ray (cursorRay.projectedDistance), which ignores the
+            // off-ray offset, so the raw point needs no on-axis projection here.
+            return unProject(m_perspectiveMappedPos, true).value_or(m_center);
         });
     } else {
         m_perspectiveIntersection.setValue(QVector3D());
@@ -280,7 +382,9 @@ void cwBaseTurnTableInteraction::startRotating(QPoint position) {
     if(!m_centerLocked) {
         // Only re-center on a real pick. On a miss keep m_center so the view
         // orbits the existing pivot instead of teleporting (issue #527).
-        if(const std::optional<QVector3D> picked = unProject(position)) {
+        // m_center is also zoom's miss target: zoomPerspective zooms along the
+        // cursor ray at m_center's depth when nothing is under the cursor.
+        if(const std::optional<QVector3D> picked = unProject(position, true)) {
             setCenter(*picked);
         }
     }
@@ -313,9 +417,41 @@ void cwBaseTurnTableInteraction::zoom(QPoint position, double delta) {
 }
 
 /**
-  \brief Resets the view
+  \brief Resets the view to frame the whole scene
+
+  Animates from the current view to the default orientation framed on the
+  scene's visible framing bounds, so a model whose datum places it far from
+  the origin (issue #549) is brought back into view without zooming out to
+  include geometry the user hid. When the scene is empty, everything is
+  hidden, or the bounds are degenerate there is nothing to frame, so fall
+  back to the fixed default pose.
   */
 void cwBaseTurnTableInteraction::resetView() {
+    if(Camera.isNull() || scene() == nullptr) {
+        resetViewImmediate();
+        return;
+    }
+
+    const QBox3D box = scene()->visibleFramingBounds();
+    if(box.isNull() || !box.isFinite()) {
+        resetViewImmediate();
+        return;
+    }
+
+    // framingViewState()'s fit is now an absolute, pure function of the box and
+    // viewport (its ortho branch no longer scales off the live zoom — issue
+    // #549), so we compute the target directly and animate from wherever the
+    // user currently is. No normalize-measure-restore bounce through the
+    // default pose, and no spurious pitch/azimuth/viewMatrix signals from it.
+    const cwTurnTableViewState target =
+            framingViewState(box, defaultAzimuth(), defaultPitch());
+    animateToViewState(target);
+}
+
+/**
+  \brief Instantly restores the default orientation and a fixed eye pose
+  */
+void cwBaseTurnTableInteraction::resetViewImmediate() {
     Pitch = defaultPitch();
     Azimuth = defaultAzimuth();
 
@@ -541,36 +677,40 @@ void cwBaseTurnTableInteraction::zoomPerspective()
 {
     if(Camera.isNull()) { return; }
 
-    double delta = ZoomDelta;
-    QPoint position = ZoomPosition;
+    const double delta = ZoomDelta;
 
     //Make the event position into gl viewport
-    QPoint mappedPos = Camera->mapToGLViewport(position);
+    const QPoint mappedPos = Camera->mapToGLViewport(ZoomPosition);
     m_perspectiveMappedPos = mappedPos; //Update the mapped position
 
-    //Get the ray from the front of the screen to the back of the screen
-    QVector3D front = Camera->unProject(mappedPos, 0.0);
+    //Cursor ray: origin on the near plane, direction into the scene. The zoom
+    //target (m_perspectiveIntersection) is a point on this ray — the near
+    //geometry's depth on a hit, the pivot's depth on a miss. Recomputed by the
+    //binding whenever m_perspectiveMappedPos changed above.
+    const QRay3D cursorRay = Camera->frustrumRay(mappedPos);
+    const QVector3D target = m_perspectiveIntersection.value();
 
-    //Find the intsection on the plane, this is only updated if the
-    //mouse position changed because of the property bindings
-    QVector3D intersection = m_perspectiveIntersection.value(); //unProject(mappedPos);
+    //Signed distance from the near plane to the target along the ray: positive
+    //while the target is still ahead, <= 0 once the near plane reaches its depth.
+    const double aheadDistance = cursorRay.projectedDistance(target);
 
-    //Smallray
-    QVector3D ray = intersection - front;
-    float rayLength = ray.length();
-    ray.normalize();
+    const double t = qBound(-1.0, delta, 1.0);
 
-    // double t =  delta;
-    double t = qMax(-1.0, qMin(1.0, delta));
-    t = rayLength * t;
-
-    QVector3D newPositionDelta = ray * t;
+    //Zoom in only while the target is ahead. Clamping the ahead-distance at 0
+    //makes the zoom stall once it reaches the target instead of letting the
+    //direction flip and run the zoom backward when the near plane passes the
+    //target depth (issue #578) — the perspective analogue of ortho zoom
+    //asymptotically approaching the cursor point. For a target still ahead this
+    //is identical to moving t of the way toward it. Zoom out is unconstrained.
+    const double step = (t >= 0.0) ? qMax(0.0, aheadDistance) * t
+                                   : aheadDistance * t;
+    const QVector3D newPositionDelta = cursorRay.direction() * step;
 
     qCDebug(lcInteract).nospace()
         << "zoomPerspective mapped=" << mappedPos
-        << " front=" << front
-        << " intersection=" << intersection
-        << " rayLength=" << rayLength
+        << " origin=" << cursorRay.origin()
+        << " target=" << target
+        << " aheadDistance=" << aheadDistance
         << " delta=" << delta
         << " translate=" << newPositionDelta;
 
@@ -827,7 +967,7 @@ inline double lerpAzimuth(double a, double b, double t) {
 // View-matrix rotation that matches cwBaseTurnTableInteraction's existing
 // (Pitch, Azimuth) convention.
 //
-// resetView() leaves the view matrix as a plain T(0,0,-50) — i.e. no
+// resetViewImmediate() leaves the view matrix as a plain T(0,0,-50) — i.e. no
 // rotation — and caches CurrentRotation = R_x(90)*R_z(0) as "default."
 // updateRotationMatrix() then applies INCREMENTAL deltas
 // CurrentRotation^-1 * newQuat to the live view matrix. So the cached
@@ -1046,7 +1186,7 @@ void cwBaseTurnTableInteraction::onStateAnimTick(const QVariant& value)
 void cwBaseTurnTableInteraction::setCamera(cwCamera* camera) {
     if(Camera != camera) {
         Camera = camera;
-        resetView();
+        resetViewImmediate();
         emit cameraChanged();
     }
 }
@@ -1130,122 +1270,46 @@ cwRayHit cwBaseTurnTableInteraction::pick(QPointF qtViewPoint) const
     //Create a ray from the back projection front and back plane
     const auto ray = Camera->frustrumRay(mappedPos);
     return scene()->geometryItersecter()->intersectsDetailed(
-                ray, Camera->pickQuery(pixelsForMillimeters(kPivotPickRadiusMillimeters)));
+                ray, Camera->pickQuery(pixelsForMillimeters(PivotPickRadiusMillimeters)));
 }
 
 void cwBaseTurnTableInteraction::zoomTo(const QBox3D &box)
 {
-    if(box.isNull()) {
-        return;
-    }
     // box.isNull() only catches the default-constructed case; an explicit
-    // finite check guards against NaN/inf min/max propagating into the
-    // fit math and poisoning the view matrix.
-    if (!isFinite3(box.minimum()) || !isFinite3(box.maximum())) {
+    // finite check guards against NaN/inf min/max propagating into the fit
+    // math and poisoning the view matrix. Bail before touching the camera so
+    // a bad box is a true no-op (framingViewState would otherwise echo the
+    // current state straight back).
+    if (box.isNull()
+            || !isFinite3(box.minimum()) || !isFinite3(box.maximum())) {
         return;
     }
 
-    // 1) Reset orientation/eye to your default
-    resetView();
-
-    const QVector3D c = box.center();
-
-    switch(Camera->projection().type()) {
-    case cwProjection::Ortho: {
-        // -------- ORTHOGRAPHIC FIT --------
-        // Re-center first: ortho's fit math reads the current world span
-        // via unProject, and the final positioning needs box.center() at
-        // view-space (0,0,-defaultDistance). The perspective branch builds
-        // its view matrix from scratch and does not want this intermediate
-        // write.
-        QMatrix4x4 view = Camera->viewMatrix();
-        view.translate(-c);
-        Camera->setViewMatrix(view);
-
-        // Compute the current world-span visible in the viewport at the
-        // box's depth by unprojecting the viewport corners, then scale zoom
-        // so the larger box dimension fills the corresponding viewport span.
-        const QSize viewportSize = Camera->viewport().size();
-        const QVector3D topLeft     = Camera->unProject(QPoint(0, 0), 1.0);
-        const QVector3D bottomRight = Camera->unProject(
-                    QPoint(viewportSize.width(), viewportSize.height()), 1.0);
-
-        const float viewSpanX = std::abs(bottomRight.x() - topLeft.x());
-        const float viewSpanY = std::abs(bottomRight.y() - topLeft.y());
-
-        const QVector3D half = 0.5f * (box.maximum() - box.minimum());
-        const float boxSizeX = 2.0f * (std::max)(half.x(), kFramingEpsilon);
-        const float boxSizeY = 2.0f * (std::max)(half.y(), kFramingEpsilon);
-
-        const float fitX = boxSizeX / (std::max)(viewSpanX, kFramingEpsilon);
-        const float fitY = boxSizeY / (std::max)(viewSpanY, kFramingEpsilon);
-        const float fit  = (std::max)(fitX, fitY) * FramingPad;
-        if (!std::isfinite(fit) || fit <= 0.0f) {
-            return;
-        }
-
-        Camera->setZoomScale(Camera->zoomScale() * fit);
-        return;
-    }
-    case cwProjection::Perspective:
-    case cwProjection::PerspectiveFrustum: {
-        // -------- PERSPECTIVE FIT --------
-        // Required eye-to-box-center distance so the box's half-width
-        // subtends half of the appropriate FOV. Take the bigger of the X
-        // and Y fits (whichever axis is wider). Add half-depth so the near
-        // face of a box with Z-thickness doesn't clip. Multiply by pad.
-        const float fovY = Camera->projection().fieldOfView() * cwGlobals::degreesToRadians();
-        const float aspect = Camera->projection().aspectRatio();
-        const float tanHalfFovY = std::tan(0.5f * fovY);
-        const float tanHalfFovX = tanHalfFovY * aspect;
-
-        const QVector3D half = 0.5f * (box.maximum() - box.minimum());
-        const float hx = (std::max)(half.x(), kFramingEpsilon);
-        const float hy = (std::max)(half.y(), kFramingEpsilon);
-        const float hz = (std::max)(half.z(), 0.0f);
-
-        // Symmetric guards on both FOV-tangent divisors so a degenerate
-        // projection (fov == 0 → tan == 0) can't slip through.
-        const float dY = hy / (std::max)(tanHalfFovY, kFramingEpsilon);
-        const float dX = hx / (std::max)(tanHalfFovX, kFramingEpsilon);
-        const float dist = ((std::max)(dX, dY) + hz) * FramingPad;
-        if (!std::isfinite(dist) || dist <= 0.0f) {
-            return;
-        }
-
-        // Build the view matrix from scratch: camera at view-space (0,0,0)
-        // with box.center() at view-space (0,0,-dist), looking down -Z
-        // (the orientation resetView left us in). Replaces the previous
-        // translate-the-existing-matrix path that had a sign error AND an
-        // inverted `canInvert` guard.
-        QMatrix4x4 newView;
-        newView.translate(0.0f, 0.0f, -dist);
-        newView.translate(-c);
-        Camera->setViewMatrix(newView);
-        return;
-    }
-    default:
-        break;
-    }
+    // zoomTo is the default-orientation special case of framingViewState:
+    // frame the box at the reset pose (azimuth=0, pitch=90 → identity view
+    // rotation, so the rotated half-extents collapse to the raw box extents)
+    // and snap to it. framingViewState owns the single copy of the ortho and
+    // perspective fit math; setViewState is the authoritative writer that
+    // applies the view matrix and zoom.
+    setViewState(framingViewState(box, defaultAzimuth(), defaultPitch()));
 }
 
 /**
  * @brief cwBaseTurnTableInteraction::framingViewState
  *
  * Returns the 5-channel viewState that frames @a box at the supplied
- * @a azimuth / @a pitch (degrees). Unlike zoomTo() this is const, does
- * NOT call resetView(), and uses the supplied orientation for BOTH the
- * fit math AND the returned target — so the AABB is sized against the
+ * @a azimuth / @a pitch (degrees). Pure and const: it reads no live camera
+ * pose and mutates nothing, using the supplied orientation for BOTH the fit
+ * math AND the returned target — so the AABB is sized against the
  * post-rotation view, not the current one. Box-null, camera-null, or
  * non-finite box falls through to the current viewState() unchanged.
- * Caller routes the result through animateToViewState() / setViewState().
+ * Caller routes the result through animateToViewState() / setViewState()
+ * (zoomTo() is the default-pose caller).
  *
- * Fit math runs in VIEW space, not world space. zoomTo() can use raw
- * box.x()/y() half-extents because it resetView()'s to identity-on-view
- * first, so the box's world axes align with the view axes. Here the
- * orientation is whatever was supplied, so we project the eight AABB
- * corners through that view rotation and read the view-space
- * half-extents — anything less would under-fit at non-default tilts.
+ * Fit math runs in VIEW space, not world space: the box is framed at the
+ * supplied orientation, so the eight AABB corners are projected through that
+ * view rotation and the view-space half-extents read off them. Using the raw
+ * world half-extents would under-fit at any non-default tilt.
  */
 cwTurnTableViewState cwBaseTurnTableInteraction::framingViewState(
         const QBox3D& box, double azimuth, double pitch) const
@@ -1299,28 +1363,26 @@ cwTurnTableViewState cwBaseTurnTableInteraction::framingViewState(
 
     switch (Camera->projection().type()) {
     case cwProjection::Ortho: {
-        // Read the current ortho frustum's view-space half-extents by
-        // unprojecting the viewport corners and forward-transforming back
-        // into view space. For ortho, P^-1 maps NDC ±1 to ±frustum half;
-        // unProject + view.map cancels the view inverse and lands exactly
-        // there.
-        const QSize viewportSize = Camera->viewport().size();
-        const QVector3D worldTL = Camera->unProject(QPoint(0, 0), 1.0);
-        const QVector3D worldBR = Camera->unProject(
-                    QPoint(viewportSize.width(), viewportSize.height()), 1.0);
-        const QMatrix4x4 view = Camera->viewMatrix();
-        const QVector3D vTL = view.map(worldTL);
-        const QVector3D vBR = view.map(worldBR);
-        const float viewSpanX = std::abs(vBR.x() - vTL.x());
-        const float viewSpanY = std::abs(vBR.y() - vTL.y());
-
-        const float fitX = (2.0f * vhx) / (std::max)(viewSpanX, kFramingEpsilon);
-        const float fitY = (2.0f * vhy) / (std::max)(viewSpanY, kFramingEpsilon);
+        // Absolute ortho fit. cwCamera::orthoProjectionDefault sets the
+        // frustum half-width to viewport/2 * zoomScale, so the full-viewport
+        // view-space span at any zoom is viewportDim * zoomScale. The zoomScale
+        // that makes the box's view-space extent (2*vh) fill that span — plus
+        // pad — is therefore 2*vh*FramingPad / viewportDim, independent of the
+        // current zoom. Take the larger axis so both fit. Being pose- and
+        // zoom-independent is what lets resetView() frame without first
+        // normalizing the camera to the default zoom.
+        const QSizeF viewport = Camera->viewport().size();
+        const float vpW = (std::max)(static_cast<float>(viewport.width()),
+                                     kFramingEpsilon);
+        const float vpH = (std::max)(static_cast<float>(viewport.height()),
+                                     kFramingEpsilon);
+        const float fitX = (2.0f * vhx) / vpW;
+        const float fitY = (2.0f * vhy) / vpH;
         const float fit  = (std::max)(fitX, fitY) * FramingPad;
         if (!std::isfinite(fit) || fit <= 0.0f) {
             return viewState();
         }
-        target.zoomScale = Camera->zoomScale() * fit;
+        target.zoomScale = fit;
         // distance unchanged for ortho — scale comes from zoomScale.
         break;
     }

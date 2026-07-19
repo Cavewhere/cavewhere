@@ -14,12 +14,6 @@
 // Qt includes
 #include <QDebug>
 
-namespace {
-    // Sphere radius used for ray-vs-point picking. Matches the half-spacing
-    // factor in PointCloud.vert so that "visible point under cursor" picks.
-    constexpr float kPointPickRadiusScale = 0.5f;
-}
-
 cwRenderPointCloud::cwRenderPointCloud(QObject* parent) :
     cwRenderObject(parent)
 {
@@ -38,14 +32,15 @@ void cwRenderPointCloud::setGeometry(GeometryData geometry)
     // pick radius collapses to 0 and no point can be hit, so bail.
     if (auto* intersecter = geometryItersecter()) {
         if (state.meanSpacingXY > 0.0f && !state.geometry.isEmpty()) {
-            const float pickRadius = state.meanSpacingXY * kPointPickRadiusScale;
+            const float pickRadius = state.meanSpacingXY * PointPickRadiusScale;
             intersecter->addObject(cwGeometryItersecter::Object(
-                cwGeometryItersecter::Key{this, 0},
+                this,
+                0,
                 state.geometry,
                 QMatrix4x4(),
                 pickRadius));
         } else {
-            intersecter->removeObject(this, 0);
+            intersecter->removeObject(renderObjectId(), 0);
         }
     }
 
@@ -63,7 +58,7 @@ void cwRenderPointCloud::clear()
     m_geometry.setValue(GeometryState{});
 
     if (auto* intersecter = geometryItersecter()) {
-        intersecter->removeObject(this, 0);
+        intersecter->removeObject(renderObjectId(), 0);
     }
 
     update();

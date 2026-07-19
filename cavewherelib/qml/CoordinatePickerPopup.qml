@@ -20,15 +20,28 @@ QC.Popup {
     readonly property int _gap: 12
     readonly property int _coordPrecision: 3
     readonly property int _wgsPrecision: 6
+    readonly property int _messageWidth: 240
+
+    // True when the region has no coordinate system, so the pick can't be placed
+    // in a real-world CRS.
+    readonly property bool _needsCoordinateSystem: !picker.hasCoordinateSystem
 
     // Cache the CRS header so binding evaluations during pick changes don't
     // re-run the PROJ name lookup + qsTr interpolation each time.
     readonly property string _crsHeader: {
-        if (picker.globalCoordinateSystem === "") {
+        if (!picker.hasCoordinateSystem) {
             return ""
         }
         const name = CoordinateSystem.nameFor(picker.globalCoordinateSystem)
         return qsTr("Project CRS — %1").arg(name !== "" ? name : picker.globalCoordinateSystem)
+    }
+
+    // Send the user to the Data page, where the region's coordinate system is set
+    // (the "Geospatial" group box). cwLinkGenerator owns the page-address scheme
+    // so this leaf doesn't hardcode the page tree.
+    function _gotoCoordinateSystem() {
+        root.picker.clearPick()
+        RootData.pageSelectionModel.currentPageAddress = linkGeneratorId.dataPageLink()
     }
 
     function _formatXYZ(x, y, z, precision) {
@@ -122,8 +135,29 @@ QC.Popup {
             }
         }
 
+        ColumnLayout {
+            objectName: "needsCoordinateSystem"
+            visible: root._needsCoordinateSystem
+            Layout.fillWidth: true
+            Layout.maximumWidth: root._messageWidth
+            spacing: 6
+
+            QC.Label {
+                Layout.fillWidth: true
+                wrapMode: QQ.Text.WordWrap
+                color: Theme.text
+                text: qsTr("This tool needs a coordinate system to place the pick in real-world coordinates.")
+            }
+
+            LinkText {
+                objectName: "coordinateSystemLink"
+                text: qsTr("Set the coordinate system")
+                onClicked: root._gotoCoordinateSystem()
+            }
+        }
+
         CopySection {
-            visible: root.picker.globalCoordinateSystem !== ""
+            visible: root.picker.hasCoordinateSystem
             objectNameRoot: "CS"
             headerText: root._crsHeader
             valueText: root._formatXYZ(root.picker.csX,
@@ -141,10 +175,15 @@ QC.Popup {
         }
 
         CopySection {
-            visible: root.picker.globalCoordinateSystem !== ""
+            visible: root.picker.hasCoordinateSystem
             objectNameRoot: "Elev"
             headerText: qsTr("Elevation")
             valueText: "%1 m".arg(Number(root.picker.elevation).toFixed(root._coordPrecision))
         }
+    }
+
+    LinkGenerator {
+        id: linkGeneratorId
+        pageSelectionModel: RootData.pageSelectionModel
     }
 }

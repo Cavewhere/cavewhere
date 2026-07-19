@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Intersecter visibility mask — plan</title>
+<style>
+  :root {
+    --bg:#1d1f23; --panel:#26292e; --panel2:#2c3036; --ink:#e6e8eb; --muted:#9aa0a8;
+    --line:#3a3f47; --accent:#5db0ff; --warn:#e3b341; --bad:#e06c75; --good:#8bc98b;
+    --code:#d7e3f0;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  .wrap { max-width:1000px; margin:0 auto; padding:32px 24px 100px; }
+  h1 { font-size:26px; margin:0 0 4px; letter-spacing:-0.3px; }
+  h2 { font-size:20px; margin:38px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--line); }
+  h3 { font-size:16px; margin:24px 0 8px; color:var(--accent); }
+  p.sub { color:var(--muted); margin:0 0 8px; font-size:15px; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.88em;
+    background:#15171a; padding:1px 6px; border-radius:5px; color:var(--code); }
+  pre { background:#15171a; border:1px solid var(--line); border-radius:10px; padding:14px 16px;
+    overflow-x:auto; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:12.5px;
+    line-height:1.5; color:var(--code); }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin:14px 0; }
+  .tag { display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px;
+    vertical-align:middle; margin-left:8px; }
+  .tag.p0 { background:#37414d; color:var(--accent); }
+  .tag.p1 { background:#3a3722; color:var(--warn); }
+  .tag.p2 { background:#233a2a; color:var(--good); }
+  .tag.done { background:#1f3a26; color:#8bc98b; border:1px solid #8bc98b; }
+  .bad { color:var(--bad); } .good { color:var(--good); } .warn { color:var(--warn); }
+  .muted { color:var(--muted); }
+  ul { padding-left:22px; } li { margin:5px 0; }
+  table { border-collapse:collapse; width:100%; margin:12px 0; font-size:13.5px; }
+  th,td { border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; }
+  th { background:var(--panel2); color:var(--ink); font-weight:600; }
+  td code { background:#15171a; }
+  .toc { columns:2; font-size:14px; }
+  .toc a { color:var(--accent); text-decoration:none; }
+  .toc a:hover { text-decoration:underline; }
+  figure { margin:18px 0; }
+  figcaption { color:var(--muted); font-size:12.5px; margin-top:8px; text-align:center; }
+  svg { width:100%; height:auto; background:#15171a; border:1px solid var(--line); border-radius:12px; }
+  .kbd { font-size:12px; color:var(--muted); }
+  .callout { border-left:3px solid var(--accent); padding:8px 14px; margin:14px 0; background:var(--panel2); border-radius:0 8px 8px 0; }
+  .callout.bad { border-left-color:var(--bad); }
+  .callout.warn { border-left-color:var(--warn); }
+  .fileref { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.85em; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Intersecter visibility mask</h1>
+<p class="sub">Making <code>cwGeometryItersecter</code> visibility-aware at per-primitive granularity, so picking and bounding-box queries honor keyword-driven visibility from one source of truth.</p>
+<p class="sub">Fixes <a href="https://github.com/Cavewhere/cavewhere/issues/575" style="color:var(--accent)">#575</a> (hidden shots still pickable) and <a href="https://github.com/Cavewhere/cavewhere/issues/549" style="color:var(--accent)">#549</a> (reset frames hidden geometry) through a single mechanism.</p>
+
+<div class="panel">
+  <strong>Contents</strong>
+  <div class="toc">
+    <a href="#goal">0 · Goal &amp; two bugs</a><br>
+    <a href="#phase0">Phase 0 · How it works today</a><br>
+    <a href="#keyword">Phase 0a · Keyword-keyed visibility</a><br>
+    <a href="#render">Phase 0b · How the renderer honors it</a><br>
+    <a href="#intersecter">Phase 0c · What the intersecter does (and doesn't)</a><br>
+    <a href="#phase1">Phase 1 · Whole-object visibleBoundingBox</a><br>
+    <a href="#boundary">Phase 1 · Framing-bounds seam (architecture)</a><br>
+    <a href="#phase2a">Phase 2a · Per-Key visible flag (scraps, glTF)</a><br>
+    <a href="#phase2">Phase 2b · Per-primitive mask (line plot)</a><br>
+    <a href="#threading">Phase 2 · Thread-safety / snapshot</a><br>
+    <a href="#perf">Performance analysis</a><br>
+    <a href="#files">File-by-file changes</a><br>
+    <a href="#alt">Alternatives considered</a><br>
+    <a href="#tests">Test plan</a><br>
+    <a href="#followups">Follow-ups (July 2026 review)</a><br>
+    <a href="#followup8">↳ 8 · GUI→render handoff protocol (not an intersecter item)</a><br>
+  </div>
+</div>
+
+<h2 id="goal">0 · Goal &amp; the two bugs</h2>
+<p>Visibility in CaveWhere is <strong>keyed on keywords</strong>: the user filters by keyword (Cave, Trip, Year, Type…), a filter pipeline splits keyword items into an <em>accepted</em> (visible) and a <em>rejected</em> (hidden) set, and each item hides its geometry at whatever granularity it owns. That hiding is applied on the <strong>render side only</strong>. The intersecter — which answers picks and bounding-box queries — never learns about it, except at whole render-object granularity.</p>
+
+<table>
+  <tr><th>Bug</th><th>Symptom</th><th>Cause</th></tr>
+  <tr>
+    <td><a href="https://github.com/Cavewhere/cavewhere/issues/575" style="color:var(--accent)">#575</a></td>
+    <td>The Distance tool snaps to a hidden shot; turntable pivot can land on a hidden trip.</td>
+    <td>Per-shot line-plot visibility never reaches the intersecter; a <code>Kind::Lines</code> pick hits hidden segments.</td>
+  </tr>
+  <tr>
+    <td>#575-class<br><span class="muted">(scrap flavor)</span></td>
+    <td>Keyword-hidden scraps and glTF models are still pickable, and the rotation pivot (<code>nearestGeometryPoint</code>) anchors onto them. Manually confirmed.</td>
+    <td>Per-id visibility (<code>cwRenderTexturedItems::setVisible(id)</code>) is render-side only; all scraps share one render object, so the whole-object gate never fires.</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/Cavewhere/cavewhere/issues/549" style="color:var(--accent)">#549</a></td>
+    <td>Reset view frames hidden caves/trips/scraps/LiDAR — the model zooms out to include things you hid.</td>
+    <td><code>boundingBox()</code> unions <em>every</em> registered object with no visibility filter at all (its doc now says so explicitly).</td>
+  </tr>
+</table>
+
+<p><strong>Design goal.</strong> Make the intersecter return correct <em>visible-only</em> results, so consumers (reset-view, Distance tool, rotation pivot, lead occlusion) are written as if <code>cwGeometryItersecter</code> is simply correct — no visibility logic duplicated into each consumer. The failing tests that pinned the bugs (<span class="fileref">testcases/test_cwRenderLinePlotPickVisibility.cpp</span> #575 per-shot; <span class="fileref">testcases/test_cwRenderTexturedItemsPickVisibility.cpp</span> per-id pick + framing bounds) have been flipped to regression tests — all phases below are implemented (July 2026): Phase 1 + the framing-bounds seam, Phase 2a (per-Key flag: <code>setVisible(Key, bool)</code>, live <code>m_hiddenKeys</code> that survives geometry replacement, per-slot <code>slotVisible</code> in the published snapshot), and Phase 2b (per-vertex mask: <code>setVisibilityMask(Key, QVector&lt;quint8&gt;)</code>, mask on the live Object, per-slot array in the snapshot; empty = all-visible). Both republish copy-on-write like <code>invalidatePublishedSlot()</code>, and the build-install callback re-stamps visibility from live state so a toggle can't race the worker.</p>
+<p class="muted">Two follow-ups from the review have since landed on top and <strong>supersede the Phase 2b design below</strong> — read <a href="#followups">Follow-ups</a> first. In short: the mask's owner now publishes its own buffer (<code>setVisibilityMask</code>) instead of the intersecter deriving a twin from <code>setRangeVisible(Key, start, count, bool)</code>, and the masked bounding-box walk is memoized per Key on the intersecter rather than re-run per query. The sections below are kept as the design record that got us here.</p>
+
+<h2 id="phase0">Phase 0 · How it works today <span class="tag p0">current</span></h2>
+<p>Three layers, wired end-to-end. Visibility flows left→right; the intersecter is the one box the flow skips.</p>
+
+<figure>
+<svg viewBox="0 0 960 430" role="img" aria-label="Current visibility data flow">
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#9aa0a8"/>
+    </marker>
+    <marker id="arrowBad" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#e06c75"/>
+    </marker>
+  </defs>
+  <style>
+    .box{fill:#26292e;stroke:#3a3f47;rx:9;}
+    .lbl{fill:#e6e8eb;font:600 13px sans-serif;}
+    .sub{fill:#9aa0a8;font:11px monospace;}
+    .grp{fill:none;stroke:#3a3f47;stroke-dasharray:4 4;rx:12;}
+    .grplbl{fill:#9aa0a8;font:600 11px sans-serif;letter-spacing:.5px;}
+    .edge{stroke:#9aa0a8;stroke-width:1.6;fill:none;}
+    .edgeBad{stroke:#e06c75;stroke-width:1.6;fill:none;stroke-dasharray:5 4;}
+  </style>
+
+  <!-- Keyword group -->
+  <rect class="grp" x="10" y="26" width="250" height="380"/>
+  <text class="grplbl" x="24" y="20">KEYWORD MODEL (source of truth)</text>
+  <rect class="box" x="30" y="40" width="210" height="52"/>
+  <text class="lbl" x="42" y="62">cwKeywordItemModel</text>
+  <text class="sub" x="42" y="80">items: Trip / Cave / Type…</text>
+  <rect class="box" x="30" y="118" width="210" height="60"/>
+  <text class="lbl" x="42" y="140">KeywordFilterPipeline</text>
+  <text class="sub" x="42" y="158">→ acceptedModel (show)</text>
+  <text class="sub" x="42" y="172">→ rejectedModel (hide)</text>
+  <rect class="box" x="30" y="205" width="210" height="60"/>
+  <text class="lbl" x="42" y="227">cwKeywordVisibility</text>
+  <text class="sub" x="42" y="245">resolveVisibility → </text>
+  <text class="sub" x="42" y="259">invokeVisible(obj, on/off)</text>
+
+  <!-- Proxies group -->
+  <rect class="grp" x="290" y="26" width="300" height="380"/>
+  <text class="grplbl" x="304" y="20">VISIBILITY PROXIES (granularity)</text>
+  <rect class="box" x="310" y="50" width="260" height="56"/>
+  <text class="lbl" x="322" y="72">cwRenderObject::setVisible</text>
+  <text class="sub" x="322" y="90">cloud · LiDAR · whole plot</text>
+  <rect class="box" x="310" y="128" width="260" height="56"/>
+  <text class="lbl" x="322" y="150">cwLinePlotTripVisibility</text>
+  <text class="sub" x="322" y="168">→ setRangeVisible(start,count)</text>
+  <rect class="box" x="310" y="206" width="260" height="56"/>
+  <text class="lbl" x="322" y="228">cwRenderTexturedItemVisibility</text>
+  <text class="sub" x="322" y="246">→ items.setVisible(id)  (per scrap)</text>
+
+  <!-- Render group -->
+  <rect class="grp" x="620" y="26" width="200" height="240"/>
+  <text class="grplbl" x="634" y="20">RENDERER (honors it)</text>
+  <rect class="box" x="638" y="50" width="164" height="56"/>
+  <text class="lbl" x="650" y="72">gatherScene skip</text>
+  <text class="sub" x="650" y="90">m_isVisible</text>
+  <rect class="box" x="638" y="128" width="164" height="56"/>
+  <text class="lbl" x="650" y="150">visibilityBuffer</text>
+  <text class="sub" x="650" y="168">shader discard</text>
+  <rect class="box" x="638" y="206" width="164" height="56"/>
+  <text class="lbl" x="650" y="228">per-id skip</text>
+  <text class="sub" x="650" y="246">cwRhiTexturedItems</text>
+
+  <!-- Intersecter (skipped) -->
+  <rect class="grp" x="620" y="300" width="330" height="100" style="stroke:#e06c75;"/>
+  <text class="grplbl" x="634" y="294" style="fill:#e06c75;">INTERSECTER (flow skips it)</text>
+  <rect class="box" x="638" y="316" width="300" height="70" style="stroke:#e06c75;"/>
+  <text class="lbl" x="650" y="340">cwGeometryItersecter</text>
+  <text class="sub" x="650" y="358">full geometry · whole-object gate only</text>
+  <text class="sub" x="650" y="374">boundingBox() unions ALL</text>
+
+  <!-- edges -->
+  <path class="edge" d="M240,66 L305,78" marker-end="url(#arrow)"/>
+  <path class="edge" d="M240,150 L305,156" marker-end="url(#arrow)"/>
+  <path class="edge" d="M240,235 L305,234" marker-end="url(#arrow)"/>
+  <path class="edge" d="M570,78 L633,78" marker-end="url(#arrow)"/>
+  <path class="edge" d="M570,156 L633,156" marker-end="url(#arrow)"/>
+  <path class="edge" d="M570,234 L633,234" marker-end="url(#arrow)"/>
+  <!-- only whole-object reaches intersecter -->
+  <path class="edge" d="M440,106 C440,300 560,340 633,344" marker-end="url(#arrow)"/>
+  <!-- per-shot / per-scrap DON'T reach intersecter -->
+  <path class="edgeBad" d="M572,160 C700,180 720,300 760,314" marker-end="url(#arrowBad)"/>
+  <path class="edgeBad" d="M572,238 C740,250 760,300 800,314" marker-end="url(#arrowBad)"/>
+</svg>
+<figcaption>Whole-object visibility (solid) reaches the intersecter via <code>parent-&gt;isVisible()</code>. Per-shot and per-scrap visibility (<span class="bad">red, dashed</span>) never does.</figcaption>
+</figure>
+
+<h3 id="keyword">Phase 0a · Visibility is keyed on keywords</h3>
+<ul>
+  <li><span class="fileref">KeywordTab.qml:17-20</span> — <code>KeywordVisibility { visibleModel: pipeline.acceptedModel; hideModel: pipeline.rejectedModel }</code>. The filter pipeline is the source of truth for what's shown.</li>
+  <li><span class="fileref">cwKeywordVisibility.cpp:105</span> <code>resolveVisibility()</code> — <em>hide wins</em>: if an object is in the reject model, hide it; else show. Fires on <code>rowsInserted/Removed/modelReset</code>.</li>
+  <li><span class="fileref">cwKeywordVisibility.cpp:17</span> <code>invokeVisible()</code> dispatches by type: <code>QQuickItem</code>, <code>cwRenderObject</code>, or a generic <code>setVisible(bool)</code> — the last is how the <em>proxy</em> objects below get called.</li>
+  <li>Each keyword item carries an <code>ObjectRole</code> pointing at the object that knows how to hide the corresponding geometry at the right granularity.</li>
+</ul>
+
+<table>
+  <tr><th>Granularity</th><th>Proxy object</th><th>Action</th><th>Reaches intersecter?</th></tr>
+  <tr><td>Whole object<br>(cloud, LiDAR, entire plot)</td><td><code>cwRenderObject</code></td><td><span class="fileref">setVisible()</span></td><td class="good">Yes — <code>isPickable()</code></td></tr>
+  <tr><td>Per shot / trip<br>(centerline)</td><td><code>cwLinePlotTripVisibility</code><br><span class="fileref">.cpp:26-38</span></td><td><code>linePlot-&gt;setRangeVisible(start,count)</code></td><td class="bad">No</td></tr>
+  <tr><td>Per scrap<br><span class="muted">(one item id per scrap, all in one shared <code>cwRenderTexturedItems</code>)</span></td><td><code>cwRenderTexturedItemVisibility</code><br><span class="fileref">cwScrapManager.cpp:1333</span></td><td><code>items-&gt;setVisible(id)</code></td><td class="bad">No</td></tr>
+  <tr><td>Per glTF model<br><span class="muted">(polycam LiDAR — multiple item ids, always toggled together)</span></td><td><code>cwRenderTexturedItemsVisibilityGroup</code><br><span class="fileref">cwNoteLiDARManager.cpp:824</span></td><td><code>items-&gt;setVisible(id)</code> per id in the group</td><td class="bad">No</td></tr>
+</table>
+
+<div class="callout"><strong>Key structural fact.</strong> Each textured item id is <em>already its own intersecter Key</em> — <code>addItem</code> registers <code>Object({this, id}, …)</code> (<span class="fileref">cwRenderTexturedItems.cpp:140</span>). The intersecter already has per-scrap / per-glTF-part granularity structurally; only the visibility bit is missing. So textured items need a <a href="#phase2a">per-Key visible flag</a>, not the per-primitive mask — the mask is needed only by the line plot, which is one Key with per-vertex visibility.</div>
+
+<h3 id="render">Phase 0b · How the renderer honors visibility</h3>
+<ul>
+  <li><strong>Whole object</strong> — <code>cwRHIObject::m_isVisible</code>, synced in <span class="fileref">cwRhiScene.cpp:71</span> and skipped at gather in <span class="fileref">cwRhiFrameRenderer.cpp:569</span> (<code>if (!object-&gt;isVisible() …) continue;</code>).</li>
+  <li><strong>Per-vertex centerline</strong> — <code>cwRenderLinePlot::m_visibility</code> is a <code>QVector&lt;quint8&gt;</code> (one byte/vertex, <code>kVisible=0xFF</code>/<code>kHidden=0x00</code>). <span class="fileref">cwRHILinePlot.cpp:44</span> uploads a parallel <code>m_visibilityBuffer</code> (uint attribute, binding 1); <span class="fileref">cwRHILinePlot.cpp:102</span> <code>updateVisibilityBuffer()</code> re-uploads on change; <code>LinePlot.vert/.frag</code> discard hidden vertices. <strong>This is the only place per-shot visibility exists.</strong></li>
+  <li><strong>Per-scrap</strong> — <code>cwRhiTexturedItems</code> stores per-id <code>visible</code> and skips hidden items at draw.</li>
+</ul>
+
+<h3 id="intersecter">Phase 0c · What the intersecter does — and doesn't</h3>
+<p class="sub">Refreshed July 2026 after the traversal rework (tube-fallback deletion, pivot anchoring, <code>traverseBvh</code> unification).</p>
+<ul>
+  <li>Geometry is registered <em>once</em> as the <strong>full</strong> vertex list in <span class="fileref">cwRenderLinePlot.cpp:46-59</span> (<code>setGeometry → addObject</code>). Visibility toggles (<code>setRangeVisible</code>) never call the intersecter. Likewise <code>cwRenderTexturedItems::setVisible(id)</code> (<span class="fileref">cwRenderTexturedItems.cpp:222</span>) updates render state only.</li>
+  <li>Both ray entry points — <code>intersectsDetailed</code> (<code>ExactPick</code>) and the rotation-pivot anchor <code>nearestGeometryPoint</code> (<code>AnchorPick</code>) — now share one traversal, <code>traverseBvh&lt;Policy&gt;</code>. The only visibility gate is whole render-object: <code>isPickable() = parent==nullptr || parent-&gt;isVisible()</code>, hoisted once per sub-BVH descent inside <code>traverseBvh</code>. <strong>One hook point now covers every ray query.</strong></li>
+  <li><code>boundingBox()</code> unions <em>all</em> node boxes with <strong>no visibility check whatsoever</strong> — its doc now says "Counts hidden objects" explicitly.</li>
+  <li><code>isPickableEmpty()</code> (added for the pivot fallback) already contains the Phase 1 loop: it unions boxes over <code>isPickable</code>-filtered live Nodes, then throws the box away and returns only its emptiness.</li>
+  <li><code>pointsInBox(QuerySnapshot, box, Key)</code> is an off-thread, <em>explicit-Key</em> query (sink-scan broad phase). It is deliberately unfiltered: the caller already chose the object, so visibility policy belongs to the caller, not this query.</li>
+  <li>Key type is <code>Key{cwRenderObject* parentObject, uint64_t id}</code>; the published BVH keeps a <code>keyToSlot</code> reverse index, so per-Key state can be republished with a direct lookup.</li>
+</ul>
+
+<h2 id="phase1">Phase 1 · Whole-object <code>visibleBoundingBox()</code> <span class="tag p1">interim</span> <span class="tag done">implemented</span></h2>
+<p>Ship the reset-view API immediately, before the deeper work. The body already exists: <code>isPickableEmpty()</code> unions boxes over <code>isPickable</code>-filtered live Nodes and discards the box. Phase 1 is an extraction, not new logic.</p>
+<ul>
+  <li>Extract that loop into <code>cwGeometryItersecter::visibleBoundingBox()</code>; reimplement <code>isPickableEmpty()</code> as <code>{ const auto box = visibleBoundingBox(); return box.isNull() || !box.isFinite(); }</code>. Main-thread only (computed against live <code>Nodes</code>), flat loop over cached per-Node boxes — O(#Keys), no BVH or vertex traversal.</li>
+  <li>Point <code>cwBaseTurnTableInteraction::resetView()</code> at <code>visibleBoundingBox()</code> (replacing <code>boundingBox()</code> at <span class="fileref">cwBaseTurnTableInteraction.cpp:424</span>); keep the empty-box fallback.</li>
+</ul>
+<div class="callout warn"><strong>Coverage is narrower than it looks.</strong> The only keyword items that carry a whole <code>cwRenderObject</code> are <strong>point clouds</strong> (<span class="fileref">cwLazLayersSceneNode.cpp:367</span>). Scraps, glTF models, and centerline trips all hide through per-id / per-range proxies whose shared parent stays visible — so Phase 1 fixes framing for hidden clouds <em>only</em>. Phases 2a/2b upgrade correctness for the rest with <strong>no change to reset-view</strong>, which is written once against the final API.</div>
+
+<h3 id="boundary">Architectural note · put the seam in the right place</h3>
+<p>Today <code>resetView()</code> reads <code>scene()-&gt;geometryItersecter()-&gt;boundingBox()</code> directly (<span class="fileref">cwBaseTurnTableInteraction.cpp:331</span>). "What bounds should the camera frame" is a <em>scene / view-presentation</em> concern, but <code>cwGeometryItersecter::boundingBox()</code> is an artifact of the <em>pick-acceleration</em> structure. Sourcing framing policy straight off the picking BVH leaks the picking subsystem's boundary into camera behavior.</p>
+<div class="callout">
+  <strong>Preferred seam:</strong> expose a scene-level framing-bounds accessor on <code>cwScene</code> / <code>cwRegionSceneManager</code> (e.g. <code>framingBounds()</code> / <code>visibleFramingBounds()</code>), and have <code>resetView()</code> (and any capture/export framing) call <em>that</em>. The <code>visibleBoundingBox()</code> work below then lives <em>behind</em> the scene seam rather than being one more method bolted onto the intersecter — the interaction depends on the scene for framing, not on the pick structure.
+  <br><br>
+  <span class="muted">Blast radius: moderate — one new scene-level accessor, re-point <code>resetView</code> (and the Phase 1/2 work) at it; no data-model changes. Tracked as the architectural follow-up from the #549 review; can land before or alongside Phase 1.</span>
+</div>
+
+<h2 id="phase2a">Phase 2a · Per-Key visible flag <span class="tag p2">scraps + glTF</span> <span class="tag done">implemented</span></h2>
+<p>Textured items don't need the mask: each item id is already its own intersecter Key with its own Node and sub-BVH slot. They need one bit.</p>
+<ul>
+  <li>Add <code>cwGeometryItersecter::setVisible(const Key&amp;, bool visible)</code> — a per-Key flag on the live <code>Node</code>, republished into the snapshot slot (the <code>keyToSlot</code> index makes this a direct lookup). No geometry change, no BVH rebuild.</li>
+  <li><code>traverseBvh</code> consults it beside the existing <code>isPickable()</code> hoist — one boolean per descended sub-BVH, <strong>zero per-primitive cost</strong>. Because the traversal is shared, picking (<code>ExactPick</code>) and the rotation pivot (<code>AnchorPick</code>) are both fixed by the same check.</li>
+  <li><code>visibleBoundingBox()</code> / <code>isPickableEmpty()</code> skip per-Key-hidden nodes — per-scrap and per-glTF framing become correct.</li>
+  <li>Forward from <code>cwRenderTexturedItems::setVisible(id)</code> (<span class="fileref">cwRenderTexturedItems.cpp:222</span>): one line, <code>intersecter-&gt;setVisible({this, id}, visible)</code>. Scraps (per-id proxies) and glTF groups (N per-id calls) are both covered — no manager changes.</li>
+  <li>Flip the two <code>[!shouldfail]</code> cases in <span class="fileref">test_cwRenderTexturedItemsPickVisibility.cpp</span>; repoint its bounds test at <code>visibleBoundingBox()</code>.</li>
+</ul>
+<div class="callout"><strong>Snapshot subtlety.</strong> <code>sub.object</code> inside a published snapshot is a <em>copy</em> of the Object, so a plain member on the live Object won't be seen by held snapshots. The whole-object gate gets away with this because it dereferences the live <code>parent-&gt;isVisible()</code>; the per-Key flag instead follows the same discipline as the Phase 2b mask — per-slot shared state, republished on change. Ray queries run on the main thread, so a simpler live-read is also defensible; decide at implementation time, but keep it consistent with the mask.</div>
+
+<h2 id="phase2">Phase 2b · The per-primitive mask <span class="tag p2">line plot</span> <span class="tag done">implemented</span></h2>
+<p>Give the intersecter its own visibility channel, fed from the same <code>setRangeVisible</code> calls the renderer already makes. Both picking and bounding box consult it. One mechanism → both #575 and per-trip #549 fall out. Only the line plot needs this — it is one Key whose visibility varies per vertex.</p>
+
+<figure>
+<svg viewBox="0 0 960 300" role="img" aria-label="Proposed mask flow">
+  <defs>
+    <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#8bc98b"/></marker>
+  </defs>
+  <style>
+    .b{fill:#26292e;stroke:#3a3f47;rx:9;} .b2{fill:#233a2a;stroke:#8bc98b;rx:9;}
+    .l{fill:#e6e8eb;font:600 13px sans-serif;} .s{fill:#9aa0a8;font:11px monospace;}
+    .e{stroke:#8bc98b;stroke-width:1.7;fill:none;}
+  </style>
+  <rect class="b" x="24" y="60" width="220" height="70"/>
+  <text class="l" x="38" y="90">cwLinePlotTripVisibility</text>
+  <text class="s" x="38" y="110">setVisible(bool)</text>
+
+  <rect class="b" x="24" y="170" width="220" height="70"/>
+  <text class="l" x="38" y="200">cwRenderLinePlot</text>
+  <text class="s" x="38" y="220">setRangeVisible(start,count)</text>
+
+  <rect class="b2" x="360" y="115" width="250" height="80"/>
+  <text class="l" x="376" y="145">cwGeometryItersecter</text>
+  <text class="s" x="376" y="165">setRangeVisible(Key,start,count)</text>
+  <text class="s" x="376" y="181">Object.m_visibility mask</text>
+
+  <rect class="b" x="710" y="40" width="220" height="70"/>
+  <text class="l" x="724" y="70">visibleBoundingBox()</text>
+  <text class="s" x="724" y="90">skip hidden prims → #549</text>
+
+  <rect class="b" x="710" y="185" width="220" height="70"/>
+  <text class="l" x="724" y="215">intersectsDetailed()</text>
+  <text class="s" x="724" y="235">skip hidden prims → #575</text>
+
+  <path class="e" d="M244,95 C300,110 320,150 358,150" marker-end="url(#a2)"/>
+  <path class="e" d="M244,205 C300,190 320,160 358,158" marker-end="url(#a2)"/>
+  <path class="e" d="M610,140 C660,120 680,95 708,85" marker-end="url(#a2)"/>
+  <path class="e" d="M610,165 C660,190 680,210 708,215" marker-end="url(#a2)"/>
+</svg>
+<figcaption>Same <code>setRangeVisible</code> call sites; a second, intersecter-owned copy of the mask. No new source of truth — it is downstream of the keyword pipeline exactly like the render buffer.</figcaption>
+</figure>
+
+<h3>2.1 · Mask on the Object</h3>
+<pre>// cwGeometryItersecter.h — Object
+QVector&lt;quint8&gt; m_visibility;   // empty = all visible (fast path)
+const QVector&lt;quint8&gt;&amp; visibility() const { return m_visibility; }
+// helper: a Lines primitive at index i is visible iff both its
+// endpoint vertices' bytes != kHidden (indices[i], indices[i+1]).</pre>
+<p>Empty mask ⇒ zero per-primitive cost for clouds, scraps, triangles, and any object that never partially hides.</p>
+
+<h3>2.2 · Mutation API (no BVH rebuild)</h3>
+<pre>void cwGeometryItersecter::setRangeVisible(const Key&amp; key, int start, int count, bool visible);
+// Updates the mask on the live Node AND republishes the mask into the
+// query snapshot (copy-on-write swap of a per-slot shared array).
+// Geometry/BVH structure is unchanged, so this is O(range), not a rebuild.</pre>
+
+<h3>2.3 · Render side pushes the mask</h3>
+<ul>
+  <li><code>cwRenderLinePlot::setGeometry()</code> — after <code>addObject</code>, seed an all-visible mask (or none).</li>
+  <li><code>cwRenderLinePlot::setRangeVisible()</code> — additionally call <code>geometryItersecter()-&gt;setRangeVisible(Key{this,0}, start, count, visible)</code>. The intersecter mask becomes the twin of the render <code>m_visibility</code>, fed by the same call.</li>
+  <li>Textured items do <em>not</em> push a mask — Phase 2a's per-Key flag covers them.</li>
+</ul>
+
+<h3>2.4 · Consumers honor the mask</h3>
+<ul>
+  <li><strong>Ray queries</strong> — in <code>traverseBvh</code>'s leaf loop, check the mask just before <code>policy.testPrimitive(ctx, prim)</code>. One check in the shared traversal covers <em>both</em> policies (<code>ExactPick</code> picking and <code>AnchorPick</code> pivot anchoring) with no per-policy duplication. Hoist the has-mask test to the sub-BVH descent (beside <code>isPickable()</code>) so unmasked objects — clouds, scraps, triangles — pay one pointer compare and nothing per primitive.</li>
+  <li><strong>Bounding box</strong> — <code>visibleBoundingBox()</code> unions only visible primitives. Masked objects iterate their primitives (can't use the cached node box); unmasked objects keep the fast whole-box path. O(vertices), only on reset, only for the line plot.</li>
+</ul>
+
+<h3 id="threading">2.5 · Thread-safety &amp; the snapshot</h3>
+<div class="callout"><strong>The one real cost.</strong> Picks run off-thread against an immutable snapshot (<code>SubBvh</code>s). Bounding box runs on the main thread against live <code>Nodes</code>.</div>
+<ul>
+  <li><strong>Bounding box</strong>: main-thread, reads the live mask directly — trivial.</li>
+  <li><strong>Picking</strong>: the mask must live <em>in</em> the published snapshot so an in-flight pick sees a consistent view. Store the mask as a per-slot <code>shared_ptr&lt;const QVector&lt;quint8&gt;&gt;</code> alongside each <code>SubBvh</code>; <code>setRangeVisible</code> builds a new array and atomically swaps the pointer (<code>keyToSlot</code> finds the slot directly). BVH nodes are untouched, so toggling never triggers a rebuild and captured snapshots stay valid.</li>
+  <li>This mirrors the existing snapshot discipline (<code>QuerySnapshot</code>, slot invalidation) — the mask is just one more immutable-per-publish array.</li>
+  <li><strong>Republish coalescing</strong> (watch, don't pre-build): each <code>setRangeVisible</code> copies the whole mask, and <code>cwLinePlotTripVisibility</code> fires once per trip — a keyword flip hiding N trips does N full-array copies. At 1 byte/vertex that's memcpy-speed (~1&nbsp;MB per copy on a 1M-vertex plot), a few ms worst case, never per-frame. If profiling ever cares, coalesce like <code>scheduleTopLevelRebuild</code>: mutate a pending mask, publish once per event-loop tick.</li>
+  <li><code>pointsInBox</code> reads the same snapshot but stays visibility-unfiltered on purpose — it is an explicit-Key query; the caller already chose the object.</li>
+</ul>
+
+<h2 id="perf">Performance analysis</h2>
+<p><code>cwGeometryItersecter</code> is a hot path; this design keeps every cost off it by construction.</p>
+<table>
+  <tr><th>Path</th><th>Cost added</th><th>Why</th></tr>
+  <tr><td>Pick over unmasked objects<br><span class="muted">(clouds, scraps, triangles — the perf-critical mass)</span></td><td class="good">~zero</td><td>Per-Key flag: one bool per descended sub-BVH, beside the existing <code>isPickable()</code> hoist. Mask: one pointer compare (empty/null mask) at the same hoist. BVH node traversal — the cost that dominates a pick — is untouched.</td></tr>
+  <tr><td>Pick over the masked line plot</td><td class="good">2 byte-loads / tested leaf primitive</td><td>Only primitives that already survived ray-box descent reach the check (a handful per pick), next to segment-distance math that dwarfs it.</td></tr>
+  <tr><td><code>visibleBoundingBox()</code>, no mask</td><td class="good">O(#Keys)</td><td>Flat loop over cached per-Node boxes (same shape as today's <code>boundingBox()</code> / <code>isPickableEmpty()</code>) — one box transform per registered Key, no BVH or vertex traversal. Microseconds.</td></tr>
+  <tr><td><code>visibleBoundingBox()</code>, masked object</td><td class="warn">O(vertices), reset only</td><td>Line plot only, only while partially hidden, only when reset runs — never per-frame, never in picking. ~ms at 500k vertices. If it ever matters: cache the visible box per Node, invalidate in <code>setRangeVisible</code>.</td></tr>
+  <tr><td><code>setRangeVisible</code> republish</td><td class="warn">O(vertices) copy per call</td><td>User-interaction rate (keyword toggles), never per-frame. Coalescible — see 2.5.</td></tr>
+</table>
+
+<h2 id="files">File-by-file changes</h2>
+<table>
+  <tr><th>File</th><th>Phase</th><th>Change</th></tr>
+  <tr><td><span class="fileref">cwGeometryItersecter.h/.cpp</span></td><td>1</td><td>Extract <code>isPickableEmpty()</code>'s loop into <code>visibleBoundingBox()</code>; <code>isPickableEmpty()</code> delegates to it.</td></tr>
+  <tr><td><span class="fileref">cwBaseTurnTableInteraction.cpp</span></td><td>1</td><td><code>resetView()</code> → <code>visibleBoundingBox()</code> (line ~424), keep fallback.</td></tr>
+  <tr><td><span class="fileref">cwGeometryItersecter.h/.cpp</span></td><td>2a</td><td><code>setVisible(Key, bool)</code> per-Key flag; checked in <code>traverseBvh</code> beside <code>isPickable()</code> and in <code>visibleBoundingBox()</code>/<code>isPickableEmpty()</code>.</td></tr>
+  <tr><td><span class="fileref">cwRenderTexturedItems.cpp</span></td><td>2a</td><td><code>setVisible(id)</code> additionally forwards <code>intersecter-&gt;setVisible({this,id}, …)</code>.</td></tr>
+  <tr><td><span class="fileref">test_cwRenderTexturedItemsPickVisibility.cpp</span></td><td>2a</td><td>Drop <code>[!shouldfail]</code> from both cases; repoint the bounds case at <code>visibleBoundingBox()</code>.</td></tr>
+  <tr><td><span class="fileref">cwGeometryItersecter.h/.cpp</span></td><td>2b</td><td><code>Object::m_visibility</code>; <code>setRangeVisible(Key,…)</code>; mask in snapshot; <code>traverseBvh</code> leaf loop and <code>visibleBoundingBox()</code> honor the mask.</td></tr>
+  <tr><td><span class="fileref">cwRenderLinePlot.cpp</span></td><td>2b</td><td>Push mask on <code>setGeometry</code> (seed) and <code>setRangeVisible</code> (range update).</td></tr>
+  <tr><td><span class="fileref">test_cwRenderLinePlotPickVisibility.cpp</span></td><td>2b</td><td>Drop <code>[!shouldfail]</code>; flip to assert the hidden shot is NOT pickable.</td></tr>
+</table>
+
+<h2 id="alt">Alternatives considered</h2>
+<ul>
+  <li><strong>Per-trip Objects</strong> — register each trip as its own <code>Key</code> and reuse whole-object <code>isPickable</code>. Rejected: restructures centerline registration, multiplies top-level BVH objects (perf), and changes the pick <code>firstIndex</code> contract (#530). The mask is purely additive — one object, one BVH.</li>
+  <li><strong>Visibility callback into the render object</strong> — intersecter reads <code>cwRenderLinePlot::m_visibility</code> live. Rejected: couples the intersecter to render internals and breaks off-thread pick safety (the array mutates under the pick). The owned-copy-in-snapshot avoids both.</li>
+  <li><strong>Fix only reset-view in the interaction</strong> (enumerate visible ranges, union in the interaction). Rejected: duplicates visibility logic per consumer and leaves #575 unfixed.</li>
+</ul>
+
+<h2 id="tests">Test plan</h2>
+<ul>
+  <li><strong>Per-id pick + framing (2a)</strong> — flip both <code>[!shouldfail]</code> cases in <span class="fileref">test_cwRenderTexturedItemsPickVisibility.cpp</span> (committed): hidden item not pickable; hidden item excluded from <code>visibleBoundingBox()</code>. Keep the whole-object contrast test.</li>
+  <li><strong>#575 pick (2b)</strong> — flip <span class="fileref">test_cwRenderLinePlotPickVisibility.cpp</span> to assert <code>CHECK_FALSE(hit.hit())</code> on the hidden shot; remove <code>[!shouldfail]</code>. Keep the whole-object contrast test.</li>
+  <li><strong>Bounding box (1, 2b)</strong> — new test: register two shots, hide one via <code>setRangeVisible</code>, assert <code>visibleBoundingBox()</code> tightens to the visible shot; hide whole object → null/empty; empty mask → equals <code>boundingBox()</code>.</li>
+  <li><strong>Pivot anchor (2a/2b)</strong> — <code>nearestGeometryPoint</code> over a hidden scrap/shot returns nullopt (or the nearest <em>visible</em> geometry), since <code>AnchorPick</code> shares the traversal gate.</li>
+  <li><strong>Reset framing (#549)</strong> — extend the existing C++ resetView tests: hidden geometry outside the visible box must not affect the framed center.</li>
+  <li><strong>Threading</strong> — toggle <code>setRangeVisible</code> while a pick snapshot is held; the held snapshot returns its captured visibility, the next pick sees the update.</li>
+  <li><strong>QML</strong> — Distance tool over a keyword-hidden trip does not snap to it.</li>
+</ul>
+
+<h2 id="followups">Follow-ups <span class="tag p1">post-implementation review, July 2026</span></h2>
+<p>Surfaced by the pre-commit reviews of the implemented phases. <strong>1 and 2 landed together</strong> (they touch the same mask path); neither is blocked by what follows.</p>
+<p><strong>6 and 7 landed</strong> — the two live defects, both in <code>cwScene::removeItem()</code>. 6 was a use-after-free (removing a LAZ layer left the intersecter dereferencing a deleted render object on every pick); implementing it surfaced 7 in the same function (the early return stranded the layer's RHI object and GPU buffers forever), confirmed by spike and fixed. <strong>Nothing live is left open here.</strong> 3, 4 and 5 are architecture and belong with issue #579: 5 is its natural first phase, 4 is how the authoring/built split gets expressed (not a precursor to it), and 3 is the belt-and-braces now that 6 supplies the belt — 7 having removed 4's headline evidence and falsified 5's caveat, both since rewritten. <a href="#followup8">8</a> is new and is <em>not</em> an intersecter item at all: it is the GUI→render handoff protocol that 6 and 7 both turned out to live in, where three separate bugs share one root cause. It wants its own plan file; it is parked here because this is where the evidence surfaced.</p>
+
+<h3>1 · Masked <code>visibleBoundingBox()</code> walk runs at interaction rate, not reset-only <span class="tag done">implemented</span></h3>
+<p><code>isPickableEmpty()</code> delegates to <code>visibleBoundingBox()</code> and is called from <code>cwBaseTurnTableInteraction</code>'s pivot fallback (<span class="fileref">cwBaseTurnTableInteraction.cpp:136</span>) — reached on every pan mouse-down over background and on the zoom <code>m_perspectiveIntersection</code> re-evaluation. With a line plot partially hidden, each of those pays the O(vertices) <code>visibleNodeBox</code> walk (~1–3&nbsp;ms at 500&nbsp;k vertices) — the perf table's "reset only" row was wrong about the caller set. Fix per the table's own escape hatch: <strong>cache the visible box per Node, invalidate in <code>setRangeVisible</code></strong> (mask changes at user rate), or give <code>isPickableEmpty()</code> an any-visible early exit. Headers already document the corrected caller set.</p>
+<p><strong>Landed</strong> as <code>m_maskedBoxCache</code>, a <code>mutable QHash&lt;Key, QBox3D&gt;</code> filled on demand by <code>visibleNodeBox()</code>. The walk now runs once per mask change instead of once per query, so the interaction-rate callers pay only the O(#Keys) loop. Cached in <strong>model space</strong>, matching the sub-BVH's model-space discipline: a <code>setModelMatrix()</code> then costs a transform rather than a re-walk (pinned by <em>"masked framing box follows the model matrix"</em>). Chose the cache over the any-visible early exit because the early exit only rescues <code>isPickableEmpty()</code>, leaving reset-view's real box to re-walk. Staleness is regression-tested: disabling the invalidation fails <em>"hidden shot does not inflate framing bounds"</em>.</p>
+<p><strong>Why the cache is not on <code>Object</code>, where the mask it derives from lives.</strong> That was the first cut — a lazy <code>mutable std::optional&lt;QBox3D&gt;</code> reset by <code>setVisibilityMask()</code>, which has the real advantage that invalidation is <em>structurally</em> impossible to forget. It is a <strong>data race</strong>. <code>launchBuildJob</code> snapshots the source nodes with <code>nodesSnapshot = Nodes</code> — implicitly shared, and <code>visibleBoundingBox()</code> walks <code>Nodes</code> <code>const</code>, which never detaches — so the worker's <code>SubBvh</code> copies each <code>Object</code> out of the <em>same</em> memory the main thread would be lazily writing the cache into. Reachable whenever a top-level rebuild is in flight (<code>setModelMatrix</code>, or removing an unrelated Key) while a partially hidden plot is framed or pivoted; no test would catch it. The intersecter itself is never handed to a worker, so a cache on it cannot race — at the cost of explicit invalidation sites instead of one structural drop, mirroring how <code>m_subBvhs</code> and <code>m_hiddenKeys</code> are already maintained.</p>
+<p>Only <code>setVisibilityMask</code>'s drop is load-bearing, which is worth stating because the review initially mis-read the others as correctness: the cache is consulted <em>only</em> for a non-empty mask, and a mask can only become non-empty through <code>setVisibilityMask</code> — while <code>addObject</code> always re-registers with a fresh empty-masked <code>Object</code>. So a stale entry can be leaked but never read, and the drops in <code>eraseNodeIfPresent</code> / <code>clear</code> bound growth rather than protect a result. Verified by deleting the <code>eraseNodeIfPresent</code> drop: the suite stays green, whereas deleting <code>setVisibilityMask</code>'s fails <em>"hidden shot does not inflate framing bounds"</em>.</p>
+
+<h3>2 · Producer-published immutable mask (third option, replaces the twin) <span class="tag done">implemented</span></h3>
+<p>The implemented twin keeps two byte-for-byte copies of the same mask — <span class="fileref">cwRenderLinePlot::m_visibility</span> and <code>Object::m_visibility</code> — synchronized by convention ("both reset on setGeometry, same ranges applied") across two files, plus an O(vertices) copy per <code>republishSlotVisibility</code>. The plan's rejected alternative was a <em>live read</em> (races off-thread picks); the implementation surfaced a third option it never weighed: <strong>the render object publishes the mask as <code>std::shared_ptr&lt;const QVector&lt;quint8&gt;&gt;</code> copy-on-write, and the intersecter (live Object and snapshot slot) holds only the pointer</strong>. Kills the duplicate buffer, the parallel range-write/validation loops, the per-call copy, and the comment-only sync invariant — while keeping snapshot immutability. Out of scope for the landed commit because it changes <code>m_visibility</code>'s type, which the RHI upload path (<span class="fileref">cwRHILinePlot</span>) consumes.</p>
+<p><strong>Landed — but without the <code>shared_ptr</code>.</strong> CLAUDE.md forbids wrapping a <code>QVector</code> in a <code>shared_ptr</code>, and it is right: <code>QVector</code> <em>is already</em> an immutably-shareable value type, so <code>cwGeometryItersecter::setVisibilityMask(Key, QVector&lt;quint8&gt;)</code> taking it by value buys the same refcount-bump publication with no wrapper. The type of <code>m_visibility</code> never changes, so <span class="fileref">cwRHILinePlot</span> was untouched and the change is far smaller than scoped. This <em>removed</em> the pre-existing <code>QVector&lt;std::shared_ptr&lt;const QVector&lt;quint8&gt;&gt;&gt;</code> from <code>BvhData</code> in favour of <code>QVector&lt;QVector&lt;quint8&gt;&gt;</code> (empty = all-visible, same signal null carried).</p>
+<p>The intersecter no longer derives a mask: <code>setRangeVisible(Key,start,count,bool)</code> is gone, and the owner — which already maintained this exact buffer for its shader — publishes it. One buffer now backs the renderer, the live <code>Object</code>, and every snapshot slot. Per toggle that is one deep copy (the owner's own detach, unavoidable), down from two, plus one <code>make_shared</code> allocation eliminated. The byte encodings never needed to agree: every reader only asks <em>is this byte nonzero</em>, so the renderer's <code>0xFF</code> and the slot flag's <code>1</code> coexist. Cost of the new seam: the published buffer is immutable by contract (owners write to a copy and replace), documented on both sides. Out-of-range guarding now lives only at the owner's <code>setRangeVisible</code>, and a short mask reads permissive — pinned by <em>"mask shorter than the geometry hides only what it covers"</em>.</p>
+
+<h3>3 · Stable identity in <code>Key</code> <span class="muted" style="font-size:12px;font-weight:400;">(the destruction hook split out to 6)</span> <span class="tag done">landed via #579 Phase 2</span></h3>
+<p><strong>Landed (July 2026):</strong> issue #579's Phase 2 (<code>SCENE_VISIBILITY_STORE_PLAN.html</code>) shipped exactly the remaining fix prescribed below — <code>Key{cwRenderObjectId parentId, uint64_t id}</code>, with the raw <code>cwRenderObject*</code> demoted to attribution-only (it fills <code>cwRayHit::object()</code>; identity and visibility never touch it). <code>m_hiddenKeys</code> itself was retired outright in the same phase (the scene visibility store replaced it), so the address-reuse hazard this item warned about is no longer representable. Nothing further to do here; the text below stands as the record of why.</p>
+<p><code>Key</code> holds a raw <code>cwRenderObject*</code> as identity. <span class="tag done">6 landed</span> — <code>clear(parentObject)</code> now has its production caller in <code>cwScene::removeItem</code>, so the purge is present and this item is what it always said it was underneath: the belt-and-braces for a purge that is <em>missed</em> rather than absent. The sharpest evidence now sits inside <code>removeItem</code> itself, sixteen lines apart: <code>GeometryItersecter-&gt;clear(item)</code> keys on the raw pointer, while the delete queue below it captures <code>renderObjectId()</code> under a comment explaining why pointer-matching a dying object is unsafe. The render side learned this twice (#491, #512); the picker never did. <code>m_hiddenKeys</code> raises the stakes: it is deliberately long-lived identity state (survives geometry replacement, may be seeded pre-registration), so an address-reused new object could be born spuriously hidden — the same failure family as the issue #512 fix in <span class="fileref">cwScene.cpp</span>. Mitigated in the landed commit by <code>addItem</code>'s unconditional visibility seed. The remaining fix is <strong><code>Key{cwRenderObjectId, uint64_t}</code></strong> (precedent: <span class="fileref">cwRenderObject::renderObjectId()</span>); the <code>cwScene::removeItem</code> → <code>clear(item)</code> half that used to be prescribed here shipped in <code>61260728</code>. Wide but mechanical: every registration call site (<span class="fileref">cwRenderTexturedItems</span>, <span class="fileref">cwRenderLinePlot</span>, <span class="fileref">cwRenderPointCloud</span>, <span class="fileref">cwRenderGLTF</span>, tests). Pairs well with folding the whole-object <code>isPickable()</code> gate into the snapshot (prerequisite for off-thread picks — the sink-scan BVH broad-phase wants this).</p>
+
+<h3>4 · Five parallel per-Key side tables want to be one per-Key record — but only after the authoring/built split <span class="tag p2">do it, not standalone</span></h3>
+<p><code>Nodes</code> (<span class="fileref">cwGeometryItersecter.h:305</span>), <code>m_subBvhs</code>, <code>m_dirtyKeys</code>, <code>m_hiddenKeys</code>, and now <code>m_maskedBoxCache</code> are five per-Key stores with five independent lifetime rules — and <code>Nodes</code> isn't even keyed: <code>findNode()</code> is a linear <code>std::find_if</code>. Adding the fifth store meant hand-patching every lifetime site.</p>
+<p><strong>⚠️ This item's headline evidence is gone.</strong> It used to read: <em>"one of them deliberately placed above an early return — exactly the ordering hazard a single <code>QHash&lt;Key, PerKeyRecord&gt;::erase</code> makes unrepresentable."</em> <a href="#followup7">Follow-up 7</a> deleted that early return, so there is no ordering hazard left in <code>removeItem</code> to be unrepresentable about. Combined with the three counter-arguments below — which this section already concedes — the honest post-7 statement is: <strong>the per-Key record is tidiness and future-proofing, with no remaining live-bug argument.</strong> Downgraded accordingly; it stays bundled with the authoring/built split.</p>
+<p><strong>Worth doing — but not as its own commit, and not first.</strong> Three things temper it, and the review that proposed it also produced the counter-evidence:</p>
+<ul>
+  <li><strong>The headline benefit is overstated.</strong> "Five invalidation rules" implies five chances to be wrong; in fact only <code>setVisibilityMask</code>'s drop is load-bearing (see follow-up 1) — the rest bound cache growth and cannot produce a wrong answer. Verified by deleting them: the suite stays green. Consolidating buys tidiness and future-proofing, not a live bug class.</li>
+  <li><strong>The <code>findNode</code> win is negligible.</strong> Its callers (<code>setVisibilityMask</code>, <code>republishSlotVisibility</code>, <code>boundingBox(Key)</code>, <code>setModelMatrix</code>) all run at user-interaction rate over tens-to-hundreds of Keys, never per frame. O(1) here is not a measured cost.</li>
+  <li><strong>Done naively it re-creates the race follow-up 1 just removed.</strong> If <code>PerKeyRecord</code> holds the <code>Object</code> <em>and</em> its derived caches, and <code>launchBuildJob</code> snapshots that hash (<code>QHash</code> is implicitly shared, so the header-copy trick does survive), then a main-thread write to a cached box through a <code>const</code> read aliases the record the worker is concurrently copying into <code>SubBvh::object</code>. Same hazard, new container.</li>
+</ul>
+<p>So the per-Key record is not a precursor to the authoring/built split — it is <strong>how that split gets expressed</strong>. The split: give the build worker an immutable built payload (geometry + matrix + published mask, produced once at launch) and keep authoring state (<code>Object</code>, masks, caches, dirty marks) main-thread-only and never shared. Then derived caches can live beside the inputs they derive from, invalidation becomes structural rather than four remembered call sites, and "is this member safe to make <code>mutable</code>?" stops needing a paragraph of comment each time (<span class="fileref">cwGeometryItersecter.h:411-425</span>). It also composes with follow-up 3 and with item 5 below: an immutable built payload is exactly where a captured <code>isPickable()</code> belongs, which is what unblocks off-thread picks for the sink-scan BVH broad-phase.</p>
+<p><span class="muted">Blast radius: large but contained to <span class="fileref">cwGeometryItersecter.{h,cpp}</span> — <code>Node</code>/<code>Object</code>/<code>SubBvh</code>/<code>BvhData</code>/<code>launchBuildJob</code>/<code>buildSubBvh</code>. Multi-day; needs its own plan. Sequence it with follow-up 3 (both re-key the class) rather than against it.</span></p>
+
+<h3>5 · Pull the pick-registration convention up into <code>cwRenderObject</code> <span class="muted" style="font-size:12px;font-weight:400;">(visibility half subsumed by #579 — registration half remains)</span></h3>
+<p><strong>Re-scoped (July 2026):</strong> the <code>publishPickVisibility</code> half of this seam is subsumed — issue #579's store made visibility identity state that survives geometry cycles (no re-publish after registration exists to forget; the <code>refreshPublishedVisibility</code>/<code>slotVisible</code> machinery this text routes through is retired). What remains its own item is the <strong>registration-ordering half</strong>: a <code>publishPickGeometry(id, geometry, matrix)</code> seam owning the null-check and ordering, so a renderer cannot silently drop pick registration when scene wiring isn't ready (the pre-attach drop the #579 Phase 0 characterization pinned).</p>
+<p>Every renderer hand-wires the same undocumented checklist: null-check <code>geometryItersecter()</code>, <code>addObject</code>, then remember that <code>addObject</code> reset this Key's visibility and re-publish it. See <span class="fileref">cwRenderLinePlot.cpp:46-59</span> and <span class="fileref">:110-116</span>; <span class="fileref">cwRenderTexturedItems.cpp:139</span>, <span class="fileref">:160</span>, <span class="fileref">:189</span>, <span class="fileref">:249</span>, <span class="fileref">:309</span>, <span class="fileref">:322</span>; <span class="fileref">cwRenderPointCloud.cpp:36</span>; <span class="fileref">cwRenderGLTF.cpp:155</span>.</p>
+<p>The "re-publish after registration" step is a convention held <em>only by comments</em>, and the comments themselves record that forgetting it has already bitten — <span class="fileref">cwRenderTexturedItems.cpp:157-162</span> and <span class="fileref">:205-209</span> exist because a hidden scrap resurrected through an empty→non-empty geometry cycle. This commit adds a third prose-only rule to the pile (<span class="fileref">cwRenderLinePlot.h:47-51</span>: "immutable once published — write to a copy and replace, never mutate in place"). None of the three is enforced by anything but a reader's diligence.</p>
+<p><strong>The change:</strong> a base-class seam on <code>cwRenderObject</code> — <code>publishPickGeometry(id, geometry, matrix)</code> and <code>publishPickVisibility(id, …)</code> — that owns the null-check, the ordering, and the post-registration re-publish, so a renderer <em>cannot</em> register geometry without also restating its visibility. Then route <code>cwRenderObject::setVisible</code> (<span class="fileref">cwRenderObject.cpp:74</span>) through it, which is the missing hook that lets <code>refreshPublishedVisibility</code> AND <code>parent-&gt;isVisible()</code> into <code>slotVisible</code> at publish time — retiring the last live <code>cwRenderObject*</code> deref inside traversal (<span class="fileref">cwGeometryItersecter.cpp:182</span>).</p>
+<p>Two things fall out. First, it is the seam the <strong>per-Key-flag/per-vertex-mask convergence</strong> needs: <code>setVisible(Key,bool)</code> keeps <code>m_hiddenKeys</code> alive across <code>addObject</code> as "identity state", but <code>cwRenderTexturedItems</code> already re-seeds unconditionally after <em>both</em> its registration paths (<span class="fileref">:161</span>, <span class="fileref">:209</span>) — so the survival is a second copy of a fact the owner re-supplies immediately, and a second copy can only ever be wrong. It is belt <em>and</em> braces where the braces have a known gap. Once registration guarantees the belt, the flag can adopt the mask's lifetime (drop on <code>addObject</code>, ignore unknown Keys) and <code>m_hiddenKeys</code> disappears, collapsing two mechanisms into one. <em>Caveat (rewritten — <span class="tag done">6 landed</span>):</em> that removes one of follow-up 3's stated motivations (an address-reused object born spuriously hidden) but <strong>not</strong> follow-up 3 itself. This caveat used to rest on the use-after-free — <em>"nothing purges a destroyed render object … so the leaked Node's <code>isPickable()</code> deref stays a use-after-free regardless"</em> — and every clause of that is now false but one: <code>removeItem</code> <em>does</em> purge, <code>clear(parentObject)</code> <em>has</em> a production caller, and the UAF is fixed and regression-tested (only <code>~cwRenderObject()</code> is still empty). So follow-up 3's necessity no longer rests on a live UAF; it rests on <strong>this item's own argument</strong> — retiring the live <code>cwRenderObject*</code> deref inside traversal (<span class="fileref">cwGeometryItersecter.cpp:182</span>). That is a real but weaker claim than the one written here, and it is why 3 is now belt-and-braces rather than a bug fix.</p>
+<p>Second, the front-end/back-end split stops being "each renderer remembers the protocol", and the intersecter stops needing a raw back-pointer to a QObject it dereferences mid-traversal.</p>
+<p><span class="muted">Blast radius: <code>cwRenderObject</code>, the four renderers above, <code>cwScene</code>, and their tests. Out of scope for the follow-up commit — this is the natural Phase 1 of issue #579's "first-class scene visibility model", and doing it there would swamp it.</span></p>
+
+<h3>6 · Nothing purges the intersecter when a render object dies — a live use-after-free <span class="tag p0">bug, land first</span> <span class="tag done">implemented</span></h3>
+
+<p><strong>Landed (July 2026).</strong> Fix is the one prescribed below: <code>cwScene::removeItem()</code> now calls <code>GeometryItersecter-&gt;clear(item)</code>, giving <code>clear(parentObject)</code> its first production caller. Confirmed under ASAN before the fix — <code>heap-use-after-free READ of size 1</code> in <code>cwRenderObject::isVisible()</code> ← <code>isPickable()</code> ← <code>visibleBoundingBox()</code>, freed by <code>cwLazLayersSceneNode::dematerialize()</code> ← <code>removeLayer()</code> ← <code>cwLazLayerModel::removeAt()</code> — and green after. Regression tests in <span class="fileref">testcases/test_cwGeometryItersecterObjectLifetime.cpp</span> cover both the direct <code>setScene(nullptr); delete</code> sequence and the real LAZ remove path.</p>
+
+<p><strong>Two things the implementation pinned down that this section didn't anticipate:</strong></p>
+<ul>
+<li>The purge had to sit <em>above</em> <code>removeItem()</code>'s <code>removedCount == 0</code> early return. Once <code>cwRhiScene::synchroize()</code> has drained <code>m_newRenderObjects</code> and <code>m_toUpdateRenderObjects</code> — i.e. every steady-state removal in the running app — <code>removedCount</code> was 0 for an item still registered with the picker, so a purge below the return would no-op in exactly the case that mattered. <em>Moot as of 7</em>: that early return is gone, and the sync path turned out to be testable CPU-side after all (see 7), contrary to the claim originally recorded here.</li>
+<li>That same early return also stranded the RHI object on every steady-state removal — a separate live bug, split out as <a href="#followup7">follow-up 7</a>, since confirmed and fixed.</li>
+</ul>
+
+<p>Three facts that only bite when combined:</p>
+<ul>
+  <li><code>cwScene::removeItem</code> (<span class="fileref">cwScene.cpp:84</span>) drops render-side references only — it never touches <code>geometryItersecter()</code>.</li>
+  <li><code>cwRenderObject::~cwRenderObject()</code> (<span class="fileref">cwRenderObject.cpp:32</span>) is <strong>empty</strong>.</li>
+  <li><code>cwGeometryItersecter::clear(parentObject)</code> has <strong>zero production callers</strong> — the very API this needs.</li>
+</ul>
+<p>So a destroyed render object leaves its <code>Node</code> behind, and the <code>Node</code>'s <code>Key</code> holds a <strong>dangling <code>cwRenderObject*</code></strong>. Every subsequent pick dereferences it: <code>traverseBvh</code> hoists <code>isPickable(sub.object)</code> (<span class="fileref">cwGeometryItersecter.cpp:182-185</span>, <span class="fileref">:1191</span>) → <code>parent-&gt;isVisible()</code> on freed memory. <code>visibleBoundingBox()</code> does the same (<span class="fileref">:807</span>), so reset-view and the pan/zoom pivot fallback hit it too.</p>
+<p><strong>This is reachable today, by a normal user action.</strong> <span class="fileref">cwLazLayersSceneNode::dematerialize</span> (<span class="fileref">cwLazLayersSceneNode.cpp:296-300</span>), reached from <code>removeLayer</code> — i.e. removing a LAZ layer — does:</p>
+<pre>cwRenderPointCloud* renderObject = it.value();
+renderObject-&gt;setScene(nullptr);   // → cwScene::removeItem: render-side refs only, then m_scene = nullptr
+delete renderObject;               // → default dtor: no purge</pre>
+<p>It never calls <code>cwRenderPointCloud::clear()</code> — the one place that does <code>intersecter-&gt;removeObject(this, 0)</code> (<span class="fileref">cwRenderPointCloud.cpp:59-60</span>). <code>cwLazLayersSceneNode::clear()</code> (<span class="fileref">:203-204</span>) repeats the same two lines. And the <strong>ordering is fatal to the obvious fix</strong>: <code>setScene(nullptr)</code> nulls <code>m_scene</code> before the delete, and <code>geometryItersecter()</code> is <code>m_scene == nullptr ? nullptr : …</code> (<span class="fileref">cwRenderObject.cpp:68-71</span>) — so a purge written in <code>~cwRenderObject()</code> would find no intersecter and silently do nothing. Any fix must purge <em>before</em> the scene is unset, or reach the intersecter another way.</p>
+<p>Second consequence, arguably as bad: the leaked <code>Node</code> retains the full geometry, and <code>m_subBvhs</code> retains its sub-BVH. For a LAZ cloud that is <strong>potentially gigabytes held forever</strong>, per removed layer — the exact memory the sub-BVH cache is elsewhere carefully written to avoid double-holding (<span class="fileref">cwGeometryItersecter.h:454-459</span>).</p>
+<p><strong>Fix:</strong> the cheap version is <code>cwScene::removeItem</code> → <code>geometryItersecter()-&gt;clear(item)</code>, which is presumably what <code>clear(parentObject)</code> was written for and would give it its first caller. Better, fold it into follow-up 5's seam so registration and release are symmetric and a renderer cannot have one without the other. Note <code>cwScene::removeItem</code> already captures <code>renderObjectId()</code> "while <code>item</code> is still alive … without ever dereferencing a dangling pointer" for the RHI side (issue #491/#512) — the scene learned this lesson once already; the intersecter side was never done.</p>
+<p><strong>Test:</strong> materialize a cloud, dematerialize it, then pick — under the macOS Debug Address Sanitizer that should fail loudly today. Worth writing the failing test first to confirm the path before fixing.</p>
+<p><span class="muted">Blast radius: small — one call site plus a regression test. Land ahead of 3, 4 and 5: it is the only item here that is a live defect rather than a structural improvement, and each of those three is wide. Splitting it out of follow-up 3 is what lets it go now, since 3's re-key is mechanical but touches every registration call site.</span></p>
+
+<h3 id="followup7">7 · <code>removeItem()</code>'s early return strands the RHI object on every steady-state removal <span class="tag p0">confirmed live bug</span> <span class="tag done">implemented</span></h3>
+
+<p>Surfaced while placing 6's purge, in the same function. <span class="fileref">cwScene::removeItem</span> (<span class="fileref">cwScene.cpp:93</span>) computes:</p>
+
+<pre><code>const qsizetype removedCount = m_newRenderObjects.removeAll(item)
+                               + (m_toUpdateRenderObjects.remove(item) ? 1 : 0);
+if (removedCount == 0) {
+    return;                       // ← skips the m_toDeleteRenderObjects append below
+}
+
+const cwRenderObjectId id = item-&gt;renderObjectId();
+if (!m_toDeleteRenderObjects.contains(id)) {
+    m_toDeleteRenderObjects.append(id);
+}</code></pre>
+
+<p><code>cwRhiScene::synchroize()</code> drains <em>both</em> queues in a single pass — <code>m_newRenderObjects.clear()</code> (<span class="fileref">cwRhiScene.cpp:56</span>) after re-inserting each into <code>m_toUpdateRenderObjects</code>, then <code>m_toUpdateRenderObjects.clear()</code> (<span class="fileref">cwRhiScene.cpp:76</span>) at the end. So for any object that has been synced and not touched since — <strong>every steady-state removal in a running app</strong> — both removals miss, <code>removedCount</code> is 0, and the function returns before queueing the id. <code>m_frame.destroyRenderObject(id)</code> (<span class="fileref">cwRhiScene.cpp:62</span>) is then never called for it.</p>
+
+<p>So a removed LAZ layer's <code>cwRHIPointCloud</code> — and its GPU vertex buffer, potentially gigabytes — is never destroyed, and may keep drawing.</p>
+
+<p><strong>Confirmed by spike, and it needed no live RHI.</strong> The claim above that reaching this path requires a real sync was <em>wrong</em>. <span class="fileref">test_cwScene_issue512.cpp</span> already drives <code>cwRhiScene::synchroize()</code> directly through the <code>CwRhiSceneTestAccess</code> friend with stub render/RHI objects that touch no GPU — a sync that drains both queues, entirely CPU-side. Removing a synced stub without a preceding <code>setVisible()</code> toggle and syncing again leaves the stub RHI alive-count at <strong>1 instead of 0</strong>.</p>
+
+<p><strong>The existing test already documented the bug as a workaround.</strong> Both #512 tests call <code>setVisible(false)</code> before <code>removeItem()</code>, commented <em>"synchroize() leaves a synced object in none of the live queues, so removeItem() would otherwise have nothing to move to delete."</em> That is this bug, hit and worked around rather than recognised — the toggle's only effect is to put the object back in <code>m_toUpdateRenderObjects</code> so the append is reached.</p>
+
+<p><strong>Why it was unintended rather than deliberate:</strong> the commit that introduced the return (<code>21c5d8df</code>, issue #491) describes it as only <em>"Skip the <code>update()</code> signal if nothing was removed"</em> — the intent was to gate <code>update()</code>, but the return placement gated the delete-queue append too.</p>
+
+<p><strong>Fix as landed:</strong> the <code>removedCount</code> gate is gone entirely rather than narrowed to <code>update()</code>. Both queue removals still run, then the id is queued and <code>update()</code> called unconditionally: <code>update()</code> is only a repaint request, and every <code>removeItem</code> caller is a genuine removal (it is reached solely from <code>setScene()</code> when the item's scene is <em>this</em>), so there is no "nothing happened" case left to skip. Regression tests: <em>"removing a synced render object frees its cwRHIObject"</em> (stubs — pins the mechanism) and <em>"removing a LAZ layer frees its point cloud's cwRHIObject"</em> (the real user path), alongside the two #512 guards they complement. Removing the gate also made test 3's <code>setVisible(false)</code> toggle vestigial — it existed only to reach the append past the gate — so it went; test 1's toggle stays, because it is a live #491 guard (that object is destroyed before the next sync).</p>
+
+<p><strong>The two open questions, answered.</strong> <code>destroyRenderObject</code> on an unknown id is already a safe no-op (<code>m_rhiObjectLookup.value(id)</code> returns null, pinned by <span class="fileref">test_cwRhiFrameRendererRegistry.cpp:73</span>), so the unconditional queueing cannot misfire. Nothing else reaps <code>m_rhiObjectLookup</code> — only <code>registerRenderObject</code>'s stale-replacement guard and <code>destroyRenderObject</code> itself.</p>
+
+<p><strong>Confirmed on the real LAZ path too.</strong> The spike used stubs; the landed regression suite also drives the actual user action. <em>"removing a LAZ layer frees its point cloud's cwRHIObject"</em> (<span class="fileref">testcases/test_cwScene_issue512.cpp</span>) builds a synthetic layer through <code>cwLazLayerModel</code>, syncs a real <code>cwRHIPointCloud</code> into the backend, calls <code>removeAt(0)</code>, and asserts the id no longer resolves. Against the pre-fix gate it fails — the real <code>cwRHIPointCloud</code>, holding the layer's whole vertex buffer, really was stranded in the registry. A real <code>cwRenderPointCloud</code> can be driven CPU-only because <code>cwRHIPointCloud::synchronize</code> touches only <code>data.object</code>, and GPU work is deferred to <code>updateResources</code>, which <code>synchroize()</code> never calls.</p>
+
+<p><strong>Still unverified — the one open question:</strong> whether the stranded object also kept <em>drawing</em>. <code>gatherScene</code> (<span class="fileref">cwRhiFrameRenderer.cpp:549</span>) walks <code>m_rhiObjects</code> (<span class="fileref">:568</span>) and gates only on <code>object-&gt;isVisible()</code>; the stranded object keeps its last-synced <code>visible == true</code>, and nothing sets it false on an object that never syncs again. <em>(An earlier draft of this section cited <code>m_rhiObjectLookup</code> at <span class="fileref">:527</span> — wrong line, wrong container; <code>:527</code> is <code>atlasIncompatibleVisibleObjectIds()</code>. The conclusion is unaffected: <code>m_rhiObjects</code> is equally only reaped by <code>destroyRenderObject</code>.)</em> So the model predicts a removed LAZ layer <strong>stayed on screen</strong> — loud and user-visible, which nobody has reported. Either it was happening (and this fix silently fixed a rendering bug), or something else reaps and the leak analysis is incomplete. The tests cannot settle it: they never render. It costs one app launch — remove a rendered LAZ layer and watch — and it is worth doing before anyone claims the full extent of what 7 fixed.</p>
+
+<h3 id="followup8">8 · The GUI→render handoff: queue membership is being used as state <span class="tag p1">refactor, own commit series</span> <span class="tag done">Phases 0–1 implemented</span></h3>
+
+<p>Surfaced by 7's review. This is the only follow-up here that is not about the intersecter — it is about the seam 6 and 7 both turned out to live in. <strong>It belongs in its own plan file or as issue #579's Phase 0</strong> and is parked here only because that is where the evidence was found; move it out when someone picks it up.</p>
+
+<p><code>cwScene</code> (GUI thread) hands work to <code>cwRhiScene::synchroize()</code> (render thread, a <code>friend</code>) through three hand-maintained containers (<span class="fileref">cwScene.h:120-126</span>):</p>
+
+<pre><code>QList&lt;cwRenderObject*&gt;   m_newRenderObjects;      // raw pointers
+QList&lt;cwRenderObjectId&gt;  m_toDeleteRenderObjects; // ids
+QSet&lt;cwRenderObject*&gt;    m_toUpdateRenderObjects; // raw pointers</code></pre>
+
+<p>The whole safety argument is "the GUI thread is blocked at the scene-graph sync barrier while the render thread drains these" — written in a comment, not in the types.</p>
+
+<p><strong>Every known bug in this file is the same bug:</strong></p>
+
+<table>
+<tr><th>Issue</th><th>Symptom</th><th>Root cause</th></tr>
+<tr><td>#491</td><td>Dangling pointer dereferenced in <code>synchroize</code></td><td>Queues hold raw pointers to objects the caller is about to delete</td></tr>
+<tr><td>#512</td><td>A new object's address reused a dead one's, cancelling its delete</td><td>Queues hold raw pointers, so identity <em>is</em> the address</td></tr>
+<tr><td><a href="#followup7">7</a></td><td>Delete never queued at all</td><td>Queue <strong>membership</strong> overloaded as "is there work to do?"</td></tr>
+</table>
+
+<p>Three investigations, three fixes, one mistake: <strong>membership is being used as state</strong>. <code>removedCount == 0</code> never meant "this object is not in the scene"; it meant "nothing has touched it since the last frame". The representation invites the conflation.</p>
+
+<p><strong>The strongest evidence is what actually happened.</strong> 7 survived inside a file whose own tests worked around it <em>and wrote the workaround down</em> — <em>"removeItem() would otherwise have nothing to move to delete"</em> (<span class="fileref">test_cwScene_issue512.cpp</span>, pre-7). Someone hit the exact defect, described it accurately, and moved on. When the person writing the regression test for the adjacent bug cannot distinguish the bug from correct behaviour, that is a protocol problem, not a diligence problem.</p>
+
+<h4>The change</h4>
+
+<p>One entry per render object, keyed on the stable id, holding the pending <em>transition</em> rather than implying it by membership:</p>
+
+<pre><code>enum class PendingOp { Add, Update, Delete };
+
+struct PendingChange {
+    PendingOp op;
+    cwRenderObject* object;   // null for Delete — see below
+    quint64 sequence;         // queue order — see the draw-order constraint
+};
+
+QMap&lt;cwRenderObjectId, PendingChange&gt; m_pending;
+quint64 m_pendingSequence = 0;   // stamped onto each write</code></pre>
+
+<p class="muted">(The <code>sequence</code> field is not optional — see the draw-order constraint below. The map orders by id, i.e. <em>construction</em> order; Adds must drain in <em>add</em> order, so the drain sorts by this stamp rather than leaning on the key. This is what shipped in Phase 1.)</p>
+
+<p>The load-bearing property: <strong><code>removeItem</code> writes <code>{Delete, nullptr}</code>, which overwrites any pending Add/Update and drops the pointer by construction.</strong> You cannot forget to scrub it — that is what #491 was. And because the key is the id, a recycled address cannot collide with a live entry — that is what #512 was. And because the entry records a transition, "was it queued?" is no longer a proxy for "does it exist?" — that is what 7 was. All three become <em>unrepresentable</em> rather than <em>guarded against</em>.</p>
+
+<svg viewBox="0 0 960 250" role="img" aria-label="Pending-change state machine">
+  <defs>
+    <marker id="fu8arrow" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#5db0ff"/>
+    </marker>
+    <marker id="fu8arrowbad" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#e06c75"/>
+    </marker>
+  </defs>
+  <rect x="30" y="100" width="120" height="46" rx="8" fill="#22262b" stroke="#3a3f47"/>
+  <text x="90" y="128" fill="#9aa4b2" font-size="13" text-anchor="middle" font-family="sans-serif">(absent)</text>
+
+  <rect x="250" y="30" width="120" height="46" rx="8" fill="#233a2a" stroke="#8bc98b"/>
+  <text x="310" y="58" fill="#8bc98b" font-size="13" text-anchor="middle" font-family="sans-serif">Add</text>
+
+  <rect x="250" y="100" width="120" height="46" rx="8" fill="#3a3722" stroke="#e3b341"/>
+  <text x="310" y="128" fill="#e3b341" font-size="13" text-anchor="middle" font-family="sans-serif">Update</text>
+
+  <rect x="250" y="170" width="120" height="46" rx="8" fill="#37414d" stroke="#e06c75"/>
+  <text x="310" y="198" fill="#e06c75" font-size="13" text-anchor="middle" font-family="sans-serif">Delete</text>
+
+  <path d="M150,115 L245,55" stroke="#5db0ff" fill="none" marker-end="url(#fu8arrow)"/>
+  <text x="196" y="76" fill="#9aa4b2" font-size="10" text-anchor="middle" font-family="sans-serif">addItem</text>
+  <path d="M150,123 L245,123" stroke="#5db0ff" fill="none" marker-end="url(#fu8arrow)"/>
+  <text x="196" y="117" fill="#9aa4b2" font-size="10" text-anchor="middle" font-family="sans-serif">updateItem</text>
+  <path d="M150,131 L245,191" stroke="#5db0ff" fill="none" marker-end="url(#fu8arrow)"/>
+  <text x="196" y="176" fill="#9aa4b2" font-size="10" text-anchor="middle" font-family="sans-serif">removeItem</text>
+
+  <path d="M370,53 C440,53 440,180 375,192" stroke="#e06c75" fill="none" marker-end="url(#fu8arrowbad)"/>
+  <path d="M370,123 C430,123 430,180 375,192" stroke="#e06c75" fill="none" marker-end="url(#fu8arrowbad)"/>
+  <text x="470" y="120" fill="#e06c75" font-size="10" font-family="sans-serif">removeItem → Delete (drops the pointer)</text>
+
+  <path d="M310,96 L310,80" stroke="#5db0ff" fill="none" marker-end="url(#fu8arrow)"/>
+  <text x="410" y="90" fill="#9aa4b2" font-size="10" text-anchor="middle" font-family="sans-serif">addItem wins over Update</text>
+
+  <text x="600" y="45" fill="#8bc98b" font-size="11" font-family="sans-serif">Add + updateItem → Add</text>
+  <text x="600" y="65" fill="#9aa4b2" font-size="11" font-family="sans-serif">(an Add already implies a full sync)</text>
+  <text x="600" y="150" fill="#9aa4b2" font-size="11" font-family="sans-serif">Delete + updateItem → Delete</text>
+  <text x="600" y="170" fill="#9aa4b2" font-size="11" font-family="sans-serif">Delete + addItem → Add (re-add before sync)</text>
+  <text x="600" y="200" fill="#5db0ff" font-size="11" font-family="sans-serif">One entry per id ⇒ no Add/Delete conflict per id.</text>
+  <text x="600" y="220" fill="#5db0ff" font-size="11" font-family="sans-serif">Cross-id Add order still ordered at drain (by sequence).</text>
+</svg>
+
+<h4>⚠️ Constraints found while scoping this — read before writing code</h4>
+
+<ul>
+<li><strong>Draw order is load-bearing, and a <code>QHash</code> would silently scramble it.</strong> <code>gatherScene</code> (<span class="fileref">cwRhiFrameRenderer.cpp:549</span>) walks <code>m_rhiObjects</code> in append order and bakes the running <code>objectOrder</code> into the sort key's high 32 bits (<code>quint64(objectOrder) &lt;&lt; 32</code>, <span class="fileref">:588</span>). Append order == registration order == today's <code>m_newRenderObjects</code> order. Any drain that reorders Adds changes draw order for everything sorted (billboards, transparency) — a silent visual regression no unit test would catch. <strong>Hence <code>QMap</code>, not <code>QHash</code>, in the sketch above.</strong></li>
+<li><strong>…but <code>QMap</code>-by-id is <em>construction</em> order, not <code>addItem</code> order.</strong> <code>m_renderObjectId</code> comes from a monotonic counter assigned in the <code>cwRenderObject</code> <em>constructor</em> (<span class="fileref">cwRenderObject.cpp:28</span>), so an object built early and added late sorts before one built late and added early. Usually identical to today's order; not guaranteed. Phase 0 must decide whether that difference is observable, and if it is, carry an explicit sequence number instead of leaning on the id.</li>
+<li><strong>Add must still trigger a synchronize.</strong> Today's add-loop re-inserts each new object into <code>m_toUpdateRenderObjects</code> (<span class="fileref">cwRhiScene.cpp:54</span>) so it gets <code>synchronize()</code>d in the same pass. The single-entry drain must do create <em>and</em> synchronize for <code>Add</code>, or new objects render empty for one frame.</li>
+<li><strong>The pointer does not fully go away.</strong> <code>Add</code>/<code>Update</code> need a live <code>cwRenderObject*</code>; only <code>Delete</code> is pointer-free. So the map still holds raw pointers for un-drained Add/Update entries, and the #491 class survives in miniature: an object deleted <em>without</em> <code>removeItem</code> still dangles. <strong>This is latent, not reachable today</strong> — every production delete goes through <code>setScene(nullptr)</code>→<code>removeItem</code> first (which writes <code>{Delete, nullptr}</code>), and it is exactly as exposed as the raw-pointer queues this refactor replaced. So Phase 2 is a hardening, not a bug fix. Two candidate mechanisms, and <strong>they are not equal on cost</strong>: <code>QPointer&lt;cwRenderObject&gt;</code> in the record auto-nulls, but it is <em>not</em> free — a <code>QPointer</code> does an atomic refcount touch on the target <code>QObject</code> for every construct/copy/destroy, and the drain <em>copies every entry</em> into a <code>QVarLengthArray</code> each sync, so it adds atomic traffic to the per-frame sync path (plus a one-time <code>ExternalRefCountData</code> alloc per render object) to guard a case that cannot currently occur. Making <code>~cwRenderObject()</code> scrub its scene entry fixes the class at the source with <em>zero</em> per-frame cost — see Phase 2 for the teardown-ordering handling that makes it safe. Prefer the destructor route.</li>
+<li><strong><code>m_pendingOffscreenJobs</code> is out of scope.</strong> It rides the same barrier but is a different lifecycle (promises/futures); do not fold it in.</li>
+</ul>
+
+<h4>Phases</h4>
+
+<ul>
+<li><strong>Phase 0 — characterize before touching. <span class="tag done">done</span></strong> Pin the <em>current</em> behaviour of every transition against the current code, so the refactor is provably behaviour-preserving: add→remove, remove→add, add→remove→add, remove→sync→add, double-remove, add→update, update→remove, and remove-of-a-never-added object. The existing stub harness in <span class="fileref">test_cwScene_issue512.cpp</span> (<code>CwRhiSceneTestAccess</code> + <code>StubRenderObject</code>) already drives <code>synchroize()</code> CPU-only, so this is cheap. <strong>Also settle the draw-order question here</strong> — write the test that would fail if Add order changed, or prove none can. This phase is the safety net; do not skip it. <em>Landed:</em> the draw-order question resolved in favour of "it can diverge" — <code>id</code> is a construction-order counter, add order is not, so the drain carries an explicit <code>sequence</code> and sorts by it. Two new stub tests pin it: <em>"added render objects register in add order, not construction order"</em> (fails under a naive id-ordered drain) and <em>"updateItem on a removed render object does not resurrect it"</em> (the transition model makes the #491 late-update path unrepresentable). The five pre-existing lifetime tests are the rest of the net.</li>
+<li><strong>Phase 1 — the swap. <span class="tag done">done</span></strong> Introduce <code>PendingOp</code>/<code>PendingChange</code> + <code>m_pending</code>, replace the three containers, rewrite <code>synchroize()</code>'s three loops as one ordered drain with a <code>switch</code>. External behaviour identical; Phase 0's tests are the gate. <code>removeItem</code>'s "capture the id while <code>item</code> is still alive" comment gets deleted — it becomes structural. <em>Landed:</em> <code>QMap&lt;cwRenderObjectId, PendingChange&gt;</code> (<code>{op, object, sequence}</code>) with a monotonic <code>m_pendingSequence</code>; the drain copies to a <code>QVarLengthArray</code>, sorts by sequence, and switches (Add = create + register + <code>syncRenderObject</code>; Update = <code>syncRenderObject</code>; Delete = <code>destroyRenderObject</code>). <code>updateItem</code> is now a no-op on any object with a pending Add/Delete (idempotent on Update). <span class="fileref">cwScene.h/.cpp</span>, <span class="fileref">cwRhiScene.h/.cpp</span>. Note: <code>QPointer</code> in the record was ruled out here — <span class="fileref">cwRenderObject.h</span> includes <span class="fileref">cwScene.h</span>, so a <code>QPointer&lt;cwRenderObject&gt;</code> member (needs the complete type) would close an include cycle. The record keeps a raw pointer — no worse than the queues it replaced — and the <code>QPointer</code> hardening moves to Phase 2.</li>
+<li><strong>Phase 2 — harden the residual pointer (destructor route, <em>not</em> QPointer). <span class="tag done">done</span></strong> The residual isn't reachable today, so this only matters as a guard against a future caller who deletes a scene-attached render object without <code>removeItem</code>. <strong>Do it at the source, in <code>~cwRenderObject()</code>, so the per-frame sync path stays a raw-pointer copy with no atomic traffic</strong> (see the cost note in the constraints above — <code>QPointer</code> in the record buys auto-nulling at the price of refcount atomics on every drain copy, to defend a case that cannot currently occur; it also needs the <span class="fileref">cwRenderObject.h</span>↔<span class="fileref">cwScene.h</span> include cycle broken to even name the type). Sketch:
+<pre><code>cwRenderObject::~cwRenderObject() {
+    if (m_scene) { m_scene-&gt;removeItem(this); }   // scrub the pending entry (and purge the intersecter — extends #6 to direct-delete)
+}</code></pre>
+Two cases fall out cleanly: <code>setScene(nullptr); delete</code> (the LAZ path) already nulled <code>m_scene</code>, so the dtor is a no-op; a direct <code>delete</code> of a live scene-attached object scrubs to <code>{Delete, nullptr}</code>. The one hazard is <strong>scene teardown</strong>: <code>~QObject</code> deletes the render-object children <em>after</em> <code>cwScene</code>'s members (<code>m_pending</code>, <code>GeometryItersecter</code>) are gone, so a dtor that called <code>removeItem</code> then would touch freed members. Handle it by having <code>~cwScene</code> sever the back-pointers first, while the scene is still whole:
+<pre><code>cwScene::~cwScene() {
+    for (cwRenderObject* obj : findChildren&lt;cwRenderObject*&gt;()) {
+        obj-&gt;detachFromScene();   // sets m_scene = nullptr, no removeItem
+    }
+    // ... existing offscreen-job teardown ...
+}</code></pre>
+Then the child dtors see <code>m_scene == nullptr</code> and no-op. <code>removeItem</code> is non-virtual and touches only <code>this</code>'s id/pointer, so the "no virtual dispatch from a dtor" rule holds. Land it with a test that <code>new</code>s a scene-attached render object and <code>delete</code>s it directly (no <code>removeItem</code>), asserting the next <code>synchroize</code> neither dereferences it nor strands its <code>cwRHIObject</code>. Only reach for <code>QPointer</code> if a future requirement makes the source-scrub impossible. <em>Landed exactly as sketched:</em> <code>~cwRenderObject()</code> scrubs via <code>removeItem(this)</code> guarded on <code>m_scene</code>; <code>~cwScene()</code> severs children with <code>findChildren&lt;cwRenderObject*&gt;()</code> → <code>detachFromScene()</code> (a private inline reachable via <code>friend class cwScene</code>). Three stub tests added to <span class="fileref">test_cwScene_issue512.cpp</span> — direct-delete of a pending-Add object (scrub drops the live pointer so the next drain registers nothing), direct-delete of a synced object (frees its <code>cwRHIObject</code>), and scene-teardown-over-children (clean under ASAN; crashes without the sever). (Phase 3 later moved every such observation off <code>pendingItemCount()</code> and onto the render-side registry.) The double-<code>removeItem</code> on the direct-delete-after-<code>removeItem</code> path is idempotent — <code>clear()</code> erases nothing and <code>destroyRenderObject</code>'s id-lookup guard no-ops a missing id — so it holds for <em>any</em> caller, which matters because there is <strong>no</strong> validated production direct-delete caller of <code>cwScene::removeItem</code> (<span class="fileref">cwCaptureManager.cpp:328</span> is <code>QGraphicsScene::removeItem</code>, a member of that class's <code>QGraphicsScene* Scene</code> — the recurring grep-trap, not this overload). <em>Known robustness ceiling (not fixed, not reachable):</em> the source-scrub turns one latent silent-dangle into a UAF for an object whose <code>m_scene</code> is set but which is <em>not</em> a QObject child of the scene (so <code>findChildren</code> misses it) and which outlives the scene. No production code makes that shape — <code>addItem</code>'s <code>setParent(this)</code> upholds "attached ⟹ scene child" everywhere. If a future caller reparents a live render object out of the scene, close it by making <code>setParent</code>-away imply <code>setScene(nullptr)</code>, or by asserting scene identity in <code>removeItem</code>.</li>
+<li><strong>Phase 3 — retire the scaffolding this exposed. <span class="tag done">done</span></strong> <code>cwScene::releaseResources()</code> (was <span class="fileref">cwScene.h:90</span>) was declared and never defined — <strong>deleted</strong> in Phase 1. <code>cwScene::pendingItemCount()</code> was public production API with <strong>zero production callers</strong> — used only by tests — which CLAUDE.md forbids; it had been <em>kept and reimplemented</em> against <code>m_pending</code> through Phases 0–2 only because those phases' acceptance criterion forbids editing the lifetime tests' assertions, and the test-access relocation is exactly that edit. <strong>Landed as planned.</strong> The method is <strong>deleted</strong> from <code>cwScene.h</code>/<code>cwScene.cpp</code>. Every test that read it now observes the <em>render-side</em> registry through the pre-existing <code>CwRhiSceneTestAccess</code> friend on <code>cwRhiScene</code> (<span class="fileref">cwRhiScene.h:33</span>), which was <strong>extracted from <code>test_cwScene_issue512.cpp</code> into a shared header <code>testlib/CwRhiSceneTestAccess.h</code></strong> so the LAZ tests can use it too. No <code>friend</code> was added to <code>cwScene</code>. The insight that makes the relocation faithful: after <code>synchroize()</code> drains <code>m_pending</code>, the registry reflects exactly what was queued, so <code>renderObjectForId(id) == nullptr</code> after a removal is the same guarantee <code>pendingItemCount() == 0</code> gave, but observed at the seam the bug actually manifests at (the drain). Per call site: the two front-end <code>test_cwScene_issue512.cpp</code> stub tests capture the id while alive then assert <code>g_aliveRhiObjects</code>/<code>renderObjectForId</code> after the drain (one keeps the object alive across the drain so a resurrected Update shows as a surviving RHI object rather than a UAF); the two <span class="fileref">test_cwLazLayersSceneNode_issue491.cpp</span> tests add a <code>cwRhiScene</code>, capture ids, and drain <em>after</em> the never-synced removal (a stronger #491 guard — it exercises the deref the bug caused, not just the queue count); the scene-teardown test dropped its <code>== 2</code> anchor (the ASAN-clean teardown is the observable, no sync runs); and the <span class="fileref">test_cwLazLayersSceneNode.cpp</span> disconnect test dropped its <code>== 0</code> peek as redundant with the <code>pointCloudForLayer() == nullptr</code> checks that already prove no re-materialize. <em>Verified:</em> <code>[cwScene],[cwRhiScene],[cwLazLayersSceneNode],[issue491],[issue512],[cwKeywordVisibility]</code> = 256 assertions in 26 cases, green under ASAN.</li>
+<li><strong>Phase 4 — optional, only if it pays. <span class="tag p2">not done</span></strong> Make the barrier a type rather than a comment (a handle that can only be drained inside sync). Judge after 1–3; it may be gilding.</li>
+<li><strong>Phase 5 — the inverse asymmetry Phase 2 exposed: managers holding raw pointers to scene-owned render objects. <span class="tag done">already satisfied — no code needed</span></strong> Surfaced by the Phase 2 review as finding R1, which claimed <code>cwLazLayersSceneNode::m_pointClouds</code> (<span class="fileref">cwLazLayersSceneNode.cpp:265</span>) keeps raw <code>cwRenderPointCloud*</code> values whose ownership belongs to the scene, so that a node outliving the scene would dangle. <strong>On inspection the finding is a false positive:</strong> line 265 is <code>m_pointClouds.insert(layer-&gt;id(), renderObject)</code> — a raw <em>local</em> — but the container's value type is <code>QHash&lt;QUuid, QPointer&lt;cwRenderPointCloud&gt;&gt;</code> (<span class="fileref">cwLazLayersSceneNode.h:97</span>), which wraps the pointer on insert. The exact remedy this phase prescribes — "observe its clouds through a lifetime-safe handle (<code>QPointer</code> is acceptable <em>here</em>)" — <strong>already landed on 2026-05-14 in <code>52977f5a</code></strong> ("Skip null point clouds during cwLazLayersSceneNode teardown"), for precisely the manager-teardown UAF this phase describes: <code>cwRegionSceneManager</code> parents both the scene and the node to itself, <code>~QObject</code> tears the scene down first, and the <code>QPointer</code> entries auto-null so <code>clear()</code> (<span class="fileref">:201-206</span>) skips them instead of double-deleting. Every other handle in the node that can reach a scene-owned render object is likewise a <code>QPointer</code>: <code>m_scene</code>, <code>m_model</code>, and each keyword item's <code>cwKeywordItem::Object</code> (<span class="fileref">cwKeywordItem.h:32</span>, "so object() can never return a dangling pointer"). Phase 2's <code>~cwScene</code> sever only makes this safer (the children's <code>~cwRenderObject</code> no-ops), so no dangle is reachable in either teardown order. No commit; this entry stands as the record that the asymmetry was checked and found already closed.</li>
+</ul>
+
+<h4>Acceptance <span class="tag done">met for Phases 0–3</span></h4>
+<p>The five existing lifetime tests stay green with no edits to their assertions <strong>through the Phases 0–2 map refactor</strong>: both #512 guards, <em>"removing a synced render object frees its cwRHIObject"</em>, <em>"removing a LAZ layer frees its point cloud's cwRHIObject"</em>, and the #491 <span class="fileref">test_cwLazLayersSceneNode_issue491.cpp</span> suite. If <em>that</em> refactor had needed one of those assertions loosened, it would have been wrong — the handoff collapse must preserve behaviour. <em>Verified:</em> all five pass unedited after the swap, alongside the two new Phase 0 tests — <code>cavewhere-test "[cwScene],[cwRhiScene],[cwLazLayersSceneNode],[issue491],[issue512]"</code> = 229 assertions in 20 cases, and the wider <code>[cwGeometryItersecter]</code>+scene set = 395 assertions in 71 cases.</p>
+<p><strong>Phase 3 is the sanctioned exception.</strong> Its whole purpose is to relocate those assertions off the test-only <code>pendingItemCount()</code> and onto the render-side seam, so it necessarily edits them — but it does <em>not</em> loosen the coverage: each rewrite still fails without its fix (it exercises the same drain the bug manifests at, now via <code>renderObjectForId</code>/<code>g_aliveRhiObjects</code>). Re-verified after the relocation: <code>[cwScene],[cwRhiScene],[cwLazLayersSceneNode],[issue491],[issue512],[cwKeywordVisibility]</code> = 256 assertions in 26 cases, green under ASAN, with <code>cwScene::pendingItemCount()</code> gone from the production header.</p>
+
+<p><span class="muted"><strong>Blast radius:</strong> contained — <span class="fileref">cwScene.{h,cpp}</span>, <span class="fileref">cwRhiScene.cpp</span>, <code>cwRhiFrameRenderer</code>'s registry, and two test files. <strong>Priority: real payoff, no deadline.</strong> Three bugs from one 20-line protocol is a genuine pattern, but the third is now fixed and there is no fourth in sight — so this is worth doing when someone next touches this seam, not urgently. The one thing <em>not</em> to do is add another comment explaining the invariant; that is what the last three fixes did.</span></p>
+
+<p class="muted" style="margin-top:40px;font-size:13px;">Related render-side plans (Phase 0 background): <span class="fileref">CENTERLINE_KEYWORD_VISIBILITY_PLAN.html</span>, <span class="fileref">CENTERLINE_PER_SHOT_VISIBILITY_PLAN.html</span>. This plan is their intersecter-side counterpart.</p>
+
+</div>
+</body>
+</html>

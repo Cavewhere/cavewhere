@@ -35,7 +35,6 @@ public:
     void initialize(const ResourceUpdateData&) override {}
     void synchronize(const SynchronizeData&) override {}
     void updateResources(const ResourceUpdateData&) override {}
-    void render(const RenderData&) override {}
 };
 
 } // namespace

@@ -118,3 +118,8 @@ double cwLengthUnitSelection::toMeters(double value) const
 {
     return cwUnits::convert(value, m_unit, cwUnits::Meters);
 }
+
+QString cwLengthUnitSelection::format(double meters, bool signedValue) const
+{
+    return cwUnits::formatLength(meters, m_unit, signedValue);
+}

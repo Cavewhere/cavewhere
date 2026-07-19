@@ -37,6 +37,43 @@ public:
         float meanSpacingXY = 0.0f;
     };
 
+    //! Pick sphere radius, as a multiple of meanSpacingXY.
+    //!
+    //! Must stay above 1/sqrt(2) ~= 0.707: on a grid of spacing s the worst
+    //! case ray passes through a cell centre, s*sqrt(2)/2 from the nearest
+    //! point, so anything smaller leaves a gap the ray slips through — and it
+    //! then hits some unoccluded point far down the ray instead. The splats
+    //! are drawn from worldRadius and overlap into a solid-looking wall, so
+    //! that gap is invisible: the surface reads as watertight and picks
+    //! through. Above the threshold the near wall yields an exact hit.
+    //!
+    //! Nothing catches a miss any more: the near-miss fallback that used to
+    //! paper over sub-threshold radii is gone (it snapped picks to points the
+    //! ray never touched, which made leads unclickable — see
+    //! cwLeadView::isOccluded). This constant is the only thing keeping a
+    //! cloud pickable where it is drawn.
+    //!
+    //! Deliberately NOT tied to worldRadius, which would match the drawn
+    //! footprint exactly but is tuned live (P + mouse wheel, see
+    //! PointCloud.vert) while this is baked into the BVH box padding at
+    //! addObject time — tracking it would rebuild the whole BVH per wheel
+    //! tick. Staying above the threshold keeps picks watertight at every
+    //! worldRadius instead.
+    //! 1.0 rather than the bare 0.707 threshold: meanSpacingXY is a mean over
+    //! an irregular cloud, so local spacing runs above it, and a wall met at a
+    //! grazing angle stretches the effective gap further still. The margin
+    //! covers both.
+    static constexpr float PointPickRadiusScale = 1.0f;
+
+    // Binds the threshold where the constant is declared, so a retune below
+    // 1/sqrt(2) fails the build rather than silently reopening the gaps.
+    // 0.7071068f rather than M_SQRT1_2: that macro is not in the C++ standard
+    // (MSVC hides it behind _USE_MATH_DEFINES, which this project never sets).
+    static_assert(PointPickRadiusScale >= 0.7071068f,
+                  "A pick sphere below sqrt(2)/2 of the point spacing cannot "
+                  "cover a grid cell's centre, so some ray through a "
+                  "solid-looking cloud will miss every point in it.");
+
     explicit cwRenderPointCloud(QObject* parent = nullptr);
 
     void setGeometry(GeometryData data);

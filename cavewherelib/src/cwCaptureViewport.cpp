@@ -71,6 +71,7 @@ cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     PaperUnit(cwUnits::Inches),
     TransformOrigin(QQuickItem::TopLeft),
     CapturingImages(false),
+    CaptureRequested(false),
     TileSize(1024, 1024),
     CaptureCamera(new cwCamera(this)),
     PreviewItem(nullptr),
@@ -144,18 +145,23 @@ void cwCaptureViewport::setViewport(QRect viewport) {
  */
 void cwCaptureViewport::capture()
 {
-    if(CapturingImages) { return; }
+    if(CapturingImages) {
+        // A render (typically a live preview) is already in flight. Don't drop this
+        // request: remember it and re-run in finishCapture() once the current render
+        // lands, so a full-res export requested mid-preview still builds its Item.
+        CaptureRequested = true;
+        return;
+    }
 
-    // Every bail-out below must still emit finishedCapture(): cwCaptureManager
-    // chains the next layer (and the final save) on that signal, so a silent
+    // Every bail-out below must still complete via finishCapture(): cwCaptureManager
+    // chains the next layer (and the final save) on finishedCapture(), so a silent
     // return would stall the whole export. abort() clears the re-entrancy flag and
     // signals completion so the manager advances rather than hangs. Capture no
     // longer touches global scene state (the gradient/grid/line-plot are hidden
     // per-tile via hiddenObjectIds), so there is nothing to restore here.
     const auto abort = [this](const QString& reason) {
         qWarning().noquote() << "Map export aborted:" << reason;
-        CapturingImages = false;
-        emit finishedCapture();
+        finishCapture();
     };
 
     // isEmpty() (not isValid()) rejects a zero-area viewport too: QSize(0,0) is
@@ -295,13 +301,18 @@ void cwCaptureViewport::capture()
     // degrades to a missing tile rather than no image at all. Placing every tile
     // here (rather than as each future arrives) keeps placeLabelsAfterTiles()
     // strictly after the last tile lands, with no ordering race against combine.
+    // Bind the destination group by value now, at schedule time. The continuation
+    // fires after the tiles settle, by which point cwCaptureManager may have flipped
+    // setPreviewCapture() for the full-res export; reading previewCapture()/Item at
+    // fire-time could select the wrong group and dereference it in addToGroup.
+    const bool wasPreview = previewCapture();
+    QGraphicsItemGroup* const parent = wasPreview ? PreviewItem : Item;
+
     auto combine = AsyncFuture::combine(AsyncFuture::AllSettled);
     for(const Tile& tile : tiles) {
         combine << tile.future;
     }
-    combine.context(this, [this, tiles, imageScale]() {
-        QGraphicsItemGroup* parent = previewCapture() ? PreviewItem : Item;
-
+    combine.context(this, [this, tiles, imageScale, wasPreview, parent]() {
         int placed = 0;
         for(const Tile& tile : tiles) {
             const QFuture<QImage>& future = tile.future;
@@ -330,7 +341,7 @@ void cwCaptureViewport::capture()
                        << "of" << tiles.size() << "tiles";
         }
 
-        if(previewCapture()) {
+        if(wasPreview) {
             updateBoundingBox();
         }
 
@@ -340,10 +351,29 @@ void cwCaptureViewport::capture()
 
         // Clean up. Visibility was overridden per-tile, never globally, so there is
         // no scene state to restore here.
-        CapturingImages = false;
-
-        emit finishedCapture();
+        finishCapture();
     });
+}
+
+/**
+ * @brief cwCaptureViewport::finishCapture
+ *
+ * Common completion path for capture(). Clears the re-entrancy flag and either
+ * re-runs a request that arrived mid-render (the latest request supersedes this now
+ * stale one, so its finishedCapture() is suppressed in favour of the re-run's) or
+ * notifies cwCaptureManager that this capture landed.
+ */
+void cwCaptureViewport::finishCapture()
+{
+    CapturingImages = false;
+
+    if(CaptureRequested) {
+        CaptureRequested = false;
+        capture();
+        return;
+    }
+
+    emit finishedCapture();
 }
 
 /**

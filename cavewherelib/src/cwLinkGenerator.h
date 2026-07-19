@@ -44,6 +44,7 @@ public:
     Q_INVOKABLE void gotoScrap(cwScrap* scrap);
     Q_INVOKABLE void gotoNote(cwNote* note);
 
+    Q_INVOKABLE QString dataPageLink();
     Q_INVOKABLE QString caveLink(cwCave* cave);
     Q_INVOKABLE QString tripLink(cwTrip* trip);
     Q_INVOKABLE QString scrapLink(cwScrap* scrap);

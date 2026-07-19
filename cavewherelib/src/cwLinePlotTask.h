@@ -36,6 +36,7 @@ class cwCave;
 
 //Std includes
 #include <optional>
+#include <utility>
 
 class cwLinePlotTask
 {
@@ -58,46 +59,8 @@ public:
         int exitCode = 0;          // populated for Step::Cavern
         QString message;           // human-readable summary
     };
-    /**
-     * TripDataPtrs, CaveDataPtrs, and RegionDataPtrs, store pointers to original
-     * data in this task.  This will allow the task to return the pointer of each object
-     * that the station's position has changed.  This is extremely useful for alerting
-     * when a specific scrap needs to be updated.
-     *
-     * It is unsafe to use the pointers in the this data structure.  But are used for
-     * book keeping only.
-     *
-     * This could possibly be replaced by id's in the future
-     */
-    class TripDataPtrs {
-    public:
-        TripDataPtrs() {}
-        TripDataPtrs(cwTrip* trip);
-
-        cwTrip* Trip;
-        QList<cwScrap*> Scraps;
-    };
-
-    class CaveDataPtrs {
-    public:
-        CaveDataPtrs() {}
-        CaveDataPtrs(cwCave* cave);
-
-        cwCave* Cave;
-        QList<TripDataPtrs> Trips;
-    };
-
-    class RegionDataPtrs {
-    public:
-        RegionDataPtrs() {}
-        RegionDataPtrs(const cwCavingRegion* region);
-
-        QList<CaveDataPtrs> Caves;
-    };
-
     struct Input {
         cwCavingRegionData regionData;
-        class RegionDataPtrs regionPointers;
 
         // Absolute on-disk attachment directories for caves and trips whose
         // externalCenterline is set. Keyed by cwCave::id() / cwTrip::id() so
@@ -145,8 +108,10 @@ public:
     /**
      * @brief The CaveStationData class
      *
-     * Holds a pointer to the cave's data that has been changed. This is the pointer to the
-     * orginial cave, trips, and scraps. in the main thread
+     * Identifies the caves, trips, and scraps whose station positions changed
+     * by their stable cwCave/cwTrip/cwScrap::id() UUID rather than a raw
+     * pointer. Only value-type identity crosses the worker boundary; the
+     * manager resolves each UUID back to the live object on the main thread.
      *
      * Also holds the new station lookup that the cave should be update with.  We don't update
      * the original cave's data directly because of thread safety.
@@ -157,16 +122,10 @@ public:
 
         void clear();
 
-        void setCaveData(QMap<cwCave*, LinePlotCaveData> caveData);
-        void setTrip(QSet<cwTrip*> trips);
-        void setScraps(QSet<cwScrap*> scraps);
         void setPositions(QVector<QVector3D> positions);
         void setTripVertexRanges(QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges);
         void setTripUuids(QVector<QUuid> tripUuids);
 
-        QMap<cwCave*, LinePlotCaveData> caveData() const;
-        QSet<cwTrip*> trips() const;
-        QSet<cwScrap*> scraps() const;
         QVector<QVector3D> stationPositions() const;
 
         // Per-trip vertex span in stationPositions and the running-id -> stable
@@ -182,9 +141,9 @@ public:
         cwSurveyNetwork regionNetwork() const;
         bool hasRegionNetworkChanged() const;
 
-        QMap<cwCave*, LinePlotCaveData> Caves;
-        QSet<cwTrip*> Trips;
-        QSet<cwScrap*> Scraps;
+        QHash<QUuid, LinePlotCaveData> Caves;
+        QSet<QUuid> Trips;
+        QSet<QUuid> Scraps;
         QVector<QVector3D> StationPositions;
         QVector<cwLinePlotGeometry::VertexRange> TripVertexRanges;
         QVector<QUuid> TripUuids;
@@ -253,48 +212,18 @@ public:
         StationTripScrapLookup(cwCave* cave);
         StationTripScrapLookup() { }
 
-        QList<int> trips(QString stationName) const;
-        QList<QPair<int, int> > scraps(QString stationName) const;
+        // Trip UUIDs, and (tripId, scrapId) pairs, of every trip/scrap that
+        // touches stationName. Keyed by stable id() rather than list index so
+        // the result never carries a raw pointer across the worker boundary.
+        QList<QUuid> trips(QString stationName) const;
+        QList<std::pair<QUuid, QUuid>> scraps(QString stationName) const;
 
     private:
-        QMultiHash<QString, int> MapStationToTrip; //Multi map of a station to multiple trips indexes
-        QMultiHash<QString, QPair<int, int> > MapStationToScrap; //Multi map of a station to multiple scraps indexes (first index is cave, then scrap index)
+        QMultiHash<QString, QUuid> MapStationToTrip;
+        QMultiHash<QString, std::pair<QUuid, QUuid>> MapStationToScrap;
     };
 
 };
-
-/**
- * @brief cwLinePlotTask::LinePlotResultData::caveData
- * @return The external cave pointer that's should be updated with cwStationPositionLookup
- *
- * This functions aren't thread safe!! You should only call these if the task isn't running
- */
-inline QMap<cwCave *, cwLinePlotTask::LinePlotCaveData> cwLinePlotTask::LinePlotResultData::caveData() const
-{
-    return Caves;
-}
-
-/**
- * @brief cwLinePlotTask::LinePlotResultData::trips
- * @return A list of all external trips that there station positions have changed
- *
- * This functions aren't thread safe!! You should only call these if the task isn't running
- */
-inline QSet<cwTrip *> cwLinePlotTask::LinePlotResultData::trips() const
-{
-    return Trips;
-}
-
-/**
- * @brief cwLinePlotTask::LinePlotResultData::scraps
- * @return A list of all the scraps that the position has changed
- *
- * This functions aren't thread safe!! You should only call these if the task isn't running
- */
-inline QSet<cwScrap *> cwLinePlotTask::LinePlotResultData::scraps() const
-{
-    return Scraps;
-}
 
 /**
  * @brief cwLinePlotTask::LinePlotResultData::stationPositions
@@ -324,30 +253,6 @@ inline bool cwLinePlotTask::LinePlotResultData::hasRegionNetworkChanged() const
 }
 
 /**
- * @brief cwLinePlotTask::LinePlotResultData::setCaveData
- * @param caveData
- */
-inline void cwLinePlotTask::LinePlotResultData::setCaveData(QMap<cwCave *, LinePlotCaveData> caveData) {
-    Caves = caveData;
-}
-
-/**
- * @brief cwLinePlotTask::LinePlotResultData::setTrip
- * @param trips
- */
-inline void cwLinePlotTask::LinePlotResultData::setTrip(QSet<cwTrip*> trips) {
-    Trips = trips;
-}
-
-/**
- * @brief cwLinePlotTask::LinePlotResultData::setScraps
- * @param scraps
- */
-inline void cwLinePlotTask::LinePlotResultData::setScraps(QSet<cwScrap*> scraps) {
-    Scraps = scraps;
-}
-
-/**
  * @brief cwLinePlotTask::LinePlotResultData::setPositions
  * @param positions
  */
@@ -373,12 +278,12 @@ inline QVector<QUuid> cwLinePlotTask::LinePlotResultData::tripUuids() const {
     return TripUuids;
 }
 
-inline QList<int> cwLinePlotTask::StationTripScrapLookup::trips(QString stationName) const
+inline QList<QUuid> cwLinePlotTask::StationTripScrapLookup::trips(QString stationName) const
 {
     return MapStationToTrip.values(stationName);
 }
 
-inline QList<QPair<int, int> > cwLinePlotTask::StationTripScrapLookup::scraps(QString stationName) const
+inline QList<std::pair<QUuid, QUuid>> cwLinePlotTask::StationTripScrapLookup::scraps(QString stationName) const
 {
     return MapStationToScrap.values(stationName);
 }

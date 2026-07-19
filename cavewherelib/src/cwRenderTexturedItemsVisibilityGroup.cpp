@@ -19,7 +19,7 @@ void cwRenderTexturedItemsVisibilityGroup::setVisible(bool visible)
 
     m_visible = visible;
     for(auto id : m_ids) {
-        m_items->setVisible(id, visible);
+        m_items->setItemVisible(id, visible);
     }
     emit visibleChanged();
 }

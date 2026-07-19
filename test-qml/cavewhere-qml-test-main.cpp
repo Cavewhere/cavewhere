@@ -7,6 +7,8 @@
 #include <QGuiApplication>
 #include <QApplication>
 #include <QFont>
+#include <QQuickStyle>
+#include <QStyleFactory>
 #include <QStyleHints>
 
 //Our inculdes
@@ -60,20 +62,15 @@ public slots:
 //QUICK_TEST_MAIN_WITH_SETUP(mapWhere-qml-tests, Setup)
 int main(int argc, char **argv) \
 {
-#ifdef Q_OS_WIN
-    // Force Basic style when running offscreen to avoid Windows native style
-    // crashes (OpenThemeData fails → unit_width assertion in qquickwindowsstyle.cpp)
-    for (int i = 1; i < argc - 1; ++i) {
-        if ((qstrcmp(argv[i], "-platform") == 0 || qstrcmp(argv[i], "--platform") == 0)
-            && qstrcmp(argv[i + 1], "offscreen") == 0) {
-            qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
-            break;
-        }
-    }
-#endif
-
     //This allows use to create a QGraphicsScene, without QApplication, this crashes
     QApplication app(argc, argv);
+
+    // Match the application's style stack (main.cpp) so tests exercise the same
+    // style as production. Fusion is a pure-QML style with no native theme calls,
+    // so it also sidesteps the Windows native-style offscreen crash that previously
+    // required forcing the Basic style here.
+    QApplication::setStyle(QStyleFactory::create("Fusion")); // Qt Widgets
+    QQuickStyle::setStyle("Fusion");                          // Qt Quick Controls
 
     // Manual-screenshot generation (CW_MANUAL_IMAGE_DIR set by
     // scripts/gen-manual-screenshots.sh): pin a light color scheme so the images

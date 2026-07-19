@@ -29,6 +29,17 @@ cwLinkGenerator::~cwLinkGenerator()
 
 
 /**
+ * @brief cwLinkGenerator::dataPageLink
+ * @return The address of the top-level Data page (parent of the per-cave pages).
+ */
+QString cwLinkGenerator::dataPageLink()
+{
+    return QStringLiteral("Source")
+           + cwPageSelectionModel::seperator()
+           + QStringLiteral("Data");
+}
+
+/**
  * @brief cwLinkGenerator::link
  * @param cave
  * @return
@@ -36,9 +47,7 @@ cwLinkGenerator::~cwLinkGenerator()
 QString cwLinkGenerator::caveLink(cwCave *cave)
 {
     if(cave == nullptr) { return QString(); }
-    return QStringLiteral("Source")
-           + cwPageSelectionModel::seperator()
-           + QStringLiteral("Data")
+    return dataPageLink()
            + cwPageSelectionModel::seperator()
            + QStringLiteral("Cave=")
            + cave->name();

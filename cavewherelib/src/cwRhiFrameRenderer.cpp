@@ -32,20 +32,6 @@ size_t qHash(const cwRhiPipelineKey& key, size_t seed) noexcept
 }
 
 namespace {
-cwRHIObject::PipelineBatch& ensurePipelineBatch(QVector<cwRHIObject::PipelineBatch>& batches,
-                                                const cwRHIObject::PipelineState& state)
-{
-    for (auto& existing : batches) {
-        if (existing.state.pipeline == state.pipeline &&
-            existing.state.sortKey == state.sortKey) {
-            return existing;
-        }
-    }
-
-    batches.append({state, {}});
-    return batches.last();
-}
-
 // Draw order for the scene's passes. The no-cloud path draws these straight to
 // its single target; the EDL composite path splits them across the scene / cloud
 // / composite passes. Shared by the live frame and the offscreen render.
@@ -164,6 +150,8 @@ void cwRhiFrameRenderer::registerRenderObject(cwRenderObjectId id, cwRHIObject* 
         destroyRhiObject(stale);
     }
 
+    rhiObject->setRenderObjectId(id);
+    rhiObject->setFrameRenderer(this);
     m_rhiObjects.append(rhiObject);
     m_rhiObjectsToInitilize.append(rhiObject);
     m_rhiObjectLookup[id] = rhiObject;
@@ -264,7 +252,14 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
         m_projectionMatrix, m_viewMatrix, m_devicePixelRatio, m_viewportSize);
     m_updateFlags = cwSceneUpdate::Flag::None;
 
-    cwRHIObject::ResourceUpdateData resourceUpdateData{resources, renderData};
+    // Built after setupPassRouting and stampCamera so each per-pass copy carries
+    // both this frame's routing and the live camera. Shared with updateResources
+    // (via resourceUpdateData) and gather() so every pipeline — wherever it is
+    // built — keys on the same stamped routing.
+    const cwRHIObject::PerPassRenderData perPassRenderData =
+        buildPerPassRenderData(renderData);
+
+    cwRHIObject::ResourceUpdateData resourceUpdateData{resources, renderData, &perPassRenderData};
 
     if(!m_rhiObjectsToInitilize.isEmpty()) {
         for(auto object : std::as_const(m_rhiObjectsToInitilize)) {
@@ -281,9 +276,6 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
     }
 
     std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount> passBatches;
-
-    const std::array<cwRHIObject::RenderData, kPassCount> perPassRenderData =
-        buildPerPassRenderData(renderData);
 
     gatherScene(passBatches, perPassRenderData);
 
@@ -512,8 +504,9 @@ bool cwRhiFrameRenderer::anyCloudVisible() const
 {
     return std::any_of(
         m_rhiObjects.cbegin(), m_rhiObjects.cend(),
-        [](const cwRHIObject* object) {
-            return object->isVisible() && object->usesPointCloudPass();
+        [this](const cwRHIObject* object) {
+            return m_visibility.objectVisible(object->renderObjectId())
+                   && object->usesPointCloudPass();
         });
 }
 
@@ -522,17 +515,18 @@ QSet<cwRenderObjectId> cwRhiFrameRenderer::atlasIncompatibleVisibleObjectIds() c
     QSet<cwRenderObjectId> ids;
     for (auto it = m_rhiObjectLookup.cbegin(); it != m_rhiObjectLookup.cend(); ++it) {
         const cwRHIObject* object = it.value();
-        if (object && object->isVisible() && object->precludesAtlasBatching()) {
+        if (object && m_visibility.objectVisible(it.key())
+            && object->precludesAtlasBatching()) {
             ids.insert(it.key());
         }
     }
     return ids;
 }
 
-std::array<cwRHIObject::RenderData, cwRhiFrameRenderer::kPassCount> cwRhiFrameRenderer::buildPerPassRenderData(
+cwRHIObject::PerPassRenderData cwRhiFrameRenderer::buildPerPassRenderData(
     const cwRHIObject::RenderData& base) const
 {
-    std::array<cwRHIObject::RenderData, kPassCount> perPass;
+    cwRHIObject::PerPassRenderData perPass;
     for (int i = 0; i < kPassCount; ++i) {
         perPass[i] = base;
         const auto pass = static_cast<cwRHIObject::RenderPass>(i);
@@ -543,57 +537,29 @@ std::array<cwRHIObject::RenderData, cwRhiFrameRenderer::kPassCount> cwRhiFrameRe
 }
 
 void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>& passBatches,
-                            const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData,
+                            const cwRHIObject::PerPassRenderData& perPassRenderData,
                             const cwSceneGatherOptions& options)
 {
-    // Resolve the per-job hidden ids to the live cwRHIObject pointers once, so the
-    // gather loop skips them with a pointer-set lookup rather than re-hashing ids.
-    // Skipped entirely on the live frame (empty set) so its hot path stays
-    // allocation-free; contains() on the resulting null set is a cheap no-op.
-    QSet<const cwRHIObject*> hiddenObjects;
-    if (!options.hiddenObjectIds.isEmpty()) {
-        hiddenObjects.reserve(options.hiddenObjectIds.size());
-        for (cwRenderObjectId id : options.hiddenObjectIds) {
-            if (cwRHIObject* object = m_rhiObjectLookup.value(id, nullptr)) {
-                hiddenObjects.insert(object);
-            }
-        }
-    }
-
     quint32 objectOrder = 0;
     for (auto object : std::as_const(m_rhiObjects)) {
-        if (!object->isVisible() || hiddenObjects.contains(object)) {
+        // Snapshot gate ANDed with the per-job overlay. Objects carry their own
+        // ids now, so the overlay is tested directly — no id→pointer resolve
+        // pass; contains() on the live frame's empty set is a cheap no-op.
+        const cwRenderObjectId id = object->renderObjectId();
+        if (!m_visibility.objectVisible(id) || options.hiddenObjectIds.contains(id)) {
             ++objectOrder;
             continue;
         }
 
-        bool gathered = false;
         for (cwRHIObject::RenderPass pass : kPassOrder) {
             const int passIndex = static_cast<int>(pass);
             auto& batches = passBatches[passIndex];
             const cwRHIObject::GatherContext context {
                 &perPassRenderData[passIndex], pass, objectOrder,
+                &m_visibility,
                 options.appearanceSlotForObject.value(object, 0)
             };
-            gathered |= object->gather(context, batches);
-        }
-
-        //Generate renderables for older rendering path
-        if (!gathered) {
-            const int defaultPassIndex = static_cast<int>(cwRHIObject::RenderPass::Opaque);
-            const quint64 baseSortKey = (quint64(objectOrder) << 32);
-            cwRHIObject::PipelineState state;
-            state.pipeline = nullptr;
-            state.sortKey = baseSortKey;
-
-            auto& batch = ensurePipelineBatch(passBatches[defaultPassIndex], state);
-            cwRHIObject::Drawable draw;
-            draw.type = cwRHIObject::Drawable::Type::Custom;
-            draw.customDraw = [object](const cwRHIObject::RenderData& data) {
-                object->render(data);
-            };
-
-            batch.drawables.append(draw);
+            object->gather(context, batches);
         }
 
         ++objectOrder;
@@ -706,7 +672,7 @@ void cwRhiFrameRenderer::drawScene(QRhiCommandBuffer* cb,
                            QRhiRenderTarget* finalTarget,
                            const EdlOffscreen* edl,
                            std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount>& passBatches,
-                           const std::array<cwRHIObject::RenderData, kPassCount>& perPassRenderData,
+                           const cwRHIObject::PerPassRenderData& perPassRenderData,
                            QRhiResourceUpdateBatch* resources,
                            const cwRhiPostProcessEffect::FrameUniformContext& frameContext,
                            quint32 cameraUniformOffset,

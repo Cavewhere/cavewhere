@@ -4,10 +4,12 @@
 //Qt includes
 #include "cwScene.h"
 #include "cwRhiPipelineSet.h"
+#include "cwRenderObjectId.h"
 class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 
 #include <rhi/qrhi.h>
+#include <array>
 #include <functional>
 #include <QMatrix4x4>
 #include <QSize>
@@ -15,8 +17,10 @@ class QRhiResourceUpdateBatch;
 
 //Our includes
 class cwRhiItemRenderer;
+class cwRhiFrameRenderer;
 class cwRenderObject;
 class cwAppearanceSlotted;
+class cwVisibilitySnapshot;
 
 class cwRHIObject {
 
@@ -55,16 +59,6 @@ public:
         float devicePixelRatio = 1.0f;
     };
 
-    struct ResourceUpdateData {
-        QRhiResourceUpdateBatch* resourceUpdateBatch;
-        RenderData renderData;
-    };
-
-    struct SynchronizeData {
-        cwRenderObject* object;
-        cwRhiItemRenderer* renderer;
-    };
-
     //For rendering
     enum class RenderPass : int {
         Background = 0,   // radial gradient — was implicit; now an explicit named pass
@@ -74,6 +68,26 @@ public:
         Overlay,
         ShadowMap,
         Count
+    };
+
+    // One RenderData per RenderPass, stamped with the target each pass routes into
+    // this frame (cwRhiFrameRenderer::buildPerPassRenderData is the single resolver).
+    using PerPassRenderData = std::array<RenderData, static_cast<size_t>(RenderPass::Count)>;
+
+    struct ResourceUpdateData {
+        QRhiResourceUpdateBatch* resourceUpdateBatch;
+        RenderData renderData;
+        // The frame's routed targets — the same source gather() receives. renderData
+        // above carries the frame's final target, not per-pass routing, so an object
+        // that builds a pipeline here for a pass that can route elsewhere
+        // (cwRhiTexturedItems) must key on its pass's entry. Always supplied by the
+        // frame renderer.
+        const PerPassRenderData* perPassRenderData = nullptr;
+    };
+
+    struct SynchronizeData {
+        cwRenderObject* object;
+        cwRhiItemRenderer* renderer;
     };
 
     // Per-object appearance-slot budget (ceiling) for offscreen render overrides.
@@ -99,6 +113,12 @@ public:
         const RenderData* renderData;
         RenderPass renderPass;
         quint32 objectOrder = 0;
+        // The frame's visibility snapshot (cwRhiFrameRenderer::visibilitySnapshot),
+        // stamped by gatherScene. Objects with sub-item granularity read their
+        // per-item flags from it (cwRhiTexturedItems); whole-object gating already
+        // happened in gatherScene, so most gather()s never touch it. Null is
+        // treated as everything-visible.
+        const cwVisibilitySnapshot* visibility = nullptr;
         // Per-object appearance slot this render job selects (0 = the live
         // appearance in slot 0; higher slots = a per-job override the offscreen
         // renderer acquired and uploaded for this object before gathering). The
@@ -173,9 +193,6 @@ public:
     virtual void synchronize(const SynchronizeData& data) = 0;
     virtual void updateResources(const ResourceUpdateData& data) = 0;
 
-    //Older rendering method
-    virtual void render(const RenderData& data) = 0;
-
     //Gather render objects
     virtual bool gather(const GatherContext& context,
                         QVector<PipelineBatch>& batches) {
@@ -184,8 +201,19 @@ public:
         return false;
     };
 
-    void setVisible(bool visible) { m_isVisible = visible; }
-    bool isVisible() const { return m_isVisible; }
+    // Stable identity of the front-end cwRenderObject this backend object mirrors,
+    // stamped by cwRhiFrameRenderer::registerRenderObject. Objects use it to read
+    // their own entries from the frame's visibility snapshot
+    // (cwRhiFrameRenderer::visibilitySnapshot) — there is no RHI-side visibility
+    // copy; the snapshot captured at the sync barrier is the render thread's truth.
+    cwRenderObjectId renderObjectId() const { return m_renderObjectId; }
+    void setRenderObjectId(cwRenderObjectId id) { m_renderObjectId = id; }
+
+    // The frame renderer that owns this object, stamped by
+    // cwRhiFrameRenderer::registerRenderObject alongside the id — before any
+    // callback runs, so subclasses may rely on it being non-null in
+    // initialize/synchronize/updateResources/gather.
+    void setFrameRenderer(cwRhiFrameRenderer* frame) { m_frame = frame; }
 
     // True when this object draws into the PointCloud pass with real geometry.
     // cwRhiScene polls this before gathering to decide whether to engage the
@@ -225,10 +253,13 @@ public:
 
     static QShader loadShader(const QString& name);
 private:
-    bool m_isVisible = true;
+    cwRenderObjectId m_renderObjectId{};
 
+protected:
+    // Owning frame renderer (see setFrameRenderer above). Protected so subclass
+    // pipeline caches can hand it to cwRhiPipelineSet::acquire directly.
+    cwRhiFrameRenderer* m_frame = nullptr;
 
-protected:    
     static PipelineBatch& acquirePipelineBatch(QVector<PipelineBatch>& batches,
                                                const PipelineState& state)
     {

@@ -15,6 +15,7 @@
 
 // SUT
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwRayHit.h"
 #include "cwTask.h"
 
@@ -29,14 +30,8 @@ cwGeometryItersecter::Object makePointObject(uint64_t id,
                                              const QMatrix4x4& modelMatrix = QMatrix4x4(),
                                              float pickRadius = kPickRadius)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setType(cwGeometry::Type::Points);
-
-    return cwGeometryItersecter::Object({nullptr, id},
-                                        geometry,
+    return cwGeometryItersecter::Object(nullptr, id,
+                                        cwTestGeometry::points(points),
                                         modelMatrix,
                                         pickRadius);
 }
@@ -47,21 +42,8 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
                                                 const QVector3D& c,
                                                 const QMatrix4x4& modelMatrix = QMatrix4x4())
 {
-    QVector<QVector3D> points;
-    points << a << b << c;
-
-    QVector<uint32_t> indexes;
-    indexes << 0u << 1u << 2u;
-
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setIndices(indexes);
-    geometry.setType(cwGeometry::Type::Triangles);
-
-    return cwGeometryItersecter::Object({nullptr, id},
-                                        geometry,
+    return cwGeometryItersecter::Object(nullptr, id,
+                                        cwTestGeometry::triangles({a, b, c}, {0u, 1u, 2u}),
                                         modelMatrix);
 }
 
@@ -104,7 +86,7 @@ TEST_CASE("setModelMatrix translates pick without invalidating sub-BVH",
     // world (5, 0, 0). Ray at the new world position should hit.
     QMatrix4x4 translation;
     translation.translate(5.0f, 0.0f, 0.0f);
-    intersector.setModelMatrix(nullptr, 1, translation);
+    intersector.setModelMatrix(cwRenderObjectId{}, 1, translation);
     intersector.waitForFinish();
 
     const QRay3D rayAtFive(QVector3D(5.0f, 0.0f, 100.0f),
@@ -155,7 +137,7 @@ TEST_CASE("Remove + add same Key produces fresh sub-BVH",
                              QVector3D(0.0f, 0.0f, -1.0f));
     REQUIRE(intersector.intersectsDetailed(rayAtOrigin).hit());
 
-    intersector.removeObject(nullptr, 42);
+    intersector.removeObject(cwRenderObjectId{}, 42);
     intersector.waitForFinish();
     REQUIRE_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
 
@@ -219,7 +201,7 @@ TEST_CASE("boundingBox() returns the world-space union of all objects",
     // A modelMatrix translation must show up in the world-space union.
     QMatrix4x4 translation;
     translation.translate(100.0f, 0.0f, 0.0f);
-    intersector.setModelMatrix(nullptr, 2, translation);
+    intersector.setModelMatrix(cwRenderObjectId{}, 2, translation);
     intersector.waitForFinish();
 
     const QBox3D moved = intersector.boundingBox();
@@ -249,28 +231,60 @@ TEST_CASE("Two-level traversal returns closest hit across mixed types",
     REQUIRE(hit.objectId() == 2);
 }
 
-TEST_CASE("Tube-pick fallback works through the two-level path",
+TEST_CASE("A point's pick sphere is honoured exactly through the two-level path",
           "[cwGeometryItersecter][twoLevel]")
 {
+    // Nothing pads the box tests for points: the sub-BVH's leaf boxes are baked
+    // with a pickRadius pad at build time (primitiveModelBox), which is what
+    // lets an unpadded traversal still reach the leaf of a sphere the ray only
+    // grazes. Pin both sides of that boundary through the two-level path, so a
+    // regression in the baked pad shows up as a lost grazing hit rather than as
+    // a cloud that quietly stops picking near its silhouette.
     cwGeometryItersecter intersector;
 
-    // A point at (1, 0, 0) with pickRadius=0.1; the ray's X offset of 0.3
-    // is outside the strict sphere (0.3 > 0.1) but within tube range
-    // (kTubeFactor * pickRadius = 5 * 0.1 = 0.5).
+    // A point at (1, 0, 0) with pickRadius=0.1 (makePointObject's default).
     intersector.addObject(makePointObject(1, {QVector3D(1.0f, 0.0f, 0.0f)}));
     intersector.waitForFinish();
 
-    const QRay3D ray(QVector3D(1.3f, 0.0f, 100.0f),
-                     QVector3D(0.0f, 0.0f, -1.0f));
+    SECTION("a ray just inside the sphere hits") {
+        // 0.09 < 0.1: grazing, and the leaf box is only padded by 0.1, so this
+        // is the case a missing baked pad would break.
+        const QRay3D ray(QVector3D(1.09f, 0.0f, 100.0f),
+                         QVector3D(0.0f, 0.0f, -1.0f));
+        const cwRayHit hit = intersector.intersectsDetailed(ray);
+        CHECK(hit.hit());
+    }
 
-    // With tube-pick on (default), the pick should land on the point.
-    cwRayHit hit = intersector.intersectsDetailed(ray);
-    REQUIRE(hit.hit());
+    SECTION("a ray inside the padded box but outside the sphere misses") {
+        // The only case here that reaches the sphere test at all, and so the
+        // only one pinning that the reject boundary is a SPHERE of pickRadius
+        // rather than the padded BOX around it. addPoints pads the object's
+        // broad-phase AABB by a full pickRadius (kPointAabbPadScale), so a ray
+        // offset in x alone by more than that is rejected by the box long
+        // before testPrimitive — which is why the x=1.2 case below proves less
+        // than it looks.
+        //
+        // (1.08, 0.08) is 0.113 from the centre — a true miss — yet lands
+        // inside the padded box [0.9,1.1]x[-0.1,0.1], so only the ray/sphere
+        // test can reject it. Verified by mutation: widening the accept region
+        // to the box's corner distance (sqrt(3)*r) fails HERE and nowhere in
+        // the two-level file.
+        const QRay3D ray(QVector3D(1.08f, 0.08f, 100.0f),
+                         QVector3D(0.0f, 0.0f, -1.0f));
+        const cwRayHit hit = intersector.intersectsDetailed(ray);
+        CHECK_FALSE(hit.hit());
+    }
 
-    // Disable tube-pick — pick should now miss.
-    intersector.setTubePickEnabled(false);
-    cwRayHit hitStrict = intersector.intersectsDetailed(ray);
-    REQUIRE_FALSE(hitStrict.hit());
+    SECTION("a ray beyond the deleted fallback's reach misses") {
+        // 0.2 = 2x the radius: inside the 2.5x reach the near-miss fallback
+        // used to snap from, so this HIT before that fallback was deleted.
+        // Rejected by the padded box rather than by the sphere, so it guards
+        // the fallback's absence and nothing more.
+        const QRay3D ray(QVector3D(1.2f, 0.0f, 100.0f),
+                         QVector3D(0.0f, 0.0f, -1.0f));
+        const cwRayHit hit = intersector.intersectsDetailed(ray);
+        CHECK_FALSE(hit.hit());
+    }
 }
 
 TEST_CASE("Picks against previously-built objects keep working during an in-flight rebuild",
@@ -479,7 +493,7 @@ TEST_CASE("perf: setModelMatrix on small object is near-instant",
     for (int i = 0; i < kIterations; ++i) {
         QMatrix4x4 m;
         m.translate(float(i), 0.0f, 0.0f);
-        intersector.setModelMatrix(nullptr, 2, m);
+        intersector.setModelMatrix(cwRenderObjectId{}, 2, m);
         intersector.waitForFinish();
     }
     const auto elapsed = std::chrono::steady_clock::now() - start;

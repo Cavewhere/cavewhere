@@ -166,11 +166,12 @@ MeasurementInteraction {
                     id: distanceLabelId
                     objectName: "measurementLineDistanceLabel"
                     anchors.centerIn: parent
-                    // Routed through the tool's selected length unit so the chip,
-                    // the readout panel, and the clipboard agree. Reading the
-                    // lengthUnit.name property re-evaluates this on a unit change.
-                    text: qsTr("%1 %2").arg(Number(measurementId.lengthUnit.fromMeters(measurementId.distance)).toFixed(2))
-                                        .arg(measurementId.lengthUnit.name)
+                    // Routed through the shared C++ length formatter so the chip,
+                    // the readout panel, and the clipboard agree by construction.
+                    // Reading the reactive lengthUnit.name re-evaluates this on a
+                    // unit change; format() is a plain invokable QML can't track.
+                    text: (measurementId.lengthUnit.name,
+                           measurementId.lengthUnit.format(measurementId.distance))
                     color: Theme.text
                     font.family: Theme.fontFamilyMono
                 }

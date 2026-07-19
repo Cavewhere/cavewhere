@@ -1,4 +1,3 @@
-import QtQuick as QQ
 import QtQuick.Layouts
 import QtQuick.Controls as QC
 import cavewherelib
@@ -17,15 +16,9 @@ RowLayout {
         text: rootId.label
     }
 
-    QQ.TextInput {
+    SelectableValue {
         id: valueInput
         text: rootId.unitValue !== null ? Utils.fixed(rootId.unitValue.value, 2) : ""
-        readOnly: true
-        selectByMouse: true
-        color: Theme.text
-        selectedTextColor: Theme.textInverse
-        selectionColor: Theme.highlight
-        font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeUI
     }
 

@@ -16,30 +16,38 @@
 #include <QBox3D>
 #include <QHash>
 #include <QSet>
-#include <atomic>
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 //Our includes
 #include "cwRayHit.h"
 #include "cwPickQuery.h"
 #include "cwGeometry.h"
 #include "cwFutureManagerToken.h"
+#include "cwRenderObjectId.h"
 #include "asyncfuture.h"
 #include "CaveWhereLibExport.h"
 class cwRenderObject;
+class cwSceneVisibility;
+class cwVisibilitySnapshot;
 
 class CAVEWHERE_LIB_EXPORT cwGeometryItersecter : public QObject
 {
     Q_OBJECT
 
 public:
+    // Stable identity of one registered geometry blob: the owning render
+    // object's id plus the owner-scoped sub-id — the same address space as
+    // cwSceneVisibility. Pointer-free, so a Key can be captured, compared,
+    // or carried by a worker snapshot after the render object is gone
+    // (issue #512), and never dereferenced.
     struct Key {
-        cwRenderObject* parentObject = nullptr;
+        cwRenderObjectId parentId = cwRenderObjectId{0};
         uint64_t id = 0;
 
         bool operator==(const Key& other) const noexcept {
-            return parentObject == other.parentObject && id == other.id;
+            return parentId == other.parentId && id == other.id;
         }
     };
 
@@ -49,21 +57,24 @@ public:
 
         // pickRadius is the world-space sphere radius around each vertex used
         // for ray-vs-point intersection. Only consulted when geometry.type()
-        // == cwGeometry::Type::Points.
-        Object(Key key,
+        // == cwGeometry::Type::Points. parentObject may be null (test
+        // fixtures); its id then reads as cwRenderObjectId{0}, which no real
+        // render object ever holds. Defined in the .cpp so this header
+        // doesn't need cwRenderObject's definition for renderObjectId().
+        Object(cwRenderObject* parentObject,
+               uint64_t id,
                cwGeometry geometry,
                QMatrix4x4 modelMatrix = QMatrix4x4(),
-               float pickRadius = 0.0f) :
-            m_key(key),
-            m_geometry(geometry),
-            m_modelMatrix(modelMatrix),
-            m_pickRadius(pickRadius)
-        {}
+               float pickRadius = 0.0f);
 
         Key key() const { return m_key; }
         const cwGeometry& geometry() const { return m_geometry; }
 
-        cwRenderObject* parent() const { return m_key.parentObject; }
+        // Attribution only — fills cwRayHit::object() so pick consumers
+        // (cwScenePick's station snap) can reach the owner. Never used for
+        // identity or visibility: identity is key(), visibility comes from
+        // the cwSceneVisibility snapshot captured per query.
+        cwRenderObject* parent() const { return m_parentObject; }
         uint64_t id() const { return m_key.id; }
 
         void setModelMatrix(const QMatrix4x4 matrix) { m_modelMatrix = matrix; }
@@ -74,6 +85,7 @@ public:
     private:
 
         Key m_key;
+        cwRenderObject* m_parentObject = nullptr;
         cwGeometry m_geometry;
         QMatrix4x4 m_modelMatrix;
         float m_pickRadius = 0.0f;
@@ -86,12 +98,21 @@ public:
     explicit cwGeometryItersecter(QObject* parent = nullptr);
     ~cwGeometryItersecter() override = default;
 
+    //! The visibility store every query reads (issue #579). cwScene wires its
+    //! own store in at construction; a null store (standalone test
+    //! intersecters) reads as everything-visible. The store must outlive this
+    //! object — both are cwScene children, created scene-first. Queries
+    //! capture store->snapshot() at entry, so a toggle is visible to the next
+    //! pick with no rebuild and no republish step.
+    void setVisibilityStore(cwSceneVisibility* store);
+
     void addObject(const cwGeometryItersecter::Object& object);
-    void clear(cwRenderObject* parentObject = nullptr);
-    void removeObject(cwRenderObject* parentObject, uint64_t id);
+    void clear();
+    void clear(cwRenderObjectId parentId);
+    void removeObject(cwRenderObjectId parentId, uint64_t id);
     void removeObject(const Key& objectKey);
 
-    void setModelMatrix(cwRenderObject* parentObject, uint64_t id, const QMatrix4x4& modelMatrix);
+    void setModelMatrix(cwRenderObjectId parentId, uint64_t id, const QMatrix4x4& modelMatrix);
     void setModelMatrix(const Key& objectKey, const QMatrix4x4& modelMatrix);
 
     QBox3D boundingBox(const Key& objectKey) const;
@@ -100,13 +121,56 @@ public:
     QBox3D boundingBox(const QList<Key>& keys) const;
 
     //! World-space union of every object's bounding box. Null box when empty.
+    //! Counts hidden objects — use visibleBoundingBox() for the region the
+    //! pick paths can actually reach.
     QBox3D boundingBox() const;
+
+    //! Like boundingBox(), but skips geometry the pick traversals skip —
+    //! anything the visibility store hides at the object or sub level, and
+    //! per-vertex-masked primitives — the box a camera should frame. Flat
+    //! O(#Keys) loop over cached per-Node boxes: an Object with a live mask
+    //! walks its vertices once per mask change (m_maskedBoxCache memoizes
+    //! per store entryVersion), so the interaction-rate callers — reset
+    //! view, and isPickableEmpty() on the pivot-fallback path — pay only the
+    //! loop. Main-thread only: reads the authoring object list, so during an
+    //! async build it already reflects objects that will become pickable.
+    QBox3D visibleBoundingBox() const;
+
+    //! True when no pick can ever hit anything: no objects, every object
+    //! hidden, or only degenerate bounds. Mirrors the visibility rule the
+    //! traversals apply, so callers gating a fallback on "is there geometry to
+    //! anchor against?" agree with what a pick returns.
+    //!
+    //! isFinite() here is QBox3D's null/finite/infinite *type* flag, not a
+    //! NaN check: a box with NaN corners still reports Finite. Nothing in the
+    //! codebase builds an Infinite box, so that arm is unreachable today.
+    //!
+    //! Delegates to visibleBoundingBox(), so during an async build it reports
+    //! non-empty and a caller keeps its fallback suppressed rather than
+    //! acting on a temporary emptiness.
+    bool isPickableEmpty() const;
 
     // `ray` direction must be unit length: ray-depth (projectedDistance)
     // divides by |dir|^2, and the screen-space line tolerance scales its
     // radius by that depth — a non-normalized direction mis-sizes both.
     double intersects(const QRay3D& ray, const cwPickQuery& query = {}) const;
     cwRayHit intersectsDetailed(const QRay3D& ray, const cwPickQuery& query = {}) const;
+
+    // Geometry-anchored rotation-pivot fallback (issue #562). Returns the
+    // world-space point ON real geometry closest to `ray`: a cloud point, the
+    // nearest spot on a shot segment, or a spot on a scrap triangle (exact
+    // hit, else its nearest edge). Candidates must lie within the query's
+    // screen-space tolerance radius at their depth; among accepted candidates
+    // the front-most wins, matching intersectsDetailed's nearest-by-depth
+    // rule. Unlike intersectsDetailed, points and triangles are reachable at
+    // the full tolerance radius (not just pickRadius / exact intersection),
+    // so a near-miss on any kind still lands the pivot on the geometry the
+    // user aimed at. Hidden objects are skipped. Returns nullopt when nothing
+    // is inside the tolerance (or the tolerance is disabled), letting the
+    // caller keep the current pivot. Reads the built BVH on the owning
+    // thread, like intersectsDetailed.
+    std::optional<QVector3D> nearestGeometryPoint(const QRay3D& ray,
+                                                  const cwPickQuery& query) const;
 
     // Capture the current built BVH as an immutable snapshot. Call on the
     // thread that owns this object (the main thread); the returned snapshot
@@ -123,14 +187,6 @@ public:
     static QList<QVector3D> pointsInBox(const QuerySnapshot& snapshot,
                                         const QBox3D& box,
                                         const Key& key);
-
-    // Escape hatch for the BVH-tube fallback that snaps to a sphere-miss
-    // within kTubeFactor * pickRadius of the ray. Disabling reverts to
-    // strict sphere intersection — picks return no-hit when the cursor
-    // sits in a sub-pixel gap, and the AABB box tests stop being
-    // inflated, recovering the pre-tube traversal cost on huge clouds.
-    void setTubePickEnabled(bool enabled) { m_tubePickEnabled = enabled; }
-    bool isTubePickEnabled() const { return m_tubePickEnabled; }
 
     // Debug-only snapshot of what the picker currently knows about. Reads
     // the built BVH's source-node snapshot if available (post-bvhReady);
@@ -261,17 +317,16 @@ private:
         // Precomputed inverse of each modelMatrices entry — avoids paying
         // QMatrix4x4::inverted() per top-level-leaf pick in the hot path.
         QVector<QMatrix4x4> inverseModelMatrices;
-        // Max pickRadius across nodesSnapshot — cached once at build time
-        // so the per-pick tube-box test doesn't have to rescan. Triangles
-        // and zero-radius Points contribute 0; harmless for those paths
-        // since they don't take the tube fallback.
-        float maxPickRadius = 0.0f;
         // Reverse index: Key → slot in the parallel arrays above. Lets a
         // mutator null out the dirty Key's sub-BVH in the published BVH so
         // it stops contributing to picks the instant its cache entry is
         // invalidated — without dropping the rest of the BVH while a
         // rebuild is in flight. A null entry in subBvhs is the in-flight
         // marker; traversal skips it. See invalidatePublishedSlot().
+        //
+        // No visibility lives here: every query pairs this geometry snapshot
+        // with a cwVisibilitySnapshot captured at entry, so a toggle needs
+        // no republish and a held pair stays internally consistent.
         QHash<Key, int> keyToSlot;
     };
 
@@ -295,7 +350,6 @@ public:
     };
 
 private:
-    bool m_tubePickEnabled = true;
 
     // Live BVH. nullptr until the first async build completes. Only
     // accessed from the main thread: pick queries (intersects/
@@ -319,6 +373,36 @@ private:
     // for the same Key before the first build observed it).
     QSet<Key> m_dirtyKeys;
 
+    // The scene's visibility store; see setVisibilityStore(). Null for
+    // standalone intersecters (tests) — queries then read everything as
+    // visible.
+    cwSceneVisibility* m_visibility = nullptr;
+
+    // Memoized model-space visible box per masked Key, filled on demand by
+    // visibleNodeBox() so the O(vertices) walk runs once per mask change
+    // rather than once per query (visibleBoundingBox() and isPickableEmpty()
+    // are called at interaction rate). Model space, so a setModelMatrix()
+    // keeps its entry.
+    //
+    // Correctness rests on the store's entryVersion: an entry is reused only
+    // while its recorded entryVersion matches the snapshot's, and every mask
+    // change bumps that version. The drops in eraseNodeIfPresent()/clear()
+    // guard the other axis — a geometry replacement reuses the Key with new
+    // vertices the old walk never saw — and bound growth.
+    //
+    // Deliberately here rather than on Object: launchBuildJob's
+    // `nodesSnapshot = Nodes` is an implicitly-shared copy, and a const walk
+    // of Nodes never detaches it, so a mutable cache inside a Node would be
+    // written by this thread while the build worker concurrently copies that
+    // same Object into SubBvh. The intersecter itself is never handed to a
+    // worker, so a cache on it can't race. Mutable + main thread only, like
+    // its callers.
+    struct MaskedBoxEntry {
+        quint64 entryVersion = 0;
+        QBox3D box;
+    };
+    mutable QHash<Key, MaskedBoxEntry> m_maskedBoxCache;
+
     // Coalesces rapid mutations into a single rebuild and cancels the
     // in-flight build when a new mutation arrives.
     AsyncFuture::Restarter<void> m_bvhRestarter;
@@ -335,12 +419,6 @@ private:
     struct PickStats;
     friend QDebug operator<<(QDebug d, const cwGeometryItersecter::PickStats& s);
 
-    // Tube-pick fallback: tracks the closest sphere-miss seen during a
-    // traversal so intersectsDetailed can snap to a point the user almost
-    // clicked. Defined in the .cpp because it's an internal traversal
-    // detail.
-    struct NearMissResult;
-
     // Invalidate the cached sub-BVH for one Object and schedule a rebuild.
     // Use for addObject (which always replaces) and any mutation that
     // changed the Object's geometry. The schedule call is coalesced via
@@ -352,6 +430,30 @@ private:
     // model-space geometry intact) and removeObject (which only shrinks
     // the set of objects).
     void scheduleTopLevelRebuild();
+
+    // The visibility view every query traverses against: the store's current
+    // snapshot, or a default (everything-visible) one when no store is wired.
+    cwVisibilitySnapshot currentVisibility() const;
+
+    // World-space box of one Node honoring its per-vertex mask from the
+    // captured snapshot: unmasked Nodes return the cached whole-node box,
+    // masked Nodes their entry in m_maskedBoxCache. Either way a warm call
+    // is a matrix transform, not a walk — the walk happens once per mask
+    // change (entryVersion bump), filling the cache.
+    QBox3D visibleNodeBox(const Node& node, const cwVisibilitySnapshot& visibility) const;
+
+    // The masked walk m_maskedBoxCache memoizes: the model-space union of
+    // the primitives `mask` leaves visible. Null box when the mask hides
+    // every one. Only meaningful for a masked Object — an unmasked one's
+    // visible box is its Node's cached BoundingBox.
+    static QBox3D computeMaskedModelBox(const Object& object, const QVector<quint8>& mask);
+
+    // True when every vertex `prim` references is visible in the
+    // per-vertex mask. Points index vertices directly; Lines and
+    // Triangles go through the index buffer.
+    static bool isPrimitiveVisible(const QVector<quint8>& mask,
+                                   const cwGeometry& geometry,
+                                   const Primitive& prim);
 
     // Release the published sub-BVH for one Key while a rebuild is in
     // flight. Leaves the rest of m_bvh intact so unrelated Objects keep
@@ -382,56 +484,45 @@ private:
     // Per-primitive bounding box in the Object's **model space**. Used
     // when constructing leaf bboxes for a sub-BVH.
     static QBox3D primitiveModelBox(const Object& object, const Primitive& prim);
-    // Per-primitive ray test. rayModel/worldFromModel/modelToWorld are
-    // computed once per top-level leaf by intersectsDetailed and passed
-    // through so this hot-path function never re-inverts the matrix.
-    // `object` comes from the SubBvh — decoupling from BvhData::
-    // nodesSnapshot ordering, which is not stable across rebuilds.
-    static void testPrimitive(const Object& object,
-                              const Primitive& prim,
-                              const QRay3D& ray,
-                              const QRay3D& rayModel,
-                              const QMatrix4x4& worldFromModel,
-                              const QMatrix4x4& modelToWorld,
-                              const cwPickTolerance& tolerance,
-                              cwRayHit& best,
-                              NearMissResult* nearMiss,
-                              PickStats* stats);
+    // The read-only inputs every primitive test within one top-level leaf
+    // shares: the Object, both rays, both matrices, and the position
+    // attribute. traverseBvh hoists them once per leaf, so the hot path
+    // never re-inverts a matrix or re-looks-up an attribute. `object` comes
+    // from the SubBvh — decoupling from BvhData::nodesSnapshot ordering,
+    // which is not stable across rebuilds. Defined in the .cpp beside the
+    // policies that consume it.
+    struct LeafContext;
 
-    // Shared cwRayHit field fill for any Point primitive — used by the
-    // sphere-hit path in testPrimitive and the tube-pick promote in
-    // tryPromoteNearMiss. Pre-computed by the caller because the two
-    // paths source tModel and the world point differently.
-    static void fillPointHit(cwRayHit& best,
-                             const Object& object,
-                             const Primitive& prim,
-                             const QRay3D& ray,
-                             const QRay3D& rayModel,
-                             const QVector3D& centerModel,
-                             const QVector3D& centerWorld,
-                             double tModel,
-                             double tWorld);
+    // The two policies traverseBvh is instantiated with. They answer
+    // different questions — ExactPick "what did the ray hit?", AnchorPick
+    // "what lies nearest the ray?" — so each names the kinds it lets consult
+    // the screen-space tolerance. See cwPickTolerance for why they disagree
+    // on purpose.
+    //
+    // ToleranceKinds is what traverseBvh reads: it decides which nodes get a
+    // tolerance pad and which sub-BVHs are skipped outright when no tolerance
+    // is supplied. The per-primitive accept rule is the policy's own
+    // testPrimitive — the constant does not enforce it. What keeps the two in
+    // step is that they now sit together in one struct, so a policy's reach
+    // and the broad phase that must not prune inside it are read as a unit
+    // rather than 200 lines apart in two near-identical traversals (which is
+    // exactly how their pads drifted apart in the first place).
+    //
+    // Defined in the .cpp; both instantiations live in that TU.
+    struct ExactPick;
+    struct AnchorPick;
 
-    // cwRayHit field fill for a Line primitive (the §7 contract). The
-    // analogue of fillPointHit: pointWorld lies on the segment, firstIndex
-    // is the segment's first index, u/v stay NaN, normal is camera-facing.
-    static void fillLineHit(cwRayHit& best,
-                            const Object& object,
-                            const Primitive& prim,
+    // Front-to-back descent: the top-level BVH in world space, then each
+    // Object's sub-BVH in model space. Hands every leaf primitive surviving
+    // visibility (read from the captured snapshot), the kind filter, and the
+    // depth prune to `policy`. What counts as a hit lives entirely in the
+    // policy, never here.
+    template <typename Policy>
+    static void traverseBvh(const BvhData& bvh,
+                            const cwVisibilitySnapshot& visibility,
                             const QRay3D& ray,
-                            const QRay3D& rayModel,
-                            const QVector3D& segPointModel,
-                            const QVector3D& segPointWorld,
-                            double tWorld);
-
-    // Post-traversal tube-pick promote. Snaps best to the closest tracked
-    // sphere-miss whose perpendicular distance is within kTubeFactor *
-    // pickRadius. No-op when best already hit, nearMiss is empty, or the
-    // miss is beyond the tube.
-    static void tryPromoteNearMiss(cwRayHit& best,
-                                   const NearMissResult& nearMiss,
-                                   const QRay3D& ray,
-                                   bool debug);
+                            const cwPickQuery& query,
+                            Policy& policy);
 
     // Debug-only per-primitive diagnostic; gated on lcPick debug.
     static void dumpLeafPrimitive(const Object& object,
@@ -492,8 +583,7 @@ private:
     template <typename Iterator>
     Iterator findNodeImpl(Iterator begin, Iterator end, const Key& objectKey) const {
         return std::find_if(begin, end, [&](const Node& node) {
-            return node.Object.parent() == objectKey.parentObject &&
-                   node.Object.id() == objectKey.id;
+            return node.Object.key() == objectKey;
         });
     }
 
@@ -572,9 +662,7 @@ inline uint32_t qHash(const cwGeometryItersecter::Object& object) {
 }
 
 inline size_t qHash(const cwGeometryItersecter::Key& key, size_t seed = 0) noexcept {
-    return qHashMulti(seed,
-                      reinterpret_cast<quintptr>(key.parentObject),
-                      key.id);
+    return qHashMulti(seed, key.parentId, key.id);
 }
 
 #endif // CWGEOMETRYITERSECTER_H
