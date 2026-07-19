@@ -88,7 +88,7 @@ uint32_t addTriangleItem(cwRenderTexturedItems& items, float y)
 // cwRenderTexturedItems (cwScrapManager::m_renderScraps), one item id per
 // scrap, and keyword-hiding a scrap toggles only that id — the shared parent
 // render object stays visible, so the whole-object gate (isPickable ->
-// parent->isVisible()) never fires. setVisible(id) now forwards to the
+// parent->isVisible()) never fires. setItemVisible(id) now forwards to the
 // intersecter's per-Key flag (each item id is its own Key{parent, id}), so a
 // hidden scrap takes no picks. glTF/polycam models hide the same way, as a
 // group of ids. No BVH rebuild — the toggle is synchronous.
@@ -108,7 +108,7 @@ TEST_CASE("cwRenderTexturedItems hidden item is not pickable",
                 rayThroughSecondItem(), cwPickQuery()).hit());
 
     // Hide item B via the real per-scrap visibility path.
-    items.setVisible(hiddenId, false);
+    items.setItemVisible(hiddenId, false);
 
     CHECK_FALSE(scene.geometryItersecter()->intersectsDetailed(
         rayThroughSecondItem(), cwPickQuery()).hit());
@@ -119,7 +119,7 @@ TEST_CASE("cwRenderTexturedItems hidden item is not pickable",
         rayThroughFirstItem(), cwPickQuery()).hit());
 
     // Re-showing restores pickability.
-    items.setVisible(hiddenId, true);
+    items.setItemVisible(hiddenId, true);
     CHECK(scene.geometryItersecter()->intersectsDetailed(
         rayThroughSecondItem(), cwPickQuery()).hit());
 }
@@ -140,7 +140,7 @@ TEST_CASE("cwRenderTexturedItems hidden item stays hidden across a geometry upda
     REQUIRE(scene.geometryItersecter()->intersectsDetailed(
                 rayThroughSecondItem(), cwPickQuery()).hit());
 
-    items.setVisible(hiddenId, false);
+    items.setItemVisible(hiddenId, false);
     items.updateGeometry(hiddenId, triangleAt(kSecondItemY));
     scene.geometryItersecter()->waitForFinish();
 
@@ -156,7 +156,7 @@ TEST_CASE("cwRenderTexturedItems hidden item stays hidden across a geometry upda
 
     // The surviving flag is still attached to a live registration:
     // re-showing resurrects the same Key.
-    items.setVisible(hiddenId, true);
+    items.setItemVisible(hiddenId, true);
     CHECK(scene.geometryItersecter()->intersectsDetailed(
         rayThroughSecondItem(), cwPickQuery()).hit());
 }
@@ -179,7 +179,7 @@ TEST_CASE("cwRenderTexturedItems hidden item does not inflate framing bounds",
     REQUIRE(scene.visibleFramingBounds().maximum().y()
             >= kSecondItemY - kTriangleExtent);
 
-    items.setVisible(hiddenId, false);
+    items.setItemVisible(hiddenId, false);
 
     // Framing bounds shrink to exactly item A's apex while the raw
     // registered box keeps counting the hidden geometry. Exact compare is
@@ -191,7 +191,7 @@ TEST_CASE("cwRenderTexturedItems hidden item does not inflate framing bounds",
           >= kSecondItemY - kTriangleExtent);
 
     // Re-showing restores the full framing box.
-    items.setVisible(hiddenId, true);
+    items.setItemVisible(hiddenId, true);
     CHECK(scene.visibleFramingBounds().maximum().y()
           >= kSecondItemY - kTriangleExtent);
 }
@@ -214,7 +214,7 @@ TEST_CASE("cwRenderTexturedItems hidden item stays hidden across an empty geomet
     REQUIRE(scene.geometryItersecter()->intersectsDetailed(
                 rayThroughSecondItem(), cwPickQuery()).hit());
 
-    items.setVisible(hiddenId, false);
+    items.setItemVisible(hiddenId, false);
     items.updateGeometry(hiddenId, cwGeometry());           // empty: unregisters
     items.updateGeometry(hiddenId, triangleAt(kSecondItemY)); // re-registers
     scene.geometryItersecter()->waitForFinish();
@@ -227,7 +227,7 @@ TEST_CASE("cwRenderTexturedItems hidden item stays hidden across an empty geomet
         rayThroughSecondItem(), cwPickQuery()).hit());
     CHECK(scene.visibleFramingBounds().isNull());
 
-    items.setVisible(hiddenId, true);
+    items.setItemVisible(hiddenId, true);
     CHECK(scene.geometryItersecter()->intersectsDetailed(
         rayThroughSecondItem(), cwPickQuery()).hit());
 }
@@ -252,7 +252,7 @@ TEST_CASE("cwRenderTexturedItems item born hidden is not pickable",
         rayThroughSecondItem(), cwPickQuery()).hit());
     CHECK(scene.visibleFramingBounds().isNull());
 
-    items.setVisible(id, true);
+    items.setItemVisible(id, true);
     CHECK(scene.geometryItersecter()->intersectsDetailed(
         rayThroughSecondItem(), cwPickQuery()).hit());
 }
@@ -270,9 +270,9 @@ TEST_CASE("cwRenderTexturedItems per-id hide survives a whole-object hide/show c
     const uint32_t hiddenId = addTriangleItem(items, kSecondItemY);
     scene.geometryItersecter()->waitForFinish();
 
-    items.setVisible(hiddenId, false);
-    items.cwRenderObject::setVisible(false);
-    items.cwRenderObject::setVisible(true);
+    items.setItemVisible(hiddenId, false);
+    items.setVisible(false);
+    items.setVisible(true);
 
     CHECK_FALSE(scene.geometryItersecter()->intersectsDetailed(
         rayThroughSecondItem(), cwPickQuery()).hit());
@@ -298,7 +298,7 @@ TEST_CASE("cwRenderTexturedItems hidden item does not anchor the rotation pivot"
     REQUIRE(scene.geometryItersecter()->nearestGeometryPoint(
                 rayThroughSecondItem(), query).has_value());
 
-    items.setVisible(hiddenId, false);
+    items.setItemVisible(hiddenId, false);
 
     CHECK_FALSE(scene.geometryItersecter()->nearestGeometryPoint(
         rayThroughSecondItem(), query).has_value());
@@ -321,9 +321,7 @@ TEST_CASE("cwRenderTexturedItems whole-object hide removes it from intersecter p
     REQUIRE(scene.geometryItersecter()->intersectsDetailed(
                 rayThroughSecondItem(), cwPickQuery()).hit());
 
-    // The per-id overload hides the base-class setVisible(bool); qualify to
-    // reach the whole-object gate.
-    items.cwRenderObject::setVisible(false);
+    items.setVisible(false);
 
     const cwRayHit hit = scene.geometryItersecter()->intersectsDetailed(
         rayThroughSecondItem(), cwPickQuery());
@@ -347,7 +345,7 @@ TEST_CASE("cwRenderTexturedItems whole-object hide removes it from the visible f
     REQUIRE(scene.visibleFramingBounds().maximum().y()
             >= kSecondItemY - kTriangleExtent);
 
-    items.cwRenderObject::setVisible(false);
+    items.setVisible(false);
 
     // The only render object is hidden, so there is nothing to frame — but
     // the raw box still reports the registered geometry.

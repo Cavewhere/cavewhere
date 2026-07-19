@@ -19,7 +19,7 @@ void cwRenderTexturedItemVisibility::setVisible(bool visible)
 
     m_visible = visible;
     if(m_items) {
-        m_items->setVisible(m_itemId, m_visible);
+        m_items->setItemVisible(m_itemId, m_visible);
     }
 
     emit visibleChanged();

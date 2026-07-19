@@ -2,6 +2,7 @@
 #include "cwGeometryItersecter.h"
 #include "cwPickingLog.h"
 #include "cwRhiTexturedItems.h"
+#include "cwSceneVisibility.h"
 #include "Monad/Result.h"
 
 #include <QtGlobal>
@@ -161,6 +162,13 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
         intersector->setVisible({this, id}, item.visible);
     }
 
+    // Dual-publish (issue #579): the store entry is identity state keyed by
+    // (ownerId, id), independent of geometry registration. A visible item is
+    // the sparse default, so this only writes when born hidden.
+    if (auto* visibility = sceneVisibility()) {
+        visibility->setSubVisible(renderObjectId(), id, item.visible);
+    }
+
     return id;
 }
 
@@ -231,7 +239,7 @@ void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
     }
 }
 
-void cwRenderTexturedItems::setVisible(uint32_t id, bool visible)
+void cwRenderTexturedItems::setItemVisible(uint32_t id, bool visible)
 {
     auto entry = m_frontState.find(id);
     if (entry == m_frontState.end()) {
@@ -248,6 +256,10 @@ void cwRenderTexturedItems::setVisible(uint32_t id, bool visible)
     // not take picks or inflate the reset-view bounds (issues #575/#549).
     if (auto* intersector = geometryItersecter()) {
         intersector->setVisible({this, id}, visible);
+    }
+
+    if (auto* visibilityStore = sceneVisibility()) {
+        visibilityStore->setSubVisible(renderObjectId(), id, visible);
     }
 }
 
@@ -322,7 +334,22 @@ void cwRenderTexturedItems::removeItem(uint32_t id)
     if (auto* intersector = geometryItersecter()) {
         intersector->removeObject({this, id});
     }
+    if (auto* visibility = sceneVisibility()) {
+        visibility->removeSub(renderObjectId(), id);
+    }
     m_frontState.remove(id);
+}
+
+void cwRenderTexturedItems::publishVisibility()
+{
+    cwRenderObject::publishVisibility();
+    auto* visibility = sceneVisibility();
+    if (visibility == nullptr) {
+        return;
+    }
+    for (auto it = m_frontState.cbegin(); it != m_frontState.cend(); ++it) {
+        visibility->setSubVisible(renderObjectId(), it.key(), it.value().visible);
+    }
 }
 
 cwRenderTexturedItems::Item cwRenderTexturedItems::item(uint32_t id) const

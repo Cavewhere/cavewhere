@@ -8,6 +8,7 @@
 //Our includes
 #include "cwRenderObject.h"
 #include "cwScene.h"
+#include "cwSceneVisibility.h"
 #include "cwGeometryItersecter.h"
 
 //Qt includes
@@ -78,12 +79,26 @@ void cwRenderObject::setScene(cwScene *scene)
     return m_scene == nullptr ? nullptr : m_scene->geometryItersecter();
 }
 
+cwSceneVisibility *cwRenderObject::sceneVisibility() const
+{
+    return m_scene == nullptr ? nullptr : m_scene->visibility();
+}
 
 void cwRenderObject::setVisible(bool newVisible)
 {
     if (m_visible == newVisible)
         return;
     m_visible = newVisible;
+    if (auto* visibility = sceneVisibility()) {
+        visibility->setObjectVisible(m_renderObjectId, m_visible);
+    }
     update();
     emit visibleChanged();
+}
+
+void cwRenderObject::publishVisibility()
+{
+    if (auto* visibility = sceneVisibility()) {
+        visibility->setObjectVisible(m_renderObjectId, m_visible);
+    }
 }

@@ -23,6 +23,7 @@ class cwUpdateDataCommand;
 class cwRHIObject;
 class cwRhiItemRenderer;
 class cwGeometryItersector;
+class cwSceneVisibility;
 #include "cwScene.h"
 #include "cwRenderObjectId.h"
 #include "CaveWhereLibExport.h"
@@ -50,6 +51,11 @@ public:
 
     cwGeometryItersecter* geometryItersecter() const;
 
+    // The scene's visibility store, or null before scene attach. Facade
+    // setters publish through this; pre-attach state lands via
+    // publishVisibility() when cwScene::addItem seeds the store.
+    cwSceneVisibility* sceneVisibility() const;
+
     cwCamera* camera() const;
 
     void update();
@@ -65,6 +71,13 @@ signals:
 protected:
     virtual cwRHIObject* createRHIObject() { return nullptr; }
     // virtual cwSceneUpdate::Flag updateOnFlags() const { return cwSceneUpdate::Flag::None; }
+
+    // Publish this object's full authoring visibility state into the scene's
+    // store. cwScene::addItem calls it at attach, making it the single seed
+    // path for state set before the scene was wired. Idempotent — republishing
+    // an unchanged state is a store no-op. Overrides publish their sub-item /
+    // mask state on top of the base's object flag.
+    virtual void publishVisibility();
 
 private:
     // Sever the back-pointer to the scene without touching it. cwScene calls this on

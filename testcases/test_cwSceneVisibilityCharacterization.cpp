@@ -27,7 +27,7 @@
 //   3. A keyword-pipeline burst (the tracker's initial full-model pass — the
 //      same shape as a modelReset re-resolve) reaching every consumer
 //      coherently through the real producer chain: model -> cwKeywordVisibility
-//      -> cwRenderTexturedItemVisibility proxy -> setVisible(id).
+//      -> cwRenderTexturedItemVisibility proxy -> setItemVisible(id).
 //
 // Per-item and per-vertex RENDER gating (cwRhiTexturedItems::gather,
 // cwRHILinePlot's visibility vertex buffer) is not CPU-observable through
@@ -232,7 +232,7 @@ TEST_CASE("visibility characterization: textured items added before scene attach
 
     cwRenderTexturedItems items;            // no scene yet
     const uint32_t id = addTriangleItem(items, 0);
-    items.setVisible(id, false);            // pre-attach seed, kept in front state
+    items.setItemVisible(id, false);            // pre-attach seed, kept in front state
 
     items.setScene(&scene);
     scene.geometryItersecter()->waitForFinish();
@@ -252,7 +252,7 @@ TEST_CASE("visibility characterization: textured items added before scene attach
     CHECK_FALSE(picks(scene, 0));
     CHECK(scene.visibleFramingBounds().isNull());
 
-    items.setVisible(id, true);
+    items.setItemVisible(id, true);
     CHECK(picks(scene, 0));
 }
 
@@ -267,7 +267,7 @@ TEST_CASE("visibility characterization: whole-object hide seeded before scene at
     cwScene scene;
 
     cwRenderTexturedItems items;            // no scene yet
-    items.cwRenderObject::setVisible(false);
+    items.setVisible(false);
 
     items.setScene(&scene);
     addTriangleItem(items, 0);              // post-attach: registers
@@ -277,7 +277,7 @@ TEST_CASE("visibility characterization: whole-object hide seeded before scene at
     CHECK_FALSE(picks(scene, 0));
     CHECK(scene.visibleFramingBounds().isNull());
 
-    items.cwRenderObject::setVisible(true);
+    items.setVisible(true);
     CHECK(picks(scene, 0));
     CHECK_FALSE(scene.visibleFramingBounds().isNull());
 }

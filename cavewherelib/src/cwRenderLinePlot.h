@@ -71,6 +71,7 @@ signals:
 
 protected:
     virtual cwRHIObject* createRHIObject() override;
+    void publishVisibility() override;
 
 private:
     struct Data {

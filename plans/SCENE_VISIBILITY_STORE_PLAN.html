@@ -228,7 +228,7 @@ published truth that replaces every consumer-side twin.
 
 <ul>
   <li><strong>Whole object</strong> — <code>cwRenderObject::setVisible</code> → object-level entry. Covers <code>cwRenderPointCloud</code>, <code>cwRenderGLTF</code>, whole-plot/whole-scrap-set toggles.</li>
-  <li><strong>Per sub-item</strong> — <code>cwRenderTexturedItems::setVisible(id, bool)</code> → <code>(ownerId, id)</code> entry with empty mask. One entry per hidden scrap/LiDAR quad.</li>
+  <li><strong>Per sub-item</strong> — <code>cwRenderTexturedItems::setItemVisible(id, bool)</code> → <code>(ownerId, id)</code> entry with empty mask. One entry per hidden scrap/LiDAR quad.</li>
   <li><strong>Per vertex</strong> — <code>cwRenderLinePlot::setRangeVisible</code> → <code>(ownerId, 0)</code> entry whose <code>mask</code> shares the owner's already-immutable buffer (same discipline as today's <code>setVisibilityMask</code>: write-to-copy-and-replace, never mutate in place). Empty mask = all-visible fast path.</li>
 </ul>
 
@@ -298,7 +298,7 @@ dirty bit with the same cost profile.
 <p>
 <strong>Producers are untouched.</strong> The keyword pipeline, <code>cwKeywordVisibility</code>, and
 all proxy classes keep calling the same owner APIs they call today (<code>setVisible</code>,
-<code>setVisible(id, bool)</code>, <code>setRangeVisible</code>). Those owner methods become
+<code>setItemVisible(id, bool)</code>, <code>setRangeVisible</code>). Those owner methods become
 <em>facades</em>: keep the local authoring copy (unchanged), then publish to the store instead of
 running today's twin protocols. This confines the churn to the render objects + consumers and keeps
 the producer pipeline, its tests, and QML untouched.
@@ -462,10 +462,27 @@ live <code>RenderData</code>, so it is not CPU-observable through production sur
   <li>Existing nets: <code>test_cwRenderLinePlotPickVisibility.cpp</code>, <code>test_cwRenderTexturedItemsPickVisibility.cpp</code>, the backface-cull picker test, and the <code>test_cwScene_issue512.cpp</code> stub harness (reused for RHI-side assertions without a GPU).</li>
 </ul>
 
-<h3><span class="pill phase">Phase 1</span> Introduce the store, dual-publish</h3>
+<h3><span class="pill phase">Phase 1</span> Introduce the store, dual-publish <span class="pill done">DONE</span></h3>
+<p class="dim">
+Landed as <code>cavewherelib/src/cwSceneVisibility.{h,cpp}</code> (store + snapshot in one file
+pair), owned by <code>cwScene</code> (<code>visibility()</code>). Store semantics as sketched in
+§1.2, with two details fixed during implementation: writing the default state (visible, empty mask)
+<em>removes</em> the entry so the store stays sparse, and <code>entryVersion</code> values come from
+the monotonic store version so a removed entry (reads as 0) can never alias a live version. Facades
+dual-publish exactly as listed below; <code>updateGeometry</code> needed no store write — store
+entries are identity state, so only the legacy intersecter re-seed remains there until Phase 2
+deletes it. Tests: <code>test_cwSceneVisibility.cpp</code> (store semantics, including entryVersion freshness
+across remove-and-recreate — the property the Phase 3 upload gate depends on) and
+<code>test_cwSceneVisibilityDualPublish.cpp</code> (store == owner authoring state across pre-attach
+seeding, post-attach toggles, scrubs). Review follow-up landed in-phase: the per-item overload
+<code>cwRenderTexturedItems::setVisible(id, bool)</code> was renamed <code>setItemVisible</code> —
+the old name hid the base <code>setVisible(bool)</code> and forced qualified calls to reach the
+whole-object toggle; with the shadow gone, whole-object equivalence is tested on
+<code>cwRenderTexturedItems</code> directly.
+</p>
 <ul>
   <li>Add <code>cwSceneVisibility</code> + <code>cwVisibilitySnapshot</code> (new files), owned by <code>cwScene</code>; unit tests for semantics: sparse defaults, AND composition, version/entryVersion advance, copy-on-read materialization, mask buffer sharing, removeObject scrub.</li>
-  <li>Owner facades publish to the store <em>in addition to</em> today's paths (dual-publish): <code>cwRenderObject::setVisible</code>, <code>cwRenderTexturedItems::setVisible/addItem/updateGeometry/removeItem</code>, <code>cwRenderLinePlot::setRangeVisible/setGeometry</code>.</li>
+  <li>Owner facades publish to the store <em>in addition to</em> today's paths (dual-publish): <code>cwRenderObject::setVisible</code>, <code>cwRenderTexturedItems::setItemVisible/addItem/removeItem</code>, <code>cwRenderLinePlot::setRangeVisible/setGeometry</code>. (<code>updateGeometry</code> needs no store write — store entries are identity state, independent of geometry registration.)</li>
   <li><code>cwScene::addItem</code> seeds via <code>publishVisibility()</code>; <code>removeItem</code> and the <code>~cwRenderObject()</code> scrub (from the pending-map work) also scrub the store.</li>
   <li>Equivalence assertions in tests: after every existing visibility test, store snapshot == legacy state. No consumer reads yet — zero behavioral risk.</li>
 </ul>
@@ -474,6 +491,7 @@ live <code>RenderData</code>, so it is not CPU-observable through production sur
 <ul>
   <li>Re-key <code>Key</code> from <code>{cwRenderObject*, uint64}</code> to <code>{cwRenderObjectId, uint64}</code> (follow-up 3, per the Q3 decision). Contained: nothing outside the intersecter consumes <code>Key::parentObject</code>; <code>qHash(Key)</code> switches from pointer to integer id; owner call sites change <code>{this, id}</code> → <code>{renderObjectId(), id}</code> at the same lines Phase 2 is already rewriting. <code>clear(cwRenderObject*)</code>/<code>removeObject(cwRenderObject*, …)</code> become id-based, matching <code>removeItem</code>'s id-keyed scrub.</li>
   <li>Traversal, <code>visibleBoundingBox()</code>, and <code>isPickableEmpty()</code> read a captured <code>cwVisibilitySnapshot</code> (paired with the BVH <code>QuerySnapshot</code>); per-slot lookup on sub-BVH entry.</li>
+  <li>When the first consumer connects to <code>changed()</code>: the signal fires once per effective mutation, so a keyword burst emits N times — snapshot materialization is coalesced but the signal edge is not. The consumer must coalesce (re-read at frame/pick cadence, e.g. a dirty flag drained at sync), or the store grows a deferred emission then.</li>
   <li>Build-install re-stamp becomes "capture current snapshot at install".</li>
   <li>Masked-box memoization re-keys on <code>(Key, entryVersion)</code>.</li>
   <li><span class="good">Retire:</span> <code>m_hiddenKeys</code>, <code>Object::m_visibilityMask</code>, <code>BvhData::slotVisible</code>, <code>BvhData::visibilityMasks</code>, <code>republishSlotVisibility</code>, <code>refreshPublishedVisibility</code>, public <code>setVisible(Key,bool)</code> + <code>setVisibilityMask(Key,…)</code>, the live <code>parentObject-&gt;isVisible()</code> deref in traversal, and the owner-side mirror calls that fed them.</li>

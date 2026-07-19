@@ -14,6 +14,7 @@
 #include "cwRHIObject.h"
 #include "cwCamera.h"
 #include "cwGeometryItersecter.h"
+#include "cwSceneVisibility.h"
 #include "cwEDLSettings.h"
 #include "cwOffscreenRenderParameters.h"
 #include "cwOffscreenRenderJob.h"
@@ -26,6 +27,7 @@
 cwScene::cwScene(QObject *parent) :
     QObject(parent),
     GeometryItersecter(new cwGeometryItersecter(this)),
+    m_visibility(new cwSceneVisibility(this)),
     Camera(nullptr),
     m_edl(new cwEDLSettings(this))
 {
@@ -75,6 +77,13 @@ void cwScene::addItem(cwRenderObject *item)
     m_pending.insert(item->renderObjectId(), {PendingOp::Add, item, m_pendingSequence++});
     item->setScene(this);
     item->setParent(this);
+
+    // Seed the store from the owner's authoring copy. This is the one seam
+    // that makes pre-attach visibility structural: whatever was set before the
+    // scene was wired lands in the store here, instead of each owner needing
+    // its own re-publish convention.
+    item->publishVisibility();
+
     update();
 }
 
@@ -106,6 +115,10 @@ void cwScene::removeItem(cwRenderObject *item)
     // Here rather than ~cwRenderObject(), which is too late — callers arrive
     // via setScene(nullptr), so geometryItersecter() is already null by then.
     GeometryItersecter->clear(item);
+
+    // Scrub the object's published visibility (object entry + every sub) so a
+    // recycled or re-added id starts from the sparse default.
+    m_visibility->removeObject(item->renderObjectId());
 
     // {Delete, null} overwrites whatever was pending for this id and, holding no
     // pointer, cannot dangle when the caller deletes `item` next (issue #491). The
@@ -187,6 +200,11 @@ cwCamera *cwScene::camera() const
 cwGeometryItersecter *cwScene::geometryItersecter() const
 {
     return GeometryItersecter;
+}
+
+cwSceneVisibility *cwScene::visibility() const
+{
+    return m_visibility;
 }
 
 QBox3D cwScene::visibleFramingBounds() const

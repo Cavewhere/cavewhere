@@ -35,6 +35,7 @@ class cwSceneCommand;
 class cwGeometryItersecter;
 class cwRhiItemRenderer;
 class cwEDLSettings;
+class cwSceneVisibility;
 struct cwOffscreenRenderParameters;
 struct cwOffscreenRenderJob;
 
@@ -78,6 +79,12 @@ public:
 
     //For doing intersection tests
     cwGeometryItersecter* geometryItersecter() const;
+
+    // The scene's published visibility truth (issue #579). Render objects
+    // publish into it through their facades; consumers read snapshots. During
+    // the store migration it runs alongside the legacy per-consumer twins
+    // (dual-publish) — see plans/SCENE_VISIBILITY_STORE_PLAN.html.
+    cwSceneVisibility* visibility() const;
 
     // The world-space box a camera should frame: the union of the scene's
     // visible geometry. "What should reset/capture frame" is a scene concern;
@@ -146,6 +153,10 @@ private:
 
     //For interaction
     cwGeometryItersecter* GeometryItersecter;
+
+    // Published visibility store; seeded by addItem() via publishVisibility(),
+    // scrubbed by removeItem().
+    cwSceneVisibility* m_visibility;
 
     //The main camera for the viewer
     cwCamera* Camera;

@@ -35,7 +35,10 @@ public:
     uint32_t addItem(const Item& item);
     void updateGeometry(uint32_t id, const cwGeometry& geometry);
     void updateTexture(uint32_t id, const QImage& image);
-    void setVisible(uint32_t id, bool visible);
+    // Named setItemVisible, not an overload of setVisible: a same-name
+    // overload would hide cwRenderObject::setVisible(bool) and make the
+    // whole-object toggle unreachable without qualification.
+    void setItemVisible(uint32_t id, bool visible);
     void setCulling(uint32_t id, CullMode culling);
     void setMaterial(uint32_t id, const cwRenderMaterialState& material);
     void setUniformBlock(uint32_t id, const QByteArray& uniformBlock);
@@ -49,6 +52,7 @@ public:
 
 protected:
     cwRHIObject *createRHIObject() override;
+    void publishVisibility() override;
 
 private:
     // Pending data to update

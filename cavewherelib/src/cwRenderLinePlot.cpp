@@ -13,7 +13,14 @@
 #include "cwRenderLinePlot.h"
 #include "cwRHILinePlot.h"
 #include "cwScene.h"
+#include "cwSceneVisibility.h"
 #include "cwGeometryItersecter.h"
+
+namespace {
+    // The plot is one geometry blob, so it occupies a single sub-slot in both
+    // the intersecter and the visibility store.
+    constexpr uint32_t kLinePlotSubId = 0;
+}
 
 cwRenderLinePlot::cwRenderLinePlot(QObject *parent) :
     cwRenderObject(parent)
@@ -54,7 +61,7 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
         geometry.setIndices(std::move(sequentialIndices));
         geometry.setType(cwGeometry::Type::Lines);
 
-        intersecter->addObject(cwGeometryItersecter::Object(cwGeometryItersecter::Key{this, 0},
+        intersecter->addObject(cwGeometryItersecter::Object(cwGeometryItersecter::Key{this, kLinePlotSubId},
                                                             std::move(geometry)));
     }
 
@@ -67,6 +74,14 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
     // owner re-applies hidden ranges right after
     // (cwLinePlotManager::reconcileTripKeywordItems).
     m_visibility.setValue(QVector<quint8>(vertexCount, kVisible));
+
+    // Dual-publish (issue #579): the store mask keyed to the old layout no
+    // longer maps to the right vertices either; clear it to the all-visible
+    // default. Unlike the intersecter there is no addObject-resets-visibility
+    // side effect, so this is the explicit reset.
+    if (auto* visibilityStore = sceneVisibility()) {
+        visibilityStore->setMask(renderObjectId(), kLinePlotSubId, QVector<quint8>());
+    }
 
     update();
 
@@ -116,11 +131,29 @@ void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)
     // intersecter's all-visible fast path; addObject already resets it there,
     // so setGeometry needn't publish.
     if (auto* intersecter = geometryItersecter()) {
-        intersecter->setVisibilityMask(cwGeometryItersecter::Key{this, 0},
+        intersecter->setVisibilityMask(cwGeometryItersecter::Key{this, kLinePlotSubId},
                                        anyHidden ? visibility : QVector<quint8>());
     }
 
+    // Dual-publish (issue #579): same buffer, same empty-means-all-visible
+    // convention; the store shares it rather than copying.
+    if (auto* visibilityStore = sceneVisibility()) {
+        visibilityStore->setMask(renderObjectId(), kLinePlotSubId,
+                                 anyHidden ? visibility : QVector<quint8>());
+    }
+
     update();
+}
+
+void cwRenderLinePlot::publishVisibility()
+{
+    cwRenderObject::publishVisibility();
+    if (auto* visibilityStore = sceneVisibility()) {
+        const QVector<quint8>& visibility = m_visibility.value();
+        const bool anyHidden = visibility.contains(kHidden);
+        visibilityStore->setMask(renderObjectId(), kLinePlotSubId,
+                                 anyHidden ? visibility : QVector<quint8>());
+    }
 }
 
 std::optional<std::pair<QVector3D, QVector3D>> cwRenderLinePlot::segmentEndpoints(int firstIndex) const
