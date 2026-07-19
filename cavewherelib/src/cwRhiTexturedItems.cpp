@@ -71,7 +71,6 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
     auto* renderItems = static_cast<cwRenderTexturedItems*>(data.object);
 
     m_renderItems = renderItems;
-    m_visible = renderItems->isVisible();
 
     const auto pendingChanges = renderItems->m_pendingChanges;
     for (const auto& command : pendingChanges) {
@@ -88,7 +87,6 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
             item->textureNeedsUpdate = !item->image.isNull();
             item->uniformBlock = command.item().uniformBlock;
             item->uniformNeedsUpdate = true;
-            item->visible = command.item().visible;
             item->pipelineNeedsUpdate = true;
             item->modelMatrix = command.item().modelMatrix;
             item->modelMatrixNeedsUpdate = true;
@@ -132,12 +130,6 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
             if (auto* item = m_items.value(id, nullptr)) {
                 item->uniformBlock = command.item().uniformBlock;
                 item->uniformNeedsUpdate = true;
-            }
-            break;
-        }
-        case cwRenderTexturedItems::PendingCommand::UpdateVisiblity: {
-            if (auto* item = m_items.value(id, nullptr)) {
-                item->visible = command.item().visible;
             }
             break;
         }
@@ -207,55 +199,12 @@ void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
 
 void cwRhiTexturedItems::render(const RenderData& data)
 {
-    // if (!m_visible) {
-    //     return;
-    // }
-
-    // QVector<Item*> drawList;
-    // drawList.reserve(m_items.size());
-    // for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
-    //     Item* item = it.value();
-    //     if (!item || !item->visible) {
-    //         continue;
-    //     }
-
-    //     if (item->numberOfIndices <= 0 || !item->pipelineRecord || !item->pipelineRecord->pipeline || !item->srb) {
-    //         continue;
-    //     }
-
-    //     drawList.append(item);
-    // }
-
-    // if (drawList.isEmpty()) {
-    //     return;
-    // }
-
-    // std::sort(drawList.begin(), drawList.end(), [](const Item* lhs, const Item* rhs) {
-    //     return lhs->pipelineRecord->pipeline < rhs->pipelineRecord->pipeline;
-    // });
-
-    // QRhiGraphicsPipeline* boundPipeline = nullptr;
-    // for (Item* item : std::as_const(drawList)) {
-    //     if (item->pipelineRecord->pipeline != boundPipeline) {
-    //         boundPipeline = item->pipelineRecord->pipeline;
-    //         data.cb->setGraphicsPipeline(boundPipeline);
-    //     }
-
-    //     data.cb->setShaderResources(item->srb);
-
-    //     const QRhiCommandBuffer::VertexInput vbind(item->vertexBuffer, 0);
-    //     data.cb->setVertexInput(0, 1, &vbind, item->indexBuffer, 0, QRhiCommandBuffer::IndexUInt32);
-
-    //     data.cb->drawIndexed(item->numberOfIndices);
-    // }
+    // All drawing goes through gather(); nothing renders via the legacy path.
+    Q_UNUSED(data);
 }
 
 bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
 {
-    if (!m_visible) {
-        return false;
-    }
-
     const auto desiredPass = context.renderPass;
     bool appended = false;
 
@@ -263,11 +212,18 @@ bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBa
     // item->ensurePipeline() below is still callable) — avoids a QHash detach.
     for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it) {
         Item* item = it.value();
-        if (!item || !item->visible) {
+        if (!item) {
             continue;
         }
 
         if (toRenderPass(item->material.renderPass) != desiredPass) {
+            continue;
+        }
+
+        // Per-item visibility comes from the frame's snapshot (the owner
+        // publishes setSubVisible to the store; no RHI-side copy exists).
+        if (context.visibility
+            && !context.visibility->subVisible(renderObjectId(), it.key())) {
             continue;
         }
 

@@ -59,8 +59,6 @@ private:
 
         double memoryUsageMb = 0.0;
 
-        bool visible = true;
-
         cwRhiTexturedItems* owner = nullptr;
 
         void initializeResources(const ResourceUpdateData &data, const SharedItemData &sharedData);
@@ -75,7 +73,6 @@ private:
 
     QHash<uint32_t, Item*> m_items;
     bool m_resourcesInitialized = false;
-    bool m_visible = true;
     QPointer<cwRenderTexturedItems> m_renderItems;
     SharedItemData m_sharedData;
     QRhiVertexInputLayout m_inputLayout;

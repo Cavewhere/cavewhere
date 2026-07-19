@@ -243,10 +243,6 @@ void cwRHIPointCloud::render(const RenderData& data)
 
 bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
 {
-    if (!isVisible()) {
-        return false;
-    }
-
     if (context.renderPass != RenderPass::PointCloud) {
         return false;
     }
@@ -297,7 +293,9 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
 
 bool cwRHIPointCloud::usesPointCloudPass() const
 {
-    return isVisible() && m_geometry.value().geometry.vertexCount() > 0;
+    // Reports geometry only; the caller (cwRhiFrameRenderer::anyCloudVisible)
+    // ANDs in this object's snapshot visibility.
+    return m_geometry.value().geometry.vertexCount() > 0;
 }
 
 bool cwRHIPointCloud::ensurePipeline(const RenderData& data)

@@ -239,18 +239,18 @@ void cwRenderTexturedItems::setItemVisible(uint32_t id, bool visible)
         return;
     }
 
-    Item payload;
-    payload.visible = visible;
-    addCommand(PendingCommand(PendingCommand::UpdateVisiblity, id, payload));
-
     entry->visible = visible;
 
-    // Keep picking and framing in step with rendering: a hidden item must
-    // not take picks or inflate the reset-view bounds (issues #575/#549).
-    // The intersecter reads this store entry from a snapshot per query.
+    // The store entry is the single published truth: the intersecter reads it
+    // from a snapshot per query (a hidden item must not take picks or inflate
+    // the reset-view bounds, issues #575/#549), and cwRhiTexturedItems::gather
+    // reads it from the frame's snapshot — no per-item visibility command
+    // travels to the render thread. update() schedules the sync that refreshes
+    // the frame's snapshot.
     if (auto* visibilityStore = sceneVisibility()) {
         visibilityStore->setSubVisible(renderObjectId(), id, visible);
     }
+    update();
 }
 
 void cwRenderTexturedItems::setCulling(uint32_t id, CullMode culling)

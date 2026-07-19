@@ -4,6 +4,7 @@
 //Qt includes
 #include "cwScene.h"
 #include "cwRhiPipelineSet.h"
+#include "cwRenderObjectId.h"
 class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 
@@ -18,6 +19,7 @@ class QRhiResourceUpdateBatch;
 class cwRhiItemRenderer;
 class cwRenderObject;
 class cwAppearanceSlotted;
+class cwVisibilitySnapshot;
 
 class cwRHIObject {
 
@@ -110,6 +112,12 @@ public:
         const RenderData* renderData;
         RenderPass renderPass;
         quint32 objectOrder = 0;
+        // The frame's visibility snapshot (cwRhiFrameRenderer::visibilitySnapshot),
+        // stamped by gatherScene. Objects with sub-item granularity read their
+        // per-item flags from it (cwRhiTexturedItems); whole-object gating already
+        // happened in gatherScene, so most gather()s never touch it. Null is
+        // treated as everything-visible.
+        const cwVisibilitySnapshot* visibility = nullptr;
         // Per-object appearance slot this render job selects (0 = the live
         // appearance in slot 0; higher slots = a per-job override the offscreen
         // renderer acquired and uploaded for this object before gathering). The
@@ -195,8 +203,13 @@ public:
         return false;
     };
 
-    void setVisible(bool visible) { m_isVisible = visible; }
-    bool isVisible() const { return m_isVisible; }
+    // Stable identity of the front-end cwRenderObject this backend object mirrors,
+    // stamped by cwRhiFrameRenderer::registerRenderObject. Objects use it to read
+    // their own entries from the frame's visibility snapshot
+    // (cwRhiFrameRenderer::visibilitySnapshot) — there is no RHI-side visibility
+    // copy; the snapshot captured at the sync barrier is the render thread's truth.
+    cwRenderObjectId renderObjectId() const { return m_renderObjectId; }
+    void setRenderObjectId(cwRenderObjectId id) { m_renderObjectId = id; }
 
     // True when this object draws into the PointCloud pass with real geometry.
     // cwRhiScene polls this before gathering to decide whether to engage the
@@ -236,10 +249,9 @@ public:
 
     static QShader loadShader(const QString& name);
 private:
-    bool m_isVisible = true;
+    cwRenderObjectId m_renderObjectId{};
 
-
-protected:    
+protected:
     static PipelineBatch& acquirePipelineBatch(QVector<PipelineBatch>& batches,
                                                const PipelineState& state)
     {

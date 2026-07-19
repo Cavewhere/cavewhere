@@ -9,12 +9,11 @@
 // visibility behavior in the seams the store refactor will rewire, so Phases
 // 1-3 are provably behavior-preserving. Three thin-coverage areas:
 //
-//   1. Whole-object visibility handoff to the RHI backend (pull-at-sync via
-//      cwRhiScene::syncRenderObject). Observed through the stub harness from
-//      test_cwScene_issue512.cpp — CPU-only, no QRhi. Note: the observable
-//      here (cwRHIObject::isVisible after a sync) is the render thread's view
-//      of visibility; Phase 3 replaces the mirror with snapshot reads and
-//      re-expresses these assertions against the snapshot.
+//   1. Whole-object visibility handoff to the RHI backend. Observed through
+//      the stub harness from test_cwScene_issue512.cpp — CPU-only, no QRhi.
+//      The observable is the frame's captured visibility snapshot (Phase 3
+//      retired the cwRHIObject::isVisible mirror these tests originally read;
+//      the snapshot is the render thread's view of visibility now).
 //
 //   2. Visibility and geometry seeded BEFORE scene attach. Today the owner's
 //      authoring state survives (front-state flag, object flag, line-plot
@@ -161,8 +160,8 @@ protected:
 } // namespace
 
 // A render object hidden BEFORE it joins a scene must reach the render thread
-// hidden: syncRenderObject pulls object->isVisible() when the Add drains, so
-// the pre-attach flag rides the first sync. Also pins that hidden means
+// hidden: cwScene::addItem seeds the store from the pre-attach flag, and the
+// first sync's snapshot capture carries it across. Also pins that hidden means
 // gather-skipped, not unregistered — the backend still creates and maps the
 // cwRHIObject.
 TEST_CASE("visibility characterization: whole-object hide seeded before scene attach reaches the RHI at first sync",
@@ -181,7 +180,8 @@ TEST_CASE("visibility characterization: whole-object hide seeded before scene at
     cwRHIObject* rhiObject =
         CwRhiSceneTestAccess::renderObjectForId(rhiScene, object->renderObjectId());
     REQUIRE(rhiObject != nullptr);          // hidden != unregistered
-    CHECK_FALSE(rhiObject->isVisible());
+    CHECK_FALSE(CwRhiSceneTestAccess::visibilitySnapshot(rhiScene)
+                    .objectVisible(object->renderObjectId()));
 
     delete object;
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // frees the stub RHI object
@@ -189,8 +189,7 @@ TEST_CASE("visibility characterization: whole-object hide seeded before scene at
 
 // A whole-object toggle reaches the render thread's view of visibility at the
 // next sync, in both directions. (Deliberately no assertion on the pre-sync
-// window: nothing reads the RHI mirror between syncs, and the pull-at-sync
-// mechanism is what the store refactor's Phase 3 replaces.)
+// window: the frame's snapshot only refreshes at the sync barrier.)
 TEST_CASE("visibility characterization: whole-object toggles propagate to the RHI at the next sync",
           "[SceneVisibility][cwScene][cwRhiScene]")
 {
@@ -203,18 +202,17 @@ TEST_CASE("visibility characterization: whole-object toggles propagate to the RH
 
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
 
-    cwRHIObject* rhiObject =
-        CwRhiSceneTestAccess::renderObjectForId(rhiScene, object->renderObjectId());
-    REQUIRE(rhiObject != nullptr);
-    REQUIRE(rhiObject->isVisible());
+    const auto id = object->renderObjectId();
+    REQUIRE(CwRhiSceneTestAccess::renderObjectForId(rhiScene, id) != nullptr);
+    REQUIRE(CwRhiSceneTestAccess::visibilitySnapshot(rhiScene).objectVisible(id));
 
     object->setVisible(false);
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
-    CHECK_FALSE(rhiObject->isVisible());
+    CHECK_FALSE(CwRhiSceneTestAccess::visibilitySnapshot(rhiScene).objectVisible(id));
 
     object->setVisible(true);
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
-    CHECK(rhiObject->isVisible());
+    CHECK(CwRhiSceneTestAccess::visibilitySnapshot(rhiScene).objectVisible(id));
 
     delete object;
     CwRhiSceneTestAccess::synchroize(rhiScene, &scene);   // frees the stub RHI object

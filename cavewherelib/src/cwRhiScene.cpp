@@ -4,6 +4,7 @@
 #include "cwRenderObject.h"
 #include "cwRhiItemRenderer.h"
 #include "cwScene.h"
+#include "cwSceneVisibility.h"
 #include "cwEDLSettings.h"
 #include "cwCamera.h"
 #include "cwOffscreenRenderJob.h"
@@ -59,6 +60,14 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer* renderer)
 
     m_frame.setEdlParameters(scene->edl()->parameters());
 
+    // One visibility snapshot per sync: the GUI thread is blocked at this
+    // barrier, so reading the store here is race-free, and everything the frame
+    // renders — live or offscreen — reads this immutable copy until the next
+    // sync. This replaces the per-object visibility mirrors the RHI side used
+    // to hand-sync (cwRHIObject::setVisible, per-item flags, the line-plot
+    // mask copy).
+    m_frame.setVisibilitySnapshot(scene->visibility()->snapshot());
+
     //Drain the pending render-object changes. One entry per id names its transition
     //(Add/Update/Delete), so this is a single ordered pass rather than three queues.
     //The map is ordered by id — i.e. construction order — but Adds must register in
@@ -107,7 +116,6 @@ void cwRhiScene::syncRenderObject(cwRenderObject* object, cwRhiItemRenderer* ren
 {
     auto rhiObject = m_frame.renderObjectForId(object->renderObjectId());
     if(rhiObject) {
-        rhiObject->setVisible(object->isVisible());
         rhiObject->synchronize({object, renderer});
         m_frame.markForResourceUpdate(rhiObject);
     }

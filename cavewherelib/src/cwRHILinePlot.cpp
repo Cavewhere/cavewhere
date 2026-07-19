@@ -66,9 +66,6 @@ void cwRHILinePlot::synchronize(const SynchronizeData& data)
 
     m_data = linePlot->m_data;
     linePlot->m_data.resetChanged();
-
-    m_visibility = linePlot->m_visibility;
-    linePlot->m_visibility.resetChanged();
 }
 
 void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
@@ -95,34 +92,46 @@ void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
     updateVisibilityBuffer(batch);
 }
 
-// Uploads the per-vertex visibility buffer when it changed. The render object
-// keeps visibility as one byte per vertex; the GPU attribute is a uint (4-byte
-// aligned on every backend), so expand on upload. Only runs on a toggle or a
-// new solve, so the small expansion cost is off the hot path.
+// Uploads the per-vertex visibility attribute from the frame's snapshot of the
+// scene visibility store, gated on the entry's store version so unrelated
+// visibility churn never re-uploads. The store mask is sparse — null means all
+// visible — so that case synthesizes a full buffer (the shader reads one uint
+// per vertex unconditionally). The mask is one byte per vertex; the GPU
+// attribute is a uint (4-byte aligned on every backend), so expand on upload.
+// Only runs on a toggle or a new solve, so the expansion cost is off the hot
+// path. A geometry replacement changes the vertex count and resets the store
+// entry, so both feed the gate.
 void cwRHILinePlot::updateVisibilityBuffer(QRhiResourceUpdateBatch* batch)
 {
-    if (!m_visibilityBuffer) {
+    if (!m_visibilityBuffer || !m_frame) {
         return;
     }
 
-    if (m_visibility.isChanged()) {
-        const QVector<quint8>& flags = m_visibility.value();
-
-        // Expand to the 4-byte-aligned uint attribute the shader reads; the
-        // range constructor widens each quint8 to quint32.
-        const QVector<quint32> expanded(flags.cbegin(), flags.cend());
-
-        const int bufferSize = expanded.size() * sizeof(quint32);
-        if (bufferSize > 0) {
-            if (m_visibilityBuffer->size() != bufferSize) {
-                m_visibilityBuffer->setSize(bufferSize);
-                m_visibilityBuffer->create();
-            }
-            batch->updateDynamicBuffer(m_visibilityBuffer, 0, bufferSize, expanded.constData());
-        }
+    const cwVisibilitySnapshot& visibility = m_frame->visibilitySnapshot();
+    const cwRenderObjectId id = renderObjectId();
+    const quint64 entryVersion = visibility.entryVersion(id, cwRenderLinePlot::kSubId);
+    const qsizetype vertexCount = m_data.value().points.size();
+    if (entryVersion == m_uploadedMaskVersion
+        && vertexCount == m_uploadedMaskVertexCount) {
+        return;
     }
 
-    m_visibility.resetChanged();
+    const QVector<quint8>* mask = visibility.mask(id, cwRenderLinePlot::kSubId);
+    const QVector<quint32> expanded = mask
+        ? QVector<quint32>(mask->cbegin(), mask->cend())
+        : QVector<quint32>(vertexCount, cwRenderLinePlot::kVisible);
+
+    const int bufferSize = expanded.size() * int(sizeof(quint32));
+    if (bufferSize > 0) {
+        if (m_visibilityBuffer->size() != bufferSize) {
+            m_visibilityBuffer->setSize(bufferSize);
+            m_visibilityBuffer->create();
+        }
+        batch->updateDynamicBuffer(m_visibilityBuffer, 0, bufferSize, expanded.constData());
+    }
+
+    m_uploadedMaskVersion = entryVersion;
+    m_uploadedMaskVertexCount = vertexCount;
 }
 
 void cwRHILinePlot::render(const RenderData& data)
@@ -155,10 +164,6 @@ void cwRHILinePlot::render(const RenderData& data)
 
 bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
 {
-    if (!isVisible()) {
-        return false;
-    }
-
     if (context.renderPass != RenderPass::Opaque) {
         return false;
     }

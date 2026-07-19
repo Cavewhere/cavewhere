@@ -685,7 +685,7 @@ void cwGeometryItersecter::clear(cwRenderObjectId parentId)
         }
     }
     qCDebug(lcPick).nospace()
-        << "clear(parent=" << static_cast<quint64>(parentId) << ") — erased "
+        << "clear(parent=" << parentId << ") — erased "
         << erased << " Nodes; remaining=" << Nodes.size();
     // Most render objects leaving the scene registered no pick geometry at
     // all — and a rebuild that would find nothing changed still cancels and
@@ -708,7 +708,7 @@ void cwGeometryItersecter::removeObject(const Key &objectKey)
 {
     if (eraseNodeIfPresent(objectKey)) {
         qCDebug(lcPick).nospace()
-            << "removeObject {parent=" << static_cast<quint64>(objectKey.parentId)
+            << "removeObject {parent=" << objectKey.parentId
             << ", id=" << objectKey.id << "}"
             << " Nodes.size after=" << Nodes.size();
         scheduleTopLevelRebuild();
@@ -725,12 +725,12 @@ void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4
     auto iter = findNode(objectKey);
     if (iter == Nodes.end()) {
         qCDebug(lcPick).nospace()
-            << "setModelMatrix {parent=" << static_cast<quint64>(objectKey.parentId)
+            << "setModelMatrix {parent=" << objectKey.parentId
             << ", id=" << objectKey.id << "} — Key not in Nodes; no-op";
         return;
     }
     qCDebug(lcPick).nospace()
-        << "setModelMatrix {parent=" << static_cast<quint64>(objectKey.parentId)
+        << "setModelMatrix {parent=" << objectKey.parentId
         << ", id=" << objectKey.id << "} — top-level rebuild only"
         << " (sub-BVH cache preserved)";
     iter->Object.setModelMatrix(modelMatrix);
@@ -1651,7 +1651,7 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
                 const Key subKey = sb.object.key();
                 qCDebug(lcPick).nospace()
                     << "    [" << i << "] " << QLatin1String(parentClass)
-                    << "#" << static_cast<quint64>(subKey.parentId)
+                    << "#" << subKey.parentId
                     << " type=" << cwGeometry::typeName(sb.object.geometry().type())
                     << " prims=" << sb.primitives.size()
                     << " visible="
@@ -1985,7 +1985,7 @@ void cwGeometryItersecter::scheduleObjectRebuild(const Key& key)
     m_dirtyKeys.insert(key);
     invalidatePublishedSlot(key);
     qCDebug(lcPick).nospace()
-        << "scheduleObjectRebuild {parent=" << static_cast<quint64>(key.parentId)
+        << "scheduleObjectRebuild {parent=" << key.parentId
         << ", id=" << key.id << "} — sub-BVH invalidated; "
         << m_subBvhs.size() << " other sub-BVH(s) still cached, "
         << m_dirtyKeys.size() << " dirty";
@@ -2510,8 +2510,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
                     ? built[i]->primitives.size()
                     : qsizetype(0);
                 qCDebug(lcPick).nospace()
-                    << "  task[" << i << "] {parent="
-                    << static_cast<quint64>(tasks[i].key.parentId)
+                    << "  task[" << i << "] {parent=" << tasks[i].key.parentId
                     << ", id=" << tasks[i].key.id << "}"
                     << " prims=" << prims
                     << " ms=" << taskMs[i];

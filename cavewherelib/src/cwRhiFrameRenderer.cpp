@@ -164,6 +164,7 @@ void cwRhiFrameRenderer::registerRenderObject(cwRenderObjectId id, cwRHIObject* 
         destroyRhiObject(stale);
     }
 
+    rhiObject->setRenderObjectId(id);
     m_rhiObjects.append(rhiObject);
     m_rhiObjectsToInitilize.append(rhiObject);
     m_rhiObjectLookup[id] = rhiObject;
@@ -516,8 +517,9 @@ bool cwRhiFrameRenderer::anyCloudVisible() const
 {
     return std::any_of(
         m_rhiObjects.cbegin(), m_rhiObjects.cend(),
-        [](const cwRHIObject* object) {
-            return object->isVisible() && object->usesPointCloudPass();
+        [this](const cwRHIObject* object) {
+            return m_visibility.objectVisible(object->renderObjectId())
+                   && object->usesPointCloudPass();
         });
 }
 
@@ -526,7 +528,8 @@ QSet<cwRenderObjectId> cwRhiFrameRenderer::atlasIncompatibleVisibleObjectIds() c
     QSet<cwRenderObjectId> ids;
     for (auto it = m_rhiObjectLookup.cbegin(); it != m_rhiObjectLookup.cend(); ++it) {
         const cwRHIObject* object = it.value();
-        if (object && object->isVisible() && object->precludesAtlasBatching()) {
+        if (object && m_visibility.objectVisible(it.key())
+            && object->precludesAtlasBatching()) {
             ids.insert(it.key());
         }
     }
@@ -550,23 +553,13 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
                             const cwRHIObject::PerPassRenderData& perPassRenderData,
                             const cwSceneGatherOptions& options)
 {
-    // Resolve the per-job hidden ids to the live cwRHIObject pointers once, so the
-    // gather loop skips them with a pointer-set lookup rather than re-hashing ids.
-    // Skipped entirely on the live frame (empty set) so its hot path stays
-    // allocation-free; contains() on the resulting null set is a cheap no-op.
-    QSet<const cwRHIObject*> hiddenObjects;
-    if (!options.hiddenObjectIds.isEmpty()) {
-        hiddenObjects.reserve(options.hiddenObjectIds.size());
-        for (cwRenderObjectId id : options.hiddenObjectIds) {
-            if (cwRHIObject* object = m_rhiObjectLookup.value(id, nullptr)) {
-                hiddenObjects.insert(object);
-            }
-        }
-    }
-
     quint32 objectOrder = 0;
     for (auto object : std::as_const(m_rhiObjects)) {
-        if (!object->isVisible() || hiddenObjects.contains(object)) {
+        // Snapshot gate ANDed with the per-job overlay. Objects carry their own
+        // ids now, so the overlay is tested directly — no id→pointer resolve
+        // pass; contains() on the live frame's empty set is a cheap no-op.
+        const cwRenderObjectId id = object->renderObjectId();
+        if (!m_visibility.objectVisible(id) || options.hiddenObjectIds.contains(id)) {
             ++objectOrder;
             continue;
         }
@@ -577,6 +570,7 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
             auto& batches = passBatches[passIndex];
             const cwRHIObject::GatherContext context {
                 &perPassRenderData[passIndex], pass, objectOrder,
+                &m_visibility,
                 options.appearanceSlotForObject.value(object, 0)
             };
             gathered |= object->gather(context, batches);

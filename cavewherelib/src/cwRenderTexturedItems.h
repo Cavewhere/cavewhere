@@ -65,7 +65,6 @@ private:
             UpdateTexture,
             UpdateMaterial,
             UpdateUniformBlock,
-            UpdateVisiblity,
             UpdateModelMatrix,
             Unknown
         };

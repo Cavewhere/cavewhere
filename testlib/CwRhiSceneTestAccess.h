@@ -24,6 +24,14 @@ struct CwRhiSceneTestAccess {
     static cwRHIObject* renderObjectForId(cwRhiScene& rhiScene, cwRenderObjectId id) {
         return rhiScene.m_frame.renderObjectForId(id);
     }
+
+    // The frame's captured visibility snapshot — the render thread's view of
+    // visibility after a synchroize(). This is what gatherScene's object gate
+    // and the per-object readers consult; tests assert against it in place of
+    // the retired cwRHIObject::isVisible mirror.
+    static cwVisibilitySnapshot visibilitySnapshot(cwRhiScene& rhiScene) {
+        return rhiScene.m_frame.visibilitySnapshot();
+    }
 };
 
 #endif // CWRHISCENETESTACCESS_H

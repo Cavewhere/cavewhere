@@ -143,10 +143,6 @@ void cwRHIGridPlane::render(const RenderData& data)
 
 bool cwRHIGridPlane::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
 {
-    if (!isVisible()) {
-        return false;
-    }
-
     // The grid is a semi-transparent reference overlay: it must draw *after* the
     // point cloud (and the EDL composite), depth-testing against the combined
     // scene+cloud depth but never writing its own full-plane depth — otherwise

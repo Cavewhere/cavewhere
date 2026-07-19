@@ -16,11 +16,6 @@
 #include "cwSceneVisibility.h"
 #include "cwGeometryItersecter.h"
 
-namespace {
-    // The plot is one geometry blob, so it occupies a single sub-slot in both
-    // the intersecter and the visibility store.
-    constexpr uint32_t kLinePlotSubId = 0;
-}
 
 cwRenderLinePlot::cwRenderLinePlot(QObject *parent) :
     cwRenderObject(parent)
@@ -61,7 +56,7 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
         geometry.setIndices(std::move(sequentialIndices));
         geometry.setType(cwGeometry::Type::Lines);
 
-        intersecter->addObject(cwGeometryItersecter::Object(this, kLinePlotSubId,
+        intersecter->addObject(cwGeometryItersecter::Object(this, kSubId,
                                                             std::move(geometry)));
     }
 
@@ -73,14 +68,14 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
     // maps to the right vertices; reset to all-visible, one byte per vertex. The
     // owner re-applies hidden ranges right after
     // (cwLinePlotManager::reconcileTripKeywordItems).
-    m_visibility.setValue(QVector<quint8>(vertexCount, kVisible));
+    m_visibility = QVector<quint8>(vertexCount, kVisible);
 
     // The published store mask is keyed to the old vertex layout, which no
     // longer maps to the right vertices; clear it to the all-visible default.
     // This is the reset the pick traversals see — the owner re-applies hidden
     // ranges right after (cwLinePlotManager::reconcileTripKeywordItems).
     if (auto* visibilityStore = sceneVisibility()) {
-        visibilityStore->setMask(renderObjectId(), kLinePlotSubId, QVector<quint8>());
+        visibilityStore->setMask(renderObjectId(), kSubId, QVector<quint8>());
     }
 
     update();
@@ -99,12 +94,12 @@ void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)
     // this check. No production caller can reach it (that needs ~2^31
     // vertices), and the overflowed loop below would no-op anyway, so this
     // buys correctness-under-optimization, not a reachable bug fix.
-    const qsizetype vertexCount = m_visibility.value().size();
+    const qsizetype vertexCount = m_visibility.size();
     if (start < 0 || count <= 0 || count > vertexCount - start) {
         return;
     }
 
-    QVector<quint8> visibility = m_visibility.value();
+    QVector<quint8> visibility = m_visibility;
     const quint8 flag = visible ? kVisible : kHidden;
     bool changed = false;
     for (int i = start; i < start + count; ++i) {
@@ -121,7 +116,7 @@ void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)
     // all-visible state — and only then is the scan worth paying for.
     const bool anyHidden = !visible || visibility.contains(kHidden);
 
-    m_visibility.setValue(visibility);
+    m_visibility = visibility;
 
     // Publish the same buffer to the scene's visibility store so hidden
     // shots stop taking picks and inflating the reset-view bounds (issues
@@ -131,7 +126,7 @@ void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)
     // writes to a copy and publishes the result instead of mutating in
     // place. An empty mask is the all-visible fast path.
     if (auto* visibilityStore = sceneVisibility()) {
-        visibilityStore->setMask(renderObjectId(), kLinePlotSubId,
+        visibilityStore->setMask(renderObjectId(), kSubId,
                                  anyHidden ? visibility : QVector<quint8>());
     }
 
@@ -142,9 +137,9 @@ void cwRenderLinePlot::publishVisibility()
 {
     cwRenderObject::publishVisibility();
     if (auto* visibilityStore = sceneVisibility()) {
-        const QVector<quint8>& visibility = m_visibility.value();
+        const QVector<quint8>& visibility = m_visibility;
         const bool anyHidden = visibility.contains(kHidden);
-        visibilityStore->setMask(renderObjectId(), kLinePlotSubId,
+        visibilityStore->setMask(renderObjectId(), kSubId,
                                  anyHidden ? visibility : QVector<quint8>());
     }
 }

@@ -72,7 +72,7 @@
 <body>
 <main>
 
-<h1>Scene Visibility Store <span class="pill phase">IN PROGRESS — Phases 0–2 done</span></h1>
+<h1>Scene Visibility Store <span class="pill phase">IN PROGRESS — Phases 0–3 done</span></h1>
 <div class="meta">
   Plan for <a href="https://github.com/Cavewhere/cavewhere/issues/579">issue #579 — First-class scene visibility model (single source of truth)</a>.
   Subsumes the intersecter-side visibility twins built for #575/#549
@@ -90,8 +90,9 @@ stored and synchronized in five places, each with its own granularity, container
 
 <p class="dim">
 Status (July 2026): this section describes the pre-plan state and is kept as motivation. Phase 2
-has since deleted row 4 entirely — the intersecter now holds zero visibility state — so the five
-places are down to three (rows 1–3 own the "plus a mirror/twin" halves that Phases 3–4 retire).
+deleted row 4 entirely — the intersecter now holds zero visibility state — and Phase 3 then retired
+rows 1–3's RHI mirror halves. What remains is exactly the intended end state: one authoring copy
+per owner (rows 1–3), the proxies (row 5), and the store as the only published truth.
 </p>
 
 <table>
@@ -100,19 +101,19 @@ places are down to three (rows 1–3 own the "plus a mirror/twin" halves that Ph
     <td>1</td>
     <td><code>cwRenderObject::m_visible</code> (cwRenderObject.h:80)</td>
     <td>whole object</td>
-    <td>bool + generic <code>PendingOp::Update</code>; mirrored to <code>cwRHIObject::m_isVisible</code> at cwRhiScene.cpp:110; gated centrally in <code>gatherScene</code> (cwRhiFrameRenderer.cpp:568)</td>
+    <td>bool + generic <code>PendingOp::Update</code>; mirrored to <code>cwRHIObject::m_isVisible</code> at cwRhiScene.cpp:110; gated centrally in <code>gatherScene</code> (cwRhiFrameRenderer.cpp:568) <em>(mirror deleted by Phase 3)</em></td>
   </tr>
   <tr>
     <td>2</td>
     <td><code>cwRenderTexturedItems</code> <code>Item::visible</code> in <code>m_frontState</code> (cwRenderTexturedItems.h:30, :98)</td>
     <td>per item id</td>
-    <td><code>PendingCommand::UpdateVisiblity</code> GPU queue (drained cwRhiTexturedItems.cpp:138) <em>plus</em> a hand-written mirror call into the intersecter (<code>setVisible({this,id}, v)</code>, cwRenderTexturedItems.cpp:249)</td>
+    <td><code>PendingCommand::UpdateVisiblity</code> GPU queue (drained cwRhiTexturedItems.cpp:138) <em>plus</em> a hand-written mirror call into the intersecter (<code>setVisible({this,id}, v)</code>, cwRenderTexturedItems.cpp:249) <em>(intersecter mirror deleted by Phase 2, command queue by Phase 3)</em></td>
   </tr>
   <tr>
     <td>3</td>
     <td><code>cwRenderLinePlot::m_visibility</code> (cwRenderLinePlot.h:87)</td>
     <td>per vertex (1 byte)</td>
-    <td><code>cwTracked</code> dirty-bit copy into <code>cwRHILinePlot</code> → GPU vertex attribute (cwRHILinePlot.cpp:102) <em>plus</em> a second publish into the intersecter (<code>setVisibilityMask(Key{this,0}, …)</code>, cwRenderLinePlot.cpp:118)</td>
+    <td><code>cwTracked</code> dirty-bit copy into <code>cwRHILinePlot</code> → GPU vertex attribute (cwRHILinePlot.cpp:102) <em>plus</em> a second publish into the intersecter (<code>setVisibilityMask(Key{this,0}, …)</code>, cwRenderLinePlot.cpp:118) <em>(intersecter publish deleted by Phase 2, <code>cwTracked</code> copy by Phase 3)</em></td>
   </tr>
   <tr>
     <td>4</td>
@@ -136,7 +137,7 @@ protocol held together by convention:
 </p>
 
 <ul>
-  <li>The RHI side keeps three mirror copies (<code>cwRHIObject::m_isVisible</code>, RHI-side <code>Item::visible</code>, the line-plot visibility buffer), each fed by a different channel (pull-at-sync, command queue, dirty-bit copy).</li>
+  <li>The RHI side keeps three mirror copies (<code>cwRHIObject::m_isVisible</code>, RHI-side <code>Item::visible</code>, the line-plot visibility buffer), each fed by a different channel (pull-at-sync, command queue, dirty-bit copy). <em>(Retired by Phase 3 — the render thread now reads one snapshot captured per sync.)</em></li>
   <li>The intersecter keeps two twin copies (<code>m_hiddenKeys</code>/<code>slotVisible</code> and <code>Object::m_visibilityMask</code>/<code>visibilityMasks</code>), fed by explicit mirror calls the owners must remember to make — including the "re-publish after every <code>addObject</code>" convention that exists only in comments and has already bitten (cwRenderTexturedItems.cpp:157-162, :205-209: a hidden scrap resurrected through an empty→non-empty geometry cycle). <em>(Retired by Phase 2.)</em></li>
   <li>Adding the intersecter as a consumer (#575/#549) required touching every granularity and inventing two new per-granularity twin protocols. The <em>next</em> consumer (per-job render state for offscreen sink inference) faces the same tax.</li>
 </ul>
@@ -213,7 +214,8 @@ protocol held together by convention:
 <figcaption>
 Today: each owner keeps one authoring copy (fine), but every consumer maintains its own duplicate,
 fed by a bespoke protocol (red). Six hand-maintained sync paths exist; a new consumer adds more.
-(The intersecter-twins box and its two red paths were deleted by Phase 2.)
+(The intersecter-twins box and its two red paths were deleted by Phase 2; the RHI-mirrors box and
+its three red paths by Phase 3 — no red paths remain.)
 </figcaption>
 </figure>
 
@@ -328,7 +330,8 @@ the producer pipeline, its tests, and QML untouched.
 
 <p class="dim">
 (The "Today" column is the pre-plan baseline. The intersecter and <code>visibleFramingBounds</code>
-rows' "After" columns landed with Phase 2 and are now current code.)
+rows' "After" columns landed with Phase 2, the three RHI rows' with Phase 3 — the whole "After"
+column is now current code.)
 </p>
 
 <table>
@@ -532,20 +535,51 @@ so <code>setVisible</code> publishes through the facade.
   <li>Gate: both pick-visibility regression suites green <em>unchanged</em> (they assert behavior, not mechanism).</li>
 </ul>
 
-<h3><span class="pill phase">Phase 3</span> Flip the RHI</h3>
+<h3><span class="pill phase">Phase 3</span> Flip the RHI <span class="pill done">DONE</span></h3>
+<p class="dim">
+Landed as planned (July 2026), single working-tree pass in the three planned chunks.
+<code>cwRhiScene::synchroize</code> captures one store snapshot per sync into
+<code>cwRhiFrameRenderer::setVisibilitySnapshot</code>; the frame's copy is the render thread's
+only visibility truth — <code>gatherScene</code>'s object gate, <code>anyCloudVisible</code>, and
+<code>atlasIncompatibleVisibleObjectIds</code> all read it by id. <code>cwRHIObject</code> traded
+its retired <code>m_isVisible</code> mirror for a <code>renderObjectId()</code> stamped at
+registration, and <code>GatherContext</code> carries a snapshot pointer so sub-item readers
+need no side channel. <code>cwRhiTexturedItems::gather</code> reads
+<code>subVisible(renderObjectId(), itemId)</code>; <code>setItemVisible</code> now publishes to the
+store and calls <code>update()</code> — no visibility command travels.
+<code>cwRHILinePlot::updateVisibilityBuffer</code> uploads from the snapshot mask gated on
+<code>(entryVersion, vertexCount)</code>; a null mask synthesizes the all-visible buffer. The
+front-end line-plot authoring mask dropped its now-unread <code>cwTracked</code> wrapper (plain
+<code>QVector&lt;quint8&gt;</code>), and <code>kSubId</code> moved onto <code>cwRenderLinePlot</code> for the
+RHI reader. Both fold-in follow-ups landed: <code>QDebug operator&lt;&lt;(cwRenderObjectId)</code>
+(seven intersecter log casts deleted); the combined snapshot entry accessor was <em>not</em> added
+(no profiling need). Gate held: the two whole-object characterization tests re-expressed their
+assertions against the frame's snapshot via <code>CwRhiSceneTestAccess::visibilitySnapshot</code> —
+exactly the re-expression the Phase 0 header reserved; every other suite untouched. Gate results:
+full C++ suite 312,744 assertions / 1,501 cases green; full QML suite 685 / 0 failed / 26 skipped
+(one first-run failure in <code>NoteOutsideScrapWarning</code> confirmed an ordering flake — passed
+in isolation and in a second full run). Reviewed by the five-lens pre-commit review: zero defects;
+the one simplify edit (per-job <code>hiddenObjectIds</code> tested directly by id in
+<code>gatherScene</code> — the id→pointer resolve pass this phase obsoleted) applied and re-gated.
+</p>
 <ul>
   <li><code>cwRhiScene::synchroize</code> grabs the frame's snapshot once; <code>gatherScene</code>'s object gate and cloud/atlas visibility checks read it (per-job <code>hiddenObjectIds</code> overlay unchanged, still ANDs on top).</li>
-  <li><code>cwRhiTexturedItems::gather</code> reads per-item visibility from the snapshot. <span class="good">Retire:</span> <code>PendingCommand::UpdateVisiblity</code>, RHI-side <code>Item::visible</code>, the visibility payload in the command union.</li>
+  <li><code>cwRhiTexturedItems::gather</code> reads per-item visibility from the snapshot. <span class="good">Retire:</span> <code>PendingCommand::UpdateVisiblity</code>, RHI-side <code>Item::visible</code>, the visibility payload in the command union. <span class="dim">One leftover: the front <code>Item</code> struct still carries <code>visible</code> in every Add/Update payload (nothing reads it RHI-side) because the same struct is the <code>m_frontState</code> authoring entry — split the payload type from the authoring entry in Phase 4's audit.</span></li>
   <li><code>cwRHILinePlot</code> uploads the mask from the snapshot, gated on <code>entryVersion</code>. <span class="good">Retire:</span> the synced <code>cwTracked&lt;QVector&lt;quint8&gt;&gt;</code> copy. Shader and vertex-attribute widening unchanged.</li>
   <li><span class="good">Retire:</span> <code>cwRHIObject::m_isVisible</code>/<code>setVisible</code> and the mirror at cwRhiScene.cpp:110; redundant per-object <code>isVisible()</code> short-circuits in subclass <code>gather()</code>s.</li>
   <li>Gate: Phase 0 characterization tests + full QML suite (visual gating is what these exercise); manual keyword-filter smoke in-app.</li>
   <li>While in these files, pick up the two "fold into Phase 3" review follow-ups from §3: the <code>QDebug</code> stream operator for <code>cwRenderObjectId</code>, and (only if profiling cares) the combined snapshot entry accessor.</li>
 </ul>
 
-<h3><span class="pill phase">Phase 4</span> Retire dual-publish + docs</h3>
+<h3><span class="pill phase">Phase 4</span> Cleanup sweep + docs <span class="dim">(re-scoped after Phase 3)</span></h3>
+<p class="dim">
+Originally "retire dual-publish" — but no legacy visibility publish path survived Phase 3: Phase 2
+took the intersecter mirror calls, Phase 3 every RHI channel, so the store is already the only
+published truth. What remains is the cleanup sweep below plus docs.
+</p>
 <ul>
-  <li>Remove the legacy publish paths left for the transition; the store is the only published truth.</li>
   <li>Owner authoring copies stay only where they earn their keep: <code>cwRenderObject::m_visible</code> (backs the Q_PROPERTY READ), <code>m_frontState[id].visible</code> (pre-attach seed + re-seed source), the line-plot mask buffer (range-flip math). Delete any that turn out redundant with the store.</li>
+  <li>Work the §3 sweep items: the testlib geometry-object factory, the <code>Key::id</code>/store-subId width unification, and the five Phase 3 review follow-ups (legacy <code>render()</code> path retirement, dead <code>m_renderItems</code> member, command-payload/authoring-entry split, frame back-pointer stamping, and the two-read-paths doc note).</li>
   <li>Update <a href="INTERSECTER_VISIBILITY_MASK_PLAN.html">the intersecter plan</a>'s follow-ups: 5's visibility half is subsumed (the registration-ordering half — <code>publishPickGeometry</code> — remains its own item); 3's motivation shrinks to the id-carry that Phase 0 landed.</li>
   <li>Close the loop on #579; note #575/#549 mechanisms replaced with behavior preserved.</li>
 </ul>
@@ -564,8 +598,17 @@ so <code>setVisible</code> publishes through the facade.
   <li><strong>Removal racing an in-flight BVH build</strong> — pre-existing window, predates this plan; its own fix commit. <code>cwScene::removeItem</code> strips the removed key from <code>m_dirtyKeys</code> and the store (absent = visible), so a build worker that finished computing just before the cancel still republishes the removed key's slot at install — picks can hit removed geometry (and construct a <code>QPointer</code> from its freed attribution pointer) until the restarted build installs, and the promoted sub-BVH cache entry leaks permanently (ids never recycle). Fix direction: the install callback drops slots whose keys are absent from the live <code>Nodes</code> list (or filters against a removed-keys set). Documented honestly at the install-callback comment in <code>cwGeometryItersecter.cpp</code>.</li>
   <li><strong>Shared testlib geometry-object factory</strong> — ~15 test files carry near-identical <code>makeTriangleObject</code>/<code>makePointObject</code>-style helpers; the Phase 2 re-key touched every copy, and the id-returning-pick work (§5) will touch them all again. Consolidate into <code>testlib/</code> during the Phase 4 sweep.</li>
   <li><strong><code>Key::id</code> width vs store subId</strong> — <code>Key::id</code> is uint64, the store's subId is uint32; <code>storeSubId()</code> truncates. Safe for every current producer (uint32 counters; line plot/clouds use 0), but a silent visibility-alias trap for a future 64-bit sub-id producer. Unify the widths (narrow <code>Key::id</code> or widen the store) in the Phase 4 sweep.</li>
-  <li><strong><code>QDebug operator&lt;&lt;(cwRenderObjectId)</code></strong> — Phase 2 accumulated seven <code>static_cast&lt;quint64&gt;</code> log casts and Phase 3's RHI logging will add more; one stream operator deletes them all. Fold into Phase 3.</li>
-  <li><strong>Combined snapshot entry accessor</strong> — pick traversal and <code>visibleNodeBox</code> probe <code>subVisible</code>/<code>mask</code>/<code>entryVersion</code> for the same <code>(parentId, subId)</code> back-to-back (2–3 hash lookups where one entry fetch would serve). Cost is small (near-empty hashes, few top-leaves); add <code>cwVisibilitySnapshot::entry()</code> alongside Phase 3's RHI reader only if profiling cares.</li>
+  <li><strong><code>QDebug operator&lt;&lt;(cwRenderObjectId)</code></strong> — Phase 2 accumulated seven <code>static_cast&lt;quint64&gt;</code> log casts and Phase 3's RHI logging will add more; one stream operator deletes them all. Fold into Phase 3. <em>(Landed with Phase 3.)</em></li>
+  <li><strong>Combined snapshot entry accessor</strong> — pick traversal and <code>visibleNodeBox</code> probe <code>subVisible</code>/<code>mask</code>/<code>entryVersion</code> for the same <code>(parentId, subId)</code> back-to-back (2–3 hash lookups where one entry fetch would serve). Cost is small (near-empty hashes, few top-leaves); add <code>cwVisibilitySnapshot::entry()</code> alongside Phase 3's RHI reader only if profiling cares. <em>(Phase 3 evaluated and declined — no profiling need; the per-item probes measured immaterial.)</em></li>
+</ul>
+
+<h3>Out-of-scope follow-ups surfaced by the Phase 3 review <span class="dim">(July 2026)</span></h3>
+<ul>
+  <li><strong>Retire the legacy <code>render()</code> draw path</strong> — all six <code>cwRHIObject</code> subclasses gather now, so the <code>!gathered</code> fallback in <code>gatherScene</code> (which wraps <code>object-&gt;render()</code> in a custom drawable) is dead-but-armed: the two surviving <code>render()</code> bodies draw with hardcoded slot-0 dynamic offsets and would use the wrong camera if an offscreen job ever reached them; two more are commented-out stubs and two explicit no-ops. Delete the pure virtual, the six bodies, and the fallback arm. Touches all six subclasses plus the batching engine — its own commit in the Phase 4 sweep.</li>
+  <li><strong>Dead <code>cwRhiTexturedItems::m_renderItems</code> member</strong> — a write-only <code>QPointer</code> to a GUI-thread QObject parked on the render thread (already write-only before Phase 3; the retired <code>render()</code> body was its last reader). Two-line delete; Phase 4 sweep.</li>
+  <li><strong>Split the textured-items command payload from the authoring entry</strong> — front <code>Item::visible</code> still rides every Add/Update command payload though nothing RHI-side reads it since Phase 3; the same struct is the <code>m_frontState</code> authoring entry Phase 4 keeps as the pre-attach seed source. Splitting the payload type from the authoring entry removes the "does the Add payload's visible matter?" confusion (it doesn't — the store is truth). Phase 4's authoring-copy audit.</li>
+  <li><strong>Stamp the frame back-pointer at registration</strong> — <code>registerRenderObject</code> now stamps <code>renderObjectId</code>; stamping <code>cwRhiFrameRenderer*</code> the same way would delete the per-subclass lazy <code>m_frame</code> backfills (two call sites in <code>cwRHILinePlot</code> alone) and their silent null no-op paths, and make "read your own snapshot entry" a base-class capability every future sub-item reader wants. Blast radius: <code>cwRHIObject.h</code>, <code>registerRenderObject</code>, 1–2 subclasses. Phase 4 sweep.</li>
+  <li><strong>Two snapshot read paths, by design</strong> — <code>gather()</code> reads <code>GatherContext::visibility</code> (per-gather, hence per-job-correct once §5's overlays exist), while <code>cwRHILinePlot</code>'s mask upload reads the frame-global snapshot (<code>updateResources</code> has no gather context, and the GPU mask buffer is a shared resource). Coherent today because both see the same frame snapshot. Note for the §5 sink-inference work: the per-vertex mask is per-frame by construction — per-job vertex hiding is out of design (the per-job overlay hides whole objects only).</li>
 </ul>
 
 <h2 id="alternatives">4 · Alternatives considered</h2>
@@ -638,7 +681,7 @@ so <code>setVisible</code> publishes through the facade.
   </tr>
   <tr>
     <td>Line-plot mask re-uploads on unrelated toggles</td>
-    <td><code>entryVersion</code> gating; add a stub-harness test that hides a scrap and asserts the plot buffer upload count is zero.</td>
+    <td><code>entryVersion</code> gating. The load-bearing property — an entry's version does not move on unrelated churn — is pinned at store level in <code>test_cwSceneVisibility.cpp</code> ("entryVersion tracks its own entry" + recreated-entry freshness). <span class="dim">The originally-sketched GPU-level upload-count assert was dropped as infeasible under repo rules: <code>updateVisibilityBuffer</code> needs a real <code>QRhiResourceUpdateBatch</code> (beyond the CPU stub harness) and test-only upload counters are banned.</span></td>
   </tr>
   <tr>
     <td>Wide test churn masks a real regression</td>
@@ -651,7 +694,7 @@ so <code>setVisible</code> publishes through the facade.
   <li><strong>Q1 — Name:</strong> <span class="pill done">DECIDED</span> <code>cwSceneVisibility</code>, its own class owned by <code>cwScene</code> — keeps <code>cwScene</code> from growing and is unit-testable without a scene.</li>
   <li><strong>Q2 — Endgame for the proxies:</strong> <span class="pill done">DECIDED</span> keep the facade pattern. The alternative (proxies hold the store + key and write it directly, retiring the owner setters) is purer but drags every proxy-creating manager (<code>cwScrapManager</code>, <code>cwNoteLiDARManager</code>, <code>cwLinePlotManager</code>) into the blast radius and re-opens pre-attach buffering, which the owner's authoring copy solves. Revisit only if the facade layer proves annoying.</li>
   <li><strong>Q3 — Full intersecter re-key (follow-up 3):</strong> <span class="pill done">DECIDED — fold into Phase 2.</span> <em>Corrected post-landing:</em> the original verification claimed pick queries return points, not object handles; that missed <code>intersectsDetailed</code>, whose <code>cwRayHit::object()</code> <em>is</em> consumed (<code>cwScenePick.cpp:43</code> qobject_casts it for station snap). The re-key was still contained: <code>Key</code> is pointer-free, and <code>Object</code> keeps the <code>cwRenderObject*</code> as an attribution-only field outside the Key — never used for identity or visibility — until the id-returning-pick migration (§5) retires it. No new hashing: <code>qHash(Key)</code> switched from hashing a pointer to hashing a stable integer id — same cost, deterministic across runs, immune to address reuse (#512 class). Phase 0's id-carry step is subsumed. <span class="dim">Note for the future hide tool: picks returning identity should return <code>(cwRenderObjectId, subId)</code>; a scene-side id→object lookup gets added then, not now.</span></li>
-  <li><strong>Q4 — Phase 3 granularity:</strong> <span class="pill done">DECIDED</span> implementer's choice — whichever is easiest to implement and verify. Expected: three commits (object gate / textured items / line plot), since dual-publish keeps each flip independently verifiable; dual-publish retires in Phase 4.</li>
+  <li><strong>Q4 — Phase 3 granularity:</strong> <span class="pill done">DECIDED</span> implementer's choice — whichever is easiest to implement and verify. Expected: three commits (object gate / textured items / line plot), since dual-publish keeps each flip independently verifiable; dual-publish retires in Phase 4. <span class="dim">Post-landing: Phase 3 landed as a single working-tree pass (implementer's choice exercised), and "dual-publish retires in Phase 4" is now stale — no legacy publish path survived Phase 3; see the re-scoped Phase 4.</span></li>
   <li><strong>Q5 — Does <code>cwRenderObject::visible</code> stay a Q_PROPERTY?</strong> <span class="pill done">DECIDED</span> yes, unchanged — the property is the facade. Audited users: no QML bindings today (the <code>visible:</code> bindings in GLTerrainRenderer.qml are on QQuickItem views, not render objects). C++ writers: <code>cwKeywordVisibility::invokeVisible</code> (cwKeywordVisibility.cpp:35), <code>cwLazLayersSceneNode::setVisibleForAll</code> (:92). C++ reader that survives: <code>cwLazLayersSceneNode.cpp:122</code> (visible-layers query of the authoring copy). All other readers (RHI mirror, gatherScene checks, textured-items pull, intersecter deref) are the consumer twins Phases 2–3 retire.</li>
 </ol>
 

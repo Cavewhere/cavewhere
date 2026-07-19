@@ -98,10 +98,6 @@ void cwRhiRadialGradient::render(const RenderData& data)
 
 bool cwRhiRadialGradient::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
 {
-    if (!isVisible()) {
-        return false;
-    }
-
     if (context.renderPass != RenderPass::Background) {
         return false;
     }
