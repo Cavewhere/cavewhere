@@ -127,6 +127,20 @@ TEST_CASE("attach copies the closure, sets the trip centerline, and remembers th
     REQUIRE_FALSE(fixture->project->modified());
 
     const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+
+    // Set-model-on-success: the model may only flip once, after the
+    // copies are verified on disk - there is never a window where the
+    // trip reads as attached while the attachment dir is still filling.
+    const QDir attachmentDir = fixture->saveLoad()->externalCenterlineDir(fixture->trip);
+    int flipCount = 0;
+    bool entryOnDiskAtFlip = false;
+    QObject::connect(fixture->trip, &cwTrip::externalCenterlineChanged,
+                     fixture->trip, [&]() {
+        ++flipCount;
+        entryOnDiskAtFlip = QFileInfo::exists(
+            attachmentDir.absoluteFilePath(QStringLiteral("survex_simple.svx")));
+    });
+
     const auto result = runAttach(fixture.get(), source);
 
     REQUIRE_FALSE(result.hasError());
@@ -137,8 +151,9 @@ TEST_CASE("attach copies the closure, sets the trip centerline, and remembers th
 
     CHECK(fixture->trip->externalCenterline().entryFile()
           == QStringLiteral("survex_simple.svx"));
+    CHECK(flipCount == 1);
+    CHECK(entryOnDiskAtFlip);
 
-    const QDir attachmentDir = fixture->saveLoad()->externalCenterlineDir(fixture->trip);
     CHECK(QFileInfo::exists(attachmentDir.absoluteFilePath(QStringLiteral("survex_simple.svx"))));
 
     // Source memory is always written (direction change: no live-link toggle).
@@ -280,7 +295,7 @@ TEST_CASE("re-attach over an attached trip replaces the entry and GCs the old cl
     CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()) == second);
 }
 
-TEST_CASE("failed re-attach falls back to Native when the prior entry file is gone",
+TEST_CASE("failed re-attach leaves the prior attachment model untouched",
           "[Attach][Orchestrator]")
 {
 #ifdef Q_OS_WIN
@@ -293,9 +308,9 @@ TEST_CASE("failed re-attach falls back to Native when the prior entry file is go
 
     // Simulate a partial re-attach having GC'd the old closure: remove
     // the prior entry's copy, then make the dir read-only so the next
-    // attach's copy fails. Rolling back to the prior attachment would
-    // persist a dangling entry-file reference, so the orchestrator must
-    // fall back to Native.
+    // attach's copy fails. The model flips only on success, so even a
+    // now-dangling prior attachment is left alone (set-model-on-success,
+    // decided 2026-07-19) - a failed re-attach never mutates the trip.
     const QString attachmentDir =
         fixture->saveLoad()->externalCenterlineDir(fixture->trip).absolutePath();
     REQUIRE(QFile::remove(
@@ -313,7 +328,8 @@ TEST_CASE("failed re-attach falls back to Native when the prior entry file is go
     REQUIRE(finished);
 
     CHECK(future.result().hasError());
-    CHECK(fixture->trip->externalCenterline().isEmpty());
+    CHECK(fixture->trip->externalCenterline().entryFile()
+          == QStringLiteral("survex_simple.svx"));
     // The prior source memory is preserved for a retry.
     CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()) == first);
 }
@@ -337,7 +353,7 @@ TEST_CASE("attach fails cleanly when the source file does not exist",
     CHECK_FALSE(fixture->project->modified());
 }
 
-TEST_CASE("attach rolls back the trip centerline when reconcile cannot write",
+TEST_CASE("attach never sets the trip centerline when reconcile cannot write",
           "[Attach][Orchestrator]")
 {
 #ifdef Q_OS_WIN
@@ -365,7 +381,8 @@ TEST_CASE("attach rolls back the trip centerline when reconcile cannot write",
     REQUIRE(finished);
 
     CHECK(future.result().hasError());
-    // Rolled back: the trip stays Native and no source entry is written.
+    // Never set: the model flips only after the reconcile verify
+    // passes, so the trip stays Native and no source entry is written.
     CHECK(fixture->trip->externalCenterline().isEmpty());
     CHECK(fixture->settings()->sourcePathFor(fixture->trip->id()).isEmpty());
     // Pinned by the phase 2 plan: a failed attach leaves modified()

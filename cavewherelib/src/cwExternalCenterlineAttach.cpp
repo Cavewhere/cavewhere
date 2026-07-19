@@ -181,18 +181,14 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
 
         const QString attachmentDir = saveLoad->externalCenterlineDir(trip).absolutePath();
 
-        const cwExternalCenterline previous = trip->externalCenterline();
-        const QString entryFileName = QFileInfo(scan.dependencies.first()).fileName();
-        trip->setExternalCenterline(cwExternalCenterline(entryFileName));
-
         auto reconcileFuture =
             cwExternalCenterlineSync::reconcile(saveLoad, scan, attachmentDir);
 
         // Cancellation is deliberately not honored past this point -
         // the filesystem mutation has started, so the attach runs to
-        // completion (success or rollback).
+        // completion (success or failure).
         AsyncFuture::observe(reconcileFuture).context(saveLoad,
-                [deferred, tripPtr, settingsPtr, scan, attachmentDir, previous, sourceFile]
+                [deferred, tripPtr, settingsPtr, scan, attachmentDir, sourceFile]
                 (const Monad::ResultBase& reconcileResult) mutable {
             if (tripPtr.isNull() || settingsPtr.isNull()) {
                 deferred.complete(ReportResult(
@@ -219,27 +215,23 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
             }
 
             if (!failures.isEmpty()) {
-                // Roll back the model; partial files may remain on disk
-                // and the project stays modified (the copy jobs already
-                // flipped the bit at enqueue). On a failed re-attach the
-                // previous entry file may itself have been removed by
-                // the partial plan's GC - restoring a dangling reference
-                // would persist a broken attachment, so fall back to
-                // Native in that case.
-                cwExternalCenterline rollback = previous;
-                if (!previous.isEmpty()) {
-                    const QString previousPath =
-                        QDir(attachmentDir).absoluteFilePath(previous.entryFile());
-                    if (!QFileInfo::exists(previousPath)) {
-                        rollback = cwExternalCenterline();
-                    }
-                }
-                trip->setExternalCenterline(rollback);
+                // The model was never touched, so a failed attach leaves
+                // the trip exactly as it was. Partial files may remain
+                // on disk (the next reconcile's GC problem) and the
+                // project stays modified - the copy jobs already flipped
+                // the bit at enqueue.
                 deferred.complete(ReportResult(
                     QStringLiteral("attach: reconcile into the project failed:\n%1")
                         .arg(failures.join(QLatin1Char('\n')))));
                 return;
             }
+
+            // Set-model-on-success: flip the model only after the
+            // copies are verified on disk, so a crash mid-attach can
+            // never persist an attachment whose files were still in
+            // flight.
+            trip->setExternalCenterline(cwExternalCenterline(
+                QFileInfo(scan.dependencies.first()).fileName()));
 
             AttachReport report;
             report.scan = scan;

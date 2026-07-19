@@ -618,16 +618,17 @@ detach(cwTrip* trip,
     cancel. Only on <code>Monad::Ok</code> does the function call
     <code>cwTrip::setExternalCenterline</code> and reconcile. A
     cancelled or failed scan leaves the data model untouched.
-    <em>Decided 2026-07-19 (set-model-on-success):</em> the model flip
-    moves to <em>after</em> the reconcile verify passes &mdash; today
-    <code>setExternalCenterline</code> fires at scan-success, before
-    any file lands, so observers see a file-less attachment for the
-    whole copy drain (a crash in that window persists a broken
-    attachment via the <code>externalCenterlineChanged</code> save
-    hook). Reconciling first (the attachment dir comes from
+    <em>Decided 2026-07-19 (set-model-on-success), now landed:</em> the
+    model flip sits <em>after</em> the reconcile verify passes &mdash;
+    originally <code>setExternalCenterline</code> fired at
+    scan-success, before any file landed, so observers saw a file-less
+    attachment for the whole copy drain (a crash in that window
+    persisted a broken attachment via the
+    <code>externalCenterlineChanged</code> save hook). Reconciling
+    first (the attachment dir comes from
     <code>externalCenterlineDir(trip)</code>, which doesn't need the
-    model) makes failure mean "nothing happened" and deletes the
-    rollback path, including its dangling-previous fallback. Lands as
+    model) makes failure mean "nothing happened" and deleted the
+    rollback path, including its dangling-previous fallback. Landed as
     the small commit before commit 9 (see the commit sequence) so the
     wrapper and dialog bind to the final semantics.
   </li>
@@ -1439,6 +1440,16 @@ public:
     of asserting rollback; happy path asserts the model is unset while
     the reconcile drains and set at completion. Commit 9's wrapper and
     dialog then bind to the final semantics.
+    <em>Shipped</em> &mdash; the flip now sits in the reconcile-success
+    branch next to the <code>setSourcePath</code> write; the rollback
+    block, dangling-previous&rarr;Native fallback, and
+    <code>previous</code> capture are gone. Tests landed per the gates
+    (failing-first: the happy path counts exactly one
+    <code>externalCenterlineChanged</code> and asserts the entry file
+    is already on disk at flip time; the failed-re-attach test now pins
+    the prior attachment staying untouched even when its entry file was
+    GC'd). <code>[Attach]</code>/<code>[AsyncScan]</code>/<code>[AttachedCenterlinesModel]</code>/<code>[Watcher]</code>/<code>[Stale]</code>
+    all green (41 cases / 484 assertions).
   </li>
   <li>
     <strong><code>CavernOutputPage</code> extension + DataMainPage
