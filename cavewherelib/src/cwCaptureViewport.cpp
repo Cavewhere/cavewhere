@@ -1002,6 +1002,10 @@ void cwCaptureViewport::updateScaleBarScale()
         ratio = scaleOrtho()->scale();
     }
 
+    if(cwCavingRegion* region = m_sceneManager ? m_sceneManager->cavingRegion() : nullptr) {
+        m_scaleBar->setUnitSystem(region->unitSystem());
+    }
+
     if(!qFuzzyCompare(ratio + 1.0, m_scaleBar->scaleRatio() + 1.0)) {
         m_scaleBar->setScaleRatio(ratio);
         if(!m_scaleBarVisible) {

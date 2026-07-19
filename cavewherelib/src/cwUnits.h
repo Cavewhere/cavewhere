@@ -92,6 +92,25 @@ public:
     //! The unit-system names in enum order — a combobox model.
     static QStringList unitSystemNames();
 
+    // --- QML-facing display helpers ---------------------------------------
+    // The static methods above are the single source of truth for unit
+    // derivation and conversion; these thin instance forwarders exist only so
+    // QML (the view scale bar, the cave length/depth stats) can resolve a
+    // display unit live from a project's UnitSystem. Instantiate
+    // `Units { id: units }` and call e.g. units.lengthDisplayUnit(meters, system).
+    Q_INVOKABLE cwUnits::LengthUnit lengthDisplayUnit(double meters, cwUnits::UnitSystem system) const {
+        return magnitudeUnit(meters, system);
+    }
+    Q_INVOKABLE cwUnits::LengthUnit depthDisplayUnit(cwUnits::UnitSystem system) const {
+        return depthUnit(system);
+    }
+    Q_INVOKABLE double convertLength(double value, cwUnits::LengthUnit from, cwUnits::LengthUnit to) const {
+        return convert(value, from, to);
+    }
+    Q_INVOKABLE QString lengthUnitName(cwUnits::LengthUnit unit) const {
+        return unitName(unit);
+    }
+
     static constexpr double convert(double value,
                                     cwUnits::ImageResolutionUnit from,
                                     cwUnits::ImageResolutionUnit to);

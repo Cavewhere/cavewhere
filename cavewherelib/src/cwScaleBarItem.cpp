@@ -16,14 +16,64 @@
 #include <array>
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <vector>
 
 namespace {
-    constexpr std::array<double, 7> kScaleLengthsMeters = {1.0, 5.0, 10.0, 50.0, 100.0, 500.0, 1000.0};
     constexpr double kMinWidthInches = 0.75;
     constexpr double kPaddingInches = 0.25;
     constexpr double kLabelSpacingInches = 0.05;
     constexpr double kBarHeightInches = 0.1;
     constexpr double kPointsPerInch = cwUnits::PointsPerInch;
+
+    // The "nice" mantissas a scale bar rounds to (1/2/5 × 10ⁿ), and the exponent
+    // sweep that covers everything from a fraction of the unit up to very large
+    // scales.
+    constexpr std::array<double, 3> kNiceMantissas = {1.0, 2.0, 5.0};
+    constexpr int kMinExponent = -2;
+    constexpr int kMaxExponent = 6;
+
+    struct ScaleCandidate {
+        double meters;                //!< the world length this bar represents
+        double value;                 //!< that length as a round number in `unit`
+        cwUnits::LengthUnit unit;     //!< the unit the label is expressed in
+    };
+
+    // Round candidate lengths for \a system, sorted by metres. Each is a round
+    // number in the unit its magnitude calls for (m/ft below one large unit,
+    // km/mi at or above it), so every label reads cleanly in the target unit
+    // rather than as a converted-from-metric fraction.
+    std::vector<ScaleCandidate> niceCandidates(cwUnits::UnitSystem system)
+    {
+        const cwUnits::LengthUnit smallUnit = cwUnits::smallLengthUnit(system);
+        const cwUnits::LengthUnit largeUnit = cwUnits::largeLengthUnit(system);
+        const double largeThresholdMeters = cwUnits::convert(1.0, largeUnit, cwUnits::Meters);
+
+        std::vector<ScaleCandidate> candidates;
+        auto addNice = [&](cwUnits::LengthUnit unit, double minMeters, double maxMeters) {
+            for (int exponent = kMinExponent; exponent <= kMaxExponent; ++exponent) {
+                for (double mantissa : kNiceMantissas) {
+                    const double value = mantissa * std::pow(10.0, exponent);
+                    const double meters = cwUnits::convert(value, unit, cwUnits::Meters);
+                    if (meters < minMeters || meters >= maxMeters) {
+                        continue;
+                    }
+                    candidates.push_back({meters, value, unit});
+                }
+            }
+        };
+
+        // Split the range at one large unit so each candidate's generating unit
+        // is also its magnitude unit — keeping the round value round in its label.
+        addNice(smallUnit, 0.0, largeThresholdMeters);
+        addNice(largeUnit, largeThresholdMeters, std::numeric_limits<double>::max());
+
+        std::sort(candidates.begin(), candidates.end(),
+                  [](const ScaleCandidate& a, const ScaleCandidate& b) {
+                      return a.meters < b.meters;
+                  });
+        return candidates;
+    }
 }
 
 cwScaleBarItem::cwScaleBarItem(QGraphicsItem *parent) :
@@ -53,6 +103,15 @@ void cwScaleBarItem::setScaleRatio(double ratio)
     }
 
     m_scaleRatio = ratio;
+    updateLayout();
+}
+
+void cwScaleBarItem::setUnitSystem(cwUnits::UnitSystem system)
+{
+    if(m_unitSystem == system) {
+        return;
+    }
+    m_unitSystem = system;
     updateLayout();
 }
 
@@ -103,6 +162,58 @@ void cwScaleBarItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, 
     painter->restore();
 }
 
+cwScaleBarItem::ScaleSelection cwScaleBarItem::selectScale(double scaleRatio,
+                                                          double availableWidthInches,
+                                                          cwUnits::UnitSystem system)
+{
+    ScaleSelection result;
+    if(scaleRatio <= 0.0 || availableWidthInches <= 0.0) {
+        return result;
+    }
+
+    auto paperWidthFromMeters = [scaleRatio](double meters) {
+        return cwUnits::convert(scaleRatio * meters, cwUnits::Meters, cwUnits::Inches);
+    };
+
+    const std::vector<ScaleCandidate> candidates = niceCandidates(system);
+
+    const ScaleCandidate* selected = nullptr;
+    const ScaleCandidate* fallback = nullptr;
+
+    for(const ScaleCandidate& candidate : candidates) {
+        double candidateWidth = paperWidthFromMeters(candidate.meters);
+        if(candidateWidth > availableWidthInches) {
+            break;
+        }
+
+        fallback = &candidate;
+
+        if(candidateWidth >= kMinWidthInches) {
+            selected = &candidate;
+            break;
+        }
+    }
+
+    if(fallback == nullptr) {
+        return result;
+    }
+
+    if(selected == nullptr) {
+        selected = fallback;
+    }
+
+    const double width = paperWidthFromMeters(selected->meters);
+    if(width <= 0.0) {
+        return result;
+    }
+
+    result.valid = true;
+    result.value = selected->value;
+    result.unit = selected->unit;
+    result.widthInches = width;
+    return result;
+}
+
 void cwScaleBarItem::updateLayout()
 {
     auto hideScale = [this]() {
@@ -128,55 +239,17 @@ void cwScaleBarItem::updateLayout()
         return;
     }
 
-    auto paperWidthFromMeters = [this](double meters) {
-        double paperMeters = m_scaleRatio * meters;
-        return cwUnits::convert(paperMeters, cwUnits::Meters, cwUnits::Inches);
-    };
-
-    double selectedMeters = -1.0;
-    double selectedWidth = 0.0;
-    double fallbackMeters = kScaleLengthsMeters.front();
-    double fallbackWidth = 0.0;
-    bool hasWidthCandidate = false;
-
-    for(double candidate : kScaleLengthsMeters) {
-        double candidateWidth = paperWidthFromMeters(candidate);
-        if(candidateWidth > availableWidth) {
-            break;
-        }
-
-        hasWidthCandidate = true;
-        fallbackMeters = candidate;
-        fallbackWidth = candidateWidth;
-
-        if(candidateWidth >= kMinWidthInches) {
-            selectedMeters = candidate;
-            selectedWidth = candidateWidth;
-            break;
-        }
-    }
-
-    if(!hasWidthCandidate) {
+    const ScaleSelection selection = selectScale(m_scaleRatio, availableWidth, m_unitSystem);
+    if(!selection.valid) {
         hideScale();
         return;
     }
 
-    if(selectedMeters < 0.0) {
-        selectedMeters = fallbackMeters;
-        selectedWidth = fallbackWidth;
-    }
-
-    if(selectedWidth <= 0.0) {
-        hideScale();
-        return;
-    }
-
-    QString labelText;
-    if(qFuzzyCompare(selectedMeters, 1000.0)) {
-        labelText = tr("1 km");
-    } else {
-        labelText = tr("%1 m").arg(QString::number(static_cast<int>(selectedMeters)));
-    }
+    double selectedWidth = selection.widthInches;
+    // No space between number and unit ("10m", "2000ft") to match the on-screen
+    // view scale bar (ScaleBar.qml).
+    QString labelText = QStringLiteral("%1%2")
+            .arg(QString::number(selection.value), cwUnits::unitName(selection.unit));
 
     QFontMetricsF metrics(m_labelFont);
     const double pointSize = m_labelFont.pointSizeF();

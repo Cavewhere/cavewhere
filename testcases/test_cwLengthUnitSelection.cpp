@@ -139,3 +139,66 @@ TEST_CASE("cwLengthUnitSelection persists to its settings key",
 
     QSettings().clear();
 }
+
+TEST_CASE("cwLengthUnitSelection default unit follows the project until chosen",
+          "[cwLengthUnitSelection]")
+{
+    QSettings().clear();
+    const QString key = QStringLiteral("test/lengthUnit");
+
+    SECTION("the default seeds the unit when nothing is persisted") {
+        cwLengthUnitSelection selection;
+        selection.setDefaultUnit(cwUnits::Feet);
+        selection.setSettingsKey(key);
+        CHECK(selection.unit() == cwUnits::Feet);
+    }
+
+    SECTION("the default applies regardless of set order (key first)") {
+        cwLengthUnitSelection selection;
+        selection.setSettingsKey(key);
+        selection.setDefaultUnit(cwUnits::Feet);
+        CHECK(selection.unit() == cwUnits::Feet);
+    }
+
+    SECTION("a persisted choice wins over a later default") {
+        {
+            cwLengthUnitSelection writer;
+            writer.setSettingsKey(key);
+            writer.setUnit(cwUnits::Feet); // an explicit user choice
+        }
+
+        cwLengthUnitSelection selection;
+        selection.setSettingsKey(key);
+        selection.setDefaultUnit(cwUnits::Meters);
+        // The stored feet choice is the user's and must not be overridden.
+        CHECK(selection.unit() == cwUnits::Feet);
+    }
+
+    SECTION("an unlisted default coerces to metres") {
+        cwLengthUnitSelection selection;
+        selection.setDefaultUnit(cwUnits::Inches);
+        selection.setSettingsKey(key);
+        CHECK(selection.unit() == cwUnits::Meters);
+    }
+
+    SECTION("a seeded default does not persist, so it keeps re-following") {
+        // Regression: seeding must not write the key, otherwise a later project
+        // change (a new default) would be mistaken for a user choice and ignored.
+        cwLengthUnitSelection selection;
+        selection.setSettingsKey(key);
+        selection.setDefaultUnit(cwUnits::Feet); // e.g. an imperial project
+        CHECK(selection.unit() == cwUnits::Feet);
+        CHECK_FALSE(QSettings().contains(key));
+
+        selection.setDefaultUnit(cwUnits::Meters); // switched to a metric project
+        CHECK(selection.unit() == cwUnits::Meters);
+
+        // An explicit pick, however, persists and then wins over any later seed.
+        selection.setUnit(cwUnits::Feet);
+        CHECK(QSettings().contains(key));
+        selection.setDefaultUnit(cwUnits::Meters);
+        CHECK(selection.unit() == cwUnits::Feet);
+    }
+
+    QSettings().clear();
+}

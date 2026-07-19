@@ -20,13 +20,32 @@ QQ.Item {
     property real maxTotalWidth: itemId.parent.width * 0.75
     property real minTotalWidth: itemId.parent.width * 0.2
 
+    // The project's unit system drives whether the bar reads in metric or
+    // imperial; the concrete unit (m/km or ft/mi) is then chosen by magnitude.
+    property int unitSystem: RootData.region ? RootData.region.unitSystem : Units.Metric
+
+    Units { id: unitsId }
+
     QQ.QtObject {
         id: privateData
-        property real meterPerCell: {
+
+        // Choose the display unit from the bar's target span, so a large scale
+        // reads in km/mi and a small one in m/ft (magnitude-aware).
+        property int displayUnit: {
+            var ppm = itemId.camera.pixelsPerMeter;
+            var target = itemId.maxTotalWidth - itemId.minTotalWidth / 2.0;
+            var metersAcross = ppm > 0.0 ? target / ppm : 0.0;
+            return unitsId.lengthDisplayUnit(metersAcross, itemId.unitSystem);
+        }
+        property real metersPerUnit: unitsId.convertLength(1.0, displayUnit, Units.Meters)
+        property real pixelsPerUnit: itemId.camera.pixelsPerMeter * metersPerUnit
+        property string unitName: unitsId.lengthUnitName(displayUnit)
+
+        property real unitsPerCell: {
             if(itemId.visible) {
-                //Go through the exponents
-                var bestCellSizeWidth = 0.0 //In pixels
-                var labelIncrement = 0.0 //In meters
+                //Go through the exponents, working in the display unit so the
+                //cell labels land on round numbers of that unit.
+                var labelIncrement = 0.0 //In displayUnit
                 var nearestToBest = 10000.0 //In pixels
 
                 var numberOfLargeCells = 5; //Number of cells in the scale bar
@@ -37,14 +56,13 @@ QQ.Item {
                 //Search for the best label incement
                 for(var i = 0; i < increments.length; i++) {
                     for(var ii = -5; ii < 10; ii++) {
-                        var currentLabelIncrement = increments[i] * Math.pow(10.0, ii); //In meters
-                        var currentCellWidth = currentLabelIncrement * itemId.camera.pixelsPerMeter;
+                        var currentLabelIncrement = increments[i] * Math.pow(10.0, ii); //In displayUnit
+                        var currentCellWidth = currentLabelIncrement * pixelsPerUnit;
                         var currentTotalWidth = currentCellWidth * numberOfLargeCells;
 
                         if(currentTotalWidth >= itemId.minTotalWidth && currentTotalWidth <= itemId.maxTotalWidth) {
                             var currentNearest = Math.abs(bestWidth - currentTotalWidth);
                             if(currentNearest < nearestToBest) {
-                                bestCellSizeWidth = currentCellWidth;
                                 labelIncrement = currentLabelIncrement;
                                 nearestToBest = currentNearest;
                             }
@@ -59,7 +77,7 @@ QQ.Item {
         }
 
         property real smallCellWidth: cellWidth / smallGrid.columns
-        property real cellWidth: itemId.camera.pixelsPerMeter * meterPerCell
+        property real cellWidth: pixelsPerUnit * unitsPerCell
         property real cellHeight: 8
     }
 
@@ -77,7 +95,7 @@ QQ.Item {
             radius: 3
 
             QC.Label {
-                text: rect2Id.index * privateData.meterPerCell / 2
+                text: rect2Id.index * privateData.unitsPerCell / 2
                 anchors.centerIn: parent
 
                 onTextChanged:  {
@@ -108,9 +126,9 @@ QQ.Item {
 
             QC.Label {
                 text: {
-                    var text = (rect1Id.index + 1) * privateData.meterPerCell;
+                    var text = (rect1Id.index + 1) * privateData.unitsPerCell;
                     if(rect1Id.index == 4) {
-                        return text + "m";
+                        return text + privateData.unitName;
                     }
                     return text
                 }

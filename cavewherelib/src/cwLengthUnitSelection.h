@@ -70,6 +70,11 @@ public:
     QString settingsKey() const { return m_settingsKey; }
     void setSettingsKey(const QString& key);
 
+    //! The unit used when nothing is persisted yet — the owner sets it from the
+    //! project's unit system so a fresh selection follows Metric/Imperial. A
+    //! persisted choice always wins, so this never overrides the user.
+    void setDefaultUnit(cwUnits::LengthUnit unit);
+
     //! The magnitude converted from canonical metres into the selected unit.
     Q_INVOKABLE double fromMeters(double meters) const;
     //! The inverse: a magnitude in the selected unit back to canonical metres.
@@ -91,9 +96,14 @@ private:
     //! Clamp a unit to the curated set, falling back to Meters — so a future or
     //! corrupt settings value can't wedge the selection on an unlisted unit.
     static cwUnits::LengthUnit coerceToSet(cwUnits::LengthUnit unit);
+    //! Set the unit without persisting — the path for seeds (setDefaultUnit) and
+    //! loads. Only setUnit() writes the settings key, so a stored value always
+    //! marks a deliberate user choice.
+    void applyUnit(cwUnits::LengthUnit unit);
     void loadFromSettings();
 
     cwUnits::LengthUnit m_unit = cwUnits::Meters;
+    cwUnits::LengthUnit m_defaultUnit = cwUnits::Meters;
     QString m_settingsKey;
 };
 

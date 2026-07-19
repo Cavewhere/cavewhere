@@ -56,6 +56,11 @@ class cwMeasurementInteraction : public cwScenePicker
     // .name / .fromMeters().
     Q_PROPERTY(cwLengthUnitSelection* lengthUnit READ lengthUnitSelection CONSTANT)
 
+    // The project's unit system. It seeds the default readout unit (metres /
+    // feet) until the user picks one in the popup; that choice is persisted and
+    // wins. Bound to RootData.region.unitSystem by the view.
+    Q_PROPERTY(cwUnits::UnitSystem unitSystem READ unitSystem WRITE setUnitSystem NOTIFY unitSystemChanged)
+
     // True/Magnetic resolution needs PROJ (grid convergence) and IGRF and is the
     // expensive part of the readout. The view sets this true only while the
     // detailed readout is on screen (expanded and visible), so the resolve is
@@ -110,6 +115,8 @@ public:
     void setAzimuthReference(cwAzimuthReference::Reference reference);
 
     cwLengthUnitSelection* lengthUnitSelection() const { return m_lengthUnit; }
+    cwUnits::UnitSystem unitSystem() const { return m_unitSystem; }
+    void setUnitSystem(cwUnits::UnitSystem system);
     bool calculateDetails() const { return m_calculateDetails; }
     void setCalculateDetails(bool calculateDetails);
     bool geoReferenced() const;
@@ -146,6 +153,7 @@ public:
 
 signals:
     void modeChanged();
+    void unitSystemChanged();
     void geoReferenceChanged();
     void azimuthReferenceChanged();
     void calculateDetailsChanged();
@@ -166,6 +174,7 @@ private:
     QPointer<cwGeoReference> m_geoReference;
 
     cwAzimuthReference::Reference m_azimuthReference = cwAzimuthReference::Reference::Grid;
+    cwUnits::UnitSystem m_unitSystem = cwUnits::Metric;
     cwLengthUnitSelection* m_lengthUnit = nullptr;
     bool m_calculateDetails = false;
     double m_referenceAzimuth = 0.0;

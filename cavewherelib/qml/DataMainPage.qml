@@ -255,22 +255,19 @@ StandardPage {
                         text: "is"
                     }
 
-                    UnitValueInput {
+                    SelectableCaveStat {
                         objectName: "length"
                         unitValue: delegateId.caveObjectRole.length
-                        unitModel: UnitDefaults.lengthModel
-                        valueReadOnly: true
                     }
 
                     QC.Label {
                         text: "long and"
                     }
 
-                    UnitValueInput {
+                    SelectableCaveStat {
                         objectName: "depth"
                         unitValue: delegateId.caveObjectRole.depth
-                        unitModel: UnitDefaults.depthModel
-                        valueReadOnly: true
+                        depth: true
                     }
 
                     QC.Label {
