@@ -680,6 +680,21 @@ detach(cwTrip* trip,
     it already owns every dependency and a one-function manager is
     bloat. The wrapper itself lands with the first QML consumer
     (commit 9's attach dialog).
+    <em>Decided at the commit-7 review:</em> when the wrapper lands,
+    per-owner mutual exclusion is enforced in one place instead of by
+    per-affordance UI bindings &mdash; generalize the manager's
+    <code>m_updateInFlightOwners</code> into a per-owner
+    <em>operation</em> token covering attach, detach, and
+    updateFromSource, exposed as a single
+    <code>Q_INVOKABLE isOwnerBusy(ownerId)</code> (+ change signal).
+    The wrapper refuses attach/detach for a busy owner, so non-UI
+    callers get the same protection, and QML binds one query for the
+    Update/Detach/re-attach affordances instead of N bespoke
+    bindings. Closes the gap UI discipline leaves open (e.g. opening
+    a re-attach dialog while that owner's update is still draining
+    would otherwise plan two reconciles against shifting state; the
+    cwSaveLoad queue serializes the disk writes but not the
+    planning).
   </li>
 </ul>
 
@@ -1167,10 +1182,15 @@ public:
     commit (it stayed small). The per-owner token guards
     <code>updateFromSource</code> re-entry directly and is exposed as
     <code>isUpdateFromSourceInFlight(ownerId)</code>; the orchestrator
-    stays stateless, so the commit-9+ UI disables the Update/detach
-    affordances off that query rather than the manager blocking
-    <code>detach()</code> itself. The canceled reconcile path also
-    releases the token (two-callback <code>context()</code>).
+    stays stateless. The canceled reconcile path also releases the
+    token (two-callback <code>context()</code>).
+    <em>Decided at the commit-7 review:</em> this token is the seed of
+    the real invariant, not its final form &mdash; when the cwRootData
+    wrapper lands it generalizes to a per-owner <em>operation</em>
+    token covering attach/detach/update, exposed as
+    <code>isOwnerBusy(ownerId)</code>, and the wrapper (not just the
+    UI) refuses busy owners. See the &sect;6 "QML entry point" bullet
+    for the full decision.
     <em>Queued-invoke hole (found at the commit-7 review):</em>
     affordance-disabling cannot stop an <code>updateFromSource</code>
     invoke that was already queued when a detach ran &mdash; the
