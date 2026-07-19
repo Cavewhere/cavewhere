@@ -155,6 +155,15 @@ public:
         return m_busyOwners.contains(ownerId);
     }
 
+    // Per-owner missing-source query for QML. JS can't test QUuid
+    // membership in missingSourceOwners (strict equality never matches
+    // the wrapped values); bind this instead, re-evaluated on
+    // missingSourceOwnersChanged.
+    Q_INVOKABLE bool isSourceMissing(const QUuid& ownerId) const
+    {
+        return m_missingSourceOwners.contains(ownerId);
+    }
+
     // True when the owner's external file carries its own declination
     // (master plan §8.8 q7) — the driver then injects nothing and the
     // trip panel shows the value read-only. Captured from the most recent

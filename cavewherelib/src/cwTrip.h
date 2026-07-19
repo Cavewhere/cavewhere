@@ -48,6 +48,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     QML_NAMED_ELEMENT(Trip)
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
+    Q_PROPERTY(QUuid id READ id NOTIFY idChanged FINAL)
     Q_PROPERTY(QDateTime date READ date WRITE setDate NOTIFY dateChanged)
     Q_PROPERTY(cwSurveyNoteModel* notes READ notes CONSTANT)
     Q_PROPERTY(cwSurveyNoteLiDARModel* notesLiDAR READ notesLiDAR CONSTANT);
@@ -125,6 +126,7 @@ public:
 
 signals:
     void nameChanged();
+    void idChanged();
     void dateChanged(QDateTime date);
     void chunksInserted(int begin, int end);
     void chunksAboutToBeRemoved(int begin, int end);

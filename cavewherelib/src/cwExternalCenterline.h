@@ -15,6 +15,7 @@
 #include <QHashFunctions>
 #include <QMetaType>
 #include <QString>
+#include <QtQml/qqmlregistration.h>
 
 /**
  * Value type identifying the entry-point centerline file (Survex,
@@ -30,6 +31,11 @@
  */
 class CAVEWHERE_LIB_EXPORT cwExternalCenterline
 {
+    Q_GADGET
+    QML_VALUE_TYPE(cwExternalCenterline)
+    Q_PROPERTY(QString entryFile READ entryFile WRITE setEntryFile FINAL)
+    Q_PROPERTY(bool isEmpty READ isEmpty FINAL)
+
 public:
     cwExternalCenterline() = default;
     explicit cwExternalCenterline(QString entryFile);

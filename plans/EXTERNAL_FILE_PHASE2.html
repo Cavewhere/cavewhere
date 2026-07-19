@@ -356,12 +356,20 @@
   </li>
   <li>
     <code>cavewherelib/qml/ExternalCenterlineAttachedHeader.qml</code>
-    &mdash; filename + format icon + source-mode line.
+    &mdash; filename + format label + source-mode line. <em>As shipped
+    (commit 10):</em> the format renders as a text label
+    (<code>attachedFormatLabel</code>), not an icon; the
+    extension&rarr;format mapping lives in QML for now and is slated to
+    move onto <code>cwExternalCenterline</code> as a
+    <code>format</code> property (&sect;15).
   </li>
   <li>
     <code>cavewherelib/qml/ExternalCenterlineSolveStatus.qml</code>
-    &mdash; status dot, station/shot counts, warning/error pill, "View
-    cavern output" link.
+    &mdash; status dot, station count, warning pill, "View cavern
+    output" link. <em>As shipped (commit 10):</em> shot count and the
+    last-solved timestamp are deferred (the &sect;12 commit-10 gate was
+    deliberately narrower); add them when a commit needs them or drop
+    them from scope explicitly.
   </li>
   <li>
     <code>cavewherelib/qml/ExternalCenterlineStationsList.qml</code>
@@ -421,11 +429,11 @@
     (<code>cavernInputButton</code>/<code>cavernOutputButton</code>/<code>loopClosureButton</code>)
     that drive one shared <code>cavernTextArea</code>. The driver
     source shows under <code>cavernInputButton</code> &mdash; there is
-    no disclosure; the SolveStatus deep-link (commit 10/11) should
-    navigate to <code>"Cavern"</code> and check
-    <code>cavernInputButton</code>. No <code>cwPageSelectionModel</code>
-    anchor IDs are introduced &mdash; the page is already routable as
-    <code>"Cavern"</code>.
+    no disclosure. The SolveStatus deep-link navigates to
+    <code>"Cavern"</code>; its reveal target is an open commit-11
+    decision &mdash; see the canonical &sect;9 bullet. No
+    <code>cwPageSelectionModel</code> anchor IDs are introduced &mdash;
+    the page is already routable as <code>"Cavern"</code>.
   </li>
   <li>
     <code>cavewherelib/qml/DataMainPage.qml</code> &mdash; the
@@ -960,15 +968,25 @@ public:
     <code>cwExternalSourceSettings::clearSourcePath(ownerId)</code>).
   </li>
   <li>
-    <strong>SolveStatus deep-link target.</strong> The "View cavern
-    output" link navigates to <code>CavernOutputPage</code> via the
-    existing <code>RootData.pageSelectionModel.gotoPageByName(null,
-    "Cavern")</code> (already wired by <code>29bcd026</code>) and then
-    scrolls the page's <code>attachedCenterlinesSection</code> &mdash;
-    the <code>objectName</code> locked in commit 9 &mdash; into view via
-    a direct <code>QQ.ItemViewport</code>/<code>ScrollView</code>
-    ensure-visible call on the section item. No new anchor IDs in
-    <code>cwPageSelectionModel</code>; routing is page-level.
+    <strong>SolveStatus deep-link target (canonical spot; open
+    decision for commit 11).</strong> The "View cavern output" link
+    navigates via the existing
+    <code>RootData.pageSelectionModel.gotoPageByName(null,
+    "Cavern")</code> (already wired by <code>29bcd026</code>); no new
+    anchor IDs in <code>cwPageSelectionModel</code>, routing is
+    page-level. Commit 10 shipped the link as a dumb
+    <code>viewCavernOutputRequested()</code> signal, so the reveal
+    behavior is decided when commit 11 wires it. The plan previously
+    said two different things &mdash; scroll
+    <code>attachedCenterlinesSection</code> into view (this section's
+    old text) vs. check <code>cavernInputButton</code> to show the
+    generated input (&sect;2's old text, inherited from the retired
+    driver-source disclosure). They can't both be the landing state.
+    Note the link says cavern <em>output</em>, and
+    <code>cavernOutputButton</code> is the page default &mdash; plain
+    navigation may be enough. Pick one at wiring time and update the
+    other mentions (&sect;2 CavernOutputPage entry, &sect;12 commit-9
+    revised note), which now defer here.
   </li>
   <li>
     <strong>Reload button.</strong> Wired to
@@ -1564,8 +1582,8 @@ public:
     side-by-side panes). The pinned
     <code>driverSourceDisclosure</code>/<code>survexInputTab</code>/<code>outputTabBar</code>/<code>cavernLogTextArea</code>/<code>loopClosureTextArea</code>/<code>survexInputTextArea</code>
     objectNames no longer exist &mdash; the SolveStatus deep-link in
-    the panel commits should navigate to the page and check
-    <code>cavernInputButton</code> to show the input. The live-stats
+    the panel commits navigates to the page; its reveal target is an
+    open commit-11 decision (see the canonical &sect;9 bullet). The live-stats
     text was dropped from the context menu item (reads plain "Cavern
     Output" again, pinned by <code>tst_DataMainPageExternal.qml</code>)
     &mdash; the stats moved to CavernOutputPage's
@@ -1956,21 +1974,51 @@ public:
   <li><code>AttachedHeader</code>: bind to a trip with attached
     centerline &rarr; renders filename + format; remembered-source path
     renders when an entry exists; a forgotten-source line renders when
-    the entry was cleared.</li>
-  <li><code>SolveStatus</code>: <code>linePlotManager.hasSolveError ==
-    false</code> + clean log &rarr; green dot; with one warning &rarr; yellow;
-    with error &rarr; red.</li>
+    the entry was cleared. <em>Shipped as specified.</em></li>
+  <li><code>SolveStatus</code>: green/yellow/red dot per
+    clean/warning/error state, station count, warning pill, "View
+    cavern output" link raising
+    <code>viewCavernOutputRequested()</code>. <em>As shipped:</em> the
+    component takes dumb data properties
+    (<code>hasError</code>/<code>warningCount</code>/<code>stationCount</code>)
+    instead of the manager pointer so the isolation test can drive all
+    three states; commit 11's panel binds them from
+    <code>linePlotManager.hasSolveError</code> /
+    <code>lastSolveWarningCount</code> /
+    <code>lastSolveStationCount</code>.</li>
   <li><code>StationsList</code>: bound to a populated
     <code>cwScopeStationListModel</code> &rarr; rows visible; clicking a
-    station emits the right signal.</li>
+    station emits <code>stationClicked(qualifiedName)</code>.
+    <em>Shipped as specified</em> (test scopes with prefix
+    <code>"cave_"</code>; deriving a trip's real
+    <code>cave_&lt;hex&gt;.trip_&lt;hex&gt;.</code> prefix in QML needs a
+    C++ helper &mdash; commit 11 must add one when wiring the panel).</li>
   <li><code>MissingSourceBanner</code>: <code>visible: false</code> by
-    default; <code>visible: true</code> when the owner appears in
-    <code>missingSourceOwners</code>; Re-link button disabled with the
-    expected tooltip.</li>
+    default; membership drives visibility via the new
+    <code>Q_INVOKABLE
+    cwExternalCenterlineManager::isSourceMissing(ownerId)</code>
+    (re-evaluated on <code>missingSourceOwnersChanged</code> &mdash;
+    resolves q16's QUuid-in-JS caveat); Re-link disabled with the
+    stub tooltip (exposed as <code>relinkDisabledReason</code>);
+    Forget source raises <code>forgetSourceRequested()</code>.</li>
   <li><code>TripMetadata</code>: editing the date emits
-    <code>dateChanged</code> on the trip; editing declination flips
-    <code>autoDeclination</code> to false.</li>
+    <code>dateChanged</code> on the trip. <em>As shipped:</em>
+    declination reuses <code>DeclainationEditor</code>, whose existing
+    contract flips <code>autoDeclination</code> off when the user
+    selects Manual mode (and manual edits write
+    <code>declinationManual</code>) &mdash; the test covers that path
+    rather than a new flip-on-edit behavior. File-owned declination
+    (bool property, panel binds from the manager in commit 11) swaps
+    the editor for a "set by your survey file" hint. Team renders via
+    <code>TeamTable</code>.</li>
 </ul>
+<p><em>C++ QML-exposure shims added by this commit</em> (all needed
+  again by commit 11): <code>cwExternalCenterline</code> is now a
+  <code>Q_GADGET</code>/<code>QML_VALUE_TYPE</code> (so
+  <code>trip.externalCenterline.entryFile</code> binds);
+  <code>cwTrip</code> exposes <code>Q_PROPERTY id</code> (NOTIFY
+  <code>idChanged</code>); <code>cwExternalSourceSettings::clearSourcePath</code>
+  is <code>Q_INVOKABLE</code> for the Forget-source wiring.</p>
 
 <h3>Commit 11 &mdash; ExternalCenterlineTripPanel assembly</h3>
 <p><strong>New QML test:</strong>
@@ -1986,7 +2034,20 @@ public:
   <code>RootData.externalCenterlineManager.isOwnerBusy(ownerId)</code>
   (re-evaluated on <code>ownerBusyChanged</code>) &mdash; a busy owner
   silently drops <code>updateFromSource</code> calls, so an enabled
-  button would be a dead click (review F8).</p>
+  button would be a dead click (review F8).
+  <em>Added by the commit-10 review:</em>
+  (c) <code>cwExternalCenterlineManager::fileOwnsDeclination(ownerId)</code>
+  is a plain method &mdash; make it <code>Q_INVOKABLE</code> so the
+  panel can feed <code>ExternalCenterlineTripMetadata.fileOwnsDeclination</code>
+  (re-evaluate when the manager recomputes; commit 10's component test
+  drives the bool directly);
+  (d) deriving a trip's real scope prefix
+  (<code>cave_&lt;hex&gt;.trip_&lt;hex&gt;.</code>) for
+  <code>ScopeStationListModel.scopePrefix</code> has no QML-reachable
+  helper &mdash; add one (the naming lives in
+  <code>cwLinePlotTask</code>/the survex exporter);
+  (e) resolve the SolveStatus deep-link reveal target (open decision,
+  canonical &sect;9 bullet).</p>
 <ul>
   <li>Programmatic attach &rarr; panel mode is Attached; sub-components
     render in order.</li>
@@ -2149,11 +2210,12 @@ public:
   </tr>
 </table>
 
-<h2 id="followups">15. Follow-ups from the commit-9 code review (2026-07-19)</h2>
+<h2 id="followups">15. Follow-ups from the commit-9 and commit-10 code reviews (2026-07-19)</h2>
 
 <p>
-  Deliberately out of scope for commit 9; none block the remaining
-  Phase-2 commits unless noted. Ordered roughly by payoff.
+  Deliberately out of scope for the reviewed commits; none block the
+  remaining Phase-2 commits unless noted. Ordered roughly by payoff
+  within each review's batch.
 </p>
 
 <ul>
@@ -2215,6 +2277,42 @@ public:
     The private publish call is at seven parameters (three strings, an
     optional error, three stats); fold the stats into a struct before
     the panel commits grow the signature again.
+  </li>
+  <li>
+    <strong>Survey-format detection belongs on
+    <code>cwExternalCenterline</code></strong> <em>(commit-10
+    review)</em>. The <code>.svx&rarr;Survex / .dat|.mak&rarr;Compass /
+    .srv|.wpj&rarr;Walls</code> mapping ships as QML string-matching in
+    <code>ExternalCenterlineAttachedHeader.qml</code>; the gadget is
+    the natural home for a <code>format</code> property (and would
+    unblock the &sect;2 "format icon" idea). One QML site today;
+    becomes three with the commit-11 panel and Phase 3's CaveSummary
+    &mdash; move it before the copies appear.
+  </li>
+  <li>
+    <strong>Per-owner status gadget on the manager</strong>
+    <em>(commit-10 review)</em>. Per-owner membership invokables are
+    accumulating on <code>cwExternalCenterlineManager</code>
+    (<code>isOwnerBusy</code>, <code>isSourceMissing</code>, next
+    <code>fileOwnsDeclination</code>) because JS can't test QUuid
+    membership in the <code>QList&lt;QUuid&gt;</code> NOTIFY
+    properties (the q16 caveat). Generalize to a single per-owner
+    status value type (or a model row keyed by owner) once commit 11
+    shows the full set of flags the panel needs. Blast radius: manager
+    public API + banner + panel + Phase-3 CaveSummary.
+  </li>
+  <li>
+    <strong>Observable remembered-source path on
+    <code>cwExternalSourceSettings</code></strong> <em>(commit-10
+    review)</em>. <code>externalCenterlineSourcesChanged</code> is a
+    plain signal with no property backing
+    <code>sourcePathFor()</code>, so
+    <code>ExternalCenterlineAttachedHeader</code> hand-rolls an
+    imperative refresh (function + <code>Connections</code> +
+    <code>onCompleted</code>) that the commit-11 panel and Phase-3
+    CaveSummary would copy. A bindable per-owner property/model would
+    make consumers declarative. Blast radius: settings class + all
+    remembered-source consumers.
   </li>
 </ul>
 

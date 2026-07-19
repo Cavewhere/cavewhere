@@ -149,10 +149,14 @@ void cwTrip::setExternalCenterline(const cwExternalCenterline& value)
 
 void cwTrip::setId(const QUuid& id)
 {
+    const QUuid oldId = Id;
     if (!id.isNull()) {
         Id = id;
     } else if (Id.isNull()) {
         Id = QUuid::createUuid();
+    }
+    if (Id != oldId) {
+        emit idChanged();
     }
 }
 

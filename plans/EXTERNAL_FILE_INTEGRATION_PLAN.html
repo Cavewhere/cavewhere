@@ -1995,6 +1995,31 @@ QQ.Item {
   <li><strong>No bindings on <code>Q_OBJECT_BINDABLE_PROPERTY</code></strong> &mdash; the C++ side uses plain member + setter + signal (CLAUDE.md), which QML binding consumes normally.</li>
 </ul>
 
+<p>
+  <em>Phase-2 as-shipped deltas (2026-07-19, Phase-2 commit 10; the
+  skeleton above is otherwise unchanged but these details are
+  superseded &mdash; see EXTERNAL_FILE_PHASE2.html &sect;12 commit-10
+  entry):</em>
+</p>
+<ul>
+  <li><code>ExternalCenterlineSolveStatus</code> takes dumb data
+    properties (<code>hasError</code>/<code>warningCount</code>/<code>stationCount</code>)
+    instead of the skeleton's <code>linePlotManager</code> +
+    <code>trip</code> &mdash; the panel binds them from the manager.
+    Shot count and the last-solved timestamp are deferred.</li>
+  <li>The banner's <code>sourceMissing</code> input comes from the
+    watcher-driven
+    <code>cwExternalCenterlineManager.isSourceMissing(ownerId)</code>
+    (re-evaluated on <code>missingSourceOwnersChanged</code>), not the
+    skeleton's <code>FileSystemHelper.exists</code> +
+    <code>hasSource</code> binding &mdash; QML never polls the
+    filesystem.</li>
+  <li><code>ExternalCenterlineAttachedHeader</code> renders a format
+    text label, not a format icon (extension&rarr;format mapping
+    slated to move onto the <code>cwExternalCenterline</code> gadget;
+    Phase-2 &sect;15).</li>
+</ul>
+
 <h5>Sub-components (new files, all Phase 2 unless noted)</h5>
 
 <table>

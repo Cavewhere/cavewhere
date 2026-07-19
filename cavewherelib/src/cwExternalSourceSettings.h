@@ -94,8 +94,11 @@ public:
      */
     void setSourcePath(const QUuid& ownerId, const QString& sourcePath);
 
-    /** Removes any ExternalCenterlineSource entry for ownerId. */
-    void clearSourcePath(const QUuid& ownerId);
+    /**
+     * Removes any ExternalCenterlineSource entry for ownerId.
+     * Q_INVOKABLE for the panel's "Forget source" action.
+     */
+    Q_INVOKABLE void clearSourcePath(const QUuid& ownerId);
 
 signals:
     /**
