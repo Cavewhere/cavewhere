@@ -13,8 +13,6 @@ ColumnLayout {
     required property CaptureItemManiputalor captureItemManiputlor
     required property GLTerrainRenderer view
 
-    Units { id: unitsId }
-
     SelectExportAreaTool {
         id: selectionTool
         parent: mapLayersId.view
@@ -294,14 +292,12 @@ ColumnLayout {
                     text: "Units:"
                 }
 
-                QC.ComboBox {
+                UnitSystemComboBox {
                     id: scaleBarUnitComboId
                     objectName: "scaleBarUnitComboBox"
                     // Index maps to CaptureViewport.ScaleBarUnitMode:
                     // 0 = FollowProject, 1 = ForceMetric, 2 = ForceImperial.
-                    model: ["Project Default",
-                            unitsId.unitSystemName(Units.Metric),
-                            unitsId.unitSystemName(Units.Imperial)]
+                    includeFollowProject: true
                 }
             }
 

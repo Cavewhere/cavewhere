@@ -6,8 +6,6 @@ import cavewherelib
 ColumnLayout {
     spacing: 20
 
-    Units { id: unitsId }
-
     QC.GroupBox {
         title: "Units"
         Layout.fillWidth: true
@@ -29,10 +27,8 @@ ColumnLayout {
                     text: "Default:"
                 }
 
-                QC.ComboBox {
+                UnitSystemComboBox {
                     objectName: "unitSystemComboBox"
-                    model: [unitsId.unitSystemName(Units.Metric),
-                            unitsId.unitSystemName(Units.Imperial)]
                     currentIndex: RootData.settings.unitSettings.unitSystem
                     onActivated: (index) => RootData.settings.unitSettings.unitSystem = index
                 }

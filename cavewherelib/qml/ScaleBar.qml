@@ -29,7 +29,7 @@ QQ.Item {
     // project's. The concrete unit (m/km or ft/mi) is then chosen by magnitude.
     readonly property int unitSystem: itemId.hasSessionOverride
         ? itemId.sessionUnitSystem
-        : (RootData.region ? RootData.region.unitSystem : Units.Metric)
+        : ProjectUnits.unitSystem
 
     Units { id: unitsId }
 

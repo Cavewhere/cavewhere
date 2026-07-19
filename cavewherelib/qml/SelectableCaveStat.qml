@@ -14,7 +14,7 @@ RowLayout {
 
     // The unit is resolved live from the project's unit system, never from the
     // cave's stored length/depth unit (which stays metres regardless).
-    readonly property int caveUnitSystem: RootData.region ? RootData.region.unitSystem : Units.Metric
+    readonly property int caveUnitSystem: ProjectUnits.unitSystem
     readonly property real meters: rootId.unitValue !== null
         ? unitsId.convertLength(rootId.unitValue.value, rootId.unitValue.unit, Units.Meters)
         : 0.0

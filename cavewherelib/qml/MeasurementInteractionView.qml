@@ -30,7 +30,7 @@ MeasurementInteraction {
 
     // The default readout unit follows the project system until the user picks
     // one; that choice persists and overrides this.
-    unitSystem: RootData.region ? RootData.region.unitSystem : Units.Metric
+    unitSystem: ProjectUnits.unitSystem
 
     onDeactivated: measurementId.reset()
 
