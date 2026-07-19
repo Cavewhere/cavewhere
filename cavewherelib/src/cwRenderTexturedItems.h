@@ -55,6 +55,18 @@ protected:
     void publishVisibility() override;
 
 private:
+    // What travels to the render thread. Item additionally carries
+    // visible/storeGeometry/storeTexture, which are authoring state only —
+    // visibility publishes through the scene visibility store, never on a
+    // command — so payloads carry just the render data.
+    struct ItemPayload {
+        cwGeometry geometry;
+        QImage texture;
+        cwRenderMaterialState material;
+        QByteArray uniformBlock;
+        QMatrix4x4 modelMatrix;
+    };
+
     // Pending data to update
     class PendingCommand {
     public:
@@ -75,19 +87,19 @@ private:
 
         }
 
-        PendingCommand(Type type, uint32_t id, Item item) :
+        PendingCommand(Type type, uint32_t id, ItemPayload payload) :
             m_commandType(type),
             m_id(id),
-            m_item(item)
+            m_payload(payload)
         { }
 
         Type type() const { return m_commandType; }
         uint32_t id() const { return m_id; }
-        const Item& item() const { return m_item; }
+        const ItemPayload& payload() const { return m_payload; }
 
 
     private:
-        Item m_item;
+        ItemPayload m_payload;
 
         Type m_commandType;
         uint32_t m_id = 0;

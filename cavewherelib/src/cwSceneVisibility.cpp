@@ -23,7 +23,7 @@ bool cwVisibilitySnapshot::objectVisible(cwRenderObjectId id) const
     return m_data == nullptr || !m_data->hiddenObjects.contains(id);
 }
 
-bool cwVisibilitySnapshot::subVisible(cwRenderObjectId id, uint32_t subId) const
+bool cwVisibilitySnapshot::subVisible(cwRenderObjectId id, uint64_t subId) const
 {
     if (m_data == nullptr) {
         return true;
@@ -35,7 +35,7 @@ bool cwVisibilitySnapshot::subVisible(cwRenderObjectId id, uint32_t subId) const
     return it == m_data->subEntries.constEnd() ? true : it->visible;
 }
 
-const QVector<quint8>* cwVisibilitySnapshot::mask(cwRenderObjectId id, uint32_t subId) const
+const QVector<quint8>* cwVisibilitySnapshot::mask(cwRenderObjectId id, uint64_t subId) const
 {
     if (m_data == nullptr) {
         return nullptr;
@@ -47,7 +47,7 @@ const QVector<quint8>* cwVisibilitySnapshot::mask(cwRenderObjectId id, uint32_t 
     return &it->mask;
 }
 
-quint64 cwVisibilitySnapshot::entryVersion(cwRenderObjectId id, uint32_t subId) const
+quint64 cwVisibilitySnapshot::entryVersion(cwRenderObjectId id, uint64_t subId) const
 {
     if (m_data == nullptr) {
         return 0;
@@ -82,7 +82,7 @@ void cwSceneVisibility::setObjectVisible(cwRenderObjectId id, bool visible)
     touch();
 }
 
-void cwSceneVisibility::setSubVisible(cwRenderObjectId id, uint32_t subId, bool visible)
+void cwSceneVisibility::setSubVisible(cwRenderObjectId id, uint64_t subId, bool visible)
 {
     const SubKey key{id, subId};
     const auto probe = m_live.subEntries.constFind(key);
@@ -109,7 +109,7 @@ void cwSceneVisibility::setSubVisible(cwRenderObjectId id, uint32_t subId, bool 
     touch();
 }
 
-void cwSceneVisibility::setMask(cwRenderObjectId id, uint32_t subId, QVector<quint8> mask)
+void cwSceneVisibility::setMask(cwRenderObjectId id, uint64_t subId, QVector<quint8> mask)
 {
     const SubKey key{id, subId};
     const auto probe = m_live.subEntries.constFind(key);
@@ -165,7 +165,7 @@ void cwSceneVisibility::removeObject(cwRenderObjectId id)
     touch();
 }
 
-void cwSceneVisibility::removeSub(cwRenderObjectId id, uint32_t subId)
+void cwSceneVisibility::removeSub(cwRenderObjectId id, uint64_t subId)
 {
     const SubKey key{id, subId};
     if (!m_live.subEntries.contains(key)) {

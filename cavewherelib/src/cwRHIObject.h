@@ -17,6 +17,7 @@ class QRhiResourceUpdateBatch;
 
 //Our includes
 class cwRhiItemRenderer;
+class cwRhiFrameRenderer;
 class cwRenderObject;
 class cwAppearanceSlotted;
 class cwVisibilitySnapshot;
@@ -192,9 +193,6 @@ public:
     virtual void synchronize(const SynchronizeData& data) = 0;
     virtual void updateResources(const ResourceUpdateData& data) = 0;
 
-    //Older rendering method
-    virtual void render(const RenderData& data) = 0;
-
     //Gather render objects
     virtual bool gather(const GatherContext& context,
                         QVector<PipelineBatch>& batches) {
@@ -210,6 +208,12 @@ public:
     // copy; the snapshot captured at the sync barrier is the render thread's truth.
     cwRenderObjectId renderObjectId() const { return m_renderObjectId; }
     void setRenderObjectId(cwRenderObjectId id) { m_renderObjectId = id; }
+
+    // The frame renderer that owns this object, stamped by
+    // cwRhiFrameRenderer::registerRenderObject alongside the id — before any
+    // callback runs, so subclasses may rely on it being non-null in
+    // initialize/synchronize/updateResources/gather.
+    void setFrameRenderer(cwRhiFrameRenderer* frame) { m_frame = frame; }
 
     // True when this object draws into the PointCloud pass with real geometry.
     // cwRhiScene polls this before gathering to decide whether to engage the
@@ -252,6 +256,10 @@ private:
     cwRenderObjectId m_renderObjectId{};
 
 protected:
+    // Owning frame renderer (see setFrameRenderer above). Protected so subclass
+    // pipeline caches can hand it to cwRhiPipelineSet::acquire directly.
+    cwRhiFrameRenderer* m_frame = nullptr;
+
     static PipelineBatch& acquirePipelineBatch(QVector<PipelineBatch>& batches,
                                                const PipelineState& state)
     {

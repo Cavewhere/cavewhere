@@ -17,6 +17,7 @@
 #include "cwCamera.h"
 #include "cwGeometry.h"
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwPickQuery.h"
 #include "cwRayHit.h"
 #include "cwRenderPointCloud.h"
@@ -96,18 +97,13 @@ double anchorRadiusWorld(const Fixture& f)
 // an index list and no pick radius. LiDAR notes take this same path.
 void addScrapTriangle(cwScene& scene, float offsetX, float z, uint64_t id = 1)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
     // The edge nearest the ray runs along x = offsetX, so the closest point on
     // the scrap to a screen-center ray is (offsetX, 0, z).
-    geometry.set(cwGeometry::Semantic::Position, QVector<QVector3D>{
+    const cwGeometry geometry = cwTestGeometry::triangles({
         QVector3D(offsetX, -20.0f, z),
         QVector3D(offsetX,  20.0f, z),
         QVector3D(offsetX + 40.0f, 0.0f, z),
-    });
-    geometry.setIndices(QVector<uint32_t>{0u, 1u, 2u});
-    geometry.setType(cwGeometry::Type::Triangles);
+    }, {0u, 1u, 2u});
 
     scene.geometryItersecter()->addObject(
         cwGeometryItersecter::Object(nullptr, id, geometry));
@@ -122,15 +118,10 @@ void addScrapTriangle(cwScene& scene, float offsetX, float z, uint64_t id = 1)
 // here depends on it doing so.
 void addCloudPointOnRay(cwScene& scene, float z, uint64_t id = 2)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position,
-                 QVector<QVector3D>{QVector3D(0.0f, 0.0f, z)});
-    geometry.setType(cwGeometry::Type::Points);
-
     scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4(), 0.5f));
+        cwGeometryItersecter::Object(nullptr, id,
+                                     cwTestGeometry::points({QVector3D(0.0f, 0.0f, z)}),
+                                     QMatrix4x4(), 0.5f));
     scene.geometryItersecter()->waitForFinish();
 }
 
@@ -185,14 +176,9 @@ void addPointWall(cwScene& scene, float z, float pickRadius, uint64_t id = 3)
         }
     }
 
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setType(cwGeometry::Type::Points);
-
     scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4(), pickRadius));
+        cwGeometryItersecter::Object(nullptr, id, cwTestGeometry::points(points),
+                                     QMatrix4x4(), pickRadius));
     scene.geometryItersecter()->waitForFinish();
 }
 

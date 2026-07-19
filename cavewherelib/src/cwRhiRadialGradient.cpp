@@ -21,10 +21,6 @@ void cwRhiRadialGradient::initialize(const ResourceUpdateData& data)
         return;
     }
 
-    if (!m_frame && data.renderData.renderer) {
-        m_frame = data.renderData.renderer->frameRenderer();
-    }
-
     QRhi* rhi = data.renderData.renderer->rhi();
 
     float vertices[] = {
@@ -70,30 +66,7 @@ void cwRhiRadialGradient::synchronize(const SynchronizeData& data)
 
 void cwRhiRadialGradient::updateResources(const ResourceUpdateData& data)
 {
-    if (!m_frame && data.renderData.renderer) {
-        m_frame = data.renderData.renderer->frameRenderer();
-    }
-
     data.resourceUpdateBatch->updateDynamicBuffer(m_uniformBuffer, 0, sizeof(UniformData), &m_uniformData);
-}
-
-void cwRhiRadialGradient::render(const RenderData& data)
-{
-    // if (!ensurePipeline(data)) {
-    //     return;
-    // }
-
-    // if (!m_pipelineRecord || !m_pipelineRecord->pipeline) {
-    //     return;
-    // }
-
-    // data.cb->setGraphicsPipeline(m_pipelineRecord->pipeline);
-    // data.cb->setShaderResources(m_srb);
-    // const QRhiCommandBuffer::VertexInput vertexBindings[] = {
-    //     { m_vertexBuffer, 0 }
-    // };
-    // data.cb->setVertexInput(0, 1, vertexBindings);
-    // data.cb->draw(4);
 }
 
 bool cwRhiRadialGradient::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
@@ -130,13 +103,6 @@ bool cwRhiRadialGradient::gather(const GatherContext& context, QVector<PipelineB
 bool cwRhiRadialGradient::ensurePipeline(const RenderData& data)
 {
     if (!m_resourcesInitialized || !data.renderer) {
-        return false;
-    }
-
-    if (!m_frame) {
-        m_frame = data.renderer->frameRenderer();
-    }
-    if (!m_frame) {
         return false;
     }
 

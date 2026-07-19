@@ -7,6 +7,7 @@
 #include "cwCamera.h"
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwGeometry.h"
 #include "cwRenderObject.h"
 #include "cwRayHit.h"
@@ -121,17 +122,13 @@ struct Fixture
 // real geometry to hit and to bound the grid-plane fallback against (#527).
 void addSmallGeometry(cwScene& scene, float extent, uint64_t id = 1)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, QVector<QVector3D>{
+    const cwGeometry geometry = cwTestGeometry::points({
         QVector3D(0.0f, 0.0f, 0.0f),   // center point so a screen-center ray hits
         QVector3D(-extent, -extent, 0.0f),
         QVector3D( extent,  extent, 0.0f),
         QVector3D(-extent,  extent, 0.0f),
         QVector3D( extent, -extent, 0.0f),
     });
-    geometry.setType(cwGeometry::Type::Points);
 
     scene.geometryItersecter()->addObject(
         cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4(), 0.5f));
@@ -149,17 +146,10 @@ constexpr float kCenterlineZ = 10.0f;
 // "all the solid is hidden, still orbit the line plot" case.
 void addCenterline(cwScene& scene, uint64_t id = 2)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, QVector<QVector3D>{
+    const cwGeometry geometry = cwTestGeometry::lines({
         QVector3D(-20.0f, 0.0f, kCenterlineZ),
         QVector3D( 20.0f, 0.0f, kCenterlineZ),
     });
-    QVector<uint32_t> indices(2);
-    std::iota(indices.begin(), indices.end(), 0u);
-    geometry.setIndices(std::move(indices));
-    geometry.setType(cwGeometry::Type::Lines);
 
     scene.geometryItersecter()->addObject(
         cwGeometryItersecter::Object(nullptr, id, geometry));
@@ -172,17 +162,13 @@ void addCenterline(cwScene& scene, uint64_t id = 2)
 // can be tested against a non-origin datum (issue #549).
 void addGeometryAt(cwScene& scene, const QVector3D& center, float extent, uint64_t id = 3)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, QVector<QVector3D>{
+    const cwGeometry geometry = cwTestGeometry::points({
         center,
         center + QVector3D(-extent, -extent, 0.0f),
         center + QVector3D( extent,  extent, 0.0f),
         center + QVector3D(-extent,  extent, 0.0f),
         center + QVector3D( extent, -extent, 0.0f),
     });
-    geometry.setType(cwGeometry::Type::Points);
 
     scene.geometryItersecter()->addObject(
         cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4(), 0.5f));
@@ -195,14 +181,9 @@ void addGeometryAt(cwScene& scene, const QVector3D& center, float extent, uint64
 void addSinglePoint(cwScene& scene, const QVector3D& position,
                     cwRenderObject* parent = nullptr, uint64_t id = 3)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, QVector<QVector3D>{position});
-    geometry.setType(cwGeometry::Type::Points);
-
     scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object(parent, id, geometry, QMatrix4x4(), 0.5f));
+        cwGeometryItersecter::Object(parent, id, cwTestGeometry::points({position}),
+                                     QMatrix4x4(), 0.5f));
     scene.geometryItersecter()->waitForFinish();
 }
 
@@ -1136,13 +1117,9 @@ TEST_CASE("cwBaseTurnTableInteraction startRotating in a point-cloud gap keeps t
     addCluster(QVector3D(-50.0f, -50.0f, 40.0f));
     addCluster(QVector3D(50.0f, 50.0f, -40.0f));
 
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setType(cwGeometry::Type::Points);
     f.scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object(nullptr, 4, geometry, QMatrix4x4(), 0.5f));
+        cwGeometryItersecter::Object(nullptr, 4, cwTestGeometry::points(points),
+                                     QMatrix4x4(), 0.5f));
     f.scene.geometryItersecter()->waitForFinish();
 
     const QVector3D pivotBefore(5.0f, 6.0f, 7.0f);

@@ -35,10 +35,6 @@ void cwRhiTexturedItems::initialize(const ResourceUpdateData& data)
     }
 
     QRhi* rhi = data.renderData.cb->rhi();
-    if (!m_frame && data.renderData.renderer) {
-        m_frame = data.renderData.renderer->frameRenderer();
-    }
-
     {
         QImage image(256, 256, QImage::Format_RGBA8888);
         image.fill(Qt::transparent);
@@ -70,8 +66,6 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
     Q_ASSERT(dynamic_cast<cwRenderTexturedItems*>(data.object) != nullptr);
     auto* renderItems = static_cast<cwRenderTexturedItems*>(data.object);
 
-    m_renderItems = renderItems;
-
     const auto pendingChanges = renderItems->m_pendingChanges;
     for (const auto& command : pendingChanges) {
         const auto id = command.id();
@@ -80,15 +74,15 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
         case cwRenderTexturedItems::PendingCommand::Add: {
             auto* item = new Item;
             item->owner = this;
-            item->material = command.item().material;
-            item->geometry = command.item().geometry;
+            item->material = command.payload().material;
+            item->geometry = command.payload().geometry;
             item->geometryNeedsUpdate = !item->geometry.indices().isEmpty();
-            item->image = command.item().texture;
+            item->image = command.payload().texture;
             item->textureNeedsUpdate = !item->image.isNull();
-            item->uniformBlock = command.item().uniformBlock;
+            item->uniformBlock = command.payload().uniformBlock;
             item->uniformNeedsUpdate = true;
             item->pipelineNeedsUpdate = true;
-            item->modelMatrix = command.item().modelMatrix;
+            item->modelMatrix = command.payload().modelMatrix;
             item->modelMatrixNeedsUpdate = true;
 
             m_items.insert(id, item);
@@ -104,22 +98,22 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
         }
         case cwRenderTexturedItems::PendingCommand::UpdateGeometry: {
             if (auto* item = m_items.value(id, nullptr)) {
-                item->geometry = command.item().geometry;
+                item->geometry = command.payload().geometry;
                 item->geometryNeedsUpdate = true;
             }
             break;
         }
         case cwRenderTexturedItems::PendingCommand::UpdateTexture: {
             if (auto* item = m_items.value(id, nullptr)) {
-                item->image = command.item().texture;
+                item->image = command.payload().texture;
                 item->textureNeedsUpdate = true;
             }
             break;
         }
         case cwRenderTexturedItems::PendingCommand::UpdateMaterial: {
             if (auto* item = m_items.value(id, nullptr)) {
-                if (!(item->material == command.item().material)) {
-                    item->material = command.item().material;
+                if (!(item->material == command.payload().material)) {
+                    item->material = command.payload().material;
                     item->pipelineNeedsUpdate = true;
                     item->uniformNeedsUpdate = true;
                 }
@@ -128,14 +122,14 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
         }
         case cwRenderTexturedItems::PendingCommand::UpdateUniformBlock: {
             if (auto* item = m_items.value(id, nullptr)) {
-                item->uniformBlock = command.item().uniformBlock;
+                item->uniformBlock = command.payload().uniformBlock;
                 item->uniformNeedsUpdate = true;
             }
             break;
         }
         case cwRenderTexturedItems::PendingCommand::UpdateModelMatrix: {
             if (auto* item = m_items.value(id, nullptr)) {
-                item->modelMatrix = command.item().modelMatrix;
+                item->modelMatrix = command.payload().modelMatrix;
                 item->modelMatrixNeedsUpdate = true;
                 item->uniformNeedsUpdate = true;
             }
@@ -151,10 +145,6 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
 
 void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
 {
-    if (!m_frame && data.renderData.renderer) {
-        m_frame = data.renderData.renderer->frameRenderer();
-    }
-
     for (auto it = m_items.begin(); it != m_items.end(); ++it) {
         Item* item = it.value();
         if (!item) {
@@ -195,12 +185,6 @@ void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
             item->createShaderResourceBindings(data, m_sharedData);
         }
     }
-}
-
-void cwRhiTexturedItems::render(const RenderData& data)
-{
-    // All drawing goes through gather(); nothing renders via the legacy path.
-    Q_UNUSED(data);
 }
 
 bool cwRhiTexturedItems::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
@@ -399,10 +383,6 @@ void cwRhiTexturedItems::Item::ensurePipeline(const RenderData& renderData,
     }
 
     auto* renderer = renderData.renderer;
-    if (!owner->m_frame && renderer) {
-        owner->m_frame = renderer->frameRenderer();
-    }
-
     // Precondition: renderData is this item's pass's routed target (gather()
     // filters items to its pass; updateResources() selects the item's entry from
     // perPassRenderData). The key self-adjusts when the routing flips.
@@ -543,10 +523,6 @@ cwRhiPipelineRecord *cwRhiTexturedItems::acquirePipeline(const cwRhiPipelineKey&
                                                                 const SharedItemData& sharedData)
 {
     Q_UNUSED(sharedData);
-
-    if (!m_frame) {
-        return nullptr;
-    }
 
     auto* sampler = sharedSampler(rhi);
     if (!sampler) {
@@ -698,5 +674,5 @@ cwRHIObject::RenderPass cwRhiTexturedItems::toRenderPass(cwRenderMaterialState::
 
 QRhiSampler* cwRhiTexturedItems::sharedSampler(QRhi* rhi)
 {
-    return m_frame ? m_frame->sharedLinearClampSampler(rhi) : nullptr;
+    return m_frame->sharedLinearClampSampler(rhi);
 }

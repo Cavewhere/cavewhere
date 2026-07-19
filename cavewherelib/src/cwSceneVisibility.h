@@ -43,14 +43,14 @@ public:
 
     quint64 version() const;
     bool objectVisible(cwRenderObjectId id) const;                          // absent = true
-    bool subVisible(cwRenderObjectId id, uint32_t subId) const;             // ANDs the object level
-    const QVector<quint8>* mask(cwRenderObjectId id, uint32_t subId) const; // null = all-visible
-    quint64 entryVersion(cwRenderObjectId id, uint32_t subId) const;        // 0 = no entry
+    bool subVisible(cwRenderObjectId id, uint64_t subId) const;             // ANDs the object level
+    const QVector<quint8>* mask(cwRenderObjectId id, uint64_t subId) const; // null = all-visible
+    quint64 entryVersion(cwRenderObjectId id, uint64_t subId) const;        // 0 = no entry
 
 private:
     friend class cwSceneVisibility;
 
-    using SubKey = std::pair<cwRenderObjectId, uint32_t>;
+    using SubKey = std::pair<cwRenderObjectId, uint64_t>;
 
     struct Entry {
         bool visible = true;
@@ -96,10 +96,10 @@ public:
     // the store stays sparse; redundant writes are no-ops — no version bump,
     // no signal.
     void setObjectVisible(cwRenderObjectId id, bool visible);
-    void setSubVisible(cwRenderObjectId id, uint32_t subId, bool visible);
-    void setMask(cwRenderObjectId id, uint32_t subId, QVector<quint8> mask);
+    void setSubVisible(cwRenderObjectId id, uint64_t subId, bool visible);
+    void setMask(cwRenderObjectId id, uint64_t subId, QVector<quint8> mask);
     void removeObject(cwRenderObjectId id); // scrubs the object entry and all its subs
-    void removeSub(cwRenderObjectId id, uint32_t subId);
+    void removeSub(cwRenderObjectId id, uint64_t subId);
 
     // Consumer-facing read API
     cwVisibilitySnapshot snapshot() const;

@@ -122,10 +122,14 @@ void cwRenderTexturedItems::addCommand(const PendingCommand&& command)
 uint32_t cwRenderTexturedItems::addItem(const Item& item)
 {
     const uint32_t id = m_nextId++;
-    Item commandItem = item;
-    commandItem.geometry = handleGeometryError(geometryForRender(commandItem.geometry));
+    ItemPayload payload;
+    payload.geometry = handleGeometryError(geometryForRender(item.geometry));
+    payload.texture = item.texture;
+    payload.material = item.material;
+    payload.uniformBlock = item.uniformBlock;
+    payload.modelMatrix = item.modelMatrix;
 
-    addCommand(PendingCommand(PendingCommand::Add, id, commandItem));
+    addCommand(PendingCommand(PendingCommand::Add, id, payload));
 
     Item storedItem = item;
     if (!storedItem.storeGeometry) {
@@ -136,9 +140,9 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     }
     m_frontState.insert(id, storedItem);
 
-    if (!commandItem.geometry.isEmpty()) {
+    if (!payload.geometry.isEmpty()) {
         if (auto* intersector = geometryItersecter()) {
-            intersector->addObject(cwGeometryItersecter::Object(this, id, commandItem.geometry, item.modelMatrix));
+            intersector->addObject(cwGeometryItersecter::Object(this, id, payload.geometry, item.modelMatrix));
         } else {
             qCDebug(lcPick).nospace()
                 << "addItem id=" << id
@@ -177,7 +181,7 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
         return;
     }
 
-    Item payload;
+    ItemPayload payload;
     payload.geometry = handleGeometryError(geometryForRender(geometry));
     addCommand(PendingCommand(PendingCommand::UpdateGeometry, id, payload));
 
@@ -221,7 +225,7 @@ void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
         return;
     }
 
-    Item payload;
+    ItemPayload payload;
     payload.texture = image; // geometry left default
     addCommand(PendingCommand(PendingCommand::UpdateTexture, id, payload));
 
@@ -262,7 +266,7 @@ void cwRenderTexturedItems::setCulling(uint32_t id, CullMode culling)
 
     entry->material.cullMode = culling;
 
-    Item payload;
+    ItemPayload payload;
     payload.material = entry->material;
     addCommand(PendingCommand(PendingCommand::UpdateMaterial, id, payload));
 }
@@ -274,7 +278,7 @@ void cwRenderTexturedItems::setMaterial(uint32_t id, const cwRenderMaterialState
         return;
     }
 
-    Item payload;
+    ItemPayload payload;
     payload.material = material;
     addCommand(PendingCommand(PendingCommand::UpdateMaterial, id, payload));
 
@@ -288,7 +292,7 @@ void cwRenderTexturedItems::setUniformBlock(uint32_t id, const QByteArray& unifo
         return;
     }
 
-    Item payload;
+    ItemPayload payload;
     payload.uniformBlock = uniformBlock;
     addCommand(PendingCommand(PendingCommand::UpdateUniformBlock, id, payload));
 
@@ -302,7 +306,7 @@ void cwRenderTexturedItems::setModelMatrix(uint32_t id, const QMatrix4x4& modelM
         return;
     }
 
-    Item payload;
+    ItemPayload payload;
     payload.modelMatrix = modelMatrix;
     addCommand(PendingCommand(PendingCommand::UpdateModelMatrix, id, payload));
 
@@ -319,7 +323,7 @@ void cwRenderTexturedItems::removeItem(uint32_t id)
         return;
     }
 
-    addCommand(PendingCommand(PendingCommand::Remove, id, Item{}));
+    addCommand(PendingCommand(PendingCommand::Remove, id, ItemPayload{}));
 
     if (auto* intersector = geometryItersecter()) {
         intersector->removeObject({renderObjectId(), id});

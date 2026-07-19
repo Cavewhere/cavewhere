@@ -24,10 +24,6 @@ void cwRHILinePlot::initialize(const ResourceUpdateData& data)
     if (m_resourcesInitialized)
         return;
 
-    if (!m_frame && data.renderData.renderer) {
-        m_frame = data.renderData.renderer->frameRenderer();
-    }
-
     initializeResources(data);
     m_resourcesInitialized = true;
 }
@@ -101,9 +97,14 @@ void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
 // Only runs on a toggle or a new solve, so the expansion cost is off the hot
 // path. A geometry replacement changes the vertex count and resets the store
 // entry, so both feed the gate.
+//
+// This reads the frame-global snapshot, not a GatherContext: updateResources
+// has no gather context, and the mask buffer is one shared GPU resource — so
+// the per-vertex mask is per-frame by construction. Per-job overlays
+// (cwSceneGatherOptions) hide whole objects only; that split is by design.
 void cwRHILinePlot::updateVisibilityBuffer(QRhiResourceUpdateBatch* batch)
 {
-    if (!m_visibilityBuffer || !m_frame) {
+    if (!m_visibilityBuffer) {
         return;
     }
 
@@ -132,34 +133,6 @@ void cwRHILinePlot::updateVisibilityBuffer(QRhiResourceUpdateBatch* batch)
 
     m_uploadedMaskVersion = entryVersion;
     m_uploadedMaskVertexCount = vertexCount;
-}
-
-void cwRHILinePlot::render(const RenderData& data)
-{
-    const int vertexCount = m_data.value().points.size();
-    if (vertexCount == 0) {
-        return;
-    }
-
-    if (!ensurePipeline(data)) {
-        return;
-    }
-
-    if (!m_pipelineRecord || !m_pipelineRecord->pipeline) {
-        return;
-    }
-
-    data.cb->setGraphicsPipeline(m_pipelineRecord->pipeline);
-    // The global camera UBO at binding 0 is dynamic-offset; this legacy path only
-    // ever draws the live frame, so it reads slot 0 (offset 0).
-    const QRhiCommandBuffer::DynamicOffset cameraOffset(0, 0);
-    data.cb->setShaderResources(m_srb, 1, &cameraOffset);
-    const QRhiCommandBuffer::VertexInput vertexInputs[2] = {
-        QRhiCommandBuffer::VertexInput(m_vertexBuffer, 0),
-        QRhiCommandBuffer::VertexInput(m_visibilityBuffer, 0)
-    };
-    data.cb->setVertexInput(0, 2, vertexInputs);
-    data.cb->draw(vertexCount);
 }
 
 bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
@@ -206,11 +179,7 @@ bool cwRHILinePlot::ensurePipeline(const RenderData& data)
         return false;
     }
 
-    if (!m_frame && data.renderer) {
-        m_frame = data.renderer->frameRenderer();
-    }
-
-    if (!m_frame || !data.renderer) {
+    if (!data.renderer) {
         return false;
     }
 

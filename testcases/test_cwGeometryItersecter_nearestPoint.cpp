@@ -18,6 +18,7 @@
 // SUT
 #include "cwBaseTurnTableInteraction.h"
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwPickingLog.h"
 #include "cwPickQuery.h"
 
@@ -32,14 +33,8 @@ cwGeometryItersecter::Object makePointCloudObject(uint64_t id,
                                                   const QVector<QVector3D>& points,
                                                   float pickRadius = 0.5f)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setType(cwGeometry::Type::Points);
-
-    return cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4(),
-                                        pickRadius);
+    return cwGeometryItersecter::Object(nullptr, id, cwTestGeometry::points(points),
+                                        QMatrix4x4(), pickRadius);
 }
 
 // A polyline registered the way cwRenderLinePlot does: non-indexed consecutive
@@ -47,17 +42,7 @@ cwGeometryItersecter::Object makePointCloudObject(uint64_t id,
 cwGeometryItersecter::Object makeLineObject(uint64_t id,
                                             const QVector<QVector3D>& points)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-
-    QVector<uint32_t> indices(points.size());
-    std::iota(indices.begin(), indices.end(), 0u);
-    geometry.setIndices(std::move(indices));
-    geometry.setType(cwGeometry::Type::Lines);
-
-    return cwGeometryItersecter::Object(nullptr, id, geometry);
+    return cwGeometryItersecter::Object(nullptr, id, cwTestGeometry::lines(points));
 }
 
 cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
@@ -65,14 +50,9 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
                                                 const QVector3D& b,
                                                 const QVector3D& c)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, QVector<QVector3D>{a, b, c});
-    geometry.setIndices(QVector<uint32_t>{0u, 1u, 2u});
-    geometry.setType(cwGeometry::Type::Triangles);
-
-    return cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4());
+    return cwGeometryItersecter::Object(nullptr, id,
+                                        cwTestGeometry::triangles({a, b, c}, {0u, 1u, 2u}),
+                                        QMatrix4x4());
 }
 
 // A constant (ortho-style) tolerance: a fixed world-space anchor radius.

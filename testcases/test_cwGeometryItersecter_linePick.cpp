@@ -19,6 +19,7 @@
 
 // SUT
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwPickingLog.h"
 #include "cwPickQuery.h"
 #include "cwRayHit.h"
@@ -36,17 +37,8 @@ cwGeometryItersecter::Object makeLineObject(uint64_t id,
                                             const QVector<QVector3D>& points,
                                             const QMatrix4x4& modelMatrix = QMatrix4x4())
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-
-    QVector<uint32_t> indices(points.size());
-    std::iota(indices.begin(), indices.end(), 0u);
-    geometry.setIndices(std::move(indices));
-    geometry.setType(cwGeometry::Type::Lines);
-
-    return cwGeometryItersecter::Object(nullptr, id, geometry, modelMatrix);
+    return cwGeometryItersecter::Object(nullptr, id, cwTestGeometry::lines(points),
+                                        modelMatrix);
 }
 
 cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
@@ -54,21 +46,10 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
                                                 const QVector3D& b,
                                                 const QVector3D& c)
 {
-    QVector<QVector3D> points;
-    points << a << b << c;
-
-    QVector<uint32_t> indices;
-    indices << 0u << 1u << 2u;
-
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setIndices(indices);
-    geometry.setType(cwGeometry::Type::Triangles);
-    geometry.setCullBackfaces(false); // Double-sided, like scrap carpets.
-
-    return cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4());
+    // Double-sided (cullBackfaces=false), like scrap carpets.
+    return cwGeometryItersecter::Object(
+        nullptr, id, cwTestGeometry::triangles({a, b, c}, {0u, 1u, 2u}, false),
+        QMatrix4x4());
 }
 
 // A constant (ortho-style) tolerance: a fixed world-space pick radius.

@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwGeometry.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
@@ -45,14 +46,8 @@ QVector<QVector3D> gridPoints()
 
 cwRenderPointCloud::GeometryData gridGeometry()
 {
-    cwGeometry geometry({
-        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
-    });
-    geometry.setType(cwGeometry::Type::Points);
-    geometry.set(cwGeometry::Semantic::Position, gridPoints());
-
     return {
-        .geometry = std::move(geometry),
+        .geometry = cwTestGeometry::points(gridPoints()),
         .bboxMin = QVector3D(-kGridSpacing, -kGridSpacing, 0.0f),
         .bboxMax = QVector3D(kGridSpacing, kGridSpacing, 0.0f),
         .meanSpacingXY = kGridSpacing,

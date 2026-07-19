@@ -8,6 +8,7 @@
 #include "cwGeometry.h"
 #include "cwRHIPointCloud.h"
 #include "cwRenderPointCloud.h"
+#include "TestGeometryBuilders.h"
 
 // Friend accessor (declared friend in cwRenderPointCloud.h) so the
 // re-upload regression test can observe the private change trackers
@@ -25,20 +26,6 @@ struct CwRenderPointCloudTestAccess {
         c.m_geometry.resetChanged();
     }
 };
-
-namespace {
-
-cwGeometry makePointGeometry(const QVector<QVector3D>& points)
-{
-    cwGeometry geometry({
-        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
-    });
-    geometry.setType(cwGeometry::Type::Points);
-    geometry.set(cwGeometry::Semantic::Position, points);
-    return geometry;
-}
-
-} // namespace
 
 TEST_CASE("cwRenderPointCloud: starts empty", "[cwRenderPointCloud]") {
     cwRenderPointCloud cloud;
@@ -59,7 +46,7 @@ TEST_CASE("cwRenderPointCloud: setGeometry populates Data", "[cwRenderPointCloud
     const QVector3D bboxMax(1.0f, 2.0f, 3.0f);
 
     cloud.setGeometry({
-        .geometry = makePointGeometry(points),
+        .geometry = cwTestGeometry::points(points),
         .bboxMin = bboxMin,
         .bboxMax = bboxMax,
         .meanSpacingXY = 0.5f,
@@ -77,7 +64,7 @@ TEST_CASE("cwRenderPointCloud: clear resets vertex data but keeps pointSize",
     cloud.setPointSize(5.5f);
 
     cloud.setGeometry({
-        .geometry = makePointGeometry({ QVector3D(1.0f, 1.0f, 1.0f) }),
+        .geometry = cwTestGeometry::points({ QVector3D(1.0f, 1.0f, 1.0f) }),
         .bboxMin = QVector3D(1.0f, 1.0f, 1.0f),
         .bboxMax = QVector3D(1.0f, 1.0f, 1.0f),
         .meanSpacingXY = 0.0f,
@@ -120,7 +107,7 @@ TEST_CASE("cwRenderPointCloud: a uniform-only change does not dirty the geometry
 
     cwRenderPointCloud cloud;
     cloud.setGeometry({
-        .geometry = makePointGeometry({
+        .geometry = cwTestGeometry::points({
             QVector3D(0.0f, 0.0f, 0.0f),
             QVector3D(1.0f, 2.0f, 3.0f),
             QVector3D(-1.0f, -2.0f, -3.0f),
@@ -150,7 +137,7 @@ TEST_CASE("cwRenderPointCloud: a uniform-only change does not dirty the geometry
 
     // A genuine geometry change does re-dirty the geometry tracker.
     cloud.setGeometry({
-        .geometry = makePointGeometry({ QVector3D(2.0f, 2.0f, 2.0f) }),
+        .geometry = cwTestGeometry::points({ QVector3D(2.0f, 2.0f, 2.0f) }),
         .bboxMin = QVector3D(2.0f, 2.0f, 2.0f),
         .bboxMax = QVector3D(2.0f, 2.0f, 2.0f),
         .meanSpacingXY = 0.25f,

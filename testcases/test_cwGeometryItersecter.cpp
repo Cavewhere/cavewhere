@@ -9,6 +9,7 @@
 
 // SUT
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 
 using namespace Catch;
 
@@ -20,19 +21,9 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
            << QVector3D(1.0f, 0.0f, 0.0f)
            << QVector3D(0.0f, 1.0f, 0.0f);
 
-    QVector<uint32_t> indexes;
-    indexes << 0u << 1u << 2u;
-
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setIndices(indexes);
-    geometry.setType(cwGeometry::Type::Triangles);
-
     // parent can be nullptr in tests; ids must be unique per parent
     return cwGeometryItersecter::Object(nullptr, id,
-                                        geometry,
+                                        cwTestGeometry::triangles(points, {0u, 1u, 2u}),
                                         modelMatrix);
 }
 

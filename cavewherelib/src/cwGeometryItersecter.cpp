@@ -198,14 +198,6 @@ namespace {
     // need to agree on more than "hidden is zero".
     constexpr quint8 kVertexHidden = 0;
 
-    // Store sub-ids are 32-bit; every producer's per-owner id fits (textured
-    // item ids are a uint32_t counter, line plot and clouds use 0). The
-    // wider Key::id exists for cwRayHit::objectId() compatibility.
-    uint32_t storeSubId(const cwGeometryItersecter::Key& key)
-    {
-        return static_cast<uint32_t>(key.id);
-    }
-
     // Mask read shared by every per-vertex visibility consumer. Out-of-range
     // reads as visible on purpose: an empty/short mask must never hide
     // geometry (the mask's absence means "all visible", and a stale-size
@@ -779,7 +771,7 @@ QBox3D cwGeometryItersecter::visibleBoundingBox() const
     QBox3D box;
     for (const Node& node : Nodes) {
         const Key key = node.Object.key();
-        if (!visibility.subVisible(key.parentId, storeSubId(key))) {
+        if (!visibility.subVisible(key.parentId, key.id)) {
             continue;
         }
         box.unite(visibleNodeBox(node, visibility));
@@ -792,12 +784,12 @@ QBox3D cwGeometryItersecter::visibleNodeBox(const Node& node,
 {
     const Object& object = node.Object;
     const Key key = object.key();
-    const QVector<quint8>* mask = visibility.mask(key.parentId, storeSubId(key));
+    const QVector<quint8>* mask = visibility.mask(key.parentId, key.id);
     if (mask == nullptr || mask->isEmpty()) {
         return node.BoundingBox.transformed(object.modelMatrix());
     }
 
-    const quint64 entryVersion = visibility.entryVersion(key.parentId, storeSubId(key));
+    const quint64 entryVersion = visibility.entryVersion(key.parentId, key.id);
     auto cached = m_maskedBoxCache.find(key);
     if (cached == m_maskedBoxCache.end() || cached->entryVersion != entryVersion) {
         cached = m_maskedBoxCache.insert(
@@ -1174,7 +1166,7 @@ void cwGeometryItersecter::traverseBvh(const BvhData& bvh,
         // sub-entry flag — short-circuits the entire descent when the
         // Object is hidden at either level.
         const Key subKey = sub.object.key();
-        if (!visibility.subVisible(subKey.parentId, storeSubId(subKey))) {
+        if (!visibility.subVisible(subKey.parentId, subKey.id)) {
             continue;
         }
 
@@ -1210,7 +1202,7 @@ void cwGeometryItersecter::traverseBvh(const BvhData& bvh,
         // `visibility` is held by the caller). Unmasked objects — clouds,
         // scraps, triangles — pay one null compare per tested leaf primitive.
         const QVector<quint8>* visibilityMask =
-            visibility.mask(subKey.parentId, storeSubId(subKey));
+            visibility.mask(subKey.parentId, subKey.id);
         const bool masked = visibilityMask != nullptr && !visibilityMask->isEmpty();
 
         const LeafContext ctx{sub.object, geometry, positionAttribute,
@@ -1655,7 +1647,7 @@ cwRayHit cwGeometryItersecter::intersectsDetailed(const QRay3D &ray, const cwPic
                     << " type=" << cwGeometry::typeName(sb.object.geometry().type())
                     << " prims=" << sb.primitives.size()
                     << " visible="
-                    << visibility.subVisible(subKey.parentId, storeSubId(subKey));
+                    << visibility.subVisible(subKey.parentId, subKey.id);
             }
         }
     }

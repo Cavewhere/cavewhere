@@ -13,6 +13,7 @@
 
 // SUT
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwRenderObject.h"
 
 namespace {
@@ -23,13 +24,8 @@ cwGeometryItersecter::Object makePointCloud(uint64_t id,
                                             const QVector<QVector3D>& points,
                                             const QMatrix4x4& modelMatrix = QMatrix4x4())
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setType(cwGeometry::Type::Points);
-
-    return cwGeometryItersecter::Object(nullptr, id, geometry, modelMatrix, kPickRadius);
+    return cwGeometryItersecter::Object(nullptr, id, cwTestGeometry::points(points),
+                                        modelMatrix, kPickRadius);
 }
 
 //! Integer lattice points (0..n-1)^3 — a deterministic cloud with n^3 vertices.

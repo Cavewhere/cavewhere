@@ -21,6 +21,7 @@
 #include "cwCamera.h"
 #include "cwGeometry.h"
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwLeadView.h"
 #include "cwScene.h"
 
@@ -82,14 +83,9 @@ struct Fixture
 // depends on it doing so).
 void addCloudPoint(cwScene& scene, const QVector3D& position, uint64_t id = 1)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, QVector<QVector3D>{position});
-    geometry.setType(cwGeometry::Type::Points);
-
     scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object(nullptr, id, geometry, QMatrix4x4(), kPickRadius));
+        cwGeometryItersecter::Object(nullptr, id, cwTestGeometry::points({position}),
+                                     QMatrix4x4(), kPickRadius));
     scene.geometryItersecter()->waitForFinish();
 }
 

@@ -101,7 +101,7 @@ public:
     // The plot is one geometry blob, so it occupies a single sub-slot in both
     // the intersecter and the visibility store. Shared with cwRHILinePlot's
     // snapshot reads.
-    static constexpr uint32_t kSubId = 0;
+    static constexpr uint64_t kSubId = 0;
 };
 
 inline float cwRenderLinePlot::maxZValue() const

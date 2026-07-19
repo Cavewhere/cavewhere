@@ -9,6 +9,7 @@
 
 // SUT
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 
 using namespace Catch;
 
@@ -27,18 +28,9 @@ cwGeometryItersecter::Object makeTriangle(uint64_t id,
            << QVector3D( 3.0f, -1.0f, 0.0f)   // CCW: normal = +Z
            << QVector3D(-1.0f,  3.0f, 0.0f);
 
-    QVector<uint32_t> indexes;
-    indexes << 0u << 1u << 2u;
-
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setIndices(indexes);
-    geometry.setType(cwGeometry::Type::Triangles);
-    geometry.setCullBackfaces(cullBackfaces);
-
-    return cwGeometryItersecter::Object(nullptr, id, geometry, modelMatrix);
+    return cwGeometryItersecter::Object(
+        nullptr, id, cwTestGeometry::triangles(points, {0u, 1u, 2u}, cullBackfaces),
+        modelMatrix);
 }
 
 // A ray that strikes the triangle at (0.25, 0.25) from the +Z side, travelling

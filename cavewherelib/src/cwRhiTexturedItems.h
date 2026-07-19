@@ -17,7 +17,6 @@ public:
     void initialize(const ResourceUpdateData& data) override;
     void synchronize(const SynchronizeData& data) override;
     void updateResources(const ResourceUpdateData& data) override;
-    void render(const RenderData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
     void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor) override;
 
@@ -73,10 +72,8 @@ private:
 
     QHash<uint32_t, Item*> m_items;
     bool m_resourcesInitialized = false;
-    QPointer<cwRenderTexturedItems> m_renderItems;
     SharedItemData m_sharedData;
     QRhiVertexInputLayout m_inputLayout;
-    cwRhiFrameRenderer* m_frame = nullptr;
 
     static QRhiShaderResourceBinding::StageFlags toRhiStages(cwRenderMaterialState::ShaderStages stages);
     static QRhiGraphicsPipeline::CullMode toRhiCullMode(cwRenderMaterialState::CullMode mode);

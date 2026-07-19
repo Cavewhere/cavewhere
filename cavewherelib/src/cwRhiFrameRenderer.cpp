@@ -32,20 +32,6 @@ size_t qHash(const cwRhiPipelineKey& key, size_t seed) noexcept
 }
 
 namespace {
-cwRHIObject::PipelineBatch& ensurePipelineBatch(QVector<cwRHIObject::PipelineBatch>& batches,
-                                                const cwRHIObject::PipelineState& state)
-{
-    for (auto& existing : batches) {
-        if (existing.state.pipeline == state.pipeline &&
-            existing.state.sortKey == state.sortKey) {
-            return existing;
-        }
-    }
-
-    batches.append({state, {}});
-    return batches.last();
-}
-
 // Draw order for the scene's passes. The no-cloud path draws these straight to
 // its single target; the EDL composite path splits them across the scene / cloud
 // / composite passes. Shared by the live frame and the offscreen render.
@@ -165,6 +151,7 @@ void cwRhiFrameRenderer::registerRenderObject(cwRenderObjectId id, cwRHIObject* 
     }
 
     rhiObject->setRenderObjectId(id);
+    rhiObject->setFrameRenderer(this);
     m_rhiObjects.append(rhiObject);
     m_rhiObjectsToInitilize.append(rhiObject);
     m_rhiObjectLookup[id] = rhiObject;
@@ -564,7 +551,6 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
             continue;
         }
 
-        bool gathered = false;
         for (cwRHIObject::RenderPass pass : kPassOrder) {
             const int passIndex = static_cast<int>(pass);
             auto& batches = passBatches[passIndex];
@@ -573,25 +559,7 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
                 &m_visibility,
                 options.appearanceSlotForObject.value(object, 0)
             };
-            gathered |= object->gather(context, batches);
-        }
-
-        //Generate renderables for older rendering path
-        if (!gathered) {
-            const int defaultPassIndex = static_cast<int>(cwRHIObject::RenderPass::Opaque);
-            const quint64 baseSortKey = (quint64(objectOrder) << 32);
-            cwRHIObject::PipelineState state;
-            state.pipeline = nullptr;
-            state.sortKey = baseSortKey;
-
-            auto& batch = ensurePipelineBatch(passBatches[defaultPassIndex], state);
-            cwRHIObject::Drawable draw;
-            draw.type = cwRHIObject::Drawable::Type::Custom;
-            draw.customDraw = [object](const cwRHIObject::RenderData& data) {
-                object->render(data);
-            };
-
-            batch.drawables.append(draw);
+            object->gather(context, batches);
         }
 
         ++objectOrder;

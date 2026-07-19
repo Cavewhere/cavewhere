@@ -15,6 +15,7 @@
 
 // SUT
 #include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
 #include "cwRayHit.h"
 #include "cwTask.h"
 
@@ -29,14 +30,8 @@ cwGeometryItersecter::Object makePointObject(uint64_t id,
                                              const QMatrix4x4& modelMatrix = QMatrix4x4(),
                                              float pickRadius = kPickRadius)
 {
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setType(cwGeometry::Type::Points);
-
     return cwGeometryItersecter::Object(nullptr, id,
-                                        geometry,
+                                        cwTestGeometry::points(points),
                                         modelMatrix,
                                         pickRadius);
 }
@@ -47,21 +42,8 @@ cwGeometryItersecter::Object makeTriangleObject(uint64_t id,
                                                 const QVector3D& c,
                                                 const QMatrix4x4& modelMatrix = QMatrix4x4())
 {
-    QVector<QVector3D> points;
-    points << a << b << c;
-
-    QVector<uint32_t> indexes;
-    indexes << 0u << 1u << 2u;
-
-    cwGeometry geometry {
-        {cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3}
-    };
-    geometry.set(cwGeometry::Semantic::Position, points);
-    geometry.setIndices(indexes);
-    geometry.setType(cwGeometry::Type::Triangles);
-
     return cwGeometryItersecter::Object(nullptr, id,
-                                        geometry,
+                                        cwTestGeometry::triangles({a, b, c}, {0u, 1u, 2u}),
                                         modelMatrix);
 }
 
