@@ -48,6 +48,9 @@ the problems CaveWhere solves — then keep the
 - [Focus the View with Keyword Layers](view-3d/layers-and-keywords.md) — show
   only part of a cave by keyword: AND columns that drill down, and the "Also
   Include" (OR) button that combines independent selections.
+- [Perspective and Field of View](view-3d/perspective-and-field-of-view.md) —
+  blend between measurement-true orthogonal and natural-looking perspective, and
+  set the lens angle with Field of View.
 
 ### Survey Data
 - [Organize Caves and Trips](survey-data/caves-and-trips.md) — the region → cave
@@ -142,9 +145,5 @@ These directories exist and will be filled in as the manual is built out. Each
 chapter is task-oriented and problem-first (see
 [the authoring guide](AUTHORING.md)).
 
-- **Notes (more)** — note keywords build on the [Notes](notes/add-a-note.md)
-  pages above.
-- **3D View (more)** — field of view, labels, leads, and rendering settings
-  (MSAA, EDL) build on [The 3D View](view-3d/the-3d-view.md).
 - **Loop Closure** — closure errors and reviewing blunders.
 - **Appendix** — small screens, keyboard shortcuts, troubleshooting.

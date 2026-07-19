@@ -3,7 +3,7 @@ title: The 3D View
 summary: Navigate the 3D cave model, aim the camera, and control what's shown with layers.
 problem: See your survey as a 3D cave and aim the view to answer where passages go and where the leads are.
 keywords: [3d view, navigation, turntable, camera, azimuth, vertical angle, plan, profile, projection, compass, scale bar, layers, keyword]
-related: [layers-and-keywords.md, ../concepts/why-cavewhere.md, ../concepts/glossary.md]
+related: [layers-and-keywords.md, perspective-and-field-of-view.md, ../concepts/why-cavewhere.md, ../concepts/glossary.md]
 ---
 
 # The 3D View
@@ -81,7 +81,9 @@ trips.
 
   **Perspective**, by contrast, makes near things larger and far things smaller,
   which looks more natural and gives a sense of depth — use it for presentation
-  and getting your bearings, not for measuring.
+  and getting your bearings, not for measuring. In perspective a **Field of View**
+  setting appears to widen or narrow the lens — see
+  [Perspective and Field of View](perspective-and-field-of-view.md).
 - **Animate** spins the view over the number of seconds you set in **Duration** —
   a quick fly-around for showing the cave to others.
 
@@ -95,6 +97,15 @@ Two aids are drawn into the scene itself:
   you can judge how big a passage or a gap actually is.
 
 Both update live as you move the camera.
+
+**Station names** are drawn right beside their points in the line plot, so you
+can read which station is which without leaving the 3D view. CaveWhere declutters
+them for you: where stations crowd together, or when you zoom out, it drops the
+overlapping labels rather than printing an unreadable pile — and keeps the labels
+already on screen steady as you move, so they don't flicker on and off. That's
+why not every station is labelled at once; zoom in on a busy area and more names
+appear. The labels ride with the survey line, so hiding a trip's `Line Plot` in
+the [Layers](layers-and-keywords.md) tab hides its station names along with it.
 
 The scale bar appears **only in orthogonal projection**. In perspective there is
 no single scale to show — near passages are drawn larger than far ones, so a bar

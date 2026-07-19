@@ -556,6 +556,70 @@ MainWindowTest {
                    "camera-controls screenshot is not blank");
         }
 
+        // The View tab switched to Perspective, so the Projection group's
+        // Field of View row (hidden in Orthogonal) is showing. Backs the "Set the
+        // Field of View" section of docs/manual/view-3d/perspective-and-field-of-view.md.
+        function test_view3dFieldOfView() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            // projectionTransition lives on the GLTerrainRenderer (objectName
+            // "renderer"), not the RegionViewer that loadRhiViewer returns.
+            let glTerrain = findByName(rootId.mainWindow, "renderer");
+            verify(glTerrain && glTerrain.projectionTransition,
+                   "found the terrain renderer and its projection transition");
+
+            let panel = findByName(rootId.mainWindow, "renderingSidePanel");
+            verify(panel, "found the rendering side panel");
+
+            let tabBar = sidePanelTabBar();
+            if (tabBar) { tabBar.currentIndex = 0; } // View tab
+
+            // Settle the projection onto perspective (progress 1). The Field of
+            // View row is bound visible to perspectiveProjection.enabled.
+            glTerrain.projectionTransition.progress = 1;
+            tryVerify(function() { return regionViewer.perspectiveProjection.enabled; },
+                      5000, "perspective projection is active");
+
+            // Move the toggle's handle to the Perspective end too, so the shot is
+            // self-consistent (a handle stuck at Orthognal while the Field of View
+            // row shows would read as a bug). ToggleSlider.sliderPos is read-only —
+            // computed from the internal button's x — so nudge the button image,
+            // which also drives progress back through the normal binding.
+            let slider = findByName(panel, "projectionSlider");
+            verify(slider, "found the projection slider");
+            let toggle = findByName(slider, "slider");
+            verify(toggle, "found the toggle inside the projection slider");
+            let kids = toggle.children;
+            for (let i = 0; kids && i < kids.length; ++i) {
+                if (kids[i].source !== undefined
+                        && String(kids[i].source).indexOf("buttonSlider") !== -1) {
+                    kids[i].x = toggle.sliderRange;
+                    break;
+                }
+            }
+            tryVerify(function() { return toggle.sliderPos >= 1.0; }, 2000,
+                      "the projection toggle reached the Perspective end");
+
+            // The View tab scrolls; bring the Projection group at its foot — where
+            // the Field of View row now sits — into the panel's viewport.
+            let flick = slider;
+            while (flick && flick.contentY === undefined) { flick = flick.parent; }
+            if (flick) { flick.contentY = Math.max(0, flick.contentHeight - flick.height); }
+
+            highlightOverlayId.target = slider.parent; // slider + Field of View + help
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "view-3d-field-of-view");
+            verify(path.length > 0, "grabToFile wrote the field-of-view screenshot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.5,
+                   "field-of-view screenshot is not blank");
+
+            // Hygiene: return to orthogonal so a later 3D shot in a full run starts
+            // from the default projection (and gets its scale bar back).
+            glTerrain.projectionTransition.progress = 0;
+        }
+
         // The Layers tab active: shows the keyword layer panel. Backs the
         // chapter's "Focus on part of the cave with layers" section.
         function test_view3dLayers() {
