@@ -59,7 +59,7 @@
 
 <header>
   <h1>Picker Mutation Pipeline</h1>
-  <div class="sub"><code>cwGeometryItersecter</code> · consolidates review items <strong>R1 + A1 + R3</strong> from the issue&nbsp;#505 review · no governing plan predates this · <em>status: proposed</em></div>
+  <div class="sub"><code>cwGeometryItersecter</code> · consolidates review items <strong>R1 + A1 + R3</strong> from the issue&nbsp;#505 review, expanded with <strong>hidden-until-pick-ready</strong> (Phase&nbsp;4) · no governing plan predates this · <em>status: proposed · R3 decided = Option&nbsp;A (2026-07-19)</em></div>
 </header>
 
 <p>The issue&nbsp;#505 fix added a <strong>fourth</strong> way to keep the published pick BVH
@@ -273,12 +273,15 @@ static QVector&lt;BvhNode&gt; BvhData::rebuildTopLevel(const BvhData&amp;);   //
 </div>
 
 <div class="card phase p3">
-  <div class="pill">Phase 3 · R3 · the acceptance question</div>
+  <div class="pill">Phase 3 · R3 · decided: Option A</div>
   <h3>Decide <code>addObject</code>'s pre-build pick policy</h3>
+  <p><strong>Decision (2026-07-19): Option A — the not-ready contract.</strong> Picks ignore an
+  object until its async build lands; the engine documents that, and Phase 4 (below) makes the
+  window invisible to the user by keeping heavy objects render-hidden until they are pick-ready.
+  Options B and C are kept here for the record:</p>
   <p>A new object's sub-BVH is O(vertices) and can't be built synchronously the way an O(objects)
   transform refresh can, so between <code>addObject</code> and the worker install a pick can't test
-  its primitives. Pick one policy and make it explicit — this is the design decision the whole
-  refactor exists to force:</p>
+  its primitives. The candidate policies were:</p>
   <table>
     <thead><tr><th>Option</th><th>Behavior</th><th>Cost / caveat</th></tr></thead>
     <tbody>
@@ -305,12 +308,120 @@ static QVector&lt;BvhNode&gt; BvhData::rebuildTopLevel(const BvhData&amp;);   //
       </tr>
     </tbody>
   </table>
-  <p class="note"><strong>Recommendation:</strong> Option A (document + rely on the existing
-  <code>status===Ready</code> gate), with the <code>InsertCoarse</code> delta reserved as a follow-up
-  if a real caller needs pre-build broad-phase picks. Confirm first: does any pick path today
-  <em>not</em> gate on readiness and rely on a freshly added object being immediately pickable?
-  That single fact decides A vs B.</p>
+  <p class="note"><strong>Why A won:</strong> C helps small notes but not large LiDAR scans —
+  which are exactly the #505 case — and B's box-hit-isn't-a-triangle-hit caveat pushes complexity
+  into every pick consumer. A is honest and zero-cost in the engine; Phase 4 then closes the UX
+  hole A leaves open (a visible-but-unpickable object) by inverting it: nothing is visible until
+  it is pickable. The <code>InsertCoarse</code> delta stays reserved as a follow-up if a real
+  caller ever needs pre-build broad-phase picks.</p>
 </div>
+
+<div class="card phase">
+  <div class="pill">Phase 4 · scope expansion · hidden-until-pick-ready</div>
+  <h3>Keep heavy objects render-hidden until their BVH lands</h3>
+  <p>Option A leaves a window where an object renders but can't be picked. For huge geometry —
+  LAZ point clouds above all, plus large note GLBs — that window is long enough for the user to
+  see the object and click it. Instead of teaching every caller about readiness, establish the
+  invariant the other way around: <strong>rendered ⇒ pickable</strong>. An object registered with
+  the intersecter stays render-hidden until its sub-BVH is published, then appears — already
+  pickable on its first visible frame.</p>
+
+  <h3 style="font-size:.95rem">Mechanism</h3>
+  <ul>
+    <li><strong>Per-key readiness query</strong> on the intersecter:
+        <code>bool isObjectPickReady(const Key&amp;) const</code> — true when the published
+        <code>m_bvh</code> has the key in <code>keyToSlot</code> with a non-null sub-BVH slot.
+        Cheap: both structures already exist. <code>bvhReady()</code> (emitted on every install)
+        is the notification edge; owners re-check on it.</li>
+    <li><strong>Owner-level gating</strong>, not store-level: owners publish <em>effective</em>
+        visibility = <span class="kbd">userVisible &amp;&amp; pickReady</span> into the scene
+        visibility store. The store and RHI backend stay dumb readers (preserves the #579
+        architecture — no store→intersecter coupling), and user hide/show toggles keep working
+        unchanged.</li>
+    <li><strong>Centralized in <code>cwRenderObject</code>, not per-type.</strong> Only three
+        render types register with the intersecter (four <code>addObject</code> sites:
+        <code>cwRenderPointCloud.cpp:36</code>; <code>cwRenderTexturedItems.cpp:145</code>,
+        <code>:214</code> — covers GLTF + scraps; <code>cwRenderLinePlot.cpp:59</code>). The base
+        class already owns the store-publish path (<code>setVisible</code> /
+        <code>publishVisibility</code>) and can reach the intersecter, so it carries the shared
+        machinery once: the pending-key set, the single <code>bvhReady()</code> connection, the
+        <code>isObjectPickReady</code> re-check, and the AND into the publish. Each subclass only
+        reports "registered key X" / "removed key X" at its existing call sites; the
+        <code>publishVisibility()</code> overrides (line plot, textured items) compose the gate
+        into the sub-item state they already publish.</li>
+    <li><strong>Verified precondition (no deadlock):</strong> the BVH build is
+        visibility-independent — visibility filters queries via the snapshot at traversal time
+        (<code>cwGeometryItersecter.cpp:1173</code>, <code>visibleBoundingBox</code>), never the
+        build's input Nodes. A hidden object still gets its sub-BVH built, so the gate always
+        releases.</li>
+  </ul>
+
+  <h3 style="font-size:.95rem">Traps to design around</h3>
+  <ul>
+    <li><strong>Silent <code>addObject</code> rejection must not mean permanently invisible.</strong>
+        <code>addObject</code> drops geometry it can't index (layout reject in
+        <code>cwRenderTexturedItems::addItem</code>; <code>Type::None</code> from
+        <code>cwGltfLoader</code> for strip/fan GLBs). Gate only the span
+        <em>accepted-by-addObject → published</em>; a rejected or never-registered object renders
+        under plain <span class="kbd">userVisible</span> as today. Concretely: the gate arms when
+        <code>addObject</code> accepts and disarms on readiness — it is never armed by default.</li>
+    <li><strong>Mutations that re-dirty an already-visible object must not re-hide it.</strong>
+        <code>setModelMatrix</code> and visibility churn schedule rebuilds constantly; the gate is
+        first-publish-only per key, not "hidden whenever a build is in flight" — otherwise every
+        rotation blinks the note. Once ready, always ready (until the key is removed). This
+        includes <strong>same-key geometry replacement</strong>: <code>updateGeometry</code>
+        (<code>cwRenderTexturedItems.cpp:214</code>) and the line plot re-call
+        <code>addObject</code> with the same key on every geometry update — re-arming there would
+        blink the line plot on every survey edit. Old geometry stays rendered and pickable until
+        the new build installs (the eventual-consistency model), so replacement needs no hiding.
+        Arm only when the key is not already published.</li>
+    <li><strong>Removal + re-add of the same key</strong> (LAZ reload, GLB path change) re-arms the
+        gate — it's a fresh sub-BVH.</li>
+    <li><strong>Prerequisite — fix readiness starvation first (Phase 4a).</strong> One restarter
+        serves all build work, every mutation cancels the in-flight build, and a cancelled build
+        discards everything: the worker returns at <code>cwGeometryItersecter.cpp:2566</code>
+        <em>before</em> banking its built sub-BVHs (<code>:2570-2574</code>), and cache promotion
+        lives in the install callback, which early-returns on cancel. A multi-second LAZ sub-BVH
+        build repeatedly cancelled by unrelated churn (a rotation drag restarts per mouse-move)
+        restarts from scratch each time. Today that means "unpickable during interaction" —
+        mild. Under the gate it means <em>invisible</em> during interaction — severe. Fix: bank
+        completed sub-BVHs across cancels so each restart makes incremental progress
+        (<code>builtSlot</code> already flows worker→install; deposit before the cancel check and
+        promote it even when the full <code>BvhData</code> was abandoned — mind the
+        worker-still-running race on the cancel path). With banking, readiness converges in a
+        bounded number of restarts regardless of churn.</li>
+  </ul>
+
+  <p class="note"><strong>Gate:</strong> test-pinned invariant — after <code>addObject</code>
+  accepts, the effective visibility published to the store stays false until
+  <code>bvhReady()</code> installs the key, then flips true without further owner calls; a
+  rotation of a ready object never un-publishes visibility; a layout-rejected item renders under
+  <code>userVisible</code> alone. Existing <code>[cwGeometryItersecter]</code> and visibility-store
+  suites stay green.</p>
+</div>
+
+<h2>Performance</h2>
+<ul>
+  <li><span class="tag t-gap">real</span> <strong>Readiness starvation under churn</strong> — see
+      the Phase 4a prerequisite above. The only build-path issue with teeth, because the gate
+      escalates it from "unpickable while interacting" to "invisible while interacting".</li>
+  <li><span class="tag t-async">trade</span> <strong>Delayed first pixels for huge clouds</strong> —
+      time-to-visible becomes max(GPU upload, sub-BVH build); for millions of points the build is
+      the long pole (seconds). Deliberate (nothing visible-but-dead), but worth a busy indicator
+      on the LAZ layer, and Phase 4a is what makes the wait bounded rather than open-ended.</li>
+  <li><span class="tag t-sync">fine</span> <strong>Per-mutation CoW refresh</strong> (landed with
+      #505, kept by Phases 1–2) — O(objects) copy + top-level rebuild per
+      <code>setModelMatrix</code>; object count is hundreds at most → microseconds per mouse-move.
+      Phase 2 consolidates paths without adding cost.</li>
+  <li><span class="tag t-sync">fine</span> <strong><code>bvhReady()</code> fan-out</strong> —
+      owners connect only while they have pending keys and disconnect when drained; the re-check
+      is a hash lookup per pending key per install.</li>
+  <li><span class="tag t-sync">fine</span> <strong>Gate flips</strong> — ordinary visibility-store
+      writes, identical in cost to a user hide/show toggle; the RHI backend stays a snapshot
+      reader. Steady-state rebuild churn already reuses cached sub-BVHs
+      (<code>cwGeometryItersecter.cpp:2519</code>) — starvation is exclusively a
+      first-build-of-a-new-heavy-object problem.</li>
+</ul>
 
 <h2>Blast radius</h2>
 <ul>
@@ -319,10 +430,15 @@ static QVector&lt;BvhNode&gt; BvhData::rebuildTopLevel(const BvhData&amp;);   //
   <li><strong>Phase 2:</strong> <code>cwGeometryItersecter</code> mutators + the private helpers they
       call; no header API change visible to <code>cwRenderObject</code> subclasses. The worker install
       callback (<code>shouldPublish</code>) is read but not restructured.</li>
-  <li><strong>Phase 3:</strong> depends on the option — A is docs + a comment; B adds a delta variant
-      and a traversal branch for null-sub-BVH leaves; C adds a threshold constant and an inline build
-      path. Option A/B may touch <code>cwRenderTexturedItems::addItem</code> / <code>updateGeometry</code>
-      call expectations and any pick caller that assumed immediacy.</li>
+  <li><strong>Phase 3:</strong> Option A — docs + a comment on <code>addObject</code>; no code
+      change beyond what Phase 4 delivers.</li>
+  <li><strong>Phase 4:</strong> <code>cwGeometryItersecter.h/.cpp</code> (one const query +
+      doc on <code>bvhReady()</code>); <code>cwRenderObject</code> (the shared gate machinery);
+      a couple of lines each at the four <code>addObject</code>/removal sites in
+      <code>cwRenderPointCloud</code>, <code>cwRenderTexturedItems</code>,
+      <code>cwRenderLinePlot</code>, plus their <code>publishVisibility()</code> overrides;
+      tests for the gate lifecycle. The visibility store, RHI backend, and QML surface are
+      untouched — the gate rides the existing owner→store publish path.</li>
 </ul>
 
 <h2>Acceptance criteria</h2>
@@ -333,8 +449,11 @@ static QVector&lt;BvhNode&gt; BvhData::rebuildTopLevel(const BvhData&amp;);   //
   <li>Exactly one function mutates <code>m_bvh</code> synchronously (A1 done);
       <code>invalidatePublishedSlot</code> / <code>refreshPublishedModelMatrix</code> are gone or become
       thin wrappers.</li>
-  <li>The <code>addObject</code> pre-build pick behavior is documented and test-pinned (R3 done),
-      whichever option is chosen.</li>
+  <li>The <code>addObject</code> pre-build pick behavior is documented and test-pinned (R3 done):
+      Option A, the not-ready contract.</li>
+  <li><strong>Rendered ⇒ pickable</strong> (Phase 4 done): an intersecter-registered heavy object
+      is never visible before its sub-BVH is published; first-publish-only gating (no re-hide on
+      rebuilds); rejected geometry falls back to plain <code>userVisible</code>.</li>
 </ul>
 
 <h2>Not in this plan</h2>
