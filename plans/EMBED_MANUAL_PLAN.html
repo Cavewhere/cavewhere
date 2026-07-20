@@ -130,7 +130,7 @@
     <span class="chip"><b>Source of truth</b> docs/manual/*.md</span>
     <span class="chip"><b>Renderer</b> Qt TextFormat.MarkdownText</span>
     <span class="chip"><b>Nav</b> cwPageSelectionModel, page per article</span>
-    <span class="chip"><b>Status</b> CP1–CP4 + CP6 done · CP5 (dark-mode polish, incl. themed link color) next</span>
+    <span class="chip"><b>Status</b> CP1–CP4 + CP6 done · CP5 mostly implemented (styling pass + themed links + tests, uncommitted) · remaining: dark-mode visual pass + drawer test gap</span>
   </div>
 </header>
 
@@ -163,10 +163,13 @@ back/forward and search. A web view fights both goals and costs the mobile build
   <p><strong>Render the Markdown natively</strong> with Qt&nbsp;6's <code>TextFormat.MarkdownText</code>
   (zero new dependencies; keeps iOS/mobile alive), and make <strong>each article its own
   registered page</strong> so the existing history stack carries back/forward and the breadcrumb.
-  The honest cost is fidelity: article bodies use Qt's default Markdown styling, not the
-  <code>manual.html</code> CSS. We rebuild the <em>chrome</em> (sidebar, search, header) natively —
-  which is what makes the integration work — and theme the reading column through
-  <code>Theme.qml</code>.</p>
+  We rebuild the <em>chrome</em> (sidebar, search, header) natively — which is what makes the
+  integration work — and theme the reading column through <code>Theme.qml</code>.
+  <br><em>Update (CP5):</em> the original "honest cost is fidelity — article bodies use Qt's default
+  Markdown styling" is now largely bought back. <code>cwDocumentStyler</code> post-processes the parsed
+  <code>QTextDocument</code> to match <code>manual.html</code>'s scale (heading sizes, block spacing,
+  line-height, responsive images) and recolors links to the theme — so the render is close to the web
+  manual, not Qt's raw defaults.</p>
 </div>
 
 <h3>Why this fits what's already there</h3>
@@ -219,8 +222,9 @@ File → Docs  ──▶  gotoPageByName(null,"Docs")
 <ul>
   <li><strong><code>DocsPage.qml</code></strong> — root <code>StandardPage</code> (same trivial wrapper
     <code>AboutPage.qml</code> uses). One shared component with a <code>slug</code> property; a
-    themed reading column (<code>Flickable</code> + <code>QC.Label</code> with
-    <code>textFormat: Label.MarkdownText</code>), plus a native sidebar/TOC and search box as chrome.</li>
+    themed reading column (<code>Flickable</code> + a read-only <code>QC.TextArea</code> with
+    <code>textFormat: MarkdownText</code>, since CP6 — was a <code>QC.Label</code> in CP1–CP5), post-processed
+    by <code>cwDocumentStyler</code>, plus a native sidebar/TOC and search box as chrome.</li>
   <li><strong>Registration loop</strong> in <code>MainContent.qml</code>'s
     <code>Component.onCompleted</code> (alongside the existing About/Settings/Cavern
     registrations at <code>:200–212</code>): register a <code>"Docs"</code> landing page, then loop the
@@ -435,19 +439,40 @@ docs-website tool, never a CaveWhere build dependency.</p>
 </div>
 
 <div class="cp">
-  <span class="tag">CP5 · Polish &amp; tests</span>
-  <h3>Dark-mode verification and fuller tests</h3>
-  <p>Verify the reading column reads correctly in dark mode — including the sidebar/drawer (CP4) and the
-    document-backed body (CP6). One concrete carry-over from CP6: the <code>QC.TextArea</code> body has no
-    <code>linkColor</code>, so links currently render in QTextDocument's default anchor color; restore
-    <code>Theme.textLink</code> (note: <code>QTextDocument::setDefaultStyleSheet</code> only affects HTML,
-    NOT <code>MarkdownText</code>, so the fix likely needs a palette Link role or post-processing anchor
-    char-formats — needs investigation).
-    The <code>tst_DocsPage.qml</code> suite is already fuller than the CP1 smoke test (21 cases across
-    render, cross-link history, search, compact drawer, and find-on-page). Remaining test gap: the drawer
-    <em>open → pick-from-inside</em> path (the Popup interior is unreachable via the page-chain
-    ObjectFinder). Confirm the offscreen/mobile build still links (no web module pulled in).</p>
-  <div class="files">~ test-qml/tst_DocsPage.qml · ~ DocsPage.qml</div>
+  <span class="tag">CP5 · Reading polish &amp; tests</span>
+  <h3>Reading typography, themed links, dark-mode verification, tests</h3>
+  <p class="rec">◑ Mostly implemented (not yet committed). The scope grew past "dark-mode verification":
+    a user observed the native Markdown render was too tightly spaced, too small, over-large images, and a
+    hard-to-read body font. That is now handled by a new C++ post-processor, <code>cwDocumentStyler</code>
+    (<code>DocumentStyler</code>, <code>QML_NAMED_ELEMENT</code>), which restyles the parsed
+    <code>QTextDocument</code> to match the web manual: heading sizes (2.6 / 1.9 / 1.45 rem over the body),
+    per-block margins and proportional line-height, a muted lead paragraph and image captions, and — the one
+    thing no stylesheet can do for Markdown — images clamped to the reading width so figures shrink on a
+    narrow window instead of overflowing. Wired in <code>DocsPage.qml</code> as a <code>DocumentStyler</code>
+    bound to the body's <code>textDocument</code>.</p>
+  <p><strong>Reading font.</strong> The body was rendering in the app's default UI font (Yanone Kaffeesatz,
+    a condensed display face) which is tiring as body copy. Added two <code>Theme.qml</code> tokens for a
+    <em>fixed</em> manual pairing independent of the user's chrome font: <code>fontFamilyReading</code>
+    ("Fira Sans", the readable body) and <code>fontFamilyHeading</code> ("Yanone Kaffeesatz", the display
+    heads); the styler sets headings to <code>fontFamilyHeading</code> while the body uses
+    <code>fontFamilyReading</code>. Both are bundled/registered fonts, mirroring the existing
+    <code>fontFamilyMono</code> token.</p>
+  <p><strong>Themed link color — done, via the post-processing route this checkpoint predicted.</strong>
+    <code>cwDocumentStyler</code> gained a <code>linkColor</code> property (<code>Theme.textLink</code>) and
+    recolors anchor char-formats in its fragment pass, so links track the theme (fixing dark-mode link
+    readability) instead of QTextDocument's default anchor color. This confirms the "post-processing anchor
+    char-formats" option over <code>setDefaultStyleSheet</code> (which is HTML-only).</p>
+  <p><strong>Tests.</strong> New <code>testcases/test_cwDocumentStyler.cpp</code> (<code>[cwDocumentStyler]</code>,
+    54 assertions) drives a real <code>TextEdit</code> (MarkdownText) to get a live
+    <code>QQuickTextDocument</code>, then asserts heading sizing + heading font family, the muted/larger lead
+    paragraph, link recoloring, body proportional line-height, and image clamp (only-shrink) — the C++ unit
+    coverage the styler needs beyond the transitive 25-case <code>tst_DocsPage</code> suite.</p>
+  <p><strong>Remaining before CP5 is done:</strong> a visual dark-mode pass over the sidebar/drawer (CP4) and
+    the styled body (CP6); the drawer <em>open → pick-from-inside</em> test gap (the Popup interior is
+    unreachable via the page-chain ObjectFinder); and confirm the offscreen/mobile build still links (no web
+    module pulled in).</p>
+  <div class="files">+ cavewherelib/src/cwDocumentStyler.{h,cpp} · ~ DocsPage.qml · ~ Theme.qml
+    (fontFamilyReading / fontFamilyHeading) · + testcases/test_cwDocumentStyler.cpp · ~ test-qml/tst_DocsPage.qml</div>
 </div>
 
 <div class="cp">
@@ -480,17 +505,18 @@ docs-website tool, never a CaveWhere build dependency.</p>
     would mean mutating the document's char formats (invasive for a read-only viewer). The current match
     is highlighted via the selection and the bar shows a running <code>"3/12"</code> count — the standard
     find affordance (ship-simplest-first). (2) <em>Themed link color</em> is lost in the swap:
-    <code>TextEdit</code> has no <code>linkColor</code> (only <code>Label</code> did), so links render in
-    QTextDocument's default anchor color. This is a dark-mode readability nit — folded into <strong>CP5</strong>
-    (dark-mode polish); note <code>setDefaultStyleSheet</code> is HTML-only so restoring <code>Theme.textLink</code> on the <code>MarkdownText</code> body needs another approach.</p>
+    <code>TextEdit</code> has no <code>linkColor</code> (only <code>Label</code> did), so links rendered in
+    QTextDocument's default anchor color. <em>Resolved in CP5:</em> <code>cwDocumentStyler</code> now recolors
+    anchor char-formats to <code>Theme.textLink</code> (the "another approach" — <code>setDefaultStyleSheet</code>
+    is HTML-only), so links track the theme in both modes.</p>
   <p>The CP4 search box finds <em>which article</em> to open (it filters the TOC across the manual). This
     checkpoint adds the other axis: <strong>find-on-page</strong> — a Ctrl+F bar that locates, highlights,
     and scrolls to text matches <em>inside</em> the article you're reading — and lands the
     <strong>same-page <code>#anchor</code> scroll</strong> that CP3 deferred (decision&nbsp;4), since both
     need the same foundation.</p>
-  <p><strong>Why it's not a toggle.</strong> The reading column is a <code>QC.Label</code> with
+  <p><strong>Why it's not a toggle.</strong> Before CP6 the reading column was a <code>QC.Label</code> with
     <code>textFormat: MarkdownText</code>, and Qt's <code>Text</code>/<code>Label</code> has no built-in
-    find or highlight and exposes no document handle. The move is to render the body through a
+    find or highlight and exposes no document handle. The move (done in CP6) was to render the body through a
     document-backed read-only text view (a read-only <code>QC.TextArea</code>, or a <code>Label</code>
     whose <code>QQuickTextDocument</code> we reach) so we can call <code>QTextDocument::find()</code> to
     locate a match, select it, and scroll it into view. That <em>same</em> <code>QTextDocument</code> is
@@ -556,6 +582,17 @@ manual; each is worth doing before or alongside CP4, where the payoffs land.</p>
     to <em>heading</em> slugs: the real fix is a shared slug contract (one function both the app and the build call)
     or generating an anchor table from the build. Blast radius: <code>cwDocumentFinder</code> + a cross-check test.
     Not a live bug against today's ASCII-only headings; do it before headings gain punctuation/unicode.</li>
+  <li><strong>R1 (from the CP5 styling review) · Shared <code>QQuickTextDocument</code>-observer base for the two doc wrappers.</strong>
+    <code>cwDocumentFinder</code> and <code>cwDocumentStyler</code> are the only two <code>QQuickTextDocument</code>
+    wrappers in the tree and now duplicate an identical block verbatim: the <code>QPointer&lt;QQuickTextDocument&gt; m_document</code>
+    (with the same word-for-word "Held by QPointer… auto-nulls" comment), the
+    <code>Q_PROPERTY(QQuickTextDocument* document …)</code>, the identical <code>textDocument()</code> helper, and the
+    <code>setDocument</code> guard shape. A small <code>cwTextDocumentObserver</code> base (holds <code>m_document</code>,
+    <code>textDocument()</code>, <code>setDocument()</code> + a virtual <code>onDocumentChanged()</code>) would remove the
+    copy. Blast radius: both classes + their tests. Borderline (only two consumers today) — do it if a third consumer
+    appears or when either class is next touched. <strong>Also record the invariant it should enforce:</strong> a document
+    post-processor must only change <em>formats</em>, never insert/remove text, or <code>cwDocumentFinder</code>'s cached
+    character positions corrupt (the styler is format-only today; a comment on <code>apply()</code> notes this).</li>
   <li><strong>A3 · Move the "empty slug = landing" rule into C++.</strong> The routing lives in QML today
     (<code>DocsPage.qml:19</code>: <code>slug === "" ? landingBody() : body(slug)</code>). Folding it into
     <code>body("")</code> returning the landing keeps the QML seam a single dumb call and puts the routing
@@ -610,10 +647,11 @@ curated manual. A1 below naturally pairs with CP4 (it builds the TOC/search over
 </ul>
 
 <footer>
-  CP1–CP4 + CP6 done (83 <code>[cwManualIndex]</code>+<code>[cwManualSearchModel]</code> assertions +
-  23 <code>tst_DocsPage</code> cases green; app + both test binaries link clean) · CaveWhere · renders
-  natively, no web engine · all file:line references verified against the current tree. Decisions 1–6
-  resolved — only CP5 (dark-mode polish incl. restoring the themed link color + fuller tests) remains.
+  CP1–CP4 + CP6 done, CP5 mostly implemented (styling pass + themed links + tests; not yet committed)
+  (83 <code>[cwManualIndex]</code>+<code>[cwManualSearchModel]</code> + 54 <code>[cwDocumentStyler]</code>
+  assertions + 25 <code>tst_DocsPage</code> cases green; app + both test binaries link clean) · CaveWhere ·
+  renders natively, no web engine · all file:line references verified against the current tree. Decisions 1–6
+  resolved — CP5 remaining: dark-mode visual verification + the drawer open→pick-inside test gap.
 </footer>
 
 </div>

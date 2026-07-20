@@ -206,6 +206,21 @@ StandardPage {
         }
     }
 
+    // Styles the rendered Markdown to match the web manual: heading sizes, block
+    // spacing, and — what no stylesheet can do for Markdown — images clamped to the
+    // reading column so figures shrink instead of overflowing on a narrow window.
+    DocumentStyler {
+        id: stylerId
+        objectName: "docsStyler"
+
+        document: bodyId.textDocument
+        baseFontSize: bodyId.font.pixelSize
+        contentWidth: bodyId.width
+        mutedColor: Theme.textSubtle
+        linkColor: Theme.textLink
+        headingFontFamily: Theme.fontFamilyHeading
+    }
+
     QQ.Flickable {
         id: scrollId
 
@@ -251,8 +266,8 @@ StandardPage {
                 color: Theme.text
                 selectionColor: Theme.highlight
                 selectedTextColor: Theme.textInverse
-                font.family: Theme.fontFamilyBody
-                font.pixelSize: Theme.fontSizeBody
+                font.family: Theme.fontFamilyReading
+                font.pixelSize: Theme.fontSizeUI
 
                 // Relative .md links (the landing index and inter-article
                 // cross-references) navigate in-app through the page model; a

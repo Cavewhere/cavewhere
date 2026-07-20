@@ -75,6 +75,13 @@ QtObject {
     readonly property string fontFamilyBody: Qt.application.font.family
     readonly property string fontFamilyMono: "Courier Prime"
 
+    // A fixed display+body pairing for long-form reading (the manual), independent
+    // of the user-configurable UI chrome font: condensed Yanone Kaffeesatz heads
+    // over a readable Fira Sans body, so the reading typography stays consistent
+    // whichever family the chrome uses.
+    readonly property string fontFamilyHeading: "Yanone Kaffeesatz"
+    readonly property string fontFamilyReading: "Fira Sans"
+
     readonly property int fontSizeCaption: Math.round(11 * fontScale)
     readonly property int fontSizeSmall:   Math.round(12 * fontScale)
     readonly property int fontSizeBody:    Math.round(14 * fontScale)
