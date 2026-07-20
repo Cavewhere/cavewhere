@@ -484,6 +484,28 @@ MainWindowTest {
                    "changing the article should close the find bar")
         }
 
+        // Switching articles starts the reader at the top rather than carrying
+        // over the previous page's scroll offset. A long article scrolled part-
+        // way down must snap back to the top when a new slug loads.
+        function test_navigatingResetsScrollToTop() {
+            let body = findBody()
+            let flick = findReadingFlickable()
+            verify(flick !== null, "the reading column should be a Flickable")
+
+            docsPageId.slug = "concepts-glossary"
+            tryVerify(function() { return body.text.indexOf("Glossary") >= 0 }, 2000,
+                      "the glossary article did not load")
+            tryVerify(function() { return flick.contentHeight > flick.height }, 2000,
+                      "the glossary should overflow the viewport so it can be scrolled")
+
+            flick.contentY = flick.contentHeight - flick.height
+            verify(flick.contentY > 0, "the reading column should be scrolled away from the top")
+
+            docsPageId.slug = "notes-add-a-note"
+            tryCompare(flick, "contentY", 0, 2000,
+                       "switching articles should reset the scroll to the top")
+        }
+
         // Links get a pointing-hand cursor; plain text keeps the selection
         // I-beam so the body still reads as selectable. The hovered-link branch
         // is driven by real hover events (not exercised offscreen), so this

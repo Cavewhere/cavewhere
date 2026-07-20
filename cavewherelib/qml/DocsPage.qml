@@ -103,8 +103,14 @@ StandardPage {
         }
     }
 
-    // A new article invalidates the current find state and its matches.
-    onSlugChanged: docsPageId.closeFind()
+    // A new article invalidates the current find state and its matches, and
+    // starts the reader at the top rather than wherever the last page was
+    // scrolled. Resetting to 0 is safe regardless of the new body's height,
+    // since it's the floor of the scroll range.
+    onSlugChanged: {
+        docsPageId.closeFind()
+        scrollId.contentY = 0
+    }
 
     // Ctrl+F (Cmd+F on macOS) opens the find bar and focuses it.
     QQ.Shortcut {
