@@ -190,6 +190,63 @@ MainWindowTest {
             tryVerify(() => { return note.count === 0 }, 2000, "Delete should remove the selected LiDAR station")
         }
 
+        // LiDAR stations must be hidden outside carpet mode so they can't be
+        // accidentally selected, moved, or deleted.
+        function test_stationsHiddenOutsideCarpetMode() {
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+
+            //When the note first opens (not in carpet mode) stations stay hidden
+            let lidarViewer = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId")
+            //compare, not verify — verify(!undefined) would pass if the property were renamed away
+            compare(lidarViewer.stationsVisible, false, "Stations should be hidden when the note first opens")
+
+            //Enter carpet mode and add a station
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
+            mouseClick(carpetButton)
+
+            let addStationButton = null
+            tryVerify(() => {
+                          addStationButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->addScrapStation")
+                          return addStationButton !== null && addStationButton.visible
+                      })
+            mouseClick(addStationButton)
+
+            let addStation = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARAddStationInteraction")
+            mouseClick(addStation, 387, 257)
+
+            let stationNameInput = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0->coreTextInput")
+            stationNameInput.openEditor();
+            keyClick(54, 0) //6
+            keyClick(16777220, 0) //Return
+
+            let note = noteGallery.currentNoteLiDAR
+            verify(note !== null, "The LiDAR note should be selected")
+            tryVerify(() => { return note.count === 1 }, 2000, "One station should be added")
+
+            //Hold the station item — it survives (hidden) after leaving carpet mode
+            let stationItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARStation_0")
+            verify(stationItem !== null, "The station item should exist")
+
+            //In carpet mode the station is shown for editing
+            tryVerify(() => { return stationItem.visible }, 2000, "Station should be visible in carpet mode")
+
+            //Leave carpet mode — the station must stay in the note but hide from view
+            let back = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->backButton")
+            mouseClick(back)
+
+            tryVerify(() => { return !stationItem.visible }, 2000, "Station should hide after leaving carpet mode")
+            compare(note.count, 1, "Leaving carpet mode must not remove the station")
+
+            //Let the exit transition finish — carpetButtonArea stays visible and on
+            //top while it shrinks, and would otherwise swallow the click below.
+            //Fixed wait per plans/WAIT_AUDIT_PLAN.md (carpet animations).
+            wait(500)
+
+            //Re-entering carpet mode shows the station again
+            mouseClick(carpetButton)
+            tryVerify(() => { return stationItem.visible }, 2000, "Station should reappear when re-entering carpet mode")
+        }
+
         function test_northInteraction() {
             //Turn off auto calculate
             let _obj1 = null

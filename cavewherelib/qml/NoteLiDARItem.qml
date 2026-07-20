@@ -8,6 +8,10 @@ RegionViewer {
     property NoteLiDAR note
     property bool isNarrow: false
 
+    //Stations are only shown while editing in carpet mode, so they can't be
+    //accidentally selected, moved, or deleted when just viewing the note.
+    readonly property bool stationsVisible: state === "SELECT" || state === "ADD-STATION"
+
     function captureIconIfNeeded() {
         if (!note || !RootData.noteLiDARManager) {
             return
@@ -58,7 +62,7 @@ RegionViewer {
     orthoProjection.enabled: true
     perspectiveProjection.enabled: false
 
-    state: "SELECT"
+    state: ""
 
     TurnTableInteraction {
         id: turnTableInteractionId
@@ -116,6 +120,10 @@ RegionViewer {
     Item3DRepeater {
         id: noteStationRepeaterId
         anchors.fill: parent
+
+        //The transform updater drives each station's visible flag (viewport
+        //clipping), so gate it here rather than binding the delegate's visible.
+        pointsVisible: rhiViewerId.stationsVisible
         camera: rhiViewerId.camera
         model: note
         positionRole: NoteLiDAR.UpPositionRole

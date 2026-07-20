@@ -112,6 +112,23 @@ void cwItem3DRepeater::setCamera(cwCamera* camera)
     emit cameraChanged();
 }
 
+bool cwItem3DRepeater::pointsVisible() const
+{
+    if(m_transformUpdater == nullptr) {
+        return false;
+    }
+    return m_transformUpdater->pointsVisible();
+}
+
+void cwItem3DRepeater::setPointsVisible(bool pointsVisible)
+{
+    if(m_transformUpdater == nullptr || m_transformUpdater->pointsVisible() == pointsVisible) {
+        return;
+    }
+    m_transformUpdater->setPointsVisible(pointsVisible);
+    emit pointsVisibleChanged();
+}
+
 void cwItem3DRepeater::onRowsInserted(const QModelIndex& parent, int first, int last)
 {
     if(!isFlatListModel(parent)) {

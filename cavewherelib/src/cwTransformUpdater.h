@@ -37,6 +37,7 @@ class CAVEWHERE_LIB_EXPORT cwTransformUpdater : public QObject
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
     Q_PROPERTY(QMatrix4x4 matrix READ matrix NOTIFY matrixChanged)
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
+    Q_PROPERTY(bool pointsVisible READ pointsVisible WRITE setPointsVisible NOTIFY pointsVisibleChanged)
 
 public:
     explicit cwTransformUpdater(QObject *parent = 0);
@@ -55,6 +56,9 @@ public:
     bool enabled() const;
     void setEnabled(bool enabled);
 
+    bool pointsVisible() const;
+    void setPointsVisible(bool pointsVisible);
+
     Q_INVOKABLE QVector3D mapFromViewportToModel(QPointF viewport) const;
     Q_INVOKABLE QPointF mapModelToViewport(QVector3D modelPoint) const;
     Q_INVOKABLE QPointF mapModelToViewport(QPointF modelPoint) const;
@@ -64,6 +68,7 @@ signals:
     void cameraChanged();
     void updated();
     void enabledChanged();
+    void pointsVisibleChanged();
 
 public slots:
     void update();
@@ -79,6 +84,7 @@ private:
 
     QMatrix4x4 TransformMatrix; //!< The total matrix that converts a object's position into qt coordinates
     bool Enabled = true; //!<
+    bool PointsVisible = true; //!< When false, all points are hidden regardless of viewport clipping
 
     void updatePoint(QQuickItem* object);
 

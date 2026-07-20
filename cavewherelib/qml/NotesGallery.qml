@@ -80,7 +80,7 @@ QQ.Rectangle {
     function exitCarpetMode() {
         noteGallery.state = "CARPET"
         noteGallery.state = ""
-        noteLidarArea.state = "SELECT"
+        noteLidarArea.state = ""
         noteGallery.backClicked()
     }
 

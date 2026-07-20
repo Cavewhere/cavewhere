@@ -18,6 +18,8 @@ using namespace Catch;
 
 // Under test
 #include "cwItem3DRepeater.h"
+#include "cwCamera.h"
+#include "cwSignalSpy.h"
 
 
 
@@ -403,5 +405,81 @@ TEST_CASE("Item3DRepeater updates position when positionRole changes", "[cwItem3
     delete root;
 }
 
+TEST_CASE("Item3DRepeater pointsVisible defaults to true", "[cwItem3DRepeater]") {
+    QQmlEngine engine;
+    QObject* root = makeRootWithRepeater(engine);
+    auto* rep = findRepeater(root);
+
+    REQUIRE(rep->pointsVisible() == true);
+
+    delete root;
+}
+
+TEST_CASE("Item3DRepeater pointsVisible round-trips and notifies", "[cwItem3DRepeater]") {
+    QQmlEngine engine;
+    QObject* root = makeRootWithRepeater(engine);
+    auto* rep = findRepeater(root);
+
+    cwSignalSpy visibleSpy(rep, &cwItem3DRepeater::pointsVisibleChanged);
+
+    rep->setPointsVisible(false);
+    REQUIRE(rep->pointsVisible() == false);
+    REQUIRE(visibleSpy.size() == 1);
+
+    //Setting the same value again must not re-notify
+    rep->setPointsVisible(false);
+    REQUIRE(visibleSpy.size() == 1);
+
+    rep->setPointsVisible(true);
+    REQUIRE(rep->pointsVisible() == true);
+    REQUIRE(visibleSpy.size() == 2);
+
+    delete root;
+}
+
+TEST_CASE("Item3DRepeater pointsVisible hides delegates created for each row", "[cwItem3DRepeater]") {
+    QQmlEngine engine;
+    QObject* root = makeRootWithRepeater(engine);
+    auto* rep = findRepeater(root);
+    rep->setComponent(makeDelegateComponent(engine, root));
+
+    cwCamera camera; //Unparented - 'root' is deleted below and must not own it
+    cwProjection projection;
+    projection.setPerspective(55, 1.0, 1.0, 10000);
+    camera.setProjection(projection);
+    camera.setViewport(QRect(0, 0, 400, 300));
+    camera.setViewMatrix(QMatrix4x4()); //Looking down the -z axis
+    rep->setCamera(&camera);
+
+    TestListModel model;
+    model.resetWith({
+        { QVector3D(0, 0, -10), QStringLiteral("A"), 1.0, QVector3D(0,0,0), true },
+        { QVector3D(0, 0, -20), QStringLiteral("B"), 2.0, QVector3D(0,0,0), true }
+    });
+    rep->setModel(&model);
+    rep->setPositionRole(TestListModel::PositionRole);
+
+    auto items = repeaterChildren(rep);
+    REQUIRE(items.size() == 2);
+    REQUIRE(items[0]->isVisible() == true);
+    REQUIRE(items[1]->isVisible() == true);
+
+    rep->setPointsVisible(false);
+    CHECK(items[0]->isVisible() == false);
+    CHECK(items[1]->isVisible() == false);
+
+    //A row added while hidden must not pop into view
+    model.insertRowAt(2, { QVector3D(0, 0, -30), QStringLiteral("C"), 3.0, QVector3D(0,0,0), true });
+    items = repeaterChildren(rep);
+    REQUIRE(items.size() == 3);
+    CHECK(items[2]->isVisible() == false);
+
+    rep->setPointsVisible(true);
+    for(QQuickItem* item : std::as_const(items)) {
+        CHECK(item->isVisible() == true);
+    }
+
+    delete root;
+}
 
 #include "test_cwItem3DRepeater.moc"

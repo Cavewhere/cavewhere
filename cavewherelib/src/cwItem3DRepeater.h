@@ -36,6 +36,7 @@ class CAVEWHERE_LIB_EXPORT cwItem3DRepeater : public cwAbstractPointManager
     Q_PROPERTY(QAbstractItemModel* model READ model WRITE setModel NOTIFY modelChanged)
     Q_PROPERTY(int positionRole READ positionRole WRITE setPositionRole NOTIFY positionRoleChanged)
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
+    Q_PROPERTY(bool pointsVisible READ pointsVisible WRITE setPointsVisible NOTIFY pointsVisibleChanged)
 
 public:
     explicit cwItem3DRepeater(QQuickItem* parent = nullptr);
@@ -50,10 +51,14 @@ public:
     cwCamera* camera() const;
     void setCamera(cwCamera* camera);
 
+    bool pointsVisible() const;
+    void setPointsVisible(bool pointsVisible);
+
 signals:
     void modelChanged();
     void positionRoleChanged();
     void cameraChanged();
+    void pointsVisibleChanged();
 
 protected:
     // Implement abstract hooks from base
