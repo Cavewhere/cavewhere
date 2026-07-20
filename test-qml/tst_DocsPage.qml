@@ -483,5 +483,26 @@ MainWindowTest {
             verify(!docsPageId.findVisible,
                    "changing the article should close the find bar")
         }
+
+        // Links get a pointing-hand cursor; plain text keeps the selection
+        // I-beam so the body still reads as selectable. The hovered-link branch
+        // is driven by real hover events (not exercised offscreen), so this
+        // guards the handler's presence and its no-link default.
+        function test_linkCursorDefaultsToIBeam() {
+            let body = findBody()
+            // The handler is a non-visual child, so it lives in the body's
+            // default data list rather than being reachable by object chain.
+            let cursor = null
+            for (let i = 0; i < body.data.length; i++) {
+                if (body.data[i].objectName === "docsBodyCursor") {
+                    cursor = body.data[i]
+                    break
+                }
+            }
+            verify(cursor !== null, "the body should carry a link-cursor handler")
+            compare(body.hoveredLink, "", "no link should be hovered at rest")
+            compare(cursor.cursorShape, Qt.IBeamCursor,
+                    "over plain text the cursor should be the selection I-beam")
+        }
     }
 }

@@ -293,6 +293,18 @@ StandardPage {
                         break
                     }
                 }
+
+                // A pointing-hand cursor marks links as clickable. Over plain
+                // text the read-only editor keeps its selection I-beam, since
+                // the body is still selectable for copy. hoveredLink stays
+                // current because this handler doesn't block the TextArea's
+                // own hover events (blocking defaults to false).
+                QQ.HoverHandler {
+                    objectName: "docsBodyCursor"
+                    cursorShape: bodyId.hoveredLink !== ""
+                                 ? Qt.PointingHandCursor
+                                 : Qt.IBeamCursor
+                }
             }
         }
     }
