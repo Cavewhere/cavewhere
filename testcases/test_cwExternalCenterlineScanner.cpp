@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Our
+#include "cwExternalCenterline.h"
 #include "cwExternalCenterlineScanner.h"
 
 // Test helpers
@@ -107,6 +108,27 @@ TEST_CASE("formatFor maps each known extension and rejects unknown", "[Scanner][
     CHECK(formatFor(QStringLiteral("foo.srv")) == Format::Walls);
     CHECK(formatFor(QStringLiteral("foo")) == Format::Unknown);
     CHECK(formatFor(QStringLiteral("foo.unknown")) == Format::Unknown);
+}
+
+TEST_CASE("formatName maps formats to display names, through the gadget too",
+          "[Scanner]")
+{
+    using namespace cwExternalCenterlineScanner;
+    CHECK(formatName(Format::Survex) == QStringLiteral("Survex"));
+    CHECK(formatName(Format::Compass) == QStringLiteral("Compass"));
+    CHECK(formatName(Format::Walls) == QStringLiteral("Walls"));
+    CHECK(formatName(Format::Unknown).isEmpty());
+
+    // cwExternalCenterline::format is the QML-facing wrapper the
+    // attached header binds to.
+    CHECK(cwExternalCenterline(QStringLiteral("cave.svx")).format()
+          == QStringLiteral("Survex"));
+    CHECK(cwExternalCenterline(QStringLiteral("cave.MAK")).format()
+          == QStringLiteral("Compass"));
+    CHECK(cwExternalCenterline(QStringLiteral("cave.wpj")).format()
+          == QStringLiteral("Walls"));
+    CHECK(cwExternalCenterline(QStringLiteral("cave.txt")).format().isEmpty());
+    CHECK(cwExternalCenterline().format().isEmpty());
 }
 
 TEST_CASE("scan rejects unknown extension", "[Scanner][Survex]")

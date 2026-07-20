@@ -511,6 +511,21 @@ Format formatFor(const QString& entryFile)
     return Format::Unknown;
 }
 
+QString formatName(Format format)
+{
+    switch (format) {
+    case Format::Survex:
+        return QStringLiteral("Survex");
+    case Format::Compass:
+        return QStringLiteral("Compass");
+    case Format::Walls:
+        return QStringLiteral("Walls");
+    case Format::Unknown:
+        break;
+    }
+    return QString();
+}
+
 Monad::Result<ScanResult> scan(const QString& entryFile)
 {
     const Format format = formatFor(entryFile);

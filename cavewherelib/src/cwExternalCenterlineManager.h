@@ -30,6 +30,10 @@ class cwTrip;
 #include <QStringList>
 #include <QUuid>
 
+//Std includes
+#include <atomic>
+#include <memory>
+
 QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
 
 //Async includes
@@ -148,12 +152,32 @@ public:
     attachCenterline(cwTrip* trip, const QString& sourcePath);
     QFuture<Monad::ResultBase> detachCenterline(cwTrip* trip);
 
+    // Requests cancellation of ownerId's in-flight attachCenterline.
+    // Honored only until the attach's internal scan lands - the flag
+    // is consulted exactly once, at that point, so a later call is a
+    // structural no-op and the attach runs to completion (the §5 q14
+    // rule). The busy token is held until either outcome reports, so
+    // cancel can never free the owner while reconcile is writing.
+    // Never touches a detach or updateFromSource in flight; a
+    // cancelled attach ends in one attachCompleted report with
+    // canceled == true.
+    //
+    // This is the only safe cancel. Cancelling the QFuture returned by
+    // attachCenterline directly does NOT get these guarantees: past
+    // the scan-landing point the orchestrator ignores future-cancel
+    // and keeps writing, while this manager's canceled observer fires
+    // immediately - releasing the token and reporting canceled for an
+    // attach that may still land. That seam predates cancelAttach and
+    // remains for tests; production callers must not cancel the
+    // returned future.
+    Q_INVOKABLE void cancelAttach(const QUuid& ownerId);
+
     // True while an attach / detach / updateFromSource for ownerId has
     // not yet drained. QML binds this one query for the
     // Update/Detach/re-attach affordances; ownerBusyChanged notifies.
     Q_INVOKABLE bool isOwnerBusy(const QUuid& ownerId) const
     {
-        return m_busyOwners.contains(ownerId);
+        return m_activeOperations.contains(ownerId);
     }
 
     // Per-owner missing-source query for QML. JS can't test QUuid
@@ -323,21 +347,103 @@ private:
     // their dep/warning counts so it never touches the disk.
     QVector<cwAttachedCenterlinesModel::Row> m_lastScanRows;
 
-    // Owners with an attach/detach/updateFromSource still draining;
-    // guards against interleaved per-owner filesystem operations
-    // (commit-5 review's in-flight-token item, generalized to the
-    // per-owner operation token at commit 9).
-    QSet<QUuid> m_busyOwners;
+    // Per-owner operation registry: one entry while an
+    // attach/detach/updateFromSource drains, guarding against
+    // interleaved per-owner filesystem operations (commit-5 review's
+    // in-flight-token item, generalized at commit 9, made a registry
+    // for cancelAttach at commit 12). The kind keeps cancelAttach off
+    // detach/update operations; the cancelFlag is the attach
+    // orchestrator's cancel seam.
+    enum class OperationKind { Attach, Detach, Update };
+
+    struct ActiveOperation {
+        OperationKind kind = OperationKind::Update;
+        std::shared_ptr<std::atomic_bool> cancelFlag; // Attach only
+    };
+
+    QHash<QUuid, ActiveOperation> m_activeOperations;
 
     // Per-owner file-owns-declination flag from the most recent recompute;
     // read via fileOwnsDeclination() and baked into each solve's Input by
     // the consumer. Rebuilt wholesale on every recompute.
     QHash<QUuid, bool> m_fileOwnsDeclination;
 
-    // Per-owner operation token bookkeeping; every begin/end pair emits
-    // ownerBusyChanged so QML affordances track the flip.
-    void beginOwnerOperation(const QUuid& ownerId);
-    void endOwnerOperation(const QUuid& ownerId);
+    // RAII completion guard for one owner operation, shared (via
+    // shared_ptr) by the operation's completion and canceled
+    // callbacks. The constructor takes the busy token (registry
+    // insert + ownerBusyChanged); finish() releases it and emits the
+    // completion report - idempotent, so exactly-one report per
+    // operation is structural rather than per-call-site discipline.
+    // The destructor is the backstop for a chain torn down without
+    // either callback running: it releases the token but never emits
+    // (in practice only reachable while the manager itself is dying,
+    // where the bridge contract no longer applies).
+    class OperationGuard {
+    public:
+        using ReportSignal =
+            void (cwExternalCenterlineManager::*)(const cwExternalCenterlineReport&);
+
+        OperationGuard(cwExternalCenterlineManager* manager,
+                       const QUuid& ownerId,
+                       OperationKind kind,
+                       std::shared_ptr<std::atomic_bool> cancelFlag,
+                       ReportSignal signal)
+            : m_manager(manager)
+            , m_ownerId(ownerId)
+            , m_signal(signal)
+        {
+            manager->m_activeOperations.insert(
+                ownerId, ActiveOperation { kind, std::move(cancelFlag) });
+            emit manager->ownerBusyChanged(ownerId);
+        }
+
+        OperationGuard(const OperationGuard&) = delete;
+        OperationGuard& operator=(const OperationGuard&) = delete;
+
+        ~OperationGuard()
+        {
+            release();
+        }
+
+        // Releases the token and emits the completion report. Safe to
+        // call at most once per outcome path; a second call (or a call
+        // after the manager died) does nothing.
+        void finish(const cwExternalCenterlineReport& report)
+        {
+            if (m_released) {
+                return;
+            }
+            release();
+            // Re-read the QPointer after release(): it emitted
+            // ownerBusyChanged synchronously, and a slot there could
+            // (in principle) tear the manager down - a pre-release
+            // snapshot would then emit through a dangling pointer.
+            if (!m_manager.isNull() && m_signal != nullptr) {
+                emit (m_manager.data()->*m_signal)(report);
+            }
+        }
+
+        // Token release without a report - for operations with no
+        // report signal (updateFromSource) and the destructor backstop.
+        void release()
+        {
+            if (m_released) {
+                return;
+            }
+            m_released = true;
+            if (m_manager.isNull()) {
+                return;
+            }
+            m_manager->m_activeOperations.remove(m_ownerId);
+            emit m_manager->ownerBusyChanged(m_ownerId);
+        }
+
+    private:
+        QPointer<cwExternalCenterlineManager> m_manager;
+        QUuid m_ownerId;
+        ReportSignal m_signal;
+        bool m_released = false;
+    };
 
     // Queues a completion-report emission for the synchronous refusal
     // paths (null trip, refused-while-busy). Emitting directly there

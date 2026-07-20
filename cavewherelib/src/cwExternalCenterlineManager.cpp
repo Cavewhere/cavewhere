@@ -565,7 +565,8 @@ void cwExternalCenterlineManager::updateFromSource(const QUuid& ownerId)
         // flag is probe-owned — the next recompute re-derives it.
         return;
     }
-    beginOwnerOperation(ownerId);
+    auto guard = std::make_shared<OperationGuard>(
+        this, ownerId, OperationKind::Update, nullptr, nullptr);
     auto future = cwExternalCenterlineSync::reconcile(
         m_saveLoad.data(), scan.value(), attachmentDir);
     // Reconcile drains through the cwSaveLoad job queue; the returned
@@ -577,13 +578,13 @@ void cwExternalCenterlineManager::updateFromSource(const QUuid& ownerId)
     // mid-drain) must still release the per-owner token or the Update
     // affordance stays stuck for the rest of the session.
     AsyncFuture::observe(future).context(this,
-            [this, ownerId](Monad::ResultBase) {
-        endOwnerOperation(ownerId);
+            [this, guard, ownerId](Monad::ResultBase) {
+        guard->release();
         m_solveOnScanApply = true;
         recomputeWatchSetAndProbeSources();
     },
-            [this, ownerId]() {
-        endOwnerOperation(ownerId);
+            [guard]() {
+        guard->release();
     });
 }
 
@@ -607,14 +608,17 @@ cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourc
         return AsyncFuture::completed(ReportResult(error));
     }
 
-    beginOwnerOperation(ownerId);
+    auto cancelFlag = std::make_shared<std::atomic_bool>(false);
+    auto guard = std::make_shared<OperationGuard>(
+        this, ownerId, OperationKind::Attach, cancelFlag,
+        &cwExternalCenterlineManager::attachCompleted);
     auto future = cwExternalCenterlineAttach::attach(
-        trip, sourcePath, m_saveLoad.data(), m_externalSourceSettings.data());
-    // The canceled path (project retired mid-attach, or the dialog's
-    // Cancel landing before the scan) must still release the token.
+        trip, sourcePath, m_saveLoad.data(), m_externalSourceSettings.data(),
+        std::move(cancelFlag));
+    // The canceled path (project retired mid-attach, or cancelAttach
+    // landing before the scan) must still release the token.
     AsyncFuture::observe(future).context(this,
-            [this, ownerId](const ReportResult& result) {
-        endOwnerOperation(ownerId);
+            [this, guard, ownerId](const ReportResult& result) {
         if (!result.hasError()) {
             // The settings write already queued a recompute; make sure
             // its apply also requests the solve that picks up the new
@@ -622,18 +626,28 @@ cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourc
             m_solveOnScanApply = true;
             recomputeWatchSetAndProbeSources();
             const auto& attachReport = result.value();
-            emit attachCompleted(cwExternalCenterlineReport::succeeded(
+            guard->finish(cwExternalCenterlineReport::succeeded(
                 ownerId, attachReport.persisted.entryFile(), attachReport.warnings));
         } else {
-            emit attachCompleted(cwExternalCenterlineReport::failed(
+            guard->finish(cwExternalCenterlineReport::failed(
                 ownerId, result.errorMessage()));
         }
     },
-            [this, ownerId]() {
-        endOwnerOperation(ownerId);
-        emit attachCompleted(cwExternalCenterlineReport::wasCanceled(ownerId));
+            [guard, ownerId]() {
+        guard->finish(cwExternalCenterlineReport::wasCanceled(ownerId));
     });
     return future;
+}
+
+void cwExternalCenterlineManager::cancelAttach(const QUuid& ownerId)
+{
+    const auto it = m_activeOperations.constFind(ownerId);
+    if (it == m_activeOperations.constEnd()
+        || it->kind != OperationKind::Attach
+        || it->cancelFlag == nullptr) {
+        return;
+    }
+    it->cancelFlag->store(true);
 }
 
 QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwTrip* trip)
@@ -655,7 +669,9 @@ QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwTrip*
         return AsyncFuture::completed(ResultBase(error));
     }
 
-    beginOwnerOperation(ownerId);
+    auto guard = std::make_shared<OperationGuard>(
+        this, ownerId, OperationKind::Detach, nullptr,
+        &cwExternalCenterlineManager::detachCompleted);
 
     // Queued-invoke hole (commit-7 review): an updateFromSource invoke
     // already queued behind this call would otherwise still see the
@@ -667,23 +683,21 @@ QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwTrip*
     auto future = cwExternalCenterlineAttach::detach(
         trip, m_saveLoad.data(), m_externalSourceSettings.data());
     AsyncFuture::observe(future).context(this,
-            [this, ownerId](const ResultBase& result) {
-        endOwnerOperation(ownerId);
+            [this, guard, ownerId](const ResultBase& result) {
         // Re-probe after the remove-tree drains (the settings clear
         // already queued one recompute; this one sees the dir gone) and
         // request the solve that drops the owner's *include.
         m_solveOnScanApply = true;
         recomputeWatchSetAndProbeSources();
         if (!result.hasError()) {
-            emit detachCompleted(cwExternalCenterlineReport::succeeded(ownerId));
+            guard->finish(cwExternalCenterlineReport::succeeded(ownerId));
         } else {
-            emit detachCompleted(cwExternalCenterlineReport::failed(
+            guard->finish(cwExternalCenterlineReport::failed(
                 ownerId, result.errorMessage()));
         }
     },
-            [this, ownerId]() {
-        endOwnerOperation(ownerId);
-        emit detachCompleted(cwExternalCenterlineReport::wasCanceled(ownerId));
+            [guard, ownerId]() {
+        guard->finish(cwExternalCenterlineReport::wasCanceled(ownerId));
     });
     return future;
 }
@@ -699,15 +713,3 @@ QString cwExternalCenterlineManager::scopePrefixForTrip(cwTrip* trip) const
         + QLatin1Char('.');
 }
 
-void cwExternalCenterlineManager::beginOwnerOperation(const QUuid& ownerId)
-{
-    m_busyOwners.insert(ownerId);
-    emit ownerBusyChanged(ownerId);
-}
-
-void cwExternalCenterlineManager::endOwnerOperation(const QUuid& ownerId)
-{
-    if (m_busyOwners.remove(ownerId)) {
-        emit ownerBusyChanged(ownerId);
-    }
-}

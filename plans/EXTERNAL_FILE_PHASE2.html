@@ -397,6 +397,25 @@
     direction change: the source path is always remembered). Calls the
     orchestrator via a thin Q_INVOKABLE wrapper on
     <code>cwRootData</code> (see &sect;<a class="anchor" href="#attach">7</a>).
+    <em>As shipped (commit 12):</em> file picker is
+    <code>QtQuick.Dialogs FileDialog</code> (the repo's standard;
+    <code>Qt.labs.platform</code> is used nowhere), the error/warning area
+    is fed by <code>cwExternalCenterlineScanPreview</code> pre-attach and
+    the <code>attachCompleted</code> bridge report post-attach, and the
+    cwRootData-wrapper sentence still holds.
+  </li>
+  <li>
+    <strong>New (commit 12):</strong>
+    <code>cwExternalCenterlineScanPreview.h/.cpp</code> &mdash;
+    QML-creatable QObject behind the dialog's pre-attach preview: bind
+    <code>sourcePath</code>, read
+    <code>formatName</code>/<code>scanning</code>/<code>valid</code>/<code>errorMessage</code>/<code>warnings</code>/<code>fileCount</code>.
+    Runs <code>cwExternalCenterlineScanner::scan</code> on a worker
+    through an <code>AsyncFuture::Restarter</code>, so rapid path
+    changes coalesce and only the newest path's result lands (each
+    run captures its path by value; the cleared/empty state never
+    cancels the restarter's outer future &mdash; that would poison a
+    same-turn follow-up scan).
   </li>
 </ul>
 
@@ -566,7 +585,16 @@
   <tr>
     <td><strong>q14</strong> &mdash; Cancel during attach</td>
     <td>Dialog stays modal during scan; Cancel aborts and persists nothing.</td>
-    <td><code>AttachExternalCenterlineDialog</code> shows a determinate progress strip while the orchestrator's scan future is running. The Cancel button calls <code>QFuture::cancel()</code> on the scan future and dismisses. Nothing in the data model or filesystem changes until the reconcile step starts (which only runs after scan returns <code>Monad::Ok</code>). <strong>Commit-9 review note:</strong> the orchestrator deliberately ignores cancellation once the scan has landed, but the manager's per-owner busy token <em>is</em> released when the returned future is canceled &mdash; so the dialog must stop offering Cancel once the scan completes (or the token can free while reconcile is still writing, letting a detach interleave).</td>
+    <td><code>AttachExternalCenterlineDialog</code> shows a determinate progress strip while the orchestrator's scan future is running. The Cancel button calls <code>QFuture::cancel()</code> on the scan future and dismisses. Nothing in the data model or filesystem changes until the reconcile step starts (which only runs after scan returns <code>Monad::Ok</code>). <strong>Commit-9 review note:</strong> the orchestrator deliberately ignores cancellation once the scan has landed, but the manager's per-owner busy token <em>is</em> released when the returned future is canceled &mdash; so the dialog must stop offering Cancel once the scan completes (or the token can free while reconcile is still writing, letting a detach interleave).
+    <br><em>Superseded as shipped (commit 12, 2026-07-19):</em> Cancel is
+    flag-based <code>cancelAttach(ownerId)</code>, not
+    <code>QFuture::cancel()</code>. The flag is consulted exactly once, at
+    scan-landing, so the busy token is held until the outcome reports and a
+    late Cancel is a structural no-op &mdash; the dialog keeps Cancel enabled
+    for the whole attach and never needs to hide it. Cancelling the returned
+    future directly remains a test-only seam with the old (unsafe)
+    token-release behavior; production callers must not use it (see the
+    <code>cancelAttach</code> header doc).</td>
   </tr>
   <tr>
     <td><strong>q16</strong> &mdash; Re-link discoverability across restarts</td>
@@ -586,7 +614,15 @@
   <tr>
     <td><strong>q18</strong> &mdash; Attach error display in the picker</td>
     <td>Red inline message below the path field; warnings yellow; <code>[Attach]</code> disabled on error.</td>
-    <td>The attach dialog binds the orchestrator's <code>QFuture&lt;Monad::Result&lt;AttachReport&gt;&gt;</code> error message into a red <code>QC.Label</code>. Warnings from <code>AttachReport.scan.warnings</code> render as yellow <code>QC.Label</code> in the same area. <code>[Attach]</code>'s <code>enabled</code> is gated on the future result being <code>Monad::Ok</code> and the path field being non-empty.</td>
+    <td>The attach dialog binds the orchestrator's <code>QFuture&lt;Monad::Result&lt;AttachReport&gt;&gt;</code> error message into a red <code>QC.Label</code>. Warnings from <code>AttachReport.scan.warnings</code> render as yellow <code>QC.Label</code> in the same area. <code>[Attach]</code>'s <code>enabled</code> is gated on the future result being <code>Monad::Ok</code> and the path field being non-empty.
+    <br><em>Superseded as shipped (commit 12, 2026-07-19):</em> the dialog
+    never holds the QFuture. Errors/warnings come from
+    <code>cwExternalCenterlineScanPreview</code> <em>before</em> Attach is
+    pressed &mdash; <code>[Attach]</code> is gated on
+    <code>preview.valid</code> &mdash; and a failed attach's message arrives
+    through the <code>attachCompleted</code> bridge report, shown in the same
+    red label (which prefers the attach error over the preview error until
+    the path is edited).</td>
   </tr>
 </table>
 
@@ -2136,6 +2172,84 @@ public:
   <code>wasCanceled</code> arm today) and assert
   <code>report.warnings</code> through the bridge against the
   warning fixture.</p>
+<p><em>&sect;15 pull-forwards (decided 2026-07-19):</em> two follow-ups
+  land as part of this commit's work rather than later.
+  (1) <strong>Survey-format detection moves onto
+  <code>cwExternalCenterline</code> first</strong> &mdash; the master
+  plan's dialog mockup shows "Format: Survex (auto-detected)" for the
+  picked path, which would otherwise duplicate
+  <code>ExternalCenterlineAttachedHeader</code>'s QML extension
+  string-matching. Expose the existing C++
+  <code>cwExternalCenterlineScanner::formatFor()</code>: a
+  <code>format</code> Q_PROPERTY on the gadget (attached owners) plus
+  a path-taking Q_INVOKABLE for the dialog's pre-attach preview; then
+  delete the AttachedHeader QML mapping.
+  (2) <strong>The RAII owner-busy token folds into
+  <code>cancelAttach</code></strong> &mdash; a cancellable attach
+  forces the manager to retain each owner's in-flight future, and
+  that per-owner operation registry is exactly the structure the
+  &sect;15 RAII item wants (one scope-guard object holding the
+  future, releasing the token, and making the exactly-one completion
+  report structural instead of per-call-site discipline across the
+  8 emit sites). Building cancelAttach on the loose discipline and
+  RAII-ifying later would touch all three owner operations twice.</p>
+<p><em>As shipped (2026-07-19), all gates below green plus the
+  prerequisites, with these deltas:</em>
+  (1) <strong><code>cancelAttach</code> is flag-based, not
+  future-cancel</strong> &mdash; the manager hands
+  <code>cwExternalCenterlineAttach::attach()</code> a
+  <code>std::shared_ptr&lt;std::atomic_bool&gt;</code> consulted
+  exactly once, when the scan lands on the main thread (set by then
+  &rarr; the deferred settles canceled, nothing mutated; set later
+  &rarr; no effect). Unlike cancelling the returned future, the flag
+  never settles the future early, so the busy token is held until the
+  outcome is decided &mdash; the commit-9 F7 hazard (token freed while
+  reconcile writes) is gone <em>structurally</em>, which supersedes
+  the q14 "stop offering Cancel once the scan lands" UI rule: the
+  dialog keeps Cancel enabled for the whole attach and a late click is
+  a safe no-op.
+  (2) <strong>The registry + RAII guard</strong>: per-owner
+  <code>ActiveOperation { kind, cancelFlag }</code> hash (kind keeps
+  <code>cancelAttach</code> off detach/update) plus a shared-ptr
+  <code>OperationGuard</code> whose ctor takes the token and whose
+  idempotent <code>finish(report)</code> releases it and emits &mdash;
+  exactly-one report per operation is structural; the dtor is a
+  release-only backstop.
+  (3) <strong>No <code>requestId</code></strong> &mdash; decided
+  against: the dialog is connect-before-call, filters reports by
+  <code>ownerId</code> string-compare, and gates on its own
+  <code>attaching</code> flag; F5/F6 attribution never bites it.
+  (4) <strong>The "path-taking Q_INVOKABLE" became
+  <code>cwExternalCenterlineScanPreview</code></strong> (new
+  QML-creatable QObject): the pre-attach gates (red error / yellow
+  warning before [Attach] is pressed) need an async scan preview
+  anyway, so format rides on it as a synchronous
+  <code>formatName</code> property next to
+  <code>scanning</code>/<code>valid</code>/<code>errorMessage</code>/<code>warnings</code>/<code>fileCount</code>
+  (Restarter-superseded per path change); no manager invokable was
+  added.
+  (5) <strong>Dialog shape</strong>: no trip-name field (the trip
+  already exists at this entry point; commit-13's Add-Trip flow names
+  it) and no watch-vs-import radio (direction change); path field +
+  Browse (<code>QtQuick.Dialogs FileDialog</code>, the repo's
+  standard), format line, "&#x2713; Found N file(s)" summary, inline
+  warning/error labels, copy-explainer BodyText, busy row, Cancel /
+  Attach. Completion via a <code>Connections</code> on
+  <code>attachCompleted</code>; success and canceled both close,
+  error stays open with the message inline.
+  (6) <strong>Bridge-coverage gaps closed</strong>: the canceled-path
+  emission is pinned by the C++ <code>cancelAttach</code> test and the
+  QML cancel-during-scan test (which invokes the button handlers
+  back-to-back synchronously &mdash; no event processing between
+  Attach and Cancel &mdash; so the flag provably lands before the scan
+  continuation); <code>report.warnings</code> is pinned by the QML
+  missing-include test.
+  (7) <strong>Fixture</strong>: the table below said
+  <code>survex_with_missing_include.svx</code> was a Phase 1 mirror
+  &mdash; it never existed; created now in
+  <code>testcases/datasets/external-centerlines/</code> and read via
+  <code>TestHelper.testcasesDatasetPath</code> (no test-qml mirror
+  needed, matching the other fixtures' usage).</p>
 <ul>
   <li>Pick a fixture &rarr; Attach &rarr;
     <code>tryVerify</code> the trip becomes Attached.</li>
@@ -2155,6 +2269,29 @@ public:
 <h3>Commit 13 &mdash; TripPage swap + Add-Trip menu + notes regex + carpet picker</h3>
 <p><strong>New QML test:</strong>
   <code>tst_TripPageExternalAttach.qml</code></p>
+<p><em>Design decisions this commit owns (added at the commit-12
+  review):</em>
+  (1) <strong>Orphan-trip policy.</strong> The dialog requires an
+  existing non-null trip and leaves it Native on cancel/dismiss; the
+  Add-Trip &rarr; <em>External centerline&hellip;</em> flow creates the
+  trip first, so this commit must decide what happens to the
+  just-created trip when the dialog is cancelled &mdash; delete the
+  orphan, or accept an empty Native trip like any other Add-Trip.
+  (2) <strong>Trip naming.</strong> The dialog deliberately has no
+  trip-name field (commit-12 as-shipped delta 5); if the attached trip
+  should be named after the entry file, this commit's flow does it.
+  (3) <strong>Evaluate the dialog's injectable
+  <code>externalCenterlineManager</code> property (commit-12 review
+  F10).</strong> The attach itself routes through
+  <code>RootData.attachTripCenterline</code> (the manager's
+  attach/detach are not Q_INVOKABLE), while cancel and the completion
+  <code>Connections</code> use the property &mdash; a host injecting a
+  different manager would get an attach whose completion is never
+  observed. Once this commit fixes the real hosts: if none injects,
+  drop the property and bind
+  <code>RootData.externalCenterlineManager</code> directly; if one
+  does, route the attach through the injected manager too (which means
+  making the manager entry points QML-reachable).</p>
 <ul>
   <li>Add Trip menu shows two items; clicking <em>External
     centerline&hellip;</em> opens the dialog.</li>
@@ -2179,6 +2316,15 @@ public:
   symlink (or copy) into the QML datasets dir per
   <code>cwGlobals</code>' dataset-path helper.
 </p>
+
+<p><em>Superseded as shipped (commit 12, 2026-07-19):</em> no
+  <code>test-qml/datasets/external-centerlines/</code> mirror dir was
+  ever created and none is needed &mdash; the QML tests read the
+  <code>testcases/datasets</code> originals directly via
+  <code>TestHelper.testcasesDatasetPath()</code> (which copies through a
+  PID-safe temp dir). The "Mirror" rows below are moot;
+  <code>survex_with_missing_include.svx</code> additionally never
+  existed in Phase 1 and was created new at commit 12.</p>
 
 <table>
   <tr><th>Fixture</th><th>Used by</th><th>Notes</th></tr>
@@ -2229,7 +2375,12 @@ public:
     <td>Use the existing
       <code>cwFileDialogHelper</code> wrapper if there is one (verify in
       commit 12); otherwise pin the platform variant for now and document
-      in the dialog's source comment.</td>
+      in the dialog's source comment.
+      <br><em>Closed at commit 12:</em> verified &mdash; no such wrapper
+      exists. The dialog uses <code>QtQuick.Dialogs FileDialog</code>,
+      the same as every other picker in the repo
+      (CavePage, FileMenu, &hellip;), so the labs.platform drift risk
+      never applied.</td>
   </tr>
   <tr>
     <td>Carpet sub-page station picker rewire could regress the existing
@@ -2347,6 +2498,12 @@ public:
     a scope-guard object (precedent: <code>cwBillboardHandle</code>)
     would make "token always released" structural instead of
     per-call-site discipline.
+    <em>Pulled into commit 12 (2026-07-19): folds into the
+    <code>cancelAttach</code> per-owner operation registry &mdash; see
+    the &sect;12 commit-12 pull-forward note. Shipped there as
+    <code>OperationGuard</code>;
+    <code>beginOwnerOperation</code>/<code>endOwnerOperation</code>
+    are gone.</em>
   </li>
   <li>
     <strong><code>publishCavernOutput</code> parameter object.</strong>
@@ -2364,6 +2521,13 @@ public:
     unblock the &sect;2 "format icon" idea). One QML site today;
     becomes three with the commit-11 panel and Phase 3's CaveSummary
     &mdash; move it before the copies appear.
+    <em>Pulled into commit 12 (2026-07-19): the attach dialog's
+    "Format: &lt;name&gt; (auto-detected)" line would be the second
+    QML copy &mdash; do the move first; see the &sect;12 commit-12
+    pull-forward note. Shipped there: gadget <code>format</code>
+    property over a shared
+    <code>cwExternalCenterlineScanner::formatName()</code>; the
+    AttachedHeader QML mapping is deleted.</em>
   </li>
   <li>
     <strong>Per-owner status gadget on the manager</strong>
@@ -2381,6 +2545,54 @@ public:
     <code>fileOwnsDeclination</code> (plus the pure
     <code>scopePrefixForTrip</code> naming helper, which wouldn't move
     into a status gadget).</em>
+    <em>Commit 12 grew the inventory again (commit-12 review R1/A1):
+    <code>cancelAttach</code> joins the pile as the first per-owner
+    <strong>command</strong>, and the dialog became the third consumer
+    hand-rolling report attribution in JS (the panel's imperative
+    <code>ownerBusy</code> refresh, the dialog's
+    <code>Connections</code> + <code>attaching</code> flag +
+    <code>String(report.ownerId)</code> compare). The completion
+    bridge guarantees exactly-one report at the emit end, but every
+    consumer re-derives "was this mine" &mdash; discipline that erodes
+    per consumer. Elevated shape: an owner-scoped operation
+    handle/status object with <code>busy</code>/<code>sourceMissing</code>/
+    <code>lastAttachReport</code> properties plus
+    <code>cancelAttach()</code>, turning all three sites into plain
+    bindings and making attribution structural on both ends. Blast
+    radius now: manager + cwRootData forwarders + panel + banner +
+    dialog + their tests. This entry's own trigger condition ("once
+    the full set of flags is known") is met &mdash; do it at Phase 3's
+    cave-level attach.</em>
+  </li>
+  <li>
+    <strong>Shared inline-message component</strong> <em>(commit-12
+    review R2)</em>. The attach dialog hand-rolls five stacked
+    conditional <code>QC.Label</code>s
+    (<code>AttachExternalCenterlineDialog.qml</code>), and the
+    <code>visible: text.length &gt; 0</code> + <code>wrapMode</code> +
+    <code>Theme.danger</code>/<code>Theme.warning</code> idiom already
+    exists verbatim in <code>ConnectRemoteForm</code>,
+    <code>CreateGitHubRepoForm</code>, <code>SaveAsDialog</code>, plus
+    three bespoke banner components. One severity-styled
+    <code>InlineMessage</code> component (severity enum &rarr; color
+    token, built-in visibility rule) would end the drift. Out of scope
+    for the externalFiles branch &mdash; touches ~6 unrelated dialogs.
+  </li>
+  <li>
+    <strong><code>scanAsync</code> entry point on the scanner
+    namespace</strong> <em>(commit-12 review R3)</em>.
+    <code>cwExternalCenterlineScanPreview</code> is the second copy of
+    the "Restarter + <code>cwConcurrent::run(scan(path))</code> +
+    observe-context-apply" shape (the manager's
+    <code>m_scanRestarter</code> is the first), and
+    <code>updateFromSource</code> still calls
+    <code>cwExternalCenterlineScanner::scan</code> synchronously on
+    the main thread &mdash; the tell that there is no blessed async
+    entry point. A
+    <code>scanAsync(path) &rarr; QFuture&lt;Result&lt;ScanResult&gt;&gt;</code>
+    would unify all three and invite fixing the sync call; touching
+    <code>updateFromSource</code>'s threading is its own change, so
+    not part of any panel/dialog commit.
   </li>
   <li>
     <strong>Observable remembered-source path on

@@ -26,13 +26,7 @@ ColumnLayout {
 
     readonly property string entryFile: trip !== null ? trip.externalCenterline.entryFile : ""
     readonly property string fileName: entryFile.substring(entryFile.lastIndexOf("/") + 1)
-    readonly property string formatName: {
-        const lower = root.entryFile.toLowerCase()
-        if (lower.endsWith(".svx")) { return qsTr("Survex") }
-        if (lower.endsWith(".dat") || lower.endsWith(".mak")) { return qsTr("Compass") }
-        if (lower.endsWith(".srv") || lower.endsWith(".wpj")) { return qsTr("Walls") }
-        return ""
-    }
+    readonly property string formatName: trip !== null ? trip.externalCenterline.format : ""
 
     spacing: Theme.tightSpacing
 

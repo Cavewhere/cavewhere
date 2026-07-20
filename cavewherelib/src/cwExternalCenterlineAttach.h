@@ -19,6 +19,10 @@
 #include <QString>
 #include <QStringList>
 
+//Std includes
+#include <atomic>
+#include <memory>
+
 class cwTrip;
 class cwSaveLoad;
 class cwExternalSourceSettings;
@@ -73,12 +77,22 @@ struct AttachReport {
  * reconcile - leaves the data model and settings exactly as they were.
  * Partial files may remain in the attachment dir and the project stays
  * modified; the next attach or detach cleans them up.
+ *
+ * cancelFlag is cwExternalCenterlineManager::cancelAttach's seam. It
+ * is consulted exactly once, when the scan lands on the main thread:
+ * set by then, the returned future settles as canceled and nothing
+ * has mutated; set later, it has no effect and the attach runs to
+ * completion (the q14 rule, made structural). Unlike cancelling the
+ * returned future directly, the flag never settles the future early,
+ * so a manager observing it keeps its busy token until the outcome
+ * is actually decided.
  */
 CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> attach(
     cwTrip* trip,
     const QString& sourceFile,
     cwSaveLoad* saveLoad,
-    cwExternalSourceSettings* externalSourceSettings);
+    cwExternalSourceSettings* externalSourceSettings,
+    std::shared_ptr<std::atomic_bool> cancelFlag = nullptr);
 
 /**
  * Trip-level detach: clear the trip's externalCenterline, remove the

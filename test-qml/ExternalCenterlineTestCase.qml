@@ -6,10 +6,11 @@ import cw.TestLib
 // (tst_CavernOutputPageExternal, tst_FileMenuExportDisable, ...).
 CWTestCase {
 
-    // Saves the fresh project as .cwproj and attaches the
-    // survex_simple.svx fixture to a new trip via the cwRootData
-    // wrapper. Returns { trip, source }.
-    function attachFixtureTrip(projectBaseName) {
+    // Creates a fresh cave + trip and saves the project as .cwproj so
+    // the attach orchestrator's temporary-project guard passes.
+    // Returns the trip, still Native - the attach-dialog tests drive
+    // the attach through the UI themselves.
+    function makeSavedTrip(projectBaseName) {
         RootData.account.name = "External Test"
         RootData.account.email = "external.test@example.com"
 
@@ -22,6 +23,14 @@ CWTestCase {
         const projectPath = tmpPath + "/" + projectBaseName + ".cwproj"
         verify(RootData.project.saveAs(projectPath), "saveAs should succeed")
         TestHelper.waitForProjectSaveToFinish(RootData.project)
+        return trip
+    }
+
+    // Saves the fresh project as .cwproj and attaches the
+    // survex_simple.svx fixture to a new trip via the cwRootData
+    // wrapper. Returns { trip, source }.
+    function attachFixtureTrip(projectBaseName) {
+        const trip = makeSavedTrip(projectBaseName)
 
         const source = TestHelper.testcasesDatasetPath(
             "external-centerlines/survex_simple.svx")

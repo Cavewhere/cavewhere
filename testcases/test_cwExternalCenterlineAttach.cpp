@@ -674,6 +674,120 @@ TEST_CASE("manager attach and detach complete through the QML report bridge",
     drainPipelines(fixture.get());
 }
 
+TEST_CASE("cancelAttach cancels an in-flight attach before the scan lands",
+          "[Attach][Manager]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("manager-cancel-attach"));
+    auto manager = managerOf(fixture.get());
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const QUuid ownerId = fixture->trip->id();
+
+    cwSignalSpy attachSpy(manager, &cwExternalCenterlineManager::attachCompleted);
+
+    auto future = manager->attachCenterline(fixture->trip, source);
+    // Same stack as the call - the scan continuation cannot have
+    // landed yet, so the flag is provably set before its single
+    // consult point.
+    manager->cancelAttach(ownerId);
+    // Unlike cancelling the future, cancelAttach leaves the busy
+    // token held until the outcome is decided at scan-landing.
+    CHECK(manager->isOwnerBusy(ownerId));
+
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    CHECK(future.isCanceled());
+
+    settleEventLoop(kCancelSettleMs);
+    REQUIRE(attachSpy.count() == 1);
+    const auto report = attachSpy.takeFirst().at(0).value<cwExternalCenterlineReport>();
+    CHECK(report.canceled());
+    CHECK_FALSE(report.success());
+    CHECK(report.ownerId() == ownerId);
+    CHECK(report.errorMessage().isEmpty());
+
+    CHECK_FALSE(manager->isOwnerBusy(ownerId));
+    CHECK(fixture->trip->externalCenterline().isEmpty());
+    CHECK(fixture->settings()->sourcePathFor(ownerId).isEmpty());
+
+    // The owner is immediately reusable - a fresh attach succeeds.
+    auto retry = manager->attachCenterline(fixture->trip, source);
+    REQUIRE(AsyncFuture::waitForFinished(retry, kAttachWaitMs));
+    REQUIRE_FALSE(retry.result().hasError());
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("cancelAttach after the scan lands is a structural no-op",
+          "[Attach][Manager]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("manager-cancel-late"));
+    auto manager = managerOf(fixture.get());
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const QUuid ownerId = fixture->trip->id();
+
+    cwSignalSpy attachSpy(manager, &cwExternalCenterlineManager::attachCompleted);
+
+    // externalCenterlineChanged fires inside the reconcile continuation
+    // - strictly after the cancel flag's single consult point and
+    // before the attach future completes. Cancelling from there is the
+    // latest deterministic moment: if the flag were ever consulted a
+    // second time (cancelling mid-filesystem-write, exactly what the
+    // header promises can't happen), this attach would report canceled
+    // instead of success.
+    QObject::connect(fixture->trip, &cwTrip::externalCenterlineChanged,
+                     fixture->trip, [&]() {
+        manager->cancelAttach(ownerId);
+    });
+
+    auto future = manager->attachCenterline(fixture->trip, source);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    CHECK_FALSE(future.isCanceled());
+    REQUIRE_FALSE(future.result().hasError());
+
+    settleEventLoop(kCancelSettleMs);
+    REQUIRE(attachSpy.count() == 1);
+    const auto report = attachSpy.takeFirst().at(0).value<cwExternalCenterlineReport>();
+    CHECK(report.success());
+    CHECK_FALSE(report.canceled());
+    CHECK(fixture->trip->externalCenterline().entryFile()
+          == QStringLiteral("survex_simple.svx"));
+    CHECK_FALSE(manager->isOwnerBusy(ownerId));
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("cancelAttach is a no-op for idle owners and non-attach operations",
+          "[Attach][Manager]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("manager-cancel-noop"));
+    auto manager = managerOf(fixture.get());
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const QUuid ownerId = fixture->trip->id();
+
+    cwSignalSpy attachSpy(manager, &cwExternalCenterlineManager::attachCompleted);
+    cwSignalSpy detachSpy(manager, &cwExternalCenterlineManager::detachCompleted);
+
+    // Idle owner: nothing to cancel, nothing reported.
+    manager->cancelAttach(ownerId);
+
+    auto attachFuture = manager->attachCenterline(fixture->trip, source);
+    REQUIRE(AsyncFuture::waitForFinished(attachFuture, kAttachWaitMs));
+    REQUIRE_FALSE(attachFuture.result().hasError());
+
+    // cancelAttach never touches a detach in flight.
+    auto detachFuture = manager->detachCenterline(fixture->trip);
+    manager->cancelAttach(ownerId);
+    REQUIRE(AsyncFuture::waitForFinished(detachFuture, kAttachWaitMs));
+    CHECK_FALSE(detachFuture.isCanceled());
+    REQUIRE_FALSE(detachFuture.result().hasError());
+
+    settleEventLoop(kCancelSettleMs);
+    CHECK(attachSpy.count() == 1); // only the successful attach reported
+    REQUIRE(detachSpy.count() == 1);
+    const auto detachReport =
+        detachSpy.takeFirst().at(0).value<cwExternalCenterlineReport>();
+    CHECK(detachReport.success());
+    CHECK_FALSE(detachReport.canceled());
+    drainPipelines(fixture.get());
+}
+
 TEST_CASE("scopePrefixForTrip derives the driver's qualified-station prefix",
           "[Attach][Manager][ScopeStations]")
 {

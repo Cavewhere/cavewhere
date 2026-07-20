@@ -1102,6 +1102,11 @@ cwExternalCenterlineSync::reconcile(const ScanResult&amp; scan,
   the copy lives at a hidden temp path that changes every session.
   Live-link is the primary mode for bundled projects; the attach
   dialog's default (&sect;8.1) already reflects that.
+  <em>(Stale after the 2026-07-16 direction change, noted at the
+  Phase-2 commit-12 review: there is no mode and no default anymore
+  &mdash; the source path is always remembered and the dialog has no
+  watch-vs-import choice. The .cw-fit point above stands on its
+  own.)</em>
 </p>
 
 <h2 id="driver">6. Driver-file shape</h2>
@@ -1572,6 +1577,16 @@ QString exportDisabledReason() const;  // empty when canExport() is true
 │                              [Cancel]  [Attach]                 │
 └─────────────────────────────────────────────────────────────────┘
 </code></pre>
+
+<p class="meta"><em>Mockup partially superseded as shipped (Phase 2
+  commit 12; the drawing above is kept for layout intent):</em> no
+  <strong>Trip name</strong> field (the trip exists before the dialog
+  opens; the Add-Trip flow's naming is a Phase-2 commit-13 decision),
+  no <strong>watch-vs-import radio</strong> (direction change
+  2026-07-16 &mdash; the source is always remembered), the scan
+  summary is a file count only ("&#x2713; Found N file(s)" &mdash;
+  station/shot counts are not in the pre-attach scan), and the "Why
+  we copy" box shipped as one short explainer paragraph.</p>
 
 <p>After the user clicks Attach:</p>
 
@@ -2372,6 +2387,13 @@ QQ.Item {
     are typically &lt;1&nbsp;MB, so the perceived dialog time should
     be sub-second in the common case; the Cancel exists for the
     pathological cases (huge include closures, slow disks).
+    <em>As shipped (Phase 2 commit 12): Cancel is honored only until
+    the attach's internal scan lands (flag-based
+    <code>cancelAttach</code>, consulted once at scan-landing) &mdash;
+    it never aborts the copy step; a late Cancel is a structural
+    no-op and the attach runs to completion. "Persists nothing" holds
+    exactly for honored cancels. The busy indication is an
+    indeterminate row, not a progress strip.</em>
   </li>
   <li>
     <strong>Collaborator opens a Git-shared project for the first

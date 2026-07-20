@@ -35,6 +35,7 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterline
     QML_VALUE_TYPE(cwExternalCenterline)
     Q_PROPERTY(QString entryFile READ entryFile WRITE setEntryFile FINAL)
     Q_PROPERTY(bool isEmpty READ isEmpty FINAL)
+    Q_PROPERTY(QString format READ format FINAL)
 
 public:
     cwExternalCenterline() = default;
@@ -42,6 +43,11 @@ public:
 
     QString entryFile() const { return m_entryFile; }
     void setEntryFile(const QString& entryFile) { m_entryFile = entryFile; }
+
+    // Display name of the entry file's survey format ("Survex",
+    // "Compass", "Walls"; empty when unrecognized or unattached),
+    // derived from the extension via the scanner's formatFor.
+    QString format() const;
 
     bool isEmpty() const { return m_entryFile.isEmpty(); }
 

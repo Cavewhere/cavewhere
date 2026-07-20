@@ -140,6 +140,15 @@ struct ScanResult {
 CAVEWHERE_LIB_EXPORT Format formatFor(const QString& entryFile);
 
 /**
+ * User-facing name for a format: "Survex", "Compass", or "Walls";
+ * empty for Format::Unknown. The single source for the format label
+ * shown by cwExternalCenterline::format() (attached owners) and the
+ * attach dialog's "auto-detected" line (via
+ * cwExternalCenterlineScanPreview). Proper nouns, so untranslated.
+ */
+CAVEWHERE_LIB_EXPORT QString formatName(Format format);
+
+/**
  * Dispatches to the per-format scanner based on formatFor(). A
  * Format::Unknown entry file returns Monad::Result error rather
  * than walking; everything else delegates to the matching scanX

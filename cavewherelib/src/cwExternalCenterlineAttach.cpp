@@ -92,7 +92,8 @@ namespace cwExternalCenterlineAttach {
 QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
                                             const QString& sourceFile,
                                             cwSaveLoad* saveLoad,
-                                            cwExternalSourceSettings* externalSourceSettings)
+                                            cwExternalSourceSettings* externalSourceSettings,
+                                            std::shared_ptr<std::atomic_bool> cancelFlag)
 {
     using ReportResult = Monad::Result<AttachReport>;
 
@@ -143,10 +144,19 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
     });
 
     AsyncFuture::observe(scanFuture).context(saveLoad,
-            [deferred, resultFuture, tripPtr, saveLoadPtr, settingsPtr, sourceFile]
+            [deferred, resultFuture, tripPtr, saveLoadPtr, settingsPtr, sourceFile,
+             cancelFlag = std::move(cancelFlag)]
             (const Monad::Result<ScanResult>& scanResult) mutable {
         if (resultFuture.isCanceled()) {
             // Cancelled before the scan landed - nothing has mutated.
+            return;
+        }
+        if (cancelFlag != nullptr && cancelFlag->load()) {
+            // cancelAttach landed while the scan ran. This is the
+            // flag's single consult point - before any mutation - so
+            // honoring it here settles the future as canceled with
+            // the data model and filesystem untouched.
+            deferred.cancel();
             return;
         }
         if (tripPtr.isNull() || settingsPtr.isNull() || saveLoadPtr.isNull()) {
