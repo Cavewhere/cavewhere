@@ -35,6 +35,7 @@ public:
         QString title;         //!< human title from llms.txt
         QString chapter;       //!< sidebar grouping derived from the path
         QString relativePath;  //!< e.g. "scraps/scraps-and-carpeting.md"
+        QString summary;       //!< one-line description from llms.txt (feeds search)
     };
 
     explicit cwManualIndex(QObject* parent = nullptr);
@@ -53,6 +54,12 @@ public:
     //"not in-app" and hands them to the browser.
     Q_INVOKABLE QString slugForLink(const QString& fromSlug, const QString& href) const;
 
+    //Lowercased "title summary keywords" haystack for the article @p slug, used
+    //by the search filter. The title and summary come from llms.txt (parsed at
+    //construction); the keywords are read from the article's front matter on
+    //first use and cached, so nothing extra is touched until a search runs.
+    Q_INVOKABLE QString searchText(const QString& slug) const;
+
     static QString slugForPath(const QString& relativePath);
     static QString chapterForPath(const QString& relativePath);
 
@@ -60,9 +67,11 @@ private:
     QString renderMarkdown(const QString& relativePath) const;
     static QString stripFrontMatter(const QString& text);
     static QString rewriteImageLinks(const QString& body, const QString& relativePath);
+    static QString frontMatterKeywords(const QString& relativePath);
 
     QList<Article> m_articles;
     QHash<QString, int> m_slugToIndex;
+    mutable QHash<QString, QString> m_searchTextCache;
 };
 
 #endif // CWMANUALINDEX_H

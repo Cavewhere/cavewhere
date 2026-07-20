@@ -61,7 +61,8 @@ cwManualIndex::cwManualIndex(QObject* parent) :
     }
 
     //A page entry in llms.txt reads: - [Title](path/to/page.md): summary
-    static const QRegularExpression itemRe(QStringLiteral("^-\\s+\\[([^\\]]+)\\]\\(([^)]+)\\):"));
+    static const QRegularExpression itemRe(
+        QStringLiteral("^-\\s+\\[([^\\]]+)\\]\\(([^)]+)\\):\\s*(.*)$"));
 
     QTextStream in(&file);
     while (!in.atEnd()) {
@@ -86,6 +87,7 @@ cwManualIndex::cwManualIndex(QObject* parent) :
         article.title = match.captured(1).trimmed();
         article.chapter = chapterForPath(relativePath);
         article.relativePath = relativePath;
+        article.summary = match.captured(3).trimmed();
 
         m_slugToIndex.insert(article.slug, m_articles.size());
         m_articles.append(article);
@@ -102,6 +104,7 @@ QVariantList cwManualIndex::articles() const
         map.insert(QStringLiteral("title"), article.title);
         map.insert(QStringLiteral("chapter"), article.chapter);
         map.insert(QStringLiteral("relativePath"), article.relativePath);
+        map.insert(QStringLiteral("summary"), article.summary);
         list.append(map);
     }
     return list;
@@ -169,6 +172,64 @@ QString cwManualIndex::slugForLink(const QString& fromSlug, const QString& href)
 
     const QString slug = slugForPath(relativePath);
     return m_slugToIndex.contains(slug) ? slug : QString();
+}
+
+QString cwManualIndex::searchText(const QString& slug) const
+{
+    const int index = m_slugToIndex.value(slug, -1);
+    if (index < 0) {
+        return QString();
+    }
+
+    const auto cached = m_searchTextCache.constFind(slug);
+    if (cached != m_searchTextCache.constEnd()) {
+        return cached.value();
+    }
+
+    const Article& article = m_articles.at(index);
+    const QString haystack = (article.title + QLatin1Char(' ')
+                              + article.summary + QLatin1Char(' ')
+                              + frontMatterKeywords(article.relativePath)).toLower();
+    m_searchTextCache.insert(slug, haystack);
+    return haystack;
+}
+
+QString cwManualIndex::frontMatterKeywords(const QString& relativePath)
+{
+    QFile file(kResourceRoot + relativePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+
+    //keywords live in the leading front-matter block as a YAML flow list:
+    //  keywords: [scrap, carpet, morphing]
+    //Return the comma-separated words space-joined; the brackets are dropped so
+    //they don't pollute the search haystack.
+    static const QRegularExpression keywordsRe(
+        QStringLiteral("^keywords:\\s*\\[([^\\]]*)\\]"));
+
+    QTextStream in(&file);
+    bool insideFrontMatter = false;
+    while (!in.atEnd()) {
+        const QString line = in.readLine();
+        if (line.trimmed() == QStringLiteral("---")) {
+            if (!insideFrontMatter) {
+                insideFrontMatter = true;
+                continue;
+            }
+            break; //Closing delimiter — no keywords line in this article.
+        }
+        if (!insideFrontMatter) {
+            continue;
+        }
+        const QRegularExpressionMatch match = keywordsRe.match(line);
+        if (match.hasMatch()) {
+            return match.captured(1).split(QLatin1Char(','), Qt::SkipEmptyParts)
+                    .join(QLatin1Char(' '))
+                    .simplified();
+        }
+    }
+    return QString();
 }
 
 QString cwManualIndex::slugForPath(const QString& relativePath)

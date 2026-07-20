@@ -20,8 +20,18 @@ MainWindowTest {
             return ObjectFinder.findObjectByChain(rootId, "rootId->docsPage->docsBody")
         }
 
+        function findByName(name) {
+            return ObjectFinder.findObjectByChain(rootId, "rootId->docsPage->" + name)
+        }
+
         function init() {
+            // Every test starts wide (persistent sidebar) unless it resizes.
+            rootId.width = 1200
             docsPageId.slug = ""
+            let field = findByName("docsSearchField")
+            if (field !== null) {
+                field.text = ""
+            }
             waitForRendering(rootId)
         }
 
@@ -106,6 +116,95 @@ MainWindowTest {
             tryVerify(function() {
                 return RootData.pageSelectionModel.currentPageAddress.endsWith("Docs")
             }, 2000, "File->Docs did not navigate to the Docs page")
+        }
+
+        // The sidebar TOC lists every manual article when the search box is
+        // empty, so the chapter-grouped table of contents is always present.
+        function test_sidebarListsAllArticlesByDefault() {
+            let toc = findByName("docsTocList")
+            verify(toc !== null, "sidebar TOC list not found")
+            let articleCount = RootData.manualIndex.articles.length
+            verify(articleCount > 10, "manual index is empty — is the manual resource built?")
+            tryCompare(toc, "count", articleCount, 2000,
+                       "the empty-query TOC should list every article")
+        }
+
+        // Typing in the search box filters the TOC to matching articles through
+        // the ManualSearchModel; clearing it restores the full list.
+        function test_searchFiltersTheToc() {
+            let toc = findByName("docsTocList")
+            let field = findByName("docsSearchField")
+            verify(toc !== null && field !== null, "sidebar search widgets not found")
+            let articleCount = RootData.manualIndex.articles.length
+
+            field.text = "declination"
+            tryVerify(function() { return toc.count > 0 && toc.count < articleCount },
+                      2000, "search did not narrow the TOC")
+
+            field.text = ""
+            tryCompare(toc, "count", articleCount, 2000,
+                       "clearing the search did not restore the full TOC")
+        }
+
+        // Below the collapse breakpoint the pinned sidebar gives way to a
+        // drawer: its persistent TOC panel deactivates and a toggle button
+        // appears. The drawer reuses the same DocsSidebar, so its search/TOC
+        // behaviour is already covered by the wide-mode cases above.
+        function test_compactModeCollapsesSidebarIntoADrawer() {
+            verify(!docsPageId.isNarrow, "a 1200px window should not be compact")
+            verify(findByName("docsTocList") !== null, "wide mode should pin the TOC panel")
+            let toggle = findByName("docsSidebarToggle")
+            verify(toggle !== null, "the drawer toggle should exist")
+            verify(!toggle.visible, "the toggle should be hidden while the panel is pinned")
+
+            rootId.width = Theme.breakpointPanelCollapse - 100
+            tryVerify(function() { return docsPageId.isNarrow },
+                      2000, "shrinking past the breakpoint should switch to compact mode")
+            tryVerify(function() { return toggle.visible },
+                      2000, "the drawer toggle should appear in compact mode")
+            // The pinned panel's Loader deactivates, so its TOC is gone from the
+            // page tree; the live TOC now lives inside the (closed) drawer.
+            verify(findByName("docsTocList") === null,
+                   "the persistent TOC panel should be inactive in compact mode")
+
+            // Picking an entry in compact mode goes through selectSlug, which
+            // closes the drawer (a no-op here) and navigates — exercise it.
+            let model = RootData.pageSelectionModel
+            model.gotoPageByName(null, "Docs")
+            docsPageId.selectSlug("scraps-carpeting")
+            tryVerify(function() {
+                return model.currentPageAddress.endsWith("Scraps and Carpeting")
+            }, 2000, "selecting an article in compact mode did not navigate")
+
+            rootId.width = 1200
+            tryVerify(function() { return !docsPageId.isNarrow && findByName("docsTocList") !== null },
+                      2000, "restoring the width should re-pin the sidebar panel")
+        }
+
+        // A gibberish query matches nothing, so the TOC empties out.
+        function test_searchWithNoMatchesEmptiesToc() {
+            let toc = findByName("docsTocList")
+            let field = findByName("docsSearchField")
+            verify(toc !== null && field !== null, "sidebar search widgets not found")
+            field.text = "zzzznotarealtopic"
+            tryCompare(toc, "count", 0, 2000, "a non-matching search should empty the TOC")
+        }
+
+        // Selecting an entry navigates in-app by slug and enters history, the
+        // same path the sidebar delegate's TapHandler drives.
+        function test_navigateToSlugEntersHistory() {
+            let model = RootData.pageSelectionModel
+            model.gotoPageByName(null, "Docs")
+            verify(model.currentPageAddress.endsWith("Docs"), "pre-state should be the Docs landing")
+
+            docsPageId.navigateToSlug("scraps-carpeting")
+            tryVerify(function() {
+                return model.currentPageAddress.endsWith("Scraps and Carpeting")
+            }, 2000, "navigateToSlug did not open the target article")
+
+            model.back()
+            verify(model.currentPageAddress.endsWith("Docs"),
+                   "the slug hop did not enter history — back() should return to the landing")
         }
 
         // Navigating to Docs pushes it as its own history entry on top of the

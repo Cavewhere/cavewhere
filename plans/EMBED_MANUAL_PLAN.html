@@ -130,7 +130,7 @@
     <span class="chip"><b>Source of truth</b> docs/manual/*.md</span>
     <span class="chip"><b>Renderer</b> Qt TextFormat.MarkdownText</span>
     <span class="chip"><b>Nav</b> cwPageSelectionModel, page per article</span>
-    <span class="chip"><b>Status</b> CP1–CP3 done · CP4 next</span>
+    <span class="chip"><b>Status</b> CP1–CP4 done · CP5 next</span>
   </div>
 </header>
 
@@ -394,10 +394,44 @@ docs-website tool, never a CaveWhere build dependency.</p>
 <div class="cp">
   <span class="tag">CP4 · Sidebar TOC + search</span>
   <h3>Find a topic and jump to it</h3>
-  <p>Build the sidebar TOC (chapter grouping from <code>cwManualIndex.articles</code>) and a search box
-    backed by a filter model over the index's title/summary/keywords. Selecting a result navigates to
-    that page.</p>
-  <div class="files">+ a small filter model · ~ cwManualIndex (search accessor) · ~ DocsPage.qml</div>
+  <p class="rec">✓ Done — 83 <code>[cwManualIndex]</code>+<code>[cwManualSearchModel]</code> assertions +
+    13 <code>tst_DocsPage</code> cases green; app + both test binaries link clean.</p>
+  <p>Added a persistent left sidebar to <code>DocsPage</code>: a search <code>TextField</code> over a
+    chapter-grouped <code>ListView</code> TOC (<code>ListView.section</code> keyed on the article's
+    <code>chapter</code>, so the model's index order groups for free). The TOC is driven by a new
+    <code>cwManualSearchModel</code> (<code>QAbstractListModel</code>, <code>QML_NAMED_ELEMENT</code>):
+    an empty <code>query</code> lists every article in order; a non-empty one keeps rows whose haystack
+    contains every whitespace term (AND). Selecting a row calls a shared
+    <code>DocsPage.navigateToSlug()</code> — the same helper <code>onLinkActivated</code> now uses, so
+    sidebar and cross-link navigation share one path.</p>
+  <p><strong>Responsive (compact mode):</strong> the sidebar content lives in a reusable
+    <code>DocsSidebar.qml</code> hosted by whichever container the width calls for — a pinned left panel
+    above <code>Theme.breakpointPanelCollapse</code> (600, the same breakpoint the other pages collapse
+    at) and, below it, a left-edge <code>QC.Drawer</code> opened by a <code>list.svg</code>
+    <code>RoundButton</code>. Only one instance is live at a time (<code>active:</code> Loaders keyed on
+    <code>isNarrow</code>); picking an article routes through <code>selectSlug()</code> which dismisses
+    the drawer then navigates. The reading column takes the full width in compact mode.</p>
+  <p><strong>Parser (the A1/R1 "summaries for free" piece):</strong> <code>cwManualIndex</code> now
+    captures the <code>llms.txt</code> trailing summary (the text after <code>):</code>) into
+    <code>Article.summary</code> at construction — zero new I/O — and adds
+    <code>searchText(slug)</code>, a lowercased <code>title + summary + keywords</code> haystack.
+    Keywords are read from each article's front matter lazily and cached on first search, so app
+    startup still touches only <code>llms.txt</code>.</p>
+  <div class="callout" style="border-left-color:var(--warn)">
+    <p class="k" style="color:var(--warn)">Plan drift — "sections → chapters" is stale</p>
+    <p>The A1/R1 follow-up proposed deriving chapters from <code>llms.txt</code>'s <code>##</code>
+    sections. That doesn't hold: <code>llms.txt</code>'s only sections are <em>Start here / Chapters /
+    Meta</em> (every article sits under one <code>## Chapters</code>), and the website build
+    (<code>build-manual-html.py</code>) itself derives the sidebar chapter from the <strong>directory
+    path</strong> (<code>chapter_title(relpath)</code>), not from those sections. So C++
+    <code>chapterForPath</code> is already a faithful port of the Python, and the two can't be collapsed
+    <em>through llms.txt</em>. The genuinely duplicated chapter table is left as-is (correct, tiny,
+    curated); only the <em>summary</em> half of A1/R1 was single-sourced from <code>llms.txt</code>, which
+    is where the real CP4 payoff was.</p>
+  </div>
+  <div class="files">+ cwManualSearchModel.{h,cpp} · + testcases/test_cwManualSearchModel.cpp ·
+    + DocsSidebar.qml (extracted, responsive host) · ~ cwManualIndex.{h,cpp} (summary + searchText) ·
+    ~ DocsPage.qml (sidebar panel/drawer) · ~ test_cwManualIndex.cpp · ~ tst_DocsPage.qml (14 cases)</div>
 </div>
 
 <div class="cp">
@@ -410,6 +444,32 @@ docs-website tool, never a CaveWhere build dependency.</p>
   <div class="files">~ test-qml/tst_DocsPage.qml · ~ DocsPage.qml</div>
 </div>
 
+<div class="cp">
+  <span class="tag">CP6 · Find on page + intra-page anchors</span>
+  <h3>Search within the current article, and jump to headings</h3>
+  <p>The CP4 search box finds <em>which article</em> to open (it filters the TOC across the manual). This
+    checkpoint adds the other axis: <strong>find-on-page</strong> — a Ctrl+F bar that locates, highlights,
+    and scrolls to text matches <em>inside</em> the article you're reading — and lands the
+    <strong>same-page <code>#anchor</code> scroll</strong> that CP3 deferred (decision&nbsp;4), since both
+    need the same foundation.</p>
+  <p><strong>Why it's not a toggle.</strong> The reading column is a <code>QC.Label</code> with
+    <code>textFormat: MarkdownText</code>, and Qt's <code>Text</code>/<code>Label</code> has no built-in
+    find or highlight and exposes no document handle. The move is to render the body through a
+    document-backed read-only text view (a read-only <code>QC.TextArea</code>, or a <code>Label</code>
+    whose <code>QQuickTextDocument</code> we reach) so we can call <code>QTextDocument::find()</code> to
+    locate a match, select it, and scroll it into view. That <em>same</em> <code>QTextDocument</code> is
+    what anchor→y resolution needs, so <code>#anchor</code> links (landing-page TOC jumps and heading
+    cross-refs) fall out of the same plumbing — the CP3 <code>onLinkActivated</code> early-return on
+    <code>#</code> becomes a real scroll.</p>
+  <p><strong>Scope:</strong> swap the reading column to the document-backed view (keep the qrc image
+    rewriting and <code>Theme</code> styling); a small find bar (text field + next/prev + match count +
+    highlight-all + Esc-to-close), opened by Ctrl+F; wire <code>#anchor</code> clicks to scroll to the
+    heading's document position. <strong>Not in scope:</strong> cross-article "find in all pages" (that's
+    what CP4's TOC search already covers a different way).</p>
+  <div class="files">~ DocsPage.qml (document-backed body + find bar) · + a find controller (QTextDocument::find
+    over the body's QQuickTextDocument) · ~ tst_DocsPage.qml</div>
+</div>
+
 <h2>Risks &amp; nuances</h2>
 <ul>
   <li><strong>Markdown fidelity.</strong> Qt renders GitHub-flavored Markdown including tables,
@@ -419,7 +479,8 @@ docs-website tool, never a CaveWhere build dependency.</p>
     on its own.</li>
   <li><strong>Front-matter stripping at load.</strong> The renderer must drop the leading
     <code>---&nbsp;…&nbsp;---</code> block, same as <code>build-manual-html.py</code> does.</li>
-  <li><strong>Intra-page anchors</strong> need anchor→y-position glue (decision&nbsp;4).</li>
+  <li><strong>Intra-page anchors</strong> need anchor→y-position glue (decision&nbsp;4) — now folded into
+    CP6, which brings in the document-backed body that makes both anchor-scroll and find-on-page possible.</li>
   <li><strong>Binary size</strong> from compiled images (decision&nbsp;1).</li>
   <li><strong>Two renderers, one source.</strong> Keep the web (<code>manual.html</code>) and in-app
     (native) paths as separate renderers over the same <code>.md</code> — don't try to make one
@@ -439,7 +500,13 @@ manual; each is worth doing before or alongside CP4, where the payoffs land.</p>
     a per-page summary that the parser captures up to <code>):</code> and then discards. Generalize the
     parser to consume <code>llms.txt</code>'s structure (sections → chapters, trailing text → summary):
     it becomes the single ordered index the plan promises and hands <strong>CP4 search its summaries
-    for free</strong>. Blast radius: the parser only. Best done at the start of CP4.</li>
+    for free</strong>. Blast radius: the parser only. Best done at the start of CP4.
+    <br><strong>Partially resolved in CP4 — closed.</strong> The <em>summary</em> half shipped: the parser
+    reads the <code>llms.txt</code> trailing text into <code>Article.summary</code> and CP4 search uses it.
+    The <em>chapters</em> half was dropped as unworkable — <code>llms.txt</code> has no per-chapter
+    sections (only <em>Start here / Chapters / Meta</em>) and the website build derives chapters from the
+    directory anyway, so <code>chapterForPath</code> is already the single faithful port (see the CP4
+    plan-drift note).</li>
   <li><strong>A3 · Move the "empty slug = landing" rule into C++.</strong> The routing lives in QML today
     (<code>DocsPage.qml:19</code>: <code>slug === "" ? landingBody() : body(slug)</code>). Folding it into
     <code>body("")</code> returning the landing keeps the QML seam a single dumb call and puts the routing
@@ -478,7 +545,11 @@ curated manual. A1 below naturally pairs with CP4 (it builds the TOC/search over
     Correctness depends on titles staying unique and never reworded; the stable id (slug) never appears in the
     address space. A slug-addressed docs sub-space (a model/index helper that navigates the Docs child by slug)
     would be robust and give stable deep-links. Blast radius: registration loop + a small nav helper + the
-    DocsPage seam. Best folded into CP4's TOC/search work over the same index.</li>
+    DocsPage seam. Best folded into CP4's TOC/search work over the same index.
+    <br><strong>CP4 status:</strong> still open, but CP4 routed all in-app hops (sidebar taps, TOC, and
+    <code>onLinkActivated</code>) through one <code>DocsPage.navigateToSlug(slug)</code> helper, so the
+    slug→<code>"Docs/"+title</code>→page-by-name round-trip now lives in exactly one place — swapping it
+    for a slug-addressed nav helper is a one-function change when someone does R1/A1.</li>
 </ul>
 
 <h2>Out of scope (this plan)</h2>
@@ -490,9 +561,10 @@ curated manual. A1 below naturally pairs with CP4 (it builds the TOC/search over
 </ul>
 
 <footer>
-  CP1–CP3 done (31 <code>[cwManualIndex]</code> + 9 <code>tst_DocsPage</code> cases green; app links
-  clean) · CaveWhere · renders natively, no web engine · all file:line references verified against the
-  current tree. Decisions 1–6 resolved — CP4 (sidebar TOC + search) is next.
+  CP1–CP4 done (83 <code>[cwManualIndex]</code>+<code>[cwManualSearchModel]</code> assertions +
+  13 <code>tst_DocsPage</code> cases green; app links clean) · CaveWhere · renders natively, no web
+  engine · all file:line references verified against the current tree. Decisions 1–6 resolved — CP5
+  (dark-mode polish + fuller tests) and CP6 (find-on-page + intra-page anchors) remain.
 </footer>
 
 </div>

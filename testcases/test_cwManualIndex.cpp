@@ -35,6 +35,22 @@ TEST_CASE("cwManualIndex parses the embedded manual", "[cwManualIndex]") {
         CHECK(scraps->title == QStringLiteral("Scraps and Carpeting"));
         CHECK(scraps->chapter == QStringLiteral("Scraps and Carpeting"));
         CHECK(scraps->relativePath == QStringLiteral("scraps/carpeting.md"));
+        //The one-line summary is captured from llms.txt (the text after "):"),
+        //which feeds the search haystack.
+        CHECK(scraps->summary.contains(QStringLiteral("carpet")));
+        CHECK(!scraps->summary.endsWith(QLatin1Char(' ')));
+    }
+
+    SECTION("searchText fuses title, summary and front-matter keywords") {
+        //"carpet" is in the summary/title; "triangulation" is only in the
+        //article's front-matter keywords — proving keywords are folded in.
+        const QString haystack = index.searchText(QStringLiteral("scraps-carpeting"));
+        REQUIRE(!haystack.isEmpty());
+        CHECK(haystack == haystack.toLower());
+        CHECK(haystack.contains(QStringLiteral("scraps and carpeting")));
+        CHECK(haystack.contains(QStringLiteral("triangulation")));
+        //An unknown slug has no haystack.
+        CHECK(index.searchText(QStringLiteral("no-such-page")).isEmpty());
     }
 
     SECTION("root-level entries (index.md, AUTHORING.md) are not articles") {
