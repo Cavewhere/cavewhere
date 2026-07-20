@@ -117,17 +117,22 @@ RegionViewer {
         defaultInteraction: turnTableInteractionId
     }
 
+    //Stations are added to this container so hiding them is one property, and
+    //doesn't fight the transform updater's per-station viewport clipping.
+    Item {
+        id: stationContainerId
+        anchors.fill: parent
+        visible: rhiViewerId.stationsVisible
+    }
+
     Item3DRepeater {
         id: noteStationRepeaterId
         anchors.fill: parent
 
-        //The transform updater drives each station's visible flag (viewport
-        //clipping), so gate it here rather than binding the delegate's visible.
-        pointsVisible: rhiViewerId.stationsVisible
+        targetItem: stationContainerId
         camera: rhiViewerId.camera
         model: note
         positionRole: NoteLiDAR.UpPositionRole
-        visible: true
         selectionManager: SelectionManager {
             id: selectionManagerId
         }
@@ -174,7 +179,6 @@ RegionViewer {
             name: ""
             PropertyChanges {
                 transformEditorId.visible: true
-                noteStationRepeaterId.visible: true
             }
         },
 
@@ -192,9 +196,9 @@ RegionViewer {
 
         State {
             name: "CAPTURE_ICON"
+            //stationsVisible is already false here, which hides stationContainerId
             PropertyChanges {
                 transformEditorId.visible: false
-                noteStationRepeaterId.visible: false
             }
         }
     ]

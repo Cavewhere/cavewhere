@@ -40,6 +40,35 @@ cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
             });
 }
 
+QQuickItem* cwAbstractPointManager::targetItem() const
+{
+    return m_targetItem;
+}
+
+void cwAbstractPointManager::setTargetItem(QQuickItem* targetItem)
+{
+    if(m_targetItem == targetItem) {
+        return;
+    }
+
+    m_targetItem = targetItem;
+    updateItemParents();
+
+    emit targetItemChanged();
+}
+
+/**
+  The item that point items are parented into, so points keep sharing that
+  item's scale and rotation.
+  */
+QQuickItem* cwAbstractPointManager::pointParentItem()
+{
+    if(m_targetItem != nullptr) {
+        return m_targetItem;
+    }
+    return parentItem() != nullptr ? parentItem() : this;
+}
+
 /**
   This creates the station component used generate the station symobols
   */
@@ -132,7 +161,7 @@ QQuickItem* cwAbstractPointManager::createItem(int index)
         m_component->setInitialProperties(item, props);
     }
 
-    item->setParentItem(parentItem() != nullptr ? parentItem() : this);
+    item->setParentItem(pointParentItem());
     item->setParent(this);
 
     m_component->completeCreate();
@@ -147,10 +176,12 @@ QQuickItem* cwAbstractPointManager::createItem(int index)
 
 void cwAbstractPointManager::updateItemParents()
 {
-    QQuickItem* newParentItem = parentItem() != nullptr ? parentItem() : this;
+    QQuickItem* newParentItem = pointParentItem();
     for(auto item : std::as_const(m_items)) {
         item->setParentItem(newParentItem);
     }
+
+    emit pointParentItemChanged();
 }
 
 void cwAbstractPointManager::refreshItemAt(int index)

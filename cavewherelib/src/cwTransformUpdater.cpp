@@ -120,8 +120,7 @@ void cwTransformUpdater::updatePoint(QQuickItem *object) {
 
     QVector3D position = object->property("position3D").value<QVector3D>();
     QVector3D position2D = TransformMatrix.map(position);
-    auto visiblity = PointsVisible && !Camera->isQtViewportCoordinateClipped(position2D);
-    object->setVisible(visiblity);
+    object->setVisible(!Camera->isQtViewportCoordinateClipped(position2D));
     object->setPosition(QPointF(position2D.x(), position2D.y()));
 }
 
@@ -191,32 +190,4 @@ void cwTransformUpdater::setEnabled(bool enabled) {
         update();
         emit enabledChanged();
     }
-}
-
-bool cwTransformUpdater::pointsVisible() const {
-    return PointsVisible;
-}
-
-void cwTransformUpdater::setPointsVisible(bool pointsVisible) {
-    if(PointsVisible == pointsVisible) {
-        return;
-    }
-
-    PointsVisible = pointsVisible;
-
-    //update() bails when disabled or camera-less, so re-apply visibility here
-    //rather than through it. Hiding needs no camera; showing has to recompute
-    //each point's viewport clipping so off-screen points stay hidden.
-    if(!PointsVisible) {
-        for(QQuickItem* object : std::as_const(PointItems)) {
-            object->setVisible(false);
-        }
-    } else if(Camera != nullptr) {
-        updateTransformMatrix();
-        for(QQuickItem* object : std::as_const(PointItems)) {
-            updatePoint(object);
-        }
-    }
-
-    emit pointsVisibleChanged();
 }

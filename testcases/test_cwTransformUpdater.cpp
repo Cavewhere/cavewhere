@@ -4,7 +4,6 @@
 //Our includes
 #include "cwTransformUpdater.h"
 #include "cwCamera.h"
-#include "cwSignalSpy.h"
 
 //Qt includes
 #include <QQuickItem>
@@ -13,6 +12,10 @@
 namespace {
 
     constexpr int kViewportSize = 1000;
+
+    //One model unit sideways - moves the projection well past a pixel without
+    //pushing the point off screen
+    constexpr qreal kPanDistance = 1.0;
 
     /**
      * Minimal stand-in for a station delegate. cwTransformUpdater reads
@@ -83,8 +86,6 @@ TEST_CASE("cwTransformUpdater shows points inside the viewport by default", "[cw
     cwTransformUpdater updater;
     updater.setCamera(makeCenteredCamera(&parent));
 
-    CHECK(updater.pointsVisible() == true);
-
     TestItemRoot root;
     TestPositionItem* inFront = root.addPoint(QVector3D(0, 0, -10)); //Down the -z axis, dead center
     updater.addPointItem(inFront);
@@ -104,95 +105,46 @@ TEST_CASE("cwTransformUpdater hides points behind the camera", "[cwTransformUpda
     CHECK(behind->isVisible() == false);
 }
 
-TEST_CASE("cwTransformUpdater pointsVisible hides every point regardless of clipping", "[cwTransformUpdater]") {
+TEST_CASE("cwTransformUpdater stops following the camera while disabled", "[cwTransformUpdater]") {
     QObject parent;
+    cwCamera* camera = makeCenteredCamera(&parent);
+
     cwTransformUpdater updater;
-    updater.setCamera(makeCenteredCamera(&parent));
-
-    TestItemRoot root;
-    TestPositionItem* inFront = root.addPoint(QVector3D(0, 0, -10));
-    TestPositionItem* behind = root.addPoint(QVector3D(0, 0, 10));
-    updater.addPointItem(inFront);
-    updater.addPointItem(behind);
-
-    REQUIRE(inFront->isVisible() == true);
-    REQUIRE(behind->isVisible() == false);
-
-    cwSignalSpy visibleSpy(&updater, &cwTransformUpdater::pointsVisibleChanged);
-
-    updater.setPointsVisible(false);
-
-    CHECK(visibleSpy.size() == 1);
-    CHECK(inFront->isVisible() == false);
-    CHECK(behind->isVisible() == false);
-
-    //Turning it back on must restore clipping-derived visibility, not blanket-show
-    updater.setPointsVisible(true);
-
-    CHECK(visibleSpy.size() == 2);
-    CHECK(inFront->isVisible() == true);
-    CHECK(behind->isVisible() == false);
-}
-
-TEST_CASE("cwTransformUpdater setPointsVisible is a no-op when unchanged", "[cwTransformUpdater]") {
-    QObject parent;
-    cwTransformUpdater updater;
-    updater.setCamera(makeCenteredCamera(&parent));
-
-    cwSignalSpy visibleSpy(&updater, &cwTransformUpdater::pointsVisibleChanged);
-
-    updater.setPointsVisible(true); //Already the default
-    CHECK(visibleSpy.size() == 0);
-
-    updater.setPointsVisible(false);
-    updater.setPointsVisible(false);
-    CHECK(visibleSpy.size() == 1);
-}
-
-TEST_CASE("cwTransformUpdater hides points added while pointsVisible is false", "[cwTransformUpdater]") {
-    QObject parent;
-    cwTransformUpdater updater;
-    updater.setCamera(makeCenteredCamera(&parent));
-    updater.setPointsVisible(false);
-
-    TestItemRoot root;
-    TestPositionItem* inFront = root.addPoint(QVector3D(0, 0, -10)); //Would be visible if not gated
-    updater.addPointItem(inFront);
-
-    CHECK(inFront->isVisible() == false);
-}
-
-TEST_CASE("cwTransformUpdater applies pointsVisible while disabled", "[cwTransformUpdater]") {
-    QObject parent;
-    cwTransformUpdater updater;
-    updater.setCamera(makeCenteredCamera(&parent));
+    updater.setCamera(camera);
 
     TestItemRoot root;
     TestPositionItem* inFront = root.addPoint(QVector3D(0, 0, -10));
     updater.addPointItem(inFront);
-    REQUIRE(inFront->isVisible() == true);
 
-    //cwItem3DRepeater drives enabled from its own isVisible(), so hiding must
-    //still take effect while updates are switched off - and unhiding must too.
+    REQUIRE(inFront->isVisible() == true);
+    const QPointF originalPosition = inFront->position();
+
+    //cwItem3DRepeater turns this off while the points are hidden, so panning the
+    //camera behind a hidden note reprojects nothing.
     updater.setEnabled(false);
 
-    updater.setPointsVisible(false);
-    CHECK(inFront->isVisible() == false);
+    QMatrix4x4 panned;
+    panned.translate(kPanDistance, 0.0, 0.0);
+    camera->setViewMatrix(panned);
+    CHECK(inFront->position() == originalPosition);
 
-    updater.setPointsVisible(true);
-    CHECK(inFront->isVisible() == true);
+    //Re-enabling has to resync everything the camera moved past
+    updater.setEnabled(true);
+    CHECK(inFront->position() != originalPosition);
 }
 
-TEST_CASE("cwTransformUpdater applies pointsVisible without a camera", "[cwTransformUpdater]") {
+TEST_CASE("cwTransformUpdater tolerates points added without a camera", "[cwTransformUpdater]") {
     cwTransformUpdater updater; //No camera set
 
     TestItemRoot root;
     TestPositionItem* item = root.addPoint(QVector3D(0, 0, -10));
     updater.addPointItem(item);
 
-    //update() bails without a camera, so hiding has to be applied directly
-    updater.setPointsVisible(false);
-    CHECK(item->isVisible() == false);
+    //Nothing to project against yet, so the point keeps its declared position
+    CHECK(item->position() == QPointF(0, 0));
+
+    updater.setCamera(makeCenteredCamera(&updater));
+    CHECK(item->isVisible() == true);
 }
 
 #include "test_cwTransformUpdater.moc"
