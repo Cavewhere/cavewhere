@@ -464,6 +464,18 @@ private:
     // contain key. Safe to call from the main thread alongside picks.
     void invalidatePublishedSlot(const Key& key);
 
+    // Apply an Object's new modelMatrix to the published BVH synchronously, so
+    // picks reflect a move/rotation immediately instead of waiting for the
+    // async worker to reinstall (issue #505: a rotate-then-pick must not hit
+    // the pre-rotation position). Sub-BVHs are model-space and reused by
+    // shared_ptr; only this Object's world transform and the small top-level
+    // change, so this is O(objects), not O(vertices). Copy-on-write like
+    // invalidatePublishedSlot, so in-flight query snapshots stay consistent.
+    // Returns false (no-op) if m_bvh is null or doesn't yet contain key — the
+    // Object's first build is still in flight and will pick up the new matrix
+    // from Nodes when it lands. Main thread only.
+    bool refreshPublishedModelMatrix(const Key& key, const QMatrix4x4& modelMatrix);
+
     QFuture<void> launchBuildJob();
 
     // Build a model-space sub-BVH for one Object using the existing

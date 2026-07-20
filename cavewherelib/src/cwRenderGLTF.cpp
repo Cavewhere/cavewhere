@@ -33,6 +33,9 @@ cwRenderGLTF::cwRenderGLTF(QObject *parent)
 void cwRenderGLTF::setGLTFFilePath(const QString &filePath)
 {
     if(m_gltfFilePath != filePath) {
+        m_gltfFilePath = filePath;
+        emit gltfFilePathChanged();
+
         for(auto id : std::as_const(m_items)) {
             removeItem(id);
         }

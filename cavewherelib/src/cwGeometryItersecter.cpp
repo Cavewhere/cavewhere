@@ -729,6 +729,14 @@ void cwGeometryItersecter::setModelMatrix(const Key &objectKey, const QMatrix4x4
     iter->Object.setModelMatrix(modelMatrix);
     // No sub-BVH invalidation — sub-BVHs are model-space and unaffected
     // by modelMatrix changes. Only the top-level needs refreshing.
+    //
+    // Refresh the published top-level synchronously first so picks reflect the
+    // move immediately (issue #505). The async rebuild still runs: it keeps the
+    // build coalesced, cancels any competing in-flight build, and remains the
+    // eventual source of truth (a stale install from an older competing build
+    // can't leave the matrix wrong because the restarted build re-snapshots the
+    // now-updated Nodes).
+    refreshPublishedModelMatrix(objectKey, modelMatrix);
     scheduleTopLevelRebuild();
 }
 
@@ -2018,6 +2026,47 @@ void cwGeometryItersecter::invalidatePublishedSlot(const Key& key)
     auto next = std::make_shared<BvhData>(*m_bvh);
     next->subBvhs[*it].reset();
     m_bvh = std::move(next);
+}
+
+bool cwGeometryItersecter::refreshPublishedModelMatrix(const Key& key,
+                                                       const QMatrix4x4& modelMatrix)
+{
+    if (!m_bvh) {
+        return false;
+    }
+    const auto slotIt = m_bvh->keyToSlot.constFind(key);
+    if (slotIt == m_bvh->keyToSlot.constEnd()) {
+        return false;
+    }
+    const int slot = *slotIt;
+
+    // Copy-on-write: m_bvh is immutable and may be shared with in-flight query
+    // snapshots, so build a fresh BvhData rather than editing in place. The
+    // sub-BVHs are model-space and reused by shared_ptr; only this Object's
+    // world transform and the small top-level change.
+    auto next = std::make_shared<BvhData>(*m_bvh);
+    next->modelMatrices[slot] = modelMatrix;
+    next->inverseModelMatrices[slot] = modelMatrix.inverted();
+
+    // Recompute each Object's world box from its (model-space) sub-BVH root and
+    // its current matrix, then rebuild the top-level. buildTopLevel skips null
+    // boxes and keys leaves by slot index, so a slot nulled by an in-flight
+    // rebuild (invalidatePublishedSlot) stays out of picks and the surviving
+    // slots keep their indices.
+    QVector<QBox3D> worldBoxes;
+    worldBoxes.reserve(next->subBvhs.size());
+    for (int i = 0; i < next->subBvhs.size(); ++i) {
+        const std::shared_ptr<const SubBvh>& sub = next->subBvhs.at(i);
+        if (!sub) {
+            worldBoxes.append(QBox3D());
+            continue;
+        }
+        worldBoxes.append(sub->modelRootBox.transformed(next->modelMatrices.at(i)));
+    }
+    next->topLevel = buildTopLevel(worldBoxes);
+
+    m_bvh = std::move(next);
+    return true;
 }
 
 bool cwGeometryItersecter::isPrimitiveVisible(const QVector<quint8>& mask,

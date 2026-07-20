@@ -97,6 +97,68 @@ TEST_CASE("setModelMatrix translates pick without invalidating sub-BVH",
     REQUIRE_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
 }
 
+TEST_CASE("setModelMatrix updates picks before the async rebuild lands",
+          "[cwGeometryItersecter][twoLevel][Issue505]")
+{
+    // Regression for issue #505 ("New GLB doesn't get added to
+    // cwGeometryIntersector ... if the lidar file rotates a bunch, it might
+    // have an old position that doesn't insersect correct").
+    //
+    // Rotating/moving a LiDAR note changes its Object modelMatrix. setModelMatrix
+    // only schedules a top-level rebuild on a worker thread (scheduleTopLevelRebuild
+    // -> m_bvhRestarter). Until that install callback lands, the published BVH
+    // still carries the OLD transform, so a pick hits where the geometry USED to
+    // be and misses where it now is. In the running app the event loop is spinning
+    // and a large mesh's rebuild can still be in flight when the user picks
+    // (e.g. NoteLiDARItem's onFinishedMoving -> pick), which is the reported
+    // "old position" symptom.
+    //
+    // The top-level refresh is cheap (it does not touch the model-space sub-BVHs),
+    // so setModelMatrix applies it synchronously (refreshPublishedModelMatrix) and
+    // a moved Object is pickable at its new world position WITHOUT spinning the
+    // event loop. This test omits waitForFinish/processEvents after setModelMatrix
+    // on purpose to sit in the pre-async-install window and pin that the pick is
+    // already correct there.
+    //
+    // Note this does not regress "picks keep working during an in-flight rebuild":
+    // that case is about ADDING a new Object (a sub-BVH build), which stays async.
+
+    cwGeometryItersecter intersector;
+
+    // A triangle in the z=0 plane, identity matrix (same winding as the
+    // two-level traversal test, which a downward ray hits).
+    intersector.addObject(makeTriangleObject(
+        1,
+        QVector3D(-1.0f, -1.0f, 0.0f),
+        QVector3D( 1.0f, -1.0f, 0.0f),
+        QVector3D( 0.0f,  1.0f, 0.0f)));
+    intersector.waitForFinish();
+
+    const QRay3D rayAtOrigin(QVector3D(0.0f, 0.0f, 100.0f),
+                             QVector3D(0.0f, 0.0f, -1.0f));
+    REQUIRE(intersector.intersectsDetailed(rayAtOrigin).hit());
+
+    // Move the object +50 in x. Do NOT waitForFinish / processEvents: we are in
+    // the window right after a rotation, before the worker's install callback
+    // has replaced the published BVH.
+    QMatrix4x4 translation;
+    translation.translate(50.0f, 0.0f, 0.0f);
+    intersector.setModelMatrix(cwRenderObjectId{}, 1, translation);
+
+    const QRay3D rayAtFifty(QVector3D(50.0f, 0.0f, 100.0f),
+                            QVector3D(0.0f, 0.0f, -1.0f));
+
+    // Desired: the pick already reflects the new transform.
+    CHECK(intersector.intersectsDetailed(rayAtFifty).hit());        // stale window: currently misses
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit()); // stale window: currently a stale hit
+
+    // After the async rebuild lands the state is of course correct — this pins
+    // that the eventual result is right regardless of the fix.
+    intersector.waitForFinish();
+    CHECK(intersector.intersectsDetailed(rayAtFifty).hit());
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
+}
+
 TEST_CASE("Replacing one Object's geometry doesn't disturb others",
           "[cwGeometryItersecter][twoLevel]")
 {
