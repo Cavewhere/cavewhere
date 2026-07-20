@@ -638,6 +638,33 @@ curated manual. A1 below naturally pairs with CP4 (it builds the TOC/search over
     for a slug-addressed nav helper is a one-function change when someone does R1/A1.</li>
 </ul>
 
+<p><strong>Group 1 shipped (commit <code>5f66d30f</code>, 2026-07-20).</strong> The three CP3-review
+coupling notes above (<em>R1</em> navigate by page handle, <em>R2</em> precise link classification,
+<em>A1</em> slug-addressed nav) plus the <em>A3</em> empty-slug→landing move landed together:
+<code>body("")</code> returns the landing; new <code>resolveLink()</code> returns a
+<code>{kind}</code> map (anchor/article/external/missing) so the viewer never guesses from the raw
+href; articles register under their <em>slug</em> and <code>navigateToSlug()</code> is a single
+<code>gotoPageByName(docsRootPage, slug)</code>. Article addresses now read as slugs (stable
+deep-links). The refactor stranded <code>slugForLink()</code> and the <code>title()</code> invokable
+(no production callers left) — both removed in the same commit.</p>
+
+<h2>Viewer polish — open (surfaced 2026-07-20)</h2>
+<ul>
+  <li><strong>Pointing-hand cursor over document links.</strong> Links in the rendered Markdown body
+    (<code>DocsPage.qml</code>'s <code>bodyId</code> <code>QC.TextArea</code>) don't show a
+    <code>Qt.PointingHandCursor</code> on hover, so they don't read as clickable. Add hover-cursor
+    feedback over anchor spans. Note the body is a read-only <code>TextArea</code> rendering
+    <code>MarkdownText</code>; <code>hoveredLink</code> / a <code>HoverHandler</code> gated on the
+    link region is the likely hook. Blast radius: <code>DocsPage.qml</code> only.</li>
+  <li><strong>Reset the scroll position to the top on page switch.</strong> Switching articles keeps
+    the reading column (<code>scrollId</code> <code>QQ.Flickable</code>) at its previous
+    <code>contentY</code>, which lands the new page mid-scroll and causes a rendering glitch. On
+    <code>slug</code> change (alongside the existing <code>onSlugChanged</code> that closes find),
+    reset <code>scrollId.contentY = 0</code>. Watch for ordering vs. the document re-layout — the
+    reset must apply after the new body's height is known, or it can clamp against the old
+    <code>contentHeight</code>. Blast radius: <code>DocsPage.qml</code> only.</li>
+</ul>
+
 <h2>Out of scope (this plan)</h2>
 <ul>
   <li>Publishing the manual to <strong>cavewhere.com</strong> — same source, separate task; the
