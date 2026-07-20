@@ -26,7 +26,6 @@ QQ.Item {
     objectName: "attachExternalCenterlineDialog"
 
     property Trip trip: null
-    property ExternalCenterlineManager externalCenterlineManager: RootData.externalCenterlineManager
 
     // True from the Attach click until the bridge reports for this
     // trip. The manager's busy token covers the same window, but the
@@ -47,6 +46,15 @@ QQ.Item {
     property Trip attachingTrip: null
     property string attachingTripId: ""
 
+    // Outcome signals for hosts. Exactly one fires per open()d session
+    // that ends: attached() when this dialog's attach succeeds,
+    // dismissed() when the user backs out (idle Cancel, or a canceled
+    // attach). A failed attach fires neither - the dialog stays open
+    // for another attempt. The programmatic close() is silent so
+    // hosts and tests can reset state without triggering cleanup.
+    signal attached()
+    signal dismissed()
+
     function open() {
         pathFieldId.text = ""
         root.attachError = ""
@@ -66,7 +74,7 @@ QQ.Item {
     }
 
     QQ.Connections {
-        target: root.externalCenterlineManager
+        target: RootData.externalCenterlineManager
 
         function onAttachCompleted(report) {
             if (!root.attaching || root.attachingTripId.length === 0) {
@@ -80,8 +88,12 @@ QQ.Item {
             root.attaching = false
             root.attachingTrip = null
             root.attachingTripId = ""
-            if (report.success || report.canceled) {
+            if (report.success) {
                 dialogId.close()
+                root.attached()
+            } else if (report.canceled) {
+                dialogId.close()
+                root.dismissed()
             } else {
                 root.attachError = report.errorMessage
             }
@@ -209,11 +221,12 @@ QQ.Item {
                     onClicked: {
                         if (root.attaching) {
                             if (root.attachingTrip !== null) {
-                                root.externalCenterlineManager.cancelAttach(
+                                RootData.externalCenterlineManager.cancelAttach(
                                     root.attachingTrip.id)
                             }
                         } else {
                             dialogId.close()
+                            root.dismissed()
                         }
                     }
                 }

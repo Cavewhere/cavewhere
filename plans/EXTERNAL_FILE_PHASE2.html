@@ -403,6 +403,9 @@
     is fed by <code>cwExternalCenterlineScanPreview</code> pre-attach and
     the <code>attachCompleted</code> bridge report post-attach, and the
     cwRootData-wrapper sentence still holds.
+    <em>Host correction (commit 13):</em> the production host is
+    CavePage's Add-Trip menu, not a TripPage button &mdash; a native
+    trip's page has no attach affordance yet (&sect;15 follow-up).
   </li>
   <li>
     <strong>New (commit 12):</strong>
@@ -427,7 +430,10 @@
     <code>SurveyEditor</code> vs.
     <code>ExternalCenterlineTripPanel</code>); <code>[Add Trip &#x25BE;]</code>
     menu (&sect;8.8 question 3) gains the <em>External centerline&hellip;</em>
-    entry.
+    entry. <em>As shipped (commit 13):</em> the menu lives on
+    <strong>CavePage</strong> (where the Add Trip button is), shared by
+    the wide and narrow bars; the swap Loader details are in the
+    &sect;12 commit-13 as-shipped note.
   </li>
   <li>
     <code>cavewherelib/qml/CavernOutputPage.qml</code> &mdash;
@@ -473,12 +479,23 @@
     <code>StationValidator</code>'s
     <code>external</code> property to the owner trip / cave's
     <code>externalCenterline.entryFile.length &gt; 0</code>.
+    <em>As shipped (commit 13):</em> the real sites are
+    <code>NoteStation.qml</code> and
+    <code>NoteLiDARStationItem.qml</code> (the two named files never
+    existed), and they previously had no validator at all &mdash; see
+    the &sect;12 commit-13 as-shipped note.
   </li>
   <li>
     Carpet sub-page station picker
     (<code>TripPage.qml:32&ndash;44</code> per master &sect;7.2) &mdash;
     swap autocomplete model from <code>cwTrip::stations()</code> to
     <code>cwScopeStationListModel</code> when the trip is externally backed.
+    <em>Superseded as shipped (commit 13):</em> no
+    <code>cwTrip::stations()</code> autocomplete ever existed to swap;
+    the carpet-mode picker is the panel's scoped stations list behind
+    the expand chevron, and the neighbor-guess already reads the
+    post-solve lookup &mdash; see the &sect;12 commit-13 as-shipped
+    note.
   </li>
 </ul>
 
@@ -2306,6 +2323,91 @@ public:
     <code>cwTrip::stations()</code>).</li>
 </ul>
 
+<p><em>As shipped (2026-07-19):</em> the five gates pass in
+  <code>tst_TripPageExternalAttach.qml</code> (plus orphan-cleanup and
+  trip-naming tests), with two coverage caveats from the commit-13
+  review: gate 4 is pinned on the <code>NoteStation</code> site only
+  &mdash; the <code>NoteLiDARStationItem</code> validator ships
+  verified by inspection, untested (its wiring is identical; a
+  LiDAR-side check needs a LiDAR-note fixture flow) &mdash; and
+  orphan cleanup is pinned for idle-Cancel only; the second
+  <code>dismissed()</code> producer (Cancel during a running attach
+  &rarr; <code>report.canceled</code>) never drives CavePage's
+  <code>removeTrip</code> in any test (commit-12 pinned the
+  dialog-level canceled path, not the host cleanup; driving it needs
+  a way to hold an attach in flight deterministically).
+  <em>Review fix (2026-07-20):</em> naming the trip from the entry
+  file originally used a raw <code>setName</code>, which silently
+  no-ops on a name collision or unsanitized name &mdash; attaching the
+  same file twice left "Trip 2" unnamed. Fixed with
+  <code>Q_INVOKABLE cwCave::uniqueTripName()</code>
+  (sanitize + dedupe over <code>cwSanitizedNameSet</code>, the same
+  machinery <code>insertTrip</code> uses); pinned by
+  <code>test_attachSameFileTwiceDeduplicatesTripName</code>
+  (second trip &rarr; "survex_simple 2").
+  The three owned decisions resolved as:
+  (1) <strong>Orphan-trip policy: delete on dismissal.</strong> The
+  dialog grew two host-facing outcome signals &mdash;
+  <code>attached()</code> (successful attach) and
+  <code>dismissed()</code> (idle Cancel or canceled attach; a
+  <em>failed</em> attach fires neither, the dialog stays open) &mdash;
+  emitted from the attribution logic it already had, so CavePage does
+  orphan cleanup off <code>dismissed()</code> without becoming a fourth
+  hand-rolled report-attribution consumer (the &sect;15 status-gadget
+  concern). The programmatic <code>close()</code> is silent.
+  (2) <strong>Trip naming:</strong> CavePage's <code>attached()</code>
+  handler names the trip from the entry file (extension stripped,
+  master &sect;8.7 "name pre-filled from filename") and then navigates
+  to the trip page; the TripPage-hosted attach of an already-named
+  trip (future affordance) will skip both by not being this flow.
+  (3) <strong>F10: injectable-manager property dropped.</strong> The
+  only production host (CavePage) doesn't inject, so the dialog now
+  binds <code>RootData.externalCenterlineManager</code> directly for
+  the completion <code>Connections</code> and <code>cancelAttach</code>;
+  the half-injectable split is gone.
+  Implementation deltas vs. the prose above:
+  (a) <strong>TripPage swap</strong> is one <code>Loader</code>
+  (<code>editorLoaderId</code>) whose <code>sourceComponent</code>
+  branches on <code>externalCenterline.entryFile</code>;
+  <code>currentTrip</code> became a real <code>Trip</code> property
+  (the old alias pointed into the always-alive SurveyEditor). The
+  COLLAPSE state/transitions retarget the loader, and both loadable
+  panes expose a uniform <code>expandedWidth</code> for the expand
+  animation. SurveyEditor is <em>destroyed</em> (not hidden) while
+  attached &mdash; the "not visible" gate is structural.
+  (b) <strong>Add-Trip menu</strong> is one shared <code>QC.Menu</code>
+  (<code>addTripMenu</code>, items <code>addNativeTripMenuItem</code> /
+  <code>addExternalTripMenuItem</code>) popped up by both the wide and
+  narrow <code>AddAndSearchBar</code>s (&sect;8.8 q3 as decided);
+  <code>tst_SurveyDataEntry</code> was updated to click through the
+  native item.
+  (c) <strong>Notes regex:</strong> the real station-reference inputs
+  are <code>NoteStation.qml</code> and
+  <code>NoteLiDARStationItem.qml</code>
+  (<code>NotesEditor.qml</code>/<code>ScrapPropertiesPanel.qml</code>
+  never existed); they previously had <em>no</em> validator at all.
+  Each now owns a <code>StationValidator</code> whose
+  <code>external</code> binds through
+  <code>cwScrap::parentTrip()</code> / <code>cwNoteLiDAR::parentTrip()</code>
+  (the former plus <code>cwCave::indexOf</code> were made
+  Q_INVOKABLE). The validator gate runs against the production
+  NoteStation item on the <code>ProjectProfile-test-v3.cw</code>
+  project with a <code>TestHelper.addScrapStation</code>-seeded
+  station.
+  (d) <strong>Carpet picker:</strong> the "swap autocomplete model from
+  <code>cwTrip::stations()</code>" prose (also master &sect;7.2) was
+  stale &mdash; no such autocomplete exists in the codebase; the only
+  name sources in carpet mode are typed input (covered by (c)) and
+  <code>cwScrap::guessNeighborStationName</code>, which already reads
+  the post-solve <code>stationPositionLookup</code>/network and so is
+  qualified-name-aware with no change. The shipped carpet picker is
+  the panel's scoped stations list: carpet still auto-collapses the
+  left pane, and the expand chevron (now
+  <code>objectName: "expandLeftPaneButton"</code>) reveals the panel
+  with the <code>cwScopeStationListModel</code> rows; the gate asserts
+  exactly the fixture's three stations on a trip with
+  <code>chunkCount === 0</code>.</p>
+
 <h2 id="fixtures">13. Fixture files</h2>
 
 <p>
@@ -2431,7 +2533,7 @@ public:
   </tr>
 </table>
 
-<h2 id="followups">15. Follow-ups from the commit-9 and commit-10 code reviews (2026-07-19)</h2>
+<h2 id="followups">15. Follow-ups from the Phase-2 code reviews (commits 9&ndash;13)</h2>
 
 <p>
   Deliberately out of scope for the reviewed commits; none block the
@@ -2625,6 +2727,30 @@ public:
     FixStationPage, GeospatialLayerPage, the context menus).
   </li>
   <li>
+    <strong>Attach entry point for existing native trips</strong>
+    <em>(commit 13)</em>. The master plan's &sect;2 dialog entry
+    described the dialog as "opened by TripPage's [Attach external
+    centerline&hellip;] button", but no commit gate ever scheduled that
+    affordance; commit 13 shipped the CavePage Add-Trip-menu host only.
+    The dialog itself already supports any existing trip (the
+    commit-12 tests attach to a pre-existing one), so the gap is purely
+    the button on a native trip's page &mdash; plus deciding whether
+    attaching to a trip that already has native chunks needs a warning
+    (the orchestrator allows it today). Small blast radius: a
+    SurveyEditor-header or TripPage affordance, dialog reuse, one test.
+  </li>
+  <li>
+    <strong>Escape should cancel the attach dialog</strong>
+    <em>(commit-13 review P1)</em>. The dialog's pre-existing
+    <code>closePolicy: QC.Popup.NoAutoClose</code> means Escape (and
+    click-outside) is a dead key &mdash; which is what makes the
+    outcome-signal contract airtight (no dismissal path can bypass
+    <code>dismissed()</code>), but leaves keyboard users with no way
+    out. Route Escape through the Cancel button's handler so it
+    participates in <code>dismissed()</code>/<code>cancelAttach</code>
+    rather than relaxing the close policy. One dialog, one test.
+  </li>
+  <li>
     <strong>One home for the cavern naming grammar
     (<code>cwCavernNaming</code>)</strong> <em>(commit-11 review)</em>.
     The <code>cave_&lt;hex&gt;.trip_&lt;hex&gt;.</code> policy is
@@ -2638,6 +2764,86 @@ public:
     grammar one home. Pure move, three consumers, no new coupling
     added by commit 11 (the manager already included
     <code>cwLinePlotTask.h</code>), so no urgency.
+  </li>
+  <li>
+    <strong>State-managed pane width in <code>TripPage</code></strong>
+    <em>(commit-13 review R1)</em>. The COLLAPSE transitions run a
+    <code>NumberAnimation</code> directly on
+    <code>editorLoaderId.item.width</code>, which destroys the pane's
+    declarative <code>width</code> binding after one collapse/expand
+    cycle &mdash; the pane stops tracking window narrowing and
+    <code>contentWidth</code> changes. This wart predates commit 13
+    (the old inline <code>surveyEditor</code> had it), but the Loader
+    swap duplicated it across two loadable panes plus the duck-typed
+    <code>expandedWidth</code> protocol both must implement. Move to
+    state-managed width (<code>PropertyChanges</code> +
+    <code>Behavior</code>) and formalize the pane contract. Blast
+    radius: TripPage states/transitions + both pane components.
+  </li>
+  <li>
+    <strong>Shared <code>externallyBacked</code> predicate on
+    <code>cwTrip</code></strong> <em>(commit-13 review R2)</em>. Three-plus
+    QML sites hand-roll
+    <code>externalCenterline.entryFile.length &gt; 0</code>
+    (<code>TripPage.isExternal</code>, <code>NoteStation</code> and
+    <code>NoteLiDARStationItem</code> validator bindings, plus
+    panel/header sites from earlier commits). A NOTIFY'd
+    <code>bool externallyBacked</code> property on <code>cwTrip</code>
+    collapses them &mdash; and is the natural place to OR in the parent
+    cave for Phase 3: master &sect;7.2 requires the relaxed station
+    grammar for an externally backed <em>cave</em> or trip, but Scope
+    trips under a cave-level attach carry <code>stationPrefix</code>,
+    not <code>externalCenterline</code>, so their note inputs would
+    stay strict with today's per-trip checks. Do this with (or just
+    before) Phase 3's cave-level attach. Blast radius: cwTrip API +
+    the QML consumer sites.
+  </li>
+  <li>
+    <strong><code>cwCave::addTrip</code> should return the new
+    trip</strong> <em>(commit-13 review R3)</em>. Both
+    <code>CavePage.addTripAndNavigate()</code> and
+    <code>addExternalTripWithDialog()</code> fetch the just-added trip
+    positionally via <code>trip(rowCount() - 1)</code>; a
+    <code>Q_INVOKABLE cwTrip* addNewTrip()</code> (or a return value on
+    <code>addTrip</code>) removes the append-order assumption. Two call
+    sites, low risk.
+  </li>
+  <li>
+    <strong>Entry-file display-name helper on the
+    <code>cwExternalCenterline</code> gadget</strong> <em>(commit-13
+    review R4)</em>. The extension-strip JS in CavePage's
+    <code>onAttached</code> (basename minus extension, then
+    <code>cwCave::uniqueTripName</code>) will be needed again by
+    Phase 3's DataMainPage "External cave&hellip;" flow, which names
+    the cave from the picked file (master &sect;8.7 row 2). A
+    <code>baseName</code>/<code>displayName</code> property on the
+    gadget centralizes it before the second copy appears.
+  </li>
+  <li>
+    <strong>Expose the external panel's expanded width from the
+    panel</strong> <em>(commit-13 review R5)</em>.
+    <code>TripPage.externalPanelWidth: 500</code> duplicates
+    <code>ExternalCenterlineTripPanel</code>'s natural width by
+    convention (the comment admits it). Expose it from the panel
+    (<code>implicitWidth</code> or a shared token) so the two cannot
+    drift. Folds naturally into the pane-contract work in the
+    state-managed-width entry above.
+  </li>
+  <li>
+    <strong>Create-on-success alternative for the Add-Trip attach
+    flow</strong> <em>(commit-13 review A1)</em>. The shipped
+    create-up-front + delete-on-dismiss shape (commit-13 decision 1)
+    is a UI-side transaction with observable residue: a cancelled flow
+    leaves two undo entries (add + remove) and a dirtied project, and
+    quitting with the dialog open bypasses both outcome signals, so a
+    save on exit persists the empty "Trip N" orphan. The clean
+    alternative is create-on-success &mdash; an
+    <code>attachNewTripCenterline(cave, path)</code> orchestrator
+    entry that creates the trip only when the attach lands, with the
+    dialog working trip-less until then. Blast radius: dialog
+    enable-gate, orchestrator, CavePage, tests. Revisit alongside
+    Phase 3's cave-level attach, which needs a create-a-cave variant
+    of the same flow.
   </li>
 </ul>
 

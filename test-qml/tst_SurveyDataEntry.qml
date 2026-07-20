@@ -28,6 +28,14 @@ MainWindowTest {
             let addCaveButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->addTrip->addButton")
             mouseClick(addCaveButton)
 
+            //Add Trip opens a two-item menu (Native trip / External
+            //centerline…) since commit 13; pick the native item.
+            let addTripMenu = findChild(RootData.pageView.currentPageItem, "addTripMenu")
+            verify(addTripMenu !== null)
+            tryVerify(()=>{ return addTripMenu.visible })
+            compare(addTripMenu.itemAt(0).objectName, "addNativeTripMenuItem")
+            mouseClick(addTripMenu.itemAt(0))
+
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             let addSuveyButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->addSurveyData")

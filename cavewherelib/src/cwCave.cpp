@@ -152,6 +152,17 @@ QString cwCave::validateName(const QString& proposedName) const
                                            QStringLiteral("cave"));
 }
 
+/**
+  Returns proposedName sanitized and deduplicated against the existing trip
+  names. cwTrip::setName silently rejects collisions and unsanitized names,
+  so callers renaming a trip from an external string (e.g. an entry
+  filename) should route through this first.
+  */
+QString cwCave::uniqueTripName(const QString& proposedName) const
+{
+    return m_tripNames.deduplicateName(cwNameUtils::sanitizeFileName(proposedName));
+}
+
 void cwCave::updateKeywords()
 {
     if(!m_keywordModel) {

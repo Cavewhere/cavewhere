@@ -43,6 +43,19 @@ StandardPage {
         RootData.surveyImportManager.importSurvexToTrip(fileUrl, newTrip)
     }
 
+    // Add Trip → External centerline…: create the trip first (the
+    // attach dialog targets an existing trip), but don't navigate -
+    // the dialog's outcome decides. attached() names the trip after
+    // the entry file and navigates; dismissed() deletes the orphan,
+    // since the user asked for an external trip, not an empty native
+    // one.
+    function addExternalTripWithDialog() {
+        cavePageArea.currentCave.addTrip()
+        var newTrip = cavePageArea.currentCave.trip(cavePageArea.currentCave.rowCount() - 1)
+        attachExternalDialogId.trip = newTrip
+        attachExternalDialogId.open()
+    }
+
     function registerSubPages() {
         if(currentCave) {
             var oldCarpetPage = PageView.page.childPage("Leads")
@@ -213,9 +226,10 @@ StandardPage {
         Layout.fillWidth: true
 
         AddAndSearchBar {
+            id: addTripBarWideId
             objectName: "addTrip"
             addButtonText: "Add Trip"
-            onAdd: cavePageArea.addTripAndNavigate()
+            onAdd: addTripMenuId.popup(addTripBarWideId, 0, addTripBarWideId.height)
         }
 
         QC.Button {
@@ -237,6 +251,55 @@ StandardPage {
                 if(!tv) return null;
                 let row = tv.currentItem as RowDelegate
                 return row ? row.tripObjectRole : null
+            }
+        }
+    }
+
+    QC.Menu {
+        id: addTripMenuId
+        objectName: "addTripMenu"
+
+        QC.MenuItem {
+            objectName: "addNativeTripMenuItem"
+            text: qsTr("Native trip")
+            onTriggered: cavePageArea.addTripAndNavigate()
+        }
+
+        QC.MenuItem {
+            objectName: "addExternalTripMenuItem"
+            text: qsTr("External centerline…")
+            onTriggered: cavePageArea.addExternalTripWithDialog()
+        }
+    }
+
+    AttachExternalCenterlineDialog {
+        id: attachExternalDialogId
+
+        onAttached: {
+            let newTrip = attachExternalDialogId.trip
+            if (newTrip === null) {
+                return
+            }
+            // Master §8.7: the trip name is pre-filled from the entry
+            // file (extension stripped). uniqueTripName() dedupes -
+            // setName silently rejects collisions.
+            let entryFile = newTrip.externalCenterline.entryFile
+            let dotIndex = entryFile.lastIndexOf(".")
+            let baseName = dotIndex > 0 ? entryFile.substring(0, dotIndex) : entryFile
+            newTrip.name = cavePageArea.currentCave.uniqueTripName(baseName)
+            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                                                       cavePageArea.tripPageName(newTrip))
+        }
+
+        onDismissed: {
+            let orphanTrip = attachExternalDialogId.trip
+            attachExternalDialogId.trip = null
+            if (orphanTrip === null || cavePageArea.currentCave === null) {
+                return
+            }
+            let index = cavePageArea.currentCave.indexOf(orphanTrip)
+            if (index >= 0) {
+                cavePageArea.currentCave.removeTrip(index)
             }
         }
     }
@@ -741,9 +804,10 @@ StandardPage {
                     spacing: Theme.actionBarSpacing
 
                     AddAndSearchBar {
+                        id: addTripBarNarrowId
                         objectName: "addTrip"
                         addButtonText: "Add Trip"
-                        onAdd: cavePageArea.addTripAndNavigate()
+                        onAdd: addTripMenuId.popup(addTripBarNarrowId, 0, addTripBarNarrowId.height)
                     }
 
                     QC.Button {

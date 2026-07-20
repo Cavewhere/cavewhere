@@ -95,7 +95,8 @@ public:
     Q_INVOKABLE void removeTrip(int i);
     Q_INVOKABLE void clearTrips();
     Q_INVOKABLE void addTrip(cwTrip* trip = nullptr);
-    int indexOf(cwTrip* trip) const;
+    Q_INVOKABLE int indexOf(cwTrip* trip) const;
+    Q_INVOKABLE QString uniqueTripName(const QString& proposedName) const;
 
     cwSanitizedNameSet& tripNameSet() { return m_tripNames; }
     const cwSanitizedNameSet& tripNameSet() const { return m_tripNames; }

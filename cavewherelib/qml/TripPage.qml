@@ -16,12 +16,22 @@ StandardPage {
 
     objectName: "tripPage"
 
-    property alias currentTrip: surveyEditor.currentTrip
+    property Trip currentTrip: null
     property string viewMode: ""
     property int currentNoteIndex: notesGalleryLoader.item ? notesGalleryLoader.item.currentNoteIndex : 0
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
     readonly property bool isWide: width >= Theme.breakpointFullGallery
+
+    // Externally-backed trips replace the shot editor with the
+    // external-centerline panel (master plan §8.5); the swap follows
+    // attach/detach through externalCenterlineChanged.
+    readonly property bool isExternal: currentTrip !== null
+                                       && currentTrip.externalCenterline.entryFile.length > 0
+
+    // Left-pane width for the external panel; SurveyEditor's editor
+    // column uses the same width internally.
+    readonly property real externalPanelWidth: 500
 
     function notePageName(note) {
         if (!note) return ""
@@ -61,15 +71,18 @@ StandardPage {
         // Disconnect all consumers before swapping the trip. The concat
         // model emits incremental row changes during the source-model
         // swap; any view still watching can hit a hasIndex assert.
+        let editor = editorLoaderId.item as SurveyEditor
         noteInstantiatorId.model = null
-        surveyEditor.notesModel = null
+        if (editor)
+            editor.notesModel = null
         if (notesGalleryLoader.item)
             notesGalleryLoader.item.notesModel = null
 
         surveyNoteConcatModelId.trip = area.currentTrip
 
         noteInstantiatorId.model = surveyNoteConcatModelId
-        surveyEditor.notesModel = surveyNoteConcatModelId
+        if (editor)
+            editor.notesModel = surveyNoteConcatModelId
         if (notesGalleryLoader.item)
             notesGalleryLoader.item.notesModel = surveyNoteConcatModelId
     }
@@ -84,7 +97,7 @@ StandardPage {
         } else {
             ng.setMode("DEFAULT")
             state = "" //Show the survey data on the left side
-            surveyEditor.visible = true
+            editorLoaderId.visible = true
             ng.visible = true
         }
     }
@@ -103,33 +116,63 @@ StandardPage {
         id: surveyNoteConcatModelId
     }
 
-    SurveyEditor {
-        id: surveyEditor
+    QQ.Component {
+        id: surveyEditorComponent
+
+        SurveyEditor {
+            // The transitions animate width imperatively, so expose the
+            // expanded target uniformly across both loadable panes.
+            readonly property real expandedWidth: contentWidth
+
+            // Inside the Loader the internal parent-based width binding
+            // would loop (loader width follows the item); bind off the
+            // page instead.
+            width: area.isNarrow ? area.width : contentWidth
+            visible: true
+            isNarrow: area.isNarrow
+            showNotes: !area.isWide
+            currentTrip: area.currentTrip
+            notesModel: surveyNoteConcatModelId
+            currentNoteIndex: area.currentNoteIndex
+
+            onCollapseClicked: {
+                if(!area.isNarrow) area.state = "COLLAPSE"
+            }
+
+            onNoteClicked: (noteIndex) => {
+                if (area.isNarrow) {
+                    let delegate = noteInstantiatorId.objectAt(noteIndex)
+                    if (delegate && delegate.page) {
+                        RootData.pageSelectionModel.gotoPage(delegate.page)
+                    }
+                } else {
+                    let ng = notesGalleryLoader.item
+                    if (ng) ng.currentNoteIndex = noteIndex
+                }
+            }
+        }
+    }
+
+    QQ.Component {
+        id: externalPanelComponent
+
+        ExternalCenterlineTripPanel {
+            readonly property real expandedWidth: area.externalPanelWidth
+
+            width: area.isNarrow ? area.width : area.externalPanelWidth
+            trip: area.currentTrip
+        }
+    }
+
+    QQ.Loader {
+        id: editorLoaderId
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.margins: 5
         visible: true
-        isNarrow: area.isNarrow
-        showNotes: !area.isWide
-        notesModel: surveyNoteConcatModelId
-        currentNoteIndex: area.currentNoteIndex
 
-        onCollapseClicked: {
-            if(!area.isNarrow) area.state = "COLLAPSE"
-        }
-
-        onNoteClicked: (noteIndex) => {
-            if (area.isNarrow) {
-                let delegate = noteInstantiatorId.objectAt(noteIndex)
-                if (delegate && delegate.page) {
-                    RootData.pageSelectionModel.gotoPage(delegate.page)
-                }
-            } else {
-                let ng = notesGalleryLoader.item
-                if (ng) ng.currentNoteIndex = noteIndex
-            }
-        }
+        sourceComponent: area.isExternal ? externalPanelComponent : surveyEditorComponent
     }
 
     QQ.Rectangle {
@@ -150,6 +193,7 @@ StandardPage {
 
             RoundButton {
                 id: expandButton
+                objectName: "expandLeftPaneButton"
                 icon.source: "qrc:/twbs-icons/icons/chevron-right.svg"
                 implicitWidth: 20
                 implicitHeight: 20
@@ -167,7 +211,7 @@ StandardPage {
                 QC.Label {
                     id: tripNameVerticalText
                     rotation: 270
-                    text: area.currentTrip.name
+                    text: area.currentTrip !== null ? area.currentTrip.name : ""
                     anchors.centerIn: parent
                     transformOrigin: QQ.Item.Center
                 }
@@ -180,7 +224,7 @@ StandardPage {
         id: notesGalleryLoader
         active: !area.isNarrow
         visible: !area.isNarrow
-        anchors.left: surveyEditor.right
+        anchors.left: editorLoaderId.right
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -259,7 +303,7 @@ StandardPage {
             }
 
             QQ.PropertyChanges {
-                surveyEditor {
+                editorLoaderId {
                     visible: false
                 }
             }
@@ -271,12 +315,12 @@ StandardPage {
             from: ""
             to: "COLLAPSE"
 
-            QQ.PropertyAction { target: surveyEditor; property: "visible"; value: true }
+            QQ.PropertyAction { target: editorLoaderId; property: "visible"; value: true }
             QQ.PropertyAction { target: collapseRectangleId; property: "visible"; value: false }
 
 
             QQ.PropertyAction {
-                target: surveyEditor; property: "clip"; value: true
+                target: editorLoaderId; property: "clip"; value: true
             }
 
             QQ.ParallelAnimation {
@@ -285,14 +329,14 @@ StandardPage {
                 }
 
                 QQ.NumberAnimation {
-                    target: surveyEditor
+                    target: editorLoaderId.item
                     property: "width"
                     to: 0
                 }
             }
 
             QQ.PropertyAction {
-                target: surveyEditor; property: "clip"; value: false
+                target: editorLoaderId; property: "clip"; value: false
             }
 
             QQ.PropertyAction { target: collapseRectangleId; property: "visible"; value: true }
@@ -303,7 +347,7 @@ StandardPage {
             to: ""
 
 
-            QQ.PropertyAction { target: notesGalleryLoader; property: "anchors.left"; value: surveyEditor.right}
+            QQ.PropertyAction { target: notesGalleryLoader; property: "anchors.left"; value: editorLoaderId.right}
 
             QQ.ParallelAnimation {
                 QQ.AnchorAnimation {
@@ -311,9 +355,9 @@ StandardPage {
                 }
 
                 QQ.NumberAnimation {
-                    target: surveyEditor
+                    target: editorLoaderId.item
                     property: "width"
-                    to: surveyEditor.contentWidth
+                    to: editorLoaderId.item ? editorLoaderId.item.expandedWidth : 0
                 }
             }
         }

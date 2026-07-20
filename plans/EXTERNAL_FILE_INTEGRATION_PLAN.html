@@ -1280,6 +1280,18 @@ QRegularExpression caveRegex("cave_([0-9a-f]{32})\\.(.+)");
   panel, so a small shared model is appropriate.
 </p>
 
+<p><em>Superseded as shipped (Phase 2 commit 13, 2026-07-19):</em> the
+  premise was stale &mdash; carpet mode has no
+  <code>cwTrip::stations()</code> autocomplete anywhere in the
+  codebase. Station names in carpet mode come from typed input (now
+  validated per this section's regex split) and from
+  <code>cwScrap::guessNeighborStationName</code>, which already reads
+  the post-solve <code>cwStationPositionLookup</code> / cave network
+  and is therefore qualified-name-aware unchanged. The shipped picker
+  is the <code>ExternalCenterlineTripPanel</code> stations list
+  (backed by <code>cwScopeStationListModel</code>), reachable on the
+  carpet sub-page via the left-pane expand chevron.</p>
+
 <h3>7.3 Internal driver exporter</h3>
 
 <p>
@@ -2266,6 +2278,11 @@ QQ.Item {
     attached to the existing Add Trip button (popup on click) with two
     items: <em>Native trip</em> and <em>External centerline&hellip;</em>.
     Don't introduce a new split-button widget; the menu is enough.
+    <em>Shipped as decided (Phase 2 commit 13, 2026-07-19)</em> &mdash;
+    one shared menu popped by both CavePage bars. Cancelling the attach
+    dialog deletes the just-created trip (the flow creates it up
+    front); a successful attach names it from the entry file per
+    &sect;8.7 and navigates to its page.
   </li>
   <li>
     <strong>Trip metadata for external trips</strong> (date, decl, team).
@@ -2543,6 +2560,18 @@ QQ.Item {
     <li>After cave-level attach, auto-create one cwTrip (Scope state, <code>stationPrefix</code> set) per resolved <code>*begin</code> block with &ge; 1 station. No dialog &mdash; trips just appear, named after their block. User renames/deletes any they don't want.</li>
     <li>External trips (Attached and Scope alike) get a 📎 prefix in the trip table and em-dash declination. Same badge for both &mdash; from the user's perspective, both are "trips whose data isn't owned by CaveWhere."</li>
     <li>Badge on cave/trip nodes in the nav tree: red dot on cavern errors, yellow on warnings, none when clean. Click navigates to CavernOutputPage with that section anchored.</li>
+    <li><strong>Station-validator predicate must extend to the parent
+      cave</strong> <em>(commit-13 review, 2026-07-20)</em>. &sect;7.2
+      requires the relaxed station grammar for an externally backed
+      <em>cave or trip</em>, but the Phase-2 validator bindings
+      (<code>NoteStation.qml</code>, <code>NoteLiDARStationItem.qml</code>)
+      check only <code>trip.externalCenterline</code> &mdash; Scope
+      trips under a cave-level attach carry <code>stationPrefix</code>,
+      not <code>externalCenterline</code>, so their note inputs would
+      stay strict. Fix via the shared <code>externallyBacked</code>
+      predicate on <code>cwTrip</code> (Phase-2 plan &sect;15, commit-13
+      review R2) ORing in the parent cave, rather than patching each
+      QML site.</li>
   </ul>
 
   <h4>Acceptance criteria</h4>
