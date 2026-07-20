@@ -72,7 +72,6 @@ QQ.Rectangle {
     function exitCarpetMode() {
         noteGallery.state = NoteToolMode.carpet
         noteGallery.state = NoteToolMode.none
-        noteLidarArea.state = NoteToolMode.none
         noteGallery.backClicked()
     }
 
@@ -663,7 +662,8 @@ QQ.Rectangle {
         anchors.bottom: parent.bottom
 
         visible: noteGallery.currentNote !== null
-        scrapsVisible: false
+        editingOverlaysVisible: false
+        toolMode: noteGallery.state
         isNarrow: noteGallery.isNarrow
         note: noteGallery.currentNote
     }
@@ -672,7 +672,8 @@ QQ.Rectangle {
         id: noteLidarArea
         anchors.fill: noteArea
         visible: noteGallery.currentNoteLiDAR !== null
-        stationsVisible: false
+        editingOverlaysVisible: false
+        toolMode: noteGallery.state
         isNarrow: noteGallery.isNarrow
         note: noteGallery.currentNoteLiDAR
     }
@@ -806,17 +807,15 @@ QQ.Rectangle {
                 }
             }
 
-            //Every carpet sub-tool extends this state, so both editors show
-            //their point overlays without each sub-tool opting in. A sub-tool
-            //that applies to LiDAR notes must also push a state onto
-            //noteLidarArea, or its stations are draggable with no tool active.
+            //Every carpet sub-tool extends this state, so every note editor
+            //shows its overlays without each sub-tool opting in.
             QQ.PropertyChanges {
                 noteArea {
-                    scrapsVisible: true
+                    editingOverlaysVisible: true
                 }
 
                 noteLidarArea {
-                    stationsVisible: true
+                    editingOverlaysVisible: true
                 }
             }
 
@@ -836,22 +835,6 @@ QQ.Rectangle {
                     selected: true
                 }
             }
-
-            //explicit: true on every block that pushes a state name. A literal
-            //in PropertyChanges is a one-shot assignment, but an expression
-            //(NoteToolMode.x) installs a live binding on the child's state,
-            //which re-runs the child's entry transition and drops its selection.
-            QQ.PropertyChanges {
-                explicit: true
-
-                noteArea {
-                    state: NoteToolMode.select
-                }
-
-                noteLidarArea {
-                    state: NoteToolMode.select
-                }
-            }
         },
 
         QQ.State {
@@ -860,18 +843,6 @@ QQ.Rectangle {
             QQ.PropertyChanges {
                 addStationId {
                     selected: true
-                }
-            }
-
-            QQ.PropertyChanges {
-                explicit: true
-
-                noteArea {
-                    state: NoteToolMode.addStation
-                }
-
-                noteLidarArea {
-                    state: NoteToolMode.addStation
                 }
             }
         },
@@ -884,14 +855,6 @@ QQ.Rectangle {
                     selected: true
                 }
             }
-
-            QQ.PropertyChanges {
-                explicit: true
-
-                noteArea {
-                    state: NoteToolMode.addLead
-                }
-            }
         },
 
         QQ.State {
@@ -900,14 +863,6 @@ QQ.Rectangle {
             QQ.PropertyChanges {
                 addScrapId {
                     selected: true
-                }
-            }
-
-            QQ.PropertyChanges {
-                explicit: true
-
-                noteArea {
-                    state: NoteToolMode.addScrap
                 }
             }
         },
@@ -972,7 +927,6 @@ QQ.Rectangle {
             }
 
             QQ.PropertyAction { target: carpetButtonArea; property: "visible"; value: !noteGallery.isNarrow }
-            QQ.PropertyAction { target: noteArea; property: "scrapsVisible"; value: false }
             QQ.PropertyAnimation {
                 target: carpetButtonArea
                 properties: "scale"

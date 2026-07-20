@@ -8,10 +8,21 @@ RegionViewer {
     property NoteLiDAR note
     property bool isNarrow: false
 
-    //Set by NotesGallery's CARPET state, mirroring NoteItem.scrapsVisible.
-    //Stations are only shown while editing, so they can't be accidentally
-    //selected, moved, or deleted when just viewing the note.
-    property bool stationsVisible: false
+    //Set by NotesGallery's CARPET state. Named the same on NoteItem so the
+    //gallery sets one property on every note editor it drives. Stations are
+    //only shown while editing, so they can't be accidentally selected, moved,
+    //or deleted when just viewing the note.
+    property bool editingOverlaysVisible: false
+
+    //The gallery's tool state, pulled rather than pushed. This editor's tools are
+    //driven by PropertyChanges, which revert on any mode it declares no State for,
+    //so an unhandled mode leaves every tool off without needing a teardown
+    //transition (NoteItem drives its tools from transitions and does need one).
+    property string toolMode: NoteToolMode.none
+
+    //Icon capture overrides the tool state without assigning to state, which
+    //would destroy the binding below and strand the viewer on the last mode.
+    property bool capturingIcon: false
 
     function captureIconIfNeeded() {
         if (!note || !RootData.noteLiDARManager) {
@@ -27,17 +38,23 @@ RegionViewer {
         }
 
         const targetNote = note
-        const previousState = state
 
-        state = NoteToolMode.captureIcon
+        rhiViewerId.capturingIcon = true
 
-        rhiViewerId.grabToImage(function(result) {
-            rhiViewerId.state = previousState
+        //grabToImage returns false without ever calling back when the viewer has
+        //no window or no size, which gltf Ready can beat. Unhandled, capturingIcon
+        //latches on and pins state to CAPTURE_ICON for the life of the item.
+        let grabStarted = rhiViewerId.grabToImage(function(result) {
+            rhiViewerId.capturingIcon = false
             if (!targetNote || !result || !result.image) {
                 return
             }
             RootData.noteLiDARManager.saveIcon(result.image, targetNote)
         })
+
+        if (!grabStarted) {
+            rhiViewerId.capturingIcon = false
+        }
     }
 
     scene: GltfScene {
@@ -63,7 +80,7 @@ RegionViewer {
     orthoProjection.enabled: true
     perspectiveProjection.enabled: false
 
-    state: NoteToolMode.none
+    state: capturingIcon ? NoteToolMode.captureIcon : toolMode
 
     TurnTableInteraction {
         id: turnTableInteractionId
@@ -124,7 +141,7 @@ RegionViewer {
     Item {
         id: stationContainerId
         anchors.fill: parent
-        visible: rhiViewerId.stationsVisible
+        visible: rhiViewerId.editingOverlaysVisible
     }
 
     Item3DRepeater {
