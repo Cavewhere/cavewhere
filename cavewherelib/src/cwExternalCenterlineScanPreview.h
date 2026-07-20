@@ -40,6 +40,7 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterlineScanPreview : public QObject
 
     Q_PROPERTY(QString sourcePath READ sourcePath WRITE setSourcePath NOTIFY sourcePathChanged FINAL)
     Q_PROPERTY(QString formatName READ formatName NOTIFY sourcePathChanged FINAL)
+    Q_PROPERTY(bool importSupported READ importSupported NOTIFY sourcePathChanged FINAL)
     Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged FINAL)
     Q_PROPERTY(bool valid READ valid NOTIFY scanChanged FINAL)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY scanChanged FINAL)
@@ -57,6 +58,11 @@ public:
     // dialog's "Format: <name> (auto-detected)" line updates before
     // the scan lands.
     QString formatName() const;
+
+    // Whether the copy-import path (cwSurveyImportManager) handles the
+    // detected format. One home for the Survex-only rule so UI gates
+    // can't drift from actual importer support.
+    bool importSupported() const;
 
     bool scanning() const { return m_scanning; }
     bool valid() const { return m_valid; }

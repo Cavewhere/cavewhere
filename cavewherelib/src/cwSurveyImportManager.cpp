@@ -119,6 +119,8 @@ void cwSurveyImportManager::importSurvex() {
  * date, team and calibration are copied from the first imported sub-trip;
  * survey chunks from every imported sub-trip are flattened into the target.
  * Parser warnings and the not-empty rejection are pushed to ErrorModel.
+ * importFinished(trip, hasErrors) fires exactly once per non-null-trip call,
+ * including the synchronous refusal paths, so UI can gate a busy state on it.
  */
 void cwSurveyImportManager::importSurvexToTrip(const QUrl& fileUrl, cwTrip* trip)
 {
@@ -131,11 +133,15 @@ void cwSurveyImportManager::importSurvexToTrip(const QUrl& fileUrl, cwTrip* trip
                     .arg(trip->name()),
                 cwError::Fatal));
         }
+        emit importFinished(trip, true);
         return;
     }
 
     const QString path = cwGlobals::importPathFromUrl(fileUrl);
-    if (path.isEmpty()) return;
+    if (path.isEmpty()) {
+        emit importFinished(trip, true);
+        return;
+    }
 
     auto importer = new cwSurvexImporter(this);
     importer->setInputFiles(QStringList{path});
@@ -151,6 +157,9 @@ void cwSurveyImportManager::importSurvexToTrip(const QUrl& fileUrl, cwTrip* trip
 
         if (!tripGuard) {
             importer->deleteLater();
+            // Null trip still unwedges a waiting dialog: its own trip
+            // reference has gone null too, so the identities match.
+            emit importFinished(nullptr, true);
             return;
         }
 
@@ -164,6 +173,7 @@ void cwSurveyImportManager::importSurvexToTrip(const QUrl& fileUrl, cwTrip* trip
                     cwError::Fatal));
             }
             importer->deleteLater();
+            emit importFinished(tripGuard, true);
             return;
         }
 
@@ -200,7 +210,9 @@ void cwSurveyImportManager::importSurvexToTrip(const QUrl& fileUrl, cwTrip* trip
         }
         for (cwCave* cave : caves) cave->deleteLater();
 
+        const bool hadErrors = importer->hasParseErrors();
         importer->deleteLater();
+        emit importFinished(tripGuard, hadErrors);
     });
 
     importer->start();

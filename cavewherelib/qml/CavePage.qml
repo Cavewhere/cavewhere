@@ -8,7 +8,6 @@
 // pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
-import QtQuick.Dialogs as QD
 import cavewherelib
 import QtQml
 import QtQml.Models as QQModels
@@ -38,22 +37,32 @@ StandardPage {
         return lastTrip;
     }
 
-    function importSurvexAsNewTrip(fileUrl) {
-        var newTrip = addTripAndNavigate()
-        RootData.surveyImportManager.importSurvexToTrip(fileUrl, newTrip)
-    }
-
-    // Add Trip → External centerline…: create the trip first (the
-    // attach dialog targets an existing trip), but don't navigate -
-    // the dialog's outcome decides. attached() names the trip after
-    // the entry file and navigates; dismissed() deletes the orphan,
-    // since the user asked for an external trip, not an empty native
-    // one.
-    function addExternalTripWithDialog() {
+    // Add Trip → Add trip from survey file…: create the trip first
+    // (the dialog targets an existing trip), but don't navigate - the
+    // dialog's outcome decides. attached()/imported() name the trip
+    // after the picked file and navigate; dismissed() deletes the
+    // orphan, since the user asked for a trip from a file, not an
+    // empty native one.
+    function addTripFromSurveyFileWithDialog() {
         cavePageArea.currentCave.addTrip()
         var newTrip = cavePageArea.currentCave.trip(cavePageArea.currentCave.rowCount() - 1)
-        attachExternalDialogId.trip = newTrip
-        attachExternalDialogId.open()
+        addSurveyFileDialogId.trip = newTrip
+        addSurveyFileDialogId.open()
+    }
+
+    // Master §8.7: the trip name comes from the picked file (directory
+    // and extension stripped). uniqueTripName() dedupes - setName
+    // silently rejects collisions.
+    function nameTripFromFileAndNavigate(newTrip, fileName) {
+        let slashIndex = fileName.lastIndexOf("/")
+        let baseName = slashIndex >= 0 ? fileName.substring(slashIndex + 1) : fileName
+        let dotIndex = baseName.lastIndexOf(".")
+        if (dotIndex > 0) {
+            baseName = baseName.substring(0, dotIndex)
+        }
+        newTrip.name = cavePageArea.currentCave.uniqueTripName(baseName)
+        RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                                                   cavePageArea.tripPageName(newTrip))
     }
 
     function registerSubPages() {
@@ -232,12 +241,6 @@ StandardPage {
             onAdd: addTripMenuId.popup(addTripBarWideId, 0, addTripBarWideId.height)
         }
 
-        QC.Button {
-            objectName: "importSurvexButton"
-            text: "Import Survex"
-            onClicked: survexImportDialogId.open()
-        }
-
         ExportImportButtons {
             id: exportButton
             visible: RootData.desktopBuild
@@ -267,33 +270,34 @@ StandardPage {
 
         QC.MenuItem {
             objectName: "addExternalTripMenuItem"
-            text: qsTr("External centerline…")
-            onTriggered: cavePageArea.addExternalTripWithDialog()
+            text: qsTr("Add trip from survey file…")
+            onTriggered: cavePageArea.addTripFromSurveyFileWithDialog()
         }
     }
 
-    AttachExternalCenterlineDialog {
-        id: attachExternalDialogId
+    AddSurveyFileDialog {
+        id: addSurveyFileDialogId
 
         onAttached: {
-            let newTrip = attachExternalDialogId.trip
+            let newTrip = addSurveyFileDialogId.trip
             if (newTrip === null) {
                 return
             }
-            // Master §8.7: the trip name is pre-filled from the entry
-            // file (extension stripped). uniqueTripName() dedupes -
-            // setName silently rejects collisions.
-            let entryFile = newTrip.externalCenterline.entryFile
-            let dotIndex = entryFile.lastIndexOf(".")
-            let baseName = dotIndex > 0 ? entryFile.substring(0, dotIndex) : entryFile
-            newTrip.name = cavePageArea.currentCave.uniqueTripName(baseName)
-            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                       cavePageArea.tripPageName(newTrip))
+            cavePageArea.nameTripFromFileAndNavigate(
+                newTrip, newTrip.externalCenterline.entryFile)
+        }
+
+        onImported: (sourcePath) => {
+            let newTrip = addSurveyFileDialogId.trip
+            if (newTrip === null) {
+                return
+            }
+            cavePageArea.nameTripFromFileAndNavigate(newTrip, sourcePath)
         }
 
         onDismissed: {
-            let orphanTrip = attachExternalDialogId.trip
-            attachExternalDialogId.trip = null
+            let orphanTrip = addSurveyFileDialogId.trip
+            addSurveyFileDialogId.trip = null
             if (orphanTrip === null || cavePageArea.currentCave === null) {
                 return
             }
@@ -301,18 +305,6 @@ StandardPage {
             if (index >= 0) {
                 cavePageArea.currentCave.removeTrip(index)
             }
-        }
-    }
-
-    QD.FileDialog {
-        id: survexImportDialogId
-        title: "Import Survex (.svx)"
-        nameFilters: [ "Survex files (*.svx)", "All files (*)" ]
-        currentFolder: RootData.lastDirectory
-        fileMode: QD.FileDialog.OpenFile
-        onAccepted: {
-            RootData.lastDirectory = selectedFile
-            cavePageArea.importSurvexAsNewTrip(selectedFile)
         }
     }
 
@@ -808,12 +800,6 @@ StandardPage {
                         objectName: "addTrip"
                         addButtonText: "Add Trip"
                         onAdd: addTripMenuId.popup(addTripBarNarrowId, 0, addTripBarNarrowId.height)
-                    }
-
-                    QC.Button {
-                        objectName: "importSurvexButton"
-                        text: "Import Survex"
-                        onClicked: survexImportDialogId.open()
                     }
 
                     RowLayout {

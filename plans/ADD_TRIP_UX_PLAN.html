@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add Trip UX — split button + unified survey-file dialog</title>
+<style>
+  :root {
+    --bg:#1d1f23; --panel:#26292e; --panel2:#2c3036; --ink:#e6e8eb; --muted:#9aa0a8;
+    --line:#3a3f47; --accent:#5db0ff; --warn:#e3b341; --bad:#e06c75; --good:#8bc98b;
+    --code:#d7e3f0;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  .wrap { max-width:1000px; margin:0 auto; padding:32px 24px 100px; }
+  h1 { font-size:26px; margin:0 0 4px; letter-spacing:-0.3px; }
+  h2 { font-size:20px; margin:38px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--line); }
+  h3 { font-size:16px; margin:24px 0 8px; color:var(--accent); }
+  p.sub { color:var(--muted); margin:0 0 8px; font-size:15px; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.88em;
+    background:#15171a; padding:1px 6px; border-radius:5px; color:var(--code); }
+  pre { background:#15171a; border:1px solid var(--line); border-radius:10px; padding:14px 16px;
+    overflow-x:auto; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:12.5px;
+    line-height:1.5; color:var(--code); }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin:14px 0; }
+  .bad { color:var(--bad); } .good { color:var(--good); } .warn { color:var(--warn); }
+  .muted { color:var(--muted); }
+  ul { padding-left:22px; } li { margin:5px 0; }
+  table { border-collapse:collapse; width:100%; margin:12px 0; font-size:13.5px; }
+  th,td { border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; }
+  th { background:var(--panel2); color:var(--ink); font-weight:600; }
+  .callout { border-left:3px solid var(--accent); padding:8px 14px; margin:14px 0; background:var(--panel2); border-radius:0 8px 8px 0; }
+  .callout.warn { border-left-color:var(--warn); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Add Trip UX — split button + unified survey-file dialog</h1>
+<p class="sub">Kills both from-a-file forks on CavePage. Discussion 2026-07-20: one-click
+Add Trip via a split button (A); a single "from survey file" entry that opens a dialog where
+the user picks the file <em>first</em> and then chooses Attach vs Import with explanations,
+Attach recommended and listed first (C); an attach/import entry on the empty trip page (B); and a zero-trip HelpArea empty state on
+the cave page (D). Drag-and-drop is deliberately <em>excluded</em>: drop support should land
+app-wide in one release (Fall 2026 milestone), not page-by-page — a GitHub issue gets filed
+when this plan's implementation finishes (see &sect;9).</p>
+<p class="sub">Executes the Phase-2 &sect;15 follow-up <em>"Attach entry point for existing
+native trips"</em> (<code>EXTERNAL_FILE_PHASE2.html</code>). Related but not executed here:
+&sect;15 A1 (create-on-success) and the Escape-cancel entry.</p>
+
+<h2>1. Problem</h2>
+<ul>
+  <li><code>CavePage.qml:258</code> — [+ Add Trip] pops a two-item menu
+    ("Native trip" / "External centerline&hellip;"). The 95% case costs an extra click, and
+    "Native trip" is jargon a new user can't resolve.</li>
+  <li><code>CavePage.qml:235</code> and <code>:813</code> — a separate "Import Survex"
+    button sits next to the Add Trip bar. Import-a-copy vs attach-a-link are both
+    "start from a survey file", presented as abstract verbs in different surfaces. Users
+    can't tell which one to click <em>before</em> picking a file; the choice only makes
+    sense once a concrete file is in hand, with the tradeoff explained.</li>
+  <li>There is no way to attach or import into a trip that already exists.</li>
+</ul>
+
+<h2>2. Target UX</h2>
+<table>
+  <tr><th>Action</th><th>Before</th><th>After</th></tr>
+  <tr>
+    <td>Add a normal trip</td>
+    <td>Click Add Trip &rarr; menu &rarr; "Native trip" (2 clicks + a decision)</td>
+    <td>Click the button body of <code>[+ Add Trip |&#9662;]</code> (1 click, no decision)</td>
+  </tr>
+  <tr>
+    <td>Start a trip from a survey file (either mode)</td>
+    <td>Two disjoint entries: "Import Survex" button vs Add-Trip-menu
+        "External centerline&hellip;"</td>
+    <td>Chevron menu &rarr; "Add trip from survey file&hellip;" &rarr; pick file &rarr;
+        choose <strong>Attach (recommended)</strong> or <strong>Import a copy</strong>
+        in the dialog</td>
+  </tr>
+  <tr>
+    <td>Attach/import into an existing empty trip</td>
+    <td class="bad">Impossible</td>
+    <td>Empty trip page shows "Add From Survey File&hellip;" next to "Add Survey Data";
+        same dialog, targets the current trip</td>
+  </tr>
+  <tr>
+    <td>Cave with no trips</td>
+    <td>Empty table, nothing points anywhere</td>
+    <td>HelpArea: "No trips yet &mdash; click Add Trip, or add one from a survey file
+        via the &#9662; menu."</td>
+  </tr>
+</table>
+
+<h3>The unified dialog</h3>
+<pre>
+┌─ Add trip from survey file ────────────────────────┐
+│ File: /caves/fisher-ridge/fr2024.svx    [Browse…]  │
+│ Format: Survex (auto-detected)                     │
+│ ✓ Found 14 files                                   │
+│                                                    │
+│ How should CaveWhere use this file?                │
+│                                                    │
+│ [ Attach ]  <b>Recommended</b>                            │
+│   The file stays the source of truth. Keep         │
+│   editing it in Survex — CaveWhere stays in        │
+│   sync. Survey data is read-only in CaveWhere.     │
+│                                                    │
+│ [ Import a copy ]                                  │
+│   Copies the data into CaveWhere. You edit it      │
+│   here; the original file is never read again.     │
+│                                                    │
+│                                        [ Cancel ]  │
+└────────────────────────────────────────────────────┘
+</pre>
+<ul>
+  <li><strong>Attach first, with a bold "Recommended" tag</strong> (Theme accent/bold
+    label). Counters the reflex to pick the familiar word "Import"; attach is the mode
+    that preserves the user's existing workflow.</li>
+  <li><strong>Format-aware enablement:</strong> Import only handles Survex today. For
+    <code>.dat/.mak/.srv/.wpj</code>, the Import button is disabled (not hidden) with a
+    muted one-liner: "Import supports Survex files only." The dialog teaching the
+    capability matrix beats a menu hiding it.</li>
+  <li>Both action buttons stay disabled until the scan preview is valid — same gate the
+    Attach button has today.</li>
+  <li>Escape/click-outside behavior unchanged (<code>NoAutoClose</code>; the &sect;15
+    Escape-cancel follow-up applies here too, unchanged).</li>
+</ul>
+
+<div class="callout">
+<strong>Naming:</strong> user-facing strings are "Add trip from survey file" (menu item +
+CavePage dialog title), "Add From Survey File&hellip;" (empty-state button; the TripPage
+host retitles the dialog "Add survey from file" since no trip is being created), "Attach"
+and "Import a copy" (choice buttons). "External" and "centerline" disappear from all
+user-facing text — they survive only in internal names (C++ types, objectNames), which
+tests keep using unchanged.
+</div>
+
+<h2>3. Commit 1 — Rework the dialog into the two-choice unified dialog <span class="muted">(C)</span></h2>
+<h3><code>AttachExternalCenterlineDialog.qml</code> &rarr; rename to <code>AddSurveyFileDialog.qml</code></h3>
+<ul>
+  <li>Retitle per the naming callout; add a <code>title</code>-ish property so the
+    TripPage host (commit 3) can supply its variant. File picker title follows.</li>
+  <li>Replace the single [Attach] button row with the two choice blocks from the mockup:
+    Attach (first, bold "Recommended" tag, description underneath) and Import a copy
+    (description underneath, format-gated). Keep <code>objectName: "attachButton"</code>;
+    new <code>importButton</code>.</li>
+  <li>Attach path: unchanged (manager bridge, busy state, cancel-during-attach,
+    outcome signals).</li>
+  <li>Import path: new <code>signal imported()</code>, symmetric with attach. On click:
+    show the same busy row ("Importing&hellip;"), call
+    <code>RootData.surveyImportManager.importSurvexToTrip(url, trip)</code>, and close +
+    emit <code>imported()</code> only when the import completes — otherwise the dialog
+    closes onto a still-empty trip and chunks pop in later (or never, on a parse
+    failure, with the explanation buried in the global error list). Requires a small
+    C++ addition: <code>cwSurveyImportManager</code> emits
+    <code>importFinished(cwTrip* trip, bool hasErrors)</code> from the existing
+    <code>cwTask::finished</code> lambda. Parse warnings keep going to
+    <code>ErrorModel</code> (parity with the old button).</li>
+  <li>Fold the existing <code>copyExplainerText</code> paragraph into the Attach choice's
+    description — as a standalone explainer it would duplicate and fight the per-button
+    descriptions.</li>
+  <li>Outcome contract becomes: exactly one of <code>attached()</code> /
+    <code>imported()</code> / <code>dismissed()</code> per opened session that ends.</li>
+</ul>
+<h3>CavePage.qml</h3>
+<ul>
+  <li>Menu item relabeled "Add trip from survey file&hellip;" (still
+    <code>addExternalTripMenuItem</code> for test continuity); flow unchanged: create
+    orphan trip &rarr; open dialog. <code>onImported</code>: keep the trip, name it from
+    the entry file via <code>uniqueTripName</code> (same as <code>onAttached</code>),
+    navigate. <code>onDismissed</code>: remove orphan (unchanged).</li>
+  <li>Delete both <code>importSurvexButton</code> instances (wide <code>:235</code>,
+    narrow <code>:813</code>), <code>survexImportDialogId</code>, and
+    <code>importSurvexAsNewTrip()</code> — the dialog owns file picking now. The old
+    "Native trip" menu item survives until commit 2.</li>
+</ul>
+<h3>Tests (gate)</h3>
+<ul>
+  <li><code>tst_TripPageExternalAttach</code>: existing attach tests keep passing with the
+    reworked layout; new test — Import path on the <code>survex_simple</code> fixture:
+    trip kept, named from entry file, chunks appear
+    (<code>tryVerify(chunkCount &gt; 0)</code>), navigation lands on the trip page.</li>
+  <li>New test: Compass fixture (or a <code>.dat</code> path string) &rarr; Import button
+    disabled, Attach enabled.</li>
+  <li>New test: during Import the dialog stays open with the busy row, then closes and
+    fires <code>imported()</code> once (SignalSpy) when the task lands.</li>
+  <li>Run <code>tst_TripPageExternalAttach</code>, <code>tst_CavePage</code>,
+    <code>tst_SurveyDataEntry</code>.</li>
+</ul>
+
+<h2>4. Commit 2 — Split button <span class="muted">(A)</span></h2>
+<h3>AddAndSearchBar.qml</h3>
+<ul>
+  <li>Add <code>property QC.Menu menu: null</code>. When non-null, show a slim chevron
+    button (<code>objectName: "menuButton"</code>, <code>chevron-down.svg</code> from
+    twbs-icons) attached to the right edge of the add button; clicking it pops the menu
+    below the bar. The primary button keeps emitting <code>add()</code> unchanged.
+    Default-null keeps the other three consumers (DataMainPage, FixStationPage,
+    GeospatialLayerPage) pixel-identical.</li>
+</ul>
+<h3>CavePage.qml</h3>
+<ul>
+  <li>Both bars (<code>addTripBarWideId</code>, <code>addTripBarNarrowId</code>):
+    <code>onAdd: addTripAndNavigate()</code>; <code>menu: addTripMenuId</code>.</li>
+  <li>Delete <code>addNativeTripMenuItem</code>; the menu's single item is
+    "Add trip from survey file&hellip;".</li>
+</ul>
+<h3>Tests (gate)</h3>
+<ul>
+  <li><code>tst_SurveyDataEntry.addSurvey()</code> — collapses to a plain
+    <code>mouseClick(addButton)</code>; delete the menu drive and the
+    <code>itemAt(0)</code> objectName guard.</li>
+  <li><code>tst_TripPageExternalAttach.openAddTripMenu()</code> — click the
+    <code>menuButton</code> chevron instead of the add button.</li>
+  <li>New: primary-click adds a trip and navigates without any menu appearing.</li>
+  <li>Run <code>tst_SurveyDataEntry</code>, <code>tst_TripPageExternalAttach</code>,
+    <code>tst_CavePage</code>.</li>
+</ul>
+
+<h2>5. Commit 3 — Add from file on the empty trip page <span class="muted">(B)</span></h2>
+<h3>SurveyEditor.qml</h3>
+<ul>
+  <li>Add <code>signal addFromSurveyFile()</code> on the root. Next to the empty-state
+    <code>addSurveyData</code> button (<code>SurveyEditor.qml:337</code>, visible when
+    <code>chunkCount === 0</code>): secondary <code>QC.Button</code>
+    "Add From Survey File&hellip;" (<code>objectName: "addFromSurveyFileButton"</code>,
+    same visibility) that emits it. SurveyEditor is only loaded for non-external trips,
+    so no <code>isExternal</code> guard is needed inside it.</li>
+</ul>
+<h3>TripPage.qml</h3>
+<ul>
+  <li>Host a second <code>AddSurveyFileDialog</code> (title "Add survey from file"). On
+    the editor's signal: <code>dialog.trip = area.currentTrip</code>, open.</li>
+  <li><code>onAttached</code>: nothing — the existing <code>isExternal</code> binding
+    flips and the Loader swaps to <code>ExternalCenterlinePanel</code>.
+    <code>onImported</code>: nothing — chunks appear in the editor in place.
+    <strong>No rename on either path</strong>: the trip is a pre-existing user object.</li>
+  <li><code>onDismissed</code>: nothing — no orphan to clean up; the trip stays native
+    and empty. The payoff of B: cancel has no transaction to unwind.</li>
+</ul>
+<h3>Tests (gate) — extend <code>tst_TripPageExternalAttach</code></h3>
+<ul>
+  <li>Empty native trip &rarr; button visible; Attach the <code>survex_simple</code>
+    fixture &rarr; pane swaps to the external panel, <code>rowCount()</code> unchanged
+    (same trip object), trip name preserved.</li>
+  <li>Import path from the trip page: chunks appear in the same trip, name preserved.</li>
+  <li>Cancel &rarr; dialog closes, trip still native and empty, no trip removed.</li>
+  <li>Trip with a chunk &rarr; button not visible (empty-state only, same rule as
+    "Add Survey Data").</li>
+</ul>
+
+<h2>6. Commit 4 — Zero-trip empty state <span class="muted">(D)</span></h2>
+<h3>CavePage.qml</h3>
+<ul>
+  <li>A <code>HelpArea</code> above the (empty) trip table in both wide and narrow
+    layouts, <code>visible: currentCave !== null &&
+    currentCave.rowCount() === 0</code>, text
+    "No trips yet &mdash; click Add Trip, or add one from a survey file via the
+    &#9662; menu." (Once app-wide drag-and-drop ships — Fall 2026 — this text grows a
+    "or drag and drop a survey file here" clause; the drop issue notes it.)</li>
+</ul>
+<h3>Tests (gate)</h3>
+<ul>
+  <li>HelpArea visible on a fresh cave, gone after the first trip is added (either
+    path), back after the last trip is deleted.</li>
+  <li>Run <code>tst_CavePage</code>.</li>
+</ul>
+
+<h2>7. Decisions for review</h2>
+<ul>
+  <li><strong>D1 — Attach listed first with a bold "Recommended" tag</strong>
+    (decided 2026-07-20): counters the familiar-word pull of "Import"; attach preserves
+    the user's existing survey workflow and is the mode the external-file feature exists
+    for.</li>
+  <li><strong>D2 — Entry points offered only on empty trips.</strong> The orchestrator
+    allows attaching over existing chunks (Phase-2 &sect;15 noted a warning would be
+    needed). Recommendation: gate the empty-state affordance on
+    <code>chunkCount === 0</code> and skip the warning dialog entirely for now. This
+    also matches the importer exactly — <code>importSurvexToTrip</code> hard-rejects
+    non-empty trips.</li>
+  <li><strong>D3 — Keep the CavePage orphan flow.</strong> Create-up-front +
+    delete-on-dismiss is built and tested, and now serves Import too. Create-on-success
+    (&sect;15 A1) stays scheduled for revisit alongside Phase 3's cave-level attach.</li>
+  <li><strong>D4 — No rename on the trip-page path</strong> (see commit 3). One rule —
+    "adding from a file never renames an existing trip" — even if the name is still the
+    default "Trip N".</li>
+</ul>
+
+<h2>8. Not in this plan</h2>
+<ul>
+  <li><code>ExportImportButtons.qml:233</code> has its own region-level "Import Survex"
+    menu item (<code>surveyImportManager.importSurvex()</code>). Different scope
+    (region-wide, own file picker); the overlap with the unified dialog is real but
+    pre-existing. Revisit if the import surfaces get consolidated.</li>
+  <li>Import support for Compass/Walls files in the unified dialog (the disabled Import
+    button's "Survex only" note is the placeholder until the importer grows formats).</li>
+  <li>&sect;15 A1 create-on-success, Escape-cancels-the-dialog, and the shared
+    <code>externallyBacked</code> predicate (R2) stay where they are in
+    <code>EXTERNAL_FILE_PHASE2.html</code>.</li>
+  <li><strong>Drag-and-drop, entirely</strong> (Fall 2026 milestone). Drop interaction
+    should land all at once across the app in one release — survey files onto the cave
+    page, plus whatever other surfaces make sense (<code>.cw</code> projects, note
+    images) — instead of one page quietly supporting it. Filed as a GitHub issue when
+    this plan's implementation completes (&sect;9); the natural design hook is the same
+    unified dialog, opened pre-filled from the dropped path.</li>
+</ul>
+
+<h2>9. Exit gate</h2>
+<ul>
+  <li>File the GitHub issue for app-wide drag-and-drop (Fall 2026 milestone): scope =
+    every drop surface at once, survey files &rarr; the unified dialog pre-filled, plus
+    the HelpArea text update from commit 4.</li>
+  <li>Per-commit: the tests listed above, offscreen, teed to <code>/tmp/</code> logs.</li>
+  <li>The Phase-2 full both-suite run (<code>cavewhere-test</code> +
+    <code>cavewhere-qml-test</code>) is still owed before any push; run it once after
+    commit 4 rather than separately for Phase 2 and this plan.</li>
+</ul>
+
+</div>
+</body>
+</html>

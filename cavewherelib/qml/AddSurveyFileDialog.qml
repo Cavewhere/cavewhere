@@ -11,16 +11,17 @@ import QtQuick.Dialogs as QD
 import QtQuick.Layouts
 import cavewherelib
 
-// Modal attach dialog for an externally-backed trip (master plan
-// §8.1, Phase 2 commit 12). Pick an entry file, preview the scan
-// (auto-detected format, file count, warnings, errors), then run
-// the attach through the manager's completion-signal bridge. There
-// is no watch-vs-import choice - the source path is always
-// remembered (direction change 2026-07-16). Cancel during the
-// attach routes through cancelAttach, which the manager honors
-// only until the attach's internal scan lands; a later click is a
-// structural no-op, so the button can stay enabled for the whole
-// operation without the q14 token-release hazard.
+// Unified add-from-survey-file dialog (Add Trip UX plan §3). Pick an
+// entry file, preview the scan (auto-detected format, file count,
+// warnings, errors), then choose how CaveWhere uses it: Attach
+// (recommended - the file stays the source of truth) or Import a copy
+// (Survex only). Attach runs through the manager's completion-signal
+// bridge; Import through cwSurveyImportManager's importFinished
+// bridge. Cancel during an attach routes through cancelAttach, which
+// the manager honors only until the attach's internal scan lands; a
+// later click is a structural no-op, so the button can stay enabled
+// for the whole operation without the q14 token-release hazard.
+// Import has no cancel path, so Cancel disables while importing.
 QQ.Item {
     id: root
     objectName: "attachExternalCenterlineDialog"
@@ -46,13 +47,30 @@ QQ.Item {
     property Trip attachingTrip: null
     property string attachingTripId: ""
 
+    // Same snapshot idea for Import: importFinished carries the trip
+    // pointer, so identity-compare against the snapshot (a trip
+    // destroyed mid-import nulls both sides, which still matches and
+    // unwedges the dialog). The source path needs no snapshot - the
+    // path field is locked while busy, so previewId.sourcePath is
+    // stable until the import reports.
+    property bool importing: false
+    property Trip importingTrip: null
+
+    property alias title: dialogId.title
+
+    readonly property bool busy: attaching || importing
+
     // Outcome signals for hosts. Exactly one fires per open()d session
     // that ends: attached() when this dialog's attach succeeds,
-    // dismissed() when the user backs out (idle Cancel, or a canceled
-    // attach). A failed attach fires neither - the dialog stays open
-    // for another attempt. The programmatic close() is silent so
-    // hosts and tests can reset state without triggering cleanup.
+    // imported(sourcePath) when its import completes (the trip carries
+    // no entry-file record on this path, so the picked path rides the
+    // signal for naming), dismissed() when the user backs out (idle
+    // Cancel, or a canceled attach). A failed attach fires neither -
+    // the dialog stays open for another attempt. The programmatic
+    // close() is silent so hosts and tests can reset state without
+    // triggering cleanup.
     signal attached()
+    signal imported(string sourcePath)
     signal dismissed()
 
     function open() {
@@ -61,6 +79,8 @@ QQ.Item {
         root.attaching = false
         root.attachingTrip = null
         root.attachingTripId = ""
+        root.importing = false
+        root.importingTrip = null
         dialogId.open()
     }
 
@@ -100,6 +120,23 @@ QQ.Item {
         }
     }
 
+    QQ.Connections {
+        target: RootData.surveyImportManager
+
+        function onImportFinished(trip, hasErrors) {
+            if (!root.importing || trip !== root.importingTrip) {
+                return
+            }
+            root.importing = false
+            root.importingTrip = null
+            // Parse warnings live in the global error model (import
+            // still lands whatever parsed); the dialog's session is
+            // over either way.
+            dialogId.close()
+            root.imported(previewId.sourcePath)
+        }
+    }
+
     QC.Dialog {
         id: dialogId
         objectName: "attachDialog"
@@ -107,7 +144,7 @@ QQ.Item {
         anchors.centerIn: QC.Overlay.overlay
         modal: true
         implicitWidth: 480
-        title: qsTr("Attach external centerline")
+        title: qsTr("Add trip from survey file")
         closePolicy: QC.Popup.NoAutoClose
 
         contentItem: ColumnLayout {
@@ -125,7 +162,7 @@ QQ.Item {
                     id: pathFieldId
                     objectName: "sourcePathField"
                     Layout.fillWidth: true
-                    enabled: !root.attaching
+                    enabled: !root.busy
                     placeholderText: qsTr("/path/to/centerline.svx")
                     // A stale failure from the previous attempt must not
                     // outrank the fresh path's scan result.
@@ -134,7 +171,7 @@ QQ.Item {
 
                 QC.Button {
                     objectName: "browseButton"
-                    enabled: !root.attaching
+                    enabled: !root.busy
                     text: qsTr("Browse…")
                     onClicked: fileDialogId.open()
                 }
@@ -179,30 +216,91 @@ QQ.Item {
                                                   : previewId.errorMessage
             }
 
-            BodyText {
-                objectName: "copyExplainerText"
-                Layout.fillWidth: true
-                text: qsTr("CaveWhere copies the file (and everything it includes) "
-                         + "into your project, so the centerline travels with git "
-                         + "sync, backups, and sharing. CaveWhere never writes to "
-                         + "your original files — keep editing them in your survey "
-                         + "tool.")
+            QC.Label {
+                text: qsTr("How should CaveWhere use this file?")
+                font.bold: true
             }
 
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Theme.tightSpacing
-                visible: root.attaching
+
+                QC.Button {
+                    id: attachButtonId
+                    objectName: "attachButton"
+                    text: qsTr("Attach")
+                    enabled: root.trip !== null && previewId.valid && !root.busy
+                    onClicked: {
+                        root.attachError = ""
+                        root.attachingTrip = root.trip
+                        root.attachingTripId = String(root.trip.id)
+                        root.attaching = true
+                        RootData.attachTripCenterline(root.attachingTrip,
+                                                      previewId.sourcePath)
+                    }
+                }
+
+                QC.Label {
+                    objectName: "recommendedLabel"
+                    text: qsTr("Recommended")
+                    font.bold: true
+                    color: Theme.accent
+                }
+            }
+
+            BodyText {
+                objectName: "attachExplainerText"
+                Layout.fillWidth: true
+                text: qsTr("The file stays the source of truth — keep editing it "
+                         + "in your survey tool and CaveWhere stays in sync. A "
+                         + "copy travels with your project for git sync, backups, "
+                         + "and sharing; CaveWhere never writes to your original "
+                         + "files. Survey data is read-only in CaveWhere.")
+            }
+
+            QC.Button {
+                id: importButtonId
+                objectName: "importButton"
+                text: qsTr("Import a copy")
+                enabled: root.trip !== null && previewId.valid && !root.busy
+                         && previewId.importSupported
+                onClicked: {
+                    root.attachError = ""
+                    root.importingTrip = root.trip
+                    root.importing = true
+                    RootData.surveyImportManager.importSurvexToTrip(
+                        previewId.sourcePath, root.importingTrip)
+                }
+            }
+
+            BodyText {
+                objectName: "importExplainerText"
+                Layout.fillWidth: true
+                text: qsTr("Copies the data into CaveWhere. You edit it here; "
+                         + "the original file is never read again.")
+            }
+
+            QC.Label {
+                objectName: "importFormatNote"
+                visible: previewId.valid && !previewId.importSupported
+                color: Theme.textSubtle
+                text: qsTr("Import supports Survex files only.")
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.tightSpacing
+                visible: root.busy
 
                 QC.BusyIndicator {
                     implicitWidth: Theme.fontSizeLarge
                     implicitHeight: Theme.fontSizeLarge
-                    running: root.attaching
+                    running: root.busy
                 }
 
                 QC.Label {
-                    objectName: "attachingLabel"
-                    text: qsTr("Attaching…")
+                    objectName: "busyLabel"
+                    text: root.importing ? qsTr("Importing…") : qsTr("Attaching…")
                 }
             }
 
@@ -218,6 +316,7 @@ QQ.Item {
                     id: cancelButtonId
                     objectName: "cancelButton"
                     text: qsTr("Cancel")
+                    enabled: !root.importing
                     onClicked: {
                         if (root.attaching) {
                             if (root.attachingTrip !== null) {
@@ -230,21 +329,6 @@ QQ.Item {
                         }
                     }
                 }
-
-                QC.Button {
-                    id: attachButtonId
-                    objectName: "attachButton"
-                    text: qsTr("Attach")
-                    enabled: root.trip !== null && previewId.valid && !root.attaching
-                    onClicked: {
-                        root.attachError = ""
-                        root.attachingTrip = root.trip
-                        root.attachingTripId = String(root.trip.id)
-                        root.attaching = true
-                        RootData.attachTripCenterline(root.attachingTrip,
-                                                      previewId.sourcePath)
-                    }
-                }
             }
         }
     }
@@ -252,7 +336,7 @@ QQ.Item {
     QD.FileDialog {
         id: fileDialogId
         objectName: "entryFileDialog"
-        title: qsTr("Attach external centerline")
+        title: dialogId.title
         nameFilters: [
             qsTr("Survey files (*.svx *.dat *.mak *.srv *.wpj)"),
             qsTr("All files (*)")

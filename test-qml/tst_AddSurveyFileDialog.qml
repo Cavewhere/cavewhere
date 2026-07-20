@@ -4,27 +4,35 @@ import cavewherelib
 import cw.TestLib
 import QmlTestRecorder
 
-// Commit-12 tests for AttachExternalCenterlineDialog: the scan
-// preview gating [Attach], the attach through the completion-signal
-// bridge, and the cancel-during-scan path (manager cancelAttach).
+// Tests for AddSurveyFileDialog (Phase-2 commit 12 + the Add Trip UX
+// plan's unified rework): the scan preview gating both choice buttons,
+// attach through the manager's completion-signal bridge, import
+// through cwSurveyImportManager's importFinished bridge, format-gated
+// Import (Survex only), and the cancel-during-scan path.
 MainWindowTest {
     id: rootId
 
     property Trip trip: null
 
-    AttachExternalCenterlineDialog {
+    AddSurveyFileDialog {
         id: attachDialogId
         trip: rootId.trip
     }
 
     ExternalCenterlineTestCase {
-        name: "AttachExternalCenterlineDialog"
+        name: "AddSurveyFileDialog"
         when: windowShown
 
         SignalSpy {
             id: attachCompletedSpyId
             target: RootData.externalCenterlineManager
             signalName: "attachCompleted"
+        }
+
+        SignalSpy {
+            id: importedSpyId
+            target: attachDialogId
+            signalName: "imported"
         }
 
         function init() {
@@ -34,6 +42,7 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
             rootId.trip = null
             attachCompletedSpyId.clear()
+            importedSpyId.clear()
         }
 
         function cleanup() {
@@ -172,6 +181,57 @@ MainWindowTest {
             tryVerify(() => rootId.trip.externalCenterline.entryFile.length > 0,
                       10000, "the trip becomes Attached")
             RootData.futureManagerModel.waitForFinished()
+        }
+
+        function test_importHappyPath() {
+            const pathField = openWithTrip("import-dialog-happy")
+            const source = TestHelper.testcasesDatasetPath(
+                "external-centerlines/survex_simple.svx")
+            pathField.text = source
+
+            const importButton = findChild(attachDialogId, "importButton")
+            verify(importButton !== null, "importButton must exist")
+            tryVerify(() => importButton.enabled, 10000,
+                      "Import enables on a valid Survex scan")
+
+            // Direct invocation: the handler runs synchronously, so the
+            // busy state is provably up before the async task lands.
+            importButton.clicked()
+            verify(attachDialogId.importing, "import busy state is up")
+            const cancelButton = findChild(attachDialogId, "cancelButton")
+            verify(!cancelButton.enabled, "no cancel path during import")
+
+            tryVerify(() => importedSpyId.count === 1, 10000,
+                      "importFinished bridges to exactly one imported()")
+            compare(importedSpyId.signalArguments[0][0], source,
+                    "imported() carries the picked path for host naming")
+            verify(!attachDialogId.importing, "busy state resets")
+            tryVerify(() => !pathField.visible, 5000, "dialog closes on import")
+
+            tryVerify(() => rootId.trip.chunkCount > 0, 10000,
+                      "the survex data lands in the trip as native chunks")
+            compare(rootId.trip.externalCenterline.entryFile, "",
+                    "an imported trip stays Native")
+            RootData.futureManagerModel.waitForFinished()
+        }
+
+        function test_compassFileDisablesImportOnly() {
+            const pathField = openWithTrip("import-dialog-compass")
+            pathField.text = TestHelper.testcasesDatasetPath(
+                "external-centerlines/compass_simple.dat")
+
+            const attachButton = findChild(attachDialogId, "attachButton")
+            tryVerify(() => attachButton.enabled, 10000,
+                      "Compass scans are attachable")
+
+            const importButton = findChild(attachDialogId, "importButton")
+            verify(!importButton.enabled, "Import is Survex-only")
+            const formatNote = findChild(attachDialogId, "importFormatNote")
+            verify(formatNote.visible, "the disabled Import explains itself")
+
+            const cancelButton = findChild(attachDialogId, "cancelButton")
+            mouseClick(cancelButton)
+            tryVerify(() => !pathField.visible, 5000, "Cancel closes the dialog")
         }
 
         function test_cancelDuringScanLeavesTripNative() {

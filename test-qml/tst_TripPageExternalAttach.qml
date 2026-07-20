@@ -4,11 +4,13 @@ import cavewherelib
 import cw.TestLib
 import QmlTestRecorder
 
-// Commit-13 tests: the CavePage [Add Trip] menu + attach-dialog flow
-// (orphan-trip cleanup, entry-file naming), the TripPage left-pane
-// swap between SurveyEditor and ExternalCenterlineTripPanel, the
-// station-reference validator relaxation on attached trips, and the
-// carpet sub-page's scoped station list.
+// Commit-13 tests (+ the Add Trip UX plan's unified dialog): the
+// CavePage [Add Trip] menu + add-from-survey-file dialog flow
+// (orphan-trip cleanup, picked-file naming, attach vs import), the
+// TripPage left-pane swap between SurveyEditor and
+// ExternalCenterlineTripPanel, the station-reference validator
+// relaxation on attached trips, and the carpet sub-page's scoped
+// station list.
 MainWindowTest {
     id: rootId
 
@@ -77,21 +79,29 @@ MainWindowTest {
             return null
         }
 
-        // Drives the External centerline… menu item through the dialog
-        // with the survex_simple fixture until the attach is submitted.
-        function attachViaAddTripMenu(cavePage) {
+        // Drives the Add trip from survey file… menu item through the
+        // dialog with the survex_simple fixture until the requested
+        // choice button ("attachButton" or "importButton") is clicked.
+        function addTripViaFileMenu(cavePage, choiceButtonName) {
             const externalItem = openAddTripMenu(cavePage, "addExternalTripMenuItem")
             mouseClick(externalItem)
 
-            const pathField = findChild(cavePage, "sourcePathField")
-            verify(pathField !== null, "attach dialog must exist on the cave page")
+            // Scope to the dialog - ExportImportButtons also has an
+            // "importButton" on the cave page.
+            const dialog = findChild(cavePage, "attachExternalCenterlineDialog")
+            verify(dialog !== null, "the dialog must exist on the cave page")
+            const pathField = findChild(dialog, "sourcePathField")
             tryVerify(() => pathField.visible, 5000, "dialog opens")
             pathField.text = TestHelper.testcasesDatasetPath(
                 "external-centerlines/survex_simple.svx")
 
-            const attachButton = findChild(cavePage, "attachButton")
-            tryVerify(() => attachButton.enabled, 10000, "preview scan lands")
-            mouseClick(attachButton)
+            const choiceButton = findChild(dialog, choiceButtonName)
+            tryVerify(() => choiceButton.enabled, 10000, "preview scan lands")
+            mouseClick(choiceButton)
+        }
+
+        function attachViaAddTripMenu(cavePage) {
+            addTripViaFileMenu(cavePage, "attachButton")
         }
 
         function test_addTripMenuNativeItemAddsTrip() {
@@ -121,7 +131,8 @@ MainWindowTest {
 
             const pathField = findChild(cavePage, "sourcePathField")
             verify(pathField !== null, "attach dialog must exist on the cave page")
-            tryVerify(() => pathField.visible, 5000, "External centerline… opens the dialog")
+            tryVerify(() => pathField.visible, 5000,
+                      "Add trip from survey file… opens the dialog")
             compare(currentCave().rowCount(), 2, "the flow creates the trip up front")
 
             // Scope to the dialog - CavePage's RemoveAskBox also has a
@@ -179,6 +190,30 @@ MainWindowTest {
             // setName would silently no-op on the collision.
             tryCompare(currentCave().trip(1), "name", "survex_simple")
             tryCompare(currentCave().trip(2), "name", "survex_simple 2")
+        }
+
+        function test_importViaDialogKeepsNamesAndFillsTrip() {
+            makeSavedTrip("trip-page-import-flow")
+            const cavePage = gotoCavePage()
+
+            addTripViaFileMenu(cavePage, "importButton")
+
+            // The imported() handler keeps the up-front trip, names it
+            // from the picked file, and navigates - same contract as
+            // attached(), but the trip stays Native and gets chunks.
+            tryVerify(() => currentCave().rowCount() === 2
+                            && currentCave().trip(1).chunkCount > 0,
+                      10000, "the import lands chunks in the new trip")
+            tryCompare(currentCave().trip(1), "name", "survex_simple")
+            compare(currentCave().trip(1).externalCenterline.entryFile, "",
+                    "an imported trip is Native, not Attached")
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "tripPage",
+                      10000, "import navigates to the trip page")
+            const tripPage = RootData.pageView.currentPageItem
+            tryVerify(() => findChild(tripPage, "surveyEditor") !== null,
+                      10000, "an imported trip shows the SurveyEditor")
+            RootData.futureManagerModel.waitForFinished()
         }
 
         function test_detachSwapsPaneBackToSurveyEditor() {

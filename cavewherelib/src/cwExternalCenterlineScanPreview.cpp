@@ -79,6 +79,12 @@ QString cwExternalCenterlineScanPreview::formatName() const
         cwExternalCenterlineScanner::formatFor(m_sourcePath));
 }
 
+bool cwExternalCenterlineScanPreview::importSupported() const
+{
+    return cwExternalCenterlineScanner::formatFor(m_sourcePath)
+            == cwExternalCenterlineScanner::Format::Survex;
+}
+
 void cwExternalCenterlineScanPreview::setScanning(bool scanning)
 {
     if (m_scanning == scanning) {

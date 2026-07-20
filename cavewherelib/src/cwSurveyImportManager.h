@@ -72,6 +72,7 @@ signals:
     void messageAdded(QString severity, QString message, QString source, int startLine, int startColumn, int endLine, int endColumn);
     void messagesCleared();
     void errorModelChanged();
+    void importFinished(cwTrip* trip, bool hasErrors);
     
 public slots:
 
