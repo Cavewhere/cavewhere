@@ -174,6 +174,9 @@ TEST_CASE("cwRenderTexturedItems hidden item does not inflate framing bounds",
     items.setScene(&scene);
     addTriangleItem(items, 0.0f);
     const uint32_t hiddenId = addTriangleItem(items, kSecondItemY);
+    // The pick-ready gate (issue #505 Phase 4) hides each item until its
+    // sub-BVH publishes, so wait for the builds before framing ready items.
+    scene.geometryItersecter()->waitForFinish();
 
     // Baseline: both items contribute — the box reaches item B.
     REQUIRE(scene.visibleFramingBounds().maximum().y()
@@ -340,6 +343,9 @@ TEST_CASE("cwRenderTexturedItems whole-object hide removes it from the visible f
     items.setScene(&scene);
     addTriangleItem(items, 0.0f);
     addTriangleItem(items, kSecondItemY);
+    // The pick-ready gate (issue #505 Phase 4) hides each item until its
+    // sub-BVH publishes, so wait for the builds before framing ready items.
+    scene.geometryItersecter()->waitForFinish();
 
     // Baseline: while visible, the framing bounds span both items.
     REQUIRE(scene.visibleFramingBounds().maximum().y()

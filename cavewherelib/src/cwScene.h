@@ -154,7 +154,7 @@ private:
     //For interaction
     cwGeometryItersecter* GeometryItersecter;
 
-    // Published visibility store; seeded by addItem() via publishVisibility(),
+    // Published visibility store; seeded by addItem() via updateVisibility(),
     // scrubbed by removeItem().
     cwSceneVisibility* m_visibility;
 

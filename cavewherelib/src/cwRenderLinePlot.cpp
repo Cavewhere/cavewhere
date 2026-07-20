@@ -14,12 +14,15 @@
 #include "cwRHILinePlot.h"
 #include "cwScene.h"
 #include "cwSceneVisibility.h"
-#include "cwGeometryItersecter.h"
+#include "cwGeometry.h"
 
 
 cwRenderLinePlot::cwRenderLinePlot(QObject *parent) :
     cwRenderObject(parent)
 {
+    // The centerline is one intersecter key, so its pick-ready gate hides the
+    // whole plot until the sub-BVH lands (issue #505 Phase 4).
+    setPickGateHidesObject(true);
 }
 
 void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
@@ -45,7 +48,13 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
     // (CPU-side only — never uploaded to the GPU). The iota list also makes
     // each segment's first index equal its from-vertex index, which the
     // centerline pick contract relies on (#530).
-    if (auto* intersecter = geometryItersecter()) {
+    // Empty geometry contributes no segments, so it would never produce a
+    // sub-BVH — registering it would arm a pick-ready gate that never releases
+    // (hidden forever). Drop it from picking instead, mirroring the point
+    // cloud's empty branch (issue #505 Phase 4).
+    if (pointData.isEmpty()) {
+        unregisterPickable(kSubId);
+    } else {
         cwGeometry geometry {
             { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
         };
@@ -56,8 +65,7 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
         geometry.setIndices(std::move(sequentialIndices));
         geometry.setType(cwGeometry::Type::Lines);
 
-        intersecter->addObject(cwGeometryItersecter::Object(this, kSubId,
-                                                            std::move(geometry)));
+        registerPickable(kSubId, std::move(geometry));
     }
 
     data.points = std::move(pointData);
@@ -77,6 +85,11 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
     if (auto* visibilityStore = sceneVisibility()) {
         visibilityStore->setMask(renderObjectId(), kSubId, QVector<quint8>());
     }
+
+    // Reflect the (possibly gated) object visibility: the first plot stays
+    // hidden until its sub-BVH publishes; a later geometry edit reuses the Key
+    // and does not re-arm, so this is a no-op republish for it.
+    updateVisibility();
 
     update();
 
@@ -133,9 +146,9 @@ void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)
     update();
 }
 
-void cwRenderLinePlot::publishVisibility()
+void cwRenderLinePlot::updateVisibility()
 {
-    cwRenderObject::publishVisibility();
+    cwRenderObject::updateVisibility();
     if (auto* visibilityStore = sceneVisibility()) {
         const QVector<quint8>& visibility = m_visibility;
         const bool anyHidden = visibility.contains(kHidden);

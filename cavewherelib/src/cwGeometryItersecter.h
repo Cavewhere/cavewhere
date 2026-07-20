@@ -107,13 +107,26 @@ public:
     void setVisibilityStore(cwSceneVisibility* store);
 
     //! Registers the object for picking, replacing any object with the same
-    //! Key. Registration is asynchronous — the sub-BVH builds on a worker —
-    //! so picks ignore this Key from the call until the build installs (the
-    //! not-ready contract, issue #505). A replacement unpublishes the old
-    //! geometry synchronously, so the in-flight window serves no stale hits;
-    //! already-built objects keep picking throughout. Callers that need the
-    //! Key pickable gate on bvhReady().
-    void addObject(const cwGeometryItersecter::Object& object);
+    //! Key, and returns a readiness future that finishes once this Key's
+    //! sub-BVH first publishes (isObjectPickReady() turns true). Registration
+    //! is asynchronous — the sub-BVH builds on a worker — so picks ignore this
+    //! Key from the call until the build installs (the not-ready contract,
+    //! issue #505). A replacement unpublishes the old geometry synchronously,
+    //! so the in-flight window serves no stale hits; already-built objects keep
+    //! picking throughout.
+    //!
+    //! The readiness future is a fire-once notification decoupled from the BVH
+    //! build: the build is driven internally by the restarter, never handed
+    //! out, so cancelling the returned future cannot cancel or disturb the
+    //! build — it only forfeits the caller's own notification. That decoupling
+    //! is the shield; there is no separate build future to protect. A same-key
+    //! replacement of an already-published Key returns an already-finished
+    //! future (first-publish-only), so a watching gate does not re-hide on a
+    //! geometry edit. A registration that doesn't take (invalid geometry,
+    //! dropped type) returns an already-finished future — nothing to wait on.
+    //! Callers that must keep geometry render-hidden until it is pickable watch
+    //! this future (cwRenderObject::registerPickable, issue #505 Phase 4).
+    QFuture<void> addObject(const cwGeometryItersecter::Object& object);
     void clear();
     void clear(cwRenderObjectId parentId);
     void removeObject(cwRenderObjectId parentId, uint64_t id);
@@ -156,6 +169,15 @@ public:
     //! non-empty and a caller keeps its fallback suppressed rather than
     //! acting on a temporary emptiness.
     bool isPickableEmpty() const;
+
+    //! True once the published BVH holds a non-null sub-BVH for objectKey — i.e.
+    //! the async build has installed its geometry and a pick can hit it. False
+    //! before the first build, for a never-registered Key, and during the window
+    //! a same-key replacement has nulled the old slot but the new build hasn't
+    //! landed. Main-thread only (reads m_bvh). A convenience/query predicate;
+    //! the production readiness edge is the future addObject() returns, which
+    //! resolves the first time this turns true for its Key (issue #505 Phase 4).
+    bool isObjectPickReady(const Key& objectKey) const;
 
     // `ray` direction must be unit length: ray-depth (projectedDistance)
     // divides by |dir|^2, and the screen-space line tolerance scales its
@@ -401,6 +423,15 @@ private:
     quint64 m_mutationSeq = 0;
     QHash<Key, quint64> m_keyDirtySeq;
 
+    // Per-Key pick-ready promises (issue #505 Phase 4). addObject creates one
+    // on a Key's first registration and hands out its future; installBuildResult
+    // completes it the first time that Key publishes a non-null sub-BVH. Kept
+    // completed across later rebuilds (first-publish-only) and only dropped —
+    // cancelled — when the Key is removed. Manually completed, never tracking
+    // the build future, so a caller cancelling the handed-out future touches
+    // only its own promise, not the build. Main-thread only.
+    QHash<Key, AsyncFuture::Deferred<void>> m_pickReadyPromises;
+
     // The scene's visibility store; see setVisibilityStore(). Null for
     // standalone intersecters (tests) — queries then read everything as
     // visible.
@@ -528,6 +559,24 @@ private:
     void installBuildResult(std::shared_ptr<BvhData> built,
                             const QHash<Key, std::shared_ptr<const SubBvh>>& banked,
                             quint64 launchSeq);
+
+    // The readiness future for `key`: reused when a promise already exists
+    // (first-publish-only keeps a resolved one resolved across rebuilds), else
+    // created pending. Returns an already-finished future when `key` didn't
+    // register a Node — nothing will ever become pickable, so a watching gate
+    // must not hide it. Main-thread only. See addObject's Phase 4 contract.
+    QFuture<void> pickReadyFuture(const Key& key);
+
+    // Complete every pending promise whose Key is now pick-ready. Called from
+    // installBuildResult after m_bvh is swapped in, so a freshly published slot
+    // releases the caller's gate on the same edge.
+    void resolveReadyPromises();
+
+    // Cancel and forget the promise for `key`, if any. A cancel on an already
+    // resolved promise is a no-op; a pending one is cancelled so a watching
+    // gate's completion callback never fires for removed geometry (the owner
+    // drops its own gate state at the removeObject site). Main-thread only.
+    void cancelReadyPromise(const Key& key);
 
     // Build a model-space sub-BVH for one Object using the existing
     // serialSplitToFanout + parallel buildBvhSubtree pipeline. Returns

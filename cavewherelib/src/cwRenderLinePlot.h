@@ -71,7 +71,7 @@ signals:
 
 protected:
     virtual cwRHIObject* createRHIObject() override;
-    void publishVisibility() override;
+    void updateVisibility() override;
 
 private:
     struct Data {
@@ -87,7 +87,7 @@ private:
     cwTracked<Data> m_data;
 
     // Authoring copy of the per-vertex mask — the source for setRangeVisible's
-    // range-flip math and for publishVisibility's re-seed. Consumers read the
+    // range-flip math and for updateVisibility's re-seed. Consumers read the
     // published store entry, never this member.
     QVector<quint8> m_visibility;
 

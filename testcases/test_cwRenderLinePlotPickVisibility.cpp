@@ -117,6 +117,10 @@ TEST_CASE("cwRenderLinePlot hidden shot does not inflate framing bounds",
     cwRenderLinePlot linePlot;
     linePlot.setScene(&scene);
     linePlot.setGeometry(twoShots());
+    // The pick-ready gate (issue #505 Phase 4) keeps the plot render-hidden —
+    // and thus out of the framing bounds — until its sub-BVH publishes, so wait
+    // for the build before framing a ready plot.
+    scene.geometryItersecter()->waitForFinish();
 
     // Baseline: both shots contribute — the box reaches shot 1.
     REQUIRE(scene.visibleFramingBounds().maximum().y() >= kSecondShotY);

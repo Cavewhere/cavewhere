@@ -52,7 +52,7 @@ public:
 
 protected:
     cwRHIObject *createRHIObject() override;
-    void publishVisibility() override;
+    void updateVisibility() override;
 
 private:
     // What travels to the render thread. Item additionally carries
@@ -113,6 +113,11 @@ private:
     QHash<uint32_t, Item> m_frontState;
 
     void addCommand(const PendingCommand &&command);
+
+    // Publish one item's effective sub-item visibility: authored visibility
+    // ANDed with its pick-ready gate, so an item stays hidden until its
+    // sub-BVH publishes (issue #505 Phase 4).
+    void publishItemVisibility(uint32_t id, bool authoredVisible);
 
     friend class cwRhiTexturedItems;
 };

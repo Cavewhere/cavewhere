@@ -573,20 +573,21 @@ void cwGeometryItersecter::waitForFinish()
 }
 
 /**
- * Registers the object for picking; see the header for the not-ready contract.
+ * Registers the object for picking; see the header for the not-ready contract
+ * and the readiness-future semantics.
  */
-void cwGeometryItersecter::addObject(const cwGeometryItersecter::Object &object)
+QFuture<void> cwGeometryItersecter::addObject(const cwGeometryItersecter::Object &object)
 {
     switch(object.geometry().type()) {
     case cwGeometry::Type::Triangles:
         addTriangles(object);
-        break;
+        return pickReadyFuture(object.key());
     case cwGeometry::Type::Lines:
         addLines(object);
-        break;
+        return pickReadyFuture(object.key());
     case cwGeometry::Type::Points:
         addPoints(object);
-        break;
+        return pickReadyFuture(object.key());
     default:
         // The renderer doesn't require geometry().type() but the picker does;
         // a triangulation task that forgets setType() drops out of picking
@@ -604,6 +605,9 @@ void cwGeometryItersecter::addObject(const cwGeometryItersecter::Object &object)
         }
         break;
     }
+    // Nothing registered — hand back a resolved future so a watching gate
+    // doesn't hide geometry that will never become pickable.
+    return AsyncFuture::completed();
 }
 
 bool cwGeometryItersecter::eraseNodeIfPresent(const Key& key)
@@ -645,6 +649,10 @@ void cwGeometryItersecter::clear()
     m_dirtyKeys.clear();
     m_keyDirtySeq.clear();
     m_maskedBoxCache.clear();
+    for (auto& promise : m_pickReadyPromises) {
+        promise.cancel();
+    }
+    m_pickReadyPromises.clear();
     // Total wipe: drop the published BVH entirely so every pick goes
     // no-hit immediately. No retention benefit here — there's no Key
     // left we'd want picks to still hit.
@@ -671,6 +679,7 @@ void cwGeometryItersecter::clear(cwRenderObjectId parentId)
             m_subBvhs.remove(key);
             m_dirtyKeys.remove(key);
             m_keyDirtySeq.remove(key);
+            cancelReadyPromise(key);
             applyPublishedDelta(key, PublishedDelta::RemoveSlot);
             iter = Nodes.erase(iter);
             ++erased;
@@ -700,6 +709,7 @@ void cwGeometryItersecter::removeObject(cwRenderObjectId parentId, uint64_t id)
 
 void cwGeometryItersecter::removeObject(const Key &objectKey)
 {
+    cancelReadyPromise(objectKey);
     if (eraseNodeIfPresent(objectKey)) {
         qCDebug(lcPick).nospace()
             << "removeObject {parent=" << objectKey.parentId
@@ -891,6 +901,19 @@ bool cwGeometryItersecter::isPickableEmpty() const
 {
     const QBox3D box = visibleBoundingBox();
     return box.isNull() || !box.isFinite();
+}
+
+bool cwGeometryItersecter::isObjectPickReady(const Key& objectKey) const
+{
+    if (!m_bvh) {
+        return false;
+    }
+    const auto slotIt = m_bvh->keyToSlot.constFind(objectKey);
+    if (slotIt == m_bvh->keyToSlot.constEnd()) {
+        return false;
+    }
+    const int slot = *slotIt;
+    return slot >= 0 && slot < m_bvh->subBvhs.size() && m_bvh->subBvhs.at(slot) != nullptr;
 }
 
 /**
@@ -2727,7 +2750,46 @@ void cwGeometryItersecter::installBuildResult(
         << " subBvhs=" << m_bvh->subBvhs.size()
         << " sourceNodes=" << m_bvh->nodesSnapshot.size()
         << " cached=" << m_subBvhs.size();
+    resolveReadyPromises();
     emit bvhReady();
+}
+
+QFuture<void> cwGeometryItersecter::pickReadyFuture(const Key& key)
+{
+    // A registration that didn't take (invalid geometry, dropped type) has no
+    // Node, so nothing will ever publish for it — resolve now rather than hand
+    // back a promise a watching gate would wait on forever.
+    if (findNode(key) == Nodes.cend()) {
+        return AsyncFuture::completed();
+    }
+
+    auto it = m_pickReadyPromises.find(key);
+    if (it == m_pickReadyPromises.end()) {
+        it = m_pickReadyPromises.insert(key, AsyncFuture::Deferred<void>());
+    }
+    // An existing promise resolved by a prior build stays resolved
+    // (first-publish-only); a brand-new one is pending because the add* above
+    // just nulled this Key's slot.
+    return it.value().future();
+}
+
+void cwGeometryItersecter::resolveReadyPromises()
+{
+    for (auto it = m_pickReadyPromises.begin(); it != m_pickReadyPromises.end(); ++it) {
+        if (!it.value().future().isFinished() && isObjectPickReady(it.key())) {
+            it.value().complete();
+        }
+    }
+}
+
+void cwGeometryItersecter::cancelReadyPromise(const Key& key)
+{
+    auto it = m_pickReadyPromises.find(key);
+    if (it == m_pickReadyPromises.end()) {
+        return;
+    }
+    it.value().cancel();
+    m_pickReadyPromises.erase(it);
 }
 
 cwRayHit cwGeometryItersecter::rayTriangleMT(const QRay3D &rayModel,

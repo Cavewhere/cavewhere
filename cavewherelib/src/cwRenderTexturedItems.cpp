@@ -141,20 +141,13 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     m_frontState.insert(id, storedItem);
 
     if (!payload.geometry.isEmpty()) {
-        if (auto* intersector = geometryItersecter()) {
-            intersector->addObject(cwGeometryItersecter::Object(this, id, payload.geometry, item.modelMatrix));
-        } else {
-            qCDebug(lcPick).nospace()
-                << "addItem id=" << id
-                << " geometry non-empty but geometryItersecter()==nullptr"
-                << " (scene wiring not ready) - picker WILL NOT see this item";
-        }
+        registerPickable(id, payload.geometry, item.modelMatrix);
     } else {
         qCDebug(lcPick).nospace()
             << "addItem id=" << id
             << " inputGeometryEmpty=" << item.geometry.isEmpty()
             << " transformedGeometryEmpty=true"
-            << " -> picker.addObject SKIPPED at addItem"
+            << " -> not registered for picking at addItem"
             << " (later updateGeometry(id, nonEmpty) would still register it)";
     }
 
@@ -162,10 +155,8 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     // (ownerId, id), independent of geometry registration — pick traversals
     // read it from a snapshot, so a born-hidden item is unpickable even
     // before (or without) its geometry registering. A visible item is the
-    // sparse default, so this only writes when born hidden.
-    if (auto* visibility = sceneVisibility()) {
-        visibility->setSubVisible(renderObjectId(), id, item.visible);
-    }
+    // sparse default, so this only writes when born hidden or gated (Phase 4).
+    publishItemVisibility(id, item.visible);
 
     return id;
 }
@@ -206,15 +197,21 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
             : payload.geometry.isEmpty() ? "removeObject"
             : "addObject");
 
-    if (intersector != nullptr) {
-        if (!payload.geometry.isEmpty()) {
-            // No visibility re-seed needed: the store entry is identity
-            // state that survives geometry removal and re-registration, so a
-            // render-hidden item can't be resurrected by a geometry cycle.
-            intersector->addObject(cwGeometryItersecter::Object(this, id, payload.geometry, modelMatrix));
-        } else {
-            intersector->removeObject({renderObjectId(), id});
-        }
+    if (!payload.geometry.isEmpty()) {
+        // The store entry is identity state that survives geometry removal and
+        // re-registration, so a render-hidden item can't be resurrected by a
+        // geometry cycle. registerPickable is first-publish-only: it hides the
+        // item only on its first registration (addItem had empty geometry) and
+        // no-ops on a same-key replacement, so an already-shown item never
+        // blinks on a geometry edit (Phase 4).
+        registerPickable(id, payload.geometry, modelMatrix);
+        publishItemVisibility(id, entry->visible);
+    } else {
+        // Geometry gone: drop it from picking and its gate, then republish so a
+        // gate armed by an earlier non-empty registration doesn't leave the
+        // item flagged hidden after the gate is gone.
+        unregisterPickable(id);
+        publishItemVisibility(id, entry->visible);
     }
 }
 
@@ -250,10 +247,9 @@ void cwRenderTexturedItems::setItemVisible(uint32_t id, bool visible)
     // the reset-view bounds, issues #575/#549), and cwRhiTexturedItems::gather
     // reads it from the frame's snapshot — no per-item visibility command
     // travels to the render thread. update() schedules the sync that refreshes
-    // the frame's snapshot.
-    if (auto* visibilityStore = sceneVisibility()) {
-        visibilityStore->setSubVisible(renderObjectId(), id, visible);
-    }
+    // the frame's snapshot. A user show while gated still yields hidden until
+    // the sub-BVH publishes (Phase 4).
+    publishItemVisibility(id, visible);
     update();
 }
 
@@ -325,24 +321,25 @@ void cwRenderTexturedItems::removeItem(uint32_t id)
 
     addCommand(PendingCommand(PendingCommand::Remove, id, ItemPayload{}));
 
-    if (auto* intersector = geometryItersecter()) {
-        intersector->removeObject({renderObjectId(), id});
-    }
+    unregisterPickable(id);
     if (auto* visibility = sceneVisibility()) {
         visibility->removeSub(renderObjectId(), id);
     }
     m_frontState.remove(id);
 }
 
-void cwRenderTexturedItems::publishVisibility()
+void cwRenderTexturedItems::updateVisibility()
 {
-    cwRenderObject::publishVisibility();
-    auto* visibility = sceneVisibility();
-    if (visibility == nullptr) {
-        return;
-    }
+    cwRenderObject::updateVisibility();
     for (auto it = m_frontState.cbegin(); it != m_frontState.cend(); ++it) {
-        visibility->setSubVisible(renderObjectId(), it.key(), it.value().visible);
+        publishItemVisibility(it.key(), it.value().visible);
+    }
+}
+
+void cwRenderTexturedItems::publishItemVisibility(uint32_t id, bool authoredVisible)
+{
+    if (auto* visibility = sceneVisibility()) {
+        visibility->setSubVisible(renderObjectId(), id, authoredVisible && subPickGateOpen(id));
     }
 }
 

@@ -88,7 +88,7 @@ void cwScene::addItem(cwRenderObject *item)
     // that makes pre-attach visibility structural: whatever was set before the
     // scene was wired lands in the store here, instead of each owner needing
     // its own re-publish convention.
-    item->publishVisibility();
+    item->updateVisibility();
 
     update();
 }
