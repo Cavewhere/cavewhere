@@ -329,6 +329,13 @@ private:
         // with a cwVisibilitySnapshot captured at entry, so a toggle needs
         // no republish and a held pair stays internally consistent.
         QHash<Key, int> keyToSlot;
+
+        // Rebuild the world-space top level from the parallel slot arrays;
+        // a null slot (the in-flight marker) contributes a null box, which
+        // buildTopLevel skips while keeping slot indexing. Pure function of
+        // this BvhData, so the worker and the copy-on-write refresh path
+        // compute identical top levels by construction.
+        QVector<BvhNode> rebuildTopLevel() const;
     };
 
 public:

@@ -2048,22 +2048,7 @@ bool cwGeometryItersecter::refreshPublishedModelMatrix(const Key& key,
     next->modelMatrices[slot] = modelMatrix;
     next->inverseModelMatrices[slot] = modelMatrix.inverted();
 
-    // Recompute each Object's world box from its (model-space) sub-BVH root and
-    // its current matrix, then rebuild the top-level. buildTopLevel skips null
-    // boxes and keys leaves by slot index, so a slot nulled by an in-flight
-    // rebuild (invalidatePublishedSlot) stays out of picks and the surviving
-    // slots keep their indices.
-    QVector<QBox3D> worldBoxes;
-    worldBoxes.reserve(next->subBvhs.size());
-    for (int i = 0; i < next->subBvhs.size(); ++i) {
-        const std::shared_ptr<const SubBvh>& sub = next->subBvhs.at(i);
-        if (!sub) {
-            worldBoxes.append(QBox3D());
-            continue;
-        }
-        worldBoxes.append(sub->modelRootBox.transformed(next->modelMatrices.at(i)));
-    }
-    next->topLevel = buildTopLevel(worldBoxes);
+    next->topLevel = next->rebuildTopLevel();
 
     m_bvh = std::move(next);
     return true;
@@ -2414,6 +2399,22 @@ cwGeometryItersecter::buildTopLevel(const QVector<QBox3D>& worldBoxes)
     return out;
 }
 
+QVector<cwGeometryItersecter::BvhNode>
+cwGeometryItersecter::BvhData::rebuildTopLevel() const
+{
+    QVector<QBox3D> worldBoxes;
+    worldBoxes.reserve(subBvhs.size());
+    for (int i = 0; i < subBvhs.size(); ++i) {
+        const std::shared_ptr<const SubBvh>& sub = subBvhs.at(i);
+        if (!sub) {
+            worldBoxes.append(QBox3D());
+            continue;
+        }
+        worldBoxes.append(sub->modelRootBox.transformed(modelMatrices.at(i)));
+    }
+    return buildTopLevel(worldBoxes);
+}
+
 QFuture<void> cwGeometryItersecter::launchBuildJob()
 {
     // Snapshot Nodes + the sub-BVH cache + the dirty set. QList/QHash are
@@ -2580,8 +2581,6 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         out->modelMatrices.reserve(nodesSnapshot.size());
         out->inverseModelMatrices.reserve(nodesSnapshot.size());
 
-        QVector<QBox3D> worldBoxes;
-        worldBoxes.reserve(nodesSnapshot.size());
         out->keyToSlot.reserve(nodesSnapshot.size());
         for (qsizetype i = 0; i < nodesSnapshot.size(); ++i) {
             const Node& n = nodesSnapshot.at(i);
@@ -2590,14 +2589,11 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             if (it == subBvhSnapshot.constEnd() || !*it) {
                 continue;
             }
-            const SubBvh& sb = **it;
             const QMatrix4x4 m = n.Object.modelMatrix();
-            const QBox3D wb = sb.modelRootBox.transformed(m);
             const int slot = static_cast<int>(out->subBvhs.size());
             out->subBvhs.append(*it);
             out->modelMatrices.append(m);
             out->inverseModelMatrices.append(m.inverted());
-            worldBoxes.append(wb);
             out->keyToSlot.insert(key, slot);
         }
 
@@ -2606,7 +2602,7 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         }
 
         const auto topStart = std::chrono::steady_clock::now();
-        out->topLevel = buildTopLevel(worldBoxes);
+        out->topLevel = out->rebuildTopLevel();
         const double topMs = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - topStart).count();
         const double totalMs = std::chrono::duration<double, std::milli>(
