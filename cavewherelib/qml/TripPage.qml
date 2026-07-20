@@ -38,7 +38,7 @@ StandardPage {
             if(PageView.page.name !== "Carpet") {
                 var page = RootData.pageSelectionModel.registerSubPage(area.PageView.page,
                                                                        "Carpet",
-                                                                       {"viewMode":"CARPET"});
+                                                                       {"viewMode":NoteToolMode.carpetMode});
             }
         }
     }
@@ -48,7 +48,7 @@ StandardPage {
       */
     PageView.defaultProperties: {
         "currentTrip":null,
-                "viewMode":""
+                "viewMode":NoteToolMode.none
     }
 
     PageView.defaultSelectionProperties: {
@@ -78,11 +78,11 @@ StandardPage {
         if(area.isNarrow) return;
         let ng = notesGalleryLoader.item
         if(!ng) return;
-        if(viewMode == "CARPET") {
-            ng.setMode("CARPET")
+        if(viewMode === NoteToolMode.carpetMode) {
+            ng.setMode(NoteToolMode.carpetMode)
             state = "COLLAPSE" //Hide the survey data on the left side
         } else {
-            ng.setMode("DEFAULT")
+            ng.setMode(NoteToolMode.defaultMode)
             state = "" //Show the survey data on the left side
             surveyEditor.visible = true
             ng.visible = true

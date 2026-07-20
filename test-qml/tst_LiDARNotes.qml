@@ -47,6 +47,13 @@ MainWindowTest {
         }
 
         function cleanup() {
+            //Reset before navigating: _exitCarpetMode() deliberately skips the
+            //bare CARPET state, so a test that fails while parked there would
+            //otherwise leak carpet mode into the next one.
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+            if (noteGallery !== null) {
+                noteGallery.state = ""
+            }
             RootData.pageSelectionModel.currentPageAddress = "View"
         }
 
@@ -245,6 +252,32 @@ MainWindowTest {
             //Re-entering carpet mode shows the station again
             mouseClick(carpetButton)
             tryVerify(() => { return stationItem.visible }, 2000, "Station should reappear when re-entering carpet mode")
+        }
+
+        // Station visibility follows the gallery's CARPET state, which every
+        // carpet sub-tool extends — it is not a list of tool names the viewer
+        // recognises. A sub-tool NoteLiDARItem knows nothing about (here the
+        // bare CARPET state, which pushes no state down to the viewer) must
+        // still show stations rather than silently hiding them.
+        function test_stationsVisibleInUnrecognizedCarpetState() {
+            let noteGallery = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery")
+            let lidarViewer = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId")
+
+            //This pins the gallery->viewer contract only. Rendered station
+            //visibility is covered by test_stationsHiddenOutsideCarpetMode; it
+            //can't be asserted here without giving the station container an
+            //objectName, which would insert a link into every station's
+            //ObjectFinder chain and break the lookups in the other tests.
+            compare(lidarViewer.stationsVisible, false, "Stations should start hidden")
+
+            noteGallery.state = "CARPET"
+            compare(lidarViewer.state, "", "Bare CARPET pushes no tool state onto the viewer")
+            tryCompare(lidarViewer, "stationsVisible", true, 2000,
+                       "Stations should show in any carpet state, not just the ones the viewer names")
+
+            noteGallery.state = ""
+            tryCompare(lidarViewer, "stationsVisible", false, 2000,
+                       "Stations should hide again on leaving carpet mode")
         }
 
         function test_northInteraction() {

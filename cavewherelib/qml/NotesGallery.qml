@@ -30,37 +30,29 @@ QQ.Rectangle {
     property alias _notePickerList: notePickerList
     property bool _pendingAutoSelect: false
 
-    readonly property string mode: {
-        switch(state) {
-            case "": return "DEFAULT"
-            case "NO_NOTES": return "DEFAULT"
-            case "CARPET": return "CARPET"
-            case "SELECT": return "CARPET"
-            case "ADD-STATION": return "CARPET"
-            case "ADD-SCRAP": return "CARPET"
-            case "ADD-LEAD": return "CARPET"
-            case "ADD-SKETCH-WALL": return "CARPET"
-            case "ADD-SKETCH-FEATURE": return "CARPET"
-            default: return "ERROR"
-        }
-    }
+    //Every state except these two is a carpet-editing state, so a new carpet
+    //sub-tool reports the right mode without being listed here.
+    readonly property string mode: (state === NoteToolMode.none || state === NoteToolMode.noNotes)
+                                   ? NoteToolMode.defaultMode
+                                   : NoteToolMode.carpetMode
 
     function setMode(mode) {
         if(mode !== noteGallery.mode) {
             switch(mode) {
-            case "DEFAULT":
-                if(noteGallery.mode == "CARPET") {
-                    noteGallery.state = "CARPET"
+            case NoteToolMode.defaultMode:
+                if(noteGallery.mode == NoteToolMode.carpetMode) {
+                    //Route through CARPET so the exit transition runs
+                    noteGallery.state = NoteToolMode.carpet
                 }
                 if(notesModel.rowCount() === 0) {
-                    noteGallery.state = "NO_NOTES"
+                    noteGallery.state = NoteToolMode.noNotes
                 } else {
-                    noteGallery.state = ""
+                    noteGallery.state = NoteToolMode.none
                     mainButtonArea.visible = !noteGallery.isNarrow;
                 }
                 break;
-            case "CARPET":
-                noteGallery.state = "SELECT"
+            case NoteToolMode.carpetMode:
+                noteGallery.state = NoteToolMode.select
             }
         }
     }
@@ -78,9 +70,9 @@ QQ.Rectangle {
     }
 
     function exitCarpetMode() {
-        noteGallery.state = "CARPET"
-        noteGallery.state = ""
-        noteLidarArea.state = ""
+        noteGallery.state = NoteToolMode.carpet
+        noteGallery.state = NoteToolMode.none
+        noteLidarArea.state = NoteToolMode.none
         noteGallery.backClicked()
     }
 
@@ -88,8 +80,8 @@ QQ.Rectangle {
     //to a different note image, or navigating to a different page.
     //Fixes #342.
     function _exitCarpetMode() {
-        if(mode === "CARPET" && state !== "CARPET") {
-            state = ""
+        if(mode === NoteToolMode.carpetMode && state !== NoteToolMode.carpet) {
+            state = NoteToolMode.none
         }
     }
 
@@ -104,7 +96,7 @@ QQ.Rectangle {
 
     QQ.Connections {
         target: RootData.pageSelectionModel
-        enabled: noteGallery.mode === "CARPET"
+        enabled: noteGallery.mode === NoteToolMode.carpetMode
         function onCurrentPageAddressChanged() {
             noteGallery._exitCarpetMode()
         }
@@ -490,9 +482,9 @@ QQ.Rectangle {
             onCountChanged: {
                 updateCurrentNote()
                 if(count <= 0) {
-                    noteGallery.state = "NO_NOTES"
+                    noteGallery.state = NoteToolMode.noNotes
                 } else {
-                    noteGallery.state = ""
+                    noteGallery.state = NoteToolMode.none
                 }
             }
         }
@@ -547,7 +539,7 @@ QQ.Rectangle {
                 visible: noteGallery.currentSketch === null
 
                 onClicked:  {
-                    noteGallery.state = "SELECT"
+                    noteGallery.state = NoteToolMode.select
                 }
             }
 
@@ -606,7 +598,7 @@ QQ.Rectangle {
                 text: "Select"
 
                 onClicked: {
-                    noteGallery.state = "SELECT"
+                    noteGallery.state = NoteToolMode.select
                 }
             }
 
@@ -623,7 +615,7 @@ QQ.Rectangle {
                     text: "Scrap"
                     visible: noteGallery.currentNote !== null
 
-                    onClicked: noteGallery.state = "ADD-SCRAP"
+                    onClicked: noteGallery.state = NoteToolMode.addScrap
                 }
 
                 NeutralIconButton {
@@ -634,7 +626,7 @@ QQ.Rectangle {
                     sourceSize: mainToolBar.iconSize
                     text: "Station"
 
-                    onClicked: noteGallery.state = "ADD-STATION"
+                    onClicked: noteGallery.state = NoteToolMode.addStation
                 }
 
                 NeutralIconButton {
@@ -645,7 +637,7 @@ QQ.Rectangle {
                     text: "Lead"
                     visible: noteGallery.currentNote !== null
 
-                    onClicked: noteGallery.state = "ADD-LEAD"
+                    onClicked: noteGallery.state = NoteToolMode.addLead
                 }
             }
         }
@@ -680,6 +672,7 @@ QQ.Rectangle {
         id: noteLidarArea
         anchors.fill: noteArea
         visible: noteGallery.currentNoteLiDAR !== null
+        stationsVisible: false
         isNarrow: noteGallery.isNarrow
         note: noteGallery.currentNoteLiDAR
     }
@@ -702,7 +695,7 @@ QQ.Rectangle {
         triangleOnRight: true
         text: "Create a scrap first, then add stations or leads"
         z: 10
-        visible: (noteGallery.state === "ADD-STATION" || noteGallery.state === "ADD-LEAD")
+        visible: (noteGallery.state === NoteToolMode.addStation || noteGallery.state === NoteToolMode.addLead)
                  && noteGallery.currentNote !== null
                  && noteArea.scrapCount === 0
     }
@@ -739,7 +732,7 @@ QQ.Rectangle {
     states: [
 
         QQ.State {
-            name: "NO_NOTES"
+            name: NoteToolMode.noNotes
 
             QQ.PropertyChanges {
                 loadNoteWidgetId {
@@ -774,7 +767,7 @@ QQ.Rectangle {
             QQ.PropertyChanges {
                 galleryView.onCountChanged: () => {
                     if(count > 0) {
-                        noteGallery.state = ""
+                        noteGallery.state = NoteToolMode.none
                         mainButtonArea.visible = !noteGallery.isNarrow
                         noteArea.visible = true
                         currentIndex = 0;
@@ -786,7 +779,7 @@ QQ.Rectangle {
         },
 
         QQ.State {
-            name: "CARPET"
+            name: NoteToolMode.carpet
 
             QQ.PropertyChanges {
                 loadNoteWidgetId {
@@ -813,9 +806,17 @@ QQ.Rectangle {
                 }
             }
 
+            //Every carpet sub-tool extends this state, so both editors show
+            //their point overlays without each sub-tool opting in. A sub-tool
+            //that applies to LiDAR notes must also push a state onto
+            //noteLidarArea, or its stations are draggable with no tool active.
             QQ.PropertyChanges {
                 noteArea {
                     scrapsVisible: true
+                }
+
+                noteLidarArea {
+                    stationsVisible: true
                 }
             }
 
@@ -827,8 +828,8 @@ QQ.Rectangle {
         },
 
         QQ.State {
-            name: "SELECT"
-            extend: "CARPET"
+            name: NoteToolMode.select
+            extend: NoteToolMode.carpet
 
             QQ.PropertyChanges {
                 selectObjectId {
@@ -836,20 +837,26 @@ QQ.Rectangle {
                 }
             }
 
+            //explicit: true on every block that pushes a state name. A literal
+            //in PropertyChanges is a one-shot assignment, but an expression
+            //(NoteToolMode.x) installs a live binding on the child's state,
+            //which re-runs the child's entry transition and drops its selection.
             QQ.PropertyChanges {
+                explicit: true
+
                 noteArea {
-                    state: "SELECT"
+                    state: NoteToolMode.select
                 }
 
                 noteLidarArea {
-                    state: "SELECT"
+                    state: NoteToolMode.select
                 }
             }
         },
 
         QQ.State {
-            name: "ADD-STATION"
-            extend:  "CARPET"
+            name: NoteToolMode.addStation
+            extend:  NoteToolMode.carpet
             QQ.PropertyChanges {
                 addStationId {
                     selected: true
@@ -857,19 +864,21 @@ QQ.Rectangle {
             }
 
             QQ.PropertyChanges {
+                explicit: true
+
                 noteArea {
-                    state: "ADD-STATION"
+                    state: NoteToolMode.addStation
                 }
 
                 noteLidarArea {
-                    state: "ADD-STATION"
+                    state: NoteToolMode.addStation
                 }
             }
         },
 
         QQ.State {
-            name: "ADD-LEAD"
-            extend:  "CARPET"
+            name: NoteToolMode.addLead
+            extend:  NoteToolMode.carpet
             QQ.PropertyChanges {
                 addLeadId {
                     selected: true
@@ -877,15 +886,17 @@ QQ.Rectangle {
             }
 
             QQ.PropertyChanges {
+                explicit: true
+
                 noteArea {
-                    state: "ADD-LEAD"
+                    state: NoteToolMode.addLead
                 }
             }
         },
 
         QQ.State {
-            name:  "ADD-SCRAP"
-            extend:  "CARPET"
+            name:  NoteToolMode.addScrap
+            extend:  NoteToolMode.carpet
             QQ.PropertyChanges {
                 addScrapId {
                     selected: true
@@ -893,27 +904,29 @@ QQ.Rectangle {
             }
 
             QQ.PropertyChanges {
+                explicit: true
+
                 noteArea {
-                    state: "ADD-SCRAP"
+                    state: NoteToolMode.addScrap
                 }
             }
         },
 
         QQ.State {
-            name: "ADD-SKETCH-WALL"
-            extend: "CARPET"
+            name: NoteToolMode.addSketchWall
+            extend: NoteToolMode.carpet
         },
 
         QQ.State {
-            name: "ADD-SKETCH-FEATURE"
-            extend: "CARPET"
+            name: NoteToolMode.addSketchFeature
+            extend: NoteToolMode.carpet
         }
     ]
 
     transitions: [
         QQ.Transition {
-            from: ""
-            to: "SELECT"
+            from: NoteToolMode.none
+            to: NoteToolMode.select
 
             QQ.PropertyAnimation {
                 target: carpetButtonArea;
@@ -941,8 +954,8 @@ QQ.Rectangle {
 
         QQ.Transition {
             objectName: "toCarpetTransition"
-            to: ""
-            from: "CARPET"
+            to: NoteToolMode.none
+            from: NoteToolMode.carpet
 
             QQ.PropertyAnimation {
                 target: carpetButtonArea;

@@ -8,9 +8,10 @@ RegionViewer {
     property NoteLiDAR note
     property bool isNarrow: false
 
-    //Stations are only shown while editing in carpet mode, so they can't be
-    //accidentally selected, moved, or deleted when just viewing the note.
-    readonly property bool stationsVisible: state === "SELECT" || state === "ADD-STATION"
+    //Set by NotesGallery's CARPET state, mirroring NoteItem.scrapsVisible.
+    //Stations are only shown while editing, so they can't be accidentally
+    //selected, moved, or deleted when just viewing the note.
+    property bool stationsVisible: false
 
     function captureIconIfNeeded() {
         if (!note || !RootData.noteLiDARManager) {
@@ -28,7 +29,7 @@ RegionViewer {
         const targetNote = note
         const previousState = state
 
-        state = "CAPTURE_ICON"
+        state = NoteToolMode.captureIcon
 
         rhiViewerId.grabToImage(function(result) {
             rhiViewerId.state = previousState
@@ -62,7 +63,7 @@ RegionViewer {
     orthoProjection.enabled: true
     perspectiveProjection.enabled: false
 
-    state: ""
+    state: NoteToolMode.none
 
     TurnTableInteraction {
         id: turnTableInteractionId
@@ -119,6 +120,7 @@ RegionViewer {
 
     //Stations are added to this container so hiding them is one property, and
     //doesn't fight the transform updater's per-station viewport clipping.
+    //Mirrors NoteItem's scrapPointsContainer.
     Item {
         id: stationContainerId
         anchors.fill: parent
@@ -174,31 +176,28 @@ RegionViewer {
         anchors.topMargin: 5
     }
 
+    //No State for NoteToolMode.none: QQuickStateGroup treats the empty name as
+    //the base state and never looks up a State object by it, so such a State is
+    //never applied and extending it inherits nothing. Base-state values belong
+    //inline on the item instead (see transformEditorId.visible above).
     states: [
         State {
-            name: ""
-            PropertyChanges {
-                transformEditorId.visible: true
-            }
-        },
-
-        State {
-            name: "SELECT"
-            extend: ""
+            name: NoteToolMode.select
             PropertyChanges { target: lidarAddStationInteraction; enabled: false; visible: false }
         },
 
         State {
-            name: "ADD-STATION"
-            extend: ""
+            name: NoteToolMode.addStation
             PropertyChanges { target: lidarAddStationInteraction; enabled: true; visible: true }
         },
 
         State {
-            name: "CAPTURE_ICON"
-            //stationsVisible is already false here, which hides stationContainerId
+            name: NoteToolMode.captureIcon
+            //The icon is a picture of the model alone, so keep the editing
+            //overlays out of the grab even when captured from carpet mode.
             PropertyChanges {
                 transformEditorId.visible: false
+                stationContainerId.visible: false
             }
         }
     ]

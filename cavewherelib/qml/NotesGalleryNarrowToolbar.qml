@@ -78,12 +78,12 @@ QQ.Rectangle {
             RoundButton {
                 objectName: "editButton"
                 icon.source: "qrc:/twbs-icons/icons/pencil.svg"
-                checked: narrowToolbar.galleryMode === "CARPET"
+                checked: narrowToolbar.galleryMode === NoteToolMode.carpetMode
                 onClicked: {
-                    if (narrowToolbar.galleryMode === "CARPET") {
+                    if (narrowToolbar.galleryMode === NoteToolMode.carpetMode) {
                         narrowToolbar.doneClicked()
                     } else {
-                        narrowToolbar.stateChangeRequested("SELECT")
+                        narrowToolbar.stateChangeRequested(NoteToolMode.select)
                     }
                 }
             }
@@ -92,7 +92,7 @@ QQ.Rectangle {
         QQ.Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: row2Layout.implicitHeight + 2 * Theme.flowSpacing
-            visible: narrowToolbar.galleryMode === "CARPET"
+            visible: narrowToolbar.galleryMode === NoteToolMode.carpetMode
             color: Theme.floatingWidgetRaisedColor
             radius: Theme.floatingWidgetRadius
 
@@ -105,47 +105,47 @@ QQ.Rectangle {
                 RoundButton {
                     objectName: "selectButton"
                     icon.source: "qrc:/twbs-icons/icons/hand-index.svg"
-                    checked: narrowToolbar.galleryState === "SELECT"
-                    onClicked: narrowToolbar.stateChangeRequested("SELECT")
+                    checked: narrowToolbar.galleryState === NoteToolMode.select
+                    onClicked: narrowToolbar.stateChangeRequested(NoteToolMode.select)
                 }
 
                 RoundButton {
                     objectName: "addScrapButton"
                     icon.source: "qrc:/twbs-icons/icons/bounding-box.svg"
                     visible: narrowToolbar.hasCurrentNote
-                    checked: narrowToolbar.galleryState === "ADD-SCRAP"
-                    onClicked: narrowToolbar.stateChangeRequested("ADD-SCRAP")
+                    checked: narrowToolbar.galleryState === NoteToolMode.addScrap
+                    onClicked: narrowToolbar.stateChangeRequested(NoteToolMode.addScrap)
                 }
 
                 RoundButton {
                     objectName: "addStationButton"
                     icon.source: "qrc:/twbs-icons/icons/geo-alt.svg"
-                    checked: narrowToolbar.galleryState === "ADD-STATION"
-                    onClicked: narrowToolbar.stateChangeRequested("ADD-STATION")
+                    checked: narrowToolbar.galleryState === NoteToolMode.addStation
+                    onClicked: narrowToolbar.stateChangeRequested(NoteToolMode.addStation)
                 }
 
                 RoundButton {
                     objectName: "addLeadButton"
                     icon.source: "qrc:/twbs-icons/icons/question-circle.svg"
                     visible: narrowToolbar.hasCurrentNote
-                    checked: narrowToolbar.galleryState === "ADD-LEAD"
-                    onClicked: narrowToolbar.stateChangeRequested("ADD-LEAD")
+                    checked: narrowToolbar.galleryState === NoteToolMode.addLead
+                    onClicked: narrowToolbar.stateChangeRequested(NoteToolMode.addLead)
                 }
 
                 RoundButton {
                     objectName: "addSketchWallButton"
                     icon.source: "qrc:/twbs-icons/icons/border.svg"
                     visible: narrowToolbar.hasCurrentSketch
-                    checked: narrowToolbar.galleryState === "ADD-SKETCH-WALL"
-                    onClicked: narrowToolbar.stateChangeRequested("ADD-SKETCH-WALL")
+                    checked: narrowToolbar.galleryState === NoteToolMode.addSketchWall
+                    onClicked: narrowToolbar.stateChangeRequested(NoteToolMode.addSketchWall)
                 }
 
                 RoundButton {
                     objectName: "addSketchFeatureButton"
                     icon.source: "qrc:/twbs-icons/icons/brush.svg"
                     visible: narrowToolbar.hasCurrentSketch
-                    checked: narrowToolbar.galleryState === "ADD-SKETCH-FEATURE"
-                    onClicked: narrowToolbar.stateChangeRequested("ADD-SKETCH-FEATURE")
+                    checked: narrowToolbar.galleryState === NoteToolMode.addSketchFeature
+                    onClicked: narrowToolbar.stateChangeRequested(NoteToolMode.addSketchFeature)
                 }
 
                 VLine {
@@ -167,7 +167,7 @@ QQ.Rectangle {
                 RoundButton {
                     objectName: "deleteSelectedButton"
                     icon.source: "qrc:/twbs-icons/icons/trash.svg"
-                    visible: narrowToolbar.galleryState === "SELECT" && narrowToolbar.hasSelection
+                    visible: narrowToolbar.galleryState === NoteToolMode.select && narrowToolbar.hasSelection
                     onClicked: narrowToolbar.deleteSelectedRequested()
                 }
             }

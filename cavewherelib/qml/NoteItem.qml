@@ -160,16 +160,16 @@ ImageItem {
         onActiveInteractionChanged: {
             if(activeInteraction == defaultInteraction) {
                 switch(noteArea.state) {
-                case "ADD-SCRAP":
+                case NoteToolMode.addScrap:
                     addScrapInteraction.activate();
                     break;
-                case "ADD-STATION":
+                case NoteToolMode.addStation:
                     addStationInteraction.activate();
                     break;
-                case "ADD-LEAD":
+                case NoteToolMode.addLead:
                     addLeadInteraction.activate();
                     break;
-                case "SELECT":
+                case NoteToolMode.select:
                     noteSelectionInteraction.activate();
                     break;
                 }
@@ -227,25 +227,25 @@ ImageItem {
 
     states: [
         QQ.State {
-            name: "ADD-STATION"
+            name: NoteToolMode.addStation
         },
 
         QQ.State {
-            name: "ADD-SCRAP"
+            name: NoteToolMode.addScrap
         },
 
         QQ.State {
-            name: "ADD-LEAD"
+            name: NoteToolMode.addLead
         },
 
         QQ.State {
-            name: "SELECT"
+            name: NoteToolMode.select
         }
     ]
 
     transitions: [
          QQ.Transition {
-            to: "ADD-SCRAP"
+            to: NoteToolMode.addScrap
             QQ.ScriptAction {
                 script: {
                     interactionManagerId.active(addScrapInteraction)
@@ -255,21 +255,21 @@ ImageItem {
         },
 
          QQ.Transition {
-            to: "ADD-STATION"
+            to: NoteToolMode.addStation
             QQ.ScriptAction {
                 script: interactionManagerId.active(addStationInteraction)
             }
         },
 
          QQ.Transition {
-            to: "ADD-LEAD"
+            to: NoteToolMode.addLead
             QQ.ScriptAction {
                 script: interactionManagerId.active(addLeadInteraction)
             }
         },
 
          QQ.Transition {
-            to: ""
+            to: NoteToolMode.none
             QQ.ScriptAction {
                 script: {
                     scrapViewId.clearSelection();
@@ -279,7 +279,7 @@ ImageItem {
         },
 
          QQ.Transition {
-            to: "SELECT"
+            to: NoteToolMode.select
             QQ.ScriptAction {
                 script: {
                     interactionManagerId.active(noteSelectionInteraction)
