@@ -121,6 +121,17 @@ StandardPage {
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
 
+    // The narrow layout's Add Trip bar lives inside narrowListComponent,
+    // whose ids aren't reachable from out here; it publishes itself on
+    // completion so the one hint can point at whichever bar is showing.
+    property QQ.Item narrowAddTripBar: null
+
+    // tripProxyModel.count rather than currentCave.rowCount(): rowCount()
+    // is a plain function, so a binding on it would never re-evaluate when
+    // a trip arrives. Nothing filters this proxy, so the counts match.
+    readonly property bool hasNoTrips: cavePageArea.currentCave !== null
+                                       && tripProxyModel.count === 0
+
     // --- Standalone items (defined once, proxied into wide/narrow layouts) ---
 
     DoubleClickTextInput {
@@ -245,7 +256,8 @@ StandardPage {
 
         ExportImportButtons {
             id: exportButton
-            visible: RootData.desktopBuild
+            objectName: "exportImportButtons"
+            visible: RootData.desktopBuild && !cavePageArea.hasNoTrips
             currentRegion: RootData.region
             currentCave: cavePageArea.currentCave
             currentTrip: {
@@ -258,6 +270,34 @@ StandardPage {
                 return row ? row.tripObjectRole : null
             }
         }
+    }
+
+    // Sits outside both layouts and positions itself, so one hint serves
+    // wide and narrow. The arrow points at Add Trip, which is why the
+    // text doesn't name the button.
+    HelpQuoteBox {
+        id: noTripsHintId
+        objectName: "noTripsHint"
+
+        readonly property QQ.Item targetBar: cavePageArea.isNarrow
+                                             ? cavePageArea.narrowAddTripBar
+                                             : addTripBarWideId
+
+        z: 10
+        triangleOffset: 0.0
+        // The hint is a sibling of the scrolling area it points into, so
+        // it has to retire itself when the bar scrolls out of view.
+        visibilityClip: cavePageArea
+        // Names the control rather than drawing a glyph: the button shows a
+        // stroked chevron, not the solid triangle a "▾" renders, and a bare
+        // symbol inside qsTr has no font-coverage or translator guarantee.
+        text: qsTr("No trips yet — add one here, or use the menu beside this button to add one from a survey file.")
+        visible: cavePageArea.hasNoTrips && noTripsHintId.targetBar !== null
+        pointAtObject: noTripsHintId.targetBar
+        pointAtObjectPosition: noTripsHintId.targetBar !== null
+                               ? Qt.point(noTripsHintId.targetBar.width / 2.0,
+                                          noTripsHintId.targetBar.height)
+                               : Qt.point(0, 0)
     }
 
     QC.Menu {
@@ -304,10 +344,12 @@ StandardPage {
         }
     }
 
+    // An empty cave has nothing to tabulate, so the header row and its
+    // sort controls only get in the hint's way.
     QQ.Loader {
         id: wideLoaderId
-        active: !cavePageArea.isNarrow
-        visible: !cavePageArea.isNarrow
+        active: !cavePageArea.isNarrow && !cavePageArea.hasNoTrips
+        visible: wideLoaderId.active
         Layout.fillWidth: true
         sourceComponent: wideTableComponent
     }
@@ -544,6 +586,7 @@ StandardPage {
                     Layout.fillWidth: true
 
                     delegate: TableStaticHeaderColumn {
+                        objectName: "headerColumn-" + text
                         model: tableViewId.model
                     }
                 }
@@ -798,10 +841,17 @@ StandardPage {
                         menu: addTripMenuId
                         menuToolTip: qsTr("More ways to add a trip")
                         onAdd: cavePageArea.addTripAndNavigate()
+
+                        QQ.Component.onCompleted: cavePageArea.narrowAddTripBar = addTripBarNarrowId
+                        QQ.Component.onDestruction: cavePageArea.narrowAddTripBar = null
                     }
 
+                    // Nothing to sort on an empty cave - the narrow
+                    // counterpart of hiding the wide table's header.
                     RowLayout {
+                        objectName: "narrowSortControls"
                         spacing: Theme.delegatePadding
+                        visible: !cavePageArea.hasNoTrips
 
                         QC.ComboBox {
                             id: narrowSortComboId

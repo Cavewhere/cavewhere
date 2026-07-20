@@ -117,6 +117,10 @@ QtObject {
     readonly property int floatingToolbarPadding: 12
     readonly property int infoColumnMaxWidth: 200
 
+    // Wrap width for help callouts. Font-scaled so a larger base size keeps
+    // roughly the same words per line instead of wrapping sooner.
+    readonly property int helpBoxMaxWidth: Math.round(350 * fontScale)
+
     // Utility
     readonly property color transparent: "#00000000"
     readonly property color shadow: dark ? "#33000000" : "#22000000"
