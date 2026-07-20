@@ -34,7 +34,7 @@ QQ.Rectangle {
 
         placeholderText: qsTr("Search the manual")
         font.family: Theme.fontFamilyBody
-        font.pixelSize: Theme.fontSizeBody
+        font.pixelSize: Theme.fontSizeUI
     }
 
     QC.ScrollView {
@@ -75,7 +75,7 @@ QQ.Rectangle {
                     text: parent.section
                     color: Theme.textSubtle
                     font.family: Theme.fontFamilyBody
-                    font.pixelSize: Theme.fontSizeCaption
+                    font.pixelSize: Theme.fontSizeSmall
                     font.capitalization: QQ.Font.AllUppercase
                     font.bold: true
                     elide: QC.Label.ElideRight
@@ -104,9 +104,12 @@ QQ.Rectangle {
                     anchors.rightMargin: 12
 
                     text: tocDelegateId.title
-                    color: tocDelegateId.current ? Theme.textInverse : Theme.text
+                    // Theme.highlight is light in light mode and dark in dark mode, so
+                    // the normal text color (dark-on-light / light-on-dark) is what keeps
+                    // a selected row readable — textInverse would collapse the contrast.
+                    color: Theme.text
                     font.family: Theme.fontFamilyBody
-                    font.pixelSize: Theme.fontSizeBody
+                    font.pixelSize: Theme.fontSizeUI
                     wrapMode: QC.Label.Wrap
                 }
 
