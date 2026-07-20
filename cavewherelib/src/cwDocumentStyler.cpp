@@ -4,7 +4,6 @@
 //Qt includes
 #include <QFont>
 #include <QImageReader>
-#include <QQuickTextDocument>
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTextDocument>
@@ -80,27 +79,8 @@ namespace {
 }
 
 cwDocumentStyler::cwDocumentStyler(QObject* parent) :
-    QObject(parent)
+    cwTextDocumentObserver(parent)
 {
-}
-
-void cwDocumentStyler::setDocument(QQuickTextDocument* document)
-{
-    if (m_document == document) {
-        return;
-    }
-
-    QObject::disconnect(m_contentsConnection);
-    m_document = document;
-    if (m_document != nullptr && m_document->textDocument() != nullptr) {
-        //A new article re-parses the same QTextDocument in place, so one connection
-        //keeps us in sync across article changes.
-        m_contentsConnection = connect(m_document->textDocument(), &QTextDocument::contentsChanged,
-                                       this, &cwDocumentStyler::apply);
-    }
-
-    emit documentChanged();
-    apply();
 }
 
 void cwDocumentStyler::setBaseFontSize(int size)
@@ -151,11 +131,6 @@ void cwDocumentStyler::setHeadingFontFamily(const QString& family)
     m_headingFontFamily = family;
     emit headingFontFamilyChanged();
     apply();
-}
-
-QTextDocument* cwDocumentStyler::textDocument() const
-{
-    return m_document != nullptr ? m_document->textDocument() : nullptr;
 }
 
 void cwDocumentStyler::apply()

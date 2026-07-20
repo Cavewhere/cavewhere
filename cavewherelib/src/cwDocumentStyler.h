@@ -4,17 +4,15 @@
 //Qt includes
 #include <QColor>
 #include <QHash>
-#include <QObject>
-#include <QPointer>
 #include <QQmlEngine>
-#include <QQuickTextDocument>
 #include <QSize>
+#include <QString>
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwTextDocumentObserver.h"
 
 class QTextBlock;
-class QTextDocument;
 
 /**
  * @brief Applies readable article styling to a rendered Markdown QTextDocument.
@@ -31,11 +29,10 @@ class QTextDocument;
  * The pass re-runs whenever the document is re-parsed (a new article), the reading
  * width changes, or the base size changes, so it stays in sync with the view.
  */
-class CAVEWHERE_LIB_EXPORT cwDocumentStyler : public QObject
+class CAVEWHERE_LIB_EXPORT cwDocumentStyler : public cwTextDocumentObserver
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(DocumentStyler)
-    Q_PROPERTY(QQuickTextDocument* document READ document WRITE setDocument NOTIFY documentChanged)
     Q_PROPERTY(int baseFontSize READ baseFontSize WRITE setBaseFontSize NOTIFY baseFontSizeChanged)
     Q_PROPERTY(qreal contentWidth READ contentWidth WRITE setContentWidth NOTIFY contentWidthChanged)
     Q_PROPERTY(QColor mutedColor READ mutedColor WRITE setMutedColor NOTIFY mutedColorChanged)
@@ -44,9 +41,6 @@ class CAVEWHERE_LIB_EXPORT cwDocumentStyler : public QObject
 
 public:
     explicit cwDocumentStyler(QObject* parent = nullptr);
-
-    QQuickTextDocument* document() const { return m_document; }
-    void setDocument(QQuickTextDocument* document);
 
     int baseFontSize() const { return m_baseFontSize; }
     void setBaseFontSize(int size);
@@ -64,15 +58,19 @@ public:
     void setHeadingFontFamily(const QString& family);
 
 signals:
-    void documentChanged();
     void baseFontSizeChanged();
     void contentWidthChanged();
     void mutedColorChanged();
     void linkColorChanged();
     void headingFontFamilyChanged();
 
+protected:
+    //Re-style on both triggers: a replaced document and an in-place re-parse (a new
+    //article rendered into the same document) both need the pass re-run.
+    void onDocumentReplaced() override { apply(); }
+    void onContentsChanged() override { apply(); }
+
 private:
-    QTextDocument* textDocument() const;
     void apply();
 
     //Per-block styling steps; each takes the base font size so margins and heading
@@ -80,12 +78,6 @@ private:
     void styleBlock(const QTextBlock& block, bool isLeadParagraph, bool isImage);
     void styleImage(const QTextBlock& block);
     QSize naturalImageSize(const QString& url);
-
-    //Held by QPointer: the document is owned by the QML text view, which can be
-    //destroyed while this styler outlives it; QPointer auto-nulls so textDocument()
-    //stays safe.
-    QPointer<QQuickTextDocument> m_document;
-    QMetaObject::Connection m_contentsConnection;
 
     int m_baseFontSize = 16;
     qreal m_contentWidth = 0.0;

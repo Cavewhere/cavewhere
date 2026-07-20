@@ -2,17 +2,13 @@
 #define CWDOCUMENTFINDER_H
 
 //Qt includes
-#include <QObject>
-#include <QPointer>
 #include <QQmlEngine>
-#include <QQuickTextDocument>
 #include <QString>
 #include <QList>
 
 //Our includes
 #include "CaveWhereLibExport.h"
-
-class QTextDocument;
+#include "cwTextDocumentObserver.h"
 
 /**
  * @brief Text search and heading-anchor lookup over a rendered QTextDocument.
@@ -27,20 +23,16 @@ class QTextDocument;
  * character position of the matching heading, so a "#anchor" click can scroll to
  * it — the same slug scheme scripts/build-manual-html.py uses for the website.
  */
-class CAVEWHERE_LIB_EXPORT cwDocumentFinder : public QObject
+class CAVEWHERE_LIB_EXPORT cwDocumentFinder : public cwTextDocumentObserver
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(DocumentFinder)
-    Q_PROPERTY(QQuickTextDocument* document READ document WRITE setDocument NOTIFY documentChanged)
     Q_PROPERTY(QString query READ query WRITE setQuery NOTIFY queryChanged)
     Q_PROPERTY(int matchCount READ matchCount NOTIFY matchesChanged)
     Q_PROPERTY(int currentMatch READ currentMatch NOTIFY currentMatchChanged)
 
 public:
     explicit cwDocumentFinder(QObject* parent = nullptr);
-
-    QQuickTextDocument* document() const { return m_document; }
-    void setDocument(QQuickTextDocument* document);
 
     QString query() const { return m_query; }
     void setQuery(const QString& query);
@@ -56,7 +48,6 @@ public:
     Q_INVOKABLE int headingPosition(const QString& anchor) const;
 
 signals:
-    void documentChanged();
     void queryChanged();
     void matchesChanged();
     void currentMatchChanged();
@@ -65,8 +56,13 @@ signals:
     //so the view can select the range and scroll it into view.
     void matchSelected(int position, int length);
 
+protected:
+    //A format-only restyle of the same article leaves match positions valid, so the
+    //finder only rebuilds when the document itself is replaced (it does not override
+    //onContentsChanged) — this keeps the current match steady while the styler runs.
+    void onDocumentReplaced() override;
+
 private:
-    QTextDocument* textDocument() const;
     void rebuildMatches();
     void selectCurrent();
 
@@ -75,10 +71,6 @@ private:
         int length = 0;
     };
 
-    //Held by QPointer: the document is owned by the QML text view, which can be
-    //destroyed while this finder outlives it; QPointer auto-nulls so textDocument()
-    //stays safe.
-    QPointer<QQuickTextDocument> m_document;
     QString m_query;
     QList<Match> m_matches;
     int m_current = -1; //!< 0-based index into m_matches, -1 when there is no match

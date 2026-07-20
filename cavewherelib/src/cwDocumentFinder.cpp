@@ -2,7 +2,6 @@
 #include "cwDocumentFinder.h"
 
 //Qt includes
-#include <QQuickTextDocument>
 #include <QTextDocument>
 #include <QTextBlock>
 #include <QTextCursor>
@@ -35,18 +34,8 @@ namespace {
 }
 
 cwDocumentFinder::cwDocumentFinder(QObject* parent) :
-    QObject(parent)
+    cwTextDocumentObserver(parent)
 {
-}
-
-void cwDocumentFinder::setDocument(QQuickTextDocument* document)
-{
-    if (m_document == document) {
-        return;
-    }
-    m_document = document;
-    emit documentChanged();
-    rebuildMatches();
 }
 
 void cwDocumentFinder::setQuery(const QString& query)
@@ -59,9 +48,9 @@ void cwDocumentFinder::setQuery(const QString& query)
     rebuildMatches();
 }
 
-QTextDocument* cwDocumentFinder::textDocument() const
+void cwDocumentFinder::onDocumentReplaced()
 {
-    return m_document != nullptr ? m_document->textDocument() : nullptr;
+    rebuildMatches();
 }
 
 void cwDocumentFinder::rebuildMatches()
