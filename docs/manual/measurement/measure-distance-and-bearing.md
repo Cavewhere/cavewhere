@@ -124,7 +124,7 @@ compass**:
   [grid convergence](../georeferencing/grid-convergence.md) at this spot — the lean
   between the map's grid and the real meridians.
 - **Magnetic (today)** — where a compass points *now*. It differs from true north by
-  the magnetic [declination](../concepts/coordinate-systems.md#magnetic-true-declination),
+  the magnetic [declination](../concepts/coordinate-systems.md#magnetic--true-declination),
   which drifts year to year, so CaveWhere computes it for **today's date** at this
   location. This is the bearing to give someone who'll walk the surface with a
   compass in hand. Because it's tied to today, it's a live reading, not a stored one.
