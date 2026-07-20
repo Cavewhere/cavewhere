@@ -593,13 +593,18 @@ cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourc
     using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
 
     if (trip == nullptr) {
-        return AsyncFuture::completed(
-            ReportResult(QStringLiteral("attach: trip is null")));
+        const QString error = QStringLiteral("attach: trip is null");
+        emitReportDeferred(&cwExternalCenterlineManager::attachCompleted,
+                           cwExternalCenterlineReport::failed(QUuid(), error));
+        return AsyncFuture::completed(ReportResult(error));
     }
     const QUuid ownerId = trip->id();
     if (isOwnerBusy(ownerId)) {
-        return AsyncFuture::completed(ReportResult(
-            QStringLiteral("attach: another operation for this trip is still in progress")));
+        const QString error = QStringLiteral(
+            "attach: another operation for this trip is still in progress");
+        emitReportDeferred(&cwExternalCenterlineManager::attachCompleted,
+                           cwExternalCenterlineReport::failed(ownerId, error));
+        return AsyncFuture::completed(ReportResult(error));
     }
 
     beginOwnerOperation(ownerId);
@@ -616,10 +621,17 @@ cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourc
             // owner's *include.
             m_solveOnScanApply = true;
             recomputeWatchSetAndProbeSources();
+            const auto& attachReport = result.value();
+            emit attachCompleted(cwExternalCenterlineReport::succeeded(
+                ownerId, attachReport.persisted.entryFile(), attachReport.warnings));
+        } else {
+            emit attachCompleted(cwExternalCenterlineReport::failed(
+                ownerId, result.errorMessage()));
         }
     },
             [this, ownerId]() {
         endOwnerOperation(ownerId);
+        emit attachCompleted(cwExternalCenterlineReport::wasCanceled(ownerId));
     });
     return future;
 }
@@ -629,13 +641,18 @@ QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwTrip*
     using Monad::ResultBase;
 
     if (trip == nullptr) {
-        return AsyncFuture::completed(
-            ResultBase(QStringLiteral("detach: trip is null")));
+        const QString error = QStringLiteral("detach: trip is null");
+        emitReportDeferred(&cwExternalCenterlineManager::detachCompleted,
+                           cwExternalCenterlineReport::failed(QUuid(), error));
+        return AsyncFuture::completed(ResultBase(error));
     }
     const QUuid ownerId = trip->id();
     if (isOwnerBusy(ownerId)) {
-        return AsyncFuture::completed(ResultBase(
-            QStringLiteral("detach: another operation for this trip is still in progress")));
+        const QString error = QStringLiteral(
+            "detach: another operation for this trip is still in progress");
+        emitReportDeferred(&cwExternalCenterlineManager::detachCompleted,
+                           cwExternalCenterlineReport::failed(ownerId, error));
+        return AsyncFuture::completed(ResultBase(error));
     }
 
     beginOwnerOperation(ownerId);
@@ -650,18 +667,36 @@ QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwTrip*
     auto future = cwExternalCenterlineAttach::detach(
         trip, m_saveLoad.data(), m_externalSourceSettings.data());
     AsyncFuture::observe(future).context(this,
-            [this, ownerId](const ResultBase&) {
+            [this, ownerId](const ResultBase& result) {
         endOwnerOperation(ownerId);
         // Re-probe after the remove-tree drains (the settings clear
         // already queued one recompute; this one sees the dir gone) and
         // request the solve that drops the owner's *include.
         m_solveOnScanApply = true;
         recomputeWatchSetAndProbeSources();
+        if (!result.hasError()) {
+            emit detachCompleted(cwExternalCenterlineReport::succeeded(ownerId));
+        } else {
+            emit detachCompleted(cwExternalCenterlineReport::failed(
+                ownerId, result.errorMessage()));
+        }
     },
             [this, ownerId]() {
         endOwnerOperation(ownerId);
+        emit detachCompleted(cwExternalCenterlineReport::wasCanceled(ownerId));
     });
     return future;
+}
+
+QString cwExternalCenterlineManager::scopePrefixForTrip(cwTrip* trip) const
+{
+    if (trip == nullptr || trip->parentCave() == nullptr) {
+        return QString();
+    }
+    return cwLinePlotTask::cavernCaveNameFor(trip->parentCave()->id())
+        + QLatin1Char('.')
+        + cwLinePlotTask::cavernTripNameFor(trip->id())
+        + QLatin1Char('.');
 }
 
 void cwExternalCenterlineManager::beginOwnerOperation(const QUuid& ownerId)

@@ -429,9 +429,9 @@
     (<code>cavernInputButton</code>/<code>cavernOutputButton</code>/<code>loopClosureButton</code>)
     that drive one shared <code>cavernTextArea</code>. The driver
     source shows under <code>cavernInputButton</code> &mdash; there is
-    no disclosure. The SolveStatus deep-link navigates to
-    <code>"Cavern"</code>; its reveal target is an open commit-11
-    decision &mdash; see the canonical &sect;9 bullet. No
+    no disclosure. The SolveStatus deep-link is plain navigation to
+    <code>"Cavern"</code> (decided 2026-07-19 &mdash; see the
+    canonical &sect;9 bullet). No
     <code>cwPageSelectionModel</code> anchor IDs are introduced &mdash;
     the page is already routable as <code>"Cavern"</code>.
   </li>
@@ -968,25 +968,21 @@ public:
     <code>cwExternalSourceSettings::clearSourcePath(ownerId)</code>).
   </li>
   <li>
-    <strong>SolveStatus deep-link target (canonical spot; open
-    decision for commit 11).</strong> The "View cavern output" link
-    navigates via the existing
+    <strong>SolveStatus deep-link target (canonical spot; decided
+    2026-07-19).</strong> The "View cavern output" link does plain
+    navigation only:
     <code>RootData.pageSelectionModel.gotoPageByName(null,
-    "Cavern")</code> (already wired by <code>29bcd026</code>); no new
-    anchor IDs in <code>cwPageSelectionModel</code>, routing is
-    page-level. Commit 10 shipped the link as a dumb
-    <code>viewCavernOutputRequested()</code> signal, so the reveal
-    behavior is decided when commit 11 wires it. The plan previously
-    said two different things &mdash; scroll
-    <code>attachedCenterlinesSection</code> into view (this section's
-    old text) vs. check <code>cavernInputButton</code> to show the
-    generated input (&sect;2's old text, inherited from the retired
-    driver-source disclosure). They can't both be the landing state.
-    Note the link says cavern <em>output</em>, and
-    <code>cavernOutputButton</code> is the page default &mdash; plain
-    navigation may be enough. Pick one at wiring time and update the
-    other mentions (&sect;2 CavernOutputPage entry, &sect;12 commit-9
-    revised note), which now defer here.
+    "Cavern")</code> (already wired by <code>29bcd026</code>). No
+    button check, no scroll-into-view &mdash; the link says cavern
+    <em>output</em> and <code>cavernOutputButton</code> is the page
+    default, so landing on the page is the whole behavior. No new
+    anchor IDs in <code>cwPageSelectionModel</code>; routing is
+    page-level. (Commit 10 shipped the link as a dumb
+    <code>viewCavernOutputRequested()</code> signal; commit 11 wires
+    it to the navigation call. Earlier drafts disagreed between
+    scrolling <code>attachedCenterlinesSection</code> and checking
+    <code>cavernInputButton</code> &mdash; both superseded by this
+    decision.)
   </li>
   <li>
     <strong>Reload button.</strong> Wired to
@@ -1582,8 +1578,8 @@ public:
     side-by-side panes). The pinned
     <code>driverSourceDisclosure</code>/<code>survexInputTab</code>/<code>outputTabBar</code>/<code>cavernLogTextArea</code>/<code>loopClosureTextArea</code>/<code>survexInputTextArea</code>
     objectNames no longer exist &mdash; the SolveStatus deep-link in
-    the panel commits navigates to the page; its reveal target is an
-    open commit-11 decision (see the canonical &sect;9 bullet). The live-stats
+    the panel commits is plain navigation to the page (decided
+    2026-07-19; see the canonical &sect;9 bullet). The live-stats
     text was dropped from the context menu item (reads plain "Cavern
     Output" again, pinned by <code>tst_DataMainPageExternal.qml</code>)
     &mdash; the stats moved to CavernOutputPage's
@@ -2026,10 +2022,13 @@ public:
 <p><em>Design prerequisites from the commit-9 review:</em>
   (a) the cwRootData attach/detach wrappers return
   <code>QFuture&lt;Monad::Result&lt;...&gt;&gt;</code>, which QML cannot
-  observe &mdash; decide the future&rarr;QML bridge here (a small
-  observer/gadget type or completion signals carrying a value-type
-  report) before binding error/report text into the panel or the
-  commit-12 dialog (review A1);
+  observe. <em>Bridge decided 2026-07-19: completion signals carrying
+  a value-type report</em> &mdash; the manager (or cwRootData wrapper)
+  emits e.g. <code>attachCompleted(report)</code> /
+  <code>detachCompleted(report)</code> where the report is a
+  <code>Q_GADGET</code> value type carrying success/error text/scan
+  warnings; no observer class. Wire before binding error/report text
+  into the panel or the commit-12 dialog (review A1);
   (b) the panel's Update/Reload and Detach affordances must disable on
   <code>RootData.externalCenterlineManager.isOwnerBusy(ownerId)</code>
   (re-evaluated on <code>ownerBusyChanged</code>) &mdash; a busy owner
@@ -2046,13 +2045,21 @@ public:
   <code>ScopeStationListModel.scopePrefix</code> has no QML-reachable
   helper &mdash; add one (the naming lives in
   <code>cwLinePlotTask</code>/the survex exporter);
-  (e) resolve the SolveStatus deep-link reveal target (open decision,
-  canonical &sect;9 bullet).</p>
+  (e) the SolveStatus deep-link is plain navigation to
+  <code>"Cavern"</code> (decided 2026-07-19, canonical &sect;9
+  bullet).</p>
 <ul>
   <li>Programmatic attach &rarr; panel mode is Attached; sub-components
     render in order.</li>
   <li>Reload button click &rarr; signal spy on
-    <code>linePlotManager.cavernOutputChanged</code> fires.</li>
+    <code>linePlotManager.cavernOutputChanged</code> fires.
+    <em>As shipped:</em> the spy targets
+    <code>attachedCenterlinesModel</code> <code>dataChanged</code>
+    (every successful solve restamps <code>lastSolved</code> via
+    <code>markSolved</code>) instead &mdash;
+    <code>cavernOutputChanged</code> dedups identical output, so a
+    reload of an unchanged file may legitimately not fire it (solve
+    duration can collide at whole-ms resolution).</li>
   <li>Detach button click &rarr;
     <code>RemoveAskBox</code> confirms; on accept, the orchestrator's
     detach future resolves and the panel's bound trip is Native again.
@@ -2063,9 +2070,72 @@ public:
     click.</li>
 </ul>
 
+<p><em>As shipped (2026-07-19):</em> all five prerequisites landed:
+  (a) <code>cwExternalCenterlineReport</code> (Q_GADGET value type:
+  <code>ownerId</code>/<code>success</code>/<code>canceled</code>/<code>errorMessage</code>/<code>warnings</code>/<code>entryFile</code>)
+  carried by the manager's <code>attachCompleted</code> /
+  <code>detachCompleted</code> signals &mdash; every call path ends in
+  exactly one emission (success, error, refused-while-busy, canceled),
+  after the busy token drops;
+  (b) Reload/Detach disable on the panel's imperative
+  <code>ownerBusy</code>, refreshed via a Connections handler on
+  <code>ownerBusyChanged</code>;
+  (c) <code>fileOwnsDeclination</code> is Q_INVOKABLE, refreshed on
+  <code>solveNeeded</code> (the scan apply emits it whenever the flags
+  change);
+  (d) <code>Q_INVOKABLE scopePrefixForTrip(trip)</code> on the manager
+  derives <code>cave_&lt;hex&gt;.trip_&lt;hex&gt;.</code>;
+  <code>cavernTripNameFor</code> was promoted from a
+  cwSurvexExporterCaveTask file-local to
+  <code>cwLinePlotTask::cavernTripNameFor</code> next to
+  <code>cavernCaveNameFor</code>;
+  (e) the deep-link does plain
+  <code>gotoPageByName(null, "Cavern")</code>.
+  <strong>Wiring delta vs. the master skeleton's "signals out":</strong>
+  the panel invokes actions directly
+  (<code>linePlotManager.rerunSurvex()</code>,
+  <code>RootData.detachTripCenterline(trip)</code>,
+  <code>externalSourceSettings.clearSourcePath(trip.id)</code>, page
+  navigation) instead of raising intents for TripPage to wire &mdash;
+  the completion-signal bridge removed the reason to keep the future
+  observation out of the panel, and it makes the commit-13 TripPage
+  swap a bare instantiation. Signals kept:
+  <code>relinkRequested</code> (stub) and
+  <code>stationClicked(qualifiedName)</code> (commit-13 carpet picker).
+  The <code>RemoveAskBox</code> lives inside the panel
+  (<code>RemoveAskBox.qml</code> gained overridable
+  <code>message</code>/<code>confirmText</code> properties, defaults
+  unchanged), and the panel owns its
+  <code>ScopeStationListModel</code> instead of requiring one from the
+  caller.</p>
+
 <h3>Commit 12 &mdash; AttachExternalCenterlineDialog</h3>
 <p><strong>New QML test:</strong>
   <code>tst_AttachExternalCenterlineDialog.qml</code></p>
+<p><em>Design prerequisite (commit-11 review A1):</em> the Cancel gate
+  below currently has <strong>no mechanism</strong> &mdash; under the
+  completion-signal bridge the dialog never holds the attach
+  <code>QFuture</code>, and
+  <code>cwExternalCenterlineManager::cancelScan()</code> cancels the
+  watch-set scan pipeline, not an in-flight attach. Add a
+  QML-reachable cancel that preserves the "no observer class"
+  decision: minimal shape is
+  <code>Q_INVOKABLE cancelAttach(ownerId)</code> on the manager
+  (cancels the in-flight attach future for that owner while the scan
+  hasn't landed; no-op afterwards, matching the q14 note). Optionally
+  echo a <code>requestId</code> on
+  <code>cwExternalCenterlineReport</code> so a dialog can attribute
+  reports to its own call &mdash; without it, a double-triggered
+  attach delivers <code>failed("in progress")</code> then the
+  in-flight operation's <code>succeeded</code> for the same
+  <code>ownerId</code> (review F5/F6); a one-shot
+  connect-before-call dialog that ignores reports it didn't initiate
+  needs no requestId. While here, close the two bridge-coverage gaps
+  from the commit-11 review: assert the canceled-path
+  <code>attachCompleted</code> emission (nothing pins the
+  <code>wasCanceled</code> arm today) and assert
+  <code>report.warnings</code> through the bridge against the
+  warning fixture.</p>
 <ul>
   <li>Pick a fixture &rarr; Attach &rarr;
     <code>tryVerify</code> the trip becomes Attached.</li>
@@ -2231,8 +2301,14 @@ public:
     to every future-returning invokable (the only precedent,
     <code>cwPDFConverter::convert</code>, has the same dead return).
     Blast radius: one new class + the two wrappers + the dialog.
-    <em>Decide in commit 11 (see the prerequisite note on its
-    &sect;12 entry).</em>
+    <em>Decided 2026-07-19: completion signals carrying a
+    <code>Q_GADGET</code> value-type report (see the commit-11
+    prerequisite note on its &sect;12 entry). Shipped with commit 11:
+    <code>cwExternalCenterlineReport</code> +
+    <code>attachCompleted</code>/<code>detachCompleted</code> on the
+    manager; every call path (success, error, refused-while-busy,
+    canceled) emits exactly once, after the busy token drops.
+    <code>cwPDFConverter::convert</code> generalization still open.</em>
   </li>
   <li>
     <strong>Shared QML attach-fixture helper.</strong>
@@ -2300,6 +2376,11 @@ public:
     status value type (or a model row keyed by owner) once commit 11
     shows the full set of flags the panel needs. Blast radius: manager
     public API + banner + panel + Phase-3 CaveSummary.
+    <em>Commit 11 shipped; the panel's per-owner set is
+    <code>isOwnerBusy</code> + <code>isSourceMissing</code> +
+    <code>fileOwnsDeclination</code> (plus the pure
+    <code>scopePrefixForTrip</code> naming helper, which wouldn't move
+    into a status gadget).</em>
   </li>
   <li>
     <strong>Observable remembered-source path on
@@ -2313,6 +2394,38 @@ public:
     CaveSummary would copy. A bindable per-owner property/model would
     make consumers declarative. Blast radius: settings class + all
     remembered-source consumers.
+    <em>Commit 11 confirmed the copy: the panel's
+    <code>missingSourcePath</code> is that idiom's second
+    instance.</em>
+  </li>
+  <li>
+    <strong>Split <code>RemoveAskBox</code> into a generic
+    ConfirmPopover</strong> <em>(commit-11 review)</em>. With the
+    commit-11 <code>message</code>/<code>confirmText</code> overrides,
+    the component now carries two APIs: the model-removal half
+    (<code>removeName</code>, <code>indexToRemove</code>,
+    <code>remove()</code>) and a generic confirm-popover half &mdash;
+    the trip panel's detach confirm uses only the generic half and
+    leaves <code>removeName</code>/<code>indexToRemove</code> dead.
+    Extract a <code>ConfirmPopover</code> base (RemoveAskBox becomes a
+    thin wrapper) when a third override property appears. Blast
+    radius: ~10 consumer sites (CavePage, DataMainPage, NotesGallery,
+    FixStationPage, GeospatialLayerPage, the context menus).
+  </li>
+  <li>
+    <strong>One home for the cavern naming grammar
+    (<code>cwCavernNaming</code>)</strong> <em>(commit-11 review)</em>.
+    The <code>cave_&lt;hex&gt;.trip_&lt;hex&gt;.</code> policy is
+    spread across <code>cwLinePlotTask</code> statics
+    (<code>cavernCaveNameFor</code> / <code>cavernTripNameFor</code> /
+    <code>cavernStationRegex</code>), the prefix-join in
+    <code>cwExternalCenterlineManager::scopePrefixForTrip</code>, and
+    the exporter's <code>*begin</code> wrapping &mdash; with
+    <code>cwScopeStationListModel</code> consuming the result as a
+    string contract. A small free-function header would give the
+    grammar one home. Pure move, three consumers, no new coupling
+    added by commit 11 (the manager already included
+    <code>cwLinePlotTask.h</code>), so no urgency.
   </li>
 </ul>
 

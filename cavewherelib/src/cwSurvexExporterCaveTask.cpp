@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwSurvexExporterCaveTask.h"
+#include "cwLinePlotTask.h"
 #include "cwSurvexExporterTripTask.h"
 #include "cwSurvexExporterUtils.h"
 #include "cwTrip.h"
@@ -17,17 +18,6 @@
 #include <QSet>
 
 namespace {
-
-// trip_<uuid> wrapper used around an externally-attached trip's
-// *include. Mirrors cwLinePlotTask::cavernCaveNameFor's "cave_<uuid>"
-// shape, with QUuid::Id128 producing the 32-hex-no-hyphens body so the
-// label survives cavern's [a-zA-Z0-9_] identifier rules.
-constexpr QLatin1String kTripNamePrefix("trip_");
-
-QString cavernTripNameFor(const QUuid& tripId)
-{
-    return kTripNamePrefix + tripId.toString(QUuid::Id128);
-}
 
 // All driver-emitted *include paths are absolute with forward slashes
 // (Survex accepts forward slashes on every platform) and double-quoted
@@ -112,7 +102,7 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         // asymmetric — on purpose"). Stations from the included file
         // resolve to cave_<uuid>.trip_<uuid>.<file-tail>.
         if (!tripData.externalCenterline.isEmpty()) {
-            const QString tripLabel = cavernTripNameFor(tripData.id);
+            const QString tripLabel = cwLinePlotTask::cavernTripNameFor(tripData.id);
             stream << "*begin " << tripLabel << " ; " << tripData.name << Qt::endl;
             // CaveWhere-resolved declination for files that carry none of
             // their own. Emitted before *include so it scopes over the

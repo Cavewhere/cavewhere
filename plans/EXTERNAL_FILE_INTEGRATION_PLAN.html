@@ -2018,6 +2018,23 @@ QQ.Item {
     text label, not a format icon (extension&rarr;format mapping
     slated to move onto the <code>cwExternalCenterline</code> gadget;
     Phase-2 &sect;15).</li>
+  <li><em>Commit 11 (panel assembly):</em> the "signals out" note is
+    superseded &mdash; the panel wires Reload / Detach / Forget source /
+    the cavern deep-link directly
+    (<code>rerunSurvex()</code>,
+    <code>RootData.detachTripCenterline</code>,
+    <code>clearSourcePath</code>,
+    <code>gotoPageByName(null, "Cavern")</code>); completion feedback
+    comes from the manager's <code>attachCompleted</code> /
+    <code>detachCompleted</code> signals carrying the
+    <code>cwExternalCenterlineReport</code> gadget, so TripPage's
+    commit-13 swap is a bare instantiation. Only
+    <code>relinkRequested</code> and <code>stationClicked</code> remain
+    as outbound signals. The panel also owns its
+    <code>ScopeStationListModel</code> (prefix from the manager's
+    <code>scopePrefixForTrip</code>) rather than requiring
+    <code>scopeStationModel</code>, and hosts the detach
+    <code>RemoveAskBox</code> itself.</li>
 </ul>
 
 <h5>Sub-components (new files, all Phase 2 unless noted)</h5>

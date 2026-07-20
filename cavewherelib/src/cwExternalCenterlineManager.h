@@ -15,6 +15,7 @@ class cwSurveyChunkSignaler;
 class cwTrip;
 #include "cwAttachedCenterlinesModel.h"
 #include "cwExternalCenterlineAttach.h"
+#include "cwExternalCenterlineReport.h"
 #include "cwExternalSourceSettings.h"
 #include "cwFutureManagerToken.h"
 #include "cwGlobals.h"
@@ -169,11 +170,18 @@ public:
     // trip panel shows the value read-only. Captured from the most recent
     // scan (source-side wins over project-side when both resolve); owners
     // that were never scanned successfully default to file-owned so an
-    // unknown state never injects a declination.
-    bool fileOwnsDeclination(const QUuid& ownerId) const
+    // unknown state never injects a declination. QML re-evaluates on
+    // solveNeeded() — the scan apply emits it whenever the flags change.
+    Q_INVOKABLE bool fileOwnsDeclination(const QUuid& ownerId) const
     {
         return m_fileOwnsDeclination.value(ownerId, true);
     }
+
+    // The qualified-station prefix the line-plot driver gives an
+    // attached trip's stations ("cave_<32hex>.trip_<32hex>."), for
+    // cwScopeStationListModel::scopePrefix. Empty for a null trip or a
+    // trip without a parent cave.
+    Q_INVOKABLE QString scopePrefixForTrip(cwTrip* trip) const;
 
     // One row per attached external centerline, rebuilt on every watch-set
     // recompute. Always non-null; owned by this object.
@@ -215,6 +223,18 @@ signals:
     // Emitted whenever isOwnerBusy(ownerId) flips for ownerId — an
     // attach/detach/updateFromSource started or drained.
     void ownerBusyChanged(const QUuid& ownerId);
+
+    // Completion bridge for QML (commit-11 decision): while the manager
+    // is alive, every attachCenterline / detachCenterline call ends in
+    // exactly one of these — success, error, refused-while-busy, or
+    // canceled — so dialogs and panels never observe the QFuture.
+    // Always delivered asynchronously (never re-entrantly from inside
+    // the call). An operation that ran reports after its busy token is
+    // released; a refused-while-busy failure arrives while the blocking
+    // operation still holds the token, so a report does NOT imply the
+    // owner is idle — bind isOwnerBusy for that.
+    void attachCompleted(const cwExternalCenterlineReport& report);
+    void detachCompleted(const cwExternalCenterlineReport& report);
 
 private:
     // Value-type inputs and outputs of the async recompute pipeline.
@@ -318,6 +338,22 @@ private:
     // ownerBusyChanged so QML affordances track the flip.
     void beginOwnerOperation(const QUuid& ownerId);
     void endOwnerOperation(const QUuid& ownerId);
+
+    // Queues a completion-report emission for the synchronous refusal
+    // paths (null trip, refused-while-busy). Emitting directly there
+    // would run handlers re-entrantly inside attachCenterline /
+    // detachCenterline — a handler that retries on failure would
+    // recurse on the same stack — and would fire before the caller
+    // even has the returned future. Deferring keeps the bridge
+    // contract uniform: the report always arrives after the call
+    // returns.
+    template<typename Signal>
+    void emitReportDeferred(Signal signal, cwExternalCenterlineReport report)
+    {
+        QMetaObject::invokeMethod(this, [this, signal, report = std::move(report)]() {
+            emit (this->*signal)(report);
+        }, Qt::QueuedConnection);
+    }
 
     // Rebuilds both attachment-dir maps wholesale from the region walk
     // via cwSaveLoad::externalCenterlineDir (pure path math, no disk

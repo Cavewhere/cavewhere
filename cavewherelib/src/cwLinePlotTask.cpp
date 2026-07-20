@@ -53,6 +53,12 @@ namespace {
 //     human-readable cave names persist in any user-driven export.
 constexpr QLatin1String kCaveNamePrefix("cave_");
 
+// trip_<uuid> wrapper the survex exporter puts around an externally-
+// attached trip's *include, so its stations resolve to
+// cave_<uuid>.trip_<uuid>.<file-tail>. Same Id128 encoding rationale as
+// the cave prefix.
+constexpr QLatin1String kTripNamePrefix("trip_");
+
 // QUuid::fromString refuses the 32-hex-no-hyphens form even when wrapped in
 // braces; it requires either the dashed RFC-4122 layout (36 chars) or the
 // dashed-and-braced layout (38 chars). We emit the no-hyphen form via
@@ -75,6 +81,11 @@ QString reinsertUuidHyphens(const QString& hex32)
 QString cwLinePlotTask::cavernCaveNameFor(const QUuid& caveId)
 {
     return kCaveNamePrefix + caveId.toString(QUuid::Id128);
+}
+
+QString cwLinePlotTask::cavernTripNameFor(const QUuid& tripId)
+{
+    return kTripNamePrefix + tripId.toString(QUuid::Id128);
 }
 
 QRegularExpression cwLinePlotTask::cavernStationRegex()

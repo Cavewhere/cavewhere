@@ -17,6 +17,7 @@
 #include "cwExternalSourceSettings.h"
 #include "cwFutureManagerModel.h"
 #include "cwLinePlotManager.h"
+#include "cwLinePlotTask.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
@@ -39,6 +40,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QThreadPool>
 
@@ -616,6 +618,84 @@ TEST_CASE("manager detach drops the settings entry and dir map synchronously",
     manager->updateFromSource(ownerId);
     drainPipelines(fixture.get());
     CHECK_FALSE(QDir(attachmentDir).exists());
+}
+
+TEST_CASE("manager attach and detach complete through the QML report bridge",
+          "[Attach][Manager]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("manager-report"));
+    auto manager = managerOf(fixture.get());
+    const QString source = datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx"));
+    const QUuid ownerId = fixture->trip->id();
+
+    cwSignalSpy attachSpy(manager, &cwExternalCenterlineManager::attachCompleted);
+    cwSignalSpy detachSpy(manager, &cwExternalCenterlineManager::detachCompleted);
+
+    auto future = fixture->rootData->attachTripCenterline(fixture->trip, source);
+
+    // The refused re-entry completes through the same bridge, as a
+    // failure report. The emission is deferred — never re-entrant
+    // inside the call — so nothing has fired yet when the refused
+    // future returns already-finished.
+    auto refused = fixture->rootData->attachTripCenterline(fixture->trip, source);
+    REQUIRE(refused.isFinished());
+    CHECK(attachSpy.count() == 0);
+
+    // Draining the first attach delivers both reports in call order:
+    // the queued refusal, then the in-flight attach's success.
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE(attachSpy.count() == 2);
+    const auto refusedReport =
+        attachSpy.takeFirst().at(0).value<cwExternalCenterlineReport>();
+    CHECK_FALSE(refusedReport.success());
+    CHECK_FALSE(refusedReport.canceled());
+    CHECK(refusedReport.ownerId() == ownerId);
+    CHECK(refusedReport.errorMessage().contains(QStringLiteral("in progress")));
+    const auto attachReport =
+        attachSpy.takeFirst().at(0).value<cwExternalCenterlineReport>();
+    CHECK(attachReport.success());
+    CHECK_FALSE(attachReport.canceled());
+    CHECK(attachReport.ownerId() == ownerId);
+    CHECK(attachReport.entryFile() == QStringLiteral("survex_simple.svx"));
+    CHECK(attachReport.errorMessage().isEmpty());
+    // The busy token is already released when the report lands — the
+    // signal documents "emitted after the token drops".
+    CHECK_FALSE(manager->isOwnerBusy(ownerId));
+
+    auto detachFuture = manager->detachCenterline(fixture->trip);
+    REQUIRE(AsyncFuture::waitForFinished(detachFuture, kAttachWaitMs));
+    REQUIRE(detachSpy.count() == 1);
+    const auto detachReport =
+        detachSpy.takeFirst().at(0).value<cwExternalCenterlineReport>();
+    CHECK(detachReport.success());
+    CHECK(detachReport.ownerId() == ownerId);
+    CHECK(detachReport.errorMessage().isEmpty());
+
+    drainPipelines(fixture.get());
+}
+
+TEST_CASE("scopePrefixForTrip derives the driver's qualified-station prefix",
+          "[Attach][Manager][ScopeStations]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("manager-scope-prefix"));
+    auto manager = managerOf(fixture.get());
+
+    const QString prefix = manager->scopePrefixForTrip(fixture->trip);
+    CHECK(prefix == cwLinePlotTask::cavernCaveNameFor(fixture->cave->id())
+                    + QLatin1Char('.')
+                    + cwLinePlotTask::cavernTripNameFor(fixture->trip->id())
+                    + QLatin1Char('.'));
+    // Shape contract independent of the helpers: what
+    // cwScopeStationListModel::scopePrefix expects.
+    CHECK(QRegularExpression(
+              QStringLiteral("^cave_[0-9a-f]{32}\\.trip_[0-9a-f]{32}\\.$"))
+              .match(prefix).hasMatch());
+
+    CHECK(manager->scopePrefixForTrip(nullptr).isEmpty());
+
+    // A trip outside any cave has no qualified prefix.
+    cwTrip orphan;
+    CHECK(manager->scopePrefixForTrip(&orphan).isEmpty());
 }
 
 TEST_CASE("attachment dirs derive from the save/load pipeline at load time",

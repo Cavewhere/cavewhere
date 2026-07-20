@@ -235,6 +235,15 @@ public:
     static QString cavernCaveNameFor(const QUuid& caveId);
     static QRegularExpression cavernStationRegex();
 
+    /**
+     * Trip-name analog of cavernCaveNameFor ("trip_<32 hex>") — the
+     * *begin wrapper the survex exporter puts around an externally-
+     * attached trip's *include, and the middle segment of the
+     * qualified-station prefix cave_<hex>.trip_<hex>. consumed by
+     * cwScopeStationListModel.
+     */
+    static QString cavernTripNameFor(const QUuid& tripId);
+
 
 
     /**

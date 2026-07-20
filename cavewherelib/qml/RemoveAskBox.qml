@@ -16,6 +16,11 @@ ShadowRectangle {
     property string removeName;
     property int indexToRemove
 
+    // Override for prompts that aren't a plain "Remove <name>?", e.g.
+    // the external-centerline detach confirmation.
+    property string message: removeName.length !== 0 ? "Remove <b>" + removeName + "</b>?" : ""
+    property string confirmText: "Remove"
+
     function show() {
         state = "visible"
     }
@@ -63,13 +68,13 @@ ShadowRectangle {
 
         QC.Label {
             anchors.verticalCenter: parent.verticalCenter
-            text: "Remove <b>" + removeChallenge.removeName + "</b>?"
-            visible: removeChallenge.removeName.length !== 0
+            text: removeChallenge.message
+            visible: removeChallenge.message.length !== 0
         }
 
         QC.Button {
             objectName: "removeButton"
-            text: "Remove"
+            text: removeChallenge.confirmText
             onClicked: {
                 removeChallenge.remove();
                 removeChallenge.state = ""
