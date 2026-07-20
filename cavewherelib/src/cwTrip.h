@@ -108,6 +108,10 @@ public:
     void setParentCave(cwCave* parentCave);
     cwCave* parentCave() const;
 
+    //! The unit system in effect for this trip: its cave's, or Metric with no
+    //! cave yet. Delegates up to cwCave::unitSystem() — the project default.
+    cwUnits::UnitSystem unitSystem() const;
+
     QList< cwStation > stations() const;
     QList< cwStation > uniqueStations() const;
 

@@ -114,7 +114,16 @@ MainWindowTest {
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "dataMainPage" });
 
-            let caveButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->caveDelegate0->caveLink")
+            // The wide-layout Loader/LayoutItemProxy realizes the cave list a
+            // frame after the page becomes current, so wait for the delegate.
+            let caveButton = null
+            tryVerify(() => {
+                caveButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->caveDelegate0->caveLink")
+                return caveButton !== null
+            }, 5000, "caveLink should exist on dataMainPage")
+            // The proxied cave list can be found before it is positioned, so let
+            // it lay out before clicking (mirrors the leadsLink handling below).
+            waitForRendering(rootId)
             mouseClick(caveButton)
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "cavePage" });

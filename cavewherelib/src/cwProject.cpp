@@ -13,6 +13,7 @@
 #include "cwTrip.h"
 #include "cwImageUtils.h"
 #include "cwCavingRegion.h"
+#include "cwUnitSettings.h"
 #include "cwTaskProgressDialog.h"
 #include "cwImageData.h"
 #include "cwRegionLoadTask.h"
@@ -151,6 +152,7 @@ cwProject::cwProject(QObject* parent) :
 {
     connectSaveLoad(m_saveLoad);
     m_saveLoad->newProject();
+    seedRegionUnitSystem();
 
     connect(this, &cwProject::fileSaved, this, [this]() {
         setModified(false);
@@ -1256,7 +1258,15 @@ void cwProject::newProject() {
     BundledArchivePath.clear();
     emit fileTypeChanged();
     m_syncHealth->refresh();
+    seedRegionUnitSystem();
     setModified(false);
+}
+
+void cwProject::seedRegionUnitSystem()
+{
+    if (auto* settings = cwUnitSettings::instance()) {
+        Region->setUnitSystem(settings->unitSystem());
+    }
 }
 
 // /**

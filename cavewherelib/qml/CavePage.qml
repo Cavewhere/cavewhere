@@ -117,14 +117,13 @@ StandardPage {
         id: lengthStat
         label: "Length:"
         unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.length : null
-        unitModel: UnitDefaults.lengthModel
     }
 
     SelectableCaveStat {
         id: depthStat
         label: "Depth:"
         unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.depth : null
-        unitModel: UnitDefaults.depthModel
+        depth: true
     }
 
     RowLayout {
@@ -694,7 +693,6 @@ StandardPage {
                     SelectableCaveStat {
                         label: "Length:"
                         unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.length : null
-                        unitModel: UnitDefaults.lengthModel
                     }
 
                     QC.Label { text: "·"; color: Theme.textSubtle }
@@ -702,7 +700,7 @@ StandardPage {
                     SelectableCaveStat {
                         label: "Depth:"
                         unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.depth : null
-                        unitModel: UnitDefaults.depthModel
+                        depth: true
                     }
 
                     QC.Label { text: "·"; color: Theme.textSubtle }

@@ -85,6 +85,19 @@ void cwMeasurementInteraction::setMode(Mode mode)
     emit modeChanged();
 }
 
+void cwMeasurementInteraction::setUnitSystem(cwUnits::UnitSystem system)
+{
+    if (m_unitSystem == system) {
+        return;
+    }
+    m_unitSystem = system;
+    // Seed the default readout unit from the project system. A previously saved
+    // choice is persisted and wins, so this only takes effect on a fresh
+    // selection (setDefaultUnit is a no-op when a value is stored).
+    m_lengthUnit->setDefaultUnit(cwUnits::smallLengthUnit(system));
+    emit unitSystemChanged();
+}
+
 cwGeoReference* cwMeasurementInteraction::geoReference() const
 {
     return m_geoReference;

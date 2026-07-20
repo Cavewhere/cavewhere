@@ -45,6 +45,11 @@ public:
 
     static double scale(const Data& data);
 
+    //! The default paper scale for a project unit system: metric 1 cm = 2.5 m
+    //! (1:250), imperial 1 in = 20 ft (1:240). Shared by the sketch map scale
+    //! and a new scrap's note-transformation scale so both round the same way.
+    static Data defaultData(cwUnits::UnitSystem system);
+
 signals:
      void scaleChanged();
 

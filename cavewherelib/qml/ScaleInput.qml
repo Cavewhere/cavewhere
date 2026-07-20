@@ -23,6 +23,15 @@ RowLayout {
 
     property double scaleValue
 
+    // Fallback units when no scale value is bound yet, matching the project's
+    // paper/cave unit pairing (Imperial → in / ft, Metric → cm / m). A bound
+    // sketch scale shows its own stored units; these only surface for an unbound
+    // input. cwSurveyNoteSketchModel seeds the same pairing into new sketches.
+    readonly property int onPaperDefaultUnit: ProjectUnits.unitSystem === Units.Imperial
+        ? Units.Inches : Units.Centimeters
+    readonly property int inCaveDefaultUnit: ProjectUnits.unitSystem === Units.Imperial
+        ? Units.Feet : Units.Meters
+
     RowLayout {
         id: rowId
         spacing: 3
@@ -56,11 +65,12 @@ RowLayout {
 
                 UnitValueInput {
                     id: onPaperLengthInput
+                    objectName: "onPaperLengthInput"
                     anchors.horizontalCenter: parent.horizontalCenter
                     unitValue: null
                     valueVisible: itemId.valueVisible
                     valueReadOnly: itemId.readOnly
-                    defaultUnit: Units.LengthUnitless
+                    defaultUnit: itemId.onPaperDefaultUnit
                 }
             }
         }
@@ -91,11 +101,12 @@ RowLayout {
 
                 UnitValueInput {
                     id: inCaveLengthInput
+                    objectName: "inCaveLengthInput"
                     anchors.horizontalCenter: parent.horizontalCenter
                     unitValue: null
                     valueVisible: itemId.valueVisible
                     valueReadOnly: itemId.readOnly
-                    defaultUnit: Units.LengthUnitless
+                    defaultUnit: itemId.inCaveDefaultUnit
                 }
             }
         }

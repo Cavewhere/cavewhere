@@ -200,6 +200,7 @@ public:
         qsizetype pointSourceNodes = 0;
         qsizetype totalPrimitives = 0;   // sum of countNodePrimitives across source nodes
         qsizetype bvhNodeCount = 0;      // BvhNode count if bvh built, else 0
+        qsizetype cachedSubBvhCount = 0; // entries in the cross-rebuild sub-BVH cache
     };
     DebugStatistics debugStatistics() const;
 

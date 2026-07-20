@@ -5,6 +5,7 @@
 #include "cwFontSettings.h"
 #include "cwSketchSettings.h"
 #include "cwRenderingSettings.h"
+#include "cwUnitSettings.h"
 
 //Qt includes
 #include <QCoreApplication>
@@ -31,6 +32,7 @@ void cwSettings::initialize()
     cwFontSettings::initialize();
     cwSketchSettings::initialize();
     cwRenderingSettings::initialize();
+    cwUnitSettings::initialize();
 }
 
 cwSettings *cwSettings::instance()
@@ -56,4 +58,8 @@ cwSketchSettings* cwSettings::sketchSettings() const {
 
 cwRenderingSettings* cwSettings::renderingSettings() const {
     return cwRenderingSettings::instance();
+}
+
+cwUnitSettings* cwSettings::unitSettings() const {
+    return cwUnitSettings::instance();
 }

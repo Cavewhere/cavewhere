@@ -123,6 +123,9 @@ QtObject {
     readonly property int statsPadding: 10
     readonly property int floatingToolbarPadding: 12
     readonly property int infoColumnMaxWidth: 200
+    // The info column grows while its settings are being edited so the wider
+    // coordinate-system editor (mode + UTM zone + hemisphere) isn't clipped.
+    readonly property int infoColumnEditMaxWidth: 320
 
     // Utility
     readonly property color transparent: "#00000000"

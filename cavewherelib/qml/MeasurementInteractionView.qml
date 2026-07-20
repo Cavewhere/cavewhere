@@ -28,6 +28,10 @@ MeasurementInteraction {
     enabled: false
     focus: visible
 
+    // The default readout unit follows the project system until the user picks
+    // one; that choice persists and overrides this.
+    unitSystem: ProjectUnits.unitSystem
+
     onDeactivated: measurementId.reset()
 
     // Crosshair cursor while hovering the active tool. cursorShape lives on the

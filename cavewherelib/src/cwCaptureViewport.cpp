@@ -995,12 +995,57 @@ void cwCaptureViewport::setLeadsVisible(bool visible)
     emit leadsVisibleChanged();
 }
 
+cwUnits::UnitSystem cwCaptureViewport::effectiveScaleBarUnitSystem() const
+{
+    switch(m_scaleBarUnitMode) {
+    case cwUnits::ForceMetric:
+        return cwUnits::Metric;
+    case cwUnits::ForceImperial:
+        return cwUnits::Imperial;
+    case cwUnits::FollowProject:
+        break;
+    }
+
+    if(cwCavingRegion* region = m_sceneManager ? m_sceneManager->cavingRegion() : nullptr) {
+        return region->unitSystem();
+    }
+    return cwUnits::Metric;
+}
+
+void cwCaptureViewport::setScaleBarUnitMode(cwUnits::ScaleBarUnitMode mode)
+{
+    if(m_scaleBarUnitMode == mode) {
+        return;
+    }
+    m_scaleBarUnitMode = mode;
+    updateScaleBarScale();
+    emit scaleBarUnitModeChanged();
+}
+
+void cwCaptureViewport::updateScaleBarForRegion()
+{
+    disconnect(m_regionUnitSystemConnection);
+    if(!m_sceneManager.isNull()) {
+        if(cwCavingRegion* region = m_sceneManager->cavingRegion()) {
+            m_regionUnitSystemConnection = connect(region, &cwCavingRegion::unitSystemChanged,
+                                                   this, &cwCaptureViewport::updateScaleBarScale);
+        }
+    }
+    updateScaleBarScale();
+}
+
 void cwCaptureViewport::updateScaleBarScale()
 {
+    if(m_scaleBar == nullptr) {
+        return;
+    }
+
     double ratio = 0.0;
     if(CaptureCamera->projection().type() == cwProjection::Ortho) {
         ratio = scaleOrtho()->scale();
     }
+
+    m_scaleBar->setUnitSystem(effectiveScaleBarUnitSystem());
 
     if(!qFuzzyCompare(ratio + 1.0, m_scaleBar->scaleRatio() + 1.0)) {
         m_scaleBar->setScaleRatio(ratio);
@@ -1080,6 +1125,17 @@ void cwCaptureViewport::setSceneManager(cwRegionSceneManager *newSceneManager)
     if (m_sceneManager == newSceneManager) {
         return;
     }
+
+    disconnect(m_sceneManagerConnection);
     m_sceneManager = newSceneManager;
+
+    if(!m_sceneManager.isNull()) {
+        // The scene manager can swap its region (new/load project); re-hook the
+        // scale bar's unit-system source whenever it does.
+        m_sceneManagerConnection = connect(m_sceneManager, &cwRegionSceneManager::cavingRegionChanged,
+                                           this, &cwCaptureViewport::updateScaleBarForRegion);
+    }
+    updateScaleBarForRegion();
+
     emit sceneManagerChanged();
 }

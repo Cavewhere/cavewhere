@@ -25,6 +25,7 @@
 #include "cwSketchViewState.h"
 #include "cwSurvey2DGeometryArtifact.h"
 #include "cwSurveyNetworkArtifact.h"
+#include "cwUnits.h"
 
 class cwScale;
 class cwKeywordModel;
@@ -109,6 +110,12 @@ public:
     void setViewType(ViewType type);
 
     cwScale *mapScale() const { return m_mapScale; }
+
+    // Seed the paper map scale to this unit system's default sketching scale:
+    // metric 1 cm = 2.5 m (1:250), imperial 1 in = 20 ft (1:240). Called for new
+    // sketches from cwSurveyNoteSketchModel::addSketch; loaded sketches restore
+    // their own stored scale via setData() instead.
+    void seedDefaultScale(cwUnits::UnitSystem system);
 
     // Icon thumbnails are written by cwSketchManager into the shared project
     // disk cache and exposed here as an `image://cwcache/...` URL. The sketch

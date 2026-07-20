@@ -77,22 +77,53 @@ MainWindowTest {
             verify(ctxButton !== null, "regionContextMenu button must exist on dataMainPage")
         }
 
-        function test_geospatialGroupBoxWraps() {
+        function test_regionInfoBoxWraps() {
             gotoDataMainPage()
 
             const dataPage = RootData.pageView.currentPageItem
-            const groupBox = findChild(dataPage, "geospatialGroupBox")
-            verify(groupBox !== null, "geospatialGroupBox must exist on dataMainPage")
+            const infoBox = findChild(dataPage, "regionInfoBox")
+            verify(infoBox !== null, "regionInfoBox must exist on dataMainPage")
 
-            // The CS picker and the layers link both live inside the
-            // Geospatial GroupBox so the screen reads as a single section.
-            const picker = findChild(groupBox, "globalCoordinateSystemComboBox")
+            // Units, the CS picker and the layers link all live inside the
+            // region info box so the screen reads as a single section.
+            const units = findChild(infoBox, "unitSystemComboBox")
+            verify(units !== null,
+                   "unitSystemComboBox must be a descendant of regionInfoBox")
+
+            const picker = findChild(infoBox, "globalCoordinateSystemComboBox")
             verify(picker !== null,
-                   "globalCoordinateSystemComboBox must be a descendant of geospatialGroupBox")
+                   "globalCoordinateSystemComboBox must be a descendant of regionInfoBox")
 
-            const link = findChild(groupBox, "geospatialLayersLink")
+            const link = findChild(infoBox, "geospatialLayersLink")
             verify(link !== null,
-                   "geospatialLayersLink must be a descendant of geospatialGroupBox")
+                   "geospatialLayersLink must be a descendant of regionInfoBox")
+        }
+
+        function test_settingsGatedBehindEdit() {
+            gotoDataMainPage()
+
+            const dataPage = RootData.pageView.currentPageItem
+            const editButton = findChild(dataPage, "regionSettingsEditButton")
+            verify(editButton !== null, "regionSettingsEditButton must exist on dataMainPage")
+
+            const units = findChild(dataPage, "unitSystemComboBox")
+            verify(units !== null, "unitSystemComboBox must exist on dataMainPage")
+            const picker = findChild(dataPage, "globalCoordinateSystemComboBox")
+            verify(picker !== null, "globalCoordinateSystemComboBox must exist on dataMainPage")
+
+            // The editors are hidden until the user opts into editing.
+            verify(!editButton.editMode, "info box must start read-only")
+            verify(!units.visible, "unit editor must be hidden until Edit is clicked")
+            verify(!picker.visible, "CS editor must be hidden until Edit is clicked")
+
+            // Click the actual pencil so the TapHandler → editMode gesture is
+            // exercised, not just the flag it sets.
+            mouseClick(editButton)
+            tryVerify(() => editButton.editMode, 2000, "clicking Edit must enter edit mode")
+            tryVerify(() => units.visible, 2000, "unit editor must show in edit mode")
+            tryVerify(() => picker.visible, 2000, "CS editor must show in edit mode")
+
+            editButton.editMode = false
         }
     }
 }

@@ -18,11 +18,14 @@ Positioner {
     property int pointIndex; //The index in the item list
     property bool selected: false
 
+    focus: selected //A selected point takes keyboard focus so its Keys handlers fire
+
     onSelectedChanged: {
         if(parentView.selectedItemIndex === pointIndex && !selected) {
             parentView.selectedItemIndex = -1
         } else if(selected) {
             parentView.selectedItemIndex = pointIndex
+            forceActiveFocus();
         }
     }
 }
