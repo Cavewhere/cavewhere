@@ -390,6 +390,17 @@ private:
     // for the same Key before the first build observed it).
     QSet<Key> m_dirtyKeys;
 
+    // Monotonic invalidation stamp per Key: bumped by scheduleObjectRebuild
+    // every time a Key's geometry is replaced. A build records the counter at
+    // launch (its launchSeq) and installBuildResult publishes/banks a Key only
+    // when its stamp is <= that launchSeq — i.e. it was not re-dirtied after
+    // the build started. This is what m_dirtyKeys cannot do on the cancel path:
+    // the replacement build clears m_dirtyKeys before a cancelled build's
+    // finished callback runs, so a re-dirtied Key would look clean and its
+    // stale sub-BVH would be banked. The stamp is ordering-independent.
+    quint64 m_mutationSeq = 0;
+    QHash<Key, quint64> m_keyDirtySeq;
+
     // The scene's visibility store; see setVisibilityStore(). Null for
     // standalone intersecters (tests) — queries then read everything as
     // visible.
@@ -502,6 +513,21 @@ private:
                              const QMatrix4x4& modelMatrix = QMatrix4x4());
 
     QFuture<void> launchBuildJob();
+
+    // Drain a finished build worker on the UI thread: promote its banked
+    // sub-BVHs (worker-written `banked`) into m_subBvhs, and — when the run
+    // produced a BvhData (`built` non-null — i.e. the run was neither cancelled
+    // nor empty of primitives) — publish it as the live BVH and emit
+    // bvhReady(). Called from the build
+    // worker's finished watcher, which fires after the worker returns for
+    // cancelled and completed runs alike, so reading the worker-written
+    // arguments here is race-free. `launchSeq` is m_mutationSeq captured when
+    // the build launched; a Key re-dirtied since then (stamp > launchSeq) is
+    // skipped so a cancelled build never banks stale geometry. See
+    // launchBuildJob().
+    void installBuildResult(std::shared_ptr<BvhData> built,
+                            const QHash<Key, std::shared_ptr<const SubBvh>>& banked,
+                            quint64 launchSeq);
 
     // Build a model-space sub-BVH for one Object using the existing
     // serialSplitToFanout + parallel buildBvhSubtree pipeline. Returns

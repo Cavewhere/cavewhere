@@ -116,8 +116,8 @@ query snapshots keep reading the old immutable copy. Today each site does that i
       <td><span class="tag t-gap">gap (R3)</span></td>
     </tr>
     <tr>
-      <td>worker install callback</td>
-      <td>Swaps in the freshly built <code>BvhData</code>, re-applying the dirty + live-Nodes filters (<code>shouldPublish</code>)</td>
+      <td>worker install (<code>installBuildResult</code>, on <code>QFutureWatcher::finished</code>)</td>
+      <td>Banks completed sub-BVHs into <code>m_subBvhs</code> (cancelled + completed runs), and on a completed run swaps in the fresh <code>BvhData</code>; <code>shouldPublish</code> re-applies the staleness (<code>launchSeq</code> vs <code>m_keyDirtySeq</code>) + live-Nodes filters — see Phase 4a</td>
       <td>—</td>
       <td><span class="tag t-async">async</span></td>
     </tr>
@@ -377,19 +377,69 @@ static QVector&lt;BvhNode&gt; BvhData::rebuildTopLevel(const BvhData&amp;);   //
         Arm only when the key is not already published.</li>
     <li><strong>Removal + re-add of the same key</strong> (LAZ reload, GLB path change) re-arms the
         gate — it's a fresh sub-BVH.</li>
-    <li><strong>Prerequisite — fix readiness starvation first (Phase 4a).</strong> One restarter
-        serves all build work, every mutation cancels the in-flight build, and a cancelled build
-        discards everything: the worker returns at <code>cwGeometryItersecter.cpp:2566</code>
-        <em>before</em> banking its built sub-BVHs (<code>:2570-2574</code>), and cache promotion
-        lives in the install callback, which early-returns on cancel. A multi-second LAZ sub-BVH
-        build repeatedly cancelled by unrelated churn (a rotation drag restarts per mouse-move)
-        restarts from scratch each time. Today that means "unpickable during interaction" —
-        mild. Under the gate it means <em>invisible</em> during interaction — severe. Fix: bank
-        completed sub-BVHs across cancels so each restart makes incremental progress
-        (<code>builtSlot</code> already flows worker→install; deposit before the cancel check and
-        promote it even when the full <code>BvhData</code> was abandoned — mind the
-        worker-still-running race on the cancel path). With banking, readiness converges in a
-        bounded number of restarts regardless of churn.</li>
+    <li><strong>Prerequisite — fix readiness starvation first (Phase 4a). ✅ DONE (uncommitted,
+        dev_3).</strong> One restarter serves all build work, every mutation cancels the in-flight
+        build, and the pre-4a code discarded everything a cancelled build had finished: the worker
+        returned <em>before</em> banking its built sub-BVHs, and cache promotion lived in the
+        AsyncFuture install callback, which never fires on cancel. A multi-second LAZ sub-BVH build
+        repeatedly cancelled by unrelated churn (a rotation drag restarts per mouse-move) restarted
+        from scratch each time. Today that means "unpickable during interaction" — mild; under the
+        gate it would mean <em>invisible</em> during interaction — severe.
+        <br><br>
+        <strong>What shipped.</strong> The worker now deposits each completed sub-BVH into
+        <code>builtSlot</code> <em>before</em> the cancel check (single-threaded, after the map's
+        <code>waitOnPool</code> join). The install body moved into
+        <code>installBuildResult(built, banked, launchSeq)</code>, which promotes the banked
+        sub-BVHs into <code>m_subBvhs</code> on <em>both</em> the completed and cancelled paths, and
+        publishes a new <code>m_bvh</code> + emits <code>bvhReady()</code> only when the run produced
+        a <code>BvhData</code> (non-cancelled).
+        <br><br>
+        <strong>Delivery uses a raw <code>QFutureWatcher&lt;void&gt;</code> on the worker's
+        <code>finished</code> signal, not AsyncFuture — deliberately.</strong> Banking must read
+        <code>*builtSlot</code>, which the worker writes at the very end of its run, so the callback
+        has to fire <em>after</em> the worker function returns — for a cancelled run too.
+        AsyncFuture cannot express that: <code>.context(this, body)</code> routes a cancelled run to
+        a no-op (banking never runs on the path that needs it), and
+        <code>.context(this, body, canceledBody)</code> wires its canceled callback to
+        <code>QFutureWatcher::canceled</code>, which fires at cancel-<em>request</em> time while the
+        worker is still running and <code>*builtSlot</code> is empty/being written — a data race
+        (verified empirically: the canceled callback observes <code>builtSlot</code> size 0 and
+        banks nothing). <code>QFutureWatcher::finished</code> is the only signal that fires strictly
+        after the worker returns, cancelled or not. The watcher is parented to <code>this</code>, so
+        it auto-disconnects on destruction, matching the guarantee the old <code>.context</code>
+        install relied on. <em>(Possible follow-up: wrap this as an AsyncFuture
+        <code>onSettled(ctx, cb)</code> primitive in the submodule so the picker reads idiomatically
+        and other side-channel-on-cancel cases can reuse it — a feature addition, not a bug fix.)</em>
+        <br><br>
+        <strong>Stale-bank hazard (found + fixed in review).</strong> Banking on the cancel path
+        reopened a staleness hole the pre-4a code was immune to (it never promoted on cancel).
+        <code>shouldPublish</code> originally filtered on <code>!m_dirtyKeys.contains(key)</code>,
+        but on the cancel path the Restarter launches the <em>replacement</em> build — which clears
+        <code>m_dirtyKeys</code> — <em>before</em> the cancelled build's <code>finished</code>
+        callback runs. A key geometry-replaced mid-build therefore looked "clean" at install time,
+        so its now-stale sub-BVH was banked and could later be reused and published → stale picks
+        (the #505 symptom). Fixed with a monotonic per-key invalidation stamp
+        (<code>m_keyDirtySeq</code> bumped by <code>scheduleObjectRebuild</code>): a build records
+        <code>launchSeq = m_mutationSeq</code> at launch, and <code>installBuildResult</code>
+        publishes/banks a key only when its stamp is <code>&lt;= launchSeq</code> (not re-dirtied
+        since the build started) and it is still live in <code>Nodes</code>. This is
+        ordering-independent — it does not depend on when the replacement build clears
+        <code>m_dirtyKeys</code>. Mirrors the <code>entryVersion</code> pattern already on
+        <code>m_maskedBoxCache</code>.
+        <br><br>
+        <strong>Convergence caveat.</strong> Banking is per-sub-BVH: <code>buildSubBvh</code>
+        returns <code>nullptr</code> on cancel, so a partially-built object banks nothing. This makes
+        readiness converge for <em>multi-object</em> scenes (line plot + scraps + several clouds —
+        completed objects stop being rebuilt every restart), but a <em>single monolithic</em> LAZ
+        cloud whose one sub-BVH never finishes before the next cancel still restarts from scratch.
+        Fully bounding that case needs intra-sub-BVH resumable builds — out of scope here.
+        <br><br>
+        <strong>Tests.</strong> "A cancelled build banks its completed sub-BVHs for reuse"
+        (banking works) and "A cancelled build does not bank a sub-BVH re-dirtied mid-build" (the
+        stale-bank fix; failed 10/10 pre-fix), both in
+        <code>test_cwGeometryItersecter_twoLevel.cpp</code>. They rely on a two-sided
+        <code>msleep</code> timing window (one-point sub-BVH finishes, a 500k cloud does not) — safe
+        under Debug+ASAN, watch-listed for Release/parallel CI.</li>
   </ul>
 
   <p class="note"><strong>Gate:</strong> test-pinned invariant — after <code>addObject</code>
@@ -403,12 +453,16 @@ static QVector&lt;BvhNode&gt; BvhData::rebuildTopLevel(const BvhData&amp;);   //
 <h2>Performance</h2>
 <ul>
   <li><span class="tag t-gap">real</span> <strong>Readiness starvation under churn</strong> — see
-      the Phase 4a prerequisite above. The only build-path issue with teeth, because the gate
-      escalates it from "unpickable while interacting" to "invisible while interacting".</li>
+      the Phase 4a prerequisite above (now ✅ done for multi-object scenes; a single monolithic
+      cloud is still unbounded — see the convergence caveat there). The only build-path issue with
+      teeth, because the gate escalates it from "unpickable while interacting" to "invisible while
+      interacting".</li>
   <li><span class="tag t-async">trade</span> <strong>Delayed first pixels for huge clouds</strong> —
       time-to-visible becomes max(GPU upload, sub-BVH build); for millions of points the build is
       the long pole (seconds). Deliberate (nothing visible-but-dead), but worth a busy indicator
-      on the LAZ layer, and Phase 4a is what makes the wait bounded rather than open-ended.</li>
+      on the LAZ layer. Phase 4a bounds the wait for multi-object scenes; for a single monolithic
+      cloud repeatedly cancelled it does not (per-sub-BVH banking can't checkpoint one in-progress
+      sub-BVH).</li>
   <li><span class="tag t-sync">fine</span> <strong>Per-mutation CoW refresh</strong> (landed with
       #505, kept by Phases 1–2) — O(objects) copy + top-level rebuild per
       <code>setModelMatrix</code>; object count is hundreds at most → microseconds per mouse-move.

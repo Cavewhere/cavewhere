@@ -8,7 +8,10 @@
 
 // Qt
 #include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QMatrix4x4>
+#include <QThread>
 #include <QThreadPool>
 #include <QVector3D>
 #include <QRay3D>
@@ -61,6 +64,27 @@ QVector<QVector3D> deterministicCloud(int count, float range, const QVector3D& t
     }
     points.last() = target;
     return points;
+}
+
+// Warm-up shared by the Phase 4a banking tests: a one-point Object (id 1 at the
+// origin) plus a slow ~500k cloud (id 2) in a single build, pumped just long
+// enough that the microsecond point sub-BVH finishes while the cloud is still
+// building. Leaves the build in flight, ready to be cancelled.
+void seedPointAndSlowCloud(cwGeometryItersecter& intersector,
+                           const QVector3D& cloudTarget, uint32_t cloudSeed)
+{
+    constexpr int kSlowCloudCount = 500'000;
+    constexpr float kSlowCloudRange = 500.0f;
+    constexpr int kPointCompletesMs = 100;
+
+    intersector.addObject(makePointObject(1, {QVector3D(0.0f, 0.0f, 0.0f)}));
+    intersector.addObject(makePointObject(
+        2,
+        deterministicCloud(kSlowCloudCount, kSlowCloudRange, cloudTarget,
+                           cloudSeed)));
+
+    QCoreApplication::processEvents();
+    QThread::msleep(kPointCompletesMs);
 }
 
 } // namespace
@@ -519,6 +543,131 @@ TEST_CASE("Stale install: a re-dirtied Key never reaches picks via a late instal
         REQUIRE(hit.hit());
         REQUIRE(hit.pointWorld().z() == Approx(80.0f).margin(1e-3));
     }
+}
+
+TEST_CASE("A cancelled build banks its completed sub-BVHs for reuse",
+          "[cwGeometryItersecter][twoLevel][Issue505]")
+{
+    // Phase 4a — readiness starvation. One restarter serves every build, so
+    // each mutation cancels the build in flight. If a cancelled build discarded
+    // the sub-BVHs it had already finished, a large first build repeatedly
+    // interrupted by interaction churn (a rotation drag restarts per mouse-move)
+    // would never make progress. The fix banks completed sub-BVHs across a
+    // cancel so the eventual uncancelled build starts warm.
+    //
+    // Here a one-point Object and a slow cloud share a single build. The build
+    // is cancelled while the cloud is still building, and the point's finished
+    // sub-BVH must land in the cache even though this build never publishes a
+    // BVH. Before the fix the cache stays empty on the cancel path.
+    //
+    // Timing: the point sub-BVH is microseconds and the cloud is far slower, so
+    // a short beat after the worker launches guarantees the point is done while
+    // the cloud is not — the same large-ratio assumption the stale-install test
+    // above relies on. cachedSubBvhCount is read through the debug-panel
+    // introspection API (debugStatistics), not test-only scaffolding.
+
+    cwGeometryItersecter intersector;
+    seedPointAndSlowCloud(intersector, QVector3D(0.0f, 0.0f, 80.0f), 11);
+
+    // Cancel the in-flight build. setModelMatrix on the cloud restarts the
+    // worker without dirtying Object 1, so its banked sub-BVH survives the
+    // install-time dirty/live filter.
+    QMatrix4x4 nudge;
+    nudge.translate(1.0f, 0.0f, 0.0f);
+    intersector.setModelMatrix(cwRenderObjectId{}, 2, nudge);
+
+    // Pump until the cancelled build's finished callback banks Object 1. The
+    // replacement build rebuilds both Objects from a cold snapshot and takes
+    // far longer, so the cache passes through exactly one banked sub-BVH
+    // (0 -> 1 -> 2) and dwells there for the whole cloud rebuild. Before the
+    // fix the cancel path banks nothing, so the cache jumps straight from 0 to
+    // 2 when the replacement lands and this window (cachedSubBvhCount == 1)
+    // never appears — the poll times out and the CHECK fails.
+    constexpr int kBankPollTimeoutMs = 10000;
+    QElapsedTimer pollTimer;
+    pollTimer.start();
+    int cachedInWindow = 0;
+    while (pollTimer.elapsed() < kBankPollTimeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 100);
+        cachedInWindow = intersector.debugStatistics().cachedSubBvhCount;
+        if (cachedInWindow >= 1) {
+            break;
+        }
+    }
+    INFO("cachedInWindow=" << cachedInWindow
+         << " pollElapsedMs=" << pollTimer.elapsed());
+    CHECK(cachedInWindow == 1);
+
+    // Settle: the eventual build reuses the banked sub-BVH and publishes both
+    // Objects, so the point is pickable.
+    intersector.waitForFinish();
+    const QRay3D rayAtOne(QVector3D(0.0f, 0.0f, 100.0f),
+                          QVector3D(0.0f, 0.0f, -1.0f));
+    CHECK(intersector.intersectsDetailed(rayAtOne).hit());
+}
+
+TEST_CASE("A cancelled build does not bank a sub-BVH re-dirtied mid-build",
+          "[cwGeometryItersecter][twoLevel][Issue505]")
+{
+    // Phase 4a corner: banking must NOT resurrect stale geometry. If a key is
+    // geometry-replaced (re-dirtied) while its build is in flight, the sub-BVH
+    // that build already finished is now stale, and the cancelled build must
+    // not promote it into the cache. The hazard is subtle: the replacement
+    // build's launch clears m_dirtyKeys before the cancelled build's finished
+    // callback runs, so an install that filters only on the live dirty set
+    // would see the key "clean" and bank the stale sub-BVH — which a later
+    // build could then reuse and publish, serving picks stale geometry (the
+    // #505 symptom).
+    //
+    // Mirror of the banking test above, but the cancel is triggered by
+    // re-adding the point with new geometry (re-dirtying it). The point's stale
+    // sub-BVH must be dropped, so the cache goes 0 -> 2 (the replacement builds
+    // both fresh) and never dwells at 1. If the stale sub-BVH is wrongly banked
+    // it sits in the cache at count 1 for the whole cloud rebuild, which the
+    // poll below reliably samples.
+
+    cwGeometryItersecter intersector;
+    // The cloud target sits off the x=y=0 and x=50,y=0 axes so it can't be hit
+    // by either settle ray below (which would confound the point-position
+    // checks).
+    seedPointAndSlowCloud(intersector, QVector3D(300.0f, 300.0f, 80.0f), 13);
+
+    // Re-dirty Object 1 with new geometry. This cancels the in-flight build
+    // and makes the point's just-finished sub-BVH stale.
+    intersector.addObject(makePointObject(1, {QVector3D(50.0f, 0.0f, 0.0f)}));
+
+    // Poll across the replacement build's cloud rebuild. A wrongly-banked stale
+    // point sub-BVH sits in the cache at count 1 for that whole window; a
+    // correct run promotes nothing until the replacement lands both fresh
+    // (0 -> 2). Sample until both are cached (count 2) or timeout.
+    constexpr int kPollTimeoutMs = 10000;
+    QElapsedTimer pollTimer;
+    pollTimer.start();
+    bool sawStalePromotion = false;
+    int cached = 0;
+    while (pollTimer.elapsed() < kPollTimeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 100);
+        cached = intersector.debugStatistics().cachedSubBvhCount;
+        if (cached == 1) {
+            sawStalePromotion = true;
+        }
+        if (cached >= 2) {
+            break;
+        }
+    }
+    INFO("cached=" << cached << " sawStalePromotion=" << sawStalePromotion
+         << " pollElapsedMs=" << pollTimer.elapsed());
+    CHECK_FALSE(sawStalePromotion);
+
+    // Settle: the replacement publishes the new geometry, so the point is
+    // pickable at its new position and not at the old one.
+    intersector.waitForFinish();
+    const QRay3D rayAtFifty(QVector3D(50.0f, 0.0f, 100.0f),
+                            QVector3D(0.0f, 0.0f, -1.0f));
+    const QRay3D rayAtZero(QVector3D(0.0f, 0.0f, 100.0f),
+                           QVector3D(0.0f, 0.0f, -1.0f));
+    CHECK(intersector.intersectsDetailed(rayAtFifty).hit());
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtZero).hit());
 }
 
 // ============================================================================

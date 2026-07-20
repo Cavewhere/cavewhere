@@ -23,6 +23,7 @@
 
 //Qt includes
 #include <QtNumeric>
+#include <QFutureWatcher>
 #include <QPlane3D>
 #include <QPromise>
 #include <QThreadPool>
@@ -621,6 +622,7 @@ bool cwGeometryItersecter::eraseNodeIfPresent(const Key& key)
     Nodes.erase(iter);
     m_subBvhs.remove(key);
     m_dirtyKeys.remove(key);
+    m_keyDirtySeq.remove(key);
     applyPublishedDelta(key, PublishedDelta::RemoveSlot);
     return true;
 }
@@ -641,6 +643,7 @@ void cwGeometryItersecter::clear()
     Nodes.clear();
     m_subBvhs.clear();
     m_dirtyKeys.clear();
+    m_keyDirtySeq.clear();
     m_maskedBoxCache.clear();
     // Total wipe: drop the published BVH entirely so every pick goes
     // no-hit immediately. No retention benefit here — there's no Key
@@ -667,6 +670,7 @@ void cwGeometryItersecter::clear(cwRenderObjectId parentId)
         if(key.parentId == parentId) {
             m_subBvhs.remove(key);
             m_dirtyKeys.remove(key);
+            m_keyDirtySeq.remove(key);
             applyPublishedDelta(key, PublishedDelta::RemoveSlot);
             iter = Nodes.erase(iter);
             ++erased;
@@ -1977,10 +1981,14 @@ void cwGeometryItersecter::enumerateLinesChunk(const Object& object,
 void cwGeometryItersecter::scheduleObjectRebuild(const Key& key)
 {
     m_subBvhs.remove(key);
-    // m_dirtyKeys protects against the published-BVH install callback for
-    // a build that snapshotted *before* this invalidation — that callback
-    // would otherwise re-populate m_subBvhs[key] with the stale sub-BVH.
+    // m_dirtyKeys makes the next launched build rebuild this Key even if its
+    // QHash entry happened to survive; it is consumed and cleared per launch.
     m_dirtyKeys.insert(key);
+    // Stamp the invalidation so a build already in flight — including one
+    // about to be cancelled by this same rebuild — recognizes its finished
+    // sub-BVH for this Key as stale even after the replacement build clears
+    // m_dirtyKeys (see installBuildResult).
+    m_keyDirtySeq[key] = ++m_mutationSeq;
     applyPublishedDelta(key, PublishedDelta::RemoveSlot);
     qCDebug(lcPick).nospace()
         << "scheduleObjectRebuild {parent=" << key.parentId
@@ -2409,6 +2417,12 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
     auto dirtyKeysSnapshot = m_dirtyKeys;
     m_dirtyKeys.clear();
 
+    // The invalidation frontier as of this launch. installBuildResult uses it
+    // to reject any Key re-dirtied after the build started, independent of the
+    // event-loop ordering between this build's install and the next build's
+    // launch (which clears m_dirtyKeys).
+    const quint64 launchSeq = m_mutationSeq;
+
     if (lcPick().isDebugEnabled()) {
         int triNodes = 0;
         int lineNodes = 0;
@@ -2546,14 +2560,27 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
             }
         }
 
+        // Bank every completed sub-BVH before the cancel check so a build cut
+        // short by interaction churn still contributes its finished work
+        // (Phase 4a). The map above has already joined (waitOnPool), so this
+        // runs single-threaded and builtSlot is read only after the worker
+        // returns (the finished-tied install watcher), never concurrently.
+        for (qsizetype i = 0; i < tasks.size(); ++i) {
+            if (built[i]) {
+                (*builtSlot)[tasks[i].key] = built[i];
+            }
+        }
+
         if (promise.isCanceled()) {
             return;
         }
 
+        // Fold the same sub-BVHs into subBvhSnapshot (a COW copy of m_subBvhs)
+        // only past the cancel check: the first write detaches it, and a
+        // churn-cancelled build has no use for the assembled result anyway.
         for (qsizetype i = 0; i < tasks.size(); ++i) {
             if (built[i]) {
                 subBvhSnapshot[tasks[i].key] = built[i];
-                (*builtSlot)[tasks[i].key] = built[i];
             }
         }
 
@@ -2602,66 +2629,105 @@ QFuture<void> cwGeometryItersecter::launchBuildJob()
         *resultSlot = std::move(out);
     });
 
-    // Install the freshly built BVH on the UI thread. .context(this, ...)
-    // is auto-disconnected by Qt when `this` is destroyed, so the lambda
-    // never fires after destruction.
-    AsyncFuture::observe(worker).context(this, [this, resultSlot, builtSlot]() {
-        if (!*resultSlot) {
-            qCDebug(lcPick) << "build worker finished without producing a BvhData"
-                            << "(canceled or zero prims)";
-            return;
-        }
-        // No visibility stamping here: queries pair the installed BVH with a
-        // store snapshot captured at query entry, so a toggle that raced the
-        // build is simply read fresh on the next pick.
-        //
-        // A worker that finished computing just before cancel still publishes
-        // here, so re-apply two filters on this side of the swap. The dirty
-        // filter catches Keys mutated mid-build (the mutator-site RemoveSlot
-        // delta was a no-op against the old m_bvh). The
-        // live-Nodes filter catches Keys *removed* mid-build — removal strips
-        // its Key from m_dirtyKeys, so the dirty filter alone would republish
-        // the removed slot (picks hitting freed geometry) and promote its
-        // sub-BVH into the cache forever (ids are never recycled). Nodes is
-        // ground truth on this thread.
-        QSet<Key> liveKeys;
-        liveKeys.reserve(Nodes.size());
-        for (const Node& node : std::as_const(Nodes)) {
-            liveKeys.insert(node.Object.key());
-        }
-        // One predicate for both loops below — a slot that publishes must
-        // also be cacheable, and vice versa, so they can't drift apart.
-        const auto shouldPublish = [this, &liveKeys](const Key& key) {
-            return !m_dirtyKeys.contains(key) && liveKeys.contains(key);
-        };
-        // The built BvhData isn't published yet, so nulling slots in place
-        // here doesn't violate the immutable-once-published rule on m_bvh —
-        // and avoids applyPublishedDelta's per-Key copy-on-write.
-        std::shared_ptr<BvhData> built = *resultSlot;
-        for (auto it = built->keyToSlot.cbegin(); it != built->keyToSlot.cend(); ++it) {
-            if (!shouldPublish(it.key())) {
-                built->subBvhs[it.value()].reset();
-            }
-        }
-        m_bvh = std::move(built);
-        // Promote freshly built sub-BVHs to the cache, skipping any Key
-        // that's been re-dirtied since the build started — those will be
-        // rebuilt by the next launched job — and any Key no longer
-        // registered.
-        for (auto it = builtSlot->constBegin(); it != builtSlot->constEnd(); ++it) {
-            if (shouldPublish(it.key())) {
-                m_subBvhs[it.key()] = it.value();
-            }
-        }
-        qCDebug(lcPick).nospace()
-            << "bvhReady installed: topLevel=" << m_bvh->topLevel.size()
-            << " subBvhs=" << m_bvh->subBvhs.size()
-            << " sourceNodes=" << m_bvh->nodesSnapshot.size()
-            << " cached=" << m_subBvhs.size();
-        emit bvhReady();
+    // Drain the worker on the UI thread once it returns. This must read
+    // *builtSlot, which the worker writes at the end of its run — so it has to
+    // fire *after* the worker function returns, for a cancelled run as well as
+    // a completed one. QFutureWatcher::finished is the only signal that does.
+    //
+    // AsyncFuture is not usable here despite being the house idiom:
+    //   - .context(this, body)               — routes a cancelled run to a
+    //     no-op, so banking never runs on the path that needs it most.
+    //   - .context(this, body, canceledBody) — its canceled callback is wired
+    //     to QFutureWatcher::canceled, which fires at cancel-*request* time,
+    //     while the worker is still running and *builtSlot is empty/being
+    //     written (a data race). Verified: swapping this in reads builtSlot
+    //     size 0 and banks nothing.
+    //
+    // Parented to `this`, so the watcher (and its connection) die with the
+    // intersecter — the lambda never fires after destruction, matching the
+    // auto-disconnect the old .context(this, ...) install relied on.
+    auto* installWatcher = new QFutureWatcher<void>(this);
+    connect(installWatcher, &QFutureWatcher<void>::finished, this,
+            [this, resultSlot, builtSlot, installWatcher, launchSeq]() {
+        installWatcher->deleteLater();
+        installBuildResult(std::move(*resultSlot), *builtSlot, launchSeq);
     });
+    installWatcher->setFuture(worker);
 
     return worker;
+}
+
+void cwGeometryItersecter::installBuildResult(
+        std::shared_ptr<BvhData> built,
+        const QHash<Key, std::shared_ptr<const SubBvh>>& banked,
+        quint64 launchSeq)
+{
+    // Runs on the UI thread once the worker has returned, so reading the
+    // worker-written `built`/`banked` here is free of the worker-still-running
+    // race. `built` is null for a cancelled or zero-primitive run.
+    //
+    // Two filters gate everything below. The staleness filter catches Keys
+    // re-dirtied since this build launched: scheduleObjectRebuild stamps
+    // m_keyDirtySeq, so a stamp > launchSeq means the geometry this build
+    // produced for that Key is superseded. This must not read m_dirtyKeys: on
+    // the cancel path the replacement build's launch clears m_dirtyKeys before
+    // this callback runs, so a re-dirtied Key would look clean and its stale
+    // sub-BVH would be banked (issue #505). The live-Nodes filter catches Keys
+    // *removed* mid-build — removal is not a re-dirty, so the staleness filter
+    // alone would republish a freed slot (picks hitting freed geometry) and
+    // cache its sub-BVH forever (ids are never recycled). Nodes is ground truth
+    // on this thread. One predicate for both uses — a slot that publishes must
+    // also be cacheable, and vice versa, so they can't drift.
+    QSet<Key> liveKeys;
+    liveKeys.reserve(Nodes.size());
+    for (const Node& node : std::as_const(Nodes)) {
+        liveKeys.insert(node.Object.key());
+    }
+    const auto shouldPublish = [this, &liveKeys, launchSeq](const Key& key) {
+        return m_keyDirtySeq.value(key, 0) <= launchSeq && liveKeys.contains(key);
+    };
+
+    // Bank completed sub-BVHs into the cache whether or not the full BvhData
+    // survived. A build cancelled by churn still contributes its finished
+    // sub-BVHs, so the eventual uncancelled build starts from a warm cache and,
+    // for multi-object scenes, readiness converges in a bounded number of
+    // restarts (Phase 4a). Banking is per-object: a single object rebuilds from
+    // scratch (buildSubBvh doesn't checkpoint mid-build), so one cloud rotated
+    // during its first build can't bank. Skip any Key re-dirtied since the
+    // build started (the next job rebuilds it) or no longer registered.
+    for (auto it = banked.constBegin(); it != banked.constEnd(); ++it) {
+        if (shouldPublish(it.key())) {
+            m_subBvhs[it.key()] = it.value();
+        }
+    }
+
+    if (!built) {
+        qCDebug(lcPick).nospace()
+            << "build worker finished without a BvhData (canceled or zero"
+            << " prims); banked=" << banked.size()
+            << " cached=" << m_subBvhs.size();
+        return;
+    }
+
+    // No visibility stamping here: queries pair the installed BVH with a store
+    // snapshot captured at query entry, so a toggle that raced the build is
+    // simply read fresh on the next pick.
+    //
+    // The built BvhData isn't published yet, so nulling slots in place here
+    // doesn't violate the immutable-once-published rule on m_bvh — and avoids
+    // applyPublishedDelta's per-Key copy-on-write.
+    for (auto it = built->keyToSlot.cbegin(); it != built->keyToSlot.cend(); ++it) {
+        if (!shouldPublish(it.key())) {
+            built->subBvhs[it.value()].reset();
+        }
+    }
+    m_bvh = std::move(built);
+    qCDebug(lcPick).nospace()
+        << "bvhReady installed: topLevel=" << m_bvh->topLevel.size()
+        << " subBvhs=" << m_bvh->subBvhs.size()
+        << " sourceNodes=" << m_bvh->nodesSnapshot.size()
+        << " cached=" << m_subBvhs.size();
+    emit bvhReady();
 }
 
 cwRayHit cwGeometryItersecter::rayTriangleMT(const QRay3D &rayModel,
