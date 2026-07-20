@@ -24,13 +24,29 @@ MainWindowTest {
             return ObjectFinder.findObjectByChain(rootId, "rootId->docsPage->" + name)
         }
 
+        // The reading column is a Flickable; its declared children are reparented
+        // into its contentItem, so walk up from the body to the ancestor that has
+        // a contentHeight.
+        function findReadingFlickable() {
+            let flick = findBody().parent
+            while (flick !== null && flick.contentHeight === undefined) {
+                flick = flick.parent
+            }
+            return flick
+        }
+
         function init() {
             // Every test starts wide (persistent sidebar) unless it resizes.
             rootId.width = 1200
             docsPageId.slug = ""
+            docsPageId.closeFind()
             let field = findByName("docsSearchField")
             if (field !== null) {
                 field.text = ""
+            }
+            let findField = findByName("docsFindField")
+            if (findField !== null) {
+                findField.text = ""
             }
             waitForRendering(rootId)
         }
@@ -100,8 +116,9 @@ MainWindowTest {
                    "the in-app hop did not enter history — back() should return to the landing")
         }
 
-        // A same-page anchor is a no-op for now (intra-page scroll is a
-        // fast-follow) — it must not navigate away or reach the browser.
+        // A same-page anchor scrolls within the page (see
+        // test_anchorLinkScrollsToHeading); it must never change the page or reach
+        // the browser — including an unmatched anchor, which here is a pure no-op.
         function test_anchorLinkDoesNotNavigate() {
             RootData.pageSelectionModel.gotoPageByName(null, "Docs")
             let body = findBody()
@@ -221,6 +238,245 @@ MainWindowTest {
             model.back()
             verify(model.currentPageAddress.endsWith("About"),
                    "back() did not return to the page before Docs — Docs was not a distinct history entry")
+        }
+
+        // The find bar is hidden until opened; openFind() reveals it and focuses
+        // the query field, and closeFind() hides it again.
+        function test_findBarOpensAndCloses() {
+            verify(!docsPageId.findVisible, "the find bar should start closed")
+            let findField = findByName("docsFindField")
+            verify(findField !== null, "the find field should exist even while closed")
+            verify(!findField.visible, "the find field should be hidden while the bar is closed")
+
+            docsPageId.openFind()
+            tryVerify(function() { return findField.visible }, 2000,
+                      "openFind should reveal the find bar")
+            verify(findField.activeFocus, "openFind should focus the query field")
+
+            docsPageId.closeFind()
+            tryVerify(function() { return !findField.visible }, 2000,
+                      "closeFind should hide the find bar")
+        }
+
+        // A search button opens the find bar, and hides itself while the bar is
+        // showing (the bar is the affordance then).
+        function test_findButtonOpensFind() {
+            let button = findByName("docsFindButton")
+            verify(button !== null, "the find button should exist")
+            verify(button.visible, "the find button should show while find is closed")
+
+            button.clicked()
+            tryVerify(function() { return docsPageId.findVisible }, 2000,
+                      "clicking the find button should open the find bar")
+            verify(!button.visible, "the find button should hide while the find bar is open")
+
+            docsPageId.closeFind()
+            tryVerify(function() { return button.visible }, 2000,
+                      "closing find should restore the find button")
+        }
+
+        // Wide mode always reserves a top band so the find UI never covers text:
+        // the search button sits in it while find is closed, the bar fills it while
+        // open, and opening find does not shift the document (the band is already
+        // reserved). Both affordances stay above the document top.
+        function test_findBarReservesSpaceAboveDocument() {
+            let flick = findReadingFlickable()
+            verify(flick !== null, "the reading column should be a Flickable")
+            verify(flick.y > 0, "wide mode should reserve a top band above the document")
+            let documentTop = flick.y
+
+            let button = findByName("docsFindButton")
+            verify(button.y >= 0 && button.y + button.height <= documentTop + 1,
+                   "the closed-state search button should sit within the reserved band")
+
+            docsPageId.openFind()
+            let findBar = findByName("docsFindField").parent   // field -> bar
+            verify(findBar.y + findBar.height <= documentTop + 1,
+                   "the find bar should sit entirely above the document")
+            tryCompare(flick, "y", documentTop, 2000,
+                       "opening find should not shift the document — the band is already reserved")
+
+            docsPageId.closeFind()
+        }
+
+        // In compact mode the find bar shares the drawer toggle's row (starting
+        // right of the hamburger) instead of dropping to its own band, so opening
+        // find does not push the document further down.
+        function test_compactFindBarSharesHamburgerRow() {
+            rootId.width = Theme.breakpointPanelCollapse - 100
+            tryVerify(function() { return docsPageId.isNarrow }, 2000,
+                      "shrinking past the breakpoint should switch to compact mode")
+
+            let toggle = findByName("docsSidebarToggle")
+            let flick = findReadingFlickable()
+            verify(flick !== null, "the reading column should be a Flickable")
+            let documentTopClosed = flick.y
+
+            docsPageId.openFind()
+            let bar = findByName("docsFindField").parent
+
+            verify(Math.abs(bar.y - toggle.y) <= toggle.height,
+                   "the find bar should sit on the hamburger's row, not below it")
+            verify(bar.x >= toggle.x + toggle.width,
+                   "the find bar should start to the right of the hamburger")
+            tryCompare(flick, "y", documentTopClosed, 2000,
+                       "opening find in compact mode should not push the document down")
+
+            docsPageId.closeFind()
+            rootId.width = 1200
+            tryVerify(function() { return !docsPageId.isNarrow }, 2000)
+        }
+
+        // Typing a term that occurs several times highlights the first match and
+        // the status reads "1/N"; find is case-insensitive over the rendered text.
+        function test_findHighlightsAndCountsMatches() {
+            let body = findBody()
+            docsPageId.slug = "scraps-carpeting"
+            tryVerify(function() { return body.text.indexOf("Scraps and Carpeting") >= 0 },
+                      2000, "the article body did not load")
+
+            docsPageId.openFind()
+            let findField = findByName("docsFindField")
+            findField.text = "scrap"
+
+            let status = findByName("docsFindStatus")
+            verify(status !== null, "the match-count status label should exist")
+            tryVerify(function() { return status.text.indexOf("/") >= 0 }, 2000,
+                      "a common term should report a running match count")
+            verify(status.text.startsWith("1/"), "the first match should be current: " + status.text)
+
+            verify(body.selectionStart >= 0, "the first match should be selected")
+            compare(body.selectedText.toLowerCase(), "scrap",
+                    "the highlighted selection should be the matched term")
+        }
+
+        // Next advances the selection to a later match (wrapping at the end), and
+        // Previous walks it back — driven through the bar's buttons.
+        function test_findNextAndPreviousWalkMatches() {
+            let body = findBody()
+            docsPageId.slug = "scraps-carpeting"
+            tryVerify(function() { return body.text.indexOf("Scraps and Carpeting") >= 0 }, 2000)
+
+            docsPageId.openFind()
+            findByName("docsFindField").text = "scrap"
+            tryVerify(function() { return body.selectionStart >= 0 }, 2000,
+                      "the first match should be selected")
+
+            let firstStart = body.selectionStart
+            findByName("docsFindNext").clicked()
+            tryVerify(function() { return body.selectionStart !== firstStart }, 2000,
+                      "Next should move the selection to a different match")
+            let secondStart = body.selectionStart
+            verify(secondStart > firstStart, "Next should move forward through the document")
+
+            findByName("docsFindPrevious").clicked()
+            tryVerify(function() { return body.selectionStart === firstStart }, 2000,
+                      "Previous should return to the earlier match")
+        }
+
+        // In the query field, Enter steps to the next match and Shift+Enter steps
+        // back — the in-field counterpart to the FindNext/FindPrevious shortcuts.
+        function test_findFieldEnterKeysWalkMatches() {
+            let body = findBody()
+            docsPageId.slug = "scraps-carpeting"
+            tryVerify(function() { return body.text.indexOf("Scraps and Carpeting") >= 0 }, 2000)
+
+            docsPageId.openFind()
+            let field = findByName("docsFindField")
+            field.forceActiveFocus()
+            field.text = "scrap"
+            tryVerify(function() { return body.selectionStart >= 0 }, 2000,
+                      "the first match should be selected")
+            let first = body.selectionStart
+
+            keyClick(Qt.Key_Return)
+            tryVerify(function() { return body.selectionStart > first }, 2000,
+                      "Enter should advance to the next match")
+
+            keyClick(Qt.Key_Return, Qt.ShiftModifier)
+            tryVerify(function() { return body.selectionStart === first }, 2000,
+                      "Shift+Enter should step back to the previous match")
+        }
+
+        // A term with no occurrences reports "None", leaves nothing selected.
+        function test_findWithNoMatchesReportsNone() {
+            let body = findBody()
+            docsPageId.slug = "scraps-carpeting"
+            tryVerify(function() { return body.text.indexOf("Scraps and Carpeting") >= 0 }, 2000)
+
+            docsPageId.openFind()
+            findByName("docsFindField").text = "zzzznotarealword"
+
+            let status = findByName("docsFindStatus")
+            tryCompare(status, "text", "None", 2000,
+                       "a non-matching term should report None")
+            compare(body.selectedText, "", "nothing should be selected when there are no matches")
+        }
+
+        // Closing the bar clears the highlighted match.
+        function test_closingFindClearsSelection() {
+            let body = findBody()
+            docsPageId.slug = "scraps-carpeting"
+            tryVerify(function() { return body.text.indexOf("Scraps and Carpeting") >= 0 }, 2000)
+
+            docsPageId.openFind()
+            findByName("docsFindField").text = "scrap"
+            tryVerify(function() { return body.selectedText.length > 0 }, 2000,
+                      "a match should be selected")
+
+            docsPageId.closeFind()
+            tryVerify(function() { return body.selectedText === "" }, 2000,
+                      "closing the find bar should clear the selection")
+            verify(!docsPageId.findVisible, "the find bar should be closed")
+        }
+
+        // A same-page "#heading" link scrolls the reading column to that specific
+        // heading (an earlier heading scrolls less than a later one, proving the
+        // anchor resolves to the right position, not merely "down the page"); a
+        // bogus anchor neither scrolls nor navigates away.
+        function test_anchorLinkScrollsToHeading() {
+            let body = findBody()
+            let flick = findReadingFlickable()
+            verify(flick !== null, "the reading column should be a Flickable")
+
+            docsPageId.slug = "concepts-glossary"
+            tryVerify(function() { return body.text.indexOf("Glossary") >= 0 }, 2000,
+                      "the glossary article did not load")
+            tryVerify(function() { return flick.contentHeight > flick.height }, 2000,
+                      "the glossary should overflow the viewport so anchors can scroll")
+
+            flick.contentY = 0
+            body.linkActivated("#the-data-model")
+            let earlyY = flick.contentY
+
+            flick.contentY = 0
+            body.linkActivated("#scrap")
+            tryVerify(function() { return flick.contentY > earlyY }, 2000,
+                      "a later heading should scroll further than an earlier one")
+            let lateY = flick.contentY
+
+            let model = RootData.pageSelectionModel
+            let addressBefore = model.currentPageAddress
+            body.linkActivated("#not-a-real-heading")
+            compare(flick.contentY, lateY, "an unknown anchor should not scroll")
+            compare(model.currentPageAddress, addressBefore,
+                    "an unknown anchor should not navigate away")
+        }
+
+        // Navigating to another article resets the find bar so its matches don't
+        // linger against the new page's text.
+        function test_navigatingResetsFind() {
+            let body = findBody()
+            docsPageId.slug = "scraps-carpeting"
+            tryVerify(function() { return body.text.indexOf("Scraps and Carpeting") >= 0 }, 2000)
+
+            docsPageId.openFind()
+            findByName("docsFindField").text = "scrap"
+            tryVerify(function() { return docsPageId.findVisible }, 2000)
+
+            docsPageId.slug = "notes-add-a-note"
+            verify(!docsPageId.findVisible,
+                   "changing the article should close the find bar")
         }
     }
 }

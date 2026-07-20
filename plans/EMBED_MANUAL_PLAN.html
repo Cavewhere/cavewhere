@@ -130,7 +130,7 @@
     <span class="chip"><b>Source of truth</b> docs/manual/*.md</span>
     <span class="chip"><b>Renderer</b> Qt TextFormat.MarkdownText</span>
     <span class="chip"><b>Nav</b> cwPageSelectionModel, page per article</span>
-    <span class="chip"><b>Status</b> CP1–CP4 done · CP5 next</span>
+    <span class="chip"><b>Status</b> CP1–CP4 + CP6 done · CP5 (dark-mode polish, incl. themed link color) next</span>
   </div>
 </header>
 
@@ -437,16 +437,52 @@ docs-website tool, never a CaveWhere build dependency.</p>
 <div class="cp">
   <span class="tag">CP5 · Polish &amp; tests</span>
   <h3>Dark-mode verification and fuller tests</h3>
-  <p>Verify the reading column (already themed from CP1) reads correctly in dark mode.
-    <em>Expand</em> the CP1 smoke test (<code>tst_DocsPage.qml</code> already exists): assert a real
-    article renders, a cross-link navigates and lands in history, and search filters. Confirm the
-    offscreen/mobile build still links (no web module pulled in).</p>
+  <p>Verify the reading column reads correctly in dark mode — including the sidebar/drawer (CP4) and the
+    document-backed body (CP6). One concrete carry-over from CP6: the <code>QC.TextArea</code> body has no
+    <code>linkColor</code>, so links currently render in QTextDocument's default anchor color; restore
+    <code>Theme.textLink</code> (note: <code>QTextDocument::setDefaultStyleSheet</code> only affects HTML,
+    NOT <code>MarkdownText</code>, so the fix likely needs a palette Link role or post-processing anchor
+    char-formats — needs investigation).
+    The <code>tst_DocsPage.qml</code> suite is already fuller than the CP1 smoke test (21 cases across
+    render, cross-link history, search, compact drawer, and find-on-page). Remaining test gap: the drawer
+    <em>open → pick-from-inside</em> path (the Popup interior is unreachable via the page-chain
+    ObjectFinder). Confirm the offscreen/mobile build still links (no web module pulled in).</p>
   <div class="files">~ test-qml/tst_DocsPage.qml · ~ DocsPage.qml</div>
 </div>
 
 <div class="cp">
   <span class="tag">CP6 · Find on page + intra-page anchors</span>
   <h3>Search within the current article, and jump to headings</h3>
+  <p class="rec">✓ Done — 23 <code>tst_DocsPage</code> cases green (25 QtTest incl. init/cleanup; 11 new: find open/close, find-button-opens-find, enter/shift-enter walk, compact-bar-shares-hamburger-row, reserves-space-above-document, highlight+count,
+    next/previous, no-match "None", close-clears-selection, <code>#anchor</code> scroll, navigation
+    resets find); app + both test binaries link clean. The reading column is now a read-only
+    <code>QC.TextArea</code> (MarkdownText) inside a plain <code>QQ.Flickable</code>; a new
+    <code>cwDocumentFinder</code> (<code>DocumentFinder</code>, <code>QML_NAMED_ELEMENT</code>) runs
+    <code>QTextDocument::find()</code> over the body's <code>QQuickTextDocument</code> for the find bar and
+    resolves GitHub-style heading slugs (matching <code>build-manual-html.py</code>) for
+    <code>#anchor</code> scroll. Four <code>twbs-icons</code> (search, chevron-up/-down, x) were added to
+    <code>cwResources.qrc</code>. The find bar is a <strong>full-width toolbar</strong> docked in a
+    <em>reserved</em> band above the reading column (in wide mode the column always reserves this band —
+    it holds the search button when find is closed and the bar when open, so opening find never shifts or
+    covers the text), sitting flush above the document with only a 1px separator line — per user request, neither an
+    overlay nor a content-hugging pill. In <strong>compact mode</strong> the bar instead shares the
+    drawer-toggle (hamburger) row, starting just right of it, so it costs no extra vertical space (anchors
+    align to the toggle's row — no LayoutItemProxy needed). The query field stretches; the count and
+    prev/next/close sit
+    right. A top-left <code>search.svg</code> <code>RoundButton</code> (hidden while the bar is open; sits
+    right of the drawer toggle in compact mode) opens find and carries a tooltip with the platform
+    shortcut via <code>Shortcut.nativeText</code> (⌘F on macOS). Match navigation uses the standard keys —
+    <code>StandardKey.FindNext</code> (F3 / ⌘G) and <code>FindPrevious</code> (Shift+F3 / ⌘⇧G), plus
+    Enter / Shift+Enter in the field — and the next/prev buttons carry those shortcuts in their
+    tooltips.</p>
+  <p><strong>Two conscious deviations from the scope below.</strong> (1) <em>Highlight-all</em> is
+    deferred: QML's <code>TextEdit</code> exposes no extra-selection API, and true simultaneous highlight
+    would mean mutating the document's char formats (invasive for a read-only viewer). The current match
+    is highlighted via the selection and the bar shows a running <code>"3/12"</code> count — the standard
+    find affordance (ship-simplest-first). (2) <em>Themed link color</em> is lost in the swap:
+    <code>TextEdit</code> has no <code>linkColor</code> (only <code>Label</code> did), so links render in
+    QTextDocument's default anchor color. This is a dark-mode readability nit — folded into <strong>CP5</strong>
+    (dark-mode polish); note <code>setDefaultStyleSheet</code> is HTML-only so restoring <code>Theme.textLink</code> on the <code>MarkdownText</code> body needs another approach.</p>
   <p>The CP4 search box finds <em>which article</em> to open (it filters the TOC across the manual). This
     checkpoint adds the other axis: <strong>find-on-page</strong> — a Ctrl+F bar that locates, highlights,
     and scrolls to text matches <em>inside</em> the article you're reading — and lands the
@@ -507,6 +543,19 @@ manual; each is worth doing before or alongside CP4, where the payoffs land.</p>
     sections (only <em>Start here / Chapters / Meta</em>) and the website build derives chapters from the
     directory anyway, so <code>chapterForPath</code> is already the single faithful port (see the CP4
     plan-drift note).</li>
+  <li><strong>R1 (from the CP6 review) · Unify the <em>heading</em>-slug scheme; stop hand-porting it a third time.</strong>
+    CP6 added <code>cwDocumentFinder::headingSlug</code> (<code>cwDocumentFinder.cpp:16</code>) — a third,
+    independent slug implementation (after <code>slugForPath</code> and the Python), used to resolve same-page
+    <code>#anchor</code> links to a heading's document position. Its comment now honestly notes it is <em>not</em>
+    byte-identical to the website: <code>scripts/build-manual-html.py</code> slugs headings with
+    <strong>pandoc's GFM auto-identifiers</strong> plus a per-page <code>--id-prefix key--</code>, a different
+    algorithm and namespace. The two coincide only for the plain-ASCII headings the manual currently uses;
+    they can diverge on numbers-leading headings, <code>&amp;</code>/unicode, and the page prefix — and
+    <strong>nothing tests the two against each other</strong>. Every in-app <code>#anchor</code> now rides on this
+    regex matching whatever the author wrote. This extends the A1/R1 debt (which covered only <em>path</em> slugs)
+    to <em>heading</em> slugs: the real fix is a shared slug contract (one function both the app and the build call)
+    or generating an anchor table from the build. Blast radius: <code>cwDocumentFinder</code> + a cross-check test.
+    Not a live bug against today's ASCII-only headings; do it before headings gain punctuation/unicode.</li>
   <li><strong>A3 · Move the "empty slug = landing" rule into C++.</strong> The routing lives in QML today
     (<code>DocsPage.qml:19</code>: <code>slug === "" ? landingBody() : body(slug)</code>). Folding it into
     <code>body("")</code> returning the landing keeps the QML seam a single dumb call and puts the routing
@@ -561,10 +610,10 @@ curated manual. A1 below naturally pairs with CP4 (it builds the TOC/search over
 </ul>
 
 <footer>
-  CP1–CP4 done (83 <code>[cwManualIndex]</code>+<code>[cwManualSearchModel]</code> assertions +
-  13 <code>tst_DocsPage</code> cases green; app links clean) · CaveWhere · renders natively, no web
-  engine · all file:line references verified against the current tree. Decisions 1–6 resolved — CP5
-  (dark-mode polish + fuller tests) and CP6 (find-on-page + intra-page anchors) remain.
+  CP1–CP4 + CP6 done (83 <code>[cwManualIndex]</code>+<code>[cwManualSearchModel]</code> assertions +
+  23 <code>tst_DocsPage</code> cases green; app + both test binaries link clean) · CaveWhere · renders
+  natively, no web engine · all file:line references verified against the current tree. Decisions 1–6
+  resolved — only CP5 (dark-mode polish incl. restoring the themed link color + fuller tests) remains.
 </footer>
 
 </div>
