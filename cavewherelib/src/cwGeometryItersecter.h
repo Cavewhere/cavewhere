@@ -106,6 +106,13 @@ public:
     //! pick with no rebuild and no republish step.
     void setVisibilityStore(cwSceneVisibility* store);
 
+    //! Registers the object for picking, replacing any object with the same
+    //! Key. Registration is asynchronous — the sub-BVH builds on a worker —
+    //! so picks ignore this Key from the call until the build installs (the
+    //! not-ready contract, issue #505). A replacement unpublishes the old
+    //! geometry synchronously, so the in-flight window serves no stale hits;
+    //! already-built objects keep picking throughout. Callers that need the
+    //! Key pickable gate on bvhReady().
     void addObject(const cwGeometryItersecter::Object& object);
     void clear();
     void clear(cwRenderObjectId parentId);
@@ -217,7 +224,9 @@ public:
 
 signals:
     // Emitted on the UI thread each time a fresh BVH atomically replaces
-    // the previous one. Picks made before this fires return no-hit.
+    // the previous one. Before the first install picks return no-hit;
+    // between installs they keep answering from the previous published
+    // BVH (see addObject's not-ready contract for newly added Keys).
     void bvhReady();
 
 private:

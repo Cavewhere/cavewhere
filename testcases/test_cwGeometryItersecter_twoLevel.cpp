@@ -159,6 +159,39 @@ TEST_CASE("setModelMatrix updates picks before the async rebuild lands",
     CHECK_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
 }
 
+TEST_CASE("addObject is not pickable until its async build installs",
+          "[cwGeometryItersecter][twoLevel][Issue505]")
+{
+    // Pins addObject's not-ready contract (issue #505; see the header doc).
+    // The install callback fires via a queued connection, so picking without
+    // spinning the event loop sits in the pre-install window
+    // deterministically (same trick as the in-flight-rebuild tests above).
+
+    cwGeometryItersecter intersector;
+
+    const QRay3D rayAtOrigin(QVector3D(0.0f, 0.0f, 100.0f),
+                             QVector3D(0.0f, 0.0f, -1.0f));
+
+    // Fresh add: not pickable inside the window, pickable after install.
+    intersector.addObject(makePointObject(1, {QVector3D(0.0f, 0.0f, 0.0f)}));
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
+
+    intersector.waitForFinish();
+    REQUIRE(intersector.intersectsDetailed(rayAtOrigin).hit());
+
+    // Same-Key replacement: the old geometry stops picking immediately (no
+    // stale hits) and the new geometry waits for its build like a fresh add.
+    intersector.addObject(makePointObject(1, {QVector3D(30.0f, 0.0f, 0.0f)}));
+    const QRay3D rayAtThirty(QVector3D(30.0f, 0.0f, 100.0f),
+                             QVector3D(0.0f, 0.0f, -1.0f));
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtThirty).hit());
+
+    intersector.waitForFinish();
+    REQUIRE(intersector.intersectsDetailed(rayAtThirty).hit());
+    REQUIRE_FALSE(intersector.intersectsDetailed(rayAtOrigin).hit());
+}
+
 TEST_CASE("Replacing one Object's geometry doesn't disturb others",
           "[cwGeometryItersecter][twoLevel]")
 {

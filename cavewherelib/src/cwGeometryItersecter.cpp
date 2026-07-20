@@ -572,10 +572,7 @@ void cwGeometryItersecter::waitForFinish()
 }
 
 /**
- * @brief cwGeometryItersecter::addTriangles
- * @param object
- *
- * Add the object to the itersector
+ * Registers the object for picking; see the header for the not-ready contract.
  */
 void cwGeometryItersecter::addObject(const cwGeometryItersecter::Object &object)
 {
