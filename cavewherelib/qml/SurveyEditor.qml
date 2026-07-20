@@ -28,6 +28,7 @@ QQ.Item {
 
     signal collapseClicked();
     signal noteClicked(int noteIndex)
+    signal addFromSurveyFile()
 
     clip: false
 
@@ -334,15 +335,31 @@ QQ.Item {
                     Layout.alignment: Qt.AlignHCenter
                 }
 
-                AddButton {
-                    id: addSurveyData
-                    objectName: "addSurveyData"
-                    text: "Add Survey Data "
+                SplitButton {
+                    buttonObjectName: "addSurveyData"
+                    text: qsTr("Add Survey Data")
+                    iconSource: "qrc:/twbs-icons/icons/plus.svg"
+                    menu: addSurveyDataMenuId
+                    menuToolTip: qsTr("More ways to add survey data")
                     Layout.alignment: Qt.AlignHCenter
                     visible: clipArea.currentTrip !== null && clipArea.currentTrip.chunkCount === 0
 
                     onClicked: {
                         clipArea.currentTrip.addNewChunk()
+                    }
+                }
+
+                QC.Menu {
+                    id: addSurveyDataMenuId
+                    objectName: "addSurveyDataMenu"
+
+                    QC.MenuItem {
+                        objectName: "addFromSurveyFileMenuItem"
+                        text: qsTr("Add from survey file…")
+
+                        onTriggered: {
+                            clipArea.addFromSurveyFile()
+                        }
                     }
                 }
             }

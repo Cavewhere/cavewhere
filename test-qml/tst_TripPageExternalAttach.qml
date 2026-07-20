@@ -221,6 +221,139 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
         }
 
+        // The editor's ListView header is built during a polish pass, so
+        // a lookup right after the page opens can answer null. Poll
+        // instead of caching that first answer.
+        function findWhenReady(item, objectName, message) {
+            let found = null
+            tryVerify(() => {
+                found = findChild(item, objectName)
+                return found !== null
+            }, 5000, message)
+            return found
+        }
+
+        // Opens the empty trip page's Add Survey Data chevron menu and
+        // returns its Add from survey file… item.
+        function openAddSurveyDataMenu(tripPage) {
+            const addSurveyData = findWhenReady(
+                tripPage, "addSurveyData",
+                "the empty state must offer Add Survey Data")
+            tryVerify(() => addSurveyData.visible, 5000,
+                      "the button shows on an empty trip")
+            // The header lays out a frame after the page opens; clicking
+            // before that lands on whatever sat at (0, 0).
+            waitForRendering(tripPage)
+
+            const menuButton = findWhenReady(tripPage, "menuButton",
+                                             "split-button chevron must exist")
+            mouseClick(menuButton)
+
+            const menu = findWhenReady(tripPage, "addSurveyDataMenu",
+                                       "addSurveyDataMenu must exist")
+            tryVerify(() => menu.visible, 5000, "menu opens on chevron click")
+            compare(menu.count, 1, "menu shows exactly one item")
+            compare(menu.itemAt(0).objectName, "addFromSurveyFileMenuItem")
+            return menu.itemAt(0)
+        }
+
+        // Opens the dialog from the menu and fills in the fixture path,
+        // returning once the scan has landed and the choices are live.
+        function armDialogOnTripPage(tripPage) {
+            mouseClick(openAddSurveyDataMenu(tripPage))
+
+            const dialog = findWhenReady(tripPage, "attachExternalCenterlineDialog",
+                                         "the dialog must exist on the trip page")
+            const pathField = findChild(dialog, "sourcePathField")
+            tryVerify(() => pathField.visible, 5000, "dialog opens")
+            pathField.text = TestHelper.testcasesDatasetPath(
+                "external-centerlines/survex_simple.svx")
+
+            tryVerify(() => findChild(dialog, "attachButton").enabled, 10000,
+                      "preview scan lands")
+            return dialog
+        }
+
+        // Drives an armed dialog through the requested choice button.
+        function addFromFileOnTripPage(tripPage, choiceButtonName) {
+            const dialog = armDialogOnTripPage(tripPage)
+
+            const choiceButton = findChild(dialog, choiceButtonName)
+            tryVerify(() => choiceButton.enabled, 10000, "the choice is live")
+            // The scan result swaps the labels above the choice boxes,
+            // which shifts them; settle before aiming at one.
+            waitForRendering(tripPage)
+            mouseClick(choiceButton)
+            return dialog
+        }
+
+        function test_tripPageAttachSwapsPaneWithoutRenamingTrip() {
+            const trip = makeSavedTrip("trip-page-add-from-file-attach")
+            const originalName = trip.name
+            const tripPage = gotoTripPage(trip)
+
+            addFromFileOnTripPage(tripPage, "attachButton")
+
+            tryVerify(() => trip.externalCenterline.entryFile === "survex_simple.svx",
+                      10000, "the existing trip becomes Attached")
+            tryVerify(() => findChild(tripPage, "externalCenterlineTripPanel") !== null,
+                      10000, "the left pane swaps to ExternalCenterlineTripPanel")
+            compare(currentCave().rowCount(), 1, "no trip is created or removed")
+            compare(trip.name, originalName, "attaching never renames an existing trip")
+            RootData.futureManagerModel.waitForFinished()
+        }
+
+        function test_tripPageImportFillsSameTripWithoutRenaming() {
+            const trip = makeSavedTrip("trip-page-add-from-file-import")
+            const originalName = trip.name
+            const tripPage = gotoTripPage(trip)
+
+            addFromFileOnTripPage(tripPage, "importButton")
+
+            tryVerify(() => trip.chunkCount > 0, 10000,
+                      "the import lands chunks in the same trip")
+            compare(currentCave().rowCount(), 1, "no trip is created or removed")
+            compare(trip.name, originalName, "importing never renames an existing trip")
+            compare(trip.externalCenterline.entryFile, "",
+                    "an imported trip stays Native")
+            verify(findChild(tripPage, "surveyEditor") !== null,
+                   "the editor keeps showing the now-filled trip")
+            RootData.futureManagerModel.waitForFinished()
+        }
+
+        function test_tripPageCancelLeavesTripNativeAndEmpty() {
+            const trip = makeSavedTrip("trip-page-add-from-file-cancel")
+            const tripPage = gotoTripPage(trip)
+
+            // Cancel a fully armed dialog - the state where the attach
+            // and import wiring could still fire on the way out.
+            const dialog = armDialogOnTripPage(tripPage)
+            const pathField = findChild(dialog, "sourcePathField")
+            waitForRendering(tripPage)
+            mouseClick(findChild(dialog, "cancelButton"))
+
+            tryVerify(() => !pathField.visible, 5000, "Cancel closes the dialog")
+            compare(currentCave().rowCount(), 1, "cancel has no trip to unwind")
+            compare(trip.chunkCount, 0, "the trip is still empty")
+            compare(trip.externalCenterline.entryFile, "", "the trip is still Native")
+            RootData.futureManagerModel.waitForFinished()
+        }
+
+        function test_addSurveyDataSplitButtonHiddenOnceTripHasData() {
+            const trip = makeSavedTrip("trip-page-add-from-file-nonempty")
+            const tripPage = gotoTripPage(trip)
+
+            const menuButton = findWhenReady(tripPage, "menuButton",
+                                             "the chevron must exist")
+            tryVerify(() => menuButton.visible, 5000,
+                      "the split button shows while the trip is empty")
+
+            trip.addNewChunk()
+            tryVerify(() => !menuButton.visible, 5000,
+                      "the whole split button is empty-state only")
+            RootData.futureManagerModel.waitForFinished()
+        }
+
         function test_detachSwapsPaneBackToSurveyEditor() {
             const fixture = attachFixtureTrip("trip-page-detach-swap")
             const tripPage = gotoTripPage(fixture.trip)

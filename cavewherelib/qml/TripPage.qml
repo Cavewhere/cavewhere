@@ -116,6 +116,23 @@ StandardPage {
         id: surveyNoteConcatModelId
     }
 
+    // Adds to the trip the page is already showing, so every outcome is
+    // a no-op here: attach flips isExternal and the Loader swaps panes,
+    // import fills the editor in place, and cancel leaves a pre-existing
+    // trip untouched. The trip is never renamed on either path - it's
+    // the user's object, not one this dialog created.
+    AddSurveyFileDialog {
+        id: addSurveyFileDialogId
+
+        // One TripPage item is reused for every trip, so bind the
+        // target rather than snapshotting it at open() - the dialog can
+        // then never act on a trip the page has already navigated away
+        // from. An in-flight attach or import is unaffected: the dialog
+        // takes its own snapshot at the click.
+        trip: area.currentTrip
+        title: qsTr("Add survey from file")
+    }
+
     QQ.Component {
         id: surveyEditorComponent
 
@@ -137,6 +154,10 @@ StandardPage {
 
             onCollapseClicked: {
                 if(!area.isNarrow) area.state = "COLLAPSE"
+            }
+
+            onAddFromSurveyFile: {
+                addSurveyFileDialogId.open()
             }
 
             onNoteClicked: (noteIndex) => {
